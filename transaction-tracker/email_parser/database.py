@@ -8267,6 +8267,10 @@ def auto_gg_results_sync(db_path: str | Path = DB_PATH,
     for widget in _GG_RESULT_PORTALS:
         host = urlparse(widget).netloc
         p: dict = {"host": host}
+        # Each step gets its own try/except (v2.41.0): a transient GG
+        # failure while walking scorecard rounds must not skip the games
+        # and flights walks for the portal — that's how s9.17 Silverhorn
+        # got payouts recorded with no Team Net/CTP winners attached.
         try:
             page = fetch_public_page(widget, xhr=False)
             if page["status_code"] != 200:
@@ -8275,48 +8279,63 @@ def auto_gg_results_sync(db_path: str | Path = DB_PATH,
                             page["html"], re.S)
             options = re.findall(r'<option[^>]*value="(\d+)"[^>]*>(.*?)</option>',
                                  sel.group(1) if sel else "", re.S)
-            with _connect(db_path) as conn:
-                code_map = {}
-                for r in conn.execute("SELECT id, item_name FROM events").fetchall():
-                    m = _GG_EVENT_CODE_COMPOUND_RE.match((r["item_name"] or "").strip())
-                    if m:
-                        code_map.setdefault(m.group(1).lower(), r["item_name"])
+        except Exception as e:
+            p["error"] = str(e)
+            options = []
+        if options:
             p["scorecards"] = []
-            for rid, _lbl in options[:scorecard_rounds]:
-                round_url = f"{widget}&round={rid}"
-                struct = parse_page_structure(
-                    fetch_public_page(round_url, xhr=False)["html"], round_url)
-                links = struct.get("links") or []
-                blob = " ".join(l.get("text") or "" for l in links)
-                m = re.search(r"\b([sa]\d+(?:\.\d+)?)\b", blob)
-                code = m.group(1).lower() if (m and m.group(1).lower() in code_map) else None
-                if not code:
-                    p["scorecards"].append({"round": rid, "note": "no event code — skipped"})
-                    continue
-                for want in ("ALL Net", "ALL Gross"):   # net FIRST (handicaps)
-                    link = next((l for l in links
-                                 if (l.get("text") or "").strip().lower() == want.lower()), None)
-                    if not link:
-                        continue
-                    href = link.get("href") or ""
-                    if href.startswith("/"):
-                        href = f"https://{host}{href}"
+            try:
+                with _connect(db_path) as conn:
+                    code_map = {}
+                    for r in conn.execute("SELECT id, item_name FROM events").fetchall():
+                        m = _GG_EVENT_CODE_COMPOUND_RE.match((r["item_name"] or "").strip())
+                        if m:
+                            code_map.setdefault(m.group(1).lower(), r["item_name"])
+                for rid, _lbl in options[:scorecard_rounds]:
+                    round_url = f"{widget}&round={rid}"
                     try:
-                        res = import_gg_scorecards(href, event_code=code,
-                                                   db_path=db_path)
-                        p["scorecards"].append({
-                            "round": rid, "board": want, "event": code,
-                            **{k: v for k, v in (res or {}).items()
-                               if isinstance(v, (int, float, str))}})
+                        struct = parse_page_structure(
+                            fetch_public_page(round_url, xhr=False)["html"], round_url)
                     except Exception as e:
-                        p["scorecards"].append({"round": rid, "board": want,
-                                                "error": str(e)})
+                        p["scorecards"].append({"round": rid, "error": str(e)})
+                        continue
+                    links = struct.get("links") or []
+                    blob = " ".join(l.get("text") or "" for l in links)
+                    m = re.search(r"\b([sa]\d+(?:\.\d+)?)\b", blob)
+                    code = m.group(1).lower() if (m and m.group(1).lower() in code_map) else None
+                    if not code:
+                        p["scorecards"].append({"round": rid, "note": "no event code — skipped"})
+                        continue
+                    for want in ("ALL Net", "ALL Gross"):   # net FIRST (handicaps)
+                        link = next((l for l in links
+                                     if (l.get("text") or "").strip().lower() == want.lower()), None)
+                        if not link:
+                            continue
+                        href = link.get("href") or ""
+                        if href.startswith("/"):
+                            href = f"https://{host}{href}"
+                        try:
+                            res = import_gg_scorecards(href, event_code=code,
+                                                       db_path=db_path)
+                            p["scorecards"].append({
+                                "round": rid, "board": want, "event": code,
+                                **{k: v for k, v in (res or {}).items()
+                                   if isinstance(v, (int, float, str))}})
+                        except Exception as e:
+                            p["scorecards"].append({"round": rid, "board": want,
+                                                    "error": str(e)})
+            except Exception as e:
+                p["scorecards_error"] = str(e)
+        try:
             p["games"] = import_gg_game_results(widget, db_path=db_path,
                                                 rewalk_recent=rewalk_recent)
+        except Exception as e:
+            p["games"] = {"error": str(e)}
+        try:
             p["flights"] = import_gg_game_flights(widget, db_path=db_path,
                                                   rewalk_recent=rewalk_recent)
         except Exception as e:
-            p["error"] = str(e)
+            p["flights"] = {"error": str(e)}
         out["portals"].append(p)
     try:
         out["payouts"] = record_all_event_game_payouts(
@@ -29595,18 +29614,32 @@ def assemble_event_game_payouts(event_name: str, db_path=None) -> dict:
     if team_amts and g_event.get("teamTotal") not in (None, "NO_EVENT"):
         if not teams:
             notes.append("Team Net: no GG-recorded winner yet — skipped")
-        for i, t in enumerate(teams):
-            if i >= len(team_amts):
-                break
-            members = [mname.strip() for mname in t["player_name"].split("+")
-                       if mname.strip() and not re.match(r"^Bl[\[A-Z]", mname.strip())]
-            if not members:
+        # Tied teams (GG "T1"/"T1") split the combined place money — with a
+        # single team place, two T1 teams each take half of team1st (s9.17
+        # Silverhorn: $108 → $54/team, matching GG's recorded purses).
+        team_pos_groups: dict = {}
+        for idx, t in enumerate(teams):
+            pm = re.search(r"(\d+)", str(t.get("position") or ""))
+            team_pos_groups.setdefault(
+                int(pm.group(1)) if pm else idx + 1, []).append(t)
+        place_cents = [round(a * 100) for a in team_amts]
+        for pos in sorted(team_pos_groups):
+            grp = team_pos_groups[pos]
+            pool = sum(place_cents[pos - 1: pos - 1 + len(grp)])
+            if pool <= 0:
                 continue
-            if len(members) < t["player_name"].count("+") + 1:
-                notes.append("Team Net: blind-draw member excluded from the split")
-            _money_split(team_amts[i], members, "team_net",
-                         f"{g_event.get('teamType') or 'Team Net'} "
-                         f"{'1st' if i == 0 else '2nd'} (team split)")
+            team_shares = split_cents(pool, len(grp))
+            suffix = {1: "1st", 2: "2nd", 3: "3rd"}.get(pos, f"{pos}th")
+            for t, tc in zip(grp, team_shares):
+                members = [mname.strip() for mname in t["player_name"].split("+")
+                           if mname.strip() and not re.match(r"^Bl[\[A-Z]", mname.strip())]
+                if not members:
+                    continue
+                if len(members) < t["player_name"].count("+") + 1:
+                    notes.append("Team Net: blind-draw member excluded from the split")
+                _money_split(tc / 100.0, members, "team_net",
+                             f"{g_event.get('teamType') or 'Team Net'} {suffix}"
+                             f"{' (T)' if len(grp) > 1 else ''} (team split)")
     proxies = ([r for r in gg_rows if r["game"] == "ctp"]
                + [r for r in gg_rows if r["game"] == "longest_putt"])
     ctp_vals = [v for v in (

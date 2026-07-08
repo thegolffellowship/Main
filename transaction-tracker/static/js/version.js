@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.40.1";
+window.TGF_VERSION = "2.41.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.41.0",
+    date: "2026-07-08",
+    changes: [
+      "TEAM NET TIE SPLIT (found on s9.17 Silverhorn, where two teams tied T1): tied teams now split the combined place money before the per-member split, matching GG's own purse math -- $108 team pot, two T1 teams -> $54/team, then $18 each for the 3 payable members of SOUTH+MORENO+WADE (+blind draw excluded) and $13.50 each for YOUNG+WATSON+SHARITZ+DECAREAUX. Previously the first team took the whole first-place amount by list order and the tied second team got NOTHING (the matrix has one team place at this player count, so the second team fell off the end of the place list). Untied teams pay per place exactly as before; descriptions gain a '(T)' marker on ties.",
+      "AUTO SYNC HARDENED (why s9.17's Team Net/CTP were missing after close): the hourly pass previously ran scorecards -> games -> flights inside ONE try/except per portal, so a transient GG fetch failure during the scorecard walk silently skipped the games and flights walks -- and the payout refresh then recorded the event with no Team Net/CTP attached. Each step is now isolated (a failed round fetch logs to that round's entry; games and flights each run regardless of earlier steps' failures), so one hiccup can no longer suppress winners that are sitting finalized in GG.",
+      "PAST events under EVENTS now list most-recent-first (Kerry's ask): switching to the PAST filter flips the default date sort to newest-on-top; UPCOMING/ALL keep soonest-first, and an explicit column sort you've clicked survives the filter switch. Deep-links that auto-flip to PAST get the same ordering.",
+    ],
+  },
   {
     version: "2.40.1",
     date: "2026-07-07",
