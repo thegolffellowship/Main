@@ -154,7 +154,7 @@
     <main>
         <nav class="tab-nav">
             <a href="/events">Events</a>
-            <a href="/contests">Contests</a>
+            <a href="/contests">Season Contests</a>
             <a href="/handicaps">Handicaps</a>
             <a href="/transactions">Transactions</a>
             <a href="/customers" class="active">Customers</a>
@@ -186,6 +186,12 @@
             <input id="part-search" type="search" placeholder="Search by name or email…">
             <select id="part-chapter">
                 <option value="">All Chapters</option>
+            </select>
+            <select id="part-played" title="Filter by whether/when they last played">
+                <option value="">Played: any</option>
+                <option value="year">Played this year</option>
+                <option value="has">Has played</option>
+                <option value="never">Never played</option>
             </select>
             <select id="part-status">
                 <option value="">All Statuses</option>
@@ -296,8 +302,8 @@
         let allRows = [];
         let viewRows = [];
         let selected = new Set();           // customer_ids
-        let sortKey = 'days_since';
-        let sortDir = 'desc';
+        let sortKey = 'last_event_date';
+        let sortDir = 'desc';   // most recent LAST PLAYED first; nulls sort last (Kerry)
         let previewIndex = 0;
         let lastDefaults = { subject: '', body: '' };
 
@@ -376,9 +382,14 @@
             const thr = parseInt($('part-threshold').value, 10) || 0;
             const onlyEmail = $('part-only-email').checked;
 
+            const played = $('part-played').value;
+            const thisYear = String(new Date().getFullYear());
             viewRows = allRows.filter(r => {
                 if (chapter && r.chapter !== chapter) return false;
                 if (status && r.status !== status) return false;
+                if (played === 'year' && !(r.last_event_date || '').startsWith(thisYear)) return false;
+                if (played === 'has' && !r.last_event_date) return false;
+                if (played === 'never' && r.last_event_date) return false;
                 if (onlyEmail && !(r.email || '').trim()) return false;
                 if (thr > 0) {
                     if (r.days_since == null) {
@@ -564,7 +575,7 @@
             });
         });
 
-        ['part-search', 'part-chapter', 'part-status', 'part-threshold', 'part-only-email']
+        ['part-search', 'part-chapter', 'part-status', 'part-threshold', 'part-only-email', 'part-played']
             .forEach(id => $(id).addEventListener('input', render));
 
         // ── Compose modal ──────────────────────────────────────────

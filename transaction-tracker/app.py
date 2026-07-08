@@ -8464,7 +8464,7 @@ def api_participation_send_email():
 # ---------------------------------------------------------------------------
 
 @app.route("/api/season-contests")
-@require_role("manager")
+@require_role("view-only")
 def api_season_contests():
     """List season contest enrollments with optional filters."""
     from email_parser.database import get_season_contest_enrollments
@@ -8526,7 +8526,7 @@ def api_customer_season_contests(customer_name):
 
 
 @app.route("/api/season-contests/removals")
-@require_role("manager")
+@require_role("view-only")
 def api_season_contest_removals():
     """List removal records (the Enrollment tab's recordation list)."""
     from email_parser.database import get_season_contest_removals
@@ -8539,7 +8539,7 @@ def api_season_contest_removals():
 
 
 @app.route("/api/season-contests/points-race")
-@require_role("manager")
+@require_role("view-only")
 def api_season_contest_points_race():
     """Persisted GG points-race standings joined with live buy-in status.
 
@@ -8562,7 +8562,7 @@ def api_season_contest_points_race():
 
 
 @app.route("/api/season-contests/points-race/fellowship-cup")
-@require_role("manager")
+@require_role("view-only")
 def api_fellowship_cup_projection():
     """Combined NET-race reset projection (THE FELLOWSHIP CUP tab)."""
     from email_parser.database import get_fellowship_cup_projection
@@ -8591,7 +8591,7 @@ def api_import_scorecards():
 
 
 @app.route("/api/scoring/rounds")
-@require_role("manager")
+@require_role("view-only")
 def api_scoring_rounds():
     from email_parser.database import get_scoring_rounds_list
     return jsonify(get_scoring_rounds_list(
@@ -8601,7 +8601,7 @@ def api_scoring_rounds():
 
 
 @app.route("/api/scoring/scorecard/<int:scoring_round_id>")
-@require_role("manager")
+@require_role("view-only")
 def api_scorecard(scoring_round_id):
     from email_parser.database import get_scorecard
     card = get_scorecard(scoring_round_id)
@@ -8681,7 +8681,7 @@ _POINTS_DETAIL_CACHE_TTL = 600
 
 
 @app.route("/api/season-contests/points-race/detail")
-@require_role("manager")
+@require_role("view-only")
 def api_season_contest_points_race_detail():
     """One player's per-round points breakdown (GG row expansion), live.
 
@@ -8719,7 +8719,7 @@ def api_season_contest_points_race_detail():
 
 
 @app.route("/api/season-contests/monthly-points")
-@require_role("manager")
+@require_role("view-only")
 def api_season_contest_monthly_points():
     """Combined monthly points races (both chapters) with winner + purse.
 

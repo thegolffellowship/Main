@@ -1,5 +1,17 @@
-window.TGF_VERSION = "2.47.0";
+window.TGF_VERSION = "2.48.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.48.0",
+    date: "2026-07-08",
+    changes: [
+      "SEASON CONTESTS (Kerry batch): the nav tab is renamed Season Contests, and view-only sessions can now actually SEE the standings -- the read-only standings APIs (enrollments list, points races, Fellowship Cup, monthly, scoring-round drill-downs) dropped from manager to view-only, fixing the 'requires Manager Access' dead end; the ENROLLMENT top-tab hides for view-only (write APIs all stay manager/admin).",
+      "CHAPTER SCOPING EVERYWHERE: HANDICAPS gains ALL | AUSTIN | SAN ANTONIO pills (player chapter now rides on the handicaps API via the customer link); TRANSACTIONS and the RSVP LOG gain a chapter select that scopes by each item's EVENT chapter with shared/TGF events always included (chapterless rows like memberships stay visible). All three pre-select the chapter manager's chapter; admin lands on ALL.",
+      "PARTICIPATION: new 'Played' filter (any / this calendar year / has played / never), and the landing sort is now LAST PLAYED most-recent-first with never-played members at the BOTTOM -- they no longer top the MEMBER view. (Known data note: a member with no Last Played usually means their event rows never matched an events-table row; audit ongoing.)",
+      "TGF ORANGE ACTIVES: every active filter/toggle state -- segmented controls, chapter pills, PLAYERS/GAMES/FINANCIAL badges, category buttons, customer detail tabs, contests sub-tabs -- switches from royal blue to TGF orange (#E87C3E).",
+      "OPS BUTTONS ADMIN-ONLY (Kerry): Sync Events, Check RSVPs, and Check Now disappear for managers and view-only on every page. Customers Export CSV is admin-only (no bulk download access for managers yet). HANDICAPS consolidates Import Rounds + ALL/SA/Austin CSV into one Import/Export dropdown; Email Cards stays standalone.",
+      "REFRESH CADENCE (Kerry: 'too much refreshing'): the GG results auto-sync now runs ONLY on event days (event today or yesterday, Central) -- close-the-event-to-results-in-an-hour still holds on those days, and off days skip GG entirely. Points-race snapshots likewise stop auto-refreshing unless an event happened since the snapshot was taken; the manual Refresh button always forces a live pull.",
+    ],
+  },
   {
     version: "2.47.0",
     date: "2026-07-08",

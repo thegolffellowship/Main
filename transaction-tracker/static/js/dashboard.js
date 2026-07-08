@@ -55,6 +55,7 @@ const NON_EVENT_KEYWORDS = [
 ];
 
 // Placeholder merchants that are not real transactions (roster imports, manual entries, etc.)
+let _evChapterMap = {};
 const PLACEHOLDER_MERCHANTS = [
     "Roster Import", "Customer Entry", "RSVP Import", "RSVP Email Link", "Handicap Import",
 ];
@@ -348,6 +349,18 @@ async function fetchItems() {
         ]);
         const raw = await res.json();
         allItems = raw.filter(i => !PLACEHOLDER_MERCHANTS.includes(i.merchant) && i.transaction_status !== "rsvp_only");
+        // event -> chapter map for the chapter scope filter; chapter
+        // managers land pre-scoped to their chapter (Kerry, 2026-07-08)
+        try {
+            const evs = await loadEventsForPicker();
+            _evChapterMap = {};
+            (evs || []).forEach(e => { _evChapterMap[(e.item_name || "").toLowerCase()] = (e.chapter || "").trim(); });
+        } catch { _evChapterMap = {}; }
+        const chSel = document.getElementById("filter-chapter-txn");
+        if (chSel && !window._txnChapterDefaultApplied && typeof currentChapter !== "undefined" && currentChapter) {
+            window._txnChapterDefaultApplied = true;
+            chSel.value = currentChapter;
+        }
         // Load reconciled item map for green dots (admin-only endpoint, fails gracefully)
         if (reconRes.ok) {
             try { reconciledItemMap = await reconRes.json(); } catch(_) {}
@@ -1005,6 +1018,19 @@ function applyFilters() {
         filtered = filtered.filter(item => classifyItem(item) === activeCategory);
     }
 
+    // Chapter scope: the item's EVENT chapter (shared 'TGF' events always
+    // included); items with no event row fall back to their own chapter
+    // snapshot, and chapterless rows (memberships etc.) stay visible.
+    const chapSel = document.getElementById("filter-chapter-txn");
+    const chapVal = chapSel ? chapSel.value : "";
+    if (chapVal) {
+        filtered = filtered.filter(item => {
+            const evCh = _evChapterMap[(item.item_name || "").toLowerCase()];
+            const ch = (evCh !== undefined && evCh !== "") ? evCh : (item.chapter || "").trim();
+            return !ch || ch === chapVal || ch.toUpperCase() === "TGF";
+        });
+    }
+
     if (query) {
         if (filterCol) {
             // Search within a specific column only
@@ -1566,6 +1592,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 
     document.getElementById("search-input").addEventListener("input", applyFilters);
     document.getElementById("filter-column").addEventListener("change", applyFilters);
+    document.getElementById("filter-chapter-txn")?.addEventListener("change", applyFilters);
     document.getElementById("sort-select").addEventListener("change", () => {
         const val = document.getElementById("sort-select").value;
         if (val) {

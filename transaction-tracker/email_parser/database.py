@@ -6673,6 +6673,16 @@ def get_points_race_standings(race_key: str,
                 (stat["fetched_at"], f"-{auto_refresh_hours} hours"),
             ).fetchone()[0] == 1
         )
+        # Standings only change after events (Kerry, 2026-07-08): a stale
+        # snapshot with NO event since it was taken is still current — skip
+        # the GG round-trip. Manual Refresh (force_refresh) is unaffected.
+        if stale and stat["n"] and stat["fetched_at"]:
+            event_since = conn.execute(
+                "SELECT 1 FROM events WHERE event_date IS NOT NULL "
+                "AND event_date >= date(?) LIMIT 1",
+                (stat["fetched_at"],)).fetchone()
+            if not event_since:
+                stale = False
 
     if force_refresh or stale:
         try:
@@ -8528,6 +8538,24 @@ def auto_gg_results_sync(db_path: str | Path = DB_PATH,
     """
     from urllib.parse import urlparse
     from golf_genius_sync import fetch_public_page, parse_page_structure
+    from .timezone_utils import today_central
+    from datetime import timedelta as _td
+
+    # Results only change after events (Kerry, 2026-07-08): skip the GG
+    # walk entirely unless an event happened today or yesterday (Central)
+    # — yesterday covers late-evening closes rolling past midnight. The
+    # on-demand bridge (scoring-auto-sync) bypasses nothing: it calls this
+    # same function, so a no-event day returns the skip marker; use the
+    # targeted bridge commands for manual pulls on off days.
+    _today = today_central()
+    _days = {_today.isoformat(), (_today - _td(days=1)).isoformat()}
+    with _connect(db_path) as _conn:
+        _hit = _conn.execute(
+            "SELECT 1 FROM events WHERE event_date IN (?, ?) LIMIT 1",
+            tuple(sorted(_days))).fetchone()
+    if not _hit:
+        return {"skipped": "no event today/yesterday — GG results only "
+                           "change after events", "portals": []}
 
     out: dict = {"portals": []}
     for widget in _GG_RESULT_PORTALS:
@@ -18270,9 +18298,11 @@ def get_all_handicap_players(db_path: str | Path | None = None) -> list[dict]:
                    MAX(r.round_date) AS latest_round_date,
                    MIN(r.differential) AS best_differential,
                    AVG(r.differential) AS avg_differential,
-                   l.customer_name
+                   l.customer_name,
+                   c.chapter
             FROM handicap_rounds r
             LEFT JOIN handicap_player_links l ON l.player_name = r.player_name
+            LEFT JOIN customers c ON c.customer_id = l.customer_id
             WHERE r.differential IS NOT NULL
             GROUP BY r.player_name
             ORDER BY r.player_name COLLATE NOCASE
@@ -18308,6 +18338,7 @@ def get_all_handicap_players(db_path: str | Path | None = None) -> list[dict]:
         players.append({
             "player_name": name,
             "customer_name": row["customer_name"],
+            "chapter": row["chapter"],
             "handicap_index": index,
             "handicap_index_18": round(index * 2, 1) if index is not None else None,
             "total_rounds": row["total_rounds"],

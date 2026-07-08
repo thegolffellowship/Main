@@ -41,7 +41,7 @@
         <!-- Tab Navigation -->
         <nav class="tab-nav">
             <a href="/events">Events</a>
-            <a href="/contests">Contests</a>
+            <a href="/contests">Season Contests</a>
             <a href="/handicaps">Handicaps</a>
             <a href="/transactions" class="active">Transactions</a>
             <a href="/customers">Customers</a>
@@ -155,6 +155,11 @@
                 class="search-box"
                 placeholder="Search by customer, item, side games..."
             >
+            <select id="filter-chapter-txn" class="filter-select" title="Scope to a chapter's events (shared/TGF events included)">
+                <option value="">All Chapters</option>
+                <option value="Austin">Austin</option>
+                <option value="San Antonio">San Antonio</option>
+            </select>
             <select id="filter-column" class="filter-select">
                 <option value="">All columns</option>
                 <option value="item_name">Item Name</option>

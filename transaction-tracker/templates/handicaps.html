@@ -207,6 +207,15 @@
         .link-customer-item:hover { background: #eff6ff; }
         .link-customer-item:last-child { border-bottom: none; }
         .link-customer-item.selected { background: #dbeafe; font-weight: 600; }
+            .ev-tab-row { display:flex; gap:0.35rem; flex-wrap:wrap; }
+        .ev-tab { cursor:pointer; user-select:none; font-size:0.78rem; font-weight:700;
+            letter-spacing:0.04em; padding:0.35rem 0.85rem; border-radius:999px;
+            background:var(--surface); border:1px solid var(--border); color:var(--text-muted); white-space:nowrap; }
+        .ev-tab:hover { border-color:#E87C3E; color:#E87C3E; }
+        .ev-tab.active { background:#E87C3E; border-color:#E87C3E; color:#fff; }
+            .hcp-io-item { display:block; width:100%; text-align:left; padding:0.45rem 0.7rem;
+            font-size:0.82rem; border:none; background:none; cursor:pointer; border-radius:5px; }
+        .hcp-io-item:hover { background: #fff3ec; color: #E87C3E; }
     </style>
 </head>
 <body>
@@ -218,12 +227,16 @@
         </div>
         <div class="header-actions">
             <span id="role-badge" class="role-badge" style="display:none;"></span>
-            <button id="btn-import" class="btn btn-primary" style="display:none;">Import Rounds</button>
-            <!-- CSV download group — manager + admin -->
-            <div id="gg-sync-group" style="display:none;gap:6px;align-items:center;">
-                <button id="btn-dl-all"    class="btn btn-secondary" title="Download ALL chapters handicap CSV" style="display:none;">⬇ ALL CSV</button>
-                <button id="btn-dl-sa"     class="btn btn-secondary" title="Download San Antonio handicap CSV" style="display:none;">⬇ SA CSV</button>
-                <button id="btn-dl-austin"  class="btn btn-secondary" title="Download Austin handicap CSV" style="display:none;">⬇ Austin CSV</button>
+            <!-- Import + CSV exports consolidated into one dropdown (Kerry, 2026-07-08) -->
+            <div id="hcp-io-wrap" style="display:none;position:relative;">
+                <button id="btn-hcp-io" class="btn btn-primary">Import / Export &#9662;</button>
+                <div id="hcp-io-menu" style="display:none;position:absolute;right:0;top:110%;z-index:50;background:var(--surface);border:1px solid var(--border);border-radius:8px;box-shadow:0 6px 18px rgba(0,0,0,0.12);min-width:190px;padding:0.3rem;">
+                    <button id="btn-import" class="hcp-io-item">Import Rounds</button>
+                    <div style="border-top:1px solid var(--border);margin:0.25rem 0;"></div>
+                    <button id="btn-dl-all" class="hcp-io-item" title="Download ALL chapters handicap CSV">&#11015; ALL CSV</button>
+                    <button id="btn-dl-sa" class="hcp-io-item" title="Download San Antonio handicap CSV">&#11015; SA CSV</button>
+                    <button id="btn-dl-austin" class="hcp-io-item" title="Download Austin handicap CSV">&#11015; Austin CSV</button>
+                </div>
             </div>
             <button id="btn-email-cards" class="btn btn-secondary" style="display:none;" title="Email handicap cards to all players with a linked email">Email Cards</button>
             <button id="btn-auto-link" class="btn btn-secondary" style="display:none;" title="Try to match unlinked handicap players to customer records (needed for Golf Genius CSV/Sync)">Auto-link Players</button>
@@ -239,13 +252,18 @@
         <!-- Tab Navigation -->
         <nav class="tab-nav">
             <a href="/events">Events</a>
-            <a href="/contests">Contests</a>
+            <a href="/contests">Season Contests</a>
             <a href="/handicaps" class="active">Handicaps</a>
             <a href="/transactions">Transactions</a>
             <a href="/customers">Customers</a>
             <a href="/tgf" class="admin-nav" style="display:none;">Payouts</a>
             <a href="/accounting" class="admin-nav admin-tab" style="display:none;">Admin</a>
         </nav>
+    <div class="sub-tabs"><nav class="ev-tab-row ev-chapter-row" style="margin-bottom:0;">
+        <span class="ev-tab active" data-hcp-chapter="all">ALL</span>
+        <span class="ev-tab" data-hcp-chapter="Austin">AUSTIN</span>
+        <span class="ev-tab" data-hcp-chapter="San Antonio">SAN ANTONIO</span>
+    </nav></div>
 
         <!-- Stats -->
         <section class="stats-row" id="stats-row">
@@ -583,6 +601,21 @@
         // handicaps endpoints require an authenticated session.
 
         document.getElementById('hcp-search').addEventListener('input', renderTable);
+        const _ioBtn = document.getElementById('btn-hcp-io');
+        const _ioMenu = document.getElementById('hcp-io-menu');
+        _ioBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            _ioMenu.style.display = _ioMenu.style.display === 'none' ? '' : 'none';
+        });
+        document.addEventListener('click', () => { _ioMenu.style.display = 'none'; });
+        document.querySelectorAll('[data-hcp-chapter]').forEach(btn => {
+            btn.addEventListener('click', () => {
+                hcpChapterFilter = btn.dataset.hcpChapter;
+                document.querySelectorAll('[data-hcp-chapter]').forEach(b =>
+                    b.classList.toggle('active', b.dataset.hcpChapter === hcpChapterFilter));
+                renderTable();
+            });
+        });
         document.getElementById('sort-select').addEventListener('change', e => {
             currentSort = e.target.value;
             renderTable();
@@ -714,11 +747,7 @@
     function onAuthReady() {
         kickInitialLoad();
         if (currentRole === 'admin' || currentRole === 'manager') {
-            document.getElementById('btn-import').style.display = '';
-            document.getElementById('gg-sync-group').style.display = 'inline-flex';
-            document.getElementById('btn-dl-all').style.display = '';
-            document.getElementById('btn-dl-sa').style.display = '';
-            document.getElementById('btn-dl-austin').style.display = '';
+            document.getElementById('hcp-io-wrap').style.display = '';
             document.getElementById('btn-email-cards').style.display = '';
         }
         if (currentRole === 'admin') {
@@ -748,6 +777,12 @@
         try {
             const r = await fetch('/api/handicaps/players');
             allPlayers = await r.json();
+            if (!window._hcpChapterDefaultApplied && typeof currentChapter !== 'undefined' && currentChapter) {
+                window._hcpChapterDefaultApplied = true;
+                hcpChapterFilter = currentChapter;
+                document.querySelectorAll('[data-hcp-chapter]').forEach(b =>
+                    b.classList.toggle('active', b.dataset.hcpChapter === currentChapter));
+            }
             updateStats();
             renderTable();
         } catch(e) {
@@ -801,10 +836,12 @@
     }
 
     // ── Table rendering ─────────────────────────────────────────────
+    let hcpChapterFilter = "all";
     function renderTable() {
         const q = document.getElementById('hcp-search').value.trim().toLowerCase();
         let players = allPlayers.filter(p =>
-            !q || p.player_name.toLowerCase().includes(q)
+            (!q || p.player_name.toLowerCase().includes(q))
+            && (hcpChapterFilter === "all" || (p.chapter || "") === hcpChapterFilter)
         );
 
         // Sort
