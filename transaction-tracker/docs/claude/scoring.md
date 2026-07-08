@@ -394,6 +394,13 @@ from the superseded snapshot, so chips appear on a standings change
 and persist until the next one (GG's between-events semantics).
 Monthly races still carry no chip — they can adopt the same
 mechanism with their own list_key when wanted.
+Backfill (v2.43.1): `seed_fellowship_cup_history()` (bridge
+`scoring-fc-seed`) reconstructs the pre-latest-event Cup ordering
+from the NET races' GG Previous Rank columns (reset = pure function
+of race position via the master ladder; first-round-on-latest-date
+players excluded as newcomers), replaces the Cup's history with that
+seed, and rotates the current order on top — chips show the last
+event's movement without waiting for the next one.
 
 ## Monthly points races (v2.30.0)
 

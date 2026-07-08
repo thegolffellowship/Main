@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.43.0";
+window.TGF_VERSION = "2.43.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.43.1",
+    date: "2026-07-08",
+    changes: [
+      "FELLOWSHIP CUP MOVEMENT BACKFILL (Kerry: 'Any way to reverse engineer the change in The Fellowship Cup by reviewing the history of last GG event and yesterday's?'): yes -- the Cup's reset value is a pure function of each player's POSITION in their NET race (master ladder + coefficient), and GG's race snapshots already carry everyone's Previous Rank from before the July 7 events. seed_fellowship_cup_history() rebuilds yesterday's Cup ordering from those previous positions (players whose first imported round IS the latest event date are treated as not-yet-on-the-list newcomers), seeds it as the prior rank-history snapshot, and rotates today's order on top -- so the \\u25b2/\\u25bc chips show the last event's effect IMMEDIATELY instead of waiting for the next event. One-time bridge command scoring-fc-seed; normal snapshot-on-change recording takes over from here.",
+    ],
+  },
   {
     version: "2.43.0",
     date: "2026-07-08",
