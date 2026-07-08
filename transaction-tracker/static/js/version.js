@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.40.0";
+window.TGF_VERSION = "2.40.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.40.1",
+    date: "2026-07-07",
+    changes: [
+      "Documented the auto GG results sync pipeline in side-games.md (hourly close-event flow, recent-round re-walk semantics, 3-day payout refresh window, manual-payout protection) after verifying it live: s9.17 Silverhorn's scorecards, flights, and all computable games landed via the pipeline minutes after Kerry closed the event, and its 18 payouts ($452.01) recorded -- Team Net/CTP/TGF MVP will flow in on the next hourly pass once entered in GG / the linked event closes.",
+    ],
+  },
   {
     version: "2.40.0",
     date: "2026-07-07",

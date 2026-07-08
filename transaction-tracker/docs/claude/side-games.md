@@ -515,6 +515,17 @@ from our imported scorecards, mirroring the MVP wiring (v2.33.0):
   amount+note prefilled; Zelle (no deep link) shows a badge with the
   handle and amount, Mark Paid closes it out. Missing handles show
   "add handle" badges until supplied.
+- **AUTO SYNC (v2.40.0)** — `auto_gg_results_sync()` runs hourly
+  (12:10–23:10 Central, APScheduler; AUTO_GG_SYNC=0 disables; bridge
+  `scoring-auto-sync` on demand): per portal it imports the newest
+  rounds' ALL Net → ALL Gross scorecards, re-walks the newest rounds
+  for GG-recorded winners + per-game flights (live rounds are marked
+  walked before results exist, so recent rounds ALWAYS re-walk —
+  upserts make it safe), then refreshes auto payouts force-replacing
+  events from the last 3 days. Closing an event in GG is the last
+  manual step: within the hour the Games tab shows winners and the
+  PAYOUTS tab has customer-tied rows with payment links. Manual
+  (screenshot) payout events are never touched.
 - Still manual: Skins ½ Net at <8 gross buyers on 9h (half-pop
   allocation rule unratified — the row shows "manual — ½-net rule
   pending").
