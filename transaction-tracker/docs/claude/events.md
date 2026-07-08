@@ -9,6 +9,24 @@
 - `transferred` — transferred to another event, shown in **Inactive** section below table. Creates contra-revenue on source event + revenue on target event in `acct_transactions`, plus allocation at target.
 - `wd` — withdrawn, shown in **Inactive** section below table
 
+## Events list filters (v2.45.0)
+Two compact tab rows replace the big stat cards: a CHAPTER scope row
+(ALL | AUSTIN | SAN ANTONIO) over a subordinate time row (ALL EVENTS |
+UPCOMING | PAST, with counts). Chapter is the outer context — it
+applies to the counts, the time filter, AND search. Clear Filters and
+?item= deep-links reset/widen the chapter scope as needed.
+
+## Payout visibility is ADMIN-only (v2.45.0, Kerry)
+Managers must not make prize payouts or see payout surfaces: the
+Payouts nav tab (`/tgf`), the per-event PAYOUTS view toggle, the Games
+tab Record Payouts button, and the Customers detail Winnings tab are
+all hidden for non-admins; /tgf redirects, and /api/tgf (GET/POST),
+mark-paid, parse-screenshot, record-game-payouts, and
+game-payouts-preview are @require_role("admin"). Managers keep
+credit/transfer/WD (internal ledger moves); anything recording a REAL
+outbound payment (refund, partial-refund, payout-credit, payout
+recording, mark-paid) is admin-only.
+
 ## Events list ordering (v2.41.0)
 The ALL | UPCOMING | PAST stat-card filter sets the default date sort per
 bucket: PAST lists most-recent-first (Kerry's ask), UPCOMING/ALL keep

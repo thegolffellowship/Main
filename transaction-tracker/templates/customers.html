@@ -41,7 +41,7 @@
             <a href="/handicaps">Handicaps</a>
             <a href="/participation">Participation</a>
 
-            <a href="/tgf">Payouts</a>
+            <a href="/tgf" class="admin-nav" style="display:none;">Payouts</a>
         </nav>
 
         <!-- Stats cards -->
@@ -974,7 +974,7 @@
         <div class="cust-tab-bar" style="display:flex; gap:0; margin-bottom:0.5rem; border-bottom:2px solid var(--border); overflow-x:auto;">
             <button type="button" class="cust-tab ${_mt === 'transactions' ? 'active' : ''}" data-tab="transactions" style="${mtabStyle('transactions')}">Transactions</button>
             <button type="button" class="cust-tab ${_mt === 'scores' ? 'active' : ''}" data-tab="scores" style="${mtabStyle('scores')}">Scores</button>
-            <button type="button" class="cust-tab ${_mt === 'winnings' ? 'active' : ''}" data-tab="winnings" style="${mtabStyle('winnings')}">Winnings</button>
+            ${currentRole === 'admin' ? `<button type="button" class="cust-tab ${_mt === 'winnings' ? 'active' : ''}" data-tab="winnings" style="${mtabStyle('winnings')}">Winnings</button>` : ''}
             <button type="button" class="cust-tab ${_mt === 'points' ? 'active' : ''}" data-tab="points" style="${mtabStyle('points')}">Points</button>
             <button type="button" class="cust-tab ${_mt === 'info' ? 'active' : ''}" data-tab="info" style="${mtabStyle('info')}">Info</button>
         </div>

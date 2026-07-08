@@ -5589,7 +5589,7 @@ def api_event_game_results():
 
 
 @app.route("/api/events/record-game-payouts", methods=["POST"])
-@require_role("manager")
+@require_role("admin")
 def api_record_game_payouts():
     """Record the Games tab's determined winners into the PAYOUTS tab
     (tgf_events/tgf_payouts + ledger reconciliation). Every row ties to
@@ -5627,7 +5627,7 @@ def api_record_game_payouts():
 
 
 @app.route("/api/events/game-payouts-preview")
-@require_role("manager")
+@require_role("admin")
 def api_game_payouts_preview():
     """Server-assembled payout rows for one event (no write) — feeds the
     Record Payouts confirm dialog."""
@@ -11113,17 +11113,21 @@ def api_merge_transactions():
 
 @app.route("/tgf")
 def tgf_page():
+    # Payouts are admin-only (Kerry, 2026-07-08: managers must not make
+    # prize payouts or see any payout tabs)
+    if session.get("role") != "admin":
+        return redirect("/events")
     return render_template("tgf.html")
 
 
 @app.route("/api/tgf")
-@require_role("manager")
+@require_role("admin")
 def api_tgf_data():
     return jsonify(get_tgf_data())
 
 
 @app.route("/api/tgf", methods=["POST"])
-@require_role("manager")
+@require_role("admin")
 def api_tgf_action():
     d = request.json or {}
     action = d.get("action")
@@ -11451,7 +11455,7 @@ def api_tgf_match_diagnostic():
 
 
 @app.route("/api/tgf/mark-paid", methods=["POST"])
-@require_role("manager")
+@require_role("admin")
 def api_tgf_mark_paid():
     """Mark a group of payouts as paid via non-Venmo method.
 
@@ -11550,7 +11554,7 @@ def api_tgf_mark_paid():
 
 
 @app.route("/api/tgf/parse-screenshot", methods=["POST"])
-@require_role("manager")
+@require_role("admin")
 def api_tgf_parse_screenshot():
     """Accept a base64 image, send to Claude vision, return parsed payouts JSON."""
     d = request.json or {}
