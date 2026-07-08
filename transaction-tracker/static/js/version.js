@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.49.1";
+window.TGF_VERSION = "2.49.2";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.49.2",
+    date: "2026-07-08",
+    changes: [
+      "HYPERLINKS = UNIVERSAL BLUE (Kerry): customer and item/event links in table rows (.cell-link) are the classic hyperlink blue (#2563eb, new --link var) -- everyone associates hyperlinks with blue. Orange stays reserved for CTAs and active states; all other table-row text is black, including the Handicaps index numbers (desktop + mobile card) which had inherited orange from the palette swap.",
+    ],
+  },
   {
     version: "2.49.1",
     date: "2026-07-08",

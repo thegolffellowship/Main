@@ -13,6 +13,8 @@
     --text-placeholder: #9CA3AF; /* FG4 — placeholder */
     --primary: #E87C3E;          /* TGF ORANGE — accent / CTAs */
     --primary-hover: #D06B2E;    /* ORANGE HOVER */
+    --link: #2563eb;             /* hyperlinks stay universal blue (Kerry) */
+    --link-hover: #1d4ed8;
     --footer: #111111;
     --chapter-sa: #D3DDE4;       /* San Antonio (dark text; alt below) */
     --chapter-sa-alt: #8FA8B8;
@@ -864,17 +866,18 @@ th[data-sort].sort-active .sort-arrow { opacity: 1; color: var(--primary); }
 .btn-clear-filters.visible { display: inline-flex; }
 
 /* ---- Clickable Links ---- */
-/* Customer/name links read as plain black text (Kerry, 2026-07-08 —
-   the palette swap turned them orange); hover underline keeps the
-   clickable affordance. */
+/* Hyperlinks in table cells (customer names, item/event names) keep the
+   universal hyperlink blue — "everyone associates hyperlinks with blue"
+   (Kerry, 2026-07-08). Orange is reserved for CTAs/active states; plain
+   table text is black. */
 .cell-link {
-    color: var(--text);
+    color: var(--link);
     cursor: pointer;
     text-decoration: none;
 }
 .cell-link:hover {
     text-decoration: underline;
-    color: var(--primary-hover);
+    color: var(--link-hover);
 }
 
 /* ---- Modal Overlay ---- */
