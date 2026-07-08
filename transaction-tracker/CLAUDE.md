@@ -346,7 +346,10 @@ use). Chapter semantic layer: `--chapter-austin #BF5700` (white text),
 `--chapter-sa #D3DDE4` (dark text, alt `--chapter-sa-alt #8FA8B8`),
 `--chapter-national #374151` — applied to the Events/Handicaps chapter pills.
 PWA `theme-color` metas + manifest are TGF orange. Do not reintroduce royal
-blue for interactive/CTA states.
+blue for interactive/CTA states. EXCEPTION (v2.49.2, Kerry): HYPERLINKS keep
+the universal hyperlink blue — `--link #2563eb` / `--link-hover #1d4ed8` on
+`.cell-link` (and the already-blue participation links). Table-row text that
+is not a hyperlink, a badge, or an action is plain black.
 
 ## Global CSS gotcha: tbody td is nowrap everywhere (IMPORTANT)
 
