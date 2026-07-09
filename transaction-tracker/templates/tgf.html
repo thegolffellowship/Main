@@ -4,6 +4,11 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
     <title>TGF — Payouts</title>
+    <!-- TGF Design System Phase 1 (v2.54.0): Bitter serif for headings/
+         nav/stat numerals per the Claude Design handoff -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Bitter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="/static/css/dashboard.css">
     <link rel="manifest" href="/static/manifest.json">
     <link rel="icon" href="/static/icon.svg" type="image/svg+xml">
@@ -13,6 +18,51 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="apple-mobile-web-app-title" content="TGF Tracker">
     <style>
+        /* ═══ TGF Design System Phase 1 (v2.54.0, Claude Design handoff) ═══
+           Dark top nav + Bitter type + Command Ledger. This page is the
+           reference implementation; site-wide rollout is Phase 2. */
+        body { font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; }
+
+        /* Dark top nav */
+        header.tgf-nav {
+            position: sticky; top: 0; z-index: 100;
+            display: flex; align-items: center; justify-content: space-between;
+            gap: 12px; padding: 14px 28px; background: #1B1B1B;
+        }
+        .tgf-nav-left { display: flex; align-items: center; gap: 14px; }
+        .tgf-nav-left img { width: 34px; height: 34px; display: block; }
+        .tgf-wordmark { font: 700 16px/1.1 'Bitter', serif; color: #fff; }
+        .tgf-version-chip {
+            font: 600 10px/1 'Bitter', serif; letter-spacing: .5px; color: #9CA3AF;
+            border: 1px solid #374151; border-radius: 5px; padding: 3px 6px;
+            text-decoration: none;
+        }
+        .tgf-version-chip:hover { color: #E87C3E; border-color: #E87C3E; }
+        .tgf-nav-right { display: flex; align-items: center; gap: 26px; flex-wrap: wrap; justify-content: flex-end; }
+        .tgf-navlink {
+            font: 700 11px/1 'Bitter', serif; letter-spacing: 1.5px;
+            text-transform: uppercase; color: #D1D5DB; text-decoration: none;
+            transition: color .15s;
+        }
+        .tgf-navlink:hover, .tgf-navlink.active { color: #E87C3E; }
+        .tgf-nav-right a.role-pill-link { text-decoration: none; }
+        .tgf-nav-right .role-badge {
+            display: inline-block; height: 32px; line-height: 32px; padding: 0 16px;
+            background: #E87C3E; color: #fff; border-radius: 9999px;
+            font-family: 'Bitter', serif; font-weight: 700; font-size: 10px;
+            letter-spacing: 1.5px; text-transform: uppercase; transition: background .15s;
+        }
+        .tgf-nav-right a.role-pill-link:hover .role-badge { background: #D06B2E; }
+        #btn-logout.tgf-logout {
+            background: none; border: none; color: #9CA3AF; cursor: pointer; padding: 0;
+            font: 600 10px/1 'Bitter', serif; letter-spacing: 1.5px; text-transform: uppercase;
+        }
+        #btn-logout.tgf-logout:hover { color: #E87C3E; }
+        @media (max-width: 768px) {
+            header.tgf-nav { padding: 10px 14px; }
+            .tgf-nav-right { gap: 12px; }
+        }
+
         /* ── TGF Payouts page styles ────────────────────────────── */
         .tgf-layout { display: flex; gap: 0; min-height: calc(100vh - 130px); }
         .tgf-sidebar {
@@ -157,23 +207,159 @@
         }
         .empty-state h3 { font-size: 1.1rem; margin-bottom: 0.5rem; }
 
-        /* Top-level tab toggle */
+        /* Sub-tab bar (TGF DS): Bitter uppercase text tabs, orange active
+           underline; UNPAID renders as a solid orange pill pushed right —
+           the standard treatment for an admin-only nav item */
         .top-tabs {
-            display: flex; gap: 0; margin-bottom: 0;
-            border-bottom: 2px solid var(--border); padding: 0 2rem;
-            background: var(--surface);
+            display: flex; gap: 32px; align-items: center; margin-bottom: 0;
+            border-bottom: 1px solid var(--border); padding: 0 28px;
+            background: #fff;
         }
         .top-tab {
-            padding: 0.75rem 1.5rem; cursor: pointer; font-size: 0.9rem;
-            font-weight: 700; color: var(--text-muted); border-bottom: 3px solid transparent;
-            margin-bottom: -2px; transition: color 0.15s, border-color 0.15s;
+            padding: 14px 0; cursor: pointer;
+            font: 700 12px/1 'Bitter', serif; letter-spacing: 1.5px;
+            color: #6B7280; border-bottom: 2px solid transparent;
+            margin-bottom: -1px; transition: color 0.15s, border-color 0.15s, background 0.15s;
             background: none; border-top: none; border-left: none; border-right: none;
-            text-transform: uppercase; letter-spacing: 0.04em;
+            text-transform: uppercase;
         }
-        .top-tab:hover { color: var(--text); }
-        .top-tab.active { color: var(--primary); border-bottom-color: var(--primary); }
+        .top-tab:hover { color: #E87C3E; }
+        .top-tab.active { color: #E87C3E; border-bottom-color: #E87C3E; }
+        .top-tab.top-tab-pill {
+            margin-left: auto; margin-bottom: 0; background: #E87C3E; color: #fff;
+            border-radius: 9999px; padding: 6px 14px; font-size: 11px;
+            border-bottom: none;
+        }
+        .top-tab.top-tab-pill:hover, .top-tab.top-tab-pill.active { background: #D06B2E; color: #fff; }
+        @media (max-width: 768px) { .top-tabs { gap: 16px; padding: 0 14px; } }
 
         .section-hidden { display: none !important; }
+
+        /* ═══ Command Ledger (GOLFERS tab — TGF DS 2a/2b/2c) ═══ */
+        .ledger { display: flex; min-height: calc(100vh - 120px); }
+        .ledger-rail {
+            width: 300px; flex: none; background: #1B1B1B;
+            display: flex; flex-direction: column;
+            max-height: calc(100vh - 110px); position: sticky; top: 62px;
+        }
+        .ledger-rail-head { padding: 18px 20px 14px; border-bottom: 1px solid #2A2A2A; }
+        .ledger-eyebrow {
+            font: 700 11px/1 'Bitter', serif; letter-spacing: 1.5px;
+            text-transform: uppercase; color: #9CA3AF;
+        }
+        .ledger-search {
+            margin-top: 11px; width: 100%; height: 36px; box-sizing: border-box;
+            border: 1px solid #374151; border-radius: 8px; padding: 0 12px;
+            font-size: 13px; background: #161616; color: #fff; outline: none;
+            font-family: inherit;
+        }
+        .ledger-search::placeholder { color: #6B7280; }
+        .ledger-search:focus { box-shadow: 0 0 0 3px rgba(232,124,62,.35); }
+        .rail-scroll {
+            overflow: auto; flex: 1;
+            scrollbar-width: thin; scrollbar-color: rgba(255,255,255,.12) transparent;
+        }
+        .rail-scroll::-webkit-scrollbar { width: 6px; }
+        .rail-scroll::-webkit-scrollbar-track { background: transparent; }
+        .rail-scroll::-webkit-scrollbar-thumb { background: rgba(255,255,255,.12); border-radius: 3px; }
+        .rail-scroll::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,.22); }
+        .glf-row {
+            display: flex; align-items: center; justify-content: space-between;
+            gap: 10px; padding: 10px 20px; border-bottom: 1px solid #232323;
+            border-left: 3px solid transparent; cursor: pointer; transition: background .15s;
+        }
+        .glf-row:hover { background: rgba(255,255,255,.05); }
+        .glf-row.active { border-left-color: #E87C3E; background: rgba(232,124,62,.14); }
+        .glf-rank { width: 18px; font: 700 12px/1 'Bitter', serif; color: #8A8A8A; text-align: center; flex: none; }
+        .glf-row.active .glf-rank { color: #E87C3E; }
+        .glf-main { min-width: 0; }
+        .glf-name {
+            font: 700 13px/1.2 'Bitter', serif; color: #E2E2E2;
+            white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+        }
+        .glf-row.active .glf-name { color: #fff; }
+        .glf-sub { font-size: 11px; color: #8A8A8A; margin-top: 1px; }
+        .glf-total {
+            font: 700 13px/1 'Bitter', serif; color: #67C99A;
+            font-variant-numeric: tabular-nums; white-space: nowrap;
+        }
+        .glf-row.active .glf-total { color: #E87C3E; }
+
+        .ledger-detail { flex: 1; overflow: auto; background: #fff; }
+        .ledger-head {
+            padding: 22px 32px 16px; border-bottom: 1px solid var(--border);
+            display: flex; align-items: flex-end; justify-content: space-between;
+            gap: 20px; flex-wrap: wrap;
+        }
+        .ledger-toggle { display: flex; gap: 22px; margin-bottom: 14px; }
+        .ledger-toggle .sub-tab {
+            padding: 0 0 2px; margin: 0; font: 700 12px/1 'Bitter', serif;
+            border-bottom: 2px solid transparent; letter-spacing: 0;
+            text-transform: none;
+        }
+        .ledger-name { font: 700 27px/1.05 'Bitter', serif; color: #1B1B1B; }
+        .ledger-meta { font-size: 13px; color: #6B7280; margin-top: 5px; }
+        .ledger-stat { text-align: right; }
+        .ledger-stat-label {
+            font: 700 10px/1 'Bitter', serif; letter-spacing: 1.5px;
+            text-transform: uppercase; color: #6B7280;
+        }
+        .ledger-stat-val {
+            font: 700 40px/1 'Bitter', serif; color: #E87C3E; margin-top: 6px;
+            font-variant-numeric: tabular-nums;
+        }
+        .ledger-hint {
+            padding: 12px 32px 6px; font: 700 10px/1 'Bitter', serif;
+            letter-spacing: 1.5px; text-transform: uppercase; color: #9CA3AF;
+        }
+        .ev-band {
+            display: flex; align-items: center; justify-content: space-between;
+            gap: 14px; padding: 7px 32px; position: sticky; top: 0;
+            cursor: pointer; user-select: none; z-index: 2;
+        }
+        .ev-band-left { display: flex; align-items: baseline; gap: 9px; min-width: 0; flex-wrap: wrap; }
+        .ev-chev { font: 700 11px/1 'Bitter', serif; width: 10px; flex: none; }
+        .ev-code { font: 700 10px/1 'Bitter', serif; }
+        .ev-name { font: 700 13px/1.2 'Bitter', serif; }
+        .ev-date { font-size: 11px; }
+        .ev-chip {
+            font: 700 9px/1 'Bitter', serif; letter-spacing: 1px; text-transform: uppercase;
+            padding: 3px 7px; border-radius: 9999px; white-space: nowrap;
+        }
+        .ev-subtotal { font: 700 13px/1 'Bitter', serif; font-variant-numeric: tabular-nums; white-space: nowrap; }
+        .pay-line {
+            display: grid; grid-template-columns: 5px 140px 1fr 110px;
+            align-items: center; gap: 0 13px; padding: 4px 32px;
+            border-bottom: 1px solid #F3F2EF; transition: background .15s;
+        }
+        .pay-line:hover { background: #FAFAF9; }
+        .pay-bar { width: 5px; height: 13px; border-radius: 3px; }
+        .pay-cat { font-size: 11.5px; font-weight: 600; }
+        .pay-detail { font-size: 11.5px; color: #4B5563; }
+        .pay-amt {
+            font-size: 11.5px; font-weight: 600; color: #1B1B1B;
+            text-align: right; font-variant-numeric: tabular-nums;
+        }
+        .ledger-back { display: none; }
+        @media (max-width: 768px) {
+            .ledger { flex-direction: column; min-height: 0; }
+            .ledger-rail { width: 100%; max-height: none; position: static; }
+            .ledger.has-selection .ledger-rail { display: none; }
+            .ledger-detail { display: none; }
+            .ledger.has-selection .ledger-detail { display: block; }
+            .ledger-back {
+                display: inline-block; background: none; border: none; padding: 0;
+                margin: 14px 20px 0; font: 600 13px/1 'Bitter', serif;
+                color: #6B7280; cursor: pointer;
+            }
+            .ledger-back:hover { color: #E87C3E; }
+            .ledger-head { padding: 12px 20px 12px; }
+            .ledger-name { font-size: 22px; }
+            .ledger-stat-val { font-size: 32px; }
+            .ledger-hint { padding: 10px 20px 6px; }
+            .ev-band { padding: 9px 20px; }
+            .pay-line { grid-template-columns: 4px 90px 1fr 80px; padding: 5px 20px; }
+        }
 
         /* Rank column */
         .rank-col { width: 30px; text-align: center; color: var(--text-muted); font-size: 0.8rem; }
@@ -187,36 +373,35 @@
     </style>
 </head>
 <body>
-    <header>
-        <div class="header-content">
-            <h1>TGF Transaction Tracker</h1>
-            <p class="subtitle">Payouts & Winnings</p>
-            <a href="/changelog" class="version-link" id="version-badge" title="View changelog">v2.0.0</a>
+    <!-- Dark top nav (TGF DS 2a). The orange role pill doubles as the
+         Admin link; icon mark is a placeholder until Kerry supplies the
+         official tgf-icon SVGs from the design system. -->
+    <header class="tgf-nav">
+        <div class="tgf-nav-left">
+            <img src="/static/icon.svg" alt="TGF" id="tgf-nav-icon">
+            <span class="tgf-wordmark">Tracker</span>
+            <a href="/changelog" class="tgf-version-chip" id="version-badge" title="View changelog">v2.0.0</a>
         </div>
-        <div class="header-actions">
-            <span id="role-badge" class="role-badge" style="display:none;"></span>
-            <button id="btn-logout" class="btn btn-secondary" title="Log out" style="display:none;">Log Out</button>
-        </div>
+        <nav class="tgf-nav-right">
+            <a class="tgf-navlink" href="/events">Events</a>
+            <a class="tgf-navlink" href="/contests">Season<span class="nav-label-full"> Contests</span></a>
+            <a class="tgf-navlink" href="/handicaps">Handicaps</a>
+            <a class="tgf-navlink" href="/transactions">Transactions</a>
+            <a class="tgf-navlink" href="/customers">Customers</a>
+            <a class="tgf-navlink active" href="/tgf">Payouts</a>
+            <a class="role-pill-link" href="/accounting" title="Admin dashboard"><span id="role-badge" class="role-badge" style="display:none;"></span></a>
+            <button id="btn-logout" class="tgf-logout" title="Log out" style="display:none;">Log Out</button>
+        </nav>
     </header>
 
     <main>
-        <!-- Tab Navigation -->
-        <nav class="tab-nav">
-            <a href="/events">Events</a>
-            <a href="/contests">Season<span class="nav-label-full"> Contests</span></a>
-            <a href="/handicaps">Handicaps</a>
-            <a href="/transactions">Transactions</a>
-            <a href="/customers">Customers</a>
-            <a href="/tgf" class="admin-nav active" style="display:none;">Payouts</a>
-            <a href="/accounting" class="admin-nav admin-tab" style="display:none;">Admin</a>
-        </nav>
-
-        <!-- Top-level EVENTS / SEASON CONTESTS / GOLFERS tabs -->
+        <!-- Sub-tab bar (TGF DS): text tabs left, admin-only UNPAID as an
+             orange pill pushed right — the render standard for a gated tab -->
         <div class="top-tabs">
             <button class="top-tab active" data-top="events">Events</button>
             <button class="top-tab" data-top="contests">Season<span class="tab-full"> Contests</span></button>
-            <button class="top-tab" data-top="unpaid">Unpaid</button>
             <button class="top-tab" data-top="golfers">Golfers</button>
+            <button class="top-tab top-tab-pill" data-top="unpaid">Unpaid</button>
         </div>
 
         <!-- ═══════════ EVENTS SECTION ═══════════ -->
@@ -240,18 +425,21 @@
             <div id="unpaid-main"></div>
         </div>
 
-        <!-- ═══════════ GOLFERS SECTION ═══════════ -->
-        <div id="section-golfers" class="tgf-layout section-hidden">
-            <div class="tgf-sidebar" id="golfers-sidebar">
-                <div class="sidebar-title">Golfers</div>
-                <div id="golfers-list">
+        <!-- ═══════════ GOLFERS SECTION — Command Ledger (TGF DS 2a/2b/2c) ═══════════ -->
+        <div id="section-golfers" class="ledger section-hidden">
+            <aside class="ledger-rail">
+                <div class="ledger-rail-head">
+                    <div class="ledger-eyebrow">Golfers</div>
+                    <input class="ledger-search" id="golfer-search" placeholder="Search golfers" autocomplete="off">
+                </div>
+                <div class="rail-scroll" id="golfers-list">
                     <div class="empty-state"><p>Loading...</p></div>
                 </div>
-            </div>
-            <div class="tgf-main" id="golfers-main">
+            </aside>
+            <div class="ledger-detail" id="golfers-main">
                 <div class="empty-state">
                     <h3>Select a golfer</h3>
-                    <p>Choose a golfer from the sidebar to view their payout history</p>
+                    <p>Choose a golfer to view their winnings</p>
                 </div>
             </div>
         </div>
@@ -745,29 +933,70 @@
             `;
         }
 
-        // ═══════════ GOLFERS TAB ═════════════════════════════════
+        // ═══════════ GOLFERS TAB — Command Ledger (TGF DS 2a/2b/2c) ═══════
+
+        // Chapter color layer (contrast-corrected pairings from the handoff)
+        const CHAPTER_STYLES = {
+            "austin":      { bg: "#BF5700", title: "#FFFFFF", meta: "rgba(255,255,255,.72)", chipBg: "rgba(255,255,255,.16)", chipTx: "#FFFFFF", label: "AUSTIN" },
+            "san antonio": { bg: "#D3DDE4", title: "#1B1B1B", meta: "#4B5563", chipBg: "rgba(27,27,27,.10)", chipTx: "#1B1B1B", label: "SAN ANTONIO" },
+            "_tgf":        { bg: "#374151", title: "#FFFFFF", meta: "rgba(255,255,255,.72)", chipBg: "rgba(255,255,255,.16)", chipTx: "#FFFFFF", label: "TGF" },
+        };
+        function chapterStyle(ev) {
+            const key = (ev.chapter || "").trim().toLowerCase();
+            return CHAPTER_STYLES[key] || CHAPTER_STYLES["_tgf"];
+        }
+
+        // Payout category color map (label text + color bar)
+        const CAT_COLORS = {
+            team_net: "#1D4ED8", individual_net: "#15803D", individual_gross: "#B45309",
+            skins: "#BE185D", mvp: "#6D28D9", closest_to_pin: "#0F766E",
+            hole_in_one: "#A16207", monthly_points: "#C2410C", other: "#475569",
+        };
+        const catColor = c => CAT_COLORS[c] || CAT_COLORS.other;
+
+        // Stat label is the season year, data-driven for future seasons
+        function seasonYear() {
+            let y = 0;
+            DATA.events.forEach(ev => {
+                const m = String(ev.event_date || "").match(/^(\d{4})/);
+                if (m) y = Math.max(y, parseInt(m[1]));
+            });
+            return y || new Date().getFullYear();
+        }
+
+        let golferSearch = "";
+        let openEvents = new Set();   // expanded event ids for the selected golfer
 
         function renderGolfersSidebar() {
             const el = $("#golfers-list");
-            // Sort by all-time winnings descending
             const sorted = Object.values(DATA.winnings).sort((a, b) => b.total_winnings - a.total_winnings);
             if (!sorted.length) {
                 el.innerHTML = '<div class="empty-state"><p>No golfers yet</p></div>';
                 return;
             }
-            el.innerHTML = sorted.map(g => `
-                <div class="sidebar-item${g.id === selectedGolferId ? ' active' : ''}" data-gid="${g.id}">
-                    <div>
-                        <div class="name">${g.name}</div>
-                        <div class="meta">${g.events_played} event${g.events_played !== 1 ? 's' : ''}</div>
-                    </div>
-                    <div class="amount">${fmt(g.total_winnings)}</div>
-                </div>
-            `).join("");
+            const q = golferSearch.trim().toLowerCase();
+            let rows = "";
+            sorted.forEach((g, i) => {
+                if (q && !g.name.toLowerCase().includes(q)) return;
+                rows += `
+                    <div class="glf-row${g.id === selectedGolferId ? ' active' : ''}" data-gid="${g.id}">
+                        <div style="display:flex;align-items:center;gap:11px;min-width:0;">
+                            <span class="glf-rank">${i + 1}</span>
+                            <div class="glf-main">
+                                <div class="glf-name">${g.name}</div>
+                                <div class="glf-sub">${g.events_played} event${g.events_played !== 1 ? 's' : ''}</div>
+                            </div>
+                        </div>
+                        <div class="glf-total">${fmt(g.total_winnings)}</div>
+                    </div>`;
+            });
+            el.innerHTML = rows || '<div class="empty-state"><p>No golfers match your search</p></div>';
 
-            el.querySelectorAll(".sidebar-item").forEach(item => {
+            el.querySelectorAll(".glf-row").forEach(item => {
                 item.addEventListener("click", () => {
                     selectedGolferId = parseInt(item.dataset.gid);
+                    openEvents = new Set();   // collapsed by default on every selection
+                    $("#section-golfers").classList.add("has-selection");
                     renderGolfersSidebar();
                     renderGolferMain();
                 });
@@ -782,32 +1011,67 @@
                 return;
             }
 
-            // Find all events with payouts for this customer (displayed as "golfer")
+            // All accounts with payouts for this golfer, newest first
             const golferEvents = [];
             DATA.events.forEach(ev => {
                 const myPayouts = (ev.payouts || []).filter(p => p.customer_id === g.id);
                 if (myPayouts.length) {
-                    const evTotal = myPayouts.reduce((s, p) => s + p.amount, 0);
-                    golferEvents.push({ event: ev, payouts: myPayouts, total: evTotal });
+                    golferEvents.push({ event: ev, payouts: myPayouts,
+                        total: myPayouts.reduce((s, p) => s + p.amount, 0) });
                 }
             });
+            golferEvents.sort((a, b) => (b.event.event_date || "").localeCompare(a.event.event_date || ""));
 
+            const avg = g.events_played ? g.total_winnings / g.events_played : 0;
             main.innerHTML = `
-                <div class="sub-tabs">
-                    <button class="sub-tab active" data-sub="gpayouts">Payouts</button>
-                    <button class="sub-tab" data-sub="ginfo">Info</button>
+                <button class="ledger-back" id="ledger-back">&lsaquo; Golfers</button>
+                <div class="ledger-head">
+                    <div>
+                        <div class="ledger-toggle">
+                            <button class="sub-tab active" data-sub="gpayouts">Payouts</button>
+                            <button class="sub-tab" data-sub="ginfo">Info</button>
+                        </div>
+                        <div class="ledger-name">${g.name}</div>
+                        <div class="ledger-meta">${g.events_played} event${g.events_played !== 1 ? 's' : ''} &middot; ${fmt(avg)} avg / event</div>
+                    </div>
+                    <div class="ledger-stat">
+                        <div class="ledger-stat-label">${seasonYear()} Winnings</div>
+                        <div class="ledger-stat-val">${fmt(g.total_winnings)}</div>
+                    </div>
                 </div>
                 <div id="golfer-payouts">${renderGolferPayouts(g, golferEvents)}</div>
-                <div id="golfer-info" style="display:none;">${renderGolferInfo(g)}</div>
+                <div id="golfer-info" style="display:none;padding:20px 32px;">${renderGolferInfo(g)}</div>
             `;
 
-            main.querySelectorAll(".sub-tab").forEach(btn => {
+            main.querySelectorAll(".ledger-toggle .sub-tab").forEach(btn => {
                 btn.addEventListener("click", () => {
-                    main.querySelectorAll(".sub-tab").forEach(b => b.classList.remove("active"));
+                    main.querySelectorAll(".ledger-toggle .sub-tab").forEach(b => b.classList.remove("active"));
                     btn.classList.add("active");
                     const t = btn.dataset.sub;
                     main.querySelector("#golfer-payouts").style.display = t === "gpayouts" ? "" : "none";
                     main.querySelector("#golfer-info").style.display = t === "ginfo" ? "" : "none";
+                });
+            });
+
+            const back = main.querySelector("#ledger-back");
+            if (back) back.addEventListener("click", () => {
+                selectedGolferId = -1;
+                $("#section-golfers").classList.remove("has-selection");
+                renderGolfersSidebar();
+                main.innerHTML = '<div class="empty-state"><h3>Select a golfer</h3><p>Choose a golfer to view their winnings</p></div>';
+            });
+
+            attachEventBandHandlers(main, g, golferEvents);
+        }
+
+        function attachEventBandHandlers(main, g, golferEvents) {
+            main.querySelectorAll(".ev-band").forEach(band => {
+                band.addEventListener("click", () => {
+                    const id = band.dataset.evid;
+                    if (openEvents.has(id)) openEvents.delete(id); else openEvents.add(id);
+                    const wrap = main.querySelector("#golfer-payouts");
+                    wrap.innerHTML = renderGolferPayouts(g, golferEvents);
+                    attachEventBandHandlers(main, g, golferEvents);
                 });
             });
         }
@@ -816,31 +1080,40 @@
             if (!golferEvents.length) {
                 return '<div class="empty-state"><p>No payouts yet</p></div>';
             }
-
-            let html = `<h2 style="font-size:1.15rem;margin-bottom:1rem;">${g.name} &mdash; All-Time Winnings: <span style="color:var(--green);">${fmt(g.total_winnings)}</span></h2>`;
-
+            let html = '<div class="ledger-hint">Click to expand</div><div style="padding-bottom:24px;">';
             golferEvents.forEach(ge => {
+                const ev = ge.event;
+                const ch = chapterStyle(ev);
+                const evid = String(ev.id);
+                const open = openEvents.has(evid);
                 html += `
-                    <div class="history-event">
-                        <div class="history-event-header">
-                            <span>${ge.event.code} &mdash; ${fmtDate(ge.event.event_date)}</span>
-                            <span class="event-total">${fmt(ge.total)}</span>
+                    <div class="ev-band" data-evid="${evid}" style="background:${ch.bg};">
+                        <div class="ev-band-left">
+                            <span class="ev-chev" style="color:${ch.title};">${open ? "&#9662;" : "&#9656;"}</span>
+                            <span class="ev-code" style="color:${ch.meta};">${ev.code}</span>
+                            ${ev.name && ev.name !== ev.code ? `<span class="ev-name" style="color:${ch.title};">${ev.name}</span>` : ""}
+                            <span class="ev-date" style="color:${ch.meta};">${fmtDate(ev.event_date)}</span>
+                            <span class="ev-chip" style="background:${ch.chipBg};color:${ch.chipTx};">${ch.label}</span>
                         </div>
-                        <table class="payout-table" style="margin-bottom:0.5rem;">
-                            <tbody>
-                                ${ge.payouts.map(p => `
-                                    <tr style="cursor:default;">
-                                        <td>${catBadge(p.category)}</td>
-                                        <td>${shortPayoutDesc(p.description, p.category) || CATEGORY_LABELS[p.category] || p.category}</td>
-                                        <td class="right total-amount">${fmt(p.amount)}</td>
-                                    </tr>
-                                `).join("")}
-                            </tbody>
-                        </table>
-                    </div>
-                `;
+                        <span class="ev-subtotal" style="color:${ch.title};">${fmt(ge.total)}</span>
+                    </div>`;
+                if (open) {
+                    ge.payouts.forEach(p => {
+                        const mobile = window.innerWidth <= 768;
+                        const catLabel = (mobile && CATEGORY_LABELS_SHORT[p.category])
+                            || CATEGORY_LABELS[p.category] || p.category;
+                        const detail = shortPayoutDesc(p.description, p.category) || "";
+                        html += `
+                            <div class="pay-line">
+                                <span class="pay-bar" style="background:${catColor(p.category)};"></span>
+                                <span class="pay-cat" style="color:${catColor(p.category)};">${catLabel}</span>
+                                <span class="pay-detail">${detail}</span>
+                                <span class="pay-amt">${fmt(p.amount)}</span>
+                            </div>`;
+                    });
+                }
             });
-
+            html += '</div>';
             return html;
         }
 
@@ -1033,6 +1306,11 @@
         document.addEventListener("DOMContentLoaded", () => {
             loadData();
             if (typeof initAuth === "function") initAuth();
+            const gs = $("#golfer-search");
+            if (gs) gs.addEventListener("input", () => {
+                golferSearch = gs.value;
+                renderGolfersSidebar();
+            });
         });
     })();
     </script>

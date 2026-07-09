@@ -783,3 +783,19 @@ Surfaces: `GET /api/events/tgf-mvp?event=<item_name>` (manager);
 MCP tool `determine_tgf_mvp`; Events Games tab 🏆 rows — City MVP
 row and TGF MVP block hydrate lazily via hydrateMvpDeterminations()
 (per-event fetch cache `_mvpDetCache`, spans marked data-done).
+
+## Payouts page — Command Ledger (v2.54.0, TGF DS Phase 1)
+
+/tgf is the Design System reference page (see CLAUDE.md → TGF Design
+System rollout). Chrome: dark top nav + white sub-tab bar; tab names
+unchanged (Kerry) but UNPAID renders as the right-aligned orange pill
+(admin-only convention). The GOLFERS tab is the Command Ledger:
+`.ledger-rail` (dark, 300px, search + ranked winnings leaderboard,
+active row = orange left border) + `.ledger-detail` (Payouts/Info
+toggle, season-year WINNINGS stat, per-event `.ev-band` collapsible
+groups — chapter-colored via the JS `CHAPTER_STYLES` map, payout lines
+color-coded via `CAT_COLORS`). Events collapse by default; `openEvents`
+Set tracks per-event expansion. Mobile (≤768px): rail-only until a
+golfer is selected (`.ledger.has-selection`), then detail w/ "‹ Golfers"
+back button. Events/Season Contests/Unpaid tabs keep their previous
+layouts and all pay/mark-paid plumbing.

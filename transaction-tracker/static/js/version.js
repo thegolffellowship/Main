@@ -1,5 +1,15 @@
-window.TGF_VERSION = "2.53.1";
+window.TGF_VERSION = "2.54.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.54.0",
+    date: "2026-07-09",
+    changes: [
+      "TGF DESIGN SYSTEM PHASE 1 (Claude Design handoff, Kerry-approved): the Payouts page is the reference implementation of the new design standards. Dark near-black top nav (TGF icon + 'Tracker' wordmark + version chip left; uppercase Bitter nav links + orange role pill linking to Admin right), white sub-tab bar with UNPAID rendered as a right-aligned solid-orange pill -- the new visual convention for an admin-only tab. Tab names unchanged per Kerry.",
+      "GOLFERS tab rebuilt as the Command Ledger: dark left rail with ranked golfer leaderboard (search, rank, event count, winnings in money-green; active golfer gets the orange left-border treatment) and a white detail panel -- Payouts/Info toggle, golfer name in Bitter serif, season-year WINNINGS stat in TGF orange, and per-event collapsible groups with chapter-colored header bands (Austin burnt orange / San Antonio slate / TGF dark) and category-colored payout lines. Events collapse by default; each toggles independently.",
+      "Mobile: the ledger becomes a leaderboard list -> golfer detail flow with a back affordance, per the 2b/2c mock screens.",
+      "Design tokens (dark surfaces, money greens, payout category colors) added to dashboard.css :root for the Phase 2 site-wide rollout -- which is ON HOLD pending Claude Design's SEASON CONTESTS + HANDICAPS prototypes (Kerry, member-pages priority). TGF icon marks are still placeholders until the design-system SVGs land.",
+    ],
+  },
   {
     version: "2.53.1",
     date: "2026-07-09",
