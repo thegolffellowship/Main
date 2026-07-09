@@ -1,0 +1,227 @@
+/* ═══════════════════════════════════════════════════════════════
+   THE GOLF FELLOWSHIP (TGF) — DESIGN TOKENS
+   "Your Golf Crew. Zero Hassle."
+   "Connect. Compete. Celebrate."
+
+   REFERENCE COPY pulled from the Claude Design "TGF Design System"
+   project (5df3bbbf-c66a-410b-a486-91019a33e41a) via DesignSync on
+   2026-07-09. Source of truth lives in Claude Design — re-pull rather
+   than editing here. The Tracker's live tokens are mirrored into
+   static/css/dashboard.css :root as pages adopt the DS.
+   ═══════════════════════════════════════════════════════════════ */
+
+/* Bitter from Google Fonts (700 for headings; 600 & 400 for supporting weight) */
+@import url('https://fonts.googleapis.com/css2?family=Bitter:wght@400;500;600;700&display=swap');
+
+:root {
+  /* ─── Core Brand ──────────────────────────────────────────── */
+  --tgf-orange: #E87C3E;          /* Primary accent */
+  --tgf-orange-hover: #D06B2E;    /* -8% luminance */
+  --tgf-black: #1B1B1B;           /* Near-black, eye-friendly */
+  --tgf-surface-dark: #111111;    /* Footer / alt sections */
+  --tgf-white: #FFFFFF;
+
+  /* ─── Surface / Text ──────────────────────────────────────── */
+  --fg1: #1B1B1B;                 /* Primary text */
+  --fg2: #4B5563;                 /* Body secondary */
+  --fg3: #6B7280;                 /* Muted / meta */
+  --fg4: #9CA3AF;                 /* Placeholder / disabled */
+  --fg-on-dark: #E2E2E2;          /* Light-gray text on #111/#1B */
+  --fg-on-dark-muted: #D1D5DB;
+
+  --bg1: #FFFFFF;                 /* Page background light */
+  --bg2: #F8F8F8;                 /* Card / muted surface */
+  --bg-dark: #111111;             /* Dark alt section */
+  --bg-primary-dark: #1B1B1B;     /* Primary dark (body) */
+
+  --border: #E5E7EB;              /* Default borders */
+  --border-dark: #374151;         /* Borders on dark surfaces */
+  --border-darker: #2A2A2A;       /* Card borders in dark mode */
+
+  /* ─── Chapter Colors ──────────────────────────────────────── */
+  --chapter-sa: #8FA8B8;          /* Steel Blue-Gray (dark text) — also used #D3DDE4 (light variant) */
+  --chapter-sa-light: #D3DDE4;    /* Light steel-blue used on event-card bookends */
+  --chapter-sa-text: #1B1B1B;
+  --chapter-austin: #BF5700;      /* Burnt Orange (white text) */
+  --chapter-austin-text: #FFFFFF;
+  --chapter-national: #374151;    /* Dark gray (white text) */
+  --chapter-national-text: #FFFFFF;
+
+  /* ─── Semantic Status ─────────────────────────────────────── */
+  --success: #16A34A;
+  --success-bg: #D1FAE5;
+  --success-text: #065F46;
+  --warning: #D97706;
+  --warning-bg: #FEF3C7;
+  --warning-text: #92400E;
+  --destructive: #DC2626;
+  --destructive-bg: #FEE2E2;
+  --destructive-text: #991B1B;
+  --info: #2563EB;
+  --info-bg: #DBEAFE;
+  --info-text: #1E40AF;
+
+  /* Event "Register" pill color — green */
+  --register-green: #047857;
+  --register-green-light: #0D7556;
+
+  /* ─── Typography ──────────────────────────────────────────── */
+  --font-serif: 'Bitter', Georgia, serif;
+  --font-sans: 'Helvetica Neue', 'Arial', system-ui, sans-serif;
+  --font-mono: 'Geist Mono', ui-monospace, monospace;
+
+  /* Base type scale (18px root, 1.6 line-height on body) */
+  --fs-display: 56px;             /* Hero H1 desktop */
+  --fs-h1: 40px;
+  --fs-h2: 32px;
+  --fs-h3: 24px;
+  --fs-h4: 20px;
+  --fs-body-lg: 18px;             /* Default body */
+  --fs-body: 16px;
+  --fs-sm: 14px;
+  --fs-xs: 13px;
+  --fs-xxs: 11px;
+
+  /* Weights */
+  --fw-regular: 400;
+  --fw-medium: 500;
+  --fw-semibold: 600;
+  --fw-bold: 700;
+
+  /* Tracking (locked by convention) */
+  --ls-button: 2px;               /* uppercase CTA labels */
+  --ls-eyebrow: 1.5px;
+
+  /* Line heights */
+  --lh-tight: 1.1;
+  --lh-snug: 1.25;
+  --lh-body: 1.6;
+  --lh-relaxed: 1.7;
+
+  /* ─── Radii ───────────────────────────────────────────────── */
+  --r-pill: 9999px;               /* Primary pill buttons (48px radius ≈ full pill at 44-52px height) */
+  --r-card: 12px;                 /* Cards / drawers / modals */
+  --r-input: 8px;                 /* Form inputs (rounded-lg, never pill) */
+  --r-badge: 6px;                 /* Small badges */
+  --r-chip: 9999px;               /* Format chip (9H / 18H / 9/18) */
+
+  /* ─── Spacing (8pt base) ──────────────────────────────────── */
+  --sp-0: 0;
+  --sp-1: 4px;
+  --sp-2: 8px;
+  --sp-3: 12px;
+  --sp-4: 16px;
+  --sp-5: 20px;
+  --sp-6: 24px;
+  --sp-8: 32px;
+  --sp-10: 40px;
+  --sp-12: 48px;
+  --sp-16: 64px;
+  --sp-20: 80px;
+
+  /* Layout rules */
+  --container-max: 1200px;
+  --container-narrow: 800px;
+  --header-h: 56px;               /* mobile */
+  --header-h-lg: 64px;            /* desktop */
+  --chapter-bar-h: 40px;
+
+  /* ─── Shadows ─────────────────────────────────────────────── */
+  --shadow-xs: 0 1px 3px rgba(0,0,0,0.06);
+  --shadow-sm: 0 1px 3px rgba(0,0,0,0.10);
+  --shadow-md: 0 4px 12px rgba(0,0,0,0.10);
+  --shadow-lg: 0 8px 32px rgba(0,0,0,0.20);
+  --shadow-header: 0 2px 8px rgba(0,0,0,0.30);
+  --shadow-text: 0 2px 8px rgba(0,0,0,0.30);
+
+  /* ─── Motion ──────────────────────────────────────────────── */
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-standard: cubic-bezier(0.4, 0, 0.2, 1);
+  --dur-fast: 150ms;
+  --dur-base: 200ms;
+  --dur-med: 300ms;
+  --dur-slow: 400ms;
+  --dur-hero: 700ms;              /* hero entrance (staggered) */
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   SEMANTIC TYPOGRAPHY STYLES
+   Apply via class; everything uses Bitter for display, Helvetica for body.
+   ═══════════════════════════════════════════════════════════════ */
+
+html { font-size: 18px; }
+body {
+  font-family: var(--font-sans);
+  color: var(--fg1);
+  background: var(--bg1);
+  line-height: var(--lh-body);
+  -webkit-font-smoothing: antialiased;
+}
+
+.tgf-h1, .tgf-display {
+  font-family: var(--font-serif);
+  font-weight: var(--fw-bold);
+  font-size: var(--fs-display);
+  line-height: var(--lh-tight);
+  letter-spacing: -0.01em;
+  text-wrap: balance;
+}
+.tgf-h2 {
+  font-family: var(--font-serif);
+  font-weight: var(--fw-bold);
+  font-size: var(--fs-h1);
+  line-height: var(--lh-tight);
+  letter-spacing: -0.005em;
+}
+.tgf-h3 {
+  font-family: var(--font-serif);
+  font-weight: var(--fw-bold);
+  font-size: var(--fs-h3);
+  line-height: var(--lh-snug);
+}
+.tgf-h4 {
+  font-family: var(--font-serif);
+  font-weight: var(--fw-bold);
+  font-size: var(--fs-h4);
+  line-height: var(--lh-snug);
+}
+
+.tgf-body-lg   { font-size: var(--fs-body-lg); line-height: var(--lh-body); color: var(--fg1); }
+.tgf-body      { font-size: var(--fs-body);    line-height: var(--lh-body); color: var(--fg1); }
+.tgf-body-sm   { font-size: var(--fs-sm);      line-height: var(--lh-body); color: var(--fg3); }
+.tgf-meta      { font-size: var(--fs-xs);      line-height: 1.4;            color: var(--fg3); }
+
+/* Pill button labels — the visual signature of TGF */
+.tgf-cta-label {
+  font-family: var(--font-serif);
+  font-weight: var(--fw-bold);
+  text-transform: uppercase;
+  letter-spacing: var(--ls-button);
+}
+
+/* Footer section headers / eyebrows in orange */
+.tgf-eyebrow {
+  font-family: var(--font-serif);
+  font-weight: var(--fw-bold);
+  font-size: var(--fs-sm);
+  text-transform: uppercase;
+  letter-spacing: 0.125em;
+  color: var(--tgf-orange);
+}
+
+/* Italic tagline treatment used in hero + "Ready to Play" */
+.tgf-tagline-italic {
+  font-family: var(--font-sans);
+  font-style: italic;
+  font-size: var(--fs-body-lg);
+  color: var(--fg-on-dark);
+}
+
+/* Stat numerals use serif for newspaper-stat feel */
+.tgf-stat-num {
+  font-family: var(--font-serif);
+  font-weight: var(--fw-bold);
+  font-size: 28px;
+  color: var(--tgf-orange);
+  line-height: 1;
+}
