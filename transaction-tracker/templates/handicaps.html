@@ -277,6 +277,9 @@
         <span class="ev-tab active" data-hcp-chapter="all">ALL</span>
         <span class="ev-tab" data-hcp-chapter="Austin">AUSTIN</span>
         <span class="ev-tab" data-hcp-chapter="San Antonio">SAN ANTONIO</span>
+        <span style="width:1px;background:var(--border,#E5E7EB);margin:0 4px;align-self:stretch;"></span>
+        <span class="ev-tab active" data-hcp-status="members">MEMBERS</span>
+        <span class="ev-tab" data-hcp-status="all">EVERYONE</span>
     </nav></div>
 
         <!-- Stats -->
@@ -631,6 +634,14 @@
                 renderTable();
             });
         });
+        document.querySelectorAll('[data-hcp-status]').forEach(btn => {
+            btn.addEventListener('click', () => {
+                hcpStatusFilter = btn.dataset.hcpStatus;
+                document.querySelectorAll('[data-hcp-status]').forEach(b =>
+                    b.classList.toggle('active', b.dataset.hcpStatus === hcpStatusFilter));
+                renderTable();
+            });
+        });
         document.getElementById('sort-select').addEventListener('change', e => {
             currentSort = e.target.value;
             renderTable();
@@ -852,11 +863,17 @@
 
     // ── Table rendering ─────────────────────────────────────────────
     let hcpChapterFilter = "all";
+    // Standard view is CURRENT MEMBERS only (Kerry, v2.53.1) — guests,
+    // first-timers, expired/inactive, and unlinked players show under
+    // EVERYONE. Membership comes from customers.current_player_status.
+    let hcpStatusFilter = "members";
+    const HCP_MEMBER_STATUSES = new Set(["active_member", "member_plus"]);
     function renderTable() {
         const q = document.getElementById('hcp-search').value.trim().toLowerCase();
         let players = allPlayers.filter(p =>
             (!q || p.player_name.toLowerCase().includes(q))
             && (hcpChapterFilter === "all" || (p.chapter || "") === hcpChapterFilter)
+            && (hcpStatusFilter === "all" || HCP_MEMBER_STATUSES.has(p.player_status))
         );
 
         // Sort
@@ -899,7 +916,7 @@
         const tbody = document.getElementById('hcp-tbody');
         if (!players.length) {
             tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;padding:32px;color:#94a3b8;">' +
-                (allPlayers.length ? 'No players match your search.' : 'No handicap data yet. Use Import Rounds to upload your Handicap Server export.') +
+                (allPlayers.length ? 'No players match the current filters.' : 'No handicap data yet. Use Import Rounds to upload your Handicap Server export.') +
                 '</td></tr>';
             return;
         }
@@ -1009,7 +1026,7 @@
             mobileList.innerHTML = '';
             if (!players.length) {
                 mobileList.innerHTML = '<p style="text-align:center;color:#94a3b8;padding:32px 0;">' +
-                    (allPlayers.length ? 'No players match your search.' : 'No handicap data yet.') + '</p>';
+                    (allPlayers.length ? 'No players match the current filters.' : 'No handicap data yet.') + '</p>';
             } else {
                 const canManageMobile = currentRole === 'admin' || currentRole === 'manager';
                 players.forEach(p => {

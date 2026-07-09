@@ -18922,7 +18922,8 @@ def get_all_handicap_players(db_path: str | Path | None = None) -> list[dict]:
                    MIN(r.differential) AS best_differential,
                    AVG(r.differential) AS avg_differential,
                    l.customer_name,
-                   c.chapter
+                   c.chapter,
+                   c.current_player_status AS player_status
             FROM handicap_rounds r
             LEFT JOIN handicap_player_links l ON l.player_name = r.player_name
             LEFT JOIN customers c ON c.customer_id = l.customer_id
@@ -18962,6 +18963,7 @@ def get_all_handicap_players(db_path: str | Path | None = None) -> list[dict]:
             "player_name": name,
             "customer_name": row["customer_name"],
             "chapter": row["chapter"],
+            "player_status": row["player_status"],
             "handicap_index": index,
             "handicap_index_18": round(index * 2, 1) if index is not None else None,
             "total_rounds": row["total_rounds"],
