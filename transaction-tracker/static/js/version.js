@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.55.0";
+window.TGF_VERSION = "2.55.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.55.1",
+    date: "2026-07-09",
+    changes: [
+      "Season-total rule recorded (Kerry): best 10 event point totals + City Championship total is the TGF standard for THE FELLOWSHIP CUP and THE PLAYERS CUP (computed on the Golf Genius side today; documented in game-engine.md pending platform-claude's parameter pass). The projected points-reset formula as implemented live is documented on the mailbox thread (#64): master ladder 100 - 0.5x(p-1); race rank maps via ROUND(1 + coef x (r-1)); NET races prorate by largest-chapter headcount, The Players Cup restacks straight at coef 1.",
+    ],
+  },
   {
     version: "2.55.0",
     date: "2026-07-09",
