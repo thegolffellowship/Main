@@ -615,7 +615,12 @@
         </div>
     </div>
 
-    {% if member_mode %}<script>window.MEMBER_MODE = true;</script>{% endif %}
+    {% if member_mode %}<script>window.MEMBER_MODE = true;</script>
+    <style>
+        /* Member view: role-gated controls can never show, even when
+           injected by re-renders after the role pass (see contests.html) */
+        .manager-only, .admin-only { display: none !important; }
+    </style>{% endif %}
     <script src="/static/js/version.js"></script>
     <script src="/static/js/auth.js"></script>
     <script>

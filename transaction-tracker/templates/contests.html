@@ -750,7 +750,13 @@
         </div>
     </div>
 
-    {% if member_mode %}<script>window.MEMBER_MODE = true;</script>{% endif %}
+    {% if member_mode %}<script>window.MEMBER_MODE = true;</script>
+    <style>
+        /* Member view: manager/admin controls can NEVER show, including
+           ones injected by re-renders after applyRole() ran (the monthly
+           "Refresh from Golf Genius" leak, Kerry 2026-07-09) */
+        .manager-only, .admin-only { display: none !important; }
+    </style>{% endif %}
     <script src="/static/js/version.js"></script>
     <script src="/static/js/auth.js"></script>
     <script src="/static/js/points-render.js"></script>
@@ -2572,7 +2578,7 @@
         cont.innerHTML = `
             <div style="display:flex;flex-wrap:wrap;align-items:center;gap:0.35rem;margin:0.4rem 0 0.6rem;">${nav}
                 <button id="pr-monthly-refresh" class="manager-only" title="Refresh from Golf Genius${prMonthlyData.fetched_at ? ` (last: ${prMonthlyData.fetched_at})` : ""}"
-                    style="padding:0.35rem 0.75rem;cursor:pointer;font-size:0.78rem;font-weight:600;
+                    style="display:${userRole === "admin" || userRole === "manager" ? "" : "none"};padding:0.35rem 0.75rem;cursor:pointer;font-size:0.78rem;font-weight:600;
                            border:1px solid var(--border);border-radius:999px;background:var(--surface);
                            color:var(--text-muted);margin-left:auto;">&#8635; Refresh</button>
                 ${prMonthlyData.fetched_at && !compact ? `<span style="font-size:0.7rem;color:var(--text-muted);" title="Snapshot time — auto-refreshes daily; Refresh pulls live">as of ${escapeHtml(prMonthlyData.fetched_at)}</span>` : ""}

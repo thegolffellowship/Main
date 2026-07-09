@@ -57,6 +57,11 @@ header.shell-nav {
 .shell-nav .role-badge.role-manager, .shell-drawer .role-badge.role-manager {
     background: rgba(37,99,235,.18); color: #BFDBFE; border-color: #1E40AF;
 }
+/* Admin role: the ADMIN pill (a real /accounting link) replaces the
+   role badge on desktop; mobile keeps the badge (drawer row is the link) */
+@media (min-width: 769px) {
+    .shell-nav .role-badge.shell-badge-desktop-hide { display: none !important; }
+}
 .shell-logout {
     background: none; cursor: pointer; padding: 6px 14px;
     border: 1px solid var(--border-dark, #374151); border-radius: 9999px;
