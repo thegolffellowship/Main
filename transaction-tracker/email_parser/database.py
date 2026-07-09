@@ -30977,7 +30977,8 @@ def get_customer_winnings(customer_name: str, db_path=None, customer_id: int | N
                         if cust else customer_name)
 
         payouts = [dict(r) for r in conn.execute(
-            """SELECT p.amount, p.category, p.description,
+            """SELECT p.amount, p.category,
+                      LTRIM(REPLACE(p.description, 'auto: ', ''), ' ') as description,
                       e.name as event_name, e.event_date, e.course
                FROM tgf_payouts p
                JOIN tgf_events e ON e.id = p.event_id

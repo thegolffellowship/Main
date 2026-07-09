@@ -3626,7 +3626,7 @@
                 // Mobile: game name left + amount right only — the free-text
                 // description column repeats the category (Kerry, 2026-07-08)
                 html += `<tr><td style="padding:0.25rem 0.4rem;font-size:0.82rem;">${payoutCatBadge(p.category)}</td>`;
-                html += `<td class="payout-hide-mobile" style="padding:0.25rem 0.4rem;font-size:0.82rem;">${escapeHtml(p.description || PAYOUT_CAT_LABELS[p.category] || p.category)}</td>`;
+                html += `<td class="payout-hide-mobile" style="padding:0.25rem 0.4rem;font-size:0.82rem;">${escapeHtml((p.description || "").replace(/^auto:\s*/i, "") || PAYOUT_CAT_LABELS[p.category] || p.category)}</td>`;
                 html += `<td style="padding:0.25rem 0.4rem;text-align:right;font-weight:600;color:#059669;font-size:0.82rem;">$${p.amount.toFixed(2)}</td></tr>`;
             });
             html += `</table></div></td></tr>`;
