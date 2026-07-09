@@ -96,6 +96,15 @@
         if (!nav) return;
         // view-only sees 3 sections → inline tabs, no drawer (rule 2)
         nav.classList.toggle("shell-inline", role === "view-only");
+        // Desktop ADMIN pill links to /accounting. It sits in
+        // .shell-nav-right (outside auth.js's nav-link selectors), so we
+        // gate it here; for admins it REPLACES the redundant role badge
+        // on desktop (mobile keeps the badge in the bar — the drawer's
+        // Admin row is the mobile route in).
+        const adminLink = nav.querySelector(".shell-admin-link");
+        if (adminLink) adminLink.style.display = (role === "admin") ? "" : "none";
+        const badge = $("role-badge");
+        if (badge) badge.classList.toggle("shell-badge-desktop-hide", role === "admin");
         // Sync the drawer's role pill from the canonical #role-badge
         const src = $("role-badge");
         document.querySelectorAll(".shell-drawer-role").forEach(el => {

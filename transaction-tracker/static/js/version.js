@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.55.1";
+window.TGF_VERSION = "2.55.2";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.55.2",
+    date: "2026-07-09",
+    changes: [
+      "Restored the Admin link (Kerry): the shell's desktop ADMIN pill now actually navigates to the Admin section -- it sat outside auth.js's nav-link selectors so the anchor never un-hid; the visible orange pill was the unclickable role badge. For admins the pill IS the /accounting link on desktop (badge hides as redundant); mobile keeps the badge in the bar with the drawer's Admin row as the way in.",
+      "Member views can never show manager/admin controls (Kerry): the monthly points 'Refresh from Golf Genius' button is re-injected on every render AFTER the role pass and leaked into the pinless member view. Injected render now gates on role, and member pages carry a CSS backstop (.manager-only/.admin-only display:none !important) so nothing role-gated can ever appear regardless of render timing.",
+    ],
+  },
   {
     version: "2.55.1",
     date: "2026-07-09",
