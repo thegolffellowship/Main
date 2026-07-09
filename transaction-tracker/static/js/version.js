@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.54.0";
+window.TGF_VERSION = "2.54.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.54.1",
+    date: "2026-07-09",
+    changes: [
+      "Official TGF circular-G icon marks are in: static/tgf-icon.svg (black) + static/tgf-icon-white.svg, pulled straight from the Claude Design 'TGF Design System' project via the new DesignSync connection. The Payouts dark nav now shows the real mark instead of the placeholder tracker icon. The design system's full token sheet (colors_and_type.css) is checked in under docs/design-system/ as the Phase 2 reference.",
+    ],
+  },
   {
     version: "2.54.0",
     date: "2026-07-09",
