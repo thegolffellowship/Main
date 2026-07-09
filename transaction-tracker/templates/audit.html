@@ -5,6 +5,10 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
     <title>TGF — Email Audit</title>
     <link rel="stylesheet" href="/static/css/dashboard.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Bitter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/css/shell.css">
     <link rel="manifest" href="/static/manifest.json">
     <link rel="icon" href="/static/icon.svg" type="image/svg+xml">
     <link rel="apple-touch-icon" href="/static/icon-180.png">
@@ -376,6 +380,16 @@
     </style>
 </head>
 <body>
+    {% if shell_v2 %}
+    {% set SHELL_TITLE = 'Audit Log' %}{% set SHELL_ACTIVE = 'admin' %}
+    {% set SHELL_OPS %}
+            <button id="btn-run-audit" class="shell-ops-primary" title="Re-fetch emails and compare">&#128269; Run Audit</button>
+            <button id="btn-autofix" class="shell-ops-maint" data-sheet title="Fix side games, customer names, and course names in existing records">Autofix All</button>
+            <button id="btn-re-extract" class="shell-ops-maint" data-sheet title="Re-parse emails to fill in partner requests, fellowship, and notes">Re-extract Fields</button>
+            <button id="btn-retry-failed" class="shell-ops-maint" data-sheet title="Re-process emails that previously parsed 0 items">Retry Failed</button>
+    {% endset %}
+    {% include '_shell_nav.html' %}
+    {% else %}
     <header>
         <div class="header-content">
             <h1>TGF Transaction Tracker</h1>
@@ -401,9 +415,11 @@
             </button>
         </div>
     </header>
+    {% endif %}
 
     <main>
         <!-- Tab Navigation -->
+        {% if not shell_v2 %}
         <nav class="tab-nav">
             <a href="/events">Events</a>
             <a href="/contests">Season<span class="nav-label-full"> Contests</span></a>
@@ -413,6 +429,7 @@
             <a href="/tgf" class="admin-nav" style="display:none;">Payouts</a>
             <a href="/accounting" class="admin-nav admin-tab active" style="display:none;">Admin</a>
         </nav>
+        {% endif %}
         <nav class="admin-subnav">
             <a href="/accounting">Accounting</a>
             <a href="/coo">COO</a>

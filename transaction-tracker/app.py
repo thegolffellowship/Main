@@ -375,6 +375,17 @@ if not _secret_key:
 app.secret_key = _secret_key
 
 
+@app.context_processor
+def _inject_shell_flag():
+    """Nav Shell v2 kill switch (nav-shell-070926, Kerry-ratified #58).
+
+    SHELL_V2 env var, default ON. Flip to 0/false/off on Railway and
+    restart to instantly revert every page to its legacy header — no
+    redeploy needed (rollback structure per mailbox #53).
+    """
+    return {"shell_v2": os.environ.get("SHELL_V2", "1").strip().lower() not in ("0", "false", "off")}
+
+
 @app.errorhandler(500)
 def handle_500(e):
     """Return JSON instead of HTML for unhandled server errors."""

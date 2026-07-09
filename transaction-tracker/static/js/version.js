@@ -1,5 +1,16 @@
-window.TGF_VERSION = "2.54.6";
+window.TGF_VERSION = "2.55.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.55.0",
+    date: "2026-07-09",
+    changes: [
+      "NAV SHELL V2 APP-WIDE (design-claude handoff nav-shell-070926, Kerry-ratified mailbox #58): every Tracker page now wears the dark top nav -- TGF circular-G mark + Tracker wordmark + version chip, uppercase Bitter section links with orange active underline, orange Admin pill, quiet outline Log Out. Built once as a shared _shell_nav.html include with shell.css/shell.js.",
+      "MOBILE: hamburger drawer (Kerry's call) replaces the wrapped tab nav for manager/admin -- 82%-width dark panel, 52px section rows with orange active treatment, ADMIN pill on gated rows, role pill + Log Out in the footer. Kerry's drawer threshold rule: roles with 3 or fewer sections (member, view-only) get inline tabs in the dark bar instead -- no drawer for two items.",
+      "PAGE-OPS TOOLBAR (spec 1e/1f): header operation buttons moved to a white toolbar row below the nav with tiered pills -- filled-dark primary, 2px-outline secondary, gray maintenance, red-outline destructive isolated right (Purge), Settings last. On phones the row keeps the primary + a '... Actions' bottom sheet holding the rest; operations never enter the navigation drawer. Row collapses to nothing when a page/role has no ops.",
+      "MEMBER SHELL: pinless pages show The Golf Fellowship wordmark, Season Contests | Handicaps inline tabs, and the ENTER SEASON CONTESTS pill in the nav on desktop (the in-content CTA stays on mobile).",
+      "ROLLBACK: single SHELL_V2 env var (default on). Flip to 0 on Railway and every page instantly reverts to its legacy header -- old markup is preserved in {% else %} branches until a cleanup release after Kerry's bake-in sign-off.",
+    ],
+  },
   {
     version: "2.54.6",
     date: "2026-07-09",

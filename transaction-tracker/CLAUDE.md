@@ -368,11 +368,24 @@ detail with collapsible chapter bands). Tokens live in `dashboard.css`
 `:root` (`--surface-dark`, `--money-green[-dark]`, `--cat-*`). The
 handoff README wrongly assumes a Next.js/Tailwind stack — translate to
 this repo's Flask/Jinja/vanilla stack, matching the visuals exactly.
-**Phase 2 (site-wide + Contests/Handicaps) is ON HOLD**: Claude Design is
-prototyping SEASON CONTESTS + HANDICAPS next (member-pages priority,
-Kerry 2026-07-09) — coordinate via the platform mailbox before restyling
-those pages. TGF icon SVGs are still placeholders (`static/icon.svg`)
-until the design-system marks land.
+**Nav Shell v2 is LIVE app-wide (v2.55.0** — handoff nav-shell-070926,
+Kerry-ratified mailbox #58): every page renders the dark nav via the
+shared `templates/_shell_nav.html` include (+ `static/css/shell.css`,
+`static/js/shell.js`), gated by the **`SHELL_V2` env var kill switch**
+(default on; flip to 0 on Railway to instantly revert all pages to the
+legacy headers preserved in their `{% else %}` branches — remove those in
+a cleanup release only after Kerry's bake-in sign-off). Shell rules:
+mobile hamburger drawer for manager/admin; **Kerry's drawer threshold
+rule** — roles with ≤3 sections (member, view-only) get inline tabs, no
+drawer; page-ops buttons live in the `SHELL_OPS` toolbar row (tiered
+pills: primary filled dark / secondary 2px outline / maintenance gray /
+destructive red outline isolated right) with a "⋯ Actions" bottom sheet
+on mobile — **ops never go in the drawer**; one global dropdown pattern
+(`.shell-menu`). auth.js drives role gating for shell links
+(`.shell-nav-links a`, `.shell-drawer-nav a`) and calls
+`window.shellApplyRole`. Official TGF icon marks: `static/tgf-icon.svg`
++ `static/tgf-icon-white.svg`. The Contests/Handicaps CONTENT redesign
+is the next design-claude handoff, built into this fixed shell.
 
 ## Standard color palette (v2.49.0)
 
