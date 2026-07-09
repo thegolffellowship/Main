@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.52.1";
+window.TGF_VERSION = "2.52.2";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.52.2",
+    date: "2026-07-09",
+    changes: [
+      "Matcher memo-typo fallback: when a receipt's memo names an event where that customer has NO pending group (the same-day cross-chapter case -- Austin players paid with the 's9.8 SILVERHORN' memo on a9.8 day), the matcher falls back to an EXACT-cents unique match across all their pending groups, the same evidence tier a memo-less receipt already gets. Non-exact amounts still never match without a correct event.",
+    ],
+  },
   {
     version: "2.52.1",
     date: "2026-07-09",
