@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.49.4";
+window.TGF_VERSION = "2.49.5";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.49.5",
+    date: "2026-07-08",
+    changes: [
+      "PAYOUTS breakdown simplified on mobile (Kerry): the expanded per-golfer detail now shows just the game name (category badge) on the left and the amount on the right -- the free-text description column (which repeats the category) hides below 768px, and the breakdown indent tightens so rows use the full width.",
+      "PENDING/PAID status badge now renders AFTER the Venmo Pay link on each payout row, and the whole payouts table sits in a horizontally scrollable container so anything that still overflows can be swiped into view instead of being cut off.",
+    ],
+  },
   {
     version: "2.49.4",
     date: "2026-07-08",
