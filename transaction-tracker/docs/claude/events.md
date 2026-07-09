@@ -26,7 +26,12 @@ site-wide: Events | Contests | Handicaps | Transactions | Customers
 (+ Payouts and an orange Admin tab pinned last, admin only); RSVP Log
 is a sub-tab of Transactions and Participation a sub-tab of Customers
 (segmented-control links under the nav). The per-event PAYOUTS view
-toggle now renders on MOBILE cards too (admin).
+toggle now renders on MOBILE cards too (admin). v2.49.4 (Kerry): the
+per-event PAYOUTS panel's Paste Screenshot drop zone + AI-parse
+handlers were REMOVED as obsolete (auto GG results sync + Record
+Payouts replaced screenshot imports; the /tgf page importer still
+exists), and the REGISTERED + GAMES columns hide below 768px
+(`.payout-hide-mobile`).
 
 ## Payout visibility is ADMIN-only (v2.45.0, Kerry)
 Managers must not make prize payouts or see payout surfaces: the
@@ -655,7 +660,10 @@ event showed default amounts ($8/$7) in Withdraw Player / Partial Refund.
 - Expandable rows show category breakdowns (team_net, individual_net, skins, etc.)
 - Venmo pay links generated for golfers with venmo_username set
 
-## Screenshot Paste / Import
+## Screenshot Paste / Import (/tgf page ONLY as of v2.49.4)
+- The per-event PAYOUTS panel on the Events page no longer has a drop
+  zone (removed as obsolete, Kerry 2026-07-08) — this section describes
+  the /tgf page importer, which remains for manual/legacy imports.
 - **Drop zone** appears below the payouts table when an event is selected
 - **Three input methods:** Ctrl+V paste, drag & drop, click to upload
 - **AI parsing:** `POST /api/tgf/parse-screenshot` sends image to Claude Vision

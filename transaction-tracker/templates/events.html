@@ -95,6 +95,8 @@
         /* Chapter semantic colors (standard palette, Kerry 2026-07-08) */
         .ev-chapter-row .ev-tab.active[data-ev-chapter="Austin"] { background: var(--chapter-austin, #BF5700); border-color: var(--chapter-austin, #BF5700); color: #fff; }
         .ev-chapter-row .ev-tab.active[data-ev-chapter="San Antonio"] { background: var(--chapter-sa, #D3DDE4); border-color: var(--chapter-sa-alt, #8FA8B8); color: #1B1B1B; }
+        /* PAYOUTS panel: drop Registered + Games columns on phones (Kerry, 2026-07-08) */
+        @media (max-width: 768px) { .payout-hide-mobile { display: none; } }
         /* Time row = the app's standard segmented control (reconcile-page
            style, Kerry 2026-07-08); active state driven by .active since
            these aren't radio inputs */
@@ -3513,18 +3515,12 @@
 
         let html = '<div style="padding:0.75rem 0;">';
 
-        // ── Screenshot paste / upload zone ──
-        html += `<div id="payout-drop-zone-${ev.id}" style="border:2px dashed var(--border);border-radius:8px;padding:1.25rem;text-align:center;color:var(--text-muted);cursor:pointer;margin-bottom:1rem;transition:border-color 0.2s,background 0.2s;" tabindex="0">`;
-        html += `<div style="font-size:0.85rem;font-weight:600;">Paste Screenshot (Ctrl+V) or Click to Upload</div>`;
-        html += `<div style="font-size:0.75rem;margin-top:0.25rem;">Golf Genius payout screenshot &rarr; AI auto-extracts payout data</div>`;
-        html += `<input type="file" id="payout-file-${ev.id}" accept="image/*" style="display:none;">`;
-        html += `</div>`;
-        html += `<div id="payout-preview-${ev.id}" style="display:none;margin-bottom:1rem;"></div>`;
-
+        // Screenshot paste/upload zone removed (Kerry, 2026-07-08) — the
+        // auto GG results sync + Record Payouts pipeline made it obsolete.
         if (!tgfEvent || !tgfEvent.payouts || tgfEvent.payouts.length === 0) {
             html += `<div style="text-align:center;padding:2rem;color:var(--text-muted);">`;
             html += `<div style="font-size:0.95rem;font-weight:600;">No payouts recorded</div>`;
-            html += `<div style="font-size:0.82rem;margin-top:0.25rem;">Paste a Golf Genius payout screenshot above to import results</div>`;
+            html += `<div style="font-size:0.82rem;margin-top:0.25rem;">Payouts record automatically after Golf Genius results sync &mdash; or use Record Payouts on the GAMES tab</div>`;
             html += `</div></div>`;
             return html;
         }
@@ -3565,8 +3561,8 @@
         html += `<thead><tr style="border-bottom:2px solid var(--border);">`;
         html += `<th style="text-align:left;font-size:0.72rem;font-weight:600;color:var(--text-muted);text-transform:uppercase;padding:0.4rem 0.5rem;width:30px;">#</th>`;
         html += `<th style="text-align:left;font-size:0.72rem;font-weight:600;color:var(--text-muted);text-transform:uppercase;padding:0.4rem 0.5rem;">Golfer</th>`;
-        html += `<th style="text-align:center;font-size:0.72rem;font-weight:600;color:var(--text-muted);text-transform:uppercase;padding:0.4rem 0.5rem;">Registered</th>`;
-        html += `<th style="text-align:right;font-size:0.72rem;font-weight:600;color:var(--text-muted);text-transform:uppercase;padding:0.4rem 0.5rem;">Games</th>`;
+        html += `<th class="payout-hide-mobile" style="text-align:center;font-size:0.72rem;font-weight:600;color:var(--text-muted);text-transform:uppercase;padding:0.4rem 0.5rem;">Registered</th>`;
+        html += `<th class="payout-hide-mobile" style="text-align:right;font-size:0.72rem;font-weight:600;color:var(--text-muted);text-transform:uppercase;padding:0.4rem 0.5rem;">Games</th>`;
         html += `<th style="text-align:right;font-size:0.72rem;font-weight:600;color:var(--text-muted);text-transform:uppercase;padding:0.4rem 0.5rem;">Total</th>`;
         html += `<th style="text-align:right;font-size:0.72rem;font-weight:600;color:var(--text-muted);text-transform:uppercase;padding:0.4rem 0.5rem;width:70px;"></th>`;
         html += `</tr></thead><tbody>`;
@@ -3596,8 +3592,8 @@
             html += `<tr class="payout-golfer-row" data-payout-gid="${g.golfer_id}" style="cursor:pointer;transition:background 0.1s;border-bottom:1px solid #f1f5f9;" onmouseover="this.style.background='#eef2ff'" onmouseout="this.style.background=''">`;
             html += `<td style="padding:0.5rem;text-align:center;color:var(--text-muted);font-size:0.8rem;">${idx + 1}</td>`;
             html += `<td style="padding:0.5rem;font-weight:600;font-size:0.88rem;">${escapeHtml(g.name)}</td>`;
-            html += `<td style="padding:0.5rem;text-align:center;">${regIcon}</td>`;
-            html += `<td style="padding:0.5rem;text-align:right;font-size:0.85rem;">${g.items.length}</td>`;
+            html += `<td class="payout-hide-mobile" style="padding:0.5rem;text-align:center;">${regIcon}</td>`;
+            html += `<td class="payout-hide-mobile" style="padding:0.5rem;text-align:right;font-size:0.85rem;">${g.items.length}</td>`;
             html += `<td style="padding:0.5rem;text-align:right;font-weight:700;color:#059669;font-variant-numeric:tabular-nums;">$${g.total.toFixed(2)}</td>`;
             html += `<td style="padding:0.5rem;text-align:right;white-space:nowrap;">${statusBadge} ${venmoHtml}</td>`;
             html += `</tr>`;
@@ -3652,135 +3648,8 @@
                 }
             });
         });
-
-        // Screenshot drop zone: paste + file upload
-        const dropZone = container.querySelector(`#payout-drop-zone-${ev.id}`);
-        const fileInput = container.querySelector(`#payout-file-${ev.id}`);
-        const previewEl = container.querySelector(`#payout-preview-${ev.id}`);
-        if (!dropZone || !fileInput) return;
-
-        dropZone.addEventListener("click", () => fileInput.click());
-        dropZone.addEventListener("dragover", (e) => { e.preventDefault(); dropZone.style.borderColor = "var(--primary)"; dropZone.style.background = "#eef2ff"; });
-        dropZone.addEventListener("dragleave", () => { dropZone.style.borderColor = ""; dropZone.style.background = ""; });
-        dropZone.addEventListener("drop", (e) => {
-            e.preventDefault();
-            dropZone.style.borderColor = ""; dropZone.style.background = "";
-            const file = e.dataTransfer.files[0];
-            if (file && file.type.startsWith("image/")) processPayoutImage(file, ev, previewEl, dropZone);
-        });
-        fileInput.addEventListener("change", () => {
-            if (fileInput.files[0]) processPayoutImage(fileInput.files[0], ev, previewEl, dropZone);
-        });
-
-        // Ctrl+V paste handler (scoped to when payouts panel is visible)
-        const pasteHandler = (e) => {
-            if (!payoutsOpenForEvent[ev.id]) return;
-            const items = e.clipboardData?.items;
-            if (!items) return;
-            for (const item of items) {
-                if (item.type.startsWith("image/")) {
-                    e.preventDefault();
-                    const blob = item.getAsFile();
-                    if (blob) processPayoutImage(blob, ev, previewEl, dropZone);
-                    return;
-                }
-            }
-        };
-        document.addEventListener("paste", pasteHandler);
-    }
-
-    async function processPayoutImage(file, ev, previewEl, dropZone) {
-        previewEl.style.display = "";
-        previewEl.innerHTML = `<div style="display:flex;align-items:center;gap:0.5rem;padding:0.75rem;background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;">
-            <div class="spinner" style="width:20px;height:20px;border:3px solid #bfdbfe;border-top-color:#2563eb;border-radius:50%;animation:spin 0.6s linear infinite;"></div>
-            <span style="font-size:0.85rem;font-weight:600;color:#1e40af;">Parsing screenshot with AI...</span>
-        </div>
-        <style>@keyframes spin { to { transform: rotate(360deg); } }</style>`;
-        dropZone.style.display = "none";
-
-        try {
-            const reader = new FileReader();
-            const base64 = await new Promise((resolve, reject) => {
-                reader.onload = () => resolve(reader.result);
-                reader.onerror = reject;
-                reader.readAsDataURL(file);
-            });
-
-            const res = await fetch("/api/tgf/parse-screenshot", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ image: base64, media_type: file.type }),
-            });
-            const parsed = await res.json();
-            if (!res.ok) throw new Error(parsed.error || "Parse failed");
-
-            // Show preview
-            const payouts = parsed.payouts || [];
-            let total = payouts.reduce((s, p) => s + (p.amount || 0), 0);
-            let previewHtml = `<div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:1rem;">`;
-            previewHtml += `<h4 style="font-size:0.85rem;font-weight:700;margin:0 0 0.5rem;">Parsed ${payouts.length} payouts — Total: $${total.toFixed(2)}</h4>`;
-            previewHtml += `<table style="width:100%;border-collapse:collapse;font-size:0.82rem;margin-bottom:0.75rem;">`;
-            payouts.forEach(p => {
-                previewHtml += `<tr><td style="padding:0.2rem 0.4rem;">${escapeHtml(p.golferName)}</td><td style="padding:0.2rem;">${payoutCatBadge(p.category)}</td><td style="padding:0.2rem;">${escapeHtml(p.description || "")}</td><td style="text-align:right;padding:0.2rem 0.4rem;font-weight:600;">$${(p.amount || 0).toFixed(2)}</td></tr>`;
-            });
-            previewHtml += `</table>`;
-            previewHtml += `<div style="display:flex;gap:0.5rem;">`;
-            previewHtml += `<button class="btn btn-primary" id="payout-save-${ev.id}" style="font-size:0.82rem;padding:0.4rem 1rem;">Save Payouts</button>`;
-            previewHtml += `<button class="btn btn-secondary" id="payout-cancel-${ev.id}" style="font-size:0.82rem;padding:0.4rem 1rem;">Cancel</button>`;
-            previewHtml += `</div></div>`;
-            previewEl.innerHTML = previewHtml;
-
-            // Save handler
-            document.getElementById(`payout-save-${ev.id}`).addEventListener("click", async () => {
-                const eventInfo = parsed.event || {};
-                const saveData = {
-                    action: "add_event",
-                    code: ev.item_name,
-                    name: eventInfo.name || ev.item_name,
-                    event_date: ev.event_date || eventInfo.date || "",
-                    course: ev.course || eventInfo.course || "",
-                    chapter: ev.chapter || "",
-                    total_purse: total,
-                    winners_count: new Set(payouts.map(p => p.golferName)).size,
-                    payouts: payouts,
-                };
-                try {
-                    const saveRes = await fetch("/api/tgf", {
-                        method: "POST",
-                        headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify(saveData),
-                    });
-                    const saveResult = await saveRes.json();
-                    if (saveResult.error) {
-                        alert("Error: " + saveResult.error);
-                        return;
-                    }
-                    // Refresh TGF data and re-render
-                    await fetchTgfPayoutData();
-                    payoutsOpenForEvent[ev.id] = true;
-                    const detailContainer = document.getElementById(`detail-content-${ev.id}`);
-                    if (detailContainer) {
-                        detailContainer.innerHTML = renderDetailContent(ev);
-                        attachDetailHandlers(detailContainer, ev);
-                    }
-                } catch (err) {
-                    alert("Save failed: " + err.message);
-                }
-            });
-
-            // Cancel handler
-            document.getElementById(`payout-cancel-${ev.id}`).addEventListener("click", () => {
-                previewEl.style.display = "none";
-                previewEl.innerHTML = "";
-                dropZone.style.display = "";
-            });
-
-        } catch (err) {
-            previewEl.innerHTML = `<div style="padding:0.75rem;background:#fef2f2;border:1px solid #fecaca;border-radius:8px;font-size:0.85rem;color:#dc2626;">
-                <strong>Parse failed:</strong> ${escapeHtml(err.message)}
-                <button class="btn btn-secondary" onclick="this.closest('div').parentElement.style.display='none';document.getElementById('payout-drop-zone-${ev.id}').style.display='';" style="margin-left:0.5rem;font-size:0.78rem;padding:0.2rem 0.5rem;">Try Again</button>
-            </div>`;
-        }
+        // Screenshot paste/upload handlers removed with the drop zone
+        // (Kerry, 2026-07-08 — auto GG results sync made them obsolete).
     }
 
     // Populate the shared course datalist from /api/courses for autocomplete
