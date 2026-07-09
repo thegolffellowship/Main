@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.52.0";
+window.TGF_VERSION = "2.52.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.52.1",
+    date: "2026-07-09",
+    changes: [
+      "VENMO MATCHER: MEMO OUTRANKS THE PIPELINE GUESS (Kerry: 'there should be far more matches'). Audit of the 209 unpaid groups showed the expense classifier's event attribution is routinely wrong ('Winnings for s9.16 ...' receipts tagged s9.12), and the matcher trusted it first -- so exact-amount receipts for s9.10 Riverside, s9.16 TPC Oaks, a9.8 Avery Ranch and more never matched. The event code in YOUR memo now resolves first; the pipeline's event_id is only a fallback.",
+      "Also: memo codes with a space after the dot parse ('s9. 10' -> s9.10), and the amount tolerance scales with evidence -- memo-named event: +/-$3 (you often paid GG's printed amounts, which differ from our computed cents by a couple dollars); pipeline-guessed event: +/-$1; no event: exact only. Uniqueness still required at every tier.",
+    ],
+  },
   {
     version: "2.52.0",
     date: "2026-07-09",
