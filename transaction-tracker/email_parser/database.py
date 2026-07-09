@@ -16285,6 +16285,43 @@ def _repair_false_monthly_venmo_matches(conn: sqlite3.Connection) -> None:
         conn.commit()
 
 
+def get_unpaid_payout_groups(db_path=None) -> dict:
+    """Every non-paid payout group (customer+account) with that customer's
+    recent Venmo payout receipts alongside — the data behind the /tgf
+    UNPAID tab investigation and the "why didn't this match?" question
+    (Kerry, 2026-07-09). A receipt with linked=1 already backs some other
+    payout group; amounts that differ from the group total explain the
+    no-match."""
+    with _connect(db_path) as conn:
+        groups = [dict(g) for g in conn.execute(
+            """SELECT e.code, e.event_date, p.customer_id,
+                      TRIM(c.first_name || ' ' || c.last_name ||
+                           COALESCE(' ' || NULLIF(TRIM(c.suffix), ''), '')) AS name,
+                      ROUND(SUM(p.amount), 2) AS total, COUNT(*) AS payout_rows
+               FROM tgf_payouts p
+               JOIN tgf_events e ON e.id = p.event_id
+               JOIN customers c ON c.customer_id = p.customer_id
+               LEFT JOIN acct_transactions t ON t.id = p.acct_transaction_id
+               WHERE p.acct_transaction_id IS NULL
+                  OR (t.source = 'pending' AND COALESCE(t.status, 'active') = 'active')
+               GROUP BY p.event_id, p.customer_id
+               ORDER BY e.event_date DESC, total DESC""").fetchall()]
+        for g in groups:
+            g["venmo_receipts"] = [dict(r) for r in conn.execute(
+                """SELECT x.id, x.amount, x.transaction_date, x.notes,
+                          CASE WHEN EXISTS (
+                              SELECT 1 FROM tgf_payouts tp
+                              WHERE tp.acct_transaction_id = x.acct_transaction_id)
+                          THEN 1 ELSE 0 END AS linked
+                   FROM expense_transactions x
+                   WHERE x.source_type = 'venmo' AND x.transaction_type = 'payout'
+                     AND x.customer_id = ?
+                   ORDER BY x.transaction_date DESC LIMIT 6""",
+                (g["customer_id"],)).fetchall()]
+        total = round(sum(g["total"] for g in groups), 2)
+        return {"unpaid_groups": len(groups), "unpaid_total": total, "groups": groups}
+
+
 def auto_match_venmo_payouts_to_tgf(
     expense_ids: list[int] | None = None,
     db_path: str | Path | None = None,

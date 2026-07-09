@@ -57,6 +57,11 @@ header {
     top: 0;
     z-index: 100;
 }
+/* Mobile: SEASON CONTESTS nav tab reads just SEASON (Kerry, 2026-07-09) */
+@media (max-width: 768px) {
+    .nav-label-full { display: none; }
+}
+
 /* Keep the role badge + header buttons on ONE line (Kerry, 2026-07-08 —
    the handicaps Import/Export dropdown wrapper is a block div and was
    stacking the row). Wraps gracefully when the viewport is narrow. */
