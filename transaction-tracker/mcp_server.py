@@ -12,6 +12,7 @@ Start:
 
 import json
 import os
+import re
 import sys
 from pathlib import Path
 
@@ -1413,6 +1414,13 @@ def _scoring_dispatch(url: str, extract: str):
         if cmd == "scoring-payouts-preview":
             # assemble without writing — inspect what would be recorded
             return json.dumps(db.assemble_event_game_payouts(arg), indent=2)
+        if cmd == "scoring-payouts-bulk-paid":
+            # "scoring-payouts-bulk-paid:<YYYY-MM-DD>" — one-time cleanup:
+            # mark every pending payout group from events before the date
+            # as PAID (link unconsumed receipts, convert placeholders)
+            if not re.match(r"^\d{4}-\d{2}-\d{2}$", arg.strip()):
+                return json.dumps({"error": "arg must be YYYY-MM-DD"})
+            return json.dumps(db.bulk_mark_payouts_paid(arg.strip()), indent=2)
         if cmd == "scoring-payouts-unpaid":
             # Every non-paid payout group + the customer's recent Venmo
             # payout receipts (linked flag + amounts) for match diagnosis
