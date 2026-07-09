@@ -18,7 +18,11 @@
     if (!sessionStorage.getItem("tgf_session_active")) {
         sessionStorage.setItem("tgf_session_active", "1");
         const isDeepLink = /[?&](txn|item|cid)=/.test(window.location.search);
-        if (window.location.pathname !== "/events" && !isDeepLink) {
+        // Public member pages (/member/*) are their own destination — a
+        // member opening the shared URL must never be bounced to /events
+        // (which would just show them the login modal). (v2.53.0, Kerry)
+        const isMemberPage = window.location.pathname.startsWith("/member");
+        if (window.location.pathname !== "/events" && !isDeepLink && !isMemberPage) {
             window.location.replace("/events");
             return;
         }
@@ -154,6 +158,16 @@ function updateNavForRole() {
 }
 
 async function initAuth() {
+    // Public member pages set window.MEMBER_MODE before this script loads:
+    // no PIN, no login modal, no role. Page code runs with currentRole =
+    // null so every manager/admin-only element stays hidden. (v2.53.0, Kerry)
+    if (window.MEMBER_MODE) {
+        currentRole = null;
+        currentChapter = null;
+        if (typeof onAuthReady === "function") onAuthReady();
+        requestAnimationFrame(_setStickyOffsets);
+        return;
+    }
     const role = await checkRole();
     if (!role) {
         showLoginModal();

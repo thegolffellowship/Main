@@ -236,3 +236,15 @@ ALL. Chapter-manager sessions land pre-filtered to their chapter;
 admin lands on ALL. Import Rounds + the three CSV exports are
 consolidated into one Import/Export dropdown (admin + manager); Email
 Cards stays standalone.
+
+## Public member view (v2.53.0, Kerry)
+
+`/member/handicaps` renders this page pinlessly (`member_mode=True` +
+the `member` role tier — see CLAUDE.md → Auth and
+docs/claude/member-portal.md). The GET endpoints
+`/api/handicaps/players|rounds|index-map|settings` serve anonymous
+callers (names/stats/chapter only — no emails or phones in the
+payload). All write/import/email endpoints keep their manager/admin
+requirements; with currentRole null the header ops buttons and
+per-player action buttons stay hidden, and player names render
+without their /customers links.

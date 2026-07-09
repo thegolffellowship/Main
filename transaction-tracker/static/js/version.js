@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.52.3";
+window.TGF_VERSION = "2.53.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.53.0",
+    date: "2026-07-09",
+    changes: [
+      "TGF MEMBER VIEW (Kerry): a pinless, shareable URL -- https://tgf-tracker.up.railway.app/member -- that opens SEASON CONTESTS and HANDICAPS read-only with no login. Full expansion and drill-down works (points races, Fellowship Cup, monthly points, Match Play pools/bracket, handicap cards); every hyperlink into the rest of the Tracker is removed in this view -- player names render as plain text, the nav shows only Season Contests | Handicaps, and the version badge no longer links to the changelog.",
+      "Under the hood: a new public 'member' role tier sits below view-only; only PII-free GET endpoints declare it (season contests, points races, monthly points, handicaps, scoring reads, match-play reads). Customers, events (with cost/markup fields), transactions and every write path still require a PIN exactly as before.",
+      "ENTER SEASON CONTESTS CTA (Kerry): a prominent TGF-orange button at the top of the Contests page -- both the normal and the member view -- links to the registration page at thegolffellowship.com/shop/ols/products/season-contests.",
+    ],
+  },
   {
     version: "2.52.3",
     date: "2026-07-09",
