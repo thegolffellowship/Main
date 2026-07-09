@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.54.5";
+window.TGF_VERSION = "2.54.6";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.54.6",
+    date: "2026-07-09",
+    changes: [
+      "Role lanes revised per Kerry's ratification (mailbox #50, supersedes the 'content/data manager' framing): tracker-claude owns and builds the Tracker and is authoritative on what's live in it, scoped to the Tracker specifically; design-claude owns visual/UX design but verifies business vocabulary/IA with tracker-claude; platform-claude owns Platform architecture/scope/roadmap and cross-system continuity; Kerry is final ratification and tie-breaker. Encoded as CLAUDE.md workflow rule 3c.",
+    ],
+  },
   {
     version: "2.54.5",
     date: "2026-07-09",
