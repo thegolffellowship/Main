@@ -276,13 +276,23 @@
             return dt.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
         };
 
-        function venmoLink(username, amount, eventCode, eventName) {
+        function venmoLink(username, amount, eventCode, eventName, golferName) {
             if (!username) return "";
             // code is conventionally the full event name — don't repeat it
+            const evDisp = (eventName || "").startsWith(eventCode) || eventCode === eventName
+                ? eventName : `${eventCode} ${eventName}`;
+            // Memo format per Kerry (2026-07-08): "[First] [Last] - Winnings
+            // for [event]". Venmo's https universal link re-serializes the
+            // query and the app shows a literal '+' for every space, so
+            // phones use the native venmo:// scheme (parsed directly by the
+            // app; %20 decodes to real spaces). Desktop keeps the web link.
             const note = encodeURIComponent(
-                (eventName || "").startsWith(eventCode) || eventCode === eventName
-                    ? `TGF ${eventName}` : `TGF ${eventCode} ${eventName}`);
-            return `https://venmo.com/${username}?txn=pay&amount=${amount.toFixed(2)}&note=${note}`;
+                `${golferName ? golferName + " - " : ""}Winnings for ${evDisp}`);
+            const amt = Number(amount).toFixed(2);
+            const mobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+            return mobile
+                ? `venmo://paycharge?txn=pay&recipients=${encodeURIComponent(username)}&amount=${amt}&note=${note}`
+                : `https://venmo.com/${encodeURIComponent(username)}?txn=pay&amount=${amt}&note=${note}`;
         }
 
         // Method-aware pay link (v2.38.0): default Venmo via venmo_username;
@@ -290,14 +300,14 @@
         // Kerry: Sharitz PayPal, Thompson Cash App, Vasquez + DelCarmen
         // Zelle). Returns {href, label, bg} for a link, {badge} when no
         // deep link exists (Zelle) or a handle is missing.
-        function payAction(winData, amount, eventCode, eventName) {
+        function payAction(winData, amount, eventCode, eventName, golferName) {
             if (!winData) return null;
             const method = (winData.payment_method
                 || (winData.venmo_username ? "venmo" : "")).toLowerCase();
             const handle = (winData.payment_handle || "").trim();
             const amt = amount.toFixed(2);
             if (method === "venmo" && winData.venmo_username) {
-                return { href: venmoLink(winData.venmo_username, amount, eventCode, eventName),
+                return { href: venmoLink(winData.venmo_username, amount, eventCode, eventName, golferName),
                          label: "Pay", bg: "#008CFF" };
             }
             if (method === "paypal") {
@@ -518,7 +528,7 @@
                 // Look up venmo username
                 const winData = Object.values(DATA.winnings).find(w => w.id === g.golfer_id);
                 const alreadyPaid = g.payment_status === "paid";
-                const act = !alreadyPaid ? payAction(winData, g.total, ev.code, ev.name) : null;
+                const act = !alreadyPaid ? payAction(winData, g.total, ev.code, ev.name, g.name) : null;
                 let venmoHtml = "";
                 if (act && act.href) {
                     venmoHtml = `<a class="venmo-btn" style="background:${act.bg};" href="${act.href}" target="_blank" rel="noopener" onclick="event.stopPropagation()">

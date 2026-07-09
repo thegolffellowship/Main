@@ -661,7 +661,14 @@ event showed default amounts ($8/$7) in Withdraw Player / Partial Refund.
 - Sidebar lists events by date with total purse amounts
 - Main area shows payouts table grouped by golfer (sorted by total descending)
 - Expandable rows show category breakdowns (team_net, individual_net, skins, etc.)
-- Venmo pay links generated for golfers with venmo_username set
+- Venmo pay links generated for golfers with venmo_username set.
+  Memo format (v2.49.6, Kerry): "[First] [Last] - Winnings for
+  [event]"; on phones the links use the native `venmo://paycharge`
+  scheme because the https universal link re-serializes the query and
+  the app displays a literal '+' for every space in the memo (desktop
+  keeps the venmo.com web link). Same treatment on the per-event
+  PAYOUTS panel (`venmoPayHref` in events.html) and the excess-credit
+  refund links (events.html + customers.html).
 
 ## Screenshot Paste / Import (/tgf page ONLY as of v2.49.4)
 - The per-event PAYOUTS panel on the Events page no longer has a drop
