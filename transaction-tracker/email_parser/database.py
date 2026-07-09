@@ -16119,6 +16119,184 @@ def capture_venmo_handle_for_customer(
         return cur.rowcount > 0
 
 
+def auto_match_venmo_payouts_to_tgf(
+    expense_ids: list[int] | None = None,
+    db_path: str | Path | None = None,
+) -> dict:
+    """Match OUTBOUND Venmo payment receipts to pending tgf_payouts and
+    mark them PAID (Kerry, 2026-07-08: "use the Venmo transaction emails
+    to confirm and mark paid the transactions I send with these links").
+
+    The expense inbox already ingests Venmo "you paid" emails as
+    expense_transactions rows with transaction_type='payout' — recipient
+    in merchant, memo in notes ("Winnings for s9.16 …"), customer_id and
+    event_id resolved when possible. For each such row, find the pending
+    payout group (source='pending' placeholder or unlinked) for that
+    customer+event whose sum matches the payment; link the group to the
+    expense's promoted ledger entry (source='venmo' → PAID on the
+    PAYOUTS tab), reverse the placeholders, stamp paid_at.
+
+    Resolution order per expense:
+      1. customer: expense.customer_id → venmo handle → name/alias cascade
+      2. tgf event: expense.event_id (events.id) via tgf_events.events_id
+         or tgf_events.code == events.item_name; else the memo's event
+         code ("Winnings for s9.16 …" → tgf_events.code LIKE 's9.16%');
+         else unique-by-amount across the customer's pending groups
+      3. amount: exact to the cent first, then ±$1.00 only when unique
+
+    Idempotent: an expense whose ledger entry already backs payout rows
+    counts as already_matched. Returns
+    {matched, ambiguous, no_candidate, already_matched, errors, matches}.
+    """
+    summary = {"matched": 0, "ambiguous": 0, "no_candidate": 0,
+               "already_matched": 0, "errors": 0, "matches": []}
+    with _connect(db_path) as conn:
+        params: list = []
+        sql = ("SELECT * FROM expense_transactions "
+               "WHERE source_type = 'venmo' AND transaction_type = 'payout' "
+               "AND review_status IN ('approved', 'pending', 'corrected')")
+        if expense_ids:
+            sql += " AND id IN (%s)" % ",".join(["?"] * len(expense_ids))
+            params.extend(expense_ids)
+        expenses = [dict(r) for r in conn.execute(sql, params).fetchall()]
+
+        for exp in expenses:
+            try:
+                amt = round(float(exp.get("amount") or 0), 2)
+                if amt <= 0:
+                    summary["no_candidate"] += 1
+                    continue
+                if exp.get("acct_transaction_id"):
+                    linked = conn.execute(
+                        "SELECT 1 FROM tgf_payouts WHERE acct_transaction_id = ? LIMIT 1",
+                        (exp["acct_transaction_id"],)).fetchone()
+                    if linked:
+                        summary["already_matched"] += 1
+                        continue
+
+                # 1. recipient customer
+                cid = exp.get("customer_id")
+                if not cid:
+                    handle = (exp.get("other_party_handle") or "").lstrip("@").lower()
+                    if handle:
+                        row = conn.execute(
+                            """SELECT customer_id FROM customers
+                               WHERE LOWER(REPLACE(COALESCE(venmo_username,''), '@', '')) = ?
+                               LIMIT 1""", (handle,)).fetchone()
+                        cid = row["customer_id"] if row else None
+                if not cid:
+                    cid = _lookup_customer_id(conn, (exp.get("merchant") or "").strip(), None)
+                if not cid:
+                    summary["no_candidate"] += 1
+                    continue
+
+                # 2. this customer's pending payout groups (one per tgf event)
+                groups = [dict(g) for g in conn.execute(
+                    """SELECT p.event_id AS tgf_event_id,
+                              ROUND(SUM(p.amount), 2) AS total
+                       FROM tgf_payouts p
+                       LEFT JOIN acct_transactions t ON t.id = p.acct_transaction_id
+                       WHERE p.customer_id = ?
+                         AND (p.acct_transaction_id IS NULL
+                              OR (t.source = 'pending'
+                                  AND COALESCE(t.status, 'active') = 'active'))
+                       GROUP BY p.event_id""", (cid,)).fetchall()]
+                if not groups:
+                    summary["no_candidate"] += 1
+                    continue
+
+                tgf_event_id = None
+                if exp.get("event_id"):
+                    row = conn.execute(
+                        """SELECT te.id FROM tgf_events te
+                           LEFT JOIN events ev ON ev.id = ?
+                           WHERE te.events_id = ?
+                              OR (ev.item_name IS NOT NULL
+                                  AND LOWER(te.code) = LOWER(ev.item_name))
+                           LIMIT 1""",
+                        (exp["event_id"], exp["event_id"])).fetchone()
+                    tgf_event_id = row["id"] if row else None
+                if tgf_event_id is None:
+                    m = re.search(r"winnings\s+for\s+([a-z]+\d+(?:\.\d+)?)",
+                                  exp.get("notes") or "", re.I)
+                    if m:
+                        row = conn.execute(
+                            "SELECT id FROM tgf_events WHERE LOWER(code) LIKE LOWER(?) LIMIT 1",
+                            (m.group(1) + "%",)).fetchone()
+                        tgf_event_id = row["id"] if row else None
+
+                cands = [g for g in groups
+                         if tgf_event_id is None or g["tgf_event_id"] == tgf_event_id]
+                exact = [g for g in cands if abs(g["total"] - amt) <= 0.01]
+                pick = None
+                if len(exact) == 1:
+                    pick = exact[0]
+                elif len(exact) > 1:
+                    summary["ambiguous"] += 1
+                    continue
+                else:
+                    close = [g for g in cands if abs(g["total"] - amt) <= 1.00]
+                    if len(close) == 1:
+                        pick = close[0]
+                    elif len(close) > 1:
+                        summary["ambiguous"] += 1
+                        continue
+                if pick is None:
+                    summary["no_candidate"] += 1
+                    continue
+
+                # 3. make sure the payment itself is in the ledger, then link
+                acct_id = exp.get("acct_transaction_id")
+                if not acct_id:
+                    acct_id = _sync_expense_ledger_entry(conn, exp)
+                    if not acct_id:
+                        summary["errors"] += 1
+                        continue
+                    conn.execute(
+                        """UPDATE expense_transactions
+                           SET acct_transaction_id = ?,
+                               review_status = CASE WHEN review_status = 'pending'
+                                                    THEN 'approved' ELSE review_status END
+                           WHERE id = ?""", (acct_id, exp["id"]))
+
+                paid_date = str(exp.get("transaction_date") or "")
+                if not re.match(r"^\d{4}-\d{2}-\d{2}", paid_date):
+                    paid_date = today_central_str()
+
+                rows = conn.execute(
+                    """SELECT p.id, p.acct_transaction_id, t.source AS txn_source
+                       FROM tgf_payouts p
+                       LEFT JOIN acct_transactions t ON t.id = p.acct_transaction_id
+                       WHERE p.customer_id = ? AND p.event_id = ?
+                         AND (p.acct_transaction_id IS NULL
+                              OR (t.source = 'pending'
+                                  AND COALESCE(t.status, 'active') = 'active'))""",
+                    (cid, pick["tgf_event_id"])).fetchall()
+                for r in rows:
+                    if r["acct_transaction_id"] and r["txn_source"] == "pending":
+                        conn.execute(
+                            "UPDATE acct_transactions SET status = 'reversed' WHERE id = ?",
+                            (r["acct_transaction_id"],))
+                    conn.execute(
+                        "UPDATE tgf_payouts SET acct_transaction_id = ?, paid_at = ? WHERE id = ?",
+                        (acct_id, paid_date, r["id"]))
+                summary["matched"] += 1
+                summary["matches"].append({
+                    "expense_id": exp["id"], "customer_id": cid,
+                    "recipient": exp.get("merchant"),
+                    "tgf_event_id": pick["tgf_event_id"], "amount": amt,
+                    "payout_rows": len(rows), "acct_transaction_id": acct_id,
+                })
+                logger.info("venmo payout matched: exp %s %s $%.2f -> tgf_event %s (%d rows)",
+                            exp["id"], exp.get("merchant"), amt,
+                            pick["tgf_event_id"], len(rows))
+            except Exception:
+                logger.exception("venmo payout auto-match failed for exp %s", exp.get("id"))
+                summary["errors"] += 1
+        conn.commit()
+    return summary
+
+
 def auto_match_venmo_inbound_to_balance_due(
     expense_ids: list[int] | None = None,
     db_path: str | Path | None = None,
@@ -30415,6 +30593,15 @@ def record_event_game_payouts(event_name: str, payouts: list,
     if isinstance(result, dict) and not result.get("error"):
         result["replaced"] = removed
         result["tgf_event_code"] = full
+        # Consume any Venmo payment emails that arrived BEFORE the payouts
+        # were recorded (Kerry sometimes pays from GG's numbers first) —
+        # the fresh pending groups can match them immediately.
+        try:
+            vm = auto_match_venmo_payouts_to_tgf(db_path=db_path)
+            if vm.get("matched"):
+                result["venmo_matched"] = vm["matched"]
+        except Exception:
+            logger.warning("post-record venmo payout match failed", exc_info=True)
     return result
 
 

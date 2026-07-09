@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.49.6";
+window.TGF_VERSION = "2.50.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.50.0",
+    date: "2026-07-08",
+    changes: [
+      "VENMO PAYMENTS AUTO-CONFIRM PAYOUTS (Kerry): the expense inbox already ingests your outbound Venmo 'you paid' receipts (recipient, amount, memo). A new matcher (auto_match_venmo_payouts_to_tgf) links each receipt to the pending payout group for that golfer+event -- resolved by customer, then event (receipt's event, or the 'Winnings for s9.16 ...' memo code), then amount (exact first, +/-$1 only when unique) -- reverses the PENDING ledger placeholder, and stamps the payout PAID with the payment date. The PAYOUTS tab flips to PAID and the Pay link disappears with zero manual steps.",
+      "Runs everywhere it needs to: automatically as each Venmo receipt email arrives (5-min inbox check), when an expense is approved in review, right after Record Payouts (consumes receipts that arrived before recording), on demand via POST /api/tgf/auto-match-venmo-payouts (admin backfill), and via the scoring-payouts-venmo-match bridge command. Ambiguous matches (two pending groups with the same amount) are left alone for manual Mark Paid rather than guessed.",
+    ],
+  },
   {
     version: "2.49.6",
     date: "2026-07-08",

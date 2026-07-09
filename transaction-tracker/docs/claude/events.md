@@ -689,6 +689,34 @@ event showed default amounts ($8/$7) in Withdraw Player / Partial Refund.
 - `_resolve_customer_for_payout(conn, name)` — resolves payout recipient to a `customer_id`: `_resolve_scoring_player` FIRST (v2.49.0 — GG results names are "LAST, First Suffix", exactly what the scoring spine's candidate expansion + curated handicap_player_links map resolve; the old comma-split alone turned 'ARIAS, Victor Jr' into first='Victor Jr'/last='Arias' and minted a fresh shell customer per recording pass), then the `_lookup_customer_id` cascade, then an exact first+last guard; creates a new customer with `acquisition_source='tgf_payout'` only if everything misses. The boot repair `_repair_tgf_payout_shells()` merges any identity-less tgf_payout shells whose name re-resolves to a real customer (repoints tgf_payouts, deletes the shell) — it healed the 8 Arias shells of 2026-07-07.
 - Payouts linked to identity via `tgf_payouts.customer_id` (FK to `customers.customer_id`)
 
+## Venmo payment auto-confirm (v2.50.0, Kerry)
+`auto_match_venmo_payouts_to_tgf(expense_ids=None)` (database.py) marks
+payouts PAID from the outbound Venmo receipt emails the expense inbox
+already ingests (`expense_transactions` rows with source_type='venmo',
+transaction_type='payout'; recipient in `merchant`, memo in `notes`,
+customer_id/event_id resolved by the expense pipeline). Per receipt:
+resolve customer (customer_id → venmo handle → name/alias cascade),
+resolve the tgf event (expense.event_id via `tgf_events.events_id` /
+`tgf_events.code` == events.item_name, else the memo's event code
+"Winnings for s9.16 …" → code prefix), then match the customer's
+pending payout-group sum (exact cent first, ±$1.00 only when unique;
+two same-amount groups = ambiguous, skipped). On match: promote the
+expense to the ledger if needed (auto-approving a 'pending' review
+row), reverse the source='pending' placeholders, point every
+tgf_payouts row in the group at the venmo ledger entry, stamp paid_at
+= payment date → get_tgf_data derives payment_status='paid' so the
+PAYOUTS tab shows PAID and the Pay link disappears. Idempotent
+(already-linked receipts count as already_matched). Triggers: each
+arriving receipt email (expense inbox check), expense review approval
+(PATCH expense-transactions), end of `record_event_game_payouts`
+(consumes receipts that arrived before recording), admin backfill
+`POST /api/tgf/auto-match-venmo-payouts`, bridge command
+`scoring-payouts-venmo-match`. NOTE: the boot-time
+`_match_pending_payouts_to_new_venmo` never matched these receipts —
+it requires `acct_transactions.category='prize_payout'` + a `customer`
+name, which the expense-promotion path doesn't set; the new matcher
+works from expense_transactions directly.
+
 ## Category types
 `team_net`, `individual_net`, `individual_gross`, `skins`, `closest_to_pin`,
 `hole_in_one`, `mvp`, `other`

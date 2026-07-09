@@ -763,6 +763,16 @@ def check_expense_inbox(force=False, days_back=None):
                         except Exception:
                             logger.warning("venmo balance-due auto-match failed for exp %s",
                                            saved.get("id"), exc_info=True)
+                    # Auto-confirm outbound winnings payments against pending
+                    # tgf_payouts (Kerry, 2026-07-08 — PAYOUTS tab flips to
+                    # PAID as soon as the Venmo receipt email lands)
+                    if saved and saved.get("transaction_type") == "payout":
+                        try:
+                            from email_parser.database import auto_match_venmo_payouts_to_tgf
+                            auto_match_venmo_payouts_to_tgf([saved["id"]])
+                        except Exception:
+                            logger.warning("venmo payout auto-match failed for exp %s",
+                                           saved.get("id"), exc_info=True)
 
             elif email_type == "expense_receipt":
                 raw_email_date = (email_data.get("date") or "")[:10]
@@ -10252,6 +10262,17 @@ def api_update_expense_transaction(tid):
                 result["balance_due_match"] = match_result
         except Exception:
             logger.warning("venmo balance-due auto-match failed for exp %s", tid, exc_info=True)
+    if (result
+            and result.get("source_type") == "venmo"
+            and result.get("transaction_type") == "payout"
+            and result.get("review_status") in ("approved", "corrected")):
+        try:
+            from email_parser.database import auto_match_venmo_payouts_to_tgf
+            match_result = auto_match_venmo_payouts_to_tgf([tid])
+            if match_result.get("matched"):
+                result["payout_match"] = match_result
+        except Exception:
+            logger.warning("venmo payout auto-match failed for exp %s", tid, exc_info=True)
     return jsonify(result)
 
 
@@ -10263,6 +10284,17 @@ def api_auto_match_venmo_balance_due():
     or after manually approving a batch."""
     from email_parser.database import auto_match_venmo_inbound_to_balance_due
     return jsonify(auto_match_venmo_inbound_to_balance_due())
+
+
+@app.route("/api/tgf/auto-match-venmo-payouts", methods=["POST"])
+@require_role("admin")
+def api_auto_match_venmo_payouts():
+    """Sweep ALL outbound Venmo payout receipts against pending tgf_payouts
+    and mark matches PAID (Kerry, 2026-07-08). New receipts also match
+    automatically as their emails arrive; this endpoint is the backfill /
+    catch-up trigger."""
+    from email_parser.database import auto_match_venmo_payouts_to_tgf
+    return jsonify(auto_match_venmo_payouts_to_tgf())
 
 
 @app.route("/api/admin/venmo-debug")
