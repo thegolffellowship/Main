@@ -5,6 +5,10 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
     <title>TGF — Events</title>
     <link rel="stylesheet" href="/static/css/dashboard.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Bitter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/css/shell.css">
     <link rel="manifest" href="/static/manifest.json">
     <link rel="icon" href="/static/icon.svg" type="image/svg+xml">
     <link rel="apple-touch-icon" href="/static/icon-180.png">
@@ -464,6 +468,16 @@
     </style>
 </head>
 <body>
+    {% if shell_v2 %}
+    {% set SHELL_TITLE = 'Events' %}{% set SHELL_ACTIVE = 'events' %}
+    {% set SHELL_OPS %}
+            <button id="btn-sync" class="shell-ops-primary" title="Scan transactions and create new event entries">&#8635; Sync Events</button>
+            <button id="btn-check-rsvps" class="shell-ops-maint" data-sheet title="Check Golf Genius RSVPs" style="display:none;">&#9745; Check RSVPs</button>
+            <button id="btn-check-now" class="shell-ops-maint" data-sheet title="Check inbox for new transactions">&#8635; Check Now</button>
+            <button id="btn-match-venmo" class="shell-ops-maint" data-sheet title="Re-run the Venmo IN &rarr; balance-due matcher (admin)" style="display:none;">&#128178; Match Venmo</button>
+    {% endset %}
+    {% include '_shell_nav.html' %}
+    {% else %}
     <header>
         <div class="header-content">
             <h1>TGF Transaction Tracker</h1>
@@ -489,9 +503,11 @@
             </button>
         </div>
     </header>
+    {% endif %}
 
     <main>
         <!-- Tab Navigation -->
+        {% if not shell_v2 %}
         <nav class="tab-nav">
             <a href="/events" class="active">Events</a>
             <a href="/contests">Season<span class="nav-label-full"> Contests</span></a>
@@ -501,6 +517,7 @@
             <a href="/tgf" class="admin-nav" style="display:none;">Payouts</a>
             <a href="/accounting" class="admin-nav admin-tab" style="display:none;">Admin</a>
         </nav>
+        {% endif %}
 
         <!-- Chapter scope (top row) over compact time tabs (sub row) — Kerry 2026-07-08.
              Search / Columns / Add Event share the time-tab line, right-justified

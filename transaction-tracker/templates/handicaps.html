@@ -5,6 +5,10 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
     <title>TGF — Handicaps</title>
     <link rel="stylesheet" href="/static/css/dashboard.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Bitter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/css/shell.css">
     <link rel="manifest" href="/static/manifest.json">
     <link rel="icon" href="/static/icon.svg" type="image/svg+xml">
     <link rel="apple-touch-icon" href="/static/icon-180.png">
@@ -222,6 +226,29 @@
     </style>
 </head>
 <body>
+    {% if shell_v2 %}
+    {% set SHELL_TITLE = 'Handicaps' %}{% set SHELL_ACTIVE = 'handicaps' %}
+    {% if not member_mode %}{% set SHELL_OPS %}
+            <div id="hcp-io-wrap" style="display:none;position:relative;">
+                <button id="btn-hcp-io" class="shell-ops-primary">Import / Export &#9662;</button>
+                <div id="hcp-io-menu" class="shell-menu" style="display:none;position:absolute;left:0;top:110%;z-index:50;">
+                    <button id="btn-import" class="hcp-io-item">Import Rounds</button>
+                    <div style="border-top:1px solid var(--border);margin:0.25rem 0;"></div>
+                    <button id="btn-dl-all" class="hcp-io-item" title="Download ALL chapters handicap CSV">&#11015; ALL CSV</button>
+                    <button id="btn-dl-sa" class="hcp-io-item" title="Download San Antonio handicap CSV">&#11015; SA CSV</button>
+                    <button id="btn-dl-austin" class="hcp-io-item" title="Download Austin handicap CSV">&#11015; Austin CSV</button>
+                </div>
+            </div>
+            <button id="btn-email-cards" class="shell-ops-secondary" data-sheet style="display:none;" title="Email handicap cards to all players with a linked email">Email Cards</button>
+            <span class="shell-ops-divider"></span>
+            <button id="btn-auto-link" class="shell-ops-maint" data-sheet style="display:none;" title="Try to match unlinked handicap players to customer records (needed for Golf Genius CSV/Sync)">Auto-link Players</button>
+            <button id="btn-create-customers" class="shell-ops-maint" data-sheet style="display:none;" title="Create archived customer records for unlinked handicap players">Create Customers for Unlinked</button>
+            <button id="btn-repair-links" class="shell-ops-maint" data-sheet style="display:none;" title="Fix any player-customer links that were stored backwards due to a prior bug">Repair Links</button>
+            <button id="btn-purge" class="shell-ops-destructive" data-sheet style="display:none;" title="Delete all rounds with 18-hole course ratings (rating > 50)">Purge 18-hole Scores</button>
+            <button id="btn-settings" class="shell-ops-settings" data-sheet style="display:none;">Settings</button>
+    {% endset %}{% endif %}
+    {% include '_shell_nav.html' %}
+    {% else %}
     <header>
         <div class="header-content">
             <h1>TGF Transaction Tracker</h1>
@@ -254,9 +281,11 @@
             <button id="btn-logout" class="btn btn-secondary" title="Log out" style="display:none;">Log Out</button>
         </div>
     </header>
+    {% endif %}
 
     <main>
         <!-- Tab Navigation -->
+        {% if not shell_v2 %}
         {% if member_mode %}
         <nav class="tab-nav">
             <a href="/member/contests">Season<span class="nav-label-full"> Contests</span></a>
@@ -272,6 +301,7 @@
             <a href="/tgf" class="admin-nav" style="display:none;">Payouts</a>
             <a href="/accounting" class="admin-nav admin-tab" style="display:none;">Admin</a>
         </nav>
+        {% endif %}
         {% endif %}
     <div class="sub-tabs"><nav class="ev-tab-row ev-chapter-row" style="margin-bottom:0;">
         <span class="ev-tab active" data-hcp-chapter="all">ALL</span>

@@ -10,6 +10,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Bitter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="/static/css/dashboard.css">
+    <link rel="stylesheet" href="/static/css/shell.css">
     <link rel="manifest" href="/static/manifest.json">
     <link rel="icon" href="/static/icon.svg" type="image/svg+xml">
     <link rel="apple-touch-icon" href="/static/icon-180.png">
@@ -373,6 +374,10 @@
     </style>
 </head>
 <body>
+    {% if shell_v2 %}
+    {% set SHELL_TITLE = 'Payouts' %}{% set SHELL_ACTIVE = 'tgf' %}
+    {% include '_shell_nav.html' %}
+    {% else %}
     <!-- Dark top nav (TGF DS 2a). The orange role pill doubles as the
          Admin link; icon mark is the official circular-G from the TGF
          Design System (pulled via DesignSync, 2026-07-09). -->
@@ -393,6 +398,7 @@
             <button id="btn-logout" class="tgf-logout" title="Log out" style="display:none;">Log Out</button>
         </nav>
     </header>
+    {% endif %}
 
     <main>
         <!-- Sub-tab bar (TGF DS): text tabs left, admin-only UNPAID as an

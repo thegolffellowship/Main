@@ -128,7 +128,9 @@ function updateNavForRole() {
     // sessions are reduced to EVENTS | CONTESTS | HANDICAPS (Kerry,
     // 2026-07-08) — other tabs hide and their pages redirect server-side.
     const VIEW_ONLY_TABS = ["/events", "/contests", "/handicaps"];
-    document.querySelectorAll(".tab-nav a").forEach(link => {
+    // Shell v2 (nav-shell-070926): the same rules drive the dark nav's
+    // desktop links and the mobile drawer links.
+    document.querySelectorAll(".tab-nav a, .shell-nav-links a, .shell-drawer-nav a").forEach(link => {
         const href = link.getAttribute("href") || "";
         if (link.classList.contains("admin-nav")) {
             link.style.display = (currentRole === "admin") ? "" : "none";
@@ -155,6 +157,9 @@ function updateNavForRole() {
     document.querySelectorAll(".admin-subnav.admin-nav").forEach(el => {
         el.style.display = (currentRole === "admin") ? "" : "none";
     });
+    // Shell v2: role densities (drawer vs inline tabs, drawer role pill,
+    // ops-row collapse) — no-op on legacy pages
+    if (typeof window.shellApplyRole === "function") window.shellApplyRole(currentRole, currentChapter);
 }
 
 async function initAuth() {
@@ -199,6 +204,9 @@ function _setStickyOffsets() {
     const adminSub = document.querySelector(".admin-subnav");
     if (hdr && nav && adminSub) {
         adminSub.style.top = (hdr.offsetHeight + nav.offsetHeight) + "px";
+    } else if (hdr && adminSub) {
+        // Shell v2 pages have no .tab-nav — sub-nav sticks under the dark bar
+        adminSub.style.top = hdr.offsetHeight + "px";
     }
 }
 // Run immediately, on DOM ready, on load, and on resize
