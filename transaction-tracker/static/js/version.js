@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.49.5";
+window.TGF_VERSION = "2.49.6";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.49.6",
+    date: "2026-07-08",
+    changes: [
+      "VENMO MEMO FORMAT (Kerry): pay links now prefill '[First] [Last] - Winnings for [event]' (was 'TGF [event]') on both the per-event PAYOUTS panel and the Payouts page, and the excess-credit refund links read '[Name] - Excess credit refund'.",
+      "NO MORE '+' BETWEEN WORDS: Venmo's https universal link re-serializes the query so the app showed a literal + for every space in the memo (e.g. 'TGF+s9.17+Silverhorn'). On phones/tablets the links now use the native venmo:// scheme, which the app parses directly so spaces come through as spaces; desktop keeps the venmo.com web link.",
+    ],
+  },
   {
     version: "2.49.5",
     date: "2026-07-08",

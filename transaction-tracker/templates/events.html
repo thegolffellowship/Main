@@ -3512,6 +3512,20 @@
         return `<span style="display:inline-block;padding:1px 8px;border-radius:99px;font-size:0.72rem;font-weight:600;background:${c};">${escapeHtml(label)}</span>`;
     }
 
+    // Venmo pay link builder. Venmo's https universal link re-serializes the
+    // query, so the app shows a literal '+' for every space in the memo
+    // (Kerry, 2026-07-08). The native venmo:// scheme is parsed directly by
+    // the app and %20 decodes to real spaces — use it where the app handles
+    // the tap (phones/tablets); desktop keeps the web link.
+    function venmoPayHref(handle, amount, note) {
+        const amt = Number(amount).toFixed(2);
+        const encoded = encodeURIComponent(note);
+        const mobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+        return mobile
+            ? `venmo://paycharge?txn=pay&recipients=${encodeURIComponent(handle)}&amount=${amt}&note=${encoded}`
+            : `https://venmo.com/${encodeURIComponent(handle)}?txn=pay&amount=${amt}&note=${encoded}`;
+    }
+
     function renderPayoutsPanel(ev, registrants) {
         // Find TGF event matching this event's item_name (code)
         const tgfEvent = tgfPayoutData.events.find(e => e.code === ev.item_name);
@@ -3589,7 +3603,7 @@
             const venmo = winData ? winData.venmo_username : "";
             const alreadyPaid = g.payment_status === "paid";
             const venmoHtml = venmo && !alreadyPaid
-                ? `<a href="https://venmo.com/${venmo}?txn=pay&amount=${g.total.toFixed(2)}&note=${encodeURIComponent('TGF ' + ev.item_name)}" target="_blank" rel="noopener" style="display:inline-flex;align-items:center;gap:3px;padding:2px 8px;border-radius:99px;font-size:0.72rem;font-weight:600;background:#008CFF;color:#fff;text-decoration:none;" onclick="event.stopPropagation();"><svg viewBox="0 0 24 24" fill="currentColor" style="width:12px;height:12px;"><path d="M19.5 3c.9 1.5 1.3 3 1.3 5 0 5.5-4.7 12.7-8.5 17H5.2L3 3.5l6-.6 1.2 9.6c1.2-2 2.7-5.2 2.7-7.3 0-1.9-.3-3.2-.8-4.2L19.5 3z"/></svg>Pay</a>`
+                ? `<a href="${venmoPayHref(venmo, g.total, `${g.name} - Winnings for ${ev.item_name}`)}" target="_blank" rel="noopener" style="display:inline-flex;align-items:center;gap:3px;padding:2px 8px;border-radius:99px;font-size:0.72rem;font-weight:600;background:#008CFF;color:#fff;text-decoration:none;" onclick="event.stopPropagation();"><svg viewBox="0 0 24 24" fill="currentColor" style="width:12px;height:12px;"><path d="M19.5 3c.9 1.5 1.3 3 1.3 5 0 5.5-4.7 12.7-8.5 17H5.2L3 3.5l6-.6 1.2 9.6c1.2-2 2.7-5.2 2.7-7.3 0-1.9-.3-3.2-.8-4.2L19.5 3z"/></svg>Pay</a>`
                 : '';
             const statusBadge = PAYOUT_STATUS_BADGE[g.payment_status] || "";
 
@@ -10643,8 +10657,7 @@
                     if (amtOwed != null && amtOwed < -0.005) {
                         const eAmt = Math.abs(amtOwed).toFixed(2);
                         const vH = info.venmo_username ? info.venmo_username.replace(/^@/, '') : '';
-                        const vNote = encodeURIComponent(`${resolvedCustomer} Excess credit refund`);
-                        const vUrl = vH ? `https://venmo.com/${vH}?txn=pay&amount=${eAmt}&note=${vNote}` : '';
+                        const vUrl = vH ? venmoPayHref(vH, eAmt, `${resolvedCustomer} - Excess credit refund`) : '';
                         const venmoLine = vH
                             ? `Venmo back ($${eAmt}) — <a href="${vUrl}" target="_blank" rel="noopener" style="color:#3D95CE;">open Venmo link for @${escapeHtml(vH)}</a>`
                             : `Venmo back ($${eAmt}) — <span style="color:#9a3412;">no handle on file</span> ` +
