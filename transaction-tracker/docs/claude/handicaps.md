@@ -248,3 +248,15 @@ payload). All write/import/email endpoints keep their manager/admin
 requirements; with currentRole null the header ops buttons and
 per-player action buttons stay hidden, and player names render
 without their /customers links.
+
+## Default filter: current members (v2.53.1, Kerry)
+
+The players list defaults to CURRENT MEMBERS only — a MEMBERS |
+EVERYONE pill pair sits after the chapter tabs (MEMBERS active on
+load). "Member" = customers.current_player_status IN ('active_member',
+'member_plus') via handicap_player_links; guests, first-timers,
+expired/inactive, and UNLINKED players are hidden until EVERYONE is
+selected — flip to EVERYONE when working the link/auto-link queue.
+get_all_handicap_players returns `player_status` for this. The stats
+row (Players Tracked / Total Rounds / avg index) stays global,
+matching the chapter filter's existing behavior.

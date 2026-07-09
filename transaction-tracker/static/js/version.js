@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.53.0";
+window.TGF_VERSION = "2.53.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.53.1",
+    date: "2026-07-09",
+    changes: [
+      "HANDICAPS default filter is CURRENT MEMBERS only (Kerry): a MEMBERS | EVERYONE pill pair next to the chapter tabs, defaulting to MEMBERS (customers.current_player_status of active_member or member_plus). Guests, first-timers, expired/inactive members, and players not yet linked to a customer record show under EVERYONE. Applies to the admin page and the public /member/handicaps view alike; the players API now carries a player_status field (status label only -- no PII).",
+    ],
+  },
   {
     version: "2.53.0",
     date: "2026-07-09",
