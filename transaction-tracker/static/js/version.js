@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.51.0";
+window.TGF_VERSION = "2.51.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.51.1",
+    date: "2026-07-08",
+    changes: [
+      "PAYOUT NAMES SHOW THE SUFFIX (Kerry): every payout surface -- the Payouts page tables, the per-event PAYOUTS panel, Customers -> Winnings, mark-paid descriptions -- now renders 'Victor Arias Jr' / 'Victor Arias III' instead of two indistinguishable 'Victor Arias' rows. The name builds append customers.suffix when present; the Venmo memo inherits it automatically since it uses the same display name.",
+    ],
+  },
   {
     version: "2.51.0",
     date: "2026-07-08",

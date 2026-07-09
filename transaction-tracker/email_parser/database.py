@@ -30173,7 +30173,7 @@ def get_tgf_data(db_path=None):
         # Customers who have received payouts
         customers = [dict(r) for r in conn.execute(
             """SELECT DISTINCT c.customer_id as id,
-                      (c.first_name || ' ' || c.last_name) as name,
+                      TRIM(c.first_name || ' ' || c.last_name || COALESCE(' ' || NULLIF(TRIM(c.suffix), ''), '')) as name,
                       c.venmo_username, c.payment_method, c.payment_handle,
                       c.chapter
                FROM customers c
@@ -30187,7 +30187,7 @@ def get_tgf_data(db_path=None):
             payouts = []
             for p in conn.execute(
                 """SELECT p.*,
-                          (c.first_name || ' ' || c.last_name) as customer_name,
+                          TRIM(c.first_name || ' ' || c.last_name || COALESCE(' ' || NULLIF(TRIM(c.suffix), ''), '')) as customer_name,
                           t.source as txn_source,
                           COALESCE(t.status, 'active') as txn_status
                    FROM tgf_payouts p
@@ -30215,7 +30215,7 @@ def get_tgf_data(db_path=None):
         winnings = {}
         for row in conn.execute(
             """SELECT c.customer_id as id,
-                      (c.first_name || ' ' || c.last_name) as name,
+                      TRIM(c.first_name || ' ' || c.last_name || COALESCE(' ' || NULLIF(TRIM(c.suffix), ''), '')) as name,
                       c.venmo_username, c.payment_method, c.payment_handle,
                       c.chapter,
                       COALESCE(SUM(p.amount), 0) as total_winnings,
@@ -30967,10 +30967,14 @@ def get_customer_winnings(customer_name: str, db_path=None, customer_id: int | N
             return {"golfer_name": None, "total_winnings": 0, "payouts": []}
 
         cust = conn.execute(
-            "SELECT first_name, last_name FROM customers WHERE customer_id = ?",
+            "SELECT first_name, last_name, suffix FROM customers WHERE customer_id = ?",
             (customer_id,),
         ).fetchone()
-        display_name = f"{cust['first_name']} {cust['last_name']}" if cust else customer_name
+        # Include the suffix so Victor Arias Jr and Victor Arias III are
+        # distinguishable on every payout surface (Kerry, 2026-07-08)
+        display_name = (" ".join(x for x in (cust["first_name"], cust["last_name"],
+                                             (cust["suffix"] or "").strip()) if x)
+                        if cust else customer_name)
 
         payouts = [dict(r) for r in conn.execute(
             """SELECT p.amount, p.category, p.description,
