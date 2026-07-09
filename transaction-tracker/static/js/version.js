@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.50.1";
+window.TGF_VERSION = "2.51.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.51.0",
+    date: "2026-07-08",
+    changes: [
+      "MONTHLY POINTS PAYOUTS ARE NOW TRACKED (Kerry): each completed month gets its own payout account (like an event) -- 'MARCH Points 2026' etc. with one row per winner ($1/member purse, ties split, from the monthly snapshot). record_monthly_points_payouts runs after the daily monthly-points refresh, is idempotent, and reuses the proven import path (pending ledger placeholders + Venmo reconciliation).",
+      "PAYOUTS page grew a top-level tab: EVENTS | SEASON CONTESTS | GOLFERS. Season Contests lists the month accounts (and future Fellowship Cup / Match Play accounts by naming convention) with the same golfer table, PAID/PENDING badges, Pay links, and Mark Paid as events. Monthly rows also appear in Customers -> Winnings automatically (new 'Monthly Points' category badge).",
+      "Venmo auto-confirm now covers monthly payments: 'Winnings for MARCH Points' receipts resolve ONLY to the month's own account (never a golf event) and mark the winner's row PAID. The v2.50.1 repair leaves legitimate month-account links alone.",
+    ],
+  },
   {
     version: "2.50.1",
     date: "2026-07-08",

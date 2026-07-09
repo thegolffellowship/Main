@@ -653,7 +653,19 @@ event showed default amounts ($8/$7) in Withdraw Player / Partial Refund.
 # TGF Payouts Page
 
 ## Architecture
-- **Page** at `/tgf` — two top-level tabs: EVENTS and GOLFERS
+- **Page** at `/tgf` — three top-level tabs: EVENTS | SEASON CONTESTS | GOLFERS
+  (v2.51.0). SEASON CONTESTS reuses the events layout filtered to contest
+  accounts by code convention (`_CONTEST_ACCOUNT_RE`: '<MONTH> Points…',
+  'Fellowship Cup…', 'Match Play…'); each month is its own payout account.
+  `record_monthly_points_payouts(force=False)` (database.py) creates
+  'MARCH Points 2026'-style tgf_events rows for completed months from the
+  monthly snapshot ($1/member, ties split; one tgf_payouts row per winner,
+  category 'monthly_points') — runs after the daily monthly-points refresh,
+  idempotent, delegates to import_tgf_payouts; bridge command
+  `scoring-monthly-payouts[:force]`. The Venmo matcher resolves
+  'Winnings for <MONTH> Points' memos ONLY to the month account, and the
+  false-match repair skips legitimate month-account links. Monthly rows
+  flow into Customers → Winnings automatically via /api/customers/winnings.
 - **Data** from `tgf_events` and `tgf_payouts` tables; golfer identity is the `customers` table (tgf_golfers was eliminated)
 - **API:** `GET /api/tgf` returns `{customers, events, winnings}` where customers is the list of payout recipients
 

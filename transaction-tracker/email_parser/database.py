@@ -16126,11 +16126,107 @@ def capture_venmo_handle_for_customer(
         return cur.rowcount > 0
 
 
-# Monthly-points winnings memos ("Winnings for MARCH Points") — those
-# payments have NO tgf_payouts rows and must never consume an event group
+# Monthly-points winnings memos ("Winnings for MARCH Points") — resolved
+# to the month's own tgf_events account (v2.51.0); never to an event group
 _MONTHLY_MEMO_RE = re.compile(
     r"winnings\s+for\s+(january|february|march|april|may|june|july|august|"
     r"september|october|november|december)\s+points", re.I)
+
+# tgf_events accounts that are SEASON CONTESTS, not golf events (monthly
+# points months; future: fellowship cup, match play). The /tgf page's
+# SEASON CONTESTS tab and the monthly repair both use this convention.
+_CONTEST_ACCOUNT_RE = re.compile(
+    r"^(january|february|march|april|may|june|july|august|september|"
+    r"october|november|december)\s+points|^(fellowship\s+cup|match\s+play)", re.I)
+
+
+def record_monthly_points_payouts(force: bool = False, db_path=None) -> dict:
+    """Record completed months' Monthly Points winners as tgf_payouts under
+    a per-month tgf_events account (Kerry, 2026-07-08: monthly payouts must
+    be trackable/confirmable like events — PAYOUTS → SEASON CONTESTS tab —
+    and appear in Customers → Winnings).
+
+    Winners + shares come from the persisted monthly-points snapshot
+    ($1/member at month close, ties split). Each complete month gets a
+    tgf_events row code '<MONTH> Points <YYYY>' (event_date = month end,
+    chapter TGF); inserts delegate to import_tgf_payouts so ledger
+    placeholders + Venmo reconciliation reuse the proven path, then the
+    Venmo payout matcher runs so already-received 'Winnings for MARCH
+    Points' receipts confirm immediately. Skips months whose account
+    already has payout rows (force=True re-records auto rows). The daily
+    monthly-points snapshot job calls this after each refresh.
+    """
+    import calendar as _cal
+    snapshot = load_gg_snapshot("monthly_points", db_path or DB_PATH)
+    if not snapshot or not snapshot.get("months"):
+        return {"error": "no monthly points snapshot"}
+    recorded, skipped = [], []
+    for m in snapshot["months"]:
+        if not m.get("complete") or not m.get("winners"):
+            skipped.append({"month": m.get("month"), "reason": "incomplete or no winners"})
+            continue
+        year, mnum = int(m["month"][:4]), int(m["month"][5:7])
+        code = f"{_cal.month_name[mnum].upper()} Points {year}"
+        with _connect(db_path) as conn:
+            row = conn.execute(
+                "SELECT id FROM tgf_events WHERE LOWER(code) = LOWER(?)",
+                (code,)).fetchone()
+            if row:
+                tgf_event_id = row["id"]
+            else:
+                cur = conn.execute(
+                    """INSERT INTO tgf_events (code, name, event_date, course, chapter)
+                       VALUES (?, ?, ?, ?, 'TGF')""",
+                    (code, code, m.get("month_end") or "", "Monthly Points Race"))
+                tgf_event_id = cur.lastrowid
+            existing = conn.execute(
+                "SELECT id, acct_transaction_id, description FROM tgf_payouts WHERE event_id = ?",
+                (tgf_event_id,)).fetchall()
+            if existing and not force:
+                skipped.append({"month": m["month"], "reason": "already recorded"})
+                conn.commit()
+                continue
+            if existing and force:
+                for r in existing:
+                    if not (r["description"] or "").startswith("auto:"):
+                        continue
+                    if r["acct_transaction_id"]:
+                        txn = conn.execute(
+                            "SELECT id, source FROM acct_transactions WHERE id = ?",
+                            (r["acct_transaction_id"],)).fetchone()
+                        if txn and txn["source"] == "pending":
+                            conn.execute("DELETE FROM acct_transactions WHERE id = ?",
+                                         (txn["id"],))
+                    conn.execute("DELETE FROM tgf_payouts WHERE id = ?", (r["id"],))
+            conn.commit()
+        share = None
+        winners = m["winners"]
+        payouts = []
+        for w in winners:
+            share = w.get("share")
+            if share is None:
+                continue
+            payouts.append({
+                "golferName": w.get("player_name"),
+                "category": "monthly_points",
+                "amount": round(float(share), 2),
+                "description": (f"auto: {code} winner — ${m.get('purse')} purse"
+                                + (f" split {len(winners)} ways" if len(winners) > 1 else "")),
+            })
+        if not payouts:
+            skipped.append({"month": m["month"], "reason": "winners have no share"})
+            continue
+        result = import_tgf_payouts(tgf_event_id, payouts, db_path=db_path)
+        recorded.append({"month": m["month"], "code": code,
+                         "winners": len(payouts), "result": result})
+    out = {"recorded": recorded, "skipped": skipped}
+    if recorded:
+        try:
+            vm = auto_match_venmo_payouts_to_tgf(db_path=db_path)
+            out["venmo_matched"] = vm.get("matched", 0)
+        except Exception:
+            logger.warning("post-monthly-record venmo match failed", exc_info=True)
+    return out
 
 
 def _repair_false_monthly_venmo_matches(conn: sqlite3.Connection) -> None:
@@ -16144,7 +16240,7 @@ def _repair_false_monthly_venmo_matches(conn: sqlite3.Connection) -> None:
     paid_at cleared. Idempotent."""
     rows = conn.execute(
         """SELECT p.id AS payout_id, p.amount, p.category,
-                  x.notes, e.event_date, e.name AS event_name
+                  x.notes, e.event_date, e.name AS event_name, e.code AS event_code
            FROM tgf_payouts p
            JOIN acct_transactions t ON t.id = p.acct_transaction_id
            JOIN expense_transactions x ON x.acct_transaction_id = t.id
@@ -16154,6 +16250,10 @@ def _repair_false_monthly_venmo_matches(conn: sqlite3.Connection) -> None:
     fixed = 0
     for r in rows:
         if not _MONTHLY_MEMO_RE.search(r["notes"] or ""):
+            continue
+        # a monthly payment linked to the month's OWN account is the
+        # correct outcome (v2.51.0 SEASON CONTESTS accounts) — leave it
+        if _CONTEST_ACCOUNT_RE.match((r["event_code"] or "").strip()):
             continue
         ph = conn.execute(
             "SELECT id FROM acct_transactions WHERE source = 'pending' AND source_ref = ?",
@@ -16232,13 +16332,6 @@ def auto_match_venmo_payouts_to_tgf(
                 if amt <= 0:
                     summary["no_candidate"] += 1
                     continue
-                # Monthly-points winnings are paid from the Contests page —
-                # they have no tgf_payouts rows and must never consume an
-                # event payout group (v2.50.1: a $70.00 MARCH Points payment
-                # ±$1-matched a $70.37 event group)
-                if _MONTHLY_MEMO_RE.search(exp.get("notes") or ""):
-                    summary["no_candidate"] += 1
-                    continue
                 if exp.get("acct_transaction_id"):
                     linked = conn.execute(
                         "SELECT 1 FROM tgf_payouts WHERE acct_transaction_id = ? LIMIT 1",
@@ -16279,7 +16372,20 @@ def auto_match_venmo_payouts_to_tgf(
                     continue
 
                 tgf_event_id = None
-                if exp.get("event_id"):
+                # Monthly-points memos resolve ONLY to the month's own
+                # account (v2.51.0). Never to a golf event: a $70.00 MARCH
+                # Points payment once ±$1-matched a $70.37 event group.
+                mm = _MONTHLY_MEMO_RE.search(exp.get("notes") or "")
+                if mm:
+                    row = conn.execute(
+                        """SELECT id FROM tgf_events WHERE LOWER(code) LIKE LOWER(?)
+                           ORDER BY event_date DESC LIMIT 1""",
+                        (mm.group(1) + " points%",)).fetchone()
+                    if not row:
+                        summary["no_candidate"] += 1
+                        continue
+                    tgf_event_id = row["id"]
+                if tgf_event_id is None and exp.get("event_id"):
                     row = conn.execute(
                         """SELECT te.id FROM tgf_events te
                            LEFT JOIN events ev ON ev.id = ?

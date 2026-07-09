@@ -92,6 +92,7 @@
         .cat-closest_to_pin  { background: #e0e7ff; color: #4338ca; }
         .cat-hole_in_one     { background: #fef08a; color: #854d0e; }
         .cat-mvp             { background: #f3e8ff; color: #7c3aed; }
+        .cat-monthly_points  { background: #fff3ec; color: #b8501f; }
         .cat-other           { background: #f1f5f9; color: #475569; }
 
         /* Venmo button */
@@ -203,9 +204,10 @@
             <a href="/accounting" class="admin-nav admin-tab" style="display:none;">Admin</a>
         </nav>
 
-        <!-- Top-level EVENTS / GOLFERS tabs -->
+        <!-- Top-level EVENTS / SEASON CONTESTS / GOLFERS tabs -->
         <div class="top-tabs">
             <button class="top-tab active" data-top="events">Events</button>
+            <button class="top-tab" data-top="contests">Season Contests</button>
             <button class="top-tab" data-top="golfers">Golfers</button>
         </div>
 
@@ -263,6 +265,7 @@
             closest_to_pin: "Closest to Pin",
             hole_in_one: "Hole in One",
             mvp: "MVP",
+            monthly_points: "Monthly Points",
             other: "Other",
         };
 
@@ -347,13 +350,30 @@
         }
 
         // ── Top tabs ─────────────────────────────────────────────
+        // SEASON CONTESTS (v2.51.0, Kerry) reuses the events layout but
+        // filtered to contest accounts (monthly points months etc.) —
+        // each month is its own payout account like each event.
+        let eventsView = "events";
+        function isContestAccount(ev) {
+            const c = (ev.code || "").trim();
+            return /^(january|february|march|april|may|june|july|august|september|october|november|december)\s+points/i.test(c)
+                || /^(fellowship\s+cup|match\s+play)/i.test(c);
+        }
         $$(".top-tab").forEach(btn => {
             btn.addEventListener("click", () => {
                 $$(".top-tab").forEach(b => b.classList.remove("active"));
                 btn.classList.add("active");
                 const target = btn.dataset.top;
-                $("#section-events").classList.toggle("section-hidden", target !== "events");
+                $("#section-events").classList.toggle("section-hidden", target === "golfers");
                 $("#section-golfers").classList.toggle("section-hidden", target !== "golfers");
+                if (target !== "golfers") {
+                    eventsView = target;
+                    selectedEventIdx = -1;
+                    const title = $("#events-sidebar .sidebar-title");
+                    if (title) title.textContent = target === "contests" ? "Season Contests" : "Events";
+                    renderEventsSidebar();
+                    renderEventMain();
+                }
             });
         });
 
@@ -361,11 +381,15 @@
 
         function renderEventsSidebar() {
             const el = $("#events-list");
-            if (!DATA.events.length) {
-                el.innerHTML = '<div class="empty-state"><p>No events yet</p></div>';
+            // keep GLOBAL indexes into DATA.events; filter for display only
+            const list = DATA.events
+                .map((ev, i) => ({ev, i}))
+                .filter(x => isContestAccount(x.ev) === (eventsView === "contests"));
+            if (!list.length) {
+                el.innerHTML = `<div class="empty-state"><p>No ${eventsView === "contests" ? "season contest payouts" : "events"} yet</p></div>`;
                 return;
             }
-            el.innerHTML = DATA.events.map((ev, i) => `
+            el.innerHTML = list.map(({ev, i}) => `
                 <div class="sidebar-item${i === selectedEventIdx ? ' active' : ''}" data-eidx="${i}">
                     <div>
                         <div class="name">${ev.code}</div>

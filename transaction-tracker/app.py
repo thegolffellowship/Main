@@ -1303,12 +1303,22 @@ def start_scheduler():
     # tab serves instantly from the DB; the Refresh button covers
     # same-day needs. 05:30 Central sits between the digest jobs.
     def refresh_monthly_points_job():
-        from email_parser.database import refresh_monthly_points_snapshot
+        from email_parser.database import (refresh_monthly_points_snapshot,
+                                           record_monthly_points_payouts)
         try:
             refresh_monthly_points_snapshot()
             logger.info("Monthly points snapshot refreshed from Golf Genius")
         except Exception:
             logger.exception("Monthly points snapshot refresh failed (non-fatal)")
+        # Record completed months' winners as SEASON CONTEST payout accounts
+        # (v2.51.0, Kerry) — idempotent; new months appear once complete
+        try:
+            res = record_monthly_points_payouts()
+            if res.get("recorded"):
+                logger.info("Monthly points payouts recorded: %s",
+                            [r["code"] for r in res["recorded"]])
+        except Exception:
+            logger.exception("Monthly points payout recording failed (non-fatal)")
 
     scheduler.add_job(
         refresh_monthly_points_job,
