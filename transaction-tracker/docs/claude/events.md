@@ -706,7 +706,14 @@ row), reverse the source='pending' placeholders, point every
 tgf_payouts row in the group at the venmo ledger entry, stamp paid_at
 = payment date → get_tgf_data derives payment_status='paid' so the
 PAYOUTS tab shows PAID and the Pay link disappears. Idempotent
-(already-linked receipts count as already_matched). Triggers: each
+(already-linked receipts count as already_matched). v2.50.1 guards:
+monthly-points memos ("Winnings for MARCH Points") are excluded — the
+monthly race is paid from Contests, has no tgf_payouts rows, and a
+$70.00 payment ±$1-matched a $70.37 event group in the first live
+hour; the ±$1.00 fallback also now requires the event to have
+resolved. Boot repair `_repair_false_monthly_venmo_matches` reverts
+any such false links (reinstates the 'payout-<id>' pending
+placeholder, clears paid_at). Triggers: each
 arriving receipt email (expense inbox check), expense review approval
 (PATCH expense-transactions), end of `record_event_game_payouts`
 (consumes receipts that arrived before recording), admin backfill
