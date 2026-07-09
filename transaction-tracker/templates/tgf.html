@@ -332,6 +332,10 @@
             return null;
         }
 
+        // "auto:" is a storage marker (auto-recorded vs manual rows) —
+        // never show it (Kerry, 2026-07-08: takes up space)
+        function stripAuto(d) { return (d || "").replace(/^auto:\s*/i, ""); }
+
         function catBadge(cat) {
             const label = CATEGORY_LABELS[cat] || cat;
             return `<span class="cat-badge cat-${cat}">${label}</span>`;
@@ -583,7 +587,7 @@
                                     ${g.items.map(p => `
                                         <tr>
                                             <td>${catBadge(p.category)}</td>
-                                            <td>${p.description || CATEGORY_LABELS[p.category] || p.category}</td>
+                                            <td>${stripAuto(p.description) || CATEGORY_LABELS[p.category] || p.category}</td>
                                             <td class="right" style="font-weight:600;color:var(--green);">${fmt(p.amount)}</td>
                                         </tr>
                                     `).join("")}
@@ -733,7 +737,7 @@
                                 ${ge.payouts.map(p => `
                                     <tr style="cursor:default;">
                                         <td>${catBadge(p.category)}</td>
-                                        <td>${p.description || CATEGORY_LABELS[p.category] || p.category}</td>
+                                        <td>${stripAuto(p.description) || CATEGORY_LABELS[p.category] || p.category}</td>
                                         <td class="right total-amount">${fmt(p.amount)}</td>
                                     </tr>
                                 `).join("")}
@@ -870,7 +874,7 @@
                     html += `<tr style="border-bottom:1px solid #f1f5f9;">
                         <td style="padding:0.3rem 0.4rem;">${escHtml(p.golferName)}</td>
                         <td style="padding:0.3rem 0.4rem;">${catBadge(p.category)}</td>
-                        <td style="padding:0.3rem 0.4rem;color:var(--text-muted);">${escHtml(p.description || "")}</td>
+                        <td style="padding:0.3rem 0.4rem;color:var(--text-muted);">${escHtml(stripAuto(p.description))}</td>
                         <td style="text-align:right;padding:0.3rem 0.4rem;font-weight:600;color:var(--green);">$${(p.amount || 0).toFixed(2)}</td>
                     </tr>`;
                 });

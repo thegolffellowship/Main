@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.51.1";
+window.TGF_VERSION = "2.51.2";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.51.2",
+    date: "2026-07-08",
+    changes: [
+      "Removed the 'auto: ' prefix from payout descriptions everywhere they display (Payouts page breakdowns, per-event PAYOUTS panel, Customers winnings API). The prefix stays in STORAGE -- it is how re-recording distinguishes auto-recorded rows from manual ones -- it just no longer wastes screen space (Kerry).",
+    ],
+  },
   {
     version: "2.51.1",
     date: "2026-07-08",
