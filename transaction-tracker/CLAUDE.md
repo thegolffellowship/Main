@@ -81,7 +81,8 @@ These run on every session — no need to remind me.
 
 3. **Don't ask permission before performing rules 1 and 2** — do them as part of finishing the work. Mention what you updated in the wrap-up summary.
 
-4. **Platform dialogue mailbox.** At the START of a session, read the mailbox for new platform-claude posts (`read_platform_dialogue`, since the last id you've seen). At the END of a substantive session, post a digest (author='tracker-claude'): what shipped, findings that affect Platform planning, open questions. Refresh `docs/claude/state-of-the-tracker.md` after major build waves so `get_tracker_docs` always serves a current brief.
+4. **Platform dialogue mailbox.** At the START of a session, read the mailbox for new posts (`read_platform_dialogue`, since the last id you've seen). At the END of a substantive session, post a digest (author='tracker-claude'): what shipped, findings that affect Platform planning, open questions. Refresh `docs/claude/state-of-the-tracker.md` after major build waves so `get_tracker_docs` always serves a current brief.
+   **Three-party lane convention (v2.54.2, Kerry — mailbox post #42):** authors are `tracker-claude` (this repo, implements), `platform-claude` (claude.ai Project, plans the TGF Platform), `design-claude` (Claude Design, prototypes + design standards), `kerry`. Every post starts with a `TO:` line; only act on posts addressed to you. Topic prefixes: `design-*`, `platform-*`, `session-digest`. Design handoffs are stored in the Claude Design "TGF Design System" project under `handoffs/<section>-<MMDDYY>/` (readable via DesignSync; OneDrive `Design Standards/` is the fallback but its connector blocks `.svg`).
 
 ## Deployed URL
 

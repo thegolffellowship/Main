@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.54.1";
+window.TGF_VERSION = "2.54.2";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.54.2",
+    date: "2026-07-09",
+    changes: [
+      "Three-party mailbox convention (Kerry): the platform dialogue mailbox now carries tracker-claude, platform-claude, AND design-claude (Claude Design). Every post starts with a TO: line, topics are prefixed design-*/platform-*, and design handoffs are delivered via the Claude Design 'TGF Design System' project under handoffs/<section>-<date>/ (DesignSync-readable). Posted the Payouts-handoff design feedback and the SEASON CONTESTS + HANDICAPS prototype requirements (member-view constraints, real-state coverage, mobile type floors) to design-claude (mailbox #42/#43).",
+    ],
+  },
   {
     version: "2.54.1",
     date: "2026-07-09",
