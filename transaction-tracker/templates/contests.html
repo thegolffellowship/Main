@@ -434,6 +434,25 @@
             .pr-section .standings-section { padding: 0.75rem 0.4rem !important; }
             .stableford-ref { grid-template-columns: 1fr; }
         }
+
+        /* Registration CTA (Kerry, v2.53.0) */
+        .contest-cta-row { margin: 0.9rem 0 0.2rem; text-align: center; }
+        .contest-cta {
+            display: inline-block;
+            background: var(--primary, #E87C3E);
+            color: #fff !important;
+            font-weight: 700;
+            letter-spacing: 0.05em;
+            padding: 0.7rem 1.8rem;
+            border-radius: 8px;
+            text-decoration: none;
+            font-size: 1rem;
+            box-shadow: 0 2px 8px rgba(232, 124, 62, 0.35);
+        }
+        .contest-cta:hover { background: var(--primary-hover, #D06B2E); }
+        @media (max-width: 768px) {
+            .contest-cta { display: block; margin: 0 0.25rem; padding: 0.75rem 1rem; }
+        }
     </style>
 </head>
 <body>
@@ -441,7 +460,11 @@
         <div class="header-content">
             <h1>TGF Transaction Tracker</h1>
             <p class="subtitle">Season Contests</p>
+            {% if member_mode %}
+            <span class="version-link" id="version-badge">v2.0.0</span>
+            {% else %}
             <a href="/changelog" class="version-link" id="version-badge" title="View changelog">v2.0.0</a>
+            {% endif %}
         </div>
         <div class="header-actions">
             <span id="role-badge" class="role-badge" style="display:none;"></span>
@@ -451,6 +474,12 @@
 
     <main>
         <!-- Tab Navigation -->
+        {% if member_mode %}
+        <nav class="tab-nav">
+            <a href="/member/contests" class="active">Season<span class="nav-label-full"> Contests</span></a>
+            <a href="/member/handicaps">Handicaps</a>
+        </nav>
+        {% else %}
         <nav class="tab-nav">
             <a href="/events">Events</a>
             <a href="/contests" class="active">Season<span class="nav-label-full"> Contests</span></a>
@@ -460,6 +489,13 @@
             <a href="/tgf" class="admin-nav" style="display:none;">Payouts</a>
             <a href="/accounting" class="admin-nav admin-tab" style="display:none;">Admin</a>
         </nav>
+        {% endif %}
+
+        <!-- Registration CTA (Kerry, v2.53.0) — shown in every view -->
+        <div class="contest-cta-row">
+            <a class="contest-cta" href="https://thegolffellowship.com/shop/ols/products/season-contests"
+               target="_blank" rel="noopener">ENTER SEASON CONTESTS &rarr;</a>
+        </div>
 
         <!-- Top-level tabs -->
         <div class="top-tabs">
@@ -703,6 +739,7 @@
         </div>
     </div>
 
+    {% if member_mode %}<script>window.MEMBER_MODE = true;</script>{% endif %}
     <script src="/static/js/version.js"></script>
     <script src="/static/js/auth.js"></script>
     <script src="/static/js/points-render.js"></script>
@@ -2287,7 +2324,7 @@
                 : (r.customer_id
                     ? `<span style="color:#b91c1c;font-weight:600;" title="Not bought in">&#10007;${compact ? "" : " Not in"}</span>`
                     : `<span style="color:#b45309;font-weight:600;" title="No matching tracker profile — check name/aliases">?${compact ? "" : " Unmatched"}</span>`);
-            const nameCell = r.customer_id
+            const nameCell = (r.customer_id && !window.MEMBER_MODE)
                 ? `<a href="/customers?cid=${r.customer_id}" class="cell-link">${escapeHtml(r.player_name)}</a>`
                 : escapeHtml(r.player_name);
             const expandable = !!(r.member_card_id || r.customer_id);
@@ -2416,7 +2453,7 @@
                      : (r.customer_id ? "" : "background:#fffbeb;");
             const hcp = r.handicap_index != null
                 ? ` <span style="color:var(--text-muted);font-size:0.82em;">(${r.handicap_index.toFixed(1)})</span>` : "";
-            const nameCell = r.customer_id
+            const nameCell = (r.customer_id && !window.MEMBER_MODE)
                 ? `<a href="/customers?cid=${r.customer_id}" class="cell-link">${escapeHtml(r.player_name)}</a>`
                 : escapeHtml(r.player_name);
             return `<tr style="${bg}">
@@ -2501,7 +2538,7 @@
             // Chapter column is narrow here (PURSE takes the slack): initials
             // only on phones — "A" / "SA" — since even AUS overflows
             const chAbbr = String(r.chapter || "").trim().split(/\s+/).filter(Boolean).map(w => w[0]).join("").toUpperCase();
-            const name = r.customer_id
+            const name = (r.customer_id && !window.MEMBER_MODE)
                 ? `<a href="/customers?cid=${r.customer_id}" class="cell-link">${escapeHtml(r.player_name)}</a>`
                 : escapeHtml(r.player_name);
             const chevron = r.customer_id

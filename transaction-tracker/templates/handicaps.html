@@ -226,7 +226,11 @@
         <div class="header-content">
             <h1>TGF Transaction Tracker</h1>
             <p class="subtitle">Handicaps — 9-hole USGA WHS index calculator</p>
+            {% if member_mode %}
+            <span class="version-link" id="version-badge">v2.0.0</span>
+            {% else %}
             <a href="/changelog" class="version-link" id="version-badge" title="View changelog">v2.0.0</a>
+            {% endif %}
         </div>
         <div class="header-actions">
             <span id="role-badge" class="role-badge" style="display:none;"></span>
@@ -253,6 +257,12 @@
 
     <main>
         <!-- Tab Navigation -->
+        {% if member_mode %}
+        <nav class="tab-nav">
+            <a href="/member/contests">Season<span class="nav-label-full"> Contests</span></a>
+            <a href="/member/handicaps" class="active">Handicaps</a>
+        </nav>
+        {% else %}
         <nav class="tab-nav">
             <a href="/events">Events</a>
             <a href="/contests">Season<span class="nav-label-full"> Contests</span></a>
@@ -262,6 +272,7 @@
             <a href="/tgf" class="admin-nav" style="display:none;">Payouts</a>
             <a href="/accounting" class="admin-nav admin-tab" style="display:none;">Admin</a>
         </nav>
+        {% endif %}
     <div class="sub-tabs"><nav class="ev-tab-row ev-chapter-row" style="margin-bottom:0;">
         <span class="ev-tab active" data-hcp-chapter="all">ALL</span>
         <span class="ev-tab" data-hcp-chapter="Austin">AUSTIN</span>
@@ -571,6 +582,7 @@
         </div>
     </div>
 
+    {% if member_mode %}<script>window.MEMBER_MODE = true;</script>{% endif %}
     <script src="/static/js/version.js"></script>
     <script src="/static/js/auth.js"></script>
     <script>
@@ -910,7 +922,7 @@
             const canManage = role === 'admin' || role === 'manager';
             let playerCell;
             let actionCell = '';
-            if (p.customer_name) {
+            if (p.customer_name && !window.MEMBER_MODE) {
                 playerCell = `<a class="player-link" href="/customers?name=${encodeURIComponent(p.customer_name)}">${esc(displayName(p.player_name))}</a>`;
                 if (canManage) {
                     actionCell = `<span class="action-email" data-player-name="${esc(p.player_name)}"></span><span class="action-unlink" data-player-name="${esc(p.player_name)}" data-customer-name="${esc(p.customer_name)}"></span>`;
@@ -1018,7 +1030,7 @@
                         <div class="hcp-mc-top" id="m-top-${id}"
                              onclick="toggleMobileCard(${esc(JSON.stringify(p.player_name))}, this)">
                             <div class="hcp-mc-info">
-                                <div class="hcp-mc-name">${p.customer_name
+                                <div class="hcp-mc-name">${(p.customer_name && !window.MEMBER_MODE)
                                     ? `<a class="player-link" href="/customers?name=${encodeURIComponent(p.customer_name)}" onclick="event.stopPropagation()">${esc(displayName(p.player_name))}</a>`
                                     : esc(displayName(p.player_name))}</div>
                                 <div class="hcp-mc-sub">${esc(sub)}</div>

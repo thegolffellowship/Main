@@ -1,6 +1,22 @@
 # Member Portal & Email Summaries — M1 LIVE (v2.28.0), M2/M3 designed
 #   + Platform roadmap: native app + website (plan of record, 2026-07-05)
 
+## Pinless Member View — LIVE (v2.53.0, Kerry)
+
+Distinct from the token-based `/me` portal below: a fully PUBLIC,
+anonymous, read-only view at `/member` (→ `/member/contests`,
+`/member/handicaps`) — one URL Kerry can blast to the whole membership.
+It reuses contests.html/handicaps.html with `member_mode=True`, backed
+by the new `member` role tier (rank 0, below view-only) in app.py —
+`@require_role("member")` GETs serve anonymous callers. Only PII-free
+reads declare the tier; see CLAUDE.md → Auth for the exact rules
+(customers/events endpoints stay view-only+). `window.MEMBER_MODE`
+short-circuits auth.js (no login modal, currentRole = null so all
+manager/admin UI stays hidden), the nav shows only Season Contests |
+Handicaps, /customers name links render as plain text, and the version
+badge loses its /changelog link. The Contests page carries the orange
+ENTER SEASON CONTESTS registration CTA in both normal and member views.
+
 M1 shipped: `/me?t=<token>` (templates/me.html, mobile-first) + token-only
 API endpoints in app.py (`/api/me/summary|scorecards|scorecard/<id>`),
 `get_member_summary`/`make_portal_token`/`verify_portal_token` in

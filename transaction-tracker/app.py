@@ -1155,7 +1155,7 @@ def validate_json_fields(data: dict, required: list[str] = None,
 # Role-based access helpers
 # ---------------------------------------------------------------------------
 # Role hierarchy: each rank includes the capabilities of the ranks below it.
-_ROLE_RANK = {"view-only": 1, "manager": 2, "admin": 3}
+_ROLE_RANK = {"member": 0, "view-only": 1, "manager": 2, "admin": 3}
 
 
 def require_role(role):
@@ -1169,6 +1169,12 @@ def require_role(role):
     def decorator(f):
         @wraps(f)
         def decorated(*args, **kwargs):
+            # "member" is the PUBLIC read tier (v2.53.0, Kerry): endpoints
+            # declaring it serve anonymous visitors — the pinless /member
+            # pages (Season Contests + Handicaps). Only PII-free GET reads
+            # may declare it.
+            if _ROLE_RANK.get(role, 1) <= 0:
+                return f(*args, **kwargs)
             user_role = session.get("role")
             if not user_role:
                 return jsonify({"error": "Not authenticated. Please log in."}), 401
@@ -6970,7 +6976,7 @@ def page_handicaps():
 
 
 @app.route("/api/handicaps/players")
-@require_role("view-only")
+@require_role("member")
 def api_handicap_players():
     """Return all players with their current handicap index.
 
@@ -6986,7 +6992,7 @@ def api_handicap_players():
 
 
 @app.route("/api/handicaps/rounds")
-@require_role("view-only")
+@require_role("member")
 def api_handicap_rounds():
     """Return rounds for a single player (?player=Name) or all rounds."""
     player_name = request.args.get("player")
@@ -7043,7 +7049,7 @@ def api_handicap_for_customer():
 
 
 @app.route("/api/handicaps/index-map")
-@require_role("view-only")
+@require_role("member")
 def api_handicap_index_map():
     """Return a map of customer_name (lowercase) → handicap_index for all linked players.
 
@@ -7099,7 +7105,7 @@ def api_delete_handicap_player(player_name):
 
 
 @app.route("/api/handicaps/settings", methods=["GET"])
-@require_role("view-only")
+@require_role("member")
 def api_get_handicap_settings():
     """Return current handicap calculation settings."""
     return jsonify(get_handicap_settings())
@@ -8491,7 +8497,7 @@ def api_participation_send_email():
 # ---------------------------------------------------------------------------
 
 @app.route("/api/season-contests")
-@require_role("view-only")
+@require_role("member")
 def api_season_contests():
     """List season contest enrollments with optional filters."""
     from email_parser.database import get_season_contest_enrollments
@@ -8566,7 +8572,7 @@ def api_season_contest_removals():
 
 
 @app.route("/api/season-contests/points-race")
-@require_role("view-only")
+@require_role("member")
 def api_season_contest_points_race():
     """Persisted GG points-race standings joined with live buy-in status.
 
@@ -8589,7 +8595,7 @@ def api_season_contest_points_race():
 
 
 @app.route("/api/season-contests/points-race/fellowship-cup")
-@require_role("view-only")
+@require_role("member")
 def api_fellowship_cup_projection():
     """Combined NET-race reset projection (THE FELLOWSHIP CUP tab)."""
     from email_parser.database import get_fellowship_cup_projection
@@ -8618,7 +8624,7 @@ def api_import_scorecards():
 
 
 @app.route("/api/scoring/rounds")
-@require_role("view-only")
+@require_role("member")
 def api_scoring_rounds():
     from email_parser.database import get_scoring_rounds_list
     return jsonify(get_scoring_rounds_list(
@@ -8628,7 +8634,7 @@ def api_scoring_rounds():
 
 
 @app.route("/api/scoring/scorecard/<int:scoring_round_id>")
-@require_role("view-only")
+@require_role("member")
 def api_scorecard(scoring_round_id):
     from email_parser.database import get_scorecard
     card = get_scorecard(scoring_round_id)
@@ -8708,7 +8714,7 @@ _POINTS_DETAIL_CACHE_TTL = 600
 
 
 @app.route("/api/season-contests/points-race/detail")
-@require_role("view-only")
+@require_role("member")
 def api_season_contest_points_race_detail():
     """One player's per-round points breakdown (GG row expansion), live.
 
@@ -8746,7 +8752,7 @@ def api_season_contest_points_race_detail():
 
 
 @app.route("/api/season-contests/monthly-points")
-@require_role("view-only")
+@require_role("member")
 def api_season_contest_monthly_points():
     """Combined monthly points races (both chapters) with winner + purse.
 
@@ -8815,12 +8821,30 @@ def contests_page():
     return render_template("contests.html")
 
 
+# ── Member view (v2.53.0, Kerry): pinless read-only pages members can
+# reach from a plain shared URL. Season Contests + Handicaps only; the
+# APIs they call are the @require_role("member") public read tier.
+@app.route("/member")
+def member_home():
+    return redirect("/member/contests")
+
+
+@app.route("/member/contests")
+def member_contests():
+    return render_template("contests.html", member_mode=True)
+
+
+@app.route("/member/handicaps")
+def member_handicaps():
+    return render_template("handicaps.html", member_mode=True)
+
+
 # ---------------------------------------------------------------------------
 # Routes — City Match Play (CMP)
 # ---------------------------------------------------------------------------
 
 @app.route("/api/cmp/pools")
-@require_role("view-only")
+@require_role("member")
 def api_cmp_pools():
     season = request.args.get("season", "")
     chapter = request.args.get("chapter", "")
@@ -8922,7 +8946,7 @@ def api_cmp_clear_match():
 
 
 @app.route("/api/cmp/matches")
-@require_role("view-only")
+@require_role("member")
 def api_cmp_get_matches():
     pool_id = request.args.get("pool_id", type=int)
     if not pool_id:
@@ -8932,7 +8956,7 @@ def api_cmp_get_matches():
 
 
 @app.route("/api/cmp/standings")
-@require_role("view-only")
+@require_role("member")
 def api_cmp_standings():
     season = request.args.get("season", "")
     chapter = request.args.get("chapter", "")
@@ -8947,7 +8971,7 @@ def api_cmp_standings():
 
 
 @app.route("/api/cmp/bracket")
-@require_role("view-only")
+@require_role("member")
 def api_cmp_get_bracket():
     season = request.args.get("season", "")
     chapter = request.args.get("chapter", "")
@@ -8997,7 +9021,7 @@ def api_cmp_clear_bracket():
 # ── Match Play versioned config + config-driven operations (v2.34.0) ──
 
 @app.route("/api/cmp/config")
-@require_role("view-only")
+@require_role("member")
 def api_cmp_get_config():
     """Active config for a season/chapter (snapshot-resolved) + structure
     for the currently enrolled N when season+chapter are given."""
@@ -9074,7 +9098,7 @@ def api_cmp_pin_config_snapshot():
 
 
 @app.route("/api/cmp/structure")
-@require_role("view-only")
+@require_role("member")
 def api_cmp_structure():
     """Computed matrix row(s). ?n=12 for one field size, else all N.
     ?version_id previews a specific config version instead of the active one."""
@@ -9145,7 +9169,7 @@ def api_cmp_seed_knockout():
 
 
 @app.route("/api/cmp/payouts")
-@require_role("view-only")
+@require_role("member")
 def api_cmp_payouts():
     season = (request.args.get("season") or "").strip()
     chapter = (request.args.get("chapter") or "").strip()
