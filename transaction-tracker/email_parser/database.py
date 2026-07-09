@@ -16453,6 +16453,16 @@ def auto_match_venmo_payouts_to_tgf(
 
                 cands = [g for g in groups
                          if tgf_event_id is None or g["tgf_event_id"] == tgf_event_id]
+                if not cands and memo_resolved:
+                    # The memo names an event where this customer has NO
+                    # pending group — usually a same-day cross-chapter memo
+                    # typo (Austin players paid with the 's9.8 SILVERHORN'
+                    # memo on a9.8 day, v2.52.2). Fall back to EXACT-cents
+                    # unique across all their pending groups — the same
+                    # evidence tier a memo-less receipt gets.
+                    cands = groups
+                    memo_resolved = False
+                    tgf_event_id = None
                 exact = [g for g in cands if abs(g["total"] - amt) <= 0.01]
                 pick = None
                 if len(exact) == 1:
