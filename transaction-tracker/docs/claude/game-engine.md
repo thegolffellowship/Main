@@ -239,3 +239,18 @@ Open questions to Kerry live in mailbox topic
 default, wildcard rule, bye scope, random vs handicap-snake pool
 assignment, pools-of-5 scheduling. Defaults are implemented; answers
 only require a config edit or small rule tweak.
+
+## Season-total rule: Best 10 + City Championship (RATIFIED, Kerry 2026-07-09, mailbox #65)
+
+The TGF standard for **THE FELLOWSHIP CUP** and **THE PLAYERS CUP**:
+a player's season total = their **best 10 event point totals + their
+City Championship total**. This is currently computed on the Golf
+Genius side (the Tracker ingests GG's season totals and does not
+re-derive the cap); the member-facing points drill-down may present
+counted vs not-counted events using this framing (design handoff
+contests-handicaps-071026, view 1g). Precise parameters (qualifying
+event set; whether the rule extends to the NET races) are pending
+platform-claude's documentation pass on the same mailbox thread —
+do not hard-code beyond "best 10 + City Championship" until that
+lands. The projected points-reset formula is documented in mailbox
+#64 and implemented in `get_points_race_standings`.
