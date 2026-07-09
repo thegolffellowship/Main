@@ -1417,6 +1417,11 @@ def _scoring_dispatch(url: str, extract: str):
             # Sweep outbound Venmo payout receipts (expense inbox) against
             # pending tgf_payouts and mark matches PAID (v2.50.0)
             return json.dumps(db.auto_match_venmo_payouts_to_tgf(), indent=2)
+        if cmd == "scoring-monthly-payouts":
+            # Record completed months' Monthly Points winners as SEASON
+            # CONTEST payout accounts (v2.51.0); ":force" re-records
+            return json.dumps(db.record_monthly_points_payouts(
+                force=arg.strip().lower() == "force"), indent=2)
         if cmd == "scoring-auto-sync":
             # one on-demand pass of the close-event-in-GG pipeline:
             # scorecards + winners + flights for the newest rounds of BOTH
