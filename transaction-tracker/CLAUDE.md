@@ -349,7 +349,11 @@ version chip; uppercase **Bitter**-serif nav links; orange role pill),
 white sub-tab bar with admin-only tabs rendered as right-aligned solid
 orange pills, Bitter headings/stats + Helvetica Neue body, pill buttons
 (inputs stay 8px radius + orange focus ring), chapter-colored band
-headers, and a payout **category color map**. `templates/tgf.html` is the
+headers, and a payout **category color map**. **Typography rule
+(RATIFIED, Kerry 2026-07-09, mailbox #44): Bitter serif only for
+headings, nav/CTA labels, eyebrows, and large stat numerals; dense data
+(table cells, list rows, numeric columns) is system sans with
+tabular-nums — be judicious with Bitter.** `templates/tgf.html` is the
 Phase 1 reference implementation (dark nav, sub-tab pill convention, and
 the GOLFERS "Command Ledger": dark leaderboard rail + golfer winnings
 detail with collapsible chapter bands). Tokens live in `dashboard.css`

@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.54.2";
+window.TGF_VERSION = "2.54.3";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.54.3",
+    date: "2026-07-09",
+    changes: [
+      "Typography rule ratified (Kerry): Bitter serif is reserved for headings, nav/CTA labels, eyebrows, and large stat numerals; dense data (table cells, list rows, numeric columns) stays system sans with tabular numerals. Locked into CLAUDE.md and relayed to Claude Design (mailbox #44) so the SEASON CONTESTS + HANDICAPS prototypes apply it from the start.",
+    ],
+  },
   {
     version: "2.54.2",
     date: "2026-07-09",
