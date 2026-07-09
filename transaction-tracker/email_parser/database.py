@@ -16409,6 +16409,7 @@ def auto_match_venmo_payouts_to_tgf(
                     continue
 
                 tgf_event_id = None
+                memo_resolved = False
                 # Monthly-points memos resolve ONLY to the month's own
                 # account (v2.51.0). Never to a golf event: a $70.00 MARCH
                 # Points payment once ±$1-matched a $70.37 event group.
@@ -16422,6 +16423,23 @@ def auto_match_venmo_payouts_to_tgf(
                         summary["no_candidate"] += 1
                         continue
                     tgf_event_id = row["id"]
+                    memo_resolved = True
+                if tgf_event_id is None:
+                    # The MEMO is what Kerry typed — it outranks the expense
+                    # pipeline's event guess, which is routinely wrong
+                    # (v2.52.1 audit: 'Winnings for s9.16 …' receipts tagged
+                    # event s9.12, so exact-amount matches were missed).
+                    # Tolerate a space after the dot ('s9. 10' → s9.10).
+                    m = re.search(r"winnings\s+for\s+([a-z]+\d+(?:\.\s*\d+)?)",
+                                  exp.get("notes") or "", re.I)
+                    if m:
+                        code = m.group(1).replace(" ", "")
+                        row = conn.execute(
+                            "SELECT id FROM tgf_events WHERE LOWER(code) LIKE LOWER(?) LIMIT 1",
+                            (code + "%",)).fetchone()
+                        if row:
+                            tgf_event_id = row["id"]
+                            memo_resolved = True
                 if tgf_event_id is None and exp.get("event_id"):
                     row = conn.execute(
                         """SELECT te.id FROM tgf_events te
@@ -16432,14 +16450,6 @@ def auto_match_venmo_payouts_to_tgf(
                            LIMIT 1""",
                         (exp["event_id"], exp["event_id"])).fetchone()
                     tgf_event_id = row["id"] if row else None
-                if tgf_event_id is None:
-                    m = re.search(r"winnings\s+for\s+([a-z]+\d+(?:\.\d+)?)",
-                                  exp.get("notes") or "", re.I)
-                    if m:
-                        row = conn.execute(
-                            "SELECT id FROM tgf_events WHERE LOWER(code) LIKE LOWER(?) LIMIT 1",
-                            (m.group(1) + "%",)).fetchone()
-                        tgf_event_id = row["id"] if row else None
 
                 cands = [g for g in groups
                          if tgf_event_id is None or g["tgf_event_id"] == tgf_event_id]
@@ -16451,11 +16461,15 @@ def auto_match_venmo_payouts_to_tgf(
                     summary["ambiguous"] += 1
                     continue
                 else:
-                    # ±$1.00 tolerance ONLY when the event itself resolved —
-                    # a bare amount within a dollar is not enough evidence
-                    # (v2.50.1, the monthly-points false match)
-                    close = ([g for g in cands if abs(g["total"] - amt) <= 1.00]
-                             if tgf_event_id is not None else [])
+                    # Tolerance scales with evidence (v2.52.1): the memo
+                    # naming the event + the right customer is strong —
+                    # Kerry often paid GG's printed amounts, which differ
+                    # from our computed cents by a few dollars ($37 vs
+                    # $39 class). Event from the pipeline guess only: ±$1.
+                    # No event at all: exact match only (v2.50.1).
+                    tol = 3.00 if memo_resolved else (1.00 if tgf_event_id is not None else 0)
+                    close = ([g for g in cands if abs(g["total"] - amt) <= tol]
+                             if tol else [])
                     if len(close) == 1:
                         pick = close[0]
                     elif len(close) > 1:

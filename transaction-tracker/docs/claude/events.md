@@ -708,11 +708,17 @@ already ingests (`expense_transactions` rows with source_type='venmo',
 transaction_type='payout'; recipient in `merchant`, memo in `notes`,
 customer_id/event_id resolved by the expense pipeline). Per receipt:
 resolve customer (customer_id → venmo handle → name/alias cascade),
-resolve the tgf event (expense.event_id via `tgf_events.events_id` /
-`tgf_events.code` == events.item_name, else the memo's event code
-"Winnings for s9.16 …" → code prefix), then match the customer's
-pending payout-group sum (exact cent first, ±$1.00 only when unique;
-two same-amount groups = ambiguous, skipped). On match: promote the
+resolve the tgf event — v2.52.1 order: the MEMO's event code FIRST
+("Winnings for s9.16 …" → tgf_events.code prefix; a space after the
+dot is tolerated, 's9. 10' → s9.10) because the expense pipeline's
+event_id guess is routinely wrong and blocking exact matches;
+expense.event_id (via `tgf_events.events_id` / code == item_name) is
+only the fallback — then match the customer's pending payout-group sum.
+Amount tolerance scales with evidence (v2.52.1): memo-resolved event
+±$3.00 (Kerry paid GG's printed amounts, which differ from our
+computed cents by a few dollars), pipeline-resolved ±$1.00, no event =
+exact cents; uniqueness required at every tier (two candidates =
+ambiguous, skipped). On match: promote the
 expense to the ledger if needed (auto-approving a 'pending' review
 row), reverse the source='pending' placeholders, point every
 tgf_payouts row in the group at the venmo ledger entry, stamp paid_at
