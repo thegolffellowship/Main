@@ -340,6 +340,27 @@ benign elapsed-time/logging/rate-limit `datetime.now()` calls. Never rewrite
 stored historical timestamps — fix only new-record defaults and live
 "today"-relative computations so the **past-events-are-frozen** principle holds.
 
+## TGF Design System rollout (v2.54.0 — Phase 1)
+
+Claude Design's handoff (Kerry's OneDrive → `Design Standards/design_handoff_transaction_tracker`)
+defines the target look: dark `#1B1B1B` top nav (TGF icon + "Tracker" +
+version chip; uppercase **Bitter**-serif nav links; orange role pill),
+white sub-tab bar with admin-only tabs rendered as right-aligned solid
+orange pills, Bitter headings/stats + Helvetica Neue body, pill buttons
+(inputs stay 8px radius + orange focus ring), chapter-colored band
+headers, and a payout **category color map**. `templates/tgf.html` is the
+Phase 1 reference implementation (dark nav, sub-tab pill convention, and
+the GOLFERS "Command Ledger": dark leaderboard rail + golfer winnings
+detail with collapsible chapter bands). Tokens live in `dashboard.css`
+`:root` (`--surface-dark`, `--money-green[-dark]`, `--cat-*`). The
+handoff README wrongly assumes a Next.js/Tailwind stack — translate to
+this repo's Flask/Jinja/vanilla stack, matching the visuals exactly.
+**Phase 2 (site-wide + Contests/Handicaps) is ON HOLD**: Claude Design is
+prototyping SEASON CONTESTS + HANDICAPS next (member-pages priority,
+Kerry 2026-07-09) — coordinate via the platform mailbox before restyling
+those pages. TGF icon SVGs are still placeholders (`static/icon.svg`)
+until the design-system marks land.
+
 ## Standard color palette (v2.49.0)
 
 Kerry's ratified brand palette lives as CSS vars in `static/css/dashboard.css`

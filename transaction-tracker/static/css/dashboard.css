@@ -32,6 +32,24 @@
     --games-active-bg: #166534;
     --rsvp-stat-border: #a78bfa;
     --rsvp-stat-color: #6d28d9;
+
+    /* TGF Design System Phase 1 (v2.54.0, Claude Design handoff) —
+       dark-surface, money, and payout-category tokens. Reference these
+       (not literal hexes) as pages adopt the DS in Phase 2. */
+    --surface-dark: #1B1B1B;     /* nav / rail / dark surfaces */
+    --surface-darker: #111111;
+    --border-dark: #374151;      /* borders on dark */
+    --card-border-dark: #2A2A2A;
+    --divider-dark: #232323;
+    --money-green: #047857;      /* winnings on light surfaces */
+    --money-green-dark: #67C99A; /* winnings on dark surfaces */
+    --cat-team-net: #1D4ED8;
+    --cat-ind-net: #15803D;
+    --cat-ind-gross: #B45309;
+    --cat-skins: #BE185D;
+    --cat-mvp: #6D28D9;
+    --cat-tgf-mvp: #C2410C;
+    --cat-ctp: #0F766E;
 }
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
