@@ -93,6 +93,13 @@
         .cat-hole_in_one     { background: #fef08a; color: #854d0e; }
         .cat-mvp             { background: #f3e8ff; color: #7c3aed; }
         .cat-monthly_points  { background: #fff3ec; color: #b8501f; }
+        /* Mobile compaction (Kerry, 2026-07-09): shorter tab label, hide
+           low-value columns, h-scroll tables */
+        .tgf-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+        @media (max-width: 768px) {
+            .tab-full { display: none; }
+            .tgf-hide-mobile { display: none; }
+        }
         .cat-other           { background: #f1f5f9; color: #475569; }
 
         /* Venmo button */
@@ -196,7 +203,7 @@
         <!-- Tab Navigation -->
         <nav class="tab-nav">
             <a href="/events">Events</a>
-            <a href="/contests">Season Contests</a>
+            <a href="/contests">Season<span class="nav-label-full"> Contests</span></a>
             <a href="/handicaps">Handicaps</a>
             <a href="/transactions">Transactions</a>
             <a href="/customers">Customers</a>
@@ -207,7 +214,8 @@
         <!-- Top-level EVENTS / SEASON CONTESTS / GOLFERS tabs -->
         <div class="top-tabs">
             <button class="top-tab active" data-top="events">Events</button>
-            <button class="top-tab" data-top="contests">Season Contests</button>
+            <button class="top-tab" data-top="contests">Season<span class="tab-full"> Contests</span></button>
+            <button class="top-tab" data-top="unpaid">Unpaid</button>
             <button class="top-tab" data-top="golfers">Golfers</button>
         </div>
 
@@ -225,6 +233,11 @@
                     <p>Choose an event from the sidebar to view payouts</p>
                 </div>
             </div>
+        </div>
+
+        <!-- ═══════════ UNPAID SECTION (admin work queue) ═══════════ -->
+        <div id="section-unpaid" class="section-hidden" style="padding:1rem;">
+            <div id="unpaid-main"></div>
         </div>
 
         <!-- ═══════════ GOLFERS SECTION ═══════════ -->
@@ -336,9 +349,174 @@
         // never show it (Kerry, 2026-07-08: takes up space)
         function stripAuto(d) { return (d || "").replace(/^auto:\s*/i, ""); }
 
+        // Compact descriptions (Kerry, 2026-07-09): the category badge
+        // already names the game, so show only "FLIGHT | Place" (ties as
+        // T2nd), "Hole N" for CTP/LP, skins as "FLIGHT | ×N". MVP and
+        // monthly lines are already short — keep them.
+        function shortPayoutDesc(desc, category) {
+            let d = stripAuto(desc).trim();
+            if (!d) return "";
+            if (/mvp/i.test(category || "") || /\bmvp\b/i.test(d)) return d.replace(/\s*\(T\)/g, " (T)");
+            const mHole = d.match(/hole\s*#?\s*(\d+)/i);
+            if (category === "ctp" || category === "closest_to_pin" || category === "longest_putt" || category === "hole_in_one") {
+                return mHole ? `Hole ${mHole[1]}` : d;
+            }
+            const tie = /\(T\)/i.test(d);
+            const mPlace = d.match(/\b(\d+)(st|nd|rd|th)\b/i);
+            const mFlight = d.match(/\b(low|high|mid(?:dle)?|[1-4])\s*flight\b/i) || d.match(/\bflight\s*(low|high|mid(?:dle)?|[1-4])\b/i);
+            const mCount = d.match(/[×x]\s*(\d+)/);
+            const parts = [];
+            if (mFlight) parts.push(String(mFlight[1]).toUpperCase());
+            if (mPlace) parts.push((tie ? "T" : "") + mPlace[1] + mPlace[2].toLowerCase());
+            else if (mCount) parts.push("×" + mCount[1]);
+            if (parts.length) return parts.join(" | ");
+            return d.replace(/\(team split\)/ig, "").replace(/\(T\)/g, "").trim();
+        }
+
+        // Mobile-short category labels (Kerry, 2026-07-09)
+        const CATEGORY_LABELS_SHORT = { individual_net: "Ind Net", individual_gross: "Ind Gross", closest_to_pin: "CTP" };
         function catBadge(cat) {
-            const label = CATEGORY_LABELS[cat] || cat;
+            const mobile = window.innerWidth <= 768;
+            const label = (mobile && CATEGORY_LABELS_SHORT[cat]) || CATEGORY_LABELS[cat] || cat;
             return `<span class="cat-badge cat-${cat}">${label}</span>`;
+        }
+
+        const TGF_STATUS_BADGE = {
+            paid:    '<span style="display:inline-block;padding:2px 9px;border-radius:99px;font-size:0.72rem;font-weight:600;background:#dcfce7;color:#166534;">PAID ✓</span>',
+            pending: '<span style="display:inline-block;padding:2px 9px;border-radius:99px;font-size:0.72rem;font-weight:600;background:#fef3c7;color:#92400e;">PENDING</span>',
+            unwired: '<span style="display:inline-block;padding:2px 9px;border-radius:99px;font-size:0.72rem;font-weight:600;background:#f1f5f9;color:#475569;">UNPAID</span>',
+            mixed:   '<span style="display:inline-block;padding:2px 9px;border-radius:99px;font-size:0.72rem;font-weight:600;background:#fce7f3;color:#9d174d;">PARTIAL</span>',
+        };
+
+        // Roll payouts up per golfer with a combined payment status
+        function golferGroupsForEvent(ev) {
+            const map = {};
+            (ev.payouts || []).forEach(p => {
+                if (!map[p.customer_name]) {
+                    map[p.customer_name] = { name: p.customer_name, golfer_id: p.customer_id, total: 0, items: [], statuses: new Set() };
+                }
+                map[p.customer_name].total += p.amount;
+                map[p.customer_name].items.push(p);
+                map[p.customer_name].statuses.add(p.payment_status || "unwired");
+            });
+            Object.values(map).forEach(g => {
+                const st = g.statuses;
+                g.payment_status = st.size === 1 ? [...st][0]
+                    : st.has("unwired") ? "unwired"
+                    : st.has("pending") ? "pending" : "mixed";
+            });
+            return Object.values(map);
+        }
+
+        function payCellHtml(ev, g) {
+            const winData = Object.values(DATA.winnings).find(w => w.id === g.golfer_id);
+            const alreadyPaid = g.payment_status === "paid";
+            const act = !alreadyPaid ? payAction(winData, g.total, ev.code, ev.name, g.name) : null;
+            let venmoHtml = "";
+            if (act && act.href) {
+                venmoHtml = `<a class="venmo-btn" style="background:${act.bg};" href="${act.href}" target="_blank" rel="noopener" onclick="event.stopPropagation()">
+                     <svg viewBox="0 0 24 24" fill="currentColor"><path d="M19.5 3c.9 1.5 1.3 3 1.3 5 0 5.5-4.7 12.7-8.5 17H5.2L3 3.5l6-.6 1.2 9.6c1.2-2 2.7-5.2 2.7-7.3 0-1.9-.3-3.2-.8-4.2L19.5 3z"/></svg>
+                     ${act.label}
+                   </a>`;
+            } else if (act && act.badge) {
+                venmoHtml = `<span style="display:inline-block;padding:2px 9px;border-radius:99px;font-size:0.72rem;font-weight:600;background:#ede9fe;color:#5b21b6;" title="No deep link for this method — pay manually, then Mark Paid">${act.badge}</span>`;
+            }
+            const statusBadge = TGF_STATUS_BADGE[g.payment_status] || "";
+            const isPending = g.payment_status !== "paid";
+            const markPaidBtn = isPending
+                ? `<button class="mark-paid-btn" data-event-id="${ev.id}" data-customer-id="${g.golfer_id}" data-amount="${g.total}" data-name="${g.name.replace(/"/g, '&quot;')}" style="font-size:0.72rem;padding:2px 8px;border-radius:99px;background:#dcfce7;color:#166534;border:1px solid #86efac;font-weight:600;cursor:pointer;margin-left:4px;" onclick="event.stopPropagation()">Mark Paid</button>`
+                : "";
+            // badge AFTER the pay link (Kerry, 2026-07-08)
+            return `${venmoHtml} ${markPaidBtn} ${statusBadge}`;
+        }
+
+        function attachMarkPaidHandlers(container) {
+            container.querySelectorAll(".mark-paid-btn").forEach(btn => {
+                btn.addEventListener("click", async (e) => {
+                    e.stopPropagation();
+                    const eventId = btn.dataset.eventId;
+                    const customerId = btn.dataset.customerId;
+                    const name = btn.dataset.name;
+                    const amount = parseFloat(btn.dataset.amount).toFixed(2);
+                    const method = prompt(
+                        `Mark ${name}'s $${amount} payout as PAID.\n\n` +
+                        `Payment method (paypal / cashapp / cash / check / zelle / other):`,
+                        "paypal"
+                    );
+                    if (!method) return;
+                    const paidDate = prompt("Paid date (YYYY-MM-DD), leave blank for today:") || "";
+                    const reference = prompt("Reference/note (optional):") || "";
+                    try {
+                        const res = await fetch("/api/tgf/mark-paid", {
+                            method: "POST",
+                            headers: {"Content-Type": "application/json"},
+                            body: JSON.stringify({
+                                event_id: parseInt(eventId),
+                                customer_id: parseInt(customerId),
+                                payment_method: method.trim().toLowerCase(),
+                                paid_date: paidDate || null,
+                                reference: reference,
+                            }),
+                        });
+                        const data = await res.json();
+                        if (!res.ok) {
+                            alert("Failed: " + (data.error || res.statusText));
+                            return;
+                        }
+                        alert(`Marked $${data.amount} paid via ${data.payment_method} (${data.linked_payouts} payouts linked).`);
+                        location.reload();
+                    } catch (err) {
+                        alert("Error: " + err.message);
+                    }
+                });
+            });
+        }
+
+        // ── UNPAID work queue (Kerry, 2026-07-09): every non-paid golfer
+        // group across ALL accounts (events + season contests), newest
+        // first, with Pay / Mark Paid inline so it can be worked through.
+        function renderUnpaidList() {
+            const el = $("#unpaid-main");
+            const list = [];
+            DATA.events.forEach(ev => {
+                golferGroupsForEvent(ev).forEach(g => {
+                    if (g.payment_status !== "paid") list.push({ev, g});
+                });
+            });
+            list.sort((a, b) => ((b.ev.event_date || "").localeCompare(a.ev.event_date || ""))
+                || (b.g.total - a.g.total));
+            if (!list.length) {
+                el.innerHTML = '<div class="empty-state"><h3>All caught up</h3><p>No unpaid payouts &#127881;</p></div>';
+                return;
+            }
+            const totalDue = list.reduce((sum, x) => sum + x.g.total, 0);
+            let rows = "";
+            list.forEach(({ev, g}) => {
+                rows += `
+                    <tr>
+                        <td><div style="font-weight:600;">${g.name}</div>
+                            <div style="font-size:0.72rem;color:var(--text-muted);">${ev.code}${ev.event_date ? " · " + fmtDate(ev.event_date) : ""}</div></td>
+                        <td class="right total-amount" style="white-space:nowrap;">${fmt(g.total)}</td>
+                        <td class="right" style="white-space:nowrap;">${payCellHtml(ev, g)}</td>
+                    </tr>`;
+            });
+            el.innerHTML = `
+                <div style="display:flex;align-items:baseline;gap:0.75rem;margin-bottom:0.75rem;flex-wrap:wrap;">
+                    <h2 style="font-size:1.15rem;margin:0;">Unpaid Payouts</h2>
+                    <span style="font-size:0.95rem;font-weight:700;color:#dc2626;">${fmt(totalDue)}</span>
+                    <span style="font-size:0.8rem;color:var(--text-muted);">${list.length} golfer/account group${list.length !== 1 ? "s" : ""}</span>
+                </div>
+                <div class="tgf-scroll">
+                <table class="payout-table">
+                    <thead><tr>
+                        <th>Golfer / Account</th>
+                        <th class="right">Amount</th>
+                        <th class="right" style="width:200px;"></th>
+                    </tr></thead>
+                    <tbody>${rows}</tbody>
+                </table>
+                </div>`;
+            attachMarkPaidHandlers(el);
         }
 
         // ── Data loading ─────────────────────────────────────────
@@ -368,8 +546,13 @@
                 $$(".top-tab").forEach(b => b.classList.remove("active"));
                 btn.classList.add("active");
                 const target = btn.dataset.top;
-                $("#section-events").classList.toggle("section-hidden", target === "golfers");
+                $("#section-events").classList.toggle("section-hidden", target === "golfers" || target === "unpaid");
                 $("#section-golfers").classList.toggle("section-hidden", target !== "golfers");
+                $("#section-unpaid").classList.toggle("section-hidden", target !== "unpaid");
+                if (target === "unpaid") {
+                    renderUnpaidList();
+                    return;
+                }
                 if (target !== "golfers") {
                     eventsView = target;
                     selectedEventIdx = -1;
@@ -420,34 +603,7 @@
             }
             const ev = DATA.events[selectedEventIdx];
 
-            // Group payouts by customer (displayed as "golfer" in UI)
-            const golferMap = {};
-            (ev.payouts || []).forEach(p => {
-                if (!golferMap[p.customer_name]) {
-                    golferMap[p.customer_name] = {
-                        name: p.customer_name, golfer_id: p.customer_id,
-                        total: 0, items: [], statuses: new Set(),
-                    };
-                }
-                golferMap[p.customer_name].total += p.amount;
-                golferMap[p.customer_name].items.push(p);
-                golferMap[p.customer_name].statuses.add(p.payment_status || "unwired");
-            });
-            // Roll up per-golfer payment status: all paid → paid, any pending → pending,
-            // any unwired → unwired (legacy), otherwise mixed
-            Object.values(golferMap).forEach(g => {
-                const s = g.statuses;
-                if (s.size === 1) {
-                    g.payment_status = [...s][0];
-                } else if (s.has("unwired")) {
-                    g.payment_status = "unwired";
-                } else if (s.has("pending")) {
-                    g.payment_status = "pending";
-                } else {
-                    g.payment_status = "mixed";
-                }
-            });
-            const golferList = Object.values(golferMap).sort((a, b) => b.total - a.total);
+            const golferList = golferGroupsForEvent(ev).sort((a, b) => b.total - a.total);
 
             main.innerHTML = `
                 <div class="sub-tabs">
@@ -498,45 +654,7 @@
             });
 
             // Mark Paid buttons
-            main.querySelectorAll(".mark-paid-btn").forEach(btn => {
-                btn.addEventListener("click", async (e) => {
-                    e.stopPropagation();
-                    const eventId = btn.dataset.eventId;
-                    const customerId = btn.dataset.customerId;
-                    const name = btn.dataset.name;
-                    const amount = parseFloat(btn.dataset.amount).toFixed(2);
-                    const method = prompt(
-                        `Mark ${name}'s $${amount} payout as PAID.\n\n` +
-                        `Payment method (paypal / cashapp / cash / check / zelle / other):`,
-                        "paypal"
-                    );
-                    if (!method) return;
-                    const paidDate = prompt("Paid date (YYYY-MM-DD), leave blank for today:") || "";
-                    const reference = prompt("Reference/note (optional):") || "";
-                    try {
-                        const res = await fetch("/api/tgf/mark-paid", {
-                            method: "POST",
-                            headers: {"Content-Type": "application/json"},
-                            body: JSON.stringify({
-                                event_id: parseInt(eventId),
-                                customer_id: parseInt(customerId),
-                                payment_method: method.trim().toLowerCase(),
-                                paid_date: paidDate || null,
-                                reference: reference,
-                            }),
-                        });
-                        const data = await res.json();
-                        if (!res.ok) {
-                            alert("Failed: " + (data.error || res.statusText));
-                            return;
-                        }
-                        alert(`Marked $${data.amount} paid via ${data.payment_method} (${data.linked_payouts} payouts linked).`);
-                        location.reload();
-                    } catch (err) {
-                        alert("Error: " + err.message);
-                    }
-                });
-            });
+            attachMarkPaidHandlers(main);
         }
 
         function renderPayoutsTab(ev, golferList) {
@@ -544,41 +662,15 @@
                 return '<div class="empty-state"><p>No payouts recorded for this event</p></div>';
             }
 
-            const STATUS_BADGE = {
-                paid:    '<span style="display:inline-block;padding:2px 9px;border-radius:99px;font-size:0.72rem;font-weight:600;background:#dcfce7;color:#166534;">PAID ✓</span>',
-                pending: '<span style="display:inline-block;padding:2px 9px;border-radius:99px;font-size:0.72rem;font-weight:600;background:#fef3c7;color:#92400e;">PENDING</span>',
-                unwired: '<span style="display:inline-block;padding:2px 9px;border-radius:99px;font-size:0.72rem;font-weight:600;background:#f1f5f9;color:#475569;">UNPAID</span>',
-                mixed:   '<span style="display:inline-block;padding:2px 9px;border-radius:99px;font-size:0.72rem;font-weight:600;background:#fce7f3;color:#9d174d;">PARTIAL</span>',
-            };
-
             let rows = "";
             golferList.forEach((g, idx) => {
-                // Look up venmo username
-                const winData = Object.values(DATA.winnings).find(w => w.id === g.golfer_id);
-                const alreadyPaid = g.payment_status === "paid";
-                const act = !alreadyPaid ? payAction(winData, g.total, ev.code, ev.name, g.name) : null;
-                let venmoHtml = "";
-                if (act && act.href) {
-                    venmoHtml = `<a class="venmo-btn" style="background:${act.bg};" href="${act.href}" target="_blank" rel="noopener" onclick="event.stopPropagation()">
-                         <svg viewBox="0 0 24 24" fill="currentColor"><path d="M19.5 3c.9 1.5 1.3 3 1.3 5 0 5.5-4.7 12.7-8.5 17H5.2L3 3.5l6-.6 1.2 9.6c1.2-2 2.7-5.2 2.7-7.3 0-1.9-.3-3.2-.8-4.2L19.5 3z"/></svg>
-                         ${act.label}
-                       </a>`;
-                } else if (act && act.badge) {
-                    venmoHtml = `<span style="display:inline-block;padding:2px 9px;border-radius:99px;font-size:0.72rem;font-weight:600;background:#ede9fe;color:#5b21b6;" title="No deep link for this method — pay manually, then Mark Paid">${act.badge}</span>`;
-                }
-                const statusBadge = STATUS_BADGE[g.payment_status] || "";
-                const isPending = g.payment_status === "pending" || g.payment_status === "unwired" || g.payment_status === "mixed";
-                const markPaidBtn = isPending
-                    ? `<button class="mark-paid-btn" data-event-id="${ev.id}" data-customer-id="${g.golfer_id}" data-amount="${g.total}" data-name="${g.name.replace(/"/g, '&quot;')}" style="font-size:0.72rem;padding:2px 8px;border-radius:99px;background:#dcfce7;color:#166534;border:1px solid #86efac;font-weight:600;cursor:pointer;margin-left:4px;" onclick="event.stopPropagation()">Mark Paid</button>`
-                    : "";
-
                 rows += `
                     <tr class="golfer-row" data-gid="${g.golfer_id}">
-                        <td class="rank-col">${idx + 1}</td>
+                        <td class="rank-col tgf-hide-mobile">${idx + 1}</td>
                         <td>${g.name}</td>
-                        <td class="right">${g.items.length}</td>
+                        <td class="right tgf-hide-mobile">${g.items.length}</td>
                         <td class="right total-amount">${fmt(g.total)}</td>
-                        <td class="right">${statusBadge} ${venmoHtml} ${markPaidBtn}</td>
+                        <td class="right" style="white-space:nowrap;">${payCellHtml(ev, g)}</td>
                     </tr>
                     <tr class="breakdown-row" data-gid="${g.golfer_id}">
                         <td colspan="5">
@@ -587,7 +679,7 @@
                                     ${g.items.map(p => `
                                         <tr>
                                             <td>${catBadge(p.category)}</td>
-                                            <td>${stripAuto(p.description) || CATEGORY_LABELS[p.category] || p.category}</td>
+                                            <td>${shortPayoutDesc(p.description, p.category) || CATEGORY_LABELS[p.category] || p.category}</td>
                                             <td class="right" style="font-weight:600;color:var(--green);">${fmt(p.amount)}</td>
                                         </tr>
                                     `).join("")}
@@ -600,18 +692,20 @@
 
             return `
                 <h2 style="font-size:1.15rem;margin-bottom:1rem;">${ev.code} &mdash; Player Purse Summary</h2>
+                <div class="tgf-scroll">
                 <table class="payout-table">
                     <thead>
                         <tr>
-                            <th class="rank-col">#</th>
+                            <th class="rank-col tgf-hide-mobile">#</th>
                             <th>Golfer</th>
-                            <th class="right">Games</th>
+                            <th class="right tgf-hide-mobile">Games</th>
                             <th class="right">Total</th>
                             <th class="right" style="width:80px;"></th>
                         </tr>
                     </thead>
                     <tbody>${rows}</tbody>
                 </table>
+                </div>
             `;
         }
 
@@ -737,7 +831,7 @@
                                 ${ge.payouts.map(p => `
                                     <tr style="cursor:default;">
                                         <td>${catBadge(p.category)}</td>
-                                        <td>${stripAuto(p.description) || CATEGORY_LABELS[p.category] || p.category}</td>
+                                        <td>${shortPayoutDesc(p.description, p.category) || CATEGORY_LABELS[p.category] || p.category}</td>
                                         <td class="right total-amount">${fmt(p.amount)}</td>
                                     </tr>
                                 `).join("")}
@@ -874,7 +968,7 @@
                     html += `<tr style="border-bottom:1px solid #f1f5f9;">
                         <td style="padding:0.3rem 0.4rem;">${escHtml(p.golferName)}</td>
                         <td style="padding:0.3rem 0.4rem;">${catBadge(p.category)}</td>
-                        <td style="padding:0.3rem 0.4rem;color:var(--text-muted);">${escHtml(stripAuto(p.description))}</td>
+                        <td style="padding:0.3rem 0.4rem;color:var(--text-muted);">${escHtml(shortPayoutDesc(p.description, p.category))}</td>
                         <td style="text-align:right;padding:0.3rem 0.4rem;font-weight:600;color:var(--green);">$${(p.amount || 0).toFixed(2)}</td>
                     </tr>`;
                 });

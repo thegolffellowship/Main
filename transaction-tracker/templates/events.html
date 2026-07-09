@@ -494,7 +494,7 @@
         <!-- Tab Navigation -->
         <nav class="tab-nav">
             <a href="/events" class="active">Events</a>
-            <a href="/contests">Season Contests</a>
+            <a href="/contests">Season<span class="nav-label-full"> Contests</span></a>
             <a href="/handicaps">Handicaps</a>
             <a href="/transactions">Transactions</a>
             <a href="/customers">Customers</a>
@@ -3508,10 +3508,35 @@
         mvp: "#f3e8ff;color:#7c3aed", monthly_points: "#fff3ec;color:#b8501f",
         other: "#f1f5f9;color:#475569",
     };
+    const PAYOUT_CAT_LABELS_SHORT = { individual_net: "Ind Net", individual_gross: "Ind Gross", closest_to_pin: "CTP" };
     function payoutCatBadge(cat) {
-        const label = PAYOUT_CAT_LABELS[cat] || cat;
+        const mobile = window.innerWidth <= 768;
+        const label = (mobile && PAYOUT_CAT_LABELS_SHORT[cat]) || PAYOUT_CAT_LABELS[cat] || cat;
         const c = PAYOUT_CAT_COLORS[cat] || "#f1f5f9;color:#475569";
         return `<span style="display:inline-block;padding:1px 8px;border-radius:99px;font-size:0.72rem;font-weight:600;background:${c};">${escapeHtml(label)}</span>`;
+    }
+
+    // Compact descriptions (Kerry, 2026-07-09): badge already names the
+    // game — show "FLIGHT | Place" (T2nd for ties), "Hole N" for CTP/LP,
+    // skins "FLIGHT | ×N"; MVP/monthly lines pass through.
+    function shortPayoutDesc(desc, category) {
+        let d = (desc || "").replace(/^auto:\s*/i, "").trim();
+        if (!d) return "";
+        if (/mvp/i.test(category || "") || /\bmvp\b/i.test(d)) return d;
+        const mHole = d.match(/hole\s*#?\s*(\d+)/i);
+        if (category === "ctp" || category === "closest_to_pin" || category === "longest_putt" || category === "hole_in_one") {
+            return mHole ? `Hole ${mHole[1]}` : d;
+        }
+        const tie = /\(T\)/i.test(d);
+        const mPlace = d.match(/\b(\d+)(st|nd|rd|th)\b/i);
+        const mFlight = d.match(/\b(low|high|mid(?:dle)?|[1-4])\s*flight\b/i) || d.match(/\bflight\s*(low|high|mid(?:dle)?|[1-4])\b/i);
+        const mCount = d.match(/[×x]\s*(\d+)/);
+        const parts = [];
+        if (mFlight) parts.push(String(mFlight[1]).toUpperCase());
+        if (mPlace) parts.push((tie ? "T" : "") + mPlace[1] + mPlace[2].toLowerCase());
+        else if (mCount) parts.push("×" + mCount[1]);
+        if (parts.length) return parts.join(" | ");
+        return d.replace(/\(team split\)/ig, "").replace(/\(T\)/g, "").trim();
     }
 
     // Venmo pay link builder. Venmo's https universal link re-serializes the
@@ -3626,7 +3651,7 @@
                 // Mobile: game name left + amount right only — the free-text
                 // description column repeats the category (Kerry, 2026-07-08)
                 html += `<tr><td style="padding:0.25rem 0.4rem;font-size:0.82rem;">${payoutCatBadge(p.category)}</td>`;
-                html += `<td class="payout-hide-mobile" style="padding:0.25rem 0.4rem;font-size:0.82rem;">${escapeHtml((p.description || "").replace(/^auto:\s*/i, "") || PAYOUT_CAT_LABELS[p.category] || p.category)}</td>`;
+                html += `<td class="payout-hide-mobile" style="padding:0.25rem 0.4rem;font-size:0.82rem;">${escapeHtml(shortPayoutDesc(p.description, p.category) || PAYOUT_CAT_LABELS[p.category] || p.category)}</td>`;
                 html += `<td style="padding:0.25rem 0.4rem;text-align:right;font-weight:600;color:#059669;font-size:0.82rem;">$${p.amount.toFixed(2)}</td></tr>`;
             });
             html += `</table></div></td></tr>`;

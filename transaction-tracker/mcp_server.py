@@ -1413,6 +1413,10 @@ def _scoring_dispatch(url: str, extract: str):
         if cmd == "scoring-payouts-preview":
             # assemble without writing — inspect what would be recorded
             return json.dumps(db.assemble_event_game_payouts(arg), indent=2)
+        if cmd == "scoring-payouts-unpaid":
+            # Every non-paid payout group + the customer's recent Venmo
+            # payout receipts (linked flag + amounts) for match diagnosis
+            return json.dumps(db.get_unpaid_payout_groups(), indent=2)
         if cmd == "scoring-payouts-venmo-match":
             # Sweep outbound Venmo payout receipts (expense inbox) against
             # pending tgf_payouts and mark matches PAID (v2.50.0)

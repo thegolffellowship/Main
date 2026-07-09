@@ -1,5 +1,15 @@
-window.TGF_VERSION = "2.51.2";
+window.TGF_VERSION = "2.52.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.52.0",
+    date: "2026-07-09",
+    changes: [
+      "UNPAID WORK QUEUE (Kerry): the Payouts page grew an UNPAID tab -- every non-paid golfer/account group across events AND season contests in one list, newest first, with the total due up top and Pay / Mark Paid / status inline so it can be worked straight through.",
+      "MOBILE COMPACTION: 'Season Contests' reads 'Season' below 768px (main nav tab AND the Payouts page tab); the Payouts page tables got the same treatment as the per-event panel -- # and Games columns hidden on phones, status badge after the Pay link, horizontal-scroll wrapper; category badges shorten Individual Net/Gross to Ind Net / Ind Gross (and Closest to Pin to CTP) on phones.",
+      "COMPACT DESCRIPTIONS everywhere payouts render: the category badge already names the game, so descriptions now show just 'LOW | T1st' style (flight | place, ties prefixed T), 'Hole 4' for CTP/Longest Putt, 'LOW | x2' for skins. Display-only -- stored descriptions unchanged.",
+      "Diagnosis plumbing for 'why didn't my old Venmo payments match': get_unpaid_payout_groups pairs every unpaid group with that customer's recent Venmo payout receipts (bridge command scoring-payouts-unpaid).",
+    ],
+  },
   {
     version: "2.51.2",
     date: "2026-07-08",
