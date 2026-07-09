@@ -426,6 +426,45 @@
         .empty-state h3 { font-size: 1rem; margin-bottom: 0.4rem; }
 
         /* ── Responsive ── */
+        /* ═══ v2.56.0 — contests-handicaps-071026 member restyle ═══ */
+        .pr-race-row { padding: 14px 28px; background: #FBFBFA; border-bottom: 1px solid var(--border); }
+        .pr-race-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+        .pr-race-chips .sub-tab {
+            display: inline-flex; align-items: center; height: 32px; padding: 0 15px;
+            margin: 0; border: 1px solid var(--border); border-radius: 9999px; background: #fff;
+            color: #6B7280; font: 700 11px/1 'Bitter', serif; letter-spacing: 1px;
+            text-transform: uppercase; border-bottom: 1px solid var(--border);
+        }
+        .pr-race-chips .sub-tab:hover { color: var(--primary); border-color: var(--primary); }
+        .pr-race-chips .sub-tab.active[data-pr="austin"] { background: var(--chapter-austin); border-color: var(--chapter-austin); color: #fff; }
+        .pr-race-chips .sub-tab.active[data-pr="net"] { background: var(--chapter-sa); border-color: var(--chapter-sa-alt); color: #1B1B1B; }
+        .pr-race-chips .sub-tab.active[data-pr="tfc"],
+        .pr-race-chips .sub-tab.active[data-pr="gross"],
+        .pr-race-chips .sub-tab.active[data-pr="monthly"] { background: var(--surface-dark); border-color: var(--surface-dark); color: #fff; }
+        .pr-race-dd { display: none; position: relative; }
+        .pr-race-dd-btn {
+            width: 100%; height: 44px; display: flex; align-items: center; padding: 0 14px;
+            border: 1px solid var(--border); border-radius: 8px; background: #fff; cursor: pointer;
+            font: 700 12.5px/1 'Bitter', serif; letter-spacing: 1px; text-transform: uppercase;
+        }
+        .pr-race-dd.open .pr-race-dd-btn { border-color: var(--primary); box-shadow: 0 0 0 3px rgba(232,124,62,.35); }
+        .pr-race-dd-menu { position: absolute; left: 0; right: 0; top: 110%; z-index: 60; }
+        .pr-race-dd-menu button { display: flex; align-items: center; }
+        .pr-race-dd-menu button.active { color: var(--primary); background: #FDF6F0; }
+        .pr-race-dd-menu button.active::after { content: "\2713"; margin-left: auto; }
+        /* view 1a standings treatment: Bitter uppercase headers, hairline rows,
+           sans tabular data (typography rule #44) */
+        #pr-table-container .enrollment-table th {
+            font: 700 10px/1.3 'Bitter', serif; letter-spacing: 1px; color: #9CA3AF;
+            border-bottom: 1px solid var(--border); padding: 10px 12px 8px;
+        }
+        #pr-table-container .enrollment-table th span { color: #9CA3AF !important; }
+        #pr-table-container .enrollment-table td {
+            border-bottom: 1px solid #F3F2EF; padding: 9px 12px;
+            font-size: 13.5px; font-variant-numeric: tabular-nums;
+        }
+        #pr-table-container .enrollment-table.pr-compact th { font-size: 9px; padding: 8px 6px 6px; }
+        #pr-table-container .enrollment-table.pr-compact td { padding: 8px 6px; font-size: 12.5px; }
         @media (max-width: 768px) {
             .cmp-body { padding: 0.75rem 1rem; }
             .pool-card-body { grid-template-columns: 1fr; }
@@ -436,6 +475,10 @@
             /* the two points-race cards carry inline padding:1rem 2rem —
                reclaim that width on phones so the standings table fits */
             .pr-section .standings-section { padding: 0.75rem 0.4rem !important; }
+            .pr-race-chips { display: none; }
+            .pr-race-dd { display: block; }
+            .pr-race-row { padding: 10px 14px; }
+            #pr-phase-chip { height: 26px; font-size: 10px !important; padding: 0 11px !important; }
             .stableford-ref { grid-template-columns: 1fr; }
         }
 
@@ -566,17 +609,32 @@
         <!-- ═══════════ POINTS RACE ═══════════ -->
         <div id="section-points-race">
             <div class="pr-section">
-                <div class="sub-tabs">
-                    <button class="sub-tab active" data-pr="net">San Antonio NET</button>
-                    <button class="sub-tab" data-pr="austin">Austin NET</button>
-                    <button class="sub-tab" data-pr="tfc">THE FELLOWSHIP CUP</button>
-                    <button class="sub-tab" data-pr="gross">THE PLAYERS CUP</button>
-                    <button class="sub-tab" data-pr="monthly">MONTHLY</button>
+                <!-- L3 race selector (contests-handicaps-071026 view 1a/1e):
+                     pill chips on desktop, .shell-menu dropdown on mobile -->
+                <div class="pr-race-row">
+                    <div class="pr-race-chips">
+                        <button class="sub-tab active" data-pr="net">San Antonio NET</button>
+                        <button class="sub-tab" data-pr="austin">Austin NET</button>
+                        <button class="sub-tab" data-pr="tfc">The Fellowship Cup</button>
+                        <button class="sub-tab" data-pr="gross">The Players Cup</button>
+                        <button class="sub-tab" data-pr="monthly">Monthly</button>
+                    </div>
+                    <div class="pr-race-dd" id="pr-race-dd">
+                        <button class="pr-race-dd-btn" id="pr-race-dd-btn" aria-haspopup="listbox">San Antonio NET <span style="margin-left:auto;">&#9662;</span></button>
+                        <div class="shell-menu pr-race-dd-menu" id="pr-race-dd-menu" style="display:none;">
+                            <button data-pr-dd="net" class="active">San Antonio NET</button>
+                            <button data-pr-dd="austin">Austin NET</button>
+                            <button data-pr-dd="tfc">The Fellowship Cup</button>
+                            <button data-pr-dd="gross">The Players Cup</button>
+                            <button data-pr-dd="monthly">Monthly</button>
+                        </div>
+                    </div>
                 </div>
                 <div class="standings-section" style="padding:1rem 2rem;">
                     <div style="display:flex;align-items:center;gap:0.75rem;flex-wrap:wrap;">
                         <h4 id="pr-standings-title" style="margin:0;">Standings — Buy-in Status</h4>
                         <button class="btn manager-only" id="pr-refresh-btn" style="font-size:0.78rem;">&#8635; Refresh from Golf Genius</button>
+                        <span id="pr-phase-chip" style="display:inline-flex;align-items:center;gap:8px;height:30px;padding:0 14px;background:#ECFBF1;color:#065F46;border-radius:9999px;font:700 11px/1 'Bitter',serif;letter-spacing:1px;text-transform:uppercase;">&#9679;&nbsp;Regular Season &middot; best 10 count</span>
                     </div>
                     <div id="pr-summary" style="margin:0.5rem 0;color:var(--text-muted);font-size:0.85rem;"></div>
                     <div id="pr-table-container" style="overflow-x:auto;"></div>
@@ -793,10 +851,37 @@
         btn.addEventListener("click", () => {
             $$(".sub-tab[data-pr]").forEach(b => b.classList.remove("active"));
             btn.classList.add("active");
+            // sync the mobile dropdown + phase chip (v2.56.0, view 1a/1e)
+            const ddb = $("pr-race-dd-btn");
+            if (ddb) ddb.innerHTML = `${escapeHtml(btn.textContent.trim())} <span style="margin-left:auto;">&#9662;</span>`;
+            document.querySelectorAll("[data-pr-dd]").forEach(mi =>
+                mi.classList.toggle("active", mi.dataset.prDd === btn.dataset.pr));
+            const chip = $("pr-phase-chip");
+            if (chip) chip.style.display = btn.dataset.pr === "monthly" ? "none" : "inline-flex";
             loadPrRoster();
             prLoadStandings();
         });
     });
+
+    // Mobile race dropdown (view 1e) — delegates to the chips so all race
+    // logic stays one code path
+    (function () {
+        const dd = $("pr-race-dd"), ddBtn = $("pr-race-dd-btn"), ddMenu = $("pr-race-dd-menu");
+        if (!ddBtn) return;
+        ddBtn.addEventListener("click", (e) => {
+            e.stopPropagation();
+            const open = ddMenu.style.display === "none";
+            ddMenu.style.display = open ? "" : "none";
+            dd.classList.toggle("open", open);
+        });
+        document.addEventListener("click", () => { ddMenu.style.display = "none"; dd.classList.remove("open"); });
+        ddMenu.querySelectorAll("[data-pr-dd]").forEach(item => {
+            item.addEventListener("click", () => {
+                const target = document.querySelector(`.sub-tab[data-pr="${item.dataset.prDd}"]`);
+                if (target) target.click();
+            });
+        });
+    })();
 
     async function loadPrRoster() {
         const kind = (document.querySelector(".sub-tab[data-pr].active") || {}).dataset?.pr || "net";

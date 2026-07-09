@@ -242,15 +242,33 @@ only require a config edit or small rule tweak.
 
 ## Season-total rule: Best 10 + City Championship (RATIFIED, Kerry 2026-07-09, mailbox #65)
 
-The TGF standard for **THE FELLOWSHIP CUP** and **THE PLAYERS CUP**:
-a player's season total = their **best 10 event point totals + their
-City Championship total**. This is currently computed on the Golf
-Genius side (the Tracker ingests GG's season totals and does not
-re-derive the cap); the member-facing points drill-down may present
-counted vs not-counted events using this framing (design handoff
-contests-handicaps-071026, view 1g). Precise parameters (qualifying
-event set; whether the rule extends to the NET races) are pending
-platform-claude's documentation pass on the same mailbox thread —
-do not hard-code beyond "best 10 + City Championship" until that
-lands. The projected points-reset formula is documented in mailbox
-#64 and implemented in `get_points_race_standings`.
+AUTHORITATIVE SPEC (mailbox #71, Kerry-confirmed 2026-07-09):
+- **Best 10 + City Championship applies to BOTH race types**: the NET
+  races (San Antonio NET, Austin NET — and therefore THE FELLOWSHIP
+  CUP, which shares the NET points) AND THE PLAYERS CUP (gross).
+- "Best 10" = a player's ten highest event point totals from
+  regular-season events carrying a POINTS game in that race. Points
+  per event = Stableford score in that race's POINTS game, floored at
+  zero (net for NET races, gross for the Players Cup).
+- The **City Championship always adds on top** of the best-10 at face
+  value — it never competes for a best-10 slot. No multiplier or
+  special weighting on championship events.
+- **Exception: MONTHLY races count everything earned in the month** —
+  no best-10 cap.
+- Computation lives on the Golf Genius side today; the Tracker ingests
+  GG season totals and may mark counted (top 10 + championship) vs
+  not-counted events in drill-downs.
+
+**Four-step championship structure (ratified, #71):**
+1. Regular Season — standings = best-10 counting events.
+2. City Championship — required addition at face value on top of best-10.
+3. Points Reset — conversion onto the master ladder per the #64 formula
+   (position p → 100 − 0.5×(p−1); race rank r → master ROUND(1+coef×(r−1));
+   NET races prorated by anchor-chapter coefficient; Players Cup coef=1,
+   flights dismissed; ties share the higher value). Implemented in
+   `get_points_race_standings`.
+4. TGF Championship — championship round points at face value added to
+   reset totals; final standings decide THE FELLOWSHIP CUP (net) and
+   THE PLAYERS CUP (gross).
+The championship-phase UI (design view 1b) is HELD per Kerry's #65
+ruling — functionality first; do not build until cleared.
