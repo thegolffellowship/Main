@@ -3506,6 +3506,13 @@ def init_db(db_path: str | Path | None = None) -> None:
         except Exception as e:
             logger.warning("Payout shell repair failed: %s", e)
 
+        # Always-run repair: revert payouts falsely matched to monthly-points
+        # Venmo payments (v2.50.1)
+        try:
+            _repair_false_monthly_venmo_matches(conn)
+        except Exception as e:
+            logger.warning("Monthly-points venmo match repair failed: %s", e)
+
         # Always-run repair: re-attribute William Massey items corrupted by bad merge
         try:
             _repair_massey_attribution(conn)
@@ -16119,6 +16126,65 @@ def capture_venmo_handle_for_customer(
         return cur.rowcount > 0
 
 
+# Monthly-points winnings memos ("Winnings for MARCH Points") — those
+# payments have NO tgf_payouts rows and must never consume an event group
+_MONTHLY_MEMO_RE = re.compile(
+    r"winnings\s+for\s+(january|february|march|april|may|june|july|august|"
+    r"september|october|november|december)\s+points", re.I)
+
+
+def _repair_false_monthly_venmo_matches(conn: sqlite3.Connection) -> None:
+    """v2.50.1: revert tgf_payouts wrongly marked PAID by MONTHLY-points
+    Venmo payments. Found live within an hour of v2.50.0: Straiton's
+    $70.00 'Winnings for MARCH Points' payment ±$1-matched his $70.37
+    a9.17 Falconhead group via the amount fallback. Monthly races are
+    paid from the Contests page, not tgf_payouts — any payout row backed
+    by an exp-promoted venmo txn whose memo is a monthly-points memo gets
+    its pending placeholder reinstated (source_ref 'payout-<id>') and
+    paid_at cleared. Idempotent."""
+    rows = conn.execute(
+        """SELECT p.id AS payout_id, p.amount, p.category,
+                  x.notes, e.event_date, e.name AS event_name
+           FROM tgf_payouts p
+           JOIN acct_transactions t ON t.id = p.acct_transaction_id
+           JOIN expense_transactions x ON x.acct_transaction_id = t.id
+           JOIN tgf_events e ON e.id = p.event_id
+           WHERE t.source = 'venmo' AND t.source_ref LIKE 'exp-promoted-%'"""
+    ).fetchall()
+    fixed = 0
+    for r in rows:
+        if not _MONTHLY_MEMO_RE.search(r["notes"] or ""):
+            continue
+        ph = conn.execute(
+            "SELECT id FROM acct_transactions WHERE source = 'pending' AND source_ref = ?",
+            (f"payout-{r['payout_id']}",)).fetchone()
+        if ph:
+            conn.execute("UPDATE acct_transactions SET status = 'active' WHERE id = ?",
+                         (ph["id"],))
+            new_id = ph["id"]
+        else:
+            cur = conn.execute(
+                """INSERT INTO acct_transactions
+                       (date, description, total_amount, type, source, source_ref,
+                        customer, order_id, entry_type, category, amount, account,
+                        status, event_name)
+                   VALUES (?, ?, ?, 'expense', 'pending', ?, ?, ?, 'expense', 'prize_payout',
+                           ?, 'Venmo', 'active', ?)""",
+                (r["event_date"], f"Payout: {r['category']} — {r['event_name']}",
+                 round(float(r["amount"]), 2), f"payout-{r['payout_id']}", "",
+                 f"PAYOUT-{r['payout_id']}", -round(float(r["amount"]), 2),
+                 r["event_name"]))
+            new_id = cur.lastrowid
+        conn.execute(
+            "UPDATE tgf_payouts SET acct_transaction_id = ?, paid_at = NULL WHERE id = ?",
+            (new_id, r["payout_id"]))
+        fixed += 1
+        logger.info("Reverted payout %d falsely matched to a monthly-points Venmo payment",
+                    r["payout_id"])
+    if fixed:
+        conn.commit()
+
+
 def auto_match_venmo_payouts_to_tgf(
     expense_ids: list[int] | None = None,
     db_path: str | Path | None = None,
@@ -16164,6 +16230,13 @@ def auto_match_venmo_payouts_to_tgf(
             try:
                 amt = round(float(exp.get("amount") or 0), 2)
                 if amt <= 0:
+                    summary["no_candidate"] += 1
+                    continue
+                # Monthly-points winnings are paid from the Contests page —
+                # they have no tgf_payouts rows and must never consume an
+                # event payout group (v2.50.1: a $70.00 MARCH Points payment
+                # ±$1-matched a $70.37 event group)
+                if _MONTHLY_MEMO_RE.search(exp.get("notes") or ""):
                     summary["no_candidate"] += 1
                     continue
                 if exp.get("acct_transaction_id"):
@@ -16235,7 +16308,11 @@ def auto_match_venmo_payouts_to_tgf(
                     summary["ambiguous"] += 1
                     continue
                 else:
-                    close = [g for g in cands if abs(g["total"] - amt) <= 1.00]
+                    # ±$1.00 tolerance ONLY when the event itself resolved —
+                    # a bare amount within a dollar is not enough evidence
+                    # (v2.50.1, the monthly-points false match)
+                    close = ([g for g in cands if abs(g["total"] - amt) <= 1.00]
+                             if tgf_event_id is not None else [])
                     if len(close) == 1:
                         pick = close[0]
                     elif len(close) > 1:

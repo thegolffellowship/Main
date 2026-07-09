@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.50.0";
+window.TGF_VERSION = "2.50.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.50.1",
+    date: "2026-07-08",
+    changes: [
+      "VENMO MATCHER GUARD: monthly-points winnings payments ('Winnings for MARCH Points' etc.) are excluded from payout matching -- those are paid from the Contests page and have no PAYOUTS-tab rows, but a $70.00 MARCH Points payment slipped through the +/-$1 tolerance and wrongly marked a $70.37 event group PAID within the first hour live. The +/-$1 fallback now also requires the EVENT to have resolved (receipt event or memo code); a bare close-amount is no longer enough evidence.",
+      "Boot repair reverts any payout rows falsely matched to monthly-points payments (reinstates their pending placeholder, clears paid_at) -- healed the one live case (Straiton a9.17). Event winnings confirmations are unaffected: Young $232.29 and Ellis $70.56 for s9.17 Silverhorn matched cleanly from their receipt emails during the same test.",
+    ],
+  },
   {
     version: "2.50.0",
     date: "2026-07-08",
