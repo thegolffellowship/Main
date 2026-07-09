@@ -31,7 +31,10 @@ per-event PAYOUTS panel's Paste Screenshot drop zone + AI-parse
 handlers were REMOVED as obsolete (auto GG results sync + Record
 Payouts replaced screenshot imports; the /tgf page importer still
 exists), and the REGISTERED + GAMES columns hide below 768px
-(`.payout-hide-mobile`).
+(`.payout-hide-mobile`). v2.49.5: the expanded breakdown's description
+column also hides on mobile (game badge left, amount right), the
+status badge renders after the Venmo Pay link, and the payout table is
+wrapped in an `overflow-x:auto` container for horizontal swiping.
 
 ## Payout visibility is ADMIN-only (v2.45.0, Kerry)
 Managers must not make prize payouts or see payout surfaces: the

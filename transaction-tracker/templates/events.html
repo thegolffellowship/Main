@@ -96,7 +96,10 @@
         .ev-chapter-row .ev-tab.active[data-ev-chapter="Austin"] { background: var(--chapter-austin, #BF5700); border-color: var(--chapter-austin, #BF5700); color: #fff; }
         .ev-chapter-row .ev-tab.active[data-ev-chapter="San Antonio"] { background: var(--chapter-sa, #D3DDE4); border-color: var(--chapter-sa-alt, #8FA8B8); color: #1B1B1B; }
         /* PAYOUTS panel: drop Registered + Games columns on phones (Kerry, 2026-07-08) */
-        @media (max-width: 768px) { .payout-hide-mobile { display: none; } }
+        @media (max-width: 768px) {
+            .payout-hide-mobile { display: none; }
+            .payout-breakdown-inner { padding: 0.4rem 0.5rem 0.6rem 0.75rem !important; }
+        }
         /* Time row = the app's standard segmented control (reconcile-page
            style, Kerry 2026-07-08); active state driven by .active since
            these aren't radio inputs */
@@ -3556,7 +3559,8 @@
         // ── Cross-reference with registrants for confirmation ──
         const registrantNames = new Set(registrants.map(r => (r.customer || "").toLowerCase()));
 
-        // ── Payout table ──
+        // ── Payout table (horizontally scrollable so nothing is cut off) ──
+        html += `<div style="overflow-x:auto;-webkit-overflow-scrolling:touch;">`;
         html += `<table style="width:100%;border-collapse:collapse;">`;
         html += `<thead><tr style="border-bottom:2px solid var(--border);">`;
         html += `<th style="text-align:left;font-size:0.72rem;font-weight:600;color:var(--text-muted);text-transform:uppercase;padding:0.4rem 0.5rem;width:30px;">#</th>`;
@@ -3595,22 +3599,24 @@
             html += `<td class="payout-hide-mobile" style="padding:0.5rem;text-align:center;">${regIcon}</td>`;
             html += `<td class="payout-hide-mobile" style="padding:0.5rem;text-align:right;font-size:0.85rem;">${g.items.length}</td>`;
             html += `<td style="padding:0.5rem;text-align:right;font-weight:700;color:#059669;font-variant-numeric:tabular-nums;">$${g.total.toFixed(2)}</td>`;
-            html += `<td style="padding:0.5rem;text-align:right;white-space:nowrap;">${statusBadge} ${venmoHtml}</td>`;
+            html += `<td style="padding:0.5rem;text-align:right;white-space:nowrap;">${venmoHtml} ${statusBadge}</td>`;
             html += `</tr>`;
 
             // Expandable breakdown row
             html += `<tr class="payout-breakdown-row" data-payout-for="${g.golfer_id}" style="display:none;">`;
-            html += `<td colspan="6" style="padding:0;background:#f8fafc;"><div style="padding:0.4rem 1rem 0.6rem 2.5rem;">`;
+            html += `<td colspan="6" style="padding:0;background:#f8fafc;"><div class="payout-breakdown-inner" style="padding:0.4rem 1rem 0.6rem 2.5rem;">`;
             html += `<table style="width:100%;border-collapse:collapse;">`;
             g.items.forEach(p => {
+                // Mobile: game name left + amount right only — the free-text
+                // description column repeats the category (Kerry, 2026-07-08)
                 html += `<tr><td style="padding:0.25rem 0.4rem;font-size:0.82rem;">${payoutCatBadge(p.category)}</td>`;
-                html += `<td style="padding:0.25rem 0.4rem;font-size:0.82rem;">${escapeHtml(p.description || PAYOUT_CAT_LABELS[p.category] || p.category)}</td>`;
+                html += `<td class="payout-hide-mobile" style="padding:0.25rem 0.4rem;font-size:0.82rem;">${escapeHtml(p.description || PAYOUT_CAT_LABELS[p.category] || p.category)}</td>`;
                 html += `<td style="padding:0.25rem 0.4rem;text-align:right;font-weight:600;color:#059669;font-size:0.82rem;">$${p.amount.toFixed(2)}</td></tr>`;
             });
             html += `</table></div></td></tr>`;
         });
 
-        html += `</tbody></table>`;
+        html += `</tbody></table></div>`;
 
         // ── Financial cross-reference: Prize Fund from GAMES matrix vs actual payouts ──
         const gamePots = computeGamePotTotals(ev, registrants);
