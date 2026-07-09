@@ -11568,7 +11568,7 @@ def api_tgf_mark_paid():
             """SELECT p.id as payout_id, p.amount, p.acct_transaction_id,
                       t.source as txn_source, t.status as txn_status,
                       e.name as event_name,
-                      (c.first_name || ' ' || c.last_name) as customer_name
+                      TRIM(c.first_name || ' ' || c.last_name || COALESCE(' ' || NULLIF(TRIM(c.suffix), ''), '')) as customer_name
                FROM tgf_payouts p
                JOIN tgf_events e ON e.id = p.event_id
                JOIN customers c ON c.customer_id = p.customer_id
