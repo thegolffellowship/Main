@@ -1,5 +1,15 @@
-window.TGF_VERSION = "2.55.2";
+window.TGF_VERSION = "2.56.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.56.0",
+    date: "2026-07-09",
+    changes: [
+      "SEASON CONTESTS member restyle, phase A (design handoff contests-handicaps-071026, Kerry-ratified mailbox #63): the race selector is now a pill-chip row on desktop -- active chip wears its chapter color (Austin burnt orange, San Antonio slate; the TGF-wide cups and Monthly go dark) -- and on phones it becomes the design-system dropdown (44px control, orange focus ring, card menu with the active race checked). One code path: the dropdown delegates to the chips.",
+      "Standings get the ratified table treatment: Bitter uppercase hairline headers, sans tabular-nums data at the 12.5px mobile floor, soft row dividers. A green phase chip reads 'Regular Season / best 10 count' on every race except MONTHLY (which counts everything, per the season spec ratified in mailbox #71).",
+      "Season spec recorded in game-engine.md (mailbox #71, Kerry-confirmed): Best 10 + City Championship applies to the NET races AND The Players Cup; points = Stableford floored at zero; championship adds at face value; monthly races are uncapped. Four-step championship structure documented; its UI (view 1b) stays HELD per Kerry until cleared.",
+      "Phase B next: the expanded-player drill-down (POINTS COUNTED / NOT COUNTED bands, scorecard treatment) and the Handicaps member restyle (trend column, cutoff-line history, mobile cards).",
+    ],
+  },
   {
     version: "2.55.2",
     date: "2026-07-09",
