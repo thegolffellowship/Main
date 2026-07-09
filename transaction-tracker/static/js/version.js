@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.54.3";
+window.TGF_VERSION = "2.54.4";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.54.4",
+    date: "2026-07-09",
+    changes: [
+      "Design-handoff delivery pivoted to the mailbox itself (Claude Design can read but not write other Claude Design projects): handoffs arrive as design-handoff posts using a FILE/part protocol with a closing manifest (spec in mailbox #45). Prototypes must be self-contained HTML/CSS referencing Design System assets by name; the DS project stays the DesignSync-readable source for assets/tokens. Green light given to design-claude for the full Season Contests + Handicaps compliance build (admin + member views, real IA and states).",
+    ],
+  },
   {
     version: "2.54.3",
     date: "2026-07-09",
