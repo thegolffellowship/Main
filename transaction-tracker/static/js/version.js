@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.49.3";
+window.TGF_VERSION = "2.49.4";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.49.4",
+    date: "2026-07-08",
+    changes: [
+      "PAYOUTS TAB CLEANUP (Kerry): removed the obsolete 'Paste Screenshot' drop zone (and its AI-parse handlers) from the per-event PAYOUTS panel -- the auto Golf Genius results sync + Record Payouts pipeline replaced screenshot imports. The empty state now points at the automatic path instead of asking for a screenshot.",
+      "PAYOUTS panel on phones: the REGISTERED and GAMES columns are hidden below 768px so # / GOLFER / TOTAL / status fit without horizontal crush. Desktop unchanged; the expandable per-golfer breakdown still shows every game line.",
+    ],
+  },
   {
     version: "2.49.3",
     date: "2026-07-08",
