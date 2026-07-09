@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.52.2";
+window.TGF_VERSION = "2.52.3";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.52.3",
+    date: "2026-07-09",
+    changes: [
+      "BULK CONFIRM (Kerry): bulk_mark_payouts_paid(before_date) marks every still-pending payout group from events before a cutoff as PAID -- payments made before mid-May predate the Venmo receipt capture and can never auto-match. Where an unconsumed receipt within \$3 exists it links to it (single ledger entry, receipt consumed); otherwise the pending placeholder becomes the expense of record, annotated '(bulk-confirmed paid)' with paid_at = event date. Bridge command scoring-payouts-bulk-paid:<YYYY-MM-DD>; idempotent. Ran with 2026-07-07 -- only this week's Falconhead/Silverhorn (+ true stragglers) remain on the UNPAID tab.",
+    ],
+  },
   {
     version: "2.52.2",
     date: "2026-07-09",

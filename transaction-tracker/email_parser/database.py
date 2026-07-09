@@ -16285,6 +16285,108 @@ def _repair_false_monthly_venmo_matches(conn: sqlite3.Connection) -> None:
         conn.commit()
 
 
+def bulk_mark_payouts_paid(before_date: str, db_path=None) -> dict:
+    """One-time cleanup (Kerry, 2026-07-09): every pending payout group
+    from events dated before ``before_date`` was paid outside the receipt
+    window (Venmo email capture only began mid-May), so mark them PAID.
+
+    Per group, cheapest-honest accounting:
+      1. If the customer has an UNCONSUMED promoted Venmo payout receipt
+         within $3 of the group total, link the group to that receipt's
+         ledger entry and reverse the pending placeholders — one real
+         expense, receipt consumed (the "since May" class).
+      2. Otherwise convert the group's pending placeholders to
+         source='venmo' entries annotated '(bulk-confirmed paid)' and
+         stamp paid_at = event_date — the payment predates receipt
+         capture, so the placeholder becomes the expense of record.
+         Rows with no ledger entry at all get one created.
+    Idempotent — already-paid groups are not selected."""
+    summary = {"groups": 0, "linked_receipt": 0, "converted": 0, "errors": 0}
+    with _connect(db_path) as conn:
+        groups = [dict(g) for g in conn.execute(
+            """SELECT p.event_id, p.customer_id, e.event_date,
+                      e.name AS event_name, ROUND(SUM(p.amount), 2) AS total
+               FROM tgf_payouts p
+               JOIN tgf_events e ON e.id = p.event_id
+               LEFT JOIN acct_transactions t ON t.id = p.acct_transaction_id
+               WHERE e.event_date != '' AND e.event_date < ?
+                 AND (p.acct_transaction_id IS NULL
+                      OR (t.source = 'pending'
+                          AND COALESCE(t.status, 'active') = 'active'))
+               GROUP BY p.event_id, p.customer_id""",
+            (before_date,)).fetchall()]
+        for g in groups:
+            try:
+                rows = conn.execute(
+                    """SELECT p.id, p.amount, p.category, p.acct_transaction_id,
+                              t.source AS src
+                       FROM tgf_payouts p
+                       LEFT JOIN acct_transactions t ON t.id = p.acct_transaction_id
+                       WHERE p.event_id = ? AND p.customer_id = ?
+                         AND (p.acct_transaction_id IS NULL
+                              OR (t.source = 'pending'
+                                  AND COALESCE(t.status, 'active') = 'active'))""",
+                    (g["event_id"], g["customer_id"])).fetchall()
+                rec = conn.execute(
+                    """SELECT x.acct_transaction_id AS aid, x.transaction_date, x.amount
+                       FROM expense_transactions x
+                       WHERE x.source_type = 'venmo' AND x.transaction_type = 'payout'
+                         AND x.customer_id = ? AND x.acct_transaction_id IS NOT NULL
+                         AND ABS(x.amount - ?) <= 3.00
+                         AND NOT EXISTS (SELECT 1 FROM tgf_payouts tp
+                                         WHERE tp.acct_transaction_id = x.acct_transaction_id)
+                       ORDER BY ABS(x.amount - ?) ASC LIMIT 1""",
+                    (g["customer_id"], g["total"], g["total"])).fetchone()
+                if rec:
+                    paid = str(rec["transaction_date"] or "")
+                    if not re.match(r"^\d{4}-\d{2}-\d{2}", paid):
+                        paid = g["event_date"]
+                    for r in rows:
+                        if r["acct_transaction_id"] and r["src"] == "pending":
+                            conn.execute(
+                                "UPDATE acct_transactions SET status = 'reversed' WHERE id = ?",
+                                (r["acct_transaction_id"],))
+                        conn.execute(
+                            "UPDATE tgf_payouts SET acct_transaction_id = ?, paid_at = ? WHERE id = ?",
+                            (rec["aid"], paid, r["id"]))
+                    summary["linked_receipt"] += 1
+                else:
+                    for r in rows:
+                        if r["acct_transaction_id"] and r["src"] == "pending":
+                            conn.execute(
+                                """UPDATE acct_transactions
+                                   SET source = 'venmo',
+                                       description = description || ' (bulk-confirmed paid)'
+                                   WHERE id = ?""", (r["acct_transaction_id"],))
+                            new_id = r["acct_transaction_id"]
+                        else:
+                            cur = conn.execute(
+                                """INSERT INTO acct_transactions
+                                       (date, description, total_amount, type, source, source_ref,
+                                        customer, order_id, entry_type, category, amount, account,
+                                        status, event_name)
+                                   VALUES (?, ?, ?, 'expense', 'venmo', ?, ?, ?, 'expense',
+                                           'prize_payout', ?, 'Venmo', 'active', ?)""",
+                                (g["event_date"],
+                                 f"Payout: {r['category']} — {g['event_name']} (bulk-confirmed paid)",
+                                 round(float(r["amount"]), 2), f"payout-{r['id']}", "",
+                                 f"PAYOUT-{r['id']}", -round(float(r["amount"]), 2),
+                                 g["event_name"]))
+                            new_id = cur.lastrowid
+                        conn.execute(
+                            "UPDATE tgf_payouts SET acct_transaction_id = ?, paid_at = ? WHERE id = ?",
+                            (new_id, g["event_date"], r["id"]))
+                    summary["converted"] += 1
+                summary["groups"] += 1
+            except Exception:
+                logger.exception("bulk mark paid failed for event %s customer %s",
+                                 g.get("event_id"), g.get("customer_id"))
+                summary["errors"] += 1
+        conn.commit()
+    logger.info("bulk_mark_payouts_paid(%s): %s", before_date, summary)
+    return summary
+
+
 def get_unpaid_payout_groups(db_path=None) -> dict:
     """Every non-paid payout group (customer+account) with that customer's
     recent Venmo payout receipts alongside — the data behind the /tgf
