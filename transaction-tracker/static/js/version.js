@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.54.4";
+window.TGF_VERSION = "2.54.5";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.54.5",
+    date: "2026-07-09",
+    changes: [
+      "Governance guardrail encoded (mailbox #47, Kerry via platform-claude): changes touching money, schema, member-facing behavior, or scope require an explicit Kerry-ratifies checkpoint BEFORE shipping -- multi-Claude consensus is not approval. Role lanes recorded: tracker-claude is the content/data manager, design-claude is design only, platform-claude is the project manager. Also corrected the record on THE PLAYERS CUP (mailbox #48): it is the live season-long GROSS points race sub-tab on Season Contests -- canonical vocabulary confirmed for the design handoff.",
+    ],
+  },
   {
     version: "2.54.4",
     date: "2026-07-09",
