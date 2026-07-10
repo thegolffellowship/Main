@@ -989,6 +989,34 @@
             .replace(/'/g, '&#39;');
     }
 
+    // ── Pin the CTA banner + top-tabs under the sticky header (Kerry,
+    //    2026-07-10): offsets computed from live heights since the header
+    //    is 64px on member mobile, different for staff/desktop. The
+    //    tabs-wrap keeps being the positioning parent for the anchored
+    //    race menu (sticky counts as positioned).
+    function prPinBars() {
+        const hdr = document.querySelector("header");
+        if (!hdr) return;
+        const h = hdr.offsetHeight;
+        const cta = document.querySelector(".contest-cta-row");
+        if (cta) {
+            cta.style.position = "sticky";
+            cta.style.top = h + "px";
+            cta.style.zIndex = "90";
+        }
+        const ctaH = cta ? cta.offsetHeight : 0;
+        const tabs = document.querySelector(".top-tabs-wrap");
+        if (tabs) {
+            tabs.style.position = "sticky";
+            tabs.style.top = (h + ctaH) + "px";
+            tabs.style.zIndex = "89";
+            tabs.style.background = "var(--surface, #fff)";
+        }
+    }
+    document.addEventListener("DOMContentLoaded", prPinBars);
+    window.addEventListener("load", prPinBars);
+    window.addEventListener("resize", prPinBars);
+
     // ── Top tabs ──
     $$(".top-tab").forEach(btn => {
         btn.addEventListener("click", (e) => {

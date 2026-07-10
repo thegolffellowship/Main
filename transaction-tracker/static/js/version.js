@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.60.4";
+window.TGF_VERSION = "2.60.5";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.60.5",
+    date: "2026-07-10",
+    changes: [
+      "The ENTER SEASON CONTESTS banner and the POINTS RACES | MATCH PLAY sub-nav are PINNED under the top nav while scrolling (Kerry) -- the whole header stack (dark nav / orange banner / tabs) stays put as the standings scroll beneath it. Offsets computed from live heights so member/staff/desktop bars all stack flush; the race dropdown still anchors right under the pinned tabs.",
+    ],
+  },
   {
     version: "2.60.4",
     date: "2026-07-10",
