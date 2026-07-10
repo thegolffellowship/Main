@@ -198,6 +198,11 @@ FIELD-SPECIFIC GUIDANCE:
   ONLY valid on TGF MEMBERSHIP or SEASON CONTESTS items. Null for all event items. \
   A match-play-format golf event (e.g. "Hill Country Matches") is NOT the same as the \
   City Match Play season contest — do not set this flag on event purchases.
+- "fall_net_points_race": "YES" or "NO" for the FALL NET points race option — \
+  any field mentioning FALL together with NET or Points (e.g. "Add FALL NET Points \
+  Race?", "FALL Points NET", "2026 FALL NET"). ONLY valid on TGF MEMBERSHIP or \
+  SEASON CONTESTS items; null for all event items. This is a SEPARATE flag from \
+  net_points_race (the spring/season race) — do not merge them.
 - "partner_request": If the player requested a specific playing partner, \
   extract the partner's name. Look for fields like "Playing Partner Request", \
   "Partner Request", "Who would you like to play with?", etc.
@@ -302,6 +307,7 @@ Return this exact JSON structure:
       "net_points_race": "<YES or NO — membership or season contests>",
       "gross_points_race": "<YES or NO — membership or season contests>",
       "city_match_play": "<YES or NO — membership or season contests>",
+      "fall_net_points_race": "<YES or NO — membership or season contests>",
       "holes": "<9 or 18 if applicable, else null>"
     }
   ]
@@ -1021,6 +1027,7 @@ def parse_email(email_data: dict) -> list[dict]:
             "net_points_race": item.get("net_points_race") if _is_contest_item(_normalize_item_name(item.get("item_name"))) else None,
             "gross_points_race": item.get("gross_points_race") if _is_contest_item(_normalize_item_name(item.get("item_name"))) else None,
             "city_match_play": item.get("city_match_play") if _is_contest_item(_normalize_item_name(item.get("item_name"))) else None,
+            "fall_net_points_race": item.get("fall_net_points_race") if _is_contest_item(_normalize_item_name(item.get("item_name"))) else None,
             "subject": subject,
             "from_addr": from_addr,
         })

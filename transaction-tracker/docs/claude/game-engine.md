@@ -194,10 +194,17 @@ cups/TGF Championship (Kerry, 2026-07-10 — do not apply the four-step
 structure here). Preview
 pages live in the CONTESTS race selector (below Monthly, burnt-orange
 "upcoming" chips) with an inline sign-up CTA; enrollments stored as
-season_contests rows with season='2026 Fall' (first two seeded via the
-`scoring-fall-enroll` bridge command: Luke Mazanec — backed by his
-2026-07-10 SEASON CONTESTS order, item 2258 — and Kerry Niester, both
-manually_enrolled=1 until the fall products/sync exist). Wire the GG
+season_contests rows with season='<year> Fall'. **AUTOMATIC as of
+v2.63.0 (Kerry: the umbrella SEASON CONTESTS product carries the fall
+option — no separate product):** the parser extracts
+`items.fall_net_points_race` (new column; prompt keys on any
+FALL+NET/Points field label) and sync_season_contests_from_items maps
+YES → NET Points Race / '<year> Fall', chapter from the canonical
+customer — fall pages populate on receipt of new orders like
+everything else. `scoring-fall-enroll:<customer_id>[:<item_id>]`
+remains as the manual fallback (Kerry/no-purchase cases);
+manually_enrolled=1 rows are cleanup-protected. First three: Luke
+Mazanec (item 2258), Kerry Niester (manual), Adam Baker (item 2259). Wire the GG
 league/page ids into _GG_POINTS_RACES when the fall races are created
 and the preview pages inherit standings/payouts automatically.
 
