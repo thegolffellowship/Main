@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.57.6";
+window.TGF_VERSION = "2.57.7";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.57.7",
+    date: "2026-07-10",
+    changes: [
+      "Contest headings on the CONTESTS page are now prominent (Kerry): the standings title is just the contest name -- 'AUSTIN NET 2026', 'THE PLAYERS CUP 2026', 'THE FELLOWSHIP CUP' -- in large uppercase Bitter on its own line, with the phase chip and staff refresh button wrapping underneath. The '-- Standings & Buy-in' / '-- Projected Points Reset' suffixes are gone; now that the race dropdown carries the names, the heading doesn't need to explain the table.",
+    ],
+  },
   {
     version: "2.57.6",
     date: "2026-07-10",
