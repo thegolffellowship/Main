@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.61.1";
+window.TGF_VERSION = "2.62.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.62.0",
+    date: "2026-07-10",
+    changes: [
+      "MEMBER TRAFFIC tracking (Kerry): the pinless member pages now count page opens and button/link clicks -- anonymously (no names, no identifiers, just the event, the page, and the control's label). New admin-only TRAFFIC page in the admin sub-nav: opens/clicks for the last 24h / 7d / 30d, a 14-day daily series, per-page totals, and the top-25 tapped controls, so you can see what members actually use.",
+      "Fall enrollment bridge is parameterized: scoring-fall-enroll:<customer_id>[:<order_item>] enrolls any customer into the fall NET from their canonical profile -- no more code change per signup. Context (Kerry's Adam Baker check): his SEASON CONTESTS order this morning auto-enrolled him in the spring NET as expected, but fall has no shop product yet, so nothing auto-writes fall enrollments -- they stay manual via this command until the fall products + sync mapping exist.",
+    ],
+  },
   {
     version: "2.61.1",
     date: "2026-07-10",

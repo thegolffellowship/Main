@@ -162,6 +162,30 @@ function updateNavForRole() {
     if (typeof window.shellApplyRole === "function") window.shellApplyRole(currentRole, currentChapter);
 }
 
+// Anonymous member-page traffic beacons (v2.62.0, Kerry): one 'open' per
+// page load + a 'click' per button/link tap, labeled by the control's id
+// or text. PII-free; admin reads the aggregates at /traffic.
+function _memberTraffic() {
+    const send = (event, detail) => {
+        try {
+            const body = JSON.stringify({ event, path: location.pathname, detail: detail || "" });
+            if (navigator.sendBeacon) {
+                navigator.sendBeacon("/api/member-metric", new Blob([body], { type: "application/json" }));
+            } else {
+                fetch("/api/member-metric", { method: "POST", keepalive: true,
+                    headers: { "Content-Type": "application/json" }, body });
+            }
+        } catch (e) { /* analytics must never break the page */ }
+    };
+    send("open");
+    document.addEventListener("click", e => {
+        const el = e.target.closest("button, a");
+        if (!el) return;
+        const label = (el.textContent || el.id || "").replace(/\s+/g, " ").trim().slice(0, 60);
+        if (label) send("click", label);
+    }, true);
+}
+
 async function initAuth() {
     // Public member pages set window.MEMBER_MODE before this script loads:
     // no PIN, no login modal, no role. Page code runs with currentRole =
@@ -171,6 +195,7 @@ async function initAuth() {
         currentChapter = null;
         if (typeof onAuthReady === "function") onAuthReady();
         requestAnimationFrame(_setStickyOffsets);
+        _memberTraffic();
         return;
     }
     const role = await checkRole();

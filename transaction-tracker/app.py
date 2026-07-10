@@ -9266,6 +9266,51 @@ def accounting_page():
     return render_template("accounting.html")
 
 
+@app.route("/api/member-metric", methods=["POST"])
+@require_role("member")
+def api_member_metric():
+    """Anonymous member-page beacon (v2.62.0, Kerry): page opens + clicks.
+
+    PII-free by design: whitelisted event names, truncated path/label,
+    nothing identifying stored. Bodies over 1KB are ignored."""
+    from email_parser.database import log_member_event
+    raw = request.get_data(cache=False, as_text=False)
+    if not raw or len(raw) > 1024:
+        return jsonify({"ok": False}), 400
+    import json as _json
+    try:
+        data = _json.loads(raw)
+    except Exception:
+        return jsonify({"ok": False}), 400
+    event = str(data.get("event") or "")
+    if event not in ("open", "click"):
+        return jsonify({"ok": False}), 400
+    path = str(data.get("path") or "")
+    if not path.startswith("/member"):
+        return jsonify({"ok": False}), 400
+    try:
+        log_member_event(event, path, str(data.get("detail") or ""))
+    except Exception:
+        logger.warning("member metric write failed", exc_info=True)
+    return jsonify({"ok": True})
+
+
+@app.route("/api/member-traffic")
+@require_role("admin")
+def api_member_traffic():
+    """Aggregated member-side traffic for the admin Traffic view."""
+    from email_parser.database import get_member_traffic_summary
+    return jsonify(get_member_traffic_summary())
+
+
+@app.route("/traffic")
+def traffic_page():
+    """Member-traffic dashboard (admin only) — v2.62.0, Kerry."""
+    if session.get("role") != "admin":
+        return redirect("/events")
+    return render_template("traffic.html")
+
+
 @app.route("/courses")
 def courses_page():
     """Course database editor (admin only) — v2.57.0, Kerry."""
