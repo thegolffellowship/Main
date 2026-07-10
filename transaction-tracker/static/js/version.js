@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.60.3";
+window.TGF_VERSION = "2.60.4";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.60.4",
+    date: "2026-07-10",
+    changes: [
+      "The fall pages' inline sign-up button reads ENTER POINTS RACE (Kerry) -- the page is already about one specific race, so the generic ENTER SEASON CONTESTS label (which stays on the top banner) was redundant there. Same shop link.",
+    ],
+  },
   {
     version: "2.60.3",
     date: "2026-07-10",
