@@ -1,5 +1,17 @@
-window.TGF_VERSION = "2.64.0";
+window.TGF_VERSION = "2.65.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.65.0",
+    date: "2026-07-10",
+    changes: [
+      "HOW IT WORKS popups rebuilt to the ratified design handoff (design-claude hiw-popup-final-071026, Kerry-RATIFIED per view, mailbox #95): every contest now has its own popup -- City NET, The Fellowship Cup, The Players Cup, City Match Play, Monthly Points Race, Fall Points Race -- rendered data-driven from one modal template. Each opens with the game name in TGF orange, an at-a-glance chip row, THE RACE / THE MONEY / THE POINTS scan blocks (Match Play: THE FORMAT / THE MONEY / THE SEEDING), the ratified per-hole points chart (net REG|CHAMP; gross REG-only with the aces-only championship bonus in the footnote per ruling R4), and a muted footnote.",
+      "EXAMPLE SCORECARD on every points contest (ruling R3): a worked 9-hole example -- PAR / GROSS SCORE / NET SCORE / NET PTS for the net races (stroke dots included), GROSS-only for The Players Cup -- with red circles under par, gray squares over par, and doubled rings at two-or-more either way. Both examples verified hole-by-hole against the ratified schedules (net example totals 8 points, gross 19). Match Play carries neither chart nor scorecard: matches are head-to-head.",
+      "MATCH PLAY gets its own HOW IT WORKS button for the first time (top-right of the Match Play page, both viewports). The shared modal is hoisted to <body> at boot so it renders over the Match Play tab (a fixed element inside the hidden points-race section painted nothing), and reopened popups now start scrolled to the top instead of wherever the last reader left off.",
+      "PHONES present the popup as a bottom sheet (handoff view 1g): it rises from the bottom edge with rounded top corners and a full-width GOT IT button; desktop keeps the centered 600px card.",
+      "POT, not PURSE -- everywhere (Kerry-RATIFIED mailbox #90; 'rename everywhere' confirmed today): the standings strip pill reads POT, the Monthly standings column header is POT, all popup / pay-note / roster copy says pot, and the admin TGF Payouts + Events financial cards read Total Pot. Internal field names (total_purse etc.) are unchanged -- display text only.",
+      "Monthly calendar rule banked as ratified (mailbox #95 item 2): the Monthly Points Race runs March through October with NO race in August (Championship month); the Monthly popup states it and game-engine.md records it.",
+    ],
+  },
   {
     version: "2.64.0",
     date: "2026-07-10",

@@ -300,6 +300,11 @@ AUTHORITATIVE SPEC (mailbox #71, Kerry-confirmed 2026-07-09):
   special weighting on championship events.
 - **Exception: MONTHLY races count everything earned in the month** —
   no best-10 cap.
+- **Monthly calendar (Kerry-RATIFIED, mailbox #95, 2026-07-10):** the
+  Monthly Points Race runs **March through October with NO race in
+  August** (Championship month — few events scheduled, top players
+  already rewarded). Member copy states "Runs March through October
+  (no race in August)".
 - Computation lives on the Golf Genius side today; the Tracker ingests
   GG season totals and may mark counted (top 10 + championship) vs
   not-counted events in drill-downs.
@@ -317,3 +322,29 @@ AUTHORITATIVE SPEC (mailbox #71, Kerry-confirmed 2026-07-09):
    THE PLAYERS CUP (gross).
 The championship-phase UI (design view 1b) is HELD per Kerry's #65
 ruling — functionality first; do not build until cleared.
+
+## How It Works popups (v2.65.0 — handoff hiw-popup-final-071026, Kerry-RATIFIED per view, mailbox #95)
+
+The CONTESTS page popups are the member-facing rules explainer of
+record. One data-driven modal in `templates/contests.html` (`HIW`
+object inside the popup IIFE) renders six views: **City NET** (generic
+— shared by SA + Austin), **The Fellowship Cup**, **The Players Cup**,
+**City Match Play**, **Monthly Points Race**, **Fall Points Race**.
+Structure per view: orange game-name title → chip row → THE RACE / THE
+MONEY / THE POINTS scan blocks (Match Play: THE FORMAT / THE MONEY /
+THE SEEDING) → ratified per-hole chart (net REG|CHAMP; gross REG-only,
+aces-only championship bonus in the footnote per ruling R4; none on
+Match Play) → worked example scorecard (ruling R3; net races stack
+GROSS over NET with stroke dots, Players Cup GROSS-only, none on Match
+Play) → muted footnote → Got it. Phones get a bottom-sheet presentation
+(handoff view 1g). The modal is hoisted to `<body>` at boot so it
+renders over the Match Play tab too. Copy is verbatim from the ratified
+file (banked by platform-claude as TGF_HIW_Popup_Copy_v1_1) — edit only
+with Kerry's ratification. Chip shorthand ratified: PLYR, CHAMP
+acceptable on chips to save real estate (#95 items 1/3).
+
+**Nomenclature (Kerry-RATIFIED, mailbox #90 + "rename everywhere"
+2026-07-10): POT, not PURSE, on every surface** — member contest pages
+(standings pill, Monthly column header, pay-notes, popups, roster
+lines) AND admin pages (TGF Payouts / Events financial "Total Pot").
+Internal field names (`total_purse`, `sel.purse`, …) unchanged.
