@@ -3844,6 +3844,7 @@
             const dl = document.getElementById("course-datalist");
             if (!dl) return;
             dl.innerHTML = COURSES_CACHE
+                .filter(c => (c.status || "active") !== "archived")
                 .map(c => `<option value="${c.name.replace(/"/g, '&quot;')}"></option>`)
                 .join("");
         } catch (err) {

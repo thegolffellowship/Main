@@ -9805,10 +9805,14 @@ _COURSE_SHORT_PINS: list = [
     (r"hill\s+country.*creeks?", "Hill Country | Creeks"),
     (r"hill\s+country.*lakes", "Hill Country | Lakes"),
     (r"hill\s+country.*oaks", "Hill Country | Oaks"),
+    # Silverhorn's formal name is "Silverhorn Golf Club of Texas" — it must
+    # match BEFORE the (distinct) Golf Club of Texas course (v2.57.2 fix)
+    (r"silverhorn", "Silverhorn"),
     (r"golf\s+club\s+of\s+texas", "GC of Texas"),
     (r"la\s+cantera", "La Cantera | Resort"),
+    # Austin's Riverside is not the SA one (v2.57.2 fix)
+    (r"riverside.*austin|austin.*riverside", "Riverside | ATX"),
     (r"riverside", "Riverside | SA"),
-    (r"silverhorn", "Silverhorn"),
     (r"olympia\s+hills", "Olympia Hills"),
     (r"black\s*jack", "Black Jack's"),
     (r"brackenridge", "Brackenridge"),
@@ -9839,11 +9843,31 @@ def apply_course_short_name_pins(db_path: str | Path = DB_PATH) -> dict:
                                         "was": r["short_name"]})
                     break
         conn.commit()
+    inserted = []
+    with _connect(db_path) as conn:
+        have = {r["name"].strip().lower() for r in conn.execute("SELECT name FROM courses").fetchall()}
+        round_names = [r["course_name"] for r in conn.execute(
+            "SELECT DISTINCT course_name FROM handicap_rounds "
+            "WHERE course_name IS NOT NULL AND TRIM(course_name) != ''").fetchall()]
+        for nm in round_names:
+            key = nm.strip().lower()
+            if key in have:
+                continue
+            for i, (pat, short) in enumerate(_COURSE_SHORT_PINS):
+                if re.search(pat, key):
+                    conn.execute("INSERT OR IGNORE INTO courses (name, short_name) VALUES (?, ?)",
+                                 (nm.strip(), short))
+                    have.add(key)
+                    hit_pins.add(i)
+                    inserted.append({"name": nm.strip(), "short_name": short})
+                    break
+        conn.commit()
     missed = [
         {"pattern": pat, "short_name": short}
         for i, (pat, short) in enumerate(_COURSE_SHORT_PINS) if i not in hit_pins
     ]
-    return {"updated": updated, "already_set": unchanged, "pins_without_a_course": missed}
+    return {"updated": updated, "already_set": unchanged,
+            "created_from_round_history": inserted, "pins_without_a_course": missed}
 
 
 def list_chapter_names(db_path: str | Path = DB_PATH) -> list:
