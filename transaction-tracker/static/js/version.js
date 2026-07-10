@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.57.8";
+window.TGF_VERSION = "2.57.9";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.57.9",
+    date: "2026-07-10",
+    changes: [
+      "Color semantics on the standings header (Kerry): green now means BOUGHT IN, nothing else. The 'BEST 10 + CITY CHAMPIONSHIP' phase chip switched from green to a burnt-orange tint (#FDF0E6 / #BF5700) so it can't be read as a buy-in signal, and the '18 of 73 currently bought in' lead is highlighted in the exact green of the bought-in rows (#bbf7d0) so the number and the rows visibly belong together. Staff diagnostics after the lead stay plain muted text.",
+    ],
+  },
   {
     version: "2.57.8",
     date: "2026-07-10",
