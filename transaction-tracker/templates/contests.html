@@ -49,6 +49,35 @@
             font-variant-numeric: tabular-nums; white-space: nowrap;
         }
 
+        /* How-it-works link + popup (Kerry, 2026-07-10) */
+        .pr-hiw-link {
+            display: inline-flex; align-items: center; height: 26px; padding: 0 11px;
+            background: #fff; border: 1px solid var(--border); border-radius: 9999px;
+            cursor: pointer; font-size: 11.5px; font-weight: 600; color: var(--text-muted);
+        }
+        .pr-hiw-link:hover { color: var(--primary); border-color: var(--primary); }
+        .pr-hiw-scrim { position: fixed; inset: 0; background: rgba(0,0,0,.45); z-index: 300; }
+        .pr-hiw-modal {
+            position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%);
+            width: min(660px, calc(100vw - 24px)); max-height: 84vh; overflow-y: auto;
+            background: #fff; border-radius: 16px; z-index: 301;
+            box-shadow: 0 20px 60px rgba(0,0,0,.3); padding: 0 20px 18px;
+        }
+        .pr-hiw-head {
+            display: flex; align-items: center; justify-content: space-between;
+            position: sticky; top: 0; background: #fff; padding: 16px 0 10px;
+            border-bottom: 1px solid var(--border); margin-bottom: 10px;
+        }
+        .pr-hiw-head h4 { margin: 0; font: 700 1.05rem/1.2 'Bitter', serif; }
+        .pr-hiw-head button {
+            width: 34px; height: 34px; border: none; background: none; cursor: pointer;
+            font-size: 16px; color: var(--text-muted); border-radius: 8px;
+        }
+        .pr-hiw-head button:hover { background: #F3F2EF; color: var(--text); }
+        .pr-hiw-body p { font-size: 13.5px; line-height: 1.5; color: var(--text-body, #4B5563); margin: 0 0 0.7rem; }
+        .pr-hiw-body p b { color: #1B1B1B; }
+        .pr-hiw-body .stableford-ref { margin-top: 0.4rem; padding: 0; border: none; }
+
         /* Contest name heading — prominent, name only (Kerry, 2026-07-10) */
         #pr-standings-title {
             margin: 0; flex-basis: 100%;
@@ -690,6 +719,7 @@
                         <h4 id="pr-standings-title"></h4>
                         <button class="btn manager-only" id="pr-refresh-btn" style="font-size:0.78rem;">&#8635; Refresh from Golf Genius</button>
                         <span id="pr-phase-chip" style="display:inline-flex;align-items:center;gap:8px;height:30px;padding:0 14px;background:#FDF0E6;color:#BF5700;border-radius:9999px;font:700 11px/1 'Bitter',serif;letter-spacing:1px;text-transform:uppercase;">&#9679;&nbsp;Regular Season &middot; best 10 + City Championship</span>
+                        <button id="pr-hiw-btn" class="pr-hiw-link" type="button">? How it works</button>
                     </div>
                     <div id="pr-summary" style="margin:0.5rem 0;color:var(--text-muted);font-size:0.85rem;"></div>
                     <div id="pr-payouts"></div>
@@ -699,37 +729,64 @@
                 <div class="standings-section" style="padding:1rem 2rem;">
                     <h4 id="pr-roster-title">Enrolled Players</h4>
                     <div id="pr-roster"><p style="color:var(--text-muted);">Loading…</p></div>
-                    <p style="color:var(--text-muted);font-size:0.8rem;margin-top:0.75rem;">
-                        Score entry and leaderboards (Fellowship Cup / Players Cup) coming soon —
-                        this roster comes from the Enrollment tab and updates with it.
-                    </p>
                 </div>
-                <div class="stableford-ref">
-                    <div>
-                        <h4>NET Stableford Table (per 9 holes)</h4>
-                        <table>
-                            <tr><td>Triple Bogey</td><td>−1</td></tr>
-                            <tr><td>Double Bogey</td><td>−1</td></tr>
-                            <tr><td>Bogey</td><td>0</td></tr>
-                            <tr><td>Par</td><td>+1</td></tr>
-                            <tr><td>Birdie</td><td>+2</td></tr>
-                            <tr><td>Eagle</td><td>+3</td></tr>
-                            <tr><td>Double Eagle</td><td>+4</td></tr>
-                            <tr><td>Hole-in-One</td><td>+8</td></tr>
-                        </table>
+
+                <!-- HOW IT WORKS popup (Kerry, 2026-07-10): the explanations +
+                     points value charts moved off the page bottom into an
+                     on-demand modal -->
+                <div class="pr-hiw-scrim" id="pr-hiw-scrim" style="display:none;"></div>
+                <div class="pr-hiw-modal" id="pr-hiw-modal" style="display:none;" role="dialog" aria-modal="true" aria-label="How the points races work">
+                    <div class="pr-hiw-head">
+                        <h4>How the Points Races Work</h4>
+                        <button id="pr-hiw-close" type="button" aria-label="Close">&#10005;</button>
                     </div>
-                    <div>
-                        <h4>GROSS Stableford Table (per 9 holes)</h4>
-                        <table>
-                            <tr><td>Triple Bogey</td><td>−1</td></tr>
-                            <tr><td>Double Bogey</td><td>0</td></tr>
-                            <tr><td>Bogey</td><td>+1</td></tr>
-                            <tr><td>Par</td><td>+2</td></tr>
-                            <tr><td>Birdie</td><td>+4</td></tr>
-                            <tr><td>Eagle</td><td>+8</td></tr>
-                            <tr><td>Double Eagle</td><td>+16</td></tr>
-                            <tr><td>Hole-in-One</td><td>+8</td></tr>
-                        </table>
+                    <div class="pr-hiw-body">
+                        <p><b>Earning points.</b> Every event carries a POINTS game for its race —
+                        your points for the event are your Stableford score in that game
+                        (net for the NET races, gross for THE PLAYERS CUP), never below zero.
+                        Per-hole values are in the charts below.</p>
+                        <p><b>The season.</b> Regular-season standings count your
+                        <b>best 10 event totals + the City Championship</b> (always added on
+                        top, at face value). After the City Championships, the
+                        <b>POINTS RESET</b> condenses the field onto one master ladder —
+                        those totals are the starting point for the <b>TGF CHAMPIONSHIP</b>,
+                        whose final round decides THE FELLOWSHIP CUP (net) and
+                        THE PLAYERS CUP (gross).</p>
+                        <p><b>Monthly.</b> Every member is automatically in the running each
+                        month — ALL points earned in the calendar month count, no best-10 cap.
+                        The award is $1 per TGF member as of the close of the month; ties split it.</p>
+                        <p><b>Buy-in &amp; payouts.</b> Green rows are bought in. $40 of every
+                        entry goes to the purse, so it grows with each one. PROJECTED amounts
+                        show who would cash if the season ended today — you must be bought in
+                        to win, and projected ties split the combined money of the tied places.</p>
+                        <div class="stableford-ref">
+                            <div>
+                                <h4>NET Stableford Table (per 9 holes)</h4>
+                                <table>
+                                    <tr><td>Triple Bogey</td><td>−1</td></tr>
+                                    <tr><td>Double Bogey</td><td>−1</td></tr>
+                                    <tr><td>Bogey</td><td>0</td></tr>
+                                    <tr><td>Par</td><td>+1</td></tr>
+                                    <tr><td>Birdie</td><td>+2</td></tr>
+                                    <tr><td>Eagle</td><td>+3</td></tr>
+                                    <tr><td>Double Eagle</td><td>+4</td></tr>
+                                    <tr><td>Hole-in-One</td><td>+8</td></tr>
+                                </table>
+                            </div>
+                            <div>
+                                <h4>GROSS Stableford Table (per 9 holes)</h4>
+                                <table>
+                                    <tr><td>Triple Bogey</td><td>−1</td></tr>
+                                    <tr><td>Double Bogey</td><td>0</td></tr>
+                                    <tr><td>Bogey</td><td>+1</td></tr>
+                                    <tr><td>Par</td><td>+2</td></tr>
+                                    <tr><td>Birdie</td><td>+4</td></tr>
+                                    <tr><td>Eagle</td><td>+8</td></tr>
+                                    <tr><td>Double Eagle</td><td>+16</td></tr>
+                                    <tr><td>Hole-in-One</td><td>+8</td></tr>
+                                </table>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -955,6 +1012,21 @@
         document.addEventListener("click", () => {
             if (menu.classList.contains("pr-tab-anchored")) menu.style.display = "none";
         });
+    })();
+
+    // ── How-it-works popup (Kerry, 2026-07-10) ──
+    (function () {
+        const btn = $("pr-hiw-btn"), modal = $("pr-hiw-modal"),
+              scrim = $("pr-hiw-scrim"), close = $("pr-hiw-close");
+        if (!btn || !modal) return;
+        const setOpen = open => {
+            modal.style.display = open ? "" : "none";
+            scrim.style.display = open ? "" : "none";
+        };
+        btn.addEventListener("click", e => { e.stopPropagation(); setOpen(true); });
+        close.addEventListener("click", () => setOpen(false));
+        scrim.addEventListener("click", () => setOpen(false));
+        document.addEventListener("keydown", e => { if (e.key === "Escape") setOpen(false); });
     })();
 
     // ── Points Race sub-tabs + enrolled roster ──
@@ -2530,44 +2602,48 @@
         chips.push('<span class="pr-pay-note">projected from current buy-ins — the purse grows with every entry</span>');
         el.innerHTML = chips.join("");
     }
+    // Walk players down a payout ladder; TIED players (same rank label)
+    // split the combined money of the places they occupy (ratified
+    // universal rule 2, Kerry 2026-07-10). Adds to _pay so a player can
+    // stack awards (Players Cup champion + flight win).
+    function prSplitDown(players, amounts, what) {
+        let place = 0, i = 0;
+        while (i < players.length && place < amounts.length) {
+            let j = i + 1;
+            while (j < players.length && String(players[j].rank) === String(players[i].rank)) j++;
+            const k = j - i;
+            const slots = amounts.slice(place, place + k);
+            const combined = slots.reduce((a, b) => a + b, 0);
+            const base = Math.floor(combined / k), rem = combined - base * k;
+            for (let g = 0; g < k; g++) {
+                const r = players[i + g];
+                r._pay = (r._pay || 0) + base + (g < rem ? 1 : 0);
+                const t = (k > 1 ? `${k}-way tie splits ` : "") + what;
+                r._payTitle = r._payTitle ? `${r._payTitle} + ${t}` : `Projected (if the season ended today): ${t}`;
+            }
+            place += k;
+            i = j;
+        }
+    }
     // Tag the rows that would cash if the season ended today. Only
     // bought-in players are eligible — the money flows PAST non-enrolled
-    // rows to the next enrolled player down.
+    // rows to the next enrolled player down; ties split combined places.
     function prAssignProjectedPayouts(d) {
         (d.standings || []).forEach(r => { delete r._pay; delete r._payTitle; });
         const pp = d.projected_payouts;
         if (!pp || !d.standings) return;
+        const enrolled = d.standings.filter(r => r.enrolled);
         if (pp.kind === "ladder") {
-            let i = 0;
-            for (const r of d.standings) {
-                if (i >= pp.amounts_cents.length) break;
-                if (!r.enrolled) continue;
-                r._pay = pp.amounts_cents[i];
-                r._payTitle = `Projected ${prOrdinal(i)}-place money if the season ended today`;
-                i++;
-            }
+            prSplitDown(enrolled, pp.amounts_cents, "place money");
         } else {
-            const enrolled = d.standings.filter(r => r.enrolled);
-            if (enrolled.length) {
-                enrolled[0]._pay = pp.champion_cents;
-                enrolled[0]._payTitle = "Projected Champion bonus (10% of the pot)";
-            }
+            prSplitDown(enrolled, [pp.champion_cents], "the Champion bonus (10% of the pot)");
             const byFlight = {};
-            for (const r of d.standings) {
-                if (!r.enrolled || !r.flight) continue;
+            for (const r of enrolled) {
+                if (!r.flight) continue;
                 (byFlight[r.flight] = byFlight[r.flight] || []).push(r);
             }
-            Object.values(byFlight).forEach(list => {
-                if (list[0]) {
-                    list[0]._pay = (list[0]._pay || 0) + pp.flight_first_cents;
-                    list[0]._payTitle = (list[0]._payTitle ? list[0]._payTitle + " + " : "Projected ")
-                        + "flight 1st (67%)";
-                }
-                if (list[1]) {
-                    list[1]._pay = pp.flight_second_cents;
-                    list[1]._payTitle = "Projected flight 2nd (33%)";
-                }
-            });
+            Object.values(byFlight).forEach(list =>
+                prSplitDown(list, [pp.flight_first_cents, pp.flight_second_cents], "flight money (67/33)"));
         }
     }
     // The two TGF-wide cups carry the four-step season structure note
@@ -2890,17 +2966,19 @@
             </tr>`;
         }).join("");
 
+        // chip sits BELOW the month tabs so they never move when a
+        // different month is selected (Kerry, 2026-07-10)
         const statusChip = sel.complete ? "" : `
-            <div style="margin:0.4rem 0 0.1rem;"><span style="display:inline-flex;align-items:center;gap:8px;height:30px;padding:0 14px;background:#FDF0E6;color:#BF5700;border-radius:9999px;font:700 11px/1 'Bitter',serif;letter-spacing:1px;text-transform:uppercase;">&#9679;&nbsp;${escapeHtml(sel.name)} &middot; In Progress</span></div>`;
+            <div style="margin:0 0 0.6rem;"><span style="display:inline-flex;align-items:center;gap:8px;height:30px;padding:0 14px;background:#FDF0E6;color:#BF5700;border-radius:9999px;font:700 11px/1 'Bitter',serif;letter-spacing:1px;text-transform:uppercase;">&#9679;&nbsp;${escapeHtml(sel.name)} &middot; In Progress</span></div>`;
 
-        cont.innerHTML = `${statusChip}
+        cont.innerHTML = `
             <div style="display:flex;flex-wrap:wrap;align-items:center;gap:0.35rem;margin:0.4rem 0 0.6rem;">${nav}
                 <button id="pr-monthly-refresh" class="manager-only" title="Refresh from Golf Genius${prMonthlyData.fetched_at ? ` (last: ${prMonthlyData.fetched_at})` : ""}"
                     style="display:${userRole === "admin" || userRole === "manager" ? "" : "none"};padding:0.35rem 0.75rem;cursor:pointer;font-size:0.78rem;font-weight:600;
                            border:1px solid var(--border);border-radius:999px;background:var(--surface);
                            color:var(--text-muted);margin-left:auto;">&#8635; Refresh</button>
                 ${prMonthlyData.fetched_at && !compact ? `<span style="font-size:0.7rem;color:var(--text-muted);" title="Snapshot time — auto-refreshes daily; Refresh pulls live">as of ${escapeHtml(prMonthlyData.fetched_at)}</span>` : ""}
-            </div>
+            </div>${statusChip}
             <table class="enrollment-table${compact ? " pr-compact" : ""}">
                 <thead><tr>
                     <th style="${rankStyle}">${compact ? "#" : "Rank"}</th><th>Player</th>

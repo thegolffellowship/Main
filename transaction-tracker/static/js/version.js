@@ -1,5 +1,15 @@
-window.TGF_VERSION = "2.58.3";
+window.TGF_VERSION = "2.59.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.59.0",
+    date: "2026-07-10",
+    changes: [
+      "Projected TIES split the combined money of the tied places (Kerry; ratified universal rule): two bought-in players tied at T2 each show half of 2nd + 3rd money (e.g. $190 + $136.80 -> PROJECTED: $163.40 each), and the ladder resumes at the right place below them. Applies to the city ladders, the Fellowship Cup, and the Players Cup (tied Champions split the 10% bonus; ties atop a flight split the 67/33 money). Cent-exact largest-remainder splits.",
+      "HOW IT WORKS popup (Kerry): a '? How it works' pill next to the phase chip opens a popup with the full explanation -- how points are earned (Stableford, net vs gross), best 10 + City Championship, the POINTS RESET -> TGF CHAMPIONSHIP structure, Monthly's rules, and buy-in/projected-payout mechanics -- plus the NET and GROSS Stableford value charts, which MOVED here from the bottom of the page. The page is shorter and the reference is there only for people who need it. Esc / X / tap-outside closes it.",
+      "The stale 'Score entry and leaderboards coming soon' note under the enrolled roster is gone -- leaderboards have been live for weeks.",
+      "The Monthly IN PROGRESS chip moved BELOW the month tabs (Kerry) so the tab row stays put when switching between open and completed months.",
+    ],
+  },
   {
     version: "2.58.3",
     date: "2026-07-10",
