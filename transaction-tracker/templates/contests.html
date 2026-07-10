@@ -37,6 +37,12 @@
         }
         .pr-place b { color: #15803d; font-weight: 700; }
         .pr-pay-note { font-size: 11px; color: var(--text-muted); flex-basis: 100%; }
+        #pr-structure-note {
+            font-size: 12.5px; color: var(--text-muted); line-height: 1.45;
+            margin: 0.2rem 0 0.6rem; max-width: 760px;
+        }
+        #pr-structure-note:empty { display: none; }
+        #pr-structure-note b { color: #1B1B1B; }
         .pr-pay {
             display: inline-block; background: #fff; color: #15803d;
             border: 1px solid #86efac; border-radius: 9999px; padding: 0 7px;
@@ -489,6 +495,10 @@
             border-bottom: 1px solid var(--border); padding: 10px 12px 8px;
         }
         #pr-table-container .enrollment-table th span { color: #9CA3AF !important; }
+        /* (PROJ) eyebrow in TGF orange (Kerry, 2026-07-10) — must out-specific
+           the gray th-span rule above */
+        #pr-table-container .enrollment-table th span.pr-proj { color: var(--primary) !important; }
+        #pr-table-container .enrollment-table .pr-rnd { text-align: center !important; }
         #pr-table-container .enrollment-table td {
             border-bottom: 1px solid #F3F2EF; padding: 9px 12px;
             font-size: 13.5px; font-variant-numeric: tabular-nums;
@@ -684,6 +694,7 @@
                     </div>
                     <div id="pr-summary" style="margin:0.5rem 0;color:var(--text-muted);font-size:0.85rem;"></div>
                     <div id="pr-payouts"></div>
+                    <div id="pr-structure-note"></div>
                     <div id="pr-table-container" style="overflow-x:auto;"></div>
                 </div>
                 <div class="standings-section" style="padding:1rem 2rem;">
@@ -2560,6 +2571,21 @@
             });
         }
     }
+    // The two TGF-wide cups carry the four-step season structure note
+    // (Kerry, 2026-07-10; ratified spec #71): the POINTS RESET after the
+    // City Championships condenses the field and sets the starting
+    // totals for the TGF Championship.
+    function prRenderStructureNote(cupName) {
+        const el = $("pr-structure-note");
+        if (!el) return;
+        el.innerHTML = cupName
+            ? `Regular-season standings count each player's <b>best 10 + City Championship</b>. `
+              + `After the City Championships, the <b>POINTS RESET</b> (the PROJ RESET column) condenses `
+              + `the field onto one master ladder — those become the starting totals for the `
+              + `<b>TGF CHAMPIONSHIP</b>, whose final round decides <b>${cupName}</b>.`
+            : "";
+    }
+
     function prPayBadge(r) {
         return r._pay
             ? ` <span class="pr-pay" title="${escapeHtml(r._payTitle || "")}">${prFmtMoney(r._pay)}</span>`
@@ -2596,6 +2622,7 @@
 
         prAssignProjectedPayouts(d);
         prRenderPayoutStrip(d.projected_payouts);
+        prRenderStructureNote(d.race_key === "players_cup_gross" ? "THE PLAYERS CUP" : null);
 
         const hasFlights = !!(d.flights && d.flights.length);
         const showChapter = !!d.cross_chapter;
@@ -2635,7 +2662,7 @@
                 ${showChapter ? `<td style="${chapStyle}" title="${escapeHtml(r.player_chapter || "")}">${escapeHtml(compact ? prAbbrevChapter(r.player_chapter) : (r.player_chapter || ""))}</td>` : ""}
                 <td style="${ptsStyle}">${r.total_points ?? ""}</td>
                 <td style="${resetStyle}">${prFmtReset(r.points_reset)}</td>
-                <td style="${rndStyle}">${r.tournaments ?? ""}</td>
+                <td style="${rndStyle}" class="pr-rnd">${r.tournaments ?? ""}</td>
                 <td style="${buyStyle}">${badge}</td>
             </tr>`;
         };
@@ -2675,8 +2702,8 @@
                     <th style="${rankStyle}">${compact ? "#" : "Rank"}</th><th>Player</th>
                     ${showChapter ? `<th style="${chapStyle}">${compact ? "CH" : "Chapter"}</th>` : ""}
                     <th style="${ptsStyle}">${compact ? "PTS" : "POINTS"}</th>
-                    <th style="${resetStyle}"><span style="display:block;font-size:${compact ? "0.52rem" : "0.65rem"};color:#d97706;font-weight:600;letter-spacing:0.03em;">(${compact ? "proj" : "Projected"})</span>${compact ? "RESET" : "POINTS RESET"}</th>
-                    <th style="${rndStyle}" title="Rounds">${compact ? "R" : "Rounds"}</th>
+                    <th style="${resetStyle}"><span class="pr-proj" style="display:block;font-size:${compact ? "0.52rem" : "0.65rem"};font-weight:600;letter-spacing:0.03em;">(${compact ? "proj" : "Projected"})</span>${compact ? "RESET" : "POINTS RESET"}</th>
+                    <th style="${rndStyle}" class="pr-rnd" title="Rounds">${compact ? "R" : "Rounds"}</th>
                     <th style="${buyStyle}" title="Buy-in">${compact ? "IN" : "Buy-in"}</th>
                 </tr></thead>
                 <tbody>${bodyRows}</tbody>
@@ -2745,6 +2772,7 @@
         prLastCupData = d;   // role-aware re-render, same as the races
         prAssignProjectedPayouts(d);
         prRenderPayoutStrip(d.projected_payouts);
+        prRenderStructureNote("THE FELLOWSHIP CUP");
 
         const compact = prIsCompact();
         const rankTh = `width:${compact ? "28px" : "56px"};`;
@@ -2774,7 +2802,7 @@
                     <th style="${rankTh}">${compact ? "#" : "Rank"}</th><th>Player</th>
                     <th style="${chapTh}">${compact ? "CH" : "Chapter"}</th>
                     <th style="${netTh}" title="Rank in their chapter's NET race">${compact ? "NET #" : "NET Rank"}</th>
-                    <th style="${resetTh}"><span style="display:block;font-size:${compact ? "0.52rem" : "0.65rem"};color:#d97706;font-weight:600;letter-spacing:0.03em;">(${compact ? "proj" : "Projected"})</span>${compact ? "RESET" : "POINTS RESET"}</th>
+                    <th style="${resetTh}"><span class="pr-proj" style="display:block;font-size:${compact ? "0.52rem" : "0.65rem"};font-weight:600;letter-spacing:0.03em;">(${compact ? "proj" : "Projected"})</span>${compact ? "RESET" : "POINTS RESET"}</th>
                 </tr></thead>
                 <tbody>${rows}</tbody>
             </table>`;
@@ -2790,6 +2818,7 @@
         $("pr-standings-title").textContent = "";
         $("pr-summary").textContent = "";
         prRenderPayoutStrip(null);
+        prRenderStructureNote(null);
         if (!prMonthlyData || force) {
             cont.innerHTML = '<div style="padding:1rem;color:var(--text-muted);">'
                 + (force ? "Refreshing monthly points from Golf Genius…"
