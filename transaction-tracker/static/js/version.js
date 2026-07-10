@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.60.5";
+window.TGF_VERSION = "2.61.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.61.0",
+    date: "2026-07-10",
+    changes: [
+      "HOW IT WORKS popups are now race-specific (Kerry): the MONTHLY popup says only what Monthly is (auto-entry, all points count, $1/member award, ties split) with just the NET chart; the FALL popup covers only the standalone best-6 + Fall Championship race, buy-in/purse rules, and the NET chart; the season races keep the full best-10 / reset / TGF Championship explanation with both charts (its Monthly paragraph and fall sentence removed). Each popup's title names its race. Roughly half the text per popup.",
+    ],
+  },
   {
     version: "2.60.5",
     date: "2026-07-10",

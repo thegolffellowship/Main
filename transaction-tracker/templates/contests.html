@@ -773,30 +773,23 @@
                         <button id="pr-hiw-close" type="button" aria-label="Close">&#10005;</button>
                     </div>
                     <div class="pr-hiw-body">
+                        <!-- SEASON races (city NETs + the two cups) -->
+                        <div id="pr-hiw-season">
                         <p><b>Earn points on every hole you play.</b> Every event carries a
                         POINTS game for its race, and your event total is your Stableford
                         score in that game (net for the NET races, gross for THE PLAYERS CUP),
-                        never below zero. Per-hole values are in the charts below —
-                        <b>CHAMP</b> values apply to the City Championship and TGF
-                        Championship rounds (net gets +1 in every category; gross adds +1
-                        to the hole-in-one bonus).</p>
+                        never below zero. <b>CHAMP</b> values apply to the City Championship
+                        and TGF Championship rounds.</p>
                         <p><b>The season.</b> Regular-season standings count your
-                        <b>best 10 event totals + the City Championship</b> (always added on
-                        top, at face value). After the City Championships, the
-                        <b>POINTS RESET</b> condenses the field onto one master ladder —
-                        those totals are the starting point for the <b>TGF CHAMPIONSHIP</b>,
+                        <b>best 10 event totals + the City Championship</b>. After the City
+                        Championships, the <b>POINTS RESET</b> condenses the field onto one
+                        master ladder — the starting totals for the <b>TGF CHAMPIONSHIP</b>,
                         whose final round decides THE FELLOWSHIP CUP (net) and
-                        THE PLAYERS CUP (gross). The FALL races are standalone:
-                        <b>best 6 + the Fall Championship</b> decides them outright —
-                        no points reset, no connection to the cups or the TGF
-                        Championship.</p>
-                        <p><b>Monthly.</b> Every member is automatically in the running each
-                        month — ALL points earned in the calendar month count, no best-10 cap.
-                        The award is $1 per TGF member as of the close of the month; ties split it.</p>
+                        THE PLAYERS CUP (gross).</p>
                         <p><b>Buy-in &amp; payouts.</b> Green rows are bought in. $40 of every
-                        entry goes to the purse, so it grows with each one. PROJECTED amounts
-                        show who would cash if the season ended today — you must be bought in
-                        to win, and projected ties split the combined money of the tied places.</p>
+                        entry goes to the purse; PROJECTED amounts show who would cash if the
+                        season ended today — you must be bought in to win, and ties split the
+                        combined money of the tied places.</p>
                         <div class="stableford-ref">
                             <div>
                                 <h4>NET Stableford Table (per 9 holes)</h4>
@@ -826,6 +819,60 @@
                                     <tr><td>Hole-in-One</td><td>+8</td><td>+9</td></tr>
                                 </table>
                             </div>
+                        </div>
+                        </div>
+                        <!-- MONTHLY -->
+                        <div id="pr-hiw-monthly" style="display:none;">
+                        <p><b>Every member is automatically in — no buy-in.</b> ALL points you
+                        earn in the calendar month count; there is no best-10 cap.</p>
+                        <p><b>The award</b> is $1 per TGF member as of the close of the month;
+                        ties split it.</p>
+                        <p><b>Points</b> = your net Stableford score in each event's POINTS
+                        game, never below zero:</p>
+                        <div class="stableford-ref">
+                            <div>
+                                <h4>NET Stableford Table (per 9 holes)</h4>
+                                <table>
+                                    <tr class="sr-head"><td></td><td>Reg</td><td>Champ</td></tr>
+                                    <tr><td>Triple Bogey</td><td>−1</td><td>0</td></tr>
+                                    <tr><td>Double Bogey</td><td>−1</td><td>0</td></tr>
+                                    <tr><td>Bogey</td><td>0</td><td>+1</td></tr>
+                                    <tr><td>Par</td><td>+1</td><td>+2</td></tr>
+                                    <tr><td>Birdie</td><td>+2</td><td>+3</td></tr>
+                                    <tr><td>Eagle</td><td>+3</td><td>+4</td></tr>
+                                    <tr><td>Double Eagle</td><td>+4</td><td>+5</td></tr>
+                                    <tr><td>Hole-in-One</td><td>+8</td><td>+9</td></tr>
+                                </table>
+                            </div>
+                        </div>
+                        </div>
+                        <!-- FALL races -->
+                        <div id="pr-hiw-fall" style="display:none;">
+                        <p><b>A standalone chapter race starting Saturday, August 29.</b>
+                        Your <b>best 6 event totals + the Fall Championship</b> decide it
+                        outright — no points reset, no tie to the cups or the TGF
+                        Championship.</p>
+                        <p><b>Buy-in &amp; payouts.</b> $40 of every entry builds the purse;
+                        projected payouts show who would cash today, and ties split the
+                        combined money of the tied places.</p>
+                        <p><b>Points</b> = your net Stableford score in each event's POINTS
+                        game, never below zero (<b>CHAMP</b> values at the Fall Championship):</p>
+                        <div class="stableford-ref">
+                            <div>
+                                <h4>NET Stableford Table (per 9 holes)</h4>
+                                <table>
+                                    <tr class="sr-head"><td></td><td>Reg</td><td>Champ</td></tr>
+                                    <tr><td>Triple Bogey</td><td>−1</td><td>0</td></tr>
+                                    <tr><td>Double Bogey</td><td>−1</td><td>0</td></tr>
+                                    <tr><td>Bogey</td><td>0</td><td>+1</td></tr>
+                                    <tr><td>Par</td><td>+1</td><td>+2</td></tr>
+                                    <tr><td>Birdie</td><td>+2</td><td>+3</td></tr>
+                                    <tr><td>Eagle</td><td>+3</td><td>+4</td></tr>
+                                    <tr><td>Double Eagle</td><td>+4</td><td>+5</td></tr>
+                                    <tr><td>Hole-in-One</td><td>+8</td><td>+9</td></tr>
+                                </table>
+                            </div>
+                        </div>
                         </div>
                     </div>
                 </div>
@@ -1103,7 +1150,22 @@
                 window.scrollTo(0, lockY);
             }
         };
-        btn.addEventListener("click", e => { e.stopPropagation(); setOpen(true); });
+        btn.addEventListener("click", e => {
+            e.stopPropagation();
+            // show only the variant for the active race (Kerry, 2026-07-10)
+            const kind = (document.querySelector(".sub-tab[data-pr].active") || {}).dataset?.pr || "net";
+            const variant = kind.startsWith("fall") ? "fall" : (kind === "monthly" ? "monthly" : "season");
+            ["season", "monthly", "fall"].forEach(v => {
+                const el = $("pr-hiw-" + v);
+                if (el) el.style.display = v === variant ? "" : "none";
+            });
+            const head = modal.querySelector(".pr-hiw-head h4");
+            if (head) head.textContent = variant === "monthly"
+                ? "How the Monthly Points Race Works"
+                : (variant === "fall" ? "How the Fall Points Races Work"
+                                      : "How the Points Races Work");
+            setOpen(true);
+        });
         close.addEventListener("click", () => setOpen(false));
         scrim.addEventListener("click", () => setOpen(false));
         document.addEventListener("keydown", e => { if (e.key === "Escape") setOpen(false); });
