@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.57.7";
+window.TGF_VERSION = "2.57.8";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.57.8",
+    date: "2026-07-10",
+    changes: [
+      "Phase chip wording matches the ratified season spec (Kerry): 'REGULAR SEASON - BEST 10 + CITY CHAMPIONSHIP' -- the season total is the best 10 event totals PLUS the City Championship on top (mailbox #71), so the chip no longer undersells it as 'best 10 count'. Still hidden on the Monthly race, which is uncapped.",
+      "Standings subtext reduced to '18 of 73 currently bought in' (Kerry) -- the ranked-players sentence, non-members-hidden note, reset coefficient, and Golf Genius timestamp are gone for members and view-only. Manager/admin still see all of those diagnostics after the short lead (they run the refreshes); the summary re-renders when the role check lands so staff never get stuck with the short line. Applies to every race through the shared renderer -- Austin NET included.",
+    ],
+  },
   {
     version: "2.57.7",
     date: "2026-07-10",
