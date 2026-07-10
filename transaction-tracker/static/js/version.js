@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.59.3";
+window.TGF_VERSION = "2.59.4";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.59.4",
+    date: "2026-07-10",
+    changes: [
+      "HOW IT WORKS button restyled (Kerry): solid TGF orange pill with white uppercase Bitter lettering, matching the app's primary-pill convention -- was a gray ghost outline.",
+    ],
+  },
   {
     version: "2.59.3",
     date: "2026-07-10",

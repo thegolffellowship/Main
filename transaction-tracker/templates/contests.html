@@ -51,11 +51,12 @@
 
         /* How-it-works link + popup (Kerry, 2026-07-10) */
         .pr-hiw-link {
-            display: inline-flex; align-items: center; height: 26px; padding: 0 11px;
-            background: #fff; border: 1px solid var(--border); border-radius: 9999px;
-            cursor: pointer; font-size: 11.5px; font-weight: 600; color: var(--text-muted);
+            display: inline-flex; align-items: center; height: 30px; padding: 0 14px;
+            background: var(--primary, #E87C3E); border: none; border-radius: 9999px;
+            cursor: pointer; color: #fff;
+            font: 700 11px/1 'Bitter', serif; letter-spacing: 1px; text-transform: uppercase;
         }
-        .pr-hiw-link:hover { color: var(--primary); border-color: var(--primary); }
+        .pr-hiw-link:hover { background: var(--primary-hover, #D06B2E); }
         .pr-hiw-scrim { position: fixed; inset: 0; background: rgba(0,0,0,.45); z-index: 300; }
         .pr-hiw-modal {
             position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%);
@@ -730,7 +731,7 @@
                         <h4 id="pr-standings-title"></h4>
                         <button class="btn manager-only" id="pr-refresh-btn" style="font-size:0.78rem;">&#8635; Refresh from Golf Genius</button>
                         <span id="pr-phase-chip" style="display:inline-flex;align-items:center;gap:8px;height:30px;padding:0 14px;background:#FDF0E6;color:#BF5700;border-radius:9999px;font:700 11px/1 'Bitter',serif;letter-spacing:1px;text-transform:uppercase;">&#9679;&nbsp;Regular Season &middot; best 10 + City Championship</span>
-                        <button id="pr-hiw-btn" class="pr-hiw-link" type="button">? How it works</button>
+                        <button id="pr-hiw-btn" class="pr-hiw-link" type="button">How It Works</button>
                     </div>
                     <div id="pr-summary" style="margin:0.5rem 0;color:var(--text-muted);font-size:0.85rem;"></div>
                     <div id="pr-payouts"></div>
