@@ -1,0 +1,321 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
+    <title>TGF — Player Spotlight</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Bitter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/css/dashboard.css">
+    <link rel="stylesheet" href="/static/css/shell.css">
+    <link rel="icon" href="/static/icon.svg" type="image/svg+xml">
+    <link rel="apple-touch-icon" href="/static/icon-180.png">
+    <style>
+        /* Player Spotlight — ADMIN PREVIEW v1 (Kerry, 2026-07-10). Styled for
+           the member view it's destined for; iterate with CA/CD before the
+           routes open to the member tier. */
+        .spt-wrap { padding: 1.25rem 1.5rem 3rem; max-width: 980px; margin: 0 auto; }
+        .spt-preview-chip {
+            display: inline-flex; align-items: center; gap: 8px; height: 26px; padding: 0 12px;
+            background: #FEF3C7; color: #92400E; border-radius: 9999px;
+            font: 700 10px/1 'Bitter', serif; letter-spacing: 1px; text-transform: uppercase;
+        }
+        .spt-hero { text-align: center; margin: 1.4rem 0 0; }
+        .spt-hero h2 { margin: 0; font: 700 1.7rem/1.15 'Bitter', serif; color: var(--text); }
+        .spt-hero p { margin: 0.45rem 0 0; font-size: 14px; color: var(--text-muted); }
+        .spt-searchbox { position: relative; max-width: 460px; margin: 1.1rem auto 0; }
+        .spt-searchbox input {
+            width: 100%; height: 48px; padding: 0 20px; box-sizing: border-box;
+            border: 1.5px solid var(--border); border-radius: 9999px;
+            font-size: 16px; background: #fff; outline: none;
+        }
+        .spt-searchbox input:focus { border-color: var(--primary, #E87C3E); box-shadow: 0 0 0 3px rgba(232,124,62,.18); }
+        .spt-suggest {
+            position: absolute; left: 10px; right: 10px; top: calc(100% + 6px); z-index: 40;
+            background: #fff; border: 1px solid var(--border); border-radius: 14px;
+            box-shadow: 0 14px 40px rgba(0,0,0,.14); overflow: hidden; text-align: left;
+        }
+        .spt-suggest button {
+            display: flex; width: 100%; align-items: center; justify-content: space-between;
+            gap: 10px; padding: 11px 16px; border: none; background: none; cursor: pointer;
+            font-size: 14.5px; color: var(--text); border-top: 1px solid #F3F2EF;
+        }
+        .spt-suggest button:first-child { border-top: none; }
+        .spt-suggest button:hover, .spt-suggest button.hl { background: #FDF0E6; }
+        .spt-suggest .none { padding: 12px 16px; font-size: 13px; color: var(--text-muted); }
+        .spt-chapter-chip {
+            display: inline-flex; align-items: center; height: 22px; padding: 0 10px;
+            border-radius: 9999px; font: 700 9.5px/1 'Bitter', serif;
+            letter-spacing: 0.8px; text-transform: uppercase;
+            background: #E5E7EB; color: #374151;
+        }
+        .spt-chapter-chip.austin { background: var(--chapter-austin, #BF5700); color: #fff; }
+        .spt-chapter-chip.sa { background: var(--chapter-sa, #D3DDE4); color: #1B1B1B; }
+
+        /* player view */
+        .spt-player { margin-top: 1.6rem; }
+        .spt-card {
+            background: #fff; border: 1px solid var(--border); border-radius: 14px;
+            padding: 20px 24px; display: flex; align-items: center; gap: 18px; flex-wrap: wrap;
+        }
+        .spt-name-block { flex: 1 1 260px; min-width: 220px; }
+        .spt-name { margin: 0; font: 700 1.65rem/1.1 'Bitter', serif; color: var(--text); }
+        .spt-badges { display: flex; gap: 6px; margin-top: 9px; flex-wrap: wrap; }
+        .spt-member-chip {
+            display: inline-flex; align-items: center; height: 22px; padding: 0 10px;
+            border-radius: 9999px; background: #bbf7d0; color: #14532D;
+            font: 700 9.5px/1 'Bitter', serif; letter-spacing: 0.8px; text-transform: uppercase;
+        }
+        .spt-lsc-chip {
+            display: inline-flex; align-items: center; height: 22px; padding: 0 10px;
+            border-radius: 9999px; background: #FDF0E6; color: #BF5700;
+            font: 700 9.5px/1 'Bitter', serif; letter-spacing: 0.8px; text-transform: uppercase;
+        }
+        .spt-hcp { text-align: center; padding: 0 8px; }
+        .spt-hcp .n { font: 700 40px/1 'Bitter', serif; color: var(--text); font-variant-numeric: tabular-nums; }
+        .spt-hcp .l { margin-top: 5px; font: 700 9px/1.3 'Bitter', serif; letter-spacing: 1.2px; text-transform: uppercase; color: var(--text-muted); }
+        .spt-tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; margin-top: 12px; }
+        .spt-tile { background: #fff; border: 1px solid var(--border); border-radius: 12px; padding: 12px 16px; }
+        .spt-tile .lbl { font: 700 9.5px/1.3 'Bitter', serif; letter-spacing: 1.4px; text-transform: uppercase; color: var(--text-muted); }
+        .spt-tile .val { font: 700 22px/1 'Bitter', serif; color: var(--text); margin-top: 7px; font-variant-numeric: tabular-nums; }
+
+        .spt-sec-h {
+            margin: 1.6rem 0 0.6rem; font: 700 11px/1.3 'Bitter', serif;
+            letter-spacing: 1.4px; text-transform: uppercase; color: #1B1B1B;
+        }
+        .spt-races { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 12px; }
+        .spt-race { background: #fff; border: 1px solid var(--border); border-radius: 12px; padding: 13px 16px; }
+        .spt-race .rl { font: 700 10.5px/1.35 'Bitter', serif; letter-spacing: 1px; text-transform: uppercase; color: #6B7280; }
+        .spt-race .rank-row { display: flex; align-items: baseline; gap: 8px; margin-top: 8px; }
+        .spt-race .rank { font: 700 26px/1 'Bitter', serif; color: var(--text); font-variant-numeric: tabular-nums; }
+        .spt-race .of { font-size: 12px; color: #9CA3AF; }
+        .spt-race .meta { margin-top: 7px; font-size: 12px; color: var(--text-body, #4B5563); line-height: 1.55; }
+        .spt-race .buyin { display: inline-flex; align-items: center; height: 20px; padding: 0 9px; border-radius: 9999px; margin-top: 9px;
+            font: 700 9px/1 'Bitter', serif; letter-spacing: 0.8px; text-transform: uppercase; }
+        .spt-race .buyin.in { background: #bbf7d0; color: #14532D; }
+        .spt-race .buyin.out { background: #F3F4F6; color: #6B7280; }
+        .spt-pay-list { background: #fff; border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
+        .spt-pay { display: flex; gap: 10px; padding: 9px 16px; border-top: 1px solid #F3F2EF; font-size: 13px; align-items: baseline; }
+        .spt-pay:first-child { border-top: none; }
+        .spt-pay .amt { margin-left: auto; font-weight: 700; color: #059669; font-variant-numeric: tabular-nums; white-space: nowrap; }
+        .spt-pay .ev { font-weight: 600; color: var(--text); }
+        .spt-pay .cat { color: #9CA3AF; font-size: 11.5px; }
+        .spt-empty { font-size: 13px; color: var(--text-muted); }
+        .spt-note { margin-top: 1.4rem; font-size: 12px; line-height: 1.55; color: #9CA3AF; }
+        @media (max-width: 640px) {
+            .spt-wrap { padding: 0.9rem 0.75rem 2.5rem; }
+            .spt-card { padding: 16px; gap: 12px; }
+            .spt-name { font-size: 1.35rem; }
+            .spt-hcp .n { font-size: 32px; }
+        }
+    </style>
+</head>
+<body>
+    {% if shell_v2 %}
+    {% set SHELL_TITLE = 'Player Spotlight' %}{% set SHELL_ACTIVE = 'admin' %}
+    {% include '_shell_nav.html' %}
+    {% else %}
+    <header>
+        <div class="header-content">
+            <h1>TGF Transaction Tracker</h1>
+            <p class="subtitle">Player Spotlight</p>
+            <a href="/changelog" class="version-link" id="version-badge" title="View changelog">v2.0.0</a>
+        </div>
+        <div class="header-actions">
+            <span id="role-badge" class="role-badge" style="display:none;"></span>
+            <button id="btn-logout" class="btn btn-secondary" title="Log out" style="display:none;">Log Out</button>
+        </div>
+    </header>
+    {% endif %}
+
+    <main>
+        <!-- admin subnav rides along while the page is admin-only; it comes
+             off (or gates) when Kerry opens the page to members -->
+        <nav class="admin-subnav">
+            <a href="/accounting">Accounting</a>
+            <a href="/coo">COO</a>
+            <a href="/audit">Audit Log</a>
+            <a href="/matrix">Matrix</a>
+            <a href="/courses">Courses</a>
+            <a href="/traffic">Traffic</a>
+            <a href="/spotlight" class="active">Spotlight</a>
+            <a href="/database">Database</a>
+            <a href="/changelog">Changelog</a>
+        </nav>
+
+        <div class="spt-wrap">
+            <div style="text-align:center;">
+                <span class="spt-preview-chip">&#9679;&nbsp;Admin Preview &middot; not member-visible yet</span>
+            </div>
+            <div class="spt-hero">
+                <h2>Player Spotlight</h2>
+                <p>Type any player's name to pull up their story &mdash; handicap,
+                   season stats, and where they stand in every race right now.</p>
+                <div class="spt-searchbox">
+                    <input type="search" id="spt-q" placeholder="Search a player&hellip;"
+                           autocomplete="off" autocapitalize="words" aria-label="Search a player">
+                    <div class="spt-suggest" id="spt-suggest" style="display:none;"></div>
+                </div>
+            </div>
+            <div class="spt-player" id="spt-player"></div>
+            <p class="spt-note">Standings come from the same live snapshots as the
+               CONTESTS page; projected Lone Star Cup seats update as buy-ins and
+               results come in. No contact info is shown here &mdash; ever.</p>
+        </div>
+    </main>
+
+    <script src="/static/js/version.js"></script>
+    <script src="/static/js/auth.js"></script>
+    <script>
+    (function () {
+        "use strict";
+        const $ = id => document.getElementById(id);
+        const esc = s => String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+        const fmtMoney = n => "$" + Number(n || 0).toLocaleString("en-US",
+            { minimumFractionDigits: (n % 1 ? 2 : 0), maximumFractionDigits: 2 });
+
+        const chapterChip = ch => {
+            const cls = ch === "Austin" ? "austin" : (ch === "San Antonio" ? "sa" : "");
+            return ch ? `<span class="spt-chapter-chip ${cls}">${esc(ch)}</span>` : "";
+        };
+
+        // ── typeahead ──
+        const q = $("spt-q"), sug = $("spt-suggest");
+        let tmr = null, reqSeq = 0;
+        q.addEventListener("input", () => {
+            clearTimeout(tmr);
+            const v = q.value.trim();
+            if (v.length < 2) { sug.style.display = "none"; return; }
+            tmr = setTimeout(async () => {
+                const seq = ++reqSeq;
+                try {
+                    const res = await fetch("/api/spotlight/search?q=" + encodeURIComponent(v));
+                    const d = await res.json();
+                    if (seq !== reqSeq) return;
+                    const players = d.players || [];
+                    sug.innerHTML = players.length
+                        ? players.map(pl =>
+                            `<button type="button" data-cid="${pl.customer_id}" data-name="${esc(pl.name)}">` +
+                            `<span>${esc(pl.name)}</span>${chapterChip(pl.chapter)}</button>`).join("")
+                        : `<div class="none">No members match &ldquo;${esc(v)}&rdquo;.</div>`;
+                    sug.style.display = "";
+                } catch (e) { /* transient */ }
+            }, 220);
+        });
+        sug.addEventListener("click", e => {
+            const btn = e.target.closest("button[data-cid]");
+            if (!btn) return;
+            sug.style.display = "none";
+            q.value = btn.dataset.name;
+            loadPlayer(btn.dataset.cid);
+        });
+        document.addEventListener("click", e => {
+            if (!e.target.closest(".spt-searchbox")) sug.style.display = "none";
+        });
+        q.addEventListener("keydown", e => {
+            if (e.key === "Enter") {
+                const first = sug.querySelector("button[data-cid]");
+                if (first && sug.style.display !== "none") first.click();
+            }
+            if (e.key === "Escape") sug.style.display = "none";
+        });
+
+        // ── player view ──
+        async function loadPlayer(cid) {
+            const box = $("spt-player");
+            box.innerHTML = '<p class="spt-empty">Pulling up their story&hellip;</p>';
+            try { history.replaceState(null, "", "?player=" + cid); } catch (e) { /* ignore */ }
+            let d;
+            try {
+                const res = await fetch("/api/spotlight/player?cid=" + encodeURIComponent(cid));
+                d = await res.json();
+                if (!res.ok || d.error) throw new Error(d.error || res.statusText);
+            } catch (err) {
+                box.innerHTML = `<p class="spt-empty">Couldn't load that player (${esc(err.message || err)}).</p>`;
+                return;
+            }
+            render(d);
+        }
+
+        function render(d) {
+            const lsc = d.lone_star_cup;
+            const lscChip = lsc
+                ? `<span class="spt-lsc-chip">Lone Star Cup &middot; ${esc(
+                    lsc.seat ? "Projected: " + lsc.seat : "Alternate #" + lsc.alternate_rank)} (${esc(lsc.chapter)})</span>`
+                : "";
+            const hcp = d.handicap_index_18;
+            const hero =
+                `<div class="spt-card">` +
+                `<div class="spt-name-block"><h3 class="spt-name">${esc(d.name)}</h3>` +
+                `<div class="spt-badges">${chapterChip(d.chapter)}` +
+                (d.is_member ? `<span class="spt-member-chip">TGF Member</span>` : "") +
+                lscChip + `</div></div>` +
+                `<div class="spt-hcp"><div class="n">${hcp != null ? esc(hcp.toFixed(1)) : "&mdash;"}</div>` +
+                `<div class="l">Handicap Index${d.handicap_index_9 != null ? ` &middot; 9-hole ${esc(d.handicap_index_9.toFixed(1))}` : ""}</div></div>` +
+                `</div>`;
+
+            const st = d.stats || {};
+            const tiles =
+                `<div class="spt-tiles">` +
+                [["Events Played", st.events_played ?? 0],
+                 ["Contests Entered", st.races_entered ?? 0],
+                 ["Season Winnings", fmtMoney(st.total_winnings)]]
+                    .map(([l, v]) => `<div class="spt-tile"><div class="lbl">${l}</div><div class="val">${esc(String(v))}</div></div>`).join("") +
+                `</div>`;
+
+            const raceCard = r => {
+                const flight = r.flight ? ` &middot; ${esc(r.flight)}` : "";
+                const reset = r.points_reset != null && r.key !== "fellowship_cup"
+                    ? `<br>Projected reset: <b>${esc(String(r.points_reset))}</b>` : "";
+                const evs = r.tournaments != null ? `${r.tournaments} event${r.tournaments === 1 ? "" : "s"}` : "";
+                const wins = r.wins ? ` &middot; ${r.wins} win${r.wins === 1 ? "" : "s"}` : "";
+                const pts = r.total_points != null ? `<b>${esc(String(r.total_points))}</b> pts` : "";
+                return `<div class="spt-race"><div class="rl">${esc(r.label)}${flight}</div>` +
+                    `<div class="rank-row"><span class="rank">${esc(String(r.rank))}</span>` +
+                    `<span class="of">of ${r.n_players}</span></div>` +
+                    `<div class="meta">${pts}${evs ? " &middot; " + evs : ""}${wins}${reset}</div>` +
+                    `<span class="buyin ${r.enrolled ? "in" : "out"}">${r.enrolled ? "Bought In" : "Not Entered"}</span>` +
+                    `</div>`;
+            };
+            const fallCard = f =>
+                `<div class="spt-race"><div class="rl">${esc((f.chapter === "Austin" ? "Austin" : "SA") + " Fall NET")}</div>` +
+                `<div class="rank-row"><span class="rank">&mdash;</span><span class="of">starts Aug 29</span></div>` +
+                `<div class="meta">Standings light up when the fall races begin.</div>` +
+                `<span class="buyin in">Bought In</span></div>`;
+            const mp = d.match_play;
+            const mpCard = mp
+                ? `<div class="spt-race"><div class="rl">City Match Play &middot; ${esc(mp.chapter)}</div>` +
+                  (mp.pool
+                    ? `<div class="rank-row"><span class="rank">${mp.wins ?? 0}&ndash;${mp.losses ?? 0}${mp.draws ? "&ndash;" + mp.draws : ""}</span><span class="of">${esc(mp.pool)}</span></div>` +
+                      `<div class="meta">${mp.stableford != null ? `<b>${esc(String(mp.stableford))}</b> Stableford pts across pool matches` : ""}</div>`
+                    : `<div class="rank-row"><span class="rank">&mdash;</span><span class="of">pools not drawn yet</span></div><div class="meta"></div>`) +
+                  `<span class="buyin in">Bought In</span></div>`
+                : "";
+
+            const races = (d.races || []).map(raceCard).join("")
+                + (d.fall_buyins || []).map(fallCard).join("") + mpCard;
+
+            const pays = (d.recent_payouts || []).map(pp =>
+                `<div class="spt-pay"><span class="ev">${esc(pp.event_name || pp.description || "Payout")}</span>` +
+                `<span class="cat">${esc(pp.category || "")}${pp.event_date ? " · " + esc(pp.event_date) : ""}</span>` +
+                `<span class="amt">${fmtMoney(pp.amount)}</span></div>`).join("");
+
+            $("spt-player").innerHTML =
+                hero + tiles +
+                `<div class="spt-sec-h">Where They Stand</div>` +
+                (races ? `<div class="spt-races">${races}</div>`
+                       : `<p class="spt-empty">No race appearances yet &mdash; standings show up after their first event.</p>`) +
+                (pays ? `<div class="spt-sec-h">Recent Winnings</div><div class="spt-pay-list">${pays}</div>` : "") +
+                (d.gg_error ? `<p class="spt-note">Standings feed note: ${esc(d.gg_error)}</p>` : "");
+        }
+
+        document.addEventListener("DOMContentLoaded", () => {
+            if (typeof initAuth === "function") initAuth();
+            const m = location.search.match(/[?&]player=(\d+)/);
+            if (m) loadPlayer(m[1]);
+        });
+    })();
+    </script>
+</body>
+</html>

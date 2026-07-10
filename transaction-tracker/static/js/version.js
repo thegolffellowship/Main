@@ -1,5 +1,15 @@
-window.TGF_VERSION = "2.66.0";
+window.TGF_VERSION = "2.67.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.67.0",
+    date: "2026-07-10",
+    changes: [
+      "PLAYER SPOTLIGHT (Kerry-directed, ADMIN PREVIEW v1 -- deliberately NOT member-visible yet): a new /spotlight page where you type any player's name and pull up their story -- name/chapter/member badges, current handicap index (18- and 9-hole), headline stat tiles (events played, contests entered, season winnings), a WHERE THEY STAND card for every points race they appear in (rank of field, points, events, flight, projected reset, BOUGHT IN pill), fall buy-in cards, a City Match Play card (pool + W-L-D record + Stableford), a projected Lone Star Cup seat/alternate chip, and their five most recent winnings. Search is a live typeahead over member names; ?player=<id> deep links restore on refresh.",
+      "GATING: the page and both APIs (/api/spotlight/search, /api/spotlight/player) are ADMIN-ONLY while Kerry iterates the design with design-claude and platform-claude. The payloads are PII-FREE BY DESIGN (name, chapter, and competitive data only -- no emails/phones/addresses/DOB), so opening it to the pinless member tier later is a role-string change, not a data audit. The page carries an amber 'ADMIN PREVIEW - not member-visible yet' chip and, temporarily, the admin subnav (comes off when it goes member-facing).",
+      "Data is composed entirely from existing engines: the persisted points-race snapshots, The Fellowship Cup projection, cmp match-play standings, handicap_player_links, get_customer_winnings, and the v2.66.0 Lone Star Cup projection. Monthly standing is deliberately deferred (its data path does live GG page walks -- too heavy per player) and is on the iteration list.",
+      "Admin subnav across all admin pages gains a SPOTLIGHT link (after Traffic).",
+    ],
+  },
   {
     version: "2.66.0",
     date: "2026-07-10",

@@ -9323,6 +9323,44 @@ def traffic_page():
     return render_template("traffic.html")
 
 
+# ── Player Spotlight (ADMIN PREVIEW v1 — Kerry, 2026-07-10) ──
+# Destined for the pinless member view after CA/CD iteration: the payloads
+# are PII-free by design, so opening it up later is a role change only.
+# Until Kerry ratifies, ALL THREE routes stay admin.
+
+@app.route("/spotlight")
+def spotlight_page():
+    """Player Spotlight (admin preview) — search a player, see their story."""
+    if session.get("role") != "admin":
+        return redirect("/events")
+    return render_template("spotlight.html")
+
+
+@app.route("/api/spotlight/search")
+@require_role("admin")
+def api_spotlight_search():
+    """Name typeahead. PII-free payload (member-tier-ready)."""
+    from email_parser.database import search_spotlight_players
+    return jsonify({"players": search_spotlight_players(
+        request.args.get("q", ""))})
+
+
+@app.route("/api/spotlight/player")
+@require_role("admin")
+def api_spotlight_player():
+    """One player's spotlight payload. PII-free (member-tier-ready)."""
+    from email_parser.database import get_player_spotlight
+    try:
+        cid = int(request.args.get("cid", ""))
+    except ValueError:
+        return jsonify({"error": "cid must be an integer"}), 400
+    try:
+        return jsonify(get_player_spotlight(cid))
+    except Exception as e:
+        logger.exception("Spotlight payload failed")
+        return jsonify({"error": f"Spotlight failed: {e}"}), 500
+
+
 @app.route("/courses")
 def courses_page():
     """Course database editor (admin only) — v2.57.0, Kerry."""
