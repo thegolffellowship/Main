@@ -235,6 +235,12 @@
         #hcp-table tbody td { border-bottom: 1px solid #F3F2EF; font-variant-numeric: tabular-nums; }
         .stats-row .stat-card .stat-label { font: 700 9.5px/1.3 'Bitter', serif; letter-spacing: 1.5px; text-transform: uppercase; color: var(--text-muted); }
         .stats-row .stat-card .stat-value { font-family: 'Bitter', serif; font-weight: 700; color: var(--text, #1B1B1B); }
+        .rounds-table thead th {
+            font: 700 9.5px/1.3 'Bitter', serif; letter-spacing: 1px;
+            color: #9CA3AF; text-transform: uppercase; background: none;
+            border-bottom: 1px solid var(--border);
+        }
+        .rounds-table td { border-bottom: 1px solid #F1F0ED; font-variant-numeric: tabular-nums; }
     </style>
 </head>
 <body>
@@ -677,14 +683,24 @@
         // Data load happens via onAuthReady() → kickInitialLoad() — the
         // handicaps endpoints require an authenticated session.
 
-        document.getElementById('hcp-search').addEventListener('input', renderTable);
+        // Null-safe binder: ops buttons don't exist in the pinless member
+        // DOM (SHELL_OPS is member-gated) — an unguarded getElementById
+        // here threw and killed every binding after it, which is why the
+        // filter pills went dead on /member/handicaps (Kerry, 2026-07-10)
+        const _on = (id, ev, fn) => {
+            const el = document.getElementById(id);
+            if (el) el.addEventListener(ev, fn);
+        };
+        _on('hcp-search', 'input', renderTable);
         const _ioBtn = document.getElementById('btn-hcp-io');
         const _ioMenu = document.getElementById('hcp-io-menu');
-        _ioBtn.addEventListener('click', (e) => {
-            e.stopPropagation();
-            _ioMenu.style.display = _ioMenu.style.display === 'none' ? '' : 'none';
-        });
-        document.addEventListener('click', () => { _ioMenu.style.display = 'none'; });
+        if (_ioBtn && _ioMenu) {
+            _ioBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                _ioMenu.style.display = _ioMenu.style.display === 'none' ? '' : 'none';
+            });
+            document.addEventListener('click', () => { _ioMenu.style.display = 'none'; });
+        }
         document.querySelectorAll('[data-hcp-chapter]').forEach(btn => {
             btn.addEventListener('click', () => {
                 hcpChapterFilter = btn.dataset.hcpChapter;
@@ -701,7 +717,7 @@
                 renderTable();
             });
         });
-        document.getElementById('sort-select').addEventListener('change', e => {
+        _on('sort-select', 'change', e => {
             currentSort = e.target.value;
             renderTable();
         });
@@ -731,10 +747,10 @@
             });
         });
 
-        document.getElementById('import-file-input').addEventListener('change', onFileChosen);
-        document.getElementById('btn-import').addEventListener('click', openImportModal);
-        document.getElementById('btn-settings').addEventListener('click', openSettingsModal);
-        document.getElementById('btn-purge').addEventListener('click', async () => {
+        _on('import-file-input', 'change', onFileChosen);
+        _on('btn-import', 'click', openImportModal);
+        _on('btn-settings', 'click', openSettingsModal);
+        _on('btn-purge', 'click', async () => {
             if (!confirm('Delete ALL rounds with 18-hole course ratings (rating > 50)? This cannot be undone.')) return;
             try {
                 const r = await fetch('/api/handicaps/purge-invalid', { method: 'POST' });
@@ -747,7 +763,7 @@
             }
         });
 
-        document.getElementById('btn-auto-link').addEventListener('click', async () => {
+        _on('btn-auto-link', 'click', async () => {
             const btn = document.getElementById('btn-auto-link');
             btn.disabled = true;
             btn.textContent = 'Linking…';
@@ -765,7 +781,7 @@
             }
         });
 
-        document.getElementById('btn-create-customers').addEventListener('click', async () => {
+        _on('btn-create-customers', 'click', async () => {
             const btn = document.getElementById('btn-create-customers');
             if (!confirm('This will create archived customer records for all unlinked handicap players. Continue?')) return;
             btn.disabled = true;
@@ -784,7 +800,7 @@
             }
         });
 
-        document.getElementById('btn-repair-links').addEventListener('click', async () => {
+        _on('btn-repair-links', 'click', async () => {
             const btn = document.getElementById('btn-repair-links');
             if (!confirm('This will detect and fix any player↔customer links that were stored backwards. Continue?')) return;
             btn.disabled = true;
@@ -807,13 +823,13 @@
             }
         });
 
-        document.getElementById('btn-dl-all').addEventListener('click', () => {
+        _on('btn-dl-all', 'click', () => {
             window.location = '/api/handicaps/export-csv';
         });
-        document.getElementById('btn-dl-sa').addEventListener('click', () => {
+        _on('btn-dl-sa', 'click', () => {
             window.location = '/api/handicaps/export-csv?chapter=San+Antonio';
         });
-        document.getElementById('btn-dl-austin').addEventListener('click', () => {
+        _on('btn-dl-austin', 'click', () => {
             window.location = '/api/handicaps/export-csv?chapter=Austin';
         });
     });
@@ -974,9 +990,12 @@
         const isAdmin = role === 'admin';
         const tbody = document.getElementById('hcp-tbody');
         if (!players.length) {
-            tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;padding:32px;color:#94a3b8;">' +
-                (allPlayers.length ? 'No players match the current filters.' : 'No handicap data yet. Use Import Rounds to upload your Handicap Server export.') +
-                '</td></tr>';
+            const emptyMsg = allPlayers.length ? 'No players match the current filters.' : 'No handicap data yet. Use Import Rounds to upload your Handicap Server export.';
+            tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;padding:32px;color:#94a3b8;">' + emptyMsg + '</td></tr>';
+            // the mobile card list must clear too — an early return here
+            // left stale cards behind whenever a filter matched nothing
+            const emptyMobile = document.getElementById('hcp-mobile-list');
+            if (emptyMobile) emptyMobile.innerHTML = '<p style="text-align:center;color:#94a3b8;padding:32px 0;">' + emptyMsg + '</p>';
             return;
         }
 
@@ -1239,9 +1258,21 @@
         const runningHcp = new Map();
         rounds.forEach(r => runningHcp.set(r.id, r.running_index_9 ?? null));
 
+        // Member view (handoff contests-handicaps-071026, view 1a): the
+        // ratified six columns — Tee/Rating/Slope fold away so the table
+        // fits a phone without cutting off the Date column (Kerry's
+        // 2026-07-10 screenshot).
+        const MEMBER = !!window.MEMBER_MODE;
         let html = `<div id="rounds-scroll-${safeid(rounds[0].player_name)}" style="overflow-x:auto;">
         <table class="rounds-table">
-            <thead><tr>
+            <thead>` + (MEMBER ? `<tr>
+                <th class="date-col">Date</th>
+                <th class="course-col">Course</th>
+                <th class="diff-col">Gross</th>
+                <th class="diff-col">Differential</th>
+                <th class="diff-col">Counting</th>
+                <th class="diff-col">Running Index</th>
+            </tr>` : `<tr>
                 <th class="date-col">Date</th>
                 <th class="course-col">Course</th>
                 <th class="narrow-col">Tee</th>
@@ -1252,9 +1283,9 @@
                 <th class="diff-col">Index</th>
                 <th class="narrow-col">Status</th>
                 ${canDelete ? '<th></th>' : ''}
-            </tr></thead><tbody id="rounds-tbody-${safeid(rounds[0].player_name)}">`;
+            </tr>`) + `</thead><tbody id="rounds-tbody-${safeid(rounds[0].player_name)}">`;
 
-        const colspan = canDelete ? 10 : 9;
+        const colspan = MEMBER ? 6 : (canDelete ? 10 : 9);
         const pid = safeid(rounds[0].player_name);
         const olderCount = rounds.length > 20 ? rounds.length - 20 : 0;
 
@@ -1273,6 +1304,27 @@
                 : '<span style="color:#94a3b8">—</span>';
             const rowStyle = [isOlder ? 'display:none' : '', !active ? 'opacity:0.5' : ''].filter(Boolean).join(';');
             const rowClass = [isUsed ? 'round-used' : '', isOlder ? 'older-round' : ''].filter(Boolean).join(' ');
+            if (MEMBER) {
+                // view 1a: counting rounds carry the success-green left bar,
+                // green differential, and a green check in COUNTING
+                const bar = isUsed ? 'border-left:3px solid #16A34A;' : 'border-left:3px solid transparent;';
+                const countCell = !active
+                    ? '<span style="color:#9CA3AF;font-weight:700;">—</span>'
+                    : isUsed
+                        ? '<span style="color:#16A34A;font-weight:700;">✓</span>'
+                        : '<span style="color:#9CA3AF;font-weight:700;">—</span>';
+                const diffCell = rnd.differential !== null
+                    ? `<span style="${isUsed ? 'color:#16A34A;font-weight:700;' : ''}">${rnd.differential.toFixed(1)}</span>`
+                    : '—';
+                return `<tr class="${rowClass}" style="${bar}${rowStyle ? rowStyle + ';' : ''}${isUsed ? 'background:#F2FBF5;' : ''}">
+                    <td class="date-col">${rnd.round_date}</td>
+                    <td class="course-col">${esc(rnd.course_name || '—')}</td>
+                    <td class="diff-col">${rnd.adjusted_score}</td>
+                    <td class="diff-col">${diffCell}</td>
+                    <td class="diff-col">${countCell}</td>
+                    <td class="diff-col">${hcpCell}</td>
+                </tr>`;
+            }
             return `<tr class="${rowClass}" ${rowStyle ? `style="${rowStyle}"` : ''}>
                 <td class="date-col">${rnd.round_date}</td>
                 <td class="course-col">${esc(rnd.course_name || '—')}</td>
@@ -1311,7 +1363,13 @@
             // Red separator: at the 12-month lookback boundary
             if (!cutoffInserted && rnd.round_date < cutoffStr) {
                 cutoffInserted = true;
-                html += `<tr class="${isOlder ? 'older-round' : ''}" ${isOlder ? 'style="display:none"' : ''}>
+                html += MEMBER
+                    ? `<tr class="${isOlder ? 'older-round' : ''}" ${isOlder ? 'style="display:none"' : ''}>
+                        <td colspan="${colspan}" class="pr-wrap" style="padding:7px 10px;border-top:2px dashed #DC2626;background:#fff;">
+                            <span style="font:700 11px/1 'Bitter',serif;letter-spacing:1px;text-transform:uppercase;color:#DC2626;">Lookback cutoff</span>
+                            <span style="font-size:12.5px;color:#6B7280;margin-left:8px;">Rounds below are outside the ${lookbackMonths}-month window and excluded.</span>
+                        </td></tr>`
+                    : `<tr class="${isOlder ? 'older-round' : ''}" ${isOlder ? 'style="display:none"' : ''}>
                     <td colspan="${colspan}" style="padding:3px 10px;background:#fee2e2;color:#991b1b;
                         font-size:0.78em;font-weight:600;text-align:center;letter-spacing:0.04em;
                         border-top:2px solid #dc2626;border-bottom:2px solid #dc2626;">
@@ -1322,6 +1380,12 @@
         }
 
         html += `</tbody></table></div>`;
+        if (MEMBER) {
+            html += `<div style="display:flex;gap:18px;flex-wrap:wrap;margin-top:8px;font-size:12.5px;color:#6B7280;">
+                <span><span style="color:#16A34A;font-weight:700;">✓ green</span> = one of the best ${numUsed || 'N'} differentials — they average to the index</span>
+                <span><span style="color:#DC2626;font-weight:700;">red dashed line</span> = lookback cutoff</span>
+            </div>`;
+        }
         if (olderCount > 0) {
             html += `<button class="btn btn-secondary" style="margin-top:8px;font-size:0.8em;"
                 onclick="toggleOlderRounds('${pid}', this)" data-count="${olderCount}">Show ${olderCount} older round${olderCount !== 1 ? 's' : ''}</button>`;

@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.56.1";
+window.TGF_VERSION = "2.56.2";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.56.2",
+    date: "2026-07-10",
+    changes: [
+      "FIXED: filter pills dead on the member Handicaps page (Kerry's screenshot). The nav-shell release moved the ops buttons out of the member DOM, but the page's init script still bound handlers to them unguarded -- the resulting error silently killed every binding after it, including the chapter and MEMBERS|EVERYONE pills and the sort control. All bindings are now null-safe.",
+      "FIXED: a filter that matched nobody left stale player cards on the mobile list (the empty-state path cleared only the desktop table).",
+      "Member round history now wears the ratified view-1a treatment (Kerry's other screenshot showed the old 9-column table overflowing the phone): the lean six columns -- Date | Course | Gross | Differential | Counting | Running Index -- with counting rounds green-barred and checked, the red dashed LOOKBACK CUTOFF rule, dimmed excluded rounds, and the explanatory legend. Admin/manager keep the full table; both get Bitter hairline headers.",
+    ],
+  },
   {
     version: "2.56.1",
     date: "2026-07-10",
