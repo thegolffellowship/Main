@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.58.0";
+window.TGF_VERSION = "2.58.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.58.1",
+    date: "2026-07-10",
+    changes: [
+      "THE FELLOWSHIP CUP and THE PLAYERS CUP now explain the full season structure (Kerry): a note under the purse strip states that regular-season standings count best 10 + City Championship, then the POINTS RESET (the PROJ RESET column) condenses the field onto one master ladder after the City Championships -- those totals are the starting point for the TGF CHAMPIONSHIP, whose final round decides the cup. City NET races and Monthly don't carry the note.",
+      "The (PROJ) eyebrow over the RESET column is TGF orange (Kerry) -- it had been silently rendered gray since v2.56.0 because the header restyle's gray-span rule outranked its inline amber; the new rule out-specifics it.",
+      "ROUNDS column data centered under its header (Kerry) -- th and td now carry a hard-centering class so no table restyle can knock it loose.",
+    ],
+  },
   {
     version: "2.58.0",
     date: "2026-07-10",
