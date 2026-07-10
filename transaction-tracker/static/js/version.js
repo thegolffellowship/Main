@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.57.1";
+window.TGF_VERSION = "2.57.2";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.57.2",
+    date: "2026-07-10",
+    changes: [
+      "Course pin corrections from the first live run's report: 'Silverhorn Golf Club of Texas' had been caught by the Golf Club of Texas pattern (it now correctly reads Silverhorn -- the real GC of Texas keeps its pin), and the two Austin Riverside rows are now 'Riverside | ATX' instead of '| SA'.",
+      "Pins now also CREATE course rows for round-history course strings that match a pin but had no database row yet -- the Hyatt Hill Country nines, Olympia Hills, and Black Jack's get exact short names on phones instead of the derivation fallback.",
+      "Archived courses no longer appear in the EVENTS course autocomplete -- the /courses editor's archive toggle now actually controls the picker (the datalist and the editor read the same course database).",
+    ],
+  },
   {
     version: "2.57.1",
     date: "2026-07-10",
