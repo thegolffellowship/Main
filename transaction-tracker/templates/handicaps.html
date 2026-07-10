@@ -1295,11 +1295,12 @@
         // fits a phone without cutting off the Date column (Kerry's
         // 2026-07-10 screenshot).
         const MEMBER = !!window.MEMBER_MODE;
-        // Phones shorten the member headers (Kerry, 2026-07-10):
-        // DIFFERENTIAL→DIFF, COUNTING→COUNT, RUNNING INDEX→INDEX
-        const HM = (window.matchMedia && window.matchMedia('(max-width: 768px)').matches)
-            ? { diff: 'Diff', count: 'Count', run: 'Index' }
-            : { diff: 'Differential', count: 'Counting', run: 'Running Index' };
+        // Phones shorten the member headers and DROP the Counting column
+        // entirely (Kerry, 2026-07-10 — the green row already says it)
+        const HMOB = window.matchMedia && window.matchMedia('(max-width: 768px)').matches;
+        const HM = HMOB
+            ? { diff: 'Diff', run: 'Index' }
+            : { diff: 'Differential', run: 'Running Index' };
         let html = `<div id="rounds-scroll-${safeid(rounds[0].player_name)}" style="overflow-x:auto;">
         <table class="rounds-table">
             <thead>` + (MEMBER ? `<tr>
@@ -1307,7 +1308,7 @@
                 <th class="course-col">Course</th>
                 <th class="diff-col">Gross</th>
                 <th class="diff-col">${HM.diff}</th>
-                <th class="diff-col">${HM.count}</th>
+                ${HMOB ? '' : '<th class="diff-col">Counting</th>'}
                 <th class="diff-col">${HM.run}</th>
             </tr>` : `<tr>
                 <th class="date-col">Date</th>
@@ -1322,7 +1323,7 @@
                 ${canDelete ? '<th></th>' : ''}
             </tr>`) + `</thead><tbody id="rounds-tbody-${safeid(rounds[0].player_name)}">`;
 
-        const colspan = MEMBER ? 6 : (canDelete ? 10 : 9);
+        const colspan = MEMBER ? (HMOB ? 5 : 6) : (canDelete ? 10 : 9);
         const pid = safeid(rounds[0].player_name);
         const olderCount = rounds.length > 20 ? rounds.length - 20 : 0;
 
@@ -1358,7 +1359,7 @@
                     <td class="course-col">${esc((window.matchMedia && matchMedia('(max-width: 768px)').matches && rnd.course_short) || shortCourse(rnd.course_name) || '—')}</td>
                     <td class="diff-col">${rnd.adjusted_score}</td>
                     <td class="diff-col">${diffCell}</td>
-                    <td class="diff-col">${countCell}</td>
+                    ${HMOB ? '' : `<td class="diff-col">${countCell}</td>`}
                     <td class="diff-col">${hcpCell}</td>
                 </tr>`;
             }
@@ -1419,7 +1420,7 @@
         html += `</tbody></table></div>`;
         if (MEMBER) {
             html += `<div style="display:flex;gap:18px;flex-wrap:wrap;margin-top:8px;font-size:12.5px;color:#6B7280;">
-                <span><span style="color:#16A34A;font-weight:700;">✓ green</span> = one of the best ${numUsed || 'N'} differentials — they average to the index</span>
+                <span><span style="color:#16A34A;font-weight:700;">${HMOB ? 'green row' : '✓ green'}</span> = one of the best ${numUsed || 'N'} differentials — they average to the index</span>
                 <span><span style="color:#DC2626;font-weight:700;">red dashed line</span> = lookback cutoff</span>
             </div>`;
         }
