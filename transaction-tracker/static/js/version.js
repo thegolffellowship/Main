@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.63.0";
+window.TGF_VERSION = "2.64.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.64.0",
+    date: "2026-07-10",
+    changes: [
+      "THE MCP HAS A CLOCK (Kerry via platform-claude, mailbox #81): new get_current_time tool returns Central time (ISO + friendly like 'Friday, July 10, 2026 - 1:45 PM CDT'), UTC equivalent, and day of week; every read_platform_dialogue response now leads with server_time_local and an explicit note that post timestamps are UTC -- so no Claude misreads UTC as local time again.",
+      "FALL How It Works popup restructured to Kerry's ratified copy (mailbox #76): singular title, at-a-glance chip row (STARTS SAT, AUG 29 / BEST 6 + FALL CHAMPIONSHIP / $40 TO THE PURSE), THE RACE / THE MONEY / THE POINTS scan blocks in Bitter, chart unchanged, standalone disclaimer demoted to a muted footnote.",
+      "ACCURACY correction (Kerry, applies everywhere): points CAN go negative on a hole -- the zero floor applies to the EVENT TOTAL only. All three popups now say it right; no 'never below zero' phrasing remains.",
+    ],
+  },
   {
     version: "2.63.0",
     date: "2026-07-10",

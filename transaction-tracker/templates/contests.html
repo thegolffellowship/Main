@@ -81,6 +81,17 @@
         .pr-hiw-body p { font-size: 13.5px; line-height: 1.5; color: var(--text-body, #4B5563); margin: 0 0 0.7rem; }
         .pr-hiw-body p b { color: #1B1B1B; }
         .pr-hiw-body .stableford-ref { margin-top: 0.4rem; padding: 0; border: none; }
+        .pr-hiw-chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 0.9rem; }
+        .pr-hiw-chips span {
+            display: inline-flex; align-items: center; height: 26px; padding: 0 11px;
+            background: #FDF0E6; color: #BF5700; border-radius: 9999px;
+            font: 700 10px/1 'Bitter', serif; letter-spacing: 1px; text-transform: uppercase;
+        }
+        .pr-hiw-sec {
+            margin: 0.9rem 0 0.25rem; font: 700 11px/1.3 'Bitter', serif;
+            letter-spacing: 1.2px; text-transform: uppercase; color: #1B1B1B;
+        }
+        .pr-hiw-foot { font-size: 12px !important; color: var(--text-muted) !important; margin-top: 0.8rem !important; }
 
         /* Contest name heading — prominent, name only (Kerry, 2026-07-10) */
         #pr-standings-title {
@@ -777,8 +788,9 @@
                         <div id="pr-hiw-season">
                         <p><b>Earn points on every hole you play.</b> Every event carries a
                         POINTS game for its race, and your event total is your Stableford
-                        score in that game (net for the NET races, gross for THE PLAYERS CUP),
-                        never below zero. <b>CHAMP</b> values apply to the City Championship
+                        score in that game (net for the NET races, gross for THE PLAYERS CUP).
+                        A rough hole can go negative, but your event total never does —
+                        the lowest an event can score is 0. <b>CHAMP</b> values apply to the City Championship
                         and TGF Championship rounds.</p>
                         <p><b>The season.</b> Regular-season standings count your
                         <b>best 10 event totals + the City Championship</b>. After the City
@@ -828,7 +840,8 @@
                         <p><b>The award</b> is $1 per TGF member as of the close of the month;
                         ties split it.</p>
                         <p><b>Points</b> = your net Stableford score in each event's POINTS
-                        game, never below zero:</p>
+                        game. A rough hole can go negative, but your event total never
+                        does — the lowest an event can score is 0:</p>
                         <div class="stableford-ref">
                             <div>
                                 <h4>NET Stableford Table (per 9 holes)</h4>
@@ -847,15 +860,23 @@
                         </div>
                         <!-- FALL races -->
                         <div id="pr-hiw-fall" style="display:none;">
-                        <p><b>A standalone chapter race starting Saturday, August 29.</b>
-                        Your <b>best 6 event totals + the Fall Championship</b> decide it
-                        outright — no points reset, no tie to the cups or the TGF
-                        Championship.</p>
-                        <p><b>Buy-in &amp; payouts.</b> $40 of every entry builds the purse;
-                        projected payouts show who would cash today, and ties split the
-                        combined money of the tied places.</p>
-                        <p><b>Points</b> = your net Stableford score in each event's POINTS
-                        game, never below zero (<b>CHAMP</b> values at the Fall Championship):</p>
+                        <div class="pr-hiw-chips">
+                            <span>Starts Sat, Aug 29</span>
+                            <span>Best 6 + Fall Championship</span>
+                            <span>$40 to the Purse</span>
+                        </div>
+                        <h5 class="pr-hiw-sec">The Race</h5>
+                        <p>Every event you play earns points. Your best 6 events plus the
+                        Fall Championship make your season total — highest total wins.</p>
+                        <h5 class="pr-hiw-sec">The Money</h5>
+                        <p>$40 of every entry goes straight to the purse, so it grows with
+                        every player who joins. Standings show who'd cash if the season
+                        ended today. Ties split the money.</p>
+                        <h5 class="pr-hiw-sec">The Points</h5>
+                        <p>Net Stableford, scored hole by hole (chart below). A rough hole
+                        can go negative, but your event total never does — the lowest an
+                        event can score is 0. At the Fall Championship, every hole is worth
+                        one extra point.</p>
                         <div class="stableford-ref">
                             <div>
                                 <h4>NET Stableford Table (per 9 holes)</h4>
@@ -872,6 +893,7 @@
                                 </table>
                             </div>
                         </div>
+                        <p class="pr-hiw-foot">This race stands alone — no points reset, and no tie to the Cups or TGF Championship.</p>
                         </div>
                     </div>
                 </div>
@@ -1169,7 +1191,7 @@
             const head = modal.querySelector(".pr-hiw-head h4");
             if (head) head.textContent = variant === "monthly"
                 ? "How the Monthly Points Race Works"
-                : (variant === "fall" ? "How the Fall Points Races Work"
+                : (variant === "fall" ? "How the Fall Points Race Works"
                                       : "How the Points Races Work");
             setOpen(true);
         });

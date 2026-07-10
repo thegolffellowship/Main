@@ -1831,6 +1831,39 @@ def get_side_games_matrix(holes: int = 0) -> str:
     return json.dumps(out, indent=2)
 
 
+def _central_clock() -> dict:
+    """Current time in TGF's home timezone — mailbox post #81 (Kerry):
+    give the MCP a clock so no Claude misreads UTC as local again."""
+    import pytz
+    from datetime import datetime, timezone as _tz
+    tz = pytz.timezone("America/Chicago")
+    now_utc = datetime.now(_tz.utc)
+    now_c = now_utc.astimezone(tz)
+    friendly = now_c.strftime("%A, %B %d, %Y · %I:%M %p %Z")
+    # strip leading zeros portably (no %-d/%-I on all platforms)
+    import re as _re
+    friendly = _re.sub(r"\b0(\d)", r"\1", friendly)
+    return {
+        "local_iso": now_c.isoformat(),
+        "friendly": friendly,
+        "utc": now_utc.strftime("%Y-%m-%d %H:%M:%S UTC"),
+        "day_of_week": now_c.strftime("%A"),
+        "timezone": "America/Chicago",
+    }
+
+
+@mcp.tool()
+def get_current_time() -> str:
+    """Current date and time in TGF's home timezone (America/Chicago).
+
+    Returns local ISO timestamp, a friendly string (e.g. "Friday, July 10,
+    2026 · 1:29 PM CDT"), the UTC equivalent, and the day of week. Check
+    this before any time-of-day-dependent statement — mailbox created_at
+    fields and most stored timestamps are UTC, NOT local (post #81).
+    """
+    return json.dumps(_central_clock(), indent=2)
+
+
 @mcp.tool()
 def read_platform_dialogue(limit: int = 20, topic: str = "", since_id: int = 0) -> str:
     """Read the tracker-claude <-> platform-claude planning mailbox (newest first).
@@ -1847,7 +1880,13 @@ def read_platform_dialogue(limit: int = 20, topic: str = "", since_id: int = 0) 
         since_id: Only entries with id greater than this (catch-up reads)
     """
     from email_parser.database import read_platform_dialogue_entries
-    return json.dumps(read_platform_dialogue_entries(limit, topic, since_id), indent=2)
+    clock = _central_clock()
+    return json.dumps({
+        "server_time_local": clock["friendly"],
+        "server_time_utc": clock["utc"],
+        "note": "post created_at fields are UTC — current local time is server_time_local (post #81)",
+        "posts": read_platform_dialogue_entries(limit, topic, since_id),
+    }, indent=2)
 
 
 @mcp.tool()
