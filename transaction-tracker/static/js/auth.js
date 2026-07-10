@@ -166,6 +166,15 @@ function updateNavForRole() {
 // page load + a 'click' per button/link tap, labeled by the control's id
 // or text. PII-free; admin reads the aggregates at /traffic.
 function _memberTraffic() {
+    // Self-exclusion for staff testing (Kerry, 2026-07-10): open any member
+    // page with #notrack once on a device and that browser stops counting
+    // (flag lives in localStorage — no IPs stored, by design). #track
+    // turns it back on.
+    try {
+        if (location.hash.includes("notrack")) localStorage.setItem("tgf_notrack", "1");
+        else if (location.hash.includes("track")) localStorage.removeItem("tgf_notrack");
+        if (localStorage.getItem("tgf_notrack") === "1") return;
+    } catch (e) { /* private mode etc. — fall through and count */ }
     const send = (event, detail) => {
         try {
             const body = JSON.stringify({ event, path: location.pathname, detail: detail || "" });

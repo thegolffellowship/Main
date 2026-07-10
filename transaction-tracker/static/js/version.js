@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.62.0";
+window.TGF_VERSION = "2.62.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.62.1",
+    date: "2026-07-10",
+    changes: [
+      "REFRESH IN PLACE (Kerry): the selected race now lives in the page URL (#race=fall_sa etc.), so refreshing SA FALL NET reloads SA FALL NET instead of snapping back to SAN ANTONIO NET. Match Play and Enrollment tabs survive refresh the same way, and race links can now be shared directly.",
+      "TRAFFIC self-exclusion (Kerry): open /member/contests#notrack once on each device you test from and that browser stops counting (the flag lives on the device -- no IP addresses are stored, by design; #track re-enables). Instructions are on the TRAFFIC page, and a one-shot scoring-traffic-reset command flushes the launch-day testing counts.",
+      "Bridge command args actually parse now: the dispatcher splits 'command:arg' before the handlers see it, so the parameterized fall-enroll (and the new raw-order reader) matched nothing -- running fall-enroll with an argument silently re-ran the two-person seed instead of enrolling the requested customer. This is why Adam Baker hadn't appeared on SA FALL NET; he's enrolled right after this deploys.",
+    ],
+  },
   {
     version: "2.62.0",
     date: "2026-07-10",

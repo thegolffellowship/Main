@@ -1077,6 +1077,14 @@
                 $("section-" + k).classList.toggle("section-hidden", k !== top);
             });
             if (top === "enrollment") enrAutoLoad();
+            try {
+                if (top === "match-play") history.replaceState(null, "", "#tab=mp");
+                else if (top === "enrollment") history.replaceState(null, "", "#tab=enr");
+                else {
+                    const activeRace = (document.querySelector(".sub-tab[data-pr].active") || {}).dataset?.pr || "net";
+                    history.replaceState(null, "", "#race=" + activeRace);
+                }
+            } catch (e) { /* ignore */ }
             if (top === "points-race" && !wasActive) { loadPrRoster(); prLoadStandings(); }
             if (mobile && TAB_MENU_IDS[top]) {
                 e.stopPropagation();   // the document click-away would instantly re-close it
@@ -1175,6 +1183,7 @@
         btn.addEventListener("click", () => {
             $$(".sub-tab[data-pr]").forEach(b => b.classList.remove("active"));
             btn.classList.add("active");
+            try { history.replaceState(null, "", "#race=" + btn.dataset.pr); } catch (e) { /* ignore */ }
             // sync the mobile dropdown + phase chip (v2.56.0, view 1a/1e)
             const ddb = $("pr-race-dd-btn");
             if (ddb) ddb.innerHTML = `${escapeHtml(btn.textContent.trim())} <span style="margin-left:auto;">&#9662;</span>`;
@@ -3322,6 +3331,30 @@
                 cur.classList.remove("active");
                 aus.classList.add("active");
             }
+        }
+        // Refresh-in-place (Kerry, 2026-07-10): the selected race/tab lives
+        // in the URL hash, so a reload restores the same page instead of
+        // snapping back to SAN ANTONIO NET.
+        const hash = location.hash || "";
+        const raceMatch = hash.match(/race=([a-z_]+)/);
+        const wantRace = raceMatch && document.querySelector(`.sub-tab[data-pr="${raceMatch[1]}"]`)
+            ? raceMatch[1] : null;
+        if (wantRace && wantRace !== (document.querySelector(".sub-tab[data-pr].active") || {}).dataset?.pr) {
+            const cur = document.querySelector(".sub-tab[data-pr].active");
+            if (cur) cur.classList.remove("active");
+            document.querySelector(`.sub-tab[data-pr="${wantRace}"]`).classList.add("active");
+            document.querySelectorAll("[data-pr-dd]").forEach(mi =>
+                mi.classList.toggle("active", mi.dataset.prDd === wantRace));
+            const chip = $("pr-phase-chip");
+            if (chip) chip.style.display =
+                (wantRace === "monthly" || wantRace.startsWith("fall")) ? "none" : "inline-flex";
+        }
+        if (hash.includes("tab=mp") || hash.includes("tab=enr")) {
+            const top = hash.includes("tab=mp") ? "match-play" : "enrollment";
+            $$(".top-tab").forEach(b => b.classList.toggle("active", b.dataset.top === top));
+            ["match-play", "points-race", "enrollment"].forEach(k =>
+                $("section-" + k).classList.toggle("section-hidden", k !== top));
+            if (top === "enrollment") enrAutoLoad();
         }
         // Points Races is the landing tab — load it immediately; Match Play
         // still warms in the background so switching to it stays instant
