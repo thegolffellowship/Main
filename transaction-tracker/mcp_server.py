@@ -1421,11 +1421,20 @@ def _scoring_dispatch(url: str, extract: str):
             if not re.match(r"^\d{4}-\d{2}-\d{2}$", arg.strip()):
                 return json.dumps({"error": "arg must be YYYY-MM-DD"})
             return json.dumps(db.bulk_mark_payouts_paid(arg.strip()), indent=2)
-        if cmd.startswith("scoring-raw-order:"):
+        if cmd == "scoring-traffic-reset":
+            # One-time member-analytics wipe (Kerry, 2026-07-10): flush the
+            # launch-day testing clicks so the counters start clean.
+            with db._connect() as conn:
+                db._ensure_member_analytics_table(conn)
+                n = conn.execute("SELECT COUNT(*) FROM member_analytics").fetchone()[0]
+                conn.execute("DELETE FROM member_analytics")
+                conn.commit()
+            return json.dumps({"deleted": n})
+        if cmd == "scoring-raw-order" and arg:
             # Return the raw order-email text for an item (server-side
             # Graph fetch) — used to learn new order-form field labels
             # (e.g. the fall points option) before teaching the parser.
-            item_id = int(cmd.split(":")[1])
+            item_id = int(arg)
             with db._connect() as conn:
                 row = conn.execute(
                     "SELECT email_uid, subject FROM items WHERE id = ?",
@@ -1445,15 +1454,15 @@ def _scoring_dispatch(url: str, extract: str):
                 body = _strip_html(body)
             return json.dumps({"subject": row["subject"], "body": body[:6000]},
                               indent=2)
-        if cmd.startswith("scoring-fall-enroll:"):
+        if cmd == "scoring-fall-enroll" and arg:
             # Parameterized fall NET enrollment (Kerry, 2026-07-10):
             # scoring-fall-enroll:<customer_id>[:<source_item_id>]
             # customer_id keyed per Guiding Principle 6; chapter from the
             # canonical customer row. manually_enrolled=1 until the fall
             # products + sync exist.
-            parts = cmd.split(":")
-            cid = int(parts[1])
-            item_id = int(parts[2]) if len(parts) > 2 and parts[2] else None
+            parts = arg.split(":")
+            cid = int(parts[0])
+            item_id = int(parts[1]) if len(parts) > 1 and parts[1] else None
             with db._connect() as conn:
                 row = conn.execute(
                     """SELECT customer_id, chapter,
