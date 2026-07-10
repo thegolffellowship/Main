@@ -132,7 +132,9 @@ header.shell-nav {
 .shell-cta-pill:hover { background: var(--primary-hover, #D06B2E); }
 @media (min-width: 769px) {
     .shell-cta-pill { display: inline-block; }
-    /* Desktop member: nav pill carries the CTA; hide the in-content row */
+    /* Desktop member: nav pill carries the CTA; hide the banner row
+       (v2.57.6: the row sits OUTSIDE main now — full-width banner) */
+    .shell-member ~ .contest-cta-row,
     .shell-member ~ main .contest-cta-row { display: none; }
 }
 
