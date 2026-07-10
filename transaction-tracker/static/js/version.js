@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.59.1";
+window.TGF_VERSION = "2.59.2";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.59.2",
+    date: "2026-07-10",
+    changes: [
+      "How It Works opener wording (Kerry): 'Earn points ON every hole you play' (was 'for').",
+    ],
+  },
   {
     version: "2.59.1",
     date: "2026-07-10",
