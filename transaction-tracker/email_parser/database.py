@@ -9724,10 +9724,12 @@ def list_courses(db_path: str | Path = DB_PATH) -> list:
     with _connect(db_path) as conn:
         _ensure_scoring_tables(conn)
         rows = conn.execute(
-            """SELECT c.course_id, c.name,
+            """SELECT c.course_id, c.name, c.short_name, c.city, c.state,
+                      c.status, ch.name AS chapter,
                       COUNT(DISTINCT t.tee_id) AS n_tees,
                       COUNT(DISTINCT sr.id) AS n_rounds
                FROM courses c
+               LEFT JOIN chapters ch ON ch.chapter_id = c.chapter_id
                LEFT JOIN course_tees t ON t.course_id = c.course_id
                LEFT JOIN scoring_rounds sr ON sr.course_id = c.course_id
                GROUP BY c.course_id ORDER BY c.name""").fetchall()
@@ -9739,6 +9741,58 @@ def list_courses(db_path: str | Path = DB_PATH) -> list:
                 (r["course_id"],)).fetchall()
             out.append(dict(r) | {"tees": [dict(t) for t in tees]})
         return out
+
+
+def update_course(course_id: int, fields: dict, db_path: str | Path = DB_PATH) -> dict:
+    """Admin Courses UI (v2.57.0, Kerry): whitelist-edit a course row.
+
+    Editable: short_name, city, state, status (active/archived), chapter
+    (by chapter NAME; empty clears). `name` stays read-only — items/events
+    dim-backfills join courses by name, so renames belong to a dedicated
+    (alias-aware) flow, not a grid edit.
+    """
+    allowed = {"short_name", "city", "state", "status", "chapter"}
+    bad = set(fields) - allowed
+    if bad:
+        raise ValueError(f"not editable: {', '.join(sorted(bad))}")
+    with _connect(db_path) as conn:
+        row = conn.execute("SELECT course_id FROM courses WHERE course_id = ?", (course_id,)).fetchone()
+        if not row:
+            raise ValueError(f"course {course_id} not found")
+        sets, vals = [], []
+        for k, v in fields.items():
+            v = (str(v).strip() or None) if v is not None else None
+            if k == "chapter":
+                cid = None
+                if v:
+                    ch = conn.execute("SELECT chapter_id FROM chapters WHERE LOWER(name) = LOWER(?)", (v,)).fetchone()
+                    if not ch:
+                        raise ValueError(f"unknown chapter: {v}")
+                    cid = ch["chapter_id"]
+                sets.append("chapter_id = ?"); vals.append(cid)
+            elif k == "status":
+                if v not in ("active", "archived"):
+                    raise ValueError("status must be active or archived")
+                sets.append("status = ?"); vals.append(v)
+            elif k == "state":
+                if v and len(v) > 2:
+                    raise ValueError("state is the 2-letter code")
+                sets.append("state = ?"); vals.append((v or "").upper() or None)
+            else:
+                sets.append(f"{k} = ?"); vals.append(v)
+        conn.execute(f"UPDATE courses SET {', '.join(sets)} WHERE course_id = ?", (*vals, course_id))
+        conn.commit()
+        out = conn.execute(
+            """SELECT c.course_id, c.name, c.short_name, c.city, c.state, c.status,
+                      ch.name AS chapter
+               FROM courses c LEFT JOIN chapters ch ON ch.chapter_id = c.chapter_id
+               WHERE c.course_id = ?""", (course_id,)).fetchone()
+        return dict(out)
+
+
+def list_chapter_names(db_path: str | Path = DB_PATH) -> list:
+    with _connect(db_path) as conn:
+        return [r["name"] for r in conn.execute("SELECT name FROM chapters ORDER BY chapter_id").fetchall()]
 
 
 def _repair_gg_email_pins(conn: sqlite3.Connection) -> None:
@@ -18638,6 +18692,19 @@ def get_handicap_rounds(player_name: str | None = None,
                 "SELECT * FROM handicap_rounds ORDER BY round_date DESC, id DESC"
             ).fetchall()
         rounds = [dict(r) for r in round_rows]
+        # Attach the admin-editable short name from the course DB (v2.57.0):
+        # exact-name match wins; unmatched course names fall back to the
+        # client-side derivation. Case-insensitive, one lookup per call.
+        if rounds:
+            short_by_name = {
+                r["name"].strip().lower(): r["short_name"]
+                for r in conn.execute(
+                    "SELECT name, short_name FROM courses WHERE short_name IS NOT NULL"
+                ).fetchall()
+            }
+            for r in rounds:
+                key = (r.get("course_name") or "").strip().lower()
+                r["course_short"] = short_by_name.get(key)
         if include_running_index and player_name and rounds:
             cfg = dict(_HANDICAP_SETTINGS_DEFAULTS)
             for row in conn.execute(
