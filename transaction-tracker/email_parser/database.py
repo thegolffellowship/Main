@@ -6896,6 +6896,16 @@ def get_points_race_standings(race_key: str,
             if e["customer_id"] and e["customer_id"] not in ranked_ids
         ]
 
+    # Projected payouts from the LIVE buy-in count (season_payouts.py —
+    # the ratified TGF_Season_Contest_Payouts_v1_0 rules). Pot counts
+    # every paid entry, ranked or not.
+    from . import season_payouts as _sp
+    _n_pot = (sum(1 for r in out_rows if r["enrolled"])
+              + len(enrolled_not_ranked))
+    projected_payouts = (
+        _sp.players_cup_payouts(_n_pot) if race.get("flights")
+        else _sp.city_net_payouts(_n_pot))
+
     return {
         "race_key": race_key,
         "label": race["label"],
@@ -6909,6 +6919,7 @@ def get_points_race_standings(race_key: str,
         "enrolled_not_ranked": enrolled_not_ranked,
         "hidden_nonmembers": hidden_nonmembers,
         "reset_info": reset_info,
+        "projected_payouts": projected_payouts,
         "fetched_at": fetched_at,
         "gg_error": gg_error,
         "flights": (
@@ -7141,9 +7152,11 @@ def get_fellowship_cup_projection(force_refresh: bool = False,
     per_race: dict = {}
     fetched: list = []
     errors: list = []
+    cup_n = 0  # every NET-bundle buy-in funds the Cup pot ($40 each)
     for k in races:
         d = get_points_race_standings(k, force_refresh=force_refresh,
                                       db_path=db_path)
+        cup_n += (d.get("n_enrolled") or 0) + len(d.get("enrolled_not_ranked") or [])
         info = d.get("reset_info") or {}
         per_race[k] = {
             "label": d["label"],
@@ -7187,11 +7200,14 @@ def get_fellowship_cup_projection(force_refresh: bool = False,
     except Exception:
         logger.warning("fellowship cup rank history failed", exc_info=True)
 
+    from . import season_payouts as _sp
     return {
         "label": "THE FELLOWSHIP CUP",
         "standings": combined,
         "n_players": len(combined),
+        "n_enrolled": cup_n,
         "per_race": per_race,
+        "projected_payouts": _sp.fellowship_cup_payouts(cup_n),
         "fetched_at": max(fetched) if fetched else None,
         "gg_error": "; ".join(errors) or None,
     }
