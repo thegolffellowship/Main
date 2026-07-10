@@ -44,10 +44,9 @@
         #pr-structure-note:empty { display: none; }
         #pr-structure-note b { color: #1B1B1B; }
         .pr-pay {
-            display: inline-block; background: #fff; color: #15803d;
-            border: 1px solid #86efac; border-radius: 9999px; padding: 0 7px;
-            font-size: 0.72rem; font-weight: 700; font-variant-numeric: tabular-nums;
-            margin-left: 4px; white-space: nowrap;
+            display: block; margin-top: 2px; color: #15803d;
+            font-size: 10px; font-weight: 700; letter-spacing: 0.4px;
+            font-variant-numeric: tabular-nums; white-space: nowrap;
         }
 
         /* Contest name heading — prominent, name only (Kerry, 2026-07-10) */
@@ -2588,7 +2587,7 @@
 
     function prPayBadge(r) {
         return r._pay
-            ? ` <span class="pr-pay" title="${escapeHtml(r._payTitle || "")}">${prFmtMoney(r._pay)}</span>`
+            ? `<span class="pr-pay" title="${escapeHtml(r._payTitle || "")}">PROJECTED: ${prFmtMoney(r._pay)}</span>`
             : "";
     }
 
@@ -2658,7 +2657,7 @@
                 : '';
             return `<tr style="${bg}${expandable ? 'cursor:pointer;' : ''}"${r.member_card_id ? ` data-card="${r.member_card_id}"` : ''}${r.customer_id ? ` data-cid="${r.customer_id}"` : ''}>
                 <td style="${rankStyle}">${escapeHtml(r.rank)}${prRankMove(r.rank, r.prev_rank)}</td>
-                <td>${nameCell}${hcp}${prPayBadge(r)}${chevron}</td>
+                <td>${nameCell}${hcp}${chevron}${prPayBadge(r)}</td>
                 ${showChapter ? `<td style="${chapStyle}" title="${escapeHtml(r.player_chapter || "")}">${escapeHtml(compact ? prAbbrevChapter(r.player_chapter) : (r.player_chapter || ""))}</td>` : ""}
                 <td style="${ptsStyle}">${r.total_points ?? ""}</td>
                 <td style="${resetStyle}">${prFmtReset(r.points_reset)}</td>
