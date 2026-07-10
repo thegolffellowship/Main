@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.59.4";
+window.TGF_VERSION = "2.60.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.60.0",
+    date: "2026-07-10",
+    changes: [
+      "FALL POINTS NET pages (Kerry): SA FALL NET and AUSTIN FALL NET join the race selector (desktop chips + the mobile POINTS RACES tab menu), each with its own page announcing 'STARTS SATURDAY, AUGUST 29' in the status-chip style, a short what-it-is blurb, and a big ENTER SEASON CONTESTS pill right in the page (the top banner is hidden on desktop member view, so the inline button covers every device). Standings, purse, and enrolled players light up here once the fall races begin; the phase chip, payout strip, and refresh button stay hidden until then.",
+    ],
+  },
   {
     version: "2.59.4",
     date: "2026-07-10",
