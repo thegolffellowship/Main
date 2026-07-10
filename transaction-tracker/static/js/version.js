@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.59.2";
+window.TGF_VERSION = "2.59.3";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.59.3",
+    date: "2026-07-10",
+    changes: [
+      "FIX: the How It Works popup wasn't scrolling on phones (Kerry) -- iOS was handing the swipe to the page BEHIND the popup, so the popup looked frozen. The page body now locks in place while the popup is open (position:fixed at the current scroll spot, restored on close) and the popup contains its own overscroll.",
+    ],
+  },
   {
     version: "2.59.2",
     date: "2026-07-10",
