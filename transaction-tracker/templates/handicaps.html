@@ -61,6 +61,14 @@
         .rounds-table .diff-col { text-align: center; width: 72px; font-variant-numeric: tabular-nums; }
         .rounds-table th.diff-col { text-align: center; }
         .rounds-table .diff-good { color: #16a34a; font-weight: 600; }
+        /* Phones: kill the desktop min-widths + padding so DATE hugs COURSE
+           (Kerry, 2026-07-10 — "date to course space is massive") */
+        @media (max-width: 768px) {
+            .rounds-table th, .rounds-table td { padding: 5px 6px; }
+            .rounds-table .date-col   { min-width: 0; padding-right: 6px; }
+            .rounds-table .course-col { min-width: 0; padding-right: 6px; }
+            .rounds-table .narrow-col, .rounds-table .diff-col { width: auto; min-width: 34px; }
+        }
         .rounds-table .diff-bad  { color: #dc2626; }
 
         .rounds-expand { background: #f8fafc; }
@@ -906,6 +914,20 @@
         return (last + ", " + parts.join(" ") + " " + suffix).toLowerCase().trim();
     }
 
+    /** Mobile course names drop venue boilerplate — mirrors
+        derive_course_short_name() in database.py; keep in sync. */
+    function shortCourse(n) {
+        if (!(window.matchMedia && window.matchMedia('(max-width: 768px)').matches)) return n;
+        let out = String(n || '').trim()
+            .replace(/^\s*(the\s+)?(club|course)\s+at\s+/i, '')
+            .replace(/^\s*hyatt\s+(regency\s+)?/i, '');
+        for (let i = 0; i < 2; i++) {
+            out = out.replace(/\s+(golf\s+(club|course|resort|links)|country\s+club|golf\s*&\s*country\s+club|resort(\s*&\s*spa)?|ranch\s+resort|golf|club)\s*$/i, '');
+        }
+        out = out.replace(/^[\s\-|–—]+|[\s\-|–—]+$/g, '');
+        return out || n;
+    }
+
     /** Mobile dates read m-d ("2026-07-01" → "7-1"); desktop keeps ISO
         (Kerry, 2026-07-10). Evaluated per render so rotation follows. */
     function fmtRoundDate(d) {
@@ -913,7 +935,7 @@
         const mobile = window.matchMedia && window.matchMedia('(max-width: 768px)').matches;
         if (!mobile) return d;
         const m = /^\d{4}-0?(\d+)-0?(\d+)/.exec(String(d));
-        return m ? `${m[1]}-${m[2]}` : d;
+        return m ? `${m[1]}/${m[2]}` : d;
     }
 
     /** Format "First Last" → "Last, First" for display. Handles suffixes. */
@@ -1328,7 +1350,7 @@
                     : '—';
                 return `<tr class="${rowClass}" style="${bar}${rowStyle ? rowStyle + ';' : ''}${isUsed ? 'background:#F2FBF5;' : ''}">
                     <td class="date-col">${fmtRoundDate(rnd.round_date)}</td>
-                    <td class="course-col">${esc(rnd.course_name || '—')}</td>
+                    <td class="course-col">${esc(shortCourse(rnd.course_name) || '—')}</td>
                     <td class="diff-col">${rnd.adjusted_score}</td>
                     <td class="diff-col">${diffCell}</td>
                     <td class="diff-col">${countCell}</td>
@@ -1337,7 +1359,7 @@
             }
             return `<tr class="${rowClass}" ${rowStyle ? `style="${rowStyle}"` : ''}>
                 <td class="date-col">${fmtRoundDate(rnd.round_date)}</td>
-                <td class="course-col">${esc(rnd.course_name || '—')}</td>
+                <td class="course-col">${esc(shortCourse(rnd.course_name) || '—')}</td>
                 <td class="narrow-col">${esc(rnd.tee_name || '—')}</td>
                 <td class="diff-col">${rnd.adjusted_score}</td>
                 <td class="diff-col">${rnd.rating}</td>

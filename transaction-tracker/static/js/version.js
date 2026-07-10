@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.56.3";
+window.TGF_VERSION = "2.56.4";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.56.4",
+    date: "2026-07-10",
+    changes: [
+      "Mobile dates switch to m/d slashes (Kerry) -- matching the points-race convention app-wide.",
+      "COURSE SHORT NAMES (Kerry): the course database gains a short_name column, auto-derived at boot for existing rows (only where empty, so manual edits stick) by stripping venue boilerplate -- 'The Quarry Golf Club' -> 'The Quarry', 'The Club at Comanche Trace' -> 'Comanche Trace', 'Hyatt Hill Country' -> 'Hill Country', 'Flying L Ranch Resort' -> 'Flying L'. Phones show short names in the Handicaps round history and the Contests round lists; desktop keeps full names.",
+      "Tightened mobile columns in the round history (Kerry: 'date to course space is massive') -- the desktop min-widths and padding no longer apply under 768px, so DATE hugs COURSE and more columns fit before scrolling.",
+    ],
+  },
   {
     version: "2.56.3",
     date: "2026-07-10",
