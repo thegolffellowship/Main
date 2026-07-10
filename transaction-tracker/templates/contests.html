@@ -711,6 +711,8 @@
                     <div class="pr-race-chips">
                         <button class="sub-tab active" data-pr="net">San Antonio NET</button>
                         <button class="sub-tab" data-pr="austin">Austin NET</button>
+                        <button class="sub-tab" data-pr="fall_sa">SA Fall NET</button>
+                        <button class="sub-tab" data-pr="fall_austin">Austin Fall NET</button>
                         <button class="sub-tab" data-pr="tfc">The Fellowship Cup</button>
                         <button class="sub-tab" data-pr="gross">The Players Cup</button>
                         <button class="sub-tab" data-pr="monthly">Monthly</button>
@@ -720,6 +722,8 @@
                         <div class="shell-menu pr-race-dd-menu" id="pr-race-dd-menu" style="display:none;">
                             <button data-pr-dd="net" class="active">San Antonio NET</button>
                             <button data-pr-dd="austin">Austin NET</button>
+                            <button data-pr-dd="fall_sa">SA Fall NET</button>
+                            <button data-pr-dd="fall_austin">Austin Fall NET</button>
                             <button data-pr-dd="tfc">The Fellowship Cup</button>
                             <button data-pr-dd="gross">The Players Cup</button>
                             <button data-pr-dd="monthly">Monthly</button>
@@ -1069,7 +1073,8 @@
             document.querySelectorAll("[data-pr-dd]").forEach(mi =>
                 mi.classList.toggle("active", mi.dataset.prDd === btn.dataset.pr));
             const chip = $("pr-phase-chip");
-            if (chip) chip.style.display = btn.dataset.pr === "monthly" ? "none" : "inline-flex";
+            if (chip) chip.style.display =
+                (btn.dataset.pr === "monthly" || btn.dataset.pr.startsWith("fall")) ? "none" : "inline-flex";
             loadPrRoster();
             prLoadStandings();
         });
@@ -1097,6 +1102,13 @@
 
     async function loadPrRoster() {
         const kind = (document.querySelector(".sub-tab[data-pr].active") || {}).dataset?.pr || "net";
+        if (kind.startsWith("fall")) {
+            $("pr-roster-title").textContent =
+                `${kind === "fall_austin" ? "AUSTIN" : "SAN ANTONIO"} FALL NET — Enrolled Players`;
+            $("pr-roster").innerHTML = '<p style="color:var(--text-muted);font-size:0.85rem;">'
+                + 'Fall buy-ins will appear here once fall enrollment opens.</p>';
+            return;
+        }
         if (kind === "monthly") {
             $("pr-roster-title").textContent = "MONTHLY POINTS — how it works";
             $("pr-roster").innerHTML = '<p style="color:var(--text-muted);font-size:0.85rem;">'
@@ -2590,8 +2602,11 @@
 
     async function prLoadStandings(force = false) {
         const kind = (document.querySelector(".sub-tab[data-pr].active") || {}).dataset?.pr || "net";
-        // monthly swaps the header refresh button for an inline one
-        $("pr-refresh-btn").style.display = kind === "monthly" ? "none" : "";
+        // monthly swaps the header refresh button for an inline one;
+        // fall previews have nothing to refresh yet
+        $("pr-refresh-btn").style.display =
+            (kind === "monthly" || kind.startsWith("fall")) ? "none" : "";
+        if (kind.startsWith("fall")) return prRenderFallPreview(kind);
         if (kind === "tfc") return prLoadFellowship(force);
         if (kind === "monthly") return prLoadMonthly(force);
         const race = PR_RACE_BY_TAB[kind];
@@ -2910,6 +2925,30 @@
                 </tr></thead>
                 <tbody>${rows}</tbody>
             </table>`;
+    }
+
+    // ── FALL NET previews (Kerry, 2026-07-10): a page per chapter that
+    //    announces the start date until the GG races exist ──
+    function prRenderFallPreview(kind) {
+        const chapter = kind === "fall_austin" ? "AUSTIN" : "SAN ANTONIO";
+        $("pr-standings-title").textContent = `${chapter} FALL NET 2026`;
+        $("pr-summary").innerHTML = "";
+        prRenderPayoutStrip(null);
+        prRenderStructureNote(null);
+        $("pr-table-container").innerHTML = `
+            <div style="padding:0.4rem 0 1rem;">
+                <span style="display:inline-flex;align-items:center;gap:8px;height:30px;padding:0 14px;background:#FDF0E6;color:#BF5700;border-radius:9999px;font:700 11px/1 'Bitter',serif;letter-spacing:1px;text-transform:uppercase;">&#9679;&nbsp;Starts Saturday, August 29</span>
+                <p style="margin:0.8rem 0 1rem;color:var(--text-body,#4B5563);font-size:13.5px;line-height:1.5;max-width:560px;">
+                    The fall NET points race for ${chapter === "AUSTIN" ? "Austin" : "San Antonio"} —
+                    earn points on every hole at fall events, buy in to compete for the purse.
+                    Standings will appear here once play begins.
+                </p>
+                <div class="fall-cta-row" style="max-width:420px;">
+                    <a class="contest-cta" style="border-radius:9999px;padding:0.8rem 1.6rem;text-align:center;"
+                       href="https://thegolffellowship.com/shop/ols/products/season-contests"
+                       target="_blank" rel="noopener">ENTER SEASON CONTESTS &rarr;</a>
+                </div>
+            </div>`;
     }
 
     // ── MONTHLY points races: combined chapters, $1/member purse ──
