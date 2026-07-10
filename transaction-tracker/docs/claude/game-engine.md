@@ -348,3 +348,39 @@ acceptable on chips to save real estate (#95 items 1/3).
 (standings pill, Monthly column header, pay-notes, popups, roster
 lines) AND admin pages (TGF Payouts / Events financial "Total Pot").
 Internal field names (`total_purse`, `sel.purse`, …) unchanged.
+
+## The Lone Star Cup — member section + projection engine (v2.66.0; spec mailbox #85–#88, Kerry-RATIFIED 2026-07-10)
+
+Third top-level member tab (POINTS RACES | MATCH PLAY | LONE STAR CUP,
+hash `#tab=lsc`). `get_lone_star_cup_projection()` in `database.py`
+computes per-chapter projected 12-seat rosters live from current
+standings; `GET /api/season-contests/lone-star-cup` (member tier)
+serves it; renderer `lscLoad()` in `templates/contests.html`.
+
+**Roster (12/chapter):** 1 Captain = City NET Champion · 6 = The
+Fellowship Cup final standings (top 6 from the chapter, TGF-wide list)
+· 1 = City Match Play Champion · 4 = The Players Cup final standings
+(top 4 from the chapter, overall list — flights don't gate seats).
+
+**Rules encoded:** enrolled-only; double-qualifiers keep the seat where
+they placed HIGHER by absolute place (#86 INTERIM — Kerry's
+"proportional valuation" edge-case tweak is NOT ratified; must be
+settled before selection day); vacancies fill from the unified
+per-chapter alternates pool ranked by percentile finish (place ÷ field
+size), tiebreak events played (#87); MP decline cascade winner →
+runner-up → pool, one level deep (#88 — declines only, never fires in
+a projection); MP seat = bracket final winner else TO BE DECIDED
+(Kerry 2026-07-10, no seeding speculation). Cross-contest place ties
+break by seat order Captain → Fellowship → Match Play → Players.
+
+**NOT BUILT YET (required before selection day, post-Championships):**
+the admin actual-roster surface with manual adds/overrides at every
+level — #87 HARD REQUIREMENT ("system proposes, Kerry approves and
+fills"; guests/past members per the 6-level invitation hierarchy live
+outside standings). Member page shows projections only.
+
+Test: scratchpad `test_lsc.py` — synthetic 22-player fixture proving
+captain precedence, no double-seating, pool fill, alternates order,
+small-field exhaustion. Note: synthetic season_contests rows must set
+`manually_enrolled=1` or boot cleanup removes them (no backing
+purchases).
