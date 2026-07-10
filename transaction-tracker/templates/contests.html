@@ -657,7 +657,7 @@
                     <div style="display:flex;align-items:center;gap:0.75rem;flex-wrap:wrap;">
                         <h4 id="pr-standings-title"></h4>
                         <button class="btn manager-only" id="pr-refresh-btn" style="font-size:0.78rem;">&#8635; Refresh from Golf Genius</button>
-                        <span id="pr-phase-chip" style="display:inline-flex;align-items:center;gap:8px;height:30px;padding:0 14px;background:#ECFBF1;color:#065F46;border-radius:9999px;font:700 11px/1 'Bitter',serif;letter-spacing:1px;text-transform:uppercase;">&#9679;&nbsp;Regular Season &middot; best 10 count</span>
+                        <span id="pr-phase-chip" style="display:inline-flex;align-items:center;gap:8px;height:30px;padding:0 14px;background:#ECFBF1;color:#065F46;border-radius:9999px;font:700 11px/1 'Bitter',serif;letter-spacing:1px;text-transform:uppercase;">&#9679;&nbsp;Regular Season &middot; best 10 + City Championship</span>
                     </div>
                     <div id="pr-summary" style="margin:0.5rem 0;color:var(--text-muted);font-size:0.85rem;"></div>
                     <div id="pr-table-container" style="overflow-x:auto;"></div>
@@ -1007,6 +1007,7 @@
     // ═══════════ AUTH ═══════════
 
     let userRole = null;
+    let prLastData = null;   // last points-race payload, for role-aware re-render
 
     function applyRole(role) {
         userRole = role;
@@ -1017,6 +1018,11 @@
         document.querySelectorAll(".admin-only").forEach(el => {
             el.style.display = role === "admin" ? "" : "none";
         });
+        // the standings summary line is role-dependent (staff see the GG
+        // diagnostics) — re-render if standings beat the auth check here
+        if (isManager && prLastData) {
+            try { renderPointsRace(prLastData); } catch (e) { /* ignore */ }
+        }
     }
 
     // ═══════════ MATCH PLAY ═══════════
@@ -2465,6 +2471,7 @@
     }
 
     function renderPointsRace(d) {
+        prLastData = d;   // applyRole re-renders so staff get the diagnostics line
         // just the contest name — big and clean (Kerry, 2026-07-10)
         $("pr-standings-title").textContent = d.label;
         let fetched = "";
@@ -2472,16 +2479,21 @@
             const dt = new Date(String(d.fetched_at).replace(" ", "T") + "Z");
             fetched = isNaN(dt) ? String(d.fetched_at) : dt.toLocaleString();
         }
+        // One short line for everyone (Kerry, 2026-07-10). The operational
+        // diagnostics (unmatched names, hidden non-members, reset coef, GG
+        // fetch time, refresh failures) stay visible for manager/admin only.
+        const prStaff = userRole === "admin" || userRole === "manager";
         $("pr-summary").textContent =
             (d.n_players
-                ? `${d.n_enrolled} of ${d.n_players} ranked players are bought into ${d.contest_type}`
+                ? `${d.n_enrolled} of ${d.n_players} currently bought in`
                 : `No standings yet for ${d.label}`)
-            + (d.n_unresolved ? ` · ${d.n_unresolved} name(s) not matched to a tracker profile` : "")
-            + (d.hidden_nonmembers && d.hidden_nonmembers.length ? ` · ${d.hidden_nonmembers.length} non-member(s) hidden` : "")
-            + (d.reset_info && d.reset_info.mode === "prorated" && d.reset_info.coefficient
-                ? ` · reset coef ${d.reset_info.coefficient} (${d.reset_info.eligible_count} of ${d.reset_info.anchor_count} anchor)` : "")
-            + (fetched ? ` · from Golf Genius ${fetched}` : "")
-            + (d.gg_error ? ` · ⚠ refresh failed (showing last snapshot)` : "");
+            + (!prStaff ? "" :
+                (d.n_unresolved ? ` · ${d.n_unresolved} name(s) not matched to a tracker profile` : "")
+                + (d.hidden_nonmembers && d.hidden_nonmembers.length ? ` · ${d.hidden_nonmembers.length} non-member(s) hidden` : "")
+                + (d.reset_info && d.reset_info.mode === "prorated" && d.reset_info.coefficient
+                    ? ` · reset coef ${d.reset_info.coefficient} (${d.reset_info.eligible_count} of ${d.reset_info.anchor_count} anchor)` : "")
+                + (fetched ? ` · from Golf Genius ${fetched}` : "")
+                + (d.gg_error ? ` · ⚠ refresh failed (showing last snapshot)` : ""));
         $("pr-summary").title = (d.hidden_nonmembers && d.hidden_nonmembers.length)
             ? "Hidden non-members: " + d.hidden_nonmembers.join(", ") : "";
 
