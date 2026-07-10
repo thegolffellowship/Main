@@ -476,8 +476,13 @@
                reclaim that width on phones so the standings table fits */
             .pr-section .standings-section { padding: 0.75rem 0.4rem !important; }
             .pr-race-chips { display: none; }
-            .pr-race-dd { display: block; }
-            .pr-race-row { padding: 10px 14px; }
+            /* the race menu now drops from the POINTS RACES tab itself
+               (Kerry, 2026-07-10) — no separate selector row on phones */
+            .pr-race-row { display: none; }
+            .top-tab[data-top="points-race"].active::after { content: " \25BE"; color: var(--primary); }
+            .pr-race-dd-menu.pr-tab-anchored {
+                position: absolute; top: 100%; left: 10px; right: 10px; z-index: 70;
+            }
             #pr-phase-chip { height: 26px; font-size: 10px !important; padding: 0 11px !important; }
             .stableford-ref { grid-template-columns: 1fr; }
         }
@@ -834,17 +839,48 @@
 
     // ── Top tabs ──
     $$(".top-tab").forEach(btn => {
-        btn.addEventListener("click", () => {
+        btn.addEventListener("click", (e) => {
+            const top = btn.dataset.top;
+            // Mobile (Kerry, 2026-07-10): tapping POINTS RACES drops the
+            // race menu straight from the tab — no separate selector row.
+            const mobile = window.matchMedia && window.matchMedia("(max-width: 768px)").matches;
+            const wasActive = btn.classList.contains("active");
             $$(".top-tab").forEach(b => b.classList.remove("active"));
             btn.classList.add("active");
-            const top = btn.dataset.top;
             ["match-play", "points-race", "enrollment"].forEach(k => {
                 $("section-" + k).classList.toggle("section-hidden", k !== top);
             });
             if (top === "enrollment") enrAutoLoad();
-            if (top === "points-race") { loadPrRoster(); prLoadStandings(); }
+            if (top === "points-race") {
+                if (!wasActive) { loadPrRoster(); prLoadStandings(); }
+                if (mobile) {
+                    e.stopPropagation();   // the document click-away would instantly re-close it
+                    prToggleTabMenu();
+                    return;
+                }
+            }
+            prCloseTabMenu();
         });
     });
+
+    // Race menu anchored to the POINTS RACES tab (mobile). Reuses the
+    // #pr-race-dd-menu .shell-menu — moved under .top-tabs on phones.
+    function prTabMenuEl() { return $("pr-race-dd-menu"); }
+    function prToggleTabMenu() {
+        const m = prTabMenuEl();
+        if (!m) return;
+        const tabs = document.querySelector(".top-tabs");
+        if (tabs && m.parentElement !== tabs) {
+            tabs.style.position = "relative";
+            m.classList.add("pr-tab-anchored");
+            tabs.appendChild(m);
+        }
+        m.style.display = m.style.display === "none" ? "" : "none";
+    }
+    function prCloseTabMenu() {
+        const m = prTabMenuEl();
+        if (m && m.classList.contains("pr-tab-anchored")) m.style.display = "none";
+    }
 
     // ── Points Race sub-tabs + enrolled roster ──
     $$(".sub-tab[data-pr]").forEach(btn => {
