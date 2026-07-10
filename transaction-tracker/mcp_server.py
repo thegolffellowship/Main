@@ -1421,6 +1421,30 @@ def _scoring_dispatch(url: str, extract: str):
             if not re.match(r"^\d{4}-\d{2}-\d{2}$", arg.strip()):
                 return json.dumps({"error": "arg must be YYYY-MM-DD"})
             return json.dumps(db.bulk_mark_payouts_paid(arg.strip()), indent=2)
+        if cmd.startswith("scoring-raw-order:"):
+            # Return the raw order-email text for an item (server-side
+            # Graph fetch) — used to learn new order-form field labels
+            # (e.g. the fall points option) before teaching the parser.
+            item_id = int(cmd.split(":")[1])
+            with db._connect() as conn:
+                row = conn.execute(
+                    "SELECT email_uid, subject FROM items WHERE id = ?",
+                    (item_id,)).fetchone()
+            if not row or not row["email_uid"] or row["email_uid"].startswith("manual"):
+                return json.dumps({"error": "no fetchable email for that item"})
+            from email_parser.fetcher import fetch_email_by_id
+            from email_parser.parser import _strip_html
+            email_data = fetch_email_by_id(
+                os.getenv("AZURE_TENANT_ID", ""), os.getenv("AZURE_CLIENT_ID", ""),
+                os.getenv("AZURE_CLIENT_SECRET", ""), os.getenv("EMAIL_ADDRESS", ""),
+                row["email_uid"])
+            if not email_data:
+                return json.dumps({"error": "Graph fetch failed"})
+            body = email_data.get("body") or ""
+            if (email_data.get("content_type") or "").lower() == "html" or "<" in body[:200]:
+                body = _strip_html(body)
+            return json.dumps({"subject": row["subject"], "body": body[:6000]},
+                              indent=2)
         if cmd.startswith("scoring-fall-enroll:"):
             # Parameterized fall NET enrollment (Kerry, 2026-07-10):
             # scoring-fall-enroll:<customer_id>[:<source_item_id>]
