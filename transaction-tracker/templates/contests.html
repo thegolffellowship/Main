@@ -449,7 +449,15 @@
         .stableford-ref h4 { font-size: 0.78rem; font-weight: 700; text-transform: uppercase; color: var(--text-muted); margin-bottom: 0.5rem; }
         .stableford-ref table { font-size: 0.82rem; width: 100%; border-collapse: collapse; }
         .stableford-ref td { padding: 0.18rem 0; }
-        .stableford-ref td:last-child { text-align: right; font-weight: 600; color: var(--primary); }
+        .stableford-ref td:nth-child(2), .stableford-ref td:nth-child(3) {
+            text-align: right; font-weight: 600; width: 54px;
+        }
+        .stableford-ref td:nth-child(2) { color: var(--primary); }
+        .stableford-ref td:nth-child(3) { color: #BF5700; }
+        .stableford-ref tr.sr-head td {
+            font-size: 0.6rem; font-weight: 700; letter-spacing: 0.6px;
+            text-transform: uppercase; color: var(--text-muted) !important;
+        }
 
         /* ── Unassigned enrollees panel ── */
         .unassigned-card {
@@ -741,10 +749,13 @@
                         <button id="pr-hiw-close" type="button" aria-label="Close">&#10005;</button>
                     </div>
                     <div class="pr-hiw-body">
-                        <p><b>Earning points.</b> Every event carries a POINTS game for its race —
-                        your points for the event are your Stableford score in that game
-                        (net for the NET races, gross for THE PLAYERS CUP), never below zero.
-                        Per-hole values are in the charts below.</p>
+                        <p><b>Earn points for every hole you play.</b> Every event carries a
+                        POINTS game for its race, and your event total is your Stableford
+                        score in that game (net for the NET races, gross for THE PLAYERS CUP),
+                        never below zero. Per-hole values are in the charts below —
+                        <b>CHAMP</b> values apply to the City Championship and TGF
+                        Championship rounds (net gets +1 in every category; gross adds +1
+                        to the hole-in-one bonus).</p>
                         <p><b>The season.</b> Regular-season standings count your
                         <b>best 10 event totals + the City Championship</b> (always added on
                         top, at face value). After the City Championships, the
@@ -763,27 +774,29 @@
                             <div>
                                 <h4>NET Stableford Table (per 9 holes)</h4>
                                 <table>
-                                    <tr><td>Triple Bogey</td><td>−1</td></tr>
-                                    <tr><td>Double Bogey</td><td>−1</td></tr>
-                                    <tr><td>Bogey</td><td>0</td></tr>
-                                    <tr><td>Par</td><td>+1</td></tr>
-                                    <tr><td>Birdie</td><td>+2</td></tr>
-                                    <tr><td>Eagle</td><td>+3</td></tr>
-                                    <tr><td>Double Eagle</td><td>+4</td></tr>
-                                    <tr><td>Hole-in-One</td><td>+8</td></tr>
+                                    <tr class="sr-head"><td></td><td>Reg</td><td>Champ</td></tr>
+                                    <tr><td>Triple Bogey</td><td>−1</td><td>0</td></tr>
+                                    <tr><td>Double Bogey</td><td>−1</td><td>0</td></tr>
+                                    <tr><td>Bogey</td><td>0</td><td>+1</td></tr>
+                                    <tr><td>Par</td><td>+1</td><td>+2</td></tr>
+                                    <tr><td>Birdie</td><td>+2</td><td>+3</td></tr>
+                                    <tr><td>Eagle</td><td>+3</td><td>+4</td></tr>
+                                    <tr><td>Double Eagle</td><td>+4</td><td>+5</td></tr>
+                                    <tr><td>Hole-in-One</td><td>+8</td><td>+9</td></tr>
                                 </table>
                             </div>
                             <div>
                                 <h4>GROSS Stableford Table (per 9 holes)</h4>
                                 <table>
-                                    <tr><td>Triple Bogey</td><td>−1</td></tr>
-                                    <tr><td>Double Bogey</td><td>0</td></tr>
-                                    <tr><td>Bogey</td><td>+1</td></tr>
-                                    <tr><td>Par</td><td>+2</td></tr>
-                                    <tr><td>Birdie</td><td>+4</td></tr>
-                                    <tr><td>Eagle</td><td>+8</td></tr>
-                                    <tr><td>Double Eagle</td><td>+16</td></tr>
-                                    <tr><td>Hole-in-One</td><td>+8</td></tr>
+                                    <tr class="sr-head"><td></td><td>Reg</td><td>Champ</td></tr>
+                                    <tr><td>Triple Bogey</td><td>−1</td><td>−1</td></tr>
+                                    <tr><td>Double Bogey</td><td>0</td><td>0</td></tr>
+                                    <tr><td>Bogey</td><td>+1</td><td>+1</td></tr>
+                                    <tr><td>Par</td><td>+2</td><td>+2</td></tr>
+                                    <tr><td>Birdie</td><td>+4</td><td>+4</td></tr>
+                                    <tr><td>Eagle</td><td>+8</td><td>+8</td></tr>
+                                    <tr><td>Double Eagle</td><td>+16</td><td>+16</td></tr>
+                                    <tr><td>Hole-in-One</td><td>+8</td><td>+9</td></tr>
                                 </table>
                             </div>
                         </div>
