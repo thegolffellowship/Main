@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.59.0";
+window.TGF_VERSION = "2.59.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.59.1",
+    date: "2026-07-10",
+    changes: [
+      "CHAMP columns in the How It Works point charts (Kerry): both Stableford tables now show REG and CHAMP values side by side, per the ratified 2026-07-06 championship schedule -- NET gets +1 in every category (Triple 0 / Bogey +1 / Par +2 / Birdie +3 / Eagle +4 / Double Eagle +5 / Ace +9); GROSS adds +1 to the hole-in-one bonus only (8 -> 9, so a championship par-3 ace beats the eagle). The popup copy states these apply to BOTH the City Championship and the TGF Championship rounds.",
+      "The app icon is now the official TGF mark (Kerry): white GF-circle on the #1B1B1B brand tile, replacing the generic dark 'T' on home screens and the old blue golf-flag favicon in browser tabs. New 512/192/180 PNGs + rebuilt icon.svg; manifest points at them for Android installs; the three admin pages that were missing the apple-touch-icon link got it. Anyone with the old icon on their phone should remove it and re-add via Share -> Add to Home Screen -- iOS caches the icon at add time.",
+      "How It Works opener rewritten to Kerry's line: 'Earn points for every hole you play.'",
+    ],
+  },
   {
     version: "2.59.0",
     date: "2026-07-10",
