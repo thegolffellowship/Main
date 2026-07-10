@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.56.0";
+window.TGF_VERSION = "2.56.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.56.1",
+    date: "2026-07-10",
+    changes: [
+      "SEASON CONTESTS phase B: the player drill-down wears the ratified 1g treatment -- POINTS COUNTED band in TGF black with the (Best 10 + City Championship) note, POINTS NOT COUNTED in warm gray, CITY CHAMPIONSHIP row on the warm paper tint, Bitter hairline table headers with soft dividers, and the compact mobile size raised to the 12.5px floor. Scorecards: PAR/YARDS/HCP rows in info blue, points rows on a blue-tinted band, 2px black rules opening each score group. Shared renderer, so the Customers Points tab matches automatically.",
+      "HANDICAPS member restyle (view 1a): the pinless member table is the ratified five columns -- Player | Index | TREND | Rounds -- with a new Trend column (index delta vs before the latest round: green falling arrow = improving, red rising = up, computed server-side from the same WHS pools). Admin/manager tables keep all columns and gain the trend chip beside HCP. MEMBERS|EVERYONE active pill goes dark per the design; stat cards and table headers adopt the Bitter treatment.",
+      "Deferred with intent: the expanded round-history interior cosmetics (green counting rows / red dashed cutoff restyle) ride with the upcoming admin-density handoff -- the current functional cutoff lines stay.",
+    ],
+  },
   {
     version: "2.56.0",
     date: "2026-07-09",
