@@ -906,6 +906,16 @@
         return (last + ", " + parts.join(" ") + " " + suffix).toLowerCase().trim();
     }
 
+    /** Mobile dates read m-d ("2026-07-01" → "7-1"); desktop keeps ISO
+        (Kerry, 2026-07-10). Evaluated per render so rotation follows. */
+    function fmtRoundDate(d) {
+        if (!d) return d;
+        const mobile = window.matchMedia && window.matchMedia('(max-width: 768px)').matches;
+        if (!mobile) return d;
+        const m = /^\d{4}-0?(\d+)-0?(\d+)/.exec(String(d));
+        return m ? `${m[1]}-${m[2]}` : d;
+    }
+
     /** Format "First Last" → "Last, First" for display. Handles suffixes. */
     function displayName(name) {
         const s = String(name || "").trim();
@@ -1132,7 +1142,7 @@
                         : '';
                     const sub = [
                         (p.active_rounds ?? 0) + ' active',
-                        p.latest_round_date ? 'Last: ' + p.latest_round_date : null
+                        p.latest_round_date ? 'Last: ' + fmtRoundDate(p.latest_round_date) : null
                     ].filter(Boolean).join(' · ');
                     const card = document.createElement('div');
                     card.className = 'hcp-mobile-card';
@@ -1317,7 +1327,7 @@
                     ? `<span style="${isUsed ? 'color:#16A34A;font-weight:700;' : ''}">${rnd.differential.toFixed(1)}</span>`
                     : '—';
                 return `<tr class="${rowClass}" style="${bar}${rowStyle ? rowStyle + ';' : ''}${isUsed ? 'background:#F2FBF5;' : ''}">
-                    <td class="date-col">${rnd.round_date}</td>
+                    <td class="date-col">${fmtRoundDate(rnd.round_date)}</td>
                     <td class="course-col">${esc(rnd.course_name || '—')}</td>
                     <td class="diff-col">${rnd.adjusted_score}</td>
                     <td class="diff-col">${diffCell}</td>
@@ -1326,7 +1336,7 @@
                 </tr>`;
             }
             return `<tr class="${rowClass}" ${rowStyle ? `style="${rowStyle}"` : ''}>
-                <td class="date-col">${rnd.round_date}</td>
+                <td class="date-col">${fmtRoundDate(rnd.round_date)}</td>
                 <td class="course-col">${esc(rnd.course_name || '—')}</td>
                 <td class="narrow-col">${esc(rnd.tee_name || '—')}</td>
                 <td class="diff-col">${rnd.adjusted_score}</td>
