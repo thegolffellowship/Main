@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.60.1";
+window.TGF_VERSION = "2.60.2";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.60.2",
+    date: "2026-07-10",
+    changes: [
+      "Fall races are STANDALONE (Kerry): best 6 + the Fall Championship decides them outright -- no points reset and no connection to the cups or the TGF Championship. The fall page blurbs, the How It Works popup, and the repo docs all say so now (the earlier wording could be read as a shorter version of the four-step structure).",
+      "TGF-orange dividers in the race dropdown (Kerry): thin orange rules separate the four groups -- city NETs | the two cups | Monthly | fall races -- in the POINTS RACES tab menu.",
+    ],
+  },
   {
     version: "2.60.1",
     date: "2026-07-10",

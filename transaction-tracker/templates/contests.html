@@ -524,6 +524,12 @@
         .pr-race-chips .sub-tab.active[data-pr="fall_sa"],
         .pr-race-chips .sub-tab.active[data-pr="fall_austin"] { background: #BF5700; border-color: #BF5700; color: #fff; }
         .shell-menu button.pr-fall { color: #BF5700; }
+        /* TGF-orange group dividers in the race dropdown (Kerry):
+           city NETs | cups | Monthly | fall */
+        .pr-race-dd-menu .pr-dd-divider {
+            height: 2px; background: var(--primary, #E87C3E);
+            margin: 4px 10px; border-radius: 1px;
+        }
         .pr-race-dd { display: none; position: relative; }
         .pr-race-dd-btn {
             width: 100%; height: 44px; display: flex; align-items: center; padding: 0 14px;
@@ -729,9 +735,12 @@
                         <div class="shell-menu pr-race-dd-menu" id="pr-race-dd-menu" style="display:none;">
                             <button data-pr-dd="net" class="active">San Antonio NET</button>
                             <button data-pr-dd="austin">Austin NET</button>
+                            <div class="pr-dd-divider"></div>
                             <button data-pr-dd="tfc">The Fellowship Cup</button>
                             <button data-pr-dd="gross">The Players Cup</button>
+                            <div class="pr-dd-divider"></div>
                             <button data-pr-dd="monthly">Monthly</button>
+                            <div class="pr-dd-divider"></div>
                             <button data-pr-dd="fall_sa" class="pr-fall">SA Fall NET</button>
                             <button data-pr-dd="fall_austin" class="pr-fall">Austin Fall NET</button>
                         </div>
@@ -777,8 +786,10 @@
                         <b>POINTS RESET</b> condenses the field onto one master ladder —
                         those totals are the starting point for the <b>TGF CHAMPIONSHIP</b>,
                         whose final round decides THE FELLOWSHIP CUP (net) and
-                        THE PLAYERS CUP (gross). The FALL races run their own shorter ladder:
-                        <b>best 6 + the Fall Championship</b>.</p>
+                        THE PLAYERS CUP (gross). The FALL races are standalone:
+                        <b>best 6 + the Fall Championship</b> decides them outright —
+                        no points reset, no connection to the cups or the TGF
+                        Championship.</p>
                         <p><b>Monthly.</b> Every member is automatically in the running each
                         month — ALL points earned in the calendar month count, no best-10 cap.
                         The award is $1 per TGF member as of the close of the month; ties split it.</p>
@@ -2962,7 +2973,9 @@
                 <p style="margin:0.8rem 0 1rem;color:var(--text-body,#4B5563);font-size:13.5px;line-height:1.5;max-width:560px;">
                     The fall NET points race for ${chapter === "AUSTIN" ? "Austin" : "San Antonio"} —
                     earn points on every hole at fall events. Your season total is your
-                    <b>best 6 event totals + the Fall Championship</b>. Buy in to compete
+                    <b>best 6 event totals + the Fall Championship</b>, and that's the
+                    whole race: a standalone chapter contest with <b>no points reset</b>
+                    and no tie to the cups or the TGF Championship. Buy in to compete
                     for the purse; standings appear here once play begins.
                 </p>
                 <div class="fall-cta-row" style="max-width:420px;">
