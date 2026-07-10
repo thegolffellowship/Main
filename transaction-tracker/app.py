@@ -8618,6 +8618,18 @@ def api_fellowship_cup_projection():
         return jsonify({"error": f"Projection failed: {e}"}), 500
 
 
+@app.route("/api/season-contests/lone-star-cup")
+@require_role("member")
+def api_lone_star_cup():
+    """LONE STAR CUP projected rosters + alternates pool (member LSC tab)."""
+    from email_parser.database import get_lone_star_cup_projection
+    try:
+        return jsonify(get_lone_star_cup_projection())
+    except Exception as e:
+        logger.exception("Lone Star Cup projection failed")
+        return jsonify({"error": f"Projection failed: {e}"}), 500
+
+
 @app.route("/api/scoring/import", methods=["POST"])
 @require_role("admin")
 def api_import_scorecards():

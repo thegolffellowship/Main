@@ -660,6 +660,59 @@
             box-shadow: 0 2px 8px rgba(232, 124, 62, 0.35);
         }
         .contest-cta:hover { background: var(--primary-hover, #D06B2E); }
+
+        /* ── LONE STAR CUP (spec: mailbox #85–#88, Kerry-RATIFIED 2026-07-10) ── */
+        .standings-section h4.lsc-title {
+            margin: 0; font: 700 1.5rem/1.15 'Bitter', serif;
+            letter-spacing: 0.5px; text-transform: none; color: var(--text);
+        }
+        .lsc-chip {
+            display: inline-flex; align-items: center; gap: 8px; height: 30px; padding: 0 14px;
+            background: #FDF0E6; color: #BF5700; border-radius: 9999px;
+            font: 700 11px/1 'Bitter', serif; letter-spacing: 1px; text-transform: uppercase;
+        }
+        .lsc-intro { margin: 0.6rem 0 0; font-size: 14px; line-height: 1.6; color: var(--text-body, #4B5563); max-width: 720px; }
+        .lsc-qual { margin: 1rem 0 0; border: 1px solid var(--border); border-radius: 12px; padding: 12px 16px; max-width: 720px; background: #FBFAF8; }
+        .lsc-qual h5 { margin: 0 0 6px; font: 700 11px/1.3 'Bitter', serif; letter-spacing: 1.2px; text-transform: uppercase; color: #1B1B1B; }
+        .lsc-qual ul { margin: 0; padding-left: 1.1rem; font-size: 13.5px; line-height: 1.7; color: var(--text-body, #4B5563); }
+        .lsc-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 1.1rem; }
+        .lsc-card { border: 1px solid var(--border); border-radius: 12px; overflow: hidden; background: #fff; }
+        .lsc-card-head {
+            background: var(--surface-dark, #1B1B1B); color: #fff; padding: 11px 14px;
+            font: 700 12px/1 'Bitter', serif; letter-spacing: 1.2px; text-transform: uppercase;
+            display: flex; justify-content: space-between; align-items: center;
+        }
+        .lsc-card-head span { color: #9CA3AF; font: 600 10px/1 'Bitter', serif; letter-spacing: 0.8px; }
+        .lsc-seat { display: flex; gap: 10px; padding: 8px 14px; border-top: 1px solid #F1F1EF; align-items: baseline; }
+        .lsc-seat-label { flex: 0 0 170px; font: 700 9.5px/1.45 'Bitter', serif; letter-spacing: 0.8px; color: #6B7280; text-transform: uppercase; }
+        .lsc-seat.captain { background: #FCF6EF; }
+        .lsc-seat.captain .lsc-seat-label { color: #BF5700; }
+        .lsc-player { font-size: 14px; color: #1B1B1B; font-weight: 600; }
+        .lsc-earn { display: block; font-size: 11px; color: #9CA3AF; font-weight: 400; }
+        .lsc-tbd { color: #9CA3AF; font-style: italic; font-weight: 500; font-size: 13px; }
+        .lsc-pool-chip {
+            display: inline-flex; margin-left: 6px; padding: 2px 7px; background: #FDF0E6;
+            color: #BF5700; border-radius: 9999px; font: 700 8.5px/1.3 'Bitter', serif;
+            letter-spacing: 0.8px; text-transform: uppercase; vertical-align: 1px;
+        }
+        .lsc-alt-head {
+            padding: 9px 14px 7px; background: #FBFAF8; border-top: 2px solid #1B1B1B;
+            font: 700 10px/1.3 'Bitter', serif; letter-spacing: 1.2px; color: #6B7280; text-transform: uppercase;
+        }
+        .lsc-alt { display: flex; gap: 8px; padding: 6px 14px; border-top: 1px solid #F1F1EF; font-size: 12.5px; align-items: baseline; }
+        .lsc-alt .n { flex: 0 0 18px; font-weight: 700; color: #9CA3AF; font-variant-numeric: tabular-nums; }
+        .lsc-alt .who { font-weight: 600; color: #1B1B1B; }
+        .lsc-alt .ctx { color: #9CA3AF; font-size: 11px; }
+        .lsc-foot { margin-top: 0.9rem; font-size: 12px; line-height: 1.55; color: #9CA3AF; max-width: 720px; }
+        @media (max-width: 768px) {
+            .lsc-grid { grid-template-columns: 1fr; }
+            .standings-section h4.lsc-title { font-size: 1.22rem; }
+            .lsc-seat-label { flex-basis: 128px; }
+        }
+        /* three member top-tabs must fit a 390px phone without scroll */
+        @media (max-width: 420px) {
+            .top-tab { padding: 0.5rem 0.55rem; font-size: 0.76rem; letter-spacing: 0; }
+        }
     </style>
 </head>
 <body>
@@ -719,6 +772,7 @@
             <div class="top-tabs">
                 <button class="top-tab active" data-top="points-race">Points Races</button>
                 <button class="top-tab" data-top="match-play">Match Play</button>
+                <button class="top-tab" data-top="lone-star-cup">Lone Star Cup</button>
                 <button class="top-tab manager-only" data-top="enrollment">Enrollment</button>
             </div>
         </div>
@@ -836,6 +890,38 @@
                     <button id="pr-hiw-close" class="pr-hiw-close" type="button" aria-label="Close">&#10005;</button>
                     <div id="pr-hiw-content"></div>
                 </div>
+            </div>
+        </div>
+
+        <!-- ═══════════ LONE STAR CUP (spec: mailbox #85–#88, Kerry-RATIFIED;
+             projected rosters live from current standings — actual selection
+             happens after the Championships with admin manual fill) ═══════════ -->
+        <div id="section-lone-star-cup" class="section-hidden">
+            <div class="standings-section" style="padding:1.25rem 2rem;">
+                <div style="display:flex;align-items:center;gap:0.75rem;flex-wrap:wrap;">
+                    <h4 class="lsc-title">The Lone Star Cup</h4>
+                    <span class="lsc-chip">&#9679;&nbsp;Projected Rosters &middot; Live from today's standings</span>
+                </div>
+                <p class="lsc-intro">Austin vs San Antonio — each chapter fields a
+                12-player team earned through the season's contests. Rosters are
+                decided after the City and TGF Championships; until then, every
+                seat below is projected live from the current standings, just
+                like the projected payouts.</p>
+                <div class="lsc-qual">
+                    <h5>How You Qualify &mdash; 12 Seats Per Chapter</h5>
+                    <ul>
+                        <li><b>1 &middot; Captain</b> &mdash; your City NET Champion</li>
+                        <li><b>6</b> &mdash; final standings of The Fellowship Cup (top 6 from your chapter)</li>
+                        <li><b>1</b> &mdash; your City Match Play Champion</li>
+                        <li><b>4</b> &mdash; final standings of The Players Cup (top 4 from your chapter)</li>
+                    </ul>
+                </div>
+                <div id="lsc-rosters"><p style="color:var(--text-muted);margin-top:1rem;">Loading projected rosters&hellip;</p></div>
+                <p class="lsc-foot">Only bought-in players hold seats. If you
+                qualify in more than one contest you take the seat where you
+                placed higher, and the seat you free up goes to the next man up
+                from the alternates pool. Alternates are ranked by how high you
+                finished relative to your field; ties go to whoever played more.</p>
             </div>
         </div>
 
@@ -1025,6 +1111,50 @@
     window.addEventListener("resize", prPinBars);
 
     // ── Top tabs ──
+    // ── LONE STAR CUP projected rosters (spec: mailbox #85–#88) ──
+    let lscLoaded = false;
+    async function lscLoad(force) {
+        if (lscLoaded && !force) return;
+        lscLoaded = true;
+        const box = $("lsc-rosters");
+        try {
+            const res = await fetch("/api/season-contests/lone-star-cup");
+            const d = await res.json();
+            if (!res.ok || d.error) throw new Error(d.error || res.statusText);
+            box.innerHTML = `<div class="lsc-grid">${(d.chapters || []).map(ch => {
+                const seats = ch.seats.map(seat => {
+                    const cap = seat.seat === "CAPTAIN";
+                    let who;
+                    if (seat.player_name) {
+                        const pool = seat.via_pool ? '<span class="lsc-pool-chip">Pool</span>' : "";
+                        who = `<span class="lsc-player">${escapeHtml(seat.player_name)}${pool}` +
+                              `<span class="lsc-earn">${escapeHtml(seat.earned_as || "")}</span></span>`;
+                    } else {
+                        who = `<span class="lsc-tbd">To be decided` +
+                              `<span class="lsc-earn">${escapeHtml(seat.note || "")}</span></span>`;
+                    }
+                    return `<div class="lsc-seat${cap ? " captain" : ""}">` +
+                           `<span class="lsc-seat-label">${escapeHtml(seat.seat)}</span>${who}</div>`;
+                }).join("");
+                const alts = (ch.alternates || []).map((a, i) =>
+                    `<div class="lsc-alt"><span class="n">${i + 1}</span>` +
+                    `<span class="who">${escapeHtml(a.player_name)}</span>` +
+                    `<span class="ctx">${escapeHtml(a.context)} &middot; ${a.events} event${a.events === 1 ? "" : "s"}</span></div>`
+                ).join("") || '<div class="lsc-alt"><span class="ctx">No eligible alternates yet.</span></div>';
+                return `<div class="lsc-card">` +
+                       `<div class="lsc-card-head">${escapeHtml(ch.chapter)}<span>${ch.n_projected} of 12 projected</span></div>` +
+                       seats +
+                       `<div class="lsc-alt-head">Next Men Up &mdash; Alternates Pool</div>` + alts +
+                       `</div>`;
+            }).join("")}</div>` + (d.gg_error
+                ? `<p style="color:var(--text-muted);font-size:12px;margin-top:0.5rem;">Standings feed note: ${escapeHtml(d.gg_error)}</p>`
+                : "");
+        } catch (err) {
+            lscLoaded = false;
+            box.innerHTML = `<p style="color:var(--text-muted);margin-top:1rem;">Couldn't load the projected rosters (${escapeHtml(err.message || String(err))}). Switch back to this tab to retry.</p>`;
+        }
+    }
+
     $$(".top-tab").forEach(btn => {
         btn.addEventListener("click", (e) => {
             const top = btn.dataset.top;
@@ -1034,13 +1164,15 @@
             const wasActive = btn.classList.contains("active");
             $$(".top-tab").forEach(b => b.classList.remove("active"));
             btn.classList.add("active");
-            ["match-play", "points-race", "enrollment"].forEach(k => {
+            ["match-play", "points-race", "enrollment", "lone-star-cup"].forEach(k => {
                 $("section-" + k).classList.toggle("section-hidden", k !== top);
             });
             if (top === "enrollment") enrAutoLoad();
+            if (top === "lone-star-cup") lscLoad();
             try {
                 if (top === "match-play") history.replaceState(null, "", "#tab=mp");
                 else if (top === "enrollment") history.replaceState(null, "", "#tab=enr");
+                else if (top === "lone-star-cup") history.replaceState(null, "", "#tab=lsc");
                 else {
                     const activeRace = (document.querySelector(".sub-tab[data-pr].active") || {}).dataset?.pr || "net";
                     history.replaceState(null, "", "#race=" + activeRace);
@@ -3155,7 +3287,7 @@
         const cont = $("pr-table-container");
         if (!cont.innerHTML || force) {
             cont.innerHTML = '<div style="padding:1rem;color:var(--text-muted);">'
-                + (force ? 'Refreshing both NET races from Golf Genius…' : 'Building Fellowship Cup projection…') + '</div>';
+                + (force ? 'Refreshing both NET races from Golf Genius…' : 'Building The Fellowship Cup projection…') + '</div>';
         }
         $("pr-summary").textContent = "";
         try {
@@ -3514,12 +3646,14 @@
             if (chip) chip.style.display =
                 (wantRace === "monthly" || wantRace.startsWith("fall")) ? "none" : "inline-flex";
         }
-        if (hash.includes("tab=mp") || hash.includes("tab=enr")) {
-            const top = hash.includes("tab=mp") ? "match-play" : "enrollment";
+        if (hash.includes("tab=mp") || hash.includes("tab=enr") || hash.includes("tab=lsc")) {
+            const top = hash.includes("tab=mp") ? "match-play"
+                : (hash.includes("tab=lsc") ? "lone-star-cup" : "enrollment");
             $$(".top-tab").forEach(b => b.classList.toggle("active", b.dataset.top === top));
-            ["match-play", "points-race", "enrollment"].forEach(k =>
+            ["match-play", "points-race", "enrollment", "lone-star-cup"].forEach(k =>
                 $("section-" + k).classList.toggle("section-hidden", k !== top));
             if (top === "enrollment") enrAutoLoad();
+            if (top === "lone-star-cup") lscLoad();
         }
         // Points Races is the landing tab — load it immediately; Match Play
         // still warms in the background so switching to it stays instant

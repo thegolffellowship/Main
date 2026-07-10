@@ -7216,6 +7216,232 @@ def get_fellowship_cup_projection(force_refresh: bool = False,
     }
 
 
+def _lsc_ordinal(n: int) -> str:
+    if 10 <= n % 100 <= 20:
+        return f"{n}th"
+    return f"{n}{ {1: 'st', 2: 'nd', 3: 'rd'}.get(n % 10, 'th') }"
+
+
+def get_lone_star_cup_projection(db_path: str | Path = DB_PATH) -> dict:
+    """LONE STAR CUP projected rosters per chapter (spec: mailbox #85–#88,
+    Kerry-RATIFIED 2026-07-10).
+
+    12 earned seats per chapter: 1 CAPTAIN (City NET Champion), 6 from the
+    final Fellowship Cup standings (top 6 FROM THAT CHAPTER on the TGF-wide
+    list), 1 City Match Play Champion, 4 from the final Players Cup
+    standings (top 4 from the chapter, overall list — flights don't gate
+    LSC seats). Rules applied:
+
+    - Only bought-in (enrolled) players hold seats — same eligibility
+      spirit as projected payouts.
+    - Double-qualifiers take the slot where they placed HIGHER by absolute
+      place (#86 interim rule — Kerry's "proportional valuation" tweak is
+      NOT ratified; revisit before selection day). Cross-contest place
+      ties break by seat order: Captain, Fellowship, Match Play, Players.
+    - Vacated or unfillable seats fill from the Tier-2 UNIFIED ALTERNATES
+      POOL (#87): one per-chapter list merging all contests, ranked by
+      percentile finish (place ÷ field size), tiebreaker events played.
+      The MP winner→runner-up→pool cascade (#88) governs real declines
+      only, so a standings projection never exercises it.
+    - The Match Play seat shows the bracket champion once the final has a
+      winner; until then it is TO BE DECIDED (Kerry, 2026-07-10 — no
+      speculative projection from seeding).
+
+    PROJECTION ONLY. Actual rosters are picked after the Championships,
+    with Kerry's manual fills/overrides (#87 hard requirement) — that
+    admin surface is a separate, later feature.
+    """
+    season = str(today_central().year)
+
+    def pnum(rank) -> int | None:
+        try:
+            return int(str(rank).lstrip("T"))
+        except (TypeError, ValueError):
+            return None
+
+    gross = get_points_race_standings("players_cup_gross", db_path=db_path)
+    cup = get_fellowship_cup_projection(db_path=db_path)
+    errors = [e for e in (gross.get("gg_error"), cup.get("gg_error")) if e]
+
+    chapters_out = []
+    for chapter, race_key in (("Austin", "austin_net"),
+                              ("San Antonio", "san_antonio_net")):
+        net = get_points_race_standings(race_key, db_path=db_path)
+        if net.get("gg_error"):
+            errors.append(net["gg_error"])
+
+        def stream(rows, chapter_field=None):
+            out = []
+            for r in rows:
+                if not r.get("enrolled") or not r.get("customer_id"):
+                    continue
+                if chapter_field and (r.get(chapter_field) or "") != chapter:
+                    continue
+                place = pnum(r.get("rank"))
+                if place is None:
+                    continue
+                out.append({"name": r["player_name"],
+                            "cid": r["customer_id"], "place": place})
+            return out
+
+        streams = {
+            "captain": stream(net["standings"]),
+            "fellowship": stream(cup["standings"], "chapter"),
+            "players": stream(gross["standings"], "player_chapter"),
+        }
+        field_sizes = {
+            "captain": len(net["standings"]),
+            "fellowship": len(cup["standings"]),
+            "players": len(gross["standings"]),
+        }
+        contest_names = {
+            "captain": "City NET",
+            "fellowship": "The Fellowship Cup",
+            "players": "The Players Cup",
+        }
+        events_by_cid = {r["customer_id"]: (r.get("tournaments") or 0)
+                         for r in net["standings"] if r.get("customer_id")}
+
+        mp_champ = None
+        try:
+            finals = [b for b in cmp_get_bracket(season, chapter,
+                                                 db_path=db_path)
+                      if b["round"] == "final" and b.get("winner_name")]
+            if finals:
+                mp_champ = {"name": finals[0]["winner_name"],
+                            "cid": finals[0].get("winner_id"), "place": 1}
+        except Exception:
+            logger.warning("LSC: match play bracket read failed for %s",
+                           chapter, exc_info=True)
+
+        # The earned 12, in seat order. Each seat draws the next unclaimed
+        # player from its contest stream; a player already holding a
+        # better-placed seat is skipped there and their would-be seat
+        # becomes a vacancy (filled from the pool below). Seat-order
+        # iteration with claim-by-better-place implements #86's
+        # "higher-placed slot" rule without a full assignment solver:
+        # first assign every contest's natural holders, then resolve.
+        seat_defs = (
+            [("captain", "CAPTAIN", "City NET Champion")]
+            + [("fellowship", f"THE FELLOWSHIP CUP · {i + 1}",
+                "Final standings, top 6 from the chapter") for i in range(6)]
+            + [("matchplay", "CITY MATCH PLAY", "Knockout champion")]
+            + [("players", f"THE PLAYERS CUP · {i + 1}",
+                "Final standings, top 4 from the chapter") for i in range(4)]
+        )
+
+        # Pass 1 — natural holders per contest (captain: 1, cup: 6, pc: 4)
+        take = {"captain": 1, "fellowship": 6, "players": 4}
+        quals: dict = {}          # cid -> list of (place, seat_order_idx, contest, name)
+        order_idx = 0
+        for contest, n_seats in take.items():
+            for cand in streams[contest][:n_seats]:
+                quals.setdefault(cand["cid"], []).append(
+                    (cand["place"], order_idx, contest, cand["name"]))
+            order_idx += 1
+        if mp_champ and mp_champ.get("cid"):
+            quals.setdefault(mp_champ["cid"], []).append(
+                (1, 1.5, "matchplay", mp_champ["name"]))
+
+        # Pass 2 — each double-qualifier keeps their best (lowest place;
+        # seat order breaks cross-contest ties)
+        kept: dict = {}           # cid -> (contest, place, name)
+        for cid, qlist in quals.items():
+            qlist.sort()
+            place, _, contest, name = qlist[0]
+            kept[cid] = (contest, place, name)
+
+        roster_ids = set(kept)
+
+        # Pass 3 — alternates pool: enrolled chapter players NOT on the
+        # roster, ranked by best percentile finish, then events played
+        pool_by_cid: dict = {}
+        for contest in ("captain", "fellowship", "players"):
+            field = field_sizes[contest] or 1
+            for cand in streams[contest]:
+                if cand["cid"] in roster_ids:
+                    continue
+                pct = cand["place"] / field
+                cur = pool_by_cid.get(cand["cid"])
+                if cur is None or pct < cur["pct"]:
+                    pool_by_cid[cand["cid"]] = {
+                        "cid": cand["cid"], "name": cand["name"],
+                        "pct": pct, "place": cand["place"],
+                        "field": field, "contest": contest_names[contest],
+                    }
+        pool = sorted(pool_by_cid.values(),
+                      key=lambda c: (c["pct"],
+                                     -events_by_cid.get(c["cid"], 0)))
+
+        # Pass 4 — fill the 12 seats: contest keepers in standings order,
+        # vacancies from the pool
+        keepers: dict = {}
+        for contest in ("captain", "fellowship", "players"):
+            keepers[contest] = [
+                cand for cand in streams[contest]
+                if kept.get(cand["cid"], (None,))[0] == contest]
+        seats = []
+        pool_iter = iter(pool)
+        pool_used: set = set()
+        for contest, seat_label, seat_note in seat_defs:
+            row = {"seat": seat_label, "note": seat_note,
+                   "player_name": None, "customer_id": None,
+                   "earned_as": None, "via_pool": False, "status": "tbd"}
+            if contest == "matchplay":
+                if mp_champ and kept.get(mp_champ.get("cid"),
+                                         (None,))[0] == "matchplay":
+                    row.update(player_name=mp_champ["name"],
+                               customer_id=mp_champ["cid"],
+                               earned_as="Knockout champion",
+                               status="projected")
+                else:
+                    row["note"] = "Decided by the knockout bracket"
+            elif keepers[contest]:
+                cand = keepers[contest].pop(0)
+                row.update(
+                    player_name=cand["name"], customer_id=cand["cid"],
+                    earned_as=(f"{_lsc_ordinal(cand['place'])} in "
+                               f"{contest_names[contest]}"),
+                    status="projected")
+            else:
+                nxt = next((c for c in pool_iter
+                            if c["cid"] not in pool_used), None)
+                if nxt:
+                    pool_used.add(nxt["cid"])
+                    row.update(
+                        player_name=nxt["name"], customer_id=nxt["cid"],
+                        earned_as=(f"Alternates pool — "
+                                   f"{_lsc_ordinal(nxt['place'])} of "
+                                   f"{nxt['field']} in {nxt['contest']}"),
+                        via_pool=True, status="projected")
+            seats.append(row)
+
+        alternates = [
+            {"player_name": c["name"], "customer_id": c["cid"],
+             "percentile": round(c["pct"] * 100, 1),
+             "context": (f"{_lsc_ordinal(c['place'])} of {c['field']} in "
+                         f"{c['contest']}"),
+             "events": events_by_cid.get(c["cid"], 0)}
+            for c in pool if c["cid"] not in pool_used
+        ][:8]
+
+        chapters_out.append({
+            "chapter": chapter,
+            "seats": seats,
+            "n_projected": sum(1 for r in seats if r["status"] == "projected"),
+            "alternates": alternates,
+        })
+
+    return {
+        "season": season,
+        "chapters": chapters_out,
+        "rules_note": ("Projected from today's standings. Double-qualifiers "
+                       "take the seat where they placed higher; open seats "
+                       "fill from the alternates pool."),
+        "gg_error": "; ".join(dict.fromkeys(errors)) or None,
+    }
+
+
 # ═══════════════════════════════════════════════════════════════════════
 #  SCORING RECORDS (Phase 1) — tracker-owned scorecards + course database
 #

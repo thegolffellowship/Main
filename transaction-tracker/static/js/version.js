@@ -1,5 +1,17 @@
-window.TGF_VERSION = "2.65.0";
+window.TGF_VERSION = "2.66.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.66.0",
+    date: "2026-07-10",
+    changes: [
+      "THE LONE STAR CUP arrives on the member Season Contests page (Kerry-directed concept, ratified spec: mailbox #85-#88): a third top-level tab -- POINTS RACES | MATCH PLAY | LONE STAR CUP -- explaining the event, the 12-seat qualification structure (1 Captain = City NET Champion, 6 from The Fellowship Cup final standings top-6-per-chapter, 1 City Match Play Champion, 4 from The Players Cup top-4-per-chapter), and LIVE PROJECTED ROSTERS per chapter computed from current standings, in the same spirit as the projected payouts.",
+      "Selection rules implemented exactly as ratified: only bought-in players hold seats; double-qualifiers take the seat where they placed HIGHER by absolute place (#86 interim -- Kerry's proportional-valuation tweak stays open until he rules); vacated or unfillable seats fill from the unified per-chapter ALTERNATES POOL ranked by percentile finish (place / field size) with events-played tiebreak (#87); the Match Play seat shows TO BE DECIDED until the knockout bracket crowns a champion (Kerry, no speculative seeding projection). Pool-filled seats wear a small POOL chip; each card lists its NEXT MEN UP alternates with their best finish context.",
+      "Engine: get_lone_star_cup_projection() composes the existing City NET / Fellowship Cup / Players Cup standings plus cmp_bracket state -- no new data sources; GET /api/season-contests/lone-star-cup serves the member tier. Verified against a synthetic 22-player fixture: captain precedence over own cup seat, no double-seating, standings-order seats, percentile pool fill, alternates ordering, small-field exhaustion (open seats stay TBD).",
+      "This is the PROJECTION HALF only: actual selection-day rosters with Kerry's manual adds/overrides at every level (#87 hard requirement -- guests and past members exist outside contest standings) is a separate admin feature to build before selection day, post-Championships.",
+      "The three member top tabs now fit a 390px phone without scrolling (tighter tab padding under 420px).",
+      "Nomenclature audit per mailbox #86 (capital-The is part of the Cup names): live member surfaces checked; the one non-compliant string -- the transient 'Building Fellowship Cup projection' loading note -- now reads 'Building The Fellowship Cup projection'. Race chips, structure notes, and the new popups already complied.",
+    ],
+  },
   {
     version: "2.65.0",
     date: "2026-07-10",
