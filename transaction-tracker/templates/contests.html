@@ -21,6 +21,7 @@
            (font boosting) — pin it so wide tables don't blow up the page */
         html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
         /* ── Top-level tabs ── */
+        .top-tabs-wrap { position: relative; }
         .top-tabs {
             display: flex; gap: 0; margin-bottom: 0;
             border-bottom: 2px solid var(--border);
@@ -476,35 +477,34 @@
                reclaim that width on phones so the standings table fits */
             .pr-section .standings-section { padding: 0.75rem 0.4rem !important; }
             .pr-race-chips { display: none; }
-            /* the race menu now drops from the POINTS RACES tab itself
-               (Kerry, 2026-07-10) — no separate selector row on phones */
+            /* race + chapter menus drop from their top-tabs on phones
+               (Kerry, 2026-07-10) — no separate selector rows */
             .pr-race-row { display: none; }
-            .top-tab[data-top="points-race"].active::after { content: " \25BE"; color: var(--primary); }
-            .pr-race-dd-menu.pr-tab-anchored {
+            .cmp-chapter-bar .cmp-chapter-tab { display: none; }
+            .top-tab[data-top="points-race"].active::after,
+            .top-tab[data-top="match-play"].active::after { content: " \25BE"; color: var(--primary); }
+            .shell-menu.pr-tab-anchored {
                 position: absolute; top: 100%; left: 10px; right: 10px; z-index: 70;
             }
             #pr-phase-chip { height: 26px; font-size: 10px !important; padding: 0 11px !important; }
             .stableford-ref { grid-template-columns: 1fr; }
         }
 
-        /* Registration CTA (Kerry, v2.53.0) */
-        .contest-cta-row { margin: 0.9rem 0 0.2rem; text-align: center; }
+        /* Registration CTA (Kerry, v2.53.0; v2.57.6: full-width banner flush
+           against the dark nav — no whitespace above, no rounded pill) */
+        .contest-cta-row { margin: 0; text-align: center; }
         .contest-cta {
-            display: inline-block;
+            display: block;
             background: var(--primary, #E87C3E);
             color: #fff !important;
             font-weight: 700;
             letter-spacing: 0.05em;
-            padding: 0.7rem 1.8rem;
-            border-radius: 8px;
+            padding: 0.8rem 1rem;
             text-decoration: none;
             font-size: 1rem;
             box-shadow: 0 2px 8px rgba(232, 124, 62, 0.35);
         }
         .contest-cta:hover { background: var(--primary-hover, #D06B2E); }
-        @media (max-width: 768px) {
-            .contest-cta { display: block; margin: 0 0.25rem; padding: 0.75rem 1rem; }
-        }
     </style>
 </head>
 <body>
@@ -529,6 +529,13 @@
     </header>
     {% endif %}
 
+    <!-- Registration CTA (Kerry, v2.53.0; v2.57.6: full-width banner attached
+         to the nav — outside <main> so it escapes its padding/max-width) -->
+    <div class="contest-cta-row">
+        <a class="contest-cta" href="https://thegolffellowship.com/shop/ols/products/season-contests"
+           target="_blank" rel="noopener">ENTER SEASON CONTESTS &rarr;</a>
+    </div>
+
     <main>
         <!-- Tab Navigation -->
         {% if not shell_v2 %}
@@ -550,21 +557,25 @@
         {% endif %}
         {% endif %}
 
-        <!-- Registration CTA (Kerry, v2.53.0) — shown in every view -->
-        <div class="contest-cta-row">
-            <a class="contest-cta" href="https://thegolffellowship.com/shop/ols/products/season-contests"
-               target="_blank" rel="noopener">ENTER SEASON CONTESTS &rarr;</a>
-        </div>
-
-        <!-- Top-level tabs -->
-        <div class="top-tabs">
-            <button class="top-tab active" data-top="points-race">Points Races</button>
-            <button class="top-tab" data-top="match-play">Match Play</button>
-            <button class="top-tab manager-only" data-top="enrollment">Enrollment</button>
+        <!-- Top-level tabs. The wrap exists so tab-anchored dropdowns have an
+             un-clipped positioning parent — .top-tabs itself is overflow-x:auto,
+             which clips absolutely-positioned children (v2.57.6 iOS fix) -->
+        <div class="top-tabs-wrap">
+            <div class="top-tabs">
+                <button class="top-tab active" data-top="points-race">Points Races</button>
+                <button class="top-tab" data-top="match-play">Match Play</button>
+                <button class="top-tab manager-only" data-top="enrollment">Enrollment</button>
+            </div>
         </div>
 
         <!-- ═══════════ MATCH PLAY ═══════════ -->
         <div id="section-match-play" class="section-hidden">
+            <!-- On phones the chapter menu drops from the MATCH PLAY tab
+                 (Kerry, 2026-07-10) — same pattern as the race menu -->
+            <div class="shell-menu cmp-chapter-dd-menu" id="cmp-chapter-dd-menu" style="display:none;">
+                <button data-cmp-dd="Austin" class="active">Austin</button>
+                <button data-cmp-dd="San Antonio">San Antonio</button>
+            </div>
             <div class="cmp-chapter-bar">
                 <button class="cmp-chapter-tab active" data-chapter="Austin">Austin</button>
                 <button class="cmp-chapter-tab" data-chapter="San Antonio">San Antonio</button>
@@ -819,6 +830,9 @@
            ones injected by re-renders after applyRole() ran (the monthly
            "Refresh from Golf Genius" leak, Kerry 2026-07-09) */
         .manager-only, .admin-only { display: none !important; }
+        /* Members pick the chapter from the MATCH PLAY tab menu on phones —
+           the whole chapter/season line goes (staff keep the season input) */
+        @media (max-width: 768px) { .cmp-chapter-bar { display: none; } }
     </style>{% endif %}
     <script src="/static/js/version.js"></script>
     <script src="/static/js/auth.js"></script>
@@ -851,36 +865,56 @@
                 $("section-" + k).classList.toggle("section-hidden", k !== top);
             });
             if (top === "enrollment") enrAutoLoad();
-            if (top === "points-race") {
-                if (!wasActive) { loadPrRoster(); prLoadStandings(); }
-                if (mobile) {
-                    e.stopPropagation();   // the document click-away would instantly re-close it
-                    prToggleTabMenu();
-                    return;
-                }
+            if (top === "points-race" && !wasActive) { loadPrRoster(); prLoadStandings(); }
+            if (mobile && TAB_MENU_IDS[top]) {
+                e.stopPropagation();   // the document click-away would instantly re-close it
+                prToggleTabMenu(top);
+                return;
             }
             prCloseTabMenu();
         });
     });
 
-    // Race menu anchored to the POINTS RACES tab (mobile). Reuses the
-    // #pr-race-dd-menu .shell-menu — moved under .top-tabs on phones.
-    function prTabMenuEl() { return $("pr-race-dd-menu"); }
-    function prToggleTabMenu() {
-        const m = prTabMenuEl();
+    // Menus anchored to their top-tab (mobile): POINTS RACES → race menu,
+    // MATCH PLAY → chapter menu. Menus are moved into .top-tabs-wrap — NOT
+    // .top-tabs, whose overflow-x:auto CLIPS absolutely-positioned children
+    // (the v2.57.5 menu opened but was invisible on iOS).
+    const TAB_MENU_IDS = { "points-race": "pr-race-dd-menu", "match-play": "cmp-chapter-dd-menu" };
+    function prToggleTabMenu(top) {
+        const m = $(TAB_MENU_IDS[top]);
         if (!m) return;
-        const tabs = document.querySelector(".top-tabs");
-        if (tabs && m.parentElement !== tabs) {
-            tabs.style.position = "relative";
+        const wrap = document.querySelector(".top-tabs-wrap");
+        if (wrap && m.parentElement !== wrap) {
             m.classList.add("pr-tab-anchored");
-            tabs.appendChild(m);
+            wrap.appendChild(m);
         }
-        m.style.display = m.style.display === "none" ? "" : "none";
+        const show = m.style.display === "none";
+        prCloseTabMenu();   // also closes the OTHER tab's menu
+        m.style.display = show ? "" : "none";
     }
     function prCloseTabMenu() {
-        const m = prTabMenuEl();
-        if (m && m.classList.contains("pr-tab-anchored")) m.style.display = "none";
+        Object.values(TAB_MENU_IDS).forEach(id => {
+            const m = $(id);
+            if (m && m.classList.contains("pr-tab-anchored")) m.style.display = "none";
+        });
     }
+
+    // Chapter menu items delegate to the (hidden-on-mobile) chapter tabs so
+    // all chapter logic stays one code path; click-away closes the menu.
+    (function () {
+        const menu = $("cmp-chapter-dd-menu");
+        if (!menu) return;
+        menu.querySelectorAll("[data-cmp-dd]").forEach(item => {
+            item.addEventListener("click", () => {
+                const target = document.querySelector(`.cmp-chapter-tab[data-chapter="${item.dataset.cmpDd}"]`);
+                if (target) target.click();
+                prCloseTabMenu();
+            });
+        });
+        document.addEventListener("click", () => {
+            if (menu.classList.contains("pr-tab-anchored")) menu.style.display = "none";
+        });
+    })();
 
     // ── Points Race sub-tabs + enrolled roster ──
     $$(".sub-tab[data-pr]").forEach(btn => {
@@ -994,6 +1028,9 @@
         btn.addEventListener("click", () => {
             $$(".cmp-chapter-tab").forEach(b => b.classList.remove("active"));
             btn.classList.add("active");
+            // keep the mobile tab-menu's checkmark in sync
+            document.querySelectorAll("[data-cmp-dd]").forEach(mi =>
+                mi.classList.toggle("active", mi.dataset.cmpDd === btn.dataset.chapter));
             cmpState.chapter = btn.dataset.chapter;
             cmpLoad();
         });

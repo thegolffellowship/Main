@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.57.5";
+window.TGF_VERSION = "2.57.6";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.57.6",
+    date: "2026-07-10",
+    changes: [
+      "FIX: the POINTS RACES tab menu shipped in v2.57.5 opened but was invisible on iPhones (Kerry) -- the menu was parented inside the sideways-scrolling tab strip, whose overflow clips absolutely-positioned children on iOS Safari. Menus now anchor to a new un-clipped wrapper around the strip.",
+      "MATCH PLAY gets the same treatment (Kerry): on phones, tapping the tab drops an Austin / San Antonio chapter menu right from the tab; the chapter tab line is gone on mobile (members lose the whole line; staff keep the season input and + Add Pool).",
+      "ENTER SEASON CONTESTS is now a full-page-width banner attached directly to the dark nav with no white space above it (Kerry) -- it moved out of the page body, dropping the pill margins and rounded corners. Desktop member view still carries the CTA as the nav pill instead of the banner.",
+    ],
+  },
   {
     version: "2.57.5",
     date: "2026-07-10",
