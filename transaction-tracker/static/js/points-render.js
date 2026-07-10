@@ -112,6 +112,19 @@
     // (KISSING TREE -> Kissing Tree; short tokens like TPC stay acronyms)
     // and the chapter prefix abbreviates (San Antonio Kickoff -> SA Kickoff).
     // Display-only — scorecard matching always uses the raw name.
+    // Mobile course names drop venue boilerplate (v2.56.4, Kerry) —
+    // mirrors derive_course_short_name() in database.py; keep in sync.
+    function prShortCourse(n) {
+        let out = String(n || "").trim()
+            .replace(/^\s*(the\s+)?(club|course)\s+at\s+/i, "")
+            .replace(/^\s*hyatt\s+(regency\s+)?/i, "");
+        for (let i = 0; i < 2; i++) {
+            out = out.replace(/\s+(golf\s+(club|course|resort|links)|country\s+club|golf\s*&\s*country\s+club|resort(\s*&\s*spa)?|ranch\s+resort|golf|club)\s*$/i, "");
+        }
+        out = out.replace(/^[\s\-|\u2013\u2014]+|[\s\-|\u2013\u2014]+$/g, "");
+        return out || n;
+    }
+
     function prPrettyEvent(name) {
         return String(name || "")
             .replace(/\b[A-Z][A-Z'&-]{2,}\b/g, w => /^(TPC|TGF|HCM)$/.test(w) ? w : w.charAt(0) + w.slice(1).toLowerCase())
@@ -132,7 +145,7 @@
         const compact = prIsCompact();
         const rows = rounds.map(r => {
             const tee = (r.tee_name || "").replace(/^\d+\s*-\s*/, "");
-            const course = [r.course_name, tee].filter(Boolean).join(" — ");
+            const course = [compact ? prShortCourse(r.course_name) : r.course_name, tee].filter(Boolean).join(" — ");
             const sr = [r.slope != null ? `slope ${r.slope}` : null,
                         r.rating != null ? `rating ${r.rating}` : null].filter(Boolean).join(", ");
             const dateTxt = prFmtAwardDate(r.round_date, compact);
@@ -495,6 +508,7 @@
     window.prBadgeLayout = prBadgeLayout;
     window.prNineSuffix = prNineSuffix;
     window.prPrettyEvent = prPrettyEvent;
+    window.prShortCourse = prShortCourse;
     window.prFmtHcp = prFmtHcp;
     window.prRenderScoreRounds = prRenderScoreRounds;
     window.prRenderDetailTables = prRenderDetailTables;

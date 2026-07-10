@@ -2925,6 +2925,7 @@ def init_db(db_path: str | Path | None = None) -> None:
             CREATE TABLE IF NOT EXISTS courses (
                 course_id   INTEGER PRIMARY KEY AUTOINCREMENT,
                 name        VARCHAR(200) NOT NULL UNIQUE,
+                short_name  VARCHAR(120),
                 chapter_id  INTEGER REFERENCES chapters(chapter_id),
                 city        VARCHAR(100),
                 state       VARCHAR(2),
@@ -2933,6 +2934,18 @@ def init_db(db_path: str | Path | None = None) -> None:
             )
             """
         )
+        # short_name (v2.56.4, Kerry): guarded ALTER for live DBs + backfill
+        # of empty rows only, so future manual edits are never overwritten
+        try:
+            conn.execute("ALTER TABLE courses ADD COLUMN short_name VARCHAR(120)")
+        except sqlite3.OperationalError:
+            pass
+        try:
+            for row in conn.execute("SELECT course_id, name FROM courses WHERE short_name IS NULL OR TRIM(short_name) = ''").fetchall():
+                conn.execute("UPDATE courses SET short_name = ? WHERE course_id = ?",
+                             (derive_course_short_name(row["name"]), row["course_id"]))
+        except sqlite3.OperationalError:
+            pass
 
         conn.execute(
             """
@@ -18898,6 +18911,24 @@ def get_handicap_export_data(chapter: str | None = None,
             ],
         },
     }
+
+
+def derive_course_short_name(name: str) -> str:
+    """Mobile-friendly course name (v2.56.4, Kerry): drop the venue
+    boilerplate — "Golf Club", "The Club at", "Resort", "Hyatt", etc.
+    "The Quarry Golf Club" -> "The Quarry"; "The Club at Comanche Trace
+    - CREEKS" -> "Comanche Trace - CREEKS". Never returns empty."""
+    s = str(name or "").strip()
+    out = re.sub(r"^\s*(the\s+)?(club|course)\s+at\s+", "", s, flags=re.I)
+    out = re.sub(r"^\s*hyatt\s+(regency\s+)?", "", out, flags=re.I)
+    for _ in range(2):  # "X Golf Club Resort" needs two trailing passes
+        out = re.sub(
+            r"\s+(golf\s+(club|course|resort|links)|country\s+club"
+            r"|golf\s*&\s*country\s+club|resort(\s*&\s*spa)?|ranch\s+resort"
+            r"|golf|club)\s*$",
+            "", out, flags=re.I)
+    out = out.strip(" -|\u2013\u2014").strip()
+    return out or s
 
 
 def get_all_handicap_players(db_path: str | Path | None = None) -> list[dict]:
