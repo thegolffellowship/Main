@@ -21,6 +21,12 @@
            (font boosting) — pin it so wide tables don't blow up the page */
         html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
         /* ── Top-level tabs ── */
+        /* Contest name heading — prominent, name only (Kerry, 2026-07-10) */
+        #pr-standings-title {
+            margin: 0; flex-basis: 100%;
+            font: 700 1.5rem/1.15 'Bitter', serif; letter-spacing: 0.5px;
+            text-transform: uppercase; color: var(--text);
+        }
         .top-tabs-wrap { position: relative; }
         .top-tabs {
             display: flex; gap: 0; margin-bottom: 0;
@@ -486,6 +492,7 @@
             .shell-menu.pr-tab-anchored {
                 position: absolute; top: 100%; left: 10px; right: 10px; z-index: 70;
             }
+            #pr-standings-title { font-size: 1.22rem; }
             #pr-phase-chip { height: 26px; font-size: 10px !important; padding: 0 11px !important; }
             .stableford-ref { grid-template-columns: 1fr; }
         }
@@ -648,7 +655,7 @@
                 </div>
                 <div class="standings-section" style="padding:1rem 2rem;">
                     <div style="display:flex;align-items:center;gap:0.75rem;flex-wrap:wrap;">
-                        <h4 id="pr-standings-title" style="margin:0;">Standings — Buy-in Status</h4>
+                        <h4 id="pr-standings-title"></h4>
                         <button class="btn manager-only" id="pr-refresh-btn" style="font-size:0.78rem;">&#8635; Refresh from Golf Genius</button>
                         <span id="pr-phase-chip" style="display:inline-flex;align-items:center;gap:8px;height:30px;padding:0 14px;background:#ECFBF1;color:#065F46;border-radius:9999px;font:700 11px/1 'Bitter',serif;letter-spacing:1px;text-transform:uppercase;">&#9679;&nbsp;Regular Season &middot; best 10 count</span>
                     </div>
@@ -2458,7 +2465,8 @@
     }
 
     function renderPointsRace(d) {
-        $("pr-standings-title").textContent = `${d.label} — Standings & Buy-in`;
+        // just the contest name — big and clean (Kerry, 2026-07-10)
+        $("pr-standings-title").textContent = d.label;
         let fetched = "";
         if (d.fetched_at) {
             const dt = new Date(String(d.fetched_at).replace(" ", "T") + "Z");
@@ -2604,7 +2612,7 @@
     }
 
     function renderFellowshipCup(d) {
-        $("pr-standings-title").textContent = "THE FELLOWSHIP CUP — Projected Points Reset";
+        $("pr-standings-title").textContent = "THE FELLOWSHIP CUP";
         let fetched = "";
         if (d.fetched_at) {
             const dt = new Date(String(d.fetched_at).replace(" ", "T") + "Z");
