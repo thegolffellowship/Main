@@ -1,5 +1,15 @@
-window.TGF_VERSION = "2.57.9";
+window.TGF_VERSION = "2.58.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.58.0",
+    date: "2026-07-10",
+    changes: [
+      "PROJECTED PAYOUTS on the points races (Kerry): every race now shows its purse and place money computed live from the current buy-in count, per the ratified TGF Season Contest Payouts v1.0 rules. A PURSE pill + per-place chips sit under the standings heading (SA NET today: $720 paying 5 places $252/$180/$129.60/$86.40/$72), and the players who would cash if the season ended today wear a green dollar badge on their row. Only bought-in players are eligible -- the money visibly flows PAST non-enrolled rows to the next bought-in player, which is the whole sales pitch for the ENTER SEASON CONTESTS banner above it.",
+      "New pure payout engine email_parser/season_payouts.py (rules-as-data, Platform-portable) with parity tests against every worked matrix in the ratified spec: City Net places curve 30%@10->20%@60 with the 2-7 place ladder families; THE FELLOWSHIP CUP 45%-flat first place until $1,008 at N=56 then +$8 of every new $40 buy-in (the winner-growth engine), remainder ladders per the proposed defaults; THE PLAYERS CUP 10% Champion off top + 90% split across the 4 fixed flights at 67/33 (the Champion's badge stacks with their flight win).",
+      "THE FELLOWSHIP CUP purse counts every NET-bundle buy-in across both chapters ($40 of each $90 bundle; the other $40 funds the buyer's City Net race). Its summary line now leads with the same green bought-in count as the races. Monthly shows no payout strip -- its purse is the $1/member award, already explained on the tab.",
+      "Flagged for Kerry per spec section 8: Cup remainder ladders are the spec's proposed defaults; ties currently pay down the ladder sequentially (no split display); City ladder capped at 7 places / Cup at 5 until the ladder families are extended.",
+    ],
+  },
   {
     version: "2.57.9",
     date: "2026-07-10",

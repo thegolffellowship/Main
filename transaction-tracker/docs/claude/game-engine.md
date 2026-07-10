@@ -163,6 +163,29 @@ places-curve (two endpoints + min), ladder families, fixed-share
 anchors w/ dollar-threshold tapers, flight structures + champion
 bonus, pool-structure lookup + per-pool bonus, per-win payout mode.
 
+**IMPLEMENTED (v2.58.0, Kerry directive 2026-07-10):**
+`email_parser/season_payouts.py` — pure engine (Platform-portable, no
+DB/Flask) with `SEED_SEASON_PAYOUT_CONFIG` rules-as-data:
+`city_net_payouts(n)` / `fellowship_cup_payouts(n)` /
+`players_cup_payouts(n)`, reusing match_play's largest-remainder
+`allocate_cents`. `test_season_payouts.py` proves parity with every
+worked matrix in the v1.0 spec (SA N=18 $252/$180/$129.60/$86.40/$72;
+Austin N=9; Cup N=27; Players Cup N=16 champ $64 + $96.48/$47.52) plus
+invariants (pot always fully paid, ladders descending, Cup 1st
+monotonic through the $1,008 taper). The points-race API payloads carry
+`projected_payouts` computed from the LIVE buy-in count (ranked +
+enrolled_not_ranked; Cup N = both chapters' NET buy-ins), and the
+CONTESTS standings render a purse strip (PURSE pill + per-place chips)
+plus green $ badges on the rows that would cash if the season ended
+today — only bought-in players are eligible, so the money visibly
+flows past non-enrolled rows (the conversion nudge, Kerry). Players
+Cup: champion badge stacks with flight-1st on the same player.
+Interpretation choices pending Kerry (spec §8): Cup remainder ladders
+are the proposed defaults; past the $2,240 pot threshold the remainder
+ladder is renormalized over (pot − 1st); tie rows are paid down the
+ladder sequentially (no split display); Cup places capped at 5 and City
+at 7 until Kerry extends the ladder families.
+
 ## Wallet/refund contract notes (mailbox ids 22/24, Kerry-ratified 2026-07-06)
 
 Platform-side decisions banked for the Stage-4 bridge (no Tracker code

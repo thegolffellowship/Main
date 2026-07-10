@@ -21,6 +21,29 @@
            (font boosting) — pin it so wide tables don't blow up the page */
         html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
         /* ── Top-level tabs ── */
+        /* Projected payouts strip + row badges (Kerry, 2026-07-10 —
+           ratified TGF_Season_Contest_Payouts_v1_0 ladders) */
+        #pr-payouts { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin: 0.4rem 0 0.55rem; }
+        #pr-payouts:empty { display: none; }
+        .pr-purse {
+            display: inline-flex; align-items: center; height: 26px; padding: 0 12px;
+            background: #1B1B1B; color: #fff; border-radius: 9999px;
+            font: 700 10.5px/1 'Bitter', serif; letter-spacing: 1px; text-transform: uppercase;
+        }
+        .pr-place {
+            display: inline-flex; align-items: center; gap: 4px; height: 26px; padding: 0 10px;
+            background: #fff; border: 1px solid var(--border); border-radius: 9999px;
+            font-size: 12px; color: var(--text-muted); font-variant-numeric: tabular-nums;
+        }
+        .pr-place b { color: #15803d; font-weight: 700; }
+        .pr-pay-note { font-size: 11px; color: var(--text-muted); flex-basis: 100%; }
+        .pr-pay {
+            display: inline-block; background: #fff; color: #15803d;
+            border: 1px solid #86efac; border-radius: 9999px; padding: 0 7px;
+            font-size: 0.72rem; font-weight: 700; font-variant-numeric: tabular-nums;
+            margin-left: 4px; white-space: nowrap;
+        }
+
         /* Contest name heading — prominent, name only (Kerry, 2026-07-10) */
         #pr-standings-title {
             margin: 0; flex-basis: 100%;
@@ -660,6 +683,7 @@
                         <span id="pr-phase-chip" style="display:inline-flex;align-items:center;gap:8px;height:30px;padding:0 14px;background:#FDF0E6;color:#BF5700;border-radius:9999px;font:700 11px/1 'Bitter',serif;letter-spacing:1px;text-transform:uppercase;">&#9679;&nbsp;Regular Season &middot; best 10 + City Championship</span>
                     </div>
                     <div id="pr-summary" style="margin:0.5rem 0;color:var(--text-muted);font-size:0.85rem;"></div>
+                    <div id="pr-payouts"></div>
                     <div id="pr-table-container" style="overflow-x:auto;"></div>
                 </div>
                 <div class="standings-section" style="padding:1rem 2rem;">
@@ -1007,7 +1031,8 @@
     // ═══════════ AUTH ═══════════
 
     let userRole = null;
-    let prLastData = null;   // last points-race payload, for role-aware re-render
+    let prLastData = null;      // last points-race payload, for role-aware re-render
+    let prLastCupData = null;   // last Fellowship Cup payload, same purpose
 
     function applyRole(role) {
         userRole = role;
@@ -1020,8 +1045,12 @@
         });
         // the standings summary line is role-dependent (staff see the GG
         // diagnostics) — re-render if standings beat the auth check here
-        if (isManager && prLastData) {
-            try { renderPointsRace(prLastData); } catch (e) { /* ignore */ }
+        if (isManager) {
+            const activePr = (document.querySelector(".sub-tab[data-pr].active") || {}).dataset?.pr;
+            try {
+                if (activePr === "tfc" && prLastCupData) renderFellowshipCup(prLastCupData);
+                else if (activePr !== "tfc" && prLastData) renderPointsRace(prLastData);
+            } catch (e) { /* ignore */ }
         }
     }
 
@@ -2470,6 +2499,73 @@
         }
     }
 
+    // ── Projected payouts (ratified TGF_Season_Contest_Payouts_v1_0) ──
+    function prFmtMoney(c) {
+        const d = c / 100;
+        return "$" + (c % 100 ? d.toFixed(2) : d.toLocaleString());
+    }
+    function prOrdinal(i) { return (i + 1) + (["st", "nd", "rd"][i] || "th"); }
+    function prRenderPayoutStrip(pp) {
+        const el = $("pr-payouts");
+        if (!el) return;
+        if (!pp || !pp.pot_cents) { el.innerHTML = ""; return; }
+        const chips = [`<span class="pr-purse">Purse ${prFmtMoney(pp.pot_cents)}</span>`];
+        if (pp.kind === "ladder") {
+            pp.amounts_cents.forEach((c, i) =>
+                chips.push(`<span class="pr-place">${prOrdinal(i)} <b>${prFmtMoney(c)}</b></span>`));
+        } else {
+            chips.push(`<span class="pr-place">Champion <b>${prFmtMoney(pp.champion_cents)}</b></span>`);
+            chips.push(`<span class="pr-place">Each flight: 1st <b>${prFmtMoney(pp.flight_first_cents)}</b> · 2nd <b>${prFmtMoney(pp.flight_second_cents)}</b></span>`);
+        }
+        chips.push('<span class="pr-pay-note">projected from current buy-ins — the purse grows with every entry</span>');
+        el.innerHTML = chips.join("");
+    }
+    // Tag the rows that would cash if the season ended today. Only
+    // bought-in players are eligible — the money flows PAST non-enrolled
+    // rows to the next enrolled player down.
+    function prAssignProjectedPayouts(d) {
+        (d.standings || []).forEach(r => { delete r._pay; delete r._payTitle; });
+        const pp = d.projected_payouts;
+        if (!pp || !d.standings) return;
+        if (pp.kind === "ladder") {
+            let i = 0;
+            for (const r of d.standings) {
+                if (i >= pp.amounts_cents.length) break;
+                if (!r.enrolled) continue;
+                r._pay = pp.amounts_cents[i];
+                r._payTitle = `Projected ${prOrdinal(i)}-place money if the season ended today`;
+                i++;
+            }
+        } else {
+            const enrolled = d.standings.filter(r => r.enrolled);
+            if (enrolled.length) {
+                enrolled[0]._pay = pp.champion_cents;
+                enrolled[0]._payTitle = "Projected Champion bonus (10% of the pot)";
+            }
+            const byFlight = {};
+            for (const r of d.standings) {
+                if (!r.enrolled || !r.flight) continue;
+                (byFlight[r.flight] = byFlight[r.flight] || []).push(r);
+            }
+            Object.values(byFlight).forEach(list => {
+                if (list[0]) {
+                    list[0]._pay = (list[0]._pay || 0) + pp.flight_first_cents;
+                    list[0]._payTitle = (list[0]._payTitle ? list[0]._payTitle + " + " : "Projected ")
+                        + "flight 1st (67%)";
+                }
+                if (list[1]) {
+                    list[1]._pay = pp.flight_second_cents;
+                    list[1]._payTitle = "Projected flight 2nd (33%)";
+                }
+            });
+        }
+    }
+    function prPayBadge(r) {
+        return r._pay
+            ? ` <span class="pr-pay" title="${escapeHtml(r._payTitle || "")}">${prFmtMoney(r._pay)}</span>`
+            : "";
+    }
+
     function renderPointsRace(d) {
         prLastData = d;   // applyRole re-renders so staff get the diagnostics line
         // just the contest name — big and clean (Kerry, 2026-07-10)
@@ -2497,6 +2593,9 @@
                 + (d.gg_error ? ` · ⚠ refresh failed (showing last snapshot)` : "")));
         $("pr-summary").title = (d.hidden_nonmembers && d.hidden_nonmembers.length)
             ? "Hidden non-members: " + d.hidden_nonmembers.join(", ") : "";
+
+        prAssignProjectedPayouts(d);
+        prRenderPayoutStrip(d.projected_payouts);
 
         const hasFlights = !!(d.flights && d.flights.length);
         const showChapter = !!d.cross_chapter;
@@ -2532,7 +2631,7 @@
                 : '';
             return `<tr style="${bg}${expandable ? 'cursor:pointer;' : ''}"${r.member_card_id ? ` data-card="${r.member_card_id}"` : ''}${r.customer_id ? ` data-cid="${r.customer_id}"` : ''}>
                 <td style="${rankStyle}">${escapeHtml(r.rank)}${prRankMove(r.rank, r.prev_rank)}</td>
-                <td>${nameCell}${hcp}${chevron}</td>
+                <td>${nameCell}${hcp}${prPayBadge(r)}${chevron}</td>
                 ${showChapter ? `<td style="${chapStyle}" title="${escapeHtml(r.player_chapter || "")}">${escapeHtml(compact ? prAbbrevChapter(r.player_chapter) : (r.player_chapter || ""))}</td>` : ""}
                 <td style="${ptsStyle}">${r.total_points ?? ""}</td>
                 <td style="${resetStyle}">${prFmtReset(r.points_reset)}</td>
@@ -2632,12 +2731,20 @@
             fetched = isNaN(dt) ? String(d.fetched_at) : dt.toLocaleString();
         }
         const pr = Object.values(d.per_race || {});
-        $("pr-summary").textContent =
-            `${d.n_players} eligible players`
-            + pr.map(x => ` · ${x.chapter}: ${x.eligible_count} eligible (coef ${x.coefficient})`).join("")
-            + (fetched ? ` · from Golf Genius ${fetched}` : "")
-            + (d.gg_error ? ` · ⚠ ${d.gg_error}` : "");
+        const cupStaff = userRole === "admin" || userRole === "manager";
+        const cupLead = d.n_enrolled
+            ? `<span style="background:#bbf7d0;color:#14532D;padding:2px 9px;border-radius:6px;font-weight:600;">${d.n_enrolled} currently bought in</span>`
+            : escapeHtml(`${d.n_players} eligible players`);
+        $("pr-summary").innerHTML = cupLead
+            + (!cupStaff ? "" : escapeHtml(
+                ` · ${d.n_players} eligible players`
+                + pr.map(x => ` · ${x.chapter}: ${x.eligible_count} eligible (coef ${x.coefficient})`).join("")
+                + (fetched ? ` · from Golf Genius ${fetched}` : "")
+                + (d.gg_error ? ` · ⚠ ${d.gg_error}` : "")));
         $("pr-summary").title = "Projection only — the actual reset happens after the City Championships";
+        prLastCupData = d;   // role-aware re-render, same as the races
+        prAssignProjectedPayouts(d);
+        prRenderPayoutStrip(d.projected_payouts);
 
         const compact = prIsCompact();
         const rankTh = `width:${compact ? "28px" : "56px"};`;
@@ -2654,7 +2761,7 @@
                 : escapeHtml(r.player_name);
             return `<tr style="${bg}">
                 <td style="${rankTh}">${escapeHtml(r.rank)}${prRankMove(r.rank, r.prev_rank)}</td>
-                <td>${nameCell}${hcp}</td>
+                <td>${nameCell}${hcp}${prPayBadge(r)}</td>
                 <td style="${chapTh}" title="${escapeHtml(r.chapter || "")}">${escapeHtml(compact ? prAbbrevChapter(r.chapter) : (r.chapter || ""))}</td>
                 <td style="${netTh}">${escapeHtml(String(r.net_rank))}</td>
                 <td style="${resetTh}">${prFmtReset(r.points_reset)}</td>
@@ -2682,6 +2789,7 @@
         // and the global refresh button is replaced by an inline one
         $("pr-standings-title").textContent = "";
         $("pr-summary").textContent = "";
+        prRenderPayoutStrip(null);
         if (!prMonthlyData || force) {
             cont.innerHTML = '<div style="padding:1rem;color:var(--text-muted);">'
                 + (force ? "Refreshing monthly points from Golf Genius…"
