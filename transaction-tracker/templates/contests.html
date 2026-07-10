@@ -517,6 +517,13 @@
         .pr-race-chips .sub-tab.active[data-pr="tfc"],
         .pr-race-chips .sub-tab.active[data-pr="gross"],
         .pr-race-chips .sub-tab.active[data-pr="monthly"] { background: var(--surface-dark); border-color: var(--surface-dark); color: #fff; }
+        /* Upcoming fall races: burnt-orange family so they read as
+           "coming, not live" (Kerry, 2026-07-10) */
+        .pr-race-chips .sub-tab.pr-fall { background: #FDF0E6; color: #BF5700; }
+        .pr-race-chips .sub-tab.active.pr-fall,
+        .pr-race-chips .sub-tab.active[data-pr="fall_sa"],
+        .pr-race-chips .sub-tab.active[data-pr="fall_austin"] { background: #BF5700; border-color: #BF5700; color: #fff; }
+        .shell-menu button.pr-fall { color: #BF5700; }
         .pr-race-dd { display: none; position: relative; }
         .pr-race-dd-btn {
             width: 100%; height: 44px; display: flex; align-items: center; padding: 0 14px;
@@ -711,22 +718,22 @@
                     <div class="pr-race-chips">
                         <button class="sub-tab active" data-pr="net">San Antonio NET</button>
                         <button class="sub-tab" data-pr="austin">Austin NET</button>
-                        <button class="sub-tab" data-pr="fall_sa">SA Fall NET</button>
-                        <button class="sub-tab" data-pr="fall_austin">Austin Fall NET</button>
                         <button class="sub-tab" data-pr="tfc">The Fellowship Cup</button>
                         <button class="sub-tab" data-pr="gross">The Players Cup</button>
                         <button class="sub-tab" data-pr="monthly">Monthly</button>
+                        <button class="sub-tab pr-fall" data-pr="fall_sa">SA Fall NET</button>
+                        <button class="sub-tab pr-fall" data-pr="fall_austin">Austin Fall NET</button>
                     </div>
                     <div class="pr-race-dd" id="pr-race-dd">
                         <button class="pr-race-dd-btn" id="pr-race-dd-btn" aria-haspopup="listbox">San Antonio NET <span style="margin-left:auto;">&#9662;</span></button>
                         <div class="shell-menu pr-race-dd-menu" id="pr-race-dd-menu" style="display:none;">
                             <button data-pr-dd="net" class="active">San Antonio NET</button>
                             <button data-pr-dd="austin">Austin NET</button>
-                            <button data-pr-dd="fall_sa">SA Fall NET</button>
-                            <button data-pr-dd="fall_austin">Austin Fall NET</button>
                             <button data-pr-dd="tfc">The Fellowship Cup</button>
                             <button data-pr-dd="gross">The Players Cup</button>
                             <button data-pr-dd="monthly">Monthly</button>
+                            <button data-pr-dd="fall_sa" class="pr-fall">SA Fall NET</button>
+                            <button data-pr-dd="fall_austin" class="pr-fall">Austin Fall NET</button>
                         </div>
                     </div>
                 </div>
@@ -770,7 +777,8 @@
                         <b>POINTS RESET</b> condenses the field onto one master ladder —
                         those totals are the starting point for the <b>TGF CHAMPIONSHIP</b>,
                         whose final round decides THE FELLOWSHIP CUP (net) and
-                        THE PLAYERS CUP (gross).</p>
+                        THE PLAYERS CUP (gross). The FALL races run their own shorter ladder:
+                        <b>best 6 + the Fall Championship</b>.</p>
                         <p><b>Monthly.</b> Every member is automatically in the running each
                         month — ALL points earned in the calendar month count, no best-10 cap.
                         The award is $1 per TGF member as of the close of the month; ties split it.</p>
@@ -1103,10 +1111,20 @@
     async function loadPrRoster() {
         const kind = (document.querySelector(".sub-tab[data-pr].active") || {}).dataset?.pr || "net";
         if (kind.startsWith("fall")) {
+            const fallChapter = kind === "fall_austin" ? "Austin" : "San Antonio";
             $("pr-roster-title").textContent =
-                `${kind === "fall_austin" ? "AUSTIN" : "SAN ANTONIO"} FALL NET — Enrolled Players`;
-            $("pr-roster").innerHTML = '<p style="color:var(--text-muted);font-size:0.85rem;">'
-                + 'Fall buy-ins will appear here once fall enrollment opens.</p>';
+                `${fallChapter.toUpperCase()} FALL NET — Enrolled Players`;
+            try {
+                const res = await fetch(`/api/season-contests?contest_type=${encodeURIComponent("NET Points Race")}&season=${encodeURIComponent("2026 Fall")}&chapter=${encodeURIComponent(fallChapter)}`);
+                const rows = res.ok ? await res.json() : [];
+                $("pr-roster").innerHTML = rows.length
+                    ? '<div style="display:flex;flex-wrap:wrap;gap:6px;">'
+                      + rows.map(r => `<span style="display:inline-flex;align-items:center;height:28px;padding:0 12px;background:#bbf7d0;color:#14532D;border-radius:9999px;font-size:12.5px;font-weight:600;">${escapeHtml(r.customer_name)}</span>`).join("")
+                      + `</div><p style="color:var(--text-muted);font-size:0.8rem;margin-top:0.6rem;">${rows.length} bought in so far — the purse grows with every entry.</p>`
+                    : '<p style="color:var(--text-muted);font-size:0.85rem;">No fall buy-ins yet — be the first.</p>';
+            } catch (e) {
+                $("pr-roster").innerHTML = '<p style="color:var(--text-muted);font-size:0.85rem;">Fall buy-ins will appear here.</p>';
+            }
             return;
         }
         if (kind === "monthly") {
@@ -2937,11 +2955,15 @@
         prRenderStructureNote(null);
         $("pr-table-container").innerHTML = `
             <div style="padding:0.4rem 0 1rem;">
-                <span style="display:inline-flex;align-items:center;gap:8px;height:30px;padding:0 14px;background:#FDF0E6;color:#BF5700;border-radius:9999px;font:700 11px/1 'Bitter',serif;letter-spacing:1px;text-transform:uppercase;">&#9679;&nbsp;Starts Saturday, August 29</span>
+                <div style="display:flex;flex-wrap:wrap;gap:8px;">
+                    <span style="display:inline-flex;align-items:center;gap:8px;height:30px;padding:0 14px;background:#FDF0E6;color:#BF5700;border-radius:9999px;font:700 11px/1 'Bitter',serif;letter-spacing:1px;text-transform:uppercase;">&#9679;&nbsp;Starts Saturday, August 29</span>
+                    <span style="display:inline-flex;align-items:center;gap:8px;height:30px;padding:0 14px;background:#FDF0E6;color:#BF5700;border-radius:9999px;font:700 11px/1 'Bitter',serif;letter-spacing:1px;text-transform:uppercase;">Best 6 + Fall Championship</span>
+                </div>
                 <p style="margin:0.8rem 0 1rem;color:var(--text-body,#4B5563);font-size:13.5px;line-height:1.5;max-width:560px;">
                     The fall NET points race for ${chapter === "AUSTIN" ? "Austin" : "San Antonio"} —
-                    earn points on every hole at fall events, buy in to compete for the purse.
-                    Standings will appear here once play begins.
+                    earn points on every hole at fall events. Your season total is your
+                    <b>best 6 event totals + the Fall Championship</b>. Buy in to compete
+                    for the purse; standings appear here once play begins.
                 </p>
                 <div class="fall-cta-row" style="max-width:420px;">
                     <a class="contest-cta" style="border-radius:9999px;padding:0.8rem 1.6rem;text-align:center;"

@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.60.0";
+window.TGF_VERSION = "2.60.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.60.1",
+    date: "2026-07-10",
+    changes: [
+      "Fall races moved BELOW Monthly in the race selector and recolored (Kerry): burnt-orange 'upcoming' chips -- soft tint idle, solid burnt orange selected -- in both the desktop chip row and the mobile tab menu.",
+      "Fall format corrected per Kerry: the fall season total is your BEST 6 event totals + the FALL CHAMPIONSHIP (not best 10). The fall pages carry a 'Best 6 + Fall Championship' chip next to the start date, and the How It Works popup notes the fall exception.",
+      "Fall pages now list ENROLLED PLAYERS live from the enrollment database (season '2026 Fall', green bought-in pills with a running count). New one-shot scoring-fall-enroll bridge command seeds the first two SA Fall NET enrollments: Luke Mazanec (his SEASON CONTESTS order from this morning, R170271926) and Kerry Niester -- manually_enrolled so nothing auto-cleans them before the fall products exist.",
+    ],
+  },
   {
     version: "2.60.0",
     date: "2026-07-10",
