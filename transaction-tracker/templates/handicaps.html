@@ -223,6 +223,18 @@
             .hcp-io-item { display:block; width:100%; text-align:left; padding:0.45rem 0.7rem;
             font-size:0.82rem; border:none; background:none; cursor:pointer; border-radius:5px; }
         .hcp-io-item:hover { background: #fff3ec; color: #E87C3E; }
+
+        /* ═══ v2.56.1 — contests-handicaps-071026 view 1a treatments ═══ */
+        .ev-tab.active[data-hcp-status] { background: var(--surface-dark, #1B1B1B); border-color: var(--surface-dark, #1B1B1B); color: #fff; }
+        #hcp-table thead th {
+            font: 700 10px/1.3 'Bitter', serif; letter-spacing: 1px;
+            color: #9CA3AF; text-transform: uppercase;
+            border-bottom: 1px solid var(--border); background: none;
+        }
+        #hcp-table thead th.sort-active { color: var(--primary, #E87C3E); }
+        #hcp-table tbody td { border-bottom: 1px solid #F3F2EF; font-variant-numeric: tabular-nums; }
+        .stats-row .stat-card .stat-label { font: 700 9.5px/1.3 'Bitter', serif; letter-spacing: 1.5px; text-transform: uppercase; color: var(--text-muted); }
+        .stats-row .stat-card .stat-value { font-family: 'Bitter', serif; font-weight: 700; color: var(--text, #1B1B1B); }
     </style>
 </head>
 <body>
@@ -359,6 +371,17 @@
             <div class="hcp-mobile-list" id="hcp-mobile-list"></div>
             <div class="table-wrapper">
                 <table id="hcp-table" class="data-table">
+                    {% if member_mode %}
+                    <thead>
+                        <tr>
+                            <th style="width:34px;"></th>
+                            <th class="sortable-th" data-sort="name">Player <span class="sort-arrow"></span></th>
+                            <th class="sortable-th" data-sort="index" style="text-align:right;">Index <span class="sort-arrow"></span></th>
+                            <th style="text-align:right;">Trend</th>
+                            <th class="sortable-th" data-sort="active" style="text-align:right;">Rounds <span class="sort-arrow"></span></th>
+                        </tr>
+                    </thead>
+                    {% else %}
                     <thead>
                         <tr>
                             <th style="width:28px;"></th>
@@ -372,6 +395,7 @@
                             <th>Action</th>
                         </tr>
                     </thead>
+                    {% endif %}
                     <tbody id="hcp-tbody">
                         <tr><td colspan="9" style="text-align:center;padding:32px;color:#94a3b8;">
                             Loading...
@@ -986,11 +1010,26 @@
                 }
             }
 
-            tr.innerHTML = `
+            // Trend (view 1a): index delta vs before the latest round —
+            // negative = improving (success green), positive = red
+            const t = p.handicap_trend;
+            const trendCell = (t == null || t === 0)
+                ? '<span style="color:#9CA3AF;font-weight:700;">—</span>'
+                : t < 0
+                    ? `<span style="color:#16A34A;font-weight:700;">▼ ${Math.abs(t).toFixed(1)}</span>`
+                    : `<span style="color:#DC2626;font-weight:700;">▲ ${t.toFixed(1)}</span>`;
+            tr.innerHTML = window.MEMBER_MODE ? `
                 <td><button class="expand-btn ${isExpanded?'open':''}"
                     onclick="toggleRounds(${esc(JSON.stringify(p.player_name))}, this)">▶</button></td>
                 <td>${playerCell}</td>
-                <td>${indexCell}</td>
+                <td style="text-align:right;">${indexCell}</td>
+                <td style="text-align:right;">${trendCell}</td>
+                <td style="text-align:right;">${activeLabel}</td>
+            ` : `
+                <td><button class="expand-btn ${isExpanded?'open':''}"
+                    onclick="toggleRounds(${esc(JSON.stringify(p.player_name))}, this)">▶</button></td>
+                <td>${playerCell}</td>
+                <td>${indexCell} ${trendCell}</td>
                 <td>${activeLabel}</td>
                 <td>${totalRounds}</td>
                 <td>${p.latest_round_date || '—'}</td>
@@ -1044,7 +1083,7 @@
             expandTr.id = `expand-${safeid(p.player_name)}`;
             expandTr.style.display = isExpanded ? '' : 'none';
             const canDelete = role === 'admin' || role === 'manager';
-            const colspan = isAdmin ? 9 : 8;
+            const colspan = window.MEMBER_MODE ? 5 : (isAdmin ? 9 : 8);
             expandTr.innerHTML = `<td colspan="${colspan}"><div class="rounds-inner" id="rounds-inner-${safeid(p.player_name)}">
                 <em style="color:#94a3b8;">Loading rounds…</em>
             </div></td>`;

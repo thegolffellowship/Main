@@ -260,3 +260,17 @@ selected — flip to EVERYONE when working the link/auto-link queue.
 get_all_handicap_players returns `player_status` for this. The stats
 row (Players Tracked / Total Rounds / avg index) stays global,
 matching the chapter filter's existing behavior.
+
+## Trend column + member table (v2.56.1, handoff contests-handicaps-071026)
+
+`get_all_handicap_players` returns `handicap_trend`: the index delta vs
+the index recomputed WITHOUT the most recent round (needs both pools
+computable, else null). Negative = improving (▼ success-green
+#16A34A), positive = ▲ red, 0/null = — gray. The pinless member table
+renders the ratified 5-column view (chevron | Player | Index | Trend |
+Rounds, right-aligned numerics); admin/manager keep the full 9-column
+table with the trend chip beside HCP. MEMBERS|EVERYONE active pill is
+now dark (--surface-dark) per view 1a; table headers wear the Bitter
+hairline treatment; stat cards Bitter labels + dark numerals. The
+expanded round-history interior keeps its current functional styling —
+its 1a cosmetic pass rides with the admin-density handoff.

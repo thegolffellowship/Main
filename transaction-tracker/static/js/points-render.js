@@ -13,12 +13,17 @@
         st.id = "points-render-css";
         st.textContent = `
         .enrollment-table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+        /* v2.56.1 (contests-handicaps-071026): Bitter hairline headers,
+           soft dividers, tabular data — ratified typography rule #44 */
         .enrollment-table th {
-            text-align: left; font-size: 0.73rem; font-weight: 600;
-            color: var(--text-muted); text-transform: uppercase;
-            padding: 0.4rem 0.75rem; border-bottom: 2px solid var(--border);
+            text-align: left; font: 700 10px/1.3 'Bitter', serif;
+            letter-spacing: 1px; color: #9CA3AF; text-transform: uppercase;
+            padding: 0.55rem 0.75rem 0.45rem; border-bottom: 1px solid var(--border);
         }
-        .enrollment-table td { padding: 0.38rem 0.75rem; border-bottom: 1px solid var(--border); }
+        .enrollment-table td {
+            padding: 0.42rem 0.75rem; border-bottom: 1px solid #F3F2EF;
+            font-variant-numeric: tabular-nums;
+        }
         /* dashboard.css sets a GLOBAL tbody td { white-space: nowrap } — no
            table text can wrap unless a cell opts in via pr-wrap.
            Safari ignores overflow-wrap in table cells; word-break works */
@@ -30,9 +35,9 @@
         @media (hover: hover) {
             .enrollment-table tbody tr:hover { background: var(--row-hover); }
         }
-        .enrollment-table.pr-compact { font-size: 0.72rem; table-layout: fixed; }
+        .enrollment-table.pr-compact { font-size: 0.78rem; table-layout: fixed; }
         .enrollment-table.pr-compact th {
-            padding: 0.3rem 0.25rem; font-size: 0.6rem; letter-spacing: 0;
+            padding: 0.3rem 0.25rem; font-size: 9px; letter-spacing: 0.5px;
         }
         .enrollment-table.pr-compact td { padding: 0.3rem 0.25rem; }`;
         document.head.appendChild(st);
@@ -247,18 +252,19 @@
 
         // Visual hierarchy: course facts on top, then a thick-bordered
         // score section (GROSS most important, then NET), then points
-        const sectTop = "border-top:3px solid #0f172a;";
-        const sectBot = "border-bottom:3px solid #0f172a;";
+        const sectTop = "border-top:2px solid #1B1B1B;";
+        const sectBot = "border-bottom:2px solid #1B1B1B;";
         const netOf = h => (h.strokes == null ? null : h.strokes - (h.strokes_received || 0));
         const tables = blocks.map(([label, hs]) => {
-            const holeRow = hs.map(h => `<td style="${td}font-weight:700;background:#111;color:#fff;">${h.hole_number}</td>`).join("");
-            const parRow = hs.map(h => `<td style="${td}">${h.par ?? ""}</td>`).join("");
-            const ydsRow = hs.map(h => `<td style="${td}">${h.yardage ?? ""}</td>`).join("");
-            const siRow = hs.map(h => `<td style="${td}color:var(--text-muted);">${h.stroke_index ?? ""}</td>`).join("");
+            const holeRow = hs.map(h => `<td style="${td}font-weight:700;background:#1B1B1B;color:#fff;">${h.hole_number}</td>`).join("");
+            const info = "color:#1D4ED8;";
+            const parRow = hs.map(h => `<td style="${td}${info}">${h.par ?? ""}</td>`).join("");
+            const ydsRow = hs.map(h => `<td style="${td}${info}">${h.yardage ?? ""}</td>`).join("");
+            const siRow = hs.map(h => `<td style="${td}${info}opacity:.75;">${h.stroke_index ?? ""}</td>`).join("");
             // GROSS section (bold score + its points on a grey band), then
             // NET section, each opened by a thick border — points sit
             // directly beneath their score and read visually subordinate
-            const grey = "background:#eef2f7;color:#475569;";
+            const grey = "background:#EFF4FF;color:#1D4ED8;";
             const scRow = hs.map(h => scoreCell(h, sectTop + "font-weight:700;")).join("");
             const gpRow = hs.map(h => `<td style="${td}${grey}">${h.stableford_gross ?? ""}</td>`).join("");
             const netRow = hs.map(h => {
@@ -272,12 +278,12 @@
             const totGP = `style="${td}${grey}font-weight:600;"`;
             const totN = `style="${td}${sectTop}font-weight:700;background:#f1f5f9;"`;
             const totNP = `style="${td}${grey}${sectBot}font-weight:600;"`;
-            const totHead = `style="${td}font-weight:700;background:#111;color:#fff;"`;
+            const totHead = `style="${td}font-weight:700;background:#1B1B1B;color:#fff;"`;
             return `<table style="border-collapse:collapse;font-size:${fs};margin:0.25rem 0;">
-                <tr><td style="${lbl}background:#111;color:#fff;">HOLE</td>${holeRow}<td ${totHead}>${label}</td></tr>
-                <tr><td style="${lbl}">PAR</td>${parRow}<td ${tot}>${sum(hs, h => h.par) || ""}</td></tr>
-                <tr><td style="${lbl}">${L.yds}</td>${ydsRow}<td ${tot}>${sum(hs, h => h.yardage) || ""}</td></tr>
-                <tr><td style="${lbl}" title="Hole handicap ranking (stroke index): 1 = hardest — decides which holes a player's handicap dots land on">HCP</td>${siRow}<td ${tot}></td></tr>
+                <tr><td style="${lbl}background:#1B1B1B;color:#fff;">HOLE</td>${holeRow}<td ${totHead}>${label}</td></tr>
+                <tr><td style="${lbl}color:#1D4ED8;">PAR</td>${parRow}<td ${tot}>${sum(hs, h => h.par) || ""}</td></tr>
+                <tr><td style="${lbl}color:#1D4ED8;">${L.yds}</td>${ydsRow}<td ${tot}>${sum(hs, h => h.yardage) || ""}</td></tr>
+                <tr><td style="${lbl}color:#1D4ED8;" title="Hole handicap ranking (stroke index): 1 = hardest — decides which holes a player's handicap dots land on">HCP</td>${siRow}<td ${tot}></td></tr>
                 <tr><td style="${lbl}${sectTop}font-weight:700;">${L.gs}</td>${scRow}<td ${totG}>${sum(hs, h => h.strokes) || ""}</td></tr>
                 <tr><td style="${lbl}${grey}" title="Gross stableford points per hole">${L.gp}</td>${gpRow}<td ${totGP}>${sumPts(hs, h => h.stableford_gross)}</td></tr>
                 <tr><td style="${lbl}${sectTop}font-weight:700;" title="Gross strokes minus handicap strokes received on the hole">${L.ns}</td>${netRow}<td ${totN}>${sumPts(hs, netOf)}</td></tr>
@@ -390,7 +396,7 @@
             // CITY CHAMPIONSHIP Total line joins them (blank until played):
             // final = best 10 point totals + City Championship total.
             let counted = true;
-            const ccRow = `<tr style="background:#eef2f7;">
+            const ccRow = `<tr style="background:#F6F5F2;">
                 <td></td>
                 <td style="font-weight:700;">CITY CHAMPIONSHIP Total</td>
                 ${Array(Math.max(0, totalCols - 2)).fill("<td></td>").join("")}
@@ -398,16 +404,16 @@
             // Admin-specced section banners: counted = black bar with white
             // text, not counted = 40% gray with black text (replaces GG's
             // "following points are not counted" sentence row)
-            const secHdr = (label, bg, fg) => `<tr><td colspan="${totalCols}" class="pr-wrap" style="background:${bg};color:${fg};font-weight:700;letter-spacing:0.04em;text-transform:uppercase;">${label}</td></tr>`;
+            const secHdr = (label, bg, fg) => `<tr><td colspan="${totalCols}" class="pr-wrap" style="background:${bg};color:${fg};font:700 11px/1.5 'Bitter',serif;letter-spacing:1px;text-transform:uppercase;">${label}</td></tr>`;
             const parts = [];
-            if (order && !opts.plain) parts.push(secHdr(`${compact ? "COUNTED" : "POINTS COUNTED"} <span style="font-weight:400;text-transform:none;">(Best 10 + City Championship)</span>`, "#111", "#fff"));
+            if (order && !opts.plain) parts.push(secHdr(`${compact ? "COUNTED" : "POINTS COUNTED"} <span style="font-weight:400;text-transform:none;letter-spacing:0;color:#9CA3AF;font-family:'Helvetica Neue',Arial,sans-serif;">(Best 10 + City Championship)</span>`, "#1B1B1B", "#fff"));
             for (const r of body) {
                 if (r.length !== width) {
                     if (opts.plain) continue;
                     if (counted) {
                         parts.push(ccRow);
                         counted = false;
-                        if (order) { parts.push(secHdr(compact ? "Not Counted" : "Points Not Counted", "#bfbfbf", "#111")); continue; }
+                        if (order) { parts.push(secHdr(compact ? "Not Counted" : "Points Not Counted", "#B9B7B2", "#1B1B1B")); continue; }
                     }
                     parts.push(`<tr><td colspan="${totalCols}" class="pr-wrap" style="text-align:center;font-weight:600;background:#f8fafc;">${escapeHtml(nb(r.join(" ")))}</td></tr>`);
                     continue;

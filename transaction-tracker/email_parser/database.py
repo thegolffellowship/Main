@@ -18959,12 +18959,20 @@ def get_all_handicap_players(db_path: str | Path | None = None) -> list[dict]:
         name = row["player_name"]
         diffs = player_diffs.get(name, [])
         index = compute_handicap_index(diffs, cfg)
+        # Trend (v2.56.1, design handoff contests-handicaps-071026 view 1a):
+        # the index as it stood BEFORE the most recent round — negative
+        # delta = improving. diffs are newest-first, so dropping [0]
+        # reconstructs the prior pool.
+        index_prev = compute_handicap_index(diffs[1:], cfg) if len(diffs) > 1 else None
+        trend = (round(index - index_prev, 1)
+                 if index is not None and index_prev is not None else None)
         players.append({
             "player_name": name,
             "customer_name": row["customer_name"],
             "chapter": row["chapter"],
             "player_status": row["player_status"],
             "handicap_index": index,
+            "handicap_trend": trend,
             "handicap_index_18": round(index * 2, 1) if index is not None else None,
             "total_rounds": row["total_rounds"],
             "active_rounds": row["active_rounds"],
