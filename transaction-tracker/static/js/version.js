@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.57.2";
+window.TGF_VERSION = "2.57.3";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.57.3",
+    date: "2026-07-10",
+    changes: [
+      "Member round history drops the COUNT column on phones (Kerry) -- the green row treatment already marks counting rounds, so the column was redundant; Date / Course / Gross / Diff / Index all fit on screen now. The legend reads 'green row' on mobile. Desktop keeps the full Counting column with its checkmarks.",
+    ],
+  },
   {
     version: "2.57.2",
     date: "2026-07-10",
