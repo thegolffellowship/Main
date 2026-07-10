@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.60.2";
+window.TGF_VERSION = "2.60.3";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.60.3",
+    date: "2026-07-10",
+    changes: [
+      "Enrolled-players lists hidden on all IN-PROGRESS race pages (Kerry): the standings already mark buy-in on every row (green + check), so the bottom roster was redundant on the live NETs, the cups, and Monthly (whose explainer lives in How It Works now). The list remains only on the upcoming FALL pages, where it's the whole show until play begins.",
+    ],
+  },
   {
     version: "2.60.2",
     date: "2026-07-10",

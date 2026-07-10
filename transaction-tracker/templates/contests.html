@@ -758,7 +758,7 @@
                     <div id="pr-structure-note"></div>
                     <div id="pr-table-container" style="overflow-x:auto;"></div>
                 </div>
-                <div class="standings-section" style="padding:1rem 2rem;">
+                <div class="standings-section" id="pr-roster-section" style="padding:1rem 2rem;">
                     <h4 id="pr-roster-title">Enrolled Players</h4>
                     <div id="pr-roster"><p style="color:var(--text-muted);">Loading…</p></div>
                 </div>
@@ -1121,6 +1121,13 @@
 
     async function loadPrRoster() {
         const kind = (document.querySelector(".sub-tab[data-pr].active") || {}).dataset?.pr || "net";
+        // Enrollment lists only on the upcoming fall pages (Kerry,
+        // 2026-07-10) — in-progress races already show buy-in status on
+        // every standings row, and Monthly's explainer lives in the
+        // How It Works popup.
+        const rosterSec = $("pr-roster-section");
+        if (rosterSec) rosterSec.style.display = kind.startsWith("fall") ? "" : "none";
+        if (!kind.startsWith("fall")) return;
         if (kind.startsWith("fall")) {
             const fallChapter = kind === "fall_austin" ? "Austin" : "San Antonio";
             $("pr-roster-title").textContent =
