@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.57.3";
+window.TGF_VERSION = "2.57.4";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.57.4",
+    date: "2026-07-10",
+    changes: [
+      "Member mobile top bar upsized (Kerry): 64px tall with a 34px TGF mark and 13px tabs, and the first tab reads the full SEASON CONTESTS instead of SEASON -- two tabs leave plenty of room. Staff mobile bar (hamburger layout) unchanged.",
+    ],
+  },
   {
     version: "2.57.3",
     date: "2026-07-10",

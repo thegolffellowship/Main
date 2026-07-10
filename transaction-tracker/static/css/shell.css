@@ -221,12 +221,16 @@ header.shell-nav {
     header.shell-nav.shell-inline .shell-burger { display: none; }
     header.shell-nav.shell-inline .shell-mobile-title { display: none; }
     header.shell-nav.shell-inline .shell-nav-links { display: flex; gap: 16px; margin-left: 0; flex: 1; }
-    /* Member variant mobile (1d): icon + inline tabs, CTA lives in content */
+    /* Member variant mobile (1d): icon + inline tabs, CTA lives in content.
+       Bigger bar/icon/text + full "Season Contests" label (Kerry,
+       2026-07-10 — two tabs leave plenty of room) */
+    header.shell-nav.shell-member { min-height: 64px; }
     .shell-member .shell-brand { display: flex; }
-    .shell-member .shell-brand img { width: 26px; height: 26px; }
+    .shell-member .shell-brand img { width: 34px; height: 34px; }
     .shell-member .shell-wordmark { display: none; }
-    .shell-member .shell-member-tabs { gap: 16px; margin-left: 4px; flex: 1; }
-    .shell-member .shell-member-tabs a { min-height: 44px; }
+    .shell-member .shell-member-tabs { gap: 18px; margin-left: 8px; flex: 1; }
+    .shell-member .shell-member-tabs a { min-height: 44px; font-size: 13px; letter-spacing: 1.2px; }
+    .shell-member .shell-member-tabs .nav-label-full { display: inline; }
     /* Ops toolbar: primary + ⋯ Actions only; the rest live in the sheet */
     .shell-ops { padding: 8px 12px; }
     .shell-ops-more { display: inline-block; height: 40px; }
