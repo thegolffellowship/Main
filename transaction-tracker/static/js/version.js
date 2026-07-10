@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.57.4";
+window.TGF_VERSION = "2.57.5";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.57.5",
+    date: "2026-07-10",
+    changes: [
+      "POINTS RACES tab is the race selector on phones (Kerry): tapping the tab drops the race menu right from the tab bar -- the separate selector row below is gone on mobile. Picking a race switches the standings and closes the menu; tapping the tab again toggles it; switching to MATCH PLAY or ENROLLMENT closes it. The active tab wears a small orange down-caret so the drop-down is discoverable. Desktop keeps the race chip row unchanged.",
+    ],
+  },
   {
     version: "2.57.4",
     date: "2026-07-10",
