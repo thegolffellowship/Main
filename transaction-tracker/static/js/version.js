@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.58.1";
+window.TGF_VERSION = "2.58.2";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.58.2",
+    date: "2026-07-10",
+    changes: [
+      "Projected money moved BELOW the player's name as a small green 'PROJECTED: $xxx' line (Kerry) -- the inline pill was overflowing the name column into the chapter/points columns on phones (the Players Cup badge sat on top of 'AUS 188'). Block line under the name can't collide with anything.",
+    ],
+  },
   {
     version: "2.58.1",
     date: "2026-07-10",
