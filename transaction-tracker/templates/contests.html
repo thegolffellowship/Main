@@ -25,7 +25,7 @@
            ratified TGF_Season_Contest_Payouts_v1_0 ladders) */
         #pr-payouts { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin: 0.4rem 0 0.55rem; }
         #pr-payouts:empty { display: none; }
-        .pr-purse {
+        .pr-pot {
             display: inline-flex; align-items: center; height: 26px; padding: 0 12px;
             background: #1B1B1B; color: #fff; border-radius: 9999px;
             font: 700 10.5px/1 'Bitter', serif; letter-spacing: 1px; text-transform: uppercase;
@@ -58,40 +58,109 @@
         }
         .pr-hiw-link:hover { background: var(--primary-hover, #D06B2E); }
         .pr-hiw-scrim { position: fixed; inset: 0; background: rgba(0,0,0,.45); z-index: 300; }
+        /* Modal card — handoff hiw-popup-final-071026 (Kerry-RATIFIED per
+           view, mailbox #95): 600px centered card on desktop, bottom sheet
+           on phones (view 1g) */
         .pr-hiw-modal {
             position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%);
-            width: min(660px, calc(100vw - 24px)); max-height: 84vh; overflow-y: auto;
+            width: min(600px, calc(100vw - 24px)); max-height: 86vh; overflow-y: auto;
             background: #fff; border-radius: 16px; z-index: 301;
-            box-shadow: 0 20px 60px rgba(0,0,0,.3); padding: 0 20px 18px;
+            box-shadow: 0 28px 80px rgba(0,0,0,.45);
             /* iOS: keep the swipe INSIDE the popup — without these the page
                behind takes the scroll and the popup looks frozen */
             -webkit-overflow-scrolling: touch; overscroll-behavior: contain;
         }
-        .pr-hiw-head {
-            display: flex; align-items: center; justify-content: space-between;
-            position: sticky; top: 0; background: #fff; padding: 16px 0 10px;
-            border-bottom: 1px solid var(--border); margin-bottom: 10px;
+        .pr-hiw-close {
+            position: absolute; top: 16px; right: 16px; width: 34px; height: 34px;
+            display: flex; align-items: center; justify-content: center; z-index: 2;
+            border-radius: 9999px; background: #F3F2EF; color: #6B7280;
+            font-size: 17px; cursor: pointer; border: none; line-height: 1;
         }
-        .pr-hiw-head h4 { margin: 0; font: 700 1.05rem/1.2 'Bitter', serif; }
-        .pr-hiw-head button {
-            width: 34px; height: 34px; border: none; background: none; cursor: pointer;
-            font-size: 16px; color: var(--text-muted); border-radius: 8px;
+        .pr-hiw-close:hover { background: #E7E5E0; color: #1B1B1B; }
+        .pr-hiw-title {
+            font: 700 26px/1.1 'Bitter', serif; color: #1B1B1B;
+            letter-spacing: -0.01em; padding: 30px 64px 0 34px;
         }
-        .pr-hiw-head button:hover { background: #F3F2EF; color: var(--text); }
-        .pr-hiw-body p { font-size: 13.5px; line-height: 1.5; color: var(--text-body, #4B5563); margin: 0 0 0.7rem; }
-        .pr-hiw-body p b { color: #1B1B1B; }
-        .pr-hiw-body .stableford-ref { margin-top: 0.4rem; padding: 0; border: none; }
-        .pr-hiw-chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 0.9rem; }
+        .pr-hiw-title .hiw-name { color: var(--primary, #E87C3E); }
+        .pr-hiw-chips { display: flex; flex-wrap: wrap; gap: 8px; margin: 16px 34px 0; }
         .pr-hiw-chips span {
-            display: inline-flex; align-items: center; height: 26px; padding: 0 11px;
-            background: #FDF0E6; color: #BF5700; border-radius: 9999px;
-            font: 700 10px/1 'Bitter', serif; letter-spacing: 1px; text-transform: uppercase;
+            display: inline-flex; align-items: center; height: 28px; padding: 0 13px;
+            border-radius: 9999px; background: rgba(191,87,0,.10); color: #BF5700;
+            font: 700 10.5px/1 'Bitter', serif; letter-spacing: 1px; text-transform: uppercase;
         }
-        .pr-hiw-sec {
-            margin: 0.9rem 0 0.25rem; font: 700 11px/1.3 'Bitter', serif;
-            letter-spacing: 1.2px; text-transform: uppercase; color: #1B1B1B;
+        .pr-hiw-secs { padding: 24px 34px 4px; display: flex; flex-direction: column; gap: 22px; }
+        .pr-hiw-sec-h { font: 700 12.5px/1 'Bitter', serif; color: #1B1B1B; text-transform: uppercase; letter-spacing: 1.6px; margin-bottom: 8px; }
+        .pr-hiw-sec-b { font-size: 15px; line-height: 1.62; color: #4B5563; }
+        .pr-hiw-foot { padding: 14px 34px 0; font-size: 12px; line-height: 1.55; color: #9CA3AF; }
+        .pr-hiw-cta { display: flex; justify-content: flex-end; padding: 16px 34px 24px; }
+        .pr-hiw-cta button {
+            height: 42px; padding: 0 26px; background: var(--primary, #E87C3E); color: #fff;
+            border: none; border-radius: 9999px; cursor: pointer;
+            font: 700 11px/1 'Bitter', serif; letter-spacing: 1.5px; text-transform: uppercase;
         }
-        .pr-hiw-foot { font-size: 12px !important; color: var(--text-muted) !important; margin-top: 0.8rem !important; }
+        /* per-hole points chart */
+        .hiwc { border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
+        .hiwc-head { display: flex; align-items: flex-end; padding: 11px 14px 9px; background: #FBFAF8; border-bottom: 1px solid var(--border); }
+        .hiwc-cap { flex: 1; font: 700 10.5px/1 'Bitter', serif; color: #6B7280; text-transform: uppercase; letter-spacing: 1.2px; }
+        .hiwc-col { width: 58px; text-align: center; font: 700 10px/1 'Bitter', serif; color: #9CA3AF; text-transform: uppercase; letter-spacing: 1px; }
+        .hiwc-col.champ { color: #BF5700; }
+        .hiwc-row { display: flex; align-items: stretch; border-top: 1px solid #F1F1EF; }
+        .hiwc-lab { flex: 1; padding: 8px 14px; font-size: 14px; color: #1B1B1B; align-self: center; }
+        .hiwc-val { width: 58px; padding: 8px 0; text-align: center; font-size: 14px; font-weight: 700; font-variant-numeric: tabular-nums; color: #1B1B1B; align-self: center; }
+        .hiwc-val.neg { color: #B91C1C; }
+        .hiwc-val.champ { align-self: stretch; padding: 0; display: flex; align-items: center; justify-content: center; background: rgba(191,87,0,.055); color: #1B1B1B; }
+        .hiwc-val.champ.neg { color: #B91C1C; }
+        /* example scorecard */
+        .hiws { border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
+        .hiws-grid { display: grid; grid-template-columns: 96px repeat(9, 1fr) 40px; align-items: center; }
+        .hiws-hd { background: var(--surface-dark, #1B1B1B); padding: 8px 0; }
+        .hiws-hd span { text-align: center; font: 700 10px/1 'Bitter', serif; color: #fff; }
+        .hiws-hd span:first-child { text-align: left; padding-left: 14px; letter-spacing: 0.5px; }
+        .hiws-hd span:last-child { color: #9CA3AF; }
+        .hiws-row { padding: 5px 0; }
+        .hiws-row .hiws-lab { padding-left: 14px; font: 700 9.5px/1.1 'Bitter', serif; letter-spacing: 0.4px; }
+        .hiws-out { text-align: center; font-weight: 700; font-size: 12.5px; font-variant-numeric: tabular-nums; }
+        .hiws-cellwrap { display: flex; align-items: center; justify-content: center; }
+        .hiws-pip { position: relative; display: inline-flex; align-items: center; justify-content: center; min-width: 22px; height: 22px; }
+        .hiws-ring2 { position: absolute; inset: -3.5px; border: 1.5px solid transparent; }
+        .hiws-num { display: inline-flex; align-items: center; justify-content: center; min-width: 22px; height: 22px; border: 1.5px solid transparent; font-size: 12.5px; font-variant-numeric: tabular-nums; }
+        .hiws-dot { position: absolute; top: -5px; right: -6px; font-size: 11px; line-height: 1; color: #1B1B1B; }
+        .hiws-leg { display: flex; align-items: center; gap: 14px; padding: 9px 14px; background: #FBFAF8; border-top: 1px solid #EDECE8; font-size: 11.5px; color: #6B7280; flex-wrap: wrap; }
+        .hiws-leg .lg { display: inline-flex; align-items: center; gap: 5px; }
+        .hiws-leg .lg-c { display: inline-flex; width: 14px; height: 14px; border: 1.5px solid #DC2626; border-radius: 50%; }
+        .hiws-leg .lg-s { display: inline-flex; width: 13px; height: 13px; border: 1.5px solid #4B5563; border-radius: 3px; }
+        @media (max-width: 640px) {
+            /* bottom-sheet presentation on phones (view 1g) */
+            .pr-hiw-modal {
+                left: 8px; right: 8px; bottom: 8px; top: auto; transform: none;
+                width: auto; max-height: 88vh; border-radius: 22px;
+                box-shadow: 0 -10px 40px rgba(0,0,0,.35);
+            }
+            .pr-hiw-title { font-size: 21px; padding: 22px 56px 0 20px; }
+            .pr-hiw-chips { gap: 7px; margin: 14px 20px 0; }
+            .pr-hiw-chips span { height: 26px; padding: 0 11px; font-size: 10px; letter-spacing: 0.8px; }
+            .pr-hiw-secs { padding: 20px 20px 4px; gap: 19px; }
+            .pr-hiw-sec-h { font-size: 12px; letter-spacing: 1.4px; margin-bottom: 7px; }
+            .pr-hiw-sec-b { font-size: 14.5px; line-height: 1.6; }
+            .pr-hiw-foot { padding: 14px 20px 0; }
+            .pr-hiw-cta { padding: 14px 20px 22px; }
+            .pr-hiw-cta button { width: 100%; height: 46px; }
+            .hiwc-col { width: 46px; font-size: 9.5px; letter-spacing: 0.5px; }
+            .hiwc-lab { padding: 7px 12px; font-size: 13.5px; }
+            .hiwc-val { width: 46px; padding: 7px 0; font-size: 13.5px; }
+            .hiws-grid { grid-template-columns: 74px repeat(9, 1fr) 28px; }
+            .hiws-hd { padding: 6px 0; }
+            .hiws-hd span { font-size: 8.5px; }
+            .hiws-hd span:first-child { padding-left: 10px; }
+            .hiws-row { padding: 3px 0; }
+            .hiws-row .hiws-lab { padding-left: 10px; font-size: 8px; letter-spacing: 0.3px; }
+            .hiws-out { font-size: 11px; }
+            .hiws-pip, .hiws-num { min-width: 18px; height: 18px; }
+            .hiws-num { font-size: 11px; }
+            .hiws-ring2 { inset: -3px; }
+            .hiws-dot { top: -4px; right: -4px; font-size: 9px; }
+            .hiws-leg { gap: 10px; padding: 8px 10px; font-size: 10.5px; }
+        }
 
         /* Contest name heading — prominent, name only (Kerry, 2026-07-10) */
         #pr-standings-title {
@@ -456,23 +525,6 @@
 
         /* ── Points Race placeholder ── */
         .pr-section { padding: 1.5rem 2rem; }
-        .stableford-ref {
-            background: var(--surface); border: 1px solid var(--border); border-radius: 6px;
-            padding: 1rem 1.25rem; margin-top: 1rem; display: grid;
-            grid-template-columns: 1fr 1fr; gap: 1rem; max-width: 680px;
-        }
-        .stableford-ref h4 { font-size: 0.78rem; font-weight: 700; text-transform: uppercase; color: var(--text-muted); margin-bottom: 0.5rem; }
-        .stableford-ref table { font-size: 0.82rem; width: 100%; border-collapse: collapse; }
-        .stableford-ref td { padding: 0.18rem 0; }
-        .stableford-ref td:nth-child(2), .stableford-ref td:nth-child(3) {
-            text-align: right; font-weight: 600; width: 54px;
-        }
-        .stableford-ref td:nth-child(2) { color: var(--primary); }
-        .stableford-ref td:nth-child(3) { color: #BF5700; }
-        .stableford-ref tr.sr-head td {
-            font-size: 0.6rem; font-weight: 700; letter-spacing: 0.6px;
-            text-transform: uppercase; color: var(--text-muted) !important;
-        }
 
         /* ── Unassigned enrollees panel ── */
         .unassigned-card {
@@ -591,7 +643,6 @@
             }
             #pr-standings-title { font-size: 1.22rem; }
             #pr-phase-chip { height: 26px; font-size: 10px !important; padding: 0 11px !important; }
-            .stableford-ref { grid-template-columns: 1fr; }
         }
 
         /* Registration CTA (Kerry, v2.53.0; v2.57.6: full-width banner flush
@@ -690,6 +741,9 @@
                 </div>
             </div>
             <div class="cmp-body">
+                <div style="display:flex;justify-content:flex-end;margin:0 0 0.6rem;">
+                    <button id="cmp-hiw-btn" class="pr-hiw-link" type="button">How It Works</button>
+                </div>
                 <div id="cmp-structure-banner"></div>
                 <div id="cmp-pools-container">
                     <div class="empty-state">
@@ -774,128 +828,13 @@
                     <div id="pr-roster"><p style="color:var(--text-muted);">Loading…</p></div>
                 </div>
 
-                <!-- HOW IT WORKS popup (Kerry, 2026-07-10): the explanations +
-                     points value charts moved off the page bottom into an
-                     on-demand modal -->
+                <!-- HOW IT WORKS popup — handoff hiw-popup-final-071026
+                     (Kerry-RATIFIED per view, mailbox #95): one shared modal,
+                     six per-contest views rendered by prHiwRender() -->
                 <div class="pr-hiw-scrim" id="pr-hiw-scrim" style="display:none;"></div>
-                <div class="pr-hiw-modal" id="pr-hiw-modal" style="display:none;" role="dialog" aria-modal="true" aria-label="How the points races work">
-                    <div class="pr-hiw-head">
-                        <h4>How the Points Races Work</h4>
-                        <button id="pr-hiw-close" type="button" aria-label="Close">&#10005;</button>
-                    </div>
-                    <div class="pr-hiw-body">
-                        <!-- SEASON races (city NETs + the two cups) -->
-                        <div id="pr-hiw-season">
-                        <p><b>Earn points on every hole you play.</b> Every event carries a
-                        POINTS game for its race, and your event total is your Stableford
-                        score in that game (net for the NET races, gross for THE PLAYERS CUP).
-                        A rough hole can go negative, but your event total never does —
-                        the lowest an event can score is 0. <b>CHAMP</b> values apply to the City Championship
-                        and TGF Championship rounds.</p>
-                        <p><b>The season.</b> Regular-season standings count your
-                        <b>best 10 event totals + the City Championship</b>. After the City
-                        Championships, the <b>POINTS RESET</b> condenses the field onto one
-                        master ladder — the starting totals for the <b>TGF CHAMPIONSHIP</b>,
-                        whose final round decides THE FELLOWSHIP CUP (net) and
-                        THE PLAYERS CUP (gross).</p>
-                        <p><b>Buy-in &amp; payouts.</b> Green rows are bought in. $40 of every
-                        entry goes to the purse; PROJECTED amounts show who would cash if the
-                        season ended today — you must be bought in to win, and ties split the
-                        combined money of the tied places.</p>
-                        <div class="stableford-ref">
-                            <div>
-                                <h4>NET Stableford Table (per 9 holes)</h4>
-                                <table>
-                                    <tr class="sr-head"><td></td><td>Reg</td><td>Champ</td></tr>
-                                    <tr><td>Triple Bogey</td><td>−1</td><td>0</td></tr>
-                                    <tr><td>Double Bogey</td><td>−1</td><td>0</td></tr>
-                                    <tr><td>Bogey</td><td>0</td><td>+1</td></tr>
-                                    <tr><td>Par</td><td>+1</td><td>+2</td></tr>
-                                    <tr><td>Birdie</td><td>+2</td><td>+3</td></tr>
-                                    <tr><td>Eagle</td><td>+3</td><td>+4</td></tr>
-                                    <tr><td>Double Eagle</td><td>+4</td><td>+5</td></tr>
-                                    <tr><td>Hole-in-One</td><td>+8</td><td>+9</td></tr>
-                                </table>
-                            </div>
-                            <div>
-                                <h4>GROSS Stableford Table (per 9 holes)</h4>
-                                <table>
-                                    <tr class="sr-head"><td></td><td>Reg</td><td>Champ</td></tr>
-                                    <tr><td>Triple Bogey</td><td>−1</td><td>−1</td></tr>
-                                    <tr><td>Double Bogey</td><td>0</td><td>0</td></tr>
-                                    <tr><td>Bogey</td><td>+1</td><td>+1</td></tr>
-                                    <tr><td>Par</td><td>+2</td><td>+2</td></tr>
-                                    <tr><td>Birdie</td><td>+4</td><td>+4</td></tr>
-                                    <tr><td>Eagle</td><td>+8</td><td>+8</td></tr>
-                                    <tr><td>Double Eagle</td><td>+16</td><td>+16</td></tr>
-                                    <tr><td>Hole-in-One</td><td>+8</td><td>+9</td></tr>
-                                </table>
-                            </div>
-                        </div>
-                        </div>
-                        <!-- MONTHLY -->
-                        <div id="pr-hiw-monthly" style="display:none;">
-                        <p><b>Every member is automatically in — no buy-in.</b> ALL points you
-                        earn in the calendar month count; there is no best-10 cap.</p>
-                        <p><b>The award</b> is $1 per TGF member as of the close of the month;
-                        ties split it.</p>
-                        <p><b>Points</b> = your net Stableford score in each event's POINTS
-                        game. A rough hole can go negative, but your event total never
-                        does — the lowest an event can score is 0:</p>
-                        <div class="stableford-ref">
-                            <div>
-                                <h4>NET Stableford Table (per 9 holes)</h4>
-                                <table>
-                                    <tr><td>Triple Bogey</td><td>−1</td></tr>
-                                    <tr><td>Double Bogey</td><td>−1</td></tr>
-                                    <tr><td>Bogey</td><td>0</td></tr>
-                                    <tr><td>Par</td><td>+1</td></tr>
-                                    <tr><td>Birdie</td><td>+2</td></tr>
-                                    <tr><td>Eagle</td><td>+3</td></tr>
-                                    <tr><td>Double Eagle</td><td>+4</td></tr>
-                                    <tr><td>Hole-in-One</td><td>+8</td></tr>
-                                </table>
-                            </div>
-                        </div>
-                        </div>
-                        <!-- FALL races -->
-                        <div id="pr-hiw-fall" style="display:none;">
-                        <div class="pr-hiw-chips">
-                            <span>Starts Sat, Aug 29</span>
-                            <span>Best 6 + Fall Championship</span>
-                            <span>$40 to the Purse</span>
-                        </div>
-                        <h5 class="pr-hiw-sec">The Race</h5>
-                        <p>Every event you play earns points. Your best 6 events plus the
-                        Fall Championship make your season total — highest total wins.</p>
-                        <h5 class="pr-hiw-sec">The Money</h5>
-                        <p>$40 of every entry goes straight to the purse, so it grows with
-                        every player who joins. Standings show who'd cash if the season
-                        ended today. Ties split the money.</p>
-                        <h5 class="pr-hiw-sec">The Points</h5>
-                        <p>Net Stableford, scored hole by hole (chart below). A rough hole
-                        can go negative, but your event total never does — the lowest an
-                        event can score is 0. At the Fall Championship, every hole is worth
-                        one extra point.</p>
-                        <div class="stableford-ref">
-                            <div>
-                                <h4>NET Stableford Table (per 9 holes)</h4>
-                                <table>
-                                    <tr class="sr-head"><td></td><td>Reg</td><td>Champ</td></tr>
-                                    <tr><td>Triple Bogey</td><td>−1</td><td>0</td></tr>
-                                    <tr><td>Double Bogey</td><td>−1</td><td>0</td></tr>
-                                    <tr><td>Bogey</td><td>0</td><td>+1</td></tr>
-                                    <tr><td>Par</td><td>+1</td><td>+2</td></tr>
-                                    <tr><td>Birdie</td><td>+2</td><td>+3</td></tr>
-                                    <tr><td>Eagle</td><td>+3</td><td>+4</td></tr>
-                                    <tr><td>Double Eagle</td><td>+4</td><td>+5</td></tr>
-                                    <tr><td>Hole-in-One</td><td>+8</td><td>+9</td></tr>
-                                </table>
-                            </div>
-                        </div>
-                        <p class="pr-hiw-foot">This race stands alone — no points reset, and no tie to the Cups or TGF Championship.</p>
-                        </div>
-                    </div>
+                <div class="pr-hiw-modal" id="pr-hiw-modal" style="display:none;" role="dialog" aria-modal="true" aria-label="How it works">
+                    <button id="pr-hiw-close" class="pr-hiw-close" type="button" aria-label="Close">&#10005;</button>
+                    <div id="pr-hiw-content"></div>
                 </div>
             </div>
         </div>
@@ -1158,11 +1097,218 @@
         });
     })();
 
-    // ── How-it-works popup (Kerry, 2026-07-10) ──
+    // ── How It Works popups — handoff hiw-popup-final-071026 (Kerry-RATIFIED
+    //    per view, mailbox #95): six data-driven contest views sharing one
+    //    modal (City NET / The Fellowship Cup / The Players Cup / City Match
+    //    Play / Monthly / Fall), each with chips, scan blocks, points chart,
+    //    and a worked example scorecard (R3; Match Play carries neither) ──
     (function () {
-        const btn = $("pr-hiw-btn"), modal = $("pr-hiw-modal"),
-              scrim = $("pr-hiw-scrim"), close = $("pr-hiw-close");
-        if (!btn || !modal) return;
+        const btn = $("pr-hiw-btn"), mpBtn = $("cmp-hiw-btn"), modal = $("pr-hiw-modal"),
+              scrim = $("pr-hiw-scrim"), close = $("pr-hiw-close"), content = $("pr-hiw-content");
+        if (!btn || !modal || !content) return;
+        // the popup serves BOTH top tabs — hoist it out of the points-race
+        // section so it still renders when Match Play is active (a fixed
+        // element inside a display:none section paints nothing)
+        document.body.appendChild(scrim);
+        document.body.appendChild(modal);
+
+        // ── point charts (ratified schedules) ──
+        const fmtPt = n => n > 0 ? "+" + n : (n < 0 ? "−" + Math.abs(n) : "0");
+        const mkRows = rows => rows.map(([label, reg, champ, kind]) => ({
+            label, kind,
+            reg: fmtPt(reg), regNeg: reg < 0,
+            hasChamp: champ !== null && champ !== undefined,
+            champ: (champ !== null && champ !== undefined) ? fmtPt(champ) : "",
+            champNeg: champ !== null && champ !== undefined && champ < 0,
+        }));
+        const netRows = champ => mkRows([
+            ["Triple Bogey", -1, champ ? 0 : null], ["Double Bogey", -1, champ ? 0 : null],
+            ["Bogey", 0, champ ? 1 : null], ["Par", 1, champ ? 2 : null, "par"],
+            ["Birdie", 2, champ ? 3 : null], ["Eagle", 3, champ ? 4 : null],
+            ["Double Eagle", 4, champ ? 5 : null], ["Hole-in-One", 8, champ ? 9 : null, "hio"],
+        ]);
+        // verified live GROSS schedule; no CHAMP column (ruling R4 — the
+        // championship bonus on gross is aces only, stated in the footnote)
+        const grossRows = mkRows([
+            ["Triple Bogey", -1], ["Double Bogey", 0], ["Bogey", 1], ["Par", 2, null, "par"],
+            ["Birdie", 4], ["Eagle", 8], ["Double Eagle", 16], ["Hole-in-One", 8, null, "hio"],
+        ]);
+        const netChart = champ => ({ caption: "Net Stableford · per hole",
+            valHeader: champ ? "Reg" : "Points", champ, rows: netRows(champ) });
+        const grossChart = { caption: "Gross Stableford · per hole",
+            valHeader: "Points", champ: false, rows: grossRows };
+
+        // ── worked example scorecards (net stacks GROSS over NET; gross
+        //    shows GROSS only). Ring marks: red circle under par, gray
+        //    square over par, doubled ring at ±2 or more; • = stroke dot ──
+        const PAR = [4, 4, 4, 3, 5, 4, 3, 4, 4], sum = a => a.reduce((x, y) => x + y, 0);
+        const mark = diff => diff <= -2 ? ["#DC2626", "50%", "block"]
+            : diff === -1 ? ["#DC2626", "50%", "none"]
+            : diff === 0 ? ["transparent", "50%", "none"]
+            : diff === 1 ? ["#4B5563", "3px", "none"] : ["#4B5563", "3px", "block"];
+        const scoreCells = (scores, dots) => scores.map((v, i) => {
+            const m = mark(v - PAR[i]);
+            return { v: String(v), dot: dots && dots[i] ? "•" : "", ring: m[0], radius: m[1], dbl: m[2] };
+        });
+        const plainCells = vals => vals.map(v => ({ v: String(v), dot: "", ring: "transparent", radius: "50%", dbl: "none" }));
+        const pts = n => n < 0 ? "−" + Math.abs(n) : String(n);
+        const scRow = (label, cells, out, kind) => ({
+            label, cells, out: String(out),
+            nc: kind === "score" ? "#1B1B1B" : "#2563EB",
+            wt: kind === "par" ? 400 : 700,
+            rbg: kind === "pts" ? "#F1F5FB" : "#FFFFFF",
+            btop: kind === "score" ? "2px solid #1B1B1B" : "1px solid #EDECE8",
+        });
+        const GROSS = [3, 4, 5, 3, 6, 7, 3, 5, 4], DOTS = [1, 0, 0, 1, 1, 0, 0, 0, 0];
+        const NET = GROSS.map((g, i) => g - DOTS[i]);
+        const NETPTS = [3, 1, 0, 2, 1, -1, 1, 0, 1];
+        const scNet = {
+            strokes: true,
+            caption: "Worked example — eagle +3, birdie +2, par +1, bogey 0, triple bogey −1. Lowest an event totals is 0.",
+            rows: [
+                scRow("PAR", plainCells(PAR), sum(PAR), "par"),
+                scRow("GROSS SCORE", scoreCells(GROSS, null), sum(GROSS), "score"),
+                scRow("NET SCORE", scoreCells(NET, DOTS), sum(NET), "score"),
+                scRow("NET PTS", plainCells(NETPTS.map(pts)), sum(NETPTS), "pts"),
+            ],
+        };
+        const CG = [3, 6, 5, 3, 3, 7, 3, 5, 4], CGP = [4, 0, 1, 2, 8, -1, 2, 1, 2];
+        const scGross = {
+            strokes: false,
+            caption: "Worked example — gross scoring: eagle +8, birdie +4, par +2, bogey +1, double bogey 0, triple bogey −1.",
+            rows: [
+                scRow("PAR", plainCells(PAR), sum(PAR), "par"),
+                scRow("GROSS SCORE", scoreCells(CG, null), sum(CG), "score"),
+                scRow("GROSS PTS", plainCells(CGP.map(pts)), sum(CGP), "pts"),
+            ],
+        };
+
+        // ── per-contest content (verbatim ratified copy) ──
+        const S = (head, body) => ({ head, body });
+        const HIW = {
+            cityNet: {
+                title: { pre: "How ", name: "City NET", post: " Works" },
+                chips: ["Net", "vs City", "Best 10 + City Championship", "$40 pot / plyr"],
+                sections: [
+                    S("The Race", "Every event you play is a chance to earn points. Your BEST 10 scores + the CITY CHAMPIONSHIP form your total vs your chapter’s participants — top placewinners win cash — the City Champion is invited to be your City’s Lone Star Cup Captain!"),
+                    S("The Money", "$40 of every NET Bundle goes straight to your city’s pot, so it grows with every player who joins. Standings show who’d cash if the season ended today. Ties split the money."),
+                    S("The Points", "Net Stableford, scored hole by hole (chart below). A rough hole can go negative, but your event total never does — the lowest an event can score is 0. At the City Championship, every hole is worth one extra point."),
+                ],
+                footnote: "Your NET Bundle enters this race AND The Fellowship Cup — same points, two leaderboards.",
+                chart: netChart(true), scorecard: scNet,
+            },
+            fellowship: {
+                title: { pre: "How ", name: "The Fellowship Cup", post: " Works" },
+                chips: ["Net", "vs TGF", "Best 10 + Championships", "$40 pot / plyr"],
+                sections: [
+                    S("The Race", "Both chapters, one Cup. Your best 10 events plus the City Championship set your regular-season total. After the City Championships, every qualifier resets onto one ladder — then the TGF Championship decides the Cup. Your chapter’s top 6 earn Lone Star Cup roster spots."),
+                    S("The Money", "$40 of every NET Bundle in BOTH cities feeds one pot. The Cup pays top-heavy: the winner’s check grows with every player who joins, on its way past $1,000. Ties split the money."),
+                    S("The Points", "Net Stableford, hole by hole (chart below). Holes can go negative; your event total never drops below 0. At the City and TGF Championships, every hole is worth one extra point."),
+                ],
+                footnote: "Comes with your NET Bundle — the same points that power your city’s race power the Cup.",
+                chart: netChart(true), scorecard: scNet,
+            },
+            playersCup: {
+                title: { pre: "How ", name: "The Players Cup", post: " Works" },
+                chips: ["Gross", "vs TGF", "4 Flights", "$40 pot / plyr"],
+                sections: [
+                    S("The Race", "Straight gross, no strokes. Your best 10 events plus the City Championship set your total. Four fixed handicap flights (under 6.0 / 6.0–11.9 / 12.0–17.9 / 18.0+) each pay their own ladder — and after the reset, the TGF Championship crowns one overall Champion. Your chapter’s top 4 earn Lone Star Cup roster spots."),
+                    S("The Money", "$40 of every $50 entry goes to the pot. The Champion takes a 10% bonus off the top; the rest splits evenly across the four flights, paying 1st and 2nd in each. Win your flight AND the Cup, and the money stacks. Ties split the money."),
+                    S("The Points", "Gross Stableford, hole by hole (chart below). Holes can go negative; your event total never drops below 0."),
+                ],
+                footnote: "Championship bonus on GROSS is aces only — hole a 1 at a Championship and it’s worth one extra point.",
+                chart: grossChart, scorecard: scGross,
+            },
+            matchPlay: {
+                title: { pre: "How ", name: "City Match Play", post: " Works" },
+                chips: ["Pool play → knockout", "$40 to the pot", "Win your pool, win $20"],
+                sections: [
+                    S("The Format", "World Cup style. Pools of about four, three matches each; the top two in every pool advance to a knockout bracket (wildcards fill it out at some field sizes). The champion earns a Lone Star Cup roster spot."),
+                    S("The Money", "$40 of every $50 entry builds the pot. Every pool winner banks $20 on the spot; the rest pays a ladder to the bracket’s top finishers, sized to the field. Ties split combined places."),
+                    S("The Seeding", "Knockout seeds go to the players with the most Stableford points across the pool-match events — every hole you play still counts."),
+                ],
+                footnote: "Matches are scored head-to-head — no season points chart applies.",
+                chart: null, scorecard: null,
+            },
+            monthly: {
+                title: { pre: "How the ", name: "Monthly Points Race", post: " Works" },
+                chips: ["Net", "Every member", "Every point counts", "Free with membership"],
+                sections: [
+                    S("The Race", "One month, no caps. Every point you earn at every event this month counts — no best-10, no buy-in. Most points at month’s end wins."),
+                    S("The Money", "The pot is $1 for every active TGF member when the month closes. Win the month, take the pot; ties split it."),
+                    S("The Points", "The same net Stableford points you earn in your chapter’s points race (chart below). Holes can go negative; your event total never drops below 0."),
+                ],
+                footnote: "A membership benefit, funded by dues — free to enter. Runs March through October (no race in August).",
+                chart: netChart(false), scorecard: scNet,
+            },
+            fall: {
+                title: { pre: "How the ", name: "Fall Points Race", post: " Works" },
+                chips: ["Net", "vs City", "Starts Aug 29", "Best 6 + Fall Champ", "$40 pot / plyr"],
+                sections: [
+                    S("The Race", "Every event you play earns points. Your best 6 events plus the Fall Championship make your season total — top placewinners win cash!"),
+                    S("The Money", "$40 of every entry goes straight to the pot, so it grows with every player who joins. Standings show who’d cash if the season ended today. Ties split the money."),
+                    S("The Points", "Net Stableford, scored hole by hole (chart below). A rough hole can go negative, but your event total never does — the lowest an event can score is 0. At the Fall Championship, every hole is worth one extra point."),
+                ],
+                footnote: "This race stands alone — no points reset, and no tie to the Cups or the TGF Championship.",
+                chart: netChart(true), scorecard: scNet,
+            },
+        };
+
+        // ── renderers ──
+        const HOLES = ["1", "2", "3", "4", "5", "6", "7", "8", "9"];
+        function hiwChartHtml(ch) {
+            if (!ch) return "";
+            const rows = ch.rows.map(r => {
+                const bg = r.kind === "par" ? "#FBFAF8" : (r.kind === "hio" ? "#FCF6EF" : "transparent");
+                const champCell = ch.champ
+                    ? `<span class="hiwc-val champ${r.champNeg ? " neg" : ""}">${r.champ}</span>` : "";
+                return `<div class="hiwc-row" style="background:${bg};">`
+                    + `<span class="hiwc-lab" style="font-weight:${r.kind === "hio" ? 700 : 500};">${r.label}</span>`
+                    + `<span class="hiwc-val${r.regNeg ? " neg" : ""}">${r.reg}</span>`
+                    + champCell + `</div>`;
+            }).join("");
+            return `<div class="hiwc"><div class="hiwc-head">`
+                + `<span class="hiwc-cap">${ch.caption}</span>`
+                + `<span class="hiwc-col">${ch.valHeader}</span>`
+                + (ch.champ ? `<span class="hiwc-col champ">Champ</span>` : "")
+                + `</div>${rows}</div>`;
+        }
+        function hiwCardHtml(sc) {
+            if (!sc) return "";
+            const head = `<div class="hiws-grid hiws-hd"><span>HOLE</span>`
+                + HOLES.map(h => `<span>${h}</span>`).join("") + `<span>OUT</span></div>`;
+            const rows = sc.rows.map(row => {
+                const cells = row.cells.map(c =>
+                    `<span class="hiws-cellwrap"><span class="hiws-pip">`
+                    + `<span class="hiws-ring2" style="border-color:${c.ring};border-radius:${c.radius};display:${c.dbl};"></span>`
+                    + `<span class="hiws-num" style="border-color:${c.ring};border-radius:${c.radius};font-weight:${row.wt};color:${row.nc};">${c.v}</span>`
+                    + `<span class="hiws-dot">${c.dot}</span></span></span>`).join("");
+                return `<div class="hiws-grid hiws-row" style="border-top:${row.btop};background:${row.rbg};">`
+                    + `<span class="hiws-lab" style="color:${row.nc};">${row.label}</span>` + cells
+                    + `<span class="hiws-out" style="color:${row.nc};">${row.out}</span></div>`;
+            }).join("");
+            return `<div><div class="pr-hiw-sec-h">Example Scorecard</div><div class="hiws">${head}${rows}`
+                + `<div class="hiws-leg"><span>${sc.caption}</span>`
+                + `<span class="lg"><span class="lg-c"></span>under par</span>`
+                + `<span class="lg"><span class="lg-s"></span>over par</span>`
+                + (sc.strokes ? `<span>• stroke</span>` : "")
+                + `</div></div></div>`;
+        }
+        function prHiwRender(key) {
+            const ct = HIW[key] || HIW.cityNet;
+            const secs = ct.sections.map(sc =>
+                `<div><div class="pr-hiw-sec-h">${escapeHtml(sc.head)}</div><div class="pr-hiw-sec-b">${escapeHtml(sc.body)}</div></div>`).join("");
+            content.innerHTML =
+                `<div class="pr-hiw-title">${escapeHtml(ct.title.pre)}<span class="hiw-name">${escapeHtml(ct.title.name)}</span>${escapeHtml(ct.title.post)}</div>`
+                + `<div class="pr-hiw-chips">${ct.chips.map(t => `<span>${escapeHtml(t)}</span>`).join("")}</div>`
+                + `<div class="pr-hiw-secs">${secs}${hiwChartHtml(ct.chart)}${hiwCardHtml(ct.scorecard)}</div>`
+                + `<div class="pr-hiw-foot">${escapeHtml(ct.footnote)}</div>`
+                + `<div class="pr-hiw-cta"><button type="button" id="pr-hiw-gotit">Got it</button></div>`;
+            modal.setAttribute("aria-label", ct.title.pre + ct.title.name + ct.title.post);
+            const gotit = $("pr-hiw-gotit");
+            if (gotit) gotit.addEventListener("click", () => setOpen(false));
+        }
+
         let lockY = 0;
         const setOpen = open => {
             modal.style.display = open ? "" : "none";
@@ -1179,22 +1325,19 @@
                 window.scrollTo(0, lockY);
             }
         };
+        // reset scroll AFTER showing — scrollTop writes are no-ops while the
+        // modal is display:none, so a reopened popup would start where the
+        // last reader left off (scrolled to the Got It button)
+        const openFor = key => { prHiwRender(key); setOpen(true); modal.scrollTop = 0; };
         btn.addEventListener("click", e => {
             e.stopPropagation();
-            // show only the variant for the active race (Kerry, 2026-07-10)
             const kind = (document.querySelector(".sub-tab[data-pr].active") || {}).dataset?.pr || "net";
-            const variant = kind.startsWith("fall") ? "fall" : (kind === "monthly" ? "monthly" : "season");
-            ["season", "monthly", "fall"].forEach(v => {
-                const el = $("pr-hiw-" + v);
-                if (el) el.style.display = v === variant ? "" : "none";
-            });
-            const head = modal.querySelector(".pr-hiw-head h4");
-            if (head) head.textContent = variant === "monthly"
-                ? "How the Monthly Points Race Works"
-                : (variant === "fall" ? "How the Fall Points Race Works"
-                                      : "How the Points Races Work");
-            setOpen(true);
+            openFor(kind.startsWith("fall") ? "fall"
+                : kind === "monthly" ? "monthly"
+                : kind === "tfc" ? "fellowship"
+                : kind === "gross" ? "playersCup" : "cityNet");
         });
+        if (mpBtn) mpBtn.addEventListener("click", e => { e.stopPropagation(); openFor("matchPlay"); });
         close.addEventListener("click", () => setOpen(false));
         scrim.addEventListener("click", () => setOpen(false));
         document.addEventListener("keydown", e => { if (e.key === "Escape") setOpen(false); });
@@ -1258,7 +1401,7 @@
                 $("pr-roster").innerHTML = rows.length
                     ? '<div style="display:flex;flex-wrap:wrap;gap:6px;">'
                       + rows.map(r => `<span style="display:inline-flex;align-items:center;height:28px;padding:0 12px;background:#bbf7d0;color:#14532D;border-radius:9999px;font-size:12.5px;font-weight:600;">${escapeHtml(r.customer_name)}</span>`).join("")
-                      + `</div><p style="color:var(--text-muted);font-size:0.8rem;margin-top:0.6rem;">${rows.length} bought in so far — the purse grows with every entry.</p>`
+                      + `</div><p style="color:var(--text-muted);font-size:0.8rem;margin-top:0.6rem;">${rows.length} bought in so far — the pot grows with every entry.</p>`
                     : '<p style="color:var(--text-muted);font-size:0.85rem;">No fall buy-ins yet — be the first.</p>';
             } catch (e) {
                 $("pr-roster").innerHTML = '<p style="color:var(--text-muted);font-size:0.85rem;">Fall buy-ins will appear here.</p>';
@@ -2791,7 +2934,7 @@
         const el = $("pr-payouts");
         if (!el) return;
         if (!pp || !pp.pot_cents) { el.innerHTML = ""; return; }
-        const chips = [`<span class="pr-purse">Purse ${prFmtMoney(pp.pot_cents)}</span>`];
+        const chips = [`<span class="pr-pot">Pot ${prFmtMoney(pp.pot_cents)}</span>`];
         if (pp.kind === "ladder") {
             pp.amounts_cents.forEach((c, i) =>
                 chips.push(`<span class="pr-place">${prOrdinal(i)} <b>${prFmtMoney(c)}</b></span>`));
@@ -2799,7 +2942,7 @@
             chips.push(`<span class="pr-place">Champion <b>${prFmtMoney(pp.champion_cents)}</b></span>`);
             chips.push(`<span class="pr-place">Each flight: 1st <b>${prFmtMoney(pp.flight_first_cents)}</b> · 2nd <b>${prFmtMoney(pp.flight_second_cents)}</b></span>`);
         }
-        chips.push('<span class="pr-pay-note">projected from current buy-ins — the purse grows with every entry</span>');
+        chips.push('<span class="pr-pay-note">projected from current buy-ins — the pot grows with every entry</span>');
         el.innerHTML = chips.join("");
     }
     // Walk players down a payout ladder; TIED players (same rank label)
@@ -3103,7 +3246,7 @@
                     <b>best 6 event totals + the Fall Championship</b>, and that's the
                     whole race: a standalone chapter contest with <b>no points reset</b>
                     and no tie to the cups or the TGF Championship. Buy in to compete
-                    for the purse; standings appear here once play begins.
+                    for the pot; standings appear here once play begins.
                 </p>
                 <div class="fall-cta-row" style="max-width:420px;">
                     <a class="contest-cta" style="border-radius:9999px;padding:0.8rem 1.6rem;text-align:center;"
@@ -3113,7 +3256,7 @@
             </div>`;
     }
 
-    // ── MONTHLY points races: combined chapters, $1/member purse ──
+    // ── MONTHLY points races: combined chapters, $1/member pot ──
     let prMonthlyData = null, prMonthlySel = null;
 
     async function prLoadMonthly(force = false) {
@@ -3173,7 +3316,7 @@
             // Points detail comes from the player's chapter season page —
             // the monthly table itself is TGF-wide, so pick the race by chapter
             const race = r.chapter === "Austin" ? "austin_net" : "san_antonio_net";
-            // Chapter column is narrow here (PURSE takes the slack): initials
+            // Chapter column is narrow here (POT takes the slack): initials
             // only on phones — "A" / "SA" — since even AUS overflows
             const chAbbr = String(r.chapter || "").trim().split(/\s+/).filter(Boolean).map(w => w[0]).join("").toUpperCase();
             const name = (r.customer_id && !window.MEMBER_MODE)
@@ -3215,7 +3358,7 @@
                     <th style="${chapStyle}">${compact ? "CH" : "Chapter"}</th>
                     <th style="${rndStyle}" title="Rounds this month">${compact ? "R" : "Rounds"}</th>
                     <th style="${ptsStyle}">${compact ? "PTS" : "POINTS"}</th>
-                    <th style="${purseStyle}" title="$1 per TGF member at month close; ties split">${compact ? "$" : "PURSE"}</th>
+                    <th style="${purseStyle}" title="$1 per TGF member at month close; ties split">${compact ? "$" : "POT"}</th>
                 </tr></thead>
                 <tbody>${rows}</tbody>
             </table>`;
