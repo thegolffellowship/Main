@@ -1355,7 +1355,7 @@
                     : '—';
                 return `<tr class="${rowClass}" style="${bar}${rowStyle ? rowStyle + ';' : ''}${isUsed ? 'background:#F2FBF5;' : ''}">
                     <td class="date-col">${fmtRoundDate(rnd.round_date)}</td>
-                    <td class="course-col">${esc(shortCourse(rnd.course_name) || '—')}</td>
+                    <td class="course-col">${esc((window.matchMedia && matchMedia('(max-width: 768px)').matches && rnd.course_short) || shortCourse(rnd.course_name) || '—')}</td>
                     <td class="diff-col">${rnd.adjusted_score}</td>
                     <td class="diff-col">${diffCell}</td>
                     <td class="diff-col">${countCell}</td>
@@ -1364,7 +1364,7 @@
             }
             return `<tr class="${rowClass}" ${rowStyle ? `style="${rowStyle}"` : ''}>
                 <td class="date-col">${fmtRoundDate(rnd.round_date)}</td>
-                <td class="course-col">${esc(shortCourse(rnd.course_name) || '—')}</td>
+                <td class="course-col">${esc((window.matchMedia && matchMedia('(max-width: 768px)').matches && rnd.course_short) || shortCourse(rnd.course_name) || '—')}</td>
                 <td class="narrow-col">${esc(rnd.tee_name || '—')}</td>
                 <td class="diff-col">${rnd.adjusted_score}</td>
                 <td class="diff-col">${rnd.rating}</td>

@@ -481,3 +481,17 @@ handicap_rounds; then compute_handicap_index reads scoring_rounds and the
 export/import ritual dies), points-detail persistence, per-player stats
 surfaces (par-3/4/5 splits, stroke-index performance, trends), historical
 portals 2016–2025, admin formula-editing UI.
+
+## Course DB editor (v2.57.0, Kerry)
+
+`/courses` (admin-only page; COURSES in the admin sub-nav) edits the
+`courses` dimension table: **short_name** (what phones display in round
+histories — exact-name matches flow through `course_short` on
+`/api/handicaps/rounds`, otherwise the JS derivation fallback), chapter
+(by name), city, state, status (archived rows dim + hide from the
+default view). Course **names stay read-only** — imports and dim
+backfills join on them; renames need an alias-aware flow. API:
+`GET /api/course-db` (list + chapter names; `list_courses` now returns
+short_name/city/state/status/chapter), `PATCH /api/course-db/<id>`
+(`update_course`, whitelisted fields). NOTE: `/api/courses` was already
+taken by the scoring API — the editor uses `/api/course-db`.

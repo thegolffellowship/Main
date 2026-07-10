@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.56.5";
+window.TGF_VERSION = "2.57.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.57.0",
+    date: "2026-07-10",
+    changes: [
+      "COURSE DATABASE EDITOR (Kerry): new admin page at /courses (COURSES in the admin sub-nav) -- every course in the database in one editable grid: Short Name, Chapter, City, State, and Status (archived courses dim and hide from the default list), plus read-only tee and imported-round counts. Edit a cell and a SAVE pill appears on the row; saves are per-row and instant.",
+      "Short names you edit here now flow to the phone displays: the handicaps rounds payload carries the course's DB short_name (exact name match), with the automatic derivation as fallback for course names not yet in the database.",
+      "Course NAMES stay read-only in the grid -- imports and backfills join on them, so renames need Claude (alias-aware). Search and a show-archived toggle included.",
+    ],
+  },
   {
     version: "2.56.5",
     date: "2026-07-10",

@@ -9266,6 +9266,31 @@ def accounting_page():
     return render_template("accounting.html")
 
 
+@app.route("/courses")
+def courses_page():
+    """Course database editor (admin only) — v2.57.0, Kerry."""
+    if session.get("role") != "admin":
+        return redirect("/events")
+    return render_template("course_db.html")
+
+
+@app.route("/api/course-db")
+@require_role("admin")
+def api_course_db_list():
+    from email_parser.database import list_courses, list_chapter_names
+    return jsonify({"courses": list_courses(), "chapters": list_chapter_names()})
+
+
+@app.route("/api/course-db/<int:course_id>", methods=["PATCH"])
+@require_role("admin")
+def api_course_db_update(course_id):
+    from email_parser.database import update_course
+    try:
+        return jsonify(update_course(course_id, request.get_json(force=True) or {}))
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+
+
 # ── Entities ──────────────────────────────────────────────────────────────
 
 @app.route("/api/accounting/entities")
