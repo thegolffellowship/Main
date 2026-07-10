@@ -324,6 +324,7 @@ ITEM_COLUMNS = [
     "address", "address2", "city", "state", "zip",
     "shirt_size", "guest_name", "date_of_birth",
     "net_points_race", "gross_points_race", "city_match_play",
+    "fall_net_points_race",
     "subject", "from_addr",
     "transaction_status", "credit_note", "transferred_from_id", "transferred_to_id",
     "wd_reason", "wd_note", "wd_credits", "credit_amount",
@@ -2667,6 +2668,7 @@ def init_db(db_path: str | Path | None = None) -> None:
                 net_points_race  TEXT,
                 gross_points_race TEXT,
                 city_match_play  TEXT,
+                fall_net_points_race TEXT,
                 subject          TEXT,
                 from_addr        TEXT,
                 transaction_status TEXT DEFAULT 'active',
@@ -2700,6 +2702,7 @@ def init_db(db_path: str | Path | None = None) -> None:
             ("archived", "INTEGER DEFAULT 0"),
             ("coupon_code", "TEXT"), ("coupon_amount", "TEXT"),
             ("event_id", "INTEGER REFERENCES events(id)"),
+            ("fall_net_points_race", "TEXT"),
         ]:
             try:
                 conn.execute(f"ALTER TABLE items ADD COLUMN {col} {col_type}")
@@ -20632,11 +20635,12 @@ def sync_season_contests_from_items(db_path: str | Path | None = None) -> dict:
 
         rows = conn.execute(
             """SELECT id, customer, customer_id, net_points_race, gross_points_race,
-                      city_match_play, item_name, order_date
+                      city_match_play, fall_net_points_race, item_name, order_date
                FROM items
                WHERE COALESCE(transaction_status, 'active') = 'active'
                  AND (UPPER(item_name) = 'TGF MEMBERSHIP' OR UPPER(item_name) LIKE '%SEASON CONTEST%')
                  AND (net_points_race = 'YES' OR gross_points_race = 'YES' OR city_match_play = 'YES'
+                      OR fall_net_points_race = 'YES'
                       OR UPPER(item_name) LIKE '%SEASON CONTEST%')"""
         ).fetchall()
 
@@ -20655,6 +20659,13 @@ def sync_season_contests_from_items(db_path: str | Path | None = None) -> dict:
                 _upsert(conn, customer, "GROSS Points Race", chapter, season, item_id, cid)
             if (row.get("city_match_play") or "").upper() == "YES":
                 _upsert(conn, customer, "City Match Play", chapter, season, item_id, cid)
+            # FALL NET is a $50 option under the umbrella SEASON CONTESTS
+            # product (Kerry, 2026-07-10): same NET Points Race contest type,
+            # season "<year> Fall" — populates the fall pages immediately on
+            # receipt of new orders, like everything else.
+            if (row.get("fall_net_points_race") or "").upper() == "YES" and season:
+                _upsert(conn, customer, "NET Points Race", chapter,
+                        f"{season} Fall", item_id, cid)
 
         # Handle standalone "SEASON CONTESTS" items (fallback for items where the parser
         # didn't populate the individual flag fields).

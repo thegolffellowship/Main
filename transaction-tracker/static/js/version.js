@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.62.1";
+window.TGF_VERSION = "2.63.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.63.0",
+    date: "2026-07-10",
+    changes: [
+      "FALL ENROLLMENT IS AUTOMATIC (Kerry: 'It's already being purchased under the umbrella SEASON CONTESTS. You need to account for it... and set up the site to populate immediately upon receipt of new orders just like everything else.'). The parser now extracts the FALL NET option from SEASON CONTESTS order emails (new fall_net_points_race field), and the season-contest sync maps it straight to the fall race ('2026 Fall'), chapter from the buyer's profile -- the fall pages populate within the normal 5-minute inbox cycle, no manual step. The order math checks out against the ratified money model: Adam's $140 = $90 NET bundle + $50 fall; Luke's $190 = $90 + $50 Players Cup + $50 fall.",
+      "Audit re-extract force-updates the fall flag, so today's two fall orders backfill by re-extracting them once -- done as part of this release.",
+      "Adam Baker is enrolled in SA FALL NET (this morning's order R967407420, canonical profile -- his GoDaddy 'James Baker' alias resolved correctly).",
+    ],
+  },
   {
     version: "2.62.1",
     date: "2026-07-10",

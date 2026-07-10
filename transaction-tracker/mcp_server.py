@@ -1449,8 +1449,8 @@ def _scoring_dispatch(url: str, extract: str):
                 row["email_uid"])
             if not email_data:
                 return json.dumps({"error": "Graph fetch failed"})
-            body = email_data.get("body") or ""
-            if (email_data.get("content_type") or "").lower() == "html" or "<" in body[:200]:
+            body = email_data.get("html") or email_data.get("text") or ""
+            if "<" in body[:500]:
                 body = _strip_html(body)
             return json.dumps({"subject": row["subject"], "body": body[:6000]},
                               indent=2)
