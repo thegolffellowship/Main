@@ -188,7 +188,10 @@ at 7 until Kerry extends the ladder families.
 
 **FALL NET races (Kerry, 2026-07-10):** SA FALL NET + AUSTIN FALL NET
 start Saturday 2026-08-29; season total = **best 6 event totals + the
-Fall Championship** (the fall analog of the best-10+CC rule). Preview
+Fall Championship**, and that DECIDES the race — the fall races are
+STANDALONE chapter contests: no points reset, no feed into the
+cups/TGF Championship (Kerry, 2026-07-10 — do not apply the four-step
+structure here). Preview
 pages live in the CONTESTS race selector (below Monthly, burnt-orange
 "upcoming" chips) with an inline sign-up CTA; enrollments stored as
 season_contests rows with season='2026 Fall' (first two seeded via the
