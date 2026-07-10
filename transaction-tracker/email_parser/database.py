@@ -9790,6 +9790,62 @@ def update_course(course_id: int, fields: dict, db_path: str | Path = DB_PATH) -
         return dict(out)
 
 
+# Kerry's ratified course short names (2026-07-10) — applied ONCE via the
+# scoring-course-short-pins bridge command, not at boot, so later manual
+# edits in the /courses UI are never overwritten. First matching pattern
+# wins; most-specific patterns first.
+_COURSE_SHORT_PINS: list = [
+    (r"tpc\s+san\s+antonio.*canyons", "TPC | Canyons"),
+    (r"tpc\s+san\s+antonio.*oaks", "TPC | Oaks"),
+    (r"tpc.*canyons", "TPC | Canyons"),
+    (r"tpc.*oaks", "TPC | Oaks"),
+    (r"comanche.*creeks?", "Comanche | Creeks"),
+    (r"comanche.*hills", "Comanche | Hills"),
+    (r"comanche.*valley", "Comanche | Valley"),
+    (r"hill\s+country.*creeks?", "Hill Country | Creeks"),
+    (r"hill\s+country.*lakes", "Hill Country | Lakes"),
+    (r"hill\s+country.*oaks", "Hill Country | Oaks"),
+    (r"golf\s+club\s+of\s+texas", "GC of Texas"),
+    (r"la\s+cantera", "La Cantera | Resort"),
+    (r"riverside", "Riverside | SA"),
+    (r"silverhorn", "Silverhorn"),
+    (r"olympia\s+hills", "Olympia Hills"),
+    (r"black\s*jack", "Black Jack's"),
+    (r"brackenridge", "Brackenridge"),
+]
+
+
+def apply_course_short_name_pins(db_path: str | Path = DB_PATH) -> dict:
+    """Apply Kerry's short-name pins to the courses table (one-shot).
+
+    Returns what changed, what already matched, and which pins found no
+    course — so the run is verifiable from the bridge response.
+    """
+    updated, unchanged, ambiguous = [], [], []
+    hit_pins = set()
+    with _connect(db_path) as conn:
+        rows = conn.execute("SELECT course_id, name, short_name FROM courses").fetchall()
+        for r in rows:
+            nm = (r["name"] or "").lower()
+            for i, (pat, short) in enumerate(_COURSE_SHORT_PINS):
+                if re.search(pat, nm):
+                    hit_pins.add(i)
+                    if (r["short_name"] or "") == short:
+                        unchanged.append(r["name"])
+                    else:
+                        conn.execute("UPDATE courses SET short_name = ? WHERE course_id = ?",
+                                     (short, r["course_id"]))
+                        updated.append({"name": r["name"], "short_name": short,
+                                        "was": r["short_name"]})
+                    break
+        conn.commit()
+    missed = [
+        {"pattern": pat, "short_name": short}
+        for i, (pat, short) in enumerate(_COURSE_SHORT_PINS) if i not in hit_pins
+    ]
+    return {"updated": updated, "already_set": unchanged, "pins_without_a_course": missed}
+
+
 def list_chapter_names(db_path: str | Path = DB_PATH) -> list:
     with _connect(db_path) as conn:
         return [r["name"] for r in conn.execute("SELECT name FROM chapters ORDER BY chapter_id").fetchall()]

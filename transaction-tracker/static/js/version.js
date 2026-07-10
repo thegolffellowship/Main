@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.57.0";
+window.TGF_VERSION = "2.57.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.57.1",
+    date: "2026-07-10",
+    changes: [
+      "Kerry's ratified course short names applied to the live database via the scoring-course-short-pins bridge command (one-shot -- /courses UI edits afterwards always stick): TPC | Oaks, TPC | Canyons, Hill Country | Oaks/Creeks/Lakes, Comanche | Creeks/Hills/Valley, Silverhorn, Olympia Hills, Black Jack's, La Cantera | Resort, Riverside | SA, Brackenridge, GC of Texas.",
+    ],
+  },
   {
     version: "2.57.0",
     date: "2026-07-10",

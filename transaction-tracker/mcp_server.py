@@ -1421,6 +1421,10 @@ def _scoring_dispatch(url: str, extract: str):
             if not re.match(r"^\d{4}-\d{2}-\d{2}$", arg.strip()):
                 return json.dumps({"error": "arg must be YYYY-MM-DD"})
             return json.dumps(db.bulk_mark_payouts_paid(arg.strip()), indent=2)
+        if cmd == "scoring-course-short-pins":
+            # Kerry's ratified course short names (2026-07-10) — one-shot
+            # apply; /courses UI edits afterwards are never overwritten
+            return json.dumps(db.apply_course_short_name_pins(), indent=2)
         if cmd == "scoring-payouts-unpaid":
             # Every non-paid payout group + the customer's recent Venmo
             # payout receipts (linked flag + amounts) for match diagnosis
