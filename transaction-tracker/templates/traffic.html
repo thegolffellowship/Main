@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
+    <title>TGF — Member Traffic</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Bitter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/css/dashboard.css">
+    <link rel="stylesheet" href="/static/css/shell.css">
+    <link rel="icon" href="/static/icon.svg" type="image/svg+xml">
+    <link rel="apple-touch-icon" href="/static/icon-180.png">
+    <style>
+        .trf-wrap { padding: 1rem 1.5rem 2.5rem; max-width: 1100px; margin: 0 auto; }
+        .trf-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin: 0.75rem 0 1.25rem; }
+        .trf-card { background: #fff; border: 1px solid var(--border); border-radius: 12px; padding: 12px 16px; }
+        .trf-card .lbl { font: 700 9.5px/1 'Bitter', serif; letter-spacing: 1.5px; text-transform: uppercase; color: var(--text-muted); }
+        .trf-card .val { font: 700 24px/1 'Bitter', serif; color: var(--text); margin-top: 7px; font-variant-numeric: tabular-nums; }
+        .trf-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+        .trf-section h4 { font: 700 11px/1.3 'Bitter', serif; letter-spacing: 1px; text-transform: uppercase; color: var(--text-muted); margin: 0 0 0.5rem; }
+        .trf-table { width: 100%; border-collapse: collapse; }
+        .trf-table th { text-align: left; font: 700 10px/1.3 'Bitter', serif; letter-spacing: 1px; text-transform: uppercase; color: #9CA3AF; padding: 8px 8px 6px; border-bottom: 1px solid var(--border); }
+        .trf-table td { padding: 6px 8px; border-bottom: 1px solid #F3F2EF; font-size: 13px; font-variant-numeric: tabular-nums; white-space: normal; }
+        .trf-table td.n { text-align: right; font-weight: 600; }
+        .trf-table th.n { text-align: right; }
+        .trf-bar { display: inline-block; height: 10px; background: var(--primary); border-radius: 3px; vertical-align: middle; margin-right: 6px; }
+        .trf-note { font-size: 12px; color: var(--text-muted); margin-top: 1rem; }
+        @media (max-width: 768px) { .trf-grid { grid-template-columns: 1fr; } .trf-wrap { padding: 0.5rem 0.5rem 2rem; } }
+    </style>
+</head>
+<body>
+    {% if shell_v2 %}
+    {% set SHELL_TITLE = 'Member Traffic' %}{% set SHELL_ACTIVE = 'admin' %}
+    {% include '_shell_nav.html' %}
+    {% else %}
+    <header>
+        <div class="header-content">
+            <h1>TGF Transaction Tracker</h1>
+            <p class="subtitle">Member Traffic</p>
+            <a href="/changelog" class="version-link" id="version-badge" title="View changelog">v2.0.0</a>
+        </div>
+        <div class="header-actions">
+            <span id="role-badge" class="role-badge" style="display:none;"></span>
+            <button id="btn-logout" class="btn btn-secondary" title="Log out" style="display:none;">Log Out</button>
+        </div>
+    </header>
+    {% endif %}
+
+    <main>
+        <nav class="admin-subnav">
+            <a href="/accounting">Accounting</a>
+            <a href="/coo">COO</a>
+            <a href="/audit">Audit Log</a>
+            <a href="/matrix">Matrix</a>
+            <a href="/courses">Courses</a>
+            <a href="/traffic" class="active">Traffic</a>
+            <a href="/database">Database</a>
+            <a href="/changelog">Changelog</a>
+        </nav>
+
+        <div class="trf-wrap">
+            <div class="trf-cards" id="trf-cards">
+                <div class="trf-card"><div class="lbl">Loading…</div><div class="val">&nbsp;</div></div>
+            </div>
+            <div class="trf-grid">
+                <div class="trf-section">
+                    <h4>Opens by day (last 14)</h4>
+                    <table class="trf-table"><thead><tr><th>Day</th><th>Opens</th><th class="n">Clicks</th></tr></thead>
+                        <tbody id="trf-daily"></tbody></table>
+                </div>
+                <div class="trf-section">
+                    <h4>By page (last 30 days)</h4>
+                    <table class="trf-table"><thead><tr><th>Page</th><th class="n">Opens</th><th class="n">Clicks</th></tr></thead>
+                        <tbody id="trf-paths"></tbody></table>
+                    <h4 style="margin-top:1.25rem;">Top clicks (last 30 days)</h4>
+                    <table class="trf-table"><thead><tr><th>What they tapped</th><th class="n">Times</th></tr></thead>
+                        <tbody id="trf-clicks"></tbody></table>
+                </div>
+            </div>
+            <p class="trf-note">
+                Anonymous counters from the pinless member pages (opens = page loads;
+                clicks = taps on buttons/links, labeled by the control's text).
+                Nothing identifying is stored. Windows are rolling, times UTC.
+            </p>
+        </div>
+    </main>
+
+    <script src="/static/js/version.js"></script>
+    <script src="/static/js/auth.js"></script>
+    <script>
+    (function () {
+        "use strict";
+        const $ = id => document.getElementById(id);
+        const esc = s => String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+
+        async function load() {
+            const res = await fetch("/api/member-traffic");
+            if (!res.ok) {
+                $("trf-cards").innerHTML = '<div class="trf-card"><div class="lbl">Admin login required</div><div class="val">—</div></div>';
+                return;
+            }
+            const d = await res.json();
+            const t = d.totals || {};
+            $("trf-cards").innerHTML = [
+                ["Opens · 24h", t.opens_24h], ["Opens · 7d", t.opens_7d], ["Opens · 30d", t.opens_30d],
+                ["Clicks · 24h", t.clicks_24h], ["Clicks · 7d", t.clicks_7d], ["Clicks · 30d", t.clicks_30d],
+            ].map(([l, v]) => `<div class="trf-card"><div class="lbl">${l}</div><div class="val">${v ?? 0}</div></div>`).join("");
+
+            const maxOpen = Math.max(1, ...(d.daily || []).map(r => r.opens));
+            $("trf-daily").innerHTML = (d.daily || []).map(r =>
+                `<tr><td>${esc(r.day)}</td>
+                     <td><span class="trf-bar" style="width:${Math.round(90 * r.opens / maxOpen)}px"></span>${r.opens}</td>
+                     <td class="n">${r.clicks}</td></tr>`).join("")
+                || '<tr><td colspan="3" style="color:#94a3b8;">No member visits recorded yet.</td></tr>';
+
+            $("trf-paths").innerHTML = (d.by_path || []).map(r =>
+                `<tr><td>${esc(r.path)}</td><td class="n">${r.opens_30d}</td><td class="n">${r.clicks_30d}</td></tr>`).join("")
+                || '<tr><td colspan="3" style="color:#94a3b8;">Nothing yet.</td></tr>';
+
+            $("trf-clicks").innerHTML = (d.top_clicks || []).map(r =>
+                `<tr><td>${esc(r.label)}</td><td class="n">${r.n}</td></tr>`).join("")
+                || '<tr><td colspan="2" style="color:#94a3b8;">Nothing yet.</td></tr>';
+        }
+
+        document.addEventListener("DOMContentLoaded", () => {
+            if (typeof initAuth === "function") initAuth();
+            load();
+        });
+    })();
+    </script>
+</body>
+</html>

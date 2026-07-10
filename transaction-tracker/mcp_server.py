@@ -1421,6 +1421,30 @@ def _scoring_dispatch(url: str, extract: str):
             if not re.match(r"^\d{4}-\d{2}-\d{2}$", arg.strip()):
                 return json.dumps({"error": "arg must be YYYY-MM-DD"})
             return json.dumps(db.bulk_mark_payouts_paid(arg.strip()), indent=2)
+        if cmd.startswith("scoring-fall-enroll:"):
+            # Parameterized fall NET enrollment (Kerry, 2026-07-10):
+            # scoring-fall-enroll:<customer_id>[:<source_item_id>]
+            # customer_id keyed per Guiding Principle 6; chapter from the
+            # canonical customer row. manually_enrolled=1 until the fall
+            # products + sync exist.
+            parts = cmd.split(":")
+            cid = int(parts[1])
+            item_id = int(parts[2]) if len(parts) > 2 and parts[2] else None
+            with db._connect() as conn:
+                row = conn.execute(
+                    """SELECT customer_id, chapter,
+                              TRIM(COALESCE(NULLIF(company_name,''),
+                                   NULLIF(TRIM(first_name || ' ' || last_name), ''))) AS name
+                       FROM customers WHERE customer_id = ?""",
+                    (cid,),
+                ).fetchone()
+            if not row or not row["name"]:
+                return json.dumps({"error": f"customer_id {cid} not found"})
+            enr = db.enroll_season_contest(
+                row["name"], "NET Points Race",
+                row["chapter"] or "San Antonio", "2026 Fall",
+                manually_enrolled=True, source_item_id=item_id)
+            return json.dumps(enr, indent=2, default=str)
         if cmd == "scoring-fall-enroll":
             # One-shot fall NET enrollments (Kerry, 2026-07-10): Luke
             # Mazanec (this morning's SEASON CONTESTS order) + Kerry

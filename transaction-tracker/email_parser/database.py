@@ -9886,6 +9886,95 @@ def apply_course_short_name_pins(db_path: str | Path = DB_PATH) -> dict:
             "created_from_round_history": inserted, "pins_without_a_course": missed}
 
 
+# ─── Member-side traffic analytics (v2.62.0, Kerry) ────────────────────
+# Anonymous, PII-free: event ('open'|'click'), path, and a short label.
+# No customer reference by design — the member tier is anonymous.
+
+def _ensure_member_analytics_table(conn: sqlite3.Connection) -> None:
+    conn.execute(
+        """CREATE TABLE IF NOT EXISTS member_analytics (
+               id         INTEGER PRIMARY KEY AUTOINCREMENT,
+               event      TEXT NOT NULL,
+               path       TEXT NOT NULL,
+               detail     TEXT,
+               created_at TEXT DEFAULT (datetime('now'))
+           )"""
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_member_analytics_time"
+        " ON member_analytics(created_at)"
+    )
+
+
+def log_member_event(event: str, path: str, detail: str = "",
+                     db_path: str | Path = DB_PATH) -> None:
+    """Record one anonymous member-page event. Inputs are whitelisted /
+    truncated by the API layer; this just writes."""
+    with _connect(db_path) as conn:
+        _ensure_member_analytics_table(conn)
+        conn.execute(
+            "INSERT INTO member_analytics (event, path, detail) VALUES (?, ?, ?)",
+            (event[:16], path[:80], (detail or "")[:80]),
+        )
+        conn.commit()
+
+
+def get_member_traffic_summary(db_path: str | Path = DB_PATH) -> dict:
+    """Aggregates for the admin Traffic view. Rolling windows (24h/7d/30d)
+    so UTC storage needs no timezone gymnastics."""
+    with _connect(db_path) as conn:
+        _ensure_member_analytics_table(conn)
+
+        def _count(event, days=None, hours=None):
+            q = "SELECT COUNT(*) FROM member_analytics WHERE event = ?"
+            args = [event]
+            if hours is not None:
+                q += " AND created_at >= datetime('now', ?)"
+                args.append(f"-{hours} hours")
+            elif days is not None:
+                q += " AND created_at >= datetime('now', ?)"
+                args.append(f"-{days} days")
+            return conn.execute(q, args).fetchone()[0]
+
+        by_path = [dict(r) for r in conn.execute(
+            """SELECT path,
+                      SUM(CASE WHEN event='open' THEN 1 ELSE 0 END) AS opens_30d,
+                      SUM(CASE WHEN event='click' THEN 1 ELSE 0 END) AS clicks_30d
+               FROM member_analytics
+               WHERE created_at >= datetime('now', '-30 days')
+               GROUP BY path ORDER BY opens_30d DESC"""
+        )]
+        daily = [dict(r) for r in conn.execute(
+            """SELECT date(created_at) AS day,
+                      SUM(CASE WHEN event='open' THEN 1 ELSE 0 END) AS opens,
+                      SUM(CASE WHEN event='click' THEN 1 ELSE 0 END) AS clicks
+               FROM member_analytics
+               WHERE created_at >= datetime('now', '-14 days')
+               GROUP BY day ORDER BY day"""
+        )]
+        top_clicks = [dict(r) for r in conn.execute(
+            """SELECT COALESCE(NULLIF(TRIM(detail), ''), '(unlabeled)') AS label,
+                      COUNT(*) AS n
+               FROM member_analytics
+               WHERE event = 'click'
+                 AND created_at >= datetime('now', '-30 days')
+               GROUP BY label ORDER BY n DESC LIMIT 25"""
+        )]
+        return {
+            "totals": {
+                "opens_24h": _count("open", hours=24),
+                "opens_7d": _count("open", days=7),
+                "opens_30d": _count("open", days=30),
+                "clicks_24h": _count("click", hours=24),
+                "clicks_7d": _count("click", days=7),
+                "clicks_30d": _count("click", days=30),
+            },
+            "by_path": by_path,
+            "daily": daily,
+            "top_clicks": top_clicks,
+        }
+
+
 def list_chapter_names(db_path: str | Path = DB_PATH) -> list:
     with _connect(db_path) as conn:
         return [r["name"] for r in conn.execute("SELECT name FROM chapters ORDER BY chapter_id").fetchall()]

@@ -308,6 +308,10 @@ No Python or local install needed — Claude Desktop connects directly to Railwa
 - `templates/cashflow.html` — Cash flow: 90-day rolling weekly view with warning indicators
 - `templates/coo.html` — COO Dashboard: action items, financial snapshot, review queue, AI chat
 - `templates/tgf.html` — TGF Payouts: events, golfers, screenshot import
+- `templates/traffic.html` — Member Traffic (admin): anonymous open/click
+  counters from the pinless member pages (`member_analytics` table; beacon in
+  auth.js under `window.MEMBER_MODE`; POST /api/member-metric is the only
+  anonymous write in the app — whitelisted events, truncated fields, no PII)
 - `templates/database.html` — Admin database browser
 - `templates/changelog.html` — Version changelog
 - `static/js/dashboard.js` — Transactions page logic (largest JS file)
