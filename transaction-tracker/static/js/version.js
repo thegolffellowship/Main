@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.61.0";
+window.TGF_VERSION = "2.61.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.61.1",
+    date: "2026-07-10",
+    changes: [
+      "The Monthly How It Works chart drops its CHAMP column (Kerry): championship values only exist at the August championships, and Monthly doesn't run in August -- so they can never apply to a monthly race. The season and fall popups keep REG | CHAMP.",
+    ],
+  },
   {
     version: "2.61.0",
     date: "2026-07-10",
