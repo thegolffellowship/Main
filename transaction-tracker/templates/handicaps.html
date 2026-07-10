@@ -1295,15 +1295,20 @@
         // fits a phone without cutting off the Date column (Kerry's
         // 2026-07-10 screenshot).
         const MEMBER = !!window.MEMBER_MODE;
+        // Phones shorten the member headers (Kerry, 2026-07-10):
+        // DIFFERENTIAL→DIFF, COUNTING→COUNT, RUNNING INDEX→INDEX
+        const HM = (window.matchMedia && window.matchMedia('(max-width: 768px)').matches)
+            ? { diff: 'Diff', count: 'Count', run: 'Index' }
+            : { diff: 'Differential', count: 'Counting', run: 'Running Index' };
         let html = `<div id="rounds-scroll-${safeid(rounds[0].player_name)}" style="overflow-x:auto;">
         <table class="rounds-table">
             <thead>` + (MEMBER ? `<tr>
                 <th class="date-col">Date</th>
                 <th class="course-col">Course</th>
                 <th class="diff-col">Gross</th>
-                <th class="diff-col">Differential</th>
-                <th class="diff-col">Counting</th>
-                <th class="diff-col">Running Index</th>
+                <th class="diff-col">${HM.diff}</th>
+                <th class="diff-col">${HM.count}</th>
+                <th class="diff-col">${HM.run}</th>
             </tr>` : `<tr>
                 <th class="date-col">Date</th>
                 <th class="course-col">Course</th>

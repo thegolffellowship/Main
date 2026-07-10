@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.56.4";
+window.TGF_VERSION = "2.56.5";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.56.5",
+    date: "2026-07-10",
+    changes: [
+      "Member round-history headers compact on phones (Kerry): DIFFERENTIAL -> DIFF, COUNTING -> COUNT, RUNNING INDEX -> INDEX -- the counting checkmarks now fit on screen at 390px without scrolling. Desktop keeps the full labels.",
+    ],
+  },
   {
     version: "2.56.4",
     date: "2026-07-10",
