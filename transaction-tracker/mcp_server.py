@@ -1421,6 +1421,32 @@ def _scoring_dispatch(url: str, extract: str):
             if not re.match(r"^\d{4}-\d{2}-\d{2}$", arg.strip()):
                 return json.dumps({"error": "arg must be YYYY-MM-DD"})
             return json.dumps(db.bulk_mark_payouts_paid(arg.strip()), indent=2)
+        if cmd == "scoring-fall-enroll":
+            # One-shot fall NET enrollments (Kerry, 2026-07-10): Luke
+            # Mazanec (this morning's SEASON CONTESTS order) + Kerry
+            # Niester into the SA Fall NET. manually_enrolled=1 protects
+            # them until the fall products/sync exist.
+            out = {"enrolled": [], "not_found": []}
+            with db._connect() as conn:
+                for pat, item_id in (("%Mazanec%", 2258), ("%Niester%", None)):
+                    row = conn.execute(
+                        """SELECT customer_id,
+                                  TRIM(COALESCE(NULLIF(company_name,''),
+                                       NULLIF(TRIM(first_name || ' ' || last_name), ''))) AS name
+                           FROM customers
+                           WHERE TRIM(first_name || ' ' || last_name) LIKE ?
+                           ORDER BY customer_id LIMIT 1""",
+                        (pat,),
+                    ).fetchone()
+                    if not row or not row["name"]:
+                        out["not_found"].append(pat)
+                        continue
+                    enr = db.enroll_season_contest(
+                        row["name"], "NET Points Race", "San Antonio",
+                        "2026 Fall", manually_enrolled=True,
+                        source_item_id=item_id)
+                    out["enrolled"].append(enr)
+            return json.dumps(out, indent=2, default=str)
         if cmd == "scoring-course-short-pins":
             # Kerry's ratified course short names (2026-07-10) — one-shot
             # apply; /courses UI edits afterwards are never overwritten

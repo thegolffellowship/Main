@@ -186,6 +186,18 @@ ladder is renormalized over (pot − 1st); tie rows are paid down the
 ladder sequentially (no split display); Cup places capped at 5 and City
 at 7 until Kerry extends the ladder families.
 
+**FALL NET races (Kerry, 2026-07-10):** SA FALL NET + AUSTIN FALL NET
+start Saturday 2026-08-29; season total = **best 6 event totals + the
+Fall Championship** (the fall analog of the best-10+CC rule). Preview
+pages live in the CONTESTS race selector (below Monthly, burnt-orange
+"upcoming" chips) with an inline sign-up CTA; enrollments stored as
+season_contests rows with season='2026 Fall' (first two seeded via the
+`scoring-fall-enroll` bridge command: Luke Mazanec — backed by his
+2026-07-10 SEASON CONTESTS order, item 2258 — and Kerry Niester, both
+manually_enrolled=1 until the fall products/sync exist). Wire the GG
+league/page ids into _GG_POINTS_RACES when the fall races are created
+and the preview pages inherit standings/payouts automatically.
+
 ## Wallet/refund contract notes (mailbox ids 22/24, Kerry-ratified 2026-07-06)
 
 Platform-side decisions banked for the Stage-4 bridge (no Tracker code
