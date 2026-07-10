@@ -7442,6 +7442,209 @@ def get_lone_star_cup_projection(db_path: str | Path = DB_PATH) -> dict:
     }
 
 
+def search_spotlight_players(q: str, limit: int = 12,
+                             db_path: str | Path = DB_PATH) -> list[dict]:
+    """Name typeahead for the Player Spotlight (admin preview v1).
+
+    PII-FREE BY DESIGN: returns customer_id, display name, and chapter
+    only — this endpoint is destined for the pinless member tier once
+    Kerry opens the page up, so nothing else may ever be added here.
+    Members only (same visibility rule as the points races).
+    """
+    q = (q or "").strip()
+    if len(q) < 2:
+        return []
+    like = f"%{q}%"
+    statuses = ",".join("?" * len(_MEMBER_PLAYER_STATUSES))
+    with _connect(db_path) as conn:
+        rows = conn.execute(
+            f"""SELECT customer_id,
+                       TRIM(first_name || ' ' || last_name) AS name, chapter
+                FROM customers
+                WHERE (first_name || ' ' || last_name) LIKE ? COLLATE NOCASE
+                  AND current_player_status IN ({statuses})
+                ORDER BY last_name COLLATE NOCASE, first_name COLLATE NOCASE
+                LIMIT ?""",
+            (like, *sorted(_MEMBER_PLAYER_STATUSES), limit),
+        ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def get_player_spotlight(customer_id: int,
+                         db_path: str | Path = DB_PATH) -> dict:
+    """PLAYER SPOTLIGHT payload (v1, admin preview — Kerry directed
+    2026-07-10; opens to members after CA/CD iteration).
+
+    One player's overview: profile, current handicap index, headline
+    stats, where they stand in every points race / cup / match play,
+    fall buy-ins, projected Lone Star Cup seat, and recent winnings.
+
+    PII-FREE BY DESIGN: name, chapter, and competitive data only — no
+    emails/phones/addresses/DOB — so flipping the routes to the member
+    tier later is a role-string change, not a data audit. Standings come
+    from the same persisted snapshots the CONTESTS page serves.
+    """
+    with _connect(db_path) as conn:
+        cust = conn.execute(
+            """SELECT customer_id, first_name, last_name, suffix, chapter,
+                      current_player_status
+               FROM customers WHERE customer_id = ?""",
+            (customer_id,),
+        ).fetchone()
+        if not cust:
+            return {"error": "player not found"}
+        name = " ".join(x for x in (cust["first_name"], cust["last_name"],
+                                    cust["suffix"]) if x)
+        is_member = cust["current_player_status"] in _MEMBER_PLAYER_STATUSES
+
+        # current handicap index via handicap_player_links (canonical path)
+        idx18 = None
+        idx_by_name = {
+            hp["player_name"]: hp["handicap_index_18"]
+            for hp in get_all_handicap_players(db_path)
+            if hp.get("handicap_index_18") is not None
+        }
+        for lr in conn.execute(
+                "SELECT player_name FROM handicap_player_links "
+                "WHERE customer_id = ?", (customer_id,)).fetchall():
+            v = idx_by_name.get(lr["player_name"])
+            if v is not None:
+                idx18 = v
+                break
+
+        enrollments = [dict(r) for r in conn.execute(
+            """SELECT contest_type, chapter, season FROM season_contests
+               WHERE customer_id = ? ORDER BY season, contest_type""",
+            (customer_id,)).fetchall()]
+
+    # ── points races (persisted snapshots — same source as CONTESTS) ──
+    races, errors, events_played = [], [], 0
+    member_card = None
+    for key in _GG_POINTS_RACES:
+        try:
+            d = get_points_race_standings(key, db_path=db_path)
+        except Exception as e:
+            errors.append(f"{key}: {e}")
+            continue
+        if d.get("gg_error"):
+            errors.append(d["gg_error"])
+        row = next((r for r in d["standings"]
+                    if r.get("customer_id") == customer_id), None)
+        if not row:
+            continue
+        events_played = max(events_played, row.get("tournaments") or 0)
+        if row.get("member_card_id"):
+            member_card = member_card or {
+                "race": key, "card": row["member_card_id"]}
+        races.append({
+            "key": key, "label": d["label"],
+            "rank": row["rank"], "n_players": d["n_players"],
+            "total_points": row.get("total_points"),
+            "tournaments": row.get("tournaments"),
+            "wins": row.get("wins"),
+            "enrolled": bool(row.get("enrolled")),
+            "flight": row.get("flight"),
+            "points_reset": row.get("points_reset"),
+        })
+    try:
+        cup = get_fellowship_cup_projection(db_path=db_path)
+        crow = next((r for r in cup["standings"]
+                     if r.get("customer_id") == customer_id), None)
+        if crow:
+            races.append({
+                "key": "fellowship_cup", "label": "THE FELLOWSHIP CUP",
+                "rank": crow["rank"], "n_players": cup["n_players"],
+                "total_points": crow.get("points_reset"),
+                "tournaments": None, "wins": None,
+                "enrolled": bool(crow.get("enrolled")),
+                "flight": None, "points_reset": crow.get("points_reset"),
+            })
+    except Exception as e:
+        errors.append(f"fellowship cup: {e}")
+
+    # fall buy-ins (standings light up when the GG races exist)
+    fall = [e for e in enrollments
+            if e["contest_type"] == "NET Points Race"
+            and (e["season"] or "").endswith("Fall")]
+
+    # ── match play ──
+    match_play = None
+    mp_enr = next((e for e in enrollments
+                   if e["contest_type"] == "City Match Play"), None)
+    if mp_enr:
+        season = str(today_central().year)
+        try:
+            rows = cmp_get_standings(season, mp_enr["chapter"],
+                                     db_path=db_path)
+            mrow = next(
+                (r for r in rows
+                 if (r.get("customer_name") or r.get("player_name") or "")
+                 .strip().lower() == name.strip().lower()), None)
+            match_play = {
+                "chapter": mp_enr["chapter"], "enrolled": True,
+                "pool": (mrow or {}).get("pool_name"),
+                "wins": (mrow or {}).get("wins"),
+                "losses": (mrow or {}).get("losses"),
+                "draws": (mrow or {}).get("draws"),
+                "stableford": (mrow or {}).get("pts"),
+            }
+        except Exception as e:
+            errors.append(f"match play: {e}")
+            match_play = {"chapter": mp_enr["chapter"], "enrolled": True}
+
+    # ── projected Lone Star Cup seat / alternate ──
+    lsc = None
+    try:
+        proj = get_lone_star_cup_projection(db_path=db_path)
+        for ch in proj["chapters"]:
+            seat = next((r for r in ch["seats"]
+                         if r.get("customer_id") == customer_id), None)
+            if seat:
+                lsc = {"chapter": ch["chapter"], "seat": seat["seat"],
+                       "earned_as": seat["earned_as"],
+                       "via_pool": seat["via_pool"]}
+                break
+            alt = next((i for i, a in enumerate(ch["alternates"])
+                        if a.get("customer_id") == customer_id), None)
+            if alt is not None:
+                lsc = {"chapter": ch["chapter"], "alternate_rank": alt + 1}
+                break
+    except Exception as e:
+        errors.append(f"lone star cup: {e}")
+
+    # ── winnings ──
+    total_winnings, recent_payouts = 0, []
+    try:
+        w = get_customer_winnings(name, db_path=db_path,
+                                  customer_id=customer_id)
+        total_winnings = w.get("total_winnings") or 0
+        recent_payouts = (w.get("payouts") or [])[:5]
+    except Exception as e:
+        errors.append(f"winnings: {e}")
+
+    return {
+        "customer_id": customer_id,
+        "name": name,
+        "chapter": cust["chapter"],
+        "is_member": is_member,
+        "handicap_index_18": idx18,
+        "handicap_index_9": round(idx18 / 2, 1) if idx18 is not None else None,
+        "stats": {
+            "events_played": events_played,
+            "races_entered": len({(e["contest_type"], e["season"])
+                                  for e in enrollments}),
+            "total_winnings": total_winnings,
+        },
+        "races": races,
+        "fall_buyins": fall,
+        "match_play": match_play,
+        "lone_star_cup": lsc,
+        "recent_payouts": recent_payouts,
+        "member_card": member_card,
+        "gg_error": "; ".join(dict.fromkeys(errors)) or None,
+    }
+
+
 # ═══════════════════════════════════════════════════════════════════════
 #  SCORING RECORDS (Phase 1) — tracker-owned scorecards + course database
 #

@@ -151,3 +151,27 @@ floored at 0, verified 2026-07-05 against member details) and the
 own-live-scoring shadow pilot are documented decisions from the same
 planning thread; see docs/claude/scoring.md for the points-model
 finding.
+
+## Player Spotlight (v2.67.0 — ADMIN PREVIEW, Kerry-directed 2026-07-10)
+
+`/spotlight` — type any player's name, get their story: handicap index
+(18/9), stat tiles (events played / contests entered / season
+winnings), a WHERE THEY STAND card per points race (rank of field,
+points, events, flight, projected reset, BOUGHT IN pill), fall buy-in
+cards, City Match Play card (pool, W-L-D, Stableford), projected Lone
+Star Cup seat/alternate chip, five most recent winnings.
+
+- Backend: `search_spotlight_players(q)` (typeahead; members only) +
+  `get_player_spotlight(customer_id)` in `database.py`, composing the
+  persisted points snapshots, cup projection, cmp standings,
+  handicap_player_links, get_customer_winnings, and the LSC projection.
+- Routes: `/spotlight` page + `/api/spotlight/search` +
+  `/api/spotlight/player` — ALL admin-only until Kerry ratifies the
+  member rollout after CA/CD iteration.
+- **PII-FREE BY DESIGN**: payloads carry name, chapter, and competitive
+  data only. Flipping to the pinless member tier is a role-string
+  change; never add contact fields to these endpoints.
+- Deferred to iteration: Monthly standing (get_monthly_points does live
+  GG page walks — too heavy per player; needs a snapshot path first),
+  recent-rounds drill-down (member_card is already in the payload for
+  the existing points-race/detail endpoint), head-to-head comparisons.

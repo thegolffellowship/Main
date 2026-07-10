@@ -312,6 +312,10 @@ No Python or local install needed — Claude Desktop connects directly to Railwa
   counters from the pinless member pages (`member_analytics` table; beacon in
   auth.js under `window.MEMBER_MODE`; POST /api/member-metric is the only
   anonymous write in the app — whitelisted events, truncated fields, no PII)
+- `templates/spotlight.html` — Player Spotlight (ADMIN PREVIEW v1): name
+  typeahead → per-player overview (handicap, stats, standings in every race,
+  projected LSC seat, winnings). PII-free payloads, member-tier-destined —
+  see `docs/claude/member-portal.md`
 - `templates/database.html` — Admin database browser
 - `templates/changelog.html` — Version changelog
 - `static/js/dashboard.js` — Transactions page logic (largest JS file)
