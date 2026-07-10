@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.56.2";
+window.TGF_VERSION = "2.56.3";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.56.3",
+    date: "2026-07-10",
+    changes: [
+      "Handicaps dates compact to m-d on phones (Kerry): round-history rows and the mobile card 'Last:' line read 7-1 instead of 2026-07-01 at mobile widths (member and admin alike); desktop keeps the full date.",
+    ],
+  },
   {
     version: "2.56.2",
     date: "2026-07-10",
