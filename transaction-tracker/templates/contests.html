@@ -2634,7 +2634,7 @@
         const rankStyle = `width:${compact ? "28px" : "56px"};`;
         const ptsStyle = `width:${compact ? "34px" : "90px"};text-align:center;font-weight:700;border-left:2px solid #cbd5e1;border-right:2px solid #cbd5e1;`;
         const resetStyle = `width:${compact ? "44px" : "110px"};text-align:center;border-right:2px solid #cbd5e1;`;
-        const rndStyle = `width:${compact ? "24px" : "80px"};text-align:center;border-right:2px solid #cbd5e1;`;
+        const rndStyle = `width:${compact ? "30px" : "80px"};text-align:center;border-right:2px solid #cbd5e1;`;
         const buyStyle = compact ? "width:26px;text-align:center;" : "width:110px;";
 
         const rowHtml = r => {
@@ -2698,7 +2698,7 @@
         $("pr-table-container").innerHTML = `
             <table class="enrollment-table${compact ? " pr-compact" : ""}">
                 <thead><tr>
-                    <th style="${rankStyle}">${compact ? "#" : "Rank"}</th><th>Player</th>
+                    <th style="${rankStyle}">${compact ? "#" : "Rank"}</th><th style="width:99%;">Player</th>
                     ${showChapter ? `<th style="${chapStyle}">${compact ? "CH" : "Chapter"}</th>` : ""}
                     <th style="${ptsStyle}">${compact ? "PTS" : "POINTS"}</th>
                     <th style="${resetStyle}"><span class="pr-proj" style="display:block;font-size:${compact ? "0.52rem" : "0.65rem"};font-weight:600;letter-spacing:0.03em;">(${compact ? "proj" : "Projected"})</span>${compact ? "RESET" : "POINTS RESET"}</th>
@@ -2798,7 +2798,7 @@
         $("pr-table-container").innerHTML = `
             <table class="enrollment-table${compact ? " pr-compact" : ""}">
                 <thead><tr>
-                    <th style="${rankTh}">${compact ? "#" : "Rank"}</th><th>Player</th>
+                    <th style="${rankTh}">${compact ? "#" : "Rank"}</th><th style="width:99%;">Player</th>
                     <th style="${chapTh}">${compact ? "CH" : "Chapter"}</th>
                     <th style="${netTh}" title="Rank in their chapter's NET race">${compact ? "NET #" : "NET Rank"}</th>
                     <th style="${resetTh}"><span class="pr-proj" style="display:block;font-size:${compact ? "0.52rem" : "0.65rem"};font-weight:600;letter-spacing:0.03em;">(${compact ? "proj" : "Projected"})</span>${compact ? "RESET" : "POINTS RESET"}</th>
@@ -2857,7 +2857,7 @@
 
         const rankStyle = `width:${compact ? "28px" : "56px"};`;
         const chapStyle = `width:${compact ? "32px" : "130px"};border-left:2px solid #cbd5e1;border-right:2px solid #cbd5e1;`;
-        const rndStyle = `width:${compact ? "24px" : "80px"};text-align:center;border-right:2px solid #cbd5e1;`;
+        const rndStyle = `width:${compact ? "30px" : "80px"};text-align:center;border-right:2px solid #cbd5e1;`;
         const ptsStyle = `width:${compact ? "40px" : "90px"};text-align:center;font-weight:700;border-left:2px solid #cbd5e1;border-right:2px solid #cbd5e1;`;
         const purseStyle = `width:${compact ? "48px" : "90px"};text-align:center;`;
         const rows = sel.standings.map(r => {
@@ -2890,7 +2890,10 @@
             </tr>`;
         }).join("");
 
-        cont.innerHTML = `
+        const statusChip = sel.complete ? "" : `
+            <div style="margin:0.4rem 0 0.1rem;"><span style="display:inline-flex;align-items:center;gap:8px;height:30px;padding:0 14px;background:#FDF0E6;color:#BF5700;border-radius:9999px;font:700 11px/1 'Bitter',serif;letter-spacing:1px;text-transform:uppercase;">&#9679;&nbsp;${escapeHtml(sel.name)} &middot; In Progress</span></div>`;
+
+        cont.innerHTML = `${statusChip}
             <div style="display:flex;flex-wrap:wrap;align-items:center;gap:0.35rem;margin:0.4rem 0 0.6rem;">${nav}
                 <button id="pr-monthly-refresh" class="manager-only" title="Refresh from Golf Genius${prMonthlyData.fetched_at ? ` (last: ${prMonthlyData.fetched_at})` : ""}"
                     style="display:${userRole === "admin" || userRole === "manager" ? "" : "none"};padding:0.35rem 0.75rem;cursor:pointer;font-size:0.78rem;font-weight:600;

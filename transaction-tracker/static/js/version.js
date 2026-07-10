@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.58.2";
+window.TGF_VERSION = "2.58.3";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.58.3",
+    date: "2026-07-10",
+    changes: [
+      "ROUNDS column data truly centered this time (Kerry): the real culprit was the table's auto-layout stretching the numeric columns wide on phones, leaving centered numbers floating oddly between the divider rules. The PLAYER column now absorbs ALL the slack width (width:99% on its header), so PTS / PROJ RESET / R / IN collapse snug around their content and the numbers sit visibly centered between their rules. Same fix on the Fellowship Cup table.",
+      "Open monthly races show an 'IN PROGRESS' chip up top (Kerry) -- e.g. 'JULY - IN PROGRESS' in the burnt-orange chip style above the month tabs. Completed months show nothing extra; their trophy rows already mark the winners.",
+    ],
+  },
   {
     version: "2.58.2",
     date: "2026-07-10",
