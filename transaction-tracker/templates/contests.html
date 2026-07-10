@@ -62,6 +62,9 @@
             width: min(660px, calc(100vw - 24px)); max-height: 84vh; overflow-y: auto;
             background: #fff; border-radius: 16px; z-index: 301;
             box-shadow: 0 20px 60px rgba(0,0,0,.3); padding: 0 20px 18px;
+            /* iOS: keep the swipe INSIDE the popup — without these the page
+               behind takes the scroll and the popup looks frozen */
+            -webkit-overflow-scrolling: touch; overscroll-behavior: contain;
         }
         .pr-hiw-head {
             display: flex; align-items: center; justify-content: space-between;
@@ -1032,9 +1035,21 @@
         const btn = $("pr-hiw-btn"), modal = $("pr-hiw-modal"),
               scrim = $("pr-hiw-scrim"), close = $("pr-hiw-close");
         if (!btn || !modal) return;
+        let lockY = 0;
         const setOpen = open => {
             modal.style.display = open ? "" : "none";
             scrim.style.display = open ? "" : "none";
+            // iOS-proof body scroll lock: without it the page behind takes
+            // the touch-drag and the popup never scrolls (Kerry, 2026-07-10)
+            if (open) {
+                lockY = window.scrollY || 0;
+                Object.assign(document.body.style,
+                    { position: "fixed", top: `-${lockY}px`, left: "0", right: "0", width: "100%" });
+            } else {
+                Object.assign(document.body.style,
+                    { position: "", top: "", left: "", right: "", width: "" });
+                window.scrollTo(0, lockY);
+            }
         };
         btn.addEventListener("click", e => { e.stopPropagation(); setOpen(true); });
         close.addEventListener("click", () => setOpen(false));
