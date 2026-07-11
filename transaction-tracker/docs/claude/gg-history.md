@@ -620,6 +620,45 @@ future bridging, parity audit vs scoring_rounds) is the next build.
 Kerry pulls further leagues' exports backwards through the seasons as
 convenient; attach in chat, any batch size.
 
+## PROOF OF CONCEPT COMPLETE: 2025+2026 (Kerry-directed, 2026-07-11 late)
+
+All eight export pairs ingested to gg_history_events/results (205
+events, 3,199 player-rounds; 2026 leagues 100% identity-matched, 2025
+~97%) on top of the Phase-A standings. Cross-channel audit: **1,305
+checks, 95.1% exact.** Every mismatch falls into three EXPLAINED
+classes — the lessons for scaling backwards:
+
+1. **Post-import score edits (sa2026: 9 of 599).** Export reflects
+   GG's current values; our scrapes captured import-time values.
+   Off-by-1-2 strokes mostly (one WD/adjustment case: 63 vs 119).
+   LESSON: the audit is a living reconciler — mismatches = "rescrape
+   this event"; neither channel is wrong, they're snapshots at
+   different times. Archive years are frozen, so this class vanishes
+   going backwards.
+2. **Multi-round days break the (customer, date) join (hcm2026: 36
+   flagged, most values present in the same day's other rounds).**
+   Hill Country Matches plays 6 rounds one Saturday; date-join can't
+   pair them. LESSON: audit joins need round labels on multi-round
+   days (the scorecard importer's round_key concept, applied to
+   audits). Match-play stub rows (gross 4/5/7 = holes-won entries)
+   need a format guard.
+3. **Per-round purse ≠ season money (sa2025: 9; champ2025: 10).**
+   The export Purse Summary is per-ROUND money only; the scraped
+   MONEY & SCORING standings include season-contest payouts (repeating
+   deltas like +$30.38/+$69.43 = season-end pot shares). LESSON: the
+   channels measure different money scopes ON PURPOSE — results-level
+   money comes from exports/Phase B, season-total money from
+   standings; career winnings = standings-level truth.
+
+Clean sheets: austin2026 369/369 · austin2025 88/88 · roadtrip2025 9/9.
+lsc2025: 0 checkable — its portal money page is an image, the export
+is the ONLY structured source (the channel-redundancy thesis proven on
+the first season tried).
+
+Roster map APPLIED (map-only): 1,089 rows, 365 customer-linked;
+league rosters added 753 league-scoped id rows. The 219 unmatched
+TGF/Former profiles remain Kerry's open decision (option b).
+
 ## Status
 
 - [x] Coverage map complete: 59 live portals, every in-scope league
