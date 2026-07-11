@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.69.3";
+window.TGF_VERSION = "2.69.4";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.69.4",
+    date: "2026-07-11",
+    changes: [
+      "GG HISTORY: SIX MORE PORTALS RECOVERED via Kerry's tgf-lonestarcup25 link, which revealed the TWO-DIGIT year suffix pattern the earlier guesses missed: 2021/2022/2025 Lone Star Cups, the 2025 TGF CHAMPIONSHIP (tgf-champ25 -- 'champ', not 'championship'), and Road Trips 2024/2025. Registry now 42 live portals. The champ25 portal cross-links a 2024 TGF CHAMPIONSHIP page, so that data exists reachable somewhere; a final derived-pattern sweep (champ20-24, LSC 23/24 variants, Trinity River, Hill Country Cup, Red Blue) is underway.",
+    ],
+  },
   {
     version: "2.69.3",
     date: "2026-07-11",

@@ -89,7 +89,7 @@ calls. Proven recipe:
   guests, and DFW/Houston members with no Tracker profile at all
   (mailbox #100 phase 3: unmatched → review queue for Kerry).
 
-## Portal registry — 36 live portals (+2 dead mains)
+## Portal registry — 42 live portals (+2 dead mains)
 
 | Portal | Season/Scope | Status | website_id | league_id | Notes |
 |---|---|---|---|---|---|
@@ -129,6 +129,12 @@ calls. Proven recipe:
 | tgf-twoman2021 | Two Man 2021 | ALIVE | — | — | ER 2843357, M$ 3137725, POINTS RACE net 3003170 / gross 3003171, DIR 2843364 |
 | tgf-twoman2022 | Two Man 2022 | ALIVE | — | — | richest Two Man site: ER 3507900, M$ 3507901, PR net/gross 3507898/3507899, FC 3594318, DIR 3594319 |
 | tgf-twomantour | Two Man Tour | ALIVE | — | — | "Two Man Tour League": Players 4947581, Tournament Results 4947585, Player Event Standings 4947586 — likely aggregates the 2024–25 per-course events |
+| tgf-lonestarcup21 | LSC 2021 | ALIVE | — | — | full league site: FC 3220970, PR san antonio 3220971, MP 3220972, M$ 3220973, ER 3220974, DIR 3220967 |
+| tgf-lonestarcup22 | LSC 2022 | ALIVE | — | — | LEADERBOARD "2022 LONE STAR CUP" 3827234, DIR 3827227, HCP 3877011/3877012 |
+| tgf-lonestarcup25 | LSC 2025 | ALIVE | 575031 | — | Kerry-supplied link (2-digit-year pattern key): LEADERBOARD/MONEY 5710572, DIR 5663174, HCP 5663175; hosted at Squaw Valley GC |
+| tgf-champ25 | TGF Championship 2025 | ALIVE | — | — | Kerry-supplied pattern ("champ", not "championship"): FC 5550900, PC Overall+4 flights+RegSeason 5553510/5550902–5550906, M$ 5550907, ER 5550908, DIR 5550896; cross-links a "2024 TGF CHAMPIONSHIP" page (5550914) — 2024 champ data exists somewhere reachable |
+| tgf-roadtrip24 | ONE-OFF 2024 | ALIVE | — | — | "2024 Road Trip + Two Man Challenge" (TGF + one Tour event, hybrid): SCHEDULE 4679638, DIR 4673301 — NO results/money pages in nav |
+| tgf-roadtrip25 | ONE-OFF 2025 | ALIVE | — | — | RESULTS 5295980, MONEY 5710562, ITINERARY 5295753, DIR 5293940 |
 | tgf-dfw (main) | — | **DEAD** | — | — | redirects to corporate golfgenius.com; also linked with a typo (`.coms`) from tgf-sa2024 |
 | tgf-houston (main) | — | **DEAD** | — | — | redirects to corporate golfgenius.com |
 
