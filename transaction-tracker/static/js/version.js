@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.71.0";
+window.TGF_VERSION = "2.71.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.71.1",
+    date: "2026-07-11",
+    changes: [
+      "GG EXPORT CHANNEL VALIDATED AND STAGED (Kerry supplied the SA + Austin 2026 Season Scores + roster exports): the export data is audit-grade -- spot-checks matched the Tracker's independently-scraped scorecards stroke-for-stroke (gross/net/course-handicap). Exports are now the third channel in the history framework: the ONLY source for at-the-time handicap index series, adjusted gross, DOBs, referral graph, payout handles, and deleted-round visibility; scraping stays the only source for hole-by-hole, per-game money, and standings. The overlap is the audit zone.",
+      "Both 2026 export pairs converted and staged under email_parser/data/gg_exports/ (18 CSVs; rosters trimmed -- DOBs/phones deliberately not committed). Key finding: GG numeric member ids are CONTAINER-SCOPED (same golfer, different id per league) -- handle+email are the stable person keys, confirming the gg_member_map design. Export-pair ingest template is the next build.",
+      "Also: roster email-map fix (emails live in customer_emails; customers has no email column) shipped earlier this release train.",
+    ],
+  },
   {
     version: "2.71.0",
     date: "2026-07-11",

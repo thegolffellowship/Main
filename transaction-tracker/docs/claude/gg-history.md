@@ -579,6 +579,47 @@ LAST and live in their own brand lane** (Kerry 2026-07-11: the Tour
 TGF members who played Tour events still identity-link via customer_id,
 ready for the future partner build, invisible on TGF surfaces).
 
+## THE THREE-CHANNEL FRAMEWORK (Kerry + tracker-claude, 2026-07-11 late)
+
+GG admin EXPORTS joined the design as the third channel. Verified
+audit-grade: the SA 2026 Season Scores export matched the Tracker's
+independently-scraped scorecards stroke-for-stroke on every spot-check
+(Anthis: 5 rounds, gross/net/course-handicap all exact).
+
+- **Channel 1 — Portal scraping (Phases A/B):** ONLY source of
+  hole-by-hole scores (Kerry's #1), per-game money breakdowns, game
+  results/flights/MVP marks, season-contest standings, brackets,
+  course/tee detail.
+- **Channel 2 — GG admin exports (Kerry downloads, 2 files/league):**
+  ONLY source of at-the-time Handicap Index + Course Handicap series,
+  Adjusted Gross, DOBs/gender/tees, "Referred By" (referral graph!),
+  payout Venmo handles, registration status, league-scoped member ids,
+  deleted-round visibility (SA 2026 Round 13 was removed — exports show
+  the true round ledger), and everything behind the members-only wall.
+- **Overlap = the audit zone:** per-round gross/net, money totals,
+  points, names, event dates — each channel proves the other honest.
+
+Season Scores export shape (9 sheets): Player Summary · Gross / Net /
+Adjusted-Gross score matrices (player × round) · Course Handicap +
+Handicap Index histories (player × round — at-the-time values!) ·
+League Rounds (round# → event name + date) · Purse Summary + Points
+Summary (player × round). Roster export: league-scoped id (header
+carries the league id — confirmed 514047/514705 for the live leagues),
+handle, email, index, tee, DOB, gender, referred-by, payout handles.
+**GG numeric ids are CONTAINER-SCOPED** (Aguilera: 41019465 in SA 2026
+vs 41580950 in the master) — handle+email are the stable person keys;
+per-league rosters decode that league's internal ids.
+
+Staged so far in `email_parser/data/gg_exports/` (converted to CSV;
+rosters trimmed to id/handle/email/affiliation/start_year/status/index/
+tee — DOBs/phones stay in Kerry's xlsx files, re-uploadable on demand):
+**sa2026 + austin2026 full pairs** (9 score sheets + roster each).
+Export-pair ingest (template: gg_history_events from league_rounds,
+per-round gg_history_results from the matrices, handicap series →
+future bridging, parity audit vs scoring_rounds) is the next build.
+Kerry pulls further leagues' exports backwards through the seasons as
+convenient; attach in chat, any batch size.
+
 ## Status
 
 - [x] Coverage map complete: 59 live portals, every in-scope league
