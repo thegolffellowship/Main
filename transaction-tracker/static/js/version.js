@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.68.0";
+window.TGF_VERSION = "2.69.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.69.0",
+    date: "2026-07-10",
+    changes: [
+      "SPOTLIGHT REBUILT DENSE per the approved design handoff (design-claude spotlight-mobile-scoring-071026, CA GO mailbox #111 -- Kerry had flagged the first cut as far too bulky): hero collapses to a single band (name + chapter/member chips left, big handicap INDEX right, Lone Star Cup projection as one line under a divider), the three stat cards become one 3-across strip (EVENTS / CONTESTS / WON in green), WHERE THEY STAND collapses to one card of compact rows (rank-of-field block left, race + inline meta, IN/NOT IN micro-pill; Players Cup rank tinted burnt orange), winnings are single-line rows with right-aligned green amounts, and the search intro copy disappears once a player is loaded. Roughly half the scroll on a phone; desktop shows the same dense column pending design-claude's desktop pass.",
+      "SCORING card is LIVE with real numbers (bound to the v2.68.0 scoring payload): PAR 3/4/5 stroke-average tiles, the 9-hole average as the PRIMARY line (18-hole demoted to a muted conditional line, hidden when a player has no 18-hole rounds -- the common case), and the EAG/BIRD/PAR/BOG/OTHER distribution strip with zero-count tiles muted. Trend arrows are the EARNED state: they appear only at 15+ tracked rounds (last-10 vs prior-10), green down = improving, red up = worse; under 15 rounds the card renders clean numbers -- designed as the default look, not a stripped one. The scope cue reads 'last N rounds' honestly.",
+      "Verified in-browser on a seeded fixture: an improving 20-round player shows all-green arrows and the exact distribution; an 8-round player gets the no-arrow default with an honest 'last 8 rounds' cue; a player with no tracked rounds gets no SCORING card at all; no horizontal overflow at 390px.",
+    ],
+  },
   {
     version: "2.68.0",
     date: "2026-07-10",

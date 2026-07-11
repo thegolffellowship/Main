@@ -6,33 +6,37 @@
     <title>TGF — Player Spotlight</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Bitter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Bitter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="/static/css/dashboard.css">
     <link rel="stylesheet" href="/static/css/shell.css">
     <link rel="icon" href="/static/icon.svg" type="image/svg+xml">
     <link rel="apple-touch-icon" href="/static/icon-180.png">
     <style>
-        /* Player Spotlight — ADMIN PREVIEW v1 (Kerry, 2026-07-10). Styled for
-           the member view it's destined for; iterate with CA/CD before the
-           routes open to the member tier. */
-        .spt-wrap { padding: 1.25rem 1.5rem 3rem; max-width: 980px; margin: 0 auto; }
+        /* Player Spotlight — ADMIN PREVIEW. Dense layout wired from handoff
+           spotlight-mobile-scoring-071026 (design-claude #110, CA GO #111):
+           single-band hero, 3-across stat strip, SCORING card (trends are the
+           EARNED state — 15+ rounds; 9-hole average primary, 18-hole muted
+           conditional), one-card WHERE THEY STAND rows, single-line winnings.
+           Desktop shows the same dense column pending CD's desktop pass. */
+        .spt-wrap { padding: 1rem 0.9rem 3rem; max-width: 560px; margin: 0 auto;
+                    display: flex; flex-direction: column; gap: 11px; }
         .spt-preview-chip {
-            display: inline-flex; align-items: center; gap: 8px; height: 26px; padding: 0 12px;
-            background: #FEF3C7; color: #92400E; border-radius: 9999px;
-            font: 700 10px/1 'Bitter', serif; letter-spacing: 1px; text-transform: uppercase;
+            text-align: center; font: 700 10px/1.3 'Bitter', serif; letter-spacing: 0.5px;
+            color: #9A6A00; background: #FBE9C7; padding: 7px; border-radius: 9px;
+            text-transform: uppercase;
         }
-        .spt-hero { text-align: center; margin: 1.4rem 0 0; }
-        .spt-hero h2 { margin: 0; font: 700 1.7rem/1.15 'Bitter', serif; color: var(--text); }
-        .spt-hero p { margin: 0.45rem 0 0; font-size: 14px; color: var(--text-muted); }
-        .spt-searchbox { position: relative; max-width: 460px; margin: 1.1rem auto 0; }
+        .spt-hero-copy { text-align: center; margin: 0.4rem 0 0; }
+        .spt-hero-copy h2 { margin: 0; font: 700 1.45rem/1.15 'Bitter', serif; color: var(--text); }
+        .spt-hero-copy p { margin: 0.4rem 0 0; font-size: 13.5px; line-height: 1.55; color: var(--text-muted); }
+        .spt-searchbox { position: relative; }
         .spt-searchbox input {
-            width: 100%; height: 48px; padding: 0 20px; box-sizing: border-box;
-            border: 1.5px solid var(--border); border-radius: 9999px;
-            font-size: 16px; background: #fff; outline: none;
+            width: 100%; height: 44px; padding: 0 16px; box-sizing: border-box;
+            border: 1px solid var(--border); border-radius: 12px;
+            font-size: 15px; background: #fff; outline: none;
         }
-        .spt-searchbox input:focus { border-color: var(--primary, #E87C3E); box-shadow: 0 0 0 3px rgba(232,124,62,.18); }
+        .spt-searchbox input:focus { border-color: var(--primary, #E87C3E); box-shadow: 0 0 0 3px rgba(232,124,62,.16); }
         .spt-suggest {
-            position: absolute; left: 10px; right: 10px; top: calc(100% + 6px); z-index: 40;
+            position: absolute; left: 4px; right: 4px; top: calc(100% + 6px); z-index: 40;
             background: #fff; border: 1px solid var(--border); border-radius: 14px;
             box-shadow: 0 14px 40px rgba(0,0,0,.14); overflow: hidden; text-align: left;
         }
@@ -42,73 +46,92 @@
             font-size: 14.5px; color: var(--text); border-top: 1px solid #F3F2EF;
         }
         .spt-suggest button:first-child { border-top: none; }
-        .spt-suggest button:hover, .spt-suggest button.hl { background: #FDF0E6; }
+        .spt-suggest button:hover { background: #FDF0E6; }
         .spt-suggest .none { padding: 12px 16px; font-size: 13px; color: var(--text-muted); }
-        .spt-chapter-chip {
-            display: inline-flex; align-items: center; height: 22px; padding: 0 10px;
-            border-radius: 9999px; font: 700 9.5px/1 'Bitter', serif;
-            letter-spacing: 0.8px; text-transform: uppercase;
-            background: #E5E7EB; color: #374151;
-        }
-        .spt-chapter-chip.austin { background: var(--chapter-austin, #BF5700); color: #fff; }
-        .spt-chapter-chip.sa { background: var(--chapter-sa, #D3DDE4); color: #1B1B1B; }
 
-        /* player view */
-        .spt-player { margin-top: 1.6rem; }
-        .spt-card {
-            background: #fff; border: 1px solid var(--border); border-radius: 14px;
-            padding: 20px 24px; display: flex; align-items: center; gap: 18px; flex-wrap: wrap;
-        }
-        .spt-name-block { flex: 1 1 260px; min-width: 220px; }
-        .spt-name { margin: 0; font: 700 1.65rem/1.1 'Bitter', serif; color: var(--text); }
-        .spt-badges { display: flex; gap: 6px; margin-top: 9px; flex-wrap: wrap; }
-        .spt-member-chip {
-            display: inline-flex; align-items: center; height: 22px; padding: 0 10px;
-            border-radius: 9999px; background: #bbf7d0; color: #14532D;
-            font: 700 9.5px/1 'Bitter', serif; letter-spacing: 0.8px; text-transform: uppercase;
-        }
-        .spt-lsc-chip {
-            display: inline-flex; align-items: center; height: 22px; padding: 0 10px;
-            border-radius: 9999px; background: #FDF0E6; color: #BF5700;
-            font: 700 9.5px/1 'Bitter', serif; letter-spacing: 0.8px; text-transform: uppercase;
-        }
-        .spt-hcp { text-align: center; padding: 0 8px; }
-        .spt-hcp .n { font: 700 40px/1 'Bitter', serif; color: var(--text); font-variant-numeric: tabular-nums; }
-        .spt-hcp .l { margin-top: 5px; font: 700 9px/1.3 'Bitter', serif; letter-spacing: 1.2px; text-transform: uppercase; color: var(--text-muted); }
-        .spt-tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; margin-top: 12px; }
-        .spt-tile { background: #fff; border: 1px solid var(--border); border-radius: 12px; padding: 12px 16px; }
-        .spt-tile .lbl { font: 700 9.5px/1.3 'Bitter', serif; letter-spacing: 1.4px; text-transform: uppercase; color: var(--text-muted); }
-        .spt-tile .val { font: 700 22px/1 'Bitter', serif; color: var(--text); margin-top: 7px; font-variant-numeric: tabular-nums; }
+        .spt-chip { display: inline-flex; align-items: center; padding: 5px 8px; border-radius: 9999px;
+                    font: 700 9.5px/1 'Bitter', serif; letter-spacing: 0.5px; text-transform: uppercase; }
+        .spt-chip.ch-sa { background: #DCE3E8; color: #3F4A54; }
+        .spt-chip.ch-austin { background: var(--chapter-austin, #BF5700); color: #fff; }
+        .spt-chip.ch-other { background: #E5E7EB; color: #374151; }
+        .spt-chip.member { background: #C9EBD5; color: #1B6B45; }
 
-        .spt-sec-h {
-            margin: 1.6rem 0 0.6rem; font: 700 11px/1.3 'Bitter', serif;
-            letter-spacing: 1.4px; text-transform: uppercase; color: #1B1B1B;
-        }
-        .spt-races { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 12px; }
-        .spt-race { background: #fff; border: 1px solid var(--border); border-radius: 12px; padding: 13px 16px; }
-        .spt-race .rl { font: 700 10.5px/1.35 'Bitter', serif; letter-spacing: 1px; text-transform: uppercase; color: #6B7280; }
-        .spt-race .rank-row { display: flex; align-items: baseline; gap: 8px; margin-top: 8px; }
-        .spt-race .rank { font: 700 26px/1 'Bitter', serif; color: var(--text); font-variant-numeric: tabular-nums; }
-        .spt-race .of { font-size: 12px; color: #9CA3AF; }
-        .spt-race .meta { margin-top: 7px; font-size: 12px; color: var(--text-body, #4B5563); line-height: 1.55; }
-        .spt-race .buyin { display: inline-flex; align-items: center; height: 20px; padding: 0 9px; border-radius: 9999px; margin-top: 9px;
-            font: 700 9px/1 'Bitter', serif; letter-spacing: 0.8px; text-transform: uppercase; }
-        .spt-race .buyin.in { background: #bbf7d0; color: #14532D; }
-        .spt-race .buyin.out { background: #F3F4F6; color: #6B7280; }
-        .spt-pay-list { background: #fff; border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
-        .spt-pay { display: flex; gap: 10px; padding: 9px 16px; border-top: 1px solid #F3F2EF; font-size: 13px; align-items: baseline; }
-        .spt-pay:first-child { border-top: none; }
-        .spt-pay .amt { margin-left: auto; font-weight: 700; color: #059669; font-variant-numeric: tabular-nums; white-space: nowrap; }
-        .spt-pay .ev { font-weight: 600; color: var(--text); }
-        .spt-pay .cat { color: #9CA3AF; font-size: 11.5px; }
-        .spt-empty { font-size: 13px; color: var(--text-muted); }
-        .spt-note { margin-top: 1.4rem; font-size: 12px; line-height: 1.55; color: #9CA3AF; }
-        @media (max-width: 640px) {
-            .spt-wrap { padding: 0.9rem 0.75rem 2.5rem; }
-            .spt-card { padding: 16px; gap: 12px; }
-            .spt-name { font-size: 1.35rem; }
-            .spt-hcp .n { font-size: 32px; }
-        }
+        .spt-card { background: #fff; border: 1px solid var(--border); border-radius: 14px; padding: 15px 16px; }
+        .spt-hero-row { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
+        .spt-name { margin: 0; font: 700 23px/1.05 'Bitter', serif; color: #1B1B1B; min-width: 0; }
+        .spt-badges { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 8px; }
+        .spt-idx { text-align: right; flex: none; }
+        .spt-idx .n { font: 700 34px/0.9 'Bitter', serif; color: #1B1B1B; font-variant-numeric: tabular-nums; }
+        .spt-idx .l { font: 700 8.5px/1.3 'Bitter', serif; letter-spacing: 0.5px; color: #6B7280;
+                      margin-top: 4px; text-transform: uppercase; }
+        .spt-lsc-line { display: flex; align-items: center; gap: 7px; margin-top: 12px;
+                        padding-top: 11px; border-top: 1px solid #F0EEE9;
+                        font: 600 11px/1.3 'Helvetica Neue', Arial, sans-serif; color: #BF5700; }
+        .spt-lsc-line b { font-weight: 800; letter-spacing: 0.3px; }
+
+        .spt-strip { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 9px; }
+        .spt-tile { background: #fff; border: 1px solid var(--border); border-radius: 12px; padding: 11px 12px; }
+        .spt-tile .lbl { font: 700 8.5px/1 'Bitter', serif; letter-spacing: 0.6px; color: #6B7280; text-transform: uppercase; }
+        .spt-tile .val { font: 700 22px/1.1 'Bitter', serif; color: #1B1B1B; margin-top: 3px; font-variant-numeric: tabular-nums; }
+        .spt-tile .val.money { font-size: 19px; color: #1B7F4B; }
+
+        .spt-sec-head { display: flex; align-items: baseline; justify-content: space-between; margin: 6px 2px 8px; }
+        .spt-sec-head .t { font: 700 11px/1 'Bitter', serif; letter-spacing: 1px; color: #1B1B1B; text-transform: uppercase; }
+        .spt-sec-head .s { font: 500 10.5px/1 'Helvetica Neue', Arial, sans-serif; color: #9CA3AF; }
+        .spt-panel { background: #fff; border: 1px solid var(--border); border-radius: 14px; overflow: hidden; }
+
+        /* SCORING card */
+        .spt-pars { display: grid; grid-template-columns: 1fr 1fr 1fr; }
+        .spt-par { padding: 12px 6px; text-align: center; border-left: 1px solid #F0EEE9; }
+        .spt-par:first-child { border-left: none; }
+        .spt-par .pl { font: 700 9px/1 'Bitter', serif; letter-spacing: 0.5px; color: #6B7280; text-transform: uppercase; }
+        .spt-par .pv { display: flex; align-items: baseline; justify-content: center; gap: 4px; margin-top: 5px; }
+        .spt-par .pv .k { font: 700 19px/1 'Bitter', serif; color: #1B1B1B; font-variant-numeric: tabular-nums; }
+        .spt-trend { font: 700 11px/1 'Helvetica Neue', Arial, sans-serif; white-space: nowrap; }
+        .spt-trend.up { color: #B91C1C; }
+        .spt-trend.down { color: #1B7F4B; }
+        .spt-avg-row { display: flex; align-items: center; justify-content: space-between;
+                       padding: 11px 14px; border-top: 1px solid #F0EEE9; }
+        .spt-avg-row .lab { font: 600 12px/1 'Helvetica Neue', Arial, sans-serif; color: #4B5563; }
+        .spt-avg-row .lab span { color: #9CA3AF; }
+        .spt-avg-row .val { display: flex; align-items: baseline; gap: 6px;
+                            font: 700 16px/1 'Bitter', serif; color: #1B1B1B; font-variant-numeric: tabular-nums; }
+        .spt-avg-row.muted { padding: 8px 14px 10px; border-top: 1px solid #F6F5F1; }
+        .spt-avg-row.muted .lab { font-weight: 500; font-size: 11px; color: #9CA3AF; }
+        .spt-avg-row.muted .val { font-size: 13px; color: #9CA3AF; }
+        .spt-dist { display: flex; border-top: 1px solid #F0EEE9; }
+        .spt-dist div { flex: 1; padding: 11px 4px; text-align: center; border-left: 1px solid #F0EEE9; }
+        .spt-dist div:first-child { border-left: none; }
+        .spt-dist .dn { font: 700 16px/1 'Bitter', serif; font-variant-numeric: tabular-nums; }
+        .spt-dist .dl { font: 700 8px/1.2 'Bitter', serif; letter-spacing: 0.3px; color: #6B7280;
+                        margin-top: 3px; text-transform: uppercase; }
+
+        /* WHERE THEY STAND rows */
+        .spt-stand { display: flex; align-items: center; gap: 12px; padding: 12px 14px; border-top: 1px solid #F0EEE9; }
+        .spt-stand:first-child { border-top: none; }
+        .spt-stand .rk { flex: none; width: 52px; text-align: center; }
+        .spt-stand .rk .r { font: 700 20px/1 'Bitter', serif; font-variant-numeric: tabular-nums; }
+        .spt-stand .rk .f { font: 600 9px/1 'Helvetica Neue', Arial, sans-serif; color: #9CA3AF; margin-top: 2px; }
+        .spt-stand .mid { flex: 1; min-width: 0; }
+        .spt-stand .race { font: 700 10px/1.2 'Bitter', serif; letter-spacing: 0.4px; color: #4B5563; text-transform: uppercase; }
+        .spt-stand .meta { font: 500 12.5px/1.35 'Helvetica Neue', Arial, sans-serif; color: #1B1B1B; margin-top: 3px; }
+        .spt-pill { flex: none; font: 700 8.5px/1 'Bitter', serif; letter-spacing: 0.4px;
+                    padding: 5px 8px; border-radius: 9999px; text-transform: uppercase; }
+        .spt-pill.in { color: #1B6B45; background: #C9EBD5; }
+        .spt-pill.out { color: #6B7280; background: #F3F4F6; }
+
+        /* winnings rows */
+        .spt-win { display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-top: 1px solid #F0EEE9; }
+        .spt-win:first-child { border-top: none; }
+        .spt-win .mid { flex: 1; min-width: 0; }
+        .spt-win .ev { font: 600 13px/1.25 'Helvetica Neue', Arial, sans-serif; color: #1B1B1B;
+                       white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .spt-win .meta { font: 500 11px/1.2 'Helvetica Neue', Arial, sans-serif; color: #9CA3AF; margin-top: 2px; }
+        .spt-win .amt { flex: none; font: 700 15px/1 'Bitter', serif; color: #1B7F4B; font-variant-numeric: tabular-nums; }
+
+        .spt-note { font: 500 11px/1.5 'Helvetica Neue', Arial, sans-serif; color: #9CA3AF; padding: 2px 4px 4px; margin: 0; }
+        .spt-empty { font-size: 13px; color: var(--text-muted); margin: 0.4rem 2px; }
+        @media (min-width: 760px) { .spt-wrap { max-width: 620px; } }
     </style>
 </head>
 <body>
@@ -130,8 +153,7 @@
     {% endif %}
 
     <main>
-        <!-- admin subnav rides along while the page is admin-only; it comes
-             off (or gates) when Kerry opens the page to members -->
+        <!-- admin subnav rides along while the page is admin-only -->
         <nav class="admin-subnav">
             <a href="/accounting">Accounting</a>
             <a href="/coo">COO</a>
@@ -145,23 +167,19 @@
         </nav>
 
         <div class="spt-wrap">
-            <div style="text-align:center;">
-                <span class="spt-preview-chip">&#9679;&nbsp;Admin Preview &middot; not member-visible yet</span>
-            </div>
-            <div class="spt-hero">
+            <div class="spt-preview-chip">&#9679; Admin Preview &middot; not member-visible yet</div>
+            <div class="spt-hero-copy" id="spt-hero-copy">
                 <h2>Player Spotlight</h2>
                 <p>Type any player's name to pull up their story &mdash; handicap,
-                   season stats, and where they stand in every race right now.</p>
-                <div class="spt-searchbox">
-                    <input type="search" id="spt-q" placeholder="Search a player&hellip;"
-                           autocomplete="off" autocapitalize="words" aria-label="Search a player">
-                    <div class="spt-suggest" id="spt-suggest" style="display:none;"></div>
-                </div>
+                   scoring, and where they stand in every race right now.</p>
             </div>
-            <div class="spt-player" id="spt-player"></div>
-            <p class="spt-note">Standings come from the same live snapshots as the
-               CONTESTS page; projected Lone Star Cup seats update as buy-ins and
-               results come in. No contact info is shown here &mdash; ever.</p>
+            <div class="spt-searchbox">
+                <input type="search" id="spt-q" placeholder="Search a player&hellip;"
+                       autocomplete="off" autocapitalize="words" aria-label="Search a player">
+                <div class="spt-suggest" id="spt-suggest" style="display:none;"></div>
+            </div>
+            <div id="spt-player" style="display:contents;"></div>
+            <p class="spt-note">Live snapshots, same as CONTESTS. No contact info shown here &mdash; ever.</p>
         </div>
     </main>
 
@@ -174,10 +192,23 @@
         const esc = s => String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
         const fmtMoney = n => "$" + Number(n || 0).toLocaleString("en-US",
             { minimumFractionDigits: (n % 1 ? 2 : 0), maximumFractionDigits: 2 });
-
+        const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+        const fmtDate = d => {
+            const m = String(d || "").match(/^(\d{4})-(\d{2})-(\d{2})/);
+            return m ? `${MONTHS[+m[2] - 1]} ${+m[3]}` : (d || "");
+        };
         const chapterChip = ch => {
-            const cls = ch === "Austin" ? "austin" : (ch === "San Antonio" ? "sa" : "");
-            return ch ? `<span class="spt-chapter-chip ${cls}">${esc(ch)}</span>` : "";
+            const cls = ch === "Austin" ? "ch-austin" : (ch === "San Antonio" ? "ch-sa" : "ch-other");
+            return ch ? `<span class="spt-chip ${cls}">${esc(ch)}</span>` : "";
+        };
+        // trends are the EARNED state (15+ rounds; payload nulls them below
+        // that). ▼ green = improving (fewer strokes), ▲ red = worse.
+        const trendHtml = (t, gap) => {
+            if (t == null || t === 0) return "";
+            const up = t > 0;
+            const a = Math.abs(t);
+            const num = a < 1 ? String(a.toFixed(gap ? 1 : 2)).replace(/^0/, "").replace(/0$/, "") : a.toFixed(1);
+            return `<span class="spt-trend ${up ? "up" : "down"}">${up ? "▲" : "▼"}${gap ? " " : ""}${num}</span>`;
         };
 
         // ── typeahead ──
@@ -221,7 +252,6 @@
             if (e.key === "Escape") sug.style.display = "none";
         });
 
-        // ── player view ──
         async function loadPlayer(cid) {
             const box = $("spt-player");
             box.innerHTML = '<p class="spt-empty">Pulling up their story&hellip;</p>';
@@ -235,78 +265,117 @@
                 box.innerHTML = `<p class="spt-empty">Couldn't load that player (${esc(err.message || err)}).</p>`;
                 return;
             }
+            $("spt-hero-copy").style.display = "none";   // loaded view drops the intro (#110)
             render(d);
         }
 
         function render(d) {
             const lsc = d.lone_star_cup;
-            const lscChip = lsc
-                ? `<span class="spt-lsc-chip">Lone Star Cup &middot; ${esc(
-                    lsc.seat ? "Projected: " + lsc.seat : "Alternate #" + lsc.alternate_rank)} (${esc(lsc.chapter)})</span>`
+            const lscLine = lsc
+                ? `<div class="spt-lsc-line"><span style="font-size:12px;">&#127942;</span>` +
+                  `<span><b>LONE STAR CUP</b> &middot; ${lsc.seat
+                      ? `proj. seat &mdash; ${esc(lsc.seat)} (${esc(lsc.chapter)})`
+                      : `alternate #${lsc.alternate_rank} (${esc(lsc.chapter)})`}</span></div>`
                 : "";
             const hcp = d.handicap_index_18;
             const hero =
-                `<div class="spt-card">` +
-                `<div class="spt-name-block"><h3 class="spt-name">${esc(d.name)}</h3>` +
+                `<div class="spt-card"><div class="spt-hero-row">` +
+                `<div style="min-width:0;"><h3 class="spt-name">${esc(d.name)}</h3>` +
                 `<div class="spt-badges">${chapterChip(d.chapter)}` +
-                (d.is_member ? `<span class="spt-member-chip">TGF Member</span>` : "") +
-                lscChip + `</div></div>` +
-                `<div class="spt-hcp"><div class="n">${hcp != null ? esc(hcp.toFixed(1)) : "&mdash;"}</div>` +
-                `<div class="l">Handicap Index${d.handicap_index_9 != null ? ` &middot; 9-hole ${esc(d.handicap_index_9.toFixed(1))}` : ""}</div></div>` +
-                `</div>`;
+                (d.is_member ? `<span class="spt-chip member">TGF Member</span>` : "") +
+                `</div></div>` +
+                `<div class="spt-idx"><div class="n">${hcp != null ? esc(hcp.toFixed(1)) : "&mdash;"}</div>` +
+                `<div class="l">Index${d.handicap_index_9 != null ? `<br>9-hole ${esc(d.handicap_index_9.toFixed(1))}` : ""}</div></div>` +
+                `</div>${lscLine}</div>`;
 
             const st = d.stats || {};
-            const tiles =
-                `<div class="spt-tiles">` +
-                [["Events Played", st.events_played ?? 0],
-                 ["Contests Entered", st.races_entered ?? 0],
-                 ["Season Winnings", fmtMoney(st.total_winnings)]]
-                    .map(([l, v]) => `<div class="spt-tile"><div class="lbl">${l}</div><div class="val">${esc(String(v))}</div></div>`).join("") +
+            const strip =
+                `<div class="spt-strip">` +
+                `<div class="spt-tile"><div class="lbl">Events</div><div class="val">${st.events_played ?? 0}</div></div>` +
+                `<div class="spt-tile"><div class="lbl">Contests</div><div class="val">${st.races_entered ?? 0}</div></div>` +
+                `<div class="spt-tile"><div class="lbl">Won</div><div class="val money">${fmtMoney(st.total_winnings)}</div></div>` +
                 `</div>`;
 
-            const raceCard = r => {
-                const flight = r.flight ? ` &middot; ${esc(r.flight)}` : "";
-                const reset = r.points_reset != null && r.key !== "fellowship_cup"
-                    ? `<br>Projected reset: <b>${esc(String(r.points_reset))}</b>` : "";
-                const evs = r.tournaments != null ? `${r.tournaments} event${r.tournaments === 1 ? "" : "s"}` : "";
-                const wins = r.wins ? ` &middot; ${r.wins} win${r.wins === 1 ? "" : "s"}` : "";
-                const pts = r.total_points != null ? `<b>${esc(String(r.total_points))}</b> pts` : "";
-                return `<div class="spt-race"><div class="rl">${esc(r.label)}${flight}</div>` +
-                    `<div class="rank-row"><span class="rank">${esc(String(r.rank))}</span>` +
-                    `<span class="of">of ${r.n_players}</span></div>` +
-                    `<div class="meta">${pts}${evs ? " &middot; " + evs : ""}${wins}${reset}</div>` +
-                    `<span class="buyin ${r.enrolled ? "in" : "out"}">${r.enrolled ? "Bought In" : "Not Entered"}</span>` +
-                    `</div>`;
-            };
-            const fallCard = f =>
-                `<div class="spt-race"><div class="rl">${esc((f.chapter === "Austin" ? "Austin" : "SA") + " Fall NET")}</div>` +
-                `<div class="rank-row"><span class="rank">&mdash;</span><span class="of">starts Aug 29</span></div>` +
-                `<div class="meta">Standings light up when the fall races begin.</div>` +
-                `<span class="buyin in">Bought In</span></div>`;
-            const mp = d.match_play;
-            const mpCard = mp
-                ? `<div class="spt-race"><div class="rl">City Match Play &middot; ${esc(mp.chapter)}</div>` +
-                  (mp.pool
-                    ? `<div class="rank-row"><span class="rank">${mp.wins ?? 0}&ndash;${mp.losses ?? 0}${mp.draws ? "&ndash;" + mp.draws : ""}</span><span class="of">${esc(mp.pool)}</span></div>` +
-                      `<div class="meta">${mp.stableford != null ? `<b>${esc(String(mp.stableford))}</b> Stableford pts across pool matches` : ""}</div>`
-                    : `<div class="rank-row"><span class="rank">&mdash;</span><span class="of">pools not drawn yet</span></div><div class="meta"></div>`) +
-                  `<span class="buyin in">Bought In</span></div>`
-                : "";
+            // ── SCORING card (#110: 9-hole primary; 18-hole muted conditional;
+            //    trends earned; distribution EAG→OTHER) ──
+            let scoring = "";
+            const sc = d.scoring;
+            if (sc) {
+                const pars = ["3", "4", "5"].map(p => {
+                    const pa = (sc.par_avgs || {})[p] || {};
+                    return `<div class="spt-par"><div class="pl">Par ${p}</div><div class="pv">` +
+                        `<span class="k">${pa.avg != null ? pa.avg.toFixed(1) : "&mdash;"}</span>${trendHtml(pa.trend, false)}` +
+                        `</div></div>`;
+                }).join("");
+                const g9 = sc.avg_gross_9, g18 = sc.avg_gross_18;
+                const avg9 = g9
+                    ? `<div class="spt-avg-row"><span class="lab">Avg <span>&middot; 9 holes</span></span>` +
+                      `<span class="val">${g9.avg.toFixed(1)}${trendHtml(g9.trend, true)}</span></div>` : "";
+                const avg18 = g18
+                    ? `<div class="spt-avg-row muted"><span class="lab">Avg &middot; 18 holes</span>` +
+                      `<span class="val">${g18.avg.toFixed(1)}</span></div>` : "";
+                const D = sc.distribution || {};
+                const DIST = [["eagle_plus", "Eag", "#BF5700"], ["birdie", "Bird", "#1B7F4B"],
+                              ["par", "Par", "#1B1B1B"], ["bogey", "Bog", "#6B7280"], ["other", "Other", "#B91C1C"]];
+                const dist = `<div class="spt-dist">` + DIST.map(([k, l, c]) => {
+                    const n = D[k] || 0;
+                    return `<div><div class="dn" style="color:${n ? c : "#C6C2BA"};">${n}</div><div class="dl">${l}</div></div>`;
+                }).join("") + `</div>`;
+                scoring =
+                    `<div><div class="spt-sec-head"><span class="t">Scoring</span>` +
+                    `<span class="s">last ${sc.window_rounds} round${sc.window_rounds === 1 ? "" : "s"}</span></div>` +
+                    `<div class="spt-panel"><div class="spt-pars">${pars}</div>${avg9}${avg18}${dist}</div></div>`;
+            }
 
-            const races = (d.races || []).map(raceCard).join("")
-                + (d.fall_buyins || []).map(fallCard).join("") + mpCard;
+            // ── WHERE THEY STAND — one card, compact rows ──
+            const standRow = (rank, rankColor, field, race, meta, entered) =>
+                `<div class="spt-stand"><div class="rk"><div class="r" style="color:${rankColor};">${rank}</div>` +
+                `<div class="f">${esc(field)}</div></div>` +
+                `<div class="mid"><div class="race">${esc(race)}</div><div class="meta">${esc(meta)}</div></div>` +
+                `<span class="spt-pill ${entered ? "in" : "out"}">${entered ? "In" : "Not In"}</span></div>`;
+            const rows = [];
+            (d.races || []).forEach(r => {
+                const pc = r.key === "players_cup_gross";
+                const metaBits = [];
+                if (r.total_points != null) metaBits.push(`${r.total_points} pts`);
+                if (r.tournaments != null) metaBits.push(`${r.tournaments} ev`);
+                if (r.wins) metaBits.push(`${r.wins} win${r.wins === 1 ? "" : "s"}`);
+                if (r.points_reset != null && r.key !== "fellowship_cup") metaBits.push(`reset ${r.points_reset}`);
+                rows.push(standRow(
+                    esc(String(r.rank)), pc ? "#BF5700" : "#1B1B1B", `of ${r.n_players}`,
+                    r.label + (r.flight ? ` · ${r.flight}` : ""),
+                    metaBits.join(" · "), r.enrolled));
+            });
+            (d.fall_buyins || []).forEach(f => {
+                rows.push(standRow("—", "#C6C2BA", "Aug 29",
+                    (f.chapter === "Austin" ? "Austin" : "SA") + " Fall NET",
+                    "Lights up when fall races begin", true));
+            });
+            if (d.match_play) {
+                const mp = d.match_play;
+                rows.push(mp.pool
+                    ? standRow(`${mp.wins ?? 0}–${mp.losses ?? 0}${mp.draws ? "–" + mp.draws : ""}`,
+                        "#1B1B1B", mp.pool, `City Match Play · ${mp.chapter}`,
+                        mp.stableford != null ? `${mp.stableford} Stableford pts · pool play in progress`
+                                              : "Pool play in progress", true)
+                    : standRow("—", "#C6C2BA", "", `City Match Play · ${mp.chapter}`,
+                        "Pools not drawn yet", true));
+            }
+            const stands = rows.length
+                ? `<div><div class="spt-sec-head"><span class="t">Where They Stand</span></div>` +
+                  `<div class="spt-panel">${rows.join("")}</div></div>`
+                : `<p class="spt-empty">No race appearances yet &mdash; standings show up after their first event.</p>`;
 
             const pays = (d.recent_payouts || []).map(pp =>
-                `<div class="spt-pay"><span class="ev">${esc(pp.event_name || pp.description || "Payout")}</span>` +
-                `<span class="cat">${esc(pp.category || "")}${pp.event_date ? " · " + esc(pp.event_date) : ""}</span>` +
-                `<span class="amt">${fmtMoney(pp.amount)}</span></div>`).join("");
+                `<div class="spt-win"><div class="mid">` +
+                `<div class="ev">${esc(pp.event_name || pp.description || "Payout")}</div>` +
+                `<div class="meta">${esc(pp.category || "")}${pp.event_date ? " · " + esc(fmtDate(pp.event_date)) : ""}</div>` +
+                `</div><span class="amt">${fmtMoney(pp.amount)}</span></div>`).join("");
+            const wins = pays
+                ? `<div><div class="spt-sec-head"><span class="t">Recent Winnings</span></div>` +
+                  `<div class="spt-panel">${pays}</div></div>` : "";
 
-            $("spt-player").innerHTML =
-                hero + tiles +
-                `<div class="spt-sec-h">Where They Stand</div>` +
-                (races ? `<div class="spt-races">${races}</div>`
-                       : `<p class="spt-empty">No race appearances yet &mdash; standings show up after their first event.</p>`) +
-                (pays ? `<div class="spt-sec-h">Recent Winnings</div><div class="spt-pay-list">${pays}</div>` : "") +
+            $("spt-player").innerHTML = hero + strip + scoring + stands + wins +
                 (d.gg_error ? `<p class="spt-note">Standings feed note: ${esc(d.gg_error)}</p>` : "");
         }
 

@@ -199,3 +199,15 @@ strokes-null or par-null holes skipped. None when a player has no
 tracked rounds. Coverage note: scoring_rounds starts at the 2026
 scoring go-live — the GG history ingest (mailbox #100/#105) deepens
 this for career-scale windows later.
+
+**Dense layout WIRED (v2.69.0 — handoff spotlight-mobile-scoring-071026,
+CA GO #111):** spotlight.html now renders the density pass: single-band
+hero (+LSC line), 3-across stat strip, SCORING card (par tiles, 9-hole
+avg primary, muted conditional 18-hole, earned trend arrows, EAG→OTHER
+distribution with muted zeros), one-card WHERE THEY STAND compact rows
+(IN/NOT IN micro-pills, Players Cup rank in burnt orange), single-line
+winnings; intro copy hides once a player loads. Desktop shows the same
+dense column (max-width 620px) pending CD's desktop pass. NEXT per
+sequence: #99 build set (in-reach lines, leaderboard deep links, ENTER
+doorway, invitation empty states) + "This is me" (#106) once CD layers
+them; member flip stays gated on Kerry's explicit ratification.
