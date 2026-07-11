@@ -585,7 +585,15 @@ ready for the future partner build, invisible on TGF surfaces).
 - [x] Access recipe proven both eras; naming chaos catalogued
 - [x] Schema RATIFIED (Kerry 2026-07-11) — tables ship in v2.70.0
 - [x] Phase-A ingest engine + bridge commands (v2.70.0)
-- [ ] 2025 wave ingest → verify vs known results → proceed backwards
+- [x] **2025 wave INGESTED (2026-07-11, first live run):** sa2025 (19
+      pages/921 rows), austin2025 (17/842), champ25 (8/170), roadtrip25
+      (1/10), lonestarcup25 (1 page, 0 rows — its LEADERBOARD/MONEY page
+      is the images-widget class; Phase-B/manual item). Totals: 46
+      standings pages, 1,943 rows, 1,871 identity-linked (96.3%), 38
+      unique names pending review. Idempotency verified (re-run = 0
+      work). league_ids discovered: sa2025 453183, austin2025 454934,
+      champ25 491299, lonestarcup25 502416, roadtrip25 465797.
+- [ ] 2024 wave next (incl. DFW/Houston finales) → … → 2016
 - [ ] Phase B: event results + match play + scorecard depth
 - [ ] Kerry review queue: pending name links on COO action items (build
       the surfacing hook when the first pending batch exists)

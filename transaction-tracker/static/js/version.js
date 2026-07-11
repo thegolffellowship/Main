@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.70.0";
+window.TGF_VERSION = "2.70.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.70.1",
+    date: "2026-07-11",
+    changes: [
+      "FIRST GG HISTORY DATA IS IN THE DATABASE: the 2025 wave ingested live on the deployed engine -- 46 standings pages across tgf-sa2025, tgf-austin2025, tgf-champ25, tgf-roadtrip25, and tgf-lonestarcup25, banking 1,943 verbatim standings rows with 1,871 (96.3%) identity-linked to customer_ids on the first pass; 38 unique names queued pending review. Every fetched widget response was raw-archived to gg_raw_archive before parsing. Idempotency verified in production (immediate re-run performed zero work).",
+      "Known item: lonestarcup25's LEADERBOARD/MONEY page is the images-widget class (uploaded graphic, no server-side table) -- flagged for Phase B or manual entry, same class as the 2016 match-play brackets.",
+    ],
+  },
   {
     version: "2.70.0",
     date: "2026-07-11",
