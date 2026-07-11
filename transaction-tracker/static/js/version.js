@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.69.6";
+window.TGF_VERSION = "2.69.7";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.69.7",
+    date: "2026-07-11",
+    changes: [
+      "GG HISTORY INVENTORY: 100% COVERAGE. Kerry's final link batch (lonestarcup, tgf-2020hccup, tgf-hc, tgf-hcm, hillcountrymatches, hillcountry2man-1, hillcountry2man) -- all seven alive -- closes the map at 59 LIVE PORTALS: every in-scope archived league now has a walkable entry URL. The naming conventions were wildly inconsistent (tgf-<name><YYYY>, two-digit years, year-first, champ/hcc/hc/hcm abbreviations, bare no-prefix subdomains), so the gg-history.md registry table is the only reliable index.",
+      "Brand correction from Kerry (supersedes the earlier ruling): the two Hill Country Two Man Challenge leagues (Jul + Nov 2023) are TWO MAN TOUR, not TGF. Only ingest-time verification left: whether the 2024-25 per-course Two Man Tour events aggregate inside tgf-twomantour.",
+    ],
+  },
   {
     version: "2.69.6",
     date: "2026-07-11",

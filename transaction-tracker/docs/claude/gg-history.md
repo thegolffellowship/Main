@@ -89,7 +89,7 @@ calls. Proven recipe:
   guests, and DFW/Houston members with no Tracker profile at all
   (mailbox #100 phase 3: unmatched → review queue for Kerry).
 
-## Portal registry — 52 live portals (+2 dead mains)
+## Portal registry — 59 live portals (+2 dead mains) — COVERAGE COMPLETE
 
 | Portal | Season/Scope | Status | website_id | league_id | Notes |
 |---|---|---|---|---|---|
@@ -145,6 +145,13 @@ calls. Proven recipe:
 | lonestarcup24 | LSC 2024 | ALIVE | 514529 | — | Kerry link (NO tgf- prefix!): DIR 5054894, HCP 5054895/5054896, SCHEDULE 5054897, TEE SHEETS 5054899; hosted at White Bluff Resort — no leaderboard/money page in nav |
 | redblue | Red Blue Challenge 2023 | ALIVE | 432025 | — | Kerry link (no prefix): LEADERBOARD 4224162 (nav also labels it "2022 LONE STAR CUP" — mislabeled duplicate entry), DIR 4224157, HCP 4224158/4224159 |
 | tgf-hcc21 | Hill Country Cup 2021 | ALIVE | — | — | FC 3188785, PR san antonio 3188786, MP 3188787, M$ 3188788, ER 3188789, DIR 3188781 |
+| lonestarcup | LSC 2023 | ALIVE | 456065 | — | Kerry link (no prefix, no year): LEADERBOARD "2023 LONE STAR CUP" 4466344, MATCHES 4467725, DIR 4466339, HCP 4466340/4466341; White Bluff Resort |
+| tgf-2020hccup | Hill Country Cup 2020 | ALIVE | 215667 | — | Kerry link (year-FIRST pattern): FC 2667258, PR san antonio 2667259, MP 2667260, M$ 2667261, ER 2667262, DIR 2667254, AN 2667263 |
+| tgf-hc | TGF Hill Country 2022 | ALIVE | 341304 | — | Kerry link: FC 3592782, PR hill country 3557452, M$ 3592783, ER 3592784, DIR 3592812, HCP 3592824/3683078, MIP 3592825 |
+| tgf-hcm | Hill Country Matches 2023 | ALIVE | 424655 | — | Kerry link: TOURNAMENT RESULTS 4149073, BRACKET 4149530, PLAYERS 4149069, TEE SHEETS 4149072 |
+| hillcountrymatches | Hill Country Matches 2024 | ALIVE | 488745 | — | Kerry link (no prefix): TOURNAMENT RESULTS 4799431, BRACKET 4801100, PLAYERS 4799427 |
+| hillcountry2man-1 | HC Two Man Jul 2023 | ALIVE | 436950 | — | **Two Man Tour brand (Kerry ruling 2026-07-11, supersedes the earlier TGF call for these two)**; manager Joe Warring: ROSTER 4273433, LEADERBOARD/RESULTS 4273437 |
+| hillcountry2man | HC Two Man Nov 2023 | ALIVE | 447709 | — | **Two Man Tour brand (same supersession)**: ROSTER 4381073, LEADERBOARD/RESULTS 4381076, TGF DIRECTORY 4381214 |
 | tgf-dfw (main) | — | **DEAD** | — | — | redirects to corporate golfgenius.com; also linked with a typo (`.coms`) from tgf-sa2024 |
 | tgf-houston (main) | — | **DEAD** | — | — | redirects to corporate golfgenius.com |
 
@@ -360,19 +367,24 @@ subdomains. Derived sweeps then completed: **TGF CHAMPIONSHIP 2020–2025
 2021/2022, Red Blue 2023, Trinity River Cup 2022, Road Trips
 2024/2025.** Registry above now 52 live.
 
-**Still missing an entry URL (in-scope, all guess patterns exhausted):**
-- **Lone Star Cup 2023** (every prefix/digit variant dead)
-- Hill Country Cup 2020 · TGF Hill Country 2022 · Hill Country Matches
-  2023 + 2024 · Hill Country Two Man Challenge ×2 (2023)
-- the 13 per-course Two Man Tour events (2024–25) + 2024 TEXAS TWO MAN
-  CHAMPIONSHIP — likely aggregated inside tgf-twomantour's Tournament
-  Results/Player Event Standings (verify at ingest before chasing URLs)
+**COVERAGE COMPLETE (2026-07-11, Kerry's final link batch):** Kerry
+supplied lonestarcup (2023 LSC), tgf-2020hccup (year-FIRST pattern),
+tgf-hc, tgf-hcm, hillcountrymatches, hillcountry2man-1, and
+hillcountry2man — **all seven alive. Every in-scope archived league now
+has a walkable portal entry URL.** Naming conventions catalogued for
+the record: tgf-<name><YYYY>, tgf-<name><YY>, tgf-<YYYY><name>,
+abbreviations (champ/hcc/hc/hcm), and bare no-prefix subdomains —
+there is NO consistent scheme; the registry table above is the only
+reliable index.
 
-Intake ask to Kerry (mailbox topic `gg-links`): for each missing league,
-the website link from the GG admin console (league → Website settings),
-or confirmation the league never had a website. A GG league with no
-public website is only reachable through Kerry's account — flag those
-for a manual-export path instead.
+**Brand correction (Kerry, 2026-07-11, supersedes the earlier ruling):**
+the two Hill Country Two Man Challenge leagues (Jul + Nov 2023) are
+**Two Man Tour**, not TGF.
+
+Only remaining verification (ingest-time, not blocking): whether the 13
+per-course Two Man Tour events (2024–25) + 2024 TEXAS TWO MAN
+CHAMPIONSHIP aggregate inside tgf-twomantour's Tournament Results /
+Player Event Standings, or need their own URLs from Kerry.
 
 ### ONE-OFFS (mailbox #105 scope expansion)
 
