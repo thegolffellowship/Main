@@ -1,5 +1,15 @@
-window.TGF_VERSION = "2.71.1";
+window.TGF_VERSION = "2.72.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.72.0",
+    date: "2026-07-11",
+    changes: [
+      "EXPORT-PAIR INGEST + PARITY AUDIT (Kerry: complete 2025+2026 as the proof of concept before moving back): the eight staged GG export pairs now flow into the database -- league rounds become gg_history_events (with parsed dates), and every player-round becomes a gg_history_results row carrying gross/net/course-handicap structured plus adjusted-gross, at-the-time handicap index, purse, and points verbatim in raw_row. Identity through the roster map + scoring cascade; league rosters enrich gg_member_map with league-scoped ids. Idempotent per league.",
+      "Bridge commands: scoring-gg-history:export=<prefix>|ALL and audit=<prefix>|ALL. The audit is the three-channel framework's proof: 2026 leagues check per-round gross/net against independently scraped scorecards (customer+date join); 2025 leagues check per-player season purse totals against the Phase-A money-leaders standings (verbatim-name join).",
+      "ROSTER MAP APPLIED (map-only -- no customers created): 1,089 gg_member_map rows live, 365 customer-linked (344 email, 21 handle cascade); 4 standings rows backfilled, 2 pending names resolved. The 219 unmatched TGF/Former member profiles remain Kerry's open decision.",
+      "Local verification against the real staged CSVs before deploy: SA 2026 = 43 events + 628 player-rounds; Anthis R3 92/77/CH15 matches the earlier live parity check; deleted Round 13 honored via header labels; re-run idempotent.",
+    ],
+  },
   {
     version: "2.71.1",
     date: "2026-07-11",
