@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.69.2";
+window.TGF_VERSION = "2.69.3";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.69.3",
+    date: "2026-07-11",
+    changes: [
+      "GG HISTORY BRAND RULINGS (Kerry, in-session): Two Man Challenge Series 2020 is TGF (pre-Two Man Tour era); all Road Trips are TGF, with the 2024 Road Trip a hybrid (TGF league + one Two Man Tour event tagged inside); Hill Country Two Man Challenge and Red Blue Challenge are TGF; Trinity River Cup 2022 is TGF (a DFW-vs-Houston Ryder-Cup-style event); Rough Water Cup is non-TGF and joins the excluded list.",
+      "TWO MAN TOUR SEPARATION SEMANTICS: the Tour is a separate brand kept for a future Two Man Tour partner build -- its data gets ingested and identity-linked but is TOTALLY separate from TGF today. The proposed gg_history_* schema gains brand as a first-class column (portals registry NOT NULL + per-event override for hybrids) acting as a hard filter: Two Man Tour rows are excluded from TGF career stats, the trophy case, and member-facing Spotlight surfaces.",
+    ],
+  },
   {
     version: "2.69.2",
     date: "2026-07-11",
