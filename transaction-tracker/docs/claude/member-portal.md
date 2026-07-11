@@ -175,3 +175,15 @@ Star Cup seat/alternate chip, five most recent winnings.
   GG page walks — too heavy per player; needs a snapshot path first),
   recent-rounds drill-down (member_card is already in the payload for
   the existing points-race/detail endpoint), head-to-head comparisons.
+- **Ratified build set (mailbox #99, Kerry 2026-07-10):** four adds —
+  (1) "what's in reach" line per standing card, (2) leaderboard names →
+  spotlight deep links, (3) NOT ENTERED → ENTER doorway on a member's
+  OWN spotlight (needs a self-identity mechanism — member pages are
+  pinless), (4) empty states as invitations quoting the live pot.
+  design-claude passes on visuals FIRST, then tracker-claude wires.
+  Privacy ruling: aggregated Season Winnings OK member-facing; past
+  members stay member-hidden in search. **Backend prep shipped
+  (v2.67.1):** payload `races[].in_reach` {points_to_next,
+  projected_payout_cents (CONTESTS payout walk mirrored server-side:
+  `_spotlight_assign_payouts`), next_payout_cents, pot_cents} +
+  top-level `race_pots` (every race + cup, entered or not).

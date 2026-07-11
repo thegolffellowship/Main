@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.67.0";
+window.TGF_VERSION = "2.67.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.67.1",
+    date: "2026-07-10",
+    changes: [
+      "SPOTLIGHT 'WHAT'S IN REACH' DATA (mailbox #99 item 1, Kerry-RATIFIED -- backend prep; the visual treatment waits for design-claude's pass per the ratified sequencing): every race entry in the spotlight payload now carries in_reach = points to the place above, what the player would cash if the season ended today (server-side mirror of the CONTESTS payout walk -- enrolled-only, tie groups split combined places cent-exact, Players Cup champion bonus + per-flight 1st/2nd stacking), the next payout rung up, and the live pot.",
+      "race_pots added to the spotlight payload: label + live pot + buy-in count for EVERY race and The Fellowship Cup, whether or not the player is in it -- the data feed for #99's 'NOT ENTERED doorway' and 'empty states as invitations' items.",
+      "Verified on the synthetic fixture: mid-pack player shows the exact gap and last-place-money rung; the race leader shows 1st-place money and no rung above; tied cup leaders split 1st+2nd combined with the outright-1st amount as their next rung.",
+    ],
+  },
   {
     version: "2.67.0",
     date: "2026-07-10",

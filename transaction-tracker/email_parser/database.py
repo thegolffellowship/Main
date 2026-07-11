@@ -7470,6 +7470,62 @@ def search_spotlight_players(q: str, limit: int = 12,
     return [dict(r) for r in rows]
 
 
+def _spotlight_assign_payouts(standings: list, pp: dict | None,
+                              tie_key: str) -> dict:
+    """customer_id -> projected payout cents if the season ended today.
+
+    Server-side mirror of the CONTESTS page's prAssignProjectedPayouts:
+    money walks the ENROLLED players in standings order (it visibly
+    skips non-enrolled rows), tie groups split their combined places
+    cent-exact. Flights races pay the champion bonus to the overall
+    enrolled leader(s) and [1st, 2nd] within each flight; awards stack.
+    """
+    if not pp:
+        return {}
+    out: dict = {}
+    enrolled = [r for r in standings
+                if r.get("enrolled") and r.get("customer_id")]
+
+    def split(rows, amounts):
+        total = sum(amounts)
+        if not rows or total <= 0:
+            return
+        base, rem = divmod(total, len(rows))
+        for i, r in enumerate(rows):
+            out[r["customer_id"]] = (out.get(r["customer_id"], 0)
+                                     + base + (1 if i < rem else 0))
+
+    def walk(players, amounts):
+        i = 0
+        while i < len(players) and i < len(amounts):
+            j = i
+            while (j + 1 < len(players)
+                   and players[j + 1].get(tie_key) == players[i].get(tie_key)):
+                j += 1
+            split(players[i:j + 1], amounts[i:j + 1])
+            i = j + 1
+
+    if pp.get("kind") == "ladder":
+        walk(enrolled, pp.get("amounts_cents") or [])
+    elif pp.get("kind") == "flights":
+        if enrolled:
+            lead = [enrolled[0]]
+            k = 1
+            while (k < len(enrolled)
+                   and enrolled[k].get(tie_key) == enrolled[0].get(tie_key)):
+                lead.append(enrolled[k])
+                k += 1
+            split(lead, [pp.get("champion_cents") or 0])
+        flights: dict = {}
+        for r in enrolled:
+            if r.get("flight"):
+                flights.setdefault(r["flight"], []).append(r)
+        for rows in flights.values():
+            walk(rows, [pp.get("flight_first_cents") or 0,
+                        pp.get("flight_second_cents") or 0])
+    return out
+
+
 def get_player_spotlight(customer_id: int,
                          db_path: str | Path = DB_PATH) -> dict:
     """PLAYER SPOTLIGHT payload (v1, admin preview — Kerry directed
@@ -7518,7 +7574,35 @@ def get_player_spotlight(customer_id: int,
             (customer_id,)).fetchall()]
 
     # ── points races (persisted snapshots — same source as CONTESTS) ──
+    # in_reach (mailbox #99 item 1, Kerry-RATIFIED): points to the place
+    # above, what they'd cash today, the next rung up, and the live pot.
+    # race_pots covers EVERY race (entered or not) so the "doorway" and
+    # invitation empty-states (#99 items 3-4) can quote live money.
+    def in_reach_for(row, standings, pp, tie_key):
+        pay_map = _spotlight_assign_payouts(standings, pp, tie_key)
+        mine = row.get(tie_key)
+        gap = None
+        for r in standings:
+            v = r.get(tie_key)
+            if v is not None and mine is not None and v > mine:
+                gap = v  # standings are ordered; last one seen above wins
+        gap = (round(gap - mine, 2) if gap is not None and mine is not None
+               else None)
+        my_pay = pay_map.get(row.get("customer_id"), 0)
+        rungs = sorted({v for v in pay_map.values() if v > my_pay})
+        if not rungs and pp:
+            rungs = sorted(a for a in (pp.get("amounts_cents")
+                                       or [pp.get("flight_first_cents") or 0])
+                           if a > my_pay)
+        return {
+            "points_to_next": gap,
+            "projected_payout_cents": my_pay,
+            "next_payout_cents": rungs[0] if rungs else None,
+            "pot_cents": (pp or {}).get("pot_cents"),
+        }
+
     races, errors, events_played = [], [], 0
+    race_pots: dict = {}
     member_card = None
     for key in _GG_POINTS_RACES:
         try:
@@ -7528,6 +7612,12 @@ def get_player_spotlight(customer_id: int,
             continue
         if d.get("gg_error"):
             errors.append(d["gg_error"])
+        pp = d.get("projected_payouts")
+        race_pots[key] = {
+            "label": d["label"], "chapter": d["chapter"],
+            "pot_cents": (pp or {}).get("pot_cents"),
+            "n_enrolled": d.get("n_enrolled"),
+        }
         row = next((r for r in d["standings"]
                     if r.get("customer_id") == customer_id), None)
         if not row:
@@ -7545,9 +7635,17 @@ def get_player_spotlight(customer_id: int,
             "enrolled": bool(row.get("enrolled")),
             "flight": row.get("flight"),
             "points_reset": row.get("points_reset"),
+            "in_reach": in_reach_for(row, d["standings"], pp,
+                                     "total_points"),
         })
     try:
         cup = get_fellowship_cup_projection(db_path=db_path)
+        pp = cup.get("projected_payouts")
+        race_pots["fellowship_cup"] = {
+            "label": "THE FELLOWSHIP CUP", "chapter": None,
+            "pot_cents": (pp or {}).get("pot_cents"),
+            "n_enrolled": cup.get("n_enrolled"),
+        }
         crow = next((r for r in cup["standings"]
                      if r.get("customer_id") == customer_id), None)
         if crow:
@@ -7558,6 +7656,8 @@ def get_player_spotlight(customer_id: int,
                 "tournaments": None, "wins": None,
                 "enrolled": bool(crow.get("enrolled")),
                 "flight": None, "points_reset": crow.get("points_reset"),
+                "in_reach": in_reach_for(crow, cup["standings"], pp,
+                                         "points_reset"),
             })
     except Exception as e:
         errors.append(f"fellowship cup: {e}")
@@ -7636,6 +7736,7 @@ def get_player_spotlight(customer_id: int,
             "total_winnings": total_winnings,
         },
         "races": races,
+        "race_pots": race_pots,
         "fall_buyins": fall,
         "match_play": match_play,
         "lone_star_cup": lsc,
