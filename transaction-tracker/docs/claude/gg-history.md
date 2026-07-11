@@ -89,7 +89,7 @@ calls. Proven recipe:
   guests, and DFW/Houston members with no Tracker profile at all
   (mailbox #100 phase 3: unmatched → review queue for Kerry).
 
-## Portal registry — 48 live portals (+2 dead mains)
+## Portal registry — 51 live portals (+2 dead mains)
 
 | Portal | Season/Scope | Status | website_id | league_id | Notes |
 |---|---|---|---|---|---|
@@ -141,6 +141,9 @@ calls. Proven recipe:
 | tgf-champ23 | TGF Championship 2023 | ALIVE | — | — | FC 4286535, PC 4340774, M$ 4286539, ER 4286540, DIR 4286531 |
 | tgf-champ24 | TGF Championship 2024 | ALIVE | — | — | FC 4932416 + RegSeason 4899990, PC flights 4933781/4933784/4934136/4934139 + RegSeason 4899991, M$ 4899992, ER 4899993, DIR 4899986 |
 | tgf-trinity | Trinity River Cup 2022 | ALIVE | — | — | DFW-v-Houston Ryder Cup event: FC 3798532, PR san antonio 3798533, MP 3798534, M$ 3798535, ER 3798536, DIR 3798529 |
+| tgf-hcc22 | Hill Country Cup 2022 | ALIVE | 384699 | — | Kerry link ("hcc" abbrev): FC 3778690, PR san antonio 3778691, MP 3778692, M$ 3778693, ER 3778694, DIR 3778687 |
+| lonestarcup24 | LSC 2024 | ALIVE | 514529 | — | Kerry link (NO tgf- prefix!): DIR 5054894, HCP 5054895/5054896, SCHEDULE 5054897, TEE SHEETS 5054899; hosted at White Bluff Resort — no leaderboard/money page in nav |
+| redblue | Red Blue Challenge 2023 | ALIVE | 432025 | — | Kerry link (no prefix): LEADERBOARD 4224162 (nav also labels it "2022 LONE STAR CUP" — mislabeled duplicate entry), DIR 4224157, HCP 4224158/4224159 |
 | tgf-dfw (main) | — | **DEAD** | — | — | redirects to corporate golfgenius.com; also linked with a typo (`.coms`) from tgf-sa2024 |
 | tgf-houston (main) | — | **DEAD** | — | — | redirects to corporate golfgenius.com |
 
