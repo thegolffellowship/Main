@@ -187,3 +187,15 @@ Star Cup seat/alternate chip, five most recent winnings.
   projected_payout_cents (CONTESTS payout walk mirrored server-side:
   `_spotlight_assign_payouts`), next_payout_cents, pot_cents} +
   top-level `race_pots` (every race + cup, entered or not).
+
+**SCORING aggregate (v2.68.0 — #103/#104 SCORING card data):** payload
+`scoring` block from `_spotlight_scoring(conn, cid)`: last-20-round
+window → `par_avgs` {3,4,5: avg/trend/holes}, `distribution`
+(eagle_plus/birdie/par/bogey/other), `avg_gross_9` + `avg_gross_18`
+(separate — TGF is mostly 9-hole rounds). Trend = last 10 rounds vs
+prior 10 (NOT 20/20 — season volume is ~21 rounds max); suppressed
+below 15 rounds. Par joins course_tee_holes via the round's tee;
+strokes-null or par-null holes skipped. None when a player has no
+tracked rounds. Coverage note: scoring_rounds starts at the 2026
+scoring go-live — the GG history ingest (mailbox #100/#105) deepens
+this for career-scale windows later.
