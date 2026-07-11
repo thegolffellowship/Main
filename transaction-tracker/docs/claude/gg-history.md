@@ -1,0 +1,374 @@
+# GG History — archive coverage map + ingest plan (INVENTORY phase)
+
+Kerry-directed initiative (mailbox #100, approved #105, closers #106/#107):
+capture ALL Golf Genius data since 2016 into the Tracker, tied to customer
+IDs. This doc banks the INVENTORY-phase deliverables: the portal coverage
+map, the proven data-access recipe, and the proposed ingest schema
+(**PROPOSAL ONLY — no gg_history_* tables exist yet; Kerry rule-3b
+ratification required before INGEST writes anything**).
+
+Inventory ran 2026-07-11 (automated walker over `probe_golf_genius`,
+~160 probes across 7 parallel agents + targeted follow-ups).
+
+## THE KEY FINDING — how the data is actually reachable
+
+Every archive portal serves its data pages as **empty JS-widget shells**:
+`n_tables=0` on every EVENT RESULTS / standings / match-play / directory
+page across all 29 portals. Static page scraping gets navigation only.
+The agents' first-pass "high ingest risk" verdict was WRONG, however —
+the data is fully server-fetchable via the widget routes the page JS
+calls. Proven recipe:
+
+1. **league_id discovery**: any portal page's raw HTML body (past ~85KB —
+   fetch full length, the head scripts are huge) carries hidden inputs:
+   `current_league_id`, `website_id`, `current_league_name`. Example:
+   tgf-sa2016 → league_id 15478, website_id 15492.
+2. **Standings widgets**: `https://<portal>.golfgenius.com/leagues/
+   <league_id>/widgets/<type>?page_id=<page_id>&shared=false` (plain GET).
+   Modern portals use `season_points_v2` (the live 2026 sync's route);
+   **2016-era pages answer to `season_points` (v1)** — proven: the full
+   66-player 2016 SA points race table (Number | Player | Total Points |
+   Total Purse | Avg. Gross | Avg. Net) came back on the first try.
+   Empty response (title "Golf Genius ::", 0 tables) = wrong widget type
+   for that page; iterate the type list.
+3. **Event results (two hops)**: the EVENT RESULTS page embeds
+   `/leagues/<league_id>/widgets/tournament_results?shared=false`, which
+   serves ONE round (defaults to the latest) and links per-tournament
+   XHR partials: `/v2tournaments/<tid>?player_stats_for_portal=true&
+   round_index=<n>` (fetch with `xhr=true`, parse the JS partial —
+   `_unwrap_js_string` in golf_genius_sync.py already does this) plus
+   `/v2tournaments/total_purse?league_id=..&round_id=..`. Proven on DFW
+   2024 (league_id 395610): full results table with header
+   `Pos. | Player | Playing Handicap | Total Gross | To Par Net |
+   Total Net | Purse`.
+4. **Machine keys**: v2tournaments rows carry `data-member-ids`,
+   `data-aggregate-id`, `data-aggregate-name` attributes — stable GG ids
+   we can store for idempotent re-import and identity linking.
+5. Scorecard-level ingest for archive events reuses the existing
+   `import_gg_scorecards` path (`/tournaments2/details/<agg>`) unchanged.
+
+**Open ingest question (INGEST phase):** enumerating all rounds of a
+season from the tournament_results widget (it serves one round per
+request; the round dropdown is client-side). Likely answerable from the
+widget HTML's round selector options or by iterating round_index — to be
+established on the first ingest portal.
+
+## Name formats observed
+
+- **"LASTNAME, First"** (uppercase surname) is the dominant format for
+  members across eras: `NIESTER, Kerry` (SA 2016 points race),
+  `WETZ, David` (DFW 2024 results).
+- **Guests render mixed-case** with affiliation "Guest" (`Hennessey,
+  Matt`, DFW 2024) — a useful member/guest signal at parse time.
+- Identity linking must therefore normalize `LAST, First` → canonical
+  `First Last` before the resolver cascade (canonical names →
+  `customer_aliases` → `handicap_player_links`); expect maiden-era names,
+  guests, and DFW/Houston members with no Tracker profile at all
+  (mailbox #100 phase 3: unmatched → review queue for Kerry).
+
+## Portal registry — 29 portals, ALL alive except the two dead mains
+
+| Portal | Season/Scope | Status | website_id | league_id | Notes |
+|---|---|---|---|---|---|
+| tgf-sa2016 | SA 2016 | ALIVE | 15492 | 15478 | oldest; "The Golf Fellowship 2016" |
+| tgf-sa2017 | SA 2017 | ALIVE | 42332 | — | |
+| tgf-sa2018 | SA 2018 | ALIVE | 80023 | — | first FELLOWSHIP CUP + MONEY & SCORING + Two Man GROSS/NET pages |
+| tgf-sa2019 | SA 2019 | ALIVE | 133245 | — | dual-city: carries POINTS RACE austin + TEAM RACE |
+| tgf-sa2020 | SA 2020 | ALIVE | 192120 | — | |
+| tgf-sa2021 | SA 2021 | ALIVE | 234894 | — | first net/gross points split (SA) |
+| tgf-sa2022 | SA 2022 | ALIVE | 324207 | — | adds FALL races, TGF HANDICAPS |
+| tgf-sa2023 | SA 2023 | ALIVE | 405415 | — | richest era: LEAGUE EAST/WEST/WEEKEND, SKINS NIGHT races, monthly Mar–Oct |
+| tgf-sa2024 | SA 2024 | ALIVE | 468184 | — | modern set (= what the Tracker knows from 2026) |
+| tgf-sa2025 | SA 2025 | ALIVE | 525799 | — | adds TGF CREDITS REPORT + Players Cup flight pages |
+| tgf-austin2019 | Austin 2019 | ALIVE | 138920 | — | dual-city: carries POINTS RACE san antonio |
+| tgf-austin2020 | Austin 2020 | ALIVE | 194603 | — | first Austin MATCH PLAY page |
+| tgf-austin2021 | Austin 2021 | ALIVE | 235084 | — | Player Dashboard page |
+| tgf-austin2022 | Austin 2022 | ALIVE | 324565 | — | net/gross points split |
+| tgf-austin2023 | Austin 2023 | ALIVE | 408164 | — | LEAGUE NORTH/SOUTH/WEEKEND |
+| tgf-austin2024 | Austin 2024 | ALIVE | 464543 | — | |
+| tgf-austin2025 | Austin 2025 | ALIVE | 527550 | — | TGF CREDITS REPORT; Players Cup flights; Net SPRING/SUMMER vs FALL |
+| tgf-dfw2020 | DFW 2020 | ALIVE | 195014 | — | |
+| tgf-dfw2021 | DFW 2021 | ALIVE | 237874 | — | |
+| tgf-dfw2022 | DFW 2022 | ALIVE | 324803 | — | net/gross split + MATCH PLAY |
+| tgf-dfw2023 | DFW 2023 | ALIVE | 409845 | — | full modern set incl. PLAYERS CUP, FALL NET, MC NORTH/SOUTH/WEEKEND |
+| tgf-dfw2024 | DFW 2024 | ALIVE | 468223 | 395610 | final DFW season; recipe proven here |
+| tgf-houston2021 | Houston 2021 | ALIVE | 237876 | — | leanest portal (no handicaps, no MP) |
+| tgf-houston2022 | Houston 2022 | ALIVE | 324804 | — | net/gross split + MATCH PLAY |
+| tgf-houston2023 | Houston 2023 | ALIVE | 410486 | — | full modern set, LEAGUE NORTH/NORTHWEST/WEEKEND |
+| tgf-houston2024 | Houston 2024 | ALIVE | 468239 | — | final Houston season |
+| tgf-hillcountry | ONE-OFF 2023 | ALIVE | 421436 | — | Hill Country Matches series (2025 edition lives as a PAGE on tgf-sa2025: 5424367) |
+| tgf-twoman | ONE-OFF 2023 | ALIVE | 417329 | — | Two Man Challenge Series; team format; also twomantour.com external |
+| tgf-roadtrip2023 | ONE-OFF 2023 | ALIVE | 410532 | — | minimal 2-page shell (Tee Sheets + Results only) |
+| tgf-dfw (main) | — | **DEAD** | — | — | redirects to corporate golfgenius.com; also linked with a typo (`.coms`) from tgf-sa2024 |
+| tgf-houston (main) | — | **DEAD** | — | — | redirects to corporate golfgenius.com |
+
+Chapter timeline confirmed by Kerry: SA since 2007 (**GG since 2016 —
+2007–2015 is Excel-era, out of GG scope, a future manual import**);
+Austin GG 2019–; DFW GG 2020–2024; Houston GG 2021–2024. league_ids for
+the remaining portals are discoverable mechanically at ingest time
+(recipe step 1) — not enumerated during inventory to save probe budget.
+
+## Coverage map — pages per portal (nav inventory)
+
+Legend: **ER**=Event Results, **M$**=Money & Scoring, **FC**=Fellowship
+Cup, **PC**=Players Cup, **PR**=Points Race (season), **MP**=Match Play,
+**MON**=monthly points pages, **DIR**=Directory, **HCP**=handicap pages,
+**AN**=analytics pages. Page ids in parentheses.
+
+### San Antonio
+
+- **2016**: FINAL STANDINGS (625979), PR (341784), MP (368529), ER
+  (341783), CURRENT MEMBERS (341780), AN (341785, 366382), DISCUSSION/
+  PHOTOS. No money page, no cup.
+- **2017**: ER (879201), PR (879199), MP (879200), DIR (879202), AN
+  (879203/879204). No cup/money pages.
+- **2018**: FC (1309638), PR (1383157), MP (1309652), ER (1272702),
+  M$ (1372235), Two Man GROSS (1535933) / NET (1535934), DIR (1272699),
+  HCP SUMMARY (1372320), AN (1272704, 1372296, 1372311, 1372318).
+- **2019**: FC (1809436), PR sa (1809437), **PR austin (1932561)**,
+  MP (1809438), **TEAM RACE (1923173)**, M$ (1809440), ER (1809439),
+  DIR (1809432), HCP (1809433), AN (1809443–1809446).
+- **2020**: FC (2436717), PR sa (2436716), MP (2436715), M$ (2417621),
+  ER (2417620), DIR (2417616), HCP (2436704), AN (2417622).
+- **2021**: FC (2819061), PR net (2819062), PR gross (2856620), MP
+  (2819063), M$ (2819064), ER (2819065), DIR (2819057), Player Dashboard
+  (3020844), AN (2819066).
+- **2022**: FC (3410707), PR net (3410708), PR gross (3410709), FALL net
+  (3817082), FALL gross (3817083), MP (3410710), M$ (3410711), ER
+  (3410712), DIR (3410703), HCP (3583724, 3683074), AN (3410713,
+  3583727, 3594354–3594356, 3594371), LEAGUES directory page (3600038).
+- **2023**: ER (3956386), M$ (3956387), FC (4258632), PC (4258633),
+  FALL GROSS (4377913), CITY NET (4104065), CITY MP (4112172), FALL CITY
+  NET (4377914), LEAGUE EAST/WEST/WEEKEND (4104067/4104068/4104069),
+  MON Mar–Oct (4104070, 4129047, 4183886, 4258619, 4299798, 4377928,
+  4464262), SKINS NIGHT races (4518987), DIR (3956382), HCP (3956551/
+  3956552), AN (4258645, 4258665–4258668).
+- **2024**: ER (4582854), M$ (4582855), FC (4932415), FC-RegSeason
+  (4582856), PC (4582857), NET (4582859), GROSS (4583569), MP (4583571),
+  MON Apr–Jul+Sep (4582866, 4817983, 4856460, 4889251, 4889252), FALL
+  NET (5015038), DIR (4582849), HCP (4582850/4582851), AN (4582873–
+  4582877).
+- **2025**: ER (5168953), M$ (5187607), FC (5547112), PC Overall +
+  4 flights + RegSeason (5553526, 5553530–5553533, 5187609), NET
+  (5187626), NET-FALL (5591949), MP (5187753), MON Mar–Jul+Sep+Oct
+  (5187754–5187757, 5498405, 5607490, 5655885), **2025 HILL COUNTRY
+  MATCHES (5424367)**, **TGF CREDITS REPORT (5364532)**, Fall Net ROSTER
+  (5582866), DIR (5168949), HCP (5187782/5187783/5187811), AN (5187786,
+  5168955, 5187798–5187800), PHOTO STREAM/EVENT TALK.
+
+### Austin
+
+- **2019**: FC (1868577), PR austin (1868578), **PR san antonio
+  (1932573)**, ER (1868580), M$ (1868581), DIR (1868573), HCP (1868574),
+  AN (1868584–1868587). No MP.
+- **2020**: FC (2442653), PR (2442654), **MP (2442655 — first Austin
+  MP)**, M$ (2442656), ER (2442657), DIR (2442649), HCP (2442650),
+  AN (2442658).
+- **2021**: FC (2820488), PR (2820489), MP (2820490), M$ (2820491), ER
+  (2820492), DIR (2820484), Player Dashboard (3021511), AN (2820493,
+  2855163), LEAGUES directory (2855164).
+- **2022**: FC (3413710), PR net (3413711), PR gross (3530279), MP
+  (3413712), M$ (3413713), ER (3413714), DIR (3413706), HCP (3594302,
+  3683075), AN (3600031–3600034, 3413715/3413716), LEAGUES directory
+  (3600039).
+- **2023**: ER (3985829), M$ (3985828), FC (4234219), PC (4234220),
+  CITY NET (3985825), CITY MP (3985827), LEAGUE NORTH/SOUTH/WEEKEND
+  (4112160/4112161/4112162), MON Mar–Jul (4112159, 4129208, 4234227,
+  4234221, 4316545), DIR (3985818), HCP (3985819/3985820), AN (3985831–
+  3985835).
+- **2024**: ER (4543204), M$ (4543205), FC (4543206), PC (4543207), NET
+  (4543208), GROSS (4583241), MP (4583243), MON Apr–Jul+Sep (4543214,
+  4889253–4889256), DIR (4543199), HCP (4543200/4543201), AN (4543218–
+  4543222).
+- **2025**: ER (5187519), M$ (5187520), FC (5547113), PC Overall +
+  4 flights + RegSeason (5553534–5553538, 5187522), NET SPRING/SUMMER
+  (5187523), NET FALL (5593497), MON Mar–Jul+Sep+Oct (5480146, 5480187,
+  5466355/5466356, 5498404, 5607491, 5655871), **TGF CREDITS REPORT
+  (5364533)**, DIR (5187514), HCP (5187515/5187516), AN (5187531–
+  5187535).
+
+### DFW (chapter closed after 2024)
+
+- **2020**: FC (2446944), PR dfw (2446945), M$ (2446947), ER (2446948),
+  DIR (2446940), HCP (2446941), AN (2446949).
+- **2021**: FC (2843324), PR (2843325), M$ (2843326), ER (2843327), DIR
+  (2843320), HCP (2843321), AN (2843328).
+- **2022**: FC (3415935), PR net (3415936), PR gross (3530282), MP
+  (3579651), M$ (3415937), ER (3415938), DIR (3415931), HCP (3415932,
+  3683077), AN (3415939).
+- **2023**: ER (4003781), M$ (4003780), FC (4259598), PC (4259600),
+  CITY NET (4129061), CITY MP (4129066), FALL NET (4443359), LEAGUE MC
+  NORTH/MC SOUTH/WEEKEND (4129063/4129064/4129065), MON Mar–Jul+Sep
+  (4129067, 4129068, 4193918, 4259630, 4284921, 4443358), DIR (4003771),
+  HCP (4003772/4003773), AN (4003782).
+- **2024**: ER (4583372), M$ (4583373), FC (4583374), PC (4583375), NET
+  (4583376), GROSS (4583567), MP (4583568), MON Apr–Jul+Sep (4583383,
+  4818142, 4889257–4889259), DIR (4583367), HCP (4583368/4583369), AN
+  (4583388). league_id 395610.
+
+### Houston (chapter closed after 2024)
+
+- **2021**: FC (2970349), PR (2970351), ER (2843345), M$ (3018741), DIR
+  (2843341), AN (2845840). Leanest portal.
+- **2022**: FC (3415958), PR net (3415959), PR gross (3530280), MP
+  (3589097), ER (3415960), M$ (3415961), DIR (3415962), HCP (3594317,
+  3679768).
+- **2023**: ER (4011516), M$ (4011517), FC (4259651), PC (4259658),
+  CITY NET (4011513), CITY MP (4011515), LEAGUE NORTH/NORTHWEST/WEEKEND
+  (4111913/4111914/4111915), MON Mar–Jul (4111906, 4129060, 4191699,
+  4259650, 4334569), DIR (4011507), HCP (4011508/4011509).
+- **2024**: ER (4583592), M$ (4583593), FC (4583594), PC (4583595), NET
+  (4583596), GROSS (4583668), MP (4583670), MON Apr–Jul+Sep (4583602,
+  4818478, 4889249, 4889260, 4889261), DIR (4583587), HCP (4583588/
+  4583589).
+
+### ONE-OFFS (mailbox #105 scope expansion)
+
+- **tgf-hillcountry** (2023): PR hill country (4117092), M$ (4117093),
+  ER (4117094), DIR (4117086), HCP (4117087/4117088), AN (4117095/
+  4117096). Single-season 2023; the 2025 edition is a page on tgf-sa2025.
+- **tgf-twoman** (2023): ER (4077390), M$ (4129189), HCP ANALYSIS
+  (4178094). Team format (2-man); no directory. NOTE: tgf-sa2018 carries
+  Two Man GROSS/NET pages — the series predates the dedicated portal.
+- **tgf-roadtrip2023**: Results (4012075), Tee Sheets (4012074) only.
+- **Awaiting Kerry's gg-links intake** (protocol per #107: post URLs to
+  mailbox topic `gg-links`, any format). None posted as of #112.
+
+## Known gaps & risks
+
+1. **Round enumeration** for tournament_results (one round per request) —
+   solve on first INGEST portal.
+2. **Member-gated pages**: DIRECTORY pages on several portals serve the
+   SCHEDULE fallback anonymously (title anomaly `:: SCHEDULE`) — member
+   rosters may be login-walled on some seasons; directories are
+   nice-to-have (identity comes primarily from results rows).
+3. **Monthly race history**: monthly pages exist 2023+ only (before
+   that, no monthly races on portals).
+4. **Vendor courtesy**: all 27 alive portals are unauthenticated public
+   subdomains GG could prune anytime — argues for raw-snapshot-first
+   ingest (store `gg_raw_archive` rows for every fetched widget/partial
+   BEFORE parsing).
+5. **Pre-GG SA history (2007–2015)** is Excel — out of walker scope,
+   future manual import via the same gg_history_* tables (source column
+   distinguishes provenance).
+6. **2019 dual-city quirk**: Austin 2019 standings appear on BOTH
+   tgf-sa2019 (page 1932561) and tgf-austin2019 (1868578) — dedupe by
+   (season, chapter, contest) at ingest, prefer the chapter's own portal.
+7. **Widget-type drift by era** (season_points vs season_points_v2 etc.)
+   — the ingest walker must try a type list per page kind and record
+   which answered (registry column), not hard-code one.
+
+## Proposed ingest schema (RULE-3B PROPOSAL — awaiting Kerry ratification)
+
+Follows the ratified house patterns: customer_id FK at design time
+(rule 6), verbatim raw snapshots (past-events-frozen, principle 4),
+append-only, Postgres-portable. **No DDL ships until Kerry ratifies.**
+
+```sql
+-- Registry: the coverage map as data (seeded from this doc)
+CREATE TABLE gg_history_portals (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    subdomain     TEXT UNIQUE NOT NULL,      -- 'tgf-sa2016'
+    chapter       TEXT,                      -- NULL for one-offs
+    season        TEXT,                      -- '2016'; NULL if multi-year
+    kind          TEXT NOT NULL,             -- 'season' | 'oneoff'
+    source        TEXT NOT NULL,             -- 'recon' | 'gg-links'
+    status        TEXT NOT NULL,             -- 'alive' | 'gone'
+    website_id    TEXT, league_id TEXT,      -- discovered per recipe
+    last_probed_at TEXT
+);
+
+-- One row per data-bearing portal page (from the coverage map)
+CREATE TABLE gg_history_pages (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    portal_id     INTEGER NOT NULL REFERENCES gg_history_portals(id),
+    gg_page_id    TEXT NOT NULL,             -- the /pages/<id> number
+    page_title    TEXT,                      -- verbatim nav label
+    page_kind     TEXT,                      -- 'event_results','season_standings',
+                                             -- 'monthly_points','match_play',
+                                             -- 'money_leaders','directory','other'
+    widget_type   TEXT,                      -- discovered per era ('season_points',...)
+    raw_archive_id INTEGER REFERENCES gg_raw_archive(id),  -- verbatim HTML hedge
+    fetch_status  TEXT, fetched_at TEXT,
+    UNIQUE(portal_id, gg_page_id)
+);
+
+-- One row per player per standings table (points races, cups, money lists)
+CREATE TABLE gg_history_standings (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    page_id       INTEGER NOT NULL REFERENCES gg_history_pages(id),
+    contest_label TEXT NOT NULL,             -- verbatim ('2016 POINTS RACE')
+    season        TEXT, chapter TEXT,        -- denormalized for query ease
+    position      INTEGER,
+    player_name   TEXT NOT NULL,             -- VERBATIM as GG printed it
+    customer_id   INTEGER REFERENCES customers(customer_id),  -- resolved link
+    points        REAL, money_cents INTEGER,
+    gg_member_ids TEXT,                      -- data-member-ids when present
+    raw_row       TEXT NOT NULL              -- full row JSON, verbatim
+);
+
+-- One row per historical event (from event-results walks)
+CREATE TABLE gg_history_events (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    portal_id     INTEGER NOT NULL REFERENCES gg_history_portals(id),
+    season        TEXT, chapter TEXT,
+    event_label   TEXT, event_date TEXT, course TEXT,
+    gg_round_id   TEXT, gg_round_index INTEGER,
+    tracker_event_id INTEGER REFERENCES events(id),  -- link when one exists
+    raw_row       TEXT
+);
+
+-- One row per player per event result line (per game/tournament)
+CREATE TABLE gg_history_results (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    gg_event_id   INTEGER NOT NULL REFERENCES gg_history_events(id),
+    game_label    TEXT,                      -- 'INDIVIDUAL Net 18 $ - d18.5 Net'
+    player_name   TEXT NOT NULL,             -- verbatim
+    customer_id   INTEGER REFERENCES customers(customer_id),
+    team_label    TEXT,                      -- one-off team formats (Two Man)
+    position      TEXT,                      -- 'T1' kept verbatim
+    playing_handicap REAL, gross REAL, net REAL,
+    points        REAL, money_cents INTEGER,
+    gg_aggregate_id TEXT, gg_member_ids TEXT,
+    raw_row       TEXT NOT NULL
+);
+
+-- Identity review queue (unmatched names -> COO action items for Kerry)
+CREATE TABLE gg_history_name_links (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    raw_name      TEXT NOT NULL,             -- 'NIESTER, Kerry' verbatim
+    portal_id     INTEGER REFERENCES gg_history_portals(id),
+    customer_id   INTEGER REFERENCES customers(customer_id),
+    matched_by    TEXT NOT NULL,             -- 'exact','alias','handicap_link',
+                                             -- 'manual','pending'
+    reviewed      INTEGER DEFAULT 0,
+    UNIQUE(raw_name, portal_id)
+);
+```
+
+Notes:
+- Raw payload hedge reuses the existing `gg_raw_archive` (url,
+  fetched_at, body_gz) — every widget/partial fetched during ingest is
+  archived BEFORE parsing, so a GG prune can never orphan us.
+- Scorecard-depth data (hole-by-hole) keeps flowing into the EXISTING
+  `scoring_rounds`/`scoring_holes` via `import_gg_scorecards` with
+  `source` distinguishing history imports; gg_history_* carries the
+  standings/results/money layer those tables don't model.
+- Identity resolution cascade at insert: exact canonical name match →
+  `customer_aliases` → `handicap_player_links` name map → else
+  customer_id NULL + a `gg_history_name_links` 'pending' row. Names
+  normalized from "LAST, First" before matching. Rule-6 compliant:
+  customer_id column present from day one, backfilled as links resolve.
+- Ingest order (approved #105): NEWEST-FIRST (2025 → 2016), season
+  portals before one-offs; time-budgeted bridge commands
+  (`gg-history-ingest:<subdomain>` pattern) repeated until done.
+
+## INVENTORY status & next steps
+
+- [x] Coverage map: 29 portals walked, nav + page ids banked (this doc)
+- [x] Access recipe proven (2016 standings + DFW 2024 results end-to-end)
+- [x] ONE-OFFS category seeded (3 portals + the sa2025 Hill Country page)
+- [ ] Kerry ratifies gg_history_* schema (rule 3b) → then INGEST begins
+- [ ] Kerry's `gg-links` mailbox intake — walker consumes any URLs posted
+- [ ] INGEST phase: league_id sweep, widget-type registry fill, raw-first
+      ingest newest-first, identity link + review queue
