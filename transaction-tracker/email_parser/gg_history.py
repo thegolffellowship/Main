@@ -520,3 +520,153 @@ def gg_history_status(db_path=None) -> dict:
             "names_pending_review": pending,
             "portals": [dict(p) for p in portals],
         }
+
+
+# ── Master roster ingest (Kerry-directed 2026-07-11: "master roster first") ─
+#
+# Seed file: email_parser/data/gg_master_roster_v6.csv — trimmed from
+# Kerry's GG admin export (The_Golf_Fellowship_Golfer_Spreadsheet_V6.xlsx,
+# 1,089 golfers). Columns kept: gg_id (unique GG member id), handle (the
+# EXACT "LAST, First" string GG prints in standings tables — the join
+# key), email, affiliation, start_year, member_guest. Phones/DOBs were
+# deliberately NOT committed; they stay in Kerry's xlsx and can layer in
+# later through the review UI.
+
+_ROSTER_FILE = "data/gg_master_roster_v6.csv"
+
+
+def ensure_gg_member_map(conn) -> None:
+    conn.execute("""CREATE TABLE IF NOT EXISTS gg_member_map (
+        gg_member_id TEXT PRIMARY KEY,
+        customer_id  INTEGER REFERENCES customers(customer_id),
+        handle       TEXT,
+        email        TEXT,
+        affiliation  TEXT,
+        start_year   TEXT,
+        member_guest TEXT,
+        matched_by   TEXT,
+        created_at   TEXT DEFAULT (datetime('now')))""")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_gg_member_map_cid "
+                 "ON gg_member_map(customer_id)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_gg_member_map_handle "
+                 "ON gg_member_map(handle)")
+
+
+def _load_roster_rows():
+    import csv
+    from pathlib import Path
+    path = Path(__file__).parent / _ROSTER_FILE
+    with open(path, newline="", encoding="utf-8") as fh:
+        return list(csv.DictReader(fh))
+
+
+def roster_ingest(apply: bool = False, db_path=None) -> dict:
+    """Match the master roster to customers; report first, write on apply.
+
+    Cascade per golfer: email → customers.customer_email /
+    customer_emails (exact, case-insensitive) → handle through the
+    scoring resolver (_resolve_scoring_player handles "LAST, First" +
+    suffixes + curated links). NEVER creates customers. On apply=True:
+    upserts gg_member_map, then backfills gg_history_standings rows and
+    gg_history_name_links whose names now resolve through the map.
+    """
+    from email_parser.database import _connect, DB_PATH, _resolve_scoring_player
+    rows = _load_roster_rows()
+    rep = {"roster_rows": len(rows), "email_matched": 0, "handle_matched": 0,
+           "unmatched": 0, "unmatched_members": [], "apply": apply}
+    with _connect(db_path or DB_PATH) as conn:
+        ensure_gg_history_tables(conn)
+        ensure_gg_member_map(conn)
+
+        email_map = {}
+        for r in conn.execute(
+                "SELECT customer_id, customer_email FROM customers "
+                "WHERE customer_email IS NOT NULL AND customer_email != ''"):
+            email_map.setdefault(r["customer_email"].strip().lower(),
+                                 r["customer_id"])
+        try:
+            for r in conn.execute(
+                    "SELECT customer_id, email FROM customer_emails"):
+                if r["email"]:
+                    email_map.setdefault(r["email"].strip().lower(),
+                                         r["customer_id"])
+        except Exception:
+            pass  # table name drift — canonical column already covered
+
+        matches = []
+        for g in rows:
+            cid, how = None, None
+            em = (g.get("email") or "").strip().lower()
+            if em and em in email_map:
+                cid, how = email_map[em], "email"
+                rep["email_matched"] += 1
+            else:
+                handle = (g.get("handle") or "").strip()
+                if handle:
+                    try:
+                        cid = _resolve_scoring_player(conn, handle)
+                    except Exception:
+                        cid = None
+                if cid is not None:
+                    how = "handle"
+                    rep["handle_matched"] += 1
+                else:
+                    rep["unmatched"] += 1
+                    aff = (g.get("affiliation") or "").strip()
+                    if aff.startswith("TGF") or aff == "Former":
+                        rep["unmatched_members"].append(
+                            f"{g.get('handle')} <{g.get('email') or 'no email'}>"
+                            f" [{aff}]")
+            matches.append((g, cid, how))
+
+        rep["unmatched_member_count"] = len(rep["unmatched_members"])
+        rep["unmatched_members"] = rep["unmatched_members"][:60]
+
+        if not apply:
+            return rep
+
+        for g, cid, how in matches:
+            conn.execute(
+                """INSERT INTO gg_member_map (gg_member_id, customer_id,
+                       handle, email, affiliation, start_year, member_guest,
+                       matched_by)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                   ON CONFLICT(gg_member_id) DO UPDATE SET
+                       customer_id=COALESCE(excluded.customer_id,
+                                            gg_member_map.customer_id),
+                       handle=excluded.handle, email=excluded.email,
+                       affiliation=excluded.affiliation,
+                       start_year=excluded.start_year,
+                       member_guest=excluded.member_guest,
+                       matched_by=COALESCE(excluded.matched_by,
+                                           gg_member_map.matched_by)""",
+                (g.get("gg_id"), cid, g.get("handle"), g.get("email"),
+                 g.get("affiliation"), g.get("start_year"),
+                 g.get("member_guest"), how))
+
+        # Backfill: standings rows + name-links that the map now resolves
+        backfilled = conn.execute(
+            """UPDATE gg_history_standings SET customer_id = (
+                   SELECT m.customer_id FROM gg_member_map m
+                   WHERE m.handle = gg_history_standings.player_name
+                     AND m.customer_id IS NOT NULL)
+               WHERE customer_id IS NULL AND EXISTS (
+                   SELECT 1 FROM gg_member_map m
+                   WHERE m.handle = gg_history_standings.player_name
+                     AND m.customer_id IS NOT NULL)""").rowcount
+        relinked = conn.execute(
+            """UPDATE gg_history_name_links SET
+                   customer_id = (SELECT m.customer_id FROM gg_member_map m
+                                  WHERE m.handle = gg_history_name_links.raw_name
+                                    AND m.customer_id IS NOT NULL),
+                   matched_by = 'roster'
+               WHERE matched_by = 'pending' AND EXISTS (
+                   SELECT 1 FROM gg_member_map m
+                   WHERE m.handle = gg_history_name_links.raw_name
+                     AND m.customer_id IS NOT NULL)""").rowcount
+        conn.commit()
+        rep["standings_backfilled"] = backfilled
+        rep["name_links_resolved"] = relinked
+        rep["map_rows"] = conn.execute(
+            "SELECT COUNT(*) FROM gg_member_map").fetchone()[0]
+        return rep
