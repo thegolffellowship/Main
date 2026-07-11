@@ -89,7 +89,7 @@ calls. Proven recipe:
   guests, and DFW/Houston members with no Tracker profile at all
   (mailbox #100 phase 3: unmatched → review queue for Kerry).
 
-## Portal registry — 51 live portals (+2 dead mains)
+## Portal registry — 52 live portals (+2 dead mains)
 
 | Portal | Season/Scope | Status | website_id | league_id | Notes |
 |---|---|---|---|---|---|
@@ -144,6 +144,7 @@ calls. Proven recipe:
 | tgf-hcc22 | Hill Country Cup 2022 | ALIVE | 384699 | — | Kerry link ("hcc" abbrev): FC 3778690, PR san antonio 3778691, MP 3778692, M$ 3778693, ER 3778694, DIR 3778687 |
 | lonestarcup24 | LSC 2024 | ALIVE | 514529 | — | Kerry link (NO tgf- prefix!): DIR 5054894, HCP 5054895/5054896, SCHEDULE 5054897, TEE SHEETS 5054899; hosted at White Bluff Resort — no leaderboard/money page in nav |
 | redblue | Red Blue Challenge 2023 | ALIVE | 432025 | — | Kerry link (no prefix): LEADERBOARD 4224162 (nav also labels it "2022 LONE STAR CUP" — mislabeled duplicate entry), DIR 4224157, HCP 4224158/4224159 |
+| tgf-hcc21 | Hill Country Cup 2021 | ALIVE | — | — | FC 3188785, PR san antonio 3188786, MP 3188787, M$ 3188788, ER 3188789, DIR 3188781 |
 | tgf-dfw (main) | — | **DEAD** | — | — | redirects to corporate golfgenius.com; also linked with a typo (`.coms`) from tgf-sa2024 |
 | tgf-houston (main) | — | **DEAD** | — | — | redirects to corporate golfgenius.com |
 
@@ -350,19 +351,19 @@ tgf-redblue[2023], tgf-roughwater[cup], tgf-trinityriver[cup],
 tgf-texastwoman. The guessable subdomain universe is exhausted —
 everything further needs Kerry's admin links.
 
-**RECOVERED via Kerry's pattern key (2026-07-11 late session):** Kerry
-supplied tgf-lonestarcup25 + tgf-champ25, revealing the TWO-DIGIT year
-convention ("champ", "lonestarcup") the 4-digit guesses missed. Derived
-sweeps then recovered: **TGF CHAMPIONSHIP 2020–2025 complete**
-(tgf-champ20…25), Lone Star Cups 2021/2022/2025, Road Trips 2024/2025,
-and Trinity River Cup 2022 (tgf-trinity). Registry above now 48 live.
+**RECOVERED via Kerry's pattern keys (2026-07-11 late session):** Kerry
+supplied tgf-lonestarcup25, tgf-champ25, tgf-hcc22, lonestarcup24, and
+redblue — revealing THREE conventions the first guesses missed:
+two-digit years, abbreviations ("champ", "hcc"), and NO-PREFIX
+subdomains. Derived sweeps then completed: **TGF CHAMPIONSHIP 2020–2025
+(tgf-champ20…25), Lone Star Cups 2021/2022/2024/2025, Hill Country Cups
+2021/2022, Red Blue 2023, Trinity River Cup 2022, Road Trips
+2024/2025.** Registry above now 52 live.
 
 **Still missing an entry URL (in-scope, all guess patterns exhausted):**
-- **Lone Star Cup 2023 + 2024** (lsc/lonestar/lonestarcup 2- and
-  4-digit variants all dead)
-- Hill Country Cup 2020/2021/2022 · TGF Hill Country 2022 · Hill
-  Country Matches 2023 + 2024 · Red Blue Challenge 2023 · Hill Country
-  Two Man Challenge ×2 (2023)
+- **Lone Star Cup 2023** (every prefix/digit variant dead)
+- Hill Country Cup 2020 · TGF Hill Country 2022 · Hill Country Matches
+  2023 + 2024 · Hill Country Two Man Challenge ×2 (2023)
 - the 13 per-course Two Man Tour events (2024–25) + 2024 TEXAS TWO MAN
   CHAMPIONSHIP — likely aggregated inside tgf-twomantour's Tournament
   Results/Player Event Standings (verify at ingest before chasing URLs)

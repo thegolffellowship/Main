@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.69.5";
+window.TGF_VERSION = "2.69.6";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.69.6",
+    date: "2026-07-11",
+    changes: [
+      "GG HISTORY INVENTORY CLOSES AT 52 LIVE PORTALS. Kerry's four late-session links (tgf-hcc22, lonestarcup24, redblue, tgf-trinity) revealed two more naming conventions -- 'hcc' abbreviations and NO-PREFIX subdomains -- and the derived sweep added tgf-hcc21 (2021 Hill Country Cup, full league site). Recovered tonight in total: TGF Championships 2020-2025 complete, Lone Star Cups 2021/2022/2024/2025, Hill Country Cups 2021/2022, Red Blue Challenge 2023, Trinity River Cup 2022, Road Trips 2020-2025 complete, Two Man 2020-2022 + Tour.",
+      "Only SIX in-scope leagues remain URL-less: Lone Star Cup 2023, Hill Country Cup 2020, TGF Hill Country 2022, Hill Country Matches 2023 + 2024, and the two 2023 Hill Country Two Man Challenges (the 2024-25 per-course Two Man Tour events likely aggregate inside tgf-twomantour -- verified at ingest). Kerry supplies those links from the admin console or flags them no-website.",
+    ],
+  },
   {
     version: "2.69.5",
     date: "2026-07-11",
