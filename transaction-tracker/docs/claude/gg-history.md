@@ -14,7 +14,7 @@ Inventory ran 2026-07-11 (automated walker over `probe_golf_genius`,
 
 Every archive portal serves its data pages as **empty JS-widget shells**:
 `n_tables=0` on every EVENT RESULTS / standings / match-play / directory
-page across all 29 portals. Static page scraping gets navigation only.
+page across all portals. Static page scraping gets navigation only.
 The agents' first-pass "high ingest risk" verdict was WRONG, however —
 the data is fully server-fetchable via the widget routes the page JS
 calls. Proven recipe:
@@ -89,7 +89,7 @@ calls. Proven recipe:
   guests, and DFW/Houston members with no Tracker profile at all
   (mailbox #100 phase 3: unmatched → review queue for Kerry).
 
-## Portal registry — 29 portals, ALL alive except the two dead mains
+## Portal registry — 36 live portals (+2 dead mains)
 
 | Portal | Season/Scope | Status | website_id | league_id | Notes |
 |---|---|---|---|---|---|
@@ -119,9 +119,16 @@ calls. Proven recipe:
 | tgf-houston2022 | Houston 2022 | ALIVE | 324804 | — | net/gross split + MATCH PLAY |
 | tgf-houston2023 | Houston 2023 | ALIVE | 410486 | — | full modern set, LEAGUE NORTH/NORTHWEST/WEEKEND |
 | tgf-houston2024 | Houston 2024 | ALIVE | 468239 | — | final Houston season |
-| tgf-hillcountry | ONE-OFF 2023 | ALIVE | 421436 | — | Hill Country Matches series (2025 edition lives as a PAGE on tgf-sa2025: 5424367) |
-| tgf-twoman | ONE-OFF 2023 | ALIVE | 417329 | — | Two Man Challenge Series; team format; also twomantour.com external |
+| tgf-hillcountry | ONE-OFF 2023 | ALIVE | 421436 | — | "TGF Hill Country 2023" league (2025 edition lives as a PAGE on tgf-sa2025: 5424367) |
+| tgf-twoman | Two Man 2023 | ALIVE | 417329 | — | Two Man Challenge Series 2023; team format; also twomantour.com external |
 | tgf-roadtrip2023 | ONE-OFF 2023 | ALIVE | 410532 | — | minimal 2-page shell (Tee Sheets + Results only) |
+| tgf-roadtrip2020 | ONE-OFF 2020 | ALIVE | — | — | full league site: ER 2597895, M$ 2597894, POINTS RACE dfw 2597893, FC 2597892, DIR 2597888 |
+| tgf-roadtrip2021 | ONE-OFF 2021 | ALIVE | — | — | sparse: Tee Sheets 2818250, Tournament Results 2818251 |
+| tgf-roadtrip2022 | ONE-OFF 2022 | ALIVE | — | — | sparse: SCHEDULE 3424508, Tee Sheets 3416819, Tournament Results 3416820 |
+| tgf-twoman2020 | Two Man 2020 | ALIVE | — | — | "Two Man Challenge Series League": Players 2532438, Tournament Results 2532442, Player Analytics 2532444 |
+| tgf-twoman2021 | Two Man 2021 | ALIVE | — | — | ER 2843357, M$ 3137725, POINTS RACE net 3003170 / gross 3003171, DIR 2843364 |
+| tgf-twoman2022 | Two Man 2022 | ALIVE | — | — | richest Two Man site: ER 3507900, M$ 3507901, PR net/gross 3507898/3507899, FC 3594318, DIR 3594319 |
+| tgf-twomantour | Two Man Tour | ALIVE | — | — | "Two Man Tour League": Players 4947581, Tournament Results 4947585, Player Event Standings 4947586 — likely aggregates the 2024–25 per-course events |
 | tgf-dfw (main) | — | **DEAD** | — | — | redirects to corporate golfgenius.com; also linked with a typo (`.coms`) from tgf-sa2024 |
 | tgf-houston (main) | — | **DEAD** | — | — | redirects to corporate golfgenius.com |
 
@@ -244,6 +251,86 @@ Cup, **PC**=Players Cup, **PR**=Points Race (season), **MP**=Match Play,
   (4583596), GROSS (4583668), MP (4583670), MON Apr–Jul+Sep (4583602,
   4818478, 4889249, 4889260, 4889261), DIR (4583587), HCP (4583588/
   4583589).
+
+## THE MASTER LEAGUE LIST (Kerry's GG admin console, 2026-07-10 screenshots)
+
+Kerry supplied the authoritative list from the golfgenius.com manager
+account: **75 archived + 4 current = 79 LEAGUES** — the portal walk saw
+29 public portal WEBSITES; a GG *league* and its public *website* are
+separate objects, and ~40 leagues have no portal we discovered. Kerry's
+categorization: some leagues are TGF, some are **Two Man Tour** (a
+sibling brand, twomantour.com), some are **neither**.
+
+Archived leagues by year (start-date order, verbatim names):
+- **2016–2018**: The Golf Fellowship 2016 · 2017 · 2018 (= tgf-sa portals)
+- **2019**: TGF San Antonio 2019 · TGF Austin 2019
+- **2020**: TGF San Antonio 2020 · TGF Austin 2020 · TGF Dallas-Ft Worth
+  2020 · Two Man Challenge Series · 2020 Road Trip · **2020 TGF
+  CHAMPIONSHIP** · **2020 Hill Country Cup**
+- **2021**: 2021 Road Trip · TGF Austin 2021 · TGF San Antonio 2021 ·
+  TGF Dallas-Ft Worth 2021 · **Non-TGF Events** · TGF Houston 2021 ·
+  Two Man 2021 · **2021 TGF CHAMPIONSHIP** · **2021 Hill Country Cup** ·
+  **2021 Lone Star Cup**
+- **2022**: 2022 Road Trip · TGF Houston 2022 · TGF Austin 2022 · TGF
+  DFW 2022 · TGF San Antonio 2022 · TGF Hill Country 2022 · **Non-TGF
+  Events (2022)** · Two Man 2022 · **2022 TGF CHAMPIONSHIP** · **2022
+  Trinity River Cup** · **2022 Hill Country Cup** · **2022 Lone Star Cup**
+- **2023**: TGF San Antonio 2023 (league row shows "Not Published" hub
+  toggle; the portal website is live regardless) · TGF Austin 2023 ·
+  TGF DFW 2023 · TGF Houston 2023 · 2023 Road Trip · TGF Hill Country
+  2023 (= tgf-hillcountry portal) · 2023 Hill Country Matches (a SECOND
+  hill-country league) · Two Man 2023 (= tgf-twoman portal) · **2023
+  Red Blue Challenge** · **Rough Water Cup** · **Hill Country Two Man
+  Challenge - July 8-9, 2023** · **2023 TGF CHAMPIONSHIP** · **2023
+  Lone Star Cup** · **Hill Country Two Man Challenge (Nov 2023)**
+- **2024**: TGF Austin 2024 · TGF San Antonio 2024 ("Not Published" hub
+  toggle) · 2024 Road Trip + Two Man Challenge · TGF DFW 2024 · TGF
+  Houston 2024 · DFW Two Man WATERCHASE · Two Man QUAIL VALLEY · **2024
+  Hill Country Matches** · Two Man MANSFIELD NATIONAL · Two Man LOST
+  PINES · **2024 TGF CHAMPIONSHIP** · Two Man TERAVISTA · **2024 LONE
+  STAR CUP** · Two Man RED RIVER SHOOTOUT · 2024 TEXAS TWO MAN
+  CHAMPIONSHIP
+- **2025**: TGF San Antonio 2025 · Two Man SHADOWGLEN · 2025 Road Trip ·
+  TGF Austin 2025 · Two Man GOLF CLUB OF HOUSTON · Two Man HAMPTON
+  COVE · Two Man TERAVISTA · Two Man VAALER CREEK · **2025 TGF
+  CHAMPIONSHIP** · Two Man TPC SAN ANTONIO · **2025 LONE STAR CUP**
+- **Undated**: Two Man Tour (badge TGF 2024)
+
+Current (4): TGF San Antonio 2026 · TGF Austin 2026 · 2026 Hill Country
+Matches · 2026 TGF CHAMPIONSHIP.
+
+**SCOPE RULING (Kerry, 2026-07-11, in-session): TGF + Two Man Tour.**
+The two Non-TGF Events leagues (2021, 2022) are EXCLUDED from ingest.
+
+**Reconciliation after the guess sweeps.** Pattern probing recovered 7
+more live portals (roadtrip2020–2022, twoman2020–2022, twomantour —
+now in the registry above), bringing the walkable set to **36 portals**.
+Confirmed-DEAD guesses (redirect to corporate golfgenius.com):
+tgf-hillcountry2020/2021/2022/2024/2025, tgf-hillcountrycup,
+tgf-hillcountrymatches, tgf-championship[2020/2021/–],
+tgf-lonestarcup[/2021], tgf-lonestar[2021], tgf-lsc[2021], twomantour,
+tgf-nontgf, tgf-roadtrip[2024/2025/–], tgf-twoman2024/2025,
+tgf-redblue[2023], tgf-roughwater[cup], tgf-trinityriver[cup],
+tgf-texastwoman. The guessable subdomain universe is exhausted —
+everything further needs Kerry's admin links.
+
+**Still missing an entry URL (in-scope leagues, no portal found):**
+- **TGF CHAMPIONSHIP 2020–2025 (6 leagues) — highest value: decides the
+  cups and the trophy case**
+- **Lone Star Cup 2021–2025 (5)** — the LSC roster/results history
+- Hill Country Cup 2020–2022 (3) · TGF Hill Country 2022 · Hill Country
+  Matches 2023 + 2024 · Trinity River Cup 2022 · Red Blue Challenge
+  2023 · Rough Water Cup 2023 · Hill Country Two Man Challenge ×2 (2023)
+- Road Trip 2024 ("+ Two Man Challenge") + 2025
+- the 13 per-course Two Man Tour events (2024–25) + 2024 TEXAS TWO MAN
+  CHAMPIONSHIP — possibly aggregated inside tgf-twomantour's Tournament
+  Results/Player Event Standings (verify at ingest before chasing URLs)
+
+Intake ask to Kerry (mailbox topic `gg-links`): for each missing league,
+the website link from the GG admin console (league → Website settings),
+or confirmation the league never had a website. A GG league with no
+public website is only reachable through Kerry's account — flag those
+for a manual-export path instead.
 
 ### ONE-OFFS (mailbox #105 scope expansion)
 
