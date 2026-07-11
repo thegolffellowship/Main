@@ -22,44 +22,67 @@ calls. Proven recipe:
 1. **league_id discovery**: any portal page's raw HTML body (past ~85KB —
    fetch full length, the head scripts are huge) carries hidden inputs:
    `current_league_id`, `website_id`, `current_league_name`. Example:
-   tgf-sa2016 → league_id 15478, website_id 15492.
-2. **Standings widgets**: `https://<portal>.golfgenius.com/leagues/
+   tgf-sa2016 → league_id 15478, website_id 15492; tgf-sa2024 → 395571.
+2. **Widget discovery shortcut (no guessing)**: the same raw page body
+   embeds `<iframe class='page-iframe' src='…/widgets/<type>?…'>` — every
+   page NAMES its own widget. Worked on both eras; only login-locked
+   pages hide it (they fall back to rendering SCHEDULE's calendar iframe).
+3. **Standings widgets**: `https://<portal>.golfgenius.com/leagues/
    <league_id>/widgets/<type>?page_id=<page_id>&shared=false` (plain GET).
-   Modern portals use `season_points_v2` (the live 2026 sync's route);
-   **2016-era pages answer to `season_points` (v1)** — proven: the full
-   66-player 2016 SA points race table (Number | Player | Total Points |
-   Total Purse | Avg. Gross | Avg. Net) came back on the first try.
-   Empty response (title "Golf Genius ::", 0 tables) = wrong widget type
-   for that page; iterate the type list.
-3. **Event results (two hops)**: the EVENT RESULTS page embeds
-   `/leagues/<league_id>/widgets/tournament_results?shared=false`, which
-   serves ONE round (defaults to the latest) and links per-tournament
-   XHR partials: `/v2tournaments/<tid>?player_stats_for_portal=true&
+   Types confirmed in the wild: `season_points_v2` (modern points races +
+   cups — the live 2026 sync's route; columns vary per config: `Handle`
+   present on Fellowship Cup, absent on monthlies; `Affiliation` values
+   incl. `TGF San Antonio/Austin/DFW/Houston` and `Former`),
+   `season_points` (v1: 2016-era standings AND the modern MONEY &
+   SCORING LEADERS pages — no rank-movement columns, `Totals:` folded
+   into the last row). Proven pulls: the full 66-player 2016 SA points
+   race and the 94-row 2024 SA money list (`Rank | Player | Times
+   Played | Total Purse | Avg. Gross | Avg. Net | Low Gross | Low Net`,
+   totals $27,591.17). Error semantics: unknown widget type → HTTP 404;
+   valid type not configured for the page → empty shell (title
+   "Golf Genius ::", 0 tables). NOTE: `season_points` appears
+   league-scoped on the old portal (returned data even for a page whose
+   real widget is `images`) — treat page_id as a hint, not a guarantee
+   of provenance.
+4. **Event results (two hops, round enumeration SOLVED)**: the EVENT
+   RESULTS page embeds `/leagues/<league_id>/widgets/tournament_results
+   ?shared=false`, which serves ONE round (defaults to latest) and
+   contains a server-side `<select name="round">` listing EVERY round_id
+   of the season (32 options on SA 2024). Appending `&round=<round_id>`
+   switches rounds — verified. Each round lists per-tournament XHR
+   partials: `/v2tournaments/<tid>?player_stats_for_portal=true&
    round_index=<n>` (fetch with `xhr=true`, parse the JS partial —
    `_unwrap_js_string` in golf_genius_sync.py already does this) plus
    `/v2tournaments/total_purse?league_id=..&round_id=..`. Proven on DFW
    2024 (league_id 395610): full results table with header
    `Pos. | Player | Playing Handicap | Total Gross | To Par Net |
-   Total Net | Purse`.
-4. **Machine keys**: v2tournaments rows carry `data-member-ids`,
+   Total Net | Purse`. Same v2tournaments scheme on BOTH eras (2016
+   included) — one parser covers all ten seasons.
+5. **Machine keys**: v2tournaments rows carry `data-member-ids`,
    `data-aggregate-id`, `data-aggregate-name` attributes — stable GG ids
    we can store for idempotent re-import and identity linking.
-5. Scorecard-level ingest for archive events reuses the existing
+6. **`images` widget pages**: some content is uploaded PNGs, not tables —
+   2016 MATCH PLAY brackets are two cloudfront images
+   (`ddz5qbrxrbzp.cloudfront.net/uploads/page_image/image/…`), and the
+   2016 FINAL STANDINGS page's own widget is an image (its data lives in
+   the league-scoped season_points widget anyway). **2024 SA Match Play
+   renders "No image uploaded."** — that bracket was never published as
+   an image and per-round match data must come from tournament_results.
+7. Scorecard-level ingest for archive events reuses the existing
    `import_gg_scorecards` path (`/tournaments2/details/<agg>`) unchanged.
-
-**Open ingest question (INGEST phase):** enumerating all rounds of a
-season from the tournament_results widget (it serves one round per
-request; the round dropdown is client-side). Likely answerable from the
-widget HTML's round selector options or by iterating round_index — to be
-established on the first ingest portal.
 
 ## Name formats observed
 
 - **"LASTNAME, First"** (uppercase surname) is the dominant format for
   members across eras: `NIESTER, Kerry` (SA 2016 points race),
-  `WETZ, David` (DFW 2024 results).
-- **Guests render mixed-case** with affiliation "Guest" (`Hennessey,
-  Matt`, DFW 2024) — a useful member/guest signal at parse time.
+  `WETZ, David` (DFW 2024 results). Mixed-case surname particles are
+  PRESERVED (`DelCARMEN, Michelle`, `McLIN, Matthew`, `DeBORDE,
+  Geremey`) and suffixes append after a second comma (`LEVESQUE,
+  Michael, Jr`, `Martinez, Jesse, III`) — the normalizer must handle
+  both.
+- **Guests/newer players render Title case** with affiliation "Guest"
+  (`Hennessey, Matt`, DFW 2024; `Fieber, Scott`, SA 2024) — a useful
+  member/guest signal at parse time.
 - Identity linking must therefore normalize `LAST, First` → canonical
   `First Last` before the resolver cascade (canonical names →
   `customer_aliases` → `handicap_player_links`); expect maiden-era names,
@@ -78,7 +101,7 @@ established on the first ingest portal.
 | tgf-sa2021 | SA 2021 | ALIVE | 234894 | — | first net/gross points split (SA) |
 | tgf-sa2022 | SA 2022 | ALIVE | 324207 | — | adds FALL races, TGF HANDICAPS |
 | tgf-sa2023 | SA 2023 | ALIVE | 405415 | — | richest era: LEAGUE EAST/WEST/WEEKEND, SKINS NIGHT races, monthly Mar–Oct |
-| tgf-sa2024 | SA 2024 | ALIVE | 468184 | — | modern set (= what the Tracker knows from 2026) |
+| tgf-sa2024 | SA 2024 | ALIVE | 468184 | 395571 | modern set (= what the Tracker knows from 2026); recipe proven here too |
 | tgf-sa2025 | SA 2025 | ALIVE | 525799 | — | adds TGF CREDITS REPORT + Players Cup flight pages |
 | tgf-austin2019 | Austin 2019 | ALIVE | 138920 | — | dual-city: carries POINTS RACE san antonio |
 | tgf-austin2020 | Austin 2020 | ALIVE | 194603 | — | first Austin MATCH PLAY page |
@@ -236,14 +259,22 @@ Cup, **PC**=Players Cup, **PR**=Points Race (season), **MP**=Match Play,
 
 ## Known gaps & risks
 
-1. **Round enumeration** for tournament_results (one round per request) —
-   solve on first INGEST portal.
-2. **Member-gated pages**: DIRECTORY pages on several portals serve the
-   SCHEDULE fallback anonymously (title anomaly `:: SCHEDULE`) — member
-   rosters may be login-walled on some seasons; directories are
-   nice-to-have (identity comes primarily from results rows).
+1. ~~Round enumeration~~ SOLVED during inventory: the
+   tournament_results widget carries the full `<select name="round">`
+   server-side; crawl = fetch widget once → scrape option values →
+   refetch per `&round=<round_id>`.
+2. **Member-gated pages CONFIRMED locked**: DIRECTORY / CURRENT MEMBERS
+   pages are members-only (fa-lock in nav) — anonymous fetches silently
+   fall back to SCHEDULE (the `:: SCHEDULE` title anomaly the walkers
+   saw), and widget-name guesses 404. Rosters are unreachable without
+   auth; acceptable — identity comes primarily from results rows.
 3. **Monthly race history**: monthly pages exist 2023+ only (before
    that, no monthly races on portals).
+3b. **Match Play bracket gaps**: era-dependent. 2016 brackets = uploaded
+   PNG images (recoverable, but needs image parsing or manual entry);
+   2024 SA bracket = "No image uploaded." (page has NO server-side
+   content) — bracket-round results must be reconstructed from
+   tournament_results match-play tournaments where they exist.
 4. **Vendor courtesy**: all 27 alive portals are unauthenticated public
    subdomains GG could prune anytime — argues for raw-snapshot-first
    ingest (store `gg_raw_archive` rows for every fetched widget/partial
