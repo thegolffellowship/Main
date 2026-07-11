@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.69.4";
+window.TGF_VERSION = "2.69.5";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.69.5",
+    date: "2026-07-11",
+    changes: [
+      "GG HISTORY: THE CHAMPIONSHIP SERIES IS COMPLETE -- tgf-champ20 through tgf-champ25 all alive, every TGF CHAMPIONSHIP 2020-2025 with Fellowship Cup, points/Players Cup, match play, money, and event-results pages. Plus tgf-trinity (2022 Trinity River Cup, the DFW-v-Houston Ryder Cup event). Registry final for this session: 48 live portals.",
+      "Remaining gaps after exhausting every naming pattern: Lone Star Cup 2023 + 2024, the Hill Country family (Cups 2020-2022, TGF Hill Country 2022, Matches 2023/2024), Red Blue Challenge, and Hill Country Two Man x2 -- these need website links from Kerry's GG admin console (or a no-website flag). The 2024-25 per-course Two Man Tour events likely aggregate inside tgf-twomantour, to be verified at ingest.",
+    ],
+  },
   {
     version: "2.69.4",
     date: "2026-07-11",

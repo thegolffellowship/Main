@@ -89,7 +89,7 @@ calls. Proven recipe:
   guests, and DFW/Houston members with no Tracker profile at all
   (mailbox #100 phase 3: unmatched → review queue for Kerry).
 
-## Portal registry — 42 live portals (+2 dead mains)
+## Portal registry — 48 live portals (+2 dead mains)
 
 | Portal | Season/Scope | Status | website_id | league_id | Notes |
 |---|---|---|---|---|---|
@@ -135,6 +135,12 @@ calls. Proven recipe:
 | tgf-champ25 | TGF Championship 2025 | ALIVE | — | — | Kerry-supplied pattern ("champ", not "championship"): FC 5550900, PC Overall+4 flights+RegSeason 5553510/5550902–5550906, M$ 5550907, ER 5550908, DIR 5550896; cross-links a "2024 TGF CHAMPIONSHIP" page (5550914) — 2024 champ data exists somewhere reachable |
 | tgf-roadtrip24 | ONE-OFF 2024 | ALIVE | — | — | "2024 Road Trip + Two Man Challenge" (TGF + one Tour event, hybrid): SCHEDULE 4679638, DIR 4673301 — NO results/money pages in nav |
 | tgf-roadtrip25 | ONE-OFF 2025 | ALIVE | — | — | RESULTS 5295980, MONEY 5710562, ITINERARY 5295753, DIR 5293940 |
+| tgf-champ20 | TGF Championship 2020 | ALIVE | — | — | FC 2568109, PR san antonio 2568110, MP 2568111, M$ 2568112, ER 2568113, DIR 2568105 |
+| tgf-champ21 | TGF Championship 2021 | ALIVE | — | — | FC 3063295, PRs 3063296, MP sa 3063297 + austin 3072525, M$ 3063298, ER 3063299, DIR 3063291 |
+| tgf-champ22 | TGF Championship 2022 | ALIVE | — | — | FC 3628138, PRs 3628139, MP sa/austin 3628140/3628141, M$ 3628142, ER 3628143, DIR 3628134 |
+| tgf-champ23 | TGF Championship 2023 | ALIVE | — | — | FC 4286535, PC 4340774, M$ 4286539, ER 4286540, DIR 4286531 |
+| tgf-champ24 | TGF Championship 2024 | ALIVE | — | — | FC 4932416 + RegSeason 4899990, PC flights 4933781/4933784/4934136/4934139 + RegSeason 4899991, M$ 4899992, ER 4899993, DIR 4899986 |
+| tgf-trinity | Trinity River Cup 2022 | ALIVE | — | — | DFW-v-Houston Ryder Cup event: FC 3798532, PR san antonio 3798533, MP 3798534, M$ 3798535, ER 3798536, DIR 3798529 |
 | tgf-dfw (main) | — | **DEAD** | — | — | redirects to corporate golfgenius.com; also linked with a typo (`.coms`) from tgf-sa2024 |
 | tgf-houston (main) | — | **DEAD** | — | — | redirects to corporate golfgenius.com |
 
@@ -341,16 +347,21 @@ tgf-redblue[2023], tgf-roughwater[cup], tgf-trinityriver[cup],
 tgf-texastwoman. The guessable subdomain universe is exhausted —
 everything further needs Kerry's admin links.
 
-**Still missing an entry URL (in-scope leagues, no portal found):**
-- **TGF CHAMPIONSHIP 2020–2025 (6 leagues) — highest value: decides the
-  cups and the trophy case**
-- **Lone Star Cup 2021–2025 (5)** — the LSC roster/results history
-- Hill Country Cup 2020–2022 (3) · TGF Hill Country 2022 · Hill Country
-  Matches 2023 + 2024 · Trinity River Cup 2022 · Red Blue Challenge
-  2023 · Rough Water Cup 2023 · Hill Country Two Man Challenge ×2 (2023)
-- Road Trip 2024 ("+ Two Man Challenge") + 2025
+**RECOVERED via Kerry's pattern key (2026-07-11 late session):** Kerry
+supplied tgf-lonestarcup25 + tgf-champ25, revealing the TWO-DIGIT year
+convention ("champ", "lonestarcup") the 4-digit guesses missed. Derived
+sweeps then recovered: **TGF CHAMPIONSHIP 2020–2025 complete**
+(tgf-champ20…25), Lone Star Cups 2021/2022/2025, Road Trips 2024/2025,
+and Trinity River Cup 2022 (tgf-trinity). Registry above now 48 live.
+
+**Still missing an entry URL (in-scope, all guess patterns exhausted):**
+- **Lone Star Cup 2023 + 2024** (lsc/lonestar/lonestarcup 2- and
+  4-digit variants all dead)
+- Hill Country Cup 2020/2021/2022 · TGF Hill Country 2022 · Hill
+  Country Matches 2023 + 2024 · Red Blue Challenge 2023 · Hill Country
+  Two Man Challenge ×2 (2023)
 - the 13 per-course Two Man Tour events (2024–25) + 2024 TEXAS TWO MAN
-  CHAMPIONSHIP — possibly aggregated inside tgf-twomantour's Tournament
+  CHAMPIONSHIP — likely aggregated inside tgf-twomantour's Tournament
   Results/Player Event Standings (verify at ingest before chasing URLs)
 
 Intake ask to Kerry (mailbox topic `gg-links`): for each missing league,
