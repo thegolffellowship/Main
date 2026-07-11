@@ -1433,8 +1433,15 @@ def _scoring_dispatch(url: str, extract: str):
                 dom, _, budget = rest.partition("@")
                 return json.dumps(ggh.ingest_portal(
                     dom.strip(), budget_seconds=int(budget or 240)), indent=2)
+            if sub == "roster":
+                # roster=report (dry-run match report) | roster=apply
+                # (write gg_member_map + backfill standings/name-links)
+                return json.dumps(
+                    ggh.roster_ingest(apply=(rest.strip() == "apply")),
+                    indent=2)
             return json.dumps({"error": "usage: scoring-gg-history:seed | "
-                               "status | ingest=<subdomain>[@<budget_s>]"})
+                               "status | ingest=<subdomain>[@<budget_s>] | "
+                               "roster=report|apply"})
         if cmd == "scoring-payouts-bulk-paid":
             # "scoring-payouts-bulk-paid:<YYYY-MM-DD>" — one-time cleanup:
             # mark every pending payout group from events before the date

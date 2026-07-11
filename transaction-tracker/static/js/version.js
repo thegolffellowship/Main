@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.70.1";
+window.TGF_VERSION = "2.71.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.71.0",
+    date: "2026-07-11",
+    changes: [
+      "MASTER ROSTER INGEST (Kerry: 'master roster first' -- the identity spine for the whole history initiative): Kerry's GG admin export (1,089 golfers -- every one with a unique GG member id, 98% with emails, Start Years reaching back to 2007) ships trimmed to matching essentials as email_parser/data/gg_master_roster_v6.csv. Phones and DOBs were deliberately left out of the repo; they stay in Kerry's spreadsheet and can layer in later through the review UI.",
+      "New gg_member_map table: GG member id -> customer_id, plus handle/email/affiliation/start_year/member-or-guest. The roster's Handle column is the exact 'LAST, First' string GG prints on every standings table across all ten years -- a direct join key that turns name-guessing into id lookups.",
+      "Bridge commands: scoring-gg-history:roster=report (dry-run match report -- exact email match first, then the scoring-resolver handle cascade; never creates customers) and roster=apply (writes the map, then backfills customer_id onto already-ingested standings rows and resolves pending name-links by handle join). Report-first discipline: apply runs only after Kerry reviews the report.",
+    ],
+  },
   {
     version: "2.70.1",
     date: "2026-07-11",

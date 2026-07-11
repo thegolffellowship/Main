@@ -593,7 +593,29 @@ ready for the future partner build, invisible on TGF surfaces).
       unique names pending review. Idempotency verified (re-run = 0
       work). league_ids discovered: sa2025 453183, austin2025 454934,
       champ25 491299, lonestarcup25 502416, roadtrip25 465797.
+- [x] **MASTER ROSTER INGEST (v2.71.0, Kerry-directed "master roster
+      first"):** Kerry's GG admin export (Golfer Spreadsheet V6, 1,089
+      golfers, unique GG member ids, 98% emails, Start Years to 2007)
+      trimmed to matching essentials and committed as
+      `email_parser/data/gg_master_roster_v6.csv` (phones/DOBs
+      deliberately NOT committed — they stay in the xlsx, layer later
+      via the review UI). New `gg_member_map` table (GG member id →
+      customer_id + handle/email/affiliation/start_year). Bridge:
+      `scoring-gg-history:roster=report` (dry-run match report — email
+      exact match first, then the handle cascade) | `roster=apply`
+      (write map + backfill gg_history_standings.customer_id and
+      pending name-links via handle join). The roster `handle` column
+      is the EXACT "LAST, First" string standings print — a direct
+      join key. Report-first discipline: apply only runs after Kerry
+      sees the report.
 - [ ] 2024 wave next (incl. DFW/Houston finales) → … → 2016
+- [ ] Hole-by-hole raw scores = Kerry's #1 priority after names/events
+      (2026-07-11): Phase B leads with the scorecard-depth walk
+      (/tournaments2/details partials via import_gg_scorecards
+      machinery) — results + per-event money ride the same pass.
+- [ ] Row-level handicap_rounds ↔ gg_history_events bridging by
+      (customer_id, date) once Phase B yields event dates — extends the
+      existing handicap_rounds.scoring_round_id pattern backwards.
 - [ ] Phase B: event results + match play + scorecard depth
 - [ ] Kerry review queue: pending name links on COO action items (build
       the surfacing hook when the first pending batch exists)
