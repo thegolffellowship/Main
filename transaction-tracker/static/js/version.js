@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.72.0";
+window.TGF_VERSION = "2.72.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.72.1",
+    date: "2026-07-11",
+    changes: [
+      "2025+2026 PROOF OF CONCEPT COMPLETE: all eight export pairs ingested live (205 events, 3,199 player-rounds; 2026 identity-matched 100%, 2025 ~97%) and the cross-channel audit ran -- 1,305 checks, 95.1% exact, with every mismatch in one of three explained classes: post-import score edits (rescrape flags -- vanishes on frozen archive years), multi-round-day date-join ambiguity (Hill Country Matches' six same-Saturday rounds; audits need round-label joins), and per-round purse vs season-total money scope (exports carry round money; standings carry season-contest payouts on top -- career winnings = standings truth).",
+      "Channel-redundancy thesis proven on the first season tried: LSC 2025's portal money page is an uploaded image (unscrapable) and the export is the only structured source. Clean 100% sheets: Austin 2026 (369/369), Austin 2025 (88/88), Road Trip 2025 (9/9).",
+    ],
+  },
   {
     version: "2.72.0",
     date: "2026-07-11",
