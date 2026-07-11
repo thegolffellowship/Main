@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.69.1";
+window.TGF_VERSION = "2.69.2";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.69.2",
+    date: "2026-07-11",
+    changes: [
+      "GG HISTORY MASTER LIST RECONCILED: Kerry supplied the authoritative league list from the GG admin console (14 screenshots -- 75 archived + 4 current leagues), revealing ~40 leagues the public-portal walk couldn't see: TGF CHAMPIONSHIP 2020-2025, Lone Star Cup 2021-2025, Hill Country Cups, Trinity River Cup, Red Blue Challenge, Rough Water Cup, Road Trips 2020-2025, the Two Man brand's full history, and two Non-TGF Events leagues. All banked in docs/claude/gg-history.md.",
+      "Pattern-guess sweeps recovered SEVEN more live portals (tgf-roadtrip2020/2021/2022, tgf-twoman2020/2021/2022, tgf-twomantour) -- the walkable set is now 36 portals. A second 17-candidate sweep came back all dead, so the guessable subdomain universe is exhausted: the remaining missing leagues (championships and Lone Star Cups above all) need their website links pulled from the GG admin console, or have no public website at all.",
+      "SCOPE RULING (Kerry, in-session): ingest covers TGF + Two Man Tour; the two Non-TGF Events leagues are excluded.",
+    ],
+  },
   {
     version: "2.69.1",
     date: "2026-07-11",
