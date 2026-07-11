@@ -1439,6 +1439,20 @@ def _scoring_dispatch(url: str, extract: str):
                 return json.dumps(
                     ggh.roster_ingest(apply=(rest.strip() == "apply")),
                     indent=2)
+            if sub == "export":
+                # export=<prefix> | export=ALL — ingest staged export pairs
+                if rest.strip().upper() == "ALL":
+                    return json.dumps([ggh.ingest_export_pair(p)
+                                       for p in ggh.EXPORT_PREFIXES], indent=2)
+                return json.dumps(ggh.ingest_export_pair(rest.strip()),
+                                  indent=2)
+            if sub == "audit":
+                # audit=<prefix> | audit=ALL — parity checks vs the other channel
+                if rest.strip().upper() == "ALL":
+                    return json.dumps([ggh.audit_export_pair(p)
+                                       for p in ggh.EXPORT_PREFIXES], indent=2)
+                return json.dumps(ggh.audit_export_pair(rest.strip()),
+                                  indent=2)
             return json.dumps({"error": "usage: scoring-gg-history:seed | "
                                "status | ingest=<subdomain>[@<budget_s>] | "
                                "roster=report|apply"})

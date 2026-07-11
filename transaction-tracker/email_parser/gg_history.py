@@ -665,3 +665,296 @@ def roster_ingest(apply: bool = False, db_path=None) -> dict:
         rep["map_rows"] = conn.execute(
             "SELECT COUNT(*) FROM gg_member_map").fetchone()[0]
         return rep
+
+
+# ── Export-pair ingest (Kerry-directed 2026-07-11: complete 2025+2026 as
+#    the proof of concept before moving further back) ─────────────────────
+#
+# Reads the staged GG admin exports (email_parser/data/gg_exports/
+# <prefix>__*.csv — Season Scores 9-sheet pairs + trimmed rosters) into
+# gg_history_events (one row per league round) + gg_history_results (one
+# row per player per round: gross/net/CH structured; AGS/index/purse/
+# points carried in raw_row verbatim + purse/points structured).
+# Idempotent per prefix via gg_round_id = 'export:<prefix>:r<N>'.
+
+_EXPORT_DIR = "data/gg_exports"
+
+# prefix → (portal subdomain, season, chapter). 2026 leagues map to the
+# LIVE portals (tgf-sa / tgf-austin); hcm2026 has no known public portal
+# — a registry row is created with source='export'.
+EXPORT_PREFIXES = {
+    "sa2026":       ("tgf-sa",            "2026", "San Antonio"),
+    "austin2026":   ("tgf-austin",        "2026", "Austin"),
+    "hcm2026":      ("hcm2026",           "2026", None),
+    "sa2025":       ("tgf-sa2025",        "2025", "San Antonio"),
+    "austin2025":   ("tgf-austin2025",    "2025", "Austin"),
+    "champ2025":    ("tgf-champ25",       "2025", None),
+    "lsc2025":      ("tgf-lonestarcup25", "2025", None),
+    "roadtrip2025": ("tgf-roadtrip25",    "2025", None),
+}
+
+_MONTH_NUM = {m: i + 1 for i, m in enumerate(
+    ("Jan", "Feb", "Mar", "Apr", "May", "Jun",
+     "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"))}
+
+
+def _export_date(raw: str, season: str):
+    """'Sat, Feb 07' + season year → '2026-02-07' (None if unparseable)."""
+    m = re.search(r"([A-Z][a-z]{2})\s+(\d{1,2})", str(raw or ""))
+    if not m or m.group(1) not in _MONTH_NUM:
+        return None
+    return f"{season}-{_MONTH_NUM[m.group(1)]:02d}-{int(m.group(2)):02d}"
+
+
+def _read_export_csv(prefix: str, sheet: str):
+    import csv
+    from pathlib import Path
+    path = Path(__file__).parent / _EXPORT_DIR / f"{prefix}__{sheet}.csv"
+    if not path.exists():
+        return None
+    with open(path, newline="", encoding="utf-8") as fh:
+        return list(csv.reader(fh))
+
+
+def _matrix_by_round(rows):
+    """Score-matrix CSV → {player_name: {round_no: cell}} keyed by the
+    'Round N' header labels (robust to deleted rounds like SA 2026 R13)."""
+    if not rows:
+        return {}
+    hdr = rows[0]
+    round_cols = {}
+    for i, h in enumerate(hdr):
+        m = re.match(r"Round (\d+)$", str(h).strip())
+        if m:
+            round_cols[i] = int(m.group(1))
+    out = {}
+    for r in rows[1:]:
+        if not r or not str(r[0]).strip():
+            continue
+        name = str(r[0]).strip()
+        vals = {}
+        for i, rn in round_cols.items():
+            if i < len(r) and str(r[i]).strip():
+                vals[rn] = str(r[i]).strip()
+        out[name] = vals
+    return out
+
+
+def ingest_export_pair(prefix: str, db_path=None) -> dict:
+    """Ingest one staged export pair. Idempotent (replaces its own rows)."""
+    from email_parser.database import _connect, DB_PATH
+    if prefix not in EXPORT_PREFIXES:
+        return {"error": f"unknown prefix {prefix!r} — known: "
+                         f"{sorted(EXPORT_PREFIXES)}"}
+    subdomain, season, chapter = EXPORT_PREFIXES[prefix]
+
+    rounds_csv = _read_export_csv(prefix, "league_rounds")
+    if rounds_csv is None:
+        return {"error": f"no staged CSVs for {prefix} (deploy drift?)"}
+    gross = _matrix_by_round(_read_export_csv(prefix, "gross_scores") or [])
+    net = _matrix_by_round(_read_export_csv(prefix, "net_scores") or [])
+    ags = _matrix_by_round(_read_export_csv(prefix, "adjusted_gross_score") or [])
+    ch = _matrix_by_round(_read_export_csv(prefix, "course_handicap_history") or [])
+    idx = _matrix_by_round(_read_export_csv(prefix, "handicap_index_history") or [])
+    purse = _matrix_by_round(_read_export_csv(prefix, "purse_summary") or [])
+    points = _matrix_by_round(_read_export_csv(prefix, "points_summary") or [])
+    roster = _read_export_csv(prefix, "roster")
+
+    stats = {"prefix": prefix, "events": 0, "results": 0, "matched": 0,
+             "pending": 0, "roster_map_rows": 0}
+
+    with _connect(db_path or DB_PATH) as conn:
+        ensure_gg_history_tables(conn)
+        ensure_gg_member_map(conn)
+        portal = conn.execute(
+            "SELECT * FROM gg_history_portals WHERE subdomain=?",
+            (subdomain,)).fetchone()
+        if portal is None:
+            conn.execute(
+                """INSERT INTO gg_history_portals (subdomain, chapter,
+                       season, kind, brand, source, status)
+                   VALUES (?, ?, ?, 'season', 'TGF', 'export', 'alive')""",
+                (subdomain, chapter, season))
+            portal = conn.execute(
+                "SELECT * FROM gg_history_portals WHERE subdomain=?",
+                (subdomain,)).fetchone()
+        portal_id = portal["id"]
+
+        # roster → map enrichment (league-scoped ids are DISTINCT keys)
+        if roster and len(roster) > 1:
+            hdr = roster[0]
+            for r in roster[1:]:
+                row = dict(zip(hdr, r))
+                if not row.get("league_member_id"):
+                    continue
+                cid = None
+                em = (row.get("email") or "").strip().lower()
+                if em:
+                    got = conn.execute(
+                        "SELECT customer_id FROM customer_emails WHERE "
+                        "LOWER(email)=? LIMIT 1", (em,)).fetchone()
+                    cid = got["customer_id"] if got else None
+                if cid is None and row.get("handle"):
+                    got = conn.execute(
+                        "SELECT customer_id FROM gg_member_map WHERE "
+                        "handle=? AND customer_id IS NOT NULL LIMIT 1",
+                        (row["handle"],)).fetchone()
+                    cid = got["customer_id"] if got else None
+                conn.execute(
+                    """INSERT INTO gg_member_map (gg_member_id, customer_id,
+                           handle, email, affiliation, start_year,
+                           member_guest, matched_by)
+                       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                       ON CONFLICT(gg_member_id) DO UPDATE SET
+                           customer_id=COALESCE(excluded.customer_id,
+                                                gg_member_map.customer_id)""",
+                    (f"{prefix}:{row['league_member_id']}", cid,
+                     row.get("handle"), row.get("email"),
+                     row.get("affiliation"), row.get("start_year"),
+                     row.get("member_guest"),
+                     "league_roster_email" if (cid and em) else
+                     ("league_roster_handle" if cid else "pending")))
+                stats["roster_map_rows"] += 1
+
+        # idempotent wipe of this prefix's prior rows
+        conn.execute(
+            """DELETE FROM gg_history_results WHERE gg_event_id IN (
+                   SELECT id FROM gg_history_events
+                   WHERE portal_id=? AND gg_round_id LIKE ?)""",
+            (portal_id, f"export:{prefix}:%"))
+        conn.execute(
+            "DELETE FROM gg_history_events WHERE portal_id=? AND "
+            "gg_round_id LIKE ?", (portal_id, f"export:{prefix}:%"))
+
+        # league rounds → events
+        event_ids = {}
+        for r in rounds_csv[1:]:
+            if len(r) < 3 or not str(r[0]).strip():
+                continue
+            try:
+                rn = int(float(r[0]))
+            except ValueError:
+                continue
+            cur = conn.execute(
+                """INSERT INTO gg_history_events (portal_id, season,
+                       chapter, event_label, event_date, brand,
+                       gg_round_id, gg_round_index, raw_row)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (portal_id, season, chapter, str(r[1]).strip(),
+                 _export_date(r[2], season), portal["brand"],
+                 f"export:{prefix}:r{rn}", rn, json.dumps(r)))
+            event_ids[rn] = cur.lastrowid
+            stats["events"] += 1
+
+        # per-player per-round results
+        players = set(gross) | set(net) | set(purse) | set(points)
+        for name in sorted(players):
+            cid = _resolve_identity(conn, portal_id, name)
+            rounds_for = (set(gross.get(name, {})) | set(net.get(name, {}))
+                          | set(purse.get(name, {}))
+                          | set(points.get(name, {})))
+            for rn in sorted(rounds_for):
+                if rn not in event_ids:
+                    continue
+                g = _to_float(gross.get(name, {}).get(rn))
+                n = _to_float(net.get(name, {}).get(rn))
+                p = _money_to_cents(purse.get(name, {}).get(rn))
+                pt = _to_float(points.get(name, {}).get(rn))
+                c = _to_float(ch.get(name, {}).get(rn))
+                if g is None and n is None and p is None and pt is None:
+                    continue
+                conn.execute(
+                    """INSERT INTO gg_history_results (gg_event_id,
+                           game_label, player_name, customer_id,
+                           playing_handicap, gross, net, points,
+                           money_cents, raw_row)
+                       VALUES (?, 'export_round', ?, ?, ?, ?, ?, ?, ?, ?)""",
+                    (event_ids[rn], name, cid, c, g, n, pt, p,
+                     json.dumps({"src": "export", "prefix": prefix,
+                                 "round": rn, "gross": g, "net": n,
+                                 "ags": _to_float(ags.get(name, {}).get(rn)),
+                                 "course_handicap": c,
+                                 "index_at_round":
+                                     _to_float(idx.get(name, {}).get(rn)),
+                                 "purse_cents": p, "points": pt})))
+                stats["results"] += 1
+                stats["matched" if cid else "pending"] += 1
+        conn.commit()
+    return stats
+
+
+def audit_export_pair(prefix: str, db_path=None) -> dict:
+    """Parity audit for one ingested export prefix.
+
+    2026 prefixes: per-round gross/net vs scoring_rounds (scraped
+    scorecards), joined by customer_id + date. 2025 prefixes: per-player
+    export season purse totals vs the money already banked in Phase-A
+    standings rows (money_leaders pages), joined by verbatim name.
+    """
+    from email_parser.database import _connect, DB_PATH
+    if prefix not in EXPORT_PREFIXES:
+        return {"error": f"unknown prefix {prefix!r}"}
+    subdomain, season, chapter = EXPORT_PREFIXES[prefix]
+    out = {"prefix": prefix, "checked": 0, "matches": 0, "mismatches": []}
+    with _connect(db_path or DB_PATH) as conn:
+        if season == "2026":
+            rows = conn.execute(
+                """SELECT r.player_name, r.customer_id, r.gross AS xg,
+                          r.net AS xn, e.event_date
+                   FROM gg_history_results r
+                   JOIN gg_history_events e ON e.id = r.gg_event_id
+                   WHERE e.portal_id = (SELECT id FROM gg_history_portals
+                                        WHERE subdomain=?)
+                     AND e.gg_round_id LIKE ?
+                     AND r.customer_id IS NOT NULL AND r.gross IS NOT NULL""",
+                (subdomain, f"export:{prefix}:%")).fetchall()
+            for r in rows:
+                sr = conn.execute(
+                    """SELECT gross, net FROM scoring_rounds
+                       WHERE customer_id=? AND round_date=?""",
+                    (r["customer_id"], r["event_date"])).fetchall()
+                if not sr:
+                    continue
+                out["checked"] += 1
+                ok = any(s["gross"] == r["xg"] and
+                         (r["xn"] is None or s["net"] == r["xn"])
+                         for s in sr)
+                if ok:
+                    out["matches"] += 1
+                elif len(out["mismatches"]) < 25:
+                    out["mismatches"].append(
+                        {"player": r["player_name"], "date": r["event_date"],
+                         "export_gross": r["xg"], "export_net": r["xn"],
+                         "scraped": [dict(s) for s in sr]})
+        else:
+            rows = conn.execute(
+                """SELECT r.player_name, SUM(r.money_cents) AS xp
+                   FROM gg_history_results r
+                   JOIN gg_history_events e ON e.id = r.gg_event_id
+                   WHERE e.portal_id = (SELECT id FROM gg_history_portals
+                                        WHERE subdomain=?)
+                     AND e.gg_round_id LIKE ?
+                   GROUP BY r.player_name
+                   HAVING xp IS NOT NULL""",
+                (subdomain, f"export:{prefix}:%")).fetchall()
+            for r in rows:
+                st = conn.execute(
+                    """SELECT MAX(s.money_cents) AS m
+                       FROM gg_history_standings s
+                       JOIN gg_history_pages g ON g.id = s.page_id
+                       WHERE g.portal_id = (SELECT id FROM gg_history_portals
+                                            WHERE subdomain=?)
+                         AND g.page_kind='money_leaders'
+                         AND s.player_name = ?""",
+                    (subdomain, r["player_name"])).fetchone()
+                if st is None or st["m"] is None:
+                    continue
+                out["checked"] += 1
+                if st["m"] == r["xp"]:
+                    out["matches"] += 1
+                elif len(out["mismatches"]) < 25:
+                    out["mismatches"].append(
+                        {"player": r["player_name"],
+                         "export_total_cents": r["xp"],
+                         "standings_cents": st["m"]})
+    return out
