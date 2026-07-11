@@ -1,5 +1,15 @@
-window.TGF_VERSION = "2.67.1";
+window.TGF_VERSION = "2.68.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.68.0",
+    date: "2026-07-10",
+    changes: [
+      "SPOTLIGHT SCORING AGGREGATE (mailbox #103/#104 -- design-claude's mobile density pass added a SCORING card on Kerry's request and asked whether the numbers are derivable; they are, and now they're REAL): the spotlight payload carries a scoring block computed from the player's last 20 tracked rounds -- par-3/4/5 stroke averages with trend arrows, an eagle/birdie/par/bogey/other distribution, and separate 9-hole and 18-hole average-gross lines (TGF rounds are mostly 9-hole, so a single '18-hole average' would have been mostly synthetic). Par comes from course_tee_holes via each round's tee.",
+      "TREND DEFINITION (correcting the prototype's assumption): last 10 rounds vs the 10 before -- NOT last-20-vs-previous-20, which needs a 40-round history nobody has this season (the most active players hold ~21). Trends suppress entirely until a player has 15+ rounds (5+ in the prior window) so early-season arrows can't mislead; negative = improving. Windows deepen automatically once the GG history ingest lands.",
+      "Verified with a synthetic 20-round fixture: par-type averages exact, distribution counts exact, trend arrows appear only when the prior window exists and read +1.0 for a player who went from all-pars to all-bogeys.",
+      "GG HISTORY recon extended per mailbox #106: all seven Austin archives (tgf-austin2019 through 2025) probed ALIVE and public, completing the inventory target list -- SA 2016-2025, Austin 2019-2025, DFW, Houston, plus three one-off portals discovered in the 2023 footer (Hill Country, Two Man Challenge, 2023 Road Trip) for the ONE-OFFS category Kerry added to scope.",
+    ],
+  },
   {
     version: "2.67.1",
     date: "2026-07-10",

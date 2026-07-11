@@ -7470,6 +7470,104 @@ def search_spotlight_players(q: str, limit: int = 12,
     return [dict(r) for r in rows]
 
 
+def _spotlight_scoring(conn, customer_id: int) -> dict | None:
+    """Per-hole scoring aggregate for the Spotlight SCORING card
+    (mailbox #103/#104 — design-claude's density pass; Kerry asked for
+    "simple, not big" individual scoring stats).
+
+    Window = the player's LAST 20 tracked rounds (scoring_rounds, both
+    9- and 18-hole). Trend = last 10 rounds vs the 10 before — NOT
+    20-vs-20: current season volume is ~20 rounds for the most active
+    players, so a 40-round baseline would never light up. Negative
+    trend = improving (fewer strokes). Par comes from course_tee_holes
+    via the round's tee; holes with no strokes or no par are skipped.
+    Returns None when the player has no tracked rounds.
+    """
+    rounds = conn.execute(
+        """SELECT id, holes_played, gross FROM scoring_rounds
+           WHERE customer_id = ? AND gross IS NOT NULL
+           ORDER BY round_date DESC, id DESC LIMIT 20""",
+        (customer_id,),
+    ).fetchall()
+    if not rounds:
+        return None
+    ids = [r["id"] for r in rounds]
+    recent_ids = set(ids[:10])   # trend halves, by recency
+    prior_ids = set(ids[10:20])
+    qmarks = ",".join("?" * len(ids))
+    holes = conn.execute(
+        f"""SELECT sh.scoring_round_id AS rid, sh.strokes, cth.par
+            FROM scoring_holes sh
+            JOIN scoring_rounds sr ON sr.id = sh.scoring_round_id
+            LEFT JOIN course_tee_holes cth
+                   ON cth.tee_id = sr.tee_id
+                  AND cth.hole_number = sh.hole_number
+            WHERE sh.scoring_round_id IN ({qmarks})
+              AND sh.strokes IS NOT NULL""",
+        ids,
+    ).fetchall()
+
+    par_sums: dict = {3: [0, 0], 4: [0, 0], 5: [0, 0]}   # strokes, holes
+    par_half: dict = {3: [[0, 0], [0, 0]], 4: [[0, 0], [0, 0]],
+                      5: [[0, 0], [0, 0]]}               # [recent, prior]
+    dist = {"eagle_plus": 0, "birdie": 0, "par": 0, "bogey": 0, "other": 0}
+    for h in holes:
+        par, strokes = h["par"], h["strokes"]
+        if par not in (3, 4, 5):
+            continue
+        par_sums[par][0] += strokes
+        par_sums[par][1] += 1
+        if h["rid"] in recent_ids:
+            par_half[par][0][0] += strokes
+            par_half[par][0][1] += 1
+        elif h["rid"] in prior_ids:
+            par_half[par][1][0] += strokes
+            par_half[par][1][1] += 1
+        diff = strokes - par
+        if diff <= -2:
+            dist["eagle_plus"] += 1
+        elif diff == -1:
+            dist["birdie"] += 1
+        elif diff == 0:
+            dist["par"] += 1
+        elif diff == 1:
+            dist["bogey"] += 1
+        else:
+            dist["other"] += 1
+
+    # trend needs a real prior half — at least 5 prior rounds
+    trend_ok = len(prior_ids) >= 5
+    par_avgs = {}
+    for p in (3, 4, 5):
+        tot, n = par_sums[p]
+        (rs, rn), (ps, pn) = par_half[p]
+        trend = (round(rs / rn - ps / pn, 2)
+                 if trend_ok and rn and pn else None)
+        par_avgs[str(p)] = {
+            "avg": round(tot / n, 2) if n else None,
+            "trend": trend, "holes": n,
+        }
+
+    def gross_line(hp):
+        rows = [r for r in rounds if r["holes_played"] == hp]
+        if not rows:
+            return None
+        rec = [r["gross"] for r in rows if r["id"] in recent_ids]
+        pri = [r["gross"] for r in rows if r["id"] in prior_ids]
+        trend = (round(sum(rec) / len(rec) - sum(pri) / len(pri), 1)
+                 if trend_ok and len(rec) >= 3 and len(pri) >= 3 else None)
+        return {"avg": round(sum(r["gross"] for r in rows) / len(rows), 1),
+                "trend": trend, "n": len(rows)}
+
+    return {
+        "window_rounds": len(rounds),
+        "par_avgs": par_avgs,
+        "distribution": dist,
+        "avg_gross_9": gross_line(9),
+        "avg_gross_18": gross_line(18),
+    }
+
+
 def _spotlight_assign_payouts(standings: list, pp: dict | None,
                               tie_key: str) -> dict:
     """customer_id -> projected payout cents if the season ended today.
@@ -7572,6 +7670,13 @@ def get_player_spotlight(customer_id: int,
             """SELECT contest_type, chapter, season FROM season_contests
                WHERE customer_id = ? ORDER BY season, contest_type""",
             (customer_id,)).fetchall()]
+
+        try:
+            scoring = _spotlight_scoring(conn, customer_id)
+        except Exception:
+            logger.warning("spotlight scoring aggregate failed",
+                           exc_info=True)
+            scoring = None
 
     # ── points races (persisted snapshots — same source as CONTESTS) ──
     # in_reach (mailbox #99 item 1, Kerry-RATIFIED): points to the place
@@ -7735,6 +7840,7 @@ def get_player_spotlight(customer_id: int,
                                   for e in enrollments}),
             "total_winnings": total_winnings,
         },
+        "scoring": scoring,
         "races": races,
         "race_pots": race_pots,
         "fall_buyins": fall,
