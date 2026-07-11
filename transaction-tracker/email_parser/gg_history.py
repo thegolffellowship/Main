@@ -578,20 +578,15 @@ def roster_ingest(apply: bool = False, db_path=None) -> dict:
         ensure_gg_history_tables(conn)
         ensure_gg_member_map(conn)
 
+        # Emails live ONLY in customer_emails (customers has no email
+        # column). Primary emails win map collisions via the ORDER BY.
         email_map = {}
         for r in conn.execute(
-                "SELECT customer_id, customer_email FROM customers "
-                "WHERE customer_email IS NOT NULL AND customer_email != ''"):
-            email_map.setdefault(r["customer_email"].strip().lower(),
+                "SELECT customer_id, email FROM customer_emails "
+                "WHERE email IS NOT NULL AND email != '' "
+                "ORDER BY is_primary DESC"):
+            email_map.setdefault(r["email"].strip().lower(),
                                  r["customer_id"])
-        try:
-            for r in conn.execute(
-                    "SELECT customer_id, email FROM customer_emails"):
-                if r["email"]:
-                    email_map.setdefault(r["email"].strip().lower(),
-                                         r["customer_id"])
-        except Exception:
-            pass  # table name drift — canonical column already covered
 
         matches = []
         for g in rows:
