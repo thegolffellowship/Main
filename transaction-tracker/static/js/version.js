@@ -1,5 +1,15 @@
-window.TGF_VERSION = "2.69.7";
+window.TGF_VERSION = "2.70.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.70.0",
+    date: "2026-07-11",
+    changes: [
+      "GG HISTORY INGEST ENGINE (Phase A) -- Kerry RATIFIED the gg_history_* schema in-session and directed the start: slowly, backwards chronologically. New email_parser/gg_history.py ships the six ratified tables (portals registry seeded with all 61 entries and Kerry's brand rulings, pages catalog, standings, events, results, name-links review queue) plus the Phase-A walker: per portal it discovers league_id and the full page catalog, then for every standings-kind page archives the raw widget response into gg_raw_archive BEFORE parsing (the GG-prune insurance), banks verbatim standings rows with parsed rank/points/money, and identity-links through the scoring resolver cascade -- never creating customers; unmatched names queue as pending for Kerry's review.",
+      "Bridge commands on probe_golf_genius (stale-session-safe, same pattern as the scoring bridges): scoring-gg-history:seed | status | ingest=<subdomain>[@<budget_s>]. Ingest is resumable and time-budgeted with polite 1s pacing and per-page commits.",
+      "TWO MAN TOUR LANE (Kerry): the Tour 'needs its own home' -- no functional crossover with TGF currently. Tour portals ingest LAST under the hard brand filter; TGF members who played Tour events still identity-link by customer_id so the future partner build inherits connected history.",
+      "Parser + classifier unit-verified against both captured eras: the 2016 season_points shape (Number/Player/Points/Purse with the folded Totals row) and the modern season_points_v2 shape (T-ranks, Points Behind Lead, no purse).",
+    ],
+  },
   {
     version: "2.69.7",
     date: "2026-07-11",
