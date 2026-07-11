@@ -302,6 +302,27 @@ Matches · 2026 TGF CHAMPIONSHIP.
 **SCOPE RULING (Kerry, 2026-07-11, in-session): TGF + Two Man Tour.**
 The two Non-TGF Events leagues (2021, 2022) are EXCLUDED from ingest.
 
+**BRAND CLASSIFICATION (Kerry, 2026-07-11, in-session — authoritative):**
+- **Two Man Challenge Series (2020) = TGF** — pre-Two Man Tour era.
+  (Interpretation pending Kerry confirm: Two Man 2021/2022/2023 read as
+  the same pre-Tour TGF lineage — their portals carry TGF HANDICAPS and
+  Fellowship Cup pages — with the separate Two Man Tour brand starting
+  at the 2024 per-course events.)
+- **Road Trips = TGF** (all years). **2024 Road Trip = TGF + one Two Man
+  Tour event inside** — ingest the league as TGF, tag the Tour event at
+  the event level.
+- **Hill Country Two Man Challenge (both 2023 leagues) = TGF.**
+- **2023 Red Blue Challenge = TGF.**
+- **Rough Water Cup = non-TGF → EXCLUDED** (joins the Non-TGF Events
+  leagues outside scope).
+- **2022 Trinity River Cup = TGF** — a DFW vs Houston Ryder-Cup-style
+  event (closed-chapter history; LSC-hierarchy relevant).
+- **Two Man Tour = SEPARATE BRAND, kept for a future Two Man Tour
+  partner build.** Ingest and identity-link its data, but it is TOTALLY
+  SEPARATE from TGF today: excluded from TGF career stats, trophy case,
+  and member-facing Spotlight surfaces. `brand` is a hard filter, not a
+  display label.
+
 **Reconciliation after the guess sweeps.** Pattern probing recovered 7
 more live portals (roadtrip2020–2022, twoman2020–2022, twomantour —
 now in the registry above), bringing the walkable set to **36 portals**.
@@ -390,6 +411,11 @@ CREATE TABLE gg_history_portals (
     chapter       TEXT,                      -- NULL for one-offs
     season        TEXT,                      -- '2016'; NULL if multi-year
     kind          TEXT NOT NULL,             -- 'season' | 'oneoff'
+    brand         TEXT NOT NULL,             -- 'TGF' | 'TwoManTour' (Kerry's
+                                             -- 2026-07-11 ruling: hard filter —
+                                             -- TwoManTour is banked + linked but
+                                             -- excluded from TGF career stats,
+                                             -- trophy case, member Spotlight)
     source        TEXT NOT NULL,             -- 'recon' | 'gg-links'
     status        TEXT NOT NULL,             -- 'alive' | 'gone'
     website_id    TEXT, league_id TEXT,      -- discovered per recipe
@@ -431,6 +457,9 @@ CREATE TABLE gg_history_events (
     portal_id     INTEGER NOT NULL REFERENCES gg_history_portals(id),
     season        TEXT, chapter TEXT,
     event_label   TEXT, event_date TEXT, course TEXT,
+    brand         TEXT,                      -- NULL = inherit portal brand;
+                                             -- set for hybrids (2024 Road Trip's
+                                             -- Two Man Tour event inside a TGF league)
     gg_round_id   TEXT, gg_round_index INTEGER,
     tracker_event_id INTEGER REFERENCES events(id),  -- link when one exists
     raw_row       TEXT
