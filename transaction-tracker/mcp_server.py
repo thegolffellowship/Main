@@ -1414,6 +1414,27 @@ def _scoring_dispatch(url: str, extract: str):
         if cmd == "scoring-payouts-preview":
             # assemble without writing — inspect what would be recorded
             return json.dumps(db.assemble_event_game_payouts(arg), indent=2)
+        if cmd == "scoring-gg-history":
+            # GG HISTORY ingest bridge (Kerry-ratified 2026-07-11; see
+            # docs/claude/gg-history.md). Sub-commands via arg:
+            #   scoring-gg-history:seed              create tables + seed registry
+            #   scoring-gg-history:status            coverage/progress report
+            #   scoring-gg-history:ingest=<subdomain>[@<budget_s>]
+            #       Phase-A standings walk of one portal; resumable —
+            #       repeat until pages_remaining == 0. url param unused.
+            from email_parser import gg_history as ggh
+            sub, _, rest = arg.partition("=")
+            sub = sub.strip().lower()
+            if sub == "seed":
+                return json.dumps(ggh.seed_portal_registry(), indent=2)
+            if sub == "status":
+                return json.dumps(ggh.gg_history_status(), indent=2)
+            if sub == "ingest" and rest:
+                dom, _, budget = rest.partition("@")
+                return json.dumps(ggh.ingest_portal(
+                    dom.strip(), budget_seconds=int(budget or 240)), indent=2)
+            return json.dumps({"error": "usage: scoring-gg-history:seed | "
+                               "status | ingest=<subdomain>[@<budget_s>]"})
         if cmd == "scoring-payouts-bulk-paid":
             # "scoring-payouts-bulk-paid:<YYYY-MM-DD>" — one-time cleanup:
             # mark every pending payout group from events before the date

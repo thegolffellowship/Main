@@ -430,7 +430,8 @@ Player Event Standings, or need their own URLs from Kerry.
    — the ingest walker must try a type list per page kind and record
    which answered (registry column), not hard-code one.
 
-## Proposed ingest schema (RULE-3B PROPOSAL — awaiting Kerry ratification)
+## Ingest schema (**RATIFIED** — Kerry in-session 2026-07-11: "let's start
+## per your direction", after reviewing #113/#116 + CA's #120)
 
 Follows the ratified house patterns: customer_id FK at design time
 (rule 6), verbatim raw snapshots (past-events-frozen, principle 4),
@@ -543,12 +544,50 @@ Notes:
   portals before one-offs; time-budgeted bridge commands
   (`gg-history-ingest:<subdomain>` pattern) repeated until done.
 
-## INVENTORY status & next steps
+## INGEST ENGINE (v2.70.0 — Phase A live)
 
-- [x] Coverage map: 29 portals walked, nav + page ids banked (this doc)
-- [x] Access recipe proven (2016 standings + DFW 2024 results end-to-end)
-- [x] ONE-OFFS category seeded (3 portals + the sa2025 Hill Country page)
-- [ ] Kerry ratifies gg_history_* schema (rule 3b) → then INGEST begins
-- [ ] Kerry's `gg-links` mailbox intake — walker consumes any URLs posted
-- [ ] INGEST phase: league_id sweep, widget-type registry fill, raw-first
-      ingest newest-first, identity link + review queue
+`email_parser/gg_history.py` + MCP bridge commands on `probe_golf_genius`
+(pass as `extract`; url param is ignored for seed/status):
+
+- `scoring-gg-history:seed` — creates the six tables + seeds the 61-row
+  portal registry (idempotent; brands per Kerry's rulings).
+- `scoring-gg-history:ingest=<subdomain>[@<budget_s>]` — Phase-A walk of
+  one portal: home fetch → league_id/website_id + full nav page catalog
+  (`gg_history_pages`, kind-classified) → for every standings-kind page
+  (season_standings / monthly_points / money_leaders): iframe widget
+  discovery (fallback season_points_v2 → season_points), **raw archived
+  to gg_raw_archive BEFORE parsing**, rows into `gg_history_standings`
+  (verbatim name + parsed rank/points/money_cents + raw_row JSON),
+  identity via `_resolve_scoring_player` (never creates customers;
+  misses → `gg_history_name_links` 'pending'). Resumable + time-budgeted
+  (default 240s): repeat until `pages_remaining == 0`. 1s sleep between
+  pages (polite pacing). Per-page commit.
+- `scoring-gg-history:status` — registry-wide progress + linked/pending
+  counts.
+
+Phase B (event_results: round-selector enumeration → /v2tournaments
+partials → gg_history_events/gg_history_results; match_play pages;
+scorecard-depth via import_gg_scorecards) builds on the same page
+catalog. Directory pages are login-walled (skipped); `images`-widget
+pages record widget_type='images' with no rows.
+
+Ingest order (Kerry: slowly, backwards chronologically): the 2025 wave
+(sa2025, austin2025, champ25, lonestarcup25, roadtrip25) → 2024 wave
+(incl. DFW/Houston finales) → … → 2016. **Two Man Tour portals ingest
+LAST and live in their own brand lane** (Kerry 2026-07-11: the Tour
+"needs its own Two Man Tour home… no functional crossover currently" —
+TGF members who played Tour events still identity-link via customer_id,
+ready for the future partner build, invisible on TGF surfaces).
+
+## Status
+
+- [x] Coverage map complete: 59 live portals, every in-scope league
+- [x] Access recipe proven both eras; naming chaos catalogued
+- [x] Schema RATIFIED (Kerry 2026-07-11) — tables ship in v2.70.0
+- [x] Phase-A ingest engine + bridge commands (v2.70.0)
+- [ ] 2025 wave ingest → verify vs known results → proceed backwards
+- [ ] Phase B: event results + match play + scorecard depth
+- [ ] Kerry review queue: pending name links on COO action items (build
+      the surfacing hook when the first pending batch exists)
+- [ ] Two Man Tour lane (last): verify per-course events inside
+      tgf-twomantour; ingest under brand='TwoManTour'
