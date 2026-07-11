@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.69.0";
+window.TGF_VERSION = "2.69.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.69.1",
+    date: "2026-07-11",
+    changes: [
+      "GG HISTORY INVENTORY COMPLETE (mailbox #100/#102/#105/#106 -- the Kerry-approved plan's phase 1): an automated walker probed every archive portal and the coverage map is banked in docs/claude/gg-history.md. 29 portals total: SA 2016-2025, Austin 2019-2025, DFW 2020-2024 and Houston 2021-2024 (the closed chapters keep per-year subdomains -- all alive -- while their main tgf-dfw/tgf-houston portals are dead corporate redirects), plus the three one-offs (Hill Country, Two Man, Road Trip 2023). Every page id for every season's results, standings, match play, money, and monthly races is catalogued.",
+      "THE ACCESS RECIPE IS PROVEN, overturning the walkers' first-pass 'JS-widget, unreachable' verdict: each portal's league_id sits in a hidden input in any page's HTML body, and the widget routes (/leagues/<id>/widgets/season_points[_v2]?page_id=...) plus the /v2tournaments XHR partials serve full tables server-side. Demonstrated end-to-end on the OLDEST data (the complete 66-player 2016 SA points race, with career purse figures) and the NEWEST closed-chapter data (DFW 2024 event results with machine-readable member ids). Name format across eras is 'LASTNAME, First'; guests render mixed-case.",
+      "Proposed gg_history_* ingest schema (portals/pages/standings/events/results/name-links, customer_id FKs per rule 6, raw snapshots into the existing gg_raw_archive before any parsing) is documented in gg-history.md and posted to the mailbox for Kerry's rule-3b ratification. NO TABLES SHIP in this release -- ingest starts only after ratification.",
+    ],
+  },
   {
     version: "2.69.0",
     date: "2026-07-10",
