@@ -9394,6 +9394,14 @@ def api_gg_history_resolve():
     return (jsonify(res), 400) if res.get("error") else jsonify(res)
 
 
+@app.route("/api/gg-history/customer-search")
+@require_role("admin")
+def api_gg_history_customer_search():
+    from email_parser import gg_history as ggh
+    return jsonify(ggh.search_customers_for_link(
+        request.args.get("q", ""), limit=10))
+
+
 # ── Player Spotlight (ADMIN PREVIEW v1 — Kerry, 2026-07-10) ──
 # Destined for the pinless member view after CA/CD iteration: the payloads
 # are PII-free by design, so opening it up later is a role change only.

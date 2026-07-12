@@ -215,23 +215,42 @@
                         ${n.hole_rounds || 0} hole rounds${rows === 0 ? " (no data rows — likely an artifact)" : ""}</div>
                     <div class="ggh-actions">
                         ${cands}
-                        <input type="number" placeholder="customer #" style="width:100px;border:1px solid var(--border);border-radius:8px;padding:5px 8px;font-size:12px;" id="cid-${n.id}">
-                        <button class="ggh-btn primary" data-act="link" data-id="${n.id}">Link</button>
+                        <input type="search" placeholder="search name to link…" autocomplete="off" style="width:170px;border:1px solid var(--border);border-radius:8px;padding:5px 8px;font-size:12px;" id="cid-${n.id}">
                         <button class="ggh-btn" data-act="guest" data-id="${n.id}">Guest</button>
                         <button class="ggh-btn" data-act="not_a_person" data-id="${n.id}">Not a person</button>
                     </div>
+                    <div class="ggh-actions" id="sr-${n.id}"></div>
                 </div>`;
             }).join("") || '<p class="ggh-muted">Queue is empty — every name has a ruling. 🎉</p>');
 
             $("ggh-queue").querySelectorAll(".ggh-cand").forEach(el =>
                 el.addEventListener("click", () => resolve(el.dataset.id, "link", el.dataset.cid)));
             $("ggh-queue").querySelectorAll(".ggh-btn[data-act]").forEach(el =>
-                el.addEventListener("click", () => {
-                    const id = el.dataset.id;
-                    const cid = el.dataset.act === "link" ? $("cid-" + id).value : null;
-                    if (el.dataset.act === "link" && !cid) { $("cid-" + id).focus(); return; }
-                    resolve(id, el.dataset.act, cid);
-                }));
+                el.addEventListener("click", () => resolve(el.dataset.id, el.dataset.act, null)));
+            // live name search → tappable Link chips (Kerry doesn't know
+            // customer numbers; typing a number still works)
+            $("ggh-queue").querySelectorAll("input[type=search]").forEach(inp => {
+                const id = inp.id.slice(4);
+                let timer = null;
+                inp.addEventListener("input", () => {
+                    clearTimeout(timer);
+                    const q = inp.value.trim();
+                    if (q.length < 2) { $("sr-" + id).innerHTML = ""; return; }
+                    timer = setTimeout(async () => {
+                        const res = await fetch("/api/gg-history/customer-search?q=" + encodeURIComponent(q));
+                        if (!res.ok) return;
+                        const hits = await res.json();
+                        $("sr-" + id).innerHTML = hits.map(c =>
+                            `<span class="ggh-cand" data-id="${id}" data-cid="${c.customer_id}"
+                                title="${esc(c.current_player_status || "")}">Link:
+                                ${esc((c.first_name || "") + " " + (c.last_name || ""))}
+                                <span class="cid">#${c.customer_id}${c.chapter ? " · " + esc(c.chapter) : ""}</span></span>`).join(" ")
+                            || '<span class="ggh-muted" style="font-size:12px;">No matching customers.</span>';
+                        $("sr-" + id).querySelectorAll(".ggh-cand").forEach(el =>
+                            el.addEventListener("click", () => resolve(el.dataset.id, "link", el.dataset.cid)));
+                    }, 300);
+                });
+            });
         }
 
         async function resolve(id, action, customerId) {
