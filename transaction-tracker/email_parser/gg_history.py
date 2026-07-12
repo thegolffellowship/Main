@@ -1072,3 +1072,184 @@ def roster_create_members(db_path=None) -> dict:
                      AND m.customer_id IS NOT NULL)""")
         conn.commit()
     return stats
+
+
+# ── #123-amendment retrofit + #127 guardrails + #128 enrichment ──────────
+# (Kerry's #123 ratification amendments crossed mid-flight with the
+#  v2.70.0 build — mailbox #126 requires explicit retrofit before the
+#  2024 wave; #127 adds option-b guardrails; #128 directs at-birth
+#  contact enrichment from the roster data already held.)
+
+def amendments_123_retrofit(db_path=None) -> dict:
+    """Retrofit the three unshipped #123 amendments onto live data.
+
+    (a) position verbatim: ADD gg_history_standings.position_raw TEXT,
+        backfilled from raw_row (the verbatim rank cell, e.g. 'T6' —
+        raw_row preserved it all along, so nothing was lost).
+    (b) identity keys: ADD gg_history_name_links.gg_member_id TEXT
+        (preferred match key, backfilled from the master map); true
+        name collisions (same handle → multiple customer_ids) FORCED
+        to pending. NOTE: the 3-col uniqueness rebuild is deferred to
+        the review-UI build (SQLite table rebuild; flagged in the
+        mailbox confirm — current writers depend on the 2-col target).
+    (c) ADD gg_history_standings.contest_kind TEXT (nullable) +
+        (season, chapter) index; customer_id index existed from v2.70.0.
+    Plus the #127 guardrail-3 audit: created gg_roster profiles whose
+    name collides with a pre-existing customer are flagged for Kerry's
+    review lane (never auto-merged, never auto-split).
+    """
+    from email_parser.database import _connect, DB_PATH
+    rep = {"position_raw_backfilled": 0, "gg_member_id_backfilled": 0,
+           "collisions_forced_pending": 0, "dup_name_review": []}
+    with _connect(db_path or DB_PATH) as conn:
+        ensure_gg_history_tables(conn)
+        ensure_gg_member_map(conn)
+        for ddl in (
+            "ALTER TABLE gg_history_standings ADD COLUMN position_raw TEXT",
+            "ALTER TABLE gg_history_standings ADD COLUMN contest_kind TEXT",
+            "ALTER TABLE gg_history_name_links ADD COLUMN gg_member_id TEXT",
+        ):
+            try:
+                conn.execute(ddl)
+            except Exception:
+                pass  # already applied
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_ggh_standings_season "
+                     "ON gg_history_standings(season, chapter)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_ggh_namelinks_ggid "
+                     "ON gg_history_name_links(gg_member_id)")
+
+        # (a) verbatim rank backfill from raw_row
+        rows = conn.execute(
+            "SELECT id, position, raw_row FROM gg_history_standings "
+            "WHERE position_raw IS NULL").fetchall()
+        for r in rows:
+            verbatim = None
+            try:
+                cells = json.loads(r["raw_row"])
+                for c in cells:
+                    s = str(c).strip()
+                    if re.fullmatch(r"T?\d+", s) and _rank_to_int(s) == r["position"]:
+                        verbatim = s
+                        break
+            except Exception:
+                pass
+            conn.execute(
+                "UPDATE gg_history_standings SET position_raw=? WHERE id=?",
+                (verbatim if verbatim is not None else
+                 (str(r["position"]) if r["position"] is not None else None),
+                 r["id"]))
+            rep["position_raw_backfilled"] += 1
+
+        # (b) preferred key backfill + collision forcing
+        rep["gg_member_id_backfilled"] = conn.execute(
+            """UPDATE gg_history_name_links SET gg_member_id = (
+                   SELECT m.gg_member_id FROM gg_member_map m
+                   WHERE m.handle = gg_history_name_links.raw_name
+                     AND m.gg_member_id NOT LIKE '%:%')
+               WHERE gg_member_id IS NULL""").rowcount
+        collisions = conn.execute(
+            """SELECT handle FROM gg_member_map
+               WHERE customer_id IS NOT NULL AND handle IS NOT NULL
+               GROUP BY handle HAVING COUNT(DISTINCT customer_id) > 1"""
+        ).fetchall()
+        for c in collisions:
+            n = conn.execute(
+                """UPDATE gg_history_name_links
+                   SET matched_by='pending', customer_id=NULL
+                   WHERE raw_name=? AND matched_by != 'pending'""",
+                (c["handle"],)).rowcount
+            rep["collisions_forced_pending"] += n
+
+        # #127 guardrail 3: dup-name review lane for created profiles
+        dups = conn.execute(
+            """SELECT c.customer_id, c.first_name, c.last_name
+               FROM customers c
+               WHERE c.acquisition_source='gg_roster' AND EXISTS (
+                   SELECT 1 FROM customers o
+                   WHERE o.customer_id != c.customer_id
+                     AND LOWER(o.first_name)=LOWER(c.first_name)
+                     AND LOWER(o.last_name)=LOWER(c.last_name))""").fetchall()
+        for d in dups:
+            conn.execute(
+                """UPDATE gg_member_map SET matched_by='review_dup_name'
+                   WHERE customer_id=?""", (d["customer_id"],))
+            rep["dup_name_review"].append(
+                f"#{d['customer_id']} {d['first_name']} {d['last_name']}")
+        conn.commit()
+    return rep
+
+
+def enrich_created_members(db_path=None) -> dict:
+    """#128: fill phone + DOB on gg_roster-created profiles from the
+    roster contact file. Never overwrites existing values; only touches
+    acquisition_source='gg_roster' profiles (born tonight, all-NULL)."""
+    import csv as _csv
+    from pathlib import Path
+    from email_parser.database import _connect, DB_PATH
+    path = Path(__file__).parent / "data/gg_master_roster_v6_contact.csv"
+    rep = {"phones_set": 0, "dobs_set": 0}
+    with open(path, newline="", encoding="utf-8") as fh:
+        contacts = {r["handle"]: r for r in _csv.DictReader(fh)}
+    with _connect(db_path or DB_PATH) as conn:
+        try:
+            conn.execute("ALTER TABLE customers ADD COLUMN date_of_birth TEXT")
+        except Exception:
+            pass
+        rows = conn.execute(
+            """SELECT c.customer_id, m.handle
+               FROM customers c
+               JOIN gg_member_map m ON m.customer_id = c.customer_id
+                    AND m.gg_member_id NOT LIKE '%:%'
+               WHERE c.acquisition_source='gg_roster'""").fetchall()
+        for r in rows:
+            ct = contacts.get(r["handle"])
+            if not ct:
+                continue
+            if ct.get("cell_phone"):
+                n = conn.execute(
+                    """UPDATE customers SET phone=?
+                       WHERE customer_id=? AND (phone IS NULL OR phone='')""",
+                    (ct["cell_phone"], r["customer_id"])).rowcount
+                rep["phones_set"] += n
+            if ct.get("dob"):
+                n = conn.execute(
+                    """UPDATE customers SET date_of_birth=?
+                       WHERE customer_id=? AND (date_of_birth IS NULL
+                                                OR date_of_birth='')""",
+                    (ct["dob"], r["customer_id"])).rowcount
+                rep["dobs_set"] += n
+        conn.commit()
+    return rep
+
+
+def archive_widget_page(subdomain: str, gg_page_id: str, db_path=None) -> dict:
+    """#126 item 3: archive a page's widget HTML verbatim (e.g. the LSC
+    2025 money page whose content is an uploaded image). The image file
+    itself lives on cloudfront, outside the SSRF allowlist — the archived
+    HTML pins its URL; the money DATA is already banked via the export."""
+    from email_parser.database import _connect, DB_PATH
+    from golf_genius_sync import fetch_public_page
+    base = f"https://{subdomain}.golfgenius.com"
+    pg = fetch_public_page(f"{base}/pages/{gg_page_id}")
+    if pg["status_code"] != 200:
+        return {"error": f"page fetch {pg['status_code']}"}
+    im = _IFRAME_WIDGET_RE.search(pg["html"])
+    target_url, html = (f"{base}/pages/{gg_page_id}", pg["html"])
+    if im:
+        src = im.group(1)
+        if src.startswith("/"):
+            src = base + src
+        w = fetch_public_page(src)
+        if w["status_code"] == 200:
+            target_url, html = src, w["html"]
+    img = re.search(r"<img[^>]+src=[\"']([^\"']+cloudfront[^\"']+)[\"']",
+                    html, re.I)
+    with _connect(db_path or DB_PATH) as conn:
+        raw_id = _archive_raw(conn, target_url, html)
+        conn.execute(
+            """UPDATE gg_history_pages SET raw_archive_id=?
+               WHERE gg_page_id=? AND raw_archive_id IS NULL""",
+            (raw_id, gg_page_id))
+        conn.commit()
+    return {"archived_url": target_url, "raw_archive_id": raw_id,
+            "image_url": img.group(1) if img else None}

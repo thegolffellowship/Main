@@ -1439,6 +1439,19 @@ def _scoring_dispatch(url: str, extract: str):
                 return json.dumps(
                     ggh.roster_ingest(apply=(rest.strip() == "apply")),
                     indent=2)
+            if sub == "retrofit-123":
+                # mailbox #126: retrofit Kerry's #123 ratification
+                # amendments that crossed mid-flight with the v2.70 build
+                return json.dumps(ggh.amendments_123_retrofit(), indent=2)
+            if sub == "enrich-contacts":
+                # mailbox #128: at-birth contact enrichment for the
+                # gg_roster-created profiles (phone + DOB from the roster)
+                return json.dumps(ggh.enrich_created_members(), indent=2)
+            if sub == "archive-page" and rest:
+                dom, _, pid = rest.partition(":")
+                return json.dumps(
+                    ggh.archive_widget_page(dom.strip(), pid.strip()),
+                    indent=2)
             if sub == "roster-create-members":
                 # Kerry-directed 2026-07-11: create customer profiles for
                 # unmatched TGF/Former roster members (never guests/leads)

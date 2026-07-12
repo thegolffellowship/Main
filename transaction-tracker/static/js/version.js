@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.73.0";
+window.TGF_VERSION = "2.73.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.73.1",
+    date: "2026-07-11",
+    changes: [
+      "MAILBOX #126-#128 COMPLIANCE BATCH. #123-amendment retrofit (the ratification amendments crossed mid-flight with the v2.70.0 build): gg_history_standings gains position_raw (verbatim 'T6' ranks backfilled from raw_row -- nothing was ever lost) and contest_kind + a (season,chapter) index; gg_history_name_links gains gg_member_id as the preferred match key (backfilled from the master map), and any handle mapping to multiple customers is FORCED to pending -- never auto-linked. The 3-column uniqueness rebuild is deferred to the review-UI build and flagged in the mailbox.",
+      "#127 GUARDRAILS on the created profiles: historical status verified (expired_member + gg_roster source); marketing-flow exclusion enforced in code (the re-engagement sender now skips gg_roster profiles with an explicit reason -- Brevo/HubSpot don't exist in this stack, so no sync to disable); dup-name review lane live (created profiles colliding with existing names get flagged review_dup_name, never auto-merged -- the fixture immediately caught the roster's own two distinct Joe Kryszaks); cross-chapter principle upheld by construction (chapter was never a match signal).",
+      "#128 ENRICH AT BIRTH: gg_roster profiles get phone + date-of-birth (guarded new customers column) synced from the roster contact file (850 contact rows staged; never overwrites existing values, only touches gg_roster profiles). LSC 2025 money-image page: widget HTML archived verbatim with the cloudfront image URL pinned (the image host is outside the SSRF allowlist; the money DATA is already banked via the export).",
+    ],
+  },
   {
     version: "2.73.0",
     date: "2026-07-11",
