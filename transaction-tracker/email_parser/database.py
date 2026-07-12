@@ -7767,9 +7767,23 @@ def get_player_spotlight(customer_id: int,
         if row.get("member_card_id"):
             member_card = member_card or {
                 "race": key, "card": row["member_card_id"]}
+        # Flighted races (Players Cup) rank WITHIN the flight (Kerry,
+        # 2026-07-12) — "16 of 119" is meaningless when the money and the
+        # race are per-flight; show "4 of 32 · 2ND FLIGHT" instead.
+        rank, n_players = row["rank"], d["n_players"]
+        if row.get("flight"):
+            mates = [r for r in d["standings"]
+                     if r.get("flight") == row["flight"]]
+            mine = row.get("total_points") or 0
+            better = sum(1 for r in mates
+                         if (r.get("total_points") or 0) > mine)
+            tied = sum(1 for r in mates
+                       if (r.get("total_points") or 0) == mine)
+            rank = ("T" if tied > 1 else "") + str(better + 1)
+            n_players = len(mates)
         races.append({
             "key": key, "label": d["label"],
-            "rank": row["rank"], "n_players": d["n_players"],
+            "rank": rank, "n_players": n_players,
             "total_points": row.get("total_points"),
             "tournaments": row.get("tournaments"),
             "wins": row.get("wins"),

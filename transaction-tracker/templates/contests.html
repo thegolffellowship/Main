@@ -3209,7 +3209,7 @@
                 ? ` <span style="color:var(--text-muted);font-size:0.82em;" title="Current 18-hole handicap index">(${r.handicap_index.toFixed(1)})</span>`
                 : '';
             return `<tr style="${bg}${expandable ? 'cursor:pointer;' : ''}"${r.member_card_id ? ` data-card="${r.member_card_id}"` : ''}${r.customer_id ? ` data-cid="${r.customer_id}"` : ''}>
-                <td style="${rankStyle}">${escapeHtml(r.rank)}${prRankMove(r.rank, r.prev_rank)}</td>
+                <td style="${rankStyle}">${escapeHtml(r._flightRank ?? r.rank)}${prRankMove(r.rank, r.prev_rank)}</td>
                 <td>${nameCell}${hcp}${chevron}${prPayBadge(r)}</td>
                 ${showChapter ? `<td style="${chapStyle}" title="${escapeHtml(r.player_chapter || "")}">${escapeHtml(compact ? prAbbrevChapter(r.player_chapter) : (r.player_chapter || ""))}</td>` : ""}
                 <td style="${ptsStyle}">${r.total_points ?? ""}</td>
@@ -3227,6 +3227,13 @@
             for (const f of d.flights) {
                 const members = d.standings.filter(r => r.flight === f.label);
                 if (!members.length) continue;
+                for (let i = 0; i < members.length; ) {
+                    let j = i + 1;
+                    while (j < members.length && members[j].total_points === members[i].total_points) j++;
+                    const t = j - i > 1 ? "T" : "";
+                    for (let g = i; g < j; g++) members[g]._flightRank = t + (i + 1);
+                    i = j;
+                }
                 sections.push(`<tr><td colspan="${nCols}" class="pr-wrap" style="background:#111;color:#fff;font-weight:700;font-size:0.82rem;letter-spacing:0.04em;">${escapeHtml(f.label.toUpperCase())} <span style="font-weight:400;">(${escapeHtml(f.range)}) — ${members.length} player${members.length === 1 ? "" : "s"}</span></td></tr>`);
                 sections.push(members.map(rowHtml).join(""));
             }
