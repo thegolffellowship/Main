@@ -7475,19 +7475,23 @@ def _spotlight_scoring(conn, customer_id: int) -> dict | None:
     (mailbox #103/#104 — design-claude's density pass; Kerry asked for
     "simple, not big" individual scoring stats).
 
-    Window = the player's LAST 20 tracked rounds (scoring_rounds, both
-    9- and 18-hole) for averages/distribution. Trend = recent FORM off
-    the last 10 rounds only (Kerry, 2026-07-12): latest 5 vs the 5
-    before, earned at 10+ tracked rounds. Negative
+    Window = ALL of the CURRENT SEASON's tracked rounds (Kerry,
+    2026-07-12: averages + the birdies/pars distribution show the whole
+    year; the calendar-year filter also keeps archive-era imports out
+    by construction). Trend = recent FORM off the last 10 rounds only:
+    latest 5 vs the 5 before, earned at 10+ tracked rounds. Negative
     trend = improving (fewer strokes). Par comes from course_tee_holes
     via the round's tee; holes with no strokes or no par are skipped.
     Returns None when the player has no tracked rounds.
     """
+    from .timezone_utils import today_central
+    season_start = f"{today_central().year}-01-01"
     rounds = conn.execute(
         """SELECT id, holes_played, gross FROM scoring_rounds
            WHERE customer_id = ? AND gross IS NOT NULL
-           ORDER BY round_date DESC, id DESC LIMIT 20""",
-        (customer_id,),
+             AND round_date >= ?
+           ORDER BY round_date DESC, id DESC""",
+        (customer_id, season_start),
     ).fetchall()
     if not rounds:
         return None
