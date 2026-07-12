@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.76.5";
+window.TGF_VERSION = "2.77.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.77.0",
+    date: "2026-07-12",
+    changes: [
+      "Spotlight -> Contests now lands ON the player (Kerry): the Where They Stand links carry the player through the hash, and after the standings render the page scrolls their row to center with a soft orange pulse. Works for every race view; member and admin alike.",
+      "IN-THE-MONEY DRAMA LINES LIVE (#99 items 1/3 under CA GO #120's bind conditions -- canonical templates are SERVER-side, every number from the live payload): each Where They Stand row now carries an incentive line colored by state. Leader: 'Leading the race -- $X projected today' (green). In the money: '$X projected · N pts to the next rung' (green). Chasing: 'Only N pts from the money ($X)' (orange). Not entered: '$X pot and growing -- not entered yet' (gray). Numbers come from the ratified in_reach block (projected payout, next rung, live pot).",
+    ],
+  },
   {
     version: "2.76.5",
     date: "2026-07-12",

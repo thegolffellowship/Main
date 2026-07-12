@@ -7710,6 +7710,38 @@ def get_player_spotlight(customer_id: int,
             "pot_cents": (pp or {}).get("pot_cents"),
         }
 
+    # Canonical SERVER-SIDE drama lines (#99 items 1/3, CA GO #120 bind
+    # conditions: templates live here, every number from the live
+    # payload). kind drives the UI color: leader/in_money/chase/invite.
+    def _drama_money(c):
+        d = c / 100
+        return "$" + (f"{d:,.2f}" if c % 100 else f"{d:,.0f}")
+
+    def drama_for(rank, enrolled, reach, pot_cents):
+        if not enrolled:
+            return ({"kind": "invite",
+                     "text": f"{_drama_money(pot_cents)} pot and growing — not entered yet"}
+                    if pot_cents else None)
+        if not reach:
+            return None
+        my = reach.get("projected_payout_cents") or 0
+        nxt, gap = reach.get("next_payout_cents"), reach.get("points_to_next")
+        if my and str(rank) in ("1", "T1"):
+            return {"kind": "leader",
+                    "text": f"Leading the race — {_drama_money(my)} projected today"}
+        if my:
+            t = f"In the money — {_drama_money(my)} projected"
+            if nxt and gap is not None:
+                t += f" · {gap:g} pts to the {_drama_money(nxt)} rung"
+            return {"kind": "in_money", "text": t}
+        if nxt and gap is not None:
+            return {"kind": "chase",
+                    "text": f"Only {gap:g} pts from the money ({_drama_money(nxt)})"}
+        if nxt:
+            return {"kind": "chase",
+                    "text": f"First money rung: {_drama_money(nxt)}"}
+        return None
+
     races, errors, events_played = [], [], 0
     race_pots: dict = {}
     member_card = None
@@ -7747,6 +7779,9 @@ def get_player_spotlight(customer_id: int,
             "in_reach": in_reach_for(row, d["standings"], pp,
                                      "total_points"),
         })
+        races[-1]["drama"] = drama_for(
+            row["rank"], bool(row.get("enrolled")), races[-1]["in_reach"],
+            (pp or {}).get("pot_cents"))
     try:
         cup = get_fellowship_cup_projection(db_path=db_path)
         pp = cup.get("projected_payouts")
@@ -7768,6 +7803,9 @@ def get_player_spotlight(customer_id: int,
                 "in_reach": in_reach_for(crow, cup["standings"], pp,
                                          "points_reset"),
             })
+            races[-1]["drama"] = drama_for(
+                crow["rank"], bool(crow.get("enrolled")),
+                races[-1]["in_reach"], (pp or {}).get("pot_cents"))
     except Exception as e:
         errors.append(f"fellowship cup: {e}")
 
