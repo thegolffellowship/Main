@@ -350,7 +350,11 @@
                 `<span class="spt-pill ${entered ? "in" : "out"}">${entered ? "In" : "Not In"}</span>` +
                 `${href ? '<span class="spt-go">&rsaquo;</span></a>' : "</div>"}`;
             const rows = [];
-            (d.races || []).forEach(r => {
+            // display order (Kerry 2026-07-12): Fellowship Cup above Players Cup
+            const RACE_ORDER = { san_antonio_net: 0, austin_net: 1, fellowship_cup: 2, players_cup_gross: 3 };
+            const orderedRaces = (d.races || []).slice()
+                .sort((a, b) => (RACE_ORDER[a.key] ?? 9) - (RACE_ORDER[b.key] ?? 9));
+            orderedRaces.forEach(r => {
                 const pc = r.key === "players_cup_gross";
                 const metaBits = [];
                 if (r.total_points != null) metaBits.push(`${r.total_points} pts`);
