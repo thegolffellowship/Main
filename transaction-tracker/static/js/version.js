@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.77.2";
+window.TGF_VERSION = "2.77.3";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.77.3",
+    date: "2026-07-12",
+    changes: [
+      "MEMBER APP INSTALL FIX (Adam Baker's Android, via Kerry): installing the app from a /member page launched at the manifest's start_url (/events -- the PIN-gated admin landing), stripping the member context. The three member pages now serve a dedicated member manifest (manifest-member.json: name 'The Golf Fellowship -- Members', start_url /member/contests), so a home-screen app added from any member page opens pinless on the member view. Android reads the manifest of the page it was installed from; existing broken icons need a remove + re-add.",
+    ],
+  },
   {
     version: "2.77.2",
     date: "2026-07-12",
