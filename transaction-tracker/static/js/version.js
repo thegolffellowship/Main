@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.76.3";
+window.TGF_VERSION = "2.76.4";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.76.4",
+    date: "2026-07-12",
+    changes: [
+      "Spotlight scoring stats now cover ALL of the current season (Kerry): par-3/4/5 averages, gross averages, and the eagles/birdies/pars/bogeys distribution compute over every 2026 tracked round (was a rolling last-20 window); the stat-strip label reads 'N rounds this season'. Trends stay recent-form (last 10 rounds, 5 vs 5) per the earlier ruling. The calendar-year filter also keeps archive-era rounds out of member-visible stats by construction, honoring the 2026-only ruling as history imports grow.",
+    ],
+  },
   {
     version: "2.76.3",
     date: "2026-07-12",
