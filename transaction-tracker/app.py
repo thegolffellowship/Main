@@ -8449,6 +8449,23 @@ def api_participation_send_email():
                             "status": "skipped", "reason": "no primary email"})
             skipped += 1
             continue
+        # #127 guardrail 2 (Kerry-ratified): gg_roster historical profiles
+        # are excluded from ALL marketing flows — contact data on the
+        # profile is fine, sending to it from a marketing composer is not.
+        gconn = get_connection()
+        try:
+            src = gconn.execute(
+                "SELECT acquisition_source FROM customers WHERE customer_id=?",
+                (cid,)).fetchone()
+        finally:
+            gconn.close()
+        if src and (src["acquisition_source"] or "") == "gg_roster":
+            results.append({"customer_id": cid, "name": row.get("name"),
+                            "status": "skipped",
+                            "reason": "historical profile (gg_roster) — "
+                                      "excluded from marketing flows"})
+            skipped += 1
+            continue
         rendered = _render_participation_email(row, subject_tpl, body_tpl)
         try:
             ok = send_mail_graph(
