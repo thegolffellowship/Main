@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.76.0";
+window.TGF_VERSION = "2.76.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.76.1",
+    date: "2026-07-12",
+    changes: [
+      "Member nav mobile fit (Kerry): with three tabs, the first tab collapses to CONTESTS on mobile (the 'Season ' prefix returns on desktop) so CONTESTS | HANDICAPS | SPOTLIGHT all fit without truncation. Threshold rule reaffirmed: more sections than three moves the member view to a hamburger with the full SEASON CONTESTS label.",
+    ],
+  },
   {
     version: "2.76.0",
     date: "2026-07-12",
