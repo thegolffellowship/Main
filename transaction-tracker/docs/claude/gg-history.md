@@ -776,9 +776,30 @@ TGF/Former profiles remain Kerry's open decision (option b).
       (customer_id, date) once Phase B yields event dates — extends the
       existing handicap_rounds.scoring_round_id pattern backwards.
       (Holes walk already bridges opportunistically at import.)
-- [ ] Phase B remaining: match play brackets + pairings (Kerry's
+- [x] **sa2025 GAMES PILOT COMPLETE (2026-07-12):** all 47 rounds,
+      387 boards, 5,436 gg_history_results rows, 95.3% identity-linked.
+      Weekly MATCH PLAY boards parsed as regular tables (7–12 match
+      rows/round — much of the match data banked without a bracket
+      parser); per-round cumulative standings boards (monthly points,
+      FC, PC) banked too. CONSUMER RULE: career-money queries must
+      filter to '$'-labelled game boards or export_round rows — the
+      cumulative points/cup boards are snapshots, not money. KNOWN
+      GAPS on the spot-check list: TEAM Net $ boards parse 0 rows
+      everywhere (table shape unrecognized — team money missing);
+      some rounds list a points board twice (duplicate game_label
+      rows, raw-layer harmless).
+- [ ] austin2025 holes walk RUNNING (kicked 2026-07-12); then
+      champ25/lonestarcup25/roadtrip25 holes+games, then Austin games.
+- [ ] Phase B remaining: match play BRACKET reconstruction (weekly
+      match rows already banked via games walk) + pairings (Kerry's
       ruling: tee-sheet scrape primary / starter-sheet PDFs cross-check
-      / score-groups tiebreaker)
+      / score-groups tiebreaker). Kerry (2026-07-12, in-session) wants
+      the played-together history to feed the PAIRINGS ENGINE — plan:
+      derive pairs from banked scorecard groups (gg_aggregate_id) +
+      event_pairings; needs a Kerry-ratified pairing_history amendment
+      (customer_id keys per rule 6 + archive-event support; currently
+      name-keyed with events-FK NOT NULL). Kerry to supply his pairing
+      rules for the rules-as-data engine.
 - [x] Review UI (v2.75.0): /admin/gg-history — pending-names queue
       (Link/Guest/Not-a-person + Undo, same-surname candidate chips,
       backfill on link), per-portal coverage, standings browser. ONE
