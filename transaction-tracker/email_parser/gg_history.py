@@ -201,6 +201,11 @@ def _rebuild_name_links_3col(conn) -> None:
     gid = cols.get("gg_member_id")
     if gid is not None and gid["notnull"]:
         return  # already the 3-col shape
+    # Recover from an interrupted attempt: python-sqlite3 runs CREATE
+    # TABLE in autocommit but the INSERT below opens a transaction — a
+    # caller that closed without committing (read-only paths) left the
+    # empty _v2 shell committed while the copy/drop/rename rolled back.
+    conn.execute("DROP TABLE IF EXISTS gg_history_name_links_v2")
     conn.execute("""CREATE TABLE gg_history_name_links_v2 (
         id           INTEGER PRIMARY KEY AUTOINCREMENT,
         raw_name     TEXT NOT NULL,
@@ -222,6 +227,9 @@ def _rebuild_name_links_3col(conn) -> None:
                  "RENAME TO gg_history_name_links")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_ggh_namelinks_ggid "
                  "ON gg_history_name_links(gg_member_id)")
+    # commit HERE, unconditionally: read-only callers never commit, and a
+    # rolled-back rebuild strands the committed _v2 shell (see above)
+    conn.commit()
     logger.info("gg_history_name_links rebuilt to 3-col uniqueness "
                 "(raw_name, portal_id, gg_member_id)")
 
@@ -371,11 +379,32 @@ def _resolve_identity(conn, portal_id: int, name: str):
     otherwise. Reviewed rows (Kerry's manual decisions) are never
     overwritten by later automated passes."""
     from email_parser.database import _resolve_scoring_player
-    cid = None
+    cid, how = None, "scoring_cascade"
     try:
         cid = _resolve_scoring_player(conn, name)
     except Exception:
         cid = None
+    if cid is None:
+        # roster map: the printed handle IS the roster handle; trust it
+        # only when it maps to exactly one customer (collision-safe)
+        try:
+            rows = conn.execute(
+                """SELECT DISTINCT customer_id FROM gg_member_map
+                   WHERE handle = ? AND customer_id IS NOT NULL""",
+                (name,)).fetchall()
+            if len(rows) == 1:
+                cid, how = rows[0][0], "roster"
+        except Exception:
+            pass
+    if cid is None:
+        # an earlier ruling (manual or automated) for this name+portal
+        got = conn.execute(
+            """SELECT customer_id, matched_by FROM gg_history_name_links
+               WHERE raw_name = ? AND portal_id = ?
+                 AND customer_id IS NOT NULL LIMIT 1""",
+            (name, portal_id)).fetchone()
+        if got:
+            cid, how = got["customer_id"], got["matched_by"]
     gid = ""
     try:
         rows = conn.execute(
@@ -397,7 +426,7 @@ def _resolve_identity(conn, portal_id: int, name: str):
                                THEN excluded.matched_by
                                ELSE gg_history_name_links.matched_by END
            WHERE gg_history_name_links.reviewed = 0""",
-        (name, portal_id, cid, "scoring_cascade" if cid else "pending", gid))
+        (name, portal_id, cid, how if cid else "pending", gid))
     return cid
 
 
@@ -1218,44 +1247,55 @@ def audit_export_pair(prefix: str, db_path=None) -> dict:
     2026 prefixes: per-round gross/net vs scoring_rounds (scraped
     scorecards), joined by customer_id + date. 2025 prefixes: per-player
     export season purse totals vs the money already banked in Phase-A
-    standings rows (money_leaders pages), joined by verbatim name.
+    standings rows (money_leaders pages), joined by verbatim name — and
+    once the Phase-B hole-by-hole walk has banked the season's
+    scorecards, the SAME gross/net check the 2026 audit runs (reported
+    under "scoring"): the channels prove each other on archive years too.
     """
     from email_parser.database import _connect, DB_PATH
     if prefix not in EXPORT_PREFIXES:
         return {"error": f"unknown prefix {prefix!r}"}
     subdomain, season, chapter = EXPORT_PREFIXES[prefix]
     out = {"prefix": prefix, "checked": 0, "matches": 0, "mismatches": []}
+
+    def scoring_check(conn, sink):
+        rows = conn.execute(
+            """SELECT r.player_name, r.customer_id, r.gross AS xg,
+                      r.net AS xn, e.event_date
+               FROM gg_history_results r
+               JOIN gg_history_events e ON e.id = r.gg_event_id
+               WHERE e.portal_id = (SELECT id FROM gg_history_portals
+                                    WHERE subdomain=?)
+                 AND e.gg_round_id LIKE ?
+                 AND r.customer_id IS NOT NULL AND r.gross IS NOT NULL""",
+            (subdomain, f"export:{prefix}:%")).fetchall()
+        for r in rows:
+            sr = conn.execute(
+                """SELECT gross, net FROM scoring_rounds
+                   WHERE customer_id=? AND round_date=?""",
+                (r["customer_id"], r["event_date"])).fetchall()
+            if not sr:
+                continue
+            sink["checked"] += 1
+            ok = any(s["gross"] == r["xg"] and
+                     (r["xn"] is None or s["net"] == r["xn"])
+                     for s in sr)
+            if ok:
+                sink["matches"] += 1
+            elif len(sink["mismatches"]) < 25:
+                sink["mismatches"].append(
+                    {"player": r["player_name"], "date": r["event_date"],
+                     "export_gross": r["xg"], "export_net": r["xn"],
+                     "scraped": [dict(s) for s in sr]})
+
     with _connect(db_path or DB_PATH) as conn:
         if season == "2026":
-            rows = conn.execute(
-                """SELECT r.player_name, r.customer_id, r.gross AS xg,
-                          r.net AS xn, e.event_date
-                   FROM gg_history_results r
-                   JOIN gg_history_events e ON e.id = r.gg_event_id
-                   WHERE e.portal_id = (SELECT id FROM gg_history_portals
-                                        WHERE subdomain=?)
-                     AND e.gg_round_id LIKE ?
-                     AND r.customer_id IS NOT NULL AND r.gross IS NOT NULL""",
-                (subdomain, f"export:{prefix}:%")).fetchall()
-            for r in rows:
-                sr = conn.execute(
-                    """SELECT gross, net FROM scoring_rounds
-                       WHERE customer_id=? AND round_date=?""",
-                    (r["customer_id"], r["event_date"])).fetchall()
-                if not sr:
-                    continue
-                out["checked"] += 1
-                ok = any(s["gross"] == r["xg"] and
-                         (r["xn"] is None or s["net"] == r["xn"])
-                         for s in sr)
-                if ok:
-                    out["matches"] += 1
-                elif len(out["mismatches"]) < 25:
-                    out["mismatches"].append(
-                        {"player": r["player_name"], "date": r["event_date"],
-                         "export_gross": r["xg"], "export_net": r["xn"],
-                         "scraped": [dict(s) for s in sr]})
+            scoring_check(conn, out)
         else:
+            sc = {"checked": 0, "matches": 0, "mismatches": []}
+            scoring_check(conn, sc)
+            if sc["checked"]:
+                out["scoring"] = sc
             rows = conn.execute(
                 """SELECT r.player_name, SUM(r.money_cents) AS xp
                    FROM gg_history_results r
@@ -1545,6 +1585,244 @@ def enrich_created_members(db_path=None) -> dict:
                 rep["dobs_set"] += n
         conn.commit()
     return rep
+
+
+# ── Phase B: per-game money walk ─────────────────────────────────────────
+#
+# Each round's per-tournament boards (INDIVIDUAL Net $, SKINS $, TEAM Net
+# $, MVP $, Closest to Pin, …) carry that game's results WITH purses —
+# the per-game money breakdown only Channel 1 has. Rows land in
+# gg_history_results with the verbatim board label as game_label,
+# attached to the SAME gg_history_events row the export channel created
+# (matched by round_index) so export rows (game_label='export_round')
+# and scrape rows sit side by side per event. ALL Net/ALL Gross boards
+# are the hole-by-hole walk's job; Adjustments and the purse-summary
+# link are skipped.
+
+_GAMES_SKIP_RE = re.compile(r"^(all net|all gross|adjustments?)", re.I)
+
+
+def _results_rows_from_tables(tables: list) -> list:
+    """Generalized leaderboard parse: any table with a Player/Winner/Team
+    header column yields result rows (verbatim raw_row + parsed fields).
+    Single-cell rows (flight section headings) are skipped — flight
+    membership is a separate concern."""
+    out = []
+    for t in tables or []:
+        if not t or len(t) < 2:
+            continue
+        hdr_i = None
+        for i, row in enumerate(t):
+            low = [str(c).strip().lower() for c in row]
+            if any(h in ("player", "players", "winner", "team", "name")
+                   or "player" in h for h in low):
+                hdr_i = i
+                break
+        if hdr_i is None:
+            continue
+        header = [str(c).strip().lower() for c in t[hdr_i]]
+
+        def col(*needles, exclude=()):
+            for i, h in enumerate(header):
+                if any(n in h for n in needles) \
+                        and not any(x in h for x in exclude):
+                    return i
+            return None
+
+        c_player = col("player", "winner", "team", "name")
+        c_pos = col("pos", "rank", "place")
+        c_ph = col("handicap")
+        c_gross = col("gross", exclude=("avg",))
+        c_net = col("net", exclude=("avg", "to par"))
+        c_points = col("point", exclude=("behind",))
+        c_purse = col("purse", "money", "winnings")
+
+        for row in t[hdr_i + 1:]:
+            cells = [str(c).strip() for c in row]
+            if len([c for c in cells if c]) <= 1:
+                continue  # section heading / separator
+            def cell(i):
+                return cells[i] if i is not None and i < len(cells) else None
+            name = cell(c_player)
+            if not name or name.lower().startswith(("total", "hole")):
+                continue
+            is_team = bool(re.search(r"\s[+&/]\s", name))
+            out.append({
+                "player_name": name,
+                "team_label": name if is_team else None,
+                "position": cell(c_pos),
+                "playing_handicap": _to_float(cell(c_ph)),
+                "gross": _to_float(cell(c_gross)),
+                "net": _to_float(cell(c_net)),
+                "points": _to_float(cell(c_points)),
+                "money_cents": _money_to_cents(cell(c_purse)),
+                "raw_row": json.dumps(row),
+            })
+    return out
+
+
+def ingest_portal_games(subdomain: str, budget_seconds: int = 240,
+                        db_path=None) -> dict:
+    """Phase-B per-game money walk of one portal. Resumable (walk state =
+    gg_history_pages 'games:<round_id>' rows); repeat until
+    rounds_left == 0. Rounds are atomic."""
+    from email_parser.database import _connect, DB_PATH
+    from golf_genius_sync import fetch_public_page, parse_page_structure
+
+    t0 = time.time()
+    base = f"https://{subdomain}.golfgenius.com"
+    stats = {"subdomain": subdomain, "rounds_done": 0, "rows": 0,
+             "boards": 0, "matched": 0, "pending": 0, "rounds_detail": []}
+
+    with _connect(db_path or DB_PATH) as conn:
+        ensure_gg_history_tables(conn)
+        ensure_gg_member_map(conn)
+        portal = conn.execute(
+            "SELECT * FROM gg_history_portals WHERE subdomain = ?",
+            (subdomain,)).fetchone()
+        if portal is None:
+            return {"error": f"unknown portal {subdomain!r} — seed first"}
+        portal_id, league_id = portal["id"], portal["league_id"]
+        if not league_id:
+            return {"error": "league_id unknown — run Phase A first"}
+
+        widget_url = (f"{base}/leagues/{league_id}/widgets/"
+                      f"tournament_results?shared=false")
+        w = fetch_public_page(widget_url)
+        if w["status_code"] != 200:
+            return {"error": f"widget HTTP {w['status_code']}"}
+        sel = _ROUND_SELECT_RE.search(w["html"])
+        options = _ROUND_OPTION_RE.findall(sel.group(1) if sel else "")
+        if not options:
+            return {"error": "no round selector"}
+        options = [(rid, " ".join(lbl.split())) for rid, lbl in options]
+        options.reverse()
+
+        export_events = {}
+        for r in conn.execute(
+                """SELECT id, gg_round_index, event_date, event_label
+                   FROM gg_history_events
+                   WHERE portal_id=? AND gg_round_index IS NOT NULL""",
+                (portal_id,)):
+            export_events.setdefault(r["gg_round_index"], dict(r))
+
+        done = {r["gg_page_id"][len("games:"):] for r in conn.execute(
+            """SELECT gg_page_id FROM gg_history_pages
+               WHERE portal_id=? AND gg_page_id LIKE 'games:%'
+                 AND fetch_status='done'""", (portal_id,))}
+
+        pending = [(rid, lbl) for rid, lbl in options if rid not in done]
+        for rid, label in pending:
+            if time.time() - t0 > budget_seconds:
+                break
+            round_url = f"{widget_url}&round={rid}"
+            pg = fetch_public_page(round_url)
+            if pg["status_code"] != 200:
+                stats["rounds_detail"].append(
+                    {"round": rid, "error": f"http_{pg['status_code']}"})
+                continue
+            links = (parse_page_structure(pg["html"], round_url)
+                     .get("links") or [])
+            ridx = None
+            for l in links:
+                m = _ROUND_INDEX_RE.search(l.get("href") or "")
+                if m:
+                    ridx = int(m.group(1))
+                    break
+            boards = [l for l in links
+                      if "/v2tournaments/" in (l.get("href") or "")
+                      and "total_purse" not in l["href"]
+                      and not _GAMES_SKIP_RE.match(
+                          (l.get("text") or "").strip())]
+            detail = {"round": rid, "index": ridx, "boards": []}
+
+            # FETCH phase first — no open write txn across network I/O
+            # (the holes bg-walk may be writing concurrently; WAL allows
+            # one writer and the default busy timeout is short)
+            fetched = []
+            for l in boards:
+                href = l["href"]
+                if href.startswith("/"):
+                    href = base + href
+                blabel = (l.get("text") or "").strip()
+                b = fetch_public_page(href)
+                if b["status_code"] != 200:
+                    detail["boards"].append(
+                        {"board": blabel, "error": f"http_{b['status_code']}"})
+                    continue
+                fetched.append((blabel, href, b["html"]))
+                time.sleep(0.3)
+
+            # WRITE phase — short transaction
+            ev = export_events.get(ridx)
+            if ev is None:
+                cur = conn.execute(
+                    """INSERT INTO gg_history_events (portal_id, season,
+                           chapter, event_label, event_date, brand,
+                           gg_round_id, gg_round_index, raw_row)
+                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                    (portal_id, portal["season"], portal["chapter"], label,
+                     _export_date(label, portal["season"] or ""),
+                     portal["brand"], str(rid), ridx,
+                     json.dumps({"src": "games_walk", "label": label})))
+                ev_id = cur.lastrowid
+                if ridx is not None:
+                    export_events[ridx] = {"id": ev_id}
+            else:
+                ev_id = ev["id"]
+            # idempotent per event: scrape rows replaced, export rows kept
+            conn.execute(
+                """DELETE FROM gg_history_results
+                   WHERE gg_event_id=? AND game_label != 'export_round'""",
+                (ev_id,))
+            for blabel, href, html in fetched:
+                _archive_raw(conn, href, html)
+                rows = _results_rows_from_tables(
+                    parse_page_structure(html, href).get("tables") or [])
+                for rec in rows:
+                    cid = None
+                    if not rec["team_label"]:
+                        cid = _resolve_identity(conn, portal_id,
+                                                rec["player_name"])
+                    conn.execute(
+                        """INSERT INTO gg_history_results (gg_event_id,
+                               game_label, player_name, customer_id,
+                               team_label, position, playing_handicap,
+                               gross, net, points, money_cents, raw_row)
+                           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                        (ev_id, blabel, rec["player_name"], cid,
+                         rec["team_label"], rec["position"],
+                         rec["playing_handicap"], rec["gross"], rec["net"],
+                         rec["points"], rec["money_cents"], rec["raw_row"]))
+                    stats["rows"] += 1
+                    stats["matched" if cid else "pending"] += 1
+                stats["boards"] += 1
+                detail["boards"].append({"board": blabel, "rows": len(rows)})
+
+            conn.execute(
+                """INSERT INTO gg_history_pages (portal_id, gg_page_id,
+                       page_title, page_kind, widget_type, fetch_status,
+                       fetched_at)
+                   VALUES (?, ?, ?, 'event_games', 'tournament_results',
+                           'done', datetime('now'))
+                   ON CONFLICT(portal_id, gg_page_id) DO UPDATE SET
+                       page_title=excluded.page_title, fetch_status='done',
+                       fetched_at=excluded.fetched_at""",
+                (portal_id, f"games:{rid}", label))
+            conn.commit()
+            stats["rounds_done"] += 1
+            stats["rounds_detail"].append(detail)
+            time.sleep(1.0)
+
+        stats["rounds_total"] = len(options)
+        stats["rounds_left"] = len(pending) - stats["rounds_done"]
+        stats["elapsed_s"] = round(time.time() - t0, 1)
+        try:
+            stats["names_pending_review"] = _sync_pending_action_item(conn)
+            conn.commit()
+        except Exception:
+            pass
+        return stats
 
 
 # ── Review UI backend (admin page /admin/gg-history) ─────────────────────

@@ -1,5 +1,15 @@
-window.TGF_VERSION = "2.75.0";
+window.TGF_VERSION = "2.75.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.75.1",
+    date: "2026-07-12",
+    changes: [
+      "HOTFIX -- name_links rebuild stranded-shell recovery: python-sqlite3 runs CREATE TABLE in autocommit but the copy INSERT opens a transaction, so a read-only caller (the overview API) that closed without committing left an empty gg_history_name_links_v2 shell committed while the copy/drop/rename rolled back -- every later gg-history call then failed with 'table already exists' (caught on prod within minutes; no data touched). The rebuild now drops any stranded shell first and commits itself unconditionally. Recovery reproduced and proven against a replica of the broken state.",
+      "PER-GAME MONEY WALK (Phase B part 2): scoring-gg-history:games=<subdomain>[@budget] (+ games-bg) walks each round's per-tournament boards -- INDIVIDUAL Net $, SKINS $, TEAM Net $, MVP $, Closest to Pin, everything except the ALL boards/Adjustments -- into gg_history_results with the verbatim board label as game_label, verbatim T1-style positions, parsed purse/points, team rows flagged via team_label. Rows attach to the SAME gg_history_events row the export channel created (matched by round_index), so export and scrape sit side by side per event; scrape rows replace idempotently, export rows are never touched. Fetch-then-write per round so no write transaction spans network I/O (the holes walk may run concurrently).",
+      "IDENTITY CASCADE EXTENDED: _resolve_identity now falls back from the scoring resolver to the roster map (printed handle -> exactly one customer, collision-safe) and then to any earlier ruling for that name+portal -- so Kerry's manual links and roster matches propagate to every future walk's rows instead of re-pending.",
+      "AUDIT EXTENDED: audit=<prefix> now ALSO runs the gross/net scorecard check for non-2026 seasons once Phase-B holes are banked (reported under 'scoring') -- the export and scrape channels prove each other on archive years, not just live.",
+    ],
+  },
   {
     version: "2.75.0",
     date: "2026-07-12",
