@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.75.3";
+window.TGF_VERSION = "2.75.4";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.75.4",
+    date: "2026-07-12",
+    changes: [
+      "Home-screen app icon: the TGF mark now fills ~84% of the tile (was 62%) -- Kerry's 'bigger logo on the badge' was about the PWA icon, not the in-app nav (both are now bigger). icon.svg rescaled and all PNG sizes (180/192/512) regenerated from it. iOS caches home-screen icons: remove and re-add the app to see the new one.",
+    ],
+  },
   {
     version: "2.75.3",
     date: "2026-07-12",
