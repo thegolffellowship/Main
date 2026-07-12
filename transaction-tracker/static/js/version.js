@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.76.1";
+window.TGF_VERSION = "2.76.2";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.76.2",
+    date: "2026-07-12",
+    changes: [
+      "Spotlight scoring trends now read recent FORM off the last 10 rounds (Kerry): latest 5 rounds vs the 5 before, and the arrows earn at 10+ tracked rounds (was last-10-vs-prior-10, earned at 15+). Averages and the scoring distribution keep the 20-round window; negative trend still means improving.",
+    ],
+  },
   {
     version: "2.76.1",
     date: "2026-07-12",
