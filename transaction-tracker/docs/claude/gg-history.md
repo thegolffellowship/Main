@@ -788,8 +788,21 @@ TGF/Former profiles remain Kerry's open decision (option b).
       everywhere (table shape unrecognized — team money missing);
       some rounds list a points board twice (duplicate game_label
       rows, raw-layer harmless).
-- [ ] austin2025 holes walk RUNNING (kicked 2026-07-12); then
-      champ25/lonestarcup25/roadtrip25 holes+games, then Austin games.
+- [x] **austin2025 HOLES COMPLETE (2026-07-12):** 29/29 rounds, ~590
+      player-rounds, zero verification discrepancies, zero no-board
+      rounds (Twin Creeks 'ALL Net - Front' variant matched via
+      prefix). Audit: money **88/88 PERFECT**; scoring 592 checks
+      97.3%. The 16 flags are a DIFFERENT class than SA's: scraped
+      card sum exceeds export gross by a consistent +7..+17 on a
+      subset (smells like export-side adjusted/capped scoring), plus
+      two partial-vs-full anomalies (ROHRMANN 18 vs 117, CALLAWAY 51
+      vs 114 at FALL CHAMP). Spot-check with hole detail vs the
+      adjusted_gross sheet before career surfaces. NOTE: FALL CHAMP @
+      KISSING TREE published only on the Austin portal (SA selector
+      skips index 64) — cross-portal shared events dedupe naturally
+      via the global gg_aggregate_id uniqueness.
+- [ ] Next walks: austin2025 games; champ25/lonestarcup25/roadtrip25
+      holes+games.
 - [ ] Phase B remaining: match play BRACKET reconstruction (weekly
       match rows already banked via games walk) + pairings (Kerry's
       ruling: tee-sheet scrape primary / starter-sheet PDFs cross-check
