@@ -88,6 +88,14 @@ linkage by code prefix → events.item_name (event_id + round_date).
 Idempotent on (gg_aggregate_id, player_name). `scoring_rounds.customer_id`
 is in `_CUSTOMER_FK_COLUMNS`.
 
+Archive imports (v2.74.0, GG-history Phase B): two extra params —
+`round_date` (explicit date when no Tracker events row exists; without
+it the cross-tournament dedupe can't scope and ALL Net + ALL Gross
+would double-import) and `source` (scoring_rounds.source tag,
+`'gg_history:<subdomain>'`; live sync stays `'gg'`). The Phase-B walker
+`ingest_portal_holes` in email_parser/gg_history.py drives this — see
+docs/claude/gg-history.md.
+
 ## Plus handicaps (v2.26.0)
 
 GG renders plus playing handicaps as "(+1)". Parsed to a NEGATIVE

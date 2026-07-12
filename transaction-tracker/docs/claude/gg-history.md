@@ -571,6 +571,48 @@ scorecard-depth via import_gg_scorecards) builds on the same page
 catalog. Directory pages are login-walled (skipped); `images`-widget
 pages record widget_type='images' with no rows.
 
+### Phase B — hole-by-hole walk (v2.74.0, LIVE)
+
+`scoring-gg-history:holes=<subdomain>[@<budget_s>]` →
+`ingest_portal_holes()`: fetches the portal's
+`/leagues/<league_id>/widgets/tournament_results?shared=false` (the
+server-side `<select name="round">` lists the whole season), walks
+rounds chronologically, and per round imports the **ALL Net board
+first** (full field WITH playing handicaps), **ALL Gross second**
+(fills anyone left) — the live auto-sync's proven ordering, prefix
+match on board labels. Cards flow through the EXISTING
+`import_gg_scorecards` machinery unchanged (courses/tees,
+scoring_rounds/scoring_holes, raw-archive-before-parse, cid
+resolution, per-card verification with COO action items).
+
+Design points (the POC lessons, applied):
+- **`round_date` is mandatory plumbing**: archive events have no
+  Tracker `events` row, so `import_gg_scorecards` gained a
+  `round_date` param — without it the cross-tournament dedupe can't
+  scope (`round_date = NULL` never matches) and ALL Net + ALL Gross
+  would double-import every player. Dates join from the export
+  channel's `gg_history_events` by round_index (**verified: export
+  "Round N" == widget `round_index` N on sa2025**); fallback parses
+  the round label; no date → round SKIPPED and reported
+  (`rounds_no_date`), never double-imported.
+- **`round_key=<round_id>`** scopes the dedupe on multi-round days
+  (Hill Country Matches class).
+- **`source='gg_history:<subdomain>'`** tags archive rows in
+  scoring_rounds (new `source` param) — distinguishes history imports
+  from live sync, and gives the future Two Man Tour lane a brand
+  filter via the portal registry join.
+- **Walk state** = synthetic `gg_history_pages` rows
+  (`gg_page_id='round:<round_id>'`, page_kind='event_round') — no new
+  tables, resumable (repeat until `rounds_left == 0`), and zero-card
+  rounds (postponed events) mark done instead of retrying forever.
+  Rounds with no ALL Net/Gross boards report their board labels in
+  `rounds_no_boards` (era-drift watch: match-play days, one-off
+  formats).
+- **Identity**: unresolved card names register as pending
+  `gg_history_name_links` rows per portal, then backfill from
+  `gg_member_map` when the printed handle maps to exactly ONE
+  customer (ambiguous handles stay pending — collision-safe).
+
 Ingest order (Kerry: slowly, backwards chronologically): the 2025 wave
 (sa2025, austin2025, champ25, lonestarcup25, roadtrip25) → 2024 wave
 (incl. DFW/Houston finales) → … → 2016. **Two Man Tour portals ingest
@@ -688,11 +730,11 @@ TGF/Former profiles remain Kerry's open decision (option b).
       is the EXACT "LAST, First" string standings print — a direct
       join key. Report-first discipline: apply only runs after Kerry
       sees the report.
-- [ ] 2024 wave next (incl. DFW/Houston finales) → … → 2016
-- [ ] Hole-by-hole raw scores = Kerry's #1 priority after names/events
-      (2026-07-11): Phase B leads with the scorecard-depth walk
-      (/tournaments2/details partials via import_gg_scorecards
-      machinery) — results + per-event money ride the same pass.
+- [ ] 2024 wave next (incl. DFW/Houston finales) → … → 2016 — 2025
+      completes FIRST (Kerry's year-at-a-time directive)
+- [x] Hole-by-hole ingest engine (v2.74.0): Phase-B walker
+      `holes=<subdomain>` live — see "Phase B — hole-by-hole walk"
+      above. Pilot: tgf-sa2025.
 - [ ] Row-level handicap_rounds ↔ gg_history_events bridging by
       (customer_id, date) once Phase B yields event dates — extends the
       existing handicap_rounds.scoring_round_id pattern backwards.

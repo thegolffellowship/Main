@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.73.1";
+window.TGF_VERSION = "2.74.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.74.0",
+    date: "2026-07-12",
+    changes: [
+      "PHASE B HOLE-BY-HOLE INGEST (Kerry's #1 data priority; pilot portal tgf-sa2025): new bridge command scoring-gg-history:holes=<subdomain>[@budget] walks the portal's tournament_results round selector (the full season, server-side) and imports every round's ALL Net then ALL Gross boards through the existing import_gg_scorecards machinery -- courses/tees, scoring_rounds/scoring_holes, raw archive before parse, cid resolution, and per-card verification all reused. Walk state lives in gg_history_pages as 'round:<round_id>' rows, so runs are resumable and a postponed/zero-card round is marked done instead of retrying forever.",
+      "import_gg_scorecards gains round_date + source params: archive events have no Tracker events row, and without a date the cross-tournament dedupe cannot scope (round_date NULL never matches in SQL) -- ALL Net + ALL Gross would double-import every player. Round dates join from the export channel's gg_history_events by round_index (verified: export Round N == widget round_index N on sa2025); rounds with no resolvable date are SKIPPED and surfaced rather than double-imported. Archive rows are tagged source='gg_history:<subdomain>' so history imports stay distinguishable from live-sync rows (and a future Two Man Tour lane can be brand-filtered).",
+      "POC lessons applied: round_key=<round_id> scopes the dedupe on multi-round days (Hill Country Matches class), and unresolved player names register in gg_history_name_links per portal for the review queue, then backfill from gg_member_map when the printed handle maps to exactly one customer (collision-safe: ambiguous handles stay pending).",
+    ],
+  },
   {
     version: "2.73.1",
     date: "2026-07-11",
