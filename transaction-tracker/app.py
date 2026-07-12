@@ -9320,7 +9320,7 @@ def api_member_metric():
     except Exception:
         return jsonify({"ok": False}), 400
     event = str(data.get("event") or "")
-    if event not in ("open", "click"):
+    if event not in ("open", "click", "nudge"):
         return jsonify({"ok": False}), 400
     path = str(data.get("path") or "")
     if not path.startswith("/member"):
