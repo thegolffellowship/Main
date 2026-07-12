@@ -499,6 +499,257 @@ def ingest_portal(subdomain: str, budget_seconds: int = 240,
         return stats
 
 
+# ── Phase B: hole-by-hole scorecard walk (Kerry's #1 data priority) ──────
+#
+# Recipe (proven during inventory + POC): the portal's tournament_results
+# widget carries the season's full server-side round selector; each
+# &round=<round_id> view lists that round's per-tournament boards. The
+# ALL Net board carries the full field WITH playing handicaps; ALL Gross
+# fills anyone left (the live auto-sync's proven ordering). Cards flow
+# through the EXISTING import_gg_scorecards machinery (courses/tees,
+# scoring_rounds/scoring_holes, raw archive, cid resolution, verification)
+# with round_key=<round_id> (multi-round-day lesson) and round_date joined
+# from the export-channel gg_history_events by round_index — archive
+# events have no Tracker events row, and without a date the cross-
+# tournament dedupe can't scope. Walk state lives in gg_history_pages as
+# synthetic 'round:<round_id>' rows (page_kind='event_round') — no new
+# tables, resumable, and a zero-card round (postponed events) is marked
+# done instead of retrying forever.
+
+_ROUND_SELECT_RE = re.compile(
+    r'<select[^>]*name="round"[^>]*>(.*?)</select>', re.S)
+_ROUND_OPTION_RE = re.compile(
+    r'<option[^>]*value="(\d+)"[^>]*>(.*?)</option>', re.S)
+_ROUND_INDEX_RE = re.compile(r"round_index=(\d+)")
+
+
+def _pick_hole_boards(links: list) -> tuple:
+    """(boards_to_import, all_board_labels) from a round page's links.
+    Net FIRST (full field with handicaps), then Gross — the live
+    auto-sync's proven ordering; prefix match covers 'ALL Net 18',
+    'ALL Net 9', 'ALL Gross 18 (back)' etc."""
+    v2t = [l for l in links
+           if "/v2tournaments/" in (l.get("href") or "")
+           and "total_purse" not in l["href"]]
+    labels = [(l.get("text") or "").strip() for l in v2t]
+    boards = [l for want in ("all net", "all gross") for l in v2t
+              if (l.get("text") or "").strip().lower().startswith(want)]
+    return boards, labels
+
+
+def ingest_portal_holes(subdomain: str, budget_seconds: int = 240,
+                        db_path=None) -> dict:
+    """Phase-B hole-by-hole walk of one portal. Resumable + time-budgeted:
+    repeat until rounds_left == 0. Rounds are atomic (budget checked at
+    round start; both boards finish once a round begins)."""
+    from email_parser.database import (_connect, DB_PATH,
+                                       import_gg_scorecards)
+    from golf_genius_sync import fetch_public_page, parse_page_structure
+
+    t0 = time.time()
+    base = f"https://{subdomain}.golfgenius.com"
+    stats = {"subdomain": subdomain, "rounds_done": 0, "cards_imported": 0,
+             "cards_replaced": 0, "cards_skipped_dup": 0, "unresolved": 0,
+             "discrepancies": 0, "rounds_no_boards": [],
+             "rounds_no_date": [], "rounds_detail": []}
+
+    with _connect(db_path or DB_PATH) as conn:
+        ensure_gg_history_tables(conn)
+        ensure_gg_member_map(conn)
+        portal = conn.execute(
+            "SELECT * FROM gg_history_portals WHERE subdomain = ?",
+            (subdomain,)).fetchone()
+        if portal is None:
+            return {"error": f"unknown portal {subdomain!r} — seed first"}
+        portal_id, league_id = portal["id"], portal["league_id"]
+        source_tag = f"gg_history:{subdomain}"
+
+        if not league_id:
+            home = fetch_public_page(base + "/")
+            m = _LEAGUE_ID_RE.search(home.get("html") or "")
+            league_id = (m.group(1) or m.group(2)) if m else None
+            if not league_id:
+                return {"error": "league_id undiscoverable — run "
+                                 "ingest=<subdomain> (Phase A) first"}
+            conn.execute("UPDATE gg_history_portals SET league_id=? "
+                         "WHERE id=?", (league_id, portal_id))
+            conn.commit()
+
+        widget_url = (f"{base}/leagues/{league_id}/widgets/"
+                      f"tournament_results?shared=false")
+        w = fetch_public_page(widget_url)
+        if w["status_code"] != 200:
+            return {"error": f"tournament_results widget HTTP "
+                             f"{w['status_code']}"}
+        sel = _ROUND_SELECT_RE.search(w["html"])
+        options = _ROUND_OPTION_RE.findall(sel.group(1) if sel else "")
+        if not options:
+            return {"error": "no round selector in tournament_results "
+                             "widget — portal may use a different results "
+                             "layout (record for the era playbook)"}
+        options = [(rid, " ".join(lbl.split())) for rid, lbl in options]
+        options.reverse()  # selector is newest-first; walk chronologically
+
+        # round_index → (date, label) from the export channel (channel 3)
+        export_events = {}
+        for r in conn.execute(
+                """SELECT gg_round_index, event_date, event_label
+                   FROM gg_history_events
+                   WHERE portal_id=? AND gg_round_index IS NOT NULL""",
+                (portal_id,)):
+            export_events.setdefault(
+                r["gg_round_index"], (r["event_date"], r["event_label"]))
+
+        done = {r["gg_page_id"][len("round:"):] for r in conn.execute(
+            """SELECT gg_page_id FROM gg_history_pages
+               WHERE portal_id=? AND gg_page_id LIKE 'round:%'
+                 AND fetch_status='done'""", (portal_id,))}
+
+        pending = [(rid, lbl) for rid, lbl in options if rid not in done]
+        for rid, label in pending:
+            if time.time() - t0 > budget_seconds:
+                break
+            round_url = f"{widget_url}&round={rid}"
+            pg = fetch_public_page(round_url)
+            if pg["status_code"] != 200:
+                stats["rounds_detail"].append(
+                    {"round": rid, "error": f"http_{pg['status_code']}"})
+                continue
+            struct = parse_page_structure(pg["html"], round_url)
+            links = struct.get("links") or []
+            raw_id = _archive_raw(conn, round_url, pg["html"])
+            # release the write lock NOW: import_gg_scorecards opens its
+            # own writer connection per board, and WAL still allows only
+            # one write txn — holding ours through the board loop would
+            # 'database is locked' every card.
+            conn.commit()
+
+            ridx = None
+            for l in links:
+                m = _ROUND_INDEX_RE.search(l.get("href") or "")
+                if m:
+                    ridx = int(m.group(1))
+                    break
+            round_date, ev_label = export_events.get(ridx, (None, None))
+            if round_date is None and portal["season"]:
+                round_date = _export_date(label, portal["season"])
+            if round_date is None:
+                # No date → the dedupe can't scope; skip rather than
+                # double-import, and surface for a manual date ruling.
+                stats["rounds_no_date"].append({"round": rid, "label": label})
+                conn.execute(
+                    """INSERT INTO gg_history_pages (portal_id, gg_page_id,
+                           page_title, page_kind, widget_type,
+                           raw_archive_id, fetch_status, fetched_at)
+                       VALUES (?, ?, ?, 'event_round', 'tournament_results',
+                               ?, 'no_date', datetime('now'))
+                       ON CONFLICT(portal_id, gg_page_id) DO UPDATE SET
+                           page_title=excluded.page_title,
+                           fetch_status='no_date',
+                           fetched_at=excluded.fetched_at""",
+                    (portal_id, f"round:{rid}", label or ev_label, raw_id))
+                conn.commit()
+                continue
+
+            boards, all_labels = _pick_hole_boards(links)
+            detail = {"round": rid, "index": ridx, "date": round_date,
+                      "label": ev_label or label, "boards": []}
+            if not boards:
+                stats["rounds_no_boards"].append(
+                    {"round": rid, "label": ev_label or label,
+                     "board_labels": all_labels[:12]})
+            for l in boards:
+                href = l["href"]
+                if href.startswith("/"):
+                    href = base + href
+                try:
+                    res = import_gg_scorecards(
+                        href, round_key=rid, round_date=round_date,
+                        source=source_tag, db_path=db_path or DB_PATH)
+                except Exception as exc:
+                    detail["boards"].append(
+                        {"board": (l.get("text") or "").strip(),
+                         "error": str(exc)})
+                    continue
+                detail["boards"].append(
+                    {"board": (l.get("text") or "").strip(),
+                     "imported": res.get("imported"),
+                     "replaced": res.get("replaced"),
+                     "skipped_dup": res.get("skipped_other_tournament"),
+                     "unresolved": res.get("unresolved_names"),
+                     "discrepancies": len(res.get("discrepancies") or [])})
+                stats["cards_imported"] += res.get("imported") or 0
+                stats["cards_replaced"] += res.get("replaced") or 0
+                stats["cards_skipped_dup"] += \
+                    res.get("skipped_other_tournament") or 0
+                stats["unresolved"] += res.get("unresolved_names") or 0
+                stats["discrepancies"] += len(res.get("discrepancies") or [])
+
+            # identity bookkeeping for the review queue: register this
+            # round's unresolved names as pending links, then backfill via
+            # the member map (roster handles ARE the printed names) when
+            # the handle maps to exactly one customer.
+            for r in conn.execute(
+                    """SELECT DISTINCT player_name FROM scoring_rounds
+                       WHERE gg_league_round_id=? AND source=?
+                         AND customer_id IS NULL""", (rid, source_tag)):
+                _resolve_identity(conn, portal_id, r["player_name"])
+            conn.execute(
+                """UPDATE scoring_rounds SET customer_id = (
+                       SELECT m.customer_id FROM gg_member_map m
+                       WHERE m.handle = scoring_rounds.player_name
+                         AND m.customer_id IS NOT NULL
+                       GROUP BY m.handle
+                       HAVING COUNT(DISTINCT m.customer_id) = 1)
+                   WHERE gg_league_round_id=? AND source=?
+                     AND customer_id IS NULL
+                     AND EXISTS (SELECT 1 FROM gg_member_map m
+                                 WHERE m.handle = scoring_rounds.player_name
+                                   AND m.customer_id IS NOT NULL)""",
+                (rid, source_tag))
+            # keep the review queue honest: a pending link whose name the
+            # map just resolved must not linger as reviewable
+            conn.execute(
+                """UPDATE gg_history_name_links SET
+                       customer_id = (
+                           SELECT m.customer_id FROM gg_member_map m
+                           WHERE m.handle = gg_history_name_links.raw_name
+                             AND m.customer_id IS NOT NULL
+                           GROUP BY m.handle
+                           HAVING COUNT(DISTINCT m.customer_id) = 1),
+                       matched_by = 'roster'
+                   WHERE portal_id=? AND matched_by='pending'
+                     AND customer_id IS NULL
+                     AND (SELECT COUNT(DISTINCT m.customer_id)
+                          FROM gg_member_map m
+                          WHERE m.handle = gg_history_name_links.raw_name
+                            AND m.customer_id IS NOT NULL) = 1""",
+                (portal_id,))
+
+            conn.execute(
+                """INSERT INTO gg_history_pages (portal_id, gg_page_id,
+                       page_title, page_kind, widget_type, raw_archive_id,
+                       fetch_status, fetched_at)
+                   VALUES (?, ?, ?, 'event_round', 'tournament_results',
+                           ?, 'done', datetime('now'))
+                   ON CONFLICT(portal_id, gg_page_id) DO UPDATE SET
+                       page_title=excluded.page_title,
+                       raw_archive_id=excluded.raw_archive_id,
+                       fetch_status='done',
+                       fetched_at=excluded.fetched_at""",
+                (portal_id, f"round:{rid}", ev_label or label, raw_id))
+            conn.commit()  # durable per round
+            stats["rounds_done"] += 1
+            stats["rounds_detail"].append(detail)
+            time.sleep(1.0)  # polite pacing between rounds
+
+        stats["rounds_total"] = len(options)
+        stats["rounds_left"] = len(pending) - stats["rounds_done"] \
+            - len(stats["rounds_no_date"])
+        stats["elapsed_s"] = round(time.time() - t0, 1)
+        return stats
+
+
 def gg_history_status(db_path=None) -> dict:
     """Coverage/progress across the registry."""
     from email_parser.database import _connect, DB_PATH

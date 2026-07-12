@@ -10046,6 +10046,8 @@ def _cleanup_empty_scoring_rounds(conn: sqlite3.Connection) -> None:
 
 def import_gg_scorecards(tournament_url: str, event_code: str | None = None,
                          round_key: str | None = None,
+                         round_date: str | None = None,
+                         source: str | None = None,
                          db_path: str | Path = DB_PATH) -> dict:
     """Import every player scorecard from a GG tournament page.
 
@@ -10057,6 +10059,15 @@ def import_gg_scorecards(tournament_url: str, event_code: str | None = None,
     (Hill Country Matches has six rounds all dated the same Saturday);
     the cross-tournament dedupe scopes to it so different rounds of the
     same day don't collapse into one. Omit for ordinary one-round events.
+
+    round_date: explicit round date for ARCHIVE imports whose event has
+    no Tracker events row (GG-history Phase B). Without it the
+    cross-tournament dedupe has nothing to scope on (round_date NULL
+    never matches in SQL) and ALL Net + ALL Gross would double-import
+    every player. An event_code hit still wins over this value.
+
+    source: scoring_rounds.source tag for new rows ('gg_history:<sub>'
+    for archive walks); existing rows keep their original tag.
     """
     import zlib
     from golf_genius_sync import fetch_tournament_scorecards
@@ -10064,7 +10075,7 @@ def import_gg_scorecards(tournament_url: str, event_code: str | None = None,
 
     with _connect(db_path) as conn:
         _ensure_scoring_tables(conn)
-        event_id = event_date = None
+        event_id, event_date = None, round_date
         if event_code:
             ev = conn.execute(
                 """SELECT id, event_date, course FROM events
@@ -10152,13 +10163,13 @@ def import_gg_scorecards(tournament_url: str, event_code: str | None = None,
                            (customer_id, player_name, event_id, gg_event_id,
                             gg_aggregate_id, gg_profile_id, round_date,
                             course_id, tee_id, holes_played, playing_handicap,
-                            gross, net, flight, gg_league_round_id)
-                       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                            gross, net, flight, gg_league_round_id, source)
+                       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
                     (cid, p["player_name"], event_id, p.get("gg_event_id"),
                      p.get("gg_aggregate_id"), p.get("gg_profile_id"),
                      event_date, course_id, tee_id, holes_played,
                      p.get("playing_handicap"), p.get("gross"), p.get("net"),
-                     p.get("flight"), round_key))
+                     p.get("flight"), round_key, source or "gg"))
                 srid = cur.lastrowid
                 imported += 1
                 verified_ids.append(srid)
