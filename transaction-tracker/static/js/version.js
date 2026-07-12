@@ -1,5 +1,15 @@
-window.TGF_VERSION = "2.74.0";
+window.TGF_VERSION = "2.75.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.75.0",
+    date: "2026-07-12",
+    changes: [
+      "GG HISTORY REVIEW UI (admin): new /admin/gg-history page (linked from every admin subnav) with three views -- the PENDING NAMES queue (each unresolved archive name with its portal, data-row counts, roster affiliation, and same-surname candidate chips; actions Link / Guest / Not-a-person, with Undo), per-portal COVERAGE (Phase-A pages, Phase-B rounds, standings/events/results/hole-round counts, pending names), and a STANDINGS BROWSER (verbatim rows with position_raw, linked customer, points, money). Link backfills every banked row for that name+portal (standings, results, hole-by-hole scoring_rounds); Guest never creates a profile (house rule); reopen un-links only what the manual ruling linked.",
+      "NAME_LINKS 3-COL UNIQUENESS REBUILD (the deferred #123 amendment-b item, flagged in mailbox #130): gg_history_name_links rebuilt so uniqueness is (raw_name, portal_id, gg_member_id) -- the same printed name CAN be two people when their GG member ids differ (the Kryszak class). gg_member_id is now NOT NULL DEFAULT '' (SQLite UNIQUE treats NULLs as distinct; '' keeps the no-id case deduped). Idempotent boot-path migration preserves row ids; the writer's upsert moved to the 3-col conflict target and stamps the preferred key when the printed handle maps to exactly one master-roster member. Reviewed rulings (Kerry's manual decisions) are never overwritten by automated passes.",
+      "COO SURFACING: one aggregate action item ('GG History: names pending identity review') tracks the live pending count -- created/updated by the ingest walkers and every review action, completed automatically when the queue empties. 121 names never become 121 items.",
+      "OPS: scoring-gg-history:holes-bg=<subdomain>[@budget] runs the Phase-B walk in a background thread (MCP clients time out ~60s; a portal walk wants minutes), holes-status polls it, overview returns the per-portal coverage payload the admin page uses.",
+    ],
+  },
   {
     version: "2.74.0",
     date: "2026-07-12",

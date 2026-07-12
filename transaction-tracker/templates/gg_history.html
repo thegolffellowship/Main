@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
+    <title>TGF — GG History Review</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Bitter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/css/dashboard.css">
+    <link rel="stylesheet" href="/static/css/shell.css">
+    <link rel="icon" href="/static/icon.svg" type="image/svg+xml">
+    <link rel="apple-touch-icon" href="/static/icon-180.png">
+    <style>
+        .ggh-wrap { padding: 1rem 1.5rem 2.5rem; max-width: 1200px; margin: 0 auto; }
+        .ggh-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; margin: 0.75rem 0 1.25rem; }
+        .ggh-card { background: #fff; border: 1px solid var(--border); border-radius: 12px; padding: 12px 16px; }
+        .ggh-card .lbl { font: 700 9.5px/1 'Bitter', serif; letter-spacing: 1.5px; text-transform: uppercase; color: var(--text-muted); }
+        .ggh-card .val { font: 700 24px/1 'Bitter', serif; color: var(--text); margin-top: 7px; font-variant-numeric: tabular-nums; }
+        .ggh-card.warn .val { color: var(--primary); }
+        .ggh-tabs { display: flex; gap: 8px; margin: 0 0 1rem; flex-wrap: wrap; }
+        .ggh-tab { border: 1px solid var(--border); background: #fff; border-radius: 999px; padding: 7px 16px; font: 600 12px/1 'Bitter', serif; letter-spacing: 0.5px; cursor: pointer; color: var(--text-body); }
+        .ggh-tab.active { background: #1B1B1B; color: #fff; border-color: #1B1B1B; }
+        .ggh-table { width: 100%; border-collapse: collapse; }
+        .ggh-table th { text-align: left; font: 700 10px/1.3 'Bitter', serif; letter-spacing: 1px; text-transform: uppercase; color: #9CA3AF; padding: 8px 8px 6px; border-bottom: 1px solid var(--border); }
+        .ggh-table td { padding: 6px 8px; border-bottom: 1px solid #F3F2EF; font-size: 13px; font-variant-numeric: tabular-nums; }
+        .ggh-table td.n, .ggh-table th.n { text-align: right; }
+        .ggh-table td.wrap { white-space: normal; }
+        .ggh-muted { color: var(--text-muted); }
+        .ggh-pill { display: inline-block; border-radius: 999px; padding: 2px 9px; font-size: 11px; font-weight: 600; }
+        .ggh-pill.tgf { background: #FDEBDD; color: #B4551A; }
+        .ggh-pill.tour { background: #E5E7EB; color: #374151; }
+        .ggh-pill.gone { background: #FEE2E2; color: #B91C1C; }
+        .ggh-name-card { background: #fff; border: 1px solid var(--border); border-radius: 12px; padding: 14px 16px; margin-bottom: 12px; }
+        .ggh-name-head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+        .ggh-name-head .nm { font: 700 16px/1.2 'Bitter', serif; }
+        .ggh-name-meta { font-size: 12px; color: var(--text-muted); margin-top: 3px; }
+        .ggh-actions { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; align-items: center; }
+        .ggh-btn { border-radius: 999px; padding: 6px 14px; font-size: 12px; font-weight: 600; cursor: pointer; border: 1px solid var(--border); background: #fff; }
+        .ggh-btn.primary { background: #1B1B1B; color: #fff; border-color: #1B1B1B; }
+        .ggh-btn.ghost:hover, .ggh-btn:hover { border-color: var(--primary); color: var(--primary); }
+        .ggh-btn.primary:hover { color: #fff; background: var(--primary); border-color: var(--primary); }
+        .ggh-cand { display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--border); border-radius: 999px; padding: 5px 12px; font-size: 12px; cursor: pointer; background: #F8F8F8; }
+        .ggh-cand:hover { border-color: var(--primary); }
+        .ggh-cand .cid { color: var(--text-muted); font-size: 10.5px; }
+        .ggh-filter-row { display: flex; gap: 10px; margin: 0 0 0.75rem; flex-wrap: wrap; }
+        .ggh-filter-row select, .ggh-filter-row input { border: 1px solid var(--border); border-radius: 8px; padding: 7px 10px; font-size: 13px; }
+        .ggh-note { font-size: 12px; color: var(--text-muted); margin-top: 1rem; }
+        .ggh-done-flash { color: #15803D; font-size: 12px; font-weight: 600; }
+        @media (max-width: 768px) { .ggh-wrap { padding: 0.5rem 0.5rem 2rem; } }
+    </style>
+</head>
+<body>
+    {% if shell_v2 %}
+    {% set SHELL_TITLE = 'GG History' %}{% set SHELL_ACTIVE = 'admin' %}
+    {% include '_shell_nav.html' %}
+    {% else %}
+    <header>
+        <div class="header-content">
+            <h1>TGF Transaction Tracker</h1>
+            <p class="subtitle">GG History Review</p>
+            <a href="/changelog" class="version-link" id="version-badge" title="View changelog">v2.0.0</a>
+        </div>
+        <div class="header-actions">
+            <span id="role-badge" class="role-badge" style="display:none;"></span>
+            <button id="btn-logout" class="btn btn-secondary" title="Log out" style="display:none;">Log Out</button>
+        </div>
+    </header>
+    {% endif %}
+
+    <main>
+        <nav class="admin-subnav">
+            <a href="/accounting">Accounting</a>
+            <a href="/coo">COO</a>
+            <a href="/audit">Audit Log</a>
+            <a href="/matrix">Matrix</a>
+            <a href="/courses">Courses</a>
+            <a href="/traffic">Traffic</a>
+            <a href="/spotlight">Spotlight</a>
+            <a href="/admin/gg-history" class="active">GG History</a>
+            <a href="/database">Database</a>
+            <a href="/changelog">Changelog</a>
+        </nav>
+
+        <div class="ggh-wrap">
+            <div class="ggh-cards" id="ggh-cards">
+                <div class="ggh-card"><div class="lbl">Loading…</div><div class="val">&nbsp;</div></div>
+            </div>
+
+            <div class="ggh-tabs">
+                <button class="ggh-tab active" data-tab="queue">Pending Names</button>
+                <button class="ggh-tab" data-tab="coverage">Coverage</button>
+                <button class="ggh-tab" data-tab="standings">Standings Browser</button>
+            </div>
+
+            <section id="tab-queue">
+                <div id="ggh-queue"></div>
+            </section>
+
+            <section id="tab-coverage" style="display:none;">
+                <table class="ggh-table">
+                    <thead><tr>
+                        <th>Portal</th><th>Season</th><th>Brand</th>
+                        <th class="n">Pages</th><th class="n">Rounds (holes)</th>
+                        <th class="n">Standings</th><th class="n">Events</th>
+                        <th class="n">Results</th><th class="n">Hole Rounds</th>
+                        <th class="n">Pending</th>
+                    </tr></thead>
+                    <tbody id="ggh-coverage"></tbody>
+                </table>
+                <p class="ggh-note">Pages = data pages catalogued (done/total, Phase A standings).
+                   Rounds = hole-by-hole round walks (done/total, Phase B). Hole Rounds =
+                   player scorecards banked in scoring_rounds from this portal.</p>
+            </section>
+
+            <section id="tab-standings" style="display:none;">
+                <div class="ggh-filter-row">
+                    <select id="st-portal"><option value="">All portals</option></select>
+                    <input id="st-q" placeholder="Search player…" />
+                    <input id="st-contest" placeholder="Contest filter…" />
+                    <button class="ggh-btn" id="st-apply">Apply</button>
+                </div>
+                <table class="ggh-table">
+                    <thead><tr>
+                        <th>Portal</th><th>Contest</th><th class="n">Pos</th>
+                        <th>Player (verbatim)</th><th>Linked Customer</th>
+                        <th class="n">Points</th><th class="n">Money</th>
+                    </tr></thead>
+                    <tbody id="ggh-standings"></tbody>
+                </table>
+            </section>
+
+            <p class="ggh-note">
+                Decisions here are final identity rulings: <b>Link</b> backfills every banked
+                history row (standings, results, hole-by-hole rounds) for that name on that
+                portal; <b>Guest</b> marks a non-member (no profile is ever created);
+                <b>Not a person</b> is for parse artifacts and team labels. Reviewed rulings
+                are never overwritten by automated passes — use Reopen to undo.
+            </p>
+        </div>
+    </main>
+
+    <script src="/static/js/version.js"></script>
+    <script src="/static/js/auth.js"></script>
+    <script>
+    (function () {
+        "use strict";
+        const $ = id => document.getElementById(id);
+        const esc = s => String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+        const money = c => c == null ? "" : "$" + (c / 100).toLocaleString(undefined, {minimumFractionDigits: 2});
+
+        // tabs
+        document.querySelectorAll(".ggh-tab").forEach(b => b.addEventListener("click", () => {
+            document.querySelectorAll(".ggh-tab").forEach(x => x.classList.toggle("active", x === b));
+            ["queue", "coverage", "standings"].forEach(t =>
+                $("tab-" + t).style.display = (b.dataset.tab === t ? "" : "none"));
+        }));
+
+        async function loadOverview() {
+            const res = await fetch("/api/gg-history/overview");
+            if (!res.ok) {
+                $("ggh-cards").innerHTML = '<div class="ggh-card"><div class="lbl">Admin login required</div><div class="val">—</div></div>';
+                return;
+            }
+            const d = await res.json();
+            const t = d.totals || {};
+            $("ggh-cards").innerHTML = [
+                ["Standings rows", t.standings], ["Linked", t.standings_linked],
+                ["Result rows", t.results], ["Hole rounds", t.hole_rounds],
+                ["Holes banked", t.holes], ["Pending names", t.pending, true],
+            ].map(([l, v, warn]) => `<div class="ggh-card${warn && v ? " warn" : ""}"><div class="lbl">${l}</div><div class="val">${(v ?? 0).toLocaleString()}</div></div>`).join("");
+
+            const sel = $("st-portal");
+            const withData = (d.portals || []).filter(p => p.standings_rows || p.events || p.hole_rounds);
+            sel.innerHTML = '<option value="">All portals</option>' +
+                withData.map(p => `<option>${esc(p.subdomain)}</option>`).join("");
+
+            $("ggh-coverage").innerHTML = (d.portals || []).filter(p => p.status !== "gone").map(p => `
+                <tr>
+                    <td>${esc(p.subdomain)}</td>
+                    <td>${esc(p.season || "—")}</td>
+                    <td><span class="ggh-pill ${p.brand === "TGF" ? "tgf" : "tour"}">${esc(p.brand)}</span></td>
+                    <td class="n">${p.pages_done}/${p.pages}</td>
+                    <td class="n">${p.rounds_done}/${p.rounds}</td>
+                    <td class="n">${p.standings_rows.toLocaleString()}</td>
+                    <td class="n">${p.events}</td>
+                    <td class="n">${p.result_rows.toLocaleString()}</td>
+                    <td class="n">${p.hole_rounds.toLocaleString()}</td>
+                    <td class="n">${p.pending_names || ""}</td>
+                </tr>`).join("");
+        }
+
+        async function loadQueue() {
+            const res = await fetch("/api/gg-history/pending-names");
+            if (!res.ok) return;
+            const d = await res.json();
+            const rc = d.reviewed_counts || {};
+            const head = `<p class="ggh-note" style="margin:0 0 0.75rem;">
+                <b>${d.pending_total}</b> pending · reviewed so far:
+                ${["manual", "guest", "not_a_person"].map(k => `${k.replace(/_/g, " ")} ${rc[k] || 0}`).join(" · ")}</p>`;
+            $("ggh-queue").innerHTML = head + ((d.names || []).map(n => {
+                const rows = (n.standings_rows || 0) + (n.result_rows || 0) + (n.hole_rounds || 0);
+                const cands = (n.candidates || []).map(c =>
+                    `<span class="ggh-cand" data-id="${n.id}" data-cid="${c.customer_id}"
+                        title="${esc(c.current_player_status || "")}">
+                        ${esc(c.first_name + " " + c.last_name)}
+                        <span class="cid">#${c.customer_id}${c.chapter ? " · " + esc(c.chapter) : ""}</span></span>`).join(" ");
+                return `<div class="ggh-name-card" id="nc-${n.id}">
+                    <div class="ggh-name-head">
+                        <span class="nm">${esc(n.raw_name)}</span>
+                        <span class="ggh-muted">${esc(n.subdomain || "")}${n.season ? " · " + esc(n.season) : ""}</span>
+                        ${n.affiliation ? `<span class="ggh-pill tour">${esc(n.affiliation)}</span>` : ""}
+                    </div>
+                    <div class="ggh-name-meta">${n.standings_rows || 0} standings · ${n.result_rows || 0} results ·
+                        ${n.hole_rounds || 0} hole rounds${rows === 0 ? " (no data rows — likely an artifact)" : ""}</div>
+                    <div class="ggh-actions">
+                        ${cands}
+                        <input type="number" placeholder="customer #" style="width:100px;border:1px solid var(--border);border-radius:8px;padding:5px 8px;font-size:12px;" id="cid-${n.id}">
+                        <button class="ggh-btn primary" data-act="link" data-id="${n.id}">Link</button>
+                        <button class="ggh-btn" data-act="guest" data-id="${n.id}">Guest</button>
+                        <button class="ggh-btn" data-act="not_a_person" data-id="${n.id}">Not a person</button>
+                    </div>
+                </div>`;
+            }).join("") || '<p class="ggh-muted">Queue is empty — every name has a ruling. 🎉</p>');
+
+            $("ggh-queue").querySelectorAll(".ggh-cand").forEach(el =>
+                el.addEventListener("click", () => resolve(el.dataset.id, "link", el.dataset.cid)));
+            $("ggh-queue").querySelectorAll(".ggh-btn[data-act]").forEach(el =>
+                el.addEventListener("click", () => {
+                    const id = el.dataset.id;
+                    const cid = el.dataset.act === "link" ? $("cid-" + id).value : null;
+                    if (el.dataset.act === "link" && !cid) { $("cid-" + id).focus(); return; }
+                    resolve(id, el.dataset.act, cid);
+                }));
+        }
+
+        async function resolve(id, action, customerId) {
+            const res = await fetch("/api/gg-history/resolve", {
+                method: "POST", headers: {"Content-Type": "application/json"},
+                body: JSON.stringify({id: +id, action, customer_id: customerId ? +customerId : null}),
+            });
+            const d = await res.json();
+            const card = $("nc-" + id);
+            if (!res.ok) { alert(d.error || "Failed"); return; }
+            if (card) {
+                const what = action === "link"
+                    ? `Linked to ${esc(d.linked_to || "")} — ${(d.standings_linked || 0) + (d.results_linked || 0) + (d.hole_rounds_linked || 0)} rows backfilled`
+                    : action === "guest" ? "Marked guest" : "Marked not-a-person";
+                card.innerHTML = `<span class="ggh-done-flash">✓ ${what}</span>
+                    <button class="ggh-btn" style="margin-left:10px;" data-undo="${id}">Undo</button>`;
+                card.querySelector("[data-undo]").addEventListener("click", async () => {
+                    await fetch("/api/gg-history/resolve", {
+                        method: "POST", headers: {"Content-Type": "application/json"},
+                        body: JSON.stringify({id: +id, action: "reopen"}),
+                    });
+                    loadQueue(); loadOverview();
+                });
+            }
+            loadOverview();
+        }
+
+        async function loadStandings() {
+            const p = new URLSearchParams();
+            if ($("st-portal").value) p.set("portal", $("st-portal").value);
+            if ($("st-q").value) p.set("q", $("st-q").value);
+            if ($("st-contest").value) p.set("contest", $("st-contest").value);
+            const res = await fetch("/api/gg-history/standings?" + p);
+            if (!res.ok) return;
+            const d = await res.json();
+            $("ggh-standings").innerHTML = (d.rows || []).map(r => `
+                <tr>
+                    <td>${esc(r.subdomain)}</td>
+                    <td class="wrap">${esc(r.contest_label)}</td>
+                    <td class="n">${esc(r.position_raw ?? r.position ?? "")}</td>
+                    <td>${esc(r.player_name)}</td>
+                    <td>${r.customer_id ? esc(r.customer_name || "") + ' <span class="ggh-muted">#' + r.customer_id + "</span>" : '<span class="ggh-muted">—</span>'}</td>
+                    <td class="n">${r.points ?? ""}</td>
+                    <td class="n">${money(r.money_cents)}</td>
+                </tr>`).join("") || '<tr><td colspan="7" class="ggh-muted">No rows.</td></tr>';
+        }
+        $("st-apply").addEventListener("click", loadStandings);
+
+        document.addEventListener("DOMContentLoaded", () => {
+            if (typeof initAuth === "function") initAuth();
+            loadOverview(); loadQueue();
+        });
+    })();
+    </script>
+</body>
+</html>

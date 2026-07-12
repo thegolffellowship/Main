@@ -317,6 +317,10 @@ No Python or local install needed — Claude Desktop connects directly to Railwa
   typeahead → per-player overview (handicap, stats, standings in every race,
   projected LSC seat, winnings). PII-free payloads, member-tier-destined —
   see `docs/claude/member-portal.md`
+- `templates/gg_history.html` — GG History review (admin): pending-names
+  identity queue (Link/Guest/Not-a-person), per-portal archive coverage,
+  standings browser; backend in `email_parser/gg_history.py` (see
+  `docs/claude/gg-history.md`)
 - `templates/database.html` — Admin database browser
 - `templates/changelog.html` — Version changelog
 - `static/js/dashboard.js` — Transactions page logic (largest JS file)

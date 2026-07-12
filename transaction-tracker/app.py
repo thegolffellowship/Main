@@ -9340,6 +9340,60 @@ def traffic_page():
     return render_template("traffic.html")
 
 
+# ── GG History review (admin) — v2.74.x ──
+# Kerry's identity review queue + archive coverage browser for the GG
+# history initiative (docs/claude/gg-history.md). Decisions here are
+# rule-3b territory only when they touch member-facing surfaces — the
+# queue itself is admin-internal.
+
+@app.route("/admin/gg-history")
+def gg_history_page():
+    if session.get("role") != "admin":
+        return redirect("/events")
+    return render_template("gg_history.html")
+
+
+@app.route("/api/gg-history/overview")
+@require_role("admin")
+def api_gg_history_overview():
+    from email_parser import gg_history as ggh
+    return jsonify(ggh.portal_overview())
+
+
+@app.route("/api/gg-history/pending-names")
+@require_role("admin")
+def api_gg_history_pending_names():
+    from email_parser import gg_history as ggh
+    return jsonify(ggh.review_queue())
+
+
+@app.route("/api/gg-history/standings")
+@require_role("admin")
+def api_gg_history_standings():
+    from email_parser import gg_history as ggh
+    return jsonify(ggh.standings_browser(
+        portal=request.args.get("portal") or None,
+        q=request.args.get("q") or None,
+        contest=request.args.get("contest") or None,
+        limit=min(int(request.args.get("limit", 200)), 1000)))
+
+
+@app.route("/api/gg-history/resolve", methods=["POST"])
+@require_role("admin")
+def api_gg_history_resolve():
+    from email_parser import gg_history as ggh
+    data = request.get_json(silent=True) or {}
+    try:
+        link_id = int(data.get("id"))
+    except (TypeError, ValueError):
+        return jsonify({"error": "id required"}), 400
+    cid = data.get("customer_id")
+    res = ggh.resolve_name_link(
+        link_id, str(data.get("action") or ""),
+        customer_id=int(cid) if cid else None)
+    return (jsonify(res), 400) if res.get("error") else jsonify(res)
+
+
 # ── Player Spotlight (ADMIN PREVIEW v1 — Kerry, 2026-07-10) ──
 # Destined for the pinless member view after CA/CD iteration: the payloads
 # are PII-free by design, so opening it up later is a role change only.

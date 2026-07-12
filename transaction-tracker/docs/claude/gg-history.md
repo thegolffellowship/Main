@@ -739,7 +739,16 @@ TGF/Former profiles remain Kerry's open decision (option b).
       (customer_id, date) once Phase B yields event dates — extends the
       existing handicap_rounds.scoring_round_id pattern backwards.
 - [ ] Phase B: event results + match play + scorecard depth
-- [ ] Kerry review queue: pending name links on COO action items (build
-      the surfacing hook when the first pending batch exists)
+- [x] Review UI (v2.75.0): /admin/gg-history — pending-names queue
+      (Link/Guest/Not-a-person + Undo, same-surname candidate chips,
+      backfill on link), per-portal coverage, standings browser. ONE
+      aggregate COO action item tracks the pending count (synced by
+      walkers + every review action; auto-completes at zero). The
+      deferred #123 name_links 3-col uniqueness rebuild shipped with it:
+      UNIQUE(raw_name, portal_id, gg_member_id), gg_member_id NOT NULL
+      DEFAULT '', idempotent boot-path migration, writer upsert on the
+      3-col target, reviewed rulings never overwritten by automated
+      passes. Bridge ops: holes-bg=<sub>[@budget] (daemon-thread walk;
+      MCP clients time out ~60s) + holes-status + overview.
 - [ ] Two Man Tour lane (last): verify per-course events inside
       tgf-twomantour; ingest under brand='TwoManTour'
