@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.78.0";
+window.TGF_VERSION = "2.78.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.78.1",
+    date: "2026-07-12",
+    changes: [
+      "PLAYERS CUP PLACES ARE BY FLIGHT (Kerry): the Contests page's flight sections now number players within their flight (competition ranking, ties share a T-rank) instead of showing the overall 119-player rank -- 2ND FLIGHT starts at 1, not 10. The rank-movement arrow still reflects overall movement. Spotlight's Where They Stand matches: a flighted race shows rank-in-flight over flight size ('4 of 32' alongside the 2ND FLIGHT label) instead of '16 of 119'.",
+    ],
+  },
   {
     version: "2.78.0",
     date: "2026-07-12",
