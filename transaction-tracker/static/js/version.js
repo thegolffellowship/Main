@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.77.0";
+window.TGF_VERSION = "2.77.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.77.1",
+    date: "2026-07-12",
+    changes: [
+      "Spotlight Where They Stand order (Kerry): THE FELLOWSHIP CUP now sits above THE PLAYERS CUP -- display order is SA NET, Austin NET, Fellowship Cup, Players Cup, then fall/match-play rows.",
+    ],
+  },
   {
     version: "2.77.0",
     date: "2026-07-12",
