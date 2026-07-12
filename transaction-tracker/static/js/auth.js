@@ -186,6 +186,7 @@ function _memberTraffic() {
             }
         } catch (e) { /* analytics must never break the page */ }
     };
+    window.tgfMemberMetric = send;  // member-nudges.js reuses the beacon
     send("open");
     document.addEventListener("click", e => {
         const el = e.target.closest("button, a");

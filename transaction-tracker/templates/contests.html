@@ -1061,7 +1061,7 @@
         </div>
     </div>
 
-    {% if member_mode %}<script>window.MEMBER_MODE = true;</script>
+    {% if member_mode %}<script>window.MEMBER_MODE = true;</script><script src="/static/js/member-nudges.js" defer></script>
     <style>
         /* Member view: manager/admin controls can NEVER show, including
            ones injected by re-renders after applyRole() ran (the monthly

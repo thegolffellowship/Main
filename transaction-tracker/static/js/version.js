@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.77.3";
+window.TGF_VERSION = "2.78.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.78.0",
+    date: "2026-07-12",
+    changes: [
+      "FIRST-USE MEMBER NUDGES LIVE (design-claude spec #139/#140, Kerry-ratified look with the #141 welcome-copy edit): three one-time discovery whispers on the member view -- the WELCOME card on first /member visit ('Welcome to the Fellowship. Tap HOW IT WORKS on any contest to see exactly how it pays -- and tap any player to explore their season.'), the standings TIP ('Tap any player to see their rounds -- event by event, hole by hole.') anchored under the first standings rows, and the Spotlight TIP ('Search any member -- including yourself.') under the search box.",
+      "The whisper pattern per spec: Bitter eyebrow + one-line system-sans body, orange exactly twice (eyebrow + 3px keyline), 40x40 one-tap dismiss, no scrim, absolute overlay so nothing reflows, bottom-toast degrade when the anchor is off-screen. Once per device via localStorage (tgf_nudge_welcome / tgf_nudge_standings / tgf_nudge_spotlight_search); one at a time -- welcome wins and defers the standings tip to the next visit. SCOPE GUARD (ratified #141): the nudge component is for discovery tips ONLY, never actionable/time-sensitive/financial messaging.",
+      "Measurement: the anonymous member beacon logs nudge impressions and dismissals (new whitelisted 'nudge' event, detail '<key>:impression|dismiss') so /traffic shows whether they work. Admin pages never see nudges (MEMBER_MODE only).",
+    ],
+  },
   {
     version: "2.77.3",
     date: "2026-07-12",
