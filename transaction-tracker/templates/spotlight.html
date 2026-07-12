@@ -204,7 +204,7 @@
             const cls = ch === "Austin" ? "ch-austin" : (ch === "San Antonio" ? "ch-sa" : "ch-other");
             return ch ? `<span class="spt-chip ${cls}">${esc(ch)}</span>` : "";
         };
-        // trends are the EARNED state (15+ rounds; payload nulls them below
+        // trends are the EARNED state (10+ rounds; payload nulls them below
         // that). ▼ green = improving (fewer strokes), ▲ red = worse.
         const trendHtml = (t, gap) => {
             if (t == null || t === 0) return "";

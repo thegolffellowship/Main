@@ -7476,9 +7476,9 @@ def _spotlight_scoring(conn, customer_id: int) -> dict | None:
     "simple, not big" individual scoring stats).
 
     Window = the player's LAST 20 tracked rounds (scoring_rounds, both
-    9- and 18-hole). Trend = last 10 rounds vs the 10 before — NOT
-    20-vs-20: current season volume is ~20 rounds for the most active
-    players, so a 40-round baseline would never light up. Negative
+    9- and 18-hole) for averages/distribution. Trend = recent FORM off
+    the last 10 rounds only (Kerry, 2026-07-12): latest 5 vs the 5
+    before, earned at 10+ tracked rounds. Negative
     trend = improving (fewer strokes). Par comes from course_tee_holes
     via the round's tee; holes with no strokes or no par are skipped.
     Returns None when the player has no tracked rounds.
@@ -7492,8 +7492,8 @@ def _spotlight_scoring(conn, customer_id: int) -> dict | None:
     if not rounds:
         return None
     ids = [r["id"] for r in rounds]
-    recent_ids = set(ids[:10])   # trend halves, by recency
-    prior_ids = set(ids[10:20])
+    recent_ids = set(ids[:5])    # trend halves: last 10 rounds, 5 vs 5
+    prior_ids = set(ids[5:10])
     qmarks = ",".join("?" * len(ids))
     holes = conn.execute(
         f"""SELECT sh.scoring_round_id AS rid, sh.strokes, cth.par
@@ -7555,7 +7555,7 @@ def _spotlight_scoring(conn, customer_id: int) -> dict | None:
         rec = [r["gross"] for r in rows if r["id"] in recent_ids]
         pri = [r["gross"] for r in rows if r["id"] in prior_ids]
         trend = (round(sum(rec) / len(rec) - sum(pri) / len(pri), 1)
-                 if trend_ok and len(rec) >= 3 and len(pri) >= 3 else None)
+                 if trend_ok and len(rec) >= 2 and len(pri) >= 2 else None)
         return {"avg": round(sum(r["gross"] for r in rows) / len(rows), 1),
                 "trend": trend, "n": len(rows)}
 
