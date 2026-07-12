@@ -756,11 +756,29 @@ TGF/Former profiles remain Kerry's open decision (option b).
       completes FIRST (Kerry's year-at-a-time directive)
 - [x] Hole-by-hole ingest engine (v2.74.0): Phase-B walker
       `holes=<subdomain>` live — see "Phase B — hole-by-hole walk"
-      above. Pilot: tgf-sa2025.
+      above.
+- [x] **sa2025 HOLES PILOT COMPLETE (2026-07-12):** all 47 published
+      rounds walked (the export's 65 include unpublished/postponed
+      rounds the selector omits), **ZERO per-card verification
+      discrepancies** season-wide, ALL Gross deduped 100% against ALL
+      Net (full-field Net coverage). Only the two Match Play bracket
+      rounds carried no ALL boards (board labels 'HORTON v BOOKER…'/
+      'MATCHES — SAN ANTONIO Match Play' — the match-play work item).
+      Cross-channel audit (audit=sa2025): scoring **1,203 checks 96.9%
+      exact**; money 111 players 91.9% (all 9 misses the known
+      season-pot class). The 37 scoring flags classify as (a) net
+      off-by-1 with gross exact (plus-handicap rendering), (b) gross
+      off-by-1–2 (late GG edits), (c) a few large deltas on
+      shared-surname pairs (Nielsen Mike/Travis, Fieber Duncan/Scott)
+      — likely resolver cross-attribution, ON THE SPOT-CHECK LIST
+      before career stats surface.
 - [ ] Row-level handicap_rounds ↔ gg_history_events bridging by
       (customer_id, date) once Phase B yields event dates — extends the
       existing handicap_rounds.scoring_round_id pattern backwards.
-- [ ] Phase B: event results + match play + scorecard depth
+      (Holes walk already bridges opportunistically at import.)
+- [ ] Phase B remaining: match play brackets + pairings (Kerry's
+      ruling: tee-sheet scrape primary / starter-sheet PDFs cross-check
+      / score-groups tiebreaker)
 - [x] Review UI (v2.75.0): /admin/gg-history — pending-names queue
       (Link/Guest/Not-a-person + Undo, same-surname candidate chips,
       backfill on link), per-portal coverage, standings browser. ONE
