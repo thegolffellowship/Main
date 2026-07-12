@@ -16,7 +16,7 @@ header.shell-nav {
     box-shadow: none; border-bottom: none;
 }
 .shell-brand { display: flex; align-items: center; gap: 12px; }
-.shell-brand img { width: 32px; height: 32px; display: block; }
+.shell-brand img { width: 42px; height: 42px; display: block; }
 .shell-wordmark { font: 700 16px/1.1 'Bitter', serif; color: #fff; white-space: nowrap; }
 .shell-version-chip {
     font: 600 10px/1 'Bitter', serif; letter-spacing: .5px; color: #9CA3AF;
@@ -228,7 +228,7 @@ header.shell-nav {
        2026-07-10 — two tabs leave plenty of room) */
     header.shell-nav.shell-member { min-height: 64px; }
     .shell-member .shell-brand { display: flex; }
-    .shell-member .shell-brand img { width: 34px; height: 34px; }
+    .shell-member .shell-brand img { width: 42px; height: 42px; }
     .shell-member .shell-wordmark { display: none; }
     .shell-member .shell-member-tabs { gap: 18px; margin-left: 8px; flex: 1; }
     .shell-member .shell-member-tabs a { min-height: 44px; font-size: 13px; letter-spacing: 1.2px; }

@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.75.2";
+window.TGF_VERSION = "2.75.3";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.75.3",
+    date: "2026-07-12",
+    changes: [
+      "Nav badge: TGF logo icon enlarged (32/34px -> 42px) in the dark shell brand, per Kerry.",
+      "SPOTLIGHT MEMBER FLIP RULINGS BANKED (Kerry, in-session): SHOW WINNINGS on the public member view; data scope 2026-ONLY (archive years join per-season after audit sign-off, via the v2.74.0 source tags); member nav stays inline tabs at 3 pages (Contests | Handicaps | Spotlight) -- no hamburger, per the existing <=3-sections threshold rule. The flip itself (role change + PII sweep + nav link + traffic beacon) leads the next build session.",
+    ],
+  },
   {
     version: "2.75.2",
     date: "2026-07-12",
