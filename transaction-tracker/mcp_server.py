@@ -1447,28 +1447,35 @@ def _scoring_dispatch(url: str, extract: str):
                 dom, _, budget = rest.partition("@")
                 return json.dumps(ggh.ingest_portal_holes(
                     dom.strip(), budget_seconds=int(budget or 240)), indent=2)
-            if sub == "holes-bg" and rest:
-                # Same walk in a daemon thread (MCP clients time out ~60s;
-                # the walk wants minutes). Poll with holes-status.
+            if sub == "games" and rest:
+                # Phase B: per-game money walk. games=<subdomain>[@budget]
+                dom, _, budget = rest.partition("@")
+                return json.dumps(ggh.ingest_portal_games(
+                    dom.strip(), budget_seconds=int(budget or 240)), indent=2)
+            if sub in ("holes-bg", "games-bg") and rest:
+                # Same walks in a daemon thread (MCP clients time out
+                # ~60s; a portal walk wants minutes). Poll: holes-status.
                 import threading
+                fn = (ggh.ingest_portal_holes if sub == "holes-bg"
+                      else ggh.ingest_portal_games)
                 dom, _, budget = rest.partition("@")
                 dom, budget_s = dom.strip(), int(budget or 600)
-                ent = _GGH_BG.get(dom)
+                key = f"{sub}:{dom}"
+                ent = _GGH_BG.get(key)
                 if ent and ent["thread"].is_alive():
-                    return json.dumps({"already_running": dom})
+                    return json.dumps({"already_running": key})
 
-                def _run(dom=dom, budget_s=budget_s):
+                def _run(fn=fn, dom=dom, budget_s=budget_s, key=key):
                     try:
-                        _GGH_BG[dom]["result"] = ggh.ingest_portal_holes(
+                        _GGH_BG[key]["result"] = fn(
                             dom, budget_seconds=budget_s)
                     except Exception as exc:  # keep the error visible
-                        _GGH_BG[dom]["result"] = {"error": str(exc)}
+                        _GGH_BG[key]["result"] = {"error": str(exc)}
 
-                t = threading.Thread(target=_run, daemon=True,
-                                     name=f"ggh-holes-{dom}")
-                _GGH_BG[dom] = {"thread": t, "result": None}
+                t = threading.Thread(target=_run, daemon=True, name=key)
+                _GGH_BG[key] = {"thread": t, "result": None}
                 t.start()
-                return json.dumps({"started": dom, "budget_s": budget_s})
+                return json.dumps({"started": key, "budget_s": budget_s})
             if sub == "holes-status":
                 return json.dumps(
                     {dom: {"running": e["thread"].is_alive(),

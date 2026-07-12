@@ -613,6 +613,28 @@ Design points (the POC lessons, applied):
   `gg_member_map` when the printed handle maps to exactly ONE
   customer (ambiguous handles stay pending — collision-safe).
 
+### Phase B — per-game money walk (v2.75.1, LIVE)
+
+`scoring-gg-history:games=<subdomain>[@budget]` (+ `games-bg=`) →
+`ingest_portal_games()`: same round-selector walk; per round every
+per-tournament board EXCEPT ALL Net/ALL Gross/Adjustments (INDIVIDUAL
+Net $, SKINS $, TEAM Net $, MVP $, CTPs, …) is parsed into
+`gg_history_results`: verbatim board label as game_label, verbatim
+'T1' positions, purse/points parsed, team rows flagged via
+team_label. Rows attach to the SAME `gg_history_events` row the
+export channel created (round_index join) — export rows
+(game_label='export_round') and scrape rows sit side by side per
+event; scrape rows replace idempotently, export rows never touched.
+Fetch-then-write per round (no write txn across network I/O — walks
+may run concurrently). Walk state: `gg_history_pages`
+'games:<round_id>' rows. `_resolve_identity` cascade (v2.75.1):
+scoring resolver → roster map (single-customer handles) → earlier
+ruling for that name+portal, so manual links propagate to all future
+walks. NOTE (python-sqlite3 trap, cost one prod hotfix): CREATE TABLE
+runs in autocommit but DML opens a transaction — any DDL+copy
+migration MUST self-commit, or a read-only caller strands the shell
+table.
+
 Ingest order (Kerry: slowly, backwards chronologically): the 2025 wave
 (sa2025, austin2025, champ25, lonestarcup25, roadtrip25) → 2024 wave
 (incl. DFW/Houston finales) → … → 2016. **Two Man Tour portals ingest
