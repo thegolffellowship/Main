@@ -801,8 +801,24 @@ TGF/Former profiles remain Kerry's open decision (option b).
       KISSING TREE published only on the Austin portal (SA selector
       skips index 64) — cross-portal shared events dedupe naturally
       via the global gg_aggregate_id uniqueness.
-- [ ] Next walks: austin2025 games; champ25/lonestarcup25/roadtrip25
-      holes+games.
+- [x] **austin2025 GAMES COMPLETE (2026-07-12):** 29/29 rounds, 299
+      boards, 3,008 rows, 94.3% linked. Austin's CART Net $ boards
+      PARSE (SA's TEAM Net $ format is the only zero-row case);
+      Austin Fall Match Play weekly rows banked.
+- [x] **One-off holes walks (2026-07-12):** champ25 2/2 rounds, 74
+      cards — every card verifier-flagged (suspected 2-day-CUMULATIVE
+      totals on round boards; hole data itself imported — SPOT-CHECK).
+      lsc25: practice round banked (same flag class); FOURBALL/
+      FOURSOMES/SINGLES have no ALL boards (Ryder-Cup team formats —
+      match-play work item). roadtrip25: 0 cards — boards are
+      'INDIVIDUAL Net - ROAD TRIP' etc., NO ALL boards; the walker
+      needs an INDIVIDUAL-fallback when no ALL boards exist (KNOWN
+      GAP, next release; games walk banks those boards' results
+      meanwhile). Games walks for all three kicked same night.
+- [ ] Holes-walker follow-ups: INDIVIDUAL-board fallback (roadtrip25
+      class); cumulative-total verify guard (champ25/lsc25 class);
+      TEAM Net $ table shape (SA class); shared-surname
+      cross-attribution spot-checks (Nielsen/Fieber class).
 - [ ] Phase B remaining: match play BRACKET reconstruction (weekly
       match rows already banked via games walk) + pairings (Kerry's
       ruling: tee-sheet scrape primary / starter-sheet PDFs cross-check
