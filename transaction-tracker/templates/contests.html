@@ -575,6 +575,10 @@
             text-transform: uppercase; border-bottom: 1px solid var(--border);
         }
         .pr-race-chips .sub-tab:hover { color: var(--primary); border-color: var(--primary); }
+        .pr-spt-pill { display: inline-block; margin: 0 0 8px 8px; padding: 5px 12px;
+            border-radius: 999px; background: var(--surface-dark, #1B1B1B); color: #fff;
+            font: 600 11px/1 'Bitter', serif; letter-spacing: 0.6px; text-decoration: none; }
+        .pr-spt-pill:hover { background: var(--primary, #E87C3E); color: #fff; }
         .pr-race-chips .sub-tab.active[data-pr="austin"] { background: var(--chapter-austin); border-color: var(--chapter-austin); color: #fff; }
         .pr-race-chips .sub-tab.active[data-pr="net"] { background: var(--chapter-sa); border-color: var(--chapter-sa-alt); color: #1B1B1B; }
         .pr-race-chips .sub-tab.active[data-pr="tfc"],
@@ -3550,8 +3554,11 @@
             html += prRenderScoreRounds(leftovers, html
                 ? {title: "OTHER ROUNDS THIS MONTH", explainer: "— no points line this month; click a row for hole-by-hole"}
                 : {title: "ROUNDS THIS MONTH", explainer: "— click a row for hole-by-hole"});
-            cell.innerHTML = html
-                || '<span style="color:var(--text-muted);">No points detail or scorecards for this month.</span>';
+            const sptPillM = tr.dataset.cid
+                ? `<a class="pr-spt-pill" href="${window.MEMBER_MODE ? "/member/spotlight" : "/spotlight"}?player=${tr.dataset.cid}">Full Spotlight &rarr;</a>`
+                : "";
+            cell.innerHTML = sptPillM + (html
+                || '<span style="color:var(--text-muted);">No points detail or scorecards for this month.</span>');
             cell.style.color = "";
             prBindScorecardToggles(cell);
         } catch (e) {
@@ -3602,8 +3609,11 @@
             let html = ptsTables ? prRenderDetailTables(ptsTables, rounds, claimed) : "";
             const leftovers = (rounds || []).filter(r => !claimed.has(r.id));
             html += prRenderScoreRounds(leftovers);
-            cell.innerHTML = html
-                || '<span style="color:var(--text-muted);">No detail available for this player yet.</span>';
+            const sptPill = tr.dataset.cid
+                ? `<a class="pr-spt-pill" href="${window.MEMBER_MODE ? "/member/spotlight" : "/spotlight"}?player=${tr.dataset.cid}">Full Spotlight &rarr;</a>`
+                : "";
+            cell.innerHTML = sptPill + (html
+                || '<span style="color:var(--text-muted);">No detail available for this player yet.</span>');
             cell.style.color = "";
             prBindScorecardToggles(cell);
         } catch (e) {

@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.76.4";
+window.TGF_VERSION = "2.76.5";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.76.5",
+    date: "2026-07-12",
+    changes: [
+      "Contests -> Spotlight connection (Kerry GO on the expanded-panel design): when a player row is expanded on the Contests page, a 'Full Spotlight ->' pill appears at the top of the event-breakdown panel (both the race and monthly views) linking to that player's Spotlight via the ?player= deep link -- member view targets /member/spotlight, admin /spotlight. The row tap itself is untouched: expand -> event lines -> scorecard detail all behave exactly as before; the pill only exists inside the opened panel, so there are no competing tap targets on mobile. Completes the loop with v2.76.3's Where-They-Stand links back into the contest views.",
+    ],
+  },
   {
     version: "2.76.4",
     date: "2026-07-12",
