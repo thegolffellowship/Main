@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.76.2";
+window.TGF_VERSION = "2.76.3";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.76.3",
+    date: "2026-07-12",
+    changes: [
+      "Spotlight WHERE THEY STAND rows now deep-link to their contest views (Kerry): each race row is a tappable link (chevron affordance, race name highlights on hover) into the Contests page's restore-in-place hash -- SA/Austin NET, Players Cup, Fellowship Cup, Fall NET rows land on their race; the Match Play row lands on the Match Play tab. Member-mode rows target /member/contests; admin rows target /contests.",
+    ],
+  },
   {
     version: "2.76.2",
     date: "2026-07-12",

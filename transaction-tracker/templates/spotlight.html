@@ -87,6 +87,9 @@
         .spt-par .pl { font: 700 9px/1 'Bitter', serif; letter-spacing: 0.5px; color: #6B7280; text-transform: uppercase; }
         .spt-par .pv { display: flex; align-items: baseline; justify-content: center; gap: 4px; margin-top: 5px; }
         .spt-par .pv .k { font: 700 19px/1 'Bitter', serif; color: #1B1B1B; font-variant-numeric: tabular-nums; }
+        a.spt-stand { text-decoration: none; color: inherit; cursor: pointer; }
+        a.spt-stand:hover .race { color: var(--primary, #E87C3E); }
+        .spt-go { font: 700 20px/1 'Helvetica Neue', Arial, sans-serif; color: #C6C2BA; margin-left: 8px; align-self: center; }
         .spt-trend { font: 700 11px/1 'Helvetica Neue', Arial, sans-serif; white-space: nowrap; }
         .spt-trend.up { color: #B91C1C; }
         .spt-trend.down { color: #1B7F4B; }
@@ -331,11 +334,17 @@
             }
 
             // ── WHERE THEY STAND — one card, compact rows ──
-            const standRow = (rank, rankColor, field, race, meta, entered) =>
-                `<div class="spt-stand"><div class="rk"><div class="r" style="color:${rankColor};">${rank}</div>` +
+            // each row deep-links to its race view on the Contests page
+            // (#race=… / #tab=mp restore-in-place, Kerry 2026-07-12)
+            const contestsBase = window.MEMBER_MODE ? "/member/contests" : "/contests";
+            const RACE_HASH = { san_antonio_net: "net", austin_net: "austin",
+                                players_cup_gross: "gross", fellowship_cup: "tfc" };
+            const standRow = (rank, rankColor, field, race, meta, entered, href) =>
+                `<${href ? `a href="${href}"` : "div"} class="spt-stand"><div class="rk"><div class="r" style="color:${rankColor};">${rank}</div>` +
                 `<div class="f">${esc(field)}</div></div>` +
                 `<div class="mid"><div class="race">${esc(race)}</div><div class="meta">${esc(meta)}</div></div>` +
-                `<span class="spt-pill ${entered ? "in" : "out"}">${entered ? "In" : "Not In"}</span></div>`;
+                `<span class="spt-pill ${entered ? "in" : "out"}">${entered ? "In" : "Not In"}</span>` +
+                `${href ? '<span class="spt-go">&rsaquo;</span></a>' : "</div>"}`;
             const rows = [];
             (d.races || []).forEach(r => {
                 const pc = r.key === "players_cup_gross";
@@ -347,12 +356,14 @@
                 rows.push(standRow(
                     esc(String(r.rank)), pc ? "#BF5700" : "#1B1B1B", `of ${r.n_players}`,
                     r.label + (r.flight ? ` · ${r.flight}` : ""),
-                    metaBits.join(" · "), r.enrolled));
+                    metaBits.join(" · "), r.enrolled,
+                    RACE_HASH[r.key] ? `${contestsBase}#race=${RACE_HASH[r.key]}` : null));
             });
             (d.fall_buyins || []).forEach(f => {
                 rows.push(standRow("—", "#C6C2BA", "Aug 29",
                     (f.chapter === "Austin" ? "Austin" : "SA") + " Fall NET",
-                    "Lights up when fall races begin", true));
+                    "Lights up when fall races begin", true,
+                    `${contestsBase}#race=${f.chapter === "Austin" ? "fall_austin" : "fall_sa"}`));
             });
             if (d.match_play) {
                 const mp = d.match_play;
@@ -360,9 +371,10 @@
                     ? standRow(`${mp.wins ?? 0}–${mp.losses ?? 0}${mp.draws ? "–" + mp.draws : ""}`,
                         "#1B1B1B", mp.pool, `City Match Play · ${mp.chapter}`,
                         mp.stableford != null ? `${mp.stableford} Stableford pts · pool play in progress`
-                                              : "Pool play in progress", true)
+                                              : "Pool play in progress", true,
+                        `${contestsBase}#tab=mp`)
                     : standRow("—", "#C6C2BA", "", `City Match Play · ${mp.chapter}`,
-                        "Pools not drawn yet", true));
+                        "Pools not drawn yet", true, `${contestsBase}#tab=mp`));
             }
             const stands = rows.length
                 ? `<div><div class="spt-sec-head"><span class="t">Where They Stand</span></div>` +
