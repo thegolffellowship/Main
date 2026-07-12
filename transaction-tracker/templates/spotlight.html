@@ -90,6 +90,10 @@
         a.spt-stand { text-decoration: none; color: inherit; cursor: pointer; }
         a.spt-stand:hover .race { color: var(--primary, #E87C3E); }
         .spt-go { font: 700 20px/1 'Helvetica Neue', Arial, sans-serif; color: #C6C2BA; margin-left: 8px; align-self: center; }
+        .spt-drama { font: 600 11.5px/1.35 'Helvetica Neue', Arial, sans-serif; margin-top: 3px; }
+        .spt-drama.leader, .spt-drama.in_money { color: #1B7F4B; }
+        .spt-drama.chase { color: var(--primary, #E87C3E); }
+        .spt-drama.invite { color: #6B7280; }
         .spt-trend { font: 700 11px/1 'Helvetica Neue', Arial, sans-serif; white-space: nowrap; }
         .spt-trend.up { color: #B91C1C; }
         .spt-trend.down { color: #1B7F4B; }
@@ -339,10 +343,10 @@
             const contestsBase = window.MEMBER_MODE ? "/member/contests" : "/contests";
             const RACE_HASH = { san_antonio_net: "net", austin_net: "austin",
                                 players_cup_gross: "gross", fellowship_cup: "tfc" };
-            const standRow = (rank, rankColor, field, race, meta, entered, href) =>
+            const standRow = (rank, rankColor, field, race, meta, entered, href, drama) =>
                 `<${href ? `a href="${href}"` : "div"} class="spt-stand"><div class="rk"><div class="r" style="color:${rankColor};">${rank}</div>` +
                 `<div class="f">${esc(field)}</div></div>` +
-                `<div class="mid"><div class="race">${esc(race)}</div><div class="meta">${esc(meta)}</div></div>` +
+                `<div class="mid"><div class="race">${esc(race)}</div><div class="meta">${esc(meta)}</div>${drama ? `<div class="spt-drama ${drama.kind}">${esc(drama.text)}</div>` : ""}</div>` +
                 `<span class="spt-pill ${entered ? "in" : "out"}">${entered ? "In" : "Not In"}</span>` +
                 `${href ? '<span class="spt-go">&rsaquo;</span></a>' : "</div>"}`;
             const rows = [];
@@ -357,7 +361,8 @@
                     esc(String(r.rank)), pc ? "#BF5700" : "#1B1B1B", `of ${r.n_players}`,
                     r.label + (r.flight ? ` · ${r.flight}` : ""),
                     metaBits.join(" · "), r.enrolled,
-                    RACE_HASH[r.key] ? `${contestsBase}#race=${RACE_HASH[r.key]}` : null));
+                    RACE_HASH[r.key] ? `${contestsBase}#race=${RACE_HASH[r.key]}&player=${d.customer_id}` : null,
+                    r.drama));
             });
             (d.fall_buyins || []).forEach(f => {
                 rows.push(standRow("—", "#C6C2BA", "Aug 29",

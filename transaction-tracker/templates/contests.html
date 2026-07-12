@@ -575,6 +575,8 @@
             text-transform: uppercase; border-bottom: 1px solid var(--border);
         }
         .pr-race-chips .sub-tab:hover { color: var(--primary); border-color: var(--primary); }
+        @keyframes prRowPulse { 0%, 100% { background: transparent; } 30% { background: #FDEBDD; } }
+        tr.pr-row-focus > td { animation: prRowPulse 1.6s ease 2; }
         .pr-spt-pill { display: inline-block; margin: 0 0 8px 8px; padding: 5px 12px;
             border-radius: 999px; background: var(--surface-dark, #1B1B1B); color: #fff;
             font: 600 11px/1 'Bitter', serif; letter-spacing: 0.6px; text-decoration: none; }
@@ -3664,7 +3666,15 @@
         // Points Races is the landing tab — load it immediately; Match Play
         // still warms in the background so switching to it stays instant
         loadPrRoster();
-        prLoadStandings();
+        const pm = hash.match(/player=(\d+)/);
+        prLoadStandings().then(() => {
+            if (!pm) return;
+            const row = document.querySelector(`#pr-table-container tr[data-cid="${pm[1]}"]`);
+            if (!row) return;
+            row.scrollIntoView({ behavior: "smooth", block: "center" });
+            row.classList.add("pr-row-focus");
+            setTimeout(() => row.classList.remove("pr-row-focus"), 4000);
+        });
         cmpLoad();
     }
 
