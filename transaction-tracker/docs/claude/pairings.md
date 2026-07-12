@@ -80,6 +80,33 @@ that COULDN'T resolve to a customer.
   rule-6 violation) + allow archive events (events-FK is NOT NULL
   today) + distinguish played-with vs rode-with.
 
+## CA/platform-claude docs merge (mailbox #134, 2026-07-12)
+
+Vetting verdict: NO conflicts with Kerry's 11 rules. Additions:
+- **Pairing MODES are first-class per event**: standard | **ABCD
+  Night** (one A/B/C/D handicap-band player per foursome) | **Dream
+  Team** (full player choice, no random assignment). From the live
+  website FAQ — Kerry's list omitted these.
+- **Foursome Lock System is the engine's runtime** (Error Handling
+  Spec §7, ratified): lock at 5pm day-before (9-hole) / 3-days-before
+  (18-hole) / custom; pairings generate at/after lock; post-lock only
+  complete foursomes may add (max 3, until start); withdrawal reopen
+  scenarios defined there.
+- **Constraint inputs beyond foursome composition**: TEE-TIME
+  preference ("need latest tee time") and CART needs — engine places
+  constrained players into compatible slots; cart-pair assignment
+  (1&2 / 3&4) honors them.
+- **Guest-host association is already structural** (registration +
+  roster "Guest of [Member]") → feeds guest-with-inviter directly.
+- **Lane ruling**: Tracker builds the V2-era engine (correct home);
+  Platform V1.0 only captures the request at signup; Kerry's rule 10
+  (signup request-notification) needs a Platform scope decision
+  (CA recommends V1.5).
+- **CA's proposed build order** (Kerry to finalize): history banking
+  (running) → customer_id migration (ratified) → standard-mode rules
+  engine → tee/cart/match constraint layer → ABCD/Dream Team modes →
+  manager override UI → Platform signup flow.
+
 ## Engine notes (design, not yet built)
 
 - Season-coverage objective (rule 3) is the optimizer's primary term;
