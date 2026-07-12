@@ -33,6 +33,37 @@ matters too, not just the foursome.
 11. **A request from or for a person LOCKS both players** from further
     requests for that event, unless the other declines.
 
+## Ratified (Kerry, in-session 2026-07-12)
+
+- **customer_id amendment: GO** ("Yes on customer id thing") — rebuild
+  pairing_history keyed by customer_id + archive-event support +
+  played-with/rode-with distinction. event_pairings joins the same
+  amendment (see audit below).
+- **Cart-pair ruling:** cart partners derive from the SEQUENCE of the
+  pairing on the tee sheet / scorecard — **spots 1 & 2 ride together,
+  spots 3 & 4 ride together.** (Scorecard groups preserve player order,
+  so rode-with history IS recoverable from the archive walks.)
+- **Priority order: NOT final.** Kerry + CA are vetting the full
+  directive set; final ordering comes back as direction. The order
+  sketched under Engine notes remains a non-ratified draft.
+
+## Rule-6 audit (Kerry-directed, run 2026-07-12)
+
+Swept all 104 CREATE TABLEs + the boot-time customer_id migration
+registry. Person-bearing tables WITHOUT customer_id — the complete
+list of remaining violators:
+
+1. **pairing_history** (player_a/player_b names) — fix ratified above.
+2. **event_pairings** (player_name, cart_pos) — same family, rides the
+   same amendment.
+
+Everything else person-bearing is compliant via design or boot
+migrations (items, rsvps, season_contests, handicap_rounds,
+handicap_player_links, customer_aliases, cmp_matches/cmp_bracket via
+player/opponent/winner-id columns, all gg_history_*/gg_member_map).
+`name_parse_failures` is exempt by nature — it is the log of names
+that COULDN'T resolve to a customer.
+
 ## Data feeds
 
 - **Played-with history**: scorecard groups (shared
