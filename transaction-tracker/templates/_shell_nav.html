@@ -19,7 +19,7 @@
     <nav class="shell-member-tabs">
         {# nbsp inside the span: the tabs are inline-flex, which collapses
            bare whitespace between flex items ("SEASONCONTESTS" bug) #}
-        <a href="/member/contests" class="{{ 'active' if SHELL_ACTIVE == 'contests' else '' }}">Season<span class="nav-label-full">&nbsp;Contests</span></a>
+        <a href="/member/contests" class="{{ 'active' if SHELL_ACTIVE == 'contests' else '' }}"><span class="nav-label-full">Season&nbsp;</span>Contests</a>
         <a href="/member/handicaps" class="{{ 'active' if SHELL_ACTIVE == 'handicaps' else '' }}">Handicaps</a>
         <a href="/member/spotlight" class="{{ 'active' if SHELL_ACTIVE == 'spotlight' else '' }}">Spotlight</a>
     </nav>
