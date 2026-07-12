@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.75.5";
+window.TGF_VERSION = "2.75.6";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.75.6",
+    date: "2026-07-12",
+    changes: [
+      "Contests page decluttered (Kerry): the on-page season-structure paragraph under the cup standings and the pot-projection caption under the purse chips are removed -- both duplicated what the HOW IT WORKS popup already explains (its The Race / The Money sections carry the best-10 + POINTS RESET + TGF Championship story and the pot-growth mechanics). prRenderStructureNote kept as a no-op that clears the element.",
+    ],
+  },
   {
     version: "2.75.5",
     date: "2026-07-12",

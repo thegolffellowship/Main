@@ -3074,7 +3074,8 @@
             chips.push(`<span class="pr-place">Champion <b>${prFmtMoney(pp.champion_cents)}</b></span>`);
             chips.push(`<span class="pr-place">Each flight: 1st <b>${prFmtMoney(pp.flight_first_cents)}</b> · 2nd <b>${prFmtMoney(pp.flight_second_cents)}</b></span>`);
         }
-        chips.push('<span class="pr-pay-note">projected from current buy-ins — the pot grows with every entry</span>');
+        // pot-projection caption removed (Kerry 2026-07-12) — the HOW IT
+        // WORKS popup explains buy-ins and pot growth
         el.innerHTML = chips.join("");
     }
     // Walk players down a payout ladder; TIED players (same rank label)
@@ -3121,19 +3122,14 @@
                 prSplitDown(list, [pp.flight_first_cents, pp.flight_second_cents], "flight money (67/33)"));
         }
     }
-    // The two TGF-wide cups carry the four-step season structure note
-    // (Kerry, 2026-07-10; ratified spec #71): the POINTS RESET after the
-    // City Championships condenses the field and sets the starting
-    // totals for the TGF Championship.
+    // The cups' four-step season-structure explainer now lives ONLY in
+    // the HOW IT WORKS popup (Kerry, 2026-07-12: "remove all that text
+    // description in lieu of the HOW IT WORKS buttons") — the on-page
+    // note duplicated the modal's The Race section. Kept as a no-op so
+    // stale call sites clear the element.
     function prRenderStructureNote(cupName) {
         const el = $("pr-structure-note");
-        if (!el) return;
-        el.innerHTML = cupName
-            ? `Regular-season standings count each player's <b>best 10 + City Championship</b>. `
-              + `After the City Championships, the <b>POINTS RESET</b> (the PROJ RESET column) condenses `
-              + `the field onto one master ladder — those become the starting totals for the `
-              + `<b>TGF CHAMPIONSHIP</b>, whose final round decides <b>${cupName}</b>.`
-            : "";
+        if (el) el.innerHTML = "";
     }
 
     function prPayBadge(r) {
