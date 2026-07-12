@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.75.6";
+window.TGF_VERSION = "2.76.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.76.0",
+    date: "2026-07-12",
+    changes: [
+      "SPOTLIGHT IS MEMBER-VISIBLE (Kerry GO, in-session): the pinless member view gains a third tab -- CONTESTS | HANDICAPS | SPOTLIGHT (inline tabs per the <=3-sections rule, no hamburger). New /member/spotlight route renders the page in member mode (admin subnav and preview chip hidden, window.MEMBER_MODE set so the login modal is skipped and the anonymous traffic beacon counts opens/taps); /api/spotlight/search and /api/spotlight/player flip from admin to the member public-read tier.",
+      "Kerry's rulings enforced: WINNINGS SHOWN (career total + recent payouts from Tracker payout records); 2026-ERA DATA ONLY -- satisfied by construction, the payload reads live points-race snapshots, current handicaps, season contests, and Tracker payouts, never gg_history/archive rows; the typeahead's member-status filter already excludes archive-created (gg_roster/expired) profiles. PII sweep re-verified: both payloads carry name/chapter/competitive data only -- no emails, phones, addresses, or DOBs.",
+    ],
+  },
   {
     version: "2.75.6",
     date: "2026-07-12",

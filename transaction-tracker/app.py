@@ -8879,6 +8879,14 @@ def member_handicaps():
     return render_template("handicaps.html", member_mode=True)
 
 
+@app.route("/member/spotlight")
+def member_spotlight():
+    """Player Spotlight, member view (Kerry GO 2026-07-12: show
+    winnings, 2026-era data only — satisfied by construction, the
+    payload reads live races/payouts/handicaps, never archive rows)."""
+    return render_template("spotlight.html", member_mode=True)
+
+
 # ---------------------------------------------------------------------------
 # Routes — City Match Play (CMP)
 # ---------------------------------------------------------------------------
@@ -9416,7 +9424,7 @@ def spotlight_page():
 
 
 @app.route("/api/spotlight/search")
-@require_role("admin")
+@require_role("member")
 def api_spotlight_search():
     """Name typeahead. PII-free payload (member-tier-ready)."""
     from email_parser.database import search_spotlight_players
@@ -9425,7 +9433,7 @@ def api_spotlight_search():
 
 
 @app.route("/api/spotlight/player")
-@require_role("admin")
+@require_role("member")
 def api_spotlight_player():
     """One player's spotlight payload. PII-free (member-tier-ready)."""
     from email_parser.database import get_player_spotlight
