@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.75.4";
+window.TGF_VERSION = "2.75.5";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.75.5",
+    date: "2026-07-12",
+    changes: [
+      "Android app icon: dedicated MASKABLE icons added (mark at the 62% safe-zone proportion) so Android's circle/squircle masks never clip the ring, while iOS and 'any' contexts keep the new full-bleed 84% mark. Manifest purposes split accordingly (big icons purpose=any; maskable pair purpose=maskable). Android users: remove + re-add the home-screen app to refresh the icon, same as iOS.",
+    ],
+  },
   {
     version: "2.75.4",
     date: "2026-07-12",
