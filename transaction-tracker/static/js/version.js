@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.72.1";
+window.TGF_VERSION = "2.73.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.73.0",
+    date: "2026-07-11",
+    changes: [
+      "HISTORICAL MEMBER PROFILES (Kerry: 'Absolutely yes, create them'): roster_create_members creates customer profiles for the master roster's unmatched TGF and Former members -- name from the GG handle (mixed-case particles preserved), chapter from affiliation, status expired_member, acquisition_source gg_roster, GG email as primary. Guests, Facebook Leads, and Interest rows are NEVER created. After creation, all banked history rows (standings, results, name-links) backfill by handle join. Bridge: scoring-gg-history:roster-create-members; idempotent.",
+      "PAIRINGS RULING banked (Kerry): scrape GG tee sheets as primary, starter-sheet PDFs as cross-check (and sole pre-GG source), scorecard groupings as game-time tiebreaker; disagreements flagged, never silently resolved. YEAR-AT-A-TIME directive: complete EVERYTHING for one year before moving to the next -- the per-year playbook is standings + exports + hole-by-hole + game money + match play + pairings + identity + audit + sign-off.",
+    ],
+  },
   {
     version: "2.72.1",
     date: "2026-07-11",
