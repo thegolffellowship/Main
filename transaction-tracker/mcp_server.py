@@ -1325,6 +1325,13 @@ def get_venmo_transactions(
     return json.dumps([dict(r) for r in rows], indent=2)
 
 
+# Background GG-history walks (v2.74.1): MCP clients time out around 60s,
+# but a portal's hole-by-hole walk wants minutes. holes-bg= runs the walk
+# in a daemon thread inside the web process; holes-status polls it. One
+# walk per subdomain at a time (guarded), last result kept for pickup.
+_GGH_BG: dict = {}
+
+
 def _scoring_dispatch(url: str, extract: str):
     """Bridge for MCP sessions whose cached tool inventory predates the
     v2.23 scoring tools (client sessions freeze the tool list at session
@@ -1440,6 +1447,36 @@ def _scoring_dispatch(url: str, extract: str):
                 dom, _, budget = rest.partition("@")
                 return json.dumps(ggh.ingest_portal_holes(
                     dom.strip(), budget_seconds=int(budget or 240)), indent=2)
+            if sub == "holes-bg" and rest:
+                # Same walk in a daemon thread (MCP clients time out ~60s;
+                # the walk wants minutes). Poll with holes-status.
+                import threading
+                dom, _, budget = rest.partition("@")
+                dom, budget_s = dom.strip(), int(budget or 600)
+                ent = _GGH_BG.get(dom)
+                if ent and ent["thread"].is_alive():
+                    return json.dumps({"already_running": dom})
+
+                def _run(dom=dom, budget_s=budget_s):
+                    try:
+                        _GGH_BG[dom]["result"] = ggh.ingest_portal_holes(
+                            dom, budget_seconds=budget_s)
+                    except Exception as exc:  # keep the error visible
+                        _GGH_BG[dom]["result"] = {"error": str(exc)}
+
+                t = threading.Thread(target=_run, daemon=True,
+                                     name=f"ggh-holes-{dom}")
+                _GGH_BG[dom] = {"thread": t, "result": None}
+                t.start()
+                return json.dumps({"started": dom, "budget_s": budget_s})
+            if sub == "holes-status":
+                return json.dumps(
+                    {dom: {"running": e["thread"].is_alive(),
+                           "result": e["result"]}
+                     for dom, e in _GGH_BG.items()}, indent=2)
+            if sub == "overview":
+                # per-portal coverage incl. Phase-B rounds + hole counts
+                return json.dumps(ggh.portal_overview(), indent=2)
             if sub == "roster":
                 # roster=report (dry-run match report) | roster=apply
                 # (write gg_member_map + backfill standings/name-links)

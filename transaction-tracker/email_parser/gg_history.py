@@ -161,19 +161,69 @@ def ensure_gg_history_tables(conn) -> None:
         gg_member_ids    TEXT,
         raw_row          TEXT NOT NULL)""")
     conn.execute("""CREATE TABLE IF NOT EXISTS gg_history_name_links (
-        id          INTEGER PRIMARY KEY AUTOINCREMENT,
-        raw_name    TEXT NOT NULL,
-        portal_id   INTEGER REFERENCES gg_history_portals(id),
-        customer_id INTEGER REFERENCES customers(customer_id),
-        matched_by  TEXT NOT NULL,
-        reviewed    INTEGER DEFAULT 0,
-        UNIQUE(raw_name, portal_id))""")
+        id           INTEGER PRIMARY KEY AUTOINCREMENT,
+        raw_name     TEXT NOT NULL,
+        portal_id    INTEGER REFERENCES gg_history_portals(id),
+        customer_id  INTEGER REFERENCES customers(customer_id),
+        matched_by   TEXT NOT NULL,
+        reviewed     INTEGER DEFAULT 0,
+        gg_member_id TEXT NOT NULL DEFAULT '',
+        UNIQUE(raw_name, portal_id, gg_member_id))""")
+    _rebuild_name_links_3col(conn)
+    # #123-amendment columns (retrofitted on prod in v2.73.1; ALTERs keep
+    # fresh databases shape-identical)
+    for ddl in (
+        "ALTER TABLE gg_history_standings ADD COLUMN position_raw TEXT",
+        "ALTER TABLE gg_history_standings ADD COLUMN contest_kind TEXT",
+    ):
+        try:
+            conn.execute(ddl)
+        except Exception:
+            pass  # already present
     conn.execute("CREATE INDEX IF NOT EXISTS idx_ggh_standings_cid "
                  "ON gg_history_standings(customer_id)")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_ggh_standings_page "
                  "ON gg_history_standings(page_id)")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_ggh_results_cid "
                  "ON gg_history_results(customer_id)")
+
+
+def _rebuild_name_links_3col(conn) -> None:
+    """#123 amendment (b), deferred from v2.73.1 to the review-UI build:
+    rebuild gg_history_name_links so uniqueness is (raw_name, portal_id,
+    gg_member_id) — the same printed name CAN be two people when their GG
+    member ids differ (the Kryszak class). gg_member_id becomes NOT NULL
+    DEFAULT '' (SQLite treats NULLs as distinct in UNIQUE — '' keeps the
+    no-id case deduped). Idempotent: detects the old shape via the
+    column's notnull flag and rebuilds once, preserving row ids."""
+    cols = {r["name"]: r for r in
+            conn.execute("PRAGMA table_info(gg_history_name_links)")}
+    gid = cols.get("gg_member_id")
+    if gid is not None and gid["notnull"]:
+        return  # already the 3-col shape
+    conn.execute("""CREATE TABLE gg_history_name_links_v2 (
+        id           INTEGER PRIMARY KEY AUTOINCREMENT,
+        raw_name     TEXT NOT NULL,
+        portal_id    INTEGER REFERENCES gg_history_portals(id),
+        customer_id  INTEGER REFERENCES customers(customer_id),
+        matched_by   TEXT NOT NULL,
+        reviewed     INTEGER DEFAULT 0,
+        gg_member_id TEXT NOT NULL DEFAULT '',
+        UNIQUE(raw_name, portal_id, gg_member_id))""")
+    src_gid = "COALESCE(gg_member_id, '')" if gid is not None else "''"
+    conn.execute(f"""INSERT INTO gg_history_name_links_v2
+                         (id, raw_name, portal_id, customer_id, matched_by,
+                          reviewed, gg_member_id)
+                     SELECT id, raw_name, portal_id, customer_id, matched_by,
+                            reviewed, {src_gid}
+                     FROM gg_history_name_links""")
+    conn.execute("DROP TABLE gg_history_name_links")
+    conn.execute("ALTER TABLE gg_history_name_links_v2 "
+                 "RENAME TO gg_history_name_links")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_ggh_namelinks_ggid "
+                 "ON gg_history_name_links(gg_member_id)")
+    logger.info("gg_history_name_links rebuilt to 3-col uniqueness "
+                "(raw_name, portal_id, gg_member_id)")
 
 
 def seed_portal_registry(db_path=None) -> dict:
@@ -315,24 +365,39 @@ def _archive_raw(conn, url: str, body: str) -> int:
 
 def _resolve_identity(conn, portal_id: int, name: str):
     """customer_id via the scoring cascade; never creates customers.
-    Records the outcome in gg_history_name_links (idempotent)."""
+    Records the outcome in gg_history_name_links (idempotent). The
+    preferred match key (gg_member_id, #123 amendment b) is stamped when
+    the printed handle maps to exactly one master-roster member; ''
+    otherwise. Reviewed rows (Kerry's manual decisions) are never
+    overwritten by later automated passes."""
     from email_parser.database import _resolve_scoring_player
     cid = None
     try:
         cid = _resolve_scoring_player(conn, name)
     except Exception:
         cid = None
+    gid = ""
+    try:
+        rows = conn.execute(
+            """SELECT DISTINCT gg_member_id FROM gg_member_map
+               WHERE handle = ? AND gg_member_id NOT LIKE '%:%'""",
+            (name,)).fetchall()
+        if len(rows) == 1:
+            gid = rows[0][0] or ""
+    except Exception:
+        pass  # map table may not exist on a bare Phase-A ingest
     conn.execute(
         """INSERT INTO gg_history_name_links (raw_name, portal_id,
-               customer_id, matched_by)
-           VALUES (?, ?, ?, ?)
-           ON CONFLICT(raw_name, portal_id) DO UPDATE SET
+               customer_id, matched_by, gg_member_id)
+           VALUES (?, ?, ?, ?, ?)
+           ON CONFLICT(raw_name, portal_id, gg_member_id) DO UPDATE SET
                customer_id=COALESCE(excluded.customer_id,
                                     gg_history_name_links.customer_id),
                matched_by=CASE WHEN excluded.customer_id IS NOT NULL
                                THEN excluded.matched_by
-                               ELSE gg_history_name_links.matched_by END""",
-        (name, portal_id, cid, "scoring_cascade" if cid else "pending"))
+                               ELSE gg_history_name_links.matched_by END
+           WHERE gg_history_name_links.reviewed = 0""",
+        (name, portal_id, cid, "scoring_cascade" if cid else "pending", gid))
     return cid
 
 
@@ -492,6 +557,10 @@ def ingest_portal(subdomain: str, budget_seconds: int = 240,
                 WHERE portal_id=? AND page_kind IN ({','.join('?'*len(_INGEST_KINDS))})
                   AND (fetch_status IS NULL OR fetch_status != 'done')""",
             (portal_id, *_INGEST_KINDS)).fetchone()[0]
+        try:
+            _sync_pending_action_item(conn)
+        except Exception:
+            pass  # action_items may not exist on a bare test DB
         conn.commit()  # page catalog + portal ids even if no page ingested
         stats["pages_remaining"] = remaining
         stats["league_id"] = league_id
@@ -747,6 +816,11 @@ def ingest_portal_holes(subdomain: str, budget_seconds: int = 240,
         stats["rounds_left"] = len(pending) - stats["rounds_done"] \
             - len(stats["rounds_no_date"])
         stats["elapsed_s"] = round(time.time() - t0, 1)
+        try:
+            stats["names_pending_review"] = _sync_pending_action_item(conn)
+            conn.commit()
+        except Exception:
+            pass  # action_items may not exist on a bare test DB
         return stats
 
 
@@ -1471,6 +1545,293 @@ def enrich_created_members(db_path=None) -> dict:
                 rep["dobs_set"] += n
         conn.commit()
     return rep
+
+
+# ── Review UI backend (admin page /admin/gg-history) ─────────────────────
+# Kerry's identity review queue: every pending name gets a human ruling —
+# link to a customer, mark guest (never auto-created), or not-a-person
+# (parse artifacts, team labels). Decisions are reviewed=1 rows that no
+# automated pass may overwrite (_resolve_identity guards on reviewed=0).
+
+_REVIEW_ACTION_SUBJECT = "GG History: names pending identity review"
+
+
+def _sync_pending_action_item(conn) -> int:
+    """Keep ONE aggregate COO action item in step with the pending count
+    (121 names must not become 121 items). Returns the pending count."""
+    n = conn.execute(
+        "SELECT COUNT(*) FROM gg_history_name_links "
+        "WHERE matched_by='pending' AND reviewed=0").fetchone()[0]
+    open_item = conn.execute(
+        "SELECT id FROM action_items WHERE subject=? AND status='open'",
+        (_REVIEW_ACTION_SUBJECT,)).fetchone()
+    if n:
+        summary = (f"{n} player names from the GG archive await identity "
+                   f"review at /admin/gg-history — link each to a customer, "
+                   f"or mark it guest / not-a-person. Mostly guests; "
+                   f"decisions backfill all banked history rows.")
+        if open_item:
+            conn.execute("UPDATE action_items SET summary=? WHERE id=?",
+                         (summary, open_item["id"]))
+        else:
+            conn.execute(
+                """INSERT INTO action_items (subject, from_name, summary,
+                       urgency, category)
+                   VALUES (?, 'GG History review queue', ?, 'low',
+                           'scoring')""",
+                (_REVIEW_ACTION_SUBJECT, summary))
+    elif open_item:
+        conn.execute(
+            """UPDATE action_items SET status='completed',
+                   completed_at=datetime('now'),
+                   completed_by='gg-history-review'
+               WHERE id=?""", (open_item["id"],))
+    return n
+
+
+def review_queue(db_path=None, limit: int = 300) -> dict:
+    """The pending-names queue with per-name context + candidate matches."""
+    from email_parser.database import _connect, DB_PATH
+    with _connect(db_path or DB_PATH) as conn:
+        ensure_gg_history_tables(conn)
+        ensure_gg_member_map(conn)
+        rows = conn.execute(
+            """SELECT l.id, l.raw_name, l.gg_member_id, l.portal_id,
+                      p.subdomain, p.season, p.chapter, p.brand,
+                      (SELECT COUNT(*) FROM gg_history_standings s
+                       JOIN gg_history_pages g ON g.id = s.page_id
+                       WHERE g.portal_id = l.portal_id
+                         AND s.player_name = l.raw_name) AS standings_rows,
+                      (SELECT COUNT(*) FROM gg_history_results r
+                       JOIN gg_history_events e ON e.id = r.gg_event_id
+                       WHERE e.portal_id = l.portal_id
+                         AND r.player_name = l.raw_name) AS result_rows,
+                      (SELECT COUNT(*) FROM scoring_rounds sr
+                       WHERE sr.player_name = l.raw_name
+                         AND sr.source = 'gg_history:' || p.subdomain)
+                          AS hole_rounds,
+                      (SELECT m.affiliation FROM gg_member_map m
+                       WHERE m.handle = l.raw_name LIMIT 1) AS affiliation
+               FROM gg_history_name_links l
+               LEFT JOIN gg_history_portals p ON p.id = l.portal_id
+               WHERE l.matched_by = 'pending' AND l.reviewed = 0
+               ORDER BY (standings_rows + result_rows + hole_rounds) DESC,
+                        l.raw_name
+               LIMIT ?""", (limit,)).fetchall()
+        out = []
+        for r in rows:
+            d = dict(r)
+            first, last = _handle_to_names(r["raw_name"])
+            cands = []
+            if last:
+                cands = [dict(c) for c in conn.execute(
+                    """SELECT customer_id, first_name, last_name, chapter,
+                              current_player_status
+                       FROM customers WHERE LOWER(last_name) = LOWER(?)
+                       ORDER BY customer_id LIMIT 6""", (last,))]
+            d["candidates"] = cands
+            out.append(d)
+        total = conn.execute(
+            "SELECT COUNT(*) FROM gg_history_name_links "
+            "WHERE matched_by='pending' AND reviewed=0").fetchone()[0]
+        reviewed = conn.execute(
+            """SELECT matched_by, COUNT(*) AS n FROM gg_history_name_links
+               WHERE reviewed=1 GROUP BY matched_by""").fetchall()
+        return {"pending_total": total, "shown": len(out), "names": out,
+                "reviewed_counts": {r["matched_by"]: r["n"]
+                                    for r in reviewed}}
+
+
+def resolve_name_link(link_id: int, action: str,
+                      customer_id: int | None = None,
+                      db_path=None) -> dict:
+    """Apply Kerry's ruling on one pending name.
+
+    link          → customer_id required; backfills every banked row for
+                    that (name, portal): standings, results, hole-by-hole
+                    scoring_rounds.
+    guest         → reviewed, no customer ever created (house rule).
+    not_a_person  → parse artifact / team label; reviewed, excluded.
+    reopen        → back to pending; a MANUAL link's backfilled rows are
+                    un-linked (scoped to this name+portal+that customer),
+                    automated resolutions are left alone.
+    """
+    from email_parser.database import _connect, DB_PATH
+    if action not in ("link", "guest", "not_a_person", "reopen"):
+        return {"error": f"unknown action {action!r}"}
+    with _connect(db_path or DB_PATH) as conn:
+        ensure_gg_history_tables(conn)
+        link = conn.execute(
+            """SELECT l.*, p.subdomain FROM gg_history_name_links l
+               LEFT JOIN gg_history_portals p ON p.id = l.portal_id
+               WHERE l.id = ?""", (link_id,)).fetchone()
+        if link is None:
+            return {"error": f"name link {link_id} not found"}
+        name, portal_id = link["raw_name"], link["portal_id"]
+        src = f"gg_history:{link['subdomain']}" if link["subdomain"] else None
+        out = {"id": link_id, "raw_name": name, "action": action}
+
+        if action == "link":
+            if not customer_id:
+                return {"error": "link action requires customer_id"}
+            cust = conn.execute(
+                "SELECT customer_id, first_name, last_name FROM customers "
+                "WHERE customer_id = ?", (customer_id,)).fetchone()
+            if cust is None:
+                return {"error": f"customer {customer_id} not found"}
+            conn.execute(
+                """UPDATE gg_history_name_links SET customer_id=?,
+                       matched_by='manual', reviewed=1 WHERE id=?""",
+                (customer_id, link_id))
+            out["standings_linked"] = conn.execute(
+                """UPDATE gg_history_standings SET customer_id=?
+                   WHERE customer_id IS NULL AND player_name=?
+                     AND page_id IN (SELECT id FROM gg_history_pages
+                                     WHERE portal_id=?)""",
+                (customer_id, name, portal_id)).rowcount
+            out["results_linked"] = conn.execute(
+                """UPDATE gg_history_results SET customer_id=?
+                   WHERE customer_id IS NULL AND player_name=?
+                     AND gg_event_id IN (SELECT id FROM gg_history_events
+                                         WHERE portal_id=?)""",
+                (customer_id, name, portal_id)).rowcount
+            if src:
+                out["hole_rounds_linked"] = conn.execute(
+                    """UPDATE scoring_rounds SET customer_id=?
+                       WHERE customer_id IS NULL AND player_name=?
+                         AND source=?""",
+                    (customer_id, name, src)).rowcount
+            out["linked_to"] = (f"#{cust['customer_id']} "
+                                f"{cust['first_name']} {cust['last_name']}")
+        elif action in ("guest", "not_a_person"):
+            conn.execute(
+                """UPDATE gg_history_name_links SET matched_by=?,
+                       reviewed=1, customer_id=NULL WHERE id=?""",
+                (action, link_id))
+        elif action == "reopen":
+            if link["matched_by"] == "manual" and link["customer_id"]:
+                old = link["customer_id"]
+                out["standings_unlinked"] = conn.execute(
+                    """UPDATE gg_history_standings SET customer_id=NULL
+                       WHERE customer_id=? AND player_name=?
+                         AND page_id IN (SELECT id FROM gg_history_pages
+                                         WHERE portal_id=?)""",
+                    (old, name, portal_id)).rowcount
+                out["results_unlinked"] = conn.execute(
+                    """UPDATE gg_history_results SET customer_id=NULL
+                       WHERE customer_id=? AND player_name=?
+                         AND gg_event_id IN (SELECT id FROM gg_history_events
+                                             WHERE portal_id=?)""",
+                    (old, name, portal_id)).rowcount
+                if src:
+                    out["hole_rounds_unlinked"] = conn.execute(
+                        """UPDATE scoring_rounds SET customer_id=NULL
+                           WHERE customer_id=? AND player_name=?
+                             AND source=?""", (old, name, src)).rowcount
+            conn.execute(
+                """UPDATE gg_history_name_links SET matched_by='pending',
+                       reviewed=0, customer_id=NULL WHERE id=?""",
+                (link_id,))
+        out["pending_remaining"] = _sync_pending_action_item(conn)
+        conn.commit()
+        return out
+
+
+def portal_overview(db_path=None) -> dict:
+    """Per-portal coverage for the review UI: pages, standings, events,
+    results, hole-by-hole rounds, pending names."""
+    from email_parser.database import _connect, DB_PATH
+    with _connect(db_path or DB_PATH) as conn:
+        ensure_gg_history_tables(conn)
+        portals = conn.execute(
+            """SELECT p.id, p.subdomain, p.chapter, p.season, p.kind,
+                      p.brand, p.status, p.league_id,
+                      (SELECT COUNT(*) FROM gg_history_pages g
+                       WHERE g.portal_id=p.id
+                         AND g.gg_page_id NOT LIKE 'round:%') AS pages,
+                      (SELECT COUNT(*) FROM gg_history_pages g
+                       WHERE g.portal_id=p.id AND g.fetch_status='done'
+                         AND g.gg_page_id NOT LIKE 'round:%')
+                          AS pages_done,
+                      (SELECT COUNT(*) FROM gg_history_pages g
+                       WHERE g.portal_id=p.id
+                         AND g.gg_page_id LIKE 'round:%') AS rounds,
+                      (SELECT COUNT(*) FROM gg_history_pages g
+                       WHERE g.portal_id=p.id AND g.fetch_status='done'
+                         AND g.gg_page_id LIKE 'round:%') AS rounds_done,
+                      (SELECT COUNT(*) FROM gg_history_standings s
+                       JOIN gg_history_pages g ON g.id=s.page_id
+                       WHERE g.portal_id=p.id) AS standings_rows,
+                      (SELECT COUNT(*) FROM gg_history_events e
+                       WHERE e.portal_id=p.id) AS events,
+                      (SELECT COUNT(*) FROM gg_history_results r
+                       JOIN gg_history_events e ON e.id=r.gg_event_id
+                       WHERE e.portal_id=p.id) AS result_rows,
+                      (SELECT COUNT(*) FROM scoring_rounds sr
+                       WHERE sr.source='gg_history:'||p.subdomain)
+                          AS hole_rounds,
+                      (SELECT COUNT(*) FROM gg_history_name_links l
+                       WHERE l.portal_id=p.id AND l.matched_by='pending'
+                         AND l.reviewed=0) AS pending_names
+               FROM gg_history_portals p
+               ORDER BY p.season DESC, p.subdomain""").fetchall()
+        totals = conn.execute(
+            """SELECT
+                   (SELECT COUNT(*) FROM gg_history_standings) AS standings,
+                   (SELECT COUNT(customer_id) FROM gg_history_standings)
+                       AS standings_linked,
+                   (SELECT COUNT(*) FROM gg_history_results) AS results,
+                   (SELECT COUNT(customer_id) FROM gg_history_results)
+                       AS results_linked,
+                   (SELECT COUNT(*) FROM scoring_rounds
+                    WHERE source LIKE 'gg_history:%') AS hole_rounds,
+                   (SELECT COUNT(*) FROM scoring_holes
+                    WHERE scoring_round_id IN (SELECT id FROM scoring_rounds
+                    WHERE source LIKE 'gg_history:%')) AS holes,
+                   (SELECT COUNT(*) FROM gg_history_name_links
+                    WHERE matched_by='pending' AND reviewed=0) AS pending
+            """).fetchone()
+        return {"totals": dict(totals),
+                "portals": [dict(p) for p in portals]}
+
+
+def standings_browser(portal: str | None = None, q: str | None = None,
+                      contest: str | None = None, limit: int = 200,
+                      db_path=None) -> dict:
+    """Standings rows for the review UI browser (verbatim, with links)."""
+    from email_parser.database import _connect, DB_PATH
+    clauses, params = ["1=1"], []
+    if portal:
+        clauses.append("p.subdomain = ?"); params.append(portal)
+    if contest:
+        clauses.append("s.contest_label LIKE ?"); params.append(f"%{contest}%")
+    if q:
+        clauses.append("s.player_name LIKE ?"); params.append(f"%{q}%")
+    with _connect(db_path or DB_PATH) as conn:
+        ensure_gg_history_tables(conn)
+        rows = conn.execute(
+            f"""SELECT s.id, p.subdomain, s.season, s.chapter,
+                       s.contest_label, s.position_raw, s.position,
+                       s.player_name, s.customer_id,
+                       c.first_name || ' ' || c.last_name AS customer_name,
+                       s.points, s.money_cents
+                FROM gg_history_standings s
+                JOIN gg_history_pages g ON g.id = s.page_id
+                JOIN gg_history_portals p ON p.id = g.portal_id
+                LEFT JOIN customers c ON c.customer_id = s.customer_id
+                WHERE {' AND '.join(clauses)}
+                ORDER BY p.season DESC, s.contest_label, s.position
+                LIMIT ?""", (*params, limit)).fetchall()
+        contests = conn.execute(
+            f"""SELECT DISTINCT p.subdomain, s.contest_label
+                FROM gg_history_standings s
+                JOIN gg_history_pages g ON g.id = s.page_id
+                JOIN gg_history_portals p ON p.id = g.portal_id
+                {'WHERE p.subdomain = ?' if portal else ''}
+                ORDER BY 1, 2""",
+            (portal,) if portal else ()).fetchall()
+        return {"rows": [dict(r) for r in rows],
+                "contests": [dict(c) for c in contests]}
 
 
 def archive_widget_page(subdomain: str, gg_page_id: str, db_path=None) -> dict:
