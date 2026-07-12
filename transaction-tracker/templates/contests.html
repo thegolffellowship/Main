@@ -3559,10 +3559,7 @@
             let html = ptsTables && ptsTables.length
                 ? prRenderDetailTables(ptsTables, inMonth, claimed, {monthFilter: monthKey, plain: true})
                 : "";
-            const leftovers = inMonth.filter(r => !claimed.has(r.id));
-            html += prRenderScoreRounds(leftovers, html
-                ? {title: "OTHER ROUNDS THIS MONTH", explainer: "— no points line this month; click a row for hole-by-hole"}
-                : {title: "ROUNDS THIS MONTH", explainer: "— click a row for hole-by-hole"});
+            // non-points rounds list removed here too (Kerry 2026-07-12)
             const sptPillM = tr.dataset.cid
                 ? `<a class="pr-spt-pill" href="${window.MEMBER_MODE ? "/member/spotlight" : "/spotlight"}?player=${tr.dataset.cid}">Full Spotlight &rarr;</a>`
                 : "";
@@ -3616,8 +3613,9 @@
             // no points detail) fall back to the separate SCORECARDS list.
             const claimed = new Set();
             let html = ptsTables ? prRenderDetailTables(ptsTables, rounds, claimed) : "";
-            const leftovers = (rounds || []).filter(r => !claimed.has(r.id));
-            html += prRenderScoreRounds(leftovers);
+            // NON-POINTS EVENTS list removed (Kerry 2026-07-12): contests
+            // show points events only; rounds still power the in-place
+            // scorecard expansion on the points lines above.
             const sptPill = tr.dataset.cid
                 ? `<a class="pr-spt-pill" href="${window.MEMBER_MODE ? "/member/spotlight" : "/spotlight"}?player=${tr.dataset.cid}">Full Spotlight &rarr;</a>`
                 : "";

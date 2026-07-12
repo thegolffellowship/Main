@@ -8667,10 +8667,19 @@ def api_import_scorecards():
 @require_role("member")
 def api_scoring_rounds():
     from email_parser.database import get_scoring_rounds_list
-    return jsonify(get_scoring_rounds_list(
+    rows = get_scoring_rounds_list(
         request.args.get("player"), request.args.get("event"),
         int(request.args.get("customer_id") or 0) or None,
-        int(request.args.get("limit") or 100)))
+        int(request.args.get("limit") or 100))
+    # 2026-only ruling (Kerry, 2026-07-12): the pinless/member tier never
+    # sees archive-era rounds — logged-in staff sessions see everything.
+    if session.get("role") not in ("view-only", "manager", "admin"):
+        from email_parser.timezone_utils import today_central
+        season = f"{today_central().year}-01-01"
+        rows = [r for r in rows
+                if (r.get("round_date") or "") >= season
+                and not str(r.get("source") or "").startswith("gg_history")]
+    return jsonify(rows)
 
 
 @app.route("/api/scoring/scorecard/<int:scoring_round_id>")
