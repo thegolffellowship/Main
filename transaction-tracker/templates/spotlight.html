@@ -366,7 +366,12 @@
                     r.label + (r.flight ? ` · ${r.flight}` : ""),
                     metaBits.join(" · "), r.enrolled,
                     RACE_HASH[r.key] ? `${contestsBase}#race=${RACE_HASH[r.key]}&player=${d.customer_id}` : null,
-                    r.drama));
+                    // drama lines PULLED (Kerry 2026-07-12): points_to_next is the
+                    // gap to the next PLACE, not to the money line — the template
+                    // quoted it as points-from-the-money and understated badly.
+                    // Re-enable only after the server computes a true money-line
+                    // gap (points to the last paying position on the ladder).
+                    null));
             });
             (d.fall_buyins || []).forEach(f => {
                 rows.push(standRow("—", "#C6C2BA", "Aug 29",

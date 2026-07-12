@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.77.1";
+window.TGF_VERSION = "2.77.2";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.77.2",
+    date: "2026-07-12",
+    changes: [
+      "HOTFIX -- drama lines PULLED (Kerry: the numbers were wrong). The 'Only N pts from the money' line quoted in_reach.points_to_next, which is the gap to the NEXT PLACE UP, not to the money line -- it badly understated the real distance for anyone more than one place below the ladder. All incentive lines are removed from Where They Stand until the server computes a true money-line gap (points to the last paying position, ties considered). The server templates and in_reach block stay in place for the corrected version.",
+    ],
+  },
   {
     version: "2.77.1",
     date: "2026-07-12",
