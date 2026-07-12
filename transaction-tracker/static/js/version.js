@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.75.1";
+window.TGF_VERSION = "2.75.2";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.75.2",
+    date: "2026-07-12",
+    changes: [
+      "REVIEW UI -- Link by NAME (Kerry, in-session: 'I don't have customer #s'): the customer-number box on each pending-name card is now a live name search. Type two or more letters and matching customers appear as tappable Link chips (searches first/last/full name, 'LAST, First' order, and name aliases; typing a number still looks up that exact customer id). Tapping a chip performs the Link immediately -- same-surname candidate chips continue to appear automatically.",
+    ],
+  },
   {
     version: "2.75.1",
     date: "2026-07-12",

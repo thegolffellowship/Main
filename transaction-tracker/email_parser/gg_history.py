@@ -2015,6 +2015,39 @@ def resolve_name_link(link_id: int, action: str,
         return out
 
 
+def search_customers_for_link(q: str, limit: int = 10, db_path=None) -> list:
+    """Name search behind the review UI's Link box (Kerry types letters,
+    not customer numbers). Matches first/last/full name and name-type
+    aliases, case-insensitive; digits-only input looks up that exact
+    customer_id."""
+    from email_parser.database import _connect, DB_PATH
+    q = (q or "").strip()
+    if not q:
+        return []
+    with _connect(db_path or DB_PATH) as conn:
+        if q.isdigit():
+            rows = conn.execute(
+                """SELECT customer_id, first_name, last_name, chapter,
+                          current_player_status
+                   FROM customers WHERE customer_id = ?""", (int(q),))
+            return [dict(r) for r in rows]
+        like = f"%{q}%"
+        rows = conn.execute(
+            """SELECT DISTINCT c.customer_id, c.first_name, c.last_name,
+                      c.chapter, c.current_player_status
+               FROM customers c
+               LEFT JOIN customer_aliases a
+                 ON a.alias_type = 'name'
+                AND a.customer_name = c.customer_name
+               WHERE c.first_name LIKE ? OR c.last_name LIKE ?
+                  OR (c.first_name || ' ' || c.last_name) LIKE ?
+                  OR (c.last_name || ', ' || c.first_name) LIKE ?
+                  OR a.alias_value LIKE ?
+               ORDER BY c.last_name, c.first_name LIMIT ?""",
+            (like, like, like, like, like, limit)).fetchall()
+        return [dict(r) for r in rows]
+
+
 def portal_overview(db_path=None) -> dict:
     """Per-portal coverage for the review UI: pages, standings, events,
     results, hole-by-hole rounds, pending names."""
