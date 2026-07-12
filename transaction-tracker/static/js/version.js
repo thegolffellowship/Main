@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.78.1";
+window.TGF_VERSION = "2.78.2";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.78.2",
+    date: "2026-07-12",
+    changes: [
+      "CONTESTS SHOW POINTS EVENTS ONLY (Kerry): the NON-POINTS EVENTS / other-rounds scorecard lists are removed from the expanded player panels (race and monthly views) -- points lines still expand to their hole-by-hole scorecards in place.",
+      "2025 LEAK PLUGGED (Kerry: 'we're revealing 2025 scores -- I didn't want to do that yet'): the scorecards list was reading /api/scoring/rounds, which had no season filter, so last night's archive imports surfaced to members. The endpoint now returns ONLY current-season, live-source rounds to pinless/member sessions (logged-in staff still see everything) -- the 2026-only ruling is now enforced at the API layer, not just in the UI, so no future member surface can leak archive data through this route.",
+    ],
+  },
   {
     version: "2.78.1",
     date: "2026-07-12",
