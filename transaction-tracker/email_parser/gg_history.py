@@ -17,8 +17,12 @@ computed into TGF career stats, trophy case, or member surfaces. The
 2020–2023 Two Man leagues predate the Tour and are TGF (flagged
 interpretation, mailbox #116 item 1).
 
-Never create customers here: unmatched names become 'pending' rows in
-gg_history_name_links (surfaced on COO action items), not shell profiles.
+Never create customers implicitly: unmatched names become 'pending'
+rows in gg_history_name_links, not shell profiles. ONE Kerry-directed
+exception ("Absolutely yes, create them", 2026-07-11):
+roster_create_members() creates profiles for the roster's unmatched
+TGF/Former members — an explicit, bounded, admin-invoked operation.
+Guests/Facebook Leads/Interest are never created.
 """
 from __future__ import annotations
 
@@ -958,3 +962,113 @@ def audit_export_pair(prefix: str, db_path=None) -> dict:
                          "export_total_cents": r["xp"],
                          "standings_cents": st["m"]})
     return out
+
+
+def _handle_to_names(handle: str):
+    """'CRONIN, Alex' → ('Alex','Cronin'); preserves mixed-case particles
+    (DeBORDE stays; ALL-UPPER words get title-cased). Suffixes after a
+    second comma ride with the first name."""
+    parts = [p.strip() for p in str(handle or "").split(",")]
+    if len(parts) < 2 or not parts[0] or not parts[1]:
+        return None, None
+    def fix(word_str):
+        return " ".join(
+            w.title() if w.isupper() else w for w in word_str.split())
+    last = fix(parts[0])
+    first = fix(" ".join(parts[1:]))
+    return first, last
+
+
+_AFFIL_CHAPTER = {
+    "TGF San Antonio": "San Antonio", "TGF San Antonio HC": "San Antonio",
+    "TGF Austin": "Austin", "TGF DFW": "DFW", "TGF Houston": "Houston",
+}
+
+
+def roster_create_members(db_path=None) -> dict:
+    """Create customer profiles for unmatched TGF/Former roster members
+    (Kerry: 'Absolutely yes, create them' — 2026-07-11).
+
+    Master-roster map rows only (league-scoped rows join by handle
+    afterwards). Guests/Facebook Leads/Interest are NEVER created. Each
+    creation: customers row (status expired_member, source gg_roster) +
+    primary GG email + map/standings/results/name-links backfill by
+    handle. Idempotent: rows that gained a customer_id are skipped.
+    """
+    from email_parser.database import _connect, DB_PATH, _resolve_scoring_player
+    stats = {"created": 0, "relinked_rows": 0, "skipped_now_matched": 0,
+             "standings_linked": 0, "results_linked": 0}
+    with _connect(db_path or DB_PATH) as conn:
+        ensure_gg_member_map(conn)
+        cands = conn.execute(
+            """SELECT * FROM gg_member_map
+               WHERE customer_id IS NULL
+                 AND gg_member_id NOT LIKE '%:%'
+                 AND (affiliation LIKE 'TGF%' OR affiliation = 'Former')
+               ORDER BY handle""").fetchall()
+        for m in cands:
+            handle = (m["handle"] or "").strip()
+            first, last = _handle_to_names(handle)
+            if not first or not last:
+                continue
+            # someone may have matched since (or an earlier loop pass
+            # created the same person under a variant handle)
+            try:
+                cid = _resolve_scoring_player(conn, handle)
+            except Exception:
+                cid = None
+            if cid is None:
+                cur = conn.execute(
+                    """INSERT INTO customers (first_name, last_name,
+                           chapter, current_player_status,
+                           acquisition_source)
+                       VALUES (?, ?, ?, 'expired_member', 'gg_roster')""",
+                    (first, last, _AFFIL_CHAPTER.get(
+                        (m["affiliation"] or "").strip())))
+                cid = cur.lastrowid
+                if m["email"]:
+                    conn.execute(
+                        """INSERT INTO customer_emails (customer_id, email,
+                               is_primary, is_golf_genius, label)
+                           VALUES (?, ?, 1, 1, 'gg_roster')""",
+                        (cid, m["email"].strip()))
+                stats["created"] += 1
+            else:
+                stats["skipped_now_matched"] += 1
+            n = conn.execute(
+                """UPDATE gg_member_map SET customer_id=?,
+                       matched_by='roster_created'
+                   WHERE handle=? AND customer_id IS NULL""",
+                (cid, handle)).rowcount
+            stats["relinked_rows"] += n
+        # backfill history rows for every newly linked handle
+        stats["standings_linked"] = conn.execute(
+            """UPDATE gg_history_standings SET customer_id = (
+                   SELECT m.customer_id FROM gg_member_map m
+                   WHERE m.handle = gg_history_standings.player_name
+                     AND m.customer_id IS NOT NULL)
+               WHERE customer_id IS NULL AND EXISTS (
+                   SELECT 1 FROM gg_member_map m
+                   WHERE m.handle = gg_history_standings.player_name
+                     AND m.customer_id IS NOT NULL)""").rowcount
+        stats["results_linked"] = conn.execute(
+            """UPDATE gg_history_results SET customer_id = (
+                   SELECT m.customer_id FROM gg_member_map m
+                   WHERE m.handle = gg_history_results.player_name
+                     AND m.customer_id IS NOT NULL)
+               WHERE customer_id IS NULL AND EXISTS (
+                   SELECT 1 FROM gg_member_map m
+                   WHERE m.handle = gg_history_results.player_name
+                     AND m.customer_id IS NOT NULL)""").rowcount
+        conn.execute(
+            """UPDATE gg_history_name_links SET
+                   customer_id = (SELECT m.customer_id FROM gg_member_map m
+                                  WHERE m.handle = gg_history_name_links.raw_name
+                                    AND m.customer_id IS NOT NULL),
+                   matched_by = 'roster_created'
+               WHERE customer_id IS NULL AND EXISTS (
+                   SELECT 1 FROM gg_member_map m
+                   WHERE m.handle = gg_history_name_links.raw_name
+                     AND m.customer_id IS NOT NULL)""")
+        conn.commit()
+    return stats

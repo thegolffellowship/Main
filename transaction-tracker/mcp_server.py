@@ -1439,6 +1439,10 @@ def _scoring_dispatch(url: str, extract: str):
                 return json.dumps(
                     ggh.roster_ingest(apply=(rest.strip() == "apply")),
                     indent=2)
+            if sub == "roster-create-members":
+                # Kerry-directed 2026-07-11: create customer profiles for
+                # unmatched TGF/Former roster members (never guests/leads)
+                return json.dumps(ggh.roster_create_members(), indent=2)
             if sub == "export":
                 # export=<prefix> | export=ALL — ingest staged export pairs
                 if rest.strip().upper() == "ALL":
