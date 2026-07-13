@@ -707,7 +707,19 @@ payouts PAID from the outbound Venmo receipt emails the expense inbox
 already ingests (`expense_transactions` rows with source_type='venmo',
 transaction_type='payout'; recipient in `merchant`, memo in `notes`,
 customer_id/event_id resolved by the expense pipeline). Per receipt:
-resolve customer (customer_id → venmo handle → name/alias cascade),
+resolve customer (customer_id → venmo handle → name/alias cascade →
+**memo payee-name prefix → memo event + exact amount**, v2.79.2). The
+last two fallbacks exist because the Venmo RECIPIENT display name is the
+account's name, which can belong to someone else entirely — Matt
+Griffin's Venmo shows "robert griffin", so his $38.25 s9.17 payout never
+matched. The memo TGF types is authoritative: "Matt Griffin - Winnings
+for s9.17 Silverhorn". Fallback (a) parses the "Name - " prefix and
+resolves it via `_lookup_customer_id`; fallback (b) parses the memo's
+event code and, if exactly one pending payout in that event owes this
+EXACT amount, takes that payee. The expense parser now preserves the
+memo verbatim (the "Name - " prefix was previously stripped), and new
+payout emails resolve customer_id from the memo prefix at insert time
+(app.py) before falling back to the Venmo display name.),
 resolve the tgf event — v2.52.1 order: the MEMO's event code FIRST
 ("Winnings for s9.16 …" → tgf_events.code prefix; a space after the
 dot is tolerated, 's9. 10' → s9.10) because the expense pipeline's

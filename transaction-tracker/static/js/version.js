@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.79.1";
+window.TGF_VERSION = "2.79.2";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.79.2",
+    date: "2026-07-13",
+    changes: [
+      "VENMO PAYOUT MATCHER NOW READS THE MEMO'S PAYEE NAME (Kerry: 'Matt Griffin didn't register as paid... I thought it should look at the memo'). Matt's payout ($38.25, s9.17 Silverhorn) never flipped to PAID because his Venmo account name displays as 'robert griffin', which is who the receipt was addressed to -- but the memo said 'Matt Griffin - Winnings for s9.17 Silverhorn'. The expense parser had been STRIPPING that leading payee name off the memo, so the matcher only ever saw the wrong account name. Three fixes: (1) the parser now preserves the memo verbatim, including the 'Name - ' prefix; (2) on new Venmo payout emails, the payee is resolved from the memo's name prefix FIRST, falling back to the Venmo display name only if that misses -- so the account name no longer mis-attributes the payment; (3) the matcher gained two memo-based fallbacks for records where the recipient name doesn't resolve: it reads the memo's payee name, and if that still misses it matches the memo's event code + the exact payment amount to the one pending payout in that event owing exactly that sum. Matt's stuck payout is resolved by fallback (3).",
+    ],
+  },
   {
     version: "2.79.1",
     date: "2026-07-13",

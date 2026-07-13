@@ -17449,6 +17449,46 @@ def auto_match_venmo_payouts_to_tgf(
                         cid = row["customer_id"] if row else None
                 if not cid:
                     cid = _lookup_customer_id(conn, (exp.get("merchant") or "").strip(), None)
+                # The Venmo RECIPIENT name is the account's display name,
+                # which often isn't the player's real name (Kerry,
+                # 2026-07-13: Matt Griffin's Venmo shows "robert griffin",
+                # so his $38.25 s9.17 payout never matched). Two fallbacks
+                # keyed off the MEMO, which the app writes from the payout
+                # row itself:
+                #  (a) memo payee name — "Matt Griffin - Winnings for …"
+                #      (present going forward now the parser keeps it verbatim)
+                #  (b) memo EVENT + the payment's EXACT amount: if exactly
+                #      one PENDING payout in that event owes this exact
+                #      amount, it is unambiguously the payee.
+                memo_txt = exp.get("notes") or ""
+                if not cid:
+                    pm = re.match(r"\s*(.+?)\s+-\s+winnings\s+for\b", memo_txt, re.I)
+                    if pm:
+                        cid = _lookup_customer_id(conn, pm.group(1).strip(), None)
+                if not cid:
+                    em = re.search(r"winnings\s+for\s+([a-z]+\d+(?:\.\s*\d+)?)",
+                                   memo_txt, re.I)
+                    if em:
+                        ecode = em.group(1).replace(" ", "")
+                        erow = conn.execute(
+                            "SELECT id FROM tgf_events WHERE LOWER(code) LIKE LOWER(?) LIMIT 1",
+                            (ecode + "%",)).fetchone()
+                        if erow:
+                            uniq = conn.execute(
+                                """SELECT p.customer_id AS cid,
+                                          ROUND(SUM(p.amount), 2) AS total
+                                   FROM tgf_payouts p
+                                   LEFT JOIN acct_transactions t
+                                          ON t.id = p.acct_transaction_id
+                                   WHERE p.event_id = ?
+                                     AND (p.acct_transaction_id IS NULL
+                                          OR (t.source = 'pending'
+                                              AND COALESCE(t.status,'active')='active'))
+                                   GROUP BY p.customer_id
+                                   HAVING ABS(total - ?) <= 0.01""",
+                                (erow["id"], amt)).fetchall()
+                            if len(uniq) == 1:
+                                cid = uniq[0]["cid"]
                 if not cid:
                     summary["no_candidate"] += 1
                     continue

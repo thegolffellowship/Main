@@ -223,7 +223,7 @@ Body: {body_preview}
 Return a JSON object with:
 - recipient_name: string (who was paid, or who paid you)
 - amount: number (positive, no $ sign)
-- memo: string (the payment note/description)
+- memo: string (the payment note/description EXACTLY as written, verbatim — preserve any leading name prefix before a " - " dash, e.g. "Matt Griffin - Winnings for s9.17 Silverhorn". Do NOT strip, summarize, or rewrite it; the leading name is the true payee when the Venmo account name differs.)
 - sent_from_account: string (Venmo username if visible, e.g. "@tgf-payments")
 - transaction_date: string (YYYY-MM-DD)
 - transaction_id: string (Venmo transaction ID if visible)

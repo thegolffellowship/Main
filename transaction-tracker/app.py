@@ -725,8 +725,20 @@ def check_expense_inbox(force=False, days_back=None):
                     body_text,
                 )
                 if extracted.get("confidence", 0) > 0:
-                    event_name = match_event_from_memo(extracted.get("memo", ""), conn)
-                    customer_id = match_customer_from_name(extracted.get("recipient_name", ""), conn)
+                    memo_txt = extracted.get("memo", "") or ""
+                    event_name = match_event_from_memo(memo_txt, conn)
+                    # For outbound payouts TGF types the real payee into the
+                    # memo ("Matt Griffin - Winnings for s9.17 …"). That name
+                    # outranks the Venmo account's display name, which can
+                    # belong to someone else entirely (Matt's Venmo shows
+                    # "robert griffin", Kerry 2026-07-13). Try the memo payee
+                    # prefix first; fall back to the recipient display name.
+                    customer_id = None
+                    _pm = re.match(r"\s*(.+?)\s+-\s+winnings\s+for\b", memo_txt, re.I)
+                    if _pm:
+                        customer_id = match_customer_from_name(_pm.group(1).strip(), conn)
+                    if not customer_id:
+                        customer_id = match_customer_from_name(extracted.get("recipient_name", ""), conn)
                     # Fallback: if no event from memo but customer was found, check their registrations
                     if not event_name and customer_id:
                         event_name = match_event_from_customer(customer_id, conn)
