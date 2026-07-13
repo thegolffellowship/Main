@@ -34,6 +34,7 @@
   max-width: 360px; }
 .tgf-nudge.tgf-nudge-toast { position: fixed; left: 16px; right: 16px; bottom: 22px;
   margin-left: auto; margin-right: auto; }
+.tgf-nudge.tgf-nudge-flow { position: static; margin: 14px auto 0; }
 .tgf-nudge::before { content: ""; position: absolute; left: 0; top: 11px; bottom: 11px; width: 3px;
   border-radius: 3px; background: var(--primary, #E87C3E); }
 .tgf-nudge-eye { font: 700 8.5px/1 'Bitter', serif; letter-spacing: 1.6px; text-transform: uppercase;
@@ -67,12 +68,14 @@
 
         let anchored = false;
         if (fixedTop) {
-            // welcome card floats over the top of content (mock 5b) —
-            // fixed under the member nav, no arrow, no reflow
-            card.style.position = "fixed";
-            card.style.top = "74px";
-            card.style.left = "16px";
-            card.style.right = "16px";
+            // Welcome card rides IN the page flow, below all content and the
+            // subtext note, centered (360px cap) — Kerry look-review
+            // 2026-07-13: the mock-5b fixed top-float covered the search box
+            // and hero on desktop. It's the only nudge allowed to reflow.
+            card.classList.add("tgf-nudge-flow");
+            const host = document.querySelector(".spt-wrap")
+                || document.querySelector("main") || document.body;
+            host.appendChild(card);
             anchored = true;
         } else if (anchor) {
             const r = anchor.getBoundingClientRect();
@@ -91,7 +94,7 @@
             const arrow = card.querySelector(".tgf-nudge-arrow");
             if (arrow) arrow.remove();
         }
-        document.body.appendChild(card);
+        if (!card.isConnected) document.body.appendChild(card);
         beacon("impression", key);
         const dismiss = kind => {
             if (!card.isConnected) return;
