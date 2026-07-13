@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.79.2";
+window.TGF_VERSION = "2.79.3";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.79.3",
+    date: "2026-07-13",
+    changes: [
+      "TEAM NET BLIND-DRAW PAYOUT REPAIR -- PARTIAL, UNPAID-ONLY (Kerry: 'only repair those, I've paid others from that event'). The v2.78.4 code fix (blind-draw partners share the team purse) only affects NEW recordings; s9.17 Silverhorn's payouts were recorded before it, so its stored split still over-paid the winning team's real members and gave the blind-draw partner $0. A full re-record would delete and re-create the whole event's rows including ones already paid, so instead a new surgical repair (repair_teamnet_blind_draw_shares) corrects ONLY the unpaid rows of the affected Team Net group and never touches a paid row. It brings each unpaid winner's team_net share to the correct uniform amount (adjusting the pending payout row AND its mirror pending ledger entry in lockstep, or inserting a fresh pending row for the excluded blind-draw member), and skips any teammate already paid. Net change across the group is $0. Exposed as bridge command scoring-teamnet-repair:<event> (dry-run) / <event>|apply.",
+    ],
+  },
   {
     version: "2.79.2",
     date: "2026-07-13",

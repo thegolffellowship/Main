@@ -1421,6 +1421,15 @@ def _scoring_dispatch(url: str, extract: str):
         if cmd == "scoring-payouts-preview":
             # assemble without writing — inspect what would be recorded
             return json.dumps(db.assemble_event_game_payouts(arg), indent=2)
+        if cmd == "scoring-teamnet-repair":
+            # Partial repair of a Team Net blind-draw over-distribution
+            # (v2.79.3, Kerry-scoped): "<event>" dry-runs the plan,
+            # "<event>|apply" writes it. Only UNPAID rows change; paid
+            # teammates are left untouched.
+            ev_arg, _, mode = arg.partition("|")
+            return json.dumps(db.repair_teamnet_blind_draw_shares(
+                ev_arg.strip(), dry_run=(mode.strip().lower() != "apply")),
+                indent=2, default=str)
         if cmd == "scoring-gg-history":
             # GG HISTORY ingest bridge (Kerry-ratified 2026-07-11; see
             # docs/claude/gg-history.md). Sub-commands via arg:
