@@ -7687,7 +7687,8 @@ def search_spotlight_players(q: str, limit: int = 12,
                FROM customers
                WHERE (first_name || ' ' || last_name) LIKE ? COLLATE NOCASE
                  AND TRIM(COALESCE(first_name, '') || COALESCE(last_name, '')) != ''
-                 AND COALESCE(archived, 0) = 0
+                 AND COALESCE(account_status, 'active') NOT IN
+                     ('merged', 'archived', 'deleted')
                ORDER BY last_name COLLATE NOCASE, first_name COLLATE NOCASE
                LIMIT ?""",
             (like, limit),
