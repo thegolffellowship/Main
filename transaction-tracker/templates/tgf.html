@@ -163,6 +163,24 @@
         }
         .venmo-btn:hover { background: #006FCC; }
         .venmo-btn svg { width: 14px; height: 14px; }
+        /* Quick "+ Venmo" handle add on unpaid rows with no handle */
+        .add-venmo-btn {
+            padding: 2px 9px; border-radius: 99px; font-size: 0.72rem;
+            font-weight: 600; background: #f1f5f9; color: #334155;
+            border: 1px dashed #94a3b8; cursor: pointer; white-space: nowrap;
+        }
+        .add-venmo-btn:hover { background: #e2e8f0; border-color: #64748b; }
+        .add-venmo-input {
+            font-size: 0.74rem; padding: 2px 6px; border: 1px solid #cbd5e1;
+            border-radius: 4px; width: 8.5rem;
+        }
+        .add-venmo-save {
+            font-size: 0.72rem; padding: 2px 8px; border-radius: 99px;
+            background: #008CFF; color: #fff; border: none; cursor: pointer;
+            font-weight: 600;
+        }
+        .add-venmo-save:disabled { opacity: 0.6; cursor: default; }
+        .add-venmo-msg { font-size: 0.7rem; color: #dc2626; }
         /* "Sent · verifying…" state after a Pay tap (v2.79.1) — not
            clickable; tells the admin the receipt is being confirmed so
            they don't pay twice. Pops back to a Pay button after 5 min. */
@@ -619,6 +637,58 @@
             return null;
         }
 
+        // ── Quick "+ Venmo" handle add (Kerry 2026-07-13) ────────────
+        // For a winner with no handle on file, add one to their customer
+        // record and immediately render the Pay link — no page reload.
+        function tgfRevealAddVenmo(btn) {
+            const wrap = btn.closest(".add-venmo-wrap");
+            if (!wrap) return;
+            wrap.innerHTML =
+                `<span style="display:inline-flex;align-items:center;gap:3px;">` +
+                `<span style="font-size:0.75rem;color:#94a3b8;">@</span>` +
+                `<input class="add-venmo-input" type="text" placeholder="venmo-username" autocapitalize="off" autocorrect="off" spellcheck="false" onclick="event.stopPropagation()" onkeydown="if(event.key==='Enter'){event.preventDefault();tgfSaveAddVenmo(this);}">` +
+                `<button class="add-venmo-save" onclick="event.stopPropagation(); tgfSaveAddVenmo(this)">Save</button>` +
+                `<span class="add-venmo-msg"></span></span>`;
+            const inp = wrap.querySelector(".add-venmo-input");
+            if (inp) inp.focus();
+        }
+        async function tgfSaveAddVenmo(el) {
+            const wrap = el.closest(".add-venmo-wrap");
+            if (!wrap) return;
+            const inp = wrap.querySelector(".add-venmo-input");
+            const msg = wrap.querySelector(".add-venmo-msg");
+            const handle = (inp && inp.value || "").trim().replace(/^@/, "");
+            if (!handle) { if (msg) msg.textContent = "?"; if (inp) inp.focus(); return; }
+            const gid = parseInt(wrap.dataset.gid, 10);
+            const saveBtn = wrap.querySelector(".add-venmo-save");
+            if (saveBtn) { saveBtn.disabled = true; saveBtn.textContent = "…"; }
+            if (msg) { msg.style.color = "#dc2626"; msg.textContent = ""; }
+            try {
+                const resp = await fetch("/api/customers/update", {
+                    method: "POST", headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        customer_name: wrap.dataset.name, customer_id: gid,
+                        fields: { venmo_username: handle },
+                    }),
+                });
+                const data = await resp.json();
+                if (!resp.ok) throw new Error(data.error || "Save failed");
+                // reflect into the in-memory winnings so any re-render keeps it
+                const w = Object.values(DATA.winnings).find(x => x.id === gid);
+                if (w) w.venmo_username = handle;
+                // swap in the immediate Pay link
+                const amt = parseFloat(wrap.dataset.amt) || 0;
+                const href = venmoLink(handle, amt, wrap.dataset.code, wrap.dataset.ename, wrap.dataset.name);
+                const evid = parseInt(wrap.dataset.evid, 10);
+                wrap.outerHTML =
+                    `<a class="venmo-btn" style="background:#008CFF;" href="${href}" target="_blank" rel="noopener" onclick="event.stopPropagation(); onPayTap(${evid}, ${gid});">` +
+                    `<svg viewBox="0 0 24 24" fill="currentColor"><path d="M19.5 3c.9 1.5 1.3 3 1.3 5 0 5.5-4.7 12.7-8.5 17H5.2L3 3.5l6-.6 1.2 9.6c1.2-2 2.7-5.2 2.7-7.3 0-1.9-.3-3.2-.8-4.2L19.5 3z"/></svg>Pay</a>`;
+            } catch (err) {
+                if (msg) msg.textContent = (err && err.message) || "Save failed";
+                if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = "Save"; }
+            }
+        }
+
         // "auto:" is a storage marker (auto-recorded vs manual rows) —
         // never show it (Kerry, 2026-07-08: takes up space)
         function stripAuto(d) { return (d || "").replace(/^auto:\s*/i, ""); }
@@ -705,6 +775,15 @@
                 }
             } else if (act && act.badge) {
                 venmoHtml = `<span style="display:inline-block;padding:2px 9px;border-radius:99px;font-size:0.72rem;font-weight:600;background:#ede9fe;color:#5b21b6;" title="No deep link for this method — pay manually, then Mark Paid">${act.badge}</span>`;
+            } else if (!alreadyPaid && !act && g.golfer_id) {
+                // No handle on file → quick "+ Venmo" to add one to the
+                // customer and get an immediate Pay link (Kerry 2026-07-13).
+                const nm = (g.name || "").replace(/"/g, "&quot;");
+                venmoHtml = `<span class="add-venmo-wrap" data-gid="${g.golfer_id}" data-evid="${ev.id}"
+                        data-amt="${g.total}" data-code="${(ev.code||'').replace(/"/g,'&quot;')}"
+                        data-ename="${(ev.name||'').replace(/"/g,'&quot;')}" data-name="${nm}">
+                     <button class="add-venmo-btn" onclick="event.stopPropagation(); tgfRevealAddVenmo(this)">+ Venmo</button>
+                   </span>`;
             }
             const statusBadge = TGF_STATUS_BADGE[g.payment_status] || "";
             const isPending = g.payment_status !== "paid";

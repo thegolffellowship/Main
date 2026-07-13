@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.79.4";
+window.TGF_VERSION = "2.80.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.80.0",
+    date: "2026-07-13",
+    changes: [
+      "QUICK \"+ VENMO\" ON PAYOUTS (Kerry): winners with no Venmo handle on file now show a small dashed \"+ Venmo\" button on their unpaid payout row (both the PAYOUTS tab and the per-event PAYOUTS panel on Events). Tap it, type the handle, Save -- it's written to that person's Customer record (by customer_id, so it sticks for every future event) and the row instantly swaps to a live blue Pay link with the amount and memo pre-filled. No page reload and no trip to the Customers page just to pay someone.",
+    ],
+  },
   {
     version: "2.79.4",
     date: "2026-07-13",
