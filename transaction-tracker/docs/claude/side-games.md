@@ -231,6 +231,22 @@ toward full automation (see governing docs).
   splits an individual's amount may read one penny below GG's
   published figure — that is the pot balancing, not an error.
 
+**Blind-draw partners ARE PAID (Kerry RATIFIED 2026-07-13).** When a
+team is completed with a blind draw, GG renders that slot as
+`Bl[LAST, First]` in the team name and pays it a full equal share of
+the team purse. `assemble_event_game_payouts` used to EXCLUDE the
+blind-draw member and split the team pot among the real members only
+(over-paying them, zeroing the drawn player). Verified wrong vs GG's
+Player Purse Summary on s9.17 Silverhorn (2026-07-07): GG split the
+winning team's $54 across all four slots incl. `Bl[HAMILTON, Doug]` →
+$13.50 each; the old code paid South/Moreno/Wade $18 and Hamilton $0.
+Fix: unwrap `Bl[...]` to the real name and include it in the split, so
+we match GG (Hamilton's team share $13.50 restored; the other three
+drop from $18 to $13.50). NOTE: my initial payout audit compared game
+TOTALS and per-board figures but not the team per-player distribution,
+so the ~$0.03 total-level agreement masked $4.50–$13.50 per-player
+errors — team splits must be audited player-by-player, not by total.
+
 ### TEAM Net — definition v1 (s9.16 TPC San Antonio | Oaks setup)
 
 | Setting | Value |
