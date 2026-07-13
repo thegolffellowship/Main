@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.86.1";
+window.TGF_VERSION = "2.86.2";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.86.2",
+    date: "2026-07-13",
+    changes: [
+      "HOTFIX: Player Spotlight search returned nobody (Kerry caught it within minutes of v2.86.0). The widened R3 search query referenced an archived column that exists on items but NOT on customers, so every search threw and the typeahead silently showed nothing. Reproduced, fixed (the shell-profile guard now uses customers.account_status), and verified against the real schema.",
+    ],
+  },
   {
     version: "2.86.1",
     date: "2026-07-13",
