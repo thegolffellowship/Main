@@ -246,6 +246,18 @@ drop from $18 to $13.50). NOTE: my initial payout audit compared game
 TOTALS and per-board figures but not the team per-player distribution,
 so the ~$0.03 total-level agreement masked $4.50–$13.50 per-player
 errors — team splits must be audited player-by-player, not by total.
+**Repairing events recorded BEFORE the fix (Kerry-scoped 2026-07-13):**
+the code fix only changes NEW recordings; events already recorded keep
+the bad split. A full re-record is wrong when some rows are already
+PAID (it deletes/re-creates paid rows). Use
+`repair_teamnet_blind_draw_shares(event_name, dry_run)` (bridge
+`scoring-teamnet-repair:<event>` / `<event>|apply`, v2.79.3) — it
+corrects ONLY the unpaid team_net rows of the affected group (adjusting
+the pending payout row + its mirror pending ledger entry in lockstep,
+or inserting a fresh pending row for the excluded blind-draw member),
+SKIPS any teammate already paid, and nets $0 across the group. s9.17
+Silverhorn was repaired this way (South/Moreno/Wade $18→$13.50,
+Hamilton $0→$13.50; Young/Watson already paid at $13.50, untouched).
 
 ### TEAM Net — definition v1 (s9.16 TPC San Antonio | Oaks setup)
 

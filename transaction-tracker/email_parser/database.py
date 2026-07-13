@@ -31910,6 +31910,215 @@ def record_all_event_game_payouts(db_path=None, time_budget: float = 42.0,
     return out
 
 
+def repair_teamnet_blind_draw_shares(event_name: str, dry_run: bool = True,
+                                     db_path=None) -> dict:
+    """Surgically correct a Team Net winning group where a blind-draw
+    partner was wrongly EXCLUDED from the recorded split (the pre-v2.78.4
+    bug — the real members were over-paid and the blind-draw got $0).
+
+    Kerry (2026-07-13) scoped this to a PARTIAL repair: only the UNPAID
+    rows of the affected group may change; teammates already paid at the
+    old amount must be left exactly as-is (a full re-record would delete
+    and re-create their paid rows). So this never touches a paid row.
+
+    Uses the corrected assembler (assemble_event_game_payouts, which now
+    includes blind-draw members) as the source of truth for the team_net
+    winners and their uniform per-player share. For each winner, resolved
+    by customer_id:
+      - If ANY of their team_net rows for this event is PAID (linked to a
+        non-pending acct_transaction) -> SKIP the player untouched.
+      - Else bring their PENDING team_net rows to exactly one row at the
+        correct share: adjust the amount of the existing pending row (and
+        its mirror pending acct_transaction) in lockstep, delete any
+        extra pending team_net rows, or INSERT a fresh pending row +
+        mirror if the player has none (the excluded blind-draw case).
+
+    The net change across the group is $0 (money over-distributed to the
+    real members moves to the blind-draw member). dry_run=True returns the
+    plan without writing. Returns {event, share, changes[], skipped_paid[],
+    net_delta, applied}.
+    """
+    with _connect(db_path) as conn:
+        ev = conn.execute(
+            "SELECT * FROM events WHERE item_name = ? COLLATE NOCASE",
+            (event_name,)).fetchone()
+        if not ev:
+            return {"error": f"event not found: {event_name}"}
+        ev = dict(ev)
+        full = ev["item_name"].strip()
+        m = _GG_EVENT_CODE_COMPOUND_RE.match(full)
+        bare = m.group(1).lower() if m else full.lower()
+        trow = conn.execute(
+            "SELECT id, name, event_date FROM tgf_events "
+            "WHERE LOWER(code) = ? OR LOWER(code) = ?",
+            (full.lower(), bare)).fetchone()
+        if not trow:
+            return {"error": f"no tgf_events row for {full}"}
+        tgf_event_id = trow["id"]
+        tgf_event_name = trow["name"]
+        tgf_event_date = trow["event_date"]
+
+        asm = assemble_event_game_payouts(event_name, db_path=db_path)
+        if asm.get("error"):
+            return asm
+        team_rows = [r for r in asm.get("rows", [])
+                     if r.get("category") == "team_net"]
+        if not team_rows:
+            return {"error": "no team_net winners in assembled payouts"}
+
+        # Correct uniform share + winner customer_ids. Resolve names to
+        # cids WITHOUT creating shells: map from the event's own recorded
+        # winners first (every team_net winner has some recorded row —
+        # even the excluded blind-draw has a skins/other row), then fall
+        # back to the lookup cascade.
+        recorded_all = [dict(r) for r in conn.execute(
+            """SELECT p.id, p.customer_id, p.category, p.amount,
+                      p.description, p.acct_transaction_id,
+                      c.first_name, c.last_name,
+                      t.source AS txn_source, t.id AS txn_id
+               FROM tgf_payouts p
+               LEFT JOIN customers c ON c.customer_id = p.customer_id
+               LEFT JOIN acct_transactions t ON t.id = p.acct_transaction_id
+               WHERE p.event_id = ?""", (tgf_event_id,)).fetchall()]
+        name_to_cid = {}
+        for r in recorded_all:
+            if r["customer_id"] and r["last_name"]:
+                key = f"{r['last_name']}, {r['first_name']}".strip().lower()
+                name_to_cid.setdefault(key, r["customer_id"])
+
+        def _cid_for(gname: str):
+            cid = name_to_cid.get((gname or "").strip().lower())
+            if cid:
+                return cid
+            return _lookup_customer_id(conn, gname, None)
+
+        share = round(float(team_rows[0]["amount"]), 2)
+        team_desc = None
+        winners = {}  # cid -> correct total team_net (uniform, but sum safe)
+        for r in team_rows:
+            cid = _cid_for(r["golferName"])
+            if not cid:
+                return {"error": f"could not resolve team_net winner "
+                                 f"{r['golferName']!r} to a customer"}
+            winners[cid] = round(winners.get(cid, 0) + float(r["amount"]), 2)
+            team_desc = team_desc or ("auto: " + (r.get("description") or ""))
+
+        # Current recorded team_net rows per winner
+        cur_team = {}
+        for r in recorded_all:
+            if r["category"] != "team_net":
+                continue
+            cur_team.setdefault(r["customer_id"], []).append(r)
+
+        changes = []
+        skipped_paid = []
+        net_delta = 0.0
+        for cid, target in winners.items():
+            rows = cur_team.get(cid, [])
+            paid = [r for r in rows
+                    if r["txn_source"] and r["txn_source"] != "pending"]
+            if paid:
+                skipped_paid.append({
+                    "customer_id": cid,
+                    "name": f"{paid[0]['first_name']} {paid[0]['last_name']}",
+                    "recorded": round(sum(float(r["amount"]) for r in rows), 2),
+                    "reason": "already paid — left untouched",
+                })
+                continue
+            cur_sum = round(sum(float(r["amount"]) for r in rows), 2)
+            if rows and cur_sum == target and len(rows) == 1:
+                continue  # already correct
+            nm = None
+            if rows:
+                nm = f"{rows[0]['first_name']} {rows[0]['last_name']}"
+            else:
+                crow = conn.execute(
+                    "SELECT first_name, last_name FROM customers WHERE customer_id = ?",
+                    (cid,)).fetchone()
+                nm = f"{crow['first_name']} {crow['last_name']}" if crow else str(cid)
+            changes.append({
+                "customer_id": cid, "name": nm,
+                "from": cur_sum, "to": target,
+                "delta": round(target - cur_sum, 2),
+                "existing_rows": len(rows),
+            })
+            net_delta = round(net_delta + (target - cur_sum), 2)
+
+        plan = {
+            "event": tgf_event_name,
+            "share": share,
+            "changes": changes,
+            "skipped_paid": skipped_paid,
+            "net_delta": net_delta,
+            "applied": False,
+        }
+        if dry_run or not changes:
+            return plan
+
+        # ---- apply (single transaction) ----
+        for ch in changes:
+            cid = ch["customer_id"]
+            rows = cur_team.get(cid, [])
+            pend = [r for r in rows]  # all are pending here (paid skipped)
+            target = ch["to"]
+            if pend:
+                keep = pend[0]
+                conn.execute("UPDATE tgf_payouts SET amount = ? WHERE id = ?",
+                             (target, keep["id"]))
+                if keep["txn_id"]:
+                    conn.execute(
+                        "UPDATE acct_transactions SET total_amount = ?, amount = ? "
+                        "WHERE id = ? AND source = 'pending'",
+                        (target, -target, keep["txn_id"]))
+                # remove any extra team_net rows for this player
+                for extra in pend[1:]:
+                    if extra["txn_id"]:
+                        conn.execute(
+                            "DELETE FROM acct_transactions WHERE id = ? AND source = 'pending'",
+                            (extra["txn_id"],))
+                    conn.execute("DELETE FROM tgf_payouts WHERE id = ?", (extra["id"],))
+            else:
+                # excluded blind-draw member — insert a fresh pending row
+                cur = conn.execute(
+                    """INSERT INTO tgf_payouts (event_id, customer_id, category,
+                                                amount, description)
+                       VALUES (?, ?, 'team_net', ?, ?)""",
+                    (tgf_event_id, cid, target, team_desc or "auto: TEAM Net (team split)"))
+                pid = cur.lastrowid
+                cur2 = conn.execute(
+                    """INSERT INTO acct_transactions
+                           (date, description, total_amount, type, source, source_ref,
+                            customer, order_id, entry_type, category, amount, account,
+                            status, event_name)
+                       VALUES (?, ?, ?, 'expense', 'pending', ?, ?, ?, 'expense',
+                               'prize_payout', ?, 'Venmo', 'active', ?)""",
+                    (tgf_event_date,
+                     f"Payout: team_net — {tgf_event_name}",
+                     target, f"payout-{pid}",
+                     "", f"PAYOUT-{pid}", -target, tgf_event_name))
+                conn.execute("UPDATE tgf_payouts SET acct_transaction_id = ? WHERE id = ?",
+                             (cur2.lastrowid, pid))
+                conn.execute(
+                    """UPDATE acct_transactions SET customer = (
+                           SELECT first_name || ' ' || last_name
+                           FROM customers WHERE customer_id = ?
+                       ) WHERE id = ?""", (cid, cur2.lastrowid))
+
+        # recompute event aggregates
+        stats = conn.execute(
+            """SELECT COUNT(*) AS cnt, COALESCE(SUM(amount), 0) AS total,
+                      COUNT(DISTINCT customer_id) AS winners
+               FROM tgf_payouts WHERE event_id = ?""", (tgf_event_id,)).fetchone()
+        conn.execute(
+            "UPDATE tgf_events SET total_purse = ?, winners_count = ?, "
+            "payouts_count = ? WHERE id = ?",
+            (stats["total"], stats["winners"], stats["cnt"], tgf_event_id))
+        conn.commit()
+        plan["applied"] = True
+        plan["event_total_purse"] = round(float(stats["total"]), 2)
+        return plan
+
+
 def record_event_game_payouts(event_name: str, payouts: list,
                               force: bool = False, db_path=None) -> dict:
     """Record the Games-tab winners as PAYOUTS-tab rows (v2.38.0).
