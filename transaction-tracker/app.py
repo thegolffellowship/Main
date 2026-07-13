@@ -10558,6 +10558,47 @@ def api_auto_match_venmo_payouts():
     return jsonify(auto_match_venmo_payouts_to_tgf())
 
 
+def _quick_expense_check():
+    """One-shot Venmo-receipt sweep, run shortly after an admin taps Pay.
+    check_expense_inbox() parses any new Venmo receipt AND calls the
+    payout matcher inline, so this both ingests the receipt and flips the
+    tgf_payout to PAID. Scheduler jobs must never raise."""
+    try:
+        check_expense_inbox(days_back=1)
+    except Exception:
+        logger.exception("Quick Venmo receipt check failed")
+
+
+@app.route("/api/tgf/schedule-venmo-check", methods=["POST"])
+@require_role("admin")
+def api_schedule_venmo_check():
+    """After an admin taps a Pay deep link (Venmo/PayPal/Cash App),
+    schedule two one-shot inbox sweeps (~75s and ~180s later) so the
+    receipt is caught and the payout flips to PAID within a couple
+    minutes instead of waiting for the 5-minute scheduler cycle
+    (Kerry, 2026-07-13). Repeated taps within the window COALESCE onto
+    the same two job ids (replace_existing), so paying a batch triggers
+    one sweep shortly after the LAST tap rather than a pile-up. The
+    normal 5-minute cycle stays the backstop; cost is unchanged — the
+    expense dedup bills each email at most once regardless of how often
+    the inbox is swept."""
+    if not getattr(scheduler, "running", False):
+        return jsonify({"scheduled": False, "reason": "scheduler not running "
+                        "in this process — 5-minute cycle will catch it"})
+    now = datetime.now()
+    scheduled = []
+    for jid, secs in (("venmo_quick_check_a", 75), ("venmo_quick_check_b", 180)):
+        try:
+            scheduler.add_job(_quick_expense_check, "date",
+                              run_date=now + timedelta(seconds=secs),
+                              id=jid, replace_existing=True, coalesce=True,
+                              misfire_grace_time=120)
+            scheduled.append(secs)
+        except Exception:
+            logger.exception("Failed to schedule quick Venmo check %s", jid)
+    return jsonify({"scheduled": True, "in_seconds": scheduled})
+
+
 @app.route("/api/admin/venmo-debug")
 @require_role("admin")
 def api_admin_venmo_debug():
