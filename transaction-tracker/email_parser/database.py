@@ -7549,9 +7549,10 @@ def gg_roster_drift_report(urls: list[str],
             if not tables:
                 # GG pages render content via widget iframes (the proven
                 # widget-route recipe) — follow them and harvest their tables
-                widget_urls = [m[0] for m in re.findall(
+                # one capture group → findall returns the URL strings directly
+                widget_urls = re.findall(
                     r"<iframe[^>]+src=[\"']([^\"']*/widgets/[a-z_0-9]+[^\"']*)[\"']",
-                    html, re.I)]
+                    html, re.I)
                 for wu in widget_urls[:6]:
                     if wu.startswith("/"):
                         from urllib.parse import urljoin
