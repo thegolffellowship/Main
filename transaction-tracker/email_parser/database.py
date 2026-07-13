@@ -7467,7 +7467,10 @@ def derive_member_financial_status(conn: sqlite3.Connection,
     READ time from what was actually PAID:
       member — a customer_memberships term covering today, OR (backfill
                gap defense) an active membership purchase in the last
-               366 days;
+               366 days, OR the curated Tracker status column vouches
+               member (legacy/cash joins predate the Tracker's order
+               history — Mary Wade class; the column may vouch a member
+               IN but can never hide one, which was the Decareaux bug);
       alumni — had a term / bought a membership at some point, not
                current ("ALUMNI" is the adopted Tracker-side term per D2
                #151; GG's roster tag stays FORMER for ops);
@@ -7489,6 +7492,12 @@ def derive_member_financial_status(conn: sqlite3.Connection,
         pass  # table not created yet on this DB — purchases decide
     if current:
         return "member"
+    ps = conn.execute(
+        "SELECT current_player_status AS s FROM customers WHERE customer_id = ?",
+        (customer_id,)).fetchone()
+    ps = ps["s"] if ps else None
+    if ps in _MEMBER_PLAYER_STATUSES:
+        return "member"
     buy = conn.execute(
         """SELECT MAX(order_date) AS last FROM items
            WHERE customer_id = ?
@@ -7505,7 +7514,9 @@ def derive_member_financial_status(conn: sqlite3.Connection,
         except ValueError:
             pass
         return "alumni"
-    return "alumni" if terms else "guest"
+    if terms or ps == "expired_member":
+        return "alumni"
+    return "guest"
 
 
 def gg_roster_drift_report(urls: list[str],
@@ -7708,6 +7719,15 @@ def derive_member_financial_status_bulk(conn: sqlite3.Connection,
         except ValueError:
             fresh = False
         out[r["customer_id"]] = "member" if fresh else "alumni"
+    # curated status column vouches members IN (legacy/cash joins predate
+    # the order history); expired_member marks alumni. It never demotes.
+    for r in conn.execute(
+            f"""SELECT customer_id, current_player_status AS s FROM customers
+                WHERE customer_id IN ({qmarks})""", cids).fetchall():
+        if r["s"] in _MEMBER_PLAYER_STATUSES:
+            out[r["customer_id"]] = "member"
+        elif r["s"] == "expired_member" and out.get(r["customer_id"]) == "guest":
+            out[r["customer_id"]] = "alumni"
     return out
 
 
