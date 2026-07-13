@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.85.0";
+window.TGF_VERSION = "2.85.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.85.1",
+    date: "2026-07-14",
+    changes: [
+      "Renamed the member 'Spotlight' nav tab to 'PLAYERS' (Kerry) — member nav is now PLAYERS | LEADERBOARD | HANDICAPS. The page URL (/member/spotlight) and its 'Player Spotlight' hero are unchanged, so existing links still work.",
+    ],
+  },
   {
     version: "2.85.0",
     date: "2026-07-14",
