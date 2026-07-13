@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.78.2";
+window.TGF_VERSION = "2.78.3";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.78.3",
+    date: "2026-07-13",
+    changes: [
+      "Verified Tuesday's (s9.17 Silverhorn, 2026-07-07) calculated payouts game-by-game against Golf Genius: Individual Net, Team Net, CTP, City/TGF MVP all match to the penny. The only differences are three sub-cent tie-split rounding cases (Moreno $11.33 vs GG $11.34, Sharitz $7.55 vs $7.56, Young skins $19.12 vs $19.13). ROOT CAUSE + RULING (Kerry, no code change): our splits apportion so shares sum EXACTLY to the pot collected (last tied player absorbs the shortfall); GG rounds each share half-up, which pays a penny or two OVER the pot (GG's own Ind Gross shares summed to $68.03 under a $68.01 'Total Purse Allocated' line). Kerry ratified MONEY OUT = MONEY IN -- keep our exact-to-pot behavior; GG over-pays by rounding. Documented in docs/claude/side-games.md so it is never 'fixed' to match GG.",
+    ],
+  },
   {
     version: "2.78.2",
     date: "2026-07-12",

@@ -213,6 +213,23 @@ toward full automation (see governing docs).
   (admin, 2026-07-05)
 - Payout places are selected per the prize matrix when a game pays
   multiple places (the matrix is the source of truth for amounts).
+- **Tie / multi-winner rounding — MONEY OUT = MONEY IN (Kerry
+  RATIFIED 2026-07-12).** When a place-group pot or a skins pot does
+  not divide into whole cents, our payout splits (`split_cents` in
+  `_rows_from_place_ladder`, and the largest-remainder skins
+  apportionment in `assemble_event_game_payouts`) apportion so the
+  shares sum EXACTLY to the pot collected — the last player in a tied
+  group absorbs the sub-cent shortfall (e.g. two players splitting
+  $22.67 → $11.34 / $11.33, not $11.34 / $11.34). This is INTENTIONAL
+  and correct: the pool pays out exactly what it took in. **Golf
+  Genius rounds each tied share half-up independently, so its printed
+  shares can total a penny or two OVER the nominal pot** (verified on
+  s9.17 Silverhorn 2026-07-07: GG's Individual Gross shares summed to
+  $68.03 under a "Total Purse Allocated: $68.01" line — GG paid two
+  cents it never collected). Kerry's ruling: keep our exact-to-pot
+  behavior; do NOT "fix" it to match GG. Consequence to expect: on odd
+  splits an individual's amount may read one penny below GG's
+  published figure — that is the pot balancing, not an error.
 
 ### TEAM Net — definition v1 (s9.16 TPC San Antonio | Oaks setup)
 
