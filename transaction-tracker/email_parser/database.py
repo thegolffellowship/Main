@@ -7538,13 +7538,34 @@ def gg_roster_drift_report(urls: list[str],
             return status_cache[cid]
 
         for url in urls:
-            page = fetch_public_page(url)
-            if page.get("error"):
-                diagnostics.append({"url": url, "error": page["error"]})
+            try:
+                page = fetch_public_page(url)
+            except Exception as e:
+                diagnostics.append({"url": url, "error": str(e)})
                 continue
-            parsed = parse_page_structure(page.get("html") or page.get("body")
-                                          or "", url)
+            html = page.get("html") or ""
+            parsed = parse_page_structure(html, url)
             tables = parsed.get("tables") or []
+            if not tables:
+                # GG pages render content via widget iframes (the proven
+                # widget-route recipe) — follow them and harvest their tables
+                widget_urls = [m[0] for m in re.findall(
+                    r"<iframe[^>]+src=[\"']([^\"']*/widgets/[a-z_0-9]+[^\"']*)[\"']",
+                    html, re.I)]
+                for wu in widget_urls[:6]:
+                    if wu.startswith("/"):
+                        from urllib.parse import urljoin
+                        wu = urljoin(url, wu)
+                    try:
+                        wpage = fetch_public_page(wu, xhr=True)
+                        wparsed = parse_page_structure(wpage.get("html") or "", wu)
+                        tables.extend(wparsed.get("tables") or [])
+                    except Exception as e:
+                        diagnostics.append({"url": wu, "error": str(e)})
+                if widget_urls and not tables:
+                    diagnostics.append({"url": url,
+                                        "widgets_followed": widget_urls[:6],
+                                        "note": "widgets returned no tables"})
             hits = 0
             for tbl in tables:
                 if not tbl or len(tbl) < 2:
