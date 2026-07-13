@@ -6734,9 +6734,29 @@
 
     async function loadMessageTemplates() {
         try {
-            const resp = await fetch("/api/messages/templates");
-            if (resp.ok) composeTemplates = await resp.json();
+            const resp = await fetch("/api/messages/templates", { cache: "no-store" });
+            if (resp.ok) { composeTemplates = await resp.json(); return true; }
         } catch (e) { /* ignore */ }
+        return false;
+    }
+
+    // Build the Template dropdown from composeTemplates, preserving the
+    // current selection. Kept separate so the modal can refresh it after a
+    // late/retried fetch (the initial page-load fetch can fail or race, which
+    // left the dropdown stuck at just "Custom Message" — Kerry 2026-07-14).
+    function populateTemplateDropdown() {
+        const tplSelect = document.getElementById("compose-template");
+        if (!tplSelect) return;
+        const cur = tplSelect.value;
+        tplSelect.innerHTML = '<option value="">Custom Message</option>';
+        composeTemplates.forEach(t => {
+            if (t.channel === "sms") return; // skip SMS-only templates
+            const opt = document.createElement("option");
+            opt.value = t.id;
+            opt.textContent = t.name + (t.is_system ? " (built-in)" : "");
+            tplSelect.appendChild(opt);
+        });
+        if (cur) tplSelect.value = cur;
     }
 
     function getComposeRecipients(eventName, audience) {
@@ -6949,16 +6969,12 @@
         document.getElementById("compose-extra-name").value = "";
         document.getElementById("compose-extra-email").value = "";
 
-        // Populate templates dropdown
-        const tplSelect = document.getElementById("compose-template");
-        tplSelect.innerHTML = '<option value="">Custom Message</option>';
-        composeTemplates.forEach(t => {
-            if (t.channel === "sms") return; // skip SMS-only templates
-            const opt = document.createElement("option");
-            opt.value = t.id;
-            opt.textContent = t.name + (t.is_system ? " (built-in)" : "");
-            tplSelect.appendChild(opt);
-        });
+        // Populate templates dropdown from what we have, then ALWAYS refresh
+        // from the server so the built-in + saved templates show reliably
+        // even if the page-load fetch failed or raced (this was the "prebuilt
+        // messages missing on mobile" bug — Kerry 2026-07-14).
+        populateTemplateDropdown();
+        loadMessageTemplates().then(ok => { if (ok) populateTemplateDropdown(); });
 
         updateRecipientCount();
         document.getElementById("compose-msg-overlay").style.display = "flex";

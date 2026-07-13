@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.84.0";
+window.TGF_VERSION = "2.84.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.84.1",
+    date: "2026-07-14",
+    changes: [
+      "FIX: prebuilt message templates missing from the Message Players dropdown (Kerry, seen on mobile). The built-in templates (Payment Reminder, Event Announcement, Tee Time Update, etc.) are stored server-side and shared across devices -- not a mobile limitation. The dropdown was built only from a single page-load fetch whose failures were silently ignored and never retried; on the installed app that fetch can fire before the session is ready, come back empty, and leave the list stuck at just 'Custom Message'. The Message Players modal now refreshes the template list from the server every time it opens (and preserves your current selection), so the built-ins reliably appear.",
+    ],
+  },
   {
     version: "2.84.0",
     date: "2026-07-13",
