@@ -6800,9 +6800,15 @@ def get_points_race_standings(race_key: str,
                 r["flight"] = _assign_flight(hcp, flights)
             out_rows.append(r)
 
-        # Members only (admin rule): resolved rows hide unless the profile is
-        # a member status; unresolved rows hide unless GG's own affiliation
-        # says they're a current TGF chapter member. Buy-ins always show.
+        # R4 (Kerry-ratified #149/#151): SHOW non-members, don't hide them.
+        # The old "members only" admin rule dropped non-enrolled non-members
+        # from the visible board; ratified reversal — guests/alumni stay
+        # RANKED on active boards (preserves LSC alternates percentile math;
+        # "ranked next to a pot is the best join pitch"), each row carries
+        # member_status (D1 financial truth) so the UI can chip them with a
+        # join/renew path. Bought-in players always remain. LADDER
+        # eligibility below is UNCHANGED — visible ≠ eligible; ineligible
+        # rows still consume no ladder spot and earn no reset points.
         status_by_cid: dict = {}
         chapter_by_cid: dict = {}
         cids = list({r["customer_id"] for r in out_rows if r["customer_id"]})
@@ -6814,24 +6820,20 @@ def get_points_race_standings(race_key: str,
                     cids).fetchall():
                 status_by_cid[sr["customer_id"]] = sr["current_player_status"]
                 chapter_by_cid[sr["customer_id"]] = sr["chapter"]
-        hidden_nonmembers = []
-        visible_rows = []
+        fin_by_cid = derive_member_financial_status_bulk(conn, cids)
+        hidden_nonmembers = []   # kept for payload compat — always [] now
         for r in out_rows:
             cid = r["customer_id"]
             if cid:
-                is_member = status_by_cid.get(cid) in _MEMBER_PLAYER_STATUSES
+                r["member_status"] = fin_by_cid.get(cid, "guest")
             else:
-                is_member = "tgf" in (r.get("affiliation") or "").lower()
-            if is_member or r["enrolled"]:
-                visible_rows.append(r)
-            else:
-                hidden_nonmembers.append(r["player_name"])
-        out_rows = visible_rows
+                r["member_status"] = ("member" if "tgf" in
+                                      (r.get("affiliation") or "").lower()
+                                      else "guest")
+            r["is_member"] = r["member_status"] == "member"
 
-        # Re-rank over the visible list (admin rule): hidden non-members are
-        # tossed entirely — they must not hold positions or create phantom
-        # ties (a "T59" whose only tie partner was hidden shows plain 59).
-        # GG's original rank is kept as gg_rank for reference.
+        # Re-rank over the visible list — now EVERYONE (R4). GG's original
+        # rank is kept as gg_rank for reference.
         for r in out_rows:
             cid = r["customer_id"]
             aff = (r.get("affiliation") or "").strip()
@@ -7453,6 +7455,194 @@ def get_lone_star_cup_projection(db_path: str | Path = DB_PATH) -> dict:
     }
 
 
+def derive_member_financial_status(conn: sqlite3.Connection,
+                                   customer_id: int) -> str:
+    """'member' | 'alumni' | 'guest' — from TRACKER FINANCIAL TRUTH.
+
+    D1, Kerry-ratified (mailbox #150, 2026-07-13): "Our side needs to
+    dictate whether he's a member or not. We have access to the financial
+    side. GG does not." The mutable customers.current_player_status column
+    can be stale (it was historically nudged by GG-roster syncs — the
+    Decareaux/Beam defect), so member-facing surfaces derive status at
+    READ time from what was actually PAID:
+      member — a customer_memberships term covering today, OR (backfill
+               gap defense) an active membership purchase in the last
+               366 days;
+      alumni — had a term / bought a membership at some point, not
+               current ("ALUMNI" is the adopted Tracker-side term per D2
+               #151; GG's roster tag stays FORMER for ops);
+      guest  — tracked, never bought a membership.
+    """
+    from .timezone_utils import today_central_str
+    today = today_central_str()
+    current = terms = 0
+    try:
+        row = conn.execute(
+            """SELECT MAX(CASE WHEN started_at <= ?
+                               AND (expires_at IS NULL OR expires_at >= ?)
+                          THEN 1 ELSE 0 END) AS cur,
+                      COUNT(*) AS n
+               FROM customer_memberships WHERE customer_id = ?""",
+            (today, today, customer_id)).fetchone()
+        current, terms = (row["cur"] or 0), (row["n"] or 0)
+    except sqlite3.OperationalError:
+        pass  # table not created yet on this DB — purchases decide
+    if current:
+        return "member"
+    buy = conn.execute(
+        """SELECT MAX(order_date) AS last FROM items
+           WHERE customer_id = ?
+             AND LOWER(item_name) LIKE '%membership%'
+             AND COALESCE(transaction_status, 'active') = 'active'""",
+        (customer_id,)).fetchone()
+    last = (buy["last"] or "")[:10] if buy and buy["last"] else None
+    if last:
+        try:
+            import datetime as _dt
+            if (_dt.date.fromisoformat(today)
+                    - _dt.date.fromisoformat(last)).days <= 366:
+                return "member"
+        except ValueError:
+            pass
+        return "alumni"
+    return "alumni" if terms else "guest"
+
+
+def gg_roster_drift_report(urls: list[str],
+                           db_path: str | Path = DB_PATH) -> dict:
+    """GG Master Roster vs Tracker financial truth — the D1 drift report
+    (Kerry-ratified #150): "everyone whose GG roster status ≠ Tracker
+    customer status — so Kerry updates GG from a checklist, not from
+    catching wrong-looking members." GG stays FORMER/Guest/Member on its
+    side (D2); we map FORMER→alumni for comparison.
+
+    urls: public GG Master Roster page URLs (e.g.
+    https://tgf-sa.golfgenius.com/pages/6125355 + the Austin twin).
+    Parse is defensive — GG page structure is theirs, not ours — so the
+    result carries diagnostics (tables seen, headers) when nothing parses.
+    """
+    from golf_genius_sync import fetch_public_page, parse_page_structure
+
+    _TAG_MAP = {"member": "member", "member+": "member",
+                "former": "alumni", "alumni": "alumni",
+                "guest": "guest", "1st timer": "guest",
+                "first timer": "guest"}
+    drift, unresolved, diagnostics = [], [], []
+    checked = 0
+    with _connect(db_path) as conn:
+        status_cache: dict = {}
+
+        def derived(cid):
+            if cid not in status_cache:
+                status_cache[cid] = derive_member_financial_status(conn, cid)
+            return status_cache[cid]
+
+        for url in urls:
+            page = fetch_public_page(url)
+            if page.get("error"):
+                diagnostics.append({"url": url, "error": page["error"]})
+                continue
+            parsed = parse_page_structure(page.get("html") or page.get("body")
+                                          or "", url)
+            tables = parsed.get("tables") or []
+            hits = 0
+            for tbl in tables:
+                if not tbl or len(tbl) < 2:
+                    continue
+                head = [(c or "").strip().lower() for c in tbl[0]]
+                name_i = next((i for i, h in enumerate(head)
+                               if "name" in h or "player" in h), None)
+                tag_i = next((i for i, h in enumerate(head)
+                              if "status" in h or "type" in h
+                              or "member" in h), None)
+                rows = tbl[1:] if name_i is not None else tbl
+                for r in rows:
+                    cells = [(c or "").strip() for c in r]
+                    if name_i is not None and tag_i is not None:
+                        nm = cells[name_i] if name_i < len(cells) else ""
+                        tag = (cells[tag_i] if tag_i < len(cells) else "").lower()
+                    else:
+                        # headerless fallback: a status-looking cell + the
+                        # longest other cell as the name
+                        tag = next((c.lower() for c in cells
+                                    if c.lower() in _TAG_MAP), "")
+                        others = [c for c in cells if c.lower() != tag and c]
+                        nm = max(others, key=len) if others else ""
+                    if not nm or tag not in _TAG_MAP:
+                        continue
+                    hits += 1
+                    checked += 1
+                    cid = _resolve_scoring_player(conn, nm)
+                    if not cid:
+                        unresolved.append({"gg_name": nm, "gg_tag": tag})
+                        continue
+                    ours = derived(cid)
+                    if ours != _TAG_MAP[tag]:
+                        crow = conn.execute(
+                            "SELECT TRIM(first_name || ' ' || last_name) AS n"
+                            " FROM customers WHERE customer_id = ?",
+                            (cid,)).fetchone()
+                        drift.append({
+                            "customer_id": cid,
+                            "name": crow["n"] if crow else nm,
+                            "gg_tag": tag,
+                            "tracker_status": ours,
+                            "action": f"set GG roster to "
+                                      f"{'FORMER' if ours == 'alumni' else ours.upper()}",
+                        })
+            if not hits:
+                diagnostics.append({
+                    "url": url, "tables_seen": len(tables),
+                    "first_headers": tables[0][0] if tables and tables[0] else None,
+                    "note": "no roster rows recognized — adjust parser to this page",
+                })
+    return {"drift": drift, "unresolved": unresolved,
+            "players_checked": checked, "diagnostics": diagnostics}
+
+
+def derive_member_financial_status_bulk(conn: sqlite3.Connection,
+                                        cids: list[int]) -> dict:
+    """{customer_id: 'member'|'alumni'|'guest'} for many players in three
+    queries — the boards path (R4) can't afford per-row derivation."""
+    from .timezone_utils import today_central_str
+    import datetime as _dt
+    today = today_central_str()
+    out = {cid: "guest" for cid in cids}
+    if not cids:
+        return out
+    qmarks = ",".join("?" * len(cids))
+    try:
+        for r in conn.execute(
+                f"""SELECT customer_id,
+                           MAX(CASE WHEN started_at <= ?
+                                    AND (expires_at IS NULL OR expires_at >= ?)
+                               THEN 1 ELSE 0 END) AS cur
+                    FROM customer_memberships
+                    WHERE customer_id IN ({qmarks})
+                    GROUP BY customer_id""",
+                (today, today, *cids)).fetchall():
+            out[r["customer_id"]] = "member" if r["cur"] else "alumni"
+    except sqlite3.OperationalError:
+        pass
+    for r in conn.execute(
+            f"""SELECT customer_id, MAX(order_date) AS last FROM items
+                WHERE customer_id IN ({qmarks})
+                  AND LOWER(item_name) LIKE '%membership%'
+                  AND COALESCE(transaction_status, 'active') = 'active'
+                GROUP BY customer_id""",
+            cids).fetchall():
+        if out.get(r["customer_id"]) == "member":
+            continue
+        last = (r["last"] or "")[:10]
+        try:
+            fresh = (last and (_dt.date.fromisoformat(today)
+                               - _dt.date.fromisoformat(last)).days <= 366)
+        except ValueError:
+            fresh = False
+        out[r["customer_id"]] = "member" if fresh else "alumni"
+    return out
+
+
 def search_spotlight_players(q: str, limit: int = 12,
                              db_path: str | Path = DB_PATH) -> list[dict]:
     """Name typeahead for the Player Spotlight (admin preview v1).
@@ -7460,23 +7650,26 @@ def search_spotlight_players(q: str, limit: int = 12,
     PII-FREE BY DESIGN: returns customer_id, display name, and chapter
     only — this endpoint is destined for the pinless member tier once
     Kerry opens the page up, so nothing else may ever be added here.
-    Members only (same visibility rule as the points races).
+    R3 (Kerry-ratified #149/#151): index EVERYONE tracked — members,
+    guests, alumni, historical — "if we track it, they have a presence."
+    The old members-only status filter made current members invisible
+    whenever the status column went stale (the Decareaux defect).
     """
     q = (q or "").strip()
     if len(q) < 2:
         return []
     like = f"%{q}%"
-    statuses = ",".join("?" * len(_MEMBER_PLAYER_STATUSES))
     with _connect(db_path) as conn:
         rows = conn.execute(
-            f"""SELECT customer_id,
-                       TRIM(first_name || ' ' || last_name) AS name, chapter
-                FROM customers
-                WHERE (first_name || ' ' || last_name) LIKE ? COLLATE NOCASE
-                  AND current_player_status IN ({statuses})
-                ORDER BY last_name COLLATE NOCASE, first_name COLLATE NOCASE
-                LIMIT ?""",
-            (like, *sorted(_MEMBER_PLAYER_STATUSES), limit),
+            """SELECT customer_id,
+                      TRIM(first_name || ' ' || last_name) AS name, chapter
+               FROM customers
+               WHERE (first_name || ' ' || last_name) LIKE ? COLLATE NOCASE
+                 AND TRIM(COALESCE(first_name, '') || COALESCE(last_name, '')) != ''
+                 AND COALESCE(archived, 0) = 0
+               ORDER BY last_name COLLATE NOCASE, first_name COLLATE NOCASE
+               LIMIT ?""",
+            (like, limit),
         ).fetchall()
     return [dict(r) for r in rows]
 
@@ -7664,7 +7857,26 @@ def get_player_spotlight(customer_id: int,
             return {"error": "player not found"}
         name = " ".join(x for x in (cust["first_name"], cust["last_name"],
                                     cust["suffix"]) if x)
-        is_member = cust["current_player_status"] in _MEMBER_PLAYER_STATUSES
+        # D1 (Kerry #150): status from Tracker financial truth, not the
+        # mutable status column (which GG-roster syncs can leave stale).
+        member_status = derive_member_financial_status(conn, customer_id)
+        is_member = member_status == "member"
+
+        # F18 (Kerry #150/#151 + screenshots 2026-07-13): EVENTS = ALL
+        # events actually played this season, regardless of status
+        # (member/guest/1st-timer/alumni) — distinct events among the
+        # season's tracked rounds. The old derivation read the points-race
+        # standings' "tournaments" column, so guests/non-enrolled players
+        # showed 0-1 (Beam 0 vs 2 rounds; Decareaux 1 vs 5).
+        from .timezone_utils import today_central
+        _season_start = f"{today_central().year}-01-01"
+        _ev = conn.execute(
+            """SELECT COUNT(DISTINCT COALESCE(event_id, 'd:' || COALESCE(round_date, '?'))) AS n
+               FROM scoring_rounds
+               WHERE customer_id = ? AND round_date >= ?
+                 AND COALESCE(source, 'gg') NOT LIKE 'gg_history%'""",
+            (customer_id, _season_start)).fetchone()
+        events_played_rounds = (_ev["n"] or 0) if _ev else 0
 
         # current handicap index via handicap_player_links (canonical path)
         idx18 = None
@@ -7899,10 +8111,14 @@ def get_player_spotlight(customer_id: int,
         "name": name,
         "chapter": cust["chapter"],
         "is_member": is_member,
+        "member_status": member_status,  # 'member' | 'alumni' | 'guest' (D1)
         "handicap_index_18": idx18,
         "handicap_index_9": round(idx18 / 2, 1) if idx18 is not None else None,
         "stats": {
-            "events_played": events_played,
+            # F18: rounds-derived count is the truth (all statuses); the
+            # race-standings "tournaments" column stays as a floor in case
+            # a round import lagged.
+            "events_played": max(events_played_rounds, events_played),
             "races_entered": len({(e["contest_type"], e["season"])
                                   for e in enrollments}),
             "total_winnings": total_winnings,

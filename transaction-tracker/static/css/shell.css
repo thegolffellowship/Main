@@ -130,6 +130,26 @@ header.shell-nav {
     text-decoration: none; transition: background .15s;
 }
 .shell-cta-pill:hover { background: var(--primary-hover, #D06B2E); }
+.shell-cta-pill { border: none; cursor: pointer; }
+/* R5 chooser sheet (Kerry-ratified #149/#151): two stacked buttons, big and
+   plain, one job each; tap-away (scrim) cancels. Interim styling until CD's
+   sheet spec lands. */
+.shell-cta-scrim { display: none; position: fixed; inset: 0; background: rgba(27,27,27,.45); z-index: 300; }
+.shell-cta-scrim.open { display: block; }
+.shell-cta-sheet {
+    display: none; position: fixed; left: 16px; right: 16px; bottom: 22px; z-index: 301;
+    background: #fff; border-radius: 16px; padding: 14px; box-shadow: 0 12px 40px rgba(0,0,0,.28);
+    flex-direction: column; gap: 10px; max-width: 420px; margin: 0 auto;
+}
+.shell-cta-sheet.open { display: flex; }
+.shell-cta-sheet a {
+    display: block; text-align: center; padding: 16px 12px; border-radius: 12px;
+    background: var(--primary, #E87C3E); color: #fff; text-decoration: none;
+    font: 700 13px/1 'Bitter', serif; letter-spacing: 1px; text-transform: uppercase;
+}
+.shell-cta-sheet a:hover { background: var(--primary-hover, #D06B2E); color: #fff; }
+.shell-cta-sheet a + a { background: #fff; color: #1B1B1B; border: 2px solid #1B1B1B; }
+.shell-cta-sheet a + a:hover { background: #F3F2EF; color: #1B1B1B; }
 @media (min-width: 769px) {
     .shell-cta-pill { display: inline-block; }
     /* Desktop member: nav pill carries the CTA; hide the banner row

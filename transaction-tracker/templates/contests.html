@@ -744,10 +744,19 @@
     {% endif %}
 
     <!-- Registration CTA (Kerry, v2.53.0; v2.57.6: full-width banner attached
-         to the nav — outside <main> so it escapes its padding/max-width) -->
+         to the nav — outside <main> so it escapes its padding/max-width).
+         R5 (Kerry-ratified #149/#151): in member mode the banner opens the
+         two-button chooser sheet (This Week's Events / Season Contests);
+         sheet markup lives in _shell_nav.html's member branch. href stays
+         as a no-JS fallback — shell.js preventDefaults it. -->
     <div class="contest-cta-row">
+        {% if member_mode %}
+        <a class="contest-cta shell-cta-open" href="https://thegolffellowship.com/shop/ols/products/season-contests"
+           target="_blank" rel="noopener">ENTER EVENTS &amp; CONTESTS &rarr;</a>
+        {% else %}
         <a class="contest-cta" href="https://thegolffellowship.com/shop/ols/products/season-contests"
            target="_blank" rel="noopener">ENTER SEASON CONTESTS &rarr;</a>
+        {% endif %}
     </div>
 
     <main>
@@ -3208,9 +3217,18 @@
             const hcp = r.handicap_index != null
                 ? ` <span style="color:var(--text-muted);font-size:0.82em;" title="Current 18-hole handicap index">(${r.handicap_index.toFixed(1)})</span>`
                 : '';
+            // R4 (Kerry-ratified #149/#151): non-members stay ranked on
+            // active boards with a status pill — the join/renew path is the
+            // row's expand → Full Spotlight, which carries the tappable
+            // JOIN/REJOIN chip.
+            const statusPill = r.member_status === "guest"
+                ? ` <span style="display:inline-block;padding:1px 6px;border-radius:9999px;font-size:0.62rem;font-weight:700;letter-spacing:0.04em;background:#E5E7EB;color:#374151;vertical-align:1px;">GUEST</span>`
+                : (r.member_status === "alumni"
+                    ? ` <span style="display:inline-block;padding:1px 6px;border-radius:9999px;font-size:0.62rem;font-weight:700;letter-spacing:0.04em;background:#FDF3E7;color:#B45309;border:1px solid #F3D9BB;vertical-align:1px;" title="Membership lapsed — rejoin at thegolffellowship.com">REJOIN</span>`
+                    : "");
             return `<tr style="${bg}${expandable ? 'cursor:pointer;' : ''}"${r.member_card_id ? ` data-card="${r.member_card_id}"` : ''}${r.customer_id ? ` data-cid="${r.customer_id}"` : ''}>
                 <td style="${rankStyle}">${escapeHtml(r._flightRank ?? r.rank)}${prRankMove(r.rank, r.prev_rank)}</td>
-                <td>${nameCell}${hcp}${chevron}${prPayBadge(r)}</td>
+                <td>${nameCell}${hcp}${statusPill}${chevron}${prPayBadge(r)}</td>
                 ${showChapter ? `<td style="${chapStyle}" title="${escapeHtml(r.player_chapter || "")}">${escapeHtml(compact ? prAbbrevChapter(r.player_chapter) : (r.player_chapter || ""))}</td>` : ""}
                 <td style="${ptsStyle}">${r.total_points ?? ""}</td>
                 <td style="${resetStyle}">${prFmtReset(r.points_reset)}</td>

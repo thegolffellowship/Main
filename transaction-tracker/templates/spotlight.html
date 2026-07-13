@@ -56,6 +56,10 @@
         .spt-chip.ch-austin { background: var(--chapter-austin, #BF5700); color: #fff; }
         .spt-chip.ch-other { background: #E5E7EB; color: #374151; }
         .spt-chip.member { background: #C9EBD5; color: #1B6B45; }
+        .spt-chip.guest { background: #E5E7EB; color: #374151; }
+        .spt-chip.rejoin { background: #FDF3E7; color: #B45309; border: 1px solid #F3D9BB;
+                           text-decoration: none; font-weight: 700; cursor: pointer; }
+        .spt-chip.rejoin:hover { background: #FBE8D3; }
 
         .spt-card { background: #fff; border: 1px solid var(--border); border-radius: 14px; padding: 15px 16px; }
         .spt-hero-row { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
@@ -212,6 +216,20 @@
             const cls = ch === "Austin" ? "ch-austin" : (ch === "San Antonio" ? "ch-sa" : "ch-other");
             return ch ? `<span class="spt-chip ${cls}">${esc(ch)}</span>` : "";
         };
+        // R1 status chips (Kerry-ratified #149/#151), from D1 financial
+        // truth: member = green label; guest = grey label + obvious join
+        // link; lapsed member (alumni) = NO status label, just an amber
+        // tappable REJOIN → (no "former" badge on a fellowship page —
+        // doubles as the lapse notice).
+        const JOIN_URL = "https://thegolffellowship.com/shop/ols/products/tgf-membership";
+        const statusChips = d => {
+            const s = d.member_status || (d.is_member ? "member" : null);
+            if (s === "member") return `<span class="spt-chip member">TGF Member</span>`;
+            if (s === "alumni") return `<a class="spt-chip rejoin" href="${JOIN_URL}" target="_blank" rel="noopener">Rejoin &rarr;</a>`;
+            if (s === "guest") return `<span class="spt-chip guest">Guest</span>` +
+                `<a class="spt-chip rejoin" href="${JOIN_URL}" target="_blank" rel="noopener">Join &rarr;</a>`;
+            return "";
+        };
         // trends are the EARNED state (10+ rounds; payload nulls them below
         // that). ▼ green = improving (fewer strokes), ▲ red = worse.
         const trendHtml = (t, gap) => {
@@ -240,7 +258,7 @@
                         ? players.map(pl =>
                             `<button type="button" data-cid="${pl.customer_id}" data-name="${esc(pl.name)}">` +
                             `<span>${esc(pl.name)}</span>${chapterChip(pl.chapter)}</button>`).join("")
-                        : `<div class="none">No members match &ldquo;${esc(v)}&rdquo;.</div>`;
+                        : `<div class="none">No players found for &ldquo;${esc(v)}&rdquo;.</div>`;
                     sug.style.display = "";
                 } catch (e) { /* transient */ }
             }, 220);
@@ -293,7 +311,7 @@
                 `<div class="spt-card"><div class="spt-hero-row">` +
                 `<div style="min-width:0;"><h3 class="spt-name">${esc(d.name)}</h3>` +
                 `<div class="spt-badges">${chapterChip(d.chapter)}` +
-                (d.is_member ? `<span class="spt-chip member">TGF Member</span>` : "") +
+                statusChips(d) +
                 `</div></div>` +
                 `<div class="spt-idx"><div class="n">${hcp != null ? esc(hcp.toFixed(1)) : "&mdash;"}</div>` +
                 `<div class="l">Index${d.handicap_index_9 != null ? `<br>9-hole ${esc(d.handicap_index_9.toFixed(1))}` : ""}</div></div>` +

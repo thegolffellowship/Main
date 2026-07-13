@@ -1421,6 +1421,14 @@ def _scoring_dispatch(url: str, extract: str):
         if cmd == "scoring-payouts-preview":
             # assemble without writing — inspect what would be recorded
             return json.dumps(db.assemble_event_game_payouts(arg), indent=2)
+        if cmd == "scoring-gg-drift":
+            # D1 drift report (Kerry #150): GG Master Roster tag vs Tracker
+            # financial status. arg = roster URL(s), |-separated, e.g.
+            # scoring-gg-drift:https://tgf-sa.golfgenius.com/pages/6125355
+            urls = [u.strip() for u in arg.split("|") if u.strip()]
+            if not urls:
+                return json.dumps({"error": "pass roster page URL(s), |-separated"})
+            return json.dumps(db.gg_roster_drift_report(urls), indent=2, default=str)
         if cmd == "scoring-heal-holes":
             # Align items.holes to the event's hole count on single-format
             # events (fixes the 'a9.18' -> holes=18 parser mis-read).

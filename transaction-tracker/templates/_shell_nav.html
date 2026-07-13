@@ -23,9 +23,18 @@
         <a href="/member/contests" class="{{ 'active' if SHELL_ACTIVE == 'contests' else '' }}">Leaderboard</a>
         <a href="/member/handicaps" class="{{ 'active' if SHELL_ACTIVE == 'handicaps' else '' }}">Handicaps</a>
     </nav>
-    <a class="shell-cta-pill" href="https://thegolffellowship.com/shop/ols/products/season-contests"
-       target="_blank" rel="noopener">Enter Season Contests</a>
+    {# R5 (Kerry-ratified #149/#151): one CTA → a two-button chooser sheet.
+       Big, plain, one job per button; tap-away cancels. Interim wiring per
+       #151 — CD's sheet spec may restyle it; destinations are final. #}
+    <button class="shell-cta-pill" id="shell-cta-chooser" type="button">Enter Events &amp; Contests</button>
 </header>
+<div class="shell-cta-scrim" id="shell-cta-scrim"></div>
+<div class="shell-cta-sheet" id="shell-cta-sheet" role="dialog" aria-label="Enter Events and Contests" aria-hidden="true">
+    <a href="https://thegolffellowship.com/shop#d612295e-1741-4595-ac4c-b6d1138349de"
+       target="_blank" rel="noopener">This Week's Events</a>
+    <a href="https://thegolffellowship.com/shop/ols/products/season-contests"
+       target="_blank" rel="noopener">Season Contests</a>
+</div>
 {% else %}
 <header class="shell-nav" id="shell-nav">
     <button class="shell-burger" id="shell-burger" aria-label="Open menu" aria-expanded="false">
