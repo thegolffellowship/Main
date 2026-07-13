@@ -7473,7 +7473,8 @@ def derive_member_financial_status(conn: sqlite3.Connection,
                IN but can never hide one, which was the Decareaux bug);
       alumni — had a term / bought a membership at some point, not
                current ("ALUMNI" is the adopted Tracker-side term per D2
-               #151; GG's roster tag stays FORMER for ops);
+               #151; GG tag: ALUMNI going forward as memberships
+               expire, legacy FORMER rows remain — Kerry 2026-07-13);
       guest  — tracked, never bought a membership.
     """
     from .timezone_utils import today_central_str
@@ -7524,8 +7525,9 @@ def gg_roster_drift_report(urls: list[str],
     """GG Master Roster vs Tracker financial truth — the D1 drift report
     (Kerry-ratified #150): "everyone whose GG roster status ≠ Tracker
     customer status — so Kerry updates GG from a checklist, not from
-    catching wrong-looking members." GG stays FORMER/Guest/Member on its
-    side (D2); we map FORMER→alumni for comparison.
+    catching wrong-looking members." GG tags: Member/Guest, plus ALUMNI
+    going forward for newly-lapsed (legacy FORMER rows remain — Kerry
+    2026-07-13); FORMER and ALUMNI both map to alumni for comparison.
 
     Two sources:
     - urls=[] (DEFAULT): compare against the GG AFFILIATION tag already
@@ -7558,8 +7560,13 @@ def gg_roster_drift_report(urls: list[str],
                     continue
                 seen_cids.add(cid)
                 aff = (r["affiliation"] or "").lower()
-                gg = ("member" if "tgf" in aff
-                      else "alumni" if "former" in aff or "alumni" in aff
+                # alumni/former checked BEFORE tgf — GG may render the tag
+                # alongside the chapter ("TGF San Antonio Alumni"), and a
+                # lapsed player must never read as member. Kerry ruling
+                # 2026-07-13: GG tag going forward is ALUMNI (newly-lapsed,
+                # applied as memberships expire); legacy FORMER rows remain.
+                gg = ("alumni" if "former" in aff or "alumni" in aff
+                      else "member" if "tgf" in aff
                       else "guest")
                 checked += 1
                 ours = fin.get(cid, "guest")
@@ -7569,7 +7576,7 @@ def gg_roster_drift_report(urls: list[str],
                         "gg_tag": r["affiliation"],
                         "tracker_status": ours,
                         "action": f"set GG roster to "
-                                  f"{'FORMER' if ours == 'alumni' else ours.upper()}",
+                                  f"{'ALUMNI' if ours == 'alumni' else ours.upper()}",
                     })
         return {"drift": drift, "unresolved": [],
                 "players_checked": checked,
@@ -7667,7 +7674,7 @@ def gg_roster_drift_report(urls: list[str],
                             "gg_tag": tag,
                             "tracker_status": ours,
                             "action": f"set GG roster to "
-                                      f"{'FORMER' if ours == 'alumni' else ours.upper()}",
+                                      f"{'ALUMNI' if ours == 'alumni' else ours.upper()}",
                         })
             if not hits:
                 diagnostics.append({
