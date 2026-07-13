@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.78.4";
+window.TGF_VERSION = "2.79.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.79.0",
+    date: "2026-07-13",
+    changes: [
+      "FASTER VENMO PAYOUT CONFIRMATION (Kerry): tapping a Pay button on the PAYOUTS page now asks the server to sweep the expense inbox ~75 seconds and ~180 seconds later, so the Venmo receipt is caught and the payout flips to PAID within a couple minutes instead of waiting for the normal 5-minute cycle. New admin endpoint POST /api/tgf/schedule-venmo-check schedules two one-shot APScheduler jobs running check_expense_inbox (which parses the receipt AND runs the payout matcher inline). Repeated Pay taps coalesce onto the same two jobs, so paying a batch triggers one sweep shortly after the last tap. The 5-minute cycle remains the backstop, and cost is unchanged -- the expense dedup bills each email at most once no matter how often the inbox is swept.",
+    ],
+  },
   {
     version: "2.78.4",
     date: "2026-07-13",
