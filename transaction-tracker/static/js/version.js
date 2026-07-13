@@ -1,5 +1,15 @@
-window.TGF_VERSION = "2.86.8";
+window.TGF_VERSION = "2.87.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.87.0",
+    date: "2026-07-13",
+    changes: [
+      "SPOTLIGHT CONVERSION PACKAGE (Kerry-ratified, mailbox #155/#156). The standings section is now personal and leads the page: 'WHERE THEY STAND' becomes 'WHERE {FIRST NAME} STANDS' (e.g. WHERE DAVID STANDS) and moves ABOVE Scoring -- the profile's job is Season Contest signups, so standings-vs-money reads first: header -> Where {Name} Stands -> Scoring -> Recent Winnings.",
+      "BUY IN -> action chip: a MEMBER not bought into a race sees an orange BUY IN -> chip (links the Season Contests product) in place of the NOT IN badge on their standings rows. Guests/alumni keep plain NOT IN -- their one action is the header JOIN/REJOIN chip (one action chip per page, no competing CTAs). The Leaderboard's Not-in column is unchanged.",
+      "Action chips restyled to solid TGF-orange pills with white text, worded JOIN TGF -> (guest) and REJOIN TGF -> (alumni) -- the old grey/amber accents were too weak as CTAs.",
+      "Welcome card copy updated for the Spotlight-first landing (Kerry-ratified verbatim): 'Welcome to the Fellowship. Start with your own name -- your season, your stats, your winnings are all in here. Then tap LEADERBOARD for every Season Contest and how it all works...and pays!'",
+    ],
+  },
   {
     version: "2.86.8",
     date: "2026-07-13",
