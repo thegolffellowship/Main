@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.86.7";
+window.TGF_VERSION = "2.86.8";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.86.8",
+    date: "2026-07-13",
+    changes: [
+      "ALUMNI is now the Tracker-wide display term for lapsed members (Kerry): the Customers list badge and detail Status field, the status dropdown, and the events registration-check message all read ALUMNI instead of FORMER, and the statuses reference row is renamed idempotently at boot. Internal keys (former/expired_member/inactive) and the member-facing spotlight treatment (no label, amber REJOIN chip) are unchanged. GG side per Kerry's ruling: newly-lapsed get tagged ALUMNI as memberships expire; legacy FORMER rows in GG remain until then.",
+    ],
+  },
   {
     version: "2.86.7",
     date: "2026-07-13",
