@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.86.4";
+window.TGF_VERSION = "2.86.5";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.86.5",
+    date: "2026-07-13",
+    changes: [
+      "GG-drift report now runs with NO URL needed: it compares Tracker financial status against the GG affiliation tag already ingested with every points-race standings snapshot (the roster-derived value GG prints on its boards -- the CH=G column). This covers every ranked player and needs no scraping; the GG member directory turned out to be login-gated, so the page-scrape mode stays only as an option for public pages.",
+    ],
+  },
   {
     version: "2.86.4",
     date: "2026-07-13",
