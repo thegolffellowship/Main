@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.80.0";
+window.TGF_VERSION = "2.81.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.81.0",
+    date: "2026-07-13",
+    changes: [
+      "PAYOUTS ACTION COLUMN SIMPLIFIED TO ONE PILL (Kerry): each payout row now shows a SINGLE control instead of two side-by-side badges. Before, an unpaid row showed a Pay link AND a PENDING badge; because that double-width cell set the column width, the green PAID pills on everyone else got pushed off the right edge on mobile. Now: paid rows show PAID, unpaid rows show just the Pay link (the link already means 'not paid yet', so the redundant PENDING pill is gone), and rows with no payment info show a single '+ Add Payment' control. The column stays narrow and every row's status is visible without horizontal scrolling. Applies to the per-event PAYOUTS panel and the PAYOUTS tab.",
+      "\"+ ADD PAYMENT\" NOW SUPPORTS ANY METHOD (Kerry): the quick add on a payout row is no longer Venmo-only. Tap '+ Add Payment', choose Venmo / PayPal / Cash App / Zelle, enter the handle (or email), Save -- it's written to that person's Customer record (Venmo handle to venmo_username; PayPal/Cash App/Zelle to payment_method + payment_handle) and the row instantly becomes the matching pay link (or a Zelle 'pay manually' badge). No reload. New customer fields payment_method/payment_handle are now editable through /api/customers/update.",
+    ],
+  },
   {
     version: "2.80.0",
     date: "2026-07-13",

@@ -3570,49 +3570,92 @@
             : `https://venmo.com/${encodeURIComponent(handle)}?txn=pay&amount=${amt}&note=${encoded}`;
     }
 
-    // ── Quick "+ Venmo" handle add on the per-event PAYOUTS panel
-    // (Kerry 2026-07-13): add a handle to the customer and render the Pay
-    // link immediately, no reload.
-    function evRevealAddVenmo(btn) {
-        const wrap = btn.closest(".ev-add-venmo-wrap");
+    // Method-aware pay link for the per-event PAYOUTS panel. Returns
+    // {href,label} for a deep link, {badge} for a no-deep-link method
+    // (Zelle), or null when there's no usable handle (→ "+ Add Payment").
+    function payoutPayLink(winData, amount, eventCode, golferName) {
+        if (!winData) return null;
+        const method = (winData.payment_method
+            || (winData.venmo_username ? "venmo" : "")).toLowerCase();
+        const amt = Number(amount).toFixed(2);
+        const note = `${golferName} - Winnings for ${eventCode}`;
+        if (method === "venmo" && winData.venmo_username)
+            return { href: venmoPayHref(winData.venmo_username, amount, note), label: "Pay" };
+        const handle = (winData.payment_handle || "").trim();
+        if (method === "paypal")
+            return handle ? { href: `https://paypal.me/${handle.replace(/^@/, "")}/${amt}`, label: "PayPal" } : null;
+        if (method === "cashapp")
+            return handle ? { href: `https://cash.app/$${handle.replace(/^\$/, "")}/${amt}`, label: "Cash App" } : null;
+        if (method === "zelle")
+            return { badge: `Zelle${handle ? " · " + handle : ""}` };
+        return null;
+    }
+
+    // "+ Add Payment" chooser — pick ANY method + enter the handle, save to
+    // the customer (by customer_id), then render the resulting Pay link in
+    // place. Not just Venmo (Kerry 2026-07-13).
+    function addPaymentChooserHtml(g, eventCode) {
+        return `<span class="ev-add-pay-wrap" data-gid="${g.golfer_id}" data-amt="${g.total}"`
+            + ` data-name="${escapeHtml(g.name).replace(/"/g, '&quot;')}" data-code="${escapeHtml(eventCode).replace(/"/g, '&quot;')}">`
+            + `<button class="ev-add-pay-btn" style="padding:2px 8px;border-radius:99px;font-size:0.72rem;font-weight:600;background:#f1f5f9;color:#334155;border:1px dashed #94a3b8;cursor:pointer;white-space:nowrap;" onclick="event.stopPropagation(); evRevealAddPay(this)">+ Add Payment</button>`
+            + `</span>`;
+    }
+    function evRevealAddPay(btn) {
+        const wrap = btn.closest(".ev-add-pay-wrap");
         if (!wrap) return;
         wrap.innerHTML =
-            `<span style="display:inline-flex;align-items:center;gap:3px;">` +
-            `<span style="font-size:0.75rem;color:#94a3b8;">@</span>` +
-            `<input class="ev-add-venmo-input" type="text" placeholder="venmo-username" autocapitalize="off" autocorrect="off" spellcheck="false" style="font-size:0.74rem;padding:2px 6px;border:1px solid #cbd5e1;border-radius:4px;width:8.5rem;" onclick="event.stopPropagation()" onkeydown="if(event.key==='Enter'){event.preventDefault();evSaveAddVenmo(this);}">` +
-            `<button class="ev-add-venmo-save" style="font-size:0.72rem;padding:2px 8px;border-radius:99px;background:#008CFF;color:#fff;border:none;cursor:pointer;font-weight:600;" onclick="event.stopPropagation(); evSaveAddVenmo(this)">Save</button>` +
-            `<span class="ev-add-venmo-msg" style="font-size:0.7rem;color:#dc2626;"></span></span>`;
-        const inp = wrap.querySelector(".ev-add-venmo-input");
+            `<span style="display:inline-flex;flex-wrap:wrap;gap:3px;align-items:center;justify-content:flex-end;max-width:160px;">` +
+            `<select class="ev-add-pay-method" style="font-size:0.72rem;padding:2px 4px;border:1px solid #cbd5e1;border-radius:4px;" onclick="event.stopPropagation()">` +
+            `<option value="venmo">Venmo</option><option value="paypal">PayPal</option>` +
+            `<option value="cashapp">Cash App</option><option value="zelle">Zelle</option></select>` +
+            `<input class="ev-add-pay-handle" type="text" placeholder="handle / email" autocapitalize="off" autocorrect="off" spellcheck="false" style="font-size:0.72rem;padding:2px 6px;border:1px solid #cbd5e1;border-radius:4px;width:7.5rem;" onclick="event.stopPropagation()" onkeydown="if(event.key==='Enter'){event.preventDefault();evSaveAddPay(this);}">` +
+            `<button class="ev-add-pay-save" style="font-size:0.72rem;padding:2px 8px;border-radius:99px;background:#008CFF;color:#fff;border:none;cursor:pointer;font-weight:600;" onclick="event.stopPropagation(); evSaveAddPay(this)">Save</button>` +
+            `<span class="ev-add-pay-msg" style="font-size:0.7rem;color:#dc2626;width:100%;text-align:right;"></span></span>`;
+        const inp = wrap.querySelector(".ev-add-pay-handle");
         if (inp) inp.focus();
     }
-    async function evSaveAddVenmo(el) {
-        const wrap = el.closest(".ev-add-venmo-wrap");
+    async function evSaveAddPay(el) {
+        const wrap = el.closest(".ev-add-pay-wrap");
         if (!wrap) return;
-        const inp = wrap.querySelector(".ev-add-venmo-input");
-        const msg = wrap.querySelector(".ev-add-venmo-msg");
-        const handle = (inp && inp.value || "").trim().replace(/^@/, "");
-        if (!handle) { if (msg) msg.textContent = "?"; if (inp) inp.focus(); return; }
+        const method = (wrap.querySelector(".ev-add-pay-method") || {}).value || "venmo";
+        const inp = wrap.querySelector(".ev-add-pay-handle");
+        const msg = wrap.querySelector(".ev-add-pay-msg");
+        const handle = (inp && inp.value || "").trim().replace(/^[@$]/, "");
+        if (!handle) { if (msg) msg.textContent = "Enter a handle"; if (inp) inp.focus(); return; }
         const gid = parseInt(wrap.dataset.gid, 10);
-        const saveBtn = wrap.querySelector(".ev-add-venmo-save");
+        const saveBtn = wrap.querySelector(".ev-add-pay-save");
         if (saveBtn) { saveBtn.disabled = true; saveBtn.textContent = "…"; }
         if (msg) msg.textContent = "";
+        const fields = { payment_method: method };
+        if (method === "venmo") fields.venmo_username = handle;
+        else fields.payment_handle = handle;
         try {
             const resp = await fetch("/api/customers/update", {
                 method: "POST", headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
-                    customer_name: wrap.dataset.name, customer_id: gid,
-                    fields: { venmo_username: handle },
+                    customer_name: wrap.dataset.name, customer_id: gid, fields,
                 }),
             });
             const data = await resp.json();
             if (!resp.ok) throw new Error(data.error || "Save failed");
             // reflect into in-memory winnings so later renders keep it
             const w = Object.values(tgfPayoutData.winnings).find(x => x.id === gid);
-            if (w) w.venmo_username = handle;
+            if (w) {
+                w.payment_method = method;
+                if (method === "venmo") w.venmo_username = handle;
+                else w.payment_handle = handle;
+            }
             const amt = parseFloat(wrap.dataset.amt) || 0;
-            const href = venmoPayHref(handle, amt, `${wrap.dataset.name} - Winnings for ${wrap.dataset.code}`);
-            wrap.outerHTML =
-                `<a href="${href}" target="_blank" rel="noopener" style="display:inline-flex;align-items:center;gap:3px;padding:2px 8px;border-radius:99px;font-size:0.72rem;font-weight:600;background:#008CFF;color:#fff;text-decoration:none;" onclick="event.stopPropagation();"><svg viewBox="0 0 24 24" fill="currentColor" style="width:12px;height:12px;"><path d="M19.5 3c.9 1.5 1.3 3 1.3 5 0 5.5-4.7 12.7-8.5 17H5.2L3 3.5l6-.6 1.2 9.6c1.2-2 2.7-5.2 2.7-7.3 0-1.9-.3-3.2-.8-4.2L19.5 3z"/></svg>Pay</a>`;
+            const pa = payoutPayLink(
+                { payment_method: method, venmo_username: method === "venmo" ? handle : "", payment_handle: method === "venmo" ? "" : handle },
+                amt, wrap.dataset.code, wrap.dataset.name);
+            if (pa && pa.href) {
+                wrap.outerHTML =
+                    `<a href="${pa.href}" target="_blank" rel="noopener" style="display:inline-flex;align-items:center;gap:3px;padding:2px 8px;border-radius:99px;font-size:0.72rem;font-weight:600;background:#008CFF;color:#fff;text-decoration:none;" onclick="event.stopPropagation();"><svg viewBox="0 0 24 24" fill="currentColor" style="width:12px;height:12px;"><path d="M19.5 3c.9 1.5 1.3 3 1.3 5 0 5.5-4.7 12.7-8.5 17H5.2L3 3.5l6-.6 1.2 9.6c1.2-2 2.7-5.2 2.7-7.3 0-1.9-.3-3.2-.8-4.2L19.5 3z"/></svg>${pa.label || 'Pay'}</a>`;
+            } else {
+                // Zelle / no-deep-link method — show an info badge
+                wrap.outerHTML = `<span style="display:inline-block;padding:2px 8px;border-radius:99px;font-size:0.7rem;font-weight:600;background:#ede9fe;color:#5b21b6;" title="Saved — pay manually">${(pa && pa.badge) || method}</span>`;
+            }
         } catch (err) {
             if (msg) msg.textContent = (err && err.message) || "Save failed";
             if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = "Save"; }
@@ -3695,18 +3738,27 @@
             const winData = Object.values(tgfPayoutData.winnings).find(w => w.id === g.golfer_id);
             const venmo = winData ? winData.venmo_username : "";
             const alreadyPaid = g.payment_status === "paid";
-            let venmoHtml = venmo && !alreadyPaid
-                ? `<a href="${venmoPayHref(venmo, g.total, `${g.name} - Winnings for ${ev.item_name}`)}" target="_blank" rel="noopener" style="display:inline-flex;align-items:center;gap:3px;padding:2px 8px;border-radius:99px;font-size:0.72rem;font-weight:600;background:#008CFF;color:#fff;text-decoration:none;" onclick="event.stopPropagation();"><svg viewBox="0 0 24 24" fill="currentColor" style="width:12px;height:12px;"><path d="M19.5 3c.9 1.5 1.3 3 1.3 5 0 5.5-4.7 12.7-8.5 17H5.2L3 3.5l6-.6 1.2 9.6c1.2-2 2.7-5.2 2.7-7.3 0-1.9-.3-3.2-.8-4.2L19.5 3z"/></svg>Pay</a>`
-                : '';
-            // No handle on file + unpaid → quick "+ Venmo" to add one to the
-            // customer and get an immediate Pay link (Kerry 2026-07-13).
-            if (!venmo && !alreadyPaid && g.golfer_id) {
-                venmoHtml = `<span class="ev-add-venmo-wrap" data-gid="${g.golfer_id}" data-amt="${g.total}"`
-                    + ` data-name="${escapeHtml(g.name).replace(/"/g,'&quot;')}" data-code="${escapeHtml(ev.item_name).replace(/"/g,'&quot;')}">`
-                    + `<button class="ev-add-venmo-btn" style="padding:2px 8px;border-radius:99px;font-size:0.72rem;font-weight:600;background:#f1f5f9;color:#334155;border:1px dashed #94a3b8;cursor:pointer;white-space:nowrap;" onclick="event.stopPropagation(); evRevealAddVenmo(this)">+ Venmo</button>`
-                    + `</span>`;
+            // ONE action/status control per row (Kerry 2026-07-13): a pay
+            // link, OR a "+ Add Payment" chooser, OR the PAID badge — never a
+            // pay link AND a PENDING badge together. The redundant second pill
+            // widened this column past the mobile viewport and pushed the PAID
+            // badges off the right edge. A pay link / add-payment control
+            // already means "not paid yet", so PENDING is dropped.
+            let actionCell;
+            if (alreadyPaid) {
+                actionCell = PAYOUT_STATUS_BADGE.paid;
+            } else {
+                const pa = payoutPayLink(winData, g.total, ev.item_name, g.name);
+                if (pa && pa.href) {
+                    actionCell = `<a href="${pa.href}" target="_blank" rel="noopener" style="display:inline-flex;align-items:center;gap:3px;padding:2px 8px;border-radius:99px;font-size:0.72rem;font-weight:600;background:#008CFF;color:#fff;text-decoration:none;" onclick="event.stopPropagation();"><svg viewBox="0 0 24 24" fill="currentColor" style="width:12px;height:12px;"><path d="M19.5 3c.9 1.5 1.3 3 1.3 5 0 5.5-4.7 12.7-8.5 17H5.2L3 3.5l6-.6 1.2 9.6c1.2-2 2.7-5.2 2.7-7.3 0-1.9-.3-3.2-.8-4.2L19.5 3z"/></svg>${pa.label || 'Pay'}</a>`;
+                } else if (pa && pa.badge) {
+                    actionCell = `<span style="display:inline-block;padding:2px 8px;border-radius:99px;font-size:0.7rem;font-weight:600;background:#ede9fe;color:#5b21b6;" title="No deep link for this method — pay manually">${pa.badge}</span>`;
+                } else if (g.golfer_id) {
+                    actionCell = addPaymentChooserHtml(g, ev.item_name);
+                } else {
+                    actionCell = "";
+                }
             }
-            const statusBadge = PAYOUT_STATUS_BADGE[g.payment_status] || "";
 
             html += `<tr class="payout-golfer-row" data-payout-gid="${g.golfer_id}" style="cursor:pointer;transition:background 0.1s;border-bottom:1px solid #f1f5f9;" onmouseover="this.style.background='#eef2ff'" onmouseout="this.style.background=''">`;
             html += `<td style="padding:0.5rem;text-align:center;color:var(--text-muted);font-size:0.8rem;">${idx + 1}</td>`;
@@ -3714,7 +3766,7 @@
             html += `<td class="payout-hide-mobile" style="padding:0.5rem;text-align:center;">${regIcon}</td>`;
             html += `<td class="payout-hide-mobile" style="padding:0.5rem;text-align:right;font-size:0.85rem;">${g.items.length}</td>`;
             html += `<td style="padding:0.5rem;text-align:right;font-weight:700;color:#059669;font-variant-numeric:tabular-nums;">$${g.total.toFixed(2)}</td>`;
-            html += `<td style="padding:0.5rem;text-align:right;white-space:nowrap;">${venmoHtml} ${statusBadge}</td>`;
+            html += `<td style="padding:0.5rem;text-align:right;white-space:normal;">${actionCell}</td>`;
             html += `</tr>`;
 
             // Expandable breakdown row

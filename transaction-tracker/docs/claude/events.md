@@ -701,19 +701,32 @@ event showed default amounts ($8/$7) in Withdraw Player / Partial Refund.
 - `_resolve_customer_for_payout(conn, name)` — resolves payout recipient to a `customer_id`: `_resolve_scoring_player` FIRST (v2.49.0 — GG results names are "LAST, First Suffix", exactly what the scoring spine's candidate expansion + curated handicap_player_links map resolve; the old comma-split alone turned 'ARIAS, Victor Jr' into first='Victor Jr'/last='Arias' and minted a fresh shell customer per recording pass), then the `_lookup_customer_id` cascade, then an exact first+last guard; creates a new customer with `acquisition_source='tgf_payout'` only if everything misses. The boot repair `_repair_tgf_payout_shells()` merges any identity-less tgf_payout shells whose name re-resolves to a real customer (repoints tgf_payouts, deletes the shell) — it healed the 8 Arias shells of 2026-07-07.
 - Payouts linked to identity via `tgf_payouts.customer_id` (FK to `customers.customer_id`)
 
-## Quick "+ Venmo" handle add on PAYOUTS (v2.80.0, Kerry)
-Winners with no `venmo_username` on file render a dashed "+ Venmo" button
-on their unpaid payout row (both `/tgf` PAYOUTS — `payCellHtml` in
-tgf.html — and the per-event PAYOUTS panel — `renderPayoutsPanel` in
-events.html). Reveal → type handle → Save posts to
-`/api/customers/update` with `customer_id` + `fields:{venmo_username}`
-(persists to `customers.venmo_username` via `update_customer_info`, keyed
-by id so it holds for every future event), then swaps the cell in place
-to a live Venmo Pay deep link (amount + "Name - Winnings for <event>"
-memo) with no reload. Helpers: `tgfRevealAddVenmo`/`tgfSaveAddVenmo`
-(tgf.html), `evRevealAddVenmo`/`evSaveAddVenmo` (events.html). Only shows
-on unpaid rows with no existing pay link; paid rows and rows with a
-handle are unchanged.
+## PAYOUTS action column — one pill + "+ Add Payment" chooser (v2.81.0, Kerry)
+The payout action cell renders exactly ONE control per row (was two
+side-by-side badges, whose double width pushed the PAID pills off-screen
+on mobile). Logic (both `/tgf` PAYOUTS `payCellHtml` in tgf.html and the
+per-event PAYOUTS panel `renderPayoutsPanel` in events.html):
+- **paid** → `PAID ✓` badge (tgf also keeps `PARTIAL` for mixed groups).
+- **unpaid + a usable pay link** (venmo via `venmo_username`; paypal /
+  cashapp via `payment_method`+`payment_handle`) → the Pay link ONLY. The
+  redundant PENDING/UNPAID pill is dropped — a pay link already means "not
+  paid yet" (Kerry). tgf keeps its "Sent · verifying…" state after a tap.
+- **unpaid + zelle / no-deep-link method** → a single info badge.
+- **unpaid + no method on file** → a single **"+ Add Payment"** chooser.
+
+The chooser (not Venmo-only): pick Venmo / PayPal / Cash App / Zelle +
+enter handle/email → Save posts to `/api/customers/update` with
+`customer_id` + `fields` (`{payment_method, venmo_username}` for Venmo;
+`{payment_method, payment_handle}` for the others). `update_customer_info`
+persists these to `customers.payment_method` / `payment_handle` /
+`venmo_username` (keyed by id, so it holds for every future event; both
+columns already existed, seeded by `_seed_customer_payment_methods`). The
+cell then swaps in place to the matching pay link (or a Zelle badge), no
+reload. Helpers: `tgfRevealAddPay`/`tgfSaveAddPay` +
+`payAction` (tgf.html); `payoutPayLink`/`addPaymentChooserHtml`/
+`evRevealAddPay`/`evSaveAddPay` (events.html). The `/api/customers/update`
+whitelist (app.py route + `update_customer_info`) now includes
+`payment_method` and `payment_handle`.
 
 ## Venmo payment auto-confirm (v2.50.0, Kerry)
 `auto_match_venmo_payouts_to_tgf(expense_ids=None)` (database.py) marks
