@@ -418,12 +418,6 @@
                     // gap (points to the last paying position on the ladder).
                     null));
             });
-            (d.fall_buyins || []).forEach(f => {
-                rows.push(standRow("—", "#C6C2BA", "Aug 29",
-                    (f.chapter === "Austin" ? "Austin" : "SA") + " Fall NET",
-                    "Lights up when fall races begin", pillIn,
-                    `${contestsBase}#race=${f.chapter === "Austin" ? "fall_austin" : "fall_sa"}`));
-            });
             if (d.match_play) {
                 const mp = d.match_play;
                 rows.push(mp.pool
@@ -435,6 +429,14 @@
                     : standRow("—", "#C6C2BA", "", `City Match Play · ${mp.chapter}`,
                         "Pools not drawn yet", pillIn, `${contestsBase}#tab=mp`));
             }
+            // dormant fall placeholder LAST — active competitions outrank
+            // a race that hasn't started (Kerry 2026-07-13)
+            (d.fall_buyins || []).forEach(f => {
+                rows.push(standRow("—", "#C6C2BA", "Aug 29",
+                    (f.chapter === "Austin" ? "Austin" : "SA") + " Fall NET",
+                    "Lights up when fall races begin", pillIn,
+                    `${contestsBase}#race=${f.chapter === "Austin" ? "fall_austin" : "fall_sa"}`));
+            });
             const stands = rows.length
                 ? `<div><div class="spt-sec-head"><span class="t">Where ${esc((d.name || "").split(" ")[0] || "They")} Stands</span>` +
                   `<span class="s" style="color:var(--primary, #E87C3E);font-style:italic;">(Click for Standings)</span></div>` +

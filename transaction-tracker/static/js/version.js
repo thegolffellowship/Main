@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.87.5";
+window.TGF_VERSION = "2.87.6";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.87.6",
+    date: "2026-07-13",
+    changes: [
+      "Where-{Name}-Stands row order (Kerry): the ACTIVE City Match Play row now sits above the dormant SA/Austin Fall NET placeholder -- live competitions outrank a race that hasn't started.",
+    ],
+  },
   {
     version: "2.87.5",
     date: "2026-07-13",
