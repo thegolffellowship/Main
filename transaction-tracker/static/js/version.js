@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.86.2";
+window.TGF_VERSION = "2.86.3";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.86.3",
+    date: "2026-07-13",
+    changes: [
+      "GG-drift widget-follow fix: the iframe URL extraction sliced the first CHARACTER of each match instead of the whole URL (re.findall with one capture group returns strings). Verified extraction against a sample iframe; the drift report can now actually read the roster widget.",
+    ],
+  },
   {
     version: "2.86.2",
     date: "2026-07-13",
