@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.85.1";
+window.TGF_VERSION = "2.85.2";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.85.2",
+    date: "2026-07-14",
+    changes: [
+      "Player Spotlight subtext now matches the renamed tab: members see 'Live snapshots, same as LEADERBOARD' (was 'CONTESTS'); the admin preview still reads 'CONTESTS'.",
+    ],
+  },
   {
     version: "2.85.1",
     date: "2026-07-14",
