@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.84.2";
+window.TGF_VERSION = "2.85.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.85.0",
+    date: "2026-07-14",
+    changes: [
+      "MEMBER VIEW IS NOW PLAYER-FIRST (Kerry). Opening the app (/member) now lands on SPOTLIGHT — the individual-player page — instead of the standings, so the member experience leads with the golfer. The member nav is reordered and relabeled to SPOTLIGHT | LEADERBOARD | HANDICAPS (the old 'Season Contests' tab is now 'Leaderboard'). The installed-app start page and the first-visit welcome nudge follow the landing to Spotlight. The paid 'Enter Season Contests' signup button and the admin/manager 'Season Contests' management tab are unchanged.",
+    ],
+  },
   {
     version: "2.84.2",
     date: "2026-07-14",

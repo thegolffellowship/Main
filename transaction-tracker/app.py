@@ -8913,7 +8913,9 @@ def contests_page():
 # APIs they call are the @require_role("member") public read tier.
 @app.route("/member")
 def member_home():
-    return redirect("/member/contests")
+    # Spotlight is the member landing (Kerry 2026-07-14: make /member about
+    # the individual player first).
+    return redirect("/member/spotlight")
 
 
 @app.route("/member/contests")
