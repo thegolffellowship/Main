@@ -211,3 +211,33 @@ dense column (max-width 620px) pending CD's desktop pass. NEXT per
 sequence: #99 build set (in-reach lines, leaderboard deep links, ENTER
 doorway, invitation empty states) + "This is me" (#106) once CD layers
 them; member flip stays gated on Kerry's explicit ratification.
+
+## Member UX Audit S1 package (v2.86.0, Kerry-ratified mailbox #149–#151)
+
+- **D1 — status source of truth:** member-facing surfaces derive status at
+  READ time from Tracker financial truth via
+  `derive_member_financial_status(_bulk)` (database.py): `member` = current
+  customer_memberships term OR active membership purchase ≤366 days;
+  `alumni` = had one, lapsed (our term; GG roster keeps FORMER per D2);
+  `guest` = never bought. `customers.current_player_status` is no longer
+  read by spotlight chip/search or board pills (it remains for admin
+  surfaces + ladder eligibility, unchanged). GG-drift report:
+  `gg_roster_drift_report(urls)` / bridge `scoring-gg-drift:<roster-url>`.
+- **F18:** spotlight `stats.events_played` = distinct events among the
+  current season's tracked rounds (all statuses), floored by the old
+  race-standings tournaments value.
+- **R3:** `search_spotlight_players` indexes everyone tracked (non-empty
+  name, not archived). Payload adds `member_status`.
+- **R1:** spotlight chips — member green; guest grey + JOIN → link;
+  alumni no label + amber REJOIN → link (spotlight.html `statusChips`).
+- **R4:** `get_points_race_standings` no longer hides non-enrolled
+  non-members; every row carries `member_status`/`is_member`;
+  `hidden_nonmembers` is always [] (kept for payload compat). Ladder
+  eligibility + reset points UNCHANGED. contests.html rowHtml renders a
+  GUEST/REJOIN pill.
+- **R2:** member-nudges.js — follow-through dismisses (beacon kind
+  `followthrough`), standings tip forced to bottom toast, `player=`
+  deep-link arrival suppresses tips, 360px max-width.
+- **R5:** member CTA "Enter Events & Contests" opens a two-button chooser
+  sheet (`_shell_nav.html` member branch + shell.css/shell.js;
+  contests.html mobile banner opens it via `.shell-cta-open`).
