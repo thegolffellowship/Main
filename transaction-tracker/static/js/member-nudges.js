@@ -110,7 +110,23 @@
     function init() {
         injectCss();
         const path = location.pathname;
-        if (path.indexOf("/member/spotlight") === 0) {
+        const onSpotlight = path.indexOf("/member/spotlight") === 0
+            || path === "/member" || path === "/member/";
+        const onContests = path.indexOf("/member/contests") === 0;
+
+        // Welcome card: first visit to the app, whichever member page they
+        // land on (the landing is now Spotlight — Kerry 2026-07-14). It wins
+        // and defers the page-specific tip to the next visit.
+        if ((onSpotlight || onContests) && !seen(KEYS.welcome)) {
+            markSeen(KEYS.welcome);  // one show only, even without dismiss
+            show(KEYS.welcome, "WELCOME TO THE FELLOWSHIP",
+                "Welcome to the Fellowship. Tap HOW IT WORKS on any contest " +
+                "to see exactly how it pays — and tap any player to explore " +
+                "their season.", null, null, true);
+            return;
+        }
+
+        if (onSpotlight) {
             if (!seen(KEYS.spotlight)) {
                 whenAnchor(".spt-searchbox", el => show(
                     KEYS.spotlight, "TIP",
@@ -119,16 +135,7 @@
             }
             return;
         }
-        if (path.indexOf("/member/contests") === 0 || path === "/member" || path === "/member/") {
-            if (!seen(KEYS.welcome)) {
-                // welcome card wins; standings nudge defers to next visit
-                markSeen(KEYS.welcome);  // one show only, even without dismiss
-                show(KEYS.welcome, "WELCOME TO THE FELLOWSHIP",
-                    "Welcome to the Fellowship. Tap HOW IT WORKS on any contest " +
-                    "to see exactly how it pays — and tap any player to explore " +
-                    "their season.", null, null, true);
-                return;
-            }
+        if (onContests) {
             if (!seen(KEYS.standings)) {
                 whenAnchor("#pr-table-container tr[data-cid], #pr-table-container tbody tr", el => show(
                     KEYS.standings, "TIP",

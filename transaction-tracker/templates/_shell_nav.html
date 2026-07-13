@@ -17,11 +17,11 @@
         <span class="shell-wordmark">The Golf Fellowship</span>
     </div>
     <nav class="shell-member-tabs">
-        {# nbsp inside the span: the tabs are inline-flex, which collapses
-           bare whitespace between flex items ("SEASONCONTESTS" bug) #}
-        <a href="/member/contests" class="{{ 'active' if SHELL_ACTIVE == 'contests' else '' }}"><span class="nav-label-full">Season&nbsp;</span>Contests</a>
-        <a href="/member/handicaps" class="{{ 'active' if SHELL_ACTIVE == 'handicaps' else '' }}">Handicaps</a>
+        {# Order + labels (Kerry 2026-07-14): Spotlight first (member landing
+           = the individual player), Season Contests renamed Leaderboard. #}
         <a href="/member/spotlight" class="{{ 'active' if SHELL_ACTIVE == 'spotlight' else '' }}">Spotlight</a>
+        <a href="/member/contests" class="{{ 'active' if SHELL_ACTIVE == 'contests' else '' }}">Leaderboard</a>
+        <a href="/member/handicaps" class="{{ 'active' if SHELL_ACTIVE == 'handicaps' else '' }}">Handicaps</a>
     </nav>
     <a class="shell-cta-pill" href="https://thegolffellowship.com/shop/ols/products/season-contests"
        target="_blank" rel="noopener">Enter Season Contests</a>
