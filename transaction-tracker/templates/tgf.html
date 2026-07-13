@@ -619,17 +619,21 @@
                          label: "Pay", bg: "#008CFF" };
             }
             if (method === "paypal") {
-                return handle
-                    ? { href: `https://paypal.me/${handle.replace(/^@/, "")}/${amt}`,
-                        label: "PayPal", bg: "#003087" }
-                    : { badge: "PayPal — add handle" };
+                // PayPal.Me links resolve a USERNAME only — an email can't
+                // deep-link (it 404s to PayPal's "Something went wrong").
+                // Username → one-tap link; email → pay-manually badge.
+                const u = handle.replace(/^https?:\/\/(www\.)?paypal\.me\//i, "").replace(/^@/, "").trim();
+                if (!u) return { badge: "PayPal — add handle" };
+                if (u.indexOf("@") !== -1) return { badge: "PayPal (manual)" };
+                return { href: `https://www.paypal.com/paypalme/${encodeURIComponent(u)}/${amt}`,
+                         label: "PayPal", bg: "#003087" };
             }
             if (method === "cashapp") {
-                const tag = handle.replace(/^\$/, "");
-                return tag
-                    ? { href: `https://cash.app/$${tag}/${amt}`,
-                        label: "Cash App", bg: "#00D632" }
-                    : { badge: "Cash App — add handle" };
+                const tag = handle.replace(/^\$/, "").trim();
+                if (!tag) return { badge: "Cash App — add handle" };
+                if (tag.indexOf("@") !== -1) return { badge: "Cash App (manual)" };
+                return { href: `https://cash.app/$${tag}/${amt}`,
+                         label: "Cash App", bg: "#00D632" };
             }
             if (method === "zelle") {
                 return { badge: `Zelle${handle ? ": " + handle : ""} — $${amt}` };
@@ -642,15 +646,21 @@
         // service they use (Venmo/PayPal/Cash App/Zelle) + handle, save it
         // to their customer record, and immediately render the pay link —
         // no page reload.
+        const PAY_HINT = { venmo: "venmo-username", paypal: "PayPal.Me name (email = manual)",
+                           cashapp: "$cashtag", zelle: "email or phone" };
+        function tgfPayHint(sel) {
+            const inp = sel.parentNode.querySelector("input");
+            if (inp) inp.placeholder = PAY_HINT[sel.value] || "handle";
+        }
         function tgfRevealAddPay(btn) {
             const wrap = btn.closest(".add-venmo-wrap");
             if (!wrap) return;
             wrap.innerHTML =
                 `<span style="display:inline-flex;flex-wrap:wrap;gap:3px;align-items:center;justify-content:flex-end;max-width:170px;">` +
-                `<select class="add-pay-method" style="font-size:0.72rem;padding:2px 4px;border:1px solid #cbd5e1;border-radius:4px;" onclick="event.stopPropagation()">` +
+                `<select class="add-pay-method" style="font-size:0.72rem;padding:2px 4px;border:1px solid #cbd5e1;border-radius:4px;" onclick="event.stopPropagation()" onchange="tgfPayHint(this)">` +
                 `<option value="venmo">Venmo</option><option value="paypal">PayPal</option>` +
                 `<option value="cashapp">Cash App</option><option value="zelle">Zelle</option></select>` +
-                `<input class="add-venmo-input" type="text" placeholder="handle / email" autocapitalize="off" autocorrect="off" spellcheck="false" onclick="event.stopPropagation()" onkeydown="if(event.key==='Enter'){event.preventDefault();tgfSaveAddPay(this);}">` +
+                `<input class="add-venmo-input" type="text" placeholder="venmo-username" autocapitalize="off" autocorrect="off" spellcheck="false" onclick="event.stopPropagation()" onkeydown="if(event.key==='Enter'){event.preventDefault();tgfSaveAddPay(this);}">` +
                 `<button class="add-venmo-save" onclick="event.stopPropagation(); tgfSaveAddPay(this)">Save</button>` +
                 `<span class="add-venmo-msg" style="width:100%;text-align:right;"></span></span>`;
             const inp = wrap.querySelector(".add-venmo-input");

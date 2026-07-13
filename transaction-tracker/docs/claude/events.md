@@ -714,6 +714,16 @@ per-event PAYOUTS panel `renderPayoutsPanel` in events.html):
 - **unpaid + zelle / no-deep-link method** → a single info badge.
 - **unpaid + no method on file** → a single **"+ Add Payment"** chooser.
 
+**PayPal/Cash App are USERNAME-only for a one-tap link (v2.82.1):**
+PayPal.Me (`paypal.me/<user>` → `www.paypal.com/paypalme/<user>/<amt>`)
+and Cash App (`cash.app/$<cashtag>`) resolve a username, not an email —
+an email 404s to PayPal's "Something went wrong" page. `payAction`
+(tgf) / `payoutPayLink` (events) now strip a pasted URL/`@`, and if the
+remaining handle contains `@` return a `(manual)` badge instead of a
+broken link (pay in-app, then Mark Paid). The chooser input shows a
+per-method placeholder (`PAY_HINT`) so PayPal prompts for a PayPal.Me
+name. Zelle is always manual (no deep link).
+
 The chooser (not Venmo-only): pick Venmo / PayPal / Cash App / Zelle +
 enter handle/email → Save posts to `/api/customers/update` with
 `customer_id` + `fields` (`{payment_method, venmo_username}` for Venmo;
