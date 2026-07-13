@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.82.1";
+window.TGF_VERSION = "2.83.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.83.0",
+    date: "2026-07-13",
+    changes: [
+      "EDIT A PLAYER'S PAYMENT METHOD FROM THE PAYOUT ROW (Kerry): once a payment method is set, its pill is now tappable to change it -- previously the '+ Add Payment' chooser only appeared when nothing was on file, so a wrong entry (e.g. a PayPal EMAIL that can't make a one-tap link) was stuck. Now tap the method pill (e.g. 'PayPal ✎') and the chooser re-opens pre-filled with the current method and handle so you can correct it -- swap Don Sharitz's PayPal email for his PayPal.Me name 'dsharitz' and the row instantly becomes a working one-tap PayPal link. Works on both the PAYOUTS tab and the per-event PAYOUTS panel; the pill stays a single narrow control so the column doesn't widen.",
+    ],
+  },
   {
     version: "2.82.1",
     date: "2026-07-13",
