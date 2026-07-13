@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.79.3";
+window.TGF_VERSION = "2.79.4";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.79.4",
+    date: "2026-07-13",
+    changes: [
+      "Hardened the Team Net blind-draw repair's player matching: it now resolves each winner through the curated GG-name spine (the same one used to record payouts), so scorecard names that differ from the customer record -- e.g. 'MORENO, Robert' on the card vs 'Roberto Moreno' in the directory -- resolve to the right person instead of failing. No shell customers are created on a miss.",
+    ],
+  },
   {
     version: "2.79.3",
     date: "2026-07-13",
