@@ -7553,12 +7553,17 @@ def gg_roster_drift_report(urls: list[str],
                 widget_urls = re.findall(
                     r"<iframe[^>]+src=[\"']([^\"']*/widgets/[a-z_0-9]+[^\"']*)[\"']",
                     html, re.I)
+                import html as _html
                 for wu in widget_urls[:6]:
+                    wu = _html.unescape(wu)  # src attrs entity-encode &
                     if wu.startswith("/"):
                         from urllib.parse import urljoin
                         wu = urljoin(url, wu)
                     try:
-                        wpage = fetch_public_page(wu, xhr=True)
+                        # plain GET (no xhr): widgets serve a full HTML page
+                        # with tables; xhr returns a JS partial (the proven
+                        # gg_history recipe)
+                        wpage = fetch_public_page(wu)
                         wparsed = parse_page_structure(wpage.get("html") or "", wu)
                         tables.extend(wparsed.get("tables") or [])
                     except Exception as e:

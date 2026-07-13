@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.86.3";
+window.TGF_VERSION = "2.86.4";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.86.4",
+    date: "2026-07-13",
+    changes: [
+      "GG-drift widget fetch aligned with the proven gg_history recipe: widget URLs are HTML-entity-unescaped (&amp; -> &) and fetched as a plain GET -- the widgets serve a full HTML page with tables that way, where the XHR variant returns a JS partial the table parser can't read.",
+    ],
+  },
   {
     version: "2.86.3",
     date: "2026-07-13",
