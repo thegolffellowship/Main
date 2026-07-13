@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.86.0";
+window.TGF_VERSION = "2.86.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.86.1",
+    date: "2026-07-13",
+    changes: [
+      "GG-drift report follow-up: Golf Genius pages render their content via widget iframes, so the first live run saw zero tables in the page shell. The report now follows the page's widget URLs (the proven widget-route recipe) and reads the roster rows from there.",
+    ],
+  },
   {
     version: "2.86.0",
     date: "2026-07-13",
