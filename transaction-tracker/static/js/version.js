@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.86.5";
+window.TGF_VERSION = "2.86.6";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.86.6",
+    date: "2026-07-13",
+    changes: [
+      "STATUS DERIVATION SOFTENED after the first live drift run flagged clearly-active members (Mary Wade, Jeff Young class) as 'guest': their memberships are legacy/cash joins that predate the Tracker's order history, so purchase records alone can't see them. The curated Tracker status column now VOUCHES a member IN (and expired_member marks alumni) -- it can add member status but can never hide one, so the Decareaux fix stands (financial truth still promotes regardless of a stale column). Both directions of GG-vs-Tracker disagreement still surface on the drift checklist.",
+    ],
+  },
   {
     version: "2.86.5",
     date: "2026-07-13",
