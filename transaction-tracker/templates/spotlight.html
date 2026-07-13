@@ -57,9 +57,17 @@
         .spt-chip.ch-other { background: #E5E7EB; color: #374151; }
         .spt-chip.member { background: #C9EBD5; color: #1B6B45; }
         .spt-chip.guest { background: #E5E7EB; color: #374151; }
-        .spt-chip.rejoin { background: #FDF3E7; color: #B45309; border: 1px solid #F3D9BB;
+        .spt-chip.rejoin { background: var(--primary, #E87C3E); color: #fff;
                            text-decoration: none; font-weight: 700; cursor: pointer; }
-        .spt-chip.rejoin:hover { background: #FBE8D3; }
+        .spt-chip.rejoin:hover { background: var(--primary-hover, #D06B2E); }
+        /* BUY IN action chip on Where-{Name}-Stands rows (#156.2, members
+           only) — same orange family; a member gets exactly one action chip
+           per page so there is no orange pileup */
+        .spt-buyin { flex: none; align-self: center; padding: 5px 10px; border-radius: 9999px;
+                     background: var(--primary, #E87C3E); color: #fff; cursor: pointer;
+                     font: 700 9.5px/1 'Bitter', serif; letter-spacing: 0.5px;
+                     text-transform: uppercase; white-space: nowrap; }
+        .spt-buyin:hover { background: var(--primary-hover, #D06B2E); }
 
         .spt-card { background: #fff; border: 1px solid var(--border); border-radius: 14px; padding: 15px 16px; }
         .spt-hero-row { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
@@ -225,9 +233,9 @@
         const statusChips = d => {
             const s = d.member_status || (d.is_member ? "member" : null);
             if (s === "member") return `<span class="spt-chip member">TGF Member</span>`;
-            if (s === "alumni") return `<a class="spt-chip rejoin" href="${JOIN_URL}" target="_blank" rel="noopener">Rejoin &rarr;</a>`;
+            if (s === "alumni") return `<a class="spt-chip rejoin" href="${JOIN_URL}" target="_blank" rel="noopener">Rejoin TGF &rarr;</a>`;
             if (s === "guest") return `<span class="spt-chip guest">Guest</span>` +
-                `<a class="spt-chip rejoin" href="${JOIN_URL}" target="_blank" rel="noopener">Join &rarr;</a>`;
+                `<a class="spt-chip rejoin" href="${JOIN_URL}" target="_blank" rel="noopener">Join TGF &rarr;</a>`;
             return "";
         };
         // trends are the EARNED state (10+ rounds; payload nulls them below
@@ -362,11 +370,23 @@
             const contestsBase = window.MEMBER_MODE ? "/member/contests" : "/contests";
             const RACE_HASH = { san_antonio_net: "net", austin_net: "austin",
                                 players_cup_gross: "gross", fellowship_cup: "tfc" };
-            const standRow = (rank, rankColor, field, race, meta, entered, href, drama) =>
+            // pill: prebuilt status/action html — #156 (Kerry-ratified): a
+            // MEMBER not bought into a race gets a BUY IN → action chip in
+            // place of NOT IN (links the Season Contests product); guests/
+            // alumni keep the plain status — their one action chip is
+            // JOIN/REJOIN in the header, no competing CTAs.
+            const SC_URL = "https://thegolffellowship.com/shop/ols/products/season-contests";
+            const pillIn = `<span class="spt-pill in">In</span>`;
+            const pillOut = `<span class="spt-pill out">Not In</span>`;
+            // span-with-click, not <a> — the row itself is an anchor and
+            // nested anchors are invalid HTML
+            const pillBuyIn = `<span class="spt-buyin" role="link" tabindex="0" ` +
+                `onclick="event.preventDefault(); event.stopPropagation(); window.open('${SC_URL}', '_blank', 'noopener');">Buy In &rarr;</span>`;
+            const standRow = (rank, rankColor, field, race, meta, pill, href, drama) =>
                 `<${href ? `a href="${href}"` : "div"} class="spt-stand"><div class="rk"><div class="r" style="color:${rankColor};">${rank}</div>` +
                 `<div class="f">${esc(field)}</div></div>` +
                 `<div class="mid"><div class="race">${esc(race)}</div><div class="meta">${esc(meta)}</div>${drama ? `<div class="spt-drama ${drama.kind}">${esc(drama.text)}</div>` : ""}</div>` +
-                `<span class="spt-pill ${entered ? "in" : "out"}">${entered ? "In" : "Not In"}</span>` +
+                pill +
                 `${href ? '<span class="spt-go">&rsaquo;</span></a>' : "</div>"}`;
             const rows = [];
             // display order (Kerry 2026-07-12): Fellowship Cup above Players Cup
@@ -383,7 +403,9 @@
                 rows.push(standRow(
                     esc(String(r.rank)), pc ? "#BF5700" : "#1B1B1B", `of ${r.n_players}`,
                     r.label + (r.flight ? ` · ${r.flight}` : ""),
-                    metaBits.join(" · "), r.enrolled,
+                    metaBits.join(" · "),
+                    r.enrolled ? pillIn
+                        : (d.member_status === "member" ? pillBuyIn : pillOut),
                     RACE_HASH[r.key] ? `${contestsBase}#race=${RACE_HASH[r.key]}&player=${d.customer_id}` : null,
                     // drama lines PULLED (Kerry 2026-07-12): points_to_next is the
                     // gap to the next PLACE, not to the money line — the template
@@ -395,7 +417,7 @@
             (d.fall_buyins || []).forEach(f => {
                 rows.push(standRow("—", "#C6C2BA", "Aug 29",
                     (f.chapter === "Austin" ? "Austin" : "SA") + " Fall NET",
-                    "Lights up when fall races begin", true,
+                    "Lights up when fall races begin", pillIn,
                     `${contestsBase}#race=${f.chapter === "Austin" ? "fall_austin" : "fall_sa"}`));
             });
             if (d.match_play) {
@@ -404,13 +426,13 @@
                     ? standRow(`${mp.wins ?? 0}–${mp.losses ?? 0}${mp.draws ? "–" + mp.draws : ""}`,
                         "#1B1B1B", mp.pool, `City Match Play · ${mp.chapter}`,
                         mp.stableford != null ? `${mp.stableford} Stableford pts · pool play in progress`
-                                              : "Pool play in progress", true,
+                                              : "Pool play in progress", pillIn,
                         `${contestsBase}#tab=mp`)
                     : standRow("—", "#C6C2BA", "", `City Match Play · ${mp.chapter}`,
-                        "Pools not drawn yet", true, `${contestsBase}#tab=mp`));
+                        "Pools not drawn yet", pillIn, `${contestsBase}#tab=mp`));
             }
             const stands = rows.length
-                ? `<div><div class="spt-sec-head"><span class="t">Where They Stand</span></div>` +
+                ? `<div><div class="spt-sec-head"><span class="t">Where ${esc((d.name || "").split(" ")[0] || "They")} Stands</span></div>` +
                   `<div class="spt-panel">${rows.join("")}</div></div>`
                 : `<p class="spt-empty">No race appearances yet &mdash; standings show up after their first event.</p>`;
 
@@ -423,7 +445,9 @@
                 ? `<div><div class="spt-sec-head"><span class="t">Recent Winnings</span></div>` +
                   `<div class="spt-panel">${pays}</div></div>` : "";
 
-            $("spt-player").innerHTML = hero + strip + scoring + stands + wins +
+            // #156 (Kerry): standings-vs-money is the conversion surface —
+            // Where {Name} Stands reads ABOVE Scoring
+            $("spt-player").innerHTML = hero + strip + stands + scoring + wins +
                 (d.gg_error ? `<p class="spt-note">Standings feed note: ${esc(d.gg_error)}</p>` : "");
         }
 

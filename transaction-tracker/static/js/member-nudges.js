@@ -141,10 +141,14 @@
         // and defers the page-specific tip to the next visit.
         if ((onSpotlight || onContests) && !seen(KEYS.welcome)) {
             markSeen(KEYS.welcome);  // one show only, even without dismiss
+            // #155 (Kerry-ratified verbatim, incl. the trailing "...and
+            // pays!" — intentional Kerry voice): copy updated for the
+            // Spotlight-first landing.
             show(KEYS.welcome, "WELCOME TO THE FELLOWSHIP",
-                "Welcome to the Fellowship. Tap HOW IT WORKS on any contest " +
-                "to see exactly how it pays — and tap any player to explore " +
-                "their season.", null, null, true);
+                "Welcome to the Fellowship. Start with your own name — your " +
+                "season, your stats, your winnings are all in here. Then tap " +
+                "LEADERBOARD for every Season Contest and how it all " +
+                "works...and pays!", null, null, true);
             return;
         }
 
