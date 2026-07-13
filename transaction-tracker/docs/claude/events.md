@@ -724,6 +724,17 @@ broken link (pay in-app, then Mark Paid). The chooser input shows a
 per-method placeholder (`PAY_HINT`) so PayPal prompts for a PayPal.Me
 name. Zelle is always manual (no deep link).
 
+**Editing an already-set method (v2.83.0):** once a method is on file
+the pill is tappable to change it (label `<Method> ✎`, e.g. `PayPal ✎`).
+The chooser re-opens PRE-FILLED with the current `payment_method` +
+handle (`tgfPayChooserWrap(ev,g,{manual,label,method,handle})` /
+`addPaymentChooserHtml(g,code,{...})` carry `data-method`/`data-handle`;
+`tgfRevealAddPay`/`evRevealAddPay` read them to prefill the select +
+input). This is the fix path for a PayPal EMAIL wrongly entered — swap it
+for the PayPal.Me username and the row becomes a working one-tap link.
+Manual-method badges use a short `PAY_LABEL` name (not the verbose
+`payAction` badge) so the pill stays narrow.
+
 The chooser (not Venmo-only): pick Venmo / PayPal / Cash App / Zelle +
 enter handle/email → Save posts to `/api/customers/update` with
 `customer_id` + `fields` (`{payment_method, venmo_username}` for Venmo;

@@ -648,6 +648,7 @@
         // no page reload.
         const PAY_HINT = { venmo: "venmo-username", paypal: "PayPal.Me name (email = manual)",
                            cashapp: "$cashtag", zelle: "email or phone" };
+        const PAY_LABEL = { venmo: "Venmo", paypal: "PayPal", cashapp: "Cash App", zelle: "Zelle" };
         function tgfPayHint(sel) {
             const inp = sel.parentNode.querySelector("input");
             if (inp) inp.placeholder = PAY_HINT[sel.value] || "handle";
@@ -660,11 +661,19 @@
                 `<select class="add-pay-method" style="font-size:0.72rem;padding:2px 4px;border:1px solid #cbd5e1;border-radius:4px;" onclick="event.stopPropagation()" onchange="tgfPayHint(this)">` +
                 `<option value="venmo">Venmo</option><option value="paypal">PayPal</option>` +
                 `<option value="cashapp">Cash App</option><option value="zelle">Zelle</option></select>` +
-                `<input class="add-venmo-input" type="text" placeholder="venmo-username" autocapitalize="off" autocorrect="off" spellcheck="false" onclick="event.stopPropagation()" onkeydown="if(event.key==='Enter'){event.preventDefault();tgfSaveAddPay(this);}">` +
+                `<input class="add-venmo-input" type="text" autocapitalize="off" autocorrect="off" spellcheck="false" onclick="event.stopPropagation()" onkeydown="if(event.key==='Enter'){event.preventDefault();tgfSaveAddPay(this);}">` +
                 `<button class="add-venmo-save" onclick="event.stopPropagation(); tgfSaveAddPay(this)">Save</button>` +
                 `<span class="add-venmo-msg" style="width:100%;text-align:right;"></span></span>`;
+            const curM = wrap.dataset.method || "venmo";
+            const curH = wrap.dataset.handle || "";
+            const sel = wrap.querySelector(".add-pay-method");
+            if (sel) sel.value = curM;
             const inp = wrap.querySelector(".add-venmo-input");
-            if (inp) inp.focus();
+            if (inp) {
+                inp.value = curH;
+                inp.placeholder = PAY_HINT[curM] || "handle";
+                inp.focus(); inp.select();
+            }
         }
         async function tgfSaveAddPay(el) {
             const wrap = el.closest(".add-venmo-wrap");
@@ -709,7 +718,11 @@
                         `<a class="venmo-btn" style="background:${act2.bg};" href="${act2.href}" target="_blank" rel="noopener" onclick="event.stopPropagation(); onPayTap(${evid}, ${gid});">` +
                         `<svg viewBox="0 0 24 24" fill="currentColor"><path d="M19.5 3c.9 1.5 1.3 3 1.3 5 0 5.5-4.7 12.7-8.5 17H5.2L3 3.5l6-.6 1.2 9.6c1.2-2 2.7-5.2 2.7-7.3 0-1.9-.3-3.2-.8-4.2L19.5 3z"/></svg>${act2.label}</a>`;
                 } else {
-                    wrap.outerHTML = `<span style="display:inline-block;padding:2px 9px;border-radius:99px;font-size:0.72rem;font-weight:600;background:#ede9fe;color:#5b21b6;" title="Saved — pay manually, then Mark Paid">${(act2 && act2.badge) || method}</span>`;
+                    // manual method saved — keep it tappable-to-edit
+                    const evStub = { id: evid, code: wrap.dataset.code, name: wrap.dataset.ename };
+                    const gStub = { golfer_id: gid, total: amt, name: wrap.dataset.name };
+                    wrap.outerHTML = tgfPayChooserWrap(evStub, gStub, {
+                        manual: true, label: (PAY_LABEL[method] || "Payment") + " ✎", method, handle });
                 }
             } catch (err) {
                 if (msg) msg.textContent = (err && err.message) || "Save failed";
@@ -780,6 +793,22 @@
             return Object.values(map);
         }
 
+        // Build the "+ Add Payment" / editable-method chooser wrapper.
+        // opts.manual + opts.label render an existing (manual) method as a
+        // tappable badge that re-opens the chooser prefilled to change it.
+        function tgfPayChooserWrap(ev, g, opts) {
+            opts = opts || {};
+            const nm = (g.name || "").replace(/"/g, "&quot;");
+            const dattrs = `data-gid="${g.golfer_id}" data-evid="${ev.id}" data-amt="${g.total}" `
+                + `data-code="${(ev.code||'').replace(/"/g,'&quot;')}" `
+                + `data-ename="${(ev.name||'').replace(/"/g,'&quot;')}" data-name="${nm}" `
+                + `data-method="${opts.method||''}" data-handle="${(opts.handle||'').replace(/"/g,'&quot;')}"`;
+            const btn = opts.manual
+                ? `<button class="add-venmo-btn" style="background:#ede9fe;color:#5b21b6;border:1px solid #ddd6fe;" title="Tap to change how this player gets paid" onclick="event.stopPropagation(); tgfRevealAddPay(this)">${opts.label}</button>`
+                : `<button class="add-venmo-btn" onclick="event.stopPropagation(); tgfRevealAddPay(this)">+ Add Payment</button>`;
+            return `<span class="add-venmo-wrap" ${dattrs}>${btn}</span>`;
+        }
+
         function payCellHtml(ev, g) {
             const winData = Object.values(DATA.winnings).find(w => w.id === g.golfer_id);
             const alreadyPaid = g.payment_status === "paid";
@@ -802,17 +831,17 @@
                        </a>`;
                 }
             } else if (act && act.badge) {
-                venmoHtml = `<span style="display:inline-block;padding:2px 9px;border-radius:99px;font-size:0.72rem;font-weight:600;background:#ede9fe;color:#5b21b6;" title="No deep link for this method — pay manually, then Mark Paid">${act.badge}</span>`;
+                // Manual method (Zelle / PayPal-or-CashApp email) — tap to
+                // change it (e.g. swap a PayPal email for the PayPal.Me name).
+                venmoHtml = tgfPayChooserWrap(ev, g, { manual: true,
+                    label: (PAY_LABEL[(winData && winData.payment_method) || ""] || "Payment") + " ✎",
+                    method: (winData && winData.payment_method) || "",
+                    handle: (winData && winData.payment_handle) || "" });
             } else if (!alreadyPaid && !act && g.golfer_id) {
                 // No payment method on file → "+ Add Payment" chooser: pick
                 // whichever service they use + handle, save to the customer,
                 // get an immediate pay link (Kerry 2026-07-13).
-                const nm = (g.name || "").replace(/"/g, "&quot;");
-                venmoHtml = `<span class="add-venmo-wrap" data-gid="${g.golfer_id}" data-evid="${ev.id}"
-                        data-amt="${g.total}" data-code="${(ev.code||'').replace(/"/g,'&quot;')}"
-                        data-ename="${(ev.name||'').replace(/"/g,'&quot;')}" data-name="${nm}">
-                     <button class="add-venmo-btn" onclick="event.stopPropagation(); tgfRevealAddPay(this)">+ Add Payment</button>
-                   </span>`;
+                venmoHtml = tgfPayChooserWrap(ev, g, {});
             }
             // Drop the redundant PENDING/UNPAID pill (Kerry 2026-07-13): a
             // Pay link, verifying pill, or "+ Add Payment" control already
