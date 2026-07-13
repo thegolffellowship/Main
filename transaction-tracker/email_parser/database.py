@@ -7516,12 +7516,53 @@ def gg_roster_drift_report(urls: list[str],
     catching wrong-looking members." GG stays FORMER/Guest/Member on its
     side (D2); we map FORMER→alumni for comparison.
 
-    urls: public GG Master Roster page URLs (e.g.
-    https://tgf-sa.golfgenius.com/pages/6125355 + the Austin twin).
-    Parse is defensive — GG page structure is theirs, not ours — so the
-    result carries diagnostics (tables seen, headers) when nothing parses.
+    Two sources:
+    - urls=[] (DEFAULT): compare against the GG AFFILIATION tag already
+      ingested with every points-race standings snapshot — that's the
+      roster-derived value GG prints on its boards (the CH=G column), it
+      covers every ranked player, and it needs no scraping. The GG member
+      directory itself is login-gated, so this is the reliable source.
+    - urls=[...]: scrape public roster-style pages (kept for when Kerry
+      shares a public page that carries status tags). Parse is defensive —
+      diagnostics come back when nothing parses.
     """
     from golf_genius_sync import fetch_public_page, parse_page_structure
+
+    if not urls:
+        drift, checked = [], 0
+        with _connect(db_path) as conn:
+            rows = conn.execute(
+                """SELECT DISTINCT s.customer_id, s.affiliation,
+                          TRIM(c.first_name || ' ' || c.last_name) AS name
+                   FROM gg_points_standings s
+                   JOIN customers c ON c.customer_id = s.customer_id
+                   WHERE s.customer_id IS NOT NULL
+                     AND COALESCE(s.affiliation, '') != ''""").fetchall()
+            cids = list({r["customer_id"] for r in rows})
+            fin = derive_member_financial_status_bulk(conn, cids)
+            seen_cids = set()
+            for r in rows:
+                cid = r["customer_id"]
+                if cid in seen_cids:
+                    continue
+                seen_cids.add(cid)
+                aff = (r["affiliation"] or "").lower()
+                gg = ("member" if "tgf" in aff
+                      else "alumni" if "former" in aff or "alumni" in aff
+                      else "guest")
+                checked += 1
+                ours = fin.get(cid, "guest")
+                if ours != gg:
+                    drift.append({
+                        "customer_id": cid, "name": r["name"],
+                        "gg_tag": r["affiliation"],
+                        "tracker_status": ours,
+                        "action": f"set GG roster to "
+                                  f"{'FORMER' if ours == 'alumni' else ours.upper()}",
+                    })
+        return {"drift": drift, "unresolved": [],
+                "players_checked": checked,
+                "source": "gg_points_standings.affiliation (ingested boards)"}
 
     _TAG_MAP = {"member": "member", "member+": "member",
                 "former": "alumni", "alumni": "alumni",
