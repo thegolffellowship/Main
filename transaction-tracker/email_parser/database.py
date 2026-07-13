@@ -31987,7 +31987,15 @@ def repair_teamnet_blind_draw_shares(event_name: str, dry_run: bool = True,
                 name_to_cid.setdefault(key, r["customer_id"])
 
         def _cid_for(gname: str):
+            # Recorded-row map first (already-resolved cids for this
+            # event), then the curated scoring resolver (same non-creating
+            # spine assemble/record use — handles "MORENO, Robert" vs the
+            # customer's "Roberto Moreno"), then the lookup cascade. None
+            # of these create a shell customer on a miss.
             cid = name_to_cid.get((gname or "").strip().lower())
+            if cid:
+                return cid
+            cid = _resolve_scoring_player(conn, gname)
             if cid:
                 return cid
             return _lookup_customer_id(conn, gname, None)
