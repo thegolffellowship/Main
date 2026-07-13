@@ -31,7 +31,7 @@
     const CSS = `
 .tgf-nudge { position: absolute; z-index: 260; background: #fff; border: 1px solid var(--border, #E5E7EB);
   border-radius: 13px; box-shadow: 0 8px 30px rgba(0,0,0,.16); padding: 13px 44px 13px 15px;
-  max-width: 360px; }
+  max-width: 360px; box-sizing: border-box; }
 .tgf-nudge.tgf-nudge-toast { position: fixed; left: 16px; right: 16px; bottom: 22px;
   margin-left: auto; margin-right: auto; }
 .tgf-nudge.tgf-nudge-flow { position: static; margin: 14px auto 0; }
@@ -83,9 +83,13 @@
             // anchor visibly on screen → anchored card with pointer;
             // otherwise degrade to the bottom toast (5d)
             if (r.top >= 0 && r.top < vh * 0.75) {
+                // align to the ANCHOR, not the viewport — on desktop a
+                // left:16px card hugged the page edge pointing at nothing
+                // (Kerry 2026-07-13; the #155 residual)
                 card.style.top = (r.bottom + (window.scrollY || 0) + 10) + "px";
-                card.style.left = "16px";
-                card.style.right = "16px";
+                card.style.left = Math.max(16, r.left + (window.scrollX || 0)) + "px";
+                card.style.right = "auto";
+                card.style.width = Math.min(360, Math.max(240, r.width)) + "px";
                 anchored = true;
             }
         }

@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.87.3";
+window.TGF_VERSION = "2.87.4";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.87.4",
+    date: "2026-07-13",
+    changes: [
+      "FIX: anchored tip cards hugged the page's left edge on desktop, pointing at nothing (Kerry screenshot; the #155 residual). Anchored tips now align to the element they point at -- left edge and width follow the anchor (capped at 360px) -- so the search tip sits under the centered search box on desktop and is unchanged on phones.",
+    ],
+  },
   {
     version: "2.87.3",
     date: "2026-07-13",
