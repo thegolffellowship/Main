@@ -284,7 +284,7 @@ from email_parser.fetcher import (
 )
 from email_parser.parser import parse_email, parse_emails, _strip_html
 from email_parser.expense_parser import (
-    classify_email, parse_chase_alert, parse_venmo_payment,
+    classify_email, parse_chase_alert, parse_venmo_payment, parse_p2p_payment,
     parse_expense_receipt, parse_action_required,
     match_event_from_memo, match_customer_from_name,
     match_event_from_customer,
@@ -718,23 +718,36 @@ def check_expense_inbox(force=False, days_back=None):
                     })
                     processed += 1
 
-            elif email_type == "venmo_payment":
-                extracted = parse_venmo_payment(
+            elif email_type in ("venmo_payment", "paypal_payment",
+                                 "cashapp_payment", "zelle_payment"):
+                # One handler for all peer-to-peer providers (Venmo / PayPal /
+                # Cash App / Zelle). They carry the same fields — recipient,
+                # amount, and the typed note that holds the true payee + event
+                # — so matching is provider-agnostic; only the source label and
+                # a couple of Venmo-only extras differ (v2.84.0, Kerry).
+                _prov = {"venmo_payment": "venmo", "paypal_payment": "paypal",
+                         "cashapp_payment": "cashapp", "zelle_payment": "zelle"}[email_type]
+                _prov_label = {"venmo": "Venmo", "paypal": "PayPal",
+                               "cashapp": "Cash App", "zelle": "Zelle"}[_prov]
+                extracted = parse_p2p_payment(
                     email_data.get("subject", ""),
                     email_data.get("from", ""),
                     body_text,
+                    provider=_prov_label,
                 )
                 if extracted.get("confidence", 0) > 0:
                     memo_txt = extracted.get("memo", "") or ""
                     event_name = match_event_from_memo(memo_txt, conn)
                     # For outbound payouts TGF types the real payee into the
                     # memo ("Matt Griffin - Winnings for s9.17 …"). That name
-                    # outranks the Venmo account's display name, which can
-                    # belong to someone else entirely (Matt's Venmo shows
-                    # "robert griffin", Kerry 2026-07-13). Try the memo payee
+                    # outranks the account's display name, which can belong to
+                    # someone else (Matt's Venmo shows "robert griffin";
+                    # Don's PayPal is his partner's, etc.). Try the memo payee
                     # prefix first; fall back to the recipient display name.
                     customer_id = None
-                    _pm = re.match(r"\s*(.+?)\s+-\s+winnings\s+for\b", memo_txt, re.I)
+                    # Optional leading "For " — Cash App renders the note as
+                    # "For <Name> - Winnings for …".
+                    _pm = re.match(r"\s*(?:for\s+)?(.+?)\s+-\s+winnings\s+for\b", memo_txt, re.I)
                     if _pm:
                         customer_id = match_customer_from_name(_pm.group(1).strip(), conn)
                     if not customer_id:
@@ -743,22 +756,23 @@ def check_expense_inbox(force=False, days_back=None):
                     if not event_name and customer_id:
                         event_name = match_event_from_customer(customer_id, conn)
                     review_status = "approved" if extracted["confidence"] >= 95 else "pending"
-                    venmo_email_date = (email_data.get("date") or "")[:10]
-                    # Pull the OTHER party's @handle out of the raw HTML — _strip_html drops
-                    # link URLs so the LLM never sees it. For received payments this is the
-                    # payer (player), for payouts it's the recipient (player).
+                    p2p_email_date = (email_data.get("date") or "")[:10]
+                    # Venmo embeds the other party's @handle in link URLs the
+                    # LLM never sees; PayPal/Cash App don't, so this is
+                    # Venmo-only.
                     other_handle = None
-                    try:
-                        from email_parser.expense_parser import extract_venmo_other_party_handle
-                        other_handle = extract_venmo_other_party_handle(email_data.get("html") or "")
-                    except Exception:
-                        logger.warning("venmo handle extraction failed", exc_info=True)
+                    if _prov == "venmo":
+                        try:
+                            from email_parser.expense_parser import extract_venmo_other_party_handle
+                            other_handle = extract_venmo_other_party_handle(email_data.get("html") or "")
+                        except Exception:
+                            logger.warning("venmo handle extraction failed", exc_info=True)
                     saved = save_expense_transaction({
                         "email_uid": email_data["uid"],
-                        "source_type": "venmo",
+                        "source_type": _prov,
                         "merchant": extracted.get("recipient_name"),
                         "amount": extracted.get("amount"),
-                        "transaction_date": extracted.get("transaction_date") or venmo_email_date or None,
+                        "transaction_date": extracted.get("transaction_date") or p2p_email_date or None,
                         "transaction_type": extracted.get("transaction_type", "payout"),
                         "event_name": event_name,
                         "customer_id": customer_id,
@@ -770,31 +784,32 @@ def check_expense_inbox(force=False, days_back=None):
                     })
                     processed += 1
                     # Stamp the player's Venmo @handle on their customer record if not set
-                    if saved and saved.get("id") and saved.get("customer_id"):
+                    if _prov == "venmo" and saved and saved.get("id") and saved.get("customer_id"):
                         try:
                             from email_parser.database import capture_venmo_handle_for_customer
                             capture_venmo_handle_for_customer(saved["id"])
                         except Exception:
                             logger.warning("capture_venmo_handle_for_customer failed for exp %s",
                                            saved.get("id"), exc_info=True)
-                    # Auto-match incoming Venmo payments against open balance-due credit-transfers
+                    # Auto-match incoming payments against open balance-due credit-transfers
                     # (runs for both approved and pending — matcher will auto-approve on match)
                     if saved and saved.get("transaction_type") == "received":
                         try:
                             from email_parser.database import auto_match_venmo_inbound_to_balance_due
                             auto_match_venmo_inbound_to_balance_due([saved["id"]])
                         except Exception:
-                            logger.warning("venmo balance-due auto-match failed for exp %s",
+                            logger.warning("inbound balance-due auto-match failed for exp %s",
                                            saved.get("id"), exc_info=True)
                     # Auto-confirm outbound winnings payments against pending
                     # tgf_payouts (Kerry, 2026-07-08 — PAYOUTS tab flips to
-                    # PAID as soon as the Venmo receipt email lands)
+                    # PAID as soon as the receipt email lands; now Venmo,
+                    # PayPal, and Cash App)
                     if saved and saved.get("transaction_type") == "payout":
                         try:
                             from email_parser.database import auto_match_venmo_payouts_to_tgf
                             auto_match_venmo_payouts_to_tgf([saved["id"]])
                         except Exception:
-                            logger.warning("venmo payout auto-match failed for exp %s",
+                            logger.warning("payout auto-match failed for exp %s",
                                            saved.get("id"), exc_info=True)
 
             elif email_type == "expense_receipt":

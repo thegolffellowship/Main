@@ -17443,8 +17443,13 @@ def auto_match_venmo_payouts_to_tgf(
                "already_matched": 0, "errors": 0, "matches": []}
     with _connect(db_path) as conn:
         params: list = []
+        # All peer-to-peer providers ride the same matcher — recipient in
+        # merchant, memo in notes ("<Name> - Winnings for s9.16 …"),
+        # customer/event resolved on ingest. PayPal + Cash App carry the
+        # note the same as Venmo (v2.84.0, Kerry).
         sql = ("SELECT * FROM expense_transactions "
-               "WHERE source_type = 'venmo' AND transaction_type = 'payout' "
+               "WHERE source_type IN ('venmo', 'paypal', 'cashapp', 'zelle') "
+               "AND transaction_type = 'payout' "
                "AND review_status IN ('approved', 'pending', 'corrected')")
         if expense_ids:
             sql += " AND id IN (%s)" % ",".join(["?"] * len(expense_ids))
@@ -17490,7 +17495,8 @@ def auto_match_venmo_payouts_to_tgf(
                 #      amount, it is unambiguously the payee.
                 memo_txt = exp.get("notes") or ""
                 if not cid:
-                    pm = re.match(r"\s*(.+?)\s+-\s+winnings\s+for\b", memo_txt, re.I)
+                    # Optional leading "For " — Cash App note format.
+                    pm = re.match(r"\s*(?:for\s+)?(.+?)\s+-\s+winnings\s+for\b", memo_txt, re.I)
                     if pm:
                         cid = _lookup_customer_id(conn, pm.group(1).strip(), None)
                 if not cid:

@@ -112,6 +112,37 @@ def classify_email(subject: str, from_addr: str, body_text: str) -> dict:
     ):
         return {"type": "venmo_payment", "confidence": 95}
 
+    # PayPal personal payments (service@paypal.com "You sent a $X USD
+    # payment" / "…sent you"). These carry the recipient name AND the note
+    # ("Your note to <name>: …"), so they match payouts exactly like Venmo.
+    # Purchase/invoice/receipt PayPal mail is left to the LLM + expense flow.
+    if "paypal.com" in from_lower and (
+        "you sent" in subject_lower or "sent you" in subject_lower
+        or "you've got money" in subject_lower or "you got money" in subject_lower
+    ):
+        return {"type": "paypal_payment", "confidence": 96}
+
+    # Cash App payment receipts (cash@square.com / cash.app). Inferred
+    # format pending a live sample — the generic P2P parser extracts
+    # name/amount/note the same way.
+    if ("cash.app" in from_lower or "square.com" in from_lower
+            or "cashapp" in from_lower) and (
+        "sent" in subject_lower or "paid" in subject_lower
+        or "payment" in subject_lower
+    ):
+        return {"type": "cashapp_payment", "confidence": 92}
+
+    # Zelle comes through the sending BANK, not Zelle directly. Frost Bank's
+    # "Send Money With Zelle Confirmation" carries the recipient, amount AND
+    # the message ("Gus VASQUEZ - Winnings for s9.15 THE QUARRY"), so it
+    # matches like the others. (Chase-originated Zelle arrives as a Chase
+    # alert — caught above — without a memo, and stays on that path.)
+    if "zelle" in subject_lower and "chase" not in from_lower and (
+        "confirmation" in subject_lower or "send money" in subject_lower
+        or "sent" in subject_lower
+    ):
+        return {"type": "zelle_payment", "confidence": 93}
+
     # LLM classification for ambiguous emails
     body_preview = (body_text or "")[:1500]
     prompt = f"""Classify this email into exactly one of these types:
@@ -210,23 +241,30 @@ def extract_venmo_other_party_handle(html_body: str, our_handle: str = "tgf-paym
     return None
 
 
-def parse_venmo_payment(subject: str, from_addr: str, body_text: str) -> dict:
-    """Extract payment data from a Venmo notification email."""
+def parse_p2p_payment(subject: str, from_addr: str, body_text: str,
+                      provider: str = "Venmo") -> dict:
+    """Extract payment data from a peer-to-peer payment notification email
+    (Venmo, PayPal, Cash App). All three carry the same fields — a recipient
+    name, an amount, and the note the sender typed — so one parser serves
+    them all; only the ``provider`` label in the prompt changes. For PayPal
+    the note appears as "Your note to <name>"; for Venmo/Cash App it's the
+    payment memo. In every case it holds the true payee + event
+    ("Don SHARITZ - Winnings for s9.15 THE QUARRY")."""
     body_preview = (body_text or "")[:2000]
 
-    prompt = f"""Extract payment details from this Venmo notification email.
+    prompt = f"""Extract payment details from this {provider} notification email.
 
 From: {from_addr}
 Subject: {subject}
 Body: {body_preview}
 
 Return a JSON object with:
-- recipient_name: string (who was paid, or who paid you)
-- amount: number (positive, no $ sign)
-- memo: string (the payment note/description EXACTLY as written, verbatim — preserve any leading name prefix before a " - " dash, e.g. "Matt Griffin - Winnings for s9.17 Silverhorn". Do NOT strip, summarize, or rewrite it; the leading name is the true payee when the Venmo account name differs.)
-- sent_from_account: string (Venmo username if visible, e.g. "@tgf-payments")
+- recipient_name: string (who was paid, or who paid you — the OTHER party, not "The Golf Fellowship")
+- amount: number (positive, no $ sign — the amount SENT/received, not any fee)
+- memo: string (the payment note/description EXACTLY as written, verbatim — for PayPal this is the "Your note to <name>" text. Preserve any leading name prefix before a " - " dash, e.g. "Matt Griffin - Winnings for s9.17 Silverhorn". Do NOT strip, summarize, or rewrite it; the leading name is the true payee when the account's display name differs.)
+- sent_from_account: string (the sender's account/handle if visible, e.g. "@tgf-payments" or "The Golf Fellowship")
 - transaction_date: string (YYYY-MM-DD)
-- transaction_id: string (Venmo transaction ID if visible)
+- transaction_id: string (the provider's transaction/confirmation ID if visible)
 - transaction_type: string ("payout" if paying someone, "received" if receiving)
 - confidence: integer (0-100)
 
@@ -241,6 +279,11 @@ Return ONLY the JSON object."""
     if "amount" in result:
         result["amount"] = abs(float(result["amount"]))
     return result
+
+
+def parse_venmo_payment(subject: str, from_addr: str, body_text: str) -> dict:
+    """Back-compat shim — Venmo is one of the P2P providers."""
+    return parse_p2p_payment(subject, from_addr, body_text, provider="Venmo")
 
 
 # ---------------------------------------------------------------------------

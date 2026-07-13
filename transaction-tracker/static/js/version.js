@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.83.0";
+window.TGF_VERSION = "2.84.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.84.0",
+    date: "2026-07-13",
+    changes: [
+      "PAYPAL, CASH APP & ZELLE PAYOUTS NOW AUTO-CONFIRM TO PAID (Kerry) -- not just Venmo. All four carry the recipient name AND your note, which is everything the matcher needs, so the payout flips to PAID automatically when the receipt email lands: PayPal (service@paypal.com, \"Your note to <name>: …\"), Cash App (noreply@notifications.cash.app, note shown as \"For <name> - …\"), and Zelle via your bank (Frost's \"Send Money With Zelle Confirmation\" includes \"Message: <name> - Winnings for …\"). One shared peer-to-peer handler now classifies and records each under its correct payment method (PayPal receipts were previously mis-filed internally as \"venmo\" -- they matched, but the label was wrong) and runs the same memo-name + event + amount matching and 2-minute confirmation sweep. The matcher also tolerates Cash App's \"For \" note prefix. Note: Zelle sent from CHASE arrives as a Chase alert with no memo and stays on the old path; Frost Zelle (with the message) is the one that auto-confirms.",
+    ],
+  },
   {
     version: "2.83.0",
     date: "2026-07-13",
