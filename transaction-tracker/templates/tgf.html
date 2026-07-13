@@ -163,6 +163,21 @@
         }
         .venmo-btn:hover { background: #006FCC; }
         .venmo-btn svg { width: 14px; height: 14px; }
+        /* "Sent · verifying…" state after a Pay tap (v2.79.1) — not
+           clickable; tells the admin the receipt is being confirmed so
+           they don't pay twice. Pops back to a Pay button after 5 min. */
+        .venmo-verifying {
+            display: inline-flex; align-items: center; gap: 6px;
+            padding: 3px 10px; border-radius: 99px; font-size: 0.75rem;
+            font-weight: 600; background: #FEF3E2; color: #B4551A;
+            border: 1px solid #F3D9BB; cursor: default; white-space: nowrap;
+        }
+        .venmo-verifying .vspin {
+            width: 10px; height: 10px; border-radius: 50%;
+            border: 2px solid #E8B98A; border-top-color: #B4551A;
+            animation: vspin 0.8s linear infinite;
+        }
+        @keyframes vspin { to { transform: rotate(360deg); } }
 
         /* Event details card */
         .detail-grid {
@@ -521,6 +536,60 @@
             } catch (e) { /* best-effort — the 5-min cycle is the backstop */ }
         }
 
+        // ── Pay → "verifying" → Paid state (v2.79.1, Kerry) ──────────
+        // Tapping Pay marks the row "Sent · verifying…" (per device, in
+        // localStorage) so the admin knows not to pay twice while we wait
+        // for the Venmo receipt to confirm. A background poll flips it to
+        // Paid the moment the server records it; if 5 minutes pass without
+        // confirmation the Pay button returns so it can be retried.
+        const PAY_VERIFY_MS = 5 * 60 * 1000;
+        let _payPollTimer = null;
+        function _payKey(evId, gid) { return `tgf_paytap_${evId}_${gid}`; }
+        function _setVerifying(evId, gid) {
+            try { localStorage.setItem(_payKey(evId, gid), String(Date.now())); } catch (e) {}
+        }
+        function _verifyingAgeMs(evId, gid) {
+            try {
+                const v = localStorage.getItem(_payKey(evId, gid));
+                return v ? Date.now() - parseInt(v, 10) : null;
+            } catch (e) { return null; }
+        }
+        function _clearVerifying(evId, gid) {
+            try { localStorage.removeItem(_payKey(evId, gid)); } catch (e) {}
+        }
+        function _anyVerifyingActive() {
+            try {
+                for (let i = 0; i < localStorage.length; i++) {
+                    const k = localStorage.key(i);
+                    if (k && k.indexOf("tgf_paytap_") === 0) {
+                        const age = Date.now() - parseInt(localStorage.getItem(k) || "0", 10);
+                        if (age < PAY_VERIFY_MS) return true;
+                    }
+                }
+            } catch (e) {}
+            return false;
+        }
+        function onPayTap(evId, gid) {
+            _setVerifying(evId, gid);
+            scheduleVenmoCheck();
+            ensurePayPolling();
+            // repaint AFTER the Venmo app/tab opens so the pill shows and
+            // we don't disturb the anchor's own navigation
+            setTimeout(renderEventMain, 700);
+        }
+        function ensurePayPolling() {
+            if (_payPollTimer) return;
+            _payPollTimer = setInterval(async () => {
+                if (!_anyVerifyingActive()) {
+                    clearInterval(_payPollTimer); _payPollTimer = null;
+                    renderEventMain();  // clear any just-expired pills
+                    return;
+                }
+                await loadData();       // pick up the server's PAID flip
+                renderEventMain();
+            }, 15000);
+        }
+
         function payAction(winData, amount, eventCode, eventName, golferName) {
             if (!winData) return null;
             const method = (winData.payment_method
@@ -616,13 +685,24 @@
         function payCellHtml(ev, g) {
             const winData = Object.values(DATA.winnings).find(w => w.id === g.golfer_id);
             const alreadyPaid = g.payment_status === "paid";
+            // paid rows drop any stale "verifying" marker
+            if (alreadyPaid) _clearVerifying(ev.id, g.golfer_id);
             const act = !alreadyPaid ? payAction(winData, g.total, ev.code, ev.name, g.name) : null;
             let venmoHtml = "";
             if (act && act.href) {
-                venmoHtml = `<a class="venmo-btn" style="background:${act.bg};" href="${act.href}" target="_blank" rel="noopener" onclick="event.stopPropagation(); scheduleVenmoCheck();">
-                     <svg viewBox="0 0 24 24" fill="currentColor"><path d="M19.5 3c.9 1.5 1.3 3 1.3 5 0 5.5-4.7 12.7-8.5 17H5.2L3 3.5l6-.6 1.2 9.6c1.2-2 2.7-5.2 2.7-7.3 0-1.9-.3-3.2-.8-4.2L19.5 3z"/></svg>
-                     ${act.label}
-                   </a>`;
+                const age = _verifyingAgeMs(ev.id, g.golfer_id);
+                if (age != null && age < PAY_VERIFY_MS) {
+                    // tapped Pay, awaiting the receipt — don't re-pay
+                    venmoHtml = `<span class="venmo-verifying" title="You tapped Pay — waiting for the Venmo receipt to confirm this payout. It flips to Paid within a couple minutes; the Pay button returns if it isn't verified in 5.">
+                         <span class="vspin"></span>Sent · verifying…
+                       </span>`;
+                } else {
+                    if (age != null) _clearVerifying(ev.id, g.golfer_id);  // >5min — pop Pay back
+                    venmoHtml = `<a class="venmo-btn" style="background:${act.bg};" href="${act.href}" target="_blank" rel="noopener" onclick="event.stopPropagation(); onPayTap(${ev.id}, ${g.golfer_id});">
+                         <svg viewBox="0 0 24 24" fill="currentColor"><path d="M19.5 3c.9 1.5 1.3 3 1.3 5 0 5.5-4.7 12.7-8.5 17H5.2L3 3.5l6-.6 1.2 9.6c1.2-2 2.7-5.2 2.7-7.3 0-1.9-.3-3.2-.8-4.2L19.5 3z"/></svg>
+                         ${act.label}
+                       </a>`;
+                }
             } else if (act && act.badge) {
                 venmoHtml = `<span style="display:inline-block;padding:2px 9px;border-radius:99px;font-size:0.72rem;font-weight:600;background:#ede9fe;color:#5b21b6;" title="No deep link for this method — pay manually, then Mark Paid">${act.badge}</span>`;
             }
@@ -1322,6 +1402,9 @@
         // ── Init ─────────────────────────────────────────────────
         document.addEventListener("DOMContentLoaded", () => {
             loadData();
+            // resume the verify poll if a payment was mid-confirmation
+            // when the page (or app) was reloaded
+            if (_anyVerifyingActive()) ensurePayPolling();
             if (typeof initAuth === "function") initAuth();
             const gs = $("#golfer-search");
             if (gs) gs.addEventListener("input", () => {

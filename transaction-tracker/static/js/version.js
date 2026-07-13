@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.79.0";
+window.TGF_VERSION = "2.79.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.79.1",
+    date: "2026-07-13",
+    changes: [
+      "PAY BUTTON NOW SHOWS A VERIFYING STATE (Kerry): after you tap Pay on a payout, the button turns into an amber 'Sent · verifying…' pill (with a small spinner) so you know the payment is registered and NOT to tap it again while we wait for the Venmo receipt. A background poll flips the row to Paid the moment the server confirms it (within a couple minutes, riding the new 75s/180s inbox sweep). If 5 minutes pass without confirmation, the Pay button pops back up so it can be retried. The verifying state is per-device (localStorage) and survives a reload or the app backgrounding while you're in Venmo -- reopening the Payouts page resumes the wait and the live poll.",
+    ],
+  },
   {
     version: "2.79.0",
     date: "2026-07-13",
