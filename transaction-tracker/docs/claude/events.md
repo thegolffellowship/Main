@@ -749,11 +749,22 @@ reload. Helpers: `tgfRevealAddPay`/`tgfSaveAddPay` +
 whitelist (app.py route + `update_customer_info`) now includes
 `payment_method` and `payment_handle`.
 
-## Venmo payment auto-confirm (v2.50.0, Kerry)
+## Payout auto-confirm — Venmo / PayPal / Cash App / Zelle (v2.50.0; multi-provider v2.84.0, Kerry)
 `auto_match_venmo_payouts_to_tgf(expense_ids=None)` (database.py) marks
-payouts PAID from the outbound Venmo receipt emails the expense inbox
-already ingests (`expense_transactions` rows with source_type='venmo',
-transaction_type='payout'; recipient in `merchant`, memo in `notes`,
+payouts PAID from the outbound receipt emails the expense inbox ingests.
+**All four P2P providers ride one path** (v2.84.0): `classify_email`
+fast-paths tag Venmo (`venmo.com`), PayPal (`paypal.com` "you sent"),
+Cash App (`cash.app` / `notifications.cash.app`), and Zelle (bank
+"…Zelle Confirmation", e.g. Frost `frostbank.com`, EXCLUDING Chase which
+has no memo and stays a chase_alert). `parse_p2p_payment(provider=…)`
+(one generic parser) extracts recipient + amount + the typed note; the
+shared app.py handler stores each under its own `source_type`
+(`venmo`/`paypal`/`cashapp`/`zelle`) and the matcher's filter is
+`source_type IN ('venmo','paypal','cashapp','zelle')`. Every provider's
+note carries the true payee + event ("<Name> - Winnings for s9.15 …";
+PayPal labels it "Your note to <name>", Cash App prefixes "For ", Zelle
+"Message:"). The memo payee-name regex tolerates an optional leading
+"For " for Cash App. Records: recipient in `merchant`, memo in `notes`,
 customer_id/event_id resolved by the expense pipeline). Per receipt:
 resolve customer (customer_id → venmo handle → name/alias cascade →
 **memo payee-name prefix → memo event + exact amount**, v2.79.2). The
