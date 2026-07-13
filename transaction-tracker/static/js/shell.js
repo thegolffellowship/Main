@@ -116,4 +116,77 @@
         // Ops buttons were shown/hidden for this role — re-evaluate the row
         setTimeout(updateOpsVisibility, 0);
     };
+
+    // ── Pull-to-refresh (Kerry 2026-07-13) ───────────────
+    // Mobile browsers already give native pull-to-refresh, but an iOS
+    // home-screen PWA (how our members run the app) does NOT — pulling
+    // down just rubber-bands. This adds the gesture there: pull down at
+    // the very top of the page past a threshold to reload. Gated to the
+    // iOS installed PWA so we never double-fire with the browser's/
+    // Android's native gesture.
+    (function initPullToRefresh() {
+        const iosPWA = window.navigator.standalone === true
+            || (/iPhone|iPad|iPod/i.test(navigator.userAgent)
+                && window.matchMedia("(display-mode: standalone)").matches);
+        if (!iosPWA) return;
+        if (!("ontouchstart" in window)) return;
+
+        const THRESHOLD = 70, MAX = 130, DAMP = 0.5;
+        const ind = document.createElement("div");
+        ind.className = "tgf-ptr";
+        ind.innerHTML = '<div class="tgf-ptr-spin"></div>';
+        // append after DOM is ready (shell.js is deferred, so body exists)
+        (document.body || document.documentElement).appendChild(ind);
+
+        let startY = 0, pulling = false, dist = 0;
+        const SKIP = "[data-ptr-skip], .no-ptr, .modal, .modal-overlay, .shell-drawer,"
+            + " .shell-sheet, dialog, [role=dialog]";
+        const scrollTop = () => window.pageYOffset
+            || document.documentElement.scrollTop || 0;
+
+        window.addEventListener("touchstart", (e) => {
+            pulling = false;
+            if (e.touches.length !== 1) return;
+            if (scrollTop() > 0) return;                       // not at top
+            if (e.target.closest && e.target.closest(SKIP)) return; // modal/drawer
+            startY = e.touches[0].clientY;
+            dist = 0;
+            pulling = true;
+            ind.style.transition = "opacity .15s";             // no lag while dragging
+        }, { passive: true });
+
+        window.addEventListener("touchmove", (e) => {
+            if (!pulling) return;
+            if (scrollTop() > 0) { reset(); return; }
+            const dy = e.touches[0].clientY - startY;
+            if (dy <= 0) { dist = 0; ind.classList.remove("visible", "ready"); return; }
+            dist = Math.min(dy * DAMP, MAX);
+            ind.classList.add("visible");
+            ind.classList.toggle("ready", dist >= THRESHOLD);
+            ind.style.transform = `translateX(-50%) translateY(${dist}px)`;
+            // suppress the iOS rubber-band so the indicator reads cleanly
+            if (dist > 4 && e.cancelable) e.preventDefault();
+        }, { passive: false });
+
+        function reset() {
+            pulling = false; dist = 0;
+            ind.style.transition = "transform .2s ease, opacity .15s";
+            ind.classList.remove("visible", "ready");
+            ind.style.transform = "";
+        }
+        function finish() {
+            if (!pulling) return;
+            if (dist >= THRESHOLD) {
+                pulling = false;
+                ind.classList.add("refreshing");
+                ind.style.transition = "transform .2s ease";
+                ind.style.transform = `translateX(-50%) translateY(${THRESHOLD}px)`;
+                setTimeout(() => window.location.reload(), 200);
+            } else {
+                reset();
+            }
+        }
+        window.addEventListener("touchend", finish, { passive: true });
+        window.addEventListener("touchcancel", reset, { passive: true });
+    })();
 })();

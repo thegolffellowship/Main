@@ -402,7 +402,14 @@ on mobile — **ops never go in the drawer**; one global dropdown pattern
 (`.shell-menu`). auth.js drives role gating for shell links
 (`.shell-nav-links a`, `.shell-drawer-nav a`) and calls
 `window.shellApplyRole`. Official TGF icon marks: `static/tgf-icon.svg`
-+ `static/tgf-icon-white.svg`. The Contests/Handicaps CONTENT redesign
++ `static/tgf-icon-white.svg`. shell.js also provides **pull-to-refresh**
+(v2.82.0): app-wide, but gated to the iOS installed PWA
+(`navigator.standalone`) where the native gesture is absent — a mobile
+browser and Android already have native PTR, so custom PTR there would
+double-fire. Pull down at page top past a 70px threshold → `location
+.reload()`; a `.tgf-ptr` spinner (shell.css) follows the drag; pulls
+starting inside a drawer/sheet/dialog (`SKIP` selector, `.no-ptr` /
+`[data-ptr-skip]` opt-out) are ignored. The Contests/Handicaps CONTENT redesign
 is the next design-claude handoff, built into this fixed shell.
 
 ## Standard color palette (v2.49.0)
