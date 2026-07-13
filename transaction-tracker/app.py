@@ -1251,15 +1251,25 @@ def start_scheduler():
         logger.info("RSVP scheduler: checking %s every %d minutes",
                      os.getenv("RSVP_EMAIL_ADDRESS"), interval)
 
-    # Expense email classifier — runs on same interval as inbox check
+    # Expense email classifier — runs MORE often than the order inbox so
+    # Venmo payout receipts are caught (and the payout flips to PAID)
+    # within a couple minutes even when the admin pays outside the app and
+    # never taps an in-app Pay button (which is what schedules the fast
+    # 75s/180s sweep). This is cost-neutral: the expense_seen_emails dedup
+    # bills each email to the AI exactly once regardless of poll frequency
+    # (see docs/claude/expense-workflow.md → Dedup & Cost Control), so a
+    # tighter interval only adds free Microsoft Graph calls. Default 2 min;
+    # override with EXPENSE_CHECK_INTERVAL_MINUTES (Kerry 2026-07-13:
+    # confirmations "took way longer than I'd like").
+    expense_interval = int(os.getenv("EXPENSE_CHECK_INTERVAL_MINUTES", "2"))
     scheduler.add_job(
         check_expense_inbox,
         "interval",
-        minutes=interval,
+        minutes=expense_interval,
         id="expense_inbox_check",
         replace_existing=True,
     )
-    logger.info("Expense email classifier scheduled every %d minutes", interval)
+    logger.info("Expense email classifier scheduled every %d minutes", expense_interval)
 
     # COO daily email — runs at 7:00 AM US/Central
     coo_email_to = os.getenv("COO_EMAIL_TO")
