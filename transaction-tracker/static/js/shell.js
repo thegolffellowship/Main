@@ -117,6 +117,24 @@
         setTimeout(updateOpsVisibility, 0);
     };
 
+    // ── R5 member CTA chooser (Kerry-ratified #149/#151) ──
+    // "Enter Events & Contests" opens a two-button sheet: This Week's
+    // Events (shop section anchor) / Season Contests (product). Tap-away
+    // cancels. Any element with .shell-cta-open also opens it (the
+    // contests-page mobile banner).
+    (function initCtaChooser() {
+        const sheet = $("shell-cta-sheet"), ctaScrim = $("shell-cta-scrim");
+        if (!sheet || !ctaScrim) return;
+        const open = (e) => { if (e) e.preventDefault(); sheet.classList.add("open"); ctaScrim.classList.add("open"); sheet.setAttribute("aria-hidden", "false"); };
+        const close = () => { sheet.classList.remove("open"); ctaScrim.classList.remove("open"); sheet.setAttribute("aria-hidden", "true"); };
+        const trigger = $("shell-cta-chooser");
+        if (trigger) trigger.addEventListener("click", open);
+        document.querySelectorAll(".shell-cta-open").forEach(el => el.addEventListener("click", open));
+        ctaScrim.addEventListener("click", close);
+        sheet.addEventListener("click", (e) => { if (e.target.closest("a")) close(); });
+        document.addEventListener("keydown", (e) => { if (e.key === "Escape") close(); });
+    })();
+
     // ── Pull-to-refresh (Kerry 2026-07-13) ───────────────
     // Mobile browsers already give native pull-to-refresh, but an iOS
     // home-screen PWA (how our members run the app) does NOT — pulling

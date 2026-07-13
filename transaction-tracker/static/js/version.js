@@ -1,5 +1,18 @@
-window.TGF_VERSION = "2.85.2";
+window.TGF_VERSION = "2.86.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.86.0",
+    date: "2026-07-13",
+    changes: [
+      "MEMBER UX AUDIT S1 PACKAGE (Kerry-ratified, mailbox #149-#151). D1 -- membership status now derives from TRACKER FINANCIAL TRUTH (paid membership terms/purchases) at read time, not the mutable status column that GG-roster syncs left stale (the Decareaux/Beam defect): 'Our side needs to dictate whether he's a member or not.' Adopted terms: member / alumni / guest ('ALUMNI' is our word; GG's roster keeps FORMER for ops). New GG-drift report (bridge scoring-gg-drift:<roster-url>) lists everyone whose GG roster tag disagrees with our financial status so Kerry updates GG from a checklist.",
+      "F18 -- the Spotlight EVENTS tile now counts ALL events actually played this season (distinct events across tracked rounds), regardless of member/guest/1st-timer/alumni status. It previously read the points-race standings' tournaments column, so non-enrolled players showed 0-1 (Beam 0 vs 2 rounds; Decareaux 1 vs 5).",
+      "R3 -- Spotlight search now indexes EVERYONE tracked (members, guests, alumni, historical): 'if we track it, they have a presence.' The old members-only filter made current members invisible whenever the status column went stale. Empty state reads 'No players found'.",
+      "R1 -- status chips from financial truth: TGF MEMBER (green), GUEST (grey + tappable JOIN link), lapsed member = NO label, just an amber tappable REJOIN -> chip to the membership product (no 'former' badge on a fellowship page; doubles as the lapse notice).",
+      "R4 -- points-race boards now SHOW non-members ranked (guests/alumni were silently hidden): preserves the LSC alternates math, and 'ranked next to a pot is the best join pitch.' Rows carry a small GUEST/REJOIN pill; the money ladder is UNCHANGED -- visible does not mean eligible, ineligible rows still take no ladder spot and no reset points.",
+      "R2 -- nudge amendments: doing the thing a tip teaches now dismisses it (searching kills the search tip, expanding a row kills the standings tip); the standings tip renders as a bottom toast so it never covers table rows; no tips on ?player= deep-link arrival; cards cap at 360px on desktop.",
+      "R5 -- the member CTA is now 'ENTER EVENTS & CONTESTS' opening a two-button chooser: This Week's Events (shop section) / Season Contests (product). Interim styling until CD's sheet spec; tap-away cancels.",
+    ],
+  },
   {
     version: "2.85.2",
     date: "2026-07-14",

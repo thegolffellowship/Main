@@ -30,8 +30,10 @@
 
     const CSS = `
 .tgf-nudge { position: absolute; z-index: 260; background: #fff; border: 1px solid var(--border, #E5E7EB);
-  border-radius: 13px; box-shadow: 0 8px 30px rgba(0,0,0,.16); padding: 13px 44px 13px 15px; }
-.tgf-nudge.tgf-nudge-toast { position: fixed; left: 16px; right: 16px; bottom: 22px; }
+  border-radius: 13px; box-shadow: 0 8px 30px rgba(0,0,0,.16); padding: 13px 44px 13px 15px;
+  max-width: 360px; }
+.tgf-nudge.tgf-nudge-toast { position: fixed; left: 16px; right: 16px; bottom: 22px;
+  margin-left: auto; margin-right: auto; }
 .tgf-nudge::before { content: ""; position: absolute; left: 0; top: 11px; bottom: 11px; width: 3px;
   border-radius: 3px; background: var(--primary, #E87C3E); }
 .tgf-nudge-eye { font: 700 8.5px/1 'Bitter', serif; letter-spacing: 1.6px; text-transform: uppercase;
@@ -91,10 +93,30 @@
         }
         document.body.appendChild(card);
         beacon("impression", key);
-        card.querySelector(".tgf-nudge-x").addEventListener("click", () => {
+        const dismiss = kind => {
+            if (!card.isConnected) return;
             markSeen(key);
-            beacon("dismiss", key);
+            beacon(kind || "dismiss", key);
             card.remove();
+        };
+        card.querySelector(".tgf-nudge-x").addEventListener("click", () => dismiss("dismiss"));
+        return dismiss;
+    }
+
+    // R2.1 (Kerry-ratified #149): FOLLOW-THROUGH = DISMISSED. Doing the
+    // thing the tip teaches retires the tip — it must never keep covering
+    // the content the member just reached. Accepted trade-off on record:
+    // an accidental follow-through burns the tip.
+    function onFollowThrough(pairs, dismiss) {
+        const fns = [];
+        const fire = () => {
+            dismiss("followthrough");
+            fns.forEach(([el, ev, fn]) => el.removeEventListener(ev, fn));
+        };
+        pairs.forEach(([el, ev]) => {
+            const fn = () => fire();
+            fns.push([el, ev, fn]);
+            el.addEventListener(ev, fn, { passive: true });
         });
     }
 
@@ -126,21 +148,43 @@
             return;
         }
 
+        // R2.3 (Kerry-ratified #149): a ?player=/#player= deep-link arrival
+        // means they were SENT here with a purpose — no contextual tip.
+        const deepLinked = /[?#&]player=/.test(location.search + location.hash)
+            || /[?&]player=/.test((location.hash.split("?")[1] || ""));
+
         if (onSpotlight) {
-            if (!seen(KEYS.spotlight)) {
-                whenAnchor(".spt-searchbox", el => show(
-                    KEYS.spotlight, "TIP",
-                    "Search any member — including yourself. Every player has a page.",
-                    el, null));
+            if (!seen(KEYS.spotlight) && !deepLinked) {
+                whenAnchor(".spt-searchbox", el => {
+                    const dismiss = show(
+                        KEYS.spotlight, "TIP",
+                        "Search any member — including yourself. Every player has a page.",
+                        el, null);
+                    // follow-through: executing a search retires the tip
+                    const inp = el.querySelector("input");
+                    const pairs = [];
+                    if (inp) pairs.push([inp, "input"]);
+                    const sug = document.getElementById("spt-suggest");
+                    if (sug) pairs.push([sug, "click"]);
+                    if (pairs.length) onFollowThrough(pairs, dismiss);
+                });
             }
             return;
         }
         if (onContests) {
-            if (!seen(KEYS.standings)) {
-                whenAnchor("#pr-table-container tr[data-cid], #pr-table-container tbody tr", el => show(
-                    KEYS.standings, "TIP",
-                    "Tap any player to see their rounds — event by event, hole by hole.",
-                    el, 64));
+            if (!seen(KEYS.standings) && !deepLinked) {
+                whenAnchor("#pr-table-container tr[data-cid], #pr-table-container tbody tr", el => {
+                    // R2.2 (Kerry-ratified #149): on DATA TABLES always use
+                    // the bottom-toast variant — never cover rows. Passing
+                    // no anchor routes show() to the 5d toast.
+                    const dismiss = show(
+                        KEYS.standings, "TIP",
+                        "Tap any player to see their rounds — event by event, hole by hole.",
+                        null, null);
+                    // follow-through: expanding a row retires the tip
+                    const cont = document.getElementById("pr-table-container");
+                    if (cont) onFollowThrough([[cont, "click"]], dismiss);
+                });
             }
         }
     }
