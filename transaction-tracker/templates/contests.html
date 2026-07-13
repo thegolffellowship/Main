@@ -3086,7 +3086,9 @@
             pp.amounts_cents.forEach((c, i) =>
                 chips.push(`<span class="pr-place">${prOrdinal(i)} <b>${prFmtMoney(c)}</b></span>`));
         } else {
-            chips.push(`<span class="pr-place">Champion <b>${prFmtMoney(pp.champion_cents)}</b></span>`);
+            // "PLUS" (Kerry 2026-07-13): the Champion bonus stacks ON TOP of
+            // flight winnings — win your flight and the Cup, the money stacks
+            chips.push(`<span class="pr-place">Champion <b>${prFmtMoney(pp.champion_cents)} PLUS</b></span>`);
             chips.push(`<span class="pr-place">Each flight: 1st <b>${prFmtMoney(pp.flight_first_cents)}</b> · 2nd <b>${prFmtMoney(pp.flight_second_cents)}</b></span>`);
         }
         // pot-projection caption removed (Kerry 2026-07-12) — the HOW IT

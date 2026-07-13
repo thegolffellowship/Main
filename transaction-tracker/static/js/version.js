@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.87.4";
+window.TGF_VERSION = "2.87.5";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.87.5",
+    date: "2026-07-13",
+    changes: [
+      "THE PLAYERS CUP payout strip: the Champion chip now reads 'Champion $x PLUS' (Kerry) -- the Champion bonus stacks on top of flight winnings (win your flight AND the Cup, the money stacks), and the badge now says so.",
+    ],
+  },
   {
     version: "2.87.4",
     date: "2026-07-13",
