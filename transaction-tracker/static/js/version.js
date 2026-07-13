@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.87.0";
+window.TGF_VERSION = "2.87.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.87.1",
+    date: "2026-07-13",
+    changes: [
+      "Welcome card repositioned (Kerry look-review): it was a fixed overlay pinned under the nav, covering the search box and hero -- exactly the elements its new copy points to. It now sits IN the page flow below all content (under the 'Live snapshots...' subtext), centered with its 360px cap on desktop. It's the only nudge allowed to reflow; the contextual tips keep their overlay/toast behavior.",
+    ],
+  },
   {
     version: "2.87.0",
     date: "2026-07-13",
