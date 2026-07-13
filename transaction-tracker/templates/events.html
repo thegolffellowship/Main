@@ -3591,10 +3591,20 @@
         if (method === "venmo" && winData.venmo_username)
             return { href: venmoPayHref(winData.venmo_username, amount, note), label: "Pay" };
         const handle = (winData.payment_handle || "").trim();
-        if (method === "paypal")
-            return handle ? { href: `https://paypal.me/${handle.replace(/^@/, "")}/${amt}`, label: "PayPal" } : null;
-        if (method === "cashapp")
-            return handle ? { href: `https://cash.app/$${handle.replace(/^\$/, "")}/${amt}`, label: "Cash App" } : null;
+        if (method === "paypal") {
+            // PayPal.Me resolves a USERNAME only; an email 404s to PayPal's
+            // error page. Username → one-tap link; email → manual badge.
+            const u = handle.replace(/^https?:\/\/(www\.)?paypal\.me\//i, "").replace(/^@/, "").trim();
+            if (!u) return null;
+            if (u.indexOf("@") !== -1) return { badge: "PayPal (manual)" };
+            return { href: `https://www.paypal.com/paypalme/${encodeURIComponent(u)}/${amt}`, label: "PayPal" };
+        }
+        if (method === "cashapp") {
+            const tag = handle.replace(/^\$/, "").trim();
+            if (!tag) return null;
+            if (tag.indexOf("@") !== -1) return { badge: "Cash App (manual)" };
+            return { href: `https://cash.app/$${tag}/${amt}`, label: "Cash App" };
+        }
         if (method === "zelle")
             return { badge: `Zelle${handle ? " · " + handle : ""}` };
         return null;
@@ -3609,15 +3619,23 @@
             + `<button class="ev-add-pay-btn" style="padding:2px 8px;border-radius:99px;font-size:0.72rem;font-weight:600;background:#f1f5f9;color:#334155;border:1px dashed #94a3b8;cursor:pointer;white-space:nowrap;" onclick="event.stopPropagation(); evRevealAddPay(this)">+ Add Payment</button>`
             + `</span>`;
     }
+    // Per-method placeholder — makes clear PayPal wants a PayPal.Me NAME
+    // (an email can't produce a one-tap link).
+    const PAY_HINT = { venmo: "venmo-username", paypal: "PayPal.Me name (email = manual)",
+                       cashapp: "$cashtag", zelle: "email or phone" };
+    function evPayHint(sel) {
+        const inp = sel.parentNode.querySelector("input");
+        if (inp) inp.placeholder = PAY_HINT[sel.value] || "handle";
+    }
     function evRevealAddPay(btn) {
         const wrap = btn.closest(".ev-add-pay-wrap");
         if (!wrap) return;
         wrap.innerHTML =
             `<span style="display:inline-flex;flex-wrap:wrap;gap:3px;align-items:center;justify-content:flex-end;max-width:160px;">` +
-            `<select class="ev-add-pay-method" style="font-size:0.72rem;padding:2px 4px;border:1px solid #cbd5e1;border-radius:4px;" onclick="event.stopPropagation()">` +
+            `<select class="ev-add-pay-method" style="font-size:0.72rem;padding:2px 4px;border:1px solid #cbd5e1;border-radius:4px;" onclick="event.stopPropagation()" onchange="evPayHint(this)">` +
             `<option value="venmo">Venmo</option><option value="paypal">PayPal</option>` +
             `<option value="cashapp">Cash App</option><option value="zelle">Zelle</option></select>` +
-            `<input class="ev-add-pay-handle" type="text" placeholder="handle / email" autocapitalize="off" autocorrect="off" spellcheck="false" style="font-size:0.72rem;padding:2px 6px;border:1px solid #cbd5e1;border-radius:4px;width:7.5rem;" onclick="event.stopPropagation()" onkeydown="if(event.key==='Enter'){event.preventDefault();evSaveAddPay(this);}">` +
+            `<input class="ev-add-pay-handle" type="text" placeholder="venmo-username" autocapitalize="off" autocorrect="off" spellcheck="false" style="font-size:0.72rem;padding:2px 6px;border:1px solid #cbd5e1;border-radius:4px;width:7.5rem;" onclick="event.stopPropagation()" onkeydown="if(event.key==='Enter'){event.preventDefault();evSaveAddPay(this);}">` +
             `<button class="ev-add-pay-save" style="font-size:0.72rem;padding:2px 8px;border-radius:99px;background:#008CFF;color:#fff;border:none;cursor:pointer;font-weight:600;" onclick="event.stopPropagation(); evSaveAddPay(this)">Save</button>` +
             `<span class="ev-add-pay-msg" style="font-size:0.7rem;color:#dc2626;width:100%;text-align:right;"></span></span>`;
         const inp = wrap.querySelector(".ev-add-pay-handle");

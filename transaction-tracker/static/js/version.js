@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.82.0";
+window.TGF_VERSION = "2.82.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.82.1",
+    date: "2026-07-13",
+    changes: [
+      "FIX: PayPal pay link no longer breaks when the handle is an email (Kerry hit 'Something went wrong' after adding a PayPal email and tapping Pay). PayPal.Me links only resolve a USERNAME (paypal.me/JohnDoe) -- an email 404s to PayPal's error page. Now: a PayPal.Me username builds a one-tap prefilled link; a PayPal EMAIL shows a 'PayPal (manual)' badge instead (pay in the PayPal app, then Mark Paid on the PAYOUTS tab) since there's no way to deep-link a prefilled payment to an email. Same guard added for Cash App (an email/phone can't be a $cashtag). The '+ Add Payment' handle box now shows a per-method hint -- picking PayPal prompts for a 'PayPal.Me name (email = manual)' so the right thing gets entered.",
+    ],
+  },
   {
     version: "2.82.0",
     date: "2026-07-13",
