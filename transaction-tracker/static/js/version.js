@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.78.3";
+window.TGF_VERSION = "2.78.4";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.78.4",
+    date: "2026-07-13",
+    changes: [
+      "TEAM NET BLIND-DRAW FIX (Kerry, verified vs GG Player Purse Summary): blind-draw team partners are now PAID their equal share of the team purse, matching Golf Genius. assemble_event_game_payouts previously excluded the Bl[LAST, First] slot and split the team pot among the real members only -- on s9.17 Silverhorn (2026-07-07) that paid the winning team's South/Moreno/Wade $18 each and gave the blind-draw Hamilton $0, where GG splits the $54 four ways at $13.50 each. Fix unwraps the Bl[...] wrapper to the real name and includes it in the split. Affected past 2026 team-net events with a blind draw will re-record to match GG.",
+      "AUDIT LESSON banked: team-game payouts must be reconciled player-by-player, not by event total -- the earlier s9.17 audit matched on totals (686.01 vs 686.04) and every individual game board, which masked $4.50-$13.50 per-player errors that netted to pennies. Documented in docs/claude/side-games.md.",
+    ],
+  },
   {
     version: "2.78.3",
     date: "2026-07-13",

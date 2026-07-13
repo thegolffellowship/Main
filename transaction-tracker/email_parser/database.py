@@ -31643,12 +31643,22 @@ def assemble_event_game_payouts(event_name: str, db_path=None) -> dict:
             team_shares = split_cents(pool, len(grp))
             suffix = {1: "1st", 2: "2nd", 3: "3rd"}.get(pos, f"{pos}th")
             for t, tc in zip(grp, team_shares):
-                members = [mname.strip() for mname in t["player_name"].split("+")
-                           if mname.strip() and not re.match(r"^Bl[\[A-Z]", mname.strip())]
+                # Blind-draw partners ARE paid their team share (Kerry
+                # 2026-07-13, verified vs GG's Player Purse Summary on
+                # s9.17 Silverhorn: GG splits $54 across all 4 slots incl.
+                # Bl[HAMILTON, Doug] → $13.50 each; the old code excluded
+                # the blind draw and split 3 ways at $18, over-paying the
+                # real members and zeroing the drawn player). Unwrap the
+                # GG 'Bl[LAST, First]' wrapper to the real name so the
+                # payout resolves to that customer.
+                def _unwrap_blind(nm):
+                    bm = re.match(r"^Bl\[(.+)\]$", nm)
+                    return bm.group(1).strip() if bm else nm
+                members = [_unwrap_blind(mname.strip())
+                           for mname in t["player_name"].split("+")
+                           if mname.strip()]
                 if not members:
                     continue
-                if len(members) < t["player_name"].count("+") + 1:
-                    notes.append("Team Net: blind-draw member excluded from the split")
                 _money_split(tc / 100.0, members, "team_net",
                              f"{g_event.get('teamType') or 'Team Net'} {suffix}"
                              f"{' (T)' if len(grp) > 1 else ''} (team split)")
