@@ -93,7 +93,9 @@
         .spt-par .pv { display: flex; align-items: baseline; justify-content: center; gap: 4px; margin-top: 5px; }
         .spt-par .pv .k { font: 700 19px/1 'Bitter', serif; color: #1B1B1B; font-variant-numeric: tabular-nums; }
         a.spt-stand { text-decoration: none; color: inherit; cursor: pointer; }
-        a.spt-stand:hover .race { color: var(--primary, #E87C3E); }
+        /* light-orange hover, same shade as the search suggestions (Kerry) */
+        a.spt-stand:hover { background: #FDF0E6; }
+        a.spt-stand:hover .race { color: var(--primary-hover, #D06B2E); }
         .spt-go { font: 700 20px/1 'Helvetica Neue', Arial, sans-serif; color: var(--primary, #E87C3E); margin-left: 8px; align-self: center; }
         .spt-drama { font: 600 11.5px/1.35 'Helvetica Neue', Arial, sans-serif; margin-top: 3px; }
         .spt-drama.leader, .spt-drama.in_money { color: #1B7F4B; }
@@ -125,7 +127,8 @@
         .spt-stand .rk .r { font: 700 20px/1 'Bitter', serif; font-variant-numeric: tabular-nums; }
         .spt-stand .rk .f { font: 600 9px/1 'Helvetica Neue', Arial, sans-serif; color: #9CA3AF; margin-top: 2px; }
         .spt-stand .mid { flex: 1; min-width: 0; }
-        .spt-stand .race { font: 700 10px/1.2 'Bitter', serif; letter-spacing: 0.4px; color: #4B5563; text-transform: uppercase; }
+        /* Season Contest names: larger + TGF orange (Kerry 2026-07-13) */
+        .spt-stand .race { font: 700 12.5px/1.2 'Bitter', serif; letter-spacing: 0.4px; color: var(--primary, #E87C3E); text-transform: uppercase; }
         .spt-stand .meta { font: 500 12.5px/1.35 'Helvetica Neue', Arial, sans-serif; color: #1B1B1B; margin-top: 3px; }
         .spt-pill { flex: none; font: 700 8.5px/1 'Bitter', serif; letter-spacing: 0.4px;
                     padding: 5px 8px; border-radius: 9999px; text-transform: uppercase; }

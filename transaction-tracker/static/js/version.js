@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.87.2";
+window.TGF_VERSION = "2.87.3";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.87.3",
+    date: "2026-07-13",
+    changes: [
+      "WHERE-{NAME}-STANDS polish (Kerry): rows get the app's light-orange hover (same shade as the search suggestions), and the Season Contest names in each row are larger and TGF orange -- the rows now clearly read as links to the Leaderboard.",
+      "Chooser sheet button relabeled 'THIS WEEK'S EVENTS' -> 'EVENTS' (Kerry: no good way to manage next-week's events yet -- the shop section link shows whatever events are on sale, so the plain label is honest). Destination unchanged.",
+    ],
+  },
   {
     version: "2.87.2",
     date: "2026-07-13",
