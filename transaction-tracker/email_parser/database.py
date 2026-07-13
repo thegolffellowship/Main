@@ -13317,7 +13317,8 @@ def update_customer_info(customer_name: str, fields: dict,
                "date_of_birth", "shirt_size", "customer",
                "first_name", "last_name", "middle_name", "suffix",
                "address", "address2", "city", "state", "zip",
-               "archived", "venmo_username", "current_player_status"}
+               "archived", "venmo_username", "current_player_status",
+               "payment_method", "payment_handle"}
     safe = {k: v for k, v in fields.items() if k in allowed}
     if not safe:
         return 0
@@ -13327,6 +13328,19 @@ def update_customer_info(customer_name: str, fields: dict,
     if venmo_username is not None:
         # Normalize: strip leading @ if provided
         venmo_username = venmo_username.lstrip("@").strip()
+
+    # payment_method / payment_handle are customer-level too (paypal/cashapp/
+    # zelle handle lives in payment_handle; venmo handle stays in
+    # venmo_username). Extract them so they don't hit the items UPDATE.
+    payment_method = safe.pop("payment_method", None)
+    if payment_method is not None:
+        payment_method = (payment_method or "").strip().lower()
+        allowed_pm = {"venmo", "paypal", "cashapp", "zelle", "cash", "check", ""}
+        if payment_method and payment_method not in allowed_pm:
+            raise ValueError(f"Invalid payment_method: {payment_method}")
+    payment_handle = safe.pop("payment_handle", None)
+    if payment_handle is not None:
+        payment_handle = (payment_handle or "").strip()
 
     # current_player_status is stored on the customers table, not items — extract it
     current_player_status = safe.pop("current_player_status", None)
@@ -13510,6 +13524,20 @@ def update_customer_info(customer_name: str, fields: dict,
             conn.execute(
                 "UPDATE customers SET venmo_username = ? WHERE customer_id = ?",
                 (venmo_username or None, cid),
+            )
+            rowcount = max(rowcount, 1)
+
+        # Update payment_method / payment_handle on the customers table
+        if payment_method is not None and cid:
+            conn.execute(
+                "UPDATE customers SET payment_method = ? WHERE customer_id = ?",
+                (payment_method or None, cid),
+            )
+            rowcount = max(rowcount, 1)
+        if payment_handle is not None and cid:
+            conn.execute(
+                "UPDATE customers SET payment_handle = ? WHERE customer_id = ?",
+                (payment_handle or None, cid),
             )
             rowcount = max(rowcount, 1)
 

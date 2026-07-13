@@ -3752,7 +3752,8 @@ def api_update_customer():
                "date_of_birth", "shirt_size", "customer",
                "first_name", "last_name", "middle_name", "suffix",
                "address", "address2", "city", "state", "zip",
-               "archived", "venmo_username", "current_player_status"}
+               "archived", "venmo_username", "current_player_status",
+               "payment_method", "payment_handle"}
     safe = {k: v for k, v in fields.items() if k in allowed}
     if not safe:
         return jsonify({"error": "No valid fields to update"}), 400
