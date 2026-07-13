@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.81.1";
+window.TGF_VERSION = "2.82.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.82.0",
+    date: "2026-07-13",
+    changes: [
+      "PULL-TO-REFRESH ON THE INSTALLED APP (Kerry): when the app is added to your home screen (iOS), you can now pull down at the top of any page to reload it -- a small orange spinner follows your finger and flips to a spin as it refreshes past the threshold. Mobile web browsers already had this natively; the installed iOS app did not (it just rubber-banded), so this fills that gap. Built into the shared nav shell so it works on every page, member and admin. Gated to the iOS installed app so it never double-fires with a browser's or Android's built-in pull-to-refresh, and it ignores pulls that start inside a drawer, sheet, or dialog.",
+    ],
+  },
   {
     version: "2.81.1",
     date: "2026-07-13",

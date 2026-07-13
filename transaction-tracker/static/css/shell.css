@@ -244,3 +244,27 @@ header.shell-nav {
 @media (min-width: 769px) {
     .shell-scrim, .shell-drawer, .shell-sheet, .shell-sheet-scrim { display: none !important; }
 }
+
+/* ── Pull-to-refresh indicator (iOS installed PWA) ───────────────
+   A small floating spinner that follows the pull-down gesture; JS
+   (shell.js) sets .visible/.ready/.refreshing + the translateY. */
+.tgf-ptr {
+    position: fixed; top: -44px; left: 50%;
+    transform: translateX(-50%);
+    width: 34px; height: 34px; border-radius: 50%;
+    background: #fff; box-shadow: 0 2px 10px rgba(0, 0, 0, 0.18);
+    display: flex; align-items: center; justify-content: center;
+    z-index: 2000; opacity: 0; pointer-events: none;
+    transition: opacity 0.15s;
+}
+.tgf-ptr.visible { opacity: 1; }
+.tgf-ptr-spin {
+    width: 18px; height: 18px; border-radius: 50%;
+    border: 2.5px solid #E5E7EB; border-top-color: #E87C3E;
+    transition: transform 0.15s ease;
+}
+.tgf-ptr.ready .tgf-ptr-spin { transform: rotate(180deg); }
+.tgf-ptr.refreshing .tgf-ptr-spin {
+    animation: tgf-ptr-spin 0.7s linear infinite;
+}
+@keyframes tgf-ptr-spin { to { transform: rotate(360deg); } }
