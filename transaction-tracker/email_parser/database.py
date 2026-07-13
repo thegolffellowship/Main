@@ -2176,12 +2176,17 @@ def _migrate_create_status_tables(conn: sqlite3.Connection) -> int:
         ("guest",       "GUEST"),
         ("member",      "MEMBER"),
         ("member_plus", "MEMBER+"),
-        ("former",      "FORMER"),
+        ("former",      "ALUMNI"),
     ]:
         conn.execute(
             "INSERT OR IGNORE INTO statuses (status_name, display_name) VALUES (?, ?)",
             (sname, dname),
         )
+    # Kerry 2026-07-13: "ALUMNI" is the Tracker-side display term for lapsed
+    # members everywhere (idempotent rename of the pre-existing live row)
+    conn.execute(
+        "UPDATE statuses SET display_name = 'ALUMNI' "
+        "WHERE status_name = 'former' AND display_name = 'FORMER'")
 
     # Backfill customer_statuses from current_player_status for customers
     # that don't yet have any customer_statuses row.

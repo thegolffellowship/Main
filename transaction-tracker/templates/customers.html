@@ -507,7 +507,7 @@
     // Derive the display status badge for a customer.
     // Priority order:
     //   1. Org leadership roles (owner/admin/manager) → always MEMBER
-    //   2. Lapsed membership term → FORMER
+    //   2. Lapsed membership term → ALUMNI (Kerry 2026-07-13: "ALUMNI" is the Tracker-side term)
     //   3. status_name from customer_statuses (canonical, set by system/manager)
     //   4. Bootstrap from transaction user_status history (new customers only)
     // Roles (golfer, sponsor, etc.) have NO bearing on member status.
@@ -519,14 +519,14 @@
         const PERMANENT = ['owner', 'admin', 'manager'];
         if (roles.some(r => PERMANENT.includes(r))) return "MEMBER";
 
-        // Lapsed membership term → FORMER (objective fact, overrides stored status)
-        if (isMembershipLapsed(membershipTerm)) return "FORMER";
+        // Lapsed membership term → ALUMNI (objective fact, overrides stored status)
+        if (isMembershipLapsed(membershipTerm)) return "ALUMNI";
 
         // Canonical status from customer_statuses table
         if (statusName) {
             if (statusName === 'member')      return "MEMBER";
             if (statusName === 'member_plus') return "MEMBER+";
-            if (statusName === 'former')      return "FORMER";
+            if (statusName === 'former')      return "ALUMNI";
             if (statusName === 'guest')       return "GUEST";
             if (statusName === '1st_timer')   return "1st TIMER";
         }
@@ -534,7 +534,7 @@
         // Legacy fallback: current_player_status column (pre-migration or no status row yet)
         if (currentPlayerStatus === 'active_member')  return "MEMBER";
         if (currentPlayerStatus === 'member_plus')    return "MEMBER+";
-        if (currentPlayerStatus === 'expired_member' || currentPlayerStatus === 'inactive') return "FORMER";
+        if (currentPlayerStatus === 'expired_member' || currentPlayerStatus === 'inactive') return "ALUMNI";
         if (currentPlayerStatus === 'active_guest')   return "GUEST";
         if (currentPlayerStatus === 'first_timer')    return items.length > 1 ? "GUEST" : "1st TIMER";
 
@@ -598,7 +598,7 @@
         if (s === "MEMBER") return "cust-row-member";
         if (s === "MEMBER+") return "cust-row-member-plus";
         if (s === "1ST TIMER") return "cust-row-first-timer";
-        if (s === "FORMER" || s === "INACTIVE") return "cust-row-former";
+        if (s === "ALUMNI" || s === "FORMER" || s === "INACTIVE") return "cust-row-former";
         return "cust-row-guest";
     }
 
@@ -1597,7 +1597,7 @@
                 <option value="active_guest" ${(customer.current_player_status === 'active_guest') ? 'selected' : ''}>GUEST</option>
                 <option value="active_member" ${(customer.current_player_status === 'active_member') ? 'selected' : ''}>MEMBER</option>
                 <option value="member_plus" ${(customer.current_player_status === 'member_plus') ? 'selected' : ''}>MEMBER+</option>
-                <option value="inactive" ${(['inactive','expired_member'].includes(customer.current_player_status)) ? 'selected' : ''}>FORMER</option>
+                <option value="inactive" ${(['inactive','expired_member'].includes(customer.current_player_status)) ? 'selected' : ''}>ALUMNI</option>
             </select>
         </div>`;
 
@@ -4006,7 +4006,7 @@
                     }
                     // Recompute status now that roles + player_status are known.
                     // c.membershipTerm is overlaid earlier in init() — if it's
-                    // lapsed, deriveStatus returns FORMER regardless of items/roles.
+                    // lapsed, deriveStatus returns ALUMNI regardless of items/roles.
                     c.status = deriveStatus(c.items, c.roles, c.current_player_status, c.membershipTerm, c.status_name);
                 });
             } catch (e) { /* roles data optional */ }

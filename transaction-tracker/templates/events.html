@@ -3947,7 +3947,7 @@
         // Canonical profile checks (when we have a linked profile)
         if (hasProfile) {
             if (selected === "MEMBER" && isFormer) {
-                return {reason: "Registered as MEMBER but customer is a Former Member — membership renewal needed"};
+                return {reason: "Registered as MEMBER but customer is an Alumni — membership renewal needed"};
             }
             if (selected === "MEMBER" && !isMember && !isFormer) {
                 return {reason: "Registered as MEMBER but customer profile is not a member"};
