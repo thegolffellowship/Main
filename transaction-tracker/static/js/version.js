@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.87.1";
+window.TGF_VERSION = "2.87.2";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.87.2",
+    date: "2026-07-13",
+    changes: [
+      "SPOTLIGHT CONVERSION REVISED (Kerry, supersedes the #156 per-row BUY IN): the BUY IN chips are REMOVED from the Where-{Name}-Stands rows -- a commerce chip on every row competed with the row's leaderboard deep-link and invited mis-taps. Instead: (1) the ENTER EVENTS & CONTESTS bar now sits at the top of the member Spotlight (same banner as the Leaderboard page, opens the two-button chooser); (2) the row chevrons are TGF orange so the rows read as tappable; (3) the section header gains an italic orange '(Click for Standings)' hint. Rows are pure navigation again, with one conversion CTA at the top of the page.",
+    ],
+  },
   {
     version: "2.87.1",
     date: "2026-07-13",
