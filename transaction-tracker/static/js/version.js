@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.81.0";
+window.TGF_VERSION = "2.81.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.81.1",
+    date: "2026-07-13",
+    changes: [
+      "FASTER PAYOUT CONFIRMATION (Kerry: confirmations 'took way longer than I'd like'). The expense inbox -- which catches the Venmo receipt and flips a payout to PAID -- now sweeps every 2 minutes instead of every 5 (new EXPENSE_CHECK_INTERVAL_MINUTES, default 2). This is cost-neutral: the dedup table bills each email to the AI exactly once no matter how often we poll, so a tighter cadence only adds free Microsoft Graph calls. This mainly helps payments made OUTSIDE the app -- e.g. paying to someone's partner's Venmo with their name in the memo -- where there's no in-app Pay tap to trigger the existing 75s/180s fast sweep. Tapping Pay on the per-event PAYOUTS panel now also triggers that fast sweep (previously only the main PAYOUTS tab did).",
+    ],
+  },
   {
     version: "2.81.0",
     date: "2026-07-13",

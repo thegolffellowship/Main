@@ -185,7 +185,11 @@ No Python or local install needed — Claude Desktop connects directly to Railwa
   bounds the Graph query — Anthropic spend is unchanged. The **expense
   classifier** (`check_expense_inbox`) now follows the same rule via the
   `expense_seen_emails` table: every email it touches is recorded once,
-  so frequency is decoupled from cost (kept at 5 min, 24/7). Its window
+  so frequency is decoupled from cost. Because it's cost-neutral it runs
+  MORE often than the order inbox — **every 2 min** by default
+  (`EXPENSE_CHECK_INTERVAL_MINUTES`, v2.81.1) so Venmo payout receipts flip
+  the payout to PAID within a couple minutes even when the admin pays
+  outside the app (no in-app Pay tap → no fast 75s/180s sweep). Its window
   is 48h steady-state (`EXPENSE_LOOKBACK_HOURS`) with a one-time
   `EXPENSE_BACKFILL_DAYS` cold-start backfill. See
   `docs/claude/expense-workflow.md` → **Dedup & Cost Control**. Boot logs
