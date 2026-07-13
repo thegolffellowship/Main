@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.86.6";
+window.TGF_VERSION = "2.86.7";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.86.7",
+    date: "2026-07-13",
+    changes: [
+      "GG-drift aligned to Kerry's ruling after he worked the first checklist (all 9 confirmed accurate -- none had renewed): the GG roster tag going forward is ALUMNI, applied as memberships expire; legacy FORMER rows remain until their time. The drift report's suggested action now reads 'set GG roster to ALUMNI', and an Alumni/Former tag is recognized even when GG renders it alongside the chapter name (checked before the TGF-membership match so a lapsed player can never read as a member).",
+    ],
+  },
   {
     version: "2.86.6",
     date: "2026-07-13",
