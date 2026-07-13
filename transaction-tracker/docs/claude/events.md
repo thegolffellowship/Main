@@ -78,6 +78,17 @@ The `user_status` field is cleaned at display time via `_cleanStatus()`:
 - Mobile collapsed view: amber badge showing "9h" or "18h" (first of three badges: Holes, Games, Tees)
 - 9|18 toggle filter in Events: filters registrants by hole count
 - Can be backfilled via `/api/audit/re-extract-fields`
+- **Authoritative source is the EVENT, not the order (v2.84.2).** The AI
+  parser sometimes mis-reads the hole count — most often it grabs the
+  SEQUENCE number out of the event code ("a9.18 Forest Creek" = the 18th
+  Austin 9-hole event, NOT 18 holes) and stores `holes='18'` on a 9-hole
+  event. `heal_item_holes_from_event()` (boot heal + bridge
+  `scoring-heal-holes`) forces `items.holes` to `_event_holes_type(name,
+  format)` for every NON-combo event; combo events keep their real
+  per-player 9/18 choice. **Display-only** — side-game pot sizing derives
+  its matrix from the event via `_event_holes_type`/`extractHolesType`,
+  never from `items.holes`, so a bad value never affected money, only the
+  badge, the 9|18 filter, and the hole-aware HCP column.
 
 ## Event formats — `events.format`
 The Edit/Add Event modal exposes four radios: `9 Holes`, `18 Holes`, `9/18 Combo`, and `27 Holes`.

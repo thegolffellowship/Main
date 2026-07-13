@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.84.1";
+window.TGF_VERSION = "2.84.2";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.84.2",
+    date: "2026-07-14",
+    changes: [
+      "FIX: 9-hole event registrations wrongly showing an 18H badge (Kerry, a9.18 Forest Creek). The order parser sometimes grabs the SEQUENCE number out of an event code -- 'a9.18' is the 18th 9-hole Austin event, not an 18-hole event -- and stored holes='18' on players in a 9-hole-only event (inconsistently: some parsed as blank). IMPORTANT: this never affected money -- side-game pot sizes are chosen from the event's hole count (a9.x = 9), not the per-player holes field -- only the roster badge, the 9|18 filter counts, and the hole-aware handicap column. New boot heal (heal_item_holes_from_event) forces items.holes to the event's hole count for every single-format event (combo events keep their real per-player 9/18 choice), so the badges are correct and a parser mis-read can't show the wrong hole count. Runs on deploy and on demand.",
+    ],
+  },
   {
     version: "2.84.1",
     date: "2026-07-14",

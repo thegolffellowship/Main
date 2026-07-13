@@ -3554,6 +3554,17 @@ def init_db(db_path: str | Path | None = None) -> None:
         except Exception as e:
             logger.warning("Stich attribution repair failed: %s", e)
 
+        # Always-run heal: align items.holes to the event's hole count on
+        # single-format events (parser sometimes reads the '.18' sequence in
+        # a code like 'a9.18' as 18 holes — Kerry 2026-07-14). Display-only;
+        # side-game pots derive holes from the event, not items.holes.
+        try:
+            _hh = heal_item_holes_from_event(conn=conn)
+            if _hh.get("fixed"):
+                logger.info("Holes heal: corrected %d item(s) to match event format", _hh["fixed"])
+        except Exception as e:
+            logger.warning("Holes heal failed: %s", e)
+
         # Always-run repair: merge duplicate Kyle Franz profile 316 into 315
         try:
             _repair_franz_attribution(conn, db_path)
@@ -8360,6 +8371,56 @@ def _event_holes_type(item_name: str, fmt: str) -> int:
     if "18" in f or "27" in f:
         return 18
     return 9
+
+
+def heal_item_holes_from_event(db_path=None, conn=None) -> dict:
+    """Force items.holes to the EVENT's hole count on single-format events.
+
+    The AI order parser occasionally mis-reads the hole count — most often
+    it grabs the SEQUENCE number out of an event code like "a9.18 Forest
+    Creek" (a 9-hole event, #18 of the season) and stores holes='18'
+    (Kerry 2026-07-14). The event code prefix is authoritative: "a9.x" = 9
+    holes, "s18.x" = 18. This aligns items.holes to `_event_holes_type`
+    for every NON-combo event (combo events keep their real per-player 9/18
+    choice). Money is never affected — side-game pots derive their matrix
+    from the event via _event_holes_type, not from items.holes; this only
+    corrects the roster hole badge, the 9|18 filter, and the hole-aware HCP
+    column. Idempotent; runs at boot and on demand.
+    """
+    def _run(c):
+        fixed = 0
+        examples: list = []
+        rows = c.execute("""
+            SELECT i.id, i.item_name, i.holes, e.format AS fmt
+            FROM items i
+            JOIN events e
+              ON (e.id = i.event_id
+                  OR e.item_name = i.item_name COLLATE NOCASE)
+            WHERE COALESCE(i.transaction_status, 'active') = 'active'
+              AND COALESCE(LOWER(e.format), '') NOT LIKE '%combo%'
+        """).fetchall()
+        seen = set()
+        for r in rows:
+            if r["id"] in seen:
+                continue
+            seen.add(r["id"])
+            canon = str(_event_holes_type(r["item_name"], r["fmt"]))
+            cur = (r["holes"] or "").strip()
+            if cur == canon:
+                continue
+            c.execute("UPDATE items SET holes = ? WHERE id = ?", (canon, r["id"]))
+            fixed += 1
+            if len(examples) < 25:
+                examples.append({"id": r["id"], "event": r["item_name"],
+                                 "from": cur or None, "to": canon})
+        return {"fixed": fixed, "examples": examples}
+
+    if conn is not None:
+        return _run(conn)  # caller owns the transaction/commit
+    with _connect(db_path) as c:
+        res = _run(c)
+        c.commit()
+        return res
 
 
 def _event_game_buyers(conn, event_name: str, kind: str = "NET") -> dict:

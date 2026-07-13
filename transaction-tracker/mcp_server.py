@@ -1421,6 +1421,10 @@ def _scoring_dispatch(url: str, extract: str):
         if cmd == "scoring-payouts-preview":
             # assemble without writing — inspect what would be recorded
             return json.dumps(db.assemble_event_game_payouts(arg), indent=2)
+        if cmd == "scoring-heal-holes":
+            # Align items.holes to the event's hole count on single-format
+            # events (fixes the 'a9.18' -> holes=18 parser mis-read).
+            return json.dumps(db.heal_item_holes_from_event(), indent=2, default=str)
         if cmd == "scoring-teamnet-repair":
             # Partial repair of a Team Net blind-draw over-distribution
             # (v2.79.3, Kerry-scoped): "<event>" dry-runs the plan,
