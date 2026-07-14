@@ -55,6 +55,32 @@ expand — an O(N²) loop per player that was the dominant source of slow page
 expands. The server version mirrors the same WHS algorithm and lookback cutoff,
 so values are identical and `templates/handicaps.html` just reads the field.
 
+## Expanded rounds view — GROSS + ADJ columns and scorecard expansion (v2.90.0)
+
+Every player's rounds table shows **GROSS** (raw score, joined from the
+bridged scorecard via `handicap_rounds.scoring_round_id` — legacy
+un-bridged rounds show "—") next to **ADJ** (the WHS adjusted score the
+differential is computed from). A capped round renders ADJ in TGF
+orange with a strokes-removed tooltip. Bridged rounds carry an orange
+chevron on the date that expands the full hole-by-hole scorecard
+inline (`toggleHcpScorecard` → `/api/scoring/scorecard/<id>` →
+`tgfRenderScorecard`); both scorecard renderers (scorecard-render.js
+and points-render.js — keep in sync) now include an **ADJ SCORE row**
+that appears only when the WHS cap lowered at least one hole, capped
+holes in orange. Applies to admin/manager AND the pinless member view.
+
+## Logged future work (Kerry 2026-07-14, tasks #16–#18)
+- **Strokes-received projection** (untether from GG dots): our index →
+  course handicap (index × slope/113 + (CR − par)) → playing handicap →
+  allocation by stroke index, with TGF rules as versioned config
+  (**max 2 pops per hole**; game variants like **Team Net: no pops on
+  par 3s** live in the game-engine layer). Validate via parity sweep of
+  projected dots vs GG's stored dots across all bridged rounds.
+- **Pseudo-GHIN 18-hole index** for comparison to the TGF 9-hole index
+  (9→18 differential method needs a spec ruling: post-2024 WHS
+  expected-score vs legacy consecutive-nines pairing).
+- **Automated Stableford cross-check** vs GG's awarded points lines.
+
 ## Expanded rounds view — cutoff lines
 Two visual separator rows appear in the expanded rounds table:
 - **Red line** — 12-month lookback boundary; rounds below are excluded from the pool

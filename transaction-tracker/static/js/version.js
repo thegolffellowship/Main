@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.89.1";
+window.TGF_VERSION = "2.90.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.90.0",
+    date: "2026-07-14",
+    changes: [
+      "Handicap records now show BOTH scores (Kerry): a GROSS column (raw, from the bridged scorecard) sits next to ADJ (the WHS net-double-bogey adjusted score the handicap is computed from) in every expanded player's rounds table -- admin and member views. When a cap bit, the ADJ value renders TGF orange with a tooltip saying how many strokes the cap removed. Legacy rounds with no scorecard bridge show a dash for gross.",
+      "Handicap records expand to the actual scorecard (Kerry): rounds bridged to an imported scorecard get an orange chevron on the date -- tap to unfold the full hole-by-hole card inline (same renderer as the member portal), tap again to close.",
+      "Scorecard grids grew an ADJ SCORE row (both renderers: scorecard-render.js + points-render.js, kept in sync): appears ONLY when the WHS cap lowered at least one hole, with the capped holes in orange -- you can see exactly where and why the handicap score diverges from the gross.",
+    ],
+  },
   {
     version: "2.89.1",
     date: "2026-07-14",

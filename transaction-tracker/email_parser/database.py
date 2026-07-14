@@ -20472,15 +20472,25 @@ def get_handicap_rounds(player_name: str | None = None,
     only needs the raw rows (e.g. build_handicap_card_data).
     """
     with _connect(db_path) as conn:
+        # RAW gross rides along from the bridged scorecard (v2.90.0, Kerry:
+        # "show the raw score and adjusted score columns"). Legacy rounds
+        # with no scorecard bridge return gross=NULL and render as "—".
+        _ensure_scoring_tables(conn)
         if player_name:
             round_rows = conn.execute(
-                "SELECT * FROM handicap_rounds WHERE player_name = ? "
-                "ORDER BY round_date DESC, id DESC",
+                "SELECT hr.*, CAST(sr.gross AS INTEGER) AS gross "
+                "FROM handicap_rounds hr "
+                "LEFT JOIN scoring_rounds sr ON sr.id = hr.scoring_round_id "
+                "WHERE hr.player_name = ? "
+                "ORDER BY hr.round_date DESC, hr.id DESC",
                 (player_name,),
             ).fetchall()
         else:
             round_rows = conn.execute(
-                "SELECT * FROM handicap_rounds ORDER BY round_date DESC, id DESC"
+                "SELECT hr.*, CAST(sr.gross AS INTEGER) AS gross "
+                "FROM handicap_rounds hr "
+                "LEFT JOIN scoring_rounds sr ON sr.id = hr.scoring_round_id "
+                "ORDER BY hr.round_date DESC, hr.id DESC"
             ).fetchall()
         rounds = [dict(r) for r in round_rows]
         # Attach the admin-editable short name from the course DB (v2.57.0):
