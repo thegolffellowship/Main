@@ -216,6 +216,16 @@ COUNTRY MATCHES** (own portal; ingested from the OneDrive Starter
 Sheet PDF, source `'tee_sheet'`). The team-board route (`team|` etc.)
 remains as the fallback/cross-check.
 
+### Generator objective: NEW PAIRINGS FIRST (v2.97.0, Kerry-ratified)
+
+Rule 3 verbatim is MAXIMIZE NEW PAIRINGS — a once-played pair and a
+thrice-played pair are equally "not new". `_pair_cost` therefore makes
+any repeat cost 1000 + count: the optimizer minimizes the NUMBER of
+repeat-pairs first and uses play counts only to break ties (prefer
+re-pairing 1s over 3s when repeats are forced). The earlier
+summed-count objective could trade an extra repeat-pair for a lower
+total, which contradicts rule 3.
+
 ### Generator: history-optimal (v2.95.3–v2.95.7, live-verified)
 
 Kerry's live s9.18 report ("pairing me with players I've played with")
