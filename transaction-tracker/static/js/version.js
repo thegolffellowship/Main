@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.96.0";
+window.TGF_VERSION = "2.96.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.96.1",
+    date: "2026-07-14",
+    changes: [
+      "18-hole tee-sheet layouts guarded: their alphabetical By-Individual table places the 'Other Players' cell (names joined by +) inside the time-cell window, so the first SA walk ingested per-player rows as phantom groups with '+'-suffixed names on the five 18-hole rounds. The names cell must now be +-free and only pure-digit hole cells may sit between the time and the players; contaminated events re-applied clean.",
+    ],
+  },
   {
     version: "2.96.0",
     date: "2026-07-14",

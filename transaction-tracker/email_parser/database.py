@@ -34548,13 +34548,22 @@ def _parse_teesheet_groups(html_text: str) -> dict:
                 if not _time_re.match(cells[i]):
                     i += 1
                     continue
+                # Names live right after the time (optionally one pure-digit
+                # hole cell between). Cells with ' + ' are the alphabetical
+                # By-Individual table's 'Other Players' column — never a
+                # group (18-hole layouts put it inside this window).
                 names: list = []
                 j = i + 1
                 while j < len(cells) and j <= i + 2:
-                    names = _split_teesheet_names(cells[j])
-                    if len(names) >= 2:
+                    c = cells[j]
+                    if " + " in c:
                         break
-                    names = []
+                    nm = _split_teesheet_names(c)
+                    if len(nm) >= 2:
+                        names = nm
+                        break
+                    if not c.isdigit():
+                        break
                     j += 1
                 if names:
                     key = (cells[i], tuple(names))
