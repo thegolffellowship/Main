@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.96.2";
+window.TGF_VERSION = "2.97.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.97.0",
+    date: "2026-07-14",
+    changes: [
+      "Generate Pairings optimizes for NEW PAIRINGS first (Kerry's rule 3, ratified in-session): a once-played pair and a thrice-played pair are equally 'not new', so the optimizer now minimizes the NUMBER of repeat-pairs as the primary term and uses play counts only as the tiebreaker (prefer re-pairing the 1s over the 3s when repeats are forced). Previously it minimized the summed play counts, which could trade an extra repeat-pair for a lower total.",
+    ],
+  },
   {
     version: "2.96.2",
     date: "2026-07-14",

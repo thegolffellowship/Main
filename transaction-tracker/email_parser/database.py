@@ -35153,12 +35153,23 @@ def _pair_count(pair_counts: dict, a: str, b: str) -> int:
     return pair_counts.get(key, 0)
 
 
+def _pair_cost(pair_counts: dict, a: str, b: str) -> int:
+    """Optimizer cost for putting two players together. Kerry's rule 3 is
+    MAXIMIZE NEW PAIRINGS — a once-played pair and a thrice-played pair
+    are equally 'not new', so ANY repeat dominates repeat depth: primary
+    term = is-repeat (weight 1000), tiebreak = play count (prefer
+    re-pairing the 1s over the 3s when repeats are forced)."""
+    c = _pair_count(pair_counts, a, b)
+    return 0 if c == 0 else 1000 + c
+
+
 def _group_score(players: list[str], pair_counts: dict) -> int:
-    """Total pairings count for all combinations within a group."""
+    """Optimizer cost of a group: new-pair objective via _pair_cost —
+    the number of repeat-pairs dominates; play counts break ties."""
     total = 0
     for i in range(len(players)):
         for j in range(i + 1, len(players)):
-            total += _pair_count(pair_counts, players[i], players[j])
+            total += _pair_cost(pair_counts, players[i], players[j])
     return total
 
 
@@ -35565,7 +35576,7 @@ def _random_groups(
             best_score = float("inf")
             for idx, unit in enumerate(fittable):
                 score = sum(
-                    _pair_count(pair_counts, g, u)
+                    _pair_cost(pair_counts, g, u)
                     for g in group
                     for u in unit
                 )
