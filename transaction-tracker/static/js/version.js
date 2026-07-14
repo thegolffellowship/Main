@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.95.3";
+window.TGF_VERSION = "2.95.4";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.95.4",
+    date: "2026-07-14",
+    changes: [
+      "Manual pairing groups accept a '!Name' literal escape that skips customer resolution: the fuzzy identity cascade mis-attached a Hill Country Matches GUEST ('Cleary, Paul', not a customer) to a member -- literal seats store the normalized name with NO customer id, so guests can never inherit a member's history.",
+    ],
+  },
   {
     version: "2.95.3",
     date: "2026-07-14",
