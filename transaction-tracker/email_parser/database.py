@@ -10814,6 +10814,94 @@ def derive_handicap_rounds_from_scoring(event_query: str, dry_run: bool = True,
                         "(Kerry-ratified 2026-07-14)"}
 
 
+def repair_handicap_adjusted_scores(cells: list[dict], dry_run: bool = True,
+                                    db_path: str | Path = DB_PATH) -> dict:
+    """Repair 2026 handicap_rounds whose adjusted_score was imported as
+    the RAW gross (the Spreadsheet Composer files carry no adjusted
+    column), using GG's true Adjusted Gross from Kerry's season-scores
+    workbooks (Kerry: 'run it', 2026-07-14).
+
+    Each cell: {name (GG 'LAST, First'), date (YYYY-MM-DD), gross,
+    adjusted}. A row is repaired ONLY when every guard holds:
+      * date in 2026, adjusted < gross (capping only lowers)
+      * exactly ONE handicap_rounds row matches the normalized player
+        name (case-insensitive) + date — ambiguity skips
+      * the stored adjusted_score equals the cell's GROSS (proof the
+        row came from an uncapped import); rows already storing the
+        true adjusted skip as 'already correct'; anything else skips
+        for review — never guess.
+    Repair sets adjusted_score to GG's value and recomputes the
+    differential from the row's OWN stored slope/rating (the tee-rating
+    question is deliberately untouched — this fixes capping only).
+    """
+    plan: list = []
+    skipped: list = []
+    with _connect(db_path) as conn:
+        for cell in cells:
+            name = _normalize_player_name(cell.get("name") or "")
+            date = (cell.get("date") or "").strip()
+            try:
+                gross = int(cell["gross"]); adjusted = int(cell["adjusted"])
+            except (KeyError, TypeError, ValueError):
+                skipped.append({"cell": cell, "reason": "malformed cell"})
+                continue
+            if not date.startswith("2026-") or adjusted >= gross or not name:
+                skipped.append({"cell": cell, "reason": "guard: date/direction"})
+                continue
+            rows = conn.execute(
+                """SELECT id, player_name, adjusted_score, rating, slope,
+                          differential
+                   FROM handicap_rounds
+                   WHERE LOWER(player_name) = LOWER(?) AND round_date = ?""",
+                (name, date)).fetchall()
+            if not rows:
+                skipped.append({"name": name, "date": date,
+                                "reason": "no matching handicap round"})
+                continue
+            if len(rows) > 1:
+                skipped.append({"name": name, "date": date,
+                                "reason": f"ambiguous ({len(rows)} rows)"})
+                continue
+            row = rows[0]
+            if row["adjusted_score"] == adjusted:
+                skipped.append({"name": name, "date": date,
+                                "reason": "already correct"})
+                continue
+            if row["adjusted_score"] != gross:
+                skipped.append({"name": name, "date": date,
+                                "stored": row["adjusted_score"],
+                                "file_gross": gross, "file_adjusted": adjusted,
+                                "reason": "stored value matches neither — review"})
+                continue
+            if not row["slope"]:
+                skipped.append({"name": name, "date": date,
+                                "reason": "row has no slope"})
+                continue
+            new_diff = round((adjusted - row["rating"]) * 113.0 / row["slope"], 1)
+            plan.append({"handicap_round_id": row["id"],
+                         "player_name": row["player_name"], "round_date": date,
+                         "adjusted": f'{row["adjusted_score"]} -> {adjusted}',
+                         "differential": f'{row["differential"]} -> {new_diff}',
+                         "_adj": adjusted, "_diff": new_diff})
+        if not dry_run:
+            for p in plan:
+                conn.execute(
+                    "UPDATE handicap_rounds SET adjusted_score = ?, "
+                    "differential = ? WHERE id = ?",
+                    (p["_adj"], p["_diff"], p["handicap_round_id"]))
+            conn.commit()
+            logger.info("Repaired %d handicap rounds to GG true adjusted "
+                        "gross (Composer raw-score import fix)", len(plan))
+        for p in plan:
+            p.pop("_adj"); p.pop("_diff")
+    from collections import Counter
+    return {"dry_run": dry_run,
+            "repaired" if not dry_run else "would_repair": plan,
+            "skipped_reasons": dict(Counter(s["reason"] for s in skipped)),
+            "skipped": skipped,
+            "summary": {"planned": len(plan), "skipped": len(skipped)}}
+
+
 def _cleanup_empty_scoring_rounds(conn: sqlite3.Connection) -> None:
     """Delete zero-hole scoring rounds (tee-sheet no-show/WD artifacts the
     importer stored before v2.26.1), reset their handicap bridges, and

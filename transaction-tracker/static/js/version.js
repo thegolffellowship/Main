@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.89.0";
+window.TGF_VERSION = "2.89.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.89.1",
+    date: "2026-07-14",
+    changes: [
+      "First export-free handicap update is LIVE (Kerry: 'apply'): s9.17 Silverhorn (27 rounds) + a9.17 Falconhead (15) written to the handicap record straight from our scorecards -- WHS net-double-bogey adjusted gross, verified 42/42 byte-identical to GG's own Adjusted Gross Score sheets in Kerry's season-scores workbooks before writing.",
+      "scoring-hcp-repair bridge command (Kerry: 'run it'): repairs 2026 handicap rounds whose adjusted_score was imported as RAW gross (the Spreadsheet Composer export has no adjusted column) using GG's true Adjusted Gross from the season workbooks. Guarded per row: 2026 only, capping-only direction, unique name+date match, and the stored value must equal the file's gross (proof of an uncapped import) -- anything else skips for review. Differential recomputed from the row's own stored slope/rating; the tee-rating question is deliberately untouched.",
+    ],
+  },
   {
     version: "2.89.0",
     date: "2026-07-14",

@@ -1430,6 +1430,18 @@ def _scoring_dispatch(url: str, extract: str):
             # export-free path shown before it's trusted — writes nothing.
             return json.dumps(db.get_scoring_handicap_preview(arg),
                               indent=2, default=str)
+        if cmd == "scoring-hcp-repair":
+            # Repair Composer-import handicap rounds (adjusted stored as raw
+            # gross) using GG's true Adjusted Gross from the season-scores
+            # workbooks. arg = JSON list of {name,date,gross,adjusted};
+            # append |apply (after the JSON) to write.
+            payload, _, mode = arg.rpartition("|")
+            if mode.strip().lower() == "apply" and payload:
+                cells, dr = json.loads(payload), False
+            else:
+                cells, dr = json.loads(arg), True
+            return json.dumps(db.repair_handicap_adjusted_scores(cells, dry_run=dr),
+                              indent=2, default=str)
         if cmd == "scoring-hcp-import":
             # Self-derive handicap rounds from our scorecards for one event
             # (WHS NDB adjusted gross — Kerry-ratified 2026-07-14).
