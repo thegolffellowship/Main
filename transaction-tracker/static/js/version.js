@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.95.5";
+window.TGF_VERSION = "2.95.6";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.95.6",
+    date: "2026-07-14",
+    changes: [
+      "scoring-pairings:gen|<event_id> -- read-only generator probe: runs Generate Pairings server-side with no seeds and reports each group's repeat-pairs and score, isolating 'generator ignores history' from 'UI passed locked seeds' (Kerry's s9.18 re-run still produced last week's trio).",
+    ],
+  },
   {
     version: "2.95.5",
     date: "2026-07-14",
