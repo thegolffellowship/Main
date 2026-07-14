@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.95.2";
+window.TGF_VERSION = "2.95.3";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.95.3",
+    date: "2026-07-14",
+    changes: [
+      "Generate Pairings actually avoids this season's repeats (Kerry, live s9.18 report: paired with last week's foursome while unplayed roster players sat elsewhere). Two fixes: pair-history lookups are now case/whitespace-insensitive (an exact-string key silently dropped history on any name drift between writers), and the random generator runs best-of-30 restarts keeping the fewest-repeats arrangement (a single greedy pass could trap early picks into repeats even when a zero-repeat arrangement exists).",
+      "Manual tee-sheet groups write path (scoring-pairings:manual|<event_id>|<json>[|apply], source 'tee_sheet'): per Kerry, CART Net weeks still played in real 3/4-somes -- the foursomes for those rounds come from the OneDrive Seasons starter sheets, which are the ruled primary source. scoring-pairings:hist|<event id or name> is a read-only debug view of pairing_history rows + 2026 totals by source.",
+    ],
+  },
   {
     version: "2.95.2",
     date: "2026-07-14",
