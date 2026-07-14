@@ -34709,6 +34709,8 @@ def import_gg_teesheet_round(portal: str, round_id: str, apply: bool = False,
                              a["cid"], b["cid"],
                              1 if frozenset((a["name"], b["name"])) in rode_pairs else 0))
                         n_pairs += 1
+            out["event_pairings_rows"] = _write_event_pairings_from_groups(
+                conn, ev["id"], resolved_groups)
             conn.commit()
             out["applied"] = True
             out["pairs_written"] = n_pairs
@@ -34944,6 +34946,9 @@ def import_gg_teamnet_round(portal: str, round_id: str, apply: bool = False,
                              a["cid"], b["cid"],
                              1 if ia // 2 == ib // 2 else 0))
                         n_pairs += 1
+            out["event_pairings_rows"] = _write_event_pairings_from_groups(
+                conn, ev["id"],
+                [{"slot": None, "players": rs} for rs in resolved])
             conn.commit()
             out["applied"] = True
             out["pairs_written"] = n_pairs
@@ -35026,6 +35031,40 @@ def clear_gg_teamnet_pairings(event_id: int,
         return {"event_id": int(event_id), "rows_deleted": cur.rowcount}
 
 
+def _write_event_pairings_from_groups(conn: sqlite3.Connection,
+                                      event_id: int, groups: list) -> int:
+    """Mirror ingested ACTUAL groups into event_pairings so the EVENTS
+    page PAIRINGS tab shows played pairings on past events (Kerry
+    2026-07-14). groups: [{'slot': str|None, 'players': [seat|None,…]}]
+    where a seat is {'name': …} — None seats (blind fills) keep cart
+    alignment but aren't written. holes inferred from event format /
+    code; combo events' 18-hole groups may label as '9' (cosmetic)."""
+    ev = conn.execute(
+        "SELECT format, item_name FROM events WHERE id = ?",
+        (int(event_id),)).fetchone()
+    fmt = (ev["format"] or "") if ev else ""
+    nm = (ev["item_name"] or "") if ev else ""
+    holes = "18" if ("18" in fmt and "9/18" not in fmt) or \
+        re.match(r"^[a-z]18\b", nm, re.I) or "MATCHES" in nm.upper() else "9"
+    conn.execute("DELETE FROM event_pairings WHERE event_id = ?",
+                 (int(event_id),))
+    n = 0
+    for gi, g in enumerate(groups, start=1):
+        seats = g["players"]
+        slot = g.get("slot") or f"Group {gi}"
+        for idx, p in enumerate(seats[:4]):
+            if not p:
+                continue
+            conn.execute(
+                """INSERT OR REPLACE INTO event_pairings
+                   (event_id, holes, group_num, slot_label, player_name,
+                    cart_pos)
+                   VALUES (?, ?, ?, ?, ?, ?)""",
+                (int(event_id), holes, gi, slot, p["name"], idx + 1))
+            n += 1
+    return n
+
+
 def import_manual_pairing_groups(event_id: int, groups: list,
                                  apply: bool = False,
                                  source: str = "tee_sheet",
@@ -35103,6 +35142,9 @@ def import_manual_pairing_groups(event_id: int, groups: list,
                              a["cid"], b["cid"],
                              1 if ia // 2 == ib // 2 else 0, source))
                         n_pairs += 1
+            out["event_pairings_rows"] = _write_event_pairings_from_groups(
+                conn, ev["id"],
+                [{"slot": None, "players": rs} for rs in resolved])
             conn.commit()
             out["applied"] = True
             out["pairs_written"] = n_pairs
