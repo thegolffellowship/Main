@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.93.1";
+window.TGF_VERSION = "2.93.2";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.93.2",
+    date: "2026-07-14",
+    changes: [
+      "PAIRINGS works on mobile (Kerry): the phone event card's PAIRINGS tab rendered a 'Feature Coming Soon!' stub even though the whole desktop pairings feature (generate/ABCD/locks/swaps/save) was already container-scoped and mobile-aware underneath -- the stub was the only blocker. Phones now get the full panel; the group grid collapses to one column on narrow screens.",
+    ],
+  },
   {
     version: "2.93.1",
     date: "2026-07-14",
