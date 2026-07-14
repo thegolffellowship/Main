@@ -107,6 +107,31 @@ Vetting verdict: NO conflicts with Kerry's 11 rules. Additions:
   engine → tee/cart/match constraint layer → ABCD/Dream Team modes →
   manager override UI → Platform signup flow.
 
+## GG tee-sheet ingest (v2.94.0 — Kerry overnight directive 2026-07-14)
+
+Bridge commands (`scoring-pairings:` on probe_golf_genius):
+`rounds|<sa|austin|page_url>` lists the portal TEE SHEETS widget's
+rounds; `round|<portal>|<round_id>[|apply]` parses/writes one;
+`all|<portal>[|apply]` walks everything (time-budgeted, resumable).
+Discovery: portal menu → TEE SHEETS page → iframe widget (cached).
+Parsing (`_parse_teesheet_groups`) handles fill-down time-cell rows
+and one-row-per-group layouts; unknown layouts return debug_tables
+over the bridge for diagnosis without a redeploy. Players resolve via
+`_resolve_scoring_player`; rows store canonical names + customer ids.
+**Apply REPLACES the event's pairing_history rows** (tee sheet =
+ruled primary source) — same replace semantics as an app-side save,
+so app-save and GG-ingest can't double-count an event.
+
+**Ratified customer_id amendment: implemented ADDITIVELY** —
+pairing_history gains customer_a_id / customer_b_id / rode / source
+('app'|'gg_teesheet'); `save_event_pairings` writes all four (rode by
+cart_pos 1&2 / 3&4). The full name-key retirement still pends the
+archive-events (nullable event_id) design.
+
+`get_pairing_history_counts(year)` — the generator's season-scoped
+repeat-minimizing signal — reads this table unchanged, so ingested
+history immediately drives maximize-new-pairings.
+
 ## Engine notes (design, not yet built)
 
 - Season-coverage objective (rule 3) is the optimizer's primary term;
