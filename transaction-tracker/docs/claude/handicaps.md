@@ -69,6 +69,22 @@ and points-render.js — keep in sync) now include an **ADJ SCORE row**
 that appears only when the WHS cap lowered at least one hole, capped
 holes in orange. Applies to admin/manager AND the pinless member view.
 
+**Nine display + resolution (v2.90.3, Kerry):** records that are one
+nine of an 18-hole round label the COURSE, not the score: "- Front" /
+"- Back" appended, or the nine's own name when the course name carries
+named nines ("Hyatt Hill Country | Lakes/Oaks" → "… | Oaks";
+`hcpNineLabel` in handicaps.html). Their expansion renders ONLY that
+nine (holes sliced client-side, 18-hole derived_totals dropped) — TGF
+handicaps are every-9-holes; full-18 cards belong on player scoring
+records. The bridge repair gained a CORRECTION pass: an unmatched
+record whose stored adjusted equals a nine's RAW gross while the WHS
+adjusted differs is an uncapped Composer-era import (the workbook
+repair skipped 18-hole rounds) — corrected to WHS, differential
+recomputed, bridged. Suspect days include any day with an unbridged
+record + an existing card. Kerry's standing rule: dashes are a bug
+symptom to RESOLVE, not a display state to accept — only records
+matching neither WHS nor raw totals stay unbridged (logged).
+
 **Bridge integrity (v2.90.2):** the handicap↔scorecard bridge is
 RECONCILING — each nine of an imported card claims at most one
 unbridged record whose adjusted_score equals that nine's WHS-adjusted

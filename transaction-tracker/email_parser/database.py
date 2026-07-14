@@ -20537,34 +20537,77 @@ def _repair_handicap_bridge_assignments(conn: sqlite3.Connection,
                GROUP BY customer_id, round_date, scoring_round_id
                HAVING COUNT(*) > 1"""):
         suspects.add((r["cid"], r["d"]))
+    # Days with an UNBRIDGED record but at least one card — resolvable,
+    # not coverable (Kerry: "figure out what's accurate"). Covers the
+    # 18-hole Composer-era records the workbook repair skipped.
+    for r in conn.execute(
+            """SELECT DISTINCT hr.customer_id AS cid, hr.round_date AS d
+               FROM handicap_rounds hr
+               JOIN scoring_rounds sr ON sr.customer_id = hr.customer_id
+                                     AND sr.round_date = hr.round_date
+               WHERE hr.scoring_round_id IS NULL
+                 AND hr.customer_id IS NOT NULL"""):
+        suspects.add((r["cid"], r["d"]))
     if not suspects:
         return
     formulas = get_scoring_formulas(db_path=db_path)
-    fixed = unmatched = 0
+    fixed = corrected = unmatched = 0
     for cid, d in sorted(suspects):
         cards = conn.execute(
             "SELECT id, tee_id FROM scoring_rounds "
             "WHERE customer_id = ? AND round_date = ?", (cid, d)).fetchall()
         recs = conn.execute(
-            "SELECT id, adjusted_score, scoring_round_id FROM handicap_rounds "
+            "SELECT id, adjusted_score, scoring_round_id, rating, slope "
+            "FROM handicap_rounds "
             "WHERE customer_id = ? AND round_date = ? ORDER BY id",
             (cid, d)).fetchall()
         if not cards or not recs:
             continue
-        slots = []  # (card_id, side, adj_total), each claimable once
+        slots = []  # each nine of each card, claimable once
         for c in cards:
             sp = _nine_totals_for_card(conn, c["id"], c["tee_id"], formulas)
             for side in ("front", "back"):
                 if sp[side]["n"]:
-                    slots.append((c["id"], side, sp[side]["adj"]))
+                    slots.append({"card": c["id"], "side": side,
+                                  "adj": sp[side]["adj"],
+                                  "gross": sp[side]["gross"]})
         taken: set = set()
+        assigned: dict = {}
+        # Pass 1: exact WHS-adjusted match.
         for rec in recs:
-            new_srid = None
-            for i, (card_id, side, adj) in enumerate(slots):
-                if i not in taken and adj == rec["adjusted_score"]:
-                    new_srid = card_id
+            assigned[rec["id"]] = None
+            for i, s in enumerate(slots):
+                if i not in taken and s["adj"] == rec["adjusted_score"]:
+                    assigned[rec["id"]] = s["card"]
                     taken.add(i)
                     break
+        # Pass 2: a record whose stored adjusted equals a nine's RAW gross
+        # (while the WHS adjusted differs) is an uncapped import — correct
+        # it to the WHS value (Kerry-ratified standard 2026-07-14) and
+        # bridge, instead of leaving a dash. Unique matches only.
+        for rec in recs:
+            if assigned[rec["id"]] is not None:
+                continue
+            cand = [i for i, s in enumerate(slots)
+                    if i not in taken and s["gross"] == rec["adjusted_score"]
+                    and s["adj"] != s["gross"]]
+            if len(cand) == 1:
+                i = cand[0]
+                s = slots[i]
+                taken.add(i)
+                assigned[rec["id"]] = s["card"]
+                new_diff = (round((s["adj"] - rec["rating"]) * 113.0 / rec["slope"], 1)
+                            if rec["slope"] else None)
+                conn.execute(
+                    "UPDATE handicap_rounds SET adjusted_score = ?, "
+                    "differential = COALESCE(?, differential) WHERE id = ?",
+                    (s["adj"], new_diff, rec["id"]))
+                corrected += 1
+                logger.info("Handicap bridge repair: record %s (%s) stored "
+                            "raw gross %s — corrected to WHS adjusted %s",
+                            rec["id"], d, rec["adjusted_score"], s["adj"])
+        for rec in recs:
+            new_srid = assigned[rec["id"]]
             if new_srid != rec["scoring_round_id"]:
                 conn.execute(
                     "UPDATE handicap_rounds SET scoring_round_id = ? WHERE id = ?",
@@ -20573,10 +20616,12 @@ def _repair_handicap_bridge_assignments(conn: sqlite3.Connection,
             if new_srid is None:
                 unmatched += 1
     conn.commit()
-    if fixed:
-        logger.info("Handicap bridge repair: re-assigned %d record(s) across "
-                    "%d suspect day(s); %d left unbridged (no reconciling "
-                    "card nine)", fixed, len(suspects), unmatched)
+    if fixed or corrected:
+        logger.info("Handicap bridge repair: re-assigned %d record(s), "
+                    "corrected %d uncapped adjusted score(s), across %d "
+                    "suspect day(s); %d left unbridged (no reconciling "
+                    "card nine — review)", fixed, corrected, len(suspects),
+                    unmatched)
 
 
 def _nine_totals_for_card(conn: sqlite3.Connection, scoring_round_id: int,

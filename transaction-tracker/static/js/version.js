@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.90.2";
+window.TGF_VERSION = "2.90.3";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.90.3",
+    date: "2026-07-14",
+    changes: [
+      "Nine naming (Kerry): the F9/B9 superscript is gone -- a record that is one nine of an 18-hole round now appends '- Front' / '- Back' to the course name, and when the course name carries NAMED nines ('Hyatt Hill Country | Lakes/Oaks') the record shows the nine's own name: 'Hyatt Hill Country | Oaks'.",
+      "Dashes resolved, not covered (Kerry): the bridge repair gained a correction pass -- an unmatched record whose stored 'adjusted' equals a nine's RAW gross (while WHS capping says lower) is another uncapped Composer-era import (the workbook repair skipped 18-hole rounds), so it is corrected to the WHS adjusted value, its differential recomputed, and bridged. Suspect days now also include any day with an unbridged record and an existing scorecard, so the Flying L / Comanche HILLS dashes resolve on this deploy. Only records matching NEITHER the WHS nor the raw total stay unbridged, logged for review.",
+      "Expanding a record that is one nine of an 18-hole round now shows ONLY that nine (Kerry: TGF handicaps are every-9-holes; the full 18 belongs on player scoring records) -- the other nine's grid and the 18-hole totals line are gone; the note above the card carries the nine's gross/adjusted.",
+    ],
+  },
   {
     version: "2.90.2",
     date: "2026-07-14",
