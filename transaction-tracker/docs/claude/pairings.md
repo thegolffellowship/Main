@@ -164,7 +164,33 @@ Caveats of record:
 - Rounds whose label carries no event code and a truncated date
   (preseason: KICKOFF/LA CANTERA/CEDAR CREEK options are cut off
   mid-date by GG) may not match a Tracker event — they surface in
-  the walk report as unmatched, not silently skipped.
+  the walk report as unmatched, not silently skipped. The `team|`
+  subcommand takes an event override (`|apply|<event id or name>`).
+
+### 2026 grab COMPLETE (overnight 2026-07-14, Kerry directive)
+
+All 41 played rounds ingested with source `'gg_teamnet'`:
+- **SA (22 rounds)**: s9.1–s9.17 (no s9.6/s9.11 — not in GG's round
+  list, both 0-registration Tracker events, presumed rained out),
+  s18.1–s18.7, LA CANTERA + the two override applies (KICKOFF → 609,
+  Feb CEDAR CREEK → 3). ~865 pairs. s18.5 WILLOW SPRINGS used a
+  "CART Net 18 $" board → cart pairs only (7).
+- **Austin (19 rounds)**: a9.1–a9.17 (no a9.6, same pattern),
+  a18.1–a18.3. ~490 pairs. a9.17 Falconhead + a18.3 CRYSTAL FALLS
+  are CART-board rounds (pairs only); the rest have TEAM boards, so
+  Austin DOES get foursomes most weeks.
+- Zero unresolved player names across both portals.
+- **Kerry flags from the walk**: (1) Tracker has BOTH
+  `a18.2 AUSTIN KICKOFF | ShadowGlen` (id 2578, Mar 14 — the real
+  a18.2, matches GG) and `a18.2 CRYSTAL FALLS` (id 3267, May 30,
+  11 regs) alongside `a18.3 CRYSTAL FALLS` (id 3263, May 30, 12
+  regs) — 3267 looks like a mislabeled twin of 3263 and its
+  registrations may need merging; (2) HILL COUNTRY MATCHES |
+  Comanche Trace (May 16) is not on either league portal's round
+  list — no pairings ingested for it.
+- Tonight's s9.18 / a9.18 post AFTER play: re-run
+  `scoring-pairings:teamall|<portal>|apply` any time — replace
+  semantics make it idempotent, and new rounds are picked up.
 
 ## Engine notes (design, not yet built)
 
