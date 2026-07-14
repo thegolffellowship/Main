@@ -1436,10 +1436,27 @@ def _scoring_dispatch(url: str, extract: str):
             #   scoring-pairings:rounds|<sa|austin|page_url>
             #   scoring-pairings:round|<portal>|<round_id>[|apply]
             #   scoring-pairings:all|<portal>[|apply]
+            # TEAM/CART Net board route (tee-sheet archive is login-gated;
+            # the played rounds' team boards carry the actual groups):
+            #   scoring-pairings:teamrounds|<portal>
+            #   scoring-pairings:team|<portal>|<round_id>[|apply]
+            #   scoring-pairings:teamall|<portal>[|apply]
             parts = [p.strip() for p in arg.split("|")]
             sub = (parts[0] or "").lower()
             if sub == "rounds" and len(parts) >= 2:
                 return json.dumps(db.gg_pairings_rounds(parts[1]), indent=2)
+            if sub == "teamrounds" and len(parts) >= 2:
+                return json.dumps(db.gg_teamnet_rounds(parts[1]), indent=2)
+            if sub == "team" and len(parts) >= 3:
+                return json.dumps(db.import_gg_teamnet_round(
+                    parts[1], parts[2],
+                    apply=(len(parts) > 3 and parts[3].lower() == "apply")),
+                    indent=2, default=str)
+            if sub == "teamall" and len(parts) >= 2:
+                return json.dumps(db.import_gg_teamnet_all(
+                    parts[1],
+                    apply=(len(parts) > 2 and parts[2].lower() == "apply")),
+                    indent=2, default=str)
             if sub == "round" and len(parts) >= 3:
                 return json.dumps(db.import_gg_teesheet_round(
                     parts[1], parts[2],

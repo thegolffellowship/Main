@@ -34671,6 +34671,216 @@ def import_gg_teesheets_all(portal: str, apply: bool = False,
             "results": results}
 
 
+# ── GG TEAM/CART Net board pairings ingest (same overnight directive).
+#    The public TEE SHEETS page turned out to be a next_round widget
+#    (upcoming event only, no archive) and the tee-sheet history page is
+#    login-gated — but every PLAYED round's tournament_results widget
+#    lists a "TEAM Net $" (SA: foursomes) or "CART Net $" (Austin: cart
+#    pairs) board whose rows are the actual playing groups in seat order.
+#    Blind-draw fills render as Bl[Name] — on the card but not physically
+#    in the group, so they become empty seats (kept for cart alignment,
+#    excluded from pairs).
+
+_GG_LEAGUE_IDS = {"sa": "514047", "austin": "514705"}
+_TEAM_BOARD_RE = re.compile(r"\b(?:TEAM|CART)\s+Net\b", re.I)
+_BLIND_SEAT_RE = re.compile(r"^[A-Za-z]{1,3}\[(.+)\]$")
+
+
+def _gg_results_widget(portal: str) -> str:
+    """The portal's tournament_results widget (has the full round selector,
+    unlike the TEE SHEETS page's next_round widget)."""
+    key = portal.lower()
+    base = _GG_PAIRING_PORTALS[key]
+    return (f"{base}/leagues/{_GG_LEAGUE_IDS[key]}"
+            "/widgets/tournament_results?shared=false")
+
+
+def gg_teamnet_rounds(portal: str) -> dict:
+    """Rounds listed by the tournament_results widget's selector."""
+    from golf_genius_sync import fetch_public_page
+    widget = _gg_results_widget(portal)
+    page = fetch_public_page(widget, xhr=False)
+    sel = re.search(r'<select[^>]*name="round"[^>]*>(.*?)</select>',
+                    page["html"], re.S)
+    options = re.findall(r'<option[^>]*value="(\d+)"[^>]*>(.*?)</option>',
+                         sel.group(1) if sel else "", re.S)
+    return {"widget": widget,
+            "rounds": [{"round_id": rid, "label": re.sub(r"\s+", " ", lbl).strip()}
+                       for rid, lbl in options]}
+
+
+def _parse_teamnet_groups(tables: list) -> list:
+    """Foursome/cart cells like 'SOUTH, Daniel + MORENO, Robert + WADE,
+    Mary + Bl[HAMILTON, Doug] TGF San Antonio' → seat lists in board
+    order. Blind fills (Xx[Name]) become None seats so the 1&2 / 3&4
+    cart split stays aligned with the board's sequence."""
+    groups = []
+    for t in tables:
+        rows = t if isinstance(t, list) else (t.get("rows") or [])
+        for row in rows:
+            for cell in row:
+                c = re.sub(r"\s+", " ", (cell or "")).strip()
+                if " + " not in c or c.lower().startswith("total purse"):
+                    continue
+                c = re.sub(r"\s+TGF [A-Za-z .]+$", "", c).strip()
+                seats: list = []
+                ok = True
+                for part in (p.strip() for p in c.split(" + ")):
+                    bm = _BLIND_SEAT_RE.match(part)
+                    if bm:
+                        seats.append(None)
+                    elif "," in part and 4 < len(part) < 60:
+                        seats.append(part)
+                    else:
+                        ok = False
+                        break
+                if ok and any(seats):
+                    groups.append(seats)
+                break  # one group cell per row
+    return groups
+
+
+def import_gg_teamnet_round(portal: str, round_id: str, apply: bool = False,
+                            label: str | None = None,
+                            db_path: str | Path = DB_PATH) -> dict:
+    """Parse one round's TEAM/CART Net board into playing groups;
+    apply=True REPLACES the matched event's pairing_history rows
+    (source 'gg_teamnet'). Rode pairs come from board seat order
+    (1&2 / 3&4 — Kerry's cart-sequence ruling; for Austin's 2-seat
+    CART rows the pair rode by definition)."""
+    from golf_genius_sync import fetch_public_page, parse_page_structure
+    widget = _gg_results_widget(portal)
+    joiner = "&" if "?" in widget else "?"
+    page = fetch_public_page(f"{widget}{joiner}round={round_id}", xhr=False)
+    if not label:
+        sel = re.search(r'<select[^>]*name="round"[^>]*>(.*?)</select>',
+                        page["html"], re.S)
+        if sel:
+            cur = re.search(r'<option[^>]*value="' + re.escape(str(round_id)) +
+                            r'"[^>]*>(.*?)</option>', sel.group(1), re.S)
+            if cur:
+                label = re.sub(r"\s+", " ", cur.group(1)).strip()
+    label = label or ""
+    struct = parse_page_structure(page["html"], page.get("final_url") or widget)
+    board = None
+    for lk in struct.get("links", []):
+        if (_TEAM_BOARD_RE.search(lk.get("text") or "")
+                and "/v2tournaments/" in (lk.get("href") or "")):
+            board = lk
+            break
+    out = {"portal": portal, "round_id": round_id, "label": label,
+           "applied": False}
+    if not board:
+        out["error"] = "no TEAM/CART Net board on this round"
+        return out
+    out["board"] = (board.get("text") or "").strip()
+    bpage = fetch_public_page(board["href"], xhr=False)
+    btables = parse_page_structure(bpage["html"], board["href"]).get("tables", [])
+    seat_groups = _parse_teamnet_groups(btables)
+    out["n_groups"] = len(seat_groups)
+    out["group_sizes"] = [sum(1 for s in g if s) for g in seat_groups]
+    out["blind_seats"] = sum(1 for g in seat_groups for s in g if s is None)
+    if not seat_groups:
+        out["error"] = "board parsed 0 groups"
+        out["debug_tables"] = btables[:2]
+        return out
+    with _connect(db_path) as conn:
+        _ensure_pairing_tables(conn)
+        ev = _match_event_for_round_label(conn, label, portal)
+        if not ev:
+            out["error"] = f"no Tracker event matched label {label!r}"
+            return out
+        out["event"] = {"id": ev["id"], "name": ev["item_name"],
+                        "date": ev["event_date"]}
+        resolved = []
+        unresolved = []
+        for seats in seat_groups:
+            rs = []
+            for raw in seats:
+                if raw is None:
+                    rs.append(None)
+                    continue
+                cid = None
+                try:
+                    cid = _resolve_scoring_player(conn, raw)
+                except Exception:
+                    cid = None
+                canonical = None
+                if cid:
+                    c = conn.execute(
+                        """SELECT TRIM(COALESCE(first_name,'') || ' ' ||
+                                   COALESCE(last_name,'')) AS nm
+                           FROM customers WHERE customer_id = ?""",
+                        (cid,)).fetchone()
+                    canonical = (c["nm"] or "").strip() or None
+                if not canonical:
+                    canonical = _normalize_player_name(raw)
+                    unresolved.append(raw)
+                rs.append({"name": canonical, "cid": cid})
+            resolved.append(rs)
+        out["unresolved_names"] = unresolved
+        if apply:
+            conn.execute("DELETE FROM pairing_history WHERE event_id = ?",
+                         (ev["id"],))
+            n_pairs = 0
+            for rs in resolved:
+                real = [(idx, p) for idx, p in enumerate(rs) if p]
+                for x in range(len(real)):
+                    for y in range(x + 1, len(real)):
+                        (ia, pa), (ib, pb) = real[x], real[y]
+                        a, b = sorted((pa, pb), key=lambda p: p["name"])
+                        conn.execute(
+                            """INSERT OR IGNORE INTO pairing_history
+                               (player_a, player_b, event_id, event_date,
+                                customer_a_id, customer_b_id, rode, source)
+                               VALUES (?, ?, ?, ?, ?, ?, ?, 'gg_teamnet')""",
+                            (a["name"], b["name"], ev["id"], ev["event_date"],
+                             a["cid"], b["cid"],
+                             1 if ia // 2 == ib // 2 else 0))
+                        n_pairs += 1
+            conn.commit()
+            out["applied"] = True
+            out["pairs_written"] = n_pairs
+    return out
+
+
+def import_gg_teamnet_all(portal: str, apply: bool = False,
+                          budget_seconds: int = 200,
+                          db_path: str | Path = DB_PATH) -> dict:
+    """Walk every round on the portal's tournament_results widget through
+    the TEAM/CART Net pairings importer (time-budgeted; re-run to
+    continue — apply replaces per event, so repeats are safe)."""
+    import time as _time
+    t0 = _time.time()
+    listing = gg_teamnet_rounds(portal)
+    results = []
+    done = skipped = 0
+    for r in listing["rounds"]:
+        if _time.time() - t0 > budget_seconds:
+            break
+        try:
+            res = import_gg_teamnet_round(portal, r["round_id"], apply=apply,
+                                          label=r["label"], db_path=db_path)
+        except Exception as e:
+            res = {"round_id": r["round_id"], "label": r["label"],
+                   "error": str(e)}
+        slim = {k: res.get(k) for k in
+                ("round_id", "label", "board", "n_groups", "group_sizes",
+                 "blind_seats", "event", "applied", "pairs_written",
+                 "error", "unresolved_names")
+                if res.get(k) is not None}
+        results.append(slim)
+        if res.get("applied") or (not apply and res.get("n_groups")):
+            done += 1
+        else:
+            skipped += 1
+    return {"portal": portal, "widget": listing["widget"],
+            "rounds_total": len(listing["rounds"]),
+            "rounds_processed": len(results), "ok": done, "skipped": skipped,
+            "rounds_left": len(listing["rounds"]) - len(results),
+            "results": results}
+
+
 def _pair_count(pair_counts: dict, a: str, b: str) -> int:
     """Look up play count for two players (key is alphabetically ordered)."""
     key = (min(a, b), max(a, b))

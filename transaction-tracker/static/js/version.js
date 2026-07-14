@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.94.0";
+window.TGF_VERSION = "2.95.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.95.0",
+    date: "2026-07-14",
+    changes: [
+      "2026 pairings grab route B (the working one): the public TEE SHEETS page proved to be a next_round widget (tonight's event only) and the tee-sheet archive is login-gated, so the ingest now reads each played round's TEAM Net $ (SA foursomes) / CART Net $ (Austin cart pairs) tournament board off the tournament_results widget -- those rows ARE the actual playing groups in seat order. Blind-draw fills (Bl[Name]) stay as empty seats: excluded from played-with pairs but preserving the 1&2 / 3&4 cart split for the rode flag. New bridge commands scoring-pairings:teamrounds|/team|/teamall|; rows land in pairing_history with source 'gg_teamnet', same replace-per-event semantics as the tee-sheet route.",
+    ],
+  },
   {
     version: "2.94.0",
     date: "2026-07-14",
