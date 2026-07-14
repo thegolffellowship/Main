@@ -69,6 +69,20 @@ and points-render.js — keep in sync) now include an **ADJ SCORE row**
 that appears only when the WHS cap lowered at least one hole, capped
 holes in orange. Applies to admin/manager AND the pinless member view.
 
+**Bridge integrity (v2.90.2):** the handicap↔scorecard bridge is
+RECONCILING — each nine of an imported card claims at most one
+unbridged record whose adjusted_score equals that nine's WHS-adjusted
+total (`_bridge_handicap_records`); the legacy date-only claim
+survives only for the safe single-card/single-record case. The old
+player+date-only UPDATE let the first card of a multi-round day claim
+every record (Hill Country Matches: Comanche CREEKS/HILLS/VALLEY all
+rendered one card's gross beside their own ADJ values — "adjusted"
+above gross, impossible). Boot repair
+`_repair_handicap_bridge_assignments` re-derives all suspect days
+(player with >1 card on a date, or >1 record sharing a card) — 
+idempotent; unmatched records stay NULL. `get_handicap_rounds` also
+guards at read time: adjusted > bridged gross ⇒ gross renders "—".
+
 **18-hole bridges (v2.90.1):** an 18-hole round posts as TWO 9-hole
 handicap records, so `get_handicap_rounds` NULLs the raw join for
 18-hole cards and (player-scoped calls only) resolves each record's

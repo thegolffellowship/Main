@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.90.1";
+window.TGF_VERSION = "2.90.2";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.90.2",
+    date: "2026-07-14",
+    changes: [
+      "Multi-round-day bridge repair (Kerry's Comanche Trace screenshot): the handicap-to-scorecard bridge matched by player+date alone, so on days with multiple rounds (Hill Country Matches: CREEKS/HILLS/VALLEY all on 5/16) the FIRST card imported claimed every record -- all three rows showed the same card's gross (37) beside their own correct ADJ values (37/39/43), producing 'adjusted' scores HIGHER than gross, which is impossible. A boot repair re-derives every suspect day: each record now bridges to the card+nine whose WHS-adjusted total equals its adjusted score; no reconciling card means unbridged (dash), never a guess. Runs on this deploy and fixes the live data.",
+      "The importer's bridge is reconciling from now on: each nine of a new card claims at most one record whose adjusted score matches its WHS total; the old date-only claim survives only in the provably-safe single-card single-record case.",
+      "Read-time guard: a record whose adjusted exceeds its bridged card's gross (a cap can only LOWER) shows a dash for gross instead of the wrong card's number -- mis-bridges can never render as phantom adjustments again.",
+    ],
+  },
   {
     version: "2.90.1",
     date: "2026-07-14",
