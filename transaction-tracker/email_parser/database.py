@@ -819,6 +819,50 @@ def _repair_chalfant_attribution(conn: sqlite3.Connection) -> None:
     conn.commit()
 
 
+def _repair_crystal_falls_twin_event(conn: sqlite3.Connection) -> None:
+    """Kerry (2026-07-14): events 3267 ('a18.2 CRYSTAL FALLS') and 3263
+    ('a18.3 CRYSTAL FALLS') are the SAME May 30 Austin event — the code/
+    name changed mid-registration and both rows kept collecting rows.
+    GG's coding wins (a18.2 = AUSTIN KICKOFF | ShadowGlen, a18.3 =
+    CRYSTAL FALLS). Idempotent: no-ops once 3267 is gone.
+
+    Stale pairing rows on the twin are DELETED (the keeper already has
+    the tee-sheet-sourced truth); every other event_id reference moves
+    to the keeper; the old product name becomes an event alias so
+    name-joined items/RSVPs keep resolving."""
+    dup = conn.execute(
+        "SELECT id FROM events WHERE id = 3267 "
+        "AND item_name = 'a18.2 CRYSTAL FALLS'").fetchone()
+    keep = conn.execute(
+        "SELECT id FROM events WHERE id = 3263 "
+        "AND item_name = 'a18.3 CRYSTAL FALLS'").fetchone()
+    if not dup or not keep:
+        return
+    conn.execute("DELETE FROM pairing_history WHERE event_id = 3267")
+    conn.execute("DELETE FROM event_pairings WHERE event_id = 3267")
+    moved = {}
+    tables = [r[0] for r in conn.execute(
+        "SELECT name FROM sqlite_master WHERE type = 'table' "
+        "AND name NOT IN ('events', 'pairing_history', 'event_pairings')")]
+    for t in tables:
+        try:
+            cols = [c[1] for c in conn.execute(f"PRAGMA table_info({t})")]
+            if "event_id" not in cols:
+                continue
+            cur = conn.execute(
+                f"UPDATE {t} SET event_id = 3263 WHERE event_id = 3267")
+            if cur.rowcount:
+                moved[t] = cur.rowcount
+        except sqlite3.Error as e:
+            logger.warning("Crystal Falls merge: %s not moved: %s", t, e)
+    conn.execute(
+        "INSERT OR IGNORE INTO event_aliases (alias_name, canonical_event_name) "
+        "VALUES ('a18.2 CRYSTAL FALLS', 'a18.3 CRYSTAL FALLS')")
+    conn.execute("DELETE FROM events WHERE id = 3267")
+    conn.commit()
+    logger.info("Crystal Falls twin-event merge: 3267 -> 3263, moved %s", moved)
+
+
 def _repair_massey_attribution(conn: sqlite3.Connection) -> None:
     """Re-attribute William Massey's orders corrupted by a bad customer merge.
 
@@ -3558,6 +3602,13 @@ def init_db(db_path: str | Path | None = None) -> None:
             _repair_stich_attribution(conn, db_path)
         except Exception as e:
             logger.warning("Stich attribution repair failed: %s", e)
+
+        # Always-run repair: merge twin Crystal Falls events 3267 → 3263
+        # (Kerry 2026-07-14: same May 30 event, renamed mid-registration)
+        try:
+            _repair_crystal_falls_twin_event(conn)
+        except Exception as e:
+            logger.warning("Crystal Falls twin-event merge failed: %s", e)
 
         # Always-run heal: align items.holes to the event's hole count on
         # single-format events (parser sometimes reads the '.18' sequence in

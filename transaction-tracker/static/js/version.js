@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.95.4";
+window.TGF_VERSION = "2.95.5";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.95.5",
+    date: "2026-07-14",
+    changes: [
+      "Twin Crystal Falls events merged (Kerry-ratified: 'a18.2 CRYSTAL FALLS' and 'a18.3 CRYSTAL FALLS' were the SAME May 30 event, renamed mid-registration; GG's coding wins -- a18.2 is AUSTIN KICKOFF | ShadowGlen). Boot repair moves every event_id reference from the stale twin (3267) to the keeper (3263), registers the old product name as an event alias so name-joined items/RSVPs keep resolving, deletes the twin, and drops its stale pairing rows (the keeper already carries the tee-sheet truth). Fixes the double-counted registrations (11 + 12 for one 12-player event).",
+      "a9.17 Falconhead and a18.3 Crystal Falls foursomes written from Kerry's tee-sheet screenshots (21 + 18 pairs, source 'tee_sheet') -- every played 2026 event now has full playing-group history feeding Generate Pairings.",
+    ],
+  },
   {
     version: "2.95.4",
     date: "2026-07-14",
