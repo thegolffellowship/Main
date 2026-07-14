@@ -1430,6 +1430,28 @@ def _scoring_dispatch(url: str, extract: str):
             # export-free path shown before it's trusted — writes nothing.
             return json.dumps(db.get_scoring_handicap_preview(arg),
                               indent=2, default=str)
+        if cmd == "scoring-pairings":
+            # GG tee-sheet pairings ingest (Kerry overnight 2026-07-14).
+            # Sub-commands (| separated):
+            #   scoring-pairings:rounds|<sa|austin|page_url>
+            #   scoring-pairings:round|<portal>|<round_id>[|apply]
+            #   scoring-pairings:all|<portal>[|apply]
+            parts = [p.strip() for p in arg.split("|")]
+            sub = (parts[0] or "").lower()
+            if sub == "rounds" and len(parts) >= 2:
+                return json.dumps(db.gg_pairings_rounds(parts[1]), indent=2)
+            if sub == "round" and len(parts) >= 3:
+                return json.dumps(db.import_gg_teesheet_round(
+                    parts[1], parts[2],
+                    apply=(len(parts) > 3 and parts[3].lower() == "apply")),
+                    indent=2, default=str)
+            if sub == "all" and len(parts) >= 2:
+                return json.dumps(db.import_gg_teesheets_all(
+                    parts[1],
+                    apply=(len(parts) > 2 and parts[2].lower() == "apply")),
+                    indent=2, default=str)
+            return json.dumps({"error": "usage: scoring-pairings:rounds|<portal> "
+                               "or round|<portal>|<id>[|apply] or all|<portal>[|apply]"})
         if cmd == "scoring-hcp-audit":
             # READ-ONLY full-table audit: every handicap record classified
             # by how it reconciles with its scorecard (Kerry 2026-07-14).

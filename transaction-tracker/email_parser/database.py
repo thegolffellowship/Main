@@ -34223,6 +34223,17 @@ def _ensure_pairing_tables(conn: sqlite3.Connection) -> None:
     conn.execute(
         "CREATE INDEX IF NOT EXISTS idx_pairing_history_date ON pairing_history(event_date)"
     )
+    # Ratified customer_id amendment (pairings.md, Kerry "GO" 2026-07-12),
+    # applied additively: pair customer ids, the rode-with flag (tee-sheet
+    # sequence 1&2 / 3&4 ride together — Kerry's cart ruling), and the
+    # row's source ('app' saves vs 'gg_teesheet' ingest).
+    for col, decl in (("customer_a_id", "INTEGER"), ("customer_b_id", "INTEGER"),
+                      ("rode", "INTEGER DEFAULT 0"),
+                      ("source", "TEXT DEFAULT 'app'")):
+        try:
+            conn.execute(f"ALTER TABLE pairing_history ADD COLUMN {col} {decl}")
+        except sqlite3.OperationalError:
+            pass  # already added
     conn.commit()
 
 
@@ -34304,8 +34315,22 @@ def save_event_pairings(event_id: int, groups_by_holes: dict, db_path=None) -> N
                         ),
                     )
 
-                # Record every pair in history
-                player_names = [p["name"] for p in grp["players"]]
+                # Record every pair in history — rode pairs by cart_pos
+                # (1&2 / 3&4, Kerry's ruling), customer ids by exact
+                # canonical-name match (best effort; NULL when unknown)
+                ordered = sorted(grp["players"], key=lambda p: p["cart_pos"])
+                player_names = [p["name"] for p in ordered]
+                rode_pairs = set()
+                for lo, hi in ((0, 1), (2, 3)):
+                    if hi < len(player_names):
+                        rode_pairs.add(frozenset((player_names[lo], player_names[hi])))
+                def _cid_for_name(nm):
+                    row = conn.execute(
+                        """SELECT customer_id FROM customers
+                           WHERE TRIM(COALESCE(first_name,'') || ' ' ||
+                                 COALESCE(last_name,'')) = ? COLLATE NOCASE""",
+                        (nm,)).fetchone()
+                    return row["customer_id"] if row else None
                 for i in range(len(player_names)):
                     for j in range(i + 1, len(player_names)):
                         a = min(player_names[i], player_names[j])
@@ -34313,10 +34338,13 @@ def save_event_pairings(event_id: int, groups_by_holes: dict, db_path=None) -> N
                         conn.execute(
                             """
                             INSERT OR IGNORE INTO pairing_history
-                                (player_a, player_b, event_id, event_date)
-                            VALUES (?, ?, ?, ?)
+                                (player_a, player_b, event_id, event_date,
+                                 customer_a_id, customer_b_id, rode, source)
+                            VALUES (?, ?, ?, ?, ?, ?, ?, 'app')
                             """,
-                            (a, b, event_id, event_date),
+                            (a, b, event_id, event_date,
+                             _cid_for_name(a), _cid_for_name(b),
+                             1 if frozenset((a, b)) in rode_pairs else 0),
                         )
 
         conn.commit()
@@ -34355,6 +34383,292 @@ def get_pairing_history_counts(year: int | None = None, db_path=None) -> dict:
         ).fetchall()
 
     return {(r["player_a"], r["player_b"]): r["cnt"] for r in rows}
+
+
+# ── GG tee-sheet pairings ingest (Kerry 2026-07-14, overnight directive:
+#    "run a pairings grab from GG tonight for all 2026 events … stored
+#    primarily for Generate Pairings to randomize based off history").
+#    Tee sheets are Kerry's ruled PRIMARY source (pairings.md); cart
+#    ruling: tee-sheet sequence positions 1&2 and 3&4 rode together.
+
+_GG_PAIRING_PORTALS = {
+    "sa": "https://tgf-sa.golfgenius.com",
+    "austin": "https://tgf-austin.golfgenius.com",
+}
+_TEESHEET_PAGE_CACHE: dict = {}
+_TEESHEET_WIDGET_CACHE: dict = {}
+_EVENT_CODE_RE = re.compile(r"\b([a-z]{1,4}\d+\.\d+)\b", re.I)
+
+
+def _gg_teesheet_widget(portal: str) -> str:
+    """Resolve a portal key ('sa'/'austin') or explicit URL to its tee-sheet
+    WIDGET url: portal menu → 'TEE SHEETS' page → iframe widget src."""
+    import html as _html
+    from golf_genius_sync import fetch_public_page, parse_page_structure
+    if portal.startswith("http"):
+        page_url = portal
+    else:
+        base = _GG_PAIRING_PORTALS[portal.lower()]
+        page_url = _TEESHEET_PAGE_CACHE.get(portal)
+        if not page_url:
+            root = fetch_public_page(base, xhr=False)
+            struct = parse_page_structure(root["html"], root.get("final_url", base))
+            for lk in struct.get("links", []):
+                if (lk.get("text") or "").strip().upper() == "TEE SHEETS":
+                    page_url = lk["href"]
+                    break
+            if not page_url:
+                raise RuntimeError(f"no TEE SHEETS link on {base}")
+            _TEESHEET_PAGE_CACHE[portal] = page_url
+    if page_url in _TEESHEET_WIDGET_CACHE:
+        return _TEESHEET_WIDGET_CACHE[page_url]
+    page = fetch_public_page(page_url, xhr=False)
+    m = re.search(r"<iframe[^>]+src=[\"']([^\"']*/widgets/[a-z_0-9]+[^\"']*)[\"']",
+                  page["html"], re.I)
+    if not m:
+        raise RuntimeError(f"no widget iframe on {page_url}")
+    widget = _html.unescape(m.group(1))
+    if widget.startswith("/"):
+        from urllib.parse import urlparse
+        pu = urlparse(page["final_url"] if page.get("final_url") else page_url)
+        widget = f"{pu.scheme}://{pu.netloc}{widget}"
+    _TEESHEET_WIDGET_CACHE[page_url] = widget
+    return widget
+
+
+def gg_pairings_rounds(portal: str) -> dict:
+    """List the tee-sheet widget's rounds: [(round_id, label), …]."""
+    from golf_genius_sync import fetch_public_page
+    widget = _gg_teesheet_widget(portal)
+    page = fetch_public_page(widget, xhr=False)
+    sel = re.search(r'<select[^>]*name="round"[^>]*>(.*?)</select>',
+                    page["html"], re.S)
+    options = re.findall(r'<option[^>]*value="(\d+)"[^>]*>(.*?)</option>',
+                         sel.group(1) if sel else "", re.S)
+    return {"widget": widget,
+            "rounds": [{"round_id": rid, "label": re.sub(r"\s+", " ", lbl).strip()}
+                       for rid, lbl in options]}
+
+
+def _parse_teesheet_groups(html_text: str) -> dict:
+    """Parse a GG tee-sheet widget round into ordered player groups.
+
+    Defensive: tee sheets render as tables where each tee time is either
+    one row (players in separate cells / one cell) or a run of rows that
+    fill down from a time cell. Returns groups plus a debug dump of the
+    raw tables so unexpected layouts can be diagnosed over the bridge
+    without a redeploy."""
+    from golf_genius_sync import parse_page_structure
+    struct = parse_page_structure(html_text, "")
+    tables = struct.get("tables", [])
+    _time_re = re.compile(r"^\d{1,2}:\d{2}\s*(AM|PM)?$", re.I)
+    _name_re = re.compile(r"^[A-Za-z'\-\. ]+,\s*[A-Za-z'\-\. ]+$|^[A-Z][a-z'\-\.]+ [A-Za-z'\-\. ]+$")
+    _noise = re.compile(r"hole|tee time|player|course|flight|hcp|handicap|^\s*$|^\d+$",
+                        re.I)
+
+    groups: list = []
+    for t in tables:
+        rows = t if isinstance(t, list) else (t.get("rows") or [])
+        current: dict | None = None
+        for row in rows:
+            cells = [re.sub(r"\s+", " ", (c or "")).strip() for c in row]
+            if not any(cells):
+                continue
+            # header rows
+            if all(_noise.match(c) for c in cells if c):
+                continue
+            time_cell = next((c for c in cells if _time_re.match(c)), None)
+            names = [c for c in cells
+                     if c and not _time_re.match(c) and not _noise.match(c)
+                     and _name_re.match(c) and len(c) > 4]
+            # a cell holding several names split by markers
+            if not names:
+                for c in cells:
+                    if c.count(",") >= 3 or " / " in c:
+                        parts = re.split(r"\s*/\s*|\s{2,}", c)
+                        names = [p.strip() for p in parts if _name_re.match(p.strip())]
+                        if names:
+                            break
+            if time_cell is not None:
+                if current and current["players"]:
+                    groups.append(current)
+                current = {"slot": time_cell, "players": list(names)}
+            elif names:
+                if current is None:
+                    current = {"slot": f"Group {len(groups) + 1}", "players": []}
+                current["players"].extend(names)
+        if current and current["players"]:
+            groups.append(current)
+            current = None
+    # de-dup players inside a group, drop empty/1-player artifacts
+    cleaned = []
+    for g in groups:
+        seen: list = []
+        for p in g["players"]:
+            if p not in seen:
+                seen.append(p)
+        if len(seen) >= 2:
+            cleaned.append({"slot": g["slot"], "players": seen})
+    debug = []
+    for t in tables[:6]:
+        rows = t if isinstance(t, list) else (t.get("rows") or [])
+        debug.append({"n_rows": len(rows), "first_rows": rows[:6]})
+    return {"groups": cleaned, "n_tables": len(tables), "debug_tables": debug}
+
+
+def _match_event_for_round_label(conn, label: str, portal: str):
+    """Tracker events row for a tee-sheet round label — event code first
+    (s9.17 / a9.18 / s18.8 …), else the label's date + portal chapter."""
+    m = _EVENT_CODE_RE.search(label)
+    if m:
+        row = conn.execute(
+            "SELECT id, item_name, event_date FROM events "
+            "WHERE item_name LIKE ? COLLATE NOCASE "
+            "ORDER BY event_date DESC LIMIT 1",
+            (m.group(1) + " %",)).fetchone()
+        if row:
+            return row
+    md = re.search(
+        r"\(?\w{3},?\s+(January|February|March|April|May|June|July|August|"
+        r"September|October|November|December|Jan|Feb|Mar|Apr|Jun|Jul|Aug|"
+        r"Sep|Oct|Nov|Dec)\.?\s+(\d{1,2})", label)
+    if md:
+        months = {m[:3].lower(): i + 1 for i, m in enumerate(
+            ["January", "February", "March", "April", "May", "June", "July",
+             "August", "September", "October", "November", "December"])}
+        iso = f"2026-{months[md.group(1)[:3].lower()]:02d}-{int(md.group(2)):02d}"
+        chapter = {"sa": "San Antonio", "austin": "Austin"}.get(portal.lower())
+        q = ("SELECT id, item_name, event_date FROM events WHERE event_date = ?"
+             + (" AND chapter = ?" if chapter else ""))
+        rows = conn.execute(q, (iso, chapter) if chapter else (iso,)).fetchall()
+        if len(rows) == 1:
+            return rows[0]
+    return None
+
+
+def import_gg_teesheet_round(portal: str, round_id: str, apply: bool = False,
+                             label: str | None = None,
+                             db_path: str | Path = DB_PATH) -> dict:
+    """Parse one tee-sheet round; apply=True writes pairing_history for the
+    matched event (REPLACES that event's history rows — the tee sheet is
+    the ruled source of truth). Players resolve through the scoring
+    cascade; rode pairs = tee-sheet sequence 1&2 / 3&4 (Kerry ruling)."""
+    from golf_genius_sync import fetch_public_page
+    widget = _gg_teesheet_widget(portal)
+    joiner = "&" if "?" in widget else "?"
+    page = fetch_public_page(f"{widget}{joiner}round={round_id}", xhr=False)
+    parsed = _parse_teesheet_groups(page["html"])
+    label = label or ""
+    sel = None if label else re.search(
+        r'<select[^>]*name="round"[^>]*>(.*?)</select>', page["html"], re.S)
+    if sel:
+        cur = re.search(r'<option[^>]*value="' + re.escape(str(round_id)) +
+                        r'"[^>]*selected[^>]*>(.*?)</option>', sel.group(1), re.S) \
+            or re.search(r'<option[^>]*selected[^>]*value="' + re.escape(str(round_id)) +
+                         r'"[^>]*>(.*?)</option>', sel.group(1), re.S)
+        if cur:
+            label = re.sub(r"\s+", " ", cur.group(1)).strip()
+    out = {"portal": portal, "round_id": round_id, "label": label,
+           "n_groups": len(parsed["groups"]), "groups": parsed["groups"],
+           "n_tables": parsed["n_tables"], "applied": False}
+    if not parsed["groups"]:
+        out["debug_tables"] = parsed["debug_tables"]
+        return out
+    with _connect(db_path) as conn:
+        _ensure_pairing_tables(conn)
+        ev = _match_event_for_round_label(conn, label, portal)
+        if not ev:
+            out["error"] = f"no Tracker event matched label {label!r}"
+            out["debug_tables"] = parsed["debug_tables"][:2]
+            return out
+        out["event"] = {"id": ev["id"], "name": ev["item_name"],
+                        "date": ev["event_date"]}
+        resolved_groups = []
+        unresolved = []
+        for g in parsed["groups"]:
+            names = []
+            for raw in g["players"]:
+                cid = None
+                try:
+                    cid = _resolve_scoring_player(conn, raw)
+                except Exception:
+                    cid = None
+                canonical = None
+                if cid:
+                    c = conn.execute(
+                        """SELECT TRIM(COALESCE(first_name,'') || ' ' ||
+                                   COALESCE(last_name,'')) AS nm
+                           FROM customers WHERE customer_id = ?""",
+                        (cid,)).fetchone()
+                    canonical = (c["nm"] or "").strip() or None
+                if not canonical:
+                    canonical = _normalize_player_name(raw)
+                    unresolved.append(raw)
+                names.append({"name": canonical, "cid": cid})
+            resolved_groups.append({"slot": g["slot"], "players": names})
+        out["unresolved_names"] = unresolved
+        if apply:
+            conn.execute("DELETE FROM pairing_history WHERE event_id = ?",
+                         (ev["id"],))
+            n_pairs = 0
+            for g in resolved_groups:
+                ps = g["players"]
+                rode_pairs = set()
+                for lo, hi in ((0, 1), (2, 3)):
+                    if hi < len(ps):
+                        rode_pairs.add(frozenset((ps[lo]["name"], ps[hi]["name"])))
+                for i in range(len(ps)):
+                    for j in range(i + 1, len(ps)):
+                        a, b = sorted((ps[i], ps[j]), key=lambda p: p["name"])
+                        conn.execute(
+                            """INSERT OR IGNORE INTO pairing_history
+                               (player_a, player_b, event_id, event_date,
+                                customer_a_id, customer_b_id, rode, source)
+                               VALUES (?, ?, ?, ?, ?, ?, ?, 'gg_teesheet')""",
+                            (a["name"], b["name"], ev["id"], ev["event_date"],
+                             a["cid"], b["cid"],
+                             1 if frozenset((a["name"], b["name"])) in rode_pairs else 0))
+                        n_pairs += 1
+            conn.commit()
+            out["applied"] = True
+            out["pairs_written"] = n_pairs
+        out.pop("groups", None)
+        out["group_sizes"] = [len(g["players"]) for g in resolved_groups]
+    return out
+
+
+def import_gg_teesheets_all(portal: str, apply: bool = False,
+                            budget_seconds: int = 200,
+                            db_path: str | Path = DB_PATH) -> dict:
+    """Walk every round of a portal's tee-sheet widget (time-budgeted;
+    re-run to continue — apply replaces per event, so repeats are safe)."""
+    import time as _time
+    t0 = _time.time()
+    listing = gg_pairings_rounds(portal)
+    results = []
+    done = skipped = 0
+    for r in listing["rounds"]:
+        if _time.time() - t0 > budget_seconds:
+            break
+        try:
+            res = import_gg_teesheet_round(portal, r["round_id"], apply=apply,
+                                           label=r["label"], db_path=db_path)
+        except Exception as e:
+            res = {"round_id": r["round_id"], "label": r["label"], "error": str(e)}
+        slim = {k: res.get(k) for k in
+                ("round_id", "label", "n_groups", "event", "applied",
+                 "pairs_written", "error", "unresolved_names")
+                if res.get(k) is not None}
+        results.append(slim)
+        if res.get("applied") or (not apply and res.get("n_groups")):
+            done += 1
+        else:
+            skipped += 1
+    return {"portal": portal, "widget": listing["widget"],
+            "rounds_total": len(listing["rounds"]),
+            "rounds_processed": len(results), "ok": done, "skipped": skipped,
+            "rounds_left": len(listing["rounds"]) - len(results),
+            "results": results}
 
 
 def _pair_count(pair_counts: dict, a: str, b: str) -> int:

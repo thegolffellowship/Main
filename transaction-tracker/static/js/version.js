@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.93.2";
+window.TGF_VERSION = "2.94.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.94.0",
+    date: "2026-07-14",
+    changes: [
+      "GG tee-sheet pairings ingest (Kerry overnight directive): scoring-pairings bridge commands walk each portal's TEE SHEETS widget round by round, parse the groups, resolve players through the scoring identity cascade, and write pairing_history per event -- played-with pairs for the whole group plus the rode-with flag per Kerry's cart ruling (tee-sheet sequence 1&2 / 3&4 ride together). Tee sheets are the ruled PRIMARY pairings source; apply REPLACES that event's history rows so re-runs are safe.",
+      "pairing_history carries the RATIFIED customer_id amendment additively: customer_a_id/customer_b_id, rode, and source ('app' vs 'gg_teesheet') columns; app-side Save Pairings now writes all four too. Generate Pairings' season-scoped repeat-minimizing counts read this same table, so the ingested 2026 history immediately drives 'maximize new pairings' -- repeats only come back after a cycle, exactly the objective in the pairing standards.",
+    ],
+  },
   {
     version: "2.93.2",
     date: "2026-07-14",
