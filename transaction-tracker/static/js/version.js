@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.95.0";
+window.TGF_VERSION = "2.95.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.95.1",
+    date: "2026-07-14",
+    changes: [
+      "Team-board parser handles the real affiliation tails the SA dry-run surfaced: the text after the last member is a comma-separated affiliation PER PLAYER ('TGF San Antonio, Former, TGF Houston, TGF Austin', '..., Guest'), not a single chapter tag -- the old single-tag strip let blind markers leak through as fake player names on mixed-chapter 18-hole rounds. Also added an event override arg (scoring-pairings:team|<portal>|<round>|apply|<event id or name fragment>) for the two preseason rounds whose selector labels GG truncates mid-date.",
+    ],
+  },
   {
     version: "2.95.0",
     date: "2026-07-14",

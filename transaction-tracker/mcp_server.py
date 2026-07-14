@@ -1439,7 +1439,9 @@ def _scoring_dispatch(url: str, extract: str):
             # TEAM/CART Net board route (tee-sheet archive is login-gated;
             # the played rounds' team boards carry the actual groups):
             #   scoring-pairings:teamrounds|<portal>
-            #   scoring-pairings:team|<portal>|<round_id>[|apply]
+            #   scoring-pairings:team|<portal>|<round_id>[|apply[|<event>]]
+            #     (<event> = events.id or item_name fragment, for rounds
+            #      whose selector label is truncated past matching)
             #   scoring-pairings:teamall|<portal>[|apply]
             parts = [p.strip() for p in arg.split("|")]
             sub = (parts[0] or "").lower()
@@ -1450,7 +1452,8 @@ def _scoring_dispatch(url: str, extract: str):
             if sub == "team" and len(parts) >= 3:
                 return json.dumps(db.import_gg_teamnet_round(
                     parts[1], parts[2],
-                    apply=(len(parts) > 3 and parts[3].lower() == "apply")),
+                    apply=(len(parts) > 3 and parts[3].lower() == "apply"),
+                    event_override=(parts[4] if len(parts) > 4 else None)),
                     indent=2, default=str)
             if sub == "teamall" and len(parts) >= 2:
                 return json.dumps(db.import_gg_teamnet_all(
