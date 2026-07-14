@@ -34966,6 +34966,14 @@ def import_manual_pairing_groups(event_id: int, groups: list,
                 if not raw:
                     rs.append(None)
                     continue
+                # "!Name" = literal: store normalized as-is, NO customer
+                # resolution — for guests the fuzzy cascade could
+                # mis-attach to a member (seen live: guest 'Cleary, Paul'
+                # resolved to a member).
+                if isinstance(raw, str) and raw.startswith("!"):
+                    rs.append({"name": _normalize_player_name(raw[1:]),
+                               "cid": None})
+                    continue
                 cid = None
                 try:
                     cid = _resolve_scoring_player(conn, raw)
