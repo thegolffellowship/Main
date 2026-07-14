@@ -214,6 +214,47 @@ When no `round_id` is present the fallback key is `(player_name, round_date, cou
 - `templates/handicaps.html` — `DIFF_LOOKUP` (client-side JS table, must match)
 - Both tables must always be kept in sync.
 
+## Self-derived handicap preview (v2.88.0 — read-only, Phase 2 step 2 prep)
+
+`get_scoring_handicap_preview(event_query)` (bridge:
+`scoring-hcp-preview:<event>`) computes, from OUR imported scorecards,
+the handicap round each player of one event WOULD get — per player:
+adjusted gross, differential, current index, and the index the new
+round would produce. **Writes nothing.** Built (Kerry 2026-07-14) so
+the manual GG handicap export/import ritual can be retired on evidence:
+preview an event, eyeball it against GG, only then consider a real
+self-derived import.
+
+**Confirmed parity finding (2026-07-14, McKinley a9.1 / Barna a9.4
+cards):** GG's handicap export carries the RAW GROSS as the round's
+"adjusted" score — no WHS net-double-bogey cap — while our formula
+layer caps per WHS. This is the dominant family of the ~9% parity
+mismatches (2026 cluster, GG exactly ours+1 whenever one hole capped),
+a POLICY difference, not a math bug. The preview therefore reports BOTH
+variants side by side (`differential_ndb` / `differential_raw`, and
+`index_after_*` for each) plus `capped_holes` and a
+`cap_changes_differential` summary count. **Which variant becomes
+TGF's standard requires Kerry's explicit ruling (rule 3b) before any
+self-derived import path ships** — handicaps drive strokes, flights,
+and payouts. The smaller opposite family (GG BELOW our capped value —
+mis-bridged cards like the Victor Arias Jr/III double-bridge, or
+different strokes-received allocation) is a per-case review queue;
+`get_differential_parity` now classifies both under
+`mismatch_families` and lists `tee_mismatch_detail` (tee-row hole
+range vs the nine actually played) to separate legitimate front/back
+rating pairs from stale tee rows.
+
+Mechanics: slope/rating come from the round's OWN tee row (captured
+from GG's tee block at scorecard import) — per-round truth, immune to
+a course carrying front/back or re-rated variants under one tee name.
+The player's existing differential pool is gathered across ALL
+`handicap_rounds` player_name variants linked to their customer_id,
+window/pool/index math via the same `compute_handicap_index` the
+handicap card uses. Rounds already bridged to a handicap_rounds row
+are flagged `already_imported` with GG's stored values for
+side-by-side. 18-hole rounds are skipped (front/back split still
+unbuilt — same Phase 2 gap as parity).
+
 ## Golf Genius public-portal probe (v2.18.1)
 
 MCP tool `probe_golf_genius(url, extract, max_chars)` fetches a public GG
