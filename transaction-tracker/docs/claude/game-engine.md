@@ -239,7 +239,15 @@ on every column. Matrix by N (4-32):
   — filled by the best non-advancing pool finishers by the seeding metric
 - SEEDING: knockout seeds = most Stableford points accumulated across
   the pool matches (ratified); classic placement 1v8/4v5/2v7/3v6, a
-  12-field plays inside a 16 template (missing seeds = byes)
+  12-field plays inside a 16 template (missing seeds = byes).
+  **EXCEPTION — 4-player knockout (Kerry 2026-07-14): semis are
+  CROSS-POOL — each pool winner vs the OTHER pool's runner-up.
+  Stableford does NOT seed that bracket; it only breaks record ties in
+  pool finishes (already applied in pool rank: wins → W−L → Stableford).**
+  Engine: `cross_pool_semi_order()` in match_play.py; config key
+  `seeding_knockout4` (default `cross_pool` — old snapshots without the
+  key get the rule too); `cmp_seed_knockout` falls back to Stableford
+  seeding with a warning if the field isn't two pools × two advancers.
 - POOL WINNER BONUS: $20/pool winner ($25 at N=4), off the pot first
 - LADDERS (% of adjusted pot): 4→71.5/28.5 (=$97/$38) | 5→66.67/33.33
   (=$120/$60) | 6→62.5/22.5/15 | 7→55/25/20 | 8-10→50/30/20 |

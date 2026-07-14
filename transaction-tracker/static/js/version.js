@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.99.2";
+window.TGF_VERSION = "2.99.3";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.99.3",
+    date: "2026-07-14",
+    changes: [
+      "Match Play 4-player knockouts seed CROSS-POOL (Kerry): each pool winner plays the OTHER pool's runner-up in the semis -- Stableford no longer seeds that bracket (it only breaks record ties within pool finishes, which pool rank already applies). Seed Knockout button, member How-It-Works copy, engine (cross_pool_semi_order + seeding_knockout4 config key, default cross_pool so existing snapshots inherit the rule), and tests all updated. Larger brackets (8/12/16) keep ratified Stableford seeding; a malformed field (not two pools x two advancers) falls back to Stableford with a warning.",
+    ],
+  },
   {
     version: "2.99.2",
     date: "2026-07-14",

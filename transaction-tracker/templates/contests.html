@@ -824,7 +824,7 @@
                         <h3>Knockout Bracket</h3>
                         <div class="bracket-controls">
                             <button class="btn manager-only" id="cmp-seed-bracket-btn" style="display:none;">
-                                &#8635; Seed Knockout (Stableford)
+                                &#8635; Seed Knockout
                             </button>
                             <button class="btn btn-danger manager-only" id="cmp-clear-bracket-btn" style="display:none;">
                                 &#215; Clear Bracket
@@ -833,7 +833,9 @@
                         <div id="cmp-bracket-container">
                             <p style="color:var(--text-muted);font-size:0.85rem;">
                                 Once pool play is complete, click "Seed Knockout" — seeds, wildcards, and
-                                first-round byes come from the versioned Match Play config.
+                                first-round byes come from the versioned Match Play config. A 4-player
+                                knockout is seeded cross-pool (each pool winner vs the other pool's
+                                runner-up); larger brackets seed by pool-match Stableford points.
                             </p>
                         </div>
                     </div>
@@ -1372,7 +1374,7 @@
                 sections: [
                     S("The Format", "World Cup style. Pools of about four, three matches each; the top two in every pool advance to a knockout bracket (wildcards fill it out at some field sizes). The champion earns a Lone Star Cup roster spot."),
                     S("The Money", "$40 of every $50 entry builds the pot. Every pool winner banks $20 on the spot; the rest pays a ladder to the bracket’s top finishers, sized to the field. Ties split combined places."),
-                    S("The Seeding", "Knockout seeds go to the players with the most Stableford points across the pool-match events — every hole you play still counts."),
+                    S("The Seeding", "In a 4-player knockout, the semifinals cross the pools: each pool winner plays the other pool's runner-up. Bigger brackets seed by total Stableford points across the pool-match events — every hole you play still counts. Ties in a pool's finishing record break on Stableford points."),
                 ],
                 footnote: "Matches are scored head-to-head — no season points chart applies.",
                 chart: null, scorecard: null,

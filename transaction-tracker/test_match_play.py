@@ -8,6 +8,7 @@ Run: python3 test_match_play.py
 from email_parser.match_play import (
     SEED_MATCH_PLAY_CONFIG,
     allocate_cents,
+    cross_pool_semi_order,
     ladder_payout_rows,
     seed_bracket,
     seed_order,
@@ -127,6 +128,30 @@ def test_tie_split():
     assert total == s["adjusted_pot"], total
 
 
+def test_cross_pool_semis():
+    # Kerry 2026-07-14: 4-player knockout semis are cross-pool — each
+    # pool winner vs the OTHER pool's runner-up; Stableford never seeds
+    # this bracket. Seed order [A1, B1, A2, B2] through classic 4-slot
+    # placement (1v4, 2v3) must land A1vB2 and B1vA2.
+    a1, a2 = {"player_name": "A1"}, {"player_name": "A2"}
+    b1, b2 = {"player_name": "B1"}, {"player_name": "B2"}
+    order = cross_pool_semi_order([a1, a2], [b1, b2])
+    assert order == [a1, b1, a2, b2]
+    plan = seed_bracket(order, 4)
+    fr = [e["player"]["player_name"] for e in plan["first_round"]]
+    assert fr == ["A1", "B2", "B1", "A2"], fr  # match 0: A1vB2, match 1: B1vA2
+    assert not plan["bye_placements"]
+    assert SEED_MATCH_PLAY_CONFIG["seeding_knockout4"] == "cross_pool"
+    # extra pool rows beyond the runner-up are ignored
+    assert cross_pool_semi_order([a1, a2, {"player_name": "A3"}],
+                                 [b1, b2]) == [a1, b1, a2, b2]
+    try:
+        cross_pool_semi_order([a1], [b1, b2])
+        assert False, "expected ValueError for a 1-advancer pool"
+    except ValueError:
+        pass
+
+
 def test_allocate_cents_exact():
     # odd split still sums exactly, spare cent to 1st place
     assert allocate_cents(13500, [71.5, 28.5]) == [9653, 3847]
@@ -135,7 +160,8 @@ def test_allocate_cents_exact():
 
 if __name__ == "__main__":
     for fn in [test_matrix_parity, test_seed_order, test_bracket_12_byes,
-               test_bracket_4_and_2, test_tie_split, test_allocate_cents_exact]:
+               test_bracket_4_and_2, test_tie_split, test_cross_pool_semis,
+               test_allocate_cents_exact]:
         fn()
         print(f"OK  {fn.__name__}")
     print("All Match Play engine tests passed.")
