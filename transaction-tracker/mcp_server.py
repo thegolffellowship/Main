@@ -1430,6 +1430,10 @@ def _scoring_dispatch(url: str, extract: str):
             # export-free path shown before it's trusted — writes nothing.
             return json.dumps(db.get_scoring_handicap_preview(arg),
                               indent=2, default=str)
+        if cmd == "scoring-hcp-audit":
+            # READ-ONLY full-table audit: every handicap record classified
+            # by how it reconciles with its scorecard (Kerry 2026-07-14).
+            return json.dumps(db.audit_handicap_bridges(), indent=2, default=str)
         if cmd == "scoring-hcp-repair":
             # Repair Composer-import handicap rounds (adjusted stored as raw
             # gross) using GG's true Adjusted Gross from the season-scores

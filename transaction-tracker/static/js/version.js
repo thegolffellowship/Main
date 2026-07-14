@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.90.4";
+window.TGF_VERSION = "2.91.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.91.0",
+    date: "2026-07-14",
+    changes: [
+      "Full-table handicap bridge AUDIT (Kerry: 'audit all the records'): read-only bridge command scoring-hcp-audit classifies every handicap record -- bridged and reconciled to a scorecard nine, bridged but matching neither nine (review queue), unbridged with a card available that day (review queue), unbridged with no card (expected for pre-scorecard eras), or over-claimed cards. The repairs shipped today were always global (boot repairs sweep every player); this proves it with numbers.",
+      "9-hole rounds now carry Front/Back too (Kerry): a 9-hole record's nine comes from the physical holes on its card (a back-nine event carries holes 10-18), so Falconhead-style back-nine events read 'Course - Back' and named nines resolve the same way as 18s ('Hyatt Hill Country | Oaks').",
+    ],
+  },
   {
     version: "2.90.4",
     date: "2026-07-14",

@@ -10911,6 +10911,91 @@ def repair_handicap_adjusted_scores(cells: list[dict], dry_run: bool = True,
             "summary": {"planned": len(plan), "skipped": len(skipped)}}
 
 
+def audit_handicap_bridges(db_path: str | Path = DB_PATH) -> dict:
+    """Full-table audit of every handicap record's link to its scorecard
+    (Kerry 2026-07-14: 'audit all the records and see if you find any
+    other issues'). READ-ONLY. Classifies every handicap_rounds row:
+
+      bridged_reconciled   — bridged; adjusted equals a nine's WHS total
+      bridged_mismatch     — bridged; adjusted matches NEITHER nine (review)
+      overclaimed_card     — more records on one card than it has nines
+      unbridged_card_exists— no bridge but the player HAS a card that date
+                             (review — the repair left it because nothing
+                             reconciled)
+      unbridged_no_card    — no scorecard exists for that player+date
+                             (expected: pre-scorecard eras)
+      unbridged_no_customer— record has no customer_id to even look with
+    """
+    from collections import Counter
+    from itertools import groupby
+    formulas = get_scoring_formulas(db_path=db_path)
+    with _connect(db_path) as conn:
+        _ensure_scoring_tables(conn)
+        recs = conn.execute(
+            """SELECT hr.id, hr.player_name, hr.customer_id, hr.round_date,
+                      hr.adjusted_score, hr.scoring_round_id,
+                      sr.holes_played, sr.tee_id
+               FROM handicap_rounds hr
+               LEFT JOIN scoring_rounds sr ON sr.id = hr.scoring_round_id
+               ORDER BY hr.scoring_round_id, hr.id""").fetchall()
+        counts: Counter = Counter()
+        mismatches: list = []
+        orphans: list = []
+        bridged = [r for r in recs if r["scoring_round_id"]]
+        unbridged = [r for r in recs if not r["scoring_round_id"]]
+        for srid, grp_it in groupby(bridged, key=lambda r: r["scoring_round_id"]):
+            grp = list(grp_it)
+            sp = _nine_totals_for_card(conn, srid, grp[0]["tee_id"], formulas)
+            sides = [s for s in ("front", "back") if sp[s]["n"]]
+            if len(grp) > len(sides):
+                counts["overclaimed_card"] += len(grp) - len(sides)
+            claimed: set = set()
+            for r in sorted(grp, key=lambda x: x["id"]):
+                cands = [s for s in sides if s not in claimed
+                         and sp[s]["adj"] == r["adjusted_score"]]
+                if cands:
+                    claimed.add(cands[0])
+                    counts["bridged_reconciled"] += 1
+                else:
+                    counts["bridged_mismatch"] += 1
+                    if len(mismatches) < 40:
+                        mismatches.append({
+                            "handicap_round_id": r["id"],
+                            "player_name": r["player_name"],
+                            "round_date": r["round_date"],
+                            "stored_adjusted": r["adjusted_score"],
+                            "card_nines": {s: {"gross": sp[s]["gross"],
+                                               "whs_adjusted": sp[s]["adj"]}
+                                           for s in sides},
+                            "scoring_round_id": srid,
+                        })
+        card_days = {f'{r["customer_id"]}:{r["round_date"]}' for r in conn.execute(
+            "SELECT customer_id, round_date FROM scoring_rounds "
+            "WHERE customer_id IS NOT NULL")}
+        for r in unbridged:
+            if not r["customer_id"]:
+                counts["unbridged_no_customer"] += 1
+            elif f'{r["customer_id"]}:{r["round_date"]}' in card_days:
+                counts["unbridged_card_exists"] += 1
+                if len(orphans) < 40:
+                    orphans.append({
+                        "handicap_round_id": r["id"],
+                        "player_name": r["player_name"],
+                        "round_date": r["round_date"],
+                        "stored_adjusted": r["adjusted_score"],
+                    })
+            else:
+                counts["unbridged_no_card"] += 1
+        return {"total_records": len(recs),
+                "counts": dict(counts),
+                "bridged_mismatches": mismatches,
+                "unbridged_with_cards": orphans,
+                "note": "READ-ONLY audit. bridged_mismatch + "
+                        "unbridged_card_exists are the review queues; "
+                        "unbridged_no_card is expected for eras with no "
+                        "imported scorecards."}
+
+
 def _cleanup_empty_scoring_rounds(conn: sqlite3.Connection) -> None:
     """Delete zero-hole scoring rounds (tee-sheet no-show/WD artifacts the
     importer stored before v2.26.1), reset their handicap bridges, and
@@ -20692,8 +20777,7 @@ def get_handicap_rounds(player_name: str | None = None,
         # Player-scoped calls only (the UI path) — the unscoped dump stays
         # cheap and simply shows no gross for 18-hole bridges.
         if player_name:
-            need = [r for r in rounds
-                    if r.get("scoring_round_id") and (r.get("sr_holes") or 0) > 9]
+            need = [r for r in rounds if r.get("scoring_round_id")]
             if need:
                 formulas = get_scoring_formulas(db_path=db_path)
                 # Resolve per CARD, not per row: when both nines of an
@@ -20702,17 +20786,25 @@ def get_handicap_rounds(player_name: str | None = None,
                 # unique-match test fails for both records. Records
                 # sharing a card claim nines together, in id order,
                 # front first — a tie assigns cleanly instead of
-                # dashing out.
+                # dashing out. 9-hole cards (v2.91.0, Kerry) simply
+                # report the nine that was PLAYED (hole numbers are
+                # physical: a back-nine event carries holes 10-18).
                 by_srid: dict = {}
                 for r in need:
                     by_srid.setdefault(r["scoring_round_id"], []).append(r)
                 for srid, group in by_srid.items():
                     sp = _nine_totals_for_card(
                         conn, srid, group[0].get("sr_tee_id"), formulas)
+                    sides = [s for s in ("front", "back") if sp[s]["n"]]
+                    if (group[0].get("sr_holes") or 0) <= 9:
+                        for r in group:
+                            if len(sides) == 1:
+                                r["nine"] = sides[0]
+                        continue
                     claimed: set = set()
                     for r in sorted(group, key=lambda x: x["id"]):
-                        cands = [s for s in ("front", "back")
-                                 if s not in claimed and sp[s]["n"]
+                        cands = [s for s in sides
+                                 if s not in claimed
                                  and sp[s]["adj"] == r["adjusted_score"]]
                         if cands:
                             claimed.add(cands[0])
