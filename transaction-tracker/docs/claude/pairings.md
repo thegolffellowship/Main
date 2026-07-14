@@ -36,7 +36,8 @@ matters too, not just the foursome.
    honored where possible, but never at the match's expense. Before
    generating, the manager gets a per-match CONFIRM question — a "no"
    (match not required this event) drops that constraint and the next
-   pairings rule runs normally. (Task #25 — engine build pending.)
+   pairings rule runs normally. (Task #25 — BUILT v2.100.0, see
+   "Match Play constraint" section below.)
 9. **Members may fill their foursome with first-time guests.**
 10. **Request communication is part of signup** (Platform build):
     when someone signs up, notify whom they've requested.
@@ -295,6 +296,50 @@ submatrix), `hist|<event id or name>` (raw rows + totals by source).
 - **GG friction to eliminate:** per-round course/tee/times/shotgun
   re-entry after pairing — data the Tracker already holds.
 
+## Match Play constraint — BUILT v2.100.0 (task #25, rule 8 amendment)
+
+**Detection** (`detect_match_play_pairings(event_id)` in database.py;
+bridge `scoring-pairings:mp|<event_id>`; API `GET /api/events/<id>/
+pairings/matchplay`, manager): season = event year, chapter = event
+chapter. Phase rule: ANY `cmp_bracket` rows for season+chapter = pool
+play is over → pending matchups only (slot pairs 2i/2i+1 with both
+players placed, no winner, both rostered). Otherwise pool phase: every
+pool-mate pair on the roster with **no PLAYED cmp_matches row** — a
+scheduled-but-unplayed row and a never-created row both count (rows are
+only created when a result/schedule is saved, so row-existence alone
+would miss most pending matches). Roster membership by customer_id
+first, `_pair_key_name` fallback.
+
+**Manager confirm gate** (events.html PAIRINGS tab): first Generate
+click fetches detection; if matches exist an orange MATCH PLAY DETECTED
+panel lists each one (pool name / round label) with a checkbox
+(default confirmed) — "Generate with Matches" proceeds; unchecking =
+"not required this event", constraint drops. A `⚔ Match Play: n/N`
+chip reopens the panel; choices persist for the session.
+
+**Generator** (`generate_event_pairings(..., mp_pairs=[[a,b],...])`):
+confirmed opponents form unsplittable `fixed_units` placed before
+partner pairing ("Match Play is king"); overlapping pool matches merge
+into one unit up to a foursome. Composition never packs a partner PAIR
+into an MP foursome — MP opponents take one seat in EACH cart, so the
+leftover seats are split across carts and a pair there could never
+ride together; pairs go to other groups instead. A partner request
+pointing INTO a match unit attaches to that foursome when there's room
+(rider joins the requester's cart). Seat order for constrained groups
+is exact (≤4! permutations): MP opponents OPPOSITE carts (weight 1000,
+seats 1/2 vs 3/4) > partner pairs SAME cart (100) > same-tee cart-
+mates (1). Side effect fix: partner pairs now share a cart everywhere
+(pre-v2.100 "adjacent" could straddle seats 2/3 = two carts). Seed
+locks beat matches (rule 5); everything undoable is reported in
+`mp_notes`, surfaced under the controls bar. ABCD mode ignores
+mp_pairs (noted). Constrained players carry `mp_opponent` in the
+response; `GET /pairings` returns `mp_matches` so SAVED pairings badge
+too — orange `⚔ MP` chip, tooltip names the opponent.
+
+**Tests**: `test_mp_pairings.py` (22 checks — both phases, roster
+filtering, opposite-cart, request-around-match, decline, knockout
+labels, decided-match exclusion).
+
 ## Pace-of-play STAGING project (Kerry, 2026-07-14 — task #23)
 
 Per-player pace ratings (manager-tagged v1; later derived from
@@ -330,9 +375,33 @@ DelCarmen 1):
   "Victor Arias" — both seeded, flag for adjustment if only one),
   Roberto Moreno, Michael Murphy, Michelle Delcarmen.
 
-Next: pace_rating editor UI (Customers page, Kerry + Robert one-tap),
-then the staging engine consuming group aggregates (shotgun trains
-front = fast; sequential first = fast).
+### Editor + staging engine — BUILT v2.101.0
+
+**One-tap editor** (Customers page, manager tier): PACE column on the
+list view + inline control on mobile cards — a 1|2|3 segmented tap.
+NULL renders as the gray "implied" 2; a tap always writes an EXPLICIT
+value with `pace_rating_source='manager'` (no clear option — the boot
+seed is fill-only-if-NULL, so clearing a seeded player would resurrect
+the seed on the next deploy). `POST /api/customers/<id>/pace`
+(`set_customer_pace_rating`); `/api/customers` carries
+pace_rating/source.
+
+**Staging engine** (inside `generate_event_pairings`, after
+composition is settled): groups are ordered by aggregate pace =
+average member rating (unrated = 2; lookup joins customers via
+items.customer_id — rule 6, suffix-proof). Sequential tee times: fast
+groups FIRST. Shotgun: fast groups at the FRONT of the hole train =
+HIGHER hole numbers = later sheet slots (slowest at 1A). Group size
+breaks pace ties (smaller plays faster), which preserves the legacy
+threesomes-to-the-front shotgun push when everyone is a 2. Seeded
+groups stay where the manager put them (rule 5). Composition is NEVER
+affected — proven by test_pace_staging.py (19 checks). The rule is
+data: `PAIRING_STAGING_DEFAULTS` overridable via the
+`pairing_staging_rules` app_settings JSON (enabled / shotgun /
+tee_times / aggregate / default_rating). Each generated group carries
+`group_pace`, rendered as a ⏱ chip on the PAIRINGS group headers.
+
+Next (pace v2, parked): derive ratings from GPS/score-entry timing.
 
 ## Engine notes (design, not yet built)
 

@@ -1485,6 +1485,11 @@ def _scoring_dispatch(url: str, extract: str):
                 # read-only: run the generator seedless + show repeat math
                 return json.dumps(db.debug_generate_pairings(int(parts[1])),
                                   indent=2, default=str)
+            if sub == "mp" and len(parts) >= 2 and parts[1].isdigit():
+                # read-only: potential Match Play matches on an event's
+                # roster (rule 8 amendment detection — Task #25)
+                return json.dumps(db.detect_match_play_pairings(int(parts[1])),
+                                  indent=2, default=str)
             if sub == "hist" and len(parts) >= 2:
                 # read-only: pairing_history rows by event id or name
                 # fragment + 2026 totals by source

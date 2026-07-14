@@ -14724,6 +14724,8 @@ def get_all_customers(db_path=None) -> list[dict]:
                    c.chapter,
                    c.ghin_number,
                    c.account_status,
+                   c.pace_rating,
+                   c.pace_rating_source,
                    c.updated_at,
                    ce.email   AS primary_email,
                    ce.label   AS email_label
@@ -35200,6 +35202,29 @@ def list_pace_ratings(db_path: str | Path = DB_PATH) -> dict:
     }
 
 
+def set_customer_pace_rating(customer_id: int, rating: int,
+                             db_path: str | Path = DB_PATH) -> dict:
+    """Manager one-tap pace edit (task #23). Writes an EXPLICIT 1/2/3
+    with source='manager' — never NULL: the boot seed is
+    fill-only-if-NULL, so a cleared seeded player would get the seed
+    value back on the next deploy. An explicit 2 is a real ruling
+    ("this player is average pace"), same as Kerry's seed corrections.
+    """
+    if rating not in (1, 2, 3):
+        raise ValueError("rating must be 1, 2, or 3")
+    with _connect(db_path) as conn:
+        cur = conn.execute(
+            """UPDATE customers
+               SET pace_rating = ?, pace_rating_source = 'manager'
+               WHERE customer_id = ?""",
+            (rating, int(customer_id)))
+        if cur.rowcount == 0:
+            raise ValueError(f"customer {customer_id} not found")
+        conn.commit()
+    return {"customer_id": int(customer_id), "pace_rating": rating,
+            "pace_rating_source": "manager"}
+
+
 def analyze_player_staging(db_path: str | Path = DB_PATH) -> dict:
     """Per-player staging positions across 9-hole events (Kerry's
     pace-ranking side quest). For each event's MAIN wave, each player's
@@ -35483,11 +35508,207 @@ def _find_partner_name(request_text: str, all_names: list[str], requester: str) 
     return None
 
 
+_CMP_ROUND_LABELS = {"r16": "Round of 16", "qf": "Quarterfinal",
+                     "sf": "Semifinal", "final": "Final"}
+
+
+# ── Pace staging rules (task #23) — rules-as-data (principle 2) ─────────
+# Kerry, 2026-07-14: group pace = aggregate of member ratings (1 slowest →
+# 3 fastest, NULL reads as 2); staging ONLY — pace never dictates who
+# plays with whom. Shotgun hole-trains put fast groups at the FRONT of
+# the train (higher hole numbers = later sheet slots); sequential tee
+# times put fast groups FIRST. Override any key via the
+# 'pairing_staging_rules' app_settings JSON.
+PAIRING_STAGING_DEFAULTS = {
+    "enabled": True,
+    "shotgun": "fast_front",    # fast → higher holes (later sheet slots)
+    "tee_times": "fast_first",  # fast → earliest tee times
+    "aggregate": "avg",         # group pace = average member rating
+    "default_rating": 2,        # NULL pace_rating reads as 2 (Kerry)
+}
+
+
+def get_pairing_staging_rules(db_path=None) -> dict:
+    """The staging ordering rule, editable data over code defaults."""
+    rules = dict(PAIRING_STAGING_DEFAULTS)
+    try:
+        raw = get_app_setting("pairing_staging_rules", db_path=db_path)
+        if raw:
+            override = json.loads(raw)
+            if isinstance(override, dict):
+                rules.update(override)
+    except Exception:
+        logger.exception("pairing_staging_rules unreadable — using defaults")
+    return rules
+
+
+def _event_roster_players(conn, event_id: int) -> list[dict]:
+    """Active registrants for an event: name + customer_id (rule 6).
+    Same events → aliases → items join the generator uses."""
+    INACTIVE = ("credited", "refunded", "transferred", "wd")
+    ph = ",".join("?" * len(INACTIVE))
+    rows = conn.execute(
+        f"""
+        SELECT DISTINCT i.customer AS name, i.customer_id
+        FROM events e
+        LEFT JOIN event_aliases ea ON ea.canonical_event_name = e.item_name
+        JOIN items i ON (
+            i.item_name = e.item_name COLLATE NOCASE
+            OR i.item_name = ea.alias_name COLLATE NOCASE
+            OR i.event_id = e.id
+        )
+        WHERE e.id = ?
+          AND COALESCE(i.transaction_status, 'active') NOT IN ({ph})
+          AND i.parent_item_id IS NULL
+        """,
+        (event_id, *INACTIVE),
+    ).fetchall()
+    return [dict(r) for r in rows if r["name"]]
+
+
+def detect_match_play_pairings(event_id: int, db_path=None) -> dict:
+    """Rule 8 as AMENDED (Kerry 2026-07-14, 'Match Play is king'): find the
+    potential Match Play matches the season state implies between players
+    on this event's roster. The Generate Pairings flow shows each one to
+    the manager for a confirm/decline BEFORE generating; confirmed matches
+    become the generator's first constraint (same foursome, opposite carts).
+
+    Phase rule: a seeded knockout (any cmp_bracket rows for the season +
+    chapter) means pool play is over — only pending bracket matchups count.
+    Otherwise every pool-mate pair without a PLAYED cmp_matches row (no
+    played_at) is a potential match; a scheduled-but-unplayed row and a
+    never-created row both imply "these two still need to play".
+
+    Roster membership is checked by customer_id first (rule 6), normalized
+    name as fallback (cmp_* rows written before the id columns existed).
+    """
+    with _connect(db_path) as conn:
+        ev = conn.execute(
+            "SELECT id, item_name, event_date, chapter FROM events WHERE id = ?",
+            (event_id,),
+        ).fetchone()
+        if not ev:
+            raise ValueError(f"Event {event_id} not found")
+        ev = dict(ev)
+        chapter = (ev.get("chapter") or "").strip()
+        season = (ev.get("event_date") or "")[:4]
+        if not season:
+            from email_parser.timezone_utils import now_central
+            season = str(now_central().year)
+
+        out: dict = {"event_id": event_id, "event_name": ev.get("item_name"),
+                     "season": season, "chapter": chapter,
+                     "phase": None, "matches": [], "notes": []}
+        if not chapter:
+            out["notes"].append("Event has no chapter — cannot scope Match Play state.")
+            return out
+
+        roster = _event_roster_players(conn, event_id)
+        roster_ids = {r["customer_id"] for r in roster if r.get("customer_id")}
+        roster_names = {_pair_key_name(r["name"]): r["name"] for r in roster}
+
+        def on_roster(name, cid):
+            if cid and cid in roster_ids:
+                return True
+            return _pair_key_name(name or "") in roster_names
+
+        def display(name):
+            """Prefer the roster's casing of the name so the generator can
+            match the pair against its player list exactly."""
+            return roster_names.get(_pair_key_name(name or ""), name)
+
+        bracket = conn.execute(
+            "SELECT * FROM cmp_bracket WHERE season = ? AND chapter = ? "
+            "ORDER BY round, slot",
+            (season, chapter),
+        ).fetchall()
+
+        if bracket:
+            # ── Knockout phase: pending matchups = slot pairs (2i, 2i+1)
+            # with both players placed and no winner recorded.
+            out["phase"] = "knockout"
+            by_round: dict[str, dict[int, dict]] = {}
+            for b in bracket:
+                by_round.setdefault(b["round"], {})[b["slot"]] = dict(b)
+            for rnd in ("r16", "qf", "sf", "final"):
+                slots = by_round.get(rnd)
+                if not slots:
+                    continue
+                for lo in sorted(slots):
+                    if lo % 2:
+                        continue
+                    s1, s2 = slots.get(lo), slots.get(lo + 1)
+                    if not s1 or not s2:
+                        continue
+                    p1, p2 = s1.get("player_name"), s2.get("player_name")
+                    if not p1 or not p2:
+                        continue
+                    if s1.get("winner_name") or s2.get("winner_name"):
+                        continue
+                    both = (on_roster(p1, s1.get("player_id"))
+                            and on_roster(p2, s2.get("player_id")))
+                    if not both:
+                        continue
+                    out["matches"].append({
+                        "stage": "knockout",
+                        "label": _CMP_ROUND_LABELS.get(rnd, rnd),
+                        "player1": display(p1), "player2": display(p2),
+                        "player1_id": s1.get("player_id"),
+                        "player2_id": s2.get("player_id"),
+                    })
+        else:
+            # ── Pool phase: pool-mate pairs with no PLAYED match yet.
+            out["phase"] = "pool"
+            pools = conn.execute(
+                "SELECT id, pool_name FROM cmp_pools WHERE season = ? AND chapter = ? "
+                "ORDER BY pool_name",
+                (season, chapter),
+            ).fetchall()
+            if not pools:
+                out["phase"] = None
+                return out
+            for pool in pools:
+                members = conn.execute(
+                    "SELECT customer_name, customer_id FROM cmp_pool_members "
+                    "WHERE pool_id = ? ORDER BY customer_name",
+                    (pool["id"],),
+                ).fetchall()
+                here = [m for m in members
+                        if on_roster(m["customer_name"], m["customer_id"])]
+                if len(here) < 2:
+                    continue
+                played = set()
+                for m in conn.execute(
+                    "SELECT player1_name, player2_name FROM cmp_matches "
+                    "WHERE pool_id = ? AND played_at IS NOT NULL",
+                    (pool["id"],),
+                ).fetchall():
+                    played.add(frozenset((_pair_key_name(m["player1_name"]),
+                                          _pair_key_name(m["player2_name"]))))
+                for i in range(len(here)):
+                    for j in range(i + 1, len(here)):
+                        a, b = here[i], here[j]
+                        key = frozenset((_pair_key_name(a["customer_name"]),
+                                         _pair_key_name(b["customer_name"])))
+                        if key in played:
+                            continue
+                        out["matches"].append({
+                            "stage": "pool",
+                            "label": pool["pool_name"],
+                            "player1": display(a["customer_name"]),
+                            "player2": display(b["customer_name"]),
+                            "player1_id": a["customer_id"],
+                            "player2_id": b["customer_id"],
+                        })
+        return out
+
+
 def generate_event_pairings(
     event_id: int,
     mode: str = "random",
     protect_partner_requests: bool = True,
     seeds: list | None = None,
+    mp_pairs: list | None = None,
     db_path=None,
 ) -> dict:
     """Generate pairings for an event and return (but do NOT save) the result.
@@ -35496,6 +35717,12 @@ def generate_event_pairings(
     protect_partner_requests: honor partner_request field (random mode only)
     seeds: list of pre-assigned player locks:
         [{"holes": "9"|"18", "slot_index": int (0-based), "players": [{"name", "cart_pos"}]}]
+    mp_pairs: manager-CONFIRMED Match Play matches, [[name1, name2], ...]
+        (rule 8 amendment, Kerry 2026-07-14: "Match Play is king").
+        Opponents land in the same foursome in OPPOSITE carts (seats 1/2
+        vs 3/4) — the first constraint, above partner requests. A partner
+        request is still honored where it fits around a match (attached
+        to the match's foursome), never at the match's expense.
 
     Returns:
         {
@@ -35503,11 +35730,15 @@ def generate_event_pairings(
             "18": [...],
             "slots_9":  [str, ...],
             "slots_18": [str, ...],
+            "mp_notes": [str, ...],   # only when mp_pairs were passed
         }
+    Players carry "mp_opponent" when their confirmed opponent is in the
+    same group (the PAIRINGS tab's visual denotation).
     """
     import random as _random
 
     seeds = seeds or []
+    mp_pairs = mp_pairs or []
     with _connect(db_path) as conn:
         # ── Load event ────────────────────────────────────────────────
         ev = conn.execute(
@@ -35569,6 +35800,33 @@ def generate_event_pairings(
         ).fetchall()
         hcp_map = {r["customer_name"].lower(): r["handicap_index"] for r in hcp_rows}
 
+        # ── Pace map for STAGING (task #23) ───────────────────────────
+        # Keyed by the roster's own name via customer_id (rule 6 — also
+        # suffix-proof: 'Victor Arias III' finds the unsuffixed customer
+        # row). Unrated players read as the configured default (2).
+        pace_rows = conn.execute(
+            f"""
+            SELECT DISTINCT i.customer AS name, c.pace_rating
+            FROM events e
+            LEFT JOIN event_aliases ea ON ea.canonical_event_name = e.item_name
+            JOIN items i ON (
+                i.item_name = e.item_name COLLATE NOCASE
+                OR i.item_name = ea.alias_name COLLATE NOCASE
+                OR i.event_id = e.id
+            )
+            JOIN customers c ON c.customer_id = i.customer_id
+            WHERE e.id = ?
+              AND COALESCE(i.transaction_status, 'active') NOT IN ({ph})
+              AND i.parent_item_id IS NULL
+              AND c.pace_rating IS NOT NULL
+            """,
+            (event_id, *INACTIVE),
+        ).fetchall()
+        pace_map = {_pair_key_name(r["name"]): r["pace_rating"]
+                    for r in pace_rows if r["name"]}
+
+    staging_rules = get_pairing_staging_rules(db_path=db_path)
+
     # ── Normalise holes per player ────────────────────────────────────
     def player_holes(item):
         h = (item.get("holes") or "").strip()
@@ -35587,6 +35845,37 @@ def generate_event_pairings(
 
     # ── Pairing history for current year ─────────────────────────────
     pair_counts = get_pairing_history_counts(db_path=db_path)
+
+    # ── Confirmed Match Play pairs: roster + holes validation ────────
+    # (rule 8 amendment — opponents must share a holes bucket to share
+    # a foursome; anything that can't be constrained is reported, never
+    # silently dropped)
+    mp_notes: list[str] = []
+    _roster_norm = {_pair_key_name(i["customer"]): i["customer"]
+                    for i in items if i.get("customer")}
+    _holes_norm = {_pair_key_name(i["customer"]): player_holes(i)
+                   for i in items if i.get("customer")}
+    valid_mp_pairs: list[tuple[str, str]] = []
+    for pr in mp_pairs:
+        if not (isinstance(pr, (list, tuple)) and len(pr) == 2):
+            continue
+        ak, bk = _pair_key_name(str(pr[0])), _pair_key_name(str(pr[1]))
+        if ak == bk:
+            continue
+        if ak not in _roster_norm or bk not in _roster_norm:
+            mp_notes.append(f"{pr[0]} vs {pr[1]}: not both on the event "
+                            "roster — match constraint dropped.")
+            continue
+        if _holes_norm.get(ak) != _holes_norm.get(bk):
+            mp_notes.append(f"{_roster_norm[ak]} vs {_roster_norm[bk]}: "
+                            "registered for different hole counts — cannot "
+                            "share a foursome.")
+            continue
+        valid_mp_pairs.append((_roster_norm[ak], _roster_norm[bk]))
+    if valid_mp_pairs and mode == "abcd":
+        mp_notes.append("Match Play constraints apply to Random mode only — "
+                        "ABCD groups were built without them.")
+        valid_mp_pairs = []
 
     # ── Generate slots ────────────────────────────────────────────────
     slots_9 = _pairing_time_slots(ev, "9")
@@ -35631,8 +35920,97 @@ def generate_event_pairings(
         # Positions still open in seeded slots
         seed_space_open = {si: 4 - len(v) for si, v in seed_map[holes].items() if len(v) < 4}
 
+        # ── Match Play units (rule 8 amendment: the FIRST constraint) ──
+        # Confirmed opponents form an unsplittable unit; overlapping
+        # matches (pool play: one player can owe several pool-mates a
+        # match) merge into one unit up to a foursome. A seed lock on
+        # either player wins (rule 5: manager override) — the match is
+        # reported, not auto-constrained.
+        mp_units: list[list[str]] = []
+        mp_opponents: set[frozenset] = set()
+        for a, b in valid_mp_pairs:
+            if a not in free_players or b not in free_players:
+                if a in seeded_players[holes] or b in seeded_players[holes]:
+                    mp_notes.append(f"{a} vs {b}: a player is locked in a "
+                                    "seed — match left to the manager's "
+                                    "placement (override wins).")
+                continue
+            ua = next((u for u in mp_units if a in u), None)
+            ub = next((u for u in mp_units if b in u), None)
+            if ua is not None and ub is not None:
+                if ua is ub:
+                    pass  # already together
+                elif len(ua) + len(ub) <= 4:
+                    ua.extend(ub)
+                    mp_units.remove(ub)
+                else:
+                    mp_notes.append(f"{a} vs {b}: overlapping matches don't "
+                                    "fit one foursome — this match was NOT "
+                                    "constrained.")
+                    continue
+            elif ua is not None:
+                if len(ua) >= 4:
+                    mp_notes.append(f"{a} vs {b}: {a}'s match group is full "
+                                    "— this match was NOT constrained.")
+                    continue
+                ua.append(b)
+            elif ub is not None:
+                if len(ub) >= 4:
+                    mp_notes.append(f"{a} vs {b}: {b}'s match group is full "
+                                    "— this match was NOT constrained.")
+                    continue
+                ub.append(a)
+            else:
+                mp_units.append([a, b])
+            mp_opponents.add(frozenset((_pair_key_name(a), _pair_key_name(b))))
+        mp_names = {n for u in mp_units for n in u}
+
+        # Partner-request adjacency pairs (for cart seating) — built from
+        # the same pairing rule _partner_locked_names uses.
+        partner_adj: set[frozenset] = set()
+        if protect_partner_requests:
+            _pa_used: set = set()
+            for requester, req_text in partner_map.items():
+                if requester in _pa_used:
+                    continue
+                partner = _find_partner_name(req_text, all_names, requester)
+                if partner and partner not in _pa_used:
+                    partner_adj.add(frozenset((_pair_key_name(requester),
+                                               _pair_key_name(partner))))
+                    _pa_used.update((requester, partner))
+
+        # Honor partner requests around a match where possible (never at
+        # the match's expense): when exactly one of the two is inside a
+        # match unit with room, the other joins that foursome.
+        if protect_partner_requests and mp_units:
+            for requester, req_text in partner_map.items():
+                partner = _find_partner_name(req_text, free_players, requester)
+                if not partner:
+                    continue
+                in_r = next((u for u in mp_units if requester in u), None)
+                in_p = next((u for u in mp_units if partner in u), None)
+                if (in_r is None) == (in_p is None):
+                    if in_r is not None and in_p is not None and in_r is not in_p:
+                        mp_notes.append(f"{requester} + {partner}: partner "
+                                        "request dropped — both have Match "
+                                        "Play matches in different groups.")
+                    continue
+                unit, joiner = (in_r, partner) if in_r is not None else (in_p, requester)
+                if joiner in mp_names:
+                    continue
+                if len(unit) < 4:
+                    unit.append(joiner)
+                    mp_names.add(joiner)
+                else:
+                    mp_notes.append(f"{requester} + {partner}: partner "
+                                    "request dropped — the Match Play "
+                                    "foursome is full.")
+
         locked_names = _partner_locked_names(
-            free_players, partner_map, protect_partner_requests)
+            [n for n in free_players if n not in mp_names],
+            partner_map, protect_partner_requests)
+        locked_names |= mp_names
+
         if mode == "abcd":
             groups_players = _abcd_groups(free_players, hcp_map)
         else:
@@ -35647,7 +36025,7 @@ def generate_event_pairings(
             for _ in range(30):
                 cand = _random_groups(
                     free_players, partner_map, pair_counts,
-                    protect_partner_requests
+                    protect_partner_requests, fixed_units=mp_units
                 )
                 cand = _swap_improve(cand, pair_counts, locked_names)
                 score = sum(_group_score(g, pair_counts) for g in cand)
@@ -35657,8 +36035,46 @@ def generate_event_pairings(
                     break
             groups_players = best_groups or []
 
-        # ── Build final group list with slot labels ───────────────────
+        # Seat order within a settled group: groups carrying a constraint
+        # pair get the exact seater — MP opponents in OPPOSITE carts
+        # (seats 1/2 vs 3/4), partner pairs in the SAME cart (they ride
+        # together — plain adjacency could straddle seats 2/3, i.e. two
+        # carts), same-tee cart-mates as the tiebreak. Unconstrained
+        # groups keep the tee-adjacency ordering.
+        def _seat(names: list[str]) -> list[str]:
+            keys = {_pair_key_name(n) for n in names}
+            constrained = (any(p <= keys for p in mp_opponents)
+                           or any(p <= keys for p in partner_adj))
+            if constrained:
+                return _arrange_group_seats(names, mp_opponents,
+                                            partner_adj, tee_map)
+            return _order_group_by_tee(names, tee_map, locked_names)
+
         is_shotgun = (ev.get("start_type" if holes == "9" else "start_type_18") == "Shotgun")
+
+        # ── STAGING (task #23): order settled groups by aggregate pace.
+        # HARD RULE: pace never dictates composition — the groups above
+        # are final; this step only decides WHERE each group is staged.
+        # Shotgun: fast groups to the FRONT of the hole train (higher
+        # hole numbers = later sheet slots), so slowest-first here.
+        # Tee times: fastest-first. Size breaks pace ties (a smaller
+        # group plays faster), which also preserves the old shotgun
+        # behavior of threesomes at the train's front. Seeded groups
+        # stay where the manager placed them (rule 5).
+        default_r = staging_rules.get("default_rating", 2)
+
+        def _group_pace(names: list[str]) -> float:
+            vals = [pace_map.get(_pair_key_name(n), default_r)
+                    for n in names if n]
+            return (sum(vals) / len(vals)) if vals else float(default_r)
+
+        staging_applied = bool(staging_rules.get("enabled", True)
+                               and groups_players)
+        if staging_applied:
+            groups_players.sort(key=lambda g: (-_group_pace(g), len(g)),
+                                reverse=bool(is_shotgun))
+
+        # ── Build final group list with slot labels ───────────────────
 
         # Start with seeded groups (already filled positions)
         seeded_groups: dict[int, list] = {}
@@ -35701,8 +36117,7 @@ def generate_event_pairings(
                 })
             else:
                 if free_group_idx < len(groups_players):
-                    gp = _order_group_by_tee(
-                        groups_players[free_group_idx], tee_map, locked_names)
+                    gp = _seat(groups_players[free_group_idx])
                     free_group_idx += 1
                     players_out = []
                     for cp, name in enumerate(gp, start=1):
@@ -35725,8 +36140,7 @@ def generate_event_pairings(
 
         # Handle overflow: free groups beyond available slots
         while free_group_idx < len(groups_players):
-            gp = _order_group_by_tee(
-                groups_players[free_group_idx], tee_map, locked_names)
+            gp = _seat(groups_players[free_group_idx])
             free_group_idx += 1
             players_out = []
             for cp, name in enumerate(gp, start=1):
@@ -35742,8 +36156,10 @@ def generate_event_pairings(
         # Remove empty groups
         all_groups = [g for g in all_groups if g["players"]]
 
-        # For shotgun: push threesomes to last slots
-        if is_shotgun and slots:
+        # For shotgun WITHOUT pace staging: push threesomes to last slots
+        # (the legacy ordering — staging subsumes it: at equal pace the
+        # size tiebreak already sends smaller groups to the train front).
+        if is_shotgun and slots and not staging_applied:
             foursomes = [g for g in all_groups if len(g["players"]) >= 4]
             smalls = [g for g in all_groups if len(g["players"]) < 4]
             ordered = foursomes + smalls
@@ -35752,14 +36168,36 @@ def generate_event_pairings(
         else:
             ordered = all_groups
 
+        # Group pace readout for the PAIRINGS tab (manager sanity check)
+        for g in ordered:
+            names = [p["name"] for p in g["players"] if p.get("name")]
+            g["group_pace"] = round(_group_pace(names), 2) if names else None
+
         # Assign final group_num
         for i, g in enumerate(ordered):
             g["group_num"] = i + 1
+
+        # Visual denotation feed: tag each player whose confirmed Match
+        # Play opponent landed in the same group (rule 8's PAIRINGS-tab
+        # requirement) — includes seeded groups the manager built.
+        if mp_opponents:
+            for g in ordered:
+                norms = {_pair_key_name(p["name"]): p["name"]
+                         for p in g["players"] if p.get("name")}
+                for p in g["players"]:
+                    pk = _pair_key_name(p.get("name") or "")
+                    opps = [norms[next(iter(pair - {pk}))]
+                            for pair in mp_opponents
+                            if pk in pair and next(iter(pair - {pk})) in norms]
+                    if opps:
+                        p["mp_opponent"] = " & ".join(opps)
 
         result[holes] = ordered
 
     result["slots_9"] = slots_9
     result["slots_18"] = slots_18
+    if mp_pairs or mp_notes:
+        result["mp_notes"] = mp_notes
     return result
 
 
@@ -35801,6 +36239,48 @@ def _order_group_by_tee(names: list[str], tee_map: dict,
             i += 1
     units.sort(key=lambda u: str(tee_map.get(u[0]) or "~"))
     return [n for u in units for n in u]
+
+
+def _arrange_group_seats(names: list[str], mp_opponents: set,
+                         partner_adj: set, tee_map: dict) -> list[str]:
+    """Seat order for a group containing Match Play opponents (rule 8
+    amendment). Carts are seats 1&2 and 3&4 (Kerry's cart-pair ruling).
+
+    Hard-to-soft priority (weighted, best permutation wins):
+    - Match Play opponents ride in OPPOSITE carts (weight 1000). This is
+      distinct from partner locking, which keeps a pair TOGETHER.
+    - Partner-request pairs share a cart (weight 100).
+    - Same-tee cart-mates (weight 1) — the tee-grouping pace rule.
+
+    Groups are ≤ 4 players (24 permutations), so brute force is exact.
+    """
+    from itertools import permutations
+
+    def _cart(idx: int) -> int:
+        return 0 if idx < 2 else 1
+
+    keys = {n: _pair_key_name(n) for n in names}
+    best, best_cost = list(names), None
+    for perm in permutations(names):
+        cost = 0
+        for i in range(len(perm)):
+            for j in range(i + 1, len(perm)):
+                pair = frozenset((keys[perm[i]], keys[perm[j]]))
+                same_cart = _cart(i) == _cart(j)
+                if pair in mp_opponents and same_cart:
+                    cost += 1000
+                if pair in partner_adj and not same_cart:
+                    cost += 100
+        for i, j in ((0, 1), (2, 3)):
+            if j < len(perm):
+                ta, tb = tee_map.get(perm[i]), tee_map.get(perm[j])
+                if ta and tb and ta != tb:
+                    cost += 1
+        if best_cost is None or cost < best_cost:
+            best, best_cost = list(perm), cost
+        if best_cost == 0:
+            break
+    return best
 
 
 def _partner_locked_names(players: list[str], partner_map: dict,
@@ -35856,12 +36336,32 @@ def _random_groups(
     partner_map: dict,
     pair_counts: dict,
     protect_partner_requests: bool,
+    fixed_units: list[list[str]] | None = None,
 ) -> list[list[str]]:
-    """Form groups using weighted random (history-aware) assignment."""
+    """Form groups using weighted random (history-aware) assignment.
+
+    fixed_units: pre-built unsplittable units placed FIRST — the Match
+    Play foursomes (rule 8 amendment). Members are consumed before
+    partner-request pairing, so a request can never pull a player out
+    of a match group ("Match Play is king"). A partner PAIR never packs
+    into a Match Play group either: MP opponents take one seat in EACH
+    cart, so the two leftover seats of that foursome are split across
+    carts — a pair placed there could not ride together. Keeping pairs
+    out lets both constraints be satisfied instead of sacrificing the
+    request at seat time.
+    """
     import random as _random
 
     used: set = set()
     units: list[list[str]] = []
+    mp_unit_names: set = set()
+
+    for fu in (fixed_units or []):
+        unit = [n for n in fu if n in players and n not in used]
+        if unit:
+            units.append(unit)
+            used.update(unit)
+            mp_unit_names.update(unit)
 
     # Build partner pairs first
     if protect_partner_requests:
@@ -35885,13 +36385,26 @@ def _random_groups(
     groups: list[list[str]] = []
     remaining = list(units)
 
+    def _unit_kind(unit: list[str]) -> str:
+        if any(n in mp_unit_names for n in unit):
+            return "mp"
+        return "pair" if len(unit) >= 2 else "single"
+
     for target in target_sizes:
         group: list[str] = []
+        kinds: set = set()
         while len(group) < target and remaining:
             needed = target - len(group)
-            fittable = [u for u in remaining if len(u) <= needed]
+
+            def _ok(u):
+                # mp + pair in one foursome is cart-infeasible (docstring)
+                k = _unit_kind(u)
+                return not ((k == "pair" and "mp" in kinds)
+                            or (k == "mp" and "pair" in kinds))
+
+            fittable = [u for u in remaining if len(u) <= needed and _ok(u)]
             if not fittable:
-                fittable = remaining
+                fittable = [u for u in remaining if _ok(u)] or remaining
             best_idx = 0
             best_score = float("inf")
             for idx, unit in enumerate(fittable):
@@ -35906,6 +36419,7 @@ def _random_groups(
             chosen = fittable[best_idx]
             remaining.remove(chosen)
             group.extend(chosen)
+            kinds.add(_unit_kind(chosen))
         if group:
             groups.append(group)
 
