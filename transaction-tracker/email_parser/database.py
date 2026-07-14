@@ -20696,18 +20696,28 @@ def get_handicap_rounds(player_name: str | None = None,
                     if r.get("scoring_round_id") and (r.get("sr_holes") or 0) > 9]
             if need:
                 formulas = get_scoring_formulas(db_path=db_path)
-                split_cache: dict = {}
+                # Resolve per CARD, not per row: when both nines of an
+                # 18-hole round have the SAME adjusted total (Flying L
+                # 5/30: 41 out / 41 in — Kerry screenshot) a per-row
+                # unique-match test fails for both records. Records
+                # sharing a card claim nines together, in id order,
+                # front first — a tie assigns cleanly instead of
+                # dashing out.
+                by_srid: dict = {}
                 for r in need:
-                    srid = r["scoring_round_id"]
-                    if srid not in split_cache:
-                        split_cache[srid] = _nine_totals_for_card(
-                            conn, srid, r.get("sr_tee_id"), formulas)
-                    sp = split_cache[srid]
-                    match = [s for s in ("front", "back")
-                             if sp[s]["n"] and sp[s]["adj"] == r["adjusted_score"]]
-                    if len(match) == 1:
-                        r["gross"] = sp[match[0]]["gross"]
-                        r["nine"] = match[0]
+                    by_srid.setdefault(r["scoring_round_id"], []).append(r)
+                for srid, group in by_srid.items():
+                    sp = _nine_totals_for_card(
+                        conn, srid, group[0].get("sr_tee_id"), formulas)
+                    claimed: set = set()
+                    for r in sorted(group, key=lambda x: x["id"]):
+                        cands = [s for s in ("front", "back")
+                                 if s not in claimed and sp[s]["n"]
+                                 and sp[s]["adj"] == r["adjusted_score"]]
+                        if cands:
+                            claimed.add(cands[0])
+                            r["gross"] = sp[cands[0]]["gross"]
+                            r["nine"] = cands[0]
         for r in rounds:
             r.pop("sr_holes", None)
             r.pop("sr_tee_id", None)
