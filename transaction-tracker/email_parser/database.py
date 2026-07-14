@@ -5051,6 +5051,18 @@ def init_db(db_path: str | Path | None = None) -> None:
         except Exception:
             logger.exception("Non-fatal: _repair_handicap_bridge_assignments failed")
 
+        # Kerry 2026-07-14: display "The Golf Club Star Ranch" as
+        # "Star Ranch". Fill-only-if-empty so a later admin edit in
+        # /courses always wins. Idempotent.
+        try:
+            conn.execute(
+                "UPDATE courses SET short_name = 'Star Ranch' "
+                "WHERE name LIKE '%Star Ranch%' "
+                "AND (short_name IS NULL OR TRIM(short_name) = '')")
+            conn.commit()
+        except Exception:
+            logger.exception("Non-fatal: Star Ranch short_name seed failed")
+
         # Pin admin-confirmed Golf Genius emails (see _GG_EMAIL_PINS)
         try:
             _repair_gg_email_pins(conn)
@@ -20797,9 +20809,14 @@ def get_handicap_rounds(player_name: str | None = None,
                         conn, srid, group[0].get("sr_tee_id"), formulas)
                     sides = [s for s in ("front", "back") if sp[s]["n"]]
                     if (group[0].get("sr_holes") or 0) <= 9:
+                        # Label a 9-hole round only when it DEVIATES — the
+                        # back nine was played. Front-nine rounds and true
+                        # 9-hole courses (Comanche CREEKS/HILLS/VALLEY are
+                        # holes 1-9 — Kerry 2026-07-14) carry no suffix;
+                        # the label would say nothing.
                         for r in group:
-                            if len(sides) == 1:
-                                r["nine"] = sides[0]
+                            if sides == ["back"]:
+                                r["nine"] = "back"
                         continue
                     claimed: set = set()
                     for r in sorted(group, key=lambda x: x["id"]):

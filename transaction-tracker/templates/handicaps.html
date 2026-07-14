@@ -1416,8 +1416,10 @@
             // a "39-stroke cap", Kerry screenshots).
             const capped = rnd.gross != null && rnd.gross !== rnd.adjusted_score;
             const grossCell = rnd.gross != null ? `${rnd.gross}` : '<span style="color:#9CA3AF">—</span>';
-            const baseCourse = (window.matchMedia && matchMedia('(max-width: 768px)').matches && rnd.course_short)
-                || shortCourse(rnd.course_name) || '—';
+            // Admin-curated short_name wins on EVERY viewport (Kerry
+            // 2026-07-14: "The Golf Club Star Ranch" → "Star Ranch");
+            // the JS derivation is only the fallback.
+            const baseCourse = rnd.course_short || shortCourse(rnd.course_name) || '—';
             const courseLabel = rnd.nine ? hcpNineLabel(rnd.course_name, baseCourse, rnd.nine) : baseCourse;
             const adjCell = capped
                 ? `<span style="color:var(--primary, #E87C3E);font-weight:700;" title="WHS net double bogey cap lowered this nine by ${rnd.gross - rnd.adjusted_score} stroke${rnd.gross - rnd.adjusted_score !== 1 ? 's' : ''} — expand to see which holes">${rnd.adjusted_score}</span>`
