@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.95.1";
+window.TGF_VERSION = "2.95.2";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.95.2",
+    date: "2026-07-14",
+    changes: [
+      "Two Austin-walk fixes: (1) affiliation tails may START with Guest/Former (a lone guest blind's tail has no TGF token at all -- 'Bl[FRANZ, Kyle] Guest' leaked as a fake player on a9.14); (2) duplicate-code events disambiguate by label/name word overlap instead of latest-date-wins -- the Tracker has BOTH 'a18.2 AUSTIN KICKOFF | ShadowGlen' (Mar 14) and 'a18.2 CRYSTAL FALLS' (May 30, looks like a mislabeled twin of a18.3 -- flagged for Kerry), and the kickoff round's pairs landed on the wrong one. scoring-pairings:clear|<event_id> deletes ONLY source='gg_teamnet' rows to undo a mis-matched apply.",
+    ],
+  },
   {
     version: "2.95.1",
     date: "2026-07-14",

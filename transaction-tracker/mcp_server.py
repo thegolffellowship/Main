@@ -1460,6 +1460,11 @@ def _scoring_dispatch(url: str, extract: str):
                     parts[1],
                     apply=(len(parts) > 2 and parts[2].lower() == "apply")),
                     indent=2, default=str)
+            if sub == "clear" and len(parts) >= 2 and parts[1].isdigit():
+                # undo a mis-matched apply: deletes ONLY source='gg_teamnet'
+                # pairing_history rows for the event
+                return json.dumps(db.clear_gg_teamnet_pairings(int(parts[1])),
+                                  indent=2)
             if sub == "round" and len(parts) >= 3:
                 return json.dumps(db.import_gg_teesheet_round(
                     parts[1], parts[2],
