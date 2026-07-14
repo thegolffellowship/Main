@@ -1,5 +1,15 @@
-window.TGF_VERSION = "2.99.5";
+window.TGF_VERSION = "2.100.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.100.0",
+    date: "2026-07-14",
+    changes: [
+      "Match Play dictates pairings (task #25, Kerry-ratified rule 8 amendment: 'Match Play is king'). Generate Pairings now detects potential matches from the Match Play season state -- during pool play, every pool-mate pair on the event roster without a PLAYED match; once a knockout bracket exists, the current round's undecided matchups between rostered players -- and shows the manager a per-match CONFIRM panel before generating. A decline means the match isn't required this event: that constraint drops and normal rules run.",
+      "Confirmed matches are the generator's FIRST constraint, above partner requests: opponents land in the same foursome in OPPOSITE carts (seats 1/2 vs 3/4) -- a new lock type distinct from partner locking, which keeps request pairs together. Partner requests are still honored where they fit around a match (the requester or partner joins the match foursome when there's room), never at the match's expense; anything the generator couldn't apply is reported in visible notes, never dropped silently.",
+      "PAIRINGS tab visually denotes Match Play participants: an orange 'MP' badge on any player whose pending opponent is seated in the same group (works on saved pairings too via GET /pairings mp_matches), plus a Match Play chip in the controls bar to reopen the confirm panel. New endpoints: GET /api/events/<id>/pairings/matchplay (detection) and mp_pairs on the generate POST; debug bridge scoring-pairings:mp|<event_id>.",
+      "Seat-order fix that fell out of the new constraint seater: partner-request pairs now share a CART (seats 1/2 or 3/4), not merely adjacent seat numbers -- plain adjacency could straddle seats 2/3, which is two different carts. Groups without a constraint pair keep the existing tee-adjacency ordering. Functional proof in test_mp_pairings.py (22 checks: detection both phases, opposite-cart placement, request-around-match, decline behavior).",
+    ],
+  },
   {
     version: "2.99.5",
     date: "2026-07-14",

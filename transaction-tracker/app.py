@@ -4643,11 +4643,21 @@ def api_get_pairings(event_id):
         finally:
             _pconn.close()
         event_players = [dict(r) for r in player_rows]
+        # Match Play matches still pending among this roster — lets the
+        # PAIRINGS tab badge opponents on SAVED pairings too (rule 8's
+        # visual denotation), not just on a fresh generate.
+        mp_matches = []
+        try:
+            from email_parser.database import detect_match_play_pairings
+            mp_matches = detect_match_play_pairings(event_id).get("matches", [])
+        except Exception:
+            logger.exception("MP detection failed for event %d (non-fatal)", event_id)
         return jsonify({
             "pairings": pairings,
             "slots_9": slots_9,
             "slots_18": slots_18,
             "event_players": event_players,
+            "mp_matches": mp_matches,
             "event": {
                 "format": ev.get("format"),
                 "start_type": ev.get("start_type"),
@@ -4661,6 +4671,22 @@ def api_get_pairings(event_id):
         return jsonify({"error": str(e)}), 500
 
 
+@app.route("/api/events/<int:event_id>/pairings/matchplay", methods=["GET"])
+@require_role("manager")
+def api_pairings_matchplay(event_id):
+    """Potential Match Play matches implied by the season state among this
+    event's roster (rule 8 amendment: the manager confirms/declines each
+    one before Generate runs — a decline drops that constraint)."""
+    try:
+        from email_parser.database import detect_match_play_pairings
+        return jsonify(detect_match_play_pairings(event_id))
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 404
+    except Exception as e:
+        logger.exception("Match Play detection failed for event %d", event_id)
+        return jsonify({"error": str(e)}), 500
+
+
 @app.route("/api/events/<int:event_id>/pairings/generate", methods=["POST"])
 @require_role("manager")
 def api_generate_pairings(event_id):
@@ -4669,14 +4695,18 @@ def api_generate_pairings(event_id):
     mode = data.get("mode", "random")
     protect = bool(data.get("protect_partner_requests", True))
     seeds = data.get("seeds", [])
+    mp_pairs = data.get("mp_pairs", [])
     if mode not in ("random", "abcd"):
         return jsonify({"error": "mode must be 'random' or 'abcd'"}), 400
+    if not isinstance(mp_pairs, list):
+        return jsonify({"error": "mp_pairs must be a list of [name, name] pairs"}), 400
     try:
         result = generate_event_pairings(
             event_id,
             mode=mode,
             protect_partner_requests=protect,
             seeds=seeds,
+            mp_pairs=mp_pairs,
         )
         return jsonify(result)
     except ValueError as e:

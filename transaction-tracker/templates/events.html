@@ -269,6 +269,36 @@
         .pairing-cart-divider {
             height: 1px; background: var(--border); margin: 0 0.6rem;
         }
+        /* Match Play (rule 8 amendment) — opponent-in-group denotation */
+        .pairing-mp-badge {
+            background: #E87C3E; color: #fff; font-size: 0.58rem;
+            font-weight: 800; letter-spacing: 0.05em; border-radius: 999px;
+            padding: 0.08rem 0.4rem; flex-shrink: 0; cursor: help;
+        }
+        .mp-confirm-panel {
+            background: #fff7ed; border: 2px solid #E87C3E;
+            border-radius: var(--radius); padding: 0.75rem 1rem;
+            margin: 0.6rem 0;
+        }
+        .mp-confirm-title {
+            font-weight: 800; font-size: 0.85rem; letter-spacing: 0.03em;
+            color: #9a3412; margin-bottom: 0.25rem;
+        }
+        .mp-confirm-row {
+            display: flex; align-items: center; gap: 0.5rem;
+            padding: 0.3rem 0; font-size: 0.85rem;
+        }
+        .mp-confirm-row label { cursor: pointer; display: flex; align-items: center; gap: 0.5rem; }
+        .mp-confirm-stage {
+            font-size: 0.68rem; font-weight: 700; color: #9a3412;
+            background: #ffedd5; border-radius: 4px; padding: 0.1rem 0.4rem;
+        }
+        .mp-chip {
+            background: #ffedd5; border: 1px solid #E87C3E; color: #9a3412;
+            font-size: 0.75rem; font-weight: 700; border-radius: 999px;
+            padding: 0.2rem 0.6rem; cursor: pointer;
+        }
+        .mp-note { font-size: 0.75rem; color: #92400e; padding: 0.15rem 0; }
         /* Orphan banner */
         .orphan-banner {
             background: #fef3c7;
@@ -4128,6 +4158,14 @@
                 seeds: [],
                 swapMode: null, selection: null,
                 showSeeds: false,
+                // Match Play is king (rule 8 amendment, Task #25):
+                // mpDetected = potential matches from the season state
+                // (null until fetched on first Generate); mpConfirm =
+                // manager's per-match confirm/decline; mpMatches = the
+                // pending-match list from GET pairings (badges on saved
+                // views); mpNotes = generator's dropped-constraint notes.
+                mpDetected: null, mpConfirm: {}, mpPanelOpen: false,
+                mpMatches: [], mpNotes: [],
             };
         }
         return pairingsData[evId];
@@ -4166,6 +4204,13 @@
         // Seed/lock toggle
         html += `<button class="pairings-seed-toggle" data-ev-id="${ev.id}" title="Pre-assign players to specific slots before generating">${state.showSeeds ? '&#x25B2; Locks' : '&#x25BC; Locks'}</button>`;
 
+        // Match Play chip — matches detected from the season state
+        // (rule 8 amendment). Click reopens the confirm/decline panel.
+        if (state.mpDetected && state.mpDetected.length) {
+            const nOn = state.mpDetected.filter((m, i) => state.mpConfirm[i]).length;
+            html += `<button class="mp-chip" data-ev-id="${ev.id}" data-pairings-action="mp-open" title="Match Play matches constrained into these pairings — click to review">&#x2694;&#xFE0F; Match Play: ${nOn}/${state.mpDetected.length}</button>`;
+        }
+
         // Spacer
         html += '<div style="flex:1;"></div>';
 
@@ -4180,6 +4225,38 @@
             }
         }
         html += '</div>'; // .pairings-controls
+
+        // ── Match Play confirm panel (rule 8: "Match Play is king") ──────────
+        // Shown before the first generate when the season state implies
+        // matches on this roster; a decline means the match isn't required
+        // this event, so that constraint drops and normal rules run.
+        if (state.mpPanelOpen && state.mpDetected && state.mpDetected.length) {
+            html += '<div class="mp-confirm-panel">';
+            html += '<div class="mp-confirm-title">&#x2694;&#xFE0F; MATCH PLAY DETECTED</div>';
+            html += '<div style="font-size:0.78rem;color:#92400e;margin-bottom:0.4rem;">Confirmed matches pair the opponents in the same foursome in <strong>opposite carts</strong> — ahead of partner requests. Uncheck any match that is not being played at this event.</div>';
+            state.mpDetected.forEach((m, i) => {
+                html += `<div class="mp-confirm-row"><label>
+                    <input type="checkbox" class="mp-confirm-chk" data-ev-id="${ev.id}" data-mp-idx="${i}" ${state.mpConfirm[i] ? 'checked' : ''}>
+                    <span class="mp-confirm-stage">${escapeHtml(m.stage === 'knockout' ? m.label : 'Pool ' + m.label.replace(/^pool\s*/i, ''))}</span>
+                    <span><strong>${escapeHtml(m.player1)}</strong> vs <strong>${escapeHtml(m.player2)}</strong></span>
+                </label></div>`;
+            });
+            html += `<div style="display:flex;gap:0.5rem;margin-top:0.5rem;">
+                <button class="pairings-action-btn" data-ev-id="${ev.id}" data-pairings-action="mp-generate" style="background:#E87C3E;color:#fff;font-weight:700;">&#x21BB; Generate with Matches</button>
+                <button class="pairings-action-btn" data-ev-id="${ev.id}" data-pairings-action="mp-close" style="font-size:0.8rem;">Close</button>
+            </div>`;
+            html += '</div>';
+        }
+
+        // Generator notes: constraints it could not apply (dropped
+        // requests, unpairable matches) — never silent.
+        if (state.mpNotes && state.mpNotes.length) {
+            html += '<div style="margin:0.3rem 0 0.5rem;">';
+            state.mpNotes.forEach(n => {
+                html += `<div class="mp-note">&#x26A0;&#xFE0F; ${escapeHtml(n)}</div>`;
+            });
+            html += '</div>';
+        }
 
         // ── Seed/Lock panel ───────────────────────────────────────────────────
         if (state.showSeeds) {
@@ -4266,6 +4343,24 @@
         return html;
     }
 
+    // Match Play badge lookup: a player is denoted when a pending match
+    // opponent is seated in the SAME group (works for freshly generated
+    // groups via player.mp_opponent and for saved pairings via the
+    // mp_matches list from GET /pairings).
+    function mpOpponentInGroup(state, grp, player) {
+        if (player.mp_opponent) return player.mp_opponent;
+        if (!state.mpMatches || !state.mpMatches.length) return null;
+        const norm = s => (s || '').trim().replace(/\s+/g, ' ').toLowerCase();
+        const inGroup = {};
+        grp.players.forEach(p => { if (p.name) inGroup[norm(p.name)] = p.name; });
+        const pk = norm(player.name);
+        for (const m of state.mpMatches) {
+            if (norm(m.player1) === pk && inGroup[norm(m.player2)]) return inGroup[norm(m.player2)];
+            if (norm(m.player2) === pk && inGroup[norm(m.player1)]) return inGroup[norm(m.player1)];
+        }
+        return null;
+    }
+
     function renderPairingGroups(ev, state, holes, groups) {
         if (!groups || !groups.length) return '';
         const fmt = (ev.format || '').trim();
@@ -4323,6 +4418,10 @@
                     data-ev-id="${ev.id}" data-holes="${holes}" data-group-num="${grp.group_num}" data-cart-pos="${player.cart_pos}">`;
                 html += `<span class="pairing-cart-dot" style="background:${cartDot};"></span>`;
                 html += `<span class="pairing-player-name">${escapeHtml(player.name || '—')}</span>`;
+                const mpOpp = mpOpponentInGroup(state, grp, player);
+                if (mpOpp) {
+                    html += `<span class="pairing-mp-badge" title="Match Play vs ${escapeHtml(mpOpp)}">&#x2694;&#xFE0F; MP</span>`;
+                }
                 html += `<span class="pairing-hcp">${hcp}</span>`;
                 html += `<span class="pairing-tee">${escapeHtml(player.tee_choice || '—')}</span>`;
                 html += '</div>';
@@ -4344,6 +4443,7 @@
             state.groups_9 = (data.pairings && data.pairings['9']) ? data.pairings['9'] : [];
             state.groups_18 = (data.pairings && data.pairings['18']) ? data.pairings['18'] : [];
             state.event_players = data.event_players || [];
+            state.mpMatches = data.mp_matches || [];
             state.isDirty = false;
             state.loaded = true;
         } catch (e) {
@@ -6252,9 +6352,51 @@
 
     }
 
+    // Run the generator with the manager's confirmed Match Play pairs
+    // (rule 8 amendment: confirmed matches are the FIRST constraint).
+    async function doGeneratePairings(container, ev, state, btn) {
+        if (btn) { btn.textContent = 'Generating…'; btn.disabled = true; }
+        const mpPairs = (state.mpDetected || [])
+            .filter((m, i) => state.mpConfirm[i])
+            .map(m => [m.player1, m.player2]);
+        try {
+            const res = await fetch(`/api/events/${ev.id}/pairings/generate`, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({
+                    mode: state.mode,
+                    protect_partner_requests: state.protectPartners,
+                    seeds: state.seeds,
+                    mp_pairs: mpPairs,
+                }),
+            });
+            const data = await res.json();
+            if (!res.ok) { alert(data.error || 'Generation failed'); return; }
+            state.groups_9 = data['9'] || [];
+            state.groups_18 = data['18'] || [];
+            state.slots_9 = data.slots_9 || [];
+            state.slots_18 = data.slots_18 || [];
+            state.mpNotes = data.mp_notes || [];
+            state.isDirty = true;
+            state.swapMode = null; state.selection = null;
+            state.loaded = true;
+        } catch (err) {
+            alert('Failed to generate pairings.');
+        }
+        rerenderDetail(container, ev);
+    }
+
     // ── Pairings interaction handlers ─────────────────────────────────────────
     function attachPairingsHandlers(container, ev) {
         const state = getPairingsState(ev.id);
+
+        // Match Play confirm/decline checkboxes (rule 8 panel)
+        container.querySelectorAll(`.mp-confirm-chk[data-ev-id="${ev.id}"]`).forEach(chk => {
+            chk.addEventListener('change', e => {
+                e.stopPropagation();
+                state.mpConfirm[parseInt(chk.dataset.mpIdx)] = chk.checked;
+            });
+        });
 
         // Mode toggle
         container.querySelectorAll('[data-pairings-mode]').forEach(btn => {
@@ -6290,30 +6432,46 @@
                 const action = btn.dataset.pairingsAction;
 
                 if (action === 'generate') {
-                    btn.textContent = 'Generating…';
-                    btn.disabled = true;
-                    try {
-                        const res = await fetch(`/api/events/${ev.id}/pairings/generate`, {
-                            method: 'POST',
-                            headers: {'Content-Type': 'application/json'},
-                            body: JSON.stringify({
-                                mode: state.mode,
-                                protect_partner_requests: state.protectPartners,
-                                seeds: state.seeds,
-                            }),
-                        });
-                        const data = await res.json();
-                        if (!res.ok) { alert(data.error || 'Generation failed'); return; }
-                        state.groups_9 = data['9'] || [];
-                        state.groups_18 = data['18'] || [];
-                        state.slots_9 = data.slots_9 || [];
-                        state.slots_18 = data.slots_18 || [];
-                        state.isDirty = true;
-                        state.swapMode = null; state.selection = null;
-                        state.loaded = true;
-                    } catch (err) {
-                        alert('Failed to generate pairings.');
+                    // Rule 8 amendment ("Match Play is king"): detect
+                    // potential matches from the season state and get the
+                    // manager's confirm/decline BEFORE the first generate.
+                    if (state.mpDetected === null) {
+                        btn.textContent = 'Checking Match Play…';
+                        btn.disabled = true;
+                        try {
+                            const res = await fetch(`/api/events/${ev.id}/pairings/matchplay`);
+                            const data = res.ok ? await res.json() : {};
+                            state.mpDetected = data.matches || [];
+                            state.mpConfirm = {};
+                            state.mpDetected.forEach((m, i) => { state.mpConfirm[i] = true; });
+                        } catch (err) {
+                            state.mpDetected = [];
+                        }
+                        if (state.mpDetected.length) {
+                            state.mpPanelOpen = true;
+                            rerenderDetail(container, ev);
+                            return;
+                        }
                     }
+                    state.mpPanelOpen = false;
+                    await doGeneratePairings(container, ev, state, btn);
+                    return;
+                }
+
+                if (action === 'mp-generate') {
+                    state.mpPanelOpen = false;
+                    await doGeneratePairings(container, ev, state, btn);
+                    return;
+                }
+
+                if (action === 'mp-open') {
+                    state.mpPanelOpen = !state.mpPanelOpen;
+                    rerenderDetail(container, ev);
+                    return;
+                }
+
+                if (action === 'mp-close') {
+                    state.mpPanelOpen = false;
                     rerenderDetail(container, ev);
                     return;
                 }
