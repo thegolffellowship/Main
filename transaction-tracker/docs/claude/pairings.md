@@ -270,6 +270,31 @@ submatrix), `hist|<event id or name>` (raw rows + totals by source).
    silently zero the history again.
    `scoring-pairings:hist|<event id or name>` = read-only debug view.
 
+## Kerry's GG workflow + validation vs GG (2026-07-14)
+
+- **Operating pattern:** GG Automatic + Random + Keep Together (requests)
+  for league nights; Manual pairings for HCM/Championships. Target:
+  full automation, manager approval only.
+- **Head-to-head on live s9.18 draft (14 players / 18 pairings):** GG
+  random scheduler = 11 new/7 repeats by its own league-scoped count,
+  truly 10/8 (missed Niester+Baker from the HCM portal). Tracker
+  optimizer = 12 new / 6 repeats (the floor). Cross-portal
+  customer_id-keyed history is the structural edge; GG's
+  pair-frequency histogram is a readout worth replicating on the
+  approval screen.
+- **GG friction to eliminate:** per-round course/tee/times/shotgun
+  re-entry after pairing — data the Tracker already holds.
+
+## Pace-of-play STAGING project (Kerry, 2026-07-14 — task #23)
+
+Per-player pace ratings (manager-tagged v1; later derived from
+GPS/score-entry timing) → group pace = aggregate → STAGING ordered by
+group pace (shotgun hole assignments / tee-time order). **HARD RULE:
+pace never dictates pairing composition — staging only.** Pipeline:
+compose → stage → approve. pace_rating storage must be
+customer_id-keyed (rule 6); the staging ordering rule ships as
+editable data (principle 2). Spec relay: mailbox #165.
+
 ## Engine notes (design, not yet built)
 
 - Season-coverage objective (rule 3) is the optimizer's primary term;
