@@ -20811,7 +20811,11 @@ def get_handicap_rounds(player_name: str | None = None,
                             r["gross"] = sp[cands[0]]["gross"]
                             r["nine"] = cands[0]
         for r in rounds:
-            r.pop("sr_holes", None)
+            # card_holes lets the client distinguish a record backed by an
+            # 18-hole card (which-nine note + slicing on expand) from a
+            # 9-hole event round that merely carries a Front/Back label
+            # (v2.92.1 — the note wrongly fired on 9-hole rounds too).
+            r["card_holes"] = r.pop("sr_holes", None)
             r.pop("sr_tee_id", None)
             # A cap can only LOWER a score — adjusted above the card's
             # gross means the bridge is wrong (multi-round-day mis-claim);
