@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.95.7";
+window.TGF_VERSION = "2.95.8";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.95.8",
+    date: "2026-07-14",
+    changes: [
+      "gen| probe also returns the event roster's full nonzero pair submatrix, so 'is this arrangement optimal' is checkable offline against the real season history.",
+    ],
+  },
   {
     version: "2.95.7",
     date: "2026-07-14",

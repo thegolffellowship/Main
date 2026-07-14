@@ -34997,6 +34997,11 @@ def debug_generate_pairings(event_id: int,
                            "group_score": sum(pairs.values())})
         out[f"groups_{holes}"] = groups
         out[f"total_score_{holes}"] = sum(g["group_score"] for g in groups)
+        roster = [n for g in out[f"groups_{holes}"] for n in g["players"]]
+        out[f"roster_pairs_{holes}"] = {
+            f"{a} + {b}": c for i, a in enumerate(roster)
+            for b in roster[i + 1:]
+            if (c := _pair_count(counts, a, b)) > 0}
     return out
 
 
