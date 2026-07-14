@@ -99,6 +99,20 @@ above gross, impossible). Boot repair
 idempotent; unmatched records stay NULL. `get_handicap_rounds` also
 guards at read time: adjusted > bridged gross ⇒ gross renders "—".
 
+**Full-table audit (v2.91.0):** `audit_handicap_bridges()` (bridge
+`scoring-hcp-audit`, READ-ONLY) classifies every handicap record.
+First live run (2026-07-14, 14,992 records): 3,453 bridged+reconciled,
+**17 bridged_mismatch** (two families: stored==raw-nine-gross uncapped
+imports on single-record 18h days the repair's suspect net missed, and
+2025 rows where GG's stored adjusted is LOWER than our WHS — likely
+GG allocating dots from full course handicap; per-case queue, do NOT
+auto-fix), **42 unbridged_card_exists** (incl. literal duplicate
+record pairs — Rohrmann/Garcia/J.Jenkins/Baker twins — deletion needs
+Kerry), 1,717 unbridged_no_customer (identity backlog), 9,763
+unbridged_no_card (pre-scorecard eras — expected). 9-hole records now
+also carry `nine` (the physically played nine from hole numbers), so
+back-nine events label "- Back"/named nine like 18s.
+
 **Twin-nine ties (v2.90.4):** nine-resolution in `get_handicap_rounds`
 is per CARD, not per row — records sharing a scoring_round_id claim
 nines together (id order, front first), so a round whose nines have
