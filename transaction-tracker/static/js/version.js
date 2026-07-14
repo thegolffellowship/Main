@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.90.3";
+window.TGF_VERSION = "2.90.4";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.90.4",
+    date: "2026-07-14",
+    changes: [
+      "Flying L resolved (Kerry): both nines of that round scored an identical 41, and the nine-resolver demanded a UNIQUE match -- a 41/41 tie matched both nines, resolved neither, left the gross dashed, and (with no nine assigned) the expansion fell back to showing the full 18. Records sharing a card now resolve TOGETHER: each claims a nine in order, front first, so ties assign cleanly. Identical twin nines mean identical gross either way, so the displayed number is exact even in the tie case.",
+    ],
+  },
   {
     version: "2.90.3",
     date: "2026-07-14",

@@ -99,6 +99,12 @@ above gross, impossible). Boot repair
 idempotent; unmatched records stay NULL. `get_handicap_rounds` also
 guards at read time: adjusted > bridged gross ⇒ gross renders "—".
 
+**Twin-nine ties (v2.90.4):** nine-resolution in `get_handicap_rounds`
+is per CARD, not per row — records sharing a scoring_round_id claim
+nines together (id order, front first), so a round whose nines have
+identical adjusted totals (Flying L 5/30: 41/41) assigns cleanly
+instead of failing the unique-match test and dashing out.
+
 **18-hole bridges (v2.90.1):** an 18-hole round posts as TWO 9-hole
 handicap records, so `get_handicap_rounds` NULLs the raw join for
 18-hole cards and (player-scoped calls only) resolves each record's
