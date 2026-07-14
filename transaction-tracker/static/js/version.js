@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.95.6";
+window.TGF_VERSION = "2.95.7";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.95.7",
+    date: "2026-07-14",
+    changes: [
+      "Generate Pairings escapes the last-group attractor (Kerry's s9.18 case, root-caused via the gen| probe: history was loaded and scored, but the greedy fills groups in order, so the most-played players get avoided until the end and pool together in the final group -- random restarts alone never escape it). Every restart candidate now runs a pairwise-swap hill-climb between groups (partner-request pairs are never split); on the live Cedar Creek roster this reaches the theoretical floor -- zero avoidable repeats, with the only remaining counts inside explicitly requested pairs.",
+    ],
+  },
   {
     version: "2.95.6",
     date: "2026-07-14",
