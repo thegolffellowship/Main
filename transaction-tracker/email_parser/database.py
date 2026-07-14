@@ -5042,6 +5042,15 @@ def init_db(db_path: str | Path | None = None) -> None:
         except Exception:
             logger.exception("Non-fatal: _cleanup_empty_scoring_rounds failed")
 
+        # Multi-round days: the old date-only bridger let one card claim
+        # every same-date handicap record for the player — re-assign by
+        # WHS-adjusted reconciliation (Comanche CREEKS/HILLS/VALLEY class,
+        # Kerry 2026-07-14). Idempotent.
+        try:
+            _repair_handicap_bridge_assignments(conn, db_path=db_path)
+        except Exception:
+            logger.exception("Non-fatal: _repair_handicap_bridge_assignments failed")
+
         # Pin admin-confirmed Golf Genius emails (see _GG_EMAIL_PINS)
         try:
             _repair_gg_email_pins(conn)
@@ -11080,14 +11089,13 @@ def import_gg_scorecards(tournament_url: str, event_code: str | None = None,
                     (srid, hole, h.get("strokes"),
                      give_back.get(hole, h.get("dots") or 0),
                      h.get("result")))
-            # Bridge the legacy derived layer (same physical round)
+            # Bridge the legacy derived layer (same physical round) — by
+            # RECONCILIATION, not date alone: on multi-round days the old
+            # date-only claim let the first card swallow every record
+            # (Comanche CREEKS/HILLS/VALLEY, Kerry 2026-07-14).
             if cid and event_date:
-                n = conn.execute(
-                    """UPDATE handicap_rounds SET scoring_round_id = ?
-                       WHERE scoring_round_id IS NULL AND customer_id = ?
-                         AND round_date = ?""",
-                    (srid, cid, event_date)).rowcount
-                bridged += n
+                bridged += _bridge_handicap_records(
+                    conn, srid, cid, event_date, tee_id, db_path=db_path)
         conn.commit()
 
     # Parallel-run verification (admin requirement): every imported card is
@@ -20460,6 +20468,117 @@ def import_handicap_rounds(rounds: list[dict],
     return {"inserted": inserted, "skipped": skipped, "matched": matched, "errors": errors[:50]}
 
 
+def _bridge_handicap_records(conn: sqlite3.Connection, srid: int, cid: int,
+                             round_date: str, tee_id: int | None,
+                             db_path: str | Path | None = None) -> int:
+    """Bridge handicap records to a just-imported card by RECONCILIATION,
+    not by date alone. The old date-only UPDATE let the first card of a
+    multi-round day claim EVERY same-date record for the player (Comanche
+    Trace CREEKS/HILLS/VALLEY all showed one card — Kerry 2026-07-14).
+
+    Each nine of the card claims at most ONE unbridged record whose
+    adjusted_score equals that nine's WHS-adjusted total. Fallback to the
+    old behavior only in the provably-safe case: the player has no other
+    card that date and exactly one unbridged record.
+    """
+    formulas = get_scoring_formulas(db_path=db_path)
+    sp = _nine_totals_for_card(conn, srid, tee_id, formulas)
+    pend = conn.execute(
+        """SELECT id, adjusted_score FROM handicap_rounds
+           WHERE scoring_round_id IS NULL AND customer_id = ?
+             AND round_date = ? ORDER BY id""",
+        (cid, round_date)).fetchall()
+    claimed: set = set()
+    n = 0
+    for side in ("front", "back"):
+        if not sp[side]["n"]:
+            continue
+        for p in pend:
+            if p["id"] not in claimed and p["adjusted_score"] == sp[side]["adj"]:
+                conn.execute(
+                    "UPDATE handicap_rounds SET scoring_round_id = ? WHERE id = ?",
+                    (srid, p["id"]))
+                claimed.add(p["id"])
+                n += 1
+                break
+    if n == 0 and len(pend) == 1:
+        other_cards = conn.execute(
+            """SELECT COUNT(*) AS c FROM scoring_rounds
+               WHERE customer_id = ? AND round_date = ? AND id != ?""",
+            (cid, round_date, srid)).fetchone()["c"]
+        if other_cards == 0:
+            conn.execute(
+                "UPDATE handicap_rounds SET scoring_round_id = ? WHERE id = ?",
+                (srid, pend[0]["id"]))
+            n = 1
+    return n
+
+
+def _repair_handicap_bridge_assignments(conn: sqlite3.Connection,
+                                        db_path: str | Path | None = None) -> None:
+    """Boot repair (idempotent): re-assign handicap↔scorecard bridges on
+    days where the old date-only bridger could mis-claim — a player with
+    MULTIPLE cards on one date, or multiple records sharing one card.
+    Every suspect day is re-derived from scratch: reset the day's bridges,
+    then let each record claim the (card, nine) whose WHS-adjusted total
+    equals its adjusted_score. Unmatched records stay NULL (rendered "—")
+    rather than guessed. Legitimate 18-hole pairs re-bridge identically,
+    so re-running is a no-op."""
+    _ensure_scoring_tables(conn)
+    suspects = set()
+    for r in conn.execute(
+            """SELECT customer_id AS cid, round_date AS d FROM scoring_rounds
+               WHERE customer_id IS NOT NULL AND round_date IS NOT NULL
+               GROUP BY customer_id, round_date HAVING COUNT(*) > 1"""):
+        suspects.add((r["cid"], r["d"]))
+    for r in conn.execute(
+            """SELECT customer_id AS cid, round_date AS d FROM handicap_rounds
+               WHERE scoring_round_id IS NOT NULL AND customer_id IS NOT NULL
+               GROUP BY customer_id, round_date, scoring_round_id
+               HAVING COUNT(*) > 1"""):
+        suspects.add((r["cid"], r["d"]))
+    if not suspects:
+        return
+    formulas = get_scoring_formulas(db_path=db_path)
+    fixed = unmatched = 0
+    for cid, d in sorted(suspects):
+        cards = conn.execute(
+            "SELECT id, tee_id FROM scoring_rounds "
+            "WHERE customer_id = ? AND round_date = ?", (cid, d)).fetchall()
+        recs = conn.execute(
+            "SELECT id, adjusted_score, scoring_round_id FROM handicap_rounds "
+            "WHERE customer_id = ? AND round_date = ? ORDER BY id",
+            (cid, d)).fetchall()
+        if not cards or not recs:
+            continue
+        slots = []  # (card_id, side, adj_total), each claimable once
+        for c in cards:
+            sp = _nine_totals_for_card(conn, c["id"], c["tee_id"], formulas)
+            for side in ("front", "back"):
+                if sp[side]["n"]:
+                    slots.append((c["id"], side, sp[side]["adj"]))
+        taken: set = set()
+        for rec in recs:
+            new_srid = None
+            for i, (card_id, side, adj) in enumerate(slots):
+                if i not in taken and adj == rec["adjusted_score"]:
+                    new_srid = card_id
+                    taken.add(i)
+                    break
+            if new_srid != rec["scoring_round_id"]:
+                conn.execute(
+                    "UPDATE handicap_rounds SET scoring_round_id = ? WHERE id = ?",
+                    (new_srid, rec["id"]))
+                fixed += 1
+            if new_srid is None:
+                unmatched += 1
+    conn.commit()
+    if fixed:
+        logger.info("Handicap bridge repair: re-assigned %d record(s) across "
+                    "%d suspect day(s); %d left unbridged (no reconciling "
+                    "card nine)", fixed, len(suspects), unmatched)
+
+
 def _nine_totals_for_card(conn: sqlite3.Connection, scoring_round_id: int,
                           tee_id: int | None, formulas: dict) -> dict:
     """Per-nine gross + WHS-adjusted totals for one scoring card. Used to
@@ -20547,6 +20666,13 @@ def get_handicap_rounds(player_name: str | None = None,
         for r in rounds:
             r.pop("sr_holes", None)
             r.pop("sr_tee_id", None)
+            # A cap can only LOWER a score — adjusted above the card's
+            # gross means the bridge is wrong (multi-round-day mis-claim);
+            # never display an impossible pairing.
+            if (r.get("gross") is not None and r.get("adjusted_score") is not None
+                    and r["adjusted_score"] > r["gross"]):
+                r["gross"] = None
+                r.pop("nine", None)
         # Attach the admin-editable short name from the course DB (v2.57.0):
         # exact-name match wins; unmatched course names fall back to the
         # client-side derivation. Case-insensitive, one lookup per call.
