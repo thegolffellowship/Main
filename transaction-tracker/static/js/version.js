@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.99.3";
+window.TGF_VERSION = "2.99.4";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.99.4",
+    date: "2026-07-14",
+    changes: [
+      "Pairing Standards rule 8 amended (Kerry): Match Play dictates pairings as the FIRST rule -- 'Match Play is king.' When the Match Play season state (pool play or current knockout round) implies a potential match between two rostered players, the generator must put the opponents in the same foursome (ideally separate carts) and visually denote them as Match Play participants, with a per-match manager CONFIRM question before generation (a 'no' drops the constraint and normal rules run). Documentation-of-record update; engine build is task #25.",
+    ],
+  },
   {
     version: "2.99.3",
     date: "2026-07-14",
