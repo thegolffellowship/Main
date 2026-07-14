@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.92.0";
+window.TGF_VERSION = "2.92.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.92.1",
+    date: "2026-07-14",
+    changes: [
+      "The 'FRONT/BACK NINE of an 18-hole round' note no longer appears on 9-hole event rounds (Kerry screenshot: Canyon Springs 6/2) -- 9-hole records got Front/Back labels in v2.91.0 and the expansion note wrongly keyed off the label instead of the backing card's hole count. The note (and single-nine slicing) now require an actual 18-hole card, and the note text renders smaller on phones.",
+    ],
+  },
   {
     version: "2.92.0",
     date: "2026-07-14",
