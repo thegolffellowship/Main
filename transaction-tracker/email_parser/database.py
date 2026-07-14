@@ -34562,7 +34562,9 @@ def _parse_teesheet_groups(html_text: str) -> dict:
                     if len(nm) >= 2:
                         names = nm
                         break
-                    if not c.isdigit():
+                    # hole cells: '1', '10', shotgun '1A'/'1B' — anything
+                    # else (tee labels like '2 - White') ends the window
+                    if not re.match(r"^\d{1,2}[AB]?$", c, re.I):
                         break
                     j += 1
                 if names:
