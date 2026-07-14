@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.91.0";
+window.TGF_VERSION = "2.92.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.92.0",
+    date: "2026-07-14",
+    changes: [
+      "Event Downgrade 18 -> 9 (Kerry, for s9.18 Cedar Creek): the Credit modal's PARTIAL REFUND tab now offers an 'Event Downgrade 18 -> 9 holes' component for players registered for 18 in a 9/18 Combo event -- the amount is the price difference between the formats (course cost + markup + included games, same per-event pricing chains as the WD calculator), and confirming it refunds that difference AND flips the registration's holes to 9. The inverse of Add Payment's Event Upgrade, which existed; the downgrade direction never did.",
+    ],
+  },
   {
     version: "2.91.0",
     date: "2026-07-14",

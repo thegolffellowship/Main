@@ -5983,6 +5983,11 @@ def api_partial_refund_item(item_id):
         return jsonify({"error": "Invalid refund method."}), 400
     refunded_components = data.get("components", {})  # e.g. {"gross_games": 30}
     new_side_games = data.get("new_side_games")  # e.g. "NET" (after removing GROSS)
+    # Event Downgrade (Kerry 2026-07-14): refunding the 18-vs-9 price
+    # difference on a 9/18 Combo event also flips the registration to 9.
+    new_holes = data.get("new_holes")
+    if new_holes is not None and str(new_holes) not in ("9", "18"):
+        return jsonify({"error": "new_holes must be 9 or 18."}), 400
     note = data.get("note", "")
     total = sum(refunded_components.values())
 
@@ -6026,6 +6031,12 @@ def api_partial_refund_item(item_id):
         if computed_new_sg != current_sg:
             conn.execute("UPDATE items SET side_games = ? WHERE id = ?",
                          (computed_new_sg, item_id))
+
+        # Event Downgrade: flip the registration's holes (the previous
+        # value is already preserved in parent_snapshot for reversal)
+        if new_holes is not None and str(parent.get("holes") or "") != str(new_holes):
+            conn.execute("UPDATE items SET holes = ? WHERE id = ?",
+                         (str(new_holes), item_id))
 
         # Create -PAY child row with parent snapshot (customer_id copied from
         # parent, same as transfer_item() — already resolved, no new lookup)
@@ -6072,7 +6083,9 @@ def api_partial_refund_item(item_id):
 
         conn.commit()
 
-    return jsonify({"status": "ok", "refunded": total, "new_side_games": computed_new_sg})
+    return jsonify({"status": "ok", "refunded": total,
+                    "new_side_games": computed_new_sg,
+                    "new_holes": new_holes})
 
 
 @app.route("/api/items/<int:item_id>/transfer", methods=["POST"])
