@@ -34515,70 +34515,58 @@ def gg_pairings_rounds(portal: str) -> dict:
                        for rid, lbl in options]}
 
 
-def _parse_teesheet_groups(html_text: str) -> dict:
-    """Parse a GG tee-sheet widget round into ordered player groups.
+def _split_teesheet_names(cell: str) -> list:
+    """Split a tee-sheet players cell ('MELCHOR, Eduardo MOORE, Dion
+    STRAITON, Robert') into ordered names: break before each token that
+    starts the next 'Surname,' unit."""
+    parts = re.split(r"\s+(?=\S+,)", (cell or "").strip())
+    return [p.strip() for p in parts if "," in p and len(p.strip()) > 4]
 
-    Defensive: tee sheets render as tables where each tee time is either
-    one row (players in separate cells / one cell) or a run of rows that
-    fill down from a time cell. Returns groups plus a debug dump of the
-    raw tables so unexpected layouts can be diagnosed over the bridge
-    without a redeploy."""
+
+def _parse_teesheet_groups(html_text: str) -> dict:
+    """Parse a GG next_round tee-sheet widget into ordered player groups.
+
+    The 'By Tee Times' table lays groups out as (time, [hole,] players)
+    triplets — sometimes two groups per row, and each group repeated in a
+    single-column variant, so groups dedupe by (time, players). The
+    alphabetical 'By Individual' table is skipped structurally (its
+    names sit outside the time-cell window). Returns a debug dump of the
+    raw tables so unexpected layouts can be diagnosed over the bridge."""
     from golf_genius_sync import parse_page_structure
     struct = parse_page_structure(html_text, "")
     tables = struct.get("tables", [])
     _time_re = re.compile(r"^\d{1,2}:\d{2}\s*(AM|PM)?$", re.I)
-    _name_re = re.compile(r"^[A-Za-z'\-\. ]+,\s*[A-Za-z'\-\. ]+$|^[A-Z][a-z'\-\.]+ [A-Za-z'\-\. ]+$")
-    _noise = re.compile(r"hole|tee time|player|course|flight|hcp|handicap|^\s*$|^\d+$",
-                        re.I)
 
     groups: list = []
+    seen: set = set()
     for t in tables:
         rows = t if isinstance(t, list) else (t.get("rows") or [])
-        current: dict | None = None
         for row in rows:
             cells = [re.sub(r"\s+", " ", (c or "")).strip() for c in row]
-            if not any(cells):
-                continue
-            # header rows
-            if all(_noise.match(c) for c in cells if c):
-                continue
-            time_cell = next((c for c in cells if _time_re.match(c)), None)
-            names = [c for c in cells
-                     if c and not _time_re.match(c) and not _noise.match(c)
-                     and _name_re.match(c) and len(c) > 4]
-            # a cell holding several names split by markers
-            if not names:
-                for c in cells:
-                    if c.count(",") >= 3 or " / " in c:
-                        parts = re.split(r"\s*/\s*|\s{2,}", c)
-                        names = [p.strip() for p in parts if _name_re.match(p.strip())]
-                        if names:
-                            break
-            if time_cell is not None:
-                if current and current["players"]:
-                    groups.append(current)
-                current = {"slot": time_cell, "players": list(names)}
-            elif names:
-                if current is None:
-                    current = {"slot": f"Group {len(groups) + 1}", "players": []}
-                current["players"].extend(names)
-        if current and current["players"]:
-            groups.append(current)
-            current = None
-    # de-dup players inside a group, drop empty/1-player artifacts
-    cleaned = []
-    for g in groups:
-        seen: list = []
-        for p in g["players"]:
-            if p not in seen:
-                seen.append(p)
-        if len(seen) >= 2:
-            cleaned.append({"slot": g["slot"], "players": seen})
+            i = 0
+            while i < len(cells):
+                if not _time_re.match(cells[i]):
+                    i += 1
+                    continue
+                names: list = []
+                j = i + 1
+                while j < len(cells) and j <= i + 2:
+                    names = _split_teesheet_names(cells[j])
+                    if len(names) >= 2:
+                        break
+                    names = []
+                    j += 1
+                if names:
+                    key = (cells[i], tuple(names))
+                    if key not in seen:
+                        seen.add(key)
+                        groups.append({"slot": cells[i], "players": names})
+                i = j + 1
     debug = []
     for t in tables[:6]:
         rows = t if isinstance(t, list) else (t.get("rows") or [])
         debug.append({"n_rows": len(rows), "first_rows": rows[:6]})
-    return {"groups": cleaned, "n_tables": len(tables), "debug_tables": debug}
+    return {"groups": groups, "n_tables": len(tables), "debug_tables": debug}
 
 
 def _match_event_for_round_label(conn, label: str, portal: str):
@@ -34622,26 +34610,20 @@ def _match_event_for_round_label(conn, label: str, portal: str):
 
 def import_gg_teesheet_round(portal: str, round_id: str, apply: bool = False,
                              label: str | None = None,
+                             event_override: str | None = None,
                              db_path: str | Path = DB_PATH) -> dict:
-    """Parse one tee-sheet round; apply=True writes pairing_history for the
-    matched event (REPLACES that event's history rows — the tee sheet is
-    the ruled source of truth). Players resolve through the scoring
-    cascade; rode pairs = tee-sheet sequence 1&2 / 3&4 (Kerry ruling)."""
+    """Parse one FINAL tee-sheet round (Kerry's route: SCHEDULE calendar →
+    per-round Tee Sheet page; the next_round widget serves the historical
+    sheet when given round_id=). apply=True writes pairing_history for
+    the matched event (REPLACES that event's rows — the tee sheet is the
+    ruled source of truth). Players resolve through the scoring cascade;
+    rode pairs = tee-sheet sequence 1&2 / 3&4 (Kerry ruling)."""
     from golf_genius_sync import fetch_public_page
     widget = _gg_teesheet_widget(portal)
     joiner = "&" if "?" in widget else "?"
-    page = fetch_public_page(f"{widget}{joiner}round={round_id}", xhr=False)
+    page = fetch_public_page(f"{widget}{joiner}round_id={round_id}", xhr=False)
     parsed = _parse_teesheet_groups(page["html"])
     label = label or ""
-    sel = None if label else re.search(
-        r'<select[^>]*name="round"[^>]*>(.*?)</select>', page["html"], re.S)
-    if sel:
-        cur = re.search(r'<option[^>]*value="' + re.escape(str(round_id)) +
-                        r'"[^>]*selected[^>]*>(.*?)</option>', sel.group(1), re.S) \
-            or re.search(r'<option[^>]*selected[^>]*value="' + re.escape(str(round_id)) +
-                         r'"[^>]*>(.*?)</option>', sel.group(1), re.S)
-        if cur:
-            label = re.sub(r"\s+", " ", cur.group(1)).strip()
     out = {"portal": portal, "round_id": round_id, "label": label,
            "n_groups": len(parsed["groups"]), "groups": parsed["groups"],
            "n_tables": parsed["n_tables"], "applied": False}
@@ -34650,7 +34632,20 @@ def import_gg_teesheet_round(portal: str, round_id: str, apply: bool = False,
         return out
     with _connect(db_path) as conn:
         _ensure_pairing_tables(conn)
-        ev = _match_event_for_round_label(conn, label, portal)
+        ev = None
+        if event_override:
+            if str(event_override).isdigit():
+                ev = conn.execute(
+                    "SELECT id, item_name, event_date FROM events WHERE id = ?",
+                    (int(event_override),)).fetchone()
+            else:
+                ev = conn.execute(
+                    "SELECT id, item_name, event_date FROM events "
+                    "WHERE item_name LIKE ? COLLATE NOCASE "
+                    "ORDER BY event_date DESC LIMIT 1",
+                    (f"%{event_override}%",)).fetchone()
+        if not ev:
+            ev = _match_event_for_round_label(conn, label, portal)
         if not ev:
             out["error"] = f"no Tracker event matched label {label!r}"
             out["debug_tables"] = parsed["debug_tables"][:2]
@@ -34714,11 +34709,13 @@ def import_gg_teesheet_round(portal: str, round_id: str, apply: bool = False,
 def import_gg_teesheets_all(portal: str, apply: bool = False,
                             budget_seconds: int = 200,
                             db_path: str | Path = DB_PATH) -> dict:
-    """Walk every round of a portal's tee-sheet widget (time-budgeted;
-    re-run to continue — apply replaces per event, so repeats are safe)."""
+    """Walk every played round through the FINAL tee-sheet importer.
+    Round ids + labels come from the tournament_results widget's selector
+    (the tee-sheet widget itself has none); time-budgeted, and apply
+    replaces per event so repeats are safe."""
     import time as _time
     t0 = _time.time()
-    listing = gg_pairings_rounds(portal)
+    listing = gg_teamnet_rounds(portal)
     results = []
     done = skipped = 0
     for r in listing["rounds"]:

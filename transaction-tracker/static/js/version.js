@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.95.8";
+window.TGF_VERSION = "2.96.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.96.0",
+    date: "2026-07-14",
+    changes: [
+      "FINAL tee sheets are now the pairings ingest source (Kerry's route: every portal's SCHEDULE calendar lists a public per-round Tee Sheet page, and its next_round widget serves the historical sheet when given round_id= -- the param the first attempt missed). scoring-pairings:round|/all| now walk these: groups parsed in true seat order from the By-Tee-Times layout (two-column rows deduped, the alphabetical By-Individual table skipped structurally), so rode-with pairs come from the actual tee-sheet sequence instead of the team-board order assumption. round| accepts an event override for GG's truncated preseason labels.",
+    ],
+  },
   {
     version: "2.95.8",
     date: "2026-07-14",

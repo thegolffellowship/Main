@@ -1485,7 +1485,8 @@ def _scoring_dispatch(url: str, extract: str):
             if sub == "round" and len(parts) >= 3:
                 return json.dumps(db.import_gg_teesheet_round(
                     parts[1], parts[2],
-                    apply=(len(parts) > 3 and parts[3].lower() == "apply")),
+                    apply=(len(parts) > 3 and parts[3].lower() == "apply"),
+                    event_override=(parts[4] if len(parts) > 4 else None)),
                     indent=2, default=str)
             if sub == "all" and len(parts) >= 2:
                 return json.dumps(db.import_gg_teesheets_all(
