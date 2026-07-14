@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.99.4";
+window.TGF_VERSION = "2.99.5";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.99.5",
+    date: "2026-07-14",
+    changes: [
+      "Pace seed fix: the two Victor Ariases store first+last as plain 'Victor Arias' (the III/Jr suffix lives outside first_name/last_name), so the suffixed seed entries missed both. One unsuffixed entry now matches both rows -- intended, since they always ride and stage together, both carry the 1. Live verification via scoring-pairings:pace| showed 21/23 before, 23/23 expected after.",
+    ],
+  },
   {
     version: "2.99.4",
     date: "2026-07-14",
