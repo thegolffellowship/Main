@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.99.0";
+window.TGF_VERSION = "2.99.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.99.1",
+    date: "2026-07-14",
+    changes: [
+      "scoring-pairings:playerstaging| -- per-player staging positions across all 9-hole events, bucketed by start type (SA shotgun trains where later sheet position = front of train, Austin shotguns, Austin sequential tee times) with pre-4PM early-play waves counted separately as preference. Feeds Kerry's initial 1-3 pace ratings derived from where each player has historically been staged.",
+    ],
+  },
   {
     version: "2.99.0",
     date: "2026-07-14",

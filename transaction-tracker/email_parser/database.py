@@ -35086,6 +35086,79 @@ def analyze_pairing_staging(db_path: str | Path = DB_PATH) -> dict:
                         "registrations; group order = final tee sheet order"}
 
 
+def analyze_player_staging(db_path: str | Path = DB_PATH) -> dict:
+    """Per-player staging positions across 9-hole events (Kerry's
+    pace-ranking side quest). For each event's MAIN wave, each player's
+    normalized position 0..1 by tee-sheet group order. Buckets:
+      sa_shotgun    — SA main waves (hole-train: LATER position = front
+                      of train = staged as FASTER)
+      aus_shotgun   — Austin shotgun events (ShadowGlen pattern: all
+                      main-wave slots share one time) — Robert's read
+      aus_times     — Austin sequential tee times (availability-
+                      constrained; EARLIER = staged as faster, weak)
+    Pre-4PM tee times are the early-play option, counted separately
+    (preference, not pace)."""
+    tre = re.compile(r"(\d{1,2}):(\d{2})\s*(AM|PM)", re.I)
+
+    def slot_minutes(s):
+        m = tre.search(s or "")
+        if not m:
+            return None
+        h, mi = int(m.group(1)) % 12, int(m.group(2))
+        if m.group(3).upper() == "PM":
+            h += 12
+        return h * 60 + mi
+
+    with _connect(db_path) as conn:
+        _ensure_pairing_tables(conn)
+        evs = conn.execute(
+            """SELECT DISTINCT e.id, e.item_name, e.chapter
+               FROM events e JOIN event_pairings ep ON ep.event_id = e.id
+               WHERE e.item_name LIKE 's9.%' OR e.item_name LIKE 'a9.%'
+               ORDER BY e.event_date""").fetchall()
+        players: dict = {}
+        n_events = {"sa_shotgun": 0, "aus_shotgun": 0, "aus_times": 0}
+        for ev in evs:
+            rows = conn.execute(
+                """SELECT group_num, slot_label, player_name
+                   FROM event_pairings WHERE event_id = ?
+                   ORDER BY group_num, cart_pos""", (ev["id"],)).fetchall()
+            groups: dict = {}
+            for r in rows:
+                groups.setdefault(r["group_num"],
+                                  {"slot": r["slot_label"],
+                                   "players": []})["players"].append(
+                    r["player_name"])
+            main, early = [], []
+            for gn in sorted(groups):
+                g = groups[gn]
+                t = slot_minutes(g["slot"])
+                (early if (t is not None and t < 16 * 60) else main).append(g)
+            if len(main) < 2:
+                continue
+            times = [slot_minutes(g["slot"]) for g in main]
+            is_shotgun = (None in times) or len(set(times)) == 1
+            if (ev["chapter"] or "") == "San Antonio":
+                bucket = "sa_shotgun"  # SA main waves are the shotgun train
+            else:
+                bucket = "aus_shotgun" if is_shotgun else "aus_times"
+            n_events[bucket] += 1
+            for i, g in enumerate(main):
+                pos = round(i / (len(main) - 1), 2)
+                for p in g["players"]:
+                    players.setdefault(p, {"sa_shotgun": [], "aus_shotgun": [],
+                                           "aus_times": [], "early_waves": 0})[
+                        bucket].append(pos)
+            for g in early:
+                for p in g["players"]:
+                    players.setdefault(p, {"sa_shotgun": [], "aus_shotgun": [],
+                                           "aus_times": [],
+                                           "early_waves": 0})["early_waves"] += 1
+        return {"n_events": n_events, "players": players,
+                "note": "positions 0=first group on sheet, 1=last; "
+                        "sa/aus_shotgun: later = front of hole train"}
+
+
 def clear_gg_teamnet_pairings(event_id: int,
                               db_path: str | Path = DB_PATH) -> dict:
     """Remove ONLY the GG-ingested pairing rows for one event (undo for a

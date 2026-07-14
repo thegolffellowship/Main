@@ -1468,6 +1468,10 @@ def _scoring_dispatch(url: str, extract: str):
                     int(parts[1]), groups,
                     apply=(len(parts) > 3 and parts[3].lower() == "apply")),
                     indent=2, default=str)
+            if sub == "playerstaging":
+                # read-only: per-player staging positions (pace ranking)
+                return json.dumps(db.analyze_player_staging(),
+                                  indent=None, default=str)
             if sub == "staging" and len(parts) >= 1:
                 # read-only: 9-hole events' actual groups in staging order
                 # with pace proxies (Kerry's staging-pattern side quest)
