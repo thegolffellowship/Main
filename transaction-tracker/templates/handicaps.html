@@ -661,6 +661,7 @@
     </style>{% endif %}
     <script src="/static/js/version.js"></script>
     <script src="/static/js/auth.js"></script>
+    <script src="/static/js/scorecard-render.js"></script>
     <script>
     // ── State ───────────────────────────────────────────────────────
     let allPlayers = [];
@@ -1254,6 +1255,36 @@
     const DIFF_LOOKUP = {3:1,4:1,5:1,6:2,7:2,8:2,9:3,10:3,11:3,12:4,13:4,14:4,15:5,16:5,17:6,18:6,19:7,20:8};
     const ADJ_LOOKUP  = {3:-2.0, 4:-1.0, 6:-1.0};  // added after avg × 0.96; all others 0
 
+    // Expand a handicap record into its actual scorecard (Kerry 2026-07-14).
+    // Only bridged rounds (scoring_round_id set) get the chevron; the card
+    // comes from /api/scoring/scorecard and renders via the shared
+    // scorecard-render.js (which shows the ADJ row when a WHS cap bit).
+    window.toggleHcpScorecard = async function (link, srid, colspan) {
+        const tr = link.closest('tr');
+        const chev = link.querySelector('.hcp-card-chev');
+        const next = tr.nextElementSibling;
+        if (next && next.classList.contains('hcp-card-row')) {
+            next.remove();
+            if (chev) chev.style.transform = '';
+            return;
+        }
+        const row = document.createElement('tr');
+        row.className = 'hcp-card-row';
+        row.innerHTML = `<td colspan="${colspan}" style="background:#fafaf9;padding:10px 12px;">
+            <em style="color:#94a3b8;font-size:0.85em;">Loading scorecard…</em></td>`;
+        tr.after(row);
+        if (chev) chev.style.transform = 'rotate(90deg)';
+        try {
+            const resp = await fetch(`/api/scoring/scorecard/${srid}`);
+            const card = await resp.json();
+            row.firstElementChild.innerHTML = (window.tgfRenderScorecard && !card.error)
+                ? window.tgfRenderScorecard(card)
+                : `<em style="color:#94a3b8;font-size:0.85em;">Scorecard unavailable.</em>`;
+        } catch (e) {
+            row.firstElementChild.innerHTML = `<em style="color:#94a3b8;font-size:0.85em;">Scorecard unavailable.</em>`;
+        }
+    };
+
     function renderRoundsTable(container, rounds) {
         const role = currentRole;
         const isAdmin = role === 'admin';
@@ -1307,6 +1338,7 @@
                 <th class="date-col">Date</th>
                 <th class="course-col">Course</th>
                 <th class="diff-col">Gross</th>
+                <th class="diff-col" title="WHS net-double-bogey adjusted score — what the handicap is computed from">Adj</th>
                 <th class="diff-col">${HM.diff}</th>
                 ${HMOB ? '' : '<th class="diff-col">Counting</th>'}
                 <th class="diff-col">${HM.run}</th>
@@ -1314,7 +1346,8 @@
                 <th class="date-col">Date</th>
                 <th class="course-col">Course</th>
                 <th class="narrow-col">Tee</th>
-                <th class="diff-col">Score</th>
+                <th class="diff-col">Gross</th>
+                <th class="diff-col" title="WHS net-double-bogey adjusted score">Adj</th>
                 <th class="diff-col">Rating</th>
                 <th class="diff-col">Slope</th>
                 <th class="diff-col">Diff</th>
@@ -1323,7 +1356,7 @@
                 ${canDelete ? '<th></th>' : ''}
             </tr>`) + `</thead><tbody id="rounds-tbody-${safeid(rounds[0].player_name)}">`;
 
-        const colspan = MEMBER ? (HMOB ? 5 : 6) : (canDelete ? 10 : 9);
+        const colspan = MEMBER ? (HMOB ? 6 : 7) : (canDelete ? 11 : 10);
         const pid = safeid(rounds[0].player_name);
         const olderCount = rounds.length > 20 ? rounds.length - 20 : 0;
 
@@ -1342,6 +1375,20 @@
                 : '<span style="color:#94a3b8">—</span>';
             const rowStyle = [isOlder ? 'display:none' : '', !active ? 'opacity:0.5' : ''].filter(Boolean).join(';');
             const rowClass = [isUsed ? 'round-used' : '', isOlder ? 'older-round' : ''].filter(Boolean).join(' ');
+            // Raw gross from the bridged scorecard; a round where the WHS
+            // cap bit shows the adjusted value in orange. Bridged rounds
+            // get a chevron on the date — expands the actual scorecard.
+            const capped = rnd.gross != null && rnd.gross !== rnd.adjusted_score;
+            const grossCell = rnd.gross != null ? rnd.gross : '<span style="color:#9CA3AF">—</span>';
+            const adjCell = capped
+                ? `<span style="color:var(--primary, #E87C3E);font-weight:700;" title="WHS cap lowered ${rnd.gross - rnd.adjusted_score} stroke${rnd.gross - rnd.adjusted_score !== 1 ? 's' : ''} — expand to see which holes">${rnd.adjusted_score}</span>`
+                : `${rnd.adjusted_score}`;
+            const expandable = !!rnd.scoring_round_id;
+            const dateCell = expandable
+                ? `<a href="javascript:void(0)" onclick="toggleHcpScorecard(this, ${rnd.scoring_round_id}, ${colspan})"
+                     style="color:inherit;text-decoration:none;white-space:nowrap;">
+                     <span class="hcp-card-chev" style="display:inline-block;transition:transform .15s;color:var(--primary, #E87C3E);font-weight:700;">&#8250;</span> ${fmtRoundDate(rnd.round_date)}</a>`
+                : fmtRoundDate(rnd.round_date);
             if (MEMBER) {
                 // view 1a: counting rounds carry the success-green left bar,
                 // green differential, and a green check in COUNTING
@@ -1355,19 +1402,21 @@
                     ? `<span style="${isUsed ? 'color:#16A34A;font-weight:700;' : ''}">${rnd.differential.toFixed(1)}</span>`
                     : '—';
                 return `<tr class="${rowClass}" style="${bar}${rowStyle ? rowStyle + ';' : ''}${isUsed ? 'background:#F2FBF5;' : ''}">
-                    <td class="date-col">${fmtRoundDate(rnd.round_date)}</td>
+                    <td class="date-col">${dateCell}</td>
                     <td class="course-col">${esc((window.matchMedia && matchMedia('(max-width: 768px)').matches && rnd.course_short) || shortCourse(rnd.course_name) || '—')}</td>
-                    <td class="diff-col">${rnd.adjusted_score}</td>
+                    <td class="diff-col">${grossCell}</td>
+                    <td class="diff-col">${adjCell}</td>
                     <td class="diff-col">${diffCell}</td>
                     ${HMOB ? '' : `<td class="diff-col">${countCell}</td>`}
                     <td class="diff-col">${hcpCell}</td>
                 </tr>`;
             }
             return `<tr class="${rowClass}" ${rowStyle ? `style="${rowStyle}"` : ''}>
-                <td class="date-col">${fmtRoundDate(rnd.round_date)}</td>
+                <td class="date-col">${dateCell}</td>
                 <td class="course-col">${esc((window.matchMedia && matchMedia('(max-width: 768px)').matches && rnd.course_short) || shortCourse(rnd.course_name) || '—')}</td>
                 <td class="narrow-col">${esc(rnd.tee_name || '—')}</td>
-                <td class="diff-col">${rnd.adjusted_score}</td>
+                <td class="diff-col">${grossCell}</td>
+                <td class="diff-col">${adjCell}</td>
                 <td class="diff-col">${rnd.rating}</td>
                 <td class="diff-col">${rnd.slope}</td>
                 <td class="diff-col ${diffClass}">${rnd.differential !== null ? rnd.differential.toFixed(1) : '—'}</td>

@@ -28,8 +28,13 @@
         const td = `padding:${compact ? "1px 1px" : "2px 6px"};text-align:center;border:1px solid #e2e8f0;min-width:${compact ? "1.1em" : "2em"};white-space:nowrap;`;
         const lbl = `padding:${compact ? "1px 2px" : "2px 8px"};border:1px solid #e2e8f0;font-weight:600;color:#475569;text-align:left;white-space:nowrap;`;
         const L = compact
-            ? { yds: "YDS", gs: "GROSS", gp: "G PTS", ns: "NET", np: "N PTS" }
-            : { yds: "YARDS", gs: "GROSS SCORE", gp: "GROSS PTS", ns: "NET SCORE", np: "NET PTS" };
+            ? { yds: "YDS", gs: "GROSS", gp: "G PTS", ns: "NET", np: "N PTS", adj: "ADJ" }
+            : { yds: "YARDS", gs: "GROSS SCORE", gp: "GROSS PTS", ns: "NET SCORE", np: "NET PTS", adj: "ADJ SCORE" };
+        // ADJ row appears only when the WHS net-double-bogey cap actually
+        // lowered a hole (Kerry 2026-07-14) — capped holes render orange so
+        // you can see exactly where the handicap score diverges from gross.
+        const anyCapped = holes.some(h =>
+            h.strokes != null && h.adjusted_strokes != null && h.adjusted_strokes !== h.strokes);
         const fs = compact ? "0.58rem" : "0.8rem";
         const spanW = compact ? "1.08em" : "1.4em";
         const sectTop = "border-top:3px solid #0f172a;";
@@ -74,6 +79,11 @@
             // NET section, each opened by a thick border
             const grey = "background:#eef2f7;color:#475569;";
             const scRow = hs.map(h => scoreCell(h, sectTop + "font-weight:700;")).join("");
+            const adjRow = !anyCapped ? "" : hs.map(h => {
+                if (h.strokes == null || h.adjusted_strokes == null) return `<td style="${td}"></td>`;
+                const hit = h.adjusted_strokes !== h.strokes;
+                return `<td style="${td}${hit ? "color:#E87C3E;font-weight:700;" : "color:#94a3b8;"}">${h.adjusted_strokes}</td>`;
+            }).join("");
             const gpRow = hs.map(h => `<td style="${td}${grey}">${h.stableford_gross ?? ""}</td>`).join("");
             const netRow = hs.map(h => {
                 const n = netOf(h);
@@ -87,12 +97,14 @@
             const totN = `style="${td}${sectTop}font-weight:700;background:#f1f5f9;"`;
             const totNP = `style="${td}${grey}${sectBot}font-weight:600;"`;
             const totHead = `style="${td}font-weight:700;background:#111;color:#fff;"`;
+            const totADJ = `style="${td}font-weight:700;background:#f1f5f9;color:#E87C3E;"`;
             return `<table style="border-collapse:collapse;font-size:${fs};margin:0.25rem 0;">
                 <tr><td style="${lbl}background:#111;color:#fff;">HOLE</td>${holeRow}<td ${totHead}>${label}</td></tr>
                 <tr><td style="${lbl}">PAR</td>${parRow}<td ${tot}>${sum(hs, h => h.par) || ""}</td></tr>
                 <tr><td style="${lbl}">${L.yds}</td>${ydsRow}<td ${tot}>${sum(hs, h => h.yardage) || ""}</td></tr>
                 <tr><td style="${lbl}" title="Hole handicap ranking: 1 = hardest">HCP</td>${siRow}<td ${tot}></td></tr>
                 <tr><td style="${lbl}${sectTop}font-weight:700;">${L.gs}</td>${scRow}<td ${totG}>${sum(hs, h => h.strokes) || ""}</td></tr>
+                ${anyCapped ? `<tr><td style="${lbl}color:#E87C3E;" title="WHS net double bogey cap: par + 2 + strokes received. Orange holes were lowered for handicap purposes.">${L.adj}</td>${adjRow}<td ${totADJ}>${sum(hs, h => h.adjusted_strokes) || ""}</td></tr>` : ""}
                 <tr><td style="${lbl}${grey}">${L.gp}</td>${gpRow}<td ${totGP}>${sumPts(hs, h => h.stableford_gross)}</td></tr>
                 <tr><td style="${lbl}${sectTop}font-weight:700;">${L.ns}</td>${netRow}<td ${totN}>${sumPts(hs, netOf)}</td></tr>
                 <tr><td style="${lbl}${grey}${sectBot}">${L.np}</td>${npRow}<td ${totNP}>${sumPts(hs, h => h.stableford_net)}</td></tr>
