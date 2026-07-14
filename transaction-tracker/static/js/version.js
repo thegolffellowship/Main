@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.88.0";
+window.TGF_VERSION = "2.89.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.89.0",
+    date: "2026-07-14",
+    changes: [
+      "Self-derived handicap IMPORT (Kerry-ratified): scoring-hcp-import:<event>[|apply] writes handicap rounds straight from our own scorecards -- WHS net-double-bogey adjusted gross, slope/rating from the round's own tee row, differential computed, scoring_round_id bridged at birth. Dry-run by default; apply writes only rounds not already recorded. The GG handicap export/import ritual is now optional per event.",
+      "Ruling basis verified on Kerry's actual GG Spreadsheet Composer downloads for a9.17 Falconhead + s9.17 Silverhorn: the export's only score column is the RAW gross (all 42 rows byte-identical to our stored gross; no adjusted column exists), so the historical record never had WHS capping. Kerry ruled: WHS standards for adjusted gross going forward.",
+      "Writer reuses each customer's existing handicap player_name variant (freshest record wins, same rule as the export dedup) so self-derived rounds extend the record instead of forking it under a new spelling; brand-new players get their handicap_player_links row created on apply.",
+    ],
+  },
   {
     version: "2.88.0",
     date: "2026-07-14",

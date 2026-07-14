@@ -1350,6 +1350,7 @@ def _scoring_dispatch(url: str, extract: str):
       scoring-game-results:<event>|<game>|<flights>  shadow-computed winners for one game
       scoring-gg-results:<event>   GG-recorded winners for one event
       scoring-hcp-preview:<event>  read-only self-derived handicap preview
+      scoring-hcp-import:<event>[|apply]  self-derive handicap rounds (WHS NDB)
     """
     if not extract.startswith("scoring-"):
         return None
@@ -1429,6 +1430,14 @@ def _scoring_dispatch(url: str, extract: str):
             # export-free path shown before it's trusted — writes nothing.
             return json.dumps(db.get_scoring_handicap_preview(arg),
                               indent=2, default=str)
+        if cmd == "scoring-hcp-import":
+            # Self-derive handicap rounds from our scorecards for one event
+            # (WHS NDB adjusted gross — Kerry-ratified 2026-07-14).
+            # "<event>" dry-runs the plan; "<event>|apply" writes it.
+            ev_arg, _, mode = arg.partition("|")
+            return json.dumps(db.derive_handicap_rounds_from_scoring(
+                ev_arg.strip(), dry_run=(mode.strip().lower() != "apply")),
+                indent=2, default=str)
         if cmd == "scoring-gg-drift":
             # D1 drift report (Kerry #150): GG roster tag vs Tracker financial
             # status. NO ARG (default): compares the affiliation tags already

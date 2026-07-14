@@ -214,6 +214,44 @@ When no `round_id` is present the fallback key is `(player_name, round_date, cou
 - `templates/handicaps.html` — `DIFF_LOOKUP` (client-side JS table, must match)
 - Both tables must always be kept in sync.
 
+## Self-derived handicap import (v2.89.0 — Kerry-ratified WHS standard)
+
+**RULING (Kerry, 2026-07-14): WHS standards for adjusted gross.** Basis
+verified on Kerry's own GG "Spreadsheet Composer" downloads for a9.17
+Falconhead + s9.17 Silverhorn: the export's only score column ("Score
+1") is the RAW gross — all 42 rows byte-identical to scoring_rounds
+.gross, no adjusted column, no slope/rating columns. The historical
+handicap_rounds record therefore never had net-double-bogey capping;
+our WHS derivation is the correction, not the deviation.
+
+`derive_handicap_rounds_from_scoring(event_query, dry_run=True)`
+(bridge: `scoring-hcp-import:<event>` dry-run / `<event>|apply` write)
+writes one handicap_rounds row per eligible 9-hole scoring round of the
+event: adjusted_score = WHS NDB adjusted gross via the formula layer,
+slope/rating from the round's OWN tee row, differential computed,
+`scoring_round_id` bridged at birth. Skips (listed in the response):
+already-bridged rounds, dedup-key hits, 18-hole rounds, missing tee or
+par data. Identity: reuses the customer's EXISTING handicap
+player_name variant (freshest record wins — the export-dedup rule) so
+a self-derived round extends the record instead of forking it; new
+players get a handicap_player_links row on apply.
+
+**CAVEAT:** never ALSO import the GG export file for an event that was
+self-derived here — a file carrying round_ids bypasses the fallback
+dedup key and would double-count the rounds. Per event it's one path
+or the other. Rounds already recorded from a GG file are skipped by
+the writer, so mixed history is safe; only the same-event double
+import is not.
+
+**Max-triple interplay (documented for the record):** TGF games cap
+ENTERED scores at triple bogey, so with 0 strokes received on a hole
+the WHS cap (par+2) still bites below the entered triple; with 1
+stroke received the two caps coincide (par+3); with 2+ received the
+NDB cap (par+4+) exceeds the entered triple so it never binds — and a
+true blow-up beyond triple was already recorded as triple at entry,
+which slightly UNDERSTATES the differential vs pure WHS in that rare
+case (favors the player; inherent in max-triple score entry, accepted).
+
 ## Self-derived handicap preview (v2.88.0 — read-only, Phase 2 step 2 prep)
 
 `get_scoring_handicap_preview(event_query)` (bridge:
@@ -233,10 +271,10 @@ mismatches (2026 cluster, GG exactly ours+1 whenever one hole capped),
 a POLICY difference, not a math bug. The preview therefore reports BOTH
 variants side by side (`differential_ndb` / `differential_raw`, and
 `index_after_*` for each) plus `capped_holes` and a
-`cap_changes_differential` summary count. **Which variant becomes
-TGF's standard requires Kerry's explicit ruling (rule 3b) before any
-self-derived import path ships** — handicaps drive strokes, flights,
-and payouts. The smaller opposite family (GG BELOW our capped value —
+`cap_changes_differential` summary count. **RESOLVED same day: Kerry
+ratified WHS standards (see Self-derived handicap import above)** —
+the raw-gross variant stays in the preview output as a reference
+column only. The smaller opposite family (GG BELOW our capped value —
 mis-bridged cards like the Victor Arias Jr/III double-bridge, or
 different strokes-received allocation) is a per-case review queue;
 `get_differential_parity` now classifies both under

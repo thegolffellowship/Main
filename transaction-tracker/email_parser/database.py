@@ -10633,6 +10633,7 @@ def get_scoring_handicap_preview(event_query: str,
             if capped and diff_ndb != diff_raw:
                 cap_bound += 1
             row = {
+                "scoring_round_id": r["srid"],
                 "player_name": _normalize_player_name(r["player_name"]),
                 "customer_id": r["customer_id"],
                 "event_name": r["event_name"],
@@ -10676,6 +10677,141 @@ def get_scoring_handicap_preview(event_query: str,
                     "cluster). Which becomes TGF's standard needs Kerry's "
                     "ruling before any self-derived import ships.",
         }
+
+
+def derive_handicap_rounds_from_scoring(event_query: str, dry_run: bool = True,
+                                        db_path: str | Path = DB_PATH) -> dict:
+    """Write handicap_rounds for one event from OUR scorecards — the
+    export-free path. **Kerry-ratified 2026-07-14: WHS standards for
+    adjusted gross** (net double bogey through the formula layer), after
+    the GG Spreadsheet Composer exports for a9.17/s9.17 confirmed the
+    export carries only the RAW gross (no adjusted column at all).
+
+    dry_run=True (default) returns the plan without writing. Apply
+    inserts one handicap_rounds row per eligible 9-hole scoring round:
+    adjusted_score = WHS NDB adjusted gross, slope/rating from the
+    round's own tee row, differential from those, scoring_round_id
+    bridged at birth.
+
+    Identity: reuses the customer's EXISTING handicap player_name (the
+    variant with the most recent/most rounds — the export-dedup rule)
+    so a self-derived row never splits a player's record under a new
+    name spelling; falls back to the normalized scoring name and creates
+    the handicap_player_links row when the player is brand new.
+
+    Skips (listed, never written): 18-hole rounds, rounds missing tee
+    slope/rating or holes pars, rounds already bridged to a handicap
+    row, and rows whose import-dedup key (player, date, round_id=NULL,
+    course, tee) already exists. CAVEAT: do NOT also import the GG
+    export file for an event processed here — a file carrying round_ids
+    would slip past the fallback dedup key and double-count the round.
+    """
+    preview = get_scoring_handicap_preview(event_query, db_path=db_path)
+    if preview.get("error"):
+        return preview
+    plan: list = []
+    skipped: list = []
+    with _connect(db_path) as conn:
+        for row in preview["rounds"]:
+            why = None
+            if row["already_imported"]:
+                why = "already bridged to a handicap round"
+            elif "no_tee_slope_rating" in row["flags"]:
+                why = "no tee slope/rating on the round"
+            elif "missing_par_holes" in row["flags"]:
+                why = "course tee is missing hole pars"
+            if why:
+                skipped.append({"player_name": row["player_name"],
+                                "scoring_round_id": row["scoring_round_id"],
+                                "reason": why})
+                continue
+
+            # Reuse the existing handicap identity for this customer —
+            # freshest-record variant wins (same rule as the CSV export
+            # dedup) — so we extend the record instead of forking it.
+            target_name = row["player_name"]
+            if row["customer_id"]:
+                best = conn.execute(
+                    """SELECT l.player_name,
+                              (SELECT MAX(hr.round_date) FROM handicap_rounds hr
+                               WHERE hr.player_name = l.player_name) AS last_round,
+                              (SELECT COUNT(*) FROM handicap_rounds hr
+                               WHERE hr.player_name = l.player_name) AS n
+                       FROM handicap_player_links l
+                       WHERE l.customer_id = ?
+                       ORDER BY last_round DESC, n DESC, l.player_name
+                       LIMIT 1""", (row["customer_id"],)).fetchone()
+                if best and best["n"]:
+                    target_name = best["player_name"]
+
+            dup = conn.execute(
+                """SELECT id FROM handicap_rounds
+                   WHERE player_name = ? AND round_date = ? AND round_id IS NULL
+                     AND COALESCE(course_name,'') = COALESCE(?,'')
+                     AND COALESCE(tee_name,'') = COALESCE(?,'')""",
+                (target_name, row["round_date"], row["course_name"],
+                 row["tee_name"])).fetchone()
+            if dup:
+                skipped.append({"player_name": target_name,
+                                "scoring_round_id": row["scoring_round_id"],
+                                "reason": f"dedup key already present (hr {dup['id']})"})
+                continue
+            plan.append({
+                "player_name": target_name,
+                "customer_id": row["customer_id"],
+                "scoring_round_id": row["scoring_round_id"],
+                "round_date": row["round_date"],
+                "course_name": row["course_name"], "tee_name": row["tee_name"],
+                "adjusted_score": row["adjusted_ndb"],
+                "gross": row["gross"], "capped_holes": row["capped_holes"],
+                "rating": row["rating"], "slope": row["slope"],
+                "differential": row["differential_ndb"],
+                "index_now": row["index_now"],
+                "index_after": row["index_after_ndb"],
+            })
+
+        if not dry_run:
+            for p in plan:
+                conn.execute(
+                    """INSERT INTO handicap_rounds
+                       (player_name, round_date, round_id, course_name, tee_name,
+                        adjusted_score, rating, slope, differential, scoring_round_id)
+                       VALUES (?, ?, NULL, ?, ?, ?, ?, ?, ?, ?)""",
+                    (p["player_name"], p["round_date"], p["course_name"],
+                     p["tee_name"], p["adjusted_score"], p["rating"],
+                     p["slope"], p["differential"], p["scoring_round_id"]))
+                # brand-new player: create the link so the handicap card
+                # and GG-export paths can resolve them to the customer
+                if not conn.execute(
+                        "SELECT 1 FROM handicap_player_links WHERE player_name = ?",
+                        (p["player_name"],)).fetchone():
+                    cname = None
+                    if p["customer_id"]:
+                        c = conn.execute(
+                            """SELECT TRIM(COALESCE(first_name,'') || ' ' ||
+                                       COALESCE(last_name,'')) AS nm
+                               FROM customers WHERE customer_id = ?""",
+                            (p["customer_id"],)).fetchone()
+                        cname = (c["nm"] or "").strip() or None
+                    conn.execute(
+                        """INSERT INTO handicap_player_links
+                           (player_name, customer_name, customer_id)
+                           VALUES (?, ?, ?)""",
+                        (p["player_name"], cname, p["customer_id"]))
+            conn.commit()
+            logger.info("Self-derived %d handicap rounds for %r (WHS NDB, "
+                        "Kerry-ratified 2026-07-14)", len(plan), event_query)
+
+    return {"event_query": event_query,
+            "events_matched": preview["events_matched"],
+            "dry_run": dry_run,
+            "would_write" if dry_run else "written": plan,
+            "skipped": skipped,
+            "summary": {"planned": len(plan), "skipped": len(skipped),
+                        "cap_changes_differential":
+                            preview["summary"]["cap_changes_differential"]},
+            "standard": "WHS net double bogey adjusted gross "
+                        "(Kerry-ratified 2026-07-14)"}
 
 
 def _cleanup_empty_scoring_rounds(conn: sqlite3.Connection) -> None:
