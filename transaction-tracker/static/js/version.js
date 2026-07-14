@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.97.0";
+window.TGF_VERSION = "2.98.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.98.0",
+    date: "2026-07-14",
+    changes: [
+      "Past events' PAIRINGS tab shows the ACTUAL played groups (Kerry): every pairings ingest path (final tee sheets, team boards, manual starter sheets) now also mirrors its groups into event_pairings -- tee-time slot labels where the source has them, seat-order cart positions (blind fills keep the cart alignment but are not written). Re-running the season walks backfills the whole 2026 schedule.",
+    ],
+  },
   {
     version: "2.97.0",
     date: "2026-07-14",
