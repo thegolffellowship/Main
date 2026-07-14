@@ -34521,13 +34521,22 @@ def _match_event_for_round_label(conn, label: str, portal: str):
     (s9.17 / a9.18 / s18.8 …), else the label's date + portal chapter."""
     m = _EVENT_CODE_RE.search(label)
     if m:
-        row = conn.execute(
+        rows = conn.execute(
             "SELECT id, item_name, event_date FROM events "
             "WHERE item_name LIKE ? COLLATE NOCASE "
-            "ORDER BY event_date DESC LIMIT 1",
-            (m.group(1) + " %",)).fetchone()
-        if row:
-            return row
+            "ORDER BY event_date DESC",
+            (m.group(1) + " %",)).fetchall()
+        if len(rows) == 1:
+            return rows[0]
+        if rows:
+            # Duplicate-code events exist (e.g. 'a18.2 CRYSTAL FALLS' vs
+            # 'a18.2 AUSTIN KICKOFF | ShadowGlen') — disambiguate by word
+            # overlap between the round label and each item_name.
+            lbl_words = set(re.findall(r"[a-z]{3,}", label.lower()))
+            def _overlap(r):
+                nm_words = set(re.findall(r"[a-z]{3,}", r["item_name"].lower()))
+                return len(lbl_words & nm_words)
+            return max(rows, key=_overlap)
     md = re.search(
         r"\(?\w{3},?\s+(January|February|March|April|May|June|July|August|"
         r"September|October|November|December|Jan|Feb|Mar|Apr|Jun|Jul|Aug|"
@@ -34686,9 +34695,11 @@ _TEAM_BOARD_RE = re.compile(r"\b(?:TEAM|CART)\s+Net\b", re.I)
 _BLIND_SEAT_RE = re.compile(r"^[A-Za-z]{1,3}\[(.+)\]$")
 # Trailing affiliation list after the LAST member: one entry per player,
 # e.g. " TGF San Antonio, Former, TGF Houston, TGF Austin" or
-# " TGF San Antonio, Guest" (sometimes with a dangling comma).
+# " TGF San Antonio, Guest" (sometimes with a dangling comma). A lone
+# guest's tail can START with Guest/Former — no TGF token at all.
 _TEAM_TAIL_RE = re.compile(
-    r"\s+TGF\s[A-Za-z .]+?(?:\s*,\s*(?:TGF\s[A-Za-z .]+?|Guest|Former))*\s*,?\s*$")
+    r"\s+(?:TGF\s[A-Za-z .]+?|Guest|Former)"
+    r"(?:\s*,\s*(?:TGF\s[A-Za-z .]+?|Guest|Former))*\s*,?\s*$")
 
 
 def _gg_results_widget(portal: str) -> str:
@@ -34864,6 +34875,19 @@ def import_gg_teamnet_round(portal: str, round_id: str, apply: bool = False,
             out["applied"] = True
             out["pairs_written"] = n_pairs
     return out
+
+
+def clear_gg_teamnet_pairings(event_id: int,
+                              db_path: str | Path = DB_PATH) -> dict:
+    """Remove ONLY the GG-ingested pairing rows for one event (undo for a
+    mis-matched apply). App-saved rows and event_pairings are untouched."""
+    with _connect(db_path) as conn:
+        _ensure_pairing_tables(conn)
+        cur = conn.execute(
+            "DELETE FROM pairing_history WHERE event_id = ? "
+            "AND source = 'gg_teamnet'", (int(event_id),))
+        conn.commit()
+        return {"event_id": int(event_id), "rows_deleted": cur.rowcount}
 
 
 def import_gg_teamnet_all(portal: str, apply: bool = False,
