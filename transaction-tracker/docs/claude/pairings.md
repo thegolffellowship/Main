@@ -192,6 +192,49 @@ All 41 played rounds ingested with source `'gg_teamnet'`:
   `scoring-pairings:teamall|<portal>|apply` any time — replace
   semantics make it idempotent, and new rounds are picked up.
 
+### FINAL STATE (2026-07-14 morning): final tee sheets are the source
+
+Kerry's route ended the scraping saga: every portal's SCHEDULE
+calendar lists a public per-round **Tee Sheet** page, and its
+`next_round` widget serves the HISTORICAL final sheet when given
+`round_id=` (the original attempt used `round=` — that's the whole
+reason the tee-sheet route looked dead). `scoring-pairings:round|` /
+`all|` now walk these (round ids + labels from the tournament_results
+selector). Parser handles the By-Tee-Times layout: `(time, [hole,]
+players)` windows, two-column rows + single-column repeats deduped,
+shotgun hole labels (1A/1B) accepted, and the alphabetical
+By-Individual table excluded (its `Other Players` cells carry ` + `
+separators — never a group; 18-hole layouts put them inside the
+window).
+
+ALL 41 played 2026 rounds now carry final-tee-sheet groups (source
+`'gg_teesheet'`, true seat order → exact rode pairs) with two ruled
+exceptions: **s9.12 Canyon Springs** (sheet never published in GG —
+page shows the alphabetized confirmed grid; its TEAM-board groups
+stand, per tee-sheets-primary / score-groups-tiebreaker) and **HILL
+COUNTRY MATCHES** (own portal; ingested from the OneDrive Starter
+Sheet PDF, source `'tee_sheet'`). The team-board route (`team|` etc.)
+remains as the fallback/cross-check.
+
+### Generator: history-optimal (v2.95.3–v2.95.7, live-verified)
+
+Kerry's live s9.18 report ("pairing me with players I've played with")
+had TWO layered causes, both fixed:
+1. Single greedy pass → best-of-30 restarts + case/whitespace-
+   normalized pair keys (v2.95.3).
+2. **Last-group attractor** (the real killer, root-caused via the
+   `gen|` probe): the greedy fills groups in order, so the most-played
+   players get avoided until the end and pool together in the final
+   group — restarts never escape it. Every candidate now runs a
+   pairwise-swap hill-climb between groups (partner-request pairs are
+   never split) (v2.95.7).
+Verified against the live s9.18 matrix: the generator's answer (17)
+equals the true optimum (4,000-restart offline search; 57 of 91
+roster pairs already had history — 10 of the 17 is the Palacios↔
+Anthis locked request alone). Debug bridge: `scoring-pairings:
+gen|<event_id>` (seedless run + per-group repeat math + roster
+submatrix), `hist|<event id or name>` (raw rows + totals by source).
+
 ### Kerry corrections + generator fix (2026-07-14, morning)
 
 1. **CART-board weeks still played in real 3/4-somes** (Kerry). The
