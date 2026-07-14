@@ -2397,7 +2397,12 @@
                 badgesHtml += '</div>';
 
                 if (mobilePairingsView) {
-                    detailHtml = badgesHtml + '<div style="padding:1.5rem 1rem;text-align:center;color:var(--text-muted);font-size:0.95rem;"><strong>Feature Coming Soon!</strong></div>';
+                    // Full pairings feature on mobile (Kerry 2026-07-14) —
+                    // the desktop panel + handlers were already
+                    // container-scoped and rerenderDetail routes mobile
+                    // containers back through renderEventsMobile; only
+                    // this stub stood in the way.
+                    detailHtml = badgesHtml + renderPairingsPanel(ev, registrants);
                 } else if (mobilePayoutsView) {
                     detailHtml = badgesHtml + renderPayoutsPanel(ev, registrants);
                 } else if (mobileFinancialView) {
