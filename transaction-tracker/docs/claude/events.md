@@ -152,6 +152,14 @@ cards remain inline buttons.
 - Child rows excluded from player counts, shown as indented "+PAY" sub-rows
 - Item types: NET Games, GROSS Games, BOTH Games, Event Upgrade (9→18 holes), Other
 - **Event Upgrade** updates the parent item's `holes` to "18" but does NOT affect games
+- **Event Downgrade (18→9) lives in the CREDIT modal's Partial Refund tab**,
+  not here (v2.92.0, Kerry): players registered for 18 in a 9/18 Combo get an
+  "Event Downgrade 18 → 9 holes" component (`calcDowngradeAmount` — the
+  format price difference via the same per-event pricing chains as
+  `calculateWdComponents`); confirming refunds the difference AND sets the
+  parent item's `holes` to 9 (`new_holes` on POST
+  `/api/items/<id>/partial-refund`; prior value preserved in
+  parent_snapshot)
 - Child payment `side_games` is empty for Event Upgrade (prevents false game merging)
 - Player dropdown filters out child payment rows to avoid duplicates
 - Supports event aliases (course changes) for parent lookup

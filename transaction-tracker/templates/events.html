@@ -7207,6 +7207,29 @@
         evCreditItemId = null;
     }
 
+    // 18 → 9 downgrade refund for a player registered for 18 in a 9/18
+    // Combo event (Kerry 2026-07-14: the inverse of Add Payment's Event
+    // Upgrade): the price difference between the two formats, using the
+    // same per-event pricing fallback chains as calculateWdComponents.
+    function calcDowngradeAmount(ev, item) {
+        if (!ev) return null;
+        const format = (ev.format || "").toLowerCase();
+        const isCombo = format.includes("combo") || format.includes("9/18");
+        const itemHoles = String(item.holes || "").replace(/[^0-9]/g, "");
+        if (!isCombo || itemHoles !== "18") return null;
+        const DC = (typeof PRICING_DEFAULTS !== "undefined" && PRICING_DEFAULTS["9/18 Combo"]) || {};
+        const D9 = (typeof PRICING_DEFAULTS !== "undefined" && PRICING_DEFAULTS["9 Holes"]) || {};
+        const cc18 = ev.course_cost_18 != null ? ev.course_cost_18 : ev.course_cost;
+        const m18  = ev.tgf_markup_18 ?? ev.tgf_markup ?? DC.tgf_markup_18;
+        const g18  = ev.side_game_fee_18 ?? ev.side_game_fee ?? DC.side_game_fee_18;
+        const cc9  = ev.course_cost_9 != null ? ev.course_cost_9 : ev.course_cost;
+        const m9   = ev.tgf_markup_9 ?? ev.tgf_markup ?? D9.tgf_markup;
+        const g9   = ev.side_game_fee_9 ?? ev.side_game_fee ?? D9.side_game_fee;
+        if (cc18 == null || cc9 == null) return null;
+        const diff = (cc18 + (m18 || 0) + (g18 || 0)) - (cc9 + (m9 || 0) + (g9 || 0));
+        return diff > 0 ? Math.round(diff * 100) / 100 : null;
+    }
+
     function buildPartialRefundComponents() {
         const item = allItems.find(r => r.id === evCreditItemId);
         if (!item) return;
@@ -7217,12 +7240,20 @@
             return names.has((item.item_name || "").toLowerCase());
         });
         const eventName = ev ? ev.item_name : item.item_name;
-        const components = calculateWdComponents(item, eventName);
+        const components = calculateWdComponents(item, eventName) || [];
+        // Downgrade 18 → 9 rides the same checkbox list; checking it also
+        // flips the registration's holes to 9 on submit.
+        const dgAmount = calcDowngradeAmount(ev, item);
+        if (dgAmount != null) {
+            components.unshift({ key: "event_downgrade",
+                                 label: "Event Downgrade 18 → 9 holes",
+                                 amount: dgAmount });
+        }
         const container = document.getElementById("ev-credit-partial-items");
         let hasGameComponents = false;
         if (components && components.length) {
-            // Only show game-related components (not course fee, included games, markup)
-            const refundable = components.filter(c => ["net_games", "gross_games"].includes(c.key));
+            // Game components + the downgrade (not course fee / markup)
+            const refundable = components.filter(c => ["net_games", "gross_games", "event_downgrade"].includes(c.key));
             if (refundable.length > 0) {
                 hasGameComponents = true;
                 container.innerHTML = refundable.map(c => `
@@ -7289,12 +7320,14 @@
             } else if (currentGames === "GROSS" && checked.includes("gross_games")) {
                 newGames = "NONE";
             }
+            const notes = [];
             if (newGames !== currentGames) {
-                document.getElementById("ev-credit-partial-games-note").innerHTML =
-                    `Games will change: <strong>${currentGames}</strong> → <strong>${newGames}</strong>`;
-            } else {
-                document.getElementById("ev-credit-partial-games-note").textContent = "";
+                notes.push(`Games will change: <strong>${currentGames}</strong> → <strong>${newGames}</strong>`);
             }
+            if (checked.includes("event_downgrade")) {
+                notes.push(`Registration will change: <strong>18 holes</strong> → <strong>9 holes</strong>`);
+            }
+            document.getElementById("ev-credit-partial-games-note").innerHTML = notes.join("<br>");
         }
     }
 
@@ -7347,7 +7380,10 @@
                 }
                 const res = await fetch(`/api/items/${evCreditItemId}/partial-refund`, {
                     method: "POST", headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ method, components, new_side_games: newGames !== currentGames ? newGames : null, note }),
+                    body: JSON.stringify({ method, components,
+                        new_side_games: newGames !== currentGames ? newGames : null,
+                        new_holes: checkedKeys.includes("event_downgrade") ? "9" : null,
+                        note }),
                 });
                 if (!res.ok) throw new Error((await res.json()).error || "Partial refund failed");
             } else {
