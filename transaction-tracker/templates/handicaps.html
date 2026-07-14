@@ -1255,6 +1255,19 @@
     const DIFF_LOOKUP = {3:1,4:1,5:1,6:2,7:2,8:2,9:3,10:3,11:3,12:4,13:4,14:4,15:5,16:5,17:6,18:6,19:7,20:8};
     const ADJ_LOOKUP  = {3:-2.0, 4:-1.0, 6:-1.0};  // added after avg × 0.96; all others 0
 
+    // Course label for a record that is ONE NINE of an 18-hole round
+    // (Kerry 2026-07-14): when the course name carries named nines
+    // ("Hyatt Hill Country | Lakes/Oaks"), use the nine's own name —
+    // "Hyatt Hill Country | Oaks"; otherwise append "- Front"/"- Back".
+    function hcpNineLabel(fullName, shortLabel, nine) {
+        const m = (fullName || '').match(/^(.*?)[|–-]\s*([^\/|]+?)\s*\/\s*([^\/|]+?)\s*$/);
+        if (m) {
+            const nineName = (nine === 'front' ? m[2] : m[3]).trim();
+            return `${m[1].replace(/[\s|–-]+$/, '').trim()} | ${nineName}`;
+        }
+        return `${shortLabel || fullName || '—'} - ${nine === 'front' ? 'Front' : 'Back'}`;
+    }
+
     // Expand a handicap record into its actual scorecard (Kerry 2026-07-14).
     // Only bridged rounds (scoring_round_id set) get the chevron; the card
     // comes from /api/scoring/scorecard and renders via the shared
@@ -1274,17 +1287,26 @@
             <em style="color:#94a3b8;font-size:0.85em;">Loading scorecard…</em></td>`;
         tr.after(row);
         if (chev) chev.style.transform = 'rotate(90deg)';
-        // An 18-hole card backs TWO 9-hole handicap records — say which
-        // nine THIS record is before showing the full card.
+        // An 18-hole card backs TWO 9-hole handicap records — show ONLY
+        // the nine this record covers (Kerry 2026-07-14: the TGF system
+        // is every-9-holes; the full 18 belongs on player scoring
+        // records, not here).
         const note = nine
             ? `<div style="font-size:0.8em;color:#475569;margin-bottom:6px;">
-                 <strong style="color:var(--primary, #E87C3E);">${nine === 'front' ? 'FRONT NINE (OUT)' : 'BACK NINE (IN)'}</strong>
-                 of an 18-hole round — this handicap record covers only that nine
-                 (gross ${gross ?? '—'}, adjusted ${adj}). Each nine posts as its own 9-hole round.</div>`
+                 <strong style="color:var(--primary, #E87C3E);">${nine === 'front' ? 'FRONT NINE' : 'BACK NINE'}</strong>
+                 of an 18-hole round — gross ${gross ?? '—'}, adjusted ${adj}.
+                 Each nine posts as its own 9-hole handicap round.</div>`
             : '';
         try {
             const resp = await fetch(`/api/scoring/scorecard/${srid}`);
             const card = await resp.json();
+            if (nine && card.holes) {
+                card.holes = card.holes.filter(h =>
+                    nine === 'front' ? h.hole_number <= 9 : h.hole_number > 9);
+                // 18-hole totals/differential don't describe this nine —
+                // the record row above already carries the right numbers
+                delete card.derived_totals;
+            }
             row.firstElementChild.innerHTML = (window.tgfRenderScorecard && !card.error)
                 ? note + window.tgfRenderScorecard(card)
                 : `<em style="color:#94a3b8;font-size:0.85em;">Scorecard unavailable.</em>`;
@@ -1391,10 +1413,10 @@
             // F9/B9 (v2.90.1 — the 18-hole join false-flagged 80 vs 41 as
             // a "39-stroke cap", Kerry screenshots).
             const capped = rnd.gross != null && rnd.gross !== rnd.adjusted_score;
-            const nineTag = rnd.nine
-                ? `<sup style="color:#9CA3AF;font-weight:600;" title="${rnd.nine === 'front' ? 'Front' : 'Back'} nine of an 18-hole round">${rnd.nine === 'front' ? 'F9' : 'B9'}</sup>`
-                : '';
-            const grossCell = rnd.gross != null ? `${rnd.gross}${nineTag}` : '<span style="color:#9CA3AF">—</span>';
+            const grossCell = rnd.gross != null ? `${rnd.gross}` : '<span style="color:#9CA3AF">—</span>';
+            const baseCourse = (window.matchMedia && matchMedia('(max-width: 768px)').matches && rnd.course_short)
+                || shortCourse(rnd.course_name) || '—';
+            const courseLabel = rnd.nine ? hcpNineLabel(rnd.course_name, baseCourse, rnd.nine) : baseCourse;
             const adjCell = capped
                 ? `<span style="color:var(--primary, #E87C3E);font-weight:700;" title="WHS net double bogey cap lowered this nine by ${rnd.gross - rnd.adjusted_score} stroke${rnd.gross - rnd.adjusted_score !== 1 ? 's' : ''} — expand to see which holes">${rnd.adjusted_score}</span>`
                 : `${rnd.adjusted_score}`;
@@ -1418,7 +1440,7 @@
                     : '—';
                 return `<tr class="${rowClass}" style="${bar}${rowStyle ? rowStyle + ';' : ''}${isUsed ? 'background:#F2FBF5;' : ''}">
                     <td class="date-col">${dateCell}</td>
-                    <td class="course-col">${esc((window.matchMedia && matchMedia('(max-width: 768px)').matches && rnd.course_short) || shortCourse(rnd.course_name) || '—')}</td>
+                    <td class="course-col">${esc(courseLabel)}</td>
                     <td class="diff-col">${grossCell}</td>
                     <td class="diff-col">${adjCell}</td>
                     <td class="diff-col">${diffCell}</td>
@@ -1428,7 +1450,7 @@
             }
             return `<tr class="${rowClass}" ${rowStyle ? `style="${rowStyle}"` : ''}>
                 <td class="date-col">${dateCell}</td>
-                <td class="course-col">${esc((window.matchMedia && matchMedia('(max-width: 768px)').matches && rnd.course_short) || shortCourse(rnd.course_name) || '—')}</td>
+                <td class="course-col">${esc(courseLabel)}</td>
                 <td class="narrow-col">${esc(rnd.tee_name || '—')}</td>
                 <td class="diff-col">${grossCell}</td>
                 <td class="diff-col">${adjCell}</td>
