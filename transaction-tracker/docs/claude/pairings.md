@@ -192,6 +192,31 @@ All 41 played rounds ingested with source `'gg_teamnet'`:
   `scoring-pairings:teamall|<portal>|apply` any time — replace
   semantics make it idempotent, and new rounds are picked up.
 
+### Kerry corrections + generator fix (2026-07-14, morning)
+
+1. **CART-board weeks still played in real 3/4-somes** (Kerry). The
+   foursomes come from the OneDrive `Seasons/<year>/2 Events` starter
+   sheets via `scoring-pairings:manual|<event_id>|<json>[|apply]`
+   (source `'tee_sheet'` — the ruled PRIMARY source; replaces the
+   event's rows). DONE: s18.5 WILLOW SPRINGS (271, 21 pairs) and
+   HILL COUNTRY MATCHES (274, 45 pairs — from its Starter Sheet PDF;
+   its own GG portal wasn't needed). STILL CART-ONLY: a9.17
+   Falconhead + a18.3 CRYSTAL FALLS — no starter sheets on OneDrive,
+   Kerry to supply a tee-sheet source.
+   `!Name` seat prefix = literal guest, NO customer resolution (the
+   fuzzy cascade mis-attached guest 'Cleary, Paul' to a member).
+2. **Cart-sequence ruling VERIFIED against a real event**: Willow
+   Springs `CartSigns.pdf` cart pairs exactly match starter-sheet
+   seat order 1&2 / 3&4.
+3. **Generator fix (v2.95.3)** — Kerry's live report: s9.18 generate
+   repeated his s9.17 foursome-mates. History rows were correct and
+   name-keyed identically (verified via `hist|`); the failure was the
+   SINGLE greedy pass. Now: best-of-30 restarts keeping the
+   fewest-repeat arrangement, plus case/whitespace-normalized pair
+   keys (`_pair_key_name`) so name drift between writers can never
+   silently zero the history again.
+   `scoring-pairings:hist|<event id or name>` = read-only debug view.
+
 ## Engine notes (design, not yet built)
 
 - Season-coverage objective (rule 3) is the optimizer's primary term;
