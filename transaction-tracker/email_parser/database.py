@@ -35018,6 +35018,74 @@ def debug_generate_pairings(event_id: int,
     return out
 
 
+def analyze_pairing_staging(db_path: str | Path = DB_PATH) -> dict:
+    """Read-only side-quest data (Kerry 2026-07-14): every 9-hole event's
+    ACTUAL groups in staging order (group_num follows the final tee
+    sheet's sequence — tee-time order, or hole order on shotguns) with
+    pace proxies per group: size, average CURRENT handicap index
+    (as-of-event index not reconstructed — proxy only), and age-band
+    mix from registrations (<50 / 50-64 / 65+)."""
+    with _connect(db_path) as conn:
+        _ensure_pairing_tables(conn)
+        hcp_rows = conn.execute(
+            """
+            SELECT l.customer_name, p.handicap_index
+            FROM (
+                SELECT player_name, AVG(differential) as handicap_index
+                FROM (
+                    SELECT player_name, differential,
+                           ROW_NUMBER() OVER (
+                               PARTITION BY player_name
+                               ORDER BY round_date DESC, id DESC) as rn
+                    FROM handicap_rounds
+                    WHERE differential IS NOT NULL
+                      AND round_date >= date('now', '-12 months')
+                )
+                WHERE rn <= 20
+                GROUP BY player_name
+            ) p
+            JOIN handicap_player_links l ON l.player_name = p.player_name
+            WHERE l.customer_name IS NOT NULL
+            """).fetchall()
+        hcp = {(r["customer_name"] or "").lower(): r["handicap_index"]
+               for r in hcp_rows}
+        evs = conn.execute(
+            """SELECT DISTINCT e.id, e.item_name, e.event_date, e.chapter
+               FROM events e JOIN event_pairings ep ON ep.event_id = e.id
+               WHERE e.item_name LIKE 's9.%' OR e.item_name LIKE 'a9.%'
+               ORDER BY e.event_date""").fetchall()
+        out = []
+        for ev in evs:
+            rows = conn.execute(
+                """SELECT group_num, slot_label, player_name
+                   FROM event_pairings WHERE event_id = ?
+                   ORDER BY group_num, cart_pos""", (ev["id"],)).fetchall()
+            band_map = {r["customer"]: r["tee_choice"] for r in conn.execute(
+                """SELECT DISTINCT customer, tee_choice FROM items
+                   WHERE event_id = ? AND tee_choice IS NOT NULL
+                   AND parent_item_id IS NULL""", (ev["id"],))}
+            groups: dict = {}
+            for r in rows:
+                groups.setdefault(r["group_num"],
+                                  {"slot": r["slot_label"], "players": []})[
+                    "players"].append(r["player_name"])
+            glist = []
+            for gn in sorted(groups):
+                g = groups[gn]
+                idxs = [hcp.get((p or "").lower()) for p in g["players"]]
+                idxs = [x for x in idxs if x is not None]
+                bands = [band_map.get(p) for p in g["players"]]
+                glist.append({
+                    "n": gn, "slot": g["slot"], "size": len(g["players"]),
+                    "avg_index": round(sum(idxs) / len(idxs), 1) if idxs else None,
+                    "bands": [b for b in bands if b]})
+            out.append({"event": ev["item_name"], "date": ev["event_date"],
+                        "chapter": ev["chapter"], "groups": glist})
+        return {"n_events": len(out), "events": out,
+                "note": "avg_index uses CURRENT index (proxy); bands from "
+                        "registrations; group order = final tee sheet order"}
+
+
 def clear_gg_teamnet_pairings(event_id: int,
                               db_path: str | Path = DB_PATH) -> dict:
     """Remove ONLY the GG-ingested pairing rows for one event (undo for a
@@ -35376,6 +35444,8 @@ def generate_event_pairings(
         # Positions still open in seeded slots
         seed_space_open = {si: 4 - len(v) for si, v in seed_map[holes].items() if len(v) < 4}
 
+        locked_names = _partner_locked_names(
+            free_players, partner_map, protect_partner_requests)
         if mode == "abcd":
             groups_players = _abcd_groups(free_players, hcp_map)
         else:
@@ -35385,8 +35455,6 @@ def generate_event_pairings(
             # the LAST group (Kerry's live s9.18 case — his max-repeat trio
             # recurred across runs). Random restarts don't escape it;
             # pairwise swaps between groups do.
-            locked_names = _partner_locked_names(
-                free_players, partner_map, protect_partner_requests)
             best_groups: list | None = None
             best_score: int | None = None
             for _ in range(30):
@@ -35446,7 +35514,8 @@ def generate_event_pairings(
                 })
             else:
                 if free_group_idx < len(groups_players):
-                    gp = groups_players[free_group_idx]
+                    gp = _order_group_by_tee(
+                        groups_players[free_group_idx], tee_map, locked_names)
                     free_group_idx += 1
                     players_out = []
                     for cp, name in enumerate(gp, start=1):
@@ -35469,7 +35538,8 @@ def generate_event_pairings(
 
         # Handle overflow: free groups beyond available slots
         while free_group_idx < len(groups_players):
-            gp = groups_players[free_group_idx]
+            gp = _order_group_by_tee(
+                groups_players[free_group_idx], tee_map, locked_names)
             free_group_idx += 1
             players_out = []
             for cp, name in enumerate(gp, start=1):
@@ -35523,6 +35593,27 @@ def _make_group_sizes(n: int) -> list[int]:
         return [4] * (q - 1) + [3, 3]     # e.g. 6→[3,3], 10→[4,3,3]
     else:  # r == 3
         return [4] * q + [3]              # e.g. 7→[4,3], 11→[4,4,3]
+
+
+def _order_group_by_tee(names: list[str], tee_map: dict,
+                        locked: set) -> list[str]:
+    """Kerry's tee-grouping pace rule (2026-07-14): once a group is
+    settled, seat same-tee players together — adjacent seats share a
+    cart AND a tee box, so the group doesn't leapfrog between tees.
+    Partner-request pairs stay adjacent (they ride together); a locked
+    pair sorts by its first member's tee."""
+    units: list[list[str]] = []
+    i = 0
+    while i < len(names):
+        a = names[i]
+        if (a in locked and i + 1 < len(names) and names[i + 1] in locked):
+            units.append([a, names[i + 1]])
+            i += 2
+        else:
+            units.append([a])
+            i += 1
+    units.sort(key=lambda u: str(tee_map.get(u[0]) or "~"))
+    return [n for u in units for n in u]
 
 
 def _partner_locked_names(players: list[str], partner_map: dict,

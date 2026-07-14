@@ -1468,6 +1468,11 @@ def _scoring_dispatch(url: str, extract: str):
                     int(parts[1]), groups,
                     apply=(len(parts) > 3 and parts[3].lower() == "apply")),
                     indent=2, default=str)
+            if sub == "staging" and len(parts) >= 1:
+                # read-only: 9-hole events' actual groups in staging order
+                # with pace proxies (Kerry's staging-pattern side quest)
+                return json.dumps(db.analyze_pairing_staging(),
+                                  indent=1, default=str)
             if sub == "gen" and len(parts) >= 2 and parts[1].isdigit():
                 # read-only: run the generator seedless + show repeat math
                 return json.dumps(db.debug_generate_pairings(int(parts[1])),
