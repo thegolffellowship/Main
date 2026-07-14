@@ -132,6 +132,40 @@ archive-events (nullable event_id) design.
 repeat-minimizing signal — reads this table unchanged, so ingested
 history immediately drives maximize-new-pairings.
 
+## GG TEAM/CART Net board ingest (v2.95.0 — the route that WORKS)
+
+The tee-sheet route above hit two walls the night it shipped: the
+public TEE SHEETS page hosts a `next_round` widget (upcoming event
+only, no round selector, unpublished pairings render as an
+alphabetized confirmed-players grid), and the PLAYER TIMES TOGETHER
+page (5783331) is login-gated. **Working source:** each played
+round's `tournament_results` widget lists a **TEAM Net $** board
+(SA, foursomes; "TEAM Net 18 $" on 18-hole rounds) or **CART Net $**
+board (Austin, cart pairs) whose rows are the ACTUAL playing groups
+in seat order — e.g. "SOUTH, Daniel + MORENO, Robert + WADE, Mary +
+Bl[HAMILTON, Doug] TGF San Antonio".
+
+Bridge commands: `scoring-pairings:teamrounds|<portal>` (round
+selector off the results widget), `team|<portal>|<round_id>[|apply]`,
+`teamall|<portal>[|apply]` (budgeted, resumable). Source column:
+`'gg_teamnet'`; same replace-per-event semantics.
+
+Caveats of record:
+- **Blind-draw fills** (`Bl[Name]`) are on the card but not in the
+  group: parsed as EMPTY seats — excluded from played-with pairs,
+  but the seat is kept so the 1&2 / 3&4 cart split stays aligned.
+- **SA rode flags assume board order = tee-sheet seat order** (team
+  boards are built from the tee sheet; verify against a published
+  tee sheet when one appears). Austin CART rows are cart pairs by
+  definition — rode=1 is exact.
+- **Austin has NO foursome board** — only cart pairs land; the
+  other-cart half of each Austin foursome is not publicly derivable
+  (scorecard aggregates are per-player on the 2026 portals).
+- Rounds whose label carries no event code and a truncated date
+  (preseason: KICKOFF/LA CANTERA/CEDAR CREEK options are cut off
+  mid-date by GG) may not match a Tracker event — they surface in
+  the walk report as unmatched, not silently skipped.
+
 ## Engine notes (design, not yet built)
 
 - Season-coverage objective (rule 3) is the optimizer's primary term;
