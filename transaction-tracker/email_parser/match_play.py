@@ -107,8 +107,13 @@ SEED_MATCH_PLAY_CONFIG: dict = {
     # of the places they jointly occupy. Default pending Kerry confirm.
     "tie_policy": "split_combined_places",
     # Knockout seeds = most Stableford points accumulated across the pool
-    # matches (ratified).
+    # matches (ratified). EXCEPTION (Kerry 2026-07-14): a 4-player
+    # knockout fed by two pools is seeded CROSS-POOL — winner of one
+    # pool vs the 2nd-place finisher of the other. Stableford does not
+    # seed that bracket; it only breaks record ties in pool finishes
+    # (which happens upstream in the pool rank).
     "seeding": "stableford_pool_matches",
+    "seeding_knockout4": "cross_pool",
     "notes": "Seeded from Prizes-Match Play Matrix.xlsx (July 6 final).",
 }
 
@@ -254,6 +259,24 @@ def round_names(template_size: int) -> list[str]:
     if template_size not in names:
         raise ValueError(f"Unsupported bracket size {template_size}")
     return names[template_size]
+
+
+def cross_pool_semi_order(pool_a: list, pool_b: list) -> list:
+    """Seed order for a two-pool 4-player knockout (Kerry 2026-07-14).
+
+    Semifinals must be cross-pool: the winner of one pool plays the
+    2nd-place finisher of the OTHER pool. Stableford does not seed this
+    bracket — it only breaks record ties in the pool finishes, which is
+    already applied in each pool's rank order.
+
+    pool_a / pool_b: each pool's ordered advancers [winner, runner_up]
+    (any extra entries are ignored). Returns the 4 entrants in seed
+    order [A1, B1, A2, B2] so classic 4-slot placement (1v4, 2v3)
+    produces exactly A1 vs B2 and B1 vs A2.
+    """
+    if len(pool_a) < 2 or len(pool_b) < 2:
+        raise ValueError("cross_pool_semi_order needs 2 advancers per pool")
+    return [pool_a[0], pool_b[0], pool_a[1], pool_b[1]]
 
 
 def seed_bracket(entrants: list[dict], bracket_size: int) -> dict:

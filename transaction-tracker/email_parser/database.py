@@ -23679,7 +23679,8 @@ def cmp_seed_knockout(season: str, chapter: str, created_by: str | None = None,
     active = sct_get_active_config("match_play", season, chapter, db_path=db_path)
     if not active:
         raise ValueError("No Match Play config template found")
-    from email_parser.match_play import seed_bracket, structure_for_n
+    from email_parser.match_play import (cross_pool_semi_order, seed_bracket,
+                                         structure_for_n)
 
     entrants = cmp_enrolled_entrants(season, chapter, db_path=db_path)
     n = len(entrants)
@@ -23706,7 +23707,29 @@ def cmp_seed_knockout(season: str, chapter: str, created_by: str | None = None,
     if not played_any:
         warnings.append("No pool matches recorded yet — seeding is arbitrary.")
 
-    seeded = sorted(field, key=_cmp_seed_metric)
+    # 4-player knockout from two pools = CROSS-POOL semis (Kerry
+    # 2026-07-14): winner of one pool vs the 2nd-place finisher of the
+    # other. Stableford does NOT seed this bracket — it only breaks
+    # record ties in pool finishes (already applied in pool rank).
+    seeding_mode = "stableford"
+    seeded = None
+    if (structure["knockout"] == 4 and wc_count == 0
+            and active["config"].get("seeding_knockout4", "cross_pool")
+            == "cross_pool"):
+        adv_by_pool: dict = {}
+        for r in adv:
+            adv_by_pool.setdefault(r["pool_name"], []).append(r)
+        pools_adv = [sorted(rows, key=lambda r: r["rank"])
+                     for _, rows in sorted(adv_by_pool.items())]
+        if len(pools_adv) == 2 and all(len(p) >= 2 for p in pools_adv):
+            seeded = cross_pool_semi_order(pools_adv[0], pools_adv[1])
+            seeding_mode = "cross_pool"
+        else:
+            warnings.append(
+                "Cross-pool semis need two pools with two advancers each "
+                "— fell back to Stableford seeding.")
+    if seeded is None:
+        seeded = sorted(field, key=_cmp_seed_metric)
     if len(field) < 2:
         raise ValueError("Not enough qualifiers to seed a knockout — need at least 2.")
     entrant_rows = [
@@ -23767,6 +23790,7 @@ def cmp_seed_knockout(season: str, chapter: str, created_by: str | None = None,
         "n": n,
         "structure": structure,
         "rounds": plan["rounds"],
+        "seeding_mode": seeding_mode,
         "seeds": [{"seed": i + 1, **e} for i, e in enumerate(entrant_rows)],
         "byes": [e["player"]["player_name"] for e in plan["bye_placements"]],
         "warnings": warnings,
