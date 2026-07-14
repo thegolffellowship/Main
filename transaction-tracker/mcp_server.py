@@ -1468,6 +1468,10 @@ def _scoring_dispatch(url: str, extract: str):
                     int(parts[1]), groups,
                     apply=(len(parts) > 3 and parts[3].lower() == "apply")),
                     indent=2, default=str)
+            if sub == "gen" and len(parts) >= 2 and parts[1].isdigit():
+                # read-only: run the generator seedless + show repeat math
+                return json.dumps(db.debug_generate_pairings(int(parts[1])),
+                                  indent=2, default=str)
             if sub == "hist" and len(parts) >= 2:
                 # read-only: pairing_history rows by event id or name
                 # fragment + 2026 totals by source

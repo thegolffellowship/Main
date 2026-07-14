@@ -34975,6 +34975,31 @@ def debug_pairing_history(query: str, db_path: str | Path = DB_PATH) -> dict:
         return out
 
 
+def debug_generate_pairings(event_id: int,
+                            db_path: str | Path = DB_PATH) -> dict:
+    """Run the pairing generator server-side with NO seeds and report the
+    repeat-score arithmetic it saw — isolates 'the generator ignores
+    history' from 'the UI passed locked seeds'."""
+    counts = get_pairing_history_counts(db_path=db_path)
+    res = generate_event_pairings(int(event_id), db_path=db_path)
+    out: dict = {"event_id": int(event_id), "n_pair_keys": len(counts)}
+    for holes in ("9", "18"):
+        if holes not in res:
+            continue
+        groups = []
+        for g in res[holes]:
+            names = [p["name"] for p in g.get("players", []) if p.get("name")]
+            pairs = {f"{a} + {b}": _pair_count(counts, a, b)
+                     for i, a in enumerate(names) for b in names[i + 1:]}
+            groups.append({"slot": g.get("slot_label"), "players": names,
+                           "repeat_pairs": {k: v for k, v in pairs.items()
+                                            if v > 0},
+                           "group_score": sum(pairs.values())})
+        out[f"groups_{holes}"] = groups
+        out[f"total_score_{holes}"] = sum(g["group_score"] for g in groups)
+    return out
+
+
 def clear_gg_teamnet_pairings(event_id: int,
                               db_path: str | Path = DB_PATH) -> dict:
     """Remove ONLY the GG-ingested pairing rows for one event (undo for a
