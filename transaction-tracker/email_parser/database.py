@@ -34359,11 +34359,20 @@ def delete_event_pairings(event_id: int, db_path=None) -> None:
         conn.commit()
 
 
+def _pair_key_name(name: str) -> str:
+    """Normalized form used for pair-count keys: collapsed whitespace,
+    lowercase. History rows come from several writers (app saves, GG
+    ingest, roster names) — an exact-string key silently drops history
+    on any case/spacing drift, which reads as 'generator ignores who
+    I've played with'."""
+    return " ".join((name or "").split()).lower()
+
+
 def get_pairing_history_counts(year: int | None = None, db_path=None) -> dict:
     """Return a dict mapping (player_a, player_b) → count for the given calendar year.
 
-    player_a < player_b alphabetically (canonical key order).
-    If year is None uses the current year.
+    Keys are normalized via _pair_key_name (lowercase, collapsed spaces),
+    alphabetical order. If year is None uses the current year.
     """
     if year is None:
         year = datetime.now().year
@@ -34382,7 +34391,12 @@ def get_pairing_history_counts(year: int | None = None, db_path=None) -> dict:
             (year_start, year_end),
         ).fetchall()
 
-    return {(r["player_a"], r["player_b"]): r["cnt"] for r in rows}
+    counts: dict = {}
+    for r in rows:
+        a, b = _pair_key_name(r["player_a"]), _pair_key_name(r["player_b"])
+        key = (min(a, b), max(a, b))
+        counts[key] = counts.get(key, 0) + r["cnt"]
+    return counts
 
 
 # ── GG tee-sheet pairings ingest (Kerry 2026-07-14, overnight directive:
@@ -34877,6 +34891,39 @@ def import_gg_teamnet_round(portal: str, round_id: str, apply: bool = False,
     return out
 
 
+def debug_pairing_history(query: str, db_path: str | Path = DB_PATH) -> dict:
+    """Read-only inspection for the pairings pipeline: rows by event id
+    (numeric query) or by player-name fragment, plus 2026 totals by
+    source — so 'the generator ignored my history' is diagnosable over
+    the bridge without a redeploy."""
+    with _connect(db_path) as conn:
+        _ensure_pairing_tables(conn)
+        out: dict = {"query": query}
+        srcs = conn.execute(
+            "SELECT COALESCE(source,'app') AS s, COUNT(*) AS n "
+            "FROM pairing_history WHERE event_date >= '2026-01-01' "
+            "GROUP BY COALESCE(source,'app')").fetchall()
+        out["rows_2026_by_source"] = {r["s"]: r["n"] for r in srcs}
+        if str(query).strip().isdigit():
+            rows = conn.execute(
+                "SELECT * FROM pairing_history WHERE event_id = ? ORDER BY id",
+                (int(query),)).fetchall()
+        else:
+            frag = f"%{query.strip()}%"
+            rows = conn.execute(
+                "SELECT * FROM pairing_history "
+                "WHERE (player_a LIKE ? OR player_b LIKE ?) "
+                "AND event_date >= '2026-01-01' ORDER BY event_date, id",
+                (frag, frag)).fetchall()
+        out["n_rows"] = len(rows)
+        out["rows"] = [
+            {k: r[k] for k in ("player_a", "player_b", "event_id",
+                               "event_date", "rode", "source",
+                               "customer_a_id", "customer_b_id")}
+            for r in rows[:80]]
+        return out
+
+
 def clear_gg_teamnet_pairings(event_id: int,
                               db_path: str | Path = DB_PATH) -> dict:
     """Remove ONLY the GG-ingested pairing rows for one event (undo for a
@@ -34888,6 +34935,81 @@ def clear_gg_teamnet_pairings(event_id: int,
             "AND source = 'gg_teamnet'", (int(event_id),))
         conn.commit()
         return {"event_id": int(event_id), "rows_deleted": cur.rowcount}
+
+
+def import_manual_pairing_groups(event_id: int, groups: list,
+                                 apply: bool = False,
+                                 source: str = "tee_sheet",
+                                 db_path: str | Path = DB_PATH) -> dict:
+    """Write pairing_history for one event from explicitly supplied groups
+    (lists of names in tee-sheet seat order) — the path for OneDrive
+    starter sheets / tee sheets, Kerry's ruled PRIMARY pairing source.
+    Same semantics as the GG ingest: apply REPLACES the event's rows;
+    rode pairs by seat sequence 1&2 / 3&4."""
+    out: dict = {"event_id": event_id, "n_groups": len(groups),
+                 "source": source, "applied": False}
+    with _connect(db_path) as conn:
+        _ensure_pairing_tables(conn)
+        ev = conn.execute(
+            "SELECT id, item_name, event_date FROM events WHERE id = ?",
+            (int(event_id),)).fetchone()
+        if not ev:
+            out["error"] = f"no event {event_id}"
+            return out
+        out["event"] = {"id": ev["id"], "name": ev["item_name"],
+                        "date": ev["event_date"]}
+        resolved = []
+        unresolved = []
+        for seats in groups:
+            rs = []
+            for raw in seats:
+                if not raw:
+                    rs.append(None)
+                    continue
+                cid = None
+                try:
+                    cid = _resolve_scoring_player(conn, raw)
+                except Exception:
+                    cid = None
+                canonical = None
+                if cid:
+                    c = conn.execute(
+                        """SELECT TRIM(COALESCE(first_name,'') || ' ' ||
+                                   COALESCE(last_name,'')) AS nm
+                           FROM customers WHERE customer_id = ?""",
+                        (cid,)).fetchone()
+                    canonical = (c["nm"] or "").strip() or None
+                if not canonical:
+                    canonical = _normalize_player_name(raw)
+                    unresolved.append(raw)
+                rs.append({"name": canonical, "cid": cid})
+            resolved.append(rs)
+        out["unresolved_names"] = unresolved
+        out["resolved_groups"] = [
+            [p["name"] if p else None for p in rs] for rs in resolved]
+        if apply:
+            conn.execute("DELETE FROM pairing_history WHERE event_id = ?",
+                         (ev["id"],))
+            n_pairs = 0
+            for rs in resolved:
+                real = [(idx, p) for idx, p in enumerate(rs) if p]
+                for x in range(len(real)):
+                    for y in range(x + 1, len(real)):
+                        (ia, pa), (ib, pb) = real[x], real[y]
+                        a, b = sorted((pa, pb), key=lambda p: p["name"])
+                        conn.execute(
+                            """INSERT OR IGNORE INTO pairing_history
+                               (player_a, player_b, event_id, event_date,
+                                customer_a_id, customer_b_id, rode, source)
+                               VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                            (a["name"], b["name"], ev["id"], ev["event_date"],
+                             a["cid"], b["cid"],
+                             1 if ia // 2 == ib // 2 else 0, source))
+                        n_pairs += 1
+            conn.commit()
+            out["applied"] = True
+            out["pairs_written"] = n_pairs
+    return out
 
 
 def import_gg_teamnet_all(portal: str, apply: bool = False,
@@ -34928,7 +35050,8 @@ def import_gg_teamnet_all(portal: str, apply: bool = False,
 
 
 def _pair_count(pair_counts: dict, a: str, b: str) -> int:
-    """Look up play count for two players (key is alphabetically ordered)."""
+    """Look up play count for two players (normalized, alphabetical key)."""
+    a, b = _pair_key_name(a), _pair_key_name(b)
     key = (min(a, b), max(a, b))
     return pair_counts.get(key, 0)
 
@@ -35106,9 +35229,22 @@ def generate_event_pairings(
         if mode == "abcd":
             groups_players = _abcd_groups(free_players, hcp_map)
         else:
-            groups_players = _random_groups(
-                free_players, partner_map, pair_counts, protect_partner_requests
-            )
+            # Best-of-K restarts: a single greedy pass can trap early picks
+            # into repeat pairings even when a zero-repeat arrangement
+            # exists. Keep the arrangement with the fewest repeat-pairs.
+            best_groups: list | None = None
+            best_score: int | None = None
+            for _ in range(30):
+                cand = _random_groups(
+                    free_players, partner_map, pair_counts,
+                    protect_partner_requests
+                )
+                score = sum(_group_score(g, pair_counts) for g in cand)
+                if best_score is None or score < best_score:
+                    best_groups, best_score = cand, score
+                if best_score == 0:
+                    break
+            groups_players = best_groups or []
 
         # ── Build final group list with slot labels ───────────────────
         is_shotgun = (ev.get("start_type" if holes == "9" else "start_type_18") == "Shotgun")

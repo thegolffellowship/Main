@@ -1460,6 +1460,19 @@ def _scoring_dispatch(url: str, extract: str):
                     parts[1],
                     apply=(len(parts) > 2 and parts[2].lower() == "apply")),
                     indent=2, default=str)
+            if sub == "manual" and len(parts) >= 3:
+                # manual|<event_id>|<json groups>[|apply] — groups from a
+                # tee sheet / starter sheet (lists of names, seat order)
+                groups = json.loads(parts[2])
+                return json.dumps(db.import_manual_pairing_groups(
+                    int(parts[1]), groups,
+                    apply=(len(parts) > 3 and parts[3].lower() == "apply")),
+                    indent=2, default=str)
+            if sub == "hist" and len(parts) >= 2:
+                # read-only: pairing_history rows by event id or name
+                # fragment + 2026 totals by source
+                return json.dumps(db.debug_pairing_history(parts[1]),
+                                  indent=2, default=str)
             if sub == "clear" and len(parts) >= 2 and parts[1].isdigit():
                 # undo a mis-matched apply: deletes ONLY source='gg_teamnet'
                 # pairing_history rows for the event
