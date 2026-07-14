@@ -35313,9 +35313,14 @@ def generate_event_pairings(
         if mode == "abcd":
             groups_players = _abcd_groups(free_players, hcp_map)
         else:
-            # Best-of-K restarts: a single greedy pass can trap early picks
-            # into repeat pairings even when a zero-repeat arrangement
-            # exists. Keep the arrangement with the fewest repeat-pairs.
+            # Best-of-K restarts + swap hill-climb. The greedy alone has a
+            # structural attractor: it fills groups in order, so the most-
+            # played players get avoided until the end and pool together in
+            # the LAST group (Kerry's live s9.18 case — his max-repeat trio
+            # recurred across runs). Random restarts don't escape it;
+            # pairwise swaps between groups do.
+            locked_names = _partner_locked_names(
+                free_players, partner_map, protect_partner_requests)
             best_groups: list | None = None
             best_score: int | None = None
             for _ in range(30):
@@ -35323,6 +35328,7 @@ def generate_event_pairings(
                     free_players, partner_map, pair_counts,
                     protect_partner_requests
                 )
+                cand = _swap_improve(cand, pair_counts, locked_names)
                 score = sum(_group_score(g, pair_counts) for g in cand)
                 if best_score is None or score < best_score:
                     best_groups, best_score = cand, score
@@ -35451,6 +35457,54 @@ def _make_group_sizes(n: int) -> list[int]:
         return [4] * (q - 1) + [3, 3]     # e.g. 6→[3,3], 10→[4,3,3]
     else:  # r == 3
         return [4] * q + [3]              # e.g. 7→[4,3], 11→[4,4,3]
+
+
+def _partner_locked_names(players: list[str], partner_map: dict,
+                          protect_partner_requests: bool) -> set:
+    """Names bound by a partner request (same unit-building rule as
+    _random_groups) — the swap improver must never split these."""
+    locked: set = set()
+    if not protect_partner_requests:
+        return locked
+    for requester, req_text in partner_map.items():
+        if requester not in players or requester in locked:
+            continue
+        partner = _find_partner_name(req_text, players, requester)
+        if partner and partner not in locked:
+            locked.add(requester)
+            locked.add(partner)
+    return locked
+
+
+def _swap_improve(groups: list[list[str]], pair_counts: dict,
+                  locked: set, max_rounds: int = 40) -> list[list[str]]:
+    """Pairwise-swap hill climb: exchange two unlocked players between
+    groups whenever it lowers the repeat score. Group sizes (and partner
+    units) are preserved; converges quickly at league sizes."""
+    improved = True
+    rounds = 0
+    while improved and rounds < max_rounds:
+        improved = False
+        rounds += 1
+        for gi in range(len(groups)):
+            for gj in range(gi + 1, len(groups)):
+                for i, a in enumerate(groups[gi]):
+                    if a in locked:
+                        continue
+                    for j, b in enumerate(groups[gj]):
+                        if b in locked:
+                            continue
+                        base = (_group_score(groups[gi], pair_counts)
+                                + _group_score(groups[gj], pair_counts))
+                        groups[gi][i], groups[gj][j] = b, a
+                        new = (_group_score(groups[gi], pair_counts)
+                               + _group_score(groups[gj], pair_counts))
+                        if new < base:
+                            improved = True
+                            a = groups[gi][i]
+                        else:
+                            groups[gi][i], groups[gj][j] = a, b
+    return groups
 
 
 def _random_groups(
