@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.92.1";
+window.TGF_VERSION = "2.93.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.93.0",
+    date: "2026-07-14",
+    changes: [
+      "Partial Refunds (incl. the 18 -> 9 Event Downgrade) gained a CREDIT method (Kerry): choosing 'Credit (hold for a future event)' creates a CREDITED child row for the amount instead of recording an outbound refund -- it surfaces in the player's open credits (Apply Credit, balance-due emails) via the same machinery as full credits, the parent registration still updates (games/holes), and NO accounting expense is written (internal ledger move; the money leaves only when the credit is later applied or refunded).",
+      "Kerry also flagged the Credit modal's option sprawl (Credit/Refund/Partial/Transfer + WD + Apply Credit elsewhere) for consolidation -- logged for a design pass; destinations and money semantics stay as-is until that lands.",
+    ],
+  },
   {
     version: "2.92.1",
     date: "2026-07-14",

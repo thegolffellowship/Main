@@ -5979,8 +5979,12 @@ def api_partial_refund_item(item_id):
     """
     data = request.get_json(silent=True) or {}
     method = data.get("method", "")
-    if method and method not in ("GoDaddy", "Venmo", "Zelle", "PayPal", "Cash App"):
+    # "Credit" (Kerry 2026-07-14) keeps the money in the house: the child
+    # row is a CREDITED item (picked up by get_player_credits → Apply
+    # Credit / balance emails) instead of an outbound refund.
+    if method and method not in ("Credit", "GoDaddy", "Venmo", "Zelle", "PayPal", "Cash App"):
         return jsonify({"error": "Invalid refund method."}), 400
+    as_credit = (method == "Credit")
     refunded_components = data.get("components", {})  # e.g. {"gross_games": 30}
     new_side_games = data.get("new_side_games")  # e.g. "NET" (after removing GROSS)
     # Event Downgrade (Kerry 2026-07-14): refunding the 18-vs-9 price
@@ -5993,7 +5997,10 @@ def api_partial_refund_item(item_id):
 
     # Build description
     comp_labels = ", ".join(f"{k.replace('_', ' ').title()}" for k in refunded_components.keys())
-    refund_desc = f"Refund {comp_labels} via {method}" if method else f"Refund {comp_labels}"
+    if as_credit:
+        refund_desc = f"Partial credit: {comp_labels} (held for a future event)"
+    else:
+        refund_desc = f"Refund {comp_labels} via {method}" if method else f"Refund {comp_labels}"
 
     import time as _time
     from email_parser.database import _connect
@@ -6038,48 +6045,58 @@ def api_partial_refund_item(item_id):
             conn.execute("UPDATE items SET holes = ? WHERE id = ?",
                          (str(new_holes), item_id))
 
-        # Create -PAY child row with parent snapshot (customer_id copied from
-        # parent, same as transfer_item() — already resolved, no new lookup)
+        # Create the child row with parent snapshot (customer_id copied from
+        # parent, same as transfer_item() — already resolved, no new lookup).
+        # Refund → -PAY child (money out). Credit → a CREDITED child with a
+        # POSITIVE price: get_player_credits() surfaces any credited row
+        # (parent or child), so it flows into Apply Credit / balance emails.
         cur = conn.execute(
             """INSERT INTO items (email_uid, merchant, customer, item_name, item_price,
                side_games, notes, parent_item_id, parent_snapshot, transaction_status, order_date,
                customer_id)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?)""",
-            (uid, f"Refund ({method})" if method else "Partial Refund",
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (uid,
+             "Partial Credit" if as_credit else (f"Refund ({method})" if method else "Partial Refund"),
              parent["customer"], parent["item_name"],
-             f"-${total:.2f}",
+             f"${total:.2f}" if as_credit else f"-${total:.2f}",
              None,
              refund_desc + (f" — {note}" if note else ""),
              item_id,
              json.dumps(parent_snap) if parent_snap else None,
+             "credited" if as_credit else "active",
              today_central_str(),
              parent.get("customer_id")),
         )
         new_child_id = cur.lastrowid
 
         # ── Accounting: flat entry for partial refund ──
-        try:
-            from email_parser.database import _write_acct_entry
-            refund_source = method.lower().replace(" ", "_") if method else "manual"
-            _m = (method or "").lower()
-            refund_account = "Venmo" if "venmo" in _m else ("PayPal" if "paypal" in _m else "TGF Checking")
-            _write_acct_entry(
-                conn,
-                item_id=new_child_id,
-                event_name=parent["item_name"],
-                customer=parent["customer"],
-                order_id=parent.get("order_id", ""),
-                entry_type="expense",
-                category="refund",
-                source=refund_source,
-                amount=float(total),
-                description=f"Partial refund ({method}): {parent['customer']} — {parent['item_name']}",
-                account=refund_account,
-                source_ref=f"partial-refund-{new_child_id}",
-                date=today_central_str(),
-            )
-        except Exception:
-            logger.warning("Failed to create accounting entry for partial refund %d", item_id, exc_info=True)
+        # A CREDIT writes NO acct entry — it's an internal ledger move
+        # (unified-financial-model rule: only real outbound payments hit
+        # acct_transactions); the money leaves when the credit is later
+        # applied or refunded through those flows.
+        if not as_credit:
+            try:
+                from email_parser.database import _write_acct_entry
+                refund_source = method.lower().replace(" ", "_") if method else "manual"
+                _m = (method or "").lower()
+                refund_account = "Venmo" if "venmo" in _m else ("PayPal" if "paypal" in _m else "TGF Checking")
+                _write_acct_entry(
+                    conn,
+                    item_id=new_child_id,
+                    event_name=parent["item_name"],
+                    customer=parent["customer"],
+                    order_id=parent.get("order_id", ""),
+                    entry_type="expense",
+                    category="refund",
+                    source=refund_source,
+                    amount=float(total),
+                    description=f"Partial refund ({method}): {parent['customer']} — {parent['item_name']}",
+                    account=refund_account,
+                    source_ref=f"partial-refund-{new_child_id}",
+                    date=today_central_str(),
+                )
+            except Exception:
+                logger.warning("Failed to create accounting entry for partial refund %d", item_id, exc_info=True)
 
         conn.commit()
 
