@@ -295,6 +295,35 @@ compose → stage → approve. pace_rating storage must be
 customer_id-keyed (rule 6); the staging ordering rule ships as
 editable data (principle 2). Spec relay: mailbox #165.
 
+### Ratings v1 — SEEDED (Kerry-ratified 2026-07-14, v2.99.2)
+
+Scale **1 = slowest → 3 = fastest**, stored on
+`customers.pace_rating` (INTEGER) with `pace_rating_source` TEXT
+(`'manager'` for ratified/manual values; `'derived'`/`'gps'` reserved).
+**NULL reads as 2 everywhere** — Kerry: "Anyone else that isn't
+marked/discussed, gets a 2 in the system until further notice." Boot
+seed `_seed_pace_ratings()` (database.py, init_db) is
+**fill-only-if-NULL**: any manager edit wins over the seed forever.
+Read back: `scoring-pairings:pace|` bridge.
+
+Ratified values (derived from staging history, then Kerry-adjusted —
+Parch/Miller/Dealy back to 2, Ellis flipped to 3, Dyal/Newman promoted,
+DelCarmen 1):
+
+- **3**: Jeff Young, John White, Chuck Fehlis, Fred Wicker, Steve
+  Kulawik, Pat Youngs, Gus Vasquez, Rob Callaway, Gilbert Ellis, Mark
+  Dyal, Tom Newman, Kerry Niester + Austin exceptions Jay Hogue, Neal
+  Cloer, Robert Straiton (all other Austin members stay 2 until Robert
+  reviews).
+- **1**: Richard Palacios, Larry Anthis, Allen Wolin, Victor Arias III
+  + Victor Arias Jr (they always ride/stage together; Kerry said
+  "Victor Arias" — both seeded, flag for adjustment if only one),
+  Roberto Moreno, Michael Murphy, Michelle Delcarmen.
+
+Next: pace_rating editor UI (Customers page, Kerry + Robert one-tap),
+then the staging engine consuming group aggregates (shotgun trains
+front = fast; sequential first = fast).
+
 ## Engine notes (design, not yet built)
 
 - Season-coverage objective (rule 3) is the optimizer's primary term;
