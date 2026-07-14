@@ -34684,6 +34684,11 @@ def import_gg_teesheets_all(portal: str, apply: bool = False,
 _GG_LEAGUE_IDS = {"sa": "514047", "austin": "514705"}
 _TEAM_BOARD_RE = re.compile(r"\b(?:TEAM|CART)\s+Net\b", re.I)
 _BLIND_SEAT_RE = re.compile(r"^[A-Za-z]{1,3}\[(.+)\]$")
+# Trailing affiliation list after the LAST member: one entry per player,
+# e.g. " TGF San Antonio, Former, TGF Houston, TGF Austin" or
+# " TGF San Antonio, Guest" (sometimes with a dangling comma).
+_TEAM_TAIL_RE = re.compile(
+    r"\s+TGF\s[A-Za-z .]+?(?:\s*,\s*(?:TGF\s[A-Za-z .]+?|Guest|Former))*\s*,?\s*$")
 
 
 def _gg_results_widget(portal: str) -> str:
@@ -34722,7 +34727,7 @@ def _parse_teamnet_groups(tables: list) -> list:
                 c = re.sub(r"\s+", " ", (cell or "")).strip()
                 if " + " not in c or c.lower().startswith("total purse"):
                     continue
-                c = re.sub(r"\s+TGF [A-Za-z .]+$", "", c).strip()
+                c = _TEAM_TAIL_RE.sub("", c).strip()
                 seats: list = []
                 ok = True
                 for part in (p.strip() for p in c.split(" + ")):
@@ -34742,6 +34747,7 @@ def _parse_teamnet_groups(tables: list) -> list:
 
 def import_gg_teamnet_round(portal: str, round_id: str, apply: bool = False,
                             label: str | None = None,
+                            event_override: str | None = None,
                             db_path: str | Path = DB_PATH) -> dict:
     """Parse one round's TEAM/CART Net board into playing groups;
     apply=True REPLACES the matched event's pairing_history rows
@@ -34786,7 +34792,23 @@ def import_gg_teamnet_round(portal: str, round_id: str, apply: bool = False,
         return out
     with _connect(db_path) as conn:
         _ensure_pairing_tables(conn)
-        ev = _match_event_for_round_label(conn, label, portal)
+        # Manual override for rounds whose selector label is truncated
+        # past recognition (GG cuts option text mid-date on the coded-less
+        # preseason rounds): accept an events.id or an item_name fragment.
+        ev = None
+        if event_override:
+            if str(event_override).isdigit():
+                ev = conn.execute(
+                    "SELECT id, item_name, event_date FROM events WHERE id = ?",
+                    (int(event_override),)).fetchone()
+            else:
+                ev = conn.execute(
+                    "SELECT id, item_name, event_date FROM events "
+                    "WHERE item_name LIKE ? COLLATE NOCASE "
+                    "ORDER BY event_date DESC LIMIT 1",
+                    (f"%{event_override}%",)).fetchone()
+        if not ev:
+            ev = _match_event_for_round_label(conn, label, portal)
         if not ev:
             out["error"] = f"no Tracker event matched label {label!r}"
             return out
