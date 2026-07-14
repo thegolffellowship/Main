@@ -1414,6 +1414,38 @@ def start_scheduler():
         )
         logger.info("Auto GG results sync scheduled hourly 12:10-23:10 US/Central")
 
+    # ── Auto pairings grab (v2.99.0, Kerry) ─────────────────────────
+    # Nightly walk of both portals' FINAL tee sheets into pairing
+    # history + past-event PAIRINGS tabs. Idempotent (replace per
+    # event); rounds without a published sheet are skipped, so the
+    # team-board fallback data stands. Disable with AUTO_PAIRINGS_GRAB=0.
+    def auto_pairings_grab_job():
+        from email_parser.database import import_gg_teesheets_all
+        for portal in ("sa", "austin"):
+            try:
+                res = import_gg_teesheets_all(portal, apply=True,
+                                              budget_seconds=280)
+                logger.info("Auto pairings grab %s: %d/%d rounds applied",
+                            portal, res.get("ok", 0),
+                            res.get("rounds_total", 0))
+            except Exception:
+                logger.exception("Auto pairings grab failed for %s "
+                                 "(non-fatal)", portal)
+
+    if os.getenv("AUTO_PAIRINGS_GRAB", "1") != "0":
+        scheduler.add_job(
+            auto_pairings_grab_job,
+            "cron",
+            hour=3,
+            minute=20,
+            timezone="US/Central",
+            id="auto_pairings_grab",
+            replace_existing=True,
+            max_instances=1,
+            coalesce=True,
+        )
+        logger.info("Auto pairings grab scheduled daily at 03:20 US/Central")
+
     # First boot after this ships (or a fresh volume): populate the
     # snapshot in the background so the first MONTHLY open doesn't wait
     try:

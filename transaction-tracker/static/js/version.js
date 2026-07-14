@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.98.0";
+window.TGF_VERSION = "2.99.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.99.0",
+    date: "2026-07-14",
+    changes: [
+      "Generate Pairings seats same-tee players together within each settled group (Kerry's tee-grouping pace rule: adjacent seats share a cart AND a tee box, so groups don't leapfrog between tees; partner-request pairs stay adjacent and sort by their first member's tee).",
+      "Nightly auto pairings grab (03:20 US/Central, AUTO_PAIRINGS_GRAB=0 to disable): walks both portals' FINAL tee sheets into pairing history + past-event PAIRINGS tabs. Idempotent replace-per-event; rounds without a published sheet are skipped so team-board fallback data stands. Tonight's events land in history automatically by morning.",
+      "scoring-pairings:staging| -- read-only side-quest probe: every 9-hole event's actual groups in staging order with pace proxies (size, avg current handicap index, age-band mix) for detecting the manager's staging patterns.",
+    ],
+  },
   {
     version: "2.98.0",
     date: "2026-07-14",
