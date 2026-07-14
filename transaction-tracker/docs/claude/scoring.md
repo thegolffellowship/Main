@@ -468,7 +468,7 @@ not-counted banners and CITY row (no best-10 monthly), monthFilter
 keeps only rows whose GG date cell starts with that month. Imported
 rounds without a points line render below as OTHER ROUNDS THIS MONTH.
 
-## Phase 2 — differential parity (v2.27.0, step 1 live)
+## Phase 2 — differential parity (v2.27.0, step 1 live; triaged v2.88.0)
 
 `get_differential_parity()` (MCP: get_differential_parity_tool; bridge:
 scoring-parity) recomputes each bridged handicap round's adjusted gross
@@ -477,10 +477,21 @@ scoring-parity) recomputes each bridged handicap round's adjusted gross
 values imported from GG's handicap export. 9-hole rounds only for now —
 an 18-hole scoring round bridges TWO 9-hole differentials (front/back
 split is the next pass). Tee rows whose slope/rating disagree with the
-handicap row are counted as tee_data_mismatches. When parity holds,
-step 2: compute_handicap_index reads scoring_rounds directly,
-handicap_rounds becomes a view, and the manual export/import ritual
-dies.
+handicap row are counted as tee_data_mismatches (v2.88.0: plus
+tee_mismatch_detail — tee-row hole range vs the nine played, to tell
+front/back rating pairs from stale rows). When parity holds, step 2:
+compute_handicap_index reads scoring_rounds directly, handicap_rounds
+becomes a view, and the manual export/import ritual dies.
+
+**Parity triage (v2.88.0, 2026-07-14 run: 2277 compared, 90.6% exact):**
+mismatches are classified in `mismatch_families`. Dominant family
+CONFIRMED on real cards — GG's export "adjusted" == RAW gross (no NDB
+cap) while ours caps per WHS; a policy difference needing Kerry's
+ruling, not a bug. Smaller `gg_below_ours` family = mis-bridges
+(Victor Arias Jr/III double-bridge class) / allocation differences —
+per-case queue. The read-only preview of the export-free path is
+`get_scoring_handicap_preview` (bridge scoring-hcp-preview:<event>) —
+see docs/claude/handicaps.md → Self-derived handicap preview.
 
 ## Phase 2 (queued)
 

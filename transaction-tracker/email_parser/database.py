@@ -10386,21 +10386,30 @@ def get_differential_parity(db_path: str | Path = DB_PATH) -> dict:
             """SELECT hr.id AS hr_id, hr.player_name, hr.round_date,
                       hr.adjusted_score AS gg_adj, hr.differential AS gg_diff,
                       hr.rating AS hr_rating, hr.slope AS hr_slope,
-                      sr.id AS srid, sr.holes_played, sr.tee_id,
-                      ct.rating AS tee_rating, ct.slope AS tee_slope
+                      sr.id AS srid, sr.holes_played, sr.tee_id, sr.gross,
+                      ct.tee_name, ct.rating AS tee_rating, ct.slope AS tee_slope,
+                      c.name AS course_name
                FROM handicap_rounds hr
                JOIN scoring_rounds sr ON sr.id = hr.scoring_round_id
-               LEFT JOIN course_tees ct ON ct.tee_id = sr.tee_id"""
+               LEFT JOIN course_tees ct ON ct.tee_id = sr.tee_id
+               LEFT JOIN courses c ON c.course_id = sr.course_id"""
         ).fetchall()
         n_18 = tee_mismatch = missing_par = 0
         adj_match = diff_match = compared = 0
+        # Mismatch families (triage 2026-07-14): GG's handicap export
+        # often carries the RAW gross as "adjusted" (no net-double-bogey
+        # cap applied), so rounds where our WHS cap binds mismatch low.
+        # The opposite family (GG BELOW our capped value) is the
+        # mis-bridge / harder-cap residue that needs per-case review.
+        fam_gg_is_gross = fam_gg_below = fam_other = 0
         mismatches: list = []
+        tee_detail: list = []
         for p in pairs:
             if (p["holes_played"] or 0) > 9:
                 n_18 += 1
                 continue
             holes = conn.execute(
-                """SELECT sh.strokes, sh.strokes_received, cth.par
+                """SELECT sh.hole_number, sh.strokes, sh.strokes_received, cth.par
                    FROM scoring_holes sh
                    LEFT JOIN course_tee_holes cth
                      ON cth.tee_id = ? AND cth.hole_number = sh.hole_number
@@ -10424,6 +10433,26 @@ def get_differential_parity(db_path: str | Path = DB_PATH) -> dict:
                     and (p["tee_slope"] != p["hr_slope"]
                          or abs((p["tee_rating"] or 0) - p["hr_rating"]) > 0.05)):
                 tee_mismatch += 1
+                if len(tee_detail) < 15:
+                    # Enough context to tell a front/back-nine rating pair
+                    # from a genuinely stale tee row: which holes the tee
+                    # row covers vs which nine was actually played.
+                    rng = conn.execute(
+                        """SELECT MIN(hole_number) AS lo, MAX(hole_number) AS hi
+                           FROM course_tee_holes WHERE tee_id = ?""",
+                        (p["tee_id"],)).fetchone()
+                    played = [h["hole_number"] for h in holes
+                              if h["strokes"] is not None]
+                    tee_detail.append({
+                        "player_name": p["player_name"],
+                        "round_date": p["round_date"],
+                        "course_name": p["course_name"],
+                        "tee_name": p["tee_name"],
+                        "round_slope_rating": f'{p["tee_slope"]}/{p["tee_rating"]}',
+                        "gg_export_slope_rating": f'{p["hr_slope"]}/{p["hr_rating"]}',
+                        "tee_holes": f'{rng["lo"]}-{rng["hi"]}' if rng and rng["lo"] else None,
+                        "first_hole_played": min(played) if played else None,
+                    })
             compared += 1
             our_diff = round((113.0 / p["hr_slope"]) * (adj - p["hr_rating"]), 1) \
                 if p["hr_slope"] else None
@@ -10437,21 +10466,216 @@ def get_differential_parity(db_path: str | Path = DB_PATH) -> dict:
                 adj_match += 1
             if d_ok:
                 diff_match += 1
-            if not (a_ok and d_ok) and len(mismatches) < 40:
-                mismatches.append({
-                    "scoring_round_id": p["srid"], "handicap_round_id": p["hr_id"],
-                    "player_name": p["player_name"], "round_date": p["round_date"],
-                    "our_adjusted": adj, "gg_adjusted": p["gg_adj"],
-                    "our_differential": our_diff, "gg_differential": gg_diff,
-                    "missing_par": bad_par,
-                })
+            if not (a_ok and d_ok):
+                gross = int(p["gross"]) if p["gross"] is not None else None
+                if not a_ok and gross is not None and p["gg_adj"] == gross and adj < gross:
+                    fam_gg_is_gross += 1
+                elif not a_ok and p["gg_adj"] < adj:
+                    fam_gg_below += 1
+                else:
+                    fam_other += 1
+                if len(mismatches) < 40:
+                    mismatches.append({
+                        "scoring_round_id": p["srid"], "handicap_round_id": p["hr_id"],
+                        "player_name": p["player_name"], "round_date": p["round_date"],
+                        "gross": gross,
+                        "our_adjusted": adj, "gg_adjusted": p["gg_adj"],
+                        "our_differential": our_diff, "gg_differential": gg_diff,
+                        "gg_equals_gross": (gross is not None and p["gg_adj"] == gross),
+                        "missing_par": bad_par,
+                    })
         return {"pairs": len(pairs), "compared_9hole": compared,
                 "adjusted_gross_match": adj_match,
                 "differential_match": diff_match,
+                "mismatch_families": {
+                    # GG exported the raw gross (no NDB cap) while our WHS
+                    # cap bound at least one hole — a POLICY difference,
+                    # not a math bug (Kerry ruling pending on which is
+                    # TGF's standard for self-derived differentials).
+                    "gg_adjusted_equals_gross": fam_gg_is_gross,
+                    # GG below our capped value — mis-bridged cards /
+                    # different strokes-received allocation; per-case queue.
+                    "gg_below_ours": fam_gg_below,
+                    "other": fam_other,
+                },
                 "mismatches": mismatches,
                 "skipped_18hole": n_18,
                 "tee_data_mismatches": tee_mismatch,
+                "tee_mismatch_detail": tee_detail,
                 "rounds_with_missing_par": missing_par}
+
+
+def get_scoring_handicap_preview(event_query: str,
+                                 db_path: str | Path = DB_PATH) -> dict:
+    """READ-ONLY preview of the handicap rounds we WOULD derive from our
+    own scorecards for one event — the export-free path, shown before
+    it's trusted (Kerry 2026-07-14). Writes nothing.
+
+    For every 9-hole scoring round of the event, computes BOTH
+    adjusted-gross variants side by side:
+      * ndb  — WHS net double bogey cap through the formula layer
+               (what our parity math does today)
+      * raw  — uncapped gross (what GG's handicap export was observed
+               to carry on the 2026 mismatch cluster)
+    plus each player's current index and the index either variant would
+    produce, so the admin can eyeball the real-world impact per player.
+    Slope/rating come from the round's OWN tee row (captured from GG's
+    tee block at scorecard import — per-round truth, immune to a course
+    having front/back or re-rated tee variants under one name).
+
+    Rows already bridged to a handicap_rounds record are flagged
+    already_imported and carry GG's stored values for comparison; a real
+    import would dedupe-skip them.
+    """
+    formulas = get_scoring_formulas(db_path=db_path)
+    settings = get_handicap_settings(db_path)
+    lookback_months = int(settings.get("lookback_months", 12))
+    cutoff_str = (datetime.now()
+                  - timedelta(days=lookback_months * 30.44)).strftime("%Y-%m-%d")
+    with _connect(db_path) as conn:
+        _ensure_scoring_tables(conn)
+        rounds = conn.execute(
+            """SELECT sr.id AS srid, sr.player_name, sr.customer_id,
+                      sr.round_date, sr.holes_played, sr.gross, sr.tee_id,
+                      e.item_name AS event_name, c.name AS course_name,
+                      ct.tee_name, ct.slope, ct.rating,
+                      (SELECT hr.id FROM handicap_rounds hr
+                       WHERE hr.scoring_round_id = sr.id LIMIT 1) AS hr_id
+               FROM scoring_rounds sr
+               JOIN events e ON e.id = sr.event_id
+               LEFT JOIN courses c ON c.course_id = sr.course_id
+               LEFT JOIN course_tees ct ON ct.tee_id = sr.tee_id
+               WHERE e.item_name LIKE ?
+               ORDER BY sr.player_name""",
+            (f"%{event_query}%",)).fetchall()
+        if not rounds:
+            return {"error": f"no imported scoring rounds match event "
+                             f"{event_query!r} — run the scorecard import first"}
+
+        out_rows: list = []
+        skipped_18 = 0
+        cap_bound = already = 0
+        events_seen: set = set()
+        for r in rounds:
+            events_seen.add(r["event_name"])
+            if (r["holes_played"] or 0) > 9:
+                skipped_18 += 1
+                continue
+            holes = conn.execute(
+                """SELECT sh.strokes, sh.strokes_received, cth.par
+                   FROM scoring_holes sh
+                   LEFT JOIN course_tee_holes cth
+                     ON cth.tee_id = ? AND cth.hole_number = sh.hole_number
+                   WHERE sh.scoring_round_id = ?""",
+                (r["tee_id"], r["srid"])).fetchall()
+            adj_ndb = raw = capped = 0
+            bad_par = False
+            for h in holes:
+                if h["strokes"] is None:
+                    continue
+                raw += h["strokes"]
+                if h["par"] is None:
+                    bad_par = True
+                    adj_ndb += h["strokes"]
+                    continue
+                a = compute_hole_derivations(
+                    h["par"], h["strokes"], h["strokes_received"] or 0,
+                    formulas)["adjusted_strokes"]
+                adj_ndb += a
+                if a < h["strokes"]:
+                    capped += 1
+
+            flags = []
+            if bad_par:
+                flags.append("missing_par_holes")
+            diff_ndb = diff_raw = None
+            if r["slope"] and r["rating"] is not None:
+                diff_ndb = round((adj_ndb - r["rating"]) * 113.0 / r["slope"], 1)
+                diff_raw = round((raw - r["rating"]) * 113.0 / r["slope"], 1)
+            else:
+                flags.append("no_tee_slope_rating")
+
+            # Existing differential pool: every handicap_rounds row for
+            # this PERSON (all player_name variants linked to their
+            # customer_id — stale duplicates exist; see export dedup),
+            # within the lookback window, excluding a row already bridged
+            # to this very card.
+            names = {_normalize_player_name(r["player_name"])}
+            if r["customer_id"]:
+                for lk in conn.execute(
+                        "SELECT player_name FROM handicap_player_links "
+                        "WHERE customer_id = ?", (r["customer_id"],)).fetchall():
+                    names.add(lk["player_name"])
+            qmarks = ",".join("?" * len(names))
+            hist = conn.execute(
+                f"""SELECT round_date, differential FROM handicap_rounds
+                    WHERE player_name IN ({qmarks})
+                      AND differential IS NOT NULL
+                      AND round_date >= ?
+                      AND (scoring_round_id IS NULL OR scoring_round_id != ?)
+                    ORDER BY round_date, id""",
+                (*names, cutoff_str, r["srid"])).fetchall()
+            pool = [h["differential"] for h in hist[-20:]]
+            index_now = compute_handicap_index(pool, settings)
+
+            def _with(new_diff):
+                if new_diff is None:
+                    return None
+                merged = sorted(
+                    [(h["round_date"], h["differential"]) for h in hist]
+                    + [(r["round_date"], new_diff)])
+                return compute_handicap_index(
+                    [d for _, d in merged[-20:]], settings)
+
+            is_imported = r["hr_id"] is not None
+            if is_imported:
+                already += 1
+            if capped and diff_ndb != diff_raw:
+                cap_bound += 1
+            row = {
+                "player_name": _normalize_player_name(r["player_name"]),
+                "customer_id": r["customer_id"],
+                "event_name": r["event_name"],
+                "round_date": r["round_date"],
+                "course_name": r["course_name"], "tee_name": r["tee_name"],
+                "slope": r["slope"], "rating": r["rating"],
+                "gross": int(r["gross"]) if r["gross"] is not None else None,
+                "adjusted_ndb": adj_ndb, "capped_holes": capped,
+                "differential_ndb": diff_ndb, "differential_raw": diff_raw,
+                "index_now": index_now,
+                "index_after_ndb": _with(diff_ndb),
+                "index_after_raw": _with(diff_raw),
+                "prior_rounds_in_window": len(hist),
+                "already_imported": is_imported,
+                "flags": flags,
+            }
+            if is_imported:
+                gg = conn.execute(
+                    """SELECT adjusted_score, differential FROM handicap_rounds
+                       WHERE id = ?""", (r["hr_id"],)).fetchone()
+                row["gg_adjusted"] = gg["adjusted_score"]
+                row["gg_differential"] = gg["differential"]
+            out_rows.append(row)
+
+        return {
+            "event_query": event_query,
+            "events_matched": sorted(events_seen),
+            "rounds": out_rows,
+            "summary": {
+                "previewed": len(out_rows),
+                "skipped_18hole": skipped_18,
+                "already_imported": already,
+                # rounds where the NDB-vs-raw policy choice actually
+                # changes the differential — the judgment calls to show
+                # the admin; everyone else is identical either way.
+                "cap_changes_differential": cap_bound,
+            },
+            "note": "READ-ONLY preview — nothing written. differential_ndb "
+                    "applies the WHS net-double-bogey cap; differential_raw "
+                    "is uncapped gross (GG's export behavior on the 2026 "
+                    "cluster). Which becomes TGF's standard needs Kerry's "
+                    "ruling before any self-derived import ships.",
+        }
 
 
 def _cleanup_empty_scoring_rounds(conn: sqlite3.Connection) -> None:

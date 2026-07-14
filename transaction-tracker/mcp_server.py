@@ -1349,6 +1349,7 @@ def _scoring_dispatch(url: str, extract: str):
       scoring-flights-import       import_gg_game_flights(widget_url) — per-game flight membership
       scoring-game-results:<event>|<game>|<flights>  shadow-computed winners for one game
       scoring-gg-results:<event>   GG-recorded winners for one event
+      scoring-hcp-preview:<event>  read-only self-derived handicap preview
     """
     if not extract.startswith("scoring-"):
         return None
@@ -1421,6 +1422,13 @@ def _scoring_dispatch(url: str, extract: str):
         if cmd == "scoring-payouts-preview":
             # assemble without writing — inspect what would be recorded
             return json.dumps(db.assemble_event_game_payouts(arg), indent=2)
+        if cmd == "scoring-hcp-preview":
+            # READ-ONLY: the handicap rounds we WOULD self-derive from our
+            # scorecards for one event (differential + index impact per
+            # player, NDB-cap vs raw-gross variants side by side). The
+            # export-free path shown before it's trusted — writes nothing.
+            return json.dumps(db.get_scoring_handicap_preview(arg),
+                              indent=2, default=str)
         if cmd == "scoring-gg-drift":
             # D1 drift report (Kerry #150): GG roster tag vs Tracker financial
             # status. NO ARG (default): compares the affiliation tags already

@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.87.6";
+window.TGF_VERSION = "2.88.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.88.0",
+    date: "2026-07-14",
+    changes: [
+      "Self-derived handicap PREVIEW (Kerry): new read-only bridge command scoring-hcp-preview:<event> computes, from our own imported scorecards, the handicap round each player WOULD get -- adjusted gross, differential, and the index change it produces -- without writing anything. Built so the GG handicap export/import ritual can be retired with evidence instead of nerve.",
+      "Differential parity triage: the ~9% mismatch against GG's export is now classified into families. Root cause of the dominant family CONFIRMED on real cards (McKinley a9.1, Barna a9.4): GG's export carries the RAW gross as 'adjusted' while our math applies the WHS net-double-bogey cap -- a policy difference, not a math bug. The preview therefore shows BOTH variants (capped vs raw) side by side; which becomes TGF's standard is a Kerry ruling before any self-derived import ships.",
+      "get_differential_parity now reports mismatch_families (gg_adjusted_equals_gross / gg_below_ours / other) and tee_mismatch_detail with each tee row's hole range vs the nine actually played -- distinguishes legitimate front/back-nine rating pairs from genuinely stale tee rows (the Silverhorn 'duplicate Gold tee' question).",
+    ],
+  },
   {
     version: "2.87.6",
     date: "2026-07-13",
