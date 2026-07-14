@@ -863,6 +863,60 @@ def _repair_crystal_falls_twin_event(conn: sqlite3.Connection) -> None:
     logger.info("Crystal Falls twin-event merge: 3267 -> 3263, moved %s", moved)
 
 
+# Pace-of-play ratings, Kerry-ratified 2026-07-14 (scale: 1 slowest → 3
+# fastest). Derived from SA shotgun/sequential staging history, then
+# adjusted by Kerry: Parch/Miller/Dealy stay unrated (= default 2),
+# Ellis flipped to 3, Dyal/Newman promoted to 3, DelCarmen 1. Austin
+# members stay at the default 2 except Hogue/Cloer/Straiton (Robert
+# will adjust his chapter later). Both Victor Ariases ride together and
+# stage together, so both carry the 1. Anyone not listed reads as 2.
+_PACE_RATING_SEED = {
+    3: ["Jeff Young", "John White", "Chuck Fehlis", "Fred Wicker",
+        "Steve Kulawik", "Pat Youngs", "Gus Vasquez", "Rob Callaway",
+        "Gilbert Ellis", "Mark Dyal", "Tom Newman", "Kerry Niester",
+        "Jay Hogue", "Neal Cloer", "Robert Straiton"],
+    1: ["Richard Palacios", "Larry Anthis", "Allen Wolin",
+        "Victor Arias III", "Victor Arias Jr", "Roberto Moreno",
+        "Michael Murphy", "Michelle Delcarmen"],
+}
+
+
+def _seed_pace_ratings(conn: sqlite3.Connection) -> None:
+    """Seed customers.pace_rating with Kerry's ratified initial values.
+
+    Fill-only-if-NULL: a manager edit (any non-NULL value) always wins,
+    so re-running on every boot never stomps a later adjustment — even
+    an adjustment back to a value that differs from this seed. NULL is
+    read as 2 everywhere (Kerry: "Anyone else that isn't marked/
+    discussed, gets a 2 in the system until further notice"), so only
+    the 1s and 3s need rows here. pace_rating_source records provenance
+    ('manager' for ratified/manual values; 'derived'/'gps' reserved for
+    future automated sources). Pace NEVER affects pairing composition —
+    staging only."""
+    for ddl in (
+        "ALTER TABLE customers ADD COLUMN pace_rating INTEGER",
+        "ALTER TABLE customers ADD COLUMN pace_rating_source TEXT",
+    ):
+        try:
+            conn.execute(ddl)
+        except sqlite3.OperationalError:
+            pass  # column already exists
+    seeded = 0
+    for rating, names in _PACE_RATING_SEED.items():
+        for name in names:
+            cur = conn.execute(
+                """UPDATE customers
+                   SET pace_rating = ?, pace_rating_source = 'manager'
+                   WHERE LOWER(TRIM(first_name || ' ' || last_name))
+                         = LOWER(?)
+                     AND pace_rating IS NULL""",
+                (rating, name))
+            seeded += cur.rowcount
+    conn.commit()
+    if seeded:
+        logger.info("Pace ratings seed: applied %d rating(s)", seeded)
+
+
 def _repair_massey_attribution(conn: sqlite3.Connection) -> None:
     """Re-attribute William Massey's orders corrupted by a bad customer merge.
 
@@ -3602,6 +3656,12 @@ def init_db(db_path: str | Path | None = None) -> None:
             _repair_stich_attribution(conn, db_path)
         except Exception as e:
             logger.warning("Stich attribution repair failed: %s", e)
+
+        # Pace ratings seed (Kerry-ratified 2026-07-14): fill-only-if-NULL
+        try:
+            _seed_pace_ratings(conn)
+        except Exception as e:
+            logger.warning("Pace ratings seed failed: %s", e)
 
         # Always-run repair: merge twin Crystal Falls events 3267 → 3263
         # (Kerry 2026-07-14: same May 30 event, renamed mid-registration)
@@ -35084,6 +35144,32 @@ def analyze_pairing_staging(db_path: str | Path = DB_PATH) -> dict:
         return {"n_events": len(out), "events": out,
                 "note": "avg_index uses CURRENT index (proxy); bands from "
                         "registrations; group order = final tee sheet order"}
+
+
+def list_pace_ratings(db_path: str | Path = DB_PATH) -> dict:
+    """Read-only: every customer with a stored pace_rating (1 slowest →
+    3 fastest, Kerry-ratified scale). Players with no row here read as
+    the default 2 system-wide. Bridge: scoring-pairings:pace|"""
+    conn = get_connection(db_path)
+    try:
+        rows = conn.execute(
+            """SELECT customer_id,
+                      TRIM(first_name || ' ' || last_name) AS name,
+                      chapter, pace_rating, pace_rating_source
+               FROM customers
+               WHERE pace_rating IS NOT NULL
+               ORDER BY pace_rating DESC, last_name, first_name"""
+        ).fetchall()
+    except sqlite3.OperationalError as e:
+        return {"error": f"pace_rating column missing: {e}"}
+    finally:
+        conn.close()
+    out = [dict(r) for r in rows]
+    return {
+        "scale": "1=slowest, 3=fastest; unlisted players default to 2",
+        "n_rated": len(out),
+        "ratings": out,
+    }
 
 
 def analyze_player_staging(db_path: str | Path = DB_PATH) -> dict:

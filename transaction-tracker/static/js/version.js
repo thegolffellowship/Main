@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.99.1";
+window.TGF_VERSION = "2.99.2";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.99.2",
+    date: "2026-07-14",
+    changes: [
+      "Pace-of-play ratings seeded (Kerry-ratified, 1=slowest to 3=fastest): customers.pace_rating + pace_rating_source columns, boot-time fill-only-if-NULL seed of 23 rated players (15 threes incl. the three Austin exceptions Hogue/Cloer/Straiton, 8 ones incl. both Victor Ariases who always ride together). Everyone unrated reads as 2 system-wide until further notice; manager edits always win over the seed. Read back via scoring-pairings:pace| bridge. Pace never affects pairing composition -- staging only (engine comes next).",
+    ],
+  },
   {
     version: "2.99.1",
     date: "2026-07-14",
