@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.96.1";
+window.TGF_VERSION = "2.96.2";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.96.2",
+    date: "2026-07-14",
+    changes: [
+      "Shotgun tee sheets parse again: the 18-hole layout guard treated shotgun hole labels ('1A'/'1B') as non-hole cells and under-parsed several 9-hole rounds (s9.12 to zero). Hole cells now match 1-2 digits plus optional A/B; tee labels still end the window so the By-Individual table stays excluded.",
+    ],
+  },
   {
     version: "2.96.1",
     date: "2026-07-14",
