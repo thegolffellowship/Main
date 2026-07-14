@@ -375,9 +375,33 @@ DelCarmen 1):
   "Victor Arias" — both seeded, flag for adjustment if only one),
   Roberto Moreno, Michael Murphy, Michelle Delcarmen.
 
-Next: pace_rating editor UI (Customers page, Kerry + Robert one-tap),
-then the staging engine consuming group aggregates (shotgun trains
-front = fast; sequential first = fast).
+### Editor + staging engine — BUILT v2.101.0
+
+**One-tap editor** (Customers page, manager tier): PACE column on the
+list view + inline control on mobile cards — a 1|2|3 segmented tap.
+NULL renders as the gray "implied" 2; a tap always writes an EXPLICIT
+value with `pace_rating_source='manager'` (no clear option — the boot
+seed is fill-only-if-NULL, so clearing a seeded player would resurrect
+the seed on the next deploy). `POST /api/customers/<id>/pace`
+(`set_customer_pace_rating`); `/api/customers` carries
+pace_rating/source.
+
+**Staging engine** (inside `generate_event_pairings`, after
+composition is settled): groups are ordered by aggregate pace =
+average member rating (unrated = 2; lookup joins customers via
+items.customer_id — rule 6, suffix-proof). Sequential tee times: fast
+groups FIRST. Shotgun: fast groups at the FRONT of the hole train =
+HIGHER hole numbers = later sheet slots (slowest at 1A). Group size
+breaks pace ties (smaller plays faster), which preserves the legacy
+threesomes-to-the-front shotgun push when everyone is a 2. Seeded
+groups stay where the manager put them (rule 5). Composition is NEVER
+affected — proven by test_pace_staging.py (19 checks). The rule is
+data: `PAIRING_STAGING_DEFAULTS` overridable via the
+`pairing_staging_rules` app_settings JSON (enabled / shotgun /
+tee_times / aggregate / default_rating). Each generated group carries
+`group_pace`, rendered as a ⏱ chip on the PAIRINGS group headers.
+
+Next (pace v2, parked): derive ratings from GPS/score-entry timing.
 
 ## Engine notes (design, not yet built)
 

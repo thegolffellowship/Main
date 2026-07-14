@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.100.0";
+window.TGF_VERSION = "2.101.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.101.0",
+    date: "2026-07-14",
+    changes: [
+      "Pace rating one-tap editor (task #23): the Customers page gets a PACE column (list view) and an inline control on the mobile cards -- a 1|2|3 segmented tap for managers (Kerry + Robert). Unrated players show a gray 'implied' 2 (NULL reads as 2 by rule); a tap always stores an explicit value with source='manager' so manager edits beat the boot seed forever (clearing to NULL would let the fill-only-if-NULL seed resurrect old values on redeploy, so there is deliberately no clear). New endpoint POST /api/customers/<id>/pace; /api/customers now returns pace_rating + pace_rating_source.",
+      "Pace STAGING engine (task #23): Generate Pairings now orders the settled groups by aggregate group pace (average member rating, unrated = 2). Sequential tee-time events stage fast groups FIRST; shotgun hole-trains stage fast groups at the FRONT of the train (higher hole numbers = later sheet slots), with group size breaking pace ties -- which also preserves the old threesomes-to-the-front shotgun behavior when everyone is a 2. HARD RULE upheld: pace never dictates composition, only where a finished group is staged; manager-seeded groups stay where they were placed.",
+      "The staging rule ships as editable data (principle 2): PAIRING_STAGING_DEFAULTS overridable via the 'pairing_staging_rules' app_settings JSON (enabled / shotgun / tee_times / aggregate / default_rating); enabled=false restores the legacy shotgun ordering. Pace lookup joins customers via items.customer_id (rule 6, suffix-proof for the Victor Arias case). Each generated group carries group_pace, shown as a stopwatch chip on the PAIRINGS group headers. Tests: test_pace_staging.py (19 checks, both start types, composition invariance, config override).",
+    ],
+  },
   {
     version: "2.100.0",
     date: "2026-07-14",

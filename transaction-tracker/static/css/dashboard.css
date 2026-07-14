@@ -2867,3 +2867,36 @@ div.mobile-card.row-rsvp-only {
     padding: 0;
 }
 .mc-item-action:hover { color: var(--primary-dark, #1d4ed8); }
+
+/* ── Pace-of-play one-tap editor (task #23, Customers page) ──────────
+   Scale 1=slowest → 3=fastest (Kerry-ratified); NULL reads as 2, shown
+   as the "implied" gray 2 until a manager taps an explicit value. */
+.pace-seg {
+    display: inline-flex;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    overflow: hidden;
+    vertical-align: middle;
+}
+.pace-seg .pace-btn {
+    border: none;
+    background: #fff;
+    font-size: 0.72rem;
+    font-weight: 700;
+    width: 28px;
+    padding: 0.22rem 0;
+    cursor: pointer;
+    color: var(--text-muted);
+    font-variant-numeric: tabular-nums;
+}
+.pace-seg .pace-btn + .pace-btn { border-left: 1px solid var(--border); }
+.pace-seg .pace-btn.active { background: var(--primary); color: #fff; }
+.pace-seg .pace-btn.implied { background: #f3f4f6; color: #374151; }
+.pace-seg .pace-btn:disabled { opacity: 0.5; cursor: wait; }
+.pace-value {
+    display: inline-block;
+    min-width: 1.4em;
+    text-align: center;
+    font-weight: 700;
+}
+.pace-value.pace-default { color: var(--text-muted); font-weight: 500; }

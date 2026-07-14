@@ -417,6 +417,22 @@ and `events.chapter_id` are FKs to `chapters.chapter_id`, but `customers` does n
 yet have a `chapter_id` column. Adding the FK to `customers` is deferred — see
 `docs/claude/schema.md → Deferred / Known Concessions`.
 
+## Customers Page List — Pace Rating One-Tap Editor (v2.101.0, task #23)
+
+Manager-tier one-tap editor for `customers.pace_rating` (Kerry-ratified
+scale 1=slowest → 3=fastest; NULL reads as 2 everywhere): a **PACE**
+column at the end of the list view plus an inline control on the mobile
+cards. The control is a 1|2|3 segmented button; the stored value renders
+solid orange, an unset rating renders a gray "implied" 2. A tap POSTs
+`/api/customers/<id>/pace` (`set_customer_pace_rating`), which always
+writes an EXPLICIT value with `pace_rating_source='manager'` — there is
+deliberately no clear-to-NULL, because the boot seed
+(`_seed_pace_ratings`) is fill-only-if-NULL and clearing a seeded player
+would resurrect the seed value on the next deploy. `/api/customers`
+(`get_all_customers`) carries `pace_rating`/`pace_rating_source` for the
+canonical overlay. Pace feeds the pairing STAGING engine only — never
+pairing composition (see `docs/claude/pairings.md`).
+
 ## Customers Page List — Activity Year Filter
 
 The Customers list has an **Activity** dropdown (`This Year` default, `Last Year`,

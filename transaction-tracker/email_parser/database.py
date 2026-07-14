@@ -14724,6 +14724,8 @@ def get_all_customers(db_path=None) -> list[dict]:
                    c.chapter,
                    c.ghin_number,
                    c.account_status,
+                   c.pace_rating,
+                   c.pace_rating_source,
                    c.updated_at,
                    ce.email   AS primary_email,
                    ce.label   AS email_label
@@ -35200,6 +35202,29 @@ def list_pace_ratings(db_path: str | Path = DB_PATH) -> dict:
     }
 
 
+def set_customer_pace_rating(customer_id: int, rating: int,
+                             db_path: str | Path = DB_PATH) -> dict:
+    """Manager one-tap pace edit (task #23). Writes an EXPLICIT 1/2/3
+    with source='manager' — never NULL: the boot seed is
+    fill-only-if-NULL, so a cleared seeded player would get the seed
+    value back on the next deploy. An explicit 2 is a real ruling
+    ("this player is average pace"), same as Kerry's seed corrections.
+    """
+    if rating not in (1, 2, 3):
+        raise ValueError("rating must be 1, 2, or 3")
+    with _connect(db_path) as conn:
+        cur = conn.execute(
+            """UPDATE customers
+               SET pace_rating = ?, pace_rating_source = 'manager'
+               WHERE customer_id = ?""",
+            (rating, int(customer_id)))
+        if cur.rowcount == 0:
+            raise ValueError(f"customer {customer_id} not found")
+        conn.commit()
+    return {"customer_id": int(customer_id), "pace_rating": rating,
+            "pace_rating_source": "manager"}
+
+
 def analyze_player_staging(db_path: str | Path = DB_PATH) -> dict:
     """Per-player staging positions across 9-hole events (Kerry's
     pace-ranking side quest). For each event's MAIN wave, each player's
@@ -35487,6 +35512,36 @@ _CMP_ROUND_LABELS = {"r16": "Round of 16", "qf": "Quarterfinal",
                      "sf": "Semifinal", "final": "Final"}
 
 
+# ── Pace staging rules (task #23) — rules-as-data (principle 2) ─────────
+# Kerry, 2026-07-14: group pace = aggregate of member ratings (1 slowest →
+# 3 fastest, NULL reads as 2); staging ONLY — pace never dictates who
+# plays with whom. Shotgun hole-trains put fast groups at the FRONT of
+# the train (higher hole numbers = later sheet slots); sequential tee
+# times put fast groups FIRST. Override any key via the
+# 'pairing_staging_rules' app_settings JSON.
+PAIRING_STAGING_DEFAULTS = {
+    "enabled": True,
+    "shotgun": "fast_front",    # fast → higher holes (later sheet slots)
+    "tee_times": "fast_first",  # fast → earliest tee times
+    "aggregate": "avg",         # group pace = average member rating
+    "default_rating": 2,        # NULL pace_rating reads as 2 (Kerry)
+}
+
+
+def get_pairing_staging_rules(db_path=None) -> dict:
+    """The staging ordering rule, editable data over code defaults."""
+    rules = dict(PAIRING_STAGING_DEFAULTS)
+    try:
+        raw = get_app_setting("pairing_staging_rules", db_path=db_path)
+        if raw:
+            override = json.loads(raw)
+            if isinstance(override, dict):
+                rules.update(override)
+    except Exception:
+        logger.exception("pairing_staging_rules unreadable — using defaults")
+    return rules
+
+
 def _event_roster_players(conn, event_id: int) -> list[dict]:
     """Active registrants for an event: name + customer_id (rule 6).
     Same events → aliases → items join the generator uses."""
@@ -35745,6 +35800,33 @@ def generate_event_pairings(
         ).fetchall()
         hcp_map = {r["customer_name"].lower(): r["handicap_index"] for r in hcp_rows}
 
+        # ── Pace map for STAGING (task #23) ───────────────────────────
+        # Keyed by the roster's own name via customer_id (rule 6 — also
+        # suffix-proof: 'Victor Arias III' finds the unsuffixed customer
+        # row). Unrated players read as the configured default (2).
+        pace_rows = conn.execute(
+            f"""
+            SELECT DISTINCT i.customer AS name, c.pace_rating
+            FROM events e
+            LEFT JOIN event_aliases ea ON ea.canonical_event_name = e.item_name
+            JOIN items i ON (
+                i.item_name = e.item_name COLLATE NOCASE
+                OR i.item_name = ea.alias_name COLLATE NOCASE
+                OR i.event_id = e.id
+            )
+            JOIN customers c ON c.customer_id = i.customer_id
+            WHERE e.id = ?
+              AND COALESCE(i.transaction_status, 'active') NOT IN ({ph})
+              AND i.parent_item_id IS NULL
+              AND c.pace_rating IS NOT NULL
+            """,
+            (event_id, *INACTIVE),
+        ).fetchall()
+        pace_map = {_pair_key_name(r["name"]): r["pace_rating"]
+                    for r in pace_rows if r["name"]}
+
+    staging_rules = get_pairing_staging_rules(db_path=db_path)
+
     # ── Normalise holes per player ────────────────────────────────────
     def player_holes(item):
         h = (item.get("holes") or "").strip()
@@ -35968,8 +36050,31 @@ def generate_event_pairings(
                                             partner_adj, tee_map)
             return _order_group_by_tee(names, tee_map, locked_names)
 
-        # ── Build final group list with slot labels ───────────────────
         is_shotgun = (ev.get("start_type" if holes == "9" else "start_type_18") == "Shotgun")
+
+        # ── STAGING (task #23): order settled groups by aggregate pace.
+        # HARD RULE: pace never dictates composition — the groups above
+        # are final; this step only decides WHERE each group is staged.
+        # Shotgun: fast groups to the FRONT of the hole train (higher
+        # hole numbers = later sheet slots), so slowest-first here.
+        # Tee times: fastest-first. Size breaks pace ties (a smaller
+        # group plays faster), which also preserves the old shotgun
+        # behavior of threesomes at the train's front. Seeded groups
+        # stay where the manager placed them (rule 5).
+        default_r = staging_rules.get("default_rating", 2)
+
+        def _group_pace(names: list[str]) -> float:
+            vals = [pace_map.get(_pair_key_name(n), default_r)
+                    for n in names if n]
+            return (sum(vals) / len(vals)) if vals else float(default_r)
+
+        staging_applied = bool(staging_rules.get("enabled", True)
+                               and groups_players)
+        if staging_applied:
+            groups_players.sort(key=lambda g: (-_group_pace(g), len(g)),
+                                reverse=bool(is_shotgun))
+
+        # ── Build final group list with slot labels ───────────────────
 
         # Start with seeded groups (already filled positions)
         seeded_groups: dict[int, list] = {}
@@ -36051,8 +36156,10 @@ def generate_event_pairings(
         # Remove empty groups
         all_groups = [g for g in all_groups if g["players"]]
 
-        # For shotgun: push threesomes to last slots
-        if is_shotgun and slots:
+        # For shotgun WITHOUT pace staging: push threesomes to last slots
+        # (the legacy ordering — staging subsumes it: at equal pace the
+        # size tiebreak already sends smaller groups to the train front).
+        if is_shotgun and slots and not staging_applied:
             foursomes = [g for g in all_groups if len(g["players"]) >= 4]
             smalls = [g for g in all_groups if len(g["players"]) < 4]
             ordered = foursomes + smalls
@@ -36060,6 +36167,11 @@ def generate_event_pairings(
                 g["slot_label"] = slots[i] if i < len(slots) else f"Group {i+1}"
         else:
             ordered = all_groups
+
+        # Group pace readout for the PAIRINGS tab (manager sanity check)
+        for g in ordered:
+            names = [p["name"] for p in g["players"] if p.get("name")]
+            g["group_pace"] = round(_group_pace(names), 2) if names else None
 
         # Assign final group_num
         for i, g in enumerate(ordered):

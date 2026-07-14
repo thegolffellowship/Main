@@ -4154,6 +4154,31 @@ def api_set_customer_status(customer_id):
     return jsonify({"status": "ok", "id": new_id, "status_name": status_name})
 
 
+@app.route("/api/customers/<int:customer_id>/pace", methods=["POST"])
+@require_role("manager")
+def api_set_customer_pace(customer_id):
+    """One-tap pace rating (task #23, Kerry-ratified scale 1 slow → 3 fast).
+
+    Body: { rating: 1|2|3 }. Always writes an explicit value with
+    source='manager' — never NULL, because the boot seed is
+    fill-only-if-NULL and clearing a seeded player would resurrect the
+    seed value on the next deploy. Manager edits win forever.
+    """
+    from email_parser.database import set_customer_pace_rating
+    data = request.get_json(silent=True) or {}
+    try:
+        rating = int(data.get("rating"))
+    except (TypeError, ValueError):
+        return jsonify({"error": "rating must be 1, 2, or 3"}), 400
+    if rating not in (1, 2, 3):
+        return jsonify({"error": "rating must be 1, 2, or 3"}), 400
+    try:
+        result = set_customer_pace_rating(customer_id, rating)
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 404
+    return jsonify({"status": "ok", **result})
+
+
 @app.route("/api/customers/<int:customer_id>/status-history")
 @require_role("view-only")
 def api_customer_status_history(customer_id):

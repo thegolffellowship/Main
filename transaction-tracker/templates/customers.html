@@ -141,6 +141,7 @@
                         <th data-sort="handicap" data-col="handicap">HCP <span class="sort-arrow">&#9650;&#9660;</span></th>
                         <th data-sort="renewal" data-col="renewal" title="Membership term expiration">Renewal <span class="sort-arrow">&#9650;&#9660;</span></th>
                         <th data-sort="latest" data-col="latest">Last Activity <span class="sort-arrow">&#9650;&#9660;</span></th>
+                        <th data-col="pace" title="Pace of play: 1 slow &rarr; 3 fast (staging only — never affects pairing composition)">Pace</th>
                     </tr>
                 </thead>
                 <tbody id="customer-list-body"></tbody>
@@ -605,6 +606,69 @@
     /** Build a "LastName, FirstName..." key for consistent name sorting. */
     /** Render the Renewal column cell from c.membershipTerm (overlaid by init()).
      * Returns a status badge or em-dash. */
+    // ── Pace-of-play one-tap editor (task #23) ────────────────────────
+    // Scale 1=slowest → 3=fastest (Kerry-ratified). NULL reads as 2 by
+    // rule and renders as the gray "implied" 2; a tap always stores an
+    // explicit value with source='manager' (manager edits beat the boot
+    // seed forever). Staging only — pace never affects composition.
+    const PACE_LABELS = { 1: "1 — Slow", 2: "2 — Average", 3: "3 — Fast" };
+
+    function renderPaceControl(c) {
+        const stored = c.pace_rating != null ? Number(c.pace_rating) : null;
+        const isMgr = currentRole === "manager" || currentRole === "admin";
+        if (!isMgr) {
+            const eff = stored || 2;
+            return `<span class="pace-value pace-default" title="Pace of play (1 slow → 3 fast)${stored == null ? ' — default' : ''}">${eff}</span>`;
+        }
+        if (!c.customer_id) return '<span style="color:var(--text-muted);">—</span>';
+        return `<div class="pace-seg" data-customer-id="${c.customer_id}" onclick="event.stopPropagation()"
+            title="Pace of play: 1 slow → 3 fast${stored == null ? ' (unset — reads as 2)' : ''}">
+            ${[1, 2, 3].map(r => `<button type="button"
+                class="pace-btn${stored === r ? ' active' : ''}${stored == null && r === 2 ? ' implied' : ''}"
+                data-pace="${r}" title="${PACE_LABELS[r]}">${r}</button>`).join('')}
+        </div>`;
+    }
+
+    async function _tapPace(btn) {
+        const seg = btn.closest(".pace-seg");
+        const cid = parseInt(seg.dataset.customerId);
+        const rating = parseInt(btn.dataset.pace);
+        seg.querySelectorAll(".pace-btn").forEach(b => { b.disabled = true; });
+        try {
+            const res = await fetch(`/api/customers/${cid}/pace`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ rating }),
+            });
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) { alert(data.error || "Failed to save pace rating."); return; }
+            // Update every card/row for this customer without a full rerender
+            allCustomers.forEach(c => {
+                if (c.customer_id === cid) {
+                    c.pace_rating = rating;
+                    c.pace_rating_source = "manager";
+                }
+            });
+            document.querySelectorAll(`.pace-seg[data-customer-id="${cid}"] .pace-btn`).forEach(b => {
+                b.classList.toggle("active", parseInt(b.dataset.pace) === rating);
+                b.classList.remove("implied");
+            });
+        } catch (e) {
+            alert("Failed to save pace rating.");
+        } finally {
+            seg.querySelectorAll(".pace-btn").forEach(b => { b.disabled = false; });
+        }
+    }
+
+    function attachPaceHandlers(rootEl) {
+        rootEl.querySelectorAll(".pace-seg .pace-btn").forEach(btn => {
+            btn.addEventListener("click", e => {
+                e.stopPropagation();
+                _tapPace(btn);
+            });
+        });
+    }
+
     function renderRenewalCell(c) {
         const term = c.membershipTerm;
         if (!term || !term.expires_at) {
@@ -1117,6 +1181,7 @@
                         ${c.creditTotal > 0 ? `<span class="status-tag status-tag-credited" style="margin-left:0.25rem; vertical-align:middle;">$${c.creditTotal.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})} Credit</span>` : ''}
                         ${currentRole === "admin" ? `<button class="btn btn-edit" data-merge-customer="${escapeHtml(c.name)}" style="font-size:0.65rem; padding:0.1rem 0.3rem; margin-left:0.25rem; vertical-align:middle;" onclick="event.stopPropagation(); openCustMergeModal('${escapeHtml(c.name).replace(/'/g, "\\'")}')">Merge</button>` : ''}
                         <br><span class="mc-event">${meta.join(" &bull; ")}</span>
+                        <span style="margin-left:0.4rem; vertical-align:middle;">${renderPaceControl(c)}</span>
                     </div>
                     <span class="mc-chevron" ${isExpanded ? 'style="transform:rotate(90deg)"' : ''}>&#9656;</span>
                 </div>
@@ -1140,6 +1205,8 @@
                 renderCustomersMobile(filtered);
             });
         });
+
+        attachPaceHandlers(container);
 
         // Attach credit/reverse handlers for every expanded mobile card
         expandedNames.forEach(name => {
@@ -1353,7 +1420,7 @@
         const tbody = document.getElementById("customer-list-body");
 
         if (!filtered.length) {
-            tbody.innerHTML = '<tr><td colspan="9" style="text-align:center; padding:3rem; color:var(--text-muted); font-style:italic;">No customers found.</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="11" style="text-align:center; padding:3rem; color:var(--text-muted); font-style:italic;">No customers found.</td></tr>';
             return;
         }
 
@@ -1372,9 +1439,10 @@
                 <td style="font-size:0.78rem; font-weight:600; color:${c.handicapIndex !== null ? (c.handicapIndex < 0 ? '#16a34a' : '#2563eb') : 'var(--text-muted)'};">${c.handicapIndex !== null ? (c.handicapIndex < 0 ? '+' + Math.abs(c.handicapIndex).toFixed(1) : c.handicapIndex.toFixed(1)) + '<span style="font-size:0.85em;color:#94a3b8;font-weight:500;margin-left:2px;">N</span><span style="font-size:0.9em;color:#64748b;font-weight:500;"> / ' + (c.handicapIndex < 0 ? '+' + Math.abs(c.handicapIndex * 2).toFixed(1) : (c.handicapIndex * 2).toFixed(1)) + '</span>' : '\u2014'}</td>
                 <td style="font-size:0.78rem;">${renderRenewalCell(c)}</td>
                 <td style="font-size:0.78rem; color:var(--text-muted);">${escapeHtml(c.latestDate || "\u2014")}</td>
+                <td>${renderPaceControl(c)}</td>
             </tr>
             <tr class="cust-detail-row ${isExpanded ? 'visible' : ''}" data-detail-for="${escapeHtml(c.name)}">
-                <td colspan="10">
+                <td colspan="11">
                     <div class="cust-detail-content" data-detail-name="${escapeHtml(c.name)}">
                         ${isExpanded ? renderCustDetailContent(c) : ''}
                     </div>
@@ -1392,6 +1460,8 @@
                 if (cust) toggleCustomerDetail(cust);
             });
         });
+
+        attachPaceHandlers(tbody);
 
         // Re-attach detail handlers for every expanded row
         expandedNames.forEach(name => {
@@ -3949,6 +4019,9 @@
                     if (canon.phone) c.phone = canon.phone;
                     if (canon.first_name) c.first_name = canon.first_name;
                     if (canon.last_name) c.last_name = canon.last_name;
+                    // Pace rating (1 slow → 3 fast; NULL reads as 2 by rule)
+                    c.pace_rating = canon.pace_rating != null ? canon.pace_rating : null;
+                    c.pace_rating_source = canon.pace_rating_source || null;
                     // Ensure customer_id is populated
                     if (canon.customer_id && !c.customer_id) c.customer_id = canon.customer_id;
                 });

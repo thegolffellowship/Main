@@ -4383,7 +4383,10 @@
             const isDropTarget = isMoveTarget && grp.players.length < 4 &&
                 !(state.selection.holes === holes && state.selection.group_num === grp.group_num);
             html += `<div class="pairing-group-card${isSelected ? ' pairings-selected' : ''}${isDropTarget ? ' pairings-move-target' : ''}" data-ev-id="${ev.id}" data-holes="${holes}" data-group-num="${grp.group_num}">`;
-            html += `<div class="pairing-group-header" data-slot-edit data-ev-id="${ev.id}" data-holes="${holes}" data-group-num="${grp.group_num}" title="Click to change this group's hole assignment">${escapeHtml(grp.slot_label)}</div>`;
+            const paceChip = grp.group_pace != null
+                ? `<span style="float:right;font-weight:600;opacity:0.9;" title="Group pace — average member rating, 1 slow &rarr; 3 fast (staging only)">&#x23F1; ${grp.group_pace}</span>`
+                : '';
+            html += `<div class="pairing-group-header" data-slot-edit data-ev-id="${ev.id}" data-holes="${holes}" data-group-num="${grp.group_num}" title="Click to change this group's hole assignment">${escapeHtml(grp.slot_label)}${paceChip}</div>`;
 
             // Render all four seats: occupied rows + clickable open slots
             // (Kerry, 2026-07-08: open spots in short groups must be usable
