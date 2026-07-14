@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.93.0";
+window.TGF_VERSION = "2.93.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.93.1",
+    date: "2026-07-14",
+    changes: [
+      "9-hole rounds only carry a nine label when it says something (Kerry): '- Back' when the back nine was played; front-nine rounds and true 9-hole courses (Comanche Trace CREEKS/HILLS/VALLEY -- the names ARE the nines) show no suffix. 18-hole splits keep Front/Back since the pair needs distinguishing.",
+      "Handicap records honor the admin-curated course short name on every screen size (was phones only), and 'The Golf Club Star Ranch' is seeded as 'Star Ranch' (fill-only-if-empty -- a /courses edit always wins).",
+    ],
+  },
   {
     version: "2.93.0",
     date: "2026-07-14",
