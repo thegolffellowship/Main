@@ -236,6 +236,23 @@ player_name variant (freshest record wins — the export-dedup rule) so
 a self-derived round extends the record instead of forking it; new
 players get a handicap_player_links row on apply.
 
+**First live run (v2.89.1, Kerry 'apply'):** s9.17 Silverhorn (27) +
+a9.17 Falconhead (15) written export-free, after verifying all 42
+self-derived adjusted values byte-identical to GG's own "Adjusted
+Gross Score" sheets in Kerry's season-scores workbooks
+(TGF_<city>_2026_Season_Scores.xls — the GG report that DOES carry
+true adjusted gross; the Spreadsheet Composer report does not).
+
+**Composer-import repair (v2.89.1, Kerry 'run it'):**
+`repair_handicap_adjusted_scores(cells, dry_run=True)` (bridge
+`scoring-hcp-repair:<json>[|apply]`) fixes 2026 rows whose
+adjusted_score was imported as raw gross, using GG's true Adjusted
+Gross from the workbooks. Guards: 2026 only; adjusted < gross; unique
+(normalized name, date) match; stored value must EQUAL the file's
+gross — 'already correct' and 'matches neither' rows skip (never
+guess). Differential recomputed from the row's OWN stored slope/rating
+(tee-rating discrepancies intentionally out of scope). Idempotent.
+
 **CAVEAT:** never ALSO import the GG export file for an event that was
 self-derived here — a file carrying round_ids bypasses the fallback
 dedup key and would double-count the rounds. Per event it's one path
