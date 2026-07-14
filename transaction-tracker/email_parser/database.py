@@ -876,7 +876,11 @@ _PACE_RATING_SEED = {
         "Gilbert Ellis", "Mark Dyal", "Tom Newman", "Kerry Niester",
         "Jay Hogue", "Neal Cloer", "Robert Straiton"],
     1: ["Richard Palacios", "Larry Anthis", "Allen Wolin",
-        "Victor Arias III", "Victor Arias Jr", "Roberto Moreno",
+        # Both Victor Ariases store first+last as plain 'Victor Arias'
+        # (III/Jr live outside first_name/last_name) — one entry
+        # matches BOTH rows, which is intended: they ride/stage
+        # together, so both carry the 1.
+        "Victor Arias", "Roberto Moreno",
         "Michael Murphy", "Michelle Delcarmen"],
 }
 
