@@ -27,6 +27,16 @@ matters too, not just the foursome.
 7. **Ambassadors are spread across groups as captains** — pace of
    play + welcoming new guests/members.
 8. **A match (match play) overrides a request** when the two conflict.
+   **AMENDED (Kerry 2026-07-14): Match Play dictates pairings as the
+   1st rule — "Match Play is king."** If the Match Play season state
+   (pool play or the current knockout round) implies a potential match
+   between two rostered players, the generator must pair the opponents
+   in the same foursome, ideally in SEPARATE carts, and visually
+   denote them as Match Play participants. Partner requests are still
+   honored where possible, but never at the match's expense. Before
+   generating, the manager gets a per-match CONFIRM question — a "no"
+   (match not required this event) drops that constraint and the next
+   pairings rule runs normally. (Task #25 — engine build pending.)
 9. **Members may fill their foursome with first-time guests.**
 10. **Request communication is part of signup** (Platform build):
     when someone signs up, notify whom they've requested.
@@ -331,6 +341,9 @@ front = fast; sequential first = fast).
 - Constraint order when they conflict: manager override (5) > match
   assignment (8) > request lock (1/11) > guest-inviter binding (4) >
   experienced-anchor (6) + ambassador-spread (7) > coverage
-  maximization (3).  ← inferred, NOT ratified — confirm with Kerry.
+  maximization (3).  ← the match-over-request portion is now RATIFIED
+  (Kerry 2026-07-14, rule 8 amendment: "Match Play is king", with a
+  manager confirm gate per detected match); the rest of the order is
+  still inferred — confirm with Kerry.
 - Requests: one per person per event; mutual locking per rule 11;
   decline releases the lock.
