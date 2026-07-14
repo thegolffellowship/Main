@@ -55,7 +55,7 @@ expand — an O(N²) loop per player that was the dominant source of slow page
 expands. The server version mirrors the same WHS algorithm and lookback cutoff,
 so values are identical and `templates/handicaps.html` just reads the field.
 
-## Expanded rounds view — GROSS + ADJ columns and scorecard expansion (v2.90.0)
+## Expanded rounds view — GROSS + ADJ columns and scorecard expansion (v2.90.0/.1)
 
 Every player's rounds table shows **GROSS** (raw score, joined from the
 bridged scorecard via `handicap_rounds.scoring_round_id` — legacy
@@ -68,6 +68,17 @@ inline (`toggleHcpScorecard` → `/api/scoring/scorecard/<id>` →
 and points-render.js — keep in sync) now include an **ADJ SCORE row**
 that appears only when the WHS cap lowered at least one hole, capped
 holes in orange. Applies to admin/manager AND the pinless member view.
+
+**18-hole bridges (v2.90.1):** an 18-hole round posts as TWO 9-hole
+handicap records, so `get_handicap_rounds` NULLs the raw join for
+18-hole cards and (player-scoped calls only) resolves each record's
+nine via `_nine_totals_for_card` — per-nine gross + WHS-adjusted
+totals matched against the record's adjusted_score. Rows then show
+that nine's gross with an F9/B9 tag, and the expanded card leads with
+a which-nine note. An unresolvable match (adjusted differs from both
+nines) shows "—" rather than guessing. The naive join briefly showed
+"80 | 41" with a phantom "39-stroke cap" tooltip (Kerry screenshots,
+same day).
 
 ## Logged future work (Kerry 2026-07-14, tasks #16–#18)
 - **Strokes-received projection** (untether from GG dots): our index →

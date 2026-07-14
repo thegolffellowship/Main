@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.90.0";
+window.TGF_VERSION = "2.90.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.90.1",
+    date: "2026-07-14",
+    changes: [
+      "18-hole rounds in the handicap records fixed (Kerry screenshots): an 18-hole round posts as TWO 9-hole handicap records, but the GROSS column was showing the full-18 total beside one nine's ADJ -- Kissing Tree read '80 | 41' and the tooltip claimed a '39-stroke WHS cap'. The server now resolves which nine each record represents (per-nine gross + WHS-adjusted totals matched against the record's adjusted score) and shows THAT nine's gross with an F9/B9 tag; the false orange cap flag and phantom tooltip are gone.",
+      "Expanding an 18-hole-backed record now leads with which nine it covers: 'FRONT NINE (OUT) of an 18-hole round -- this handicap record covers only that nine (gross X, adjusted Y)' above the full card, so the record's numbers reconcile against the right half of the scorecard.",
+    ],
+  },
   {
     version: "2.90.0",
     date: "2026-07-14",
