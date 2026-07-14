@@ -20460,6 +20460,32 @@ def import_handicap_rounds(rounds: list[dict],
     return {"inserted": inserted, "skipped": skipped, "matched": matched, "errors": errors[:50]}
 
 
+def _nine_totals_for_card(conn: sqlite3.Connection, scoring_round_id: int,
+                          tee_id: int | None, formulas: dict) -> dict:
+    """Per-nine gross + WHS-adjusted totals for one scoring card. Used to
+    resolve which nine of an 18-hole round a 9-hole handicap record
+    represents (each nine posts as its own handicap round)."""
+    holes = conn.execute(
+        """SELECT sh.hole_number, sh.strokes, sh.strokes_received, cth.par
+           FROM scoring_holes sh
+           LEFT JOIN course_tee_holes cth
+             ON cth.tee_id = ? AND cth.hole_number = sh.hole_number
+           WHERE sh.scoring_round_id = ?""",
+        (tee_id, scoring_round_id)).fetchall()
+    out = {"front": {"gross": 0, "adj": 0, "n": 0},
+           "back": {"gross": 0, "adj": 0, "n": 0}}
+    for h in holes:
+        if h["strokes"] is None:
+            continue
+        side = out["front"] if h["hole_number"] <= 9 else out["back"]
+        side["n"] += 1
+        side["gross"] += h["strokes"]
+        side["adj"] += (compute_hole_derivations(
+            h["par"], h["strokes"], h["strokes_received"] or 0,
+            formulas)["adjusted_strokes"] if h["par"] is not None else h["strokes"])
+    return out
+
+
 def get_handicap_rounds(player_name: str | None = None,
                          db_path: str | Path | None = None,
                          include_running_index: bool = True) -> list[dict]:
@@ -20475,24 +20501,52 @@ def get_handicap_rounds(player_name: str | None = None,
         # RAW gross rides along from the bridged scorecard (v2.90.0, Kerry:
         # "show the raw score and adjusted score columns"). Legacy rounds
         # with no scorecard bridge return gross=NULL and render as "—".
+        # 18-hole cards are NULLed here and resolved below to the ONE NINE
+        # this handicap row represents (v2.90.1, Kerry screenshot: Kissing
+        # Tree showed GROSS 80 beside ADJ 41 and false-flagged as capped —
+        # an 18-hole round posts as TWO 9-hole handicap records).
         _ensure_scoring_tables(conn)
+        _sel = ("SELECT hr.*, "
+                "CASE WHEN COALESCE(sr.holes_played, 9) > 9 THEN NULL "
+                "     ELSE CAST(sr.gross AS INTEGER) END AS gross, "
+                "sr.holes_played AS sr_holes, sr.tee_id AS sr_tee_id "
+                "FROM handicap_rounds hr "
+                "LEFT JOIN scoring_rounds sr ON sr.id = hr.scoring_round_id ")
         if player_name:
             round_rows = conn.execute(
-                "SELECT hr.*, CAST(sr.gross AS INTEGER) AS gross "
-                "FROM handicap_rounds hr "
-                "LEFT JOIN scoring_rounds sr ON sr.id = hr.scoring_round_id "
-                "WHERE hr.player_name = ? "
+                _sel + "WHERE hr.player_name = ? "
                 "ORDER BY hr.round_date DESC, hr.id DESC",
                 (player_name,),
             ).fetchall()
         else:
             round_rows = conn.execute(
-                "SELECT hr.*, CAST(sr.gross AS INTEGER) AS gross "
-                "FROM handicap_rounds hr "
-                "LEFT JOIN scoring_rounds sr ON sr.id = hr.scoring_round_id "
-                "ORDER BY hr.round_date DESC, hr.id DESC"
+                _sel + "ORDER BY hr.round_date DESC, hr.id DESC"
             ).fetchall()
         rounds = [dict(r) for r in round_rows]
+        # Resolve each 18-hole bridge to its nine: compute per-nine gross +
+        # WHS adjusted from the holes and match the row's adjusted_score.
+        # Player-scoped calls only (the UI path) — the unscoped dump stays
+        # cheap and simply shows no gross for 18-hole bridges.
+        if player_name:
+            need = [r for r in rounds
+                    if r.get("scoring_round_id") and (r.get("sr_holes") or 0) > 9]
+            if need:
+                formulas = get_scoring_formulas(db_path=db_path)
+                split_cache: dict = {}
+                for r in need:
+                    srid = r["scoring_round_id"]
+                    if srid not in split_cache:
+                        split_cache[srid] = _nine_totals_for_card(
+                            conn, srid, r.get("sr_tee_id"), formulas)
+                    sp = split_cache[srid]
+                    match = [s for s in ("front", "back")
+                             if sp[s]["n"] and sp[s]["adj"] == r["adjusted_score"]]
+                    if len(match) == 1:
+                        r["gross"] = sp[match[0]]["gross"]
+                        r["nine"] = match[0]
+        for r in rounds:
+            r.pop("sr_holes", None)
+            r.pop("sr_tee_id", None)
         # Attach the admin-editable short name from the course DB (v2.57.0):
         # exact-name match wins; unmatched course names fall back to the
         # client-side derivation. Case-insensitive, one lookup per call.
