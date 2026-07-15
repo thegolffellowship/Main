@@ -339,6 +339,13 @@ the s9.18 rain-out):** a single screen of questions, then one Execute:
    personalized per player server-side: credited → "Your $X.XX entry
    has been converted to a full credit…", refunded → includes the
    method, skipped → "we'll follow up", RSVP-only/comp → nothing owed.
+   **Preview Emails** (v2.103.0) renders every recipient's exact email
+   before execute — outcome chip w/ amount, subject, full body — via
+   `POST /api/events/<id>/cancel-preview` (zero-write dry run that
+   predicts outcomes from the selected mode and renders through the
+   SAME shared helpers the send uses: `_cancel_recipient_list` /
+   `_cancel_predicted_outcomes` / `_cancel_event_vars` in app.py, so
+   preview and send cannot drift). Flags players with no email on file.
 4. **Execute** → `POST /api/events/<id>/cancel-execute` does everything
    in one call: sets status, silently credits comps, settles paid
    players, then emails **everyone** — paid, skipped, RSVP-only item

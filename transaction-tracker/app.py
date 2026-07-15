@@ -4888,6 +4888,133 @@ def api_cancel_bulk(event_id):
     return jsonify({"status": "ok", "results": results})
 
 
+def _cancel_recipient_list(plan, outcome_by_item):
+    """Per-recipient send list + personalized vars for cancellation
+    notices. SHARED by cancel-preview (predicted outcomes) and
+    cancel-execute (actual outcomes) so what the manager previews is
+    what gets sent. Returns (recipients, players_without_email)."""
+    recipients, no_email = [], []
+    for rec in plan["recipients"]:
+        if not rec["email"]:
+            no_email.append(rec["customer"])
+            continue
+        outs = {outcome_by_item[iid][0] for iid in rec["item_ids"]
+                if iid in outcome_by_item}
+        amount_str = f"${rec['amount']:,.2f}"
+        if rec["kind"] != "paid" or rec["amount"] <= 0:
+            amount_str = "$0.00"
+            line = ("No payment was on file for this event, so there is "
+                    "nothing to settle.")
+            outcome = "none"
+        elif "credited" in outs:
+            line = (f"Your {amount_str} entry has been converted to a full "
+                    "credit on your account — it will be applied "
+                    "automatically when you register for a future event.")
+            outcome = "credited"
+        elif "refunded" in outs:
+            methods = {outcome_by_item[iid][1] for iid in rec["item_ids"]
+                       if outcome_by_item.get(iid, ("", ""))[0] == "refunded"}
+            mtxt = next((m for m in methods if m), "your original payment method")
+            line = f"Your {amount_str} is being refunded via {mtxt}."
+            outcome = "refunded"
+        else:
+            line = "We'll follow up with you separately about your entry."
+            outcome = "skipped"
+        recipients.append({
+            "player_name": rec["customer"],
+            "email": rec["email"],
+            "outcome": outcome,
+            "vars": {"credit_amount": amount_str, "credit_line": line},
+        })
+    return recipients, no_email
+
+
+def _cancel_event_vars(event_id, reason, status):
+    ev = next((e for e in get_all_events() if e.get("id") == event_id), {}) or {}
+    return {
+        "event_name": ev.get("item_name") or "",
+        "event_date": ev.get("event_date") or "",
+        "course": ev.get("course") or "",
+        "chapter": ev.get("chapter") or "",
+        "reason": reason,
+        "status_label": status,  # 'cancelled' / 'postponed' reads well in copy
+    }
+
+
+def _cancel_predicted_outcomes(paid_by_id, mode, actions):
+    """What WOULD happen to each paid item — the preview's stand-in for
+    execute's real results (skip/credit/refund per mode)."""
+    custom_map = {a["item_id"]: a for a in (actions or [])
+                  if a.get("item_id") is not None}
+    outcomes = {}
+    for iid, item in paid_by_id.items():
+        if mode in ("credit", "refund"):
+            act = mode
+            method = item.get("auto_refund_method", "")
+        else:
+            entry = custom_map.get(iid, {})
+            act = entry.get("action") or "skip"
+            method = entry.get("method") or item.get("auto_refund_method", "")
+        outcomes[iid] = (("credited" if act == "credit"
+                          else "refunded" if act == "refund"
+                          else "skipped"), method if act == "refund" else
+                         (method if act == "credit" else ""))
+    return outcomes
+
+
+@app.route("/api/events/<int:event_id>/cancel-preview", methods=["POST"])
+@require_role("admin")
+def api_cancel_preview(event_id):
+    """Dry-run of the one-tap cancellation emails (Kerry 2026-07-14):
+    each player's FULLY RENDERED subject + body with their exact amount,
+    using the same recipient builder and template renderer as the send —
+    zero writes. Body: {status, reason, mode, actions?, subject, html_body}.
+    """
+    from email_parser.database import plan_event_cancellation_notice
+    data = request.get_json(silent=True) or {}
+    status = data.get("status", "cancelled")
+    reason = (data.get("reason") or "").strip()
+    mode = data.get("mode", "credit")
+    subject_tpl = (data.get("subject") or "").strip()
+    body_tpl = (data.get("html_body") or "").strip()
+    if status not in ("cancelled", "postponed"):
+        return jsonify({"error": "status must be 'cancelled' or 'postponed'"}), 400
+    if mode not in ("credit", "refund", "custom"):
+        return jsonify({"error": "mode must be 'credit', 'refund', or 'custom'"}), 400
+    if not subject_tpl or not body_tpl:
+        return jsonify({"error": "subject and html_body are required"}), 400
+
+    try:
+        plan = plan_event_cancellation_notice(event_id)
+    except Exception as e:
+        logger.exception("Cancel preview failed for event %d", event_id)
+        return jsonify({"error": str(e)}), 500
+    players = get_cancellation_players(event_id)
+    paid_by_id = {p["id"]: p for p in players.get("paid", [])}
+    outcome_by_item = _cancel_predicted_outcomes(paid_by_id, mode,
+                                                 data.get("actions"))
+    recipients, no_email = _cancel_recipient_list(plan, outcome_by_item)
+    event_vars = _cancel_event_vars(event_id, reason or "—", status)
+
+    previews = []
+    for r in recipients:
+        variables = {**event_vars, **r.get("vars", {}),
+                     "player_name": r.get("player_name") or "Player"}
+        previews.append({
+            "player_name": r["player_name"],
+            "email": r["email"],
+            "outcome": r["outcome"],
+            "credit_amount": r["vars"]["credit_amount"],
+            "subject": render_msg_template(subject_tpl, variables),
+            "html": render_msg_template(body_tpl, variables),
+        })
+    return jsonify({
+        "recipients": previews,
+        "players_without_email": no_email,
+        "n_recipients": len(previews),
+    })
+
+
 @app.route("/api/events/<int:event_id>/cancel-execute", methods=["POST"])
 @require_role("admin")
 def api_cancel_execute(event_id):
@@ -4982,49 +5109,13 @@ def api_cancel_execute(event_id):
             outcome_by_item[iid] = ("failed", method)
             failed += 1
 
-    # Notification emails — every player (settled, skipped, RSVP-only)
+    # Notification emails — every player (settled, skipped, RSVP-only).
+    # Same builder the preview endpoint uses, fed with ACTUAL outcomes.
     email_result = {"sent": 0, "failed": 0, "errors": []}
     no_email = []
     if send_email:
-        all_events = get_all_events()
-        ev = next((e for e in all_events if e.get("id") == event_id), {}) or {}
-        status_label = status  # 'cancelled' / 'postponed' reads well in copy
-        event_vars = {
-            "event_name": ev.get("item_name") or "",
-            "event_date": ev.get("event_date") or "",
-            "course": ev.get("course") or "",
-            "chapter": ev.get("chapter") or "",
-            "reason": reason,
-            "status_label": status_label,
-        }
-        recipients = []
-        for rec in plan["recipients"]:
-            if not rec["email"]:
-                no_email.append(rec["customer"])
-                continue
-            outs = {outcome_by_item[iid][0] for iid in rec["item_ids"]
-                    if iid in outcome_by_item}
-            amount_str = f"${rec['amount']:,.2f}"
-            if rec["kind"] != "paid" or rec["amount"] <= 0:
-                amount_str = "$0.00"
-                line = ("No payment was on file for this event, so there is "
-                        "nothing to settle.")
-            elif "credited" in outs:
-                line = (f"Your {amount_str} entry has been converted to a full "
-                        "credit on your account — it will be applied "
-                        "automatically when you register for a future event.")
-            elif "refunded" in outs:
-                methods = {outcome_by_item[iid][1] for iid in rec["item_ids"]
-                           if outcome_by_item.get(iid, ("", ""))[0] == "refunded"}
-                mtxt = next((m for m in methods if m), "your original payment method")
-                line = f"Your {amount_str} is being refunded via {mtxt}."
-            else:
-                line = "We'll follow up with you separately about your entry."
-            recipients.append({
-                "player_name": rec["customer"],
-                "email": rec["email"],
-                "vars": {"credit_amount": amount_str, "credit_line": line},
-            })
+        event_vars = _cancel_event_vars(event_id, reason, status)
+        recipients, no_email = _cancel_recipient_list(plan, outcome_by_item)
         if recipients:
             email_result = send_bulk_emails(
                 recipients=recipients,
