@@ -1,5 +1,15 @@
-window.TGF_VERSION = "2.101.0";
+window.TGF_VERSION = "2.102.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.102.0",
+    date: "2026-07-14",
+    changes: [
+      "One-tap event cancellation (Kerry-ratified after the s9.18 Cedar Creek rain-out): the Cancel Event modal is now a single screen of questions -- status + reason, Credit All / Refund All / One-by-One, and an editable notification email -- with one EXECUTE that does everything server-side: sets the event status, settles every paid player, silently removes comps, and emails EVERYONE (paid, skipped, RSVP-only, and unmatched GG 'PLAYING' RSVPs) in one call.",
+      "Each email carries the player's EXACT settled amount: new {credit_amount} and {credit_line} template variables are personalized per recipient ('Your $76.00 entry has been converted to a full credit...'), with distinct wording for refunds (includes the auto-detected method), skipped players, and RSVP-only players who owed nothing. Amounts are computed from active entry items plus their add-on children, summed per player across multiple orders (plan_event_cancellation_notice; sends recorded in the Message History log).",
+      "Root-cause fix for 'the cancellation email reached nobody': the send path used to skip credited players unconditionally, but after Credit All the credited players ARE the audience. The new endpoint plans recipients+amounts BEFORE crediting (structurally immune), and both the Message Players composer and /api/messages/send now include credited/refunded registrants when the event is cancelled or postponed (transferred players stay excluded; active events unchanged).",
+      "New endpoint POST /api/events/<id>/cancel-execute (admin); the old cancel/cancel-bulk/cancel-apply endpoints remain for compatibility. send_bulk_emails supports per-recipient template variables. Tests: test_cancel_notice.py (10 checks: per-player totals w/ add-on cascade, multi-order summing, canonical email resolution, RSVP coverage, plan-before-credit).",
+    ],
+  },
   {
     version: "2.101.0",
     date: "2026-07-14",

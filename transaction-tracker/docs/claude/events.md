@@ -322,32 +322,63 @@ Events can be cancelled or postponed from the event detail view (admin only).
 New columns on `events` table: `status` TEXT (`active`/`cancelled`/`postponed`),
 `status_reason` TEXT, `rescheduled_to_event_id` INTEGER, `status_changed_at` TEXT.
 
-**Cancel Event modal — 4 steps:**
-1. Choose `Cancelled` or `Postponed` + enter reason text (required).
-2. Choose refund/credit mode: **Bulk** (Credit All / Refund All in one click) or **One-by-One**.
-3. (One-by-One) Staging list with per-row Credit / Refund / Skip buttons → Apply All.
-4. Completion summary + optional "Send Cancellation Email" prompt.
+**Cancel Event modal — ONE-TAP EXECUTE (v2.102.0, Kerry-ratified after
+the s9.18 rain-out):** a single screen of questions, then one Execute:
+1. Status (`Cancelled`/`Postponed`) + reason (required).
+2. Paid players: **Credit All** (default) / **Refund All** (methods
+   auto-detected) / **One-by-One** (inline per-row Credit/Refund/Skip;
+   paid players load when the modal opens, BEFORE anything runs).
+3. Notification email (default ON, editable subject/body). Template
+   vars: `{player_name} {event_name} {event_date} {course} {reason}
+   {status_label} {credit_amount} {credit_line}` — `{credit_line}` is
+   personalized per player server-side: credited → "Your $X.XX entry
+   has been converted to a full credit…", refunded → includes the
+   method, skipped → "we'll follow up", RSVP-only/comp → nothing owed.
+4. **Execute** → `POST /api/events/<id>/cancel-execute` does everything
+   in one call: sets status, silently credits comps, settles paid
+   players, then emails **everyone** — paid, skipped, RSVP-only item
+   rows, and unmatched PLAYING `rsvps` — with sends recorded in the
+   Message History log. Summary reports actions, emails, and any
+   players with no email on file.
+
+**Why plan-before-credit matters:** the historic flow credited players
+FIRST and only then offered the email — but the send path skipped
+credited registrants, so the notice reached nobody. `cancel-execute`
+computes recipients + exact amounts via
+`plan_event_cancellation_notice(event_id)` (active parent items +
+active add-on children, summed per player across multiple orders,
+canonical email resolver) BEFORE any status/credit write. Additionally,
+the Message Players composer and `/api/messages/send` now INCLUDE
+credited/refunded registrants when the event is cancelled/postponed
+(they are the audience there); transferred players stay excluded and
+active-event behavior is unchanged.
 
 **Key behaviors:**
 - Refund method auto-detected from original payment (`godaddy` → GoDaddy, `venmo` → Venmo, etc.)
 - Add-on payments cascade automatically via existing `credit_item` / `refund_item` logic
-- Comp and RSVP-only players are silently removed (no credit/refund needed)
+- Comp and RSVP-only players are silently removed (no credit/refund needed) but still notified
 - **Restore Event** button appears on cancelled/postponed events until the first player
   action is taken (`can_restore_event(conn, event_name)` checks for any credited/refunded items)
 - Cancelled/postponed badges shown on the event list rows
 - Status banner shown at top of event detail view
 
 **API endpoints (all admin):**
+- `POST /api/events/<id>/cancel-execute` — `{status, reason, mode:
+  'credit'|'refund'|'custom', actions?, send_email, subject, html_body}`
+  → the one-tap flow (status + settle + notify in one call)
 - `POST /api/events/<name>/cancel` — `{status, reason}` → sets event status
 - `POST /api/events/<name>/restore` — clears status back to active
 - `GET  /api/events/<name>/cancellation-players` — list of active players with payment info
-- `POST /api/events/<name>/cancel-bulk` — `{action: 'credit'|'refund', method?}` → bulk apply
-- `POST /api/events/<name>/cancel-apply` — `{actions: [{item_id, action, method?}]}` → one-by-one apply
+- `POST /api/events/<name>/cancel-bulk` — `{action: 'credit'|'refund', method?}` → bulk apply (legacy)
+- `POST /api/events/<name>/cancel-apply` — `{actions: [{item_id, action, method?}]}` → one-by-one apply (legacy)
 
 **Key DB functions:**
 - `set_event_status(conn, event_name, status, reason)` — writes status + timestamp
 - `can_restore_event(conn, event_name)` — returns True if no credited/refunded items yet
 - `get_cancellation_players(conn, event_name)` — returns active players with payment method
+- `plan_event_cancellation_notice(event_id)` — per-player notification plan
+  (totals + canonical emails), MUST run before crediting; tests in
+  `test_cancel_notice.py`
 
 # RSVP Credit Application (from Events page)
 

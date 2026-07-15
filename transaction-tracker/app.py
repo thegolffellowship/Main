@@ -4888,6 +4888,187 @@ def api_cancel_bulk(event_id):
     return jsonify({"status": "ok", "results": results})
 
 
+@app.route("/api/events/<int:event_id>/cancel-execute", methods=["POST"])
+@require_role("admin")
+def api_cancel_execute(event_id):
+    """One-tap cancellation (Kerry-ratified 2026-07-14): set status, settle
+    every player, and send notification emails carrying each player's
+    EXACT credit amount — one execute, correct by construction (the plan
+    with amounts + emails is captured BEFORE anything is credited, so the
+    old credited-players-drop-off-the-email-audience trap can't occur).
+
+    Body: {
+        status: 'cancelled'|'postponed',
+        reason: str (required),
+        mode: 'credit'|'refund'|'custom' (default credit),
+        actions: [{item_id, action: credit|refund|skip, method?}]
+                 (custom mode only; unlisted items are skipped),
+        send_email: bool (default true),
+        subject: str, html_body: str (required when send_email —
+                 vars: {player_name} {event_name} {event_date} {course}
+                 {chapter} {reason} {status_label} {credit_amount}
+                 {credit_line})
+    }
+    """
+    from email_parser.database import plan_event_cancellation_notice
+    data = request.get_json(silent=True) or {}
+    status = data.get("status", "cancelled")
+    reason = (data.get("reason") or "").strip()
+    mode = data.get("mode", "credit")
+    send_email = bool(data.get("send_email", True))
+    subject_tpl = (data.get("subject") or "").strip()
+    body_tpl = (data.get("html_body") or "").strip()
+    if status not in ("cancelled", "postponed"):
+        return jsonify({"error": "status must be 'cancelled' or 'postponed'"}), 400
+    if not reason:
+        return jsonify({"error": "reason is required"}), 400
+    if mode not in ("credit", "refund", "custom"):
+        return jsonify({"error": "mode must be 'credit', 'refund', or 'custom'"}), 400
+    if send_email and (not subject_tpl or not body_tpl):
+        return jsonify({"error": "subject and html_body are required when send_email is true"}), 400
+
+    # Plan FIRST — amounts and emails come from still-active items
+    plan = plan_event_cancellation_notice(event_id)
+    players = get_cancellation_players(event_id)
+    paid_by_id = {p["id"]: p for p in players.get("paid", [])}
+
+    if not set_event_status(event_id, status, reason):
+        return jsonify({"error": "Event not found"}), 404
+
+    note = f"Event {status} — {reason}"
+
+    # Silent removals (comps / RSVP-only — nothing owed)
+    silent_removed = 0
+    for iid in plan["silent_items"]:
+        try:
+            if credit_item(iid, note=note):
+                silent_removed += 1
+        except Exception:
+            logger.exception("Silent credit failed for item %s", iid)
+
+    # Paid players
+    custom_map = {}
+    if mode == "custom":
+        for a in (data.get("actions") or []):
+            if a.get("item_id") is not None:
+                custom_map[a["item_id"]] = a
+    outcome_by_item = {}
+    ok = failed = skipped = 0
+    for iid, item in paid_by_id.items():
+        if mode in ("credit", "refund"):
+            act = mode
+            method = item.get("auto_refund_method", "")
+        else:
+            entry = custom_map.get(iid, {})
+            act = entry.get("action") or "skip"
+            method = entry.get("method") or item.get("auto_refund_method", "")
+        if act == "skip":
+            outcome_by_item[iid] = ("skipped", "")
+            skipped += 1
+            continue
+        try:
+            if act == "credit":
+                success = credit_item(iid, note=note)
+            else:
+                success = refund_item(iid, method=method, note=note)
+            outcome_by_item[iid] = (("credited" if act == "credit" else "refunded")
+                                    if success else "failed", method)
+            if success:
+                ok += 1
+            else:
+                failed += 1
+        except Exception:
+            logger.exception("Cancel action failed for item %s", iid)
+            outcome_by_item[iid] = ("failed", method)
+            failed += 1
+
+    # Notification emails — every player (settled, skipped, RSVP-only)
+    email_result = {"sent": 0, "failed": 0, "errors": []}
+    no_email = []
+    if send_email:
+        all_events = get_all_events()
+        ev = next((e for e in all_events if e.get("id") == event_id), {}) or {}
+        status_label = status  # 'cancelled' / 'postponed' reads well in copy
+        event_vars = {
+            "event_name": ev.get("item_name") or "",
+            "event_date": ev.get("event_date") or "",
+            "course": ev.get("course") or "",
+            "chapter": ev.get("chapter") or "",
+            "reason": reason,
+            "status_label": status_label,
+        }
+        recipients = []
+        for rec in plan["recipients"]:
+            if not rec["email"]:
+                no_email.append(rec["customer"])
+                continue
+            outs = {outcome_by_item[iid][0] for iid in rec["item_ids"]
+                    if iid in outcome_by_item}
+            amount_str = f"${rec['amount']:,.2f}"
+            if rec["kind"] != "paid" or rec["amount"] <= 0:
+                amount_str = "$0.00"
+                line = ("No payment was on file for this event, so there is "
+                        "nothing to settle.")
+            elif "credited" in outs:
+                line = (f"Your {amount_str} entry has been converted to a full "
+                        "credit on your account — it will be applied "
+                        "automatically when you register for a future event.")
+            elif "refunded" in outs:
+                methods = {outcome_by_item[iid][1] for iid in rec["item_ids"]
+                           if outcome_by_item.get(iid, ("", ""))[0] == "refunded"}
+                mtxt = next((m for m in methods if m), "your original payment method")
+                line = f"Your {amount_str} is being refunded via {mtxt}."
+            else:
+                line = "We'll follow up with you separately about your entry."
+            recipients.append({
+                "player_name": rec["customer"],
+                "email": rec["email"],
+                "vars": {"credit_amount": amount_str, "credit_line": line},
+            })
+        if recipients:
+            email_result = send_bulk_emails(
+                recipients=recipients,
+                subject_template=subject_tpl,
+                body_template=body_tpl,
+                event_vars=event_vars,
+            )
+            role = session.get("role", "unknown")
+            error_emails = [e["recipient"] for e in email_result.get("errors", [])]
+            for r in recipients:
+                try:
+                    log_message({
+                        "event_name": event_vars["event_name"],
+                        "template_id": None,
+                        "channel": "email",
+                        "recipient_name": r.get("player_name"),
+                        "recipient_address": r["email"],
+                        "subject": render_msg_template(
+                            subject_tpl, {**event_vars, **r.get("vars", {}),
+                                          "player_name": r.get("player_name") or "Player"}),
+                        "body_preview": render_msg_template(
+                            body_tpl, {**event_vars, **r.get("vars", {}),
+                                       "player_name": r.get("player_name") or "Player"})[:200],
+                        "audience": "cancellation",
+                        "status": "sent" if r["email"] not in error_emails else "failed",
+                        "sent_by": role,
+                    })
+                except Exception:
+                    logger.exception("Failed to log cancellation email to %s", r["email"])
+
+    return jsonify({
+        "status": "ok",
+        "event_status": status,
+        "silent_removed": silent_removed,
+        "actioned": ok,
+        "failed": failed,
+        "skipped": skipped,
+        "emails_sent": email_result.get("sent", 0),
+        "emails_failed": email_result.get("failed", 0),
+        "email_errors": email_result.get("errors", []),
+        "players_without_email": no_email,
+    })
+
+
 @app.route("/api/events/<int:event_id>/cancel-apply", methods=["POST"])
 @require_role("admin")
 def api_cancel_apply(event_id):
@@ -6500,6 +6681,7 @@ def api_send_messages():
         "course": event_info.get("course") or "",
         "chapter": event_info.get("chapter") or "",
     }
+    event_status = (event_info.get("status") or "active")
 
     # Filter audience
     audience = (data.get("audience") or "all").lower()
@@ -6617,8 +6799,14 @@ def api_send_messages():
         if not (isinstance(rid, str) and rid.startswith("gg-rsvp")) and rid in exclude_ids:
             continue
         status = (r.get("transaction_status") or "active")
-        # Skip credited/transferred
-        if status in ("credited", "transferred"):
+        # Skip transferred always. Skip credited only while the event is
+        # still ACTIVE — on a cancelled/postponed event the credited
+        # players ARE the audience (they were credited BY the
+        # cancellation, and excluding them made the post-cancel email
+        # silently reach nobody — Kerry, rained-out s9.18, 2026-07-14).
+        if status == "transferred":
+            continue
+        if status == "credited" and event_status == "active":
             continue
         email = resolve_email(r)
         if not email:

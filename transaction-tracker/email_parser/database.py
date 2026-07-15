@@ -16445,6 +16445,112 @@ def get_cancellation_players(event_id: int, db_path: str | Path | None = None) -
         return {"paid": paid, "silent": silent}
 
 
+def plan_event_cancellation_notice(event_id: int,
+                                   db_path: str | Path | None = None) -> dict:
+    """Per-player notification plan for the one-tap cancellation flow
+    (Kerry 2026-07-14). MUST run BEFORE any items are credited: the
+    dollar totals come from still-ACTIVE parent items plus their active
+    add-on children, and the whole point is telling each player the
+    exact amount that lands on their account.
+
+    Returns {"recipients": [{customer, email, amount, item_ids, kind}],
+             "paid_items": [...], "silent_items": [...]}
+    kind: 'paid' (money to settle) | 'silent' (RSVP-only / comp — no
+    money, notified anyway: "everyone receives an email", Kerry).
+    One recipient per player — multiple items (entry + add-ons bought
+    separately) are summed. Emails via the canonical resolver.
+
+    Coverage beyond get_cancellation_players (which only sees ACTIVE
+    items): rsvp_only/gg_rsvp item rows and unmatched PLAYING rsvps
+    join as silent recipients, deduped by email — without them the
+    never-paid crowd would get no notice at all.
+    """
+    players = get_cancellation_players(event_id, db_path=db_path)
+    conn = get_connection(db_path)
+    try:
+        ev = conn.execute("SELECT item_name FROM events WHERE id = ?",
+                          (event_id,)).fetchone()
+        event_name = ev["item_name"] if ev else ""
+        rsvp_items = [dict(r) for r in conn.execute(
+            """SELECT * FROM items
+               WHERE item_name = ? COLLATE NOCASE
+                 AND parent_item_id IS NULL
+                 AND COALESCE(transaction_status, 'active')
+                     IN ('rsvp_only', 'gg_rsvp')
+               ORDER BY customer""",
+            (event_name,),
+        ).fetchall()]
+        def item_total(item: dict) -> float:
+            total = _parse_dollar(item.get("item_price"))
+            for ch in conn.execute(
+                "SELECT item_price FROM items WHERE parent_item_id = ? "
+                "AND COALESCE(transaction_status, 'active') = 'active'",
+                (item["id"],),
+            ).fetchall():
+                total += _parse_dollar(ch["item_price"])
+            return total
+
+        by_key: dict = {}
+
+        def add(it: dict, kind: str):
+            email = (resolve_player_email(it, conn=conn) or "").strip()
+            key = email.lower() or f"name:{_pair_key_name(it.get('customer') or '')}"
+            rec = by_key.setdefault(key, {
+                "customer": it.get("customer") or "Player",
+                "email": email,
+                "amount": 0.0,
+                "item_ids": [],
+                "kind": "silent",
+            })
+            if kind == "paid":
+                rec["amount"] = round(rec["amount"] + item_total(it), 2)
+                rec["kind"] = "paid"
+            if it.get("id") is not None:
+                rec["item_ids"].append(it["id"])
+
+        for kind in ("paid", "silent"):
+            for it in players.get(kind, []):
+                add(it, kind)
+        for it in rsvp_items:
+            add(it, "rsvp")
+
+        # Unmatched GG RSVPs (rsvps table, PLAYING, email only — no item)
+        try:
+            for rv in conn.execute(
+                """SELECT r1.player_name, r1.player_email, r1.response
+                   FROM rsvps r1
+                   INNER JOIN (
+                       SELECT player_email, MAX(received_at) AS max_date
+                       FROM rsvps
+                       WHERE matched_event = ?
+                         AND player_email IS NOT NULL AND player_email != ''
+                       GROUP BY player_email
+                   ) r2 ON r1.player_email = r2.player_email
+                      AND r1.received_at = r2.max_date
+                   WHERE r1.matched_event = ?""",
+                (event_name, event_name),
+            ).fetchall():
+                if (rv["response"] or "").upper() != "PLAYING":
+                    continue
+                email = (rv["player_email"] or "").strip()
+                if not email or email.lower() in by_key:
+                    continue
+                by_key[email.lower()] = {
+                    "customer": rv["player_name"] or email.split("@")[0],
+                    "email": email, "amount": 0.0,
+                    "item_ids": [], "kind": "silent",
+                }
+        except sqlite3.OperationalError:
+            pass  # no rsvps table on a bare install
+    finally:
+        conn.close()
+    return {
+        "recipients": list(by_key.values()),
+        "paid_items": [i["id"] for i in players.get("paid", [])],
+        "silent_items": [i["id"] for i in players.get("silent", [])],
+    }
+
+
 def create_event(item_name: str, event_date: str = None, course: str = None,
                  chapter: str = None, format: str = None, start_type: str = None,
                  start_time: str = None, tee_time_count: int = None,

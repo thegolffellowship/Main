@@ -449,7 +449,9 @@ def send_bulk_emails(
 ) -> dict:
     """Send emails to a list of recipients with template variable substitution.
 
-    Each recipient dict must have: player_name, email
+    Each recipient dict must have: player_name, email. An optional "vars"
+    dict adds per-recipient substitutions (e.g. credit_amount /
+    credit_line for cancellation notices) on top of event_vars.
     event_vars provides: event_name, event_date, course, chapter
 
     Returns: {"sent": N, "failed": N, "errors": [...]}
@@ -468,7 +470,8 @@ def send_bulk_emails(
     errors = []
 
     for i, recip in enumerate(recipients):
-        variables = {**event_vars, "player_name": recip["player_name"]}
+        variables = {**event_vars, **(recip.get("vars") or {}),
+                     "player_name": recip["player_name"]}
         rendered_subject = render_msg_template(subject_template, variables)
         rendered_body = render_msg_template(body_template, variables)
 
