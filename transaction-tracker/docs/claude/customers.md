@@ -894,10 +894,18 @@ Credit modal, which now PAYS as well as records:
   desktop), PayPal (PayPal.Me username — emails can't deep-link), and
   Cash App ($cashtag), prefilled with the player's handle
   (customers.venmo_username, or payment_handle when payment_method
-  matches), the exact credit amount, and the ratified memo
-  **"[First Name] [Last Name] - Credit for [Event Name]"** (Copy button
-  for providers whose links drop the memo). Zelle = no deep link; the
-  "I'm sending via Zelle" button arms verification only.
+  matches), the exact credit amount, and the ratified memo (Kerry
+  2026-07-15, refined same day — money reads FROM its ORIGIN event):
+  **"[First] [Last] - Credit from [Event]"** for full refunds;
+  **"[First] [Last] - Excess credit from [SOURCE event]"** for
+  excess-credit rows (traced excess item → email_uid's registration →
+  `transferred_from_id` → the original event, since the row itself is
+  named for the event the credit was APPLIED to); **"Overpayment
+  credit from [Event]"** for overpayment rows. Copy button for
+  providers whose links drop the memo. Zelle = no deep link; the
+  "I'm sending via Zelle" button arms verification only. The
+  apply-credit modals' excess Venmo-back links (Customers + Events
+  pages) carry the same source-event memo.
 - **Verification**: the pay tap POSTs `/api/items/<id>/refund-watch`
   (admin) → `refund_watches` row (ONE open watch per item; re-taps
   replace) + the ~75s/~180s quick inbox sweeps. When the provider's
