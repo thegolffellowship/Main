@@ -885,6 +885,38 @@ Each rendering path has 5 tabs: **Transactions**, **Scores**, **Winnings**, **Po
   name — passing `customer_id` is what avoids that collision.
 - Returns `{golfer_name, total_winnings, payouts: [{event_name, date, category, amount}]}`
 
+## Refund Credit — P2P pay links with receipt verification (v2.106.0, Kerry 2026-07-15)
+
+The red **Refund** button on credited/withdrawn rows opens the Refund
+Credit modal, which now PAYS as well as records:
+
+- **Pay links** for Venmo (`venmo://paycharge` on phones, web link on
+  desktop), PayPal (PayPal.Me username — emails can't deep-link), and
+  Cash App ($cashtag), prefilled with the player's handle
+  (customers.venmo_username, or payment_handle when payment_method
+  matches), the exact credit amount, and the ratified memo
+  **"[First Name] [Last Name] - Credit for [Event Name]"** (Copy button
+  for providers whose links drop the memo). Zelle = no deep link; the
+  "I'm sending via Zelle" button arms verification only.
+- **Verification**: the pay tap POSTs `/api/items/<id>/refund-watch`
+  (admin) → `refund_watches` row (ONE open watch per item; re-taps
+  replace) + the ~75s/~180s quick inbox sweeps. When the provider's
+  receipt email is ingested, `auto_match_refund_watches` (runs after
+  the winnings payout matcher, which keeps first claim) verifies —
+  amount exact to the cent AND (same customer_id | same normalized
+  handle | watch memo contained in the receipt note); receipts
+  predating the watch or already backing a tgf_payout are excluded;
+  one receipt verifies exactly one watch — then records through the
+  SAME `payout_credit` path as a manual Record Refund (receipt-dated,
+  identical acct rows). The modal polls `GET /refund-watch` and flips
+  Sent → verified & recorded live; the 5-minute inbox cycle is the
+  backstop; manual Record Refund always remains.
+- **Safety properties**: double-tap can't double-record
+  (payout_credit refuses non-credited rows; watch verifies once); an
+  amount edited inside the payment app never matches (stays pending);
+  `/api/refund-watches` lists open watches. Tests:
+  `test_refund_watch.py`.
+
 ## Customer detail Transactions tab — display columns
 
 The Customer detail Transactions tab renders the same `displaySideGames` / `displayItemNotes`
