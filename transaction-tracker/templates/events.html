@@ -1067,6 +1067,8 @@
                         <div style="font-size:0.7rem; color:#9ca3af; margin-top:0.25rem;">
                             Variables: {player_name} {event_name} {event_date} {course} {reason} {status_label} {credit_amount} {credit_line} &mdash; {credit_line} becomes each player's personalized "your $X.XX has been credited" sentence.
                         </div>
+                        <button type="button" id="cancel-preview-btn" class="btn" style="margin-top:0.5rem; font-size:0.78rem; padding:0.3rem 0.75rem; background:#f3f4f6; border:1px solid #d1d5db; border-radius:6px; color:#374151; font-weight:600; cursor:pointer;">&#x1F441; Preview Emails</button>
+                        <div id="cancel-preview-list" style="display:none; margin-top:0.6rem; max-height:320px; overflow-y:auto; border:1px solid #e5e7eb; border-radius:8px; padding:0.5rem; background:#fafafa;"></div>
                     </div>
                 </div>
 
@@ -10613,6 +10615,9 @@
         document.getElementById('cancel-email-body').value = CANCEL_EMAIL_DEFAULT_BODY;
         document.getElementById('cancel-staging-wrap').style.display = 'none';
         document.getElementById('cancel-player-summary').textContent = 'Loading players…';
+        const _pv = document.getElementById('cancel-preview-list');
+        _pv.style.display = 'none'; _pv.dataset.loaded = ''; _pv.innerHTML = '';
+        document.getElementById('cancel-preview-btn').innerHTML = '&#x1F441; Preview Emails';
         // Reset status buttons
         document.querySelectorAll('.cancel-status-btn').forEach(b => {
             const active = b.dataset.status === 'cancelled';
@@ -10718,6 +10723,81 @@
 
     document.getElementById('cancel-email-toggle').addEventListener('change', function() {
         document.getElementById('cancel-email-fields').style.display = this.checked ? '' : 'none';
+    });
+
+    // Per-player email preview — server-rendered with the exact same
+    // recipient builder + template renderer the Execute send uses.
+    document.getElementById('cancel-preview-btn').addEventListener('click', async () => {
+        const btn = document.getElementById('cancel-preview-btn');
+        const list = document.getElementById('cancel-preview-list');
+        const subject = document.getElementById('cancel-email-subject').value.trim();
+        const body = document.getElementById('cancel-email-body').value.trim();
+        if (!subject || !body) { alert('Enter a subject and message to preview.'); return; }
+
+        // Toggle closed if already open
+        if (list.style.display !== 'none' && list.dataset.loaded === '1') {
+            list.style.display = 'none';
+            list.dataset.loaded = '';
+            btn.innerHTML = '&#x1F441; Preview Emails';
+            return;
+        }
+
+        btn.disabled = true; btn.textContent = 'Rendering…';
+        const payload = {
+            status: cancelEventState.status,
+            reason: document.getElementById('cancel-event-reason').value.trim(),
+            mode: cancelEventState.mode,
+            subject, html_body: body,
+        };
+        if (cancelEventState.mode === 'custom') {
+            payload.actions = cancelEventState.paidPlayers.map(p => ({
+                item_id: p.id,
+                action: cancelEventState.stagedActions[p.id] || 'skip',
+                method: p.auto_refund_method || '',
+            }));
+        }
+        try {
+            const resp = await fetch(`/api/events/${cancelEventState.eventId}/cancel-preview`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload),
+            });
+            const data = await resp.json();
+            if (!resp.ok) { alert(data.error || 'Preview failed.'); return; }
+
+            const chip = (o, amt) => {
+                const styles = {
+                    credited: ['#f0fdf4', '#15803d', `CREDIT ${amt}`],
+                    refunded: ['#eff6ff', '#1d4ed8', `REFUND ${amt}`],
+                    skipped: ['#fef3c7', '#92400e', 'SKIPPED'],
+                    none: ['#f3f4f6', '#6b7280', 'NO PAYMENT'],
+                }[o] || ['#f3f4f6', '#6b7280', o];
+                return `<span style="background:${styles[0]}; color:${styles[1]}; font-size:0.65rem; font-weight:800; border-radius:999px; padding:0.1rem 0.5rem; white-space:nowrap;">${styles[2]}</span>`;
+            };
+            let html = `<div style="font-size:0.75rem; color:#6b7280; margin-bottom:0.4rem;">${data.n_recipients} email${data.n_recipients === 1 ? '' : 's'} will be sent:</div>`;
+            html += (data.recipients || []).map(r => `
+                <div style="background:#fff; border:1px solid #e5e7eb; border-radius:6px; padding:0.5rem 0.6rem; margin-bottom:0.45rem;">
+                    <div style="display:flex; align-items:center; gap:0.5rem; flex-wrap:wrap; margin-bottom:0.25rem;">
+                        <strong style="font-size:0.82rem;">${escapeHtml(r.player_name)}</strong>
+                        <span style="font-size:0.72rem; color:#6b7280;">${escapeHtml(r.email)}</span>
+                        ${chip(r.outcome, escapeHtml(r.credit_amount))}
+                    </div>
+                    <div style="font-size:0.75rem; font-weight:600; color:#374151; margin-bottom:0.25rem;">Subject: ${escapeHtml(r.subject)}</div>
+                    <div style="font-size:0.76rem; color:#374151; border-left:3px solid #E87C3E; padding-left:0.5rem;">${r.html}</div>
+                </div>`).join('');
+            if ((data.players_without_email || []).length) {
+                html += `<div style="font-size:0.75rem; color:#92400e; background:#fef3c7; border-radius:6px; padding:0.4rem 0.6rem;">&#x26A0;&#xFE0F; No email on file (will NOT receive this): ${escapeHtml(data.players_without_email.join(', '))}</div>`;
+            }
+            list.innerHTML = html;
+            list.style.display = '';
+            list.dataset.loaded = '1';
+            btn.innerHTML = '&#x25B2; Hide Preview';
+        } catch (err) {
+            alert('Preview failed: ' + err.message);
+        } finally {
+            btn.disabled = false;
+            if (list.dataset.loaded !== '1') btn.innerHTML = '&#x1F441; Preview Emails';
+        }
     });
 
     document.getElementById('cancel-event-close').addEventListener('click', closeCancelModal);

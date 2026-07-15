@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.102.2";
+window.TGF_VERSION = "2.103.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.103.0",
+    date: "2026-07-14",
+    changes: [
+      "Per-player email preview in the Cancel Event flow (Kerry): a Preview Emails button under the message editor renders every recipient's exact email BEFORE execute -- name, address, an outcome chip with their settled amount (CREDIT $76.00 / REFUND $52.00 / SKIPPED / NO PAYMENT), the rendered subject, and the full personalized body. Tap again to hide; players with no email on file are flagged at the bottom of the list.",
+      "WYSIWYG by construction: new POST /api/events/<id>/cancel-preview is a zero-write dry run that predicts each item's outcome from the selected mode (Credit All / Refund All / One-by-One choices) and renders through the SAME recipient builder and template renderer the execute send uses -- the shared helpers (_cancel_recipient_list, _cancel_predicted_outcomes, _cancel_event_vars) were factored out of cancel-execute so preview and send can never drift apart.",
+    ],
+  },
   {
     version: "2.102.2",
     date: "2026-07-14",
