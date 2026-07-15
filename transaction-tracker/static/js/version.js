@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.106.1";
+window.TGF_VERSION = "2.106.2";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.106.2",
+    date: "2026-07-15",
+    changes: [
+      "Balance-due emails no longer produce '+'-riddled Venmo memos (Kerry, from Richard Palacios's payment: 'all those pluses in the memo...I don't like em'). Root cause: the email linked https venmo.com, which renders the note's encoded spaces as literal '+' characters no matter how they're encoded -- the same quirk the in-app pay buttons dodged on 2026-07-08 by using the native venmo:// scheme, which emails can't use directly (Gmail strips app-scheme links). Fix: a new no-auth /pay/venmo bounce page -- the email links there over https, the page auto-fires venmo://paycharge (where %20 decodes to real spaces) and shows the memo with a venmo.com fallback for desktop. Memo wording also aligned to the ratified grammar: '[First] [Last] - Balance due for [Event]' (inbound money is FOR the event; outbound credits read FROM their origin event). Balance-due auto-matching is unaffected -- it matches on customer + amount, never memo text.",
+    ],
+  },
   {
     version: "2.106.1",
     date: "2026-07-15",
