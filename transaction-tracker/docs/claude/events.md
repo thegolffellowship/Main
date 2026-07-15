@@ -225,6 +225,25 @@ false positives on similar amounts. Multiple matches → `ambiguous`, no matches
 item's `customer_id` directly (name/email re-resolution is only a fallback for
 NULL-cid parents).
 
+**Memo fallback — spouse-pays-for-player (v2.107.0).** When handle → name →
+alias all fail to produce an amount-matching candidate (the classic case: a
+player's spouse pays the balance from *their own* Venmo, so the payer handle
+and display name aren't the player's), the matcher makes one more pass over
+the memo. The balance-due link we email the player prefills the memo with the
+**player's** name (`Richard Palacios - Balance due for s18.8 Vaaler Creek`), so
+even a spouse's tap carries the player's name. The fallback scans every active
+`balance_due:` item within ±$1.00 of the expense amount and keeps those whose
+player **full name** (canonical or a `customer_aliases` name alias) appears in
+`expense_transactions.notes` (the payer's memo). Exactly one hit → matched
+(the `+PAY` child note is tagged `[memo-match]` for the audit trail); two or
+more → left for manual. Guards against misfire: **full names only** (`_memo_match_names`
+requires a space and ≥5 chars, so a bare "Richard" never matches), exact amount,
+and unique-open-balance. This is the inbound mirror of the outbound refund
+matcher, which already accepts a memo-in-notes hit as one of its verifiers.
+`match_via_memo` is logged (`venmo memo-match: exp … → item …`). Handles/names
+still take priority — the memo pass only runs when identity resolution comes up
+empty.
+
 Diagnostic: `GET /api/admin/venmo-debug?payer=<name fragment>` returns the full
 state (expense_transactions, customer_aliases, customers.venmo_username,
 balance_due items) for a payer fragment so you can see exactly where the chain

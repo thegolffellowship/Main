@@ -19120,6 +19120,50 @@ def auto_match_venmo_payouts_to_tgf(
     return summary
 
 
+def _memo_match_names(conn, customer: str | None, customer_id) -> set[str]:
+    """Full-name strings (canonical + name aliases) for a customer, lowercased.
+
+    Only names with a space and >=5 chars are returned — a single token like
+    "Richard" is too collision-prone to key a memo match on. Used by the
+    inbound balance-due memo fallback: our prefilled Venmo memo carries the
+    PLAYER's full name ("Richard Palacios - Balance due for ..."), so a
+    spouse's payment can be tied back to the player even when the payer's
+    handle/name doesn't resolve.
+    """
+    names: set[str] = set()
+
+    def _add(n):
+        n = (n or "").strip().lower()
+        if n and " " in n and len(n) >= 5:
+            names.add(n)
+
+    _add(customer)
+    if customer_id:
+        row = conn.execute(
+            "SELECT first_name, last_name FROM customers WHERE customer_id = ?",
+            (customer_id,),
+        ).fetchone()
+        if row:
+            _add(f"{row['first_name'] or ''} {row['last_name'] or ''}")
+        try:
+            for a in conn.execute(
+                "SELECT alias_value FROM customer_aliases "
+                "WHERE customer_id = ? AND alias_type = 'name'",
+                (customer_id,),
+            ).fetchall():
+                _add(a["alias_value"])
+        except sqlite3.OperationalError:
+            pass  # customer_aliases may lack customer_id on very old DBs
+    return names
+
+
+def _memo_names_hit(conn, customer, customer_id, memo_lower: str) -> bool:
+    """True if any of the customer's full names appears in the memo text."""
+    if not memo_lower:
+        return False
+    return any(nm in memo_lower for nm in _memo_match_names(conn, customer, customer_id))
+
+
 def auto_match_venmo_inbound_to_balance_due(
     expense_ids: list[int] | None = None,
     db_path: str | Path | None = None,
@@ -19287,6 +19331,58 @@ def auto_match_venmo_inbound_to_balance_due(
                         c["_owed"] = owed
                         matched.append(c)
 
+                matched_via_memo = False
+                if not matched:
+                    # Memo fallback (spouse-pays-for-player): the payer's identity
+                    # didn't resolve — no handle on file, display name isn't the
+                    # player, no alias. But the balance-due LINK we emailed the
+                    # player prefills the memo with the PLAYER's name ("Richard
+                    # Palacios - Balance due for s18.8 Vaaler Creek"), so when the
+                    # wife taps it from her own Venmo the memo still names Richard.
+                    # Find the UNIQUE open balance-due whose amount matches AND
+                    # whose player's full name (or alias) appears in the receipt
+                    # note. Amount + a named open balance make a misfire nearly
+                    # impossible; anything ambiguous stays manual.
+                    memo_text = (exp.get("notes") or "").lower()
+                    if memo_text:
+                        near = [dict(r) for r in conn.execute(
+                            """SELECT id, customer, customer_id, item_name,
+                                      credit_note, item_price
+                               FROM items
+                               WHERE merchant = 'Paid Separately (Credit Transfer)'
+                                 AND COALESCE(transaction_status, 'active') = 'active'
+                                 AND credit_note LIKE 'balance_due:%'"""
+                        ).fetchall()]
+                        memo_hits = []
+                        for c in near:
+                            cnote = c.get("credit_note") or ""
+                            try:
+                                owed = float(cnote.split(":", 1)[1])
+                            except (ValueError, IndexError):
+                                continue
+                            if abs(owed - exp_amount) > 1.00:
+                                continue
+                            if _memo_names_hit(conn, c.get("customer"),
+                                               c.get("customer_id"), memo_text):
+                                c["_owed"] = owed
+                                memo_hits.append(c)
+                        if len(memo_hits) == 1:
+                            matched = memo_hits
+                            matched_via_memo = True
+                            logger.info(
+                                "venmo memo-match: exp %s payer='%s' handle=%r -> "
+                                "item %s (%s) via memo name",
+                                exp.get("id"), payer_name,
+                                exp.get("other_party_handle"),
+                                memo_hits[0]["id"], memo_hits[0].get("customer"),
+                            )
+                        elif len(memo_hits) > 1:
+                            logger.info(
+                                "venmo memo-match ambiguous: exp %s matched %d open "
+                                "balances by memo name — leaving for manual",
+                                exp.get("id"), len(memo_hits),
+                            )
+
                 if not matched:
                     summary["no_candidate"] += 1
                     continue
@@ -19322,6 +19418,8 @@ def auto_match_venmo_inbound_to_balance_due(
                 amount_str = f"${exp_amount:.2f}"
                 # Marker stays in notes so the match is auditable later
                 note = f"Balance due — Venmo {amount_str} [venmo-bd-exp:{exp['id']}]"
+                if matched_via_memo:
+                    note += " [memo-match]"
                 # We bypass add_payment_to_event() to set our own email_uid
                 # (add_payment_to_event uses a timestamp uid; we want a deterministic one
                 # so re-running the matcher is naturally idempotent on the items table too).
