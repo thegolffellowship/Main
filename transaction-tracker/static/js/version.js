@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.102.1";
+window.TGF_VERSION = "2.102.2";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.102.2",
+    date: "2026-07-14",
+    changes: [
+      "Docs: events.md cancellation section now states where Cancel Event lives on each form factor (desktop registrations-header Actions menu; mobile expanded-card Actions menu as of v2.102.1) so the gap Kerry hit is discoverable in the docs of record.",
+    ],
+  },
   {
     version: "2.102.1",
     date: "2026-07-14",

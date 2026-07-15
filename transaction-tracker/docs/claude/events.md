@@ -318,7 +318,12 @@ consistently with the rest of the page.
 
 # Event Cancellation / Postponement
 
-Events can be cancelled or postponed from the event detail view (admin only).
+Events can be cancelled or postponed from the event detail view (admin
+only) — desktop: the registrations header's ⚙ Actions menu; **mobile
+(v2.102.1): the expanded event card's ⚙ Actions menu** (it was
+desktop-only until Kerry hit exactly that gap running the s9.18
+rain-out from his phone). Both show Restore Event instead once the
+event is cancelled/postponed.
 New columns on `events` table: `status` TEXT (`active`/`cancelled`/`postponed`),
 `status_reason` TEXT, `rescheduled_to_event_id` INTEGER, `status_changed_at` TEXT.
 
