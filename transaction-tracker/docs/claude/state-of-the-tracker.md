@@ -1,4 +1,4 @@
-# State of the Tracker — July 2026 (Platform-facing brief)
+# State of the Tracker — mid-July 2026 (Platform-facing brief)
 
 Audience: the claude.ai "The Golf Fellowship" Project, where TGF Platform
 planning has lived for the past six months. Purpose: catch that planning
@@ -9,7 +9,7 @@ for session-by-session updates after this brief.
 
 ## What the Tracker is now
 
-Flask + SQLite on Railway (tgf-tracker.up.railway.app), version 2.34.x,
+Flask + SQLite on Railway (tgf-tracker.up.railway.app), version 2.104.x,
 ~200+ routes, 61 MCP tools. Started as a GoDaddy order-email parser;
 now runs most of TGF's operations:
 
@@ -87,7 +87,53 @@ they are load-bearing for Platform scoring design:
   records tiebreaker outcomes via payment); one MVP per city per event;
   TGF MVP shareable.
 
+## The July 8–14 build wave (v2.5x → v2.104)
+
+The week that closed most of the distance to GG independence:
+
+- **Own handicaps RATIFIED + live** — handicap rounds self-derived from
+  our scorecards (WHS net-double-bogey adjusted gross); the manual GG
+  CSV export ritual is dead. (handicaps.md)
+- **Pairing engine complete** (pairings.md): Kerry's 11-rule standard;
+  full 2026 played-with/rode-with history banked from GG final tee
+  sheets (nightly 3:20 auto-grab, replace-semantics); NEW-PAIRINGS-FIRST
+  optimizer verified optimal vs a 4,000-restart offline search and
+  head-to-head better than GG's own scheduler; **Match Play dictates
+  pairings** (rule 8 amendment — season-state detection, manager
+  confirm gate, opponents same-foursome/opposite-carts, MP badges);
+  **pace staging** (1–3 ratings, one-tap editor, groups staged by
+  aggregate pace — shotgun fast-to-front, tee-times fast-first;
+  composition never affected).
+- **Season-contest economics live**: exact-cents payout engines for
+  City Net / Fellowship Cup / Players Cup with live projected purses on
+  the standings; Best-10+CC season totals; Monthly + Fall races;
+  Lone Star Cup 12-seat projection engine; How-It-Works member popups
+  (all Kerry-ratified copy).
+- **Member tier**: pinless public pages (Spotlight, Leaderboard,
+  Handicaps) + Nav Shell v2 app-wide; anonymous member-traffic
+  analytics.
+- **Event cancellation suite** (born from the s9.18 rain-out, built
+  live with Kerry): one-tap execute — status + badge picker (RAINED
+  OUT etc.), credit/refund all, RSVP-roster clearing, per-player emails
+  carrying exact credit amounts, WYSIWYG preview from the same renderer
+  that sends. Pattern note for Platform: plan notification amounts
+  BEFORE mutating payment state.
+- **GG archive**: 29 portals of history walked (2016–2025), 2026
+  pairings from final tee sheets, all raw responses archived — the data
+  outlives GG access.
+
 ## In flight (July 2026)
+
+**SCORING GO-LIVE is now the plan-of-record work item** — Kerry directed
+(2026-07-14) that CA own the full plan + documentation, from
+tracker-claude's readiness assessment in mailbox **#187** (topic
+platform-scoring-golive). Summary: engine parity, course DB, handicaps,
+games/payouts all green; gaps are flighting ASSIGNMENT rules (Kerry
+ruling needed), per-game playing-handicap config, the entry-path
+decision (shadow-first recommended), the leaderboard surface, and a
+print-CSS document creator (Starter Sheet / Cart Signs / Scorecards /
+Proximity Marker Sheets — the last needs a per-event game-holes
+config, the one datum still trapped in GG).
 
 - **Live championship standings** — City and TGF Championships are
   upcoming; GG does live scoring but does NOT compute points standings

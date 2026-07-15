@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.104.0";
+window.TGF_VERSION = "2.104.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.104.1",
+    date: "2026-07-14",
+    changes: [
+      "Docs: state-of-the-tracker.md refreshed for the CA handoff (Kerry: scoring go-live planning moves to the claude.ai project) -- July 8-14 build-wave summary (own handicaps ratified, pairing engine complete w/ Match Play constraint + pace staging, season-contest economics, member tier, cancellation suite, GG archive) and the scoring go-live readiness assessment referenced as mailbox #187.",
+    ],
+  },
   {
     version: "2.104.0",
     date: "2026-07-14",
