@@ -19795,6 +19795,38 @@ def rematch_rsvps(db_path: str | Path | None = None) -> dict:
         return {"rematched_events": rematched_events, "rematched_items": rematched_items}
 
 
+def audit_upcoming_event_rsvps(db_path: str | Path | None = None) -> dict:
+    """Self-healing RSVP match hygiene (Kerry 2026-07-15: 'I don't want
+    to worry that things aren't matching'): run audit_event_rsvps —
+    clear email-mismatched matches + rematch — across every ACTIVE
+    upcoming event (event_date >= today Central). Idempotent and pure
+    DB work, so it's safe to run after every RSVP ingest and nightly.
+    Returns totals plus a by_event map of only the events that changed.
+    """
+    with _connect(db_path) as conn:
+        names = [r["item_name"] for r in conn.execute(
+            """SELECT item_name FROM events
+               WHERE event_date >= ?
+                 AND COALESCE(status, 'active') = 'active'
+               ORDER BY event_date""",
+            (today_central_str(),),
+        ).fetchall()]
+    out = {"events_audited": 0, "cleared": 0, "rematched": 0, "by_event": {}}
+    for nm in names:
+        try:
+            res = audit_event_rsvps(nm, db_path=db_path)
+        except Exception:
+            logger.exception("RSVP auto-audit failed for %s", nm)
+            continue
+        out["events_audited"] += 1
+        c, m = res.get("cleared", 0), res.get("rematched", 0)
+        out["cleared"] += c
+        out["rematched"] += m
+        if c or m:
+            out["by_event"][nm] = {"cleared": c, "rematched": m}
+    return out
+
+
 def audit_event_rsvps(event_name: str, db_path: str | Path | None = None) -> dict:
     """Audit and fix RSVP-to-item matches for a specific event.
 

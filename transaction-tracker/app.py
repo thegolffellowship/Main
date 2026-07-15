@@ -907,6 +907,19 @@ def check_rsvp_inbox():
     # Also re-run matching for any previously unmatched RSVPs
     rematch_rsvps()
 
+    # Self-healing match hygiene (Kerry 2026-07-15): rematch_rsvps only
+    # fills UNMATCHED rsvps — it never clears a bad first-name match
+    # (the Daniel South → Daniel Lehan class). Run the full audit
+    # (clear mismatches + rematch) across upcoming events after every
+    # ingest, so bad matches never outlive one inbox cycle.
+    try:
+        from email_parser.database import audit_upcoming_event_rsvps
+        res = audit_upcoming_event_rsvps()
+        if res.get("cleared") or res.get("rematched"):
+            logger.info("RSVP auto-audit after ingest: %s", res)
+    except Exception:
+        logger.exception("RSVP auto-audit failed (non-fatal)")
+
     # Check for credited players who just RSVPd and send admin alert emails
     _send_rsvp_credit_alerts()
 
@@ -1445,6 +1458,32 @@ def start_scheduler():
             coalesce=True,
         )
         logger.info("Auto pairings grab scheduled daily at 03:20 US/Central")
+
+    # ── Nightly RSVP match audit (Kerry 2026-07-15) ──────────────────
+    # Belt-and-braces sweep behind the per-ingest and on-open audits:
+    # clear email-mismatched matches + rematch across upcoming events.
+    # Disable with AUTO_RSVP_AUDIT=0.
+    def auto_rsvp_audit_job():
+        from email_parser.database import audit_upcoming_event_rsvps
+        try:
+            res = audit_upcoming_event_rsvps()
+            logger.info("Nightly RSVP audit: %s", res)
+        except Exception:
+            logger.exception("Nightly RSVP audit failed (non-fatal)")
+
+    if os.getenv("AUTO_RSVP_AUDIT", "1") != "0":
+        scheduler.add_job(
+            auto_rsvp_audit_job,
+            "cron",
+            hour=3,
+            minute=35,
+            timezone="US/Central",
+            id="auto_rsvp_audit",
+            replace_existing=True,
+            max_instances=1,
+            coalesce=True,
+        )
+        logger.info("Nightly RSVP audit scheduled daily at 03:35 US/Central")
 
     # First boot after this ships (or a fresh volume): populate the
     # snapshot in the background so the first MONTHLY open doesn't wait
@@ -7087,10 +7126,33 @@ def api_rsvps():
     return jsonify(get_all_rsvps(event_name=event, response=response))
 
 
+# event_name → monotonic timestamp of the last on-open auto-audit.
+# In-memory is fine: single Railway instance, and the ingest + nightly
+# audits back it up if the process restarts.
+_rsvp_onopen_audit_last: dict = {}
+_RSVP_ONOPEN_AUDIT_SECONDS = 900  # at most once per event per 15 min
+
+
 @app.route("/api/rsvps/event/<path:event_name>")
 @require_role("view-only")
 def api_rsvps_for_event(event_name):
-    """Return the latest RSVP per player for a specific event."""
+    """Return the latest RSVP per player for a specific event.
+
+    Opening an event self-heals its RSVP matches (Kerry 2026-07-15):
+    manager/admin sessions trigger the clear-mismatches + rematch audit
+    inline (throttled per event) BEFORE the read, so what the manager
+    sees is already corrected — no manual Audit RSVPs button required.
+    """
+    if session.get("role") in ("manager", "admin"):
+        last = _rsvp_onopen_audit_last.get(event_name)
+        if last is None or time.monotonic() - last > _RSVP_ONOPEN_AUDIT_SECONDS:
+            _rsvp_onopen_audit_last[event_name] = time.monotonic()
+            try:
+                res = audit_event_rsvps(event_name)
+                if res.get("cleared") or res.get("rematched"):
+                    logger.info("On-open RSVP audit for %s: %s", event_name, res)
+            except Exception:
+                logger.exception("On-open RSVP audit failed for %s", event_name)
     return jsonify(get_rsvps_for_event(event_name))
 
 
