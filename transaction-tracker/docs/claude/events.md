@@ -1009,3 +1009,33 @@ Set tracks per-event expansion. Mobile (≤768px): rail-only until a
 golfer is selected (`.ledger.has-selection`), then detail w/ "‹ Golfers"
 back button. Events/Season Contests/Unpaid tabs keep their previous
 layouts and all pay/mark-paid plumbing.
+
+## REFUNDS console (v2.108.0, Kerry — "nothing falls thru the cracks")
+
+Admin **Refunds** top-tab on /tgf (right-aligned orange pill, next to
+Unpaid) consolidates every credit refund in one place, so the manager
+never has to hunt across 25 rows to see what's owed / paying / paid.
+Backend `get_refunds_overview(db_path, completed_days=120)` in
+`database.py`; route `GET /api/refunds/overview` (admin). Three buckets:
+
+- **OUTSTANDING** — held credit balances that could be paid back: WD rows
+  (credit in `credit_amount`) + standalone `credited` rows (credit in
+  `item_price`), positive only, minus any with an OPEN refund watch.
+  Sorted **oldest first** (age from `order_date`); each row shows an age
+  chip (amber ≥14d, red ≥30d). A per-item **"Held"** marker to separate
+  intentionally-held credits from refund-pending ones is a **separate
+  schema addition pending Kerry's ruling** — today it's age-sort only.
+- **IN FLIGHT** — open `refund_watches` (a P2P pay link was tapped,
+  awaiting the provider's receipt); shows method/handle + "watching…".
+- **COMPLETED** — payouts recorded in the last `completed_days` days
+  (status `refunded`, or WD rows stamped `Refunded …`), newest first,
+  parsed from the `credit_note` payout stamp; badge **VERIFIED** when a
+  refund watch confirmed it, else **PAID**.
+
+Each bucket carries a count + dollar total (`totals`). v1 is
+consolidate-and-route: an OUTSTANDING row's **Refund…** button
+deep-links to `/customers?cid=<id>`, where the existing red Refund modal
+(pay links + receipt verification) lives — money-action modals are NOT
+duplicated into the console. Inline actions are the next increment.
+Tests: `test_refunds_overview.py` (12 checks). Read-only; no schema
+change.

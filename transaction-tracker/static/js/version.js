@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.107.0";
+window.TGF_VERSION = "2.108.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.108.0",
+    date: "2026-07-15",
+    changes: [
+      "REFUNDS console (Kerry: 'I don't want to go to 25 places to do all this work ... consolidation so nothing falls thru the cracks'). New admin REFUNDS tab on the TGF Payouts page consolidates every credit refund in one view, mirroring the PAYOUTS layout, with three buckets: OUTSTANDING (held credit balances -- WD credits + standalone credited rows -- that could be paid back, sorted OLDEST FIRST so aging credits surface), IN FLIGHT (open refund watches -- a P2P pay link was tapped, awaiting the provider's receipt, shown 'watching...'), and COMPLETED (payouts recorded in the last 120 days, VERIFIED if a receipt confirmed it, else PAID). Each bucket shows its count + dollar total; outstanding rows carry an age chip (amber >=14d, red >=30d). Backed by GET /api/refunds/overview (admin) and get_refunds_overview() with test_refunds_overview.py (12 checks).",
+      "v1 of the console consolidates + routes: each OUTSTANDING row's 'Refund...' button deep-links to that player's profile, where the existing red Refund modal (Venmo/PayPal/Cash App/Zelle pay links + receipt verification) already lives -- rather than duplicating money-action modals. Inline refund actions in the console are the next increment. A per-item 'Held' marker (to distinguish credits you're intentionally holding from those awaiting refund) is a separate schema addition pending Kerry's ruling; today the bucket is age-sorted.",
+    ],
+  },
   {
     version: "2.107.0",
     date: "2026-07-15",
