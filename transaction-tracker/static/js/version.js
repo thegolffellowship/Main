@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.106.0";
+window.TGF_VERSION = "2.106.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.106.1",
+    date: "2026-07-15",
+    changes: [
+      "Refund memo wording per Kerry's live review of Rob Callaway's excess refund ('Credit for Excess credit -- s9.19' read wrong): memos now say money comes FROM its origin event. Full refunds: '[First] [Last] - Credit from [Event]'. Excess-credit rows -- which are named for the event the credit was APPLIED to -- trace back through the transfer chain (excess item -> the registration it funded -> transferred_from_id -> the original event) and read '[First] [Last] - Excess credit from s9.18 Cedar Creek'; if the chain can't be traced the applied-to event is used without the double-prefix. Overpayment rows read 'Overpayment credit from [Event]'. The apply-credit modals' excess Venmo-back links on both the Customers and Events pages carry the same source-event memo (previously a generic 'Excess credit refund').",
+    ],
+  },
   {
     version: "2.106.0",
     date: "2026-07-15",

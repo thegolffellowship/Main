@@ -11193,7 +11193,9 @@
                     if (amtOwed != null && amtOwed < -0.005) {
                         const eAmt = Math.abs(amtOwed).toFixed(2);
                         const vH = info.venmo_username ? info.venmo_username.replace(/^@/, '') : '';
-                        const vUrl = vH ? venmoPayHref(vH, eAmt, `${resolvedCustomer} - Excess credit refund`) : '';
+                        // Excess reads FROM the source event (Kerry 2026-07-15)
+                        const _srcEv = (info.credits && info.credits[0] && info.credits[0].event_name) || '';
+                        const vUrl = vH ? venmoPayHref(vH, eAmt, `${resolvedCustomer} - Excess credit from ${_srcEv}`.trimEnd()) : '';
                         const venmoLine = vH
                             ? `Venmo back ($${eAmt}) — <a href="${vUrl}" target="_blank" rel="noopener" style="color:#3D95CE;">open Venmo link for @${escapeHtml(vH)}</a>`
                             : `Venmo back ($${eAmt}) — <span style="color:#9a3412;">no handle on file</span> ` +

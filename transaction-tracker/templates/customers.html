@@ -3094,13 +3094,43 @@
         document.getElementById("cust-payout-overlay").style.display = "flex";
     }
 
-    // Memo per Kerry (2026-07-15): "[First Name] [Last Name] - Credit for [Event Name]"
+    // Memo per Kerry (2026-07-15, refined same day): money reads FROM its
+    // ORIGIN event. Full refund → "[First] [Last] - Credit from [Event]".
+    // Excess-credit rows are named after the event the credit was APPLIED
+    // to ("Excess credit — s9.19 …"), so trace the chain back:
+    // excess item → its email_uid encodes the registration it funded →
+    // that registration's transferred_from_id → the ORIGINAL event
+    // ("… - Excess credit from s9.18 Cedar Creek"). Overpayment rows
+    // originate at their own event.
+    function _custRefundSource() {
+        const { eventName } = custPayoutCtx || {};
+        const name = String(eventName || "");
+        const item = allItems.find(i => i.id === custPayoutItemId) || {};
+        const m = String(item.email_uid || "").match(/^credit-excess-(\d+)-/);
+        if (m || /^Excess credit\s+—/.test(name)) {
+            if (m) {
+                const reg = allItems.find(i => i.id === parseInt(m[1]));
+                const srcId = reg && reg.transferred_from_id ? parseInt(reg.transferred_from_id) : null;
+                const src = srcId ? allItems.find(i => i.id === srcId) : null;
+                if (src && src.item_name) {
+                    return { label: "Excess credit from", event: src.item_name };
+                }
+            }
+            return { label: "Excess credit from", event: name.replace(/^Excess credit\s+—\s*/, "") };
+        }
+        if (/^Overpayment credit\s+—/.test(name)) {
+            return { label: "Overpayment credit from", event: name.replace(/^Overpayment credit\s+—\s*/, "") };
+        }
+        return { label: "Credit from", event: name };
+    }
+
     function _custRefundMemo() {
-        const { playerName, eventName, cust } = custPayoutCtx || {};
+        const { playerName, cust } = custPayoutCtx || {};
         const first = (cust && cust.first_name) || String(playerName || "").split(" ")[0] || "";
         const last = (cust && cust.last_name) ||
             String(playerName || "").split(" ").slice(1).join(" ") || "";
-        return `${first} ${last}`.trim() + ` - Credit for ${eventName || ""}`.trimEnd();
+        const src = _custRefundSource();
+        return `${first} ${last}`.trim() + ` - ${src.label} ${src.event}`.trimEnd();
     }
 
     // Deep links mirror the Payouts tab (tgf.html payAction): venmo://
@@ -3308,7 +3338,8 @@
                 const handle = info.venmo_username ? info.venmo_username.replace(/^@/, '') : '';
                 // venmo:// scheme on phones — the https universal link shows
                 // literal '+' for memo spaces (Kerry, 2026-07-08)
-                const venmoNote = encodeURIComponent(`${customerName} - Excess credit refund`);
+                // Excess reads FROM the source event (Kerry 2026-07-15)
+                const venmoNote = encodeURIComponent(`${customerName} - Excess credit from ${sourceEvent || ''}`.trimEnd());
                 const _vMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
                 const venmoPayUrl = handle
                     ? (_vMobile
