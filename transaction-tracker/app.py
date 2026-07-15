@@ -5642,6 +5642,53 @@ def api_reverse_credit_application(item_id):
 VENMO_RECIPIENT_USERNAME = "tgf-payments"
 
 
+@app.route("/pay/venmo")
+def pay_venmo_bounce():
+    """Deep-link bounce for Venmo links embedded in EMAILS.
+
+    Kerry 2026-07-15 (Richard Palacios's balance-due payment): the
+    https venmo.com universal link renders a literal '+' for every memo
+    space no matter how it's encoded — the same quirk that made the
+    in-app pay buttons use the native venmo:// scheme (2026-07-08).
+    Emails can't link venmo:// directly (Gmail strips app-scheme
+    hrefs), so they link HERE: this page fires the app scheme (where
+    %20 decodes to real spaces) and keeps the web link + a copyable
+    memo as fallback. No auth — it lives in members' inboxes and serves
+    nothing beyond what the link itself carries.
+    """
+    import html as _html
+    from urllib.parse import quote as _q
+    to = re.sub(r"[^A-Za-z0-9_.@-]", "", (request.args.get("to") or ""))[:60].lstrip("@")
+    note = (request.args.get("note") or "")[:200]
+    try:
+        amount = round(float(request.args.get("amount") or 0), 2)
+    except (TypeError, ValueError):
+        amount = 0
+    if not to or amount <= 0:
+        return Response("Invalid payment link.", status=400)
+    amt = f"{amount:.2f}"
+    app_link = (f"venmo://paycharge?txn=pay&recipients={_q(to)}"
+                f"&amount={amt}&note={_q(note)}")
+    web_link = (f"https://venmo.com/{_q(to)}?txn=pay&amount={amt}"
+                f"&note={_q(note)}")
+    e = _html.escape
+    page = f"""<!DOCTYPE html><html><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Opening Venmo…</title></head>
+<body style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
+             max-width:420px;margin:3rem auto;padding:0 1rem;color:#0f172a;text-align:center;">
+<h2 style="margin-bottom:0.25rem;">Opening Venmo…</h2>
+<p style="color:#475569;">Pay <strong>${e(amt)}</strong> to <strong>@{e(to)}</strong></p>
+<p style="background:#f1f5f9;border-radius:8px;padding:0.6rem 0.8rem;font-size:0.9rem;">Memo: {e(note)}</p>
+<p><a href="{e(app_link)}" style="display:inline-block;background:#3D95CE;color:#fff;text-decoration:none;
+    padding:0.75rem 1.5rem;border-radius:8px;font-weight:600;">Open the Venmo app</a></p>
+<p style="font-size:0.85rem;color:#64748b;">App didn't open?
+  <a href="{e(web_link)}">Pay on venmo.com</a> (the memo may lose its spaces there — copy it from above).</p>
+<script>setTimeout(function() {{ window.location.href = {json.dumps(app_link)}; }}, 400);</script>
+</body></html>"""
+    return Response(page, mimetype="text/html")
+
+
 def _build_balance_due_email(item_id: int) -> dict | None:
     """Assemble the balance-due email payload for a credit-transfer item.
 
@@ -5649,7 +5696,7 @@ def _build_balance_due_email(item_id: int) -> dict | None:
     (testing destination), venmo_link, amount_owed, player_name, event_name.
     Returns None if the item is not a credit-transfer with a positive balance_due.
     """
-    from urllib.parse import quote_plus
+    from urllib.parse import quote
     from email_parser.database import _connect as _db_connect
 
     with _db_connect() as conn:
@@ -5689,12 +5736,17 @@ def _build_balance_due_email(item_id: int) -> dict | None:
     event_date = event.get("event_date") or ""
     course = event.get("course") or ""
 
-    memo = f"{player_name} {event_name} balance due"
-    # Venmo's URL handler treats note as form-encoded — spaces must be '+',
-    # not '%20', or they render as literal '+' chars in the prefilled memo.
+    memo = f"{player_name} - Balance due for {event_name}"
+    # https venmo.com links render the note's encoded spaces as literal '+'
+    # chars in the prefilled memo no matter how they're encoded (Kerry,
+    # 2026-07-15). Route through the /pay/venmo bounce page, which fires the
+    # native venmo:// scheme (decodes %20 correctly) with a venmo.com
+    # fallback for desktop. Gmail strips venmo:// hrefs, so the email link
+    # must be https — the bounce page is the bridge.
+    base_url = os.getenv("APP_BASE_URL", "https://tgf-tracker.up.railway.app").rstrip("/")
     venmo_link = (
-        f"https://venmo.com/{VENMO_RECIPIENT_USERNAME}"
-        f"?txn=pay&amount={amount_owed:.2f}&note={quote_plus(memo)}"
+        f"{base_url}/pay/venmo?to={quote(VENMO_RECIPIENT_USERNAME)}"
+        f"&amount={amount_owed:.2f}&note={quote(memo)}"
     )
 
     subject = f"Balance due for {event_name} — ${amount_owed:.2f}"

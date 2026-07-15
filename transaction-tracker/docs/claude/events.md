@@ -230,6 +230,29 @@ state (expense_transactions, customer_aliases, customers.venmo_username,
 balance_due items) for a payer fragment so you can see exactly where the chain
 breaks.
 
+### Balance-due email Venmo link — the `/pay/venmo` bounce page (v2.106.2)
+
+The balance-due email's "Pay on Venmo" button links to `GET /pay/venmo`
+(no auth — it lives in members' inboxes), not to venmo.com directly.
+Reason (Kerry 2026-07-15, Richard Palacios's payment): `https://venmo.com/...`
+universal links render every encoded space in the `note` as a literal `+`
+in the prefilled memo — no encoding avoids it — while the native
+`venmo://paycharge` scheme decodes `%20` correctly, but Gmail strips
+app-scheme hrefs from emails. The bounce page is the bridge: the email
+carries an https link to `/pay/venmo?to=&amount=&note=`, the page
+auto-fires the `venmo://` link after 400ms, shows the memo as copyable
+text, and offers the venmo.com web link as a desktop fallback (with a
+warning that the memo may lose its spaces there).
+
+Params are sanitized (`to` stripped to handle-safe chars, `note` capped
+at 200 chars, `amount` must parse > 0 → else 400) and HTML-escaped, so
+the page reflects nothing raw. The memo itself follows the ratified
+grammar: inbound money is FOR the event (`[First] [Last] - Balance due
+for [Event]`); outbound credits read FROM their origin event (see
+`customers.md` → refund memo grammar). Changing memo wording is safe for
+auto-matching: `auto_match_venmo_inbound_to_balance_due` matches on
+customer + amount, never memo text.
+
 INFO-level logs are emitted for every unmatched expense (`venmo no-candidate:
 exp <id> payer='<name>' handle=<handle>`) and for handle-resolution outcomes
 in Railway logs.
