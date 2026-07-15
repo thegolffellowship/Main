@@ -14730,6 +14730,8 @@ def get_all_customers(db_path=None) -> list[dict]:
                    c.account_status,
                    c.pace_rating,
                    c.pace_rating_source,
+                   c.payment_method,
+                   c.payment_handle,
                    c.updated_at,
                    ce.email   AS primary_email,
                    ce.label   AS email_label
@@ -18653,6 +18655,204 @@ def get_unpaid_payout_groups(db_path=None) -> dict:
                 (g["customer_id"],)).fetchall()]
         total = round(sum(g["total"] for g in groups), 2)
         return {"unpaid_groups": len(groups), "unpaid_total": total, "groups": groups}
+
+
+# ── Refund watches (v2.106.0, Kerry 2026-07-15) ──────────────────────
+# The red Refund buttons pay via P2P deep links (Venmo/PayPal/Cash App;
+# Zelle is record-and-watch, no deep link) and the provider's receipt
+# email is the VERIFICATION: tapping a pay link registers a watch, the
+# expense inbox ingests the receipt, and the matcher below records the
+# credit payout automatically through payout_credit — same books as a
+# manual Record Refund. Memo format (Kerry):
+# "[First Name] [Last Name] - Credit for [Event Name]".
+
+def _ensure_refund_watch_table(conn: sqlite3.Connection) -> None:
+    conn.execute(
+        """CREATE TABLE IF NOT EXISTS refund_watches (
+            id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+            item_id             INTEGER NOT NULL REFERENCES items(id),
+            customer_id         INTEGER REFERENCES customers(customer_id),
+            customer_name       TEXT,
+            method              TEXT NOT NULL,
+            handle              TEXT,
+            amount              REAL NOT NULL,
+            memo                TEXT,
+            initiated_at        TEXT DEFAULT (datetime('now')),
+            verified_at         TEXT,
+            verified_expense_id INTEGER,
+            recorded            INTEGER DEFAULT 0
+        )"""
+    )
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_refund_watches_item "
+                 "ON refund_watches(item_id)")
+
+
+def create_refund_watch(item_id: int, method: str, amount: float,
+                        memo: str = "", handle: str = "",
+                        db_path: str | Path | None = None) -> dict:
+    """Register 'a refund payment was just initiated for this credit'.
+    One OPEN watch per item — re-tapping the pay link replaces the prior
+    unverified watch instead of stacking (double-tap guard)."""
+    with _connect(db_path) as conn:
+        _ensure_refund_watch_table(conn)
+        item = conn.execute("SELECT * FROM items WHERE id = ?",
+                            (item_id,)).fetchone()
+        if not item:
+            return {"ok": False, "error": "Item not found"}
+        item = dict(item)
+        status = (item.get("transaction_status") or "active")
+        if status not in ("credited", "wd"):
+            return {"ok": False, "error": f"Item is '{status}' — only "
+                    "credited/withdrawn rows carry a refundable credit"}
+        try:
+            amt = round(float(amount), 2)
+        except (TypeError, ValueError):
+            return {"ok": False, "error": "amount must be a number"}
+        if amt <= 0:
+            return {"ok": False, "error": "amount must be positive"}
+        conn.execute("DELETE FROM refund_watches "
+                     "WHERE item_id = ? AND verified_at IS NULL", (item_id,))
+        cur = conn.execute(
+            """INSERT INTO refund_watches
+               (item_id, customer_id, customer_name, method, handle,
+                amount, memo)
+               VALUES (?, ?, ?, ?, ?, ?, ?)""",
+            (item_id, item.get("customer_id"), item.get("customer"),
+             method, (handle or "").strip(), amt, memo or ""),
+        )
+        conn.commit()
+        return {"ok": True, "watch_id": cur.lastrowid, "amount": amt}
+
+
+def get_refund_watch(item_id: int,
+                     db_path: str | Path | None = None) -> dict | None:
+    """Latest watch for an item (open or verified), or None."""
+    with _connect(db_path) as conn:
+        _ensure_refund_watch_table(conn)
+        row = conn.execute(
+            "SELECT * FROM refund_watches WHERE item_id = ? "
+            "ORDER BY id DESC LIMIT 1", (item_id,)).fetchone()
+        return dict(row) if row else None
+
+
+def get_open_refund_watches(db_path: str | Path | None = None) -> list[dict]:
+    with _connect(db_path) as conn:
+        _ensure_refund_watch_table(conn)
+        return [dict(r) for r in conn.execute(
+            "SELECT * FROM refund_watches WHERE verified_at IS NULL "
+            "ORDER BY initiated_at DESC").fetchall()]
+
+
+def auto_match_refund_watches(expense_ids: list[int] | None = None,
+                              db_path: str | Path | None = None) -> dict:
+    """Verify open refund watches against outbound P2P payment receipts
+    and record the payout.
+
+    Runs AFTER auto_match_venmo_payouts_to_tgf on ingest (winnings get
+    first claim on a receipt) and skips any receipt already backing a
+    tgf_payout. Match rule, oldest watch first, receipts ingested after
+    the watch started: amount exact to the cent AND at least one of
+    (same customer_id | same normalized handle | the watch memo appears
+    in the receipt note). One receipt verifies exactly one watch.
+
+    On match: payout_credit(item, method, refund_date=receipt date,
+    note='Auto-verified …') — identical books to a manual Record Refund.
+    If the item was already paid out manually in the meantime, the watch
+    is marked verified with recorded=0 (no double recording:
+    payout_credit refuses non-credited rows). Idempotent.
+    """
+    summary = {"verified": 0, "recorded": 0, "unmatched_watches": 0,
+               "errors": 0, "matches": []}
+
+    def norm_handle(h):
+        return (h or "").lstrip("@").lstrip("$").strip().lower()
+
+    with _connect(db_path) as conn:
+        _ensure_refund_watch_table(conn)
+        watches = [dict(r) for r in conn.execute(
+            "SELECT * FROM refund_watches WHERE verified_at IS NULL "
+            "ORDER BY initiated_at").fetchall()]
+        if not watches:
+            return summary
+        params: list = []
+        sql = ("SELECT * FROM expense_transactions "
+               "WHERE source_type IN ('venmo', 'paypal', 'cashapp', 'zelle') "
+               "AND transaction_type = 'payout' "
+               "AND review_status IN ('approved', 'pending', 'corrected')")
+        if expense_ids:
+            sql += " AND id IN (%s)" % ",".join(["?"] * len(expense_ids))
+            params.extend(expense_ids)
+        expenses = [dict(r) for r in conn.execute(sql, params).fetchall()]
+        used = {r["verified_expense_id"] for r in conn.execute(
+            "SELECT verified_expense_id FROM refund_watches "
+            "WHERE verified_expense_id IS NOT NULL").fetchall()}
+        # Receipts already backing a WINNINGS payout are off the table
+        payout_backed = set()
+        for exp in expenses:
+            if exp.get("acct_transaction_id"):
+                row = conn.execute(
+                    "SELECT 1 FROM tgf_payouts WHERE acct_transaction_id = ? "
+                    "LIMIT 1", (exp["acct_transaction_id"],)).fetchone()
+                if row:
+                    payout_backed.add(exp["id"])
+
+    for w in watches:
+        cand = None
+        for exp in expenses:
+            if exp["id"] in used or exp["id"] in payout_backed:
+                continue
+            try:
+                amt = round(float(exp.get("amount") or 0), 2)
+            except (TypeError, ValueError):
+                continue
+            if abs(amt - round(float(w["amount"]), 2)) > 0.009:
+                continue
+            if (exp.get("created_at") or "") < (w.get("initiated_at") or ""):
+                continue  # receipt predates the watch — not this payment
+            same_cust = bool(w.get("customer_id")) and \
+                exp.get("customer_id") == w["customer_id"]
+            same_handle = bool(norm_handle(w.get("handle"))) and \
+                norm_handle(exp.get("other_party_handle")) == norm_handle(w.get("handle"))
+            memo = (w.get("memo") or "").strip().lower()
+            notes = (exp.get("notes") or "").strip().lower()
+            memo_hit = bool(memo) and bool(notes) and memo in notes
+            if same_cust or same_handle or memo_hit:
+                cand = exp
+                break
+        if not cand:
+            summary["unmatched_watches"] += 1
+            continue
+        used.add(cand["id"])
+        recorded = 0
+        try:
+            res = payout_credit(
+                w["item_id"], method=w["method"],
+                note=(f"Auto-verified via {w['method']} receipt "
+                      f"(expense #{cand['id']})"),
+                refund_date=(cand.get("transaction_date") or "")[:10],
+                db_path=db_path,
+            )
+            recorded = 1 if res.get("ok") else 0
+            if not recorded:
+                logger.info("Refund watch %s verified but not recorded: %s",
+                            w["id"], res.get("error"))
+        except Exception:
+            logger.exception("Refund watch %s: recording failed", w["id"])
+            summary["errors"] += 1
+        with _connect(db_path) as conn:
+            conn.execute(
+                "UPDATE refund_watches SET verified_at = datetime('now'), "
+                "verified_expense_id = ?, recorded = ? WHERE id = ?",
+                (cand["id"], recorded, w["id"]))
+            conn.commit()
+        summary["verified"] += 1
+        summary["recorded"] += recorded
+        summary["matches"].append({
+            "watch_id": w["id"], "item_id": w["item_id"],
+            "expense_id": cand["id"], "amount": w["amount"],
+            "customer": w.get("customer_name"),
+        })
+    return summary
 
 
 def auto_match_venmo_payouts_to_tgf(

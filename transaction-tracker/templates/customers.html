@@ -206,7 +206,8 @@
         </div>
     </div>
 
-    <!-- Refund Credit modal (records a credit payout via Venmo/Zelle/Check) -->
+    <!-- Refund Credit modal — pay via P2P deep link with receipt
+         verification (Kerry 2026-07-15), or record manually. -->
     <div id="cust-payout-overlay" class="modal-overlay" style="display:none;">
         <div class="modal credit-modal" style="max-width:480px;">
             <div class="modal-header">
@@ -218,13 +219,14 @@
                 <label>Method
                     <select id="cust-payout-method" class="modal-input">
                         <option value="Venmo">Venmo</option>
-                        <option value="Zelle">Zelle</option>
-                        <option value="Cash App">Cash App</option>
                         <option value="PayPal">PayPal</option>
+                        <option value="Cash App">Cash App</option>
+                        <option value="Zelle">Zelle</option>
                         <option value="Check">Check</option>
                         <option value="GoDaddy">GoDaddy</option>
                     </select>
                 </label>
+                <div id="cust-payout-paybox" style="display:none; background:#eff6ff; border:1px solid #bfdbfe; border-radius:6px; padding:0.6rem 0.75rem; font-size:0.82rem;"></div>
                 <label>Refund Date
                     <input type="date" id="cust-payout-date" class="modal-input">
                 </label>
@@ -3071,8 +3073,14 @@
     // ---- Refund Credit (records cash payout against a credited or WD-credit row) ----
     let custPayoutItemId = null;
 
+    let custPayoutCtx = null;      // {playerName, eventName, amountNum, cust}
+    let custPayoutPollTimer = null;
+
     function openCustPayoutModal(itemId, playerName, eventName, amount) {
         custPayoutItemId = itemId;
+        const cust = allCustomers.find(c => c.name === playerName) || {};
+        const amountNum = parseFloat(String(amount || "").replace(/[^0-9.]/g, "")) || 0;
+        custPayoutCtx = { playerName, eventName, amountNum, cust };
         document.getElementById("cust-payout-info").innerHTML =
             `<div><strong>${escapeHtml(playerName || "Player")}</strong> &middot; ${escapeHtml(eventName || "")}</div>` +
             `<div style="margin-top:0.25rem; color:#991b1b; font-weight:600;">Outstanding credit: ${escapeHtml(amount || "")}</div>`;
@@ -3082,12 +3090,155 @@
         const btn = document.getElementById("cust-payout-submit");
         btn.disabled = false;
         btn.textContent = "Record Refund";
+        renderCustPayoutPaybox();
         document.getElementById("cust-payout-overlay").style.display = "flex";
+    }
+
+    // Memo per Kerry (2026-07-15): "[First Name] [Last Name] - Credit for [Event Name]"
+    function _custRefundMemo() {
+        const { playerName, eventName, cust } = custPayoutCtx || {};
+        const first = (cust && cust.first_name) || String(playerName || "").split(" ")[0] || "";
+        const last = (cust && cust.last_name) ||
+            String(playerName || "").split(" ").slice(1).join(" ") || "";
+        return `${first} ${last}`.trim() + ` - Credit for ${eventName || ""}`.trimEnd();
+    }
+
+    // Deep links mirror the Payouts tab (tgf.html payAction): venmo://
+    // on phones (https universal link renders '+' for spaces), PayPal.Me
+    // username links, $cashtag links; Zelle has no link (record & watch).
+    function _custRefundPayLink(method, handle, amountNum) {
+        const amt = amountNum.toFixed(2);
+        const note = encodeURIComponent(_custRefundMemo());
+        const mobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+        if (method === "Venmo") {
+            const h = handle.replace(/^@/, "").trim();
+            if (!h) return null;
+            return mobile
+                ? `venmo://paycharge?txn=pay&recipients=${encodeURIComponent(h)}&amount=${amt}&note=${note}`
+                : `https://venmo.com/${encodeURIComponent(h)}?txn=pay&amount=${amt}&note=${note}`;
+        }
+        if (method === "PayPal") {
+            const u = handle.replace(/^https?:\/\/(www\.)?paypal\.me\//i, "").replace(/^@/, "").trim();
+            if (!u || u.indexOf("@") !== -1) return null;  // email can't deep-link
+            return `https://www.paypal.com/paypalme/${encodeURIComponent(u)}/${amt}`;
+        }
+        if (method === "Cash App") {
+            const tag = handle.replace(/^\$/, "").trim();
+            if (!tag || tag.indexOf("@") !== -1) return null;
+            return `https://cash.app/$${tag}/${amt}`;
+        }
+        return null;  // Zelle / Check / GoDaddy — no deep link
+    }
+
+    function _custRefundDefaultHandle(method) {
+        const cust = (custPayoutCtx && custPayoutCtx.cust) || {};
+        const pm = (cust.payment_method || "").toLowerCase();
+        if (method === "Venmo") return cust.venmo_username || "";
+        if (method === "PayPal" && pm === "paypal") return cust.payment_handle || "";
+        if (method === "Cash App" && pm === "cashapp") return cust.payment_handle || "";
+        if (method === "Zelle" && pm === "zelle") return cust.payment_handle || "";
+        return "";
+    }
+
+    function renderCustPayoutPaybox() {
+        const box = document.getElementById("cust-payout-paybox");
+        if (custPayoutPollTimer) { clearInterval(custPayoutPollTimer); custPayoutPollTimer = null; }
+        if (!custPayoutCtx) { box.style.display = "none"; return; }
+        const method = document.getElementById("cust-payout-method").value;
+        const p2p = ["Venmo", "PayPal", "Cash App", "Zelle"].includes(method);
+        if (!p2p || !custPayoutCtx.amountNum) { box.style.display = "none"; box.innerHTML = ""; return; }
+
+        const memo = _custRefundMemo();
+        const handle = _custRefundDefaultHandle(method);
+        const amt = custPayoutCtx.amountNum.toFixed(2);
+        let html = `<div style="margin-bottom:0.35rem;"><strong>Memo:</strong> <span style="font-family:monospace;">${escapeHtml(memo)}</span>
+            <button type="button" id="cust-payout-copy-memo" class="btn" style="font-size:0.65rem; padding:0.1rem 0.4rem; margin-left:0.3rem;">Copy</button></div>`;
+        html += `<div style="display:flex; gap:0.4rem; align-items:center; margin-bottom:0.45rem;">
+            <span style="white-space:nowrap;">Handle:</span>
+            <input type="text" id="cust-payout-handle" class="modal-input" style="flex:1; font-size:0.8rem; padding:0.25rem 0.4rem;"
+                value="${escapeHtml(handle)}" placeholder="${method === 'Venmo' ? 'venmo-username' : method === 'PayPal' ? 'PayPal.Me name' : method === 'Cash App' ? '$cashtag' : 'email or phone (for your reference)'}">
+        </div>`;
+        html += `<div id="cust-payout-paybtn-row"></div>`;
+        html += `<div id="cust-payout-watch-status" style="margin-top:0.4rem;"></div>`;
+        box.innerHTML = html;
+        box.style.display = "";
+
+        const memoBtn = document.getElementById("cust-payout-copy-memo");
+        memoBtn.addEventListener("click", () => {
+            navigator.clipboard && navigator.clipboard.writeText(memo);
+            memoBtn.textContent = "Copied ✓";
+            setTimeout(() => { memoBtn.textContent = "Copy"; }, 1500);
+        });
+        const handleInput = document.getElementById("cust-payout-handle");
+        const renderPayBtn = () => {
+            const row = document.getElementById("cust-payout-paybtn-row");
+            const h = handleInput.value.trim();
+            const link = _custRefundPayLink(method, h, custPayoutCtx.amountNum);
+            const colors = { "Venmo": "#008CFF", "PayPal": "#003087", "Cash App": "#00D632", "Zelle": "#6D1ED4" };
+            if (link) {
+                row.innerHTML = `<button type="button" id="cust-payout-paybtn" class="btn" style="background:${colors[method]}; color:#fff; font-weight:700; width:100%;">
+                    Open ${escapeHtml(method)} — $${amt}</button>`;
+            } else {
+                row.innerHTML = `<button type="button" id="cust-payout-paybtn" class="btn" style="background:#374151; color:#fff; font-weight:600; width:100%;">
+                    ${method === "Zelle" ? "I'm sending via Zelle" : "No deep link"} — watch for the $${amt} receipt</button>`;
+            }
+            document.getElementById("cust-payout-paybtn").addEventListener("click", async () => {
+                // 1. Register the watch (server also schedules the quick
+                //    ~75s/~180s receipt sweeps), 2. open the pay link,
+                //    3. poll until the receipt verifies + records it.
+                try {
+                    const resp = await fetch(`/api/items/${custPayoutItemId}/refund-watch`, {
+                        method: "POST", keepalive: true,
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ method, amount: custPayoutCtx.amountNum, memo, handle: h }),
+                    });
+                    const d = await resp.json().catch(() => ({}));
+                    if (!resp.ok) { alert(d.error || "Could not start the refund watch."); return; }
+                } catch (e) { alert("Could not start the refund watch."); return; }
+                if (link) window.open(link, "_blank");
+                _custStartRefundWatchPoll();
+            });
+        };
+        handleInput.addEventListener("input", renderPayBtn);
+        renderPayBtn();
+    }
+
+    function _custStartRefundWatchPoll() {
+        const status = document.getElementById("cust-payout-watch-status");
+        const started = Date.now();
+        if (status) status.innerHTML =
+            `<span style="color:#92400e; font-weight:600;">⏳ Sent — watching for the receipt…</span>
+             <span style="color:#6b7280; font-size:0.75rem;">(auto-records when it lands; usually 1–3 min)</span>`;
+        if (custPayoutPollTimer) clearInterval(custPayoutPollTimer);
+        custPayoutPollTimer = setInterval(async () => {
+            if (!custPayoutItemId) { clearInterval(custPayoutPollTimer); return; }
+            try {
+                const res = await fetch(`/api/items/${custPayoutItemId}/refund-watch`);
+                const w = await res.json();
+                if (w && w.verified_at) {
+                    clearInterval(custPayoutPollTimer); custPayoutPollTimer = null;
+                    const el = document.getElementById("cust-payout-watch-status");
+                    if (el) el.innerHTML = w.recorded
+                        ? `<span style="color:#15803d; font-weight:700;">✓ Receipt verified — refund recorded automatically.</span>`
+                        : `<span style="color:#92400e; font-weight:600;">Receipt verified, but recording needs review (see server log).</span>`;
+                    custCachedEvents = null;
+                    await init();
+                }
+            } catch (e) { /* keep polling */ }
+            if (Date.now() - started > 6 * 60 * 1000) {
+                clearInterval(custPayoutPollTimer); custPayoutPollTimer = null;
+                const el = document.getElementById("cust-payout-watch-status");
+                if (el) el.innerHTML =
+                    `<span style="color:#6b7280;">Still waiting on the receipt — it will auto-record whenever it arrives (5-min inbox cycle is the backstop). You can also Record Refund manually below.</span>`;
+            }
+        }, 15000);
     }
 
     function closeCustPayoutModal() {
         document.getElementById("cust-payout-overlay").style.display = "none";
         custPayoutItemId = null;
+        custPayoutCtx = null;
+        if (custPayoutPollTimer) { clearInterval(custPayoutPollTimer); custPayoutPollTimer = null; }
     }
 
     async function submitCustPayout() {
@@ -4022,6 +4173,9 @@
                     // Pace rating (1 slow → 3 fast; NULL reads as 2 by rule)
                     c.pace_rating = canon.pace_rating != null ? canon.pace_rating : null;
                     c.pace_rating_source = canon.pace_rating_source || null;
+                    // Payment identity for refund deep links (Kerry 2026-07-15)
+                    c.payment_method = canon.payment_method || null;
+                    c.payment_handle = canon.payment_handle || null;
                     // Ensure customer_id is populated
                     if (canon.customer_id && !c.customer_id) c.customer_id = canon.customer_id;
                 });
@@ -4192,6 +4346,7 @@
 
         // Refund Credit modal
         document.getElementById("cust-payout-submit").addEventListener("click", submitCustPayout);
+        document.getElementById("cust-payout-method").addEventListener("change", renderCustPayoutPaybox);
         document.getElementById("cust-payout-cancel").addEventListener("click", closeCustPayoutModal);
         document.getElementById("cust-payout-close").addEventListener("click", closeCustPayoutModal);
         document.getElementById("cust-payout-overlay").addEventListener("click", (e) => {

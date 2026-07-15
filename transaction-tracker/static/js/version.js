@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.105.0";
+window.TGF_VERSION = "2.106.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.106.0",
+    date: "2026-07-15",
+    changes: [
+      "Refund buttons now PAY, not just record (Kerry): the Refund Credit modal builds a one-tap payment link for Venmo (venmo:// on phones), PayPal (PayPal.Me), and Cash App ($cashtag) -- prefilled with the player's handle from their customer record, the exact credit amount, and the ratified memo \"[First Name] [Last Name] - Credit for [Event Name]\" (with a Copy button for providers whose links can't carry a memo). Zelle has no deep link: an \"I'm sending via Zelle\" button arms the same verification. Manual Record Refund remains for Check/GoDaddy or any fallback.",
+      "Verification is automatic: tapping a pay link registers a refund watch (refund_watches table, one open watch per item -- re-taps replace, not stack) and schedules the same ~75s/~180s quick inbox sweeps the Payouts tab uses. When the provider's receipt email lands, auto_match_refund_watches verifies it (amount exact to the cent AND same customer / same handle / memo present in the receipt note; receipts predating the watch or already backing a winnings payout are excluded; one receipt verifies exactly one watch) and records the payout through the SAME payout_credit path as a manual Record Refund -- identical books, receipt-dated. The modal shows Sent -> watching -> verified & recorded live; the 5-minute inbox cycle is the backstop.",
+      "Recordation implications handled: winnings matcher keeps first claim on every receipt (refund matcher runs after it and skips payout-backed receipts); an amount edited inside the payment app simply never matches (stays pending, manual record always available); double-tap can't double-record (payout_credit refuses already-actioned rows, watch verifies once); /api/customers now carries payment_method/payment_handle so non-Venmo handles prefill. Tests: test_refund_watch.py (13 checks).",
+    ],
+  },
   {
     version: "2.105.0",
     date: "2026-07-15",

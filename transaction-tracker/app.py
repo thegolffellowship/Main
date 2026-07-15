@@ -811,6 +811,18 @@ def check_expense_inbox(force=False, days_back=None):
                         except Exception:
                             logger.warning("payout auto-match failed for exp %s",
                                            saved.get("id"), exc_info=True)
+                        # Refund watches ride the same receipt, AFTER the
+                        # winnings matcher (which gets first claim) —
+                        # verifies + records player-credit refunds paid
+                        # via the red Refund buttons (Kerry 2026-07-15)
+                        try:
+                            from email_parser.database import auto_match_refund_watches
+                            rw = auto_match_refund_watches([saved["id"]])
+                            if rw.get("verified"):
+                                logger.info("Refund watch verified: %s", rw["matches"])
+                        except Exception:
+                            logger.warning("refund-watch auto-match failed for exp %s",
+                                           saved.get("id"), exc_info=True)
 
             elif email_type == "expense_receipt":
                 raw_email_date = (email_data.get("date") or "")[:10]
@@ -6385,6 +6397,57 @@ def api_payout_credit(item_id):
     if not result.get("ok"):
         return jsonify({"error": result.get("error", "Payout failed")}), 400
     return jsonify({"status": "ok", "amount": result.get("amount"), "date": result.get("date")})
+
+
+@app.route("/api/items/<int:item_id>/refund-watch", methods=["POST"])
+@require_role("admin")
+def api_create_refund_watch(item_id):
+    """Register a refund-payment watch when the admin taps a P2P pay link
+    (Kerry 2026-07-15). Body: {method, amount, memo, handle?}. Also
+    schedules the ~75s/~180s quick inbox sweeps so the provider's receipt
+    verifies the refund within a couple of minutes."""
+    from email_parser.database import create_refund_watch
+    data = request.get_json(silent=True) or {}
+    method = (data.get("method") or "").strip()
+    if method not in ("Venmo", "PayPal", "Cash App", "Zelle"):
+        return jsonify({"error": "method must be Venmo, PayPal, Cash App, or Zelle"}), 400
+    result = create_refund_watch(
+        item_id, method=method, amount=data.get("amount"),
+        memo=(data.get("memo") or "").strip(),
+        handle=(data.get("handle") or "").strip(),
+    )
+    if not result.get("ok"):
+        return jsonify({"error": result.get("error", "watch failed")}), 400
+    # Quick receipt sweeps (same coalescing jobs as the payouts Pay flow)
+    if getattr(scheduler, "running", False):
+        now = datetime.now()
+        for jid, secs in (("venmo_quick_check_a", 75), ("venmo_quick_check_b", 180)):
+            try:
+                scheduler.add_job(_quick_expense_check, "date",
+                                  run_date=now + timedelta(seconds=secs),
+                                  id=jid, replace_existing=True, coalesce=True,
+                                  misfire_grace_time=120)
+            except Exception:
+                logger.exception("Failed to schedule quick receipt check %s", jid)
+    return jsonify({"status": "ok", **result})
+
+
+@app.route("/api/items/<int:item_id>/refund-watch", methods=["GET"])
+@require_role("manager")
+def api_get_refund_watch(item_id):
+    """Latest refund watch for a credit item — the modal polls this to
+    flip to 'verified' when the receipt lands."""
+    from email_parser.database import get_refund_watch
+    w = get_refund_watch(item_id)
+    return jsonify(w or {})
+
+
+@app.route("/api/refund-watches", methods=["GET"])
+@require_role("manager")
+def api_list_refund_watches():
+    """Open (unverified) refund watches — pending-refund indicators."""
+    from email_parser.database import get_open_refund_watches
+    return jsonify(get_open_refund_watches())
 
 
 @app.route("/api/items/<int:item_id>/partial-refund", methods=["POST"])
