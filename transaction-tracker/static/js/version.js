@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.102.0";
+window.TGF_VERSION = "2.102.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.102.1",
+    date: "2026-07-14",
+    changes: [
+      "Cancel Event reaches mobile: the expanded event card's ⚙ Actions menu now carries the admin Cancel Event item (Restore Event when already cancelled/postponed), mirroring the desktop menu -- it was desktop-only, which left the new one-tap cancellation flow unreachable from a phone on the night it was needed. Handler wiring was already shared (attachDetailHandlers runs for mobile detail elements), so this is menu markup only.",
+    ],
+  },
   {
     version: "2.102.0",
     date: "2026-07-14",

@@ -2507,6 +2507,9 @@
                                 <div class="ev-menu-divider"></div>
                                 <button class="ev-menu-item btn-mobile-edit-event" data-edit-event="${ev.id}">Edit</button>
                                 ${currentRole === "admin" ? `<button class="ev-menu-item btn-mobile-merge-event" data-merge-event="${ev.id}">Merge</button>` : ''}
+                                ${currentRole === "admin" ? `<div class="ev-menu-divider"></div>${(ev.status || 'active') === 'active'
+                                    ? `<button class="ev-menu-item ev-menu-item-danger btn-cancel-event" data-event-id="${ev.id}" data-event-name="${escapeHtml(ev.item_name)}">Cancel Event</button>`
+                                    : `<button class="ev-menu-item btn-restore-event" data-event-id="${ev.id}">Restore Event</button>`}` : ''}
                                 ${currentRole === "admin" ? `<button class="ev-menu-item ev-menu-item-danger btn-mobile-delete-event" data-delete-event="${ev.id}" title="Delete">&times;</button>` : ''}
                             </div>
                         </div>
