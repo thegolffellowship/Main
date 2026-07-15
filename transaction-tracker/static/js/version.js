@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.104.2";
+window.TGF_VERSION = "2.105.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.105.0",
+    date: "2026-07-15",
+    changes: [
+      "RSVP match hygiene is now fully automatic (Kerry: 'I don't want to worry that things aren't matching'). The Audit RSVPs pass -- clear email-mismatched first-name matches + rematch -- now runs itself in three places: (1) after EVERY RSVP inbox ingest (rematch_rsvps only filled unmatched rows; it never cleared a bad match, so the Daniel South class of mis-match survived every cycle until someone pressed the button), (2) when a manager/admin opens an event (inline before the RSVP read, throttled to once per event per 15 minutes, so what you see is already healed), and (3) a nightly 3:35 AM Central sweep across upcoming events (AUTO_RSVP_AUDIT=0 to disable). The manual button remains for on-demand use.",
+    ],
+  },
   {
     version: "2.104.2",
     date: "2026-07-14",
