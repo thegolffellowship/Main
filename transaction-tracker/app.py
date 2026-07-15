@@ -5042,6 +5042,8 @@ def api_cancel_execute(event_id):
     status = data.get("status", "cancelled")
     reason = (data.get("reason") or "").strip()
     mode = data.get("mode", "credit")
+    badge = (data.get("badge") or "").strip()[:32]
+    clear_rsvps = bool(data.get("clear_rsvps", True))
     send_email = bool(data.get("send_email", True))
     subject_tpl = (data.get("subject") or "").strip()
     body_tpl = (data.get("html_body") or "").strip()
@@ -5059,7 +5061,7 @@ def api_cancel_execute(event_id):
     players = get_cancellation_players(event_id)
     paid_by_id = {p["id"]: p for p in players.get("paid", [])}
 
-    if not set_event_status(event_id, status, reason):
+    if not set_event_status(event_id, status, reason, badge=badge or None):
         return jsonify({"error": "Event not found"}), 404
 
     note = f"Event {status} — {reason}"
@@ -5109,6 +5111,20 @@ def api_cancel_execute(event_id):
             outcome_by_item[iid] = ("failed", method)
             failed += 1
 
+    # Clear the RSVP roster (Kerry 2026-07-14: the credit pass rightly
+    # skips never-paid rsvp_only/gg_rsvp rows, but they kept the roster
+    # populated after cancellation). They were already captured as
+    # notification recipients by the plan above, so they still get the
+    # email.
+    rsvps_cleared = 0
+    if clear_rsvps:
+        try:
+            from email_parser.database import clear_event_rsvp_items
+            rsvps_cleared = clear_event_rsvp_items(
+                event_id, note=f"{note} — RSVP removed")
+        except Exception:
+            logger.exception("RSVP clear failed for event %d", event_id)
+
     # Notification emails — every player (settled, skipped, RSVP-only).
     # Same builder the preview endpoint uses, fed with ACTUAL outcomes.
     email_result = {"sent": 0, "failed": 0, "errors": []}
@@ -5149,7 +5165,9 @@ def api_cancel_execute(event_id):
     return jsonify({
         "status": "ok",
         "event_status": status,
+        "badge": badge or None,
         "silent_removed": silent_removed,
+        "rsvps_cleared": rsvps_cleared,
         "actioned": ok,
         "failed": failed,
         "skipped": skipped,

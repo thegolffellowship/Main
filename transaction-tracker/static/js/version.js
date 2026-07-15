@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.103.0";
+window.TGF_VERSION = "2.104.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.104.0",
+    date: "2026-07-14",
+    changes: [
+      "Cancel Event clears the RSVP roster (Kerry, after running the s9.18 rain-out live): unpaid rsvp_only/gg_rsvp entries are withdrawn during execute (default-on 'Clear RSVP roster' checkbox) so a cancelled event's roster reads empty -- the credit pass rightly skips them (they never paid), which previously left them populating the roster after everyone else was credited. They still receive the notification email (the recipient plan captures them before the clear). Unmatched Golf Genius 'PLAYING' RSVPs no longer render as synthetic roster rows (or count in the roster number) on cancelled/postponed events.",
+      "Selectable status badge at cancel time: a Badge chip row (CANCELLED / RAINED OUT / COURSE CLOSED / WEATHER / POSTPONED / RESCHEDULED) picks the label shown on the event -- new events.status_badge column, rendered on the desktop list rows, the mobile event cards (which previously showed no cancelled badge at all), and the event detail banner. Auto-defaults to the chosen status until a chip is pinned; Restore Event clears it. status_badge is also editable via the event update path for backfills.",
+    ],
+  },
   {
     version: "2.103.0",
     date: "2026-07-14",
