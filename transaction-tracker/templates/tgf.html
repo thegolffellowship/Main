@@ -441,6 +441,7 @@
             <button class="top-tab" data-top="contests">Season<span class="tab-full"> Contests</span></button>
             <button class="top-tab" data-top="golfers">Golfers</button>
             <button class="top-tab top-tab-pill" data-top="unpaid">Unpaid</button>
+            <button class="top-tab top-tab-pill" data-top="refunds">Refunds</button>
         </div>
 
         <!-- ═══════════ EVENTS SECTION ═══════════ -->
@@ -462,6 +463,11 @@
         <!-- ═══════════ UNPAID SECTION (admin work queue) ═══════════ -->
         <div id="section-unpaid" class="section-hidden" style="padding:1rem;">
             <div id="unpaid-main"></div>
+        </div>
+
+        <!-- ═══════════ REFUNDS SECTION (admin — consolidated credit refunds) ═══════════ -->
+        <div id="section-refunds" class="section-hidden" style="padding:1rem;">
+            <div id="refunds-main"><div class="empty-state"><p>Loading…</p></div></div>
         </div>
 
         <!-- ═══════════ GOLFERS SECTION — Command Ledger (TGF DS 2a/2b/2c) ═══════════ -->
@@ -946,6 +952,105 @@
             attachMarkPaidHandlers(el);
         }
 
+        // ═══════════ REFUNDS TAB (consolidated credit refunds) ═══════
+        // Kerry 2026-07-15: "I don't want to go to 25 places … nothing falls
+        // thru the cracks." One console: OUTSTANDING (held credits, oldest
+        // first) / IN FLIGHT (open watches) / COMPLETED (recorded payouts).
+        // v1 consolidates + deep-links each OUTSTANDING row to the player's
+        // profile where the red Refund modal already lives; inline actions
+        // are the next increment.
+        function escR(s) {
+            return String(s == null ? "" : s).replace(/[&<>"']/g,
+                c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+        }
+        function ageChip(days) {
+            if (days == null) return "";
+            let bg = "#e5e7eb", fg = "#374151";
+            if (days >= 30) { bg = "#fee2e2"; fg = "#b91c1c"; }
+            else if (days >= 14) { bg = "#fef3c7"; fg = "#92400e"; }
+            return `<span style="font-size:0.68rem;font-weight:600;background:${bg};color:${fg};padding:1px 7px;border-radius:10px;white-space:nowrap;">${days}d</span>`;
+        }
+        function playerCell(name, cid, sub) {
+            const nm = escR(name || "—");
+            const label = cid
+                ? `<a href="/customers?cid=${cid}" style="color:var(--link);text-decoration:none;font-weight:600;">${nm}</a>`
+                : `<span style="font-weight:600;">${nm}</span>`;
+            return `<div>${label}</div>${sub ? `<div style="font-size:0.72rem;color:var(--text-muted);">${escR(sub)}</div>` : ""}`;
+        }
+        async function loadRefunds() {
+            const el = $("#refunds-main");
+            el.innerHTML = '<div class="empty-state"><p>Loading…</p></div>';
+            try {
+                const resp = await fetch("/api/refunds/overview");
+                if (!resp.ok) throw new Error("http " + resp.status);
+                renderRefunds(await resp.json());
+            } catch (e) {
+                console.error("Failed to load refunds overview", e);
+                el.innerHTML = '<div class="empty-state"><h3>Couldn\'t load refunds</h3><p>Try again.</p></div>';
+            }
+        }
+        function renderRefunds(data) {
+            const el = $("#refunds-main");
+            const t = data.totals || {};
+
+            const outRows = (data.outstanding || []).map(r => `
+                <tr>
+                    <td>${playerCell(r.customer, r.customer_id, r.event)}</td>
+                    <td class="right">${ageChip(r.age_days)}</td>
+                    <td class="right total-amount" style="white-space:nowrap;">${fmt(r.amount)}</td>
+                    <td class="right" style="white-space:nowrap;">
+                        <a href="/customers?cid=${r.customer_id || ""}"
+                           style="display:inline-block;text-decoration:none;background:#E87C3E;color:#fff;font-size:0.78rem;font-weight:600;padding:4px 12px;border-radius:14px;">Refund…</a></td>
+                </tr>`).join("");
+
+            const flightRows = (data.in_flight || []).map(r => `
+                <tr>
+                    <td>${playerCell(r.customer, r.customer_id, r.event)}</td>
+                    <td style="font-size:0.78rem;color:var(--text-muted);white-space:nowrap;">
+                        ${escR(r.method || "")}${r.handle ? " · " + escR(r.handle) : ""}</td>
+                    <td class="right">${ageChip(r.age_days)}</td>
+                    <td class="right total-amount" style="white-space:nowrap;">${fmt(r.amount)}</td>
+                    <td class="right"><span style="font-size:0.7rem;font-weight:600;background:#dbeafe;color:#1e40af;padding:2px 8px;border-radius:10px;white-space:nowrap;">watching…</span></td>
+                </tr>`).join("");
+
+            const doneRows = (data.completed || []).map(r => `
+                <tr>
+                    <td>${playerCell(r.customer, r.customer_id, r.event)}</td>
+                    <td style="font-size:0.78rem;color:var(--text-muted);white-space:nowrap;">${escR(r.method || "")}${r.date ? " · " + fmtDate(r.date) : ""}</td>
+                    <td class="right total-amount" style="white-space:nowrap;">${fmt(r.amount)}</td>
+                    <td class="right"><span style="font-size:0.7rem;font-weight:600;background:#dcfce7;color:#166534;padding:2px 8px;border-radius:10px;white-space:nowrap;">${r.via_watch ? "VERIFIED" : "PAID"}</span></td>
+                </tr>`).join("");
+
+            const section = (title, count, amount, color, table) => `
+                <div style="margin-bottom:1.5rem;">
+                    <div style="display:flex;align-items:baseline;gap:0.6rem;margin-bottom:0.5rem;flex-wrap:wrap;">
+                        <h2 style="font-size:1.05rem;margin:0;">${title}</h2>
+                        <span style="font-size:0.9rem;font-weight:700;color:${color};">${fmt(amount)}</span>
+                        <span style="font-size:0.78rem;color:var(--text-muted);">${count} item${count !== 1 ? "s" : ""}</span>
+                    </div>
+                    ${table}
+                </div>`;
+
+            const tbl = (head, rows, empty) => rows
+                ? `<div class="tgf-scroll"><table class="payout-table"><thead><tr>${head}</tr></thead><tbody>${rows}</tbody></table></div>`
+                : `<div style="font-size:0.85rem;color:var(--text-muted);padding:0.25rem 0;">${empty}</div>`;
+
+            el.innerHTML = `
+                <div style="display:flex;align-items:baseline;gap:0.75rem;margin-bottom:1rem;flex-wrap:wrap;">
+                    <h1 style="font-size:1.25rem;margin:0;">Refunds</h1>
+                    <span style="font-size:0.8rem;color:var(--text-muted);">Every credit owed, in flight, or paid — one place.</span>
+                </div>
+                ${section("Outstanding", t.outstanding_count || 0, t.outstanding_amount || 0, "#b45309",
+                    tbl(`<th>Player / Event</th><th class="right">Age</th><th class="right">Credit</th><th class="right" style="width:110px;"></th>`,
+                        outRows, "No held credits awaiting refund &#127881;"))}
+                ${section("In Flight", t.in_flight_count || 0, t.in_flight_amount || 0, "#1e40af",
+                    tbl(`<th>Player / Event</th><th>Method</th><th class="right">Age</th><th class="right">Amount</th><th class="right" style="width:90px;"></th>`,
+                        flightRows, "No refunds currently being verified."))}
+                ${section("Completed", t.completed_count || 0, t.completed_amount || 0, "#166534",
+                    tbl(`<th>Player / Event</th><th>Method</th><th class="right">Amount</th><th class="right" style="width:90px;"></th>`,
+                        doneRows, `No refunds recorded in the last ${data.completed_days || 120} days.`))}`;
+        }
+
         // ── Data loading ─────────────────────────────────────────
         async function loadData() {
             try {
@@ -973,11 +1078,16 @@
                 $$(".top-tab").forEach(b => b.classList.remove("active"));
                 btn.classList.add("active");
                 const target = btn.dataset.top;
-                $("#section-events").classList.toggle("section-hidden", target === "golfers" || target === "unpaid");
+                $("#section-events").classList.toggle("section-hidden", target === "golfers" || target === "unpaid" || target === "refunds");
                 $("#section-golfers").classList.toggle("section-hidden", target !== "golfers");
                 $("#section-unpaid").classList.toggle("section-hidden", target !== "unpaid");
+                $("#section-refunds").classList.toggle("section-hidden", target !== "refunds");
                 if (target === "unpaid") {
                     renderUnpaidList();
+                    return;
+                }
+                if (target === "refunds") {
+                    loadRefunds();
                     return;
                 }
                 if (target !== "golfers") {

@@ -18743,6 +18743,135 @@ def get_open_refund_watches(db_path: str | Path | None = None) -> list[dict]:
             "ORDER BY initiated_at DESC").fetchall()]
 
 
+def get_refunds_overview(db_path: str | Path | None = None,
+                         completed_days: int = 120) -> dict:
+    """Consolidated REFUNDS console (Kerry 2026-07-15: "I don't want to go to
+    25 places … nothing falls thru the cracks").
+
+    Three buckets, mirroring the PAYOUTS view's structure:
+
+      * ``outstanding`` — credit balances we're holding that could be paid
+        back: WD rows (credit in ``credit_amount``) and standalone credited
+        rows (credit in ``item_price``), minus any with an OPEN refund watch
+        (those are in flight). Sorted OLDEST FIRST so aging credits surface
+        (Kerry's age-sorting; a per-item "Held" marker is a separate,
+        ratification-pending schema add).
+      * ``in_flight`` — open refund watches: a P2P pay link was tapped and we
+        are waiting on the provider's receipt to verify.
+      * ``completed`` — payouts recorded in the last ``completed_days`` days
+        (status 'refunded', or WD rows stamped 'Refunded …'), newest first.
+
+    Amounts are floats; ``age_days`` is Central-day based. Read-only.
+    """
+    import datetime as _dt
+    import re as _re
+    from email_parser.timezone_utils import today_central
+
+    today = today_central()
+
+    def _age(datestr):
+        try:
+            d = _dt.datetime.strptime((datestr or "")[:10], "%Y-%m-%d").date()
+            return (today - d).days
+        except Exception:
+            return None
+
+    stamp_re = _re.compile(r"Refunded \$([\d,]+\.?\d*) via (.+?) on (\d{4}-\d{2}-\d{2})")
+
+    with _connect(db_path) as conn:
+        _ensure_refund_watch_table(conn)
+        open_watch_ids = {r["item_id"] for r in conn.execute(
+            "SELECT item_id FROM refund_watches WHERE verified_at IS NULL").fetchall()}
+        verified_ids = {r["item_id"] for r in conn.execute(
+            "SELECT item_id FROM refund_watches WHERE verified_at IS NOT NULL").fetchall()}
+
+        # OUTSTANDING — held credits not yet in flight / paid
+        outstanding = []
+        for r in conn.execute(
+            """SELECT id, customer, customer_id, item_name, item_price,
+                      credit_amount, transaction_status, order_date, credit_note
+               FROM items
+               WHERE LOWER(COALESCE(transaction_status,'')) IN ('wd','credited')"""
+        ).fetchall():
+            r = dict(r)
+            status = (r.get("transaction_status") or "").lower()
+            amt = _parse_dollar(r.get("credit_amount") if status == "wd"
+                                else r.get("item_price"))
+            if amt <= 0 or r["id"] in open_watch_ids:
+                continue
+            outstanding.append({
+                "item_id": r["id"], "customer": r.get("customer"),
+                "customer_id": r.get("customer_id"), "event": r.get("item_name"),
+                "amount": round(amt, 2), "kind": status,
+                "order_date": r.get("order_date"),
+                "age_days": _age(r.get("order_date")),
+                "note": r.get("credit_note") or "",
+            })
+        outstanding.sort(key=lambda x: (x["age_days"] is None, -(x["age_days"] or 0)))
+
+        # IN FLIGHT — open watches
+        in_flight = []
+        for w in conn.execute(
+            """SELECT rw.*, it.item_name AS event
+               FROM refund_watches rw
+               LEFT JOIN items it ON it.id = rw.item_id
+               WHERE rw.verified_at IS NULL
+               ORDER BY rw.initiated_at"""
+        ).fetchall():
+            w = dict(w)
+            in_flight.append({
+                "item_id": w["item_id"], "customer": w.get("customer_name"),
+                "customer_id": w.get("customer_id"), "event": w.get("event"),
+                "amount": round(float(w.get("amount") or 0), 2),
+                "method": w.get("method"), "handle": w.get("handle"),
+                "memo": w.get("memo"), "initiated_at": w.get("initiated_at"),
+                "age_days": _age(w.get("initiated_at")),
+            })
+
+        # COMPLETED — recorded payouts (recent window)
+        completed = []
+        for r in conn.execute(
+            """SELECT id, customer, customer_id, item_name, credit_note,
+                      transaction_status
+               FROM items
+               WHERE LOWER(COALESCE(transaction_status,'')) = 'refunded'
+                  OR (LOWER(COALESCE(transaction_status,'')) = 'wd'
+                      AND credit_note LIKE 'Refunded %')"""
+        ).fetchall():
+            r = dict(r)
+            m = stamp_re.search(r.get("credit_note") or "")
+            if not m:
+                continue
+            date = m.group(3)
+            age = _age(date)
+            if age is not None and age > completed_days:
+                continue
+            completed.append({
+                "item_id": r["id"], "customer": r.get("customer"),
+                "customer_id": r.get("customer_id"), "event": r.get("item_name"),
+                "amount": round(_parse_dollar(m.group(1)), 2),
+                "method": m.group(2).strip(), "date": date,
+                "via_watch": r["id"] in verified_ids,
+            })
+        completed.sort(key=lambda x: x["date"], reverse=True)
+
+    def _sum(rows):
+        return round(sum(x["amount"] for x in rows), 2)
+
+    return {
+        "outstanding": outstanding, "in_flight": in_flight, "completed": completed,
+        "totals": {
+            "outstanding_count": len(outstanding),
+            "outstanding_amount": _sum(outstanding),
+            "in_flight_count": len(in_flight),
+            "in_flight_amount": _sum(in_flight),
+            "completed_count": len(completed),
+            "completed_amount": _sum(completed),
+        },
+        "completed_days": completed_days,
+    }
+
+
 def auto_match_refund_watches(expense_ids: list[int] | None = None,
                               db_path: str | Path | None = None) -> dict:
     """Verify open refund watches against outbound P2P payment receipts

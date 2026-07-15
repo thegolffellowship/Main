@@ -313,7 +313,10 @@ No Python or local install needed — Claude Desktop connects directly to Railwa
 - `templates/reconcile.html` — Bank reconciliation: account dashboard, match queue, monthly summary
 - `templates/cashflow.html` — Cash flow: 90-day rolling weekly view with warning indicators
 - `templates/coo.html` — COO Dashboard: action items, financial snapshot, review queue, AI chat
-- `templates/tgf.html` — TGF Payouts: events, golfers, screenshot import
+- `templates/tgf.html` — TGF Payouts: events, golfers, screenshot import,
+  Unpaid work queue, and the **REFUNDS console** (admin, v2.108.0 —
+  OUTSTANDING/IN FLIGHT/COMPLETED credit refunds via
+  `GET /api/refunds/overview` → `get_refunds_overview`; see `docs/claude/events.md`)
 - `templates/traffic.html` — Member Traffic (admin): anonymous open/click
   counters from the pinless member pages (`member_analytics` table; beacon in
   auth.js under `window.MEMBER_MODE`; POST /api/member-metric is the only

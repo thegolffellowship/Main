@@ -6502,6 +6502,21 @@ def api_list_refund_watches():
     return jsonify(get_open_refund_watches())
 
 
+@app.route("/api/refunds/overview", methods=["GET"])
+@require_role("admin")
+def api_refunds_overview():
+    """Consolidated REFUNDS console: OUTSTANDING (held credits) / IN FLIGHT
+    (open watches) / COMPLETED (recorded payouts). Kerry 2026-07-15 — one
+    place so nothing falls through the cracks."""
+    from email_parser.database import get_refunds_overview
+    try:
+        days = int(request.args.get("completed_days", 120))
+    except (TypeError, ValueError):
+        days = 120
+    days = max(7, min(days, 365))
+    return jsonify(get_refunds_overview(completed_days=days))
+
+
 @app.route("/api/items/<int:item_id>/partial-refund", methods=["POST"])
 @require_role("admin")
 def api_partial_refund_item(item_id):
