@@ -17490,17 +17490,37 @@ def get_rsvp_credit_info(rsvp_id: int, db_path: str | Path | None = None) -> dic
         if not rsvp.get("matched_event"):
             return None
 
-        # Resolve player name from matched item or RSVP row itself
+        # Resolve the player. The rsvp's own customer_id is authoritative
+        # (rule 6) — the matched item is only trusted when its email
+        # matches the rsvp's, because the first-name matcher can pin a
+        # rsvp to the WRONG player's item (Daniel South's Vaaler rsvp →
+        # Daniel Lehan's purchase, 2026-07-15). Resolving through such an
+        # item would surface — and apply — the other player's credits.
         customer_name = rsvp.get("player_name") or ""
-        if rsvp.get("matched_item_id"):
+        cust_id = rsvp.get("customer_id")
+        rsvp_email = (rsvp.get("player_email") or "").strip()
+        if cust_id:
+            crow = conn.execute(
+                "SELECT TRIM(first_name || ' ' || last_name) AS n "
+                "FROM customers WHERE customer_id = ?",
+                (cust_id,),
+            ).fetchone()
+            if crow and (crow["n"] or "").strip():
+                customer_name = crow["n"].strip()
+        elif rsvp.get("matched_item_id"):
             item_row = conn.execute(
                 "SELECT customer, customer_email FROM items WHERE id = ?",
                 (rsvp["matched_item_id"],),
             ).fetchone()
             if item_row:
-                customer_name = item_row["customer"] or customer_name
+                item_email = (item_row["customer_email"] or "").strip().lower()
+                if (not rsvp_email or not item_email
+                        or rsvp_email.lower() == item_email):
+                    customer_name = item_row["customer"] or customer_name
 
-        credits = get_player_credits(customer_name, db_path)
+        credits = get_player_credits(customer_name, db_path,
+                                     customer_id=cust_id,
+                                     player_email=rsvp_email or None)
         if not credits:
             return None
 
@@ -17582,9 +17602,16 @@ def get_event_rsvp_credit_map(event_name: str, db_path: str | Path | None = None
             (event_name,),
         ).fetchall()
 
-        # GG RSVPs not matched to an active item (these become synthetic JS rows)
+        # GG RSVPs that render as synthetic JS rows on the frontend. MUST
+        # stay in parity with the frontend's unmatchedPlaying filter: a
+        # rsvp whose matched item is active but carries a DIFFERENT email
+        # is treated as mis-matched (the first-name matcher pinned it to
+        # the wrong player's item — Daniel South → Daniel Lehan's Vaaler
+        # purchase, 2026-07-15) and re-displayed as its own row; without
+        # this branch the credit map never considered those players, so
+        # their badge silently vanished.
         rsvp_rows = conn.execute(
-            """SELECT r.id, r.player_name, r.player_email
+            """SELECT r.id, r.player_name, r.player_email, r.customer_id
                FROM rsvps r
                WHERE r.matched_event = ? COLLATE NOCASE
                  AND r.response = 'PLAYING'
@@ -17593,6 +17620,14 @@ def get_event_rsvp_credit_map(event_name: str, db_path: str | Path | None = None
                           SELECT 1 FROM items i
                           WHERE i.id = r.matched_item_id
                             AND COALESCE(i.transaction_status, 'active') = 'active'
+                      )
+                      OR EXISTS (
+                          SELECT 1 FROM items i
+                          WHERE i.id = r.matched_item_id
+                            AND COALESCE(i.transaction_status, 'active') = 'active'
+                            AND COALESCE(i.customer_email, '') != ''
+                            AND COALESCE(r.player_email, '') != ''
+                            AND LOWER(i.customer_email) != LOWER(r.player_email)
                       ))""",
             (event_name,),
         ).fetchall()
@@ -17630,6 +17665,22 @@ def get_event_rsvp_credit_map(event_name: str, db_path: str | Path | None = None
                     if cname:
                         email_to_canonical_name[email] = cname
 
+        # The rsvps row's own customer_id is the most reliable identity
+        # (rule 6): it's resolved at parse time and survives a wrong
+        # matched_item_id, which only carries the OTHER player's identity.
+        rsvpid_to_cid: dict[int, int] = {}
+        rsvpid_to_name: dict[int, str] = {}
+        for rr in rsvp_rows:
+            if rr["customer_id"]:
+                crow = conn.execute(
+                    "SELECT TRIM(first_name || ' ' || last_name) AS n "
+                    "FROM customers WHERE customer_id = ?",
+                    (rr["customer_id"],),
+                ).fetchone()
+                rsvpid_to_cid[rr["id"]] = rr["customer_id"]
+                if crow and (crow["n"] or "").strip():
+                    rsvpid_to_name[rr["id"]] = crow["n"].strip()
+
     result = {}
 
     # Item-based RSVPs (rsvp_only / gg_rsvp items in the items table)
@@ -17655,15 +17706,18 @@ def get_event_rsvp_credit_map(event_name: str, db_path: str | Path | None = None
     # GG RSVPs from rsvps table (synthetic frontend rows)
     for rr in rsvp_rows:
         email = (rr["player_email"] or "").strip().lower()
-        # Prefer name from GoDaddy items (matches frontend resolved_name), then customers
-        # table, then raw GG player name as last resort
+        # Name resolution mirrors get_rsvps_for_event (which feeds the
+        # frontend's resolved_name): customers table via the rsvp's own
+        # customer_id first, then email lookups, then raw GG first name.
         customer = (
-            email_to_customer.get(email)
+            rsvpid_to_name.get(rr["id"])
+            or email_to_customer.get(email)
             or email_to_canonical_name.get(email)
             or rr["player_name"]
             or ""
         )
-        cust_id = email_to_customer_id.get(email) if email else None
+        cust_id = (rsvpid_to_cid.get(rr["id"])
+                   or (email_to_customer_id.get(email) if email else None))
         if not customer or customer in result:
             continue
         credits = get_player_credits(

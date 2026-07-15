@@ -5284,7 +5284,8 @@ def api_rsvp_credit_info_by_item(item_id):
             return jsonify({"error": "Item not found"}), 404
         item = dict(item)
 
-        credits = get_player_credits(item["customer"])
+        credits = get_player_credits(item["customer"],
+                                     customer_id=item.get("customer_id"))
         if not credits:
             return jsonify({"error": "No credits on file for this player"}), 404
 
