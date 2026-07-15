@@ -2898,6 +2898,10 @@ def init_db(db_path: str | Path | None = None) -> None:
             ("course_cost_breakdown", "TEXT"), ("course_cost_breakdown_9", "TEXT"), ("course_cost_breakdown_18", "TEXT"),
             ("status", "TEXT DEFAULT 'active'"),
             ("status_reason", "TEXT"),
+            # Display label for the status badge, picked at cancel time
+            # (RAINED OUT / COURSE CLOSED / ... — Kerry 2026-07-14).
+            # NULL = plain status text.
+            ("status_badge", "TEXT"),
             ("rescheduled_to_event_id", "INTEGER"),
             ("status_changed_at", "TEXT"),
             ("per_game_addon", "REAL"),
@@ -13858,7 +13862,7 @@ def update_event(event_id: int, fields: dict, db_path: str | Path | None = None)
                 "tgf_markup_final", "tgf_markup_final_9", "tgf_markup_final_18",
                 "course_surcharge", "per_game_addon",
                 "course_cost_breakdown", "course_cost_breakdown_9", "course_cost_breakdown_18",
-                "rescheduled_to_event_id"}
+                "rescheduled_to_event_id", "status_badge"}
     safe = {k: v for k, v in fields.items() if k in allowed}
     if not safe:
         return False
@@ -16365,10 +16369,18 @@ def _detect_refund_method(item: dict) -> str:
 
 def set_event_status(event_id: int, status: str, reason: str = "",
                      rescheduled_to_id: int | None = None,
+                     badge: str | None = None,
                      db_path: str | Path | None = None) -> bool:
-    """Set an event's status to 'cancelled', 'postponed', or 'active'."""
+    """Set an event's status to 'cancelled', 'postponed', or 'active'.
+
+    badge: display label for the status badge (e.g. 'RAINED OUT'),
+    picked at cancel time. Restoring to active always clears it.
+    """
     if status not in ("active", "cancelled", "postponed"):
         return False
+    badge = (badge or "").strip()[:32] or None
+    if status == "active":
+        badge = None
     with _connect(db_path) as conn:
         row = conn.execute("SELECT id FROM events WHERE id = ?", (event_id,)).fetchone()
         if not row:
@@ -16377,13 +16389,38 @@ def set_event_status(event_id: int, status: str, reason: str = "",
         conn.execute(
             """UPDATE events
                SET status = ?, status_reason = ?, rescheduled_to_event_id = ?,
-                   status_changed_at = ?
+                   status_badge = ?, status_changed_at = ?
                WHERE id = ?""",
-            (status, reason or None, rescheduled_to_id,
+            (status, reason or None, rescheduled_to_id, badge,
              _dt.datetime.utcnow().isoformat(), event_id),
         )
         conn.commit()
         return True
+
+
+def clear_event_rsvp_items(event_id: int, note: str = "",
+                           db_path: str | Path | None = None) -> int:
+    """Withdraw an event's unpaid RSVP entries (rsvp_only / gg_rsvp item
+    rows) so a cancelled event's roster reads empty (Kerry 2026-07-14 —
+    the credit pass rightly skips them because they never paid, but they
+    kept the roster populated after cancellation). Returns rows flipped.
+    """
+    with _connect(db_path) as conn:
+        ev = conn.execute("SELECT item_name FROM events WHERE id = ?",
+                          (event_id,)).fetchone()
+        if not ev:
+            return 0
+        cur = conn.execute(
+            """UPDATE items
+               SET transaction_status = 'wd', credit_note = ?
+               WHERE item_name = ? COLLATE NOCASE
+                 AND parent_item_id IS NULL
+                 AND COALESCE(transaction_status, 'active')
+                     IN ('rsvp_only', 'gg_rsvp')""",
+            (note or "Event cancelled — RSVP removed", ev["item_name"]),
+        )
+        conn.commit()
+        return cur.rowcount
 
 
 def can_restore_event(event_id: int, db_path: str | Path | None = None) -> bool:

@@ -1035,6 +1035,10 @@
                     </div>
                 </div>
                 <div style="margin-bottom:0.9rem;">
+                    <div style="font-weight:600; font-size:0.85rem; margin-bottom:0.5rem;">Badge <span style="font-weight:400; color:#6b7280; font-size:0.75rem;">(shown on the event)</span></div>
+                    <div id="cancel-badge-chips" style="display:flex; gap:0.4rem; flex-wrap:wrap;"></div>
+                </div>
+                <div style="margin-bottom:0.9rem;">
                     <label style="font-weight:600; font-size:0.85rem;">Reason <span style="color:#dc2626;">*</span>
                         <input type="text" id="cancel-event-reason" class="modal-input" placeholder="e.g. Rained out after 3 holes" style="margin-top:0.25rem;">
                     </label>
@@ -1054,6 +1058,13 @@
                 <div id="cancel-staging-wrap" style="display:none; margin-bottom:0.9rem;">
                     <div style="font-size:0.78rem; color:#6b7280; margin-bottom:0.4rem;">Choose an action for each player — skipped players still get the notification (without an amount).</div>
                     <div id="cancel-staging-list" style="display:flex; flex-direction:column; gap:0.4rem; max-height:260px; overflow-y:auto;"></div>
+                </div>
+
+                <div style="margin-bottom:0.9rem;">
+                    <label style="display:flex; gap:0.45rem; align-items:center; font-weight:600; font-size:0.85rem; cursor:pointer;">
+                        <input type="checkbox" id="cancel-clear-rsvps" checked style="cursor:pointer;">
+                        Clear RSVP roster <span style="font-weight:400; color:#6b7280;">(unpaid RSVP entries are withdrawn so the roster reads empty — they still get the email)</span>
+                    </label>
                 </div>
 
                 <div style="border-top:1px solid #e5e7eb; padding-top:0.75rem; margin-bottom:0.9rem;">
@@ -2369,7 +2380,8 @@
                 if (!resolved && first && [...mRegNames].some(n => n.startsWith(first))) return false;
                 return true;
             });
-            const mGgRows = mUnmatched.map((r, i) => ({
+            // Cancelled/postponed events read empty — no synthetic GG rows
+            const mGgRows = ((ev.status || 'active') !== 'active') ? [] : mUnmatched.map((r, i) => ({
                 id: `gg-rsvp-${i}`, customer: r.resolved_name || r.player_name || 'Unknown',
                 customer_email: r.player_email || '', item_name: ev.item_name,
                 item_price: '', side_games: '', tee_choice: '', handicap: '',
@@ -2527,6 +2539,8 @@
                     <div class="mc-primary">
                         <span class="mc-customer">${escapeHtml(ev.item_name)}</span>
                         <span class="reg-count" style="font-size:0.78rem; min-width:auto; height:24px; border-radius:12px; margin-left:0.35rem; vertical-align:middle; padding:0 0.4rem;">${stats.players}/${ev.registrations || 0}</span>
+                        ${(ev.status === 'cancelled') ? `<span style="margin-left:0.35rem; font-size:0.62rem; font-weight:700; background:#fee2e2; color:#dc2626; border:1px solid #fecaca; border-radius:4px; padding:1px 5px; vertical-align:middle; text-transform:uppercase;">${escapeHtml(ev.status_badge || 'Cancelled')}</span>` : ''}
+                        ${(ev.status === 'postponed') ? `<span style="margin-left:0.35rem; font-size:0.62rem; font-weight:700; background:#fef3c7; color:#d97706; border:1px solid #fde68a; border-radius:4px; padding:1px 5px; vertical-align:middle; text-transform:uppercase;">${escapeHtml(ev.status_badge || 'Postponed')}</span>` : ''}
                         <br><span class="mc-event" style="font-size:0.85rem;">${escapeHtml(ev.event_date || "\u2014")} &bull; ${escapeHtml(ev.course || ev.chapter || "\u2014")}</span>
                     </div>
                     <span class="mc-chevron" ${isExpanded ? 'style="transform:rotate(90deg)"' : ''}>&#9656;</span>
@@ -2590,8 +2604,8 @@
             <tr class="event-row-clickable ${isExpanded ? 'expanded' : ''}" data-id="${ev.id}" data-name="${escapeHtml(ev.item_name)}">
                 <td>
                     <strong>${escapeHtml(ev.item_name)}</strong>
-                    ${(ev.status === 'cancelled') ? `<span style="margin-left:0.4rem; font-size:0.65rem; font-weight:700; background:#fee2e2; color:#dc2626; border:1px solid #fecaca; border-radius:4px; padding:1px 5px; vertical-align:middle; text-transform:uppercase;">Cancelled</span>` : ''}
-                    ${(ev.status === 'postponed') ? `<span style="margin-left:0.4rem; font-size:0.65rem; font-weight:700; background:#fef3c7; color:#d97706; border:1px solid #fde68a; border-radius:4px; padding:1px 5px; vertical-align:middle; text-transform:uppercase;">Postponed</span>` : ''}
+                    ${(ev.status === 'cancelled') ? `<span style="margin-left:0.4rem; font-size:0.65rem; font-weight:700; background:#fee2e2; color:#dc2626; border:1px solid #fecaca; border-radius:4px; padding:1px 5px; vertical-align:middle; text-transform:uppercase;">${escapeHtml(ev.status_badge || 'Cancelled')}</span>` : ''}
+                    ${(ev.status === 'postponed') ? `<span style="margin-left:0.4rem; font-size:0.65rem; font-weight:700; background:#fef3c7; color:#d97706; border:1px solid #fde68a; border-radius:4px; padding:1px 5px; vertical-align:middle; text-transform:uppercase;">${escapeHtml(ev.status_badge || 'Postponed')}</span>` : ''}
                 </td>
                 <td>${escapeHtml(ev.event_date || "\u2014")}</td>
                 <td>${escapeHtml(ev.course || "\u2014")}</td>
@@ -2817,7 +2831,8 @@
             if (!resolved && first && [...regNames].some(n => n.startsWith(first))) return false;
             return true;
         });
-        const syntheticRows = unmatchedPlaying.map((r, i) => ({
+        // Cancelled/postponed events count no synthetic GG rows
+        const syntheticRows = ((ev.status || 'active') !== 'active') ? [] : unmatchedPlaying.map((r, i) => ({
             id: `gg-rsvp-${i}`, customer_email: r.player_email || '',
             transaction_status: 'gg_rsvp', side_games: ''
         }));
@@ -5013,8 +5028,11 @@
             return true;
         });
 
-        // Create synthetic rows for unmatched GG RSVP players so they appear in the main table
-        const ggRsvpRows = unmatchedPlaying.map((r, i) => ({
+        // Create synthetic rows for unmatched GG RSVP players so they appear
+        // in the main table — except on cancelled/postponed events, where
+        // the roster reads empty (Kerry 2026-07-14: cleared RSVPs kept
+        // reappearing via these synthetic rows).
+        const ggRsvpRows = ((ev.status || 'active') !== 'active') ? [] : unmatchedPlaying.map((r, i) => ({
             id: `gg-rsvp-${i}`,
             rsvp_id: r.id,  // actual rsvps table id for credit application
             customer: r.resolved_name || r.player_name || 'Unknown',
@@ -5044,12 +5062,12 @@
         const evStatus = ev.status || 'active';
         if (evStatus === 'cancelled') {
             html += `<div style="display:flex; align-items:center; gap:0.5rem; background:#fee2e2; border:1px solid #fecaca; border-radius:6px; padding:0.5rem 0.75rem; margin-bottom:0.5rem; font-size:0.82rem;">
-                <span style="font-weight:700; color:#dc2626; text-transform:uppercase; font-size:0.75rem; letter-spacing:0.05em;">&#x26A0; Cancelled</span>
+                <span style="font-weight:700; color:#dc2626; text-transform:uppercase; font-size:0.75rem; letter-spacing:0.05em;">&#x26A0; ${escapeHtml(ev.status_badge || 'Cancelled')}</span>
                 ${ev.status_reason ? `<span style="color:#7f1d1d;">${escapeHtml(ev.status_reason)}</span>` : ''}
             </div>`;
         } else if (evStatus === 'postponed') {
             html += `<div style="display:flex; align-items:center; gap:0.5rem; background:#fef3c7; border:1px solid #fde68a; border-radius:6px; padding:0.5rem 0.75rem; margin-bottom:0.5rem; font-size:0.82rem;">
-                <span style="font-weight:700; color:#d97706; text-transform:uppercase; font-size:0.75rem; letter-spacing:0.05em;">&#x23F8; Postponed</span>
+                <span style="font-weight:700; color:#d97706; text-transform:uppercase; font-size:0.75rem; letter-spacing:0.05em;">&#x23F8; ${escapeHtml(ev.status_badge || 'Postponed')}</span>
                 ${ev.status_reason ? `<span style="color:#92400e;">${escapeHtml(ev.status_reason)}</span>` : ''}
             </div>`;
         }
@@ -10595,6 +10613,34 @@
 <p>{credit_line}</p>
 <p>See you at the next one!<br>The Golf Fellowship</p>`;
 
+    // Badge options shown as chips at cancel time (Kerry 2026-07-14).
+    // The first entry per status is the auto default; picking a chip
+    // pins it.
+    const CANCEL_BADGE_OPTIONS = ['CANCELLED', 'RAINED OUT', 'COURSE CLOSED', 'WEATHER', 'POSTPONED', 'RESCHEDULED'];
+
+    function _cancelDefaultBadge() {
+        return cancelEventState.status === 'postponed' ? 'POSTPONED' : 'CANCELLED';
+    }
+
+    function renderCancelBadgeChips() {
+        const wrap = document.getElementById('cancel-badge-chips');
+        const selected = cancelEventState.badge || _cancelDefaultBadge();
+        wrap.innerHTML = CANCEL_BADGE_OPTIONS.map(b => {
+            const active = b === selected;
+            return `<button type="button" class="cancel-badge-chip" data-badge="${b}"
+                style="padding:0.25rem 0.7rem; border-radius:999px; font-size:0.72rem; font-weight:700; letter-spacing:0.03em; cursor:pointer;
+                       border:1.5px solid ${active ? '#dc2626' : '#d1d5db'};
+                       background:${active ? '#fee2e2' : '#fff'};
+                       color:${active ? '#dc2626' : '#6b7280'};">${b}</button>`;
+        }).join('');
+        wrap.querySelectorAll('.cancel-badge-chip').forEach(chip => {
+            chip.addEventListener('click', () => {
+                cancelEventState.badge = chip.dataset.badge;
+                renderCancelBadgeChips();
+            });
+        });
+    }
+
     function showCancelPane(pane) {
         ['questions', 'done'].forEach(p => {
             document.getElementById(`cancel-${p}`).style.display = p === pane ? '' : 'none';
@@ -10606,7 +10652,9 @@
     }
 
     async function openCancelEventModal(eventId, eventName) {
-        cancelEventState = { eventId, eventName, status: 'cancelled', mode: 'credit', paidPlayers: [], stagedActions: {} };
+        cancelEventState = { eventId, eventName, status: 'cancelled', mode: 'credit', badge: null, paidPlayers: [], stagedActions: {} };
+        document.getElementById('cancel-clear-rsvps').checked = true;
+        renderCancelBadgeChips();
         document.getElementById('cancel-event-modal-title').textContent = 'Cancel / Postpone Event';
         document.getElementById('cancel-event-reason').value = '';
         document.getElementById('cancel-email-toggle').checked = true;
@@ -10714,6 +10762,8 @@
                 b.style.borderColor = isThis ? (btn.dataset.status === 'cancelled' ? '#dc2626' : '#d97706') : '#d1d5db';
                 b.classList.toggle('active', isThis);
             });
+            // Badge auto default follows status until a chip is pinned
+            renderCancelBadgeChips();
         });
     });
 
@@ -10826,6 +10876,8 @@
             status: cancelEventState.status,
             reason,
             mode: cancelEventState.mode,
+            badge: cancelEventState.badge || _cancelDefaultBadge(),
+            clear_rsvps: document.getElementById('cancel-clear-rsvps').checked,
             send_email: sendEmail,
             subject, html_body: body,
         };
@@ -10848,7 +10900,9 @@
 
             const bits = [];
             bits.push(`${data.actioned} player(s) ${cancelEventState.mode === 'refund' ? 'refunded' : 'settled'}.`);
-            if (data.silent_removed) bits.push(`${data.silent_removed} RSVP/comp player(s) removed (nothing owed).`);
+            if (data.silent_removed) bits.push(`${data.silent_removed} comp player(s) removed (nothing owed).`);
+            if (data.rsvps_cleared) bits.push(`${data.rsvps_cleared} RSVP entry(ies) cleared — roster is empty.`);
+            if (data.badge) bits.push(`Badge: ${data.badge}.`);
             if (data.skipped) bits.push(`${data.skipped} skipped — handle separately.`);
             if (data.failed) bits.push(`⚠️ ${data.failed} action(s) FAILED — review players individually.`);
             if (sendEmail) {

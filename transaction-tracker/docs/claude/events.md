@@ -353,6 +353,22 @@ the s9.18 rain-out):** a single screen of questions, then one Execute:
    Message History log. Summary reports actions, emails, and any
    players with no email on file.
 
+**v2.104.0 additions (Kerry, after the live s9.18 run):**
+- **Clear RSVP roster** (checkbox, default ON; `clear_rsvps` on the
+  endpoint): unpaid `rsvp_only`/`gg_rsvp` item rows are flipped to `wd`
+  (`clear_event_rsvp_items(event_id, note)`) so the roster reads empty
+  — the credit pass rightly skips never-paid rows, which otherwise kept
+  the roster populated post-cancel. The notification plan captures them
+  BEFORE the clear, so they still get the email. The UI also stops
+  rendering unmatched-GG-RSVP synthetic roster rows (and counting them)
+  on cancelled/postponed events.
+- **Status badge picker** (`badge` on the endpoint → new
+  `events.status_badge` column): chips CANCELLED / RAINED OUT / COURSE
+  CLOSED / WEATHER / POSTPONED / RESCHEDULED choose the label shown on
+  the desktop list rows, mobile event cards, and the detail banner.
+  Auto-defaults from the status; Restore clears it; editable later via
+  `update_event` (`status_badge` whitelisted) for backfills.
+
 **Why plan-before-credit matters:** the historic flow credited players
 FIRST and only then offered the email — but the send path skipped
 credited registrants, so the notice reached nobody. `cancel-execute`
