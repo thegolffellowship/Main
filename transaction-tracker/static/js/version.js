@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.104.1";
+window.TGF_VERSION = "2.104.2";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.104.2",
+    date: "2026-07-14",
+    changes: [
+      "RSVP credit badge fix (Kerry's live catch: Daniel South's $74 rain-out credit missing from his Vaaler Creek RSVP row): the first-name RSVP matcher had pinned his RSVP to Daniel LEHAN's active purchase. The roster UI's email-mismatch guard correctly re-displayed him as his own row, but the backend credit map used a stricter query WITHOUT that guard, so mis-matched players were never considered for a badge. get_event_rsvp_credit_map now mirrors the frontend rule exactly (a matched-but-different-email RSVP counts as unmatched) and resolves identity by the RSVP's own customer_id first.",
+      "Worse bug fixed in the same trace: get_rsvp_credit_info (the Apply Credit modal + credit-alert email path) resolved the player THROUGH the matched item -- for a mis-matched RSVP that surfaces, and would have applied, the WRONG PERSON'S credits. It now resolves by the RSVP's own customer_id (rule 6), trusts the matched item only when its email agrees, and passes customer_id + email into the credit lookup. The item-based credit-info endpoint also passes customer_id. Regression proof: test_rsvp_credit_map.py (9 checks, cross-Daniel scenario reproduced exactly).",
+    ],
+  },
   {
     version: "2.104.1",
     date: "2026-07-14",

@@ -413,6 +413,17 @@ active-event behavior is unchanged.
 When an event is cancelled, players who had credits from that event and are now RSVPing
 to a future event can have their credit applied directly from the RSVP row.
 
+**Identity rule (v2.104.2, the cross-Daniel bug):** every credit lookup
+in this flow resolves the player by the RSVP row's own `customer_id`
+FIRST, and trusts `matched_item_id` only when the item's email agrees
+with the RSVP's — the first-name matcher can pin an RSVP to the WRONG
+player's item (Daniel South's Vaaler RSVP → Daniel Lehan's purchase),
+and resolving through such an item surfaces the other person's credits.
+`get_event_rsvp_credit_map`'s synthetic-row query must stay in PARITY
+with the frontend's `unmatchedPlaying` filter (including the
+matched-but-different-email branch) or mis-matched players silently
+lose their Credit badge. Regression: `test_rsvp_credit_map.py`.
+
 **How it works:**
 - After RSVP inbox check, `_send_rsvp_credit_alerts()` auto-sends email alerts to players
   with outstanding credits who have RSVPed to an upcoming event.
