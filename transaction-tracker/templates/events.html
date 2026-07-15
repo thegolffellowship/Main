@@ -1015,79 +1015,75 @@
         </div>
     </div>
 
-    <!-- Cancel / Postpone Event Modal -->
+    <!-- Cancel / Postpone Event Modal — one-tap execute (Kerry-ratified 2026-07-14):
+         one screen of questions, one Execute that sets status, settles every
+         player, and emails everyone their exact credit amount. -->
     <div id="cancel-event-overlay" class="modal-overlay" style="display:none;">
-        <div class="modal credit-modal" style="max-width:600px;">
+        <div class="modal credit-modal" style="max-width:640px;">
             <div class="modal-header">
                 <h2 id="cancel-event-modal-title">Cancel Event</h2>
                 <button id="cancel-event-close" class="modal-close">&times;</button>
             </div>
 
-            <!-- Step 1: Choose status + enter reason -->
-            <div id="cancel-step-1">
-                <div style="margin-bottom:1rem;">
+            <!-- Questions (single screen) -->
+            <div id="cancel-questions">
+                <div style="margin-bottom:0.9rem;">
                     <div style="font-weight:600; font-size:0.85rem; margin-bottom:0.5rem;">Status</div>
                     <div style="display:flex; gap:0.5rem;">
                         <button type="button" class="cancel-status-btn active" data-status="cancelled" style="flex:1; padding:0.5rem; border:2px solid #dc2626; border-radius:6px; background:#fee2e2; color:#dc2626; font-weight:600; cursor:pointer; font-size:0.85rem;">Cancelled</button>
-                        <button type="button" class="cancel-status-btn" data-status="postponed" style="flex:1; padding:0.5rem; border:2px solid #d97706; border-radius:6px; background:#fff; color:#d97706; font-weight:600; cursor:pointer; font-size:0.85rem;">Postponed</button>
+                        <button type="button" class="cancel-status-btn" data-status="postponed" style="flex:1; padding:0.5rem; border:2px solid #d1d5db; border-radius:6px; background:#fff; color:#d97706; font-weight:600; cursor:pointer; font-size:0.85rem;">Postponed</button>
                     </div>
                 </div>
-                <div style="margin-bottom:1rem;">
+                <div style="margin-bottom:0.9rem;">
                     <label style="font-weight:600; font-size:0.85rem;">Reason <span style="color:#dc2626;">*</span>
-                        <input type="text" id="cancel-event-reason" class="modal-input" placeholder="e.g. Rained out, course unavailable..." style="margin-top:0.25rem;">
+                        <input type="text" id="cancel-event-reason" class="modal-input" placeholder="e.g. Rained out after 3 holes" style="margin-top:0.25rem;">
                     </label>
                 </div>
+
+                <div id="cancel-player-summary" style="padding:0.55rem 0.75rem; background:#f9fafb; border:1px solid #e5e7eb; border-radius:6px; margin-bottom:0.9rem; font-size:0.82rem; color:#374151;">Loading players&hellip;</div>
+
+                <div style="margin-bottom:0.9rem;">
+                    <div style="font-weight:600; font-size:0.85rem; margin-bottom:0.5rem;">Paid players</div>
+                    <div style="display:flex; gap:0.5rem;">
+                        <button type="button" class="cancel-mode-btn active" data-mode="credit" style="flex:1; padding:0.45rem; border:2px solid #16a34a; border-radius:6px; background:#f0fdf4; color:#15803d; font-weight:600; cursor:pointer; font-size:0.8rem;">Credit All</button>
+                        <button type="button" class="cancel-mode-btn" data-mode="refund" style="flex:1; padding:0.45rem; border:2px solid #d1d5db; border-radius:6px; background:#fff; color:#1d4ed8; font-weight:600; cursor:pointer; font-size:0.8rem;">Refund All</button>
+                        <button type="button" class="cancel-mode-btn" data-mode="custom" style="flex:1; padding:0.45rem; border:2px solid #d1d5db; border-radius:6px; background:#fff; color:#374151; font-weight:600; cursor:pointer; font-size:0.8rem;">One by One</button>
+                    </div>
+                </div>
+
+                <div id="cancel-staging-wrap" style="display:none; margin-bottom:0.9rem;">
+                    <div style="font-size:0.78rem; color:#6b7280; margin-bottom:0.4rem;">Choose an action for each player — skipped players still get the notification (without an amount).</div>
+                    <div id="cancel-staging-list" style="display:flex; flex-direction:column; gap:0.4rem; max-height:260px; overflow-y:auto;"></div>
+                </div>
+
+                <div style="border-top:1px solid #e5e7eb; padding-top:0.75rem; margin-bottom:0.9rem;">
+                    <label style="display:flex; gap:0.45rem; align-items:center; font-weight:600; font-size:0.85rem; cursor:pointer;">
+                        <input type="checkbox" id="cancel-email-toggle" checked style="cursor:pointer;">
+                        Send notification email <span style="font-weight:400; color:#6b7280;">(includes each player's credit amount)</span>
+                    </label>
+                    <div id="cancel-email-fields" style="margin-top:0.55rem;">
+                        <input type="text" id="cancel-email-subject" class="modal-input" placeholder="Subject" style="margin-bottom:0.4rem;">
+                        <textarea id="cancel-email-body" class="modal-input" rows="7" style="font-size:0.8rem; font-family:inherit;"></textarea>
+                        <div style="font-size:0.7rem; color:#9ca3af; margin-top:0.25rem;">
+                            Variables: {player_name} {event_name} {event_date} {course} {reason} {status_label} {credit_amount} {credit_line} &mdash; {credit_line} becomes each player's personalized "your $X.XX has been credited" sentence.
+                        </div>
+                    </div>
+                </div>
+
                 <div class="modal-actions">
-                    <button type="button" id="cancel-step1-back" class="btn btn-secondary">Cancel</button>
-                    <button type="button" id="cancel-step1-next" class="btn btn-primary" style="background:#dc2626;">Next</button>
+                    <button type="button" id="cancel-abort" class="btn btn-secondary">Back</button>
+                    <button type="button" id="cancel-execute" class="btn btn-primary" style="background:#dc2626;">Execute</button>
                 </div>
             </div>
 
-            <!-- Step 2: Choose bulk vs one-by-one -->
-            <div id="cancel-step-2" style="display:none;">
-                <div id="cancel-step2-summary" style="padding:0.6rem 0.75rem; background:#f9fafb; border:1px solid #e5e7eb; border-radius:6px; margin-bottom:1rem; font-size:0.85rem;"></div>
-                <div style="font-weight:600; font-size:0.85rem; margin-bottom:0.75rem;">How would you like to handle paid players?</div>
-                <div style="display:flex; flex-direction:column; gap:0.5rem; margin-bottom:1rem;">
-                    <button type="button" id="cancel-bulk-credit" class="btn" style="padding:0.6rem 1rem; background:#f0fdf4; border:2px solid #16a34a; color:#15803d; font-weight:600; font-size:0.85rem; text-align:left; border-radius:8px; cursor:pointer;">
-                        <strong>Credit All</strong><br>
-                        <span style="font-weight:400; font-size:0.78rem; color:#6b7280;">Hold payment as a credit toward a future event</span>
-                    </button>
-                    <button type="button" id="cancel-bulk-refund" class="btn" style="padding:0.6rem 1rem; background:#eff6ff; border:2px solid #2563eb; color:#1d4ed8; font-weight:600; font-size:0.85rem; text-align:left; border-radius:8px; cursor:pointer;">
-                        <strong>Refund All</strong><br>
-                        <span style="font-weight:400; font-size:0.78rem; color:#6b7280;">Issue refund via original payment method (auto-detected)</span>
-                    </button>
-                    <button type="button" id="cancel-one-by-one" class="btn" style="padding:0.6rem 1rem; background:#fafafa; border:2px solid #9ca3af; color:#374151; font-weight:600; font-size:0.85rem; text-align:left; border-radius:8px; cursor:pointer;">
-                        <strong>One by One</strong><br>
-                        <span style="font-weight:400; font-size:0.78rem; color:#6b7280;">Review each player and choose Credit, Refund, or Skip</span>
-                    </button>
-                </div>
-                <div class="modal-actions" style="padding-top:0;">
-                    <button type="button" id="cancel-step2-back" class="btn btn-secondary">Back</button>
-                </div>
-            </div>
-
-            <!-- Step 3: One-by-one staging list -->
-            <div id="cancel-step-3" style="display:none;">
-                <div style="font-size:0.82rem; color:#6b7280; margin-bottom:0.75rem;" id="cancel-step3-hint">
-                    Choose an action for each player, then click Apply All.
-                </div>
-                <div id="cancel-staging-list" style="display:flex; flex-direction:column; gap:0.4rem; max-height:320px; overflow-y:auto; margin-bottom:0.75rem;"></div>
-                <div class="modal-actions">
-                    <button type="button" id="cancel-step3-back" class="btn btn-secondary">Back</button>
-                    <button type="button" id="cancel-step3-apply" class="btn btn-primary" style="background:#dc2626;">Apply All</button>
-                </div>
-            </div>
-
-            <!-- Step 4: Complete — optional email -->
-            <div id="cancel-step-4" style="display:none;">
+            <!-- Done -->
+            <div id="cancel-done" style="display:none;">
                 <div style="text-align:center; padding:1rem 0;">
                     <div style="font-size:2rem; margin-bottom:0.5rem;">&#10003;</div>
-                    <div id="cancel-step4-summary" style="font-weight:600; font-size:0.95rem; margin-bottom:0.5rem;"></div>
-                    <div style="font-size:0.82rem; color:#6b7280; margin-bottom:1.25rem;" id="cancel-step4-detail"></div>
-                    <div style="font-weight:600; font-size:0.85rem; margin-bottom:0.5rem;">Would you like to send the cancellation email now?</div>
-                    <div style="display:flex; gap:0.75rem; justify-content:center;">
-                        <button type="button" id="cancel-send-email" class="btn" style="background:#7c3aed; color:#fff; border:none; border-radius:6px; padding:0.5rem 1.25rem; font-weight:600; cursor:pointer;">Send Email</button>
-                        <button type="button" id="cancel-skip-email" class="btn btn-secondary">Skip</button>
+                    <div id="cancel-done-summary" style="font-weight:600; font-size:0.95rem; margin-bottom:0.5rem;"></div>
+                    <div id="cancel-done-detail" style="font-size:0.82rem; color:#6b7280; margin-bottom:1rem; text-align:left; display:inline-block;"></div>
+                    <div class="modal-actions" style="justify-content:center;">
+                        <button type="button" id="cancel-done-close" class="btn btn-primary">Close</button>
                     </div>
                 </div>
             </div>
@@ -6989,9 +6985,15 @@
 
         const allRegs = [...registrants, ...ggRows];
 
+        const _ev = allEvents.find(e => e.item_name === eventName) || {};
+        const evCancelled = (_ev.status === 'cancelled' || _ev.status === 'postponed');
         return allRegs.filter(r => {
             const status = (r.transaction_status || "active");
-            if (status === "credited" || status === "transferred" || status === "refunded") return false;
+            // Credited/refunded players stay in the audience on a
+            // cancelled/postponed event — they were credited BY the
+            // cancellation and are exactly who follow-ups are for.
+            if (status === "transferred") return false;
+            if ((status === "credited" || status === "refunded") && !evCancelled) return false;
             // Resolve email: use customer_email, or look up from other items by name
             const email = r.customer_email || (r.customer ? emailByName[(r.customer || "").toLowerCase()] : "") || "";
             if (!email) return false;
@@ -10580,124 +10582,79 @@
         stagedActions: {},
     };
 
-    function showCancelStep(step) {
-        [1, 2, 3, 4].forEach(n => {
-            document.getElementById(`cancel-step-${n}`).style.display = n === step ? '' : 'none';
+    // Default cancellation notice — {credit_line} is filled per player
+    // server-side with their exact settled amount.
+    const CANCEL_EMAIL_DEFAULT_SUBJECT = '{event_name} — {status_label}';
+    const CANCEL_EMAIL_DEFAULT_BODY = `<p>Hi {player_name},</p>
+<p>{event_name} at {course} on {event_date} has been {status_label} — {reason}.</p>
+<p>{credit_line}</p>
+<p>See you at the next one!<br>The Golf Fellowship</p>`;
+
+    function showCancelPane(pane) {
+        ['questions', 'done'].forEach(p => {
+            document.getElementById(`cancel-${p}`).style.display = p === pane ? '' : 'none';
         });
-        document.getElementById('cancel-loading').style.display = 'none';
+        document.getElementById('cancel-loading').style.display = pane === 'loading' ? 'block' : 'none';
+        if (pane === 'loading') {
+            ['questions', 'done'].forEach(p => { document.getElementById(`cancel-${p}`).style.display = 'none'; });
+        }
     }
 
-    function openCancelEventModal(eventId, eventName) {
-        cancelEventState = { eventId, eventName, status: 'cancelled', reason: '', paidPlayers: [], stagedActions: {} };
+    async function openCancelEventModal(eventId, eventName) {
+        cancelEventState = { eventId, eventName, status: 'cancelled', mode: 'credit', paidPlayers: [], stagedActions: {} };
         document.getElementById('cancel-event-modal-title').textContent = 'Cancel / Postpone Event';
         document.getElementById('cancel-event-reason').value = '';
+        document.getElementById('cancel-email-toggle').checked = true;
+        document.getElementById('cancel-email-fields').style.display = '';
+        document.getElementById('cancel-email-subject').value = CANCEL_EMAIL_DEFAULT_SUBJECT;
+        document.getElementById('cancel-email-body').value = CANCEL_EMAIL_DEFAULT_BODY;
+        document.getElementById('cancel-staging-wrap').style.display = 'none';
+        document.getElementById('cancel-player-summary').textContent = 'Loading players…';
         // Reset status buttons
         document.querySelectorAll('.cancel-status-btn').forEach(b => {
             const active = b.dataset.status === 'cancelled';
             b.style.background = active ? '#fee2e2' : '#fff';
-            b.style.borderColor = active ? '#dc2626' : '#d97706';
+            b.style.borderColor = active ? '#dc2626' : '#d1d5db';
             b.classList.toggle('active', active);
         });
-        showCancelStep(1);
+        _setCancelMode('credit');
+        showCancelPane('questions');
         document.getElementById('cancel-event-overlay').style.display = 'flex';
+
+        // Load paid players up front (works pre-cancel) so the manager
+        // sees who's affected BEFORE executing anything.
+        try {
+            const resp = await fetch(`/api/events/${eventId}/cancellation-players`);
+            cancelEventState.paidPlayers = resp.ok ? await resp.json() : [];
+        } catch (e) { cancelEventState.paidPlayers = []; }
+        const n = cancelEventState.paidPlayers.length;
+        document.getElementById('cancel-player-summary').innerHTML =
+            `<strong>${n}</strong> paid player${n === 1 ? '' : 's'} to settle. ` +
+            'RSVP-only and comp players are removed automatically (nothing owed) and still receive the notification.';
+        buildCancelStagingList();
     }
 
     function closeCancelModal() {
         document.getElementById('cancel-event-overlay').style.display = 'none';
     }
 
-    // Status toggle
-    document.querySelectorAll('.cancel-status-btn').forEach(btn => {
-        btn.addEventListener('click', () => {
-            cancelEventState.status = btn.dataset.status;
-            document.querySelectorAll('.cancel-status-btn').forEach(b => {
-                const isThis = b === btn;
-                b.style.background = isThis ? (btn.dataset.status === 'cancelled' ? '#fee2e2' : '#fef3c7') : '#fff';
-                b.style.borderColor = isThis ? (btn.dataset.status === 'cancelled' ? '#dc2626' : '#d97706') : '#d1d5db';
-                b.style.color = isThis ? (btn.dataset.status === 'cancelled' ? '#dc2626' : '#d97706') : '#6b7280';
-            });
+    function _setCancelMode(mode) {
+        cancelEventState.mode = mode;
+        document.querySelectorAll('.cancel-mode-btn').forEach(b => {
+            const isThis = b.dataset.mode === mode;
+            b.classList.toggle('active', isThis);
+            const colors = { credit: ['#16a34a', '#f0fdf4', '#15803d'],
+                             refund: ['#2563eb', '#eff6ff', '#1d4ed8'],
+                             custom: ['#6b7280', '#f3f4f6', '#374151'] };
+            const [border, bg, fg] = colors[b.dataset.mode];
+            b.style.borderColor = isThis ? border : '#d1d5db';
+            b.style.background = isThis ? bg : '#fff';
+            b.style.color = fg;
         });
-    });
-
-    document.getElementById('cancel-event-close').addEventListener('click', closeCancelModal);
-    document.getElementById('cancel-event-overlay').addEventListener('click', e => { if (e.target === document.getElementById('cancel-event-overlay')) closeCancelModal(); });
-    document.getElementById('cancel-step1-back').addEventListener('click', closeCancelModal);
-
-    document.getElementById('cancel-step1-next').addEventListener('click', async () => {
-        const reason = document.getElementById('cancel-event-reason').value.trim();
-        if (!reason) { alert('Please enter a reason.'); return; }
-        cancelEventState.reason = reason;
-
-        // Show loading
-        document.getElementById('cancel-step-1').style.display = 'none';
-        document.getElementById('cancel-loading').style.display = 'block';
-        document.getElementById('cancel-loading').textContent = 'Cancelling event...';
-
-        try {
-            // Cancel the event (silently removes comps/RSVP players)
-            const resp = await fetch(`/api/events/${cancelEventState.eventId}/cancel`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ status: cancelEventState.status, reason: cancelEventState.reason }),
-            });
-            const data = await resp.json();
-            if (!resp.ok) { alert(data.error || 'Failed to cancel event.'); showCancelStep(1); return; }
-
-            // Fetch paid players
-            const pResp = await fetch(`/api/events/${cancelEventState.eventId}/cancellation-players`);
-            cancelEventState.paidPlayers = pResp.ok ? await pResp.json() : [];
-
-            if (!cancelEventState.paidPlayers.length) {
-                // No paid players — go straight to done
-                showCancelComplete(0, 0, 0);
-                return;
-            }
-
-            // Show step 2 — choose bulk vs one-by-one
-            const label = cancelEventState.status === 'cancelled' ? 'Cancelled' : 'Postponed';
-            document.getElementById('cancel-step2-summary').innerHTML =
-                `<strong>${escapeHtml(cancelEventState.eventName)}</strong> marked as <strong>${label}</strong>. ` +
-                `<strong>${cancelEventState.paidPlayers.length}</strong> paid player(s) need attention. ` +
-                (data.silent_removed > 0 ? `${data.silent_removed} comp/RSVP player(s) silently removed.` : '');
-            showCancelStep(2);
-        } catch (err) {
-            alert('Error: ' + err.message);
-            showCancelStep(1);
-        }
-    });
-
-    document.getElementById('cancel-step2-back').addEventListener('click', () => {
-        // Note: event is already cancelled at this point; back just goes back for email or admin to handle separately
-        closeCancelModal();
-    });
-
-    async function doBulkAction(action) {
-        document.getElementById('cancel-step-2').style.display = 'none';
-        document.getElementById('cancel-loading').style.display = 'block';
-        document.getElementById('cancel-loading').textContent = `Applying ${action === 'credit' ? 'credits' : 'refunds'}...`;
-
-        try {
-            const resp = await fetch(`/api/events/${cancelEventState.eventId}/cancel-bulk`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ action, note: `Event ${cancelEventState.status} — ${cancelEventState.reason}` }),
-            });
-            const data = await resp.json();
-            if (!resp.ok) { alert(data.error || 'Failed.'); showCancelStep(2); return; }
-            const ok = (data.results?.ok || []).length;
-            const failed = (data.results?.failed || []).length;
-            showCancelComplete(ok, failed, 0);
-        } catch (err) {
-            alert('Error: ' + err.message);
-            showCancelStep(2);
-        }
+        document.getElementById('cancel-staging-wrap').style.display = mode === 'custom' ? '' : 'none';
     }
 
-    document.getElementById('cancel-bulk-credit').addEventListener('click', () => doBulkAction('credit'));
-    document.getElementById('cancel-bulk-refund').addEventListener('click', () => doBulkAction('refund'));
-
-    document.getElementById('cancel-one-by-one').addEventListener('click', () => {
-        // Build staging list
+    function buildCancelStagingList() {
         const list = document.getElementById('cancel-staging-list');
         cancelEventState.stagedActions = {};
         cancelEventState.paidPlayers.forEach(p => { cancelEventState.stagedActions[p.id] = 'credit'; });
@@ -10709,18 +10666,16 @@
                 <span style="flex:1; font-weight:600;">${escapeHtml(displayName(p.customer || 'Unknown', p.user_status))}</span>
                 <span style="color:#6b7280; font-size:0.75rem;">${price}</span>
                 <button type="button" class="staging-btn staging-credit active" data-id="${p.id}" data-action="credit" style="padding:0.2rem 0.55rem; border-radius:4px; border:1.5px solid #16a34a; background:#f0fdf4; color:#15803d; font-size:0.72rem; font-weight:600; cursor:pointer;">Credit</button>
-                <button type="button" class="staging-btn staging-refund" data-id="${p.id}" data-action="refund" style="padding:0.2rem 0.55rem; border-radius:4px; border:1.5px solid #2563eb; background:#fff; color:#1d4ed8; font-size:0.72rem; font-weight:600; cursor:pointer;">Refund${method}</button>
-                <button type="button" class="staging-btn staging-skip" data-id="${p.id}" data-action="skip" style="padding:0.2rem 0.55rem; border-radius:4px; border:1.5px solid #9ca3af; background:#fff; color:#6b7280; font-size:0.72rem; font-weight:600; cursor:pointer;">Skip</button>
+                <button type="button" class="staging-btn staging-refund" data-id="${p.id}" data-action="refund" style="padding:0.2rem 0.55rem; border-radius:4px; border:1.5px solid #d1d5db; background:#fff; color:#9ca3af; font-size:0.72rem; font-weight:600; cursor:pointer;">Refund${method}</button>
+                <button type="button" class="staging-btn staging-skip" data-id="${p.id}" data-action="skip" style="padding:0.2rem 0.55rem; border-radius:4px; border:1.5px solid #d1d5db; background:#fff; color:#9ca3af; font-size:0.72rem; font-weight:600; cursor:pointer;">Skip</button>
             </div>`;
-        }).join('');
+        }).join('') || '<div style="font-size:0.8rem; color:#6b7280;">No paid players.</div>';
 
-        // Attach toggle handlers
         list.querySelectorAll('.staging-btn').forEach(btn => {
             btn.addEventListener('click', () => {
                 const id = parseInt(btn.dataset.id);
                 const action = btn.dataset.action;
                 cancelEventState.stagedActions[id] = action;
-                // Update styles on all three buttons for this player
                 list.querySelectorAll(`.staging-btn[data-id="${id}"]`).forEach(b => {
                     const isActive = b.dataset.action === action;
                     if (b.classList.contains('staging-credit')) {
@@ -10739,77 +10694,96 @@
                 });
             });
         });
-
-        showCancelStep(3);
-    });
-
-    document.getElementById('cancel-step3-back').addEventListener('click', () => showCancelStep(2));
-
-    document.getElementById('cancel-step3-apply').addEventListener('click', async () => {
-        const actions = cancelEventState.paidPlayers.map(p => ({
-            item_id: p.id,
-            action: cancelEventState.stagedActions[p.id] || 'skip',
-            method: p.auto_refund_method || '',
-            note: `Event ${cancelEventState.status} — ${cancelEventState.reason}`,
-        }));
-
-        document.getElementById('cancel-step-3').style.display = 'none';
-        document.getElementById('cancel-loading').style.display = 'block';
-        document.getElementById('cancel-loading').textContent = 'Applying actions...';
-
-        try {
-            const resp = await fetch(`/api/events/${cancelEventState.eventId}/cancel-apply`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ actions }),
-            });
-            const data = await resp.json();
-            if (!resp.ok) { alert(data.error || 'Failed.'); showCancelStep(3); return; }
-            const ok = (data.results?.ok || []).length;
-            const failed = (data.results?.failed || []).length;
-            const skipped = (data.results?.skipped || []).length;
-            showCancelComplete(ok, failed, skipped);
-        } catch (err) {
-            alert('Error: ' + err.message);
-            showCancelStep(3);
-        }
-    });
-
-    function showCancelComplete(ok, failed, skipped) {
-        const label = cancelEventState.status === 'cancelled' ? 'Cancelled' : 'Postponed';
-        document.getElementById('cancel-step4-summary').textContent = `Event ${label} Successfully`;
-        let detail = '';
-        if (ok > 0) detail += `${ok} player(s) actioned. `;
-        if (skipped > 0) detail += `${skipped} skipped. `;
-        if (failed > 0) detail += `${failed} failed — review individually. `;
-        if (!ok && !skipped && !failed) detail = 'No paid players to action.';
-        document.getElementById('cancel-step4-detail').textContent = detail.trim();
-        document.getElementById('cancel-loading').style.display = 'none';
-        showCancelStep(4);
-        // Refresh events data
-        fetchEvents();
     }
 
-    document.getElementById('cancel-send-email').addEventListener('click', () => {
-        closeCancelModal();
-        // Open the compose modal and pre-select the cancellation template
-        if (cancelEventState.eventName) {
-            openComposeModal(cancelEventState.eventName);
-            // Pre-select Event Cancellation template if it exists
-            setTimeout(() => {
-                const tplSelect = document.getElementById('compose-template');
-                if (tplSelect) {
-                    const opt = Array.from(tplSelect.options).find(o => o.textContent.toLowerCase().includes('cancellation'));
-                    if (opt) {
-                        tplSelect.value = opt.value;
-                        tplSelect.dispatchEvent(new Event('change'));
-                    }
-                }
-            }, 50);
-        }
+    // Status toggle
+    document.querySelectorAll('.cancel-status-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            cancelEventState.status = btn.dataset.status;
+            document.querySelectorAll('.cancel-status-btn').forEach(b => {
+                const isThis = b === btn;
+                b.style.background = isThis ? (btn.dataset.status === 'cancelled' ? '#fee2e2' : '#fef3c7') : '#fff';
+                b.style.borderColor = isThis ? (btn.dataset.status === 'cancelled' ? '#dc2626' : '#d97706') : '#d1d5db';
+                b.classList.toggle('active', isThis);
+            });
+        });
     });
 
-    document.getElementById('cancel-skip-email').addEventListener('click', closeCancelModal);
+    document.querySelectorAll('.cancel-mode-btn').forEach(btn => {
+        btn.addEventListener('click', () => _setCancelMode(btn.dataset.mode));
+    });
+
+    document.getElementById('cancel-email-toggle').addEventListener('change', function() {
+        document.getElementById('cancel-email-fields').style.display = this.checked ? '' : 'none';
+    });
+
+    document.getElementById('cancel-event-close').addEventListener('click', closeCancelModal);
+    document.getElementById('cancel-event-overlay').addEventListener('click', e => { if (e.target === document.getElementById('cancel-event-overlay')) closeCancelModal(); });
+    document.getElementById('cancel-abort').addEventListener('click', closeCancelModal);
+    document.getElementById('cancel-done-close').addEventListener('click', closeCancelModal);
+
+    // EXECUTE — one call does everything: status, credits/refunds, emails
+    document.getElementById('cancel-execute').addEventListener('click', async () => {
+        const reason = document.getElementById('cancel-event-reason').value.trim();
+        if (!reason) { alert('Please enter a reason.'); return; }
+        const sendEmail = document.getElementById('cancel-email-toggle').checked;
+        const subject = document.getElementById('cancel-email-subject').value.trim();
+        const body = document.getElementById('cancel-email-body').value.trim();
+        if (sendEmail && (!subject || !body)) { alert('Subject and message are required to send the email (or untick it).'); return; }
+
+        const n = cancelEventState.paidPlayers.length;
+        const label = cancelEventState.status === 'cancelled' ? 'CANCEL' : 'POSTPONE';
+        const modeTxt = { credit: `credit all ${n} paid player(s)`, refund: `refund all ${n} paid player(s)`, custom: 'apply your per-player choices' }[cancelEventState.mode];
+        if (!confirm(`${label} "${cancelEventState.eventName}", ${modeTxt}${sendEmail ? ', and email everyone their amounts' : ''}?`)) return;
+
+        showCancelPane('loading');
+        document.getElementById('cancel-loading').textContent = 'Executing — settling players' + (sendEmail ? ' and sending emails…' : '…');
+
+        const payload = {
+            status: cancelEventState.status,
+            reason,
+            mode: cancelEventState.mode,
+            send_email: sendEmail,
+            subject, html_body: body,
+        };
+        if (cancelEventState.mode === 'custom') {
+            payload.actions = cancelEventState.paidPlayers.map(p => ({
+                item_id: p.id,
+                action: cancelEventState.stagedActions[p.id] || 'skip',
+                method: p.auto_refund_method || '',
+            }));
+        }
+
+        try {
+            const resp = await fetch(`/api/events/${cancelEventState.eventId}/cancel-execute`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload),
+            });
+            const data = await resp.json();
+            if (!resp.ok) { alert(data.error || 'Execute failed.'); showCancelPane('questions'); return; }
+
+            const bits = [];
+            bits.push(`${data.actioned} player(s) ${cancelEventState.mode === 'refund' ? 'refunded' : 'settled'}.`);
+            if (data.silent_removed) bits.push(`${data.silent_removed} RSVP/comp player(s) removed (nothing owed).`);
+            if (data.skipped) bits.push(`${data.skipped} skipped — handle separately.`);
+            if (data.failed) bits.push(`⚠️ ${data.failed} action(s) FAILED — review players individually.`);
+            if (sendEmail) {
+                bits.push(`${data.emails_sent} email(s) sent${data.emails_failed ? `, ${data.emails_failed} failed` : ''}.`);
+                if ((data.players_without_email || []).length) {
+                    bits.push(`⚠️ No email on file: ${data.players_without_email.join(', ')}.`);
+                }
+            }
+            document.getElementById('cancel-done-summary').textContent =
+                `Event ${cancelEventState.status === 'cancelled' ? 'Cancelled' : 'Postponed'} Successfully`;
+            document.getElementById('cancel-done-detail').innerHTML = bits.map(escapeHtml).join('<br>');
+            showCancelPane('done');
+            fetchEvents();
+        } catch (err) {
+            alert('Error: ' + err.message);
+            showCancelPane('questions');
+        }
+    });
 
     // Restore event handler
     document.addEventListener('click', async e => {
