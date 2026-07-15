@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.106.2";
+window.TGF_VERSION = "2.107.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.107.0",
+    date: "2026-07-15",
+    changes: [
+      "Balance-due payments now auto-recognize even when a spouse pays from THEIR OWN Venmo (Kerry: 'What happens if Richard's wife sends the Venmo from her Venmo?'). Before: the inbound matcher resolved the payer by handle -> name -> alias; an unrecognized payer (a spouse) landed in the manual-match queue. Now, when none of those resolve, a memo fallback kicks in: because the balance-due link we email the player prefills the memo with the PLAYER's name ('Richard Palacios - Balance due for s18.8 Vaaler Creek'), the matcher reads the receipt memo and ties the payment to the UNIQUE open balance whose amount matches AND whose player's full name appears in the memo. Guards keep it safe: full names only (a bare 'Richard' won't match), exact amount (±$1), and if two open balances would both match it stays manual. The verified +PAY child is tagged '[memo-match]' for the audit trail. The refund (outbound) side already used memo as a verifier; this brings the inbound side to parity. Tests: test_inbound_memo_match.py (11 checks).",
+    ],
+  },
   {
     version: "2.106.2",
     date: "2026-07-15",
