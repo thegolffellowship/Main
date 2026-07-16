@@ -1108,6 +1108,14 @@
         </div>
     </div>
 
+    <style>
+    .ap-suggest-wrap { position: relative; }
+    .ap-suggest { position: absolute; top: 100%; left: 0; right: 0; z-index: 10001; background: #fff; border: 1px solid #e5e7eb; border-radius: 8px; box-shadow: 0 6px 20px rgba(0,0,0,0.18); max-height: 240px; overflow-y: auto; margin-top: 2px; }
+    .ap-suggest-item { padding: 0.6rem 0.8rem; cursor: pointer; font-size: 0.95rem; border-bottom: 1px solid #f1f5f9; color: #1b1b1b; }
+    .ap-suggest-item:last-child { border-bottom: none; }
+    .ap-suggest-item.active, .ap-suggest-item:hover { background: #fff7ed; }
+    </style>
+
     <!-- Add Player Modal -->
     <div id="add-player-overlay" class="modal-overlay" style="display:none;">
         <div class="modal add-player-modal">
@@ -1148,8 +1156,10 @@
                     </div>
                     <div id="ap-name-input" class="ap-field-section" style="display:none;">
                         <label class="ap-field-label"><span>Player Name <span class="ap-required">*</span></span>
-                            <input type="text" id="add-player-name" class="modal-input" placeholder="First Last" autocomplete="off" list="ap-customer-list" aria-required="true">
-                            <datalist id="ap-customer-list"></datalist>
+                            <div class="ap-suggest-wrap">
+                                <input type="text" id="add-player-name" class="modal-input" placeholder="First Last" autocomplete="off" aria-autocomplete="list" aria-required="true">
+                                <div id="ap-name-suggest" class="ap-suggest" style="display:none;"></div>
+                            </div>
                         </label>
                     </div>
                     <div id="ap-contact-fields" class="edit-grid ap-field-section-sm" style="display:none;">
@@ -1798,6 +1808,7 @@
     let handicapIndexMap = {};  // keyed by lowercase customer_name → {index_9, index_18}
     let expandedEventId = null;
     let rsvpCreditMap = {};  // keyed by event_name → { customerName: creditInfo }
+    let apCustomerNames = [];  // Add Player name typeahead pool (mobile-safe)
     let gamesOpenForEvent = {};  // keyed by event id → true if games panel is open
     let pairingsOpenForEvent = {};  // keyed by event id → true if pairings panel is open
     let pairingsData = {};          // keyed by event id → {groups_9, groups_18, slots_9, slots_18, isDirty, mode, protectPartners, seeds, swapMode, selection, loaded}
@@ -8780,11 +8791,10 @@
             }
         });
 
-        // Populate customer autocomplete list
+        // Customer-name pool for the custom mobile-friendly typeahead (native
+        // <datalist> renders no dropdown on iOS Safari — Kerry 2026-07-16).
         if (!isComp) {
-            const datalist = document.getElementById("ap-customer-list");
-            const names = [...new Set(allItems.map(i => i.customer).filter(Boolean))].sort();
-            datalist.innerHTML = names.map(n => `<option value="${escapeHtml(n)}">`).join("");
+            apCustomerNames = [...new Set(allItems.map(i => i.customer).filter(Boolean))].sort();
         }
     }
 
@@ -10379,7 +10389,51 @@
                     else statusSelect.value = "";
                 }
             }
+            renderApNameSuggest(name);
         });
+
+        // Custom player-name typeahead — replaces the native <datalist>, which
+        // shows no dropdown on iOS Safari (Kerry 2026-07-16: roster autofill
+        // wasn't happening on mobile when adding an RSVP). Works on both.
+        function renderApNameSuggest(q) {
+            const box = document.getElementById('ap-name-suggest');
+            if (!box) return;
+            const query = (q || '').trim().toLowerCase();
+            if (!query) { box.style.display = 'none'; box.innerHTML = ''; return; }
+            const starts = [], contains = [];
+            for (const n of apCustomerNames) {
+                const ln = n.toLowerCase();
+                if (ln === query) continue;               // already exact — no dropdown
+                if (ln.startsWith(query)) starts.push(n);
+                else if (ln.includes(query)) contains.push(n);
+            }
+            const matches = starts.concat(contains).slice(0, 8);
+            if (!matches.length) { box.style.display = 'none'; box.innerHTML = ''; return; }
+            box.innerHTML = matches.map(n =>
+                `<div class="ap-suggest-item" data-name="${escapeHtml(n)}">${escapeHtml(n)}</div>`).join('');
+            box.style.display = 'block';
+        }
+        (function wireApNameSuggest() {
+            const box = document.getElementById('ap-name-suggest');
+            const input = document.getElementById('add-player-name');
+            if (!box || !input) return;
+            // mousedown (fires on iOS tap BEFORE the input blur) so the choice
+            // registers and focus is kept.
+            box.addEventListener('mousedown', function(e) {
+                const item = e.target.closest('.ap-suggest-item');
+                if (!item) return;
+                e.preventDefault();
+                input.value = item.dataset.name;
+                input.dispatchEvent(new Event('input', { bubbles: true }));
+                box.style.display = 'none'; box.innerHTML = '';
+            });
+            input.addEventListener('blur', function() {
+                setTimeout(() => { box.style.display = 'none'; }, 150);
+            });
+            input.addEventListener('focus', function() {
+                if (input.value.trim()) renderApNameSuggest(input.value);
+            });
+        })();
 
         // Auto-format amount fields: prevent multiple decimals on input and format on blur
         ["add-player-amount", "upgrade-rsvp-amount"].forEach(id => {
