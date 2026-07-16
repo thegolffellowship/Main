@@ -651,6 +651,252 @@ def audit_dupes(conn):
     return out
 
 
+# ────────────────────────────────────────────────────────────────────
+# Section: taxslice — month-scoped income integrity for the sales-tax
+# webfile (A4 / Kerry 2026-07-17). arg = YYYY-MM, default 2026-06.
+# ────────────────────────────────────────────────────────────────────
+def audit_taxslice(conn, month: str = "2026-06"):
+    month = (month or "2026-06").strip()[:7]
+    out = {"month": month}
+
+    # What the app itself would report as the month's tax reserve —
+    # sourced from the near-dead acct_allocations table, so shown for
+    # context, not trusted.
+    out["app_tax_reserve_from_allocations"] = _one(conn, """
+        SELECT COUNT(*) AS alloc_rows,
+               ROUND(COALESCE(SUM(tax_reserve),0),2) AS tax_reserve,
+               ROUND(COALESCE(SUM(tgf_operating),0),2) AS taxable_operating
+        FROM acct_allocations WHERE allocation_date LIKE ?""", (month + "%",))
+
+    # The month's live income ledger, by category/source — the base any
+    # revenue-derived taxable calc would start from.
+    out["income_by_category_source"] = [dict(r) for r in conn.execute("""
+        SELECT COALESCE(category,'(null)') AS category,
+               COALESCE(source,'(null)') AS source,
+               COUNT(*) AS n, ROUND(SUM(amount),2) AS total
+        FROM acct_transactions
+        WHERE COALESCE(status,'active') NOT IN ('reversed','merged')
+          AND entry_type='income' AND date LIKE ?
+        GROUP BY 1,2 ORDER BY total DESC""", (month + "%",))]
+
+    # Floating income rows in the month (no customer, no item, no event)
+    # — invisible to any per-event taxable calc, or double-counted if a
+    # twin exists.
+    out["floating_income_rows"] = [dict(r) for r in conn.execute("""
+        SELECT id, date, description, ROUND(amount,2) AS amount,
+               source, source_ref
+        FROM acct_transactions
+        WHERE COALESCE(status,'active') NOT IN ('reversed','merged')
+          AND entry_type='income' AND customer_id IS NULL
+          AND item_id IS NULL
+          AND (event_name IS NULL OR TRIM(event_name)='')
+          AND date LIKE ?
+        ORDER BY ABS(amount) DESC""", (month + "%",))]
+    out["floating_income_total"] = round(
+        sum(r["amount"] or 0 for r in out["floating_income_rows"]), 2)
+
+    # Cross-writer twins touching the month, ±1-day window (catches the
+    # Jeff Young class the same-day scan missed). Transfer legs excluded.
+    fam = "rtrim(source_ref,'0123456789')"
+    twins = [dict(r) for r in conn.execute(f"""
+        SELECT a.id AS id_a, b.id AS id_b, a.date AS date_a, b.date AS date_b,
+               ROUND(a.amount,2) AS amt_a, ROUND(b.amount,2) AS amt_b,
+               a.source_ref AS ref_a, b.source_ref AS ref_b,
+               a.entry_type AS type_a, b.entry_type AS type_b,
+               COALESCE(a.customer, b.customer) AS customer,
+               a.customer_id AS cid_a, b.customer_id AS cid_b
+        FROM acct_transactions a
+        JOIN acct_transactions b ON b.id > a.id
+          AND ABS(ABS(b.amount) - ABS(a.amount)) < 0.01
+          AND ABS(julianday(b.date) - julianday(a.date)) <= 1
+          AND COALESCE(b.customer_id,-1) = COALESCE(a.customer_id,-1)
+          AND {fam.replace('source_ref','b.source_ref')} !=
+              {fam.replace('source_ref','a.source_ref')}
+        WHERE COALESCE(a.status,'active') NOT IN ('reversed','merged')
+          AND COALESCE(b.status,'active') NOT IN ('reversed','merged')
+          AND ABS(a.amount) > 0.01
+          AND (a.date LIKE ? OR b.date LIKE ?)
+          AND a.source_ref NOT LIKE 'xfer%' AND b.source_ref NOT LIKE 'xfer%'
+          AND a.source_ref NOT LIKE '%-in' AND a.source_ref NOT LIKE '%-out'
+          AND b.source_ref NOT LIKE '%-in' AND b.source_ref NOT LIKE '%-out'
+        ORDER BY ABS(a.amount) DESC""", (month + "%", month + "%"))]
+    income_twins = [t for t in twins
+                    if t["type_a"] == "income" and t["type_b"] == "income"]
+    out["twin_pairs_in_month"] = {
+        "all_pairs": len(twins),
+        "income_income_pairs": len(income_twins),
+        "income_double_count_dollars": round(
+            sum(abs(t["amt_a"] or 0) for t in income_twins), 2),
+        "pairs": twins[:30],
+    }
+    return out
+
+
+# ────────────────────────────────────────────────────────────────────
+# Section: prizes — S2 1099-MISC prize exposure. arg = calendar year,
+# default 2026. Calendar-YTD per customer from tgf_payouts (event date
+# basis), cash + credit-applied (tgf_payouts records winnings
+# regardless of settlement rail; unpaid/credit rows included).
+# ────────────────────────────────────────────────────────────────────
+def audit_prizes(conn, year: str = "2026"):
+    year = (year or "2026").strip()[:4]
+    rows = [dict(r) for r in conn.execute("""
+        SELECT p.customer_id,
+               TRIM(COALESCE(c.first_name,'')||' '||
+                    COALESCE(c.last_name,'')) AS customer,
+               COUNT(*) AS payout_rows,
+               COUNT(DISTINCT p.event_id) AS events,
+               ROUND(SUM(p.amount),2) AS total_ytd,
+               ROUND(SUM(CASE WHEN p.paid_at IS NOT NULL
+                              THEN p.amount ELSE 0 END),2) AS settled,
+               ROUND(SUM(CASE WHEN p.paid_at IS NULL
+                              THEN p.amount ELSE 0 END),2) AS unsettled,
+               MAX(e.event_date) AS last_win_date
+        FROM tgf_payouts p
+        JOIN tgf_events e ON e.id = p.event_id
+        LEFT JOIN customers c ON c.customer_id = p.customer_id
+        WHERE substr(e.event_date,1,4) = ?
+        GROUP BY p.customer_id
+        ORDER BY total_ytd DESC""", (year,))]
+    for r in rows:
+        t = r["total_ytd"] or 0
+        r["flag"] = ("REPORTABLE_600" if t >= 600 else
+                     "W9_REQUIRED_500" if t >= 500 else
+                     "WATCH_400" if t >= 400 else "")
+    flagged = [r for r in rows if r["flag"]]
+    return {
+        "year": year,
+        "thresholds": {"WATCH": 400, "W9_REQUIRED": 500, "REPORTABLE": 600},
+        "customers_total": len(rows),
+        "prize_total_ytd": round(sum(r["total_ytd"] or 0 for r in rows), 2),
+        "flag_counts": {
+            "REPORTABLE_600": sum(1 for r in rows
+                                  if r["flag"] == "REPORTABLE_600"),
+            "W9_REQUIRED_500": sum(1 for r in rows
+                                   if r["flag"] == "W9_REQUIRED_500"),
+            "WATCH_400": sum(1 for r in rows if r["flag"] == "WATCH_400"),
+        },
+        "flagged": flagged,
+        "next_in_line_300_400": [r for r in rows
+                                 if 300 <= (r["total_ytd"] or 0) < 400][:15],
+    }
+
+
+# ────────────────────────────────────────────────────────────────────
+# Section: k3 — characterize every computed-vs-actual variance lump
+# with event/game/date context + GG's published money for the same
+# player+event (gg_game_results.purse and gg_history_results.money_cents).
+# ────────────────────────────────────────────────────────────────────
+def audit_k3(conn):
+    lumps = [dict(r) for r in conn.execute("""
+        SELECT p.acct_transaction_id AS ledger_id,
+               MIN(p.customer_id) AS customer_id,
+               ROUND(SUM(p.amount),2) AS computed_sum,
+               ROUND(ABS(a.total_amount),2) AS actual_paid,
+               ROUND(ABS(a.total_amount) - SUM(p.amount),2) AS variance,
+               a.date AS paid_date, a.description AS paid_description,
+               MIN(e.id) AS tgf_event_id
+        FROM tgf_payouts p
+        JOIN acct_transactions a ON a.id = p.acct_transaction_id
+        JOIN tgf_events e ON e.id = p.event_id
+        GROUP BY p.acct_transaction_id
+        HAVING ABS(ABS(a.total_amount) - SUM(p.amount)) > 0.01
+        ORDER BY variance""")]
+    for lump in lumps:
+        lump["payout_rows"] = [dict(r) for r in conn.execute("""
+            SELECT p.id, p.category, ROUND(p.amount,2) AS computed,
+                   p.description, e.code AS event_code, e.name AS event_name,
+                   e.event_date, e.chapter, e.events_id AS tracker_event_id
+            FROM tgf_payouts p JOIN tgf_events e ON e.id = p.event_id
+            WHERE p.acct_transaction_id = ?""", (lump["ledger_id"],))]
+        lump["customer"] = (_one(conn, """
+            SELECT TRIM(COALESCE(first_name,'')||' '||COALESCE(last_name,''))
+                   AS nm FROM customers WHERE customer_id=?""",
+            (lump["customer_id"],)) or {}).get("nm")
+        ev_ids = {r["tracker_event_id"] for r in lump["payout_rows"]
+                  if r["tracker_event_id"] is not None}
+        gg_rows, ggh_rows = [], []
+        for ev in ev_ids:
+            gg_rows += [dict(r) for r in conn.execute("""
+                SELECT game, game_label, position, ROUND(purse,2) AS purse
+                FROM gg_game_results
+                WHERE event_id=? AND customer_id=? AND purse IS NOT NULL""",
+                (ev, lump["customer_id"]))]
+            ggh_rows += [dict(r) for r in conn.execute("""
+                SELECT r.game_label, r.position,
+                       ROUND(r.money_cents/100.0,2) AS money
+                FROM gg_history_results r
+                JOIN gg_history_events ghe ON ghe.id = r.gg_event_id
+                WHERE ghe.tracker_event_id=? AND r.customer_id=?
+                  AND r.money_cents IS NOT NULL AND r.money_cents != 0""",
+                (ev, lump["customer_id"]))]
+        lump["gg_game_results"] = gg_rows
+        lump["gg_published_total"] = round(
+            sum(r["purse"] or 0 for r in gg_rows), 2) if gg_rows else None
+        lump["gg_history_money"] = ggh_rows
+        lump["gg_history_total"] = round(
+            sum(r["money"] or 0 for r in ggh_rows), 2) if ggh_rows else None
+    return {"variance_lumps": lumps, "lump_count": len(lumps)}
+
+
+# ────────────────────────────────────────────────────────────────────
+# Section: xferchain — A2 evidence: per-transfer-chain balance check
+# (out leg vs in leg vs any venmo-bd income on the target item).
+# ────────────────────────────────────────────────────────────────────
+def audit_xferchain(conn):
+    legs = {}
+    for r in conn.execute("""
+        SELECT id, source_ref, ROUND(amount,2) AS amount, date, item_id,
+               customer_id, entry_type, category
+        FROM acct_transactions
+        WHERE source_ref LIKE 'xfer-flat-%'
+          AND COALESCE(status,'active') NOT IN ('reversed','merged')"""):
+        m = re.match(r"xfer-flat-(\d+)-(in|out)$", r["source_ref"] or "")
+        if m:
+            legs[(int(m.group(1)), m.group(2))] = dict(r)
+    chains, orphan_legs = [], 0
+    for (item_id, side), leg in legs.items():
+        if side != "out":
+            continue
+        target = _one(conn, """
+            SELECT CAST(transferred_to_id AS INTEGER) AS tgt FROM items
+            WHERE id=?""", (item_id,)).get("tgt")
+        in_leg = legs.get((target, "in")) if target else None
+        if in_leg is None and target is None:
+            orphan_legs += 1
+            continue
+        out_amt = leg["amount"] or 0
+        in_amt = (in_leg or {}).get("amount") or 0
+        diff = round(in_amt - out_amt, 2)
+        chain = {"source_item": item_id, "target_item": target,
+                 "out": out_amt, "in": in_amt, "in_minus_out": diff}
+        if in_leg and abs(diff) > 0.01:
+            bd = [dict(r) for r in conn.execute("""
+                SELECT id, source_ref, ROUND(amount,2) AS amount, date
+                FROM acct_transactions
+                WHERE item_id=? AND entry_type='income'
+                  AND source_ref LIKE 'venmo-bd-%'
+                  AND COALESCE(status,'active') NOT IN ('reversed','merged')""",
+                (target,))]
+            chain["venmo_bd_rows_on_target"] = bd
+            chain["fee_double_booked"] = any(
+                abs((b["amount"] or 0) - diff) <= 0.02 for b in bd)
+        chains.append(chain)
+    unbalanced = [c for c in chains if abs(c["in_minus_out"]) > 0.01]
+    double = [c for c in chains if c.get("fee_double_booked")]
+    return {
+        "chains": len(chains),
+        "orphan_out_legs_no_target": orphan_legs,
+        "unbalanced_chains": len(unbalanced),
+        "unbalanced_net_dollars": round(
+            sum(c["in_minus_out"] for c in unbalanced), 2),
+        "fee_double_booked_chains": len(double),
+        "fee_double_booked_dollars": round(
+            sum(c["in_minus_out"] for c in double), 2),
+        "examples": unbalanced[:20],
+    }
+
+
 SECTIONS = {
     "tables": audit_tables,
     "customer": audit_customer_lens,
@@ -658,25 +904,34 @@ SECTIONS = {
     "ledger": audit_ledger,
     "money": audit_money,
     "dupes": audit_dupes,
+    "taxslice": audit_taxslice,
+    "prizes": audit_prizes,
+    "k3": audit_k3,
+    "xferchain": audit_xferchain,
 }
+# Sections that accept an argument via "name=value" syntax.
+PARAM_SECTIONS = {"taxslice", "prizes"}
 
 
 def run(section: str = "summary") -> dict:
     """Entry point for the bridge. section = one section name, 'summary'
     (= everything), or comma-separated names."""
     section = (section or "summary").strip().lower()
-    names = (list(SECTIONS) if section in ("summary", "all", "")
+    core = ["tables", "customer", "fks", "ledger", "money", "dupes"]
+    names = (core if section in ("summary", "all", "")
              else [s.strip() for s in section.split(",") if s.strip()])
     result = {"read_only": True, "sections": names}
     with managed_connection() as conn:
         for name in names:
+            name, _, param = name.partition("=")
             fn = SECTIONS.get(name)
             if not fn:
                 result[name] = {"error": f"unknown section {name!r}; "
                                          f"valid: {sorted(SECTIONS)}"}
                 continue
             try:
-                result[name] = fn(conn)
+                result[name] = (fn(conn, param) if param
+                                and name in PARAM_SECTIONS else fn(conn))
             except Exception as exc:
                 result[name] = {"error": f"{type(exc).__name__}: {exc}"}
     return result
