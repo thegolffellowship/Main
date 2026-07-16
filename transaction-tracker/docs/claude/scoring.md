@@ -243,9 +243,10 @@ for weeks). We OWN the determination from our scorecards + formula layer:
   scores land), a one-time daemon backfill on boot when the table is empty,
   and the bridge `scoring-mvp-recompute[:event]` for a manual run.
 - **Badge read + RETROACTIVITY BOUNDARY:** `get_scoring_rounds_list` emits
-  mvp/co_mvp/tgf_mvp/co_tgf_mvp. Our computation is authoritative **only for
-  events after the ratified boundary `_MVP_RETRO_BOUNDARY = "2026-07-14"`**
-  (a9.18/s9.18). On/before the boundary GG is bible (Kerry standing rule):
+  mvp/co_mvp/tgf_mvp/co_tgf_mvp. Our computation is authoritative for events
+  **on/after the ratified boundary `_MVP_RETRO_BOUNDARY = "2026-07-14"`**
+  (a9.18 forward — a9.18 is the first event the cap affects, `>=`). Before the
+  boundary GG is bible (Kerry standing rule):
   where GG recorded an MVP (`event_mvps`) we defer to it — our post-cap
   handicaps must not re-crown a frozen result (e.g. s18.6 Flying L, where our
   net points make Sanford City MVP but GG's tiebreaker MVP is Jeff Young) —
