@@ -104,6 +104,52 @@ def main():
     check("totals in_flight_amount = 50.00", t["in_flight_amount"] == 50.00)
     check("totals completed_amount = 30.00", t["completed_amount"] == 30.00)
 
+    # ── Age anchoring (Kerry: same-event credits must show the SAME age) ──
+    import datetime as _dt
+    with db._connect(tmp) as conn:
+        # past event; two credits registered on DIFFERENT days
+        conn.execute("INSERT INTO events (id, item_name, event_date, chapter,"
+                     " format) VALUES (701, 's9.71 Played', '2026-07-10',"
+                     " 'San Antonio', '9 Holes')")
+        conn.execute("INSERT INTO customers (customer_id, first_name,"
+                     " last_name) VALUES (50, 'Fay', 'Foxtrot')")
+        # rain-out/registration credits: order_date differs, event_id shared
+        conn.execute(
+            "INSERT INTO items (id, email_uid, item_index, merchant, order_date,"
+            " item_name, customer, customer_id, item_price, transaction_status,"
+            " event_id) VALUES (7201,'r7201',0,'The Golf Fellowship','2026-07-01',"
+            " 's9.71 Played','Fay Foxtrot',50,'$50.00','credited',701)")
+        conn.execute(
+            "INSERT INTO items (id, email_uid, item_index, merchant, order_date,"
+            " item_name, customer, customer_id, credit_amount, transaction_status,"
+            " event_id) VALUES (7202,'r7202',0,'The Golf Fellowship','2026-07-05',"
+            " 's9.71 Played','Gus Golf',50,'$60.00','wd',701)")
+        # synthetic excess credit on the SAME past event -> must use order_date
+        conn.execute(
+            "INSERT INTO items (id, email_uid, item_index, merchant, order_date,"
+            " item_name, customer, customer_id, item_price, transaction_status,"
+            " event_id) VALUES (7203,'credit-excess-7201-1',0,'Manual Entry',"
+            " '2026-07-12','Excess credit — s9.71 Played','Fay Foxtrot',50,"
+            " '$8.00','credited',701)")
+        conn.commit()
+
+    ov2 = db.get_refunds_overview(tmp, completed_days=120)
+    byid = {o["item_id"]: o for o in ov2["outstanding"]}
+    from email_parser.timezone_utils import today_central
+    today = today_central()
+
+    def days_since(s):
+        return max(0, (today - _dt.datetime.strptime(s, "%Y-%m-%d").date()).days)
+
+    check("event-anchored age uses event_date not order_date (7201)",
+          byid[7201]["age_days"] == days_since("2026-07-10"))
+    check("same-event credits share age despite different order_dates",
+          byid[7201]["age_days"] == byid[7202]["age_days"])
+    check("synthetic excess credit keeps creation date (order_date)",
+          byid[7203]["age_days"] == days_since("2026-07-12"))
+    check("synthetic age differs from event-anchored age",
+          byid[7203]["age_days"] != byid[7201]["age_days"])
+
     print(f"\n{PASS} passed, {FAIL} failed")
     return 1 if FAIL else 0
 

@@ -1021,8 +1021,18 @@ Backend `get_refunds_overview(db_path, completed_days=120)` in
 - **OUTSTANDING** — held credit balances that could be paid back: WD rows
   (credit in `credit_amount`) + standalone `credited` rows (credit in
   `item_price`), positive only, minus any with an OPEN refund watch.
-  Sorted **oldest first** (age from `order_date`); each row shows an age
-  chip (amber ≥14d, red ≥30d). A per-item **"Held"** marker to separate
+  Sorted **oldest first**; each row shows an age
+  chip (amber ≥14d, red ≥30d). **Age anchoring (v2.108.1)** — a credit's
+  age is NOT `order_date` (that's the player's *registration* date, so
+  same-event rain-out credits would each show a different age by who
+  registered when). For registration rows flipped to credited/wd
+  (rain-out, withdrawal) the age anchors to the linked **event's date**
+  (`_credit_anchor` joins `events` via `items.event_id`), so every credit
+  from one event shares an age. Synthetic credit rows (excess/overpayment
+  — `email_uid` `credit-excess-*`/`credit-overpay*`, or item_name
+  `Excess credit…`/`Overpayment…`) are created *at* credit time, so they
+  keep `order_date`. Future-event or date-less credits fall back to
+  `order_date`; ages clamp at 0. A per-item **"Held"** marker to separate
   intentionally-held credits from refund-pending ones is a **separate
   schema addition pending Kerry's ruling** — today it's age-sort only.
 - **IN FLIGHT** — open `refund_watches` (a P2P pay link was tapped,

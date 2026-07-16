@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.108.0";
+window.TGF_VERSION = "2.108.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.108.1",
+    date: "2026-07-16",
+    changes: [
+      "REFUNDS console age fix (Kerry: 'Age on those is incorrect'). The OUTSTANDING bucket was keying each credit's age off the player's REGISTRATION date (items.order_date), so credits from the SAME rain-out showed different ages -- every s9.18 Cedar Creek credit read 7d/3d/2d by who registered when, instead of a single age since the event. Age now anchors to the EVENT date for registration-based credits (rain-out/withdrawal rows flipped to credited/wd): all s9.18 Cedar Creek credits (event 2026-07-14) read the same age. Synthetic credit rows (excess/overpayment, email_uid credit-excess-*) are created AT credit time, so those correctly keep their own creation date (an 'Excess credit' made today still shows 0d). Future-event or date-less credits fall back to order_date, and ages clamp at 0. test_refunds_overview.py extended to 16 checks (same-event credits share age; synthetic rows keep creation date).",
+    ],
+  },
   {
     version: "2.108.0",
     date: "2026-07-15",
