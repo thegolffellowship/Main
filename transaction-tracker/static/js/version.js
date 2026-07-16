@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.115.3";
+window.TGF_VERSION = "2.115.4";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.115.4",
+    date: "2026-07-16",
+    changes: [
+      "Added docs/claude/financial-audit-charter.md — the charter for a dedicated, comprehensive audit of the entire Tracker's financial system and customer_id / FK integrity (Kerry, 2026-07-16). End-state: one FINANCIAL/LEDGER as single source of truth, every financial row tied to a customer_id and an FK home, CPA/IRS-audit-defensible. Documents the known gaps (Venmo receipts captured but customer_id null; one-shot resolution with no re-resolve on alias-add; computed-vs-actual payout variance unreconciled), the read-only-first method, and the phased deliverables. Kicks off in a fresh session; CA architecture guidance solicited via mailbox #199.",
+    ],
+  },
   {
     version: "2.115.3",
     date: "2026-07-16",
