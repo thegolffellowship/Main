@@ -8680,6 +8680,13 @@ def _ensure_mvp_tables(conn: sqlite3.Connection) -> None:
         points       REAL,
         computed_at  TEXT DEFAULT (datetime('now')),
         PRIMARY KEY (event_id, customer_id, kind))""")
+    # Which events our engine has authoritatively determined (winner or not).
+    # Lets the badge treat our computation as the sole authority for a
+    # computed event — the GG event_mvps fallback applies ONLY to events we
+    # have never computed, never per-player within a computed event.
+    conn.execute("""CREATE TABLE IF NOT EXISTS mvp_computed_events (
+        event_id     INTEGER PRIMARY KEY REFERENCES events(id),
+        computed_at  TEXT DEFAULT (datetime('now')))""")
 
 
 def _parse_money(v) -> float:
@@ -9120,40 +9127,61 @@ def recompute_computed_mvps(scope_event: str | None = None,
         name_to_id = {r["item_name"].lower(): r["id"]
                       for r in conn.execute(
                           "SELECT id, item_name FROM events").fetchall()}
+        # Targets = every event that has scorecards (scoped to one day when
+        # scope_event is given). We iterate EVENTS, not dates, so two 18-hole
+        # events sharing a date each get their own determination (an 18h event
+        # is its own day-group — determine_tgf_mvp excludes other 18h events).
         if scope_event:
             row = conn.execute(
                 "SELECT event_date FROM events WHERE item_name = ? COLLATE NOCASE",
                 (scope_event,)).fetchone()
-            dates = [row["event_date"]] if row and row["event_date"] else []
+            date = row["event_date"] if row else None
+            if not date:
+                return {"days": 0, "mvp_rows": 0, "tgf_mvp_rows": 0,
+                        "events_computed": 0, "scope": scope_event}
+            targets = [r["name"] for r in conn.execute(
+                """SELECT DISTINCT e.item_name AS name
+                     FROM scoring_rounds sr JOIN events e ON e.id = sr.event_id
+                    WHERE e.event_date = ?""", (date,)).fetchall()]
+            clear_ids = [r["id"] for r in conn.execute(
+                "SELECT id FROM events WHERE event_date = ?", (date,)).fetchall()]
         else:
-            dates = [r["date"] for r in conn.execute(
-                """SELECT DISTINCT e.event_date AS date
+            targets = [r["name"] for r in conn.execute(
+                """SELECT DISTINCT e.item_name AS name
                      FROM scoring_rounds sr JOIN events e ON e.id = sr.event_id
                     WHERE e.event_date IS NOT NULL""").fetchall()]
+            clear_ids = None  # whole-table clear below
 
-    reps = {}   # event_date -> one representative event_name to drive the day
-    with _connect(db_path) as conn:
-        for d in dates:
-            r = conn.execute(
-                "SELECT item_name FROM events WHERE event_date = ? ORDER BY id LIMIT 1",
-                (d,)).fetchone()
-            if r:
-                reps[d] = r["item_name"]
+        # Clear up-front (once) so per-event inserts never wipe a sibling's
+        # freshly-written rows mid-loop.
+        if clear_ids is not None:
+            ph = ",".join("?" for _ in clear_ids) or "NULL"
+            conn.execute(f"DELETE FROM event_mvp_computed WHERE event_id IN ({ph})",
+                         clear_ids)
+            conn.execute(f"DELETE FROM mvp_computed_events WHERE event_id IN ({ph})",
+                         clear_ids)
+        else:
+            conn.execute("DELETE FROM event_mvp_computed")
+            conn.execute("DELETE FROM mvp_computed_events")
+        conn.commit()
 
-    days_done, mvp_rows, tgf_rows = 0, 0, 0
-    for d, rep in reps.items():
-        det = determine_tgf_mvp(rep, db_path=db_path)
+    processed: set[int] = set()
+    mvp_rows = tgf_rows = 0
+    for tname in targets:
+        tid = name_to_id.get(tname.lower())
+        if tid in processed:
+            continue
+        det = determine_tgf_mvp(tname, db_path=db_path)
         if det.get("error"):
             continue
-        # Every event that shares this date is in-scope for the clear+rewrite.
+        linked_ids = [name_to_id[n.lower()] for n in det.get("linked_events", [])
+                      if n.lower() in name_to_id]
         with _connect(db_path) as conn:
-            day_ids = [r["id"] for r in conn.execute(
-                "SELECT id FROM events WHERE event_date = ?", (d,)).fetchall()]
-            if day_ids:
-                ph = ",".join("?" for _ in day_ids)
-                conn.execute(
-                    f"DELETE FROM event_mvp_computed WHERE event_id IN ({ph})",
-                    day_ids)
+            for lid in (linked_ids or [tid]):
+                if lid:
+                    conn.execute(
+                        "INSERT OR REPLACE INTO mvp_computed_events (event_id) VALUES (?)",
+                        (lid,))
             for pe in det.get("per_event", []):
                 cm = pe.get("city_mvp") or {}
                 if cm.get("status") != "determined":
@@ -9187,9 +9215,9 @@ def recompute_computed_mvps(scope_event: str | None = None,
                          w.get("day_points")))
                     tgf_rows += 1
             conn.commit()
-        days_done += 1
-    return {"days": days_done, "mvp_rows": mvp_rows, "tgf_mvp_rows": tgf_rows,
-            "scope": scope_event or "all"}
+        processed.update(l for l in (linked_ids or [tid]) if l)
+    return {"days": len(processed), "mvp_rows": mvp_rows, "tgf_mvp_rows": tgf_rows,
+            "events_computed": len(processed), "scope": scope_event or "all"}
 
 
 # ── Event game results (v2.35.0; flight rule per Kerry 2026-07-07) ─────
@@ -11710,6 +11738,8 @@ def get_scoring_rounds_list(player: str | None = None, event: str | None = None,
                        (SELECT MIN(h.hole_number) FROM scoring_holes h
                         WHERE h.scoring_round_id = sr.id
                           AND h.strokes IS NOT NULL) AS first_hole,
+                       EXISTS(SELECT 1 FROM mvp_computed_events ce
+                              WHERE ce.event_id = sr.event_id) AS _ev_computed,
                        (SELECT cm.split FROM event_mvp_computed cm
                           WHERE cm.event_id = sr.event_id
                             AND cm.customer_id = sr.customer_id
@@ -11736,13 +11766,22 @@ def get_scoring_rounds_list(player: str | None = None, event: str | None = None,
         out = []
         for r in rows:
             d = dict(r)
+            ev_computed = d.pop("_ev_computed", 0)
             cm, ct = d.pop("_cm_split", None), d.pop("_ct_split", None)
             gg_mvp, gg_tgf = d.pop("_gg_mvp", 0), d.pop("_gg_tgf", 0)
-            # sole MVP: computed row with split=0, else GG fallback (sole).
-            d["mvp"] = 1 if (cm == 0 or (cm is None and gg_mvp)) else 0
-            d["co_mvp"] = 1 if cm == 1 else 0
-            d["tgf_mvp"] = 1 if (ct == 0 or (ct is None and gg_tgf)) else 0
-            d["co_tgf_mvp"] = 1 if ct == 1 else 0
+            # Our computation is authoritative for any event we've computed:
+            # a winner has split=0 (sole) or 1 (Co-), a non-winner has no row.
+            # The GG event_mvps fallback applies ONLY to events never computed.
+            if ev_computed:
+                d["mvp"] = 1 if cm == 0 else 0
+                d["co_mvp"] = 1 if cm == 1 else 0
+                d["tgf_mvp"] = 1 if ct == 0 else 0
+                d["co_tgf_mvp"] = 1 if ct == 1 else 0
+            else:
+                d["mvp"] = 1 if gg_mvp else 0
+                d["co_mvp"] = 0
+                d["tgf_mvp"] = 1 if gg_tgf else 0
+                d["co_tgf_mvp"] = 0
             out.append(d)
         return out
 
