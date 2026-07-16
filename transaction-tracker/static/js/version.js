@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.116.4";
+window.TGF_VERSION = "2.117.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.117.0",
+    date: "2026-07-16",
+    changes: [
+      "IRS-lane read-only reports (fin_audit bridge, financial-audit Deliverable 2 phase): scoring-fin-audit gains four sections. taxslice=YYYY-MM — month-scoped income integrity for the sales-tax webfile: the month's income ledger by category/source, floating income rows (no customer/item/event), cross-writer twin pairs widened to a ±1-day window (catches the date-off-by-one class), and the app's own acct_allocations-sourced tax_reserve shown for context (that table is near-dead, so it is context, not truth). prizes=YYYY — S2 1099-MISC prize exposure: per-customer calendar-YTD totals from tgf_payouts (event-date basis, settled + unsettled so credit-applied winnings count) flagged WATCH >=$400 / W-9-REQUIRED >=$500 / REPORTABLE >=$600, plus the $300-400 next-in-line band. k3 — every computed-vs-actual variance lump with its payout rows, customer, event code/date, and GG's published money for the same player+event (gg_game_results.purse + gg_history_results.money_cents) so Kerry can rule netting-vs-engine-delta on evidence. xferchain — A2 evidence: per-transfer-chain balance (out leg vs in leg via items.transferred_to_id) and whether the fee difference is double-booked by a venmo-bd income row on the target item. All pure SELECT/PRAGMA.",
+      "Governance library seed #1 (mailbox #201, Kerry-directed): docs/governance/TGF_Handicap_Standard_v1_0.md committed VERBATIM per the README intake rule. The draft Audit Readiness Standard is NOT mirrored (explicitly held until Kerry ratifies).",
+    ],
+  },
   {
     version: "2.116.4",
     date: "2026-07-16",
