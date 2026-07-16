@@ -1360,6 +1360,7 @@ def _scoring_dispatch(url: str, extract: str):
       scoring-card:<round_id>      full scorecard with derivations
       scoring-courses              course/tee database listing
       scoring-mvp-import           import_gg_event_mvps(widget_url)
+      scoring-mvp-recompute[:event] self-compute City/TGF MVP badges (split -> Co-)
       scoring-games-import         import_gg_game_results(widget_url) — GG-recorded CTP/LP/HIO/TEAM Net winners
       scoring-flights-import       import_gg_game_flights(widget_url) — per-game flight membership
       scoring-game-results:<event>|<game>|<flights>  shadow-computed winners for one game
@@ -1396,6 +1397,13 @@ def _scoring_dispatch(url: str, extract: str):
             # url = tournament_results widget (optionally &round=<id>);
             # time-budgeted — call repeatedly until rounds_left == 0
             return json.dumps(db.import_gg_event_mvps(url), indent=2)
+        if cmd == "scoring-mvp-recompute":
+            # Self-computed City MVP / TGF MVP (Kerry-ratified 2026-07-16):
+            # materialize determine_tgf_mvp winners + split -> Co- into
+            # event_mvp_computed so the badges read our own determination.
+            # arg = event name to scope one day; empty = recompute every date.
+            return json.dumps(
+                db.recompute_computed_mvps(arg.strip() or None), indent=2)
         if cmd == "scoring-games-import":
             # GG-recorded CTP / Longest Putt / HIO / TEAM Net winners;
             # same widget-url contract + time budget as scoring-mvp-import
