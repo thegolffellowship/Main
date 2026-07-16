@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.114.1";
+window.TGF_VERSION = "2.114.2";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.114.2",
+    date: "2026-07-16",
+    changes: [
+      "TGF MVP is now gated to multi-chapter days (Kerry ruling B): on a day where only one chapter fielded the game (the other chapter's event had no players / rained out), the lone City MVP is NOT elevated to TGF MVP — matching GG, which never ran the TGF MVP game on a single-chapter day. Co-TGF-MVP still applies only to genuine multi-chapter ties.",
+      "Docs: handicap-projection.md flipped to RATIFIED and handicaps.md updated with the go-live rulings of record (Kerry mailbox #196/#197, 2026-07-16): D1 tee-based playing handicap, D4 nine-hole cap ordering note, R1 remove ×0.96 (sweep-gated, not yet applied), R2 12-month lookback deviation, R3 plus handling held, the layering principle, the standing retroactivity boundary (no handicap change alters results before a9.18/s9.18), and H-5 Star Ranch tee values stand.",
+    ],
+  },
   {
     version: "2.114.1",
     date: "2026-07-16",

@@ -1,8 +1,69 @@
-# Playing-Handicap Projection (Task #16) — CA review & ratification draft
+# Playing-Handicap Projection (Task #16) — RATIFIED
 
-**Status: SHADOW / read-only. Awaiting Kerry + CA ratification of the
-100% tee-based playing-handicap calculation.** Nothing member-facing.
+**Status: RATIFIED (Kerry, 2026-07-16 — mailbox #196/#197, D1).** The
+tee-based playing-handicap calculation is the TGF standard. Still SHADOW /
+read-only at the member layer (nothing member-facing ships off it without
+the net-scoring go-live), but the CALCULATION itself is ratified law.
 Author: tracker-claude, 2026-07-16.
+
+## ═══ RATIFICATION (Kerry, mailbox #196, D1 date 2026-07-16) ═══
+
+> **D1 RATIFIED:** The tee-based playing-handicap calculation — Course
+> Handicap = index × slope/113 + (CR − par), unrounded; Playing Handicap =
+> whs_round at 100% allowance, no cap except the 18.0 nine-hole CH cap;
+> per-hole allocation by stroke index, max 2 pops — is the TGF standard.
+> Plus-handicap treatment and per-game adjustments are explicitly excluded,
+> pending their own rulings. Index provenance (the 0.96 removal and the
+> index-vs-index sweep) is a separate layer and does not gate this.
+
+**Evidence basis (platform-claude review, #196):** GG's own printed PH
+detail (s9.17 Silverhorn) states "full precision in intermediary
+calculations, rounding once, as the last step" and walks
+index × slope/113 + (C.R.−P) verbatim — all 19 visible players reproduce
+through our calc (incl. Griffin −0.085→0, Young 0.431→0, Wade +0.2). The
+formula is exonerated by GG's math, not just parity counts.
+
+**D4 CLOSED (nine-hole CH cap):** GG's "Maximum Nine Hole Course Handicap
+18.0" == the TGF 2-pop rule (same constraint, two views); confirmed firing
+(DelCarmen s9.15 Quarry, CH 19.951 → capped 18.0). **ORDERING NOTE:** GG
+rounds THEN caps; our spec caps THEN rounds. Equivalent at integer caps —
+**pin the order in config before any fractional/per-game cap exists.**
+
+**R1 — REMOVE the ×0.96 "bonus for excellence" multiplier.** Pre-2020 USGA,
+deleted by WHS; TGF follows WHS except deliberate deviations, and this was
+inherited not chosen. Removal raises the field's indexes ~4% (Kerry: current
+system favors low handicappers too much). SEQUENCED: impact sweep (I-2)
+FIRST → report → then apply under the retroactivity boundary. **Not yet
+applied.**
+
+**R2 — 12-month lookback window is a DELIBERATE deviation, ratified**
+(introduced 2026 for volatility / stale conditions). In the deviation
+register.
+
+**R3 — Plus handling: current practice is "fall-where-it-falls."** The
+website ÷2 rule is NOT practiced (GG manual nightmare). Full plus design is
+HELD for a dedicated session. Banked design intents: no per-hole penalty
+ever; points games = play off zero, subtract plus strokes from point TOTAL
+post-event; team games = OFF LOWEST field shift. **Do NOT ship the engine's
+"give a stroke back on easiest holes" as ratified behavior.**
+
+**LAYERING PRINCIPLE (Kerry):** The handicap-record layer only ever sees raw
+gross adjusted at 100% handicaps. Game-layer adjustments (off-lowest,
+allowances, plus zeroing) live downstream and NEVER feed back into caps or
+differentials. One-way flow — no game rule can contaminate a handicap.
+
+**RETROACTIVITY BOUNDARY (Kerry, STANDING RULE):** No handicap-layer change
+may alter RESULTS for any event **before a9.18 Forest Creek / rained-out
+s9.18 Cedar Creek**. GG is bible for results through those events. Any index/
+cap/ladder change (R1, I-3, etc.) applies going forward only; pre-boundary
+results are frozen.
+
+**H-5 — Star Ranch family CLOSED (our values stand):** verified vs GG course
+setup — our per-round tee capture carries the BACK-9 values (White 117/33.9,
+Blue 118/35.2, Green 115/33.4, Ladies 119/34.3); GG's handicap export
+shipped FRONT-9 values regardless of nine played. GG's export was
+nine-blind; the 177 rounds are an explained legacy defect. **Our per-round
+tee values are correct.**
 
 This is the keystone that untethers **net** scoring from Golf Genius:
 gross points need none of it; net needs all of it. It turns a player's

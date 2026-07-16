@@ -9087,6 +9087,17 @@ def determine_tgf_mvp(event_name: str, db_path: str | Path = DB_PATH) -> dict:
     if not all_city_mvps:
         out["tgf_mvp"] = {"status": "no_city_mvps"}
         return out
+    # TGF MVP is a CROSS-CHAPTER honor (Kerry ruling B, 2026-07-16): it only
+    # exists when two or more chapters actually FIELDED the game that day. If
+    # only one event produced a determined City MVP (the other chapter had no
+    # players / rained out), there is no TGF MVP — the lone City MVP is not
+    # elevated. This matches GG, which never ran the TGF MVP game on a
+    # single-chapter day.
+    mvp_event_names = {w["event_name"] for w in all_city_mvps}
+    if len(mvp_event_names) < 2:
+        out["tgf_mvp"] = {"status": "single_event_day",
+                          "note": "only one chapter fielded the game — no TGF MVP"}
+        return out
     # day points per City MVP = their net Stableford summed across the
     # day's linked events (usually just their own nine)
     for w in all_city_mvps:

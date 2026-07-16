@@ -3,6 +3,46 @@
 All handicap calculations are for **9-hole rounds only**. The differential
 lookup counts match WHS Rule 5.2a. Adjustments per that rule are also applied.
 
+## ═══ RATIFIED RULINGS OF RECORD (Kerry, mailbox #196/#197, 2026-07-16) ═══
+
+The go-live rulings package. Full ratification language lives in
+`handicap-projection.md`; this is the enforcement mirror. **Nothing beyond
+the ratified items below changes code or data without Kerry's sign-off.**
+
+- **D1 (RATIFIED 2026-07-16) — tee-based playing handicap is the TGF
+  standard.** Course Handicap = index × slope/113 + (CR − par), unrounded;
+  Playing Handicap = whs_round at **100% allowance, no cap except the 18.0
+  nine-hole CH cap**; per-hole allocation by stroke index, **max 2 pops**.
+  Plus-handicap treatment + per-game adjustments explicitly EXCLUDED (own
+  rulings pending). Index provenance is a separate layer, does not gate D1.
+- **D4 (CLOSED) — nine-hole CH cap = the 2-pop rule.** GG's "Maximum Nine
+  Hole Course Handicap 18.0" is the same constraint. **Ordering note:** GG
+  rounds THEN caps; our spec caps THEN rounds — equivalent at integer caps,
+  but **pin the order in config before any fractional/per-game cap exists.**
+- **R1 — REMOVE the ×0.96 multiplier** (pre-2020 USGA "bonus for
+  excellence," deleted by WHS). Raises field indexes ~4%. **Sequenced:
+  impact sweep (I-2) FIRST → report → apply under the retroactivity
+  boundary. NOT yet applied.**
+- **R2 — 12-month lookback window is a DELIBERATE deviation, ratified**
+  (deviation register).
+- **R3 — Plus handling = "fall-where-it-falls" for now.** Website ÷2 rule
+  NOT practiced. Full plus design HELD for a dedicated session. Do NOT ship
+  the engine's "give a stroke back on easiest holes" as ratified behavior.
+  Banked intents: no per-hole penalty; points games play off zero + subtract
+  plus strokes from the point TOTAL post-event; team games off LOWEST shift.
+- **LAYERING PRINCIPLE.** The handicap-record layer only ever sees raw gross
+  adjusted at 100% handicaps. Game-layer adjustments (off-lowest, allowances,
+  plus zeroing) live downstream and NEVER feed back into caps/differentials.
+  One-way flow — no game rule can contaminate a handicap.
+- **RETROACTIVITY BOUNDARY (STANDING RULE).** No handicap-layer change may
+  alter RESULTS for any event **before a9.18 Forest Creek / s9.18 Cedar
+  Creek**. GG is bible for results through those events; changes apply
+  forward only.
+- **H-5 (CLOSED) — Star Ranch tee values stand.** Our per-round capture
+  carries the correct BACK-9 tee values; GG's handicap export shipped
+  FRONT-9 values nine-blind. The 177 rounds are an explained legacy export
+  defect — our per-round values are correct.
+
 ## Handicap Differential Table (WHS Rule 5.2a)
 
 | 9-Hole Rounds in Record | Differentials Used | Adjustment |
