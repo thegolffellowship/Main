@@ -5416,6 +5416,42 @@ def api_rsvp_credit_info_by_item(item_id):
     })
 
 
+def _arm_excess_venmo_watch(result, data):
+    """When Apply Credit & Register refunds the excess via Venmo, arm a refund
+    watch on the new excess-credit item so the provider receipt auto-records
+    the refund (Kerry 2026-07-16: the button should open Venmo and self-verify
+    — no separate link click, no manual record). Fire-and-forget; the 2-min
+    expense cycle backs up the ~75s/180s quick sweeps scheduled here."""
+    if (data or {}).get("excess_action") != "venmo":
+        return
+    ecid = result.get("excess_credit_id")
+    amount = result.get("excess")
+    if not ecid or not amount or amount <= 0:
+        return
+    from email_parser.database import create_refund_watch
+    ev = (data or {}).get("excess_venmo") or {}
+    handle = (ev.get("handle") or "").strip().lstrip("@")
+    memo = (ev.get("memo") or "").strip()
+    try:
+        create_refund_watch(ecid, method="Venmo", amount=amount,
+                            memo=memo, handle=handle)
+    except Exception:
+        logger.warning("apply-credit excess Venmo watch failed for item %s",
+                       ecid, exc_info=True)
+        return
+    result["excess_venmo_watch_armed"] = True
+    if getattr(scheduler, "running", False):
+        now = datetime.now()
+        for jid, secs in (("venmo_quick_check_a", 75), ("venmo_quick_check_b", 180)):
+            try:
+                scheduler.add_job(_quick_expense_check, "date",
+                                  run_date=now + timedelta(seconds=secs),
+                                  id=jid, replace_existing=True, coalesce=True,
+                                  misfire_grace_time=120)
+            except Exception:
+                logger.exception("Failed to schedule quick receipt check %s", jid)
+
+
 @app.route("/api/rsvps/<int:item_id>/apply-credit", methods=["POST"])
 @require_role("manager")
 def api_apply_credit_to_rsvp(item_id):
@@ -5444,6 +5480,7 @@ def api_apply_credit_to_rsvp(item_id):
     )
     if not result.get("ok"):
         return jsonify({"error": result.get("error", "Failed")}), 400
+    _arm_excess_venmo_watch(result, data)
     return jsonify(result)
 
 
@@ -5622,6 +5659,7 @@ def api_gg_rsvp_apply_credit(rsvp_id):
     )
     if not result.get("ok"):
         return jsonify({"error": result.get("error", "Failed")}), 400
+    _arm_excess_venmo_watch(result, data)
     return jsonify({**result, "item_id": new_item_id})
 
 

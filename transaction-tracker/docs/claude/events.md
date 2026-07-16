@@ -591,10 +591,22 @@ All three rendering paths on the Customers page (inline expand, detail panel, mo
 - **Inline Venmo handle entry.** When "Venmo back" is selected and no handle is on file,
   the modal shows a `+ Add @handle` affordance that expands to an inline input + Save
   button. Save persists via `/api/customers/update`, then the modal re-renders the excess
-  section with the prefilled Venmo deep link. `excess_action="venmo"` is now accepted by
-  `apply_credit_to_rsvp` (was 400) — the actual Venmo transfer is a manual followup, but
-  the excess credit row is created in both `keep` and `venmo` modes so the audit trail is
-  preserved either way.
+  section with the prefilled Venmo deep link. `excess_action="venmo"` is accepted by
+  `apply_credit_to_rsvp`; the excess credit row is created in both `keep` and `venmo`
+  modes so the audit trail is preserved either way.
+- **One-tap Venmo-back (v2.112.0, Kerry).** Selecting "Venmo back" and tapping **Apply
+  Credit & Register** now opens Venmo automatically (right person/amount/memo) and
+  self-records the refund — no separate link click, no manual record. Flow: the
+  apply request is dispatched FIRST (so `_arm_excess_venmo_watch` in app.py arms a
+  refund watch on the new excess-credit item — `apply_credit_to_rsvp` returns
+  `excess_credit_id` — before the receipt can arrive), THEN `window.location.href` fires
+  the native `venmo://` link **synchronously inside the click gesture** (iOS blocks
+  app-scheme navigation after an `await`). The receipt then auto-records via the same
+  `refund_watches` / `auto_match_refund_watches` path as the red Refund buttons (amount
+  + customer/handle, ~75s/180s quick sweeps + 2-min cycle), flipping the excess item
+  `credited → refunded`. The client passes `excess_venmo:{handle,memo}` so the watch memo
+  matches what's paid; memo uses the ratified "Excess credit from [origin event]" grammar.
+  Both the RSVP and GG-RSVP apply-credit endpoints call the helper.
 
 # Payout Credit / Refund (WD + standalone credited rows)
 
