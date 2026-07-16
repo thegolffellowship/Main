@@ -11779,6 +11779,12 @@ def get_scoring_rounds_list(player: str | None = None, event: str | None = None,
                                 AND m.kind = 'tgf_mvp') AS _gg_tgf,
                        EXISTS(SELECT 1 FROM event_mvps m
                               WHERE m.event_id = sr.event_id) AS _gg_event_has,
+                       (SELECT COUNT(*) FROM event_mvps m
+                          WHERE m.event_id = sr.event_id
+                            AND m.kind = 'mvp') AS _gg_mvp_ct,
+                       (SELECT COUNT(*) FROM event_mvps m
+                          WHERE m.event_id = sr.event_id
+                            AND m.kind = 'tgf_mvp') AS _gg_tgf_ct,
                        e.event_date AS _event_date
                 FROM scoring_rounds sr
                 LEFT JOIN events e ON e.id = sr.event_id
@@ -11794,6 +11800,8 @@ def get_scoring_rounds_list(player: str | None = None, event: str | None = None,
             cm, ct = d.pop("_cm_split", None), d.pop("_ct_split", None)
             gg_mvp, gg_tgf = d.pop("_gg_mvp", 0), d.pop("_gg_tgf", 0)
             gg_event_has = d.pop("_gg_event_has", 0)
+            gg_mvp_ct = d.pop("_gg_mvp_ct", 0) or 0
+            gg_tgf_ct = d.pop("_gg_tgf_ct", 0) or 0
             event_date = d.pop("_event_date", None)
             # RETROACTIVITY BOUNDARY (Kerry): our self-computed determination
             # is authoritative from a9.18/s9.18 (2026-07-14) FORWARD (inclusive
@@ -11811,10 +11819,16 @@ def get_scoring_rounds_list(player: str | None = None, event: str | None = None,
                 d["tgf_mvp"] = 1 if ct == 0 else 0
                 d["co_tgf_mvp"] = 1 if ct == 1 else 0
             else:
-                d["mvp"] = 1 if gg_mvp else 0
-                d["co_mvp"] = 0
-                d["tgf_mvp"] = 1 if gg_tgf else 0
-                d["co_tgf_mvp"] = 0
+                # GG-authoritative (pre-boundary): if GG recorded MORE THAN
+                # ONE winner it was a SPLIT (co-MVP) — GG paid the pot in
+                # shares rather than applying a tiebreaker (e.g. s18.6 Flying L,
+                # Young/Sanford/Fehlis $33.33 each). This split is an OUTLIER
+                # to our Net->Gross tiebreaker; going forward only an admin
+                # override should force a split over our computed sole winner.
+                d["mvp"] = 1 if (gg_mvp and gg_mvp_ct <= 1) else 0
+                d["co_mvp"] = 1 if (gg_mvp and gg_mvp_ct > 1) else 0
+                d["tgf_mvp"] = 1 if (gg_tgf and gg_tgf_ct <= 1) else 0
+                d["co_tgf_mvp"] = 1 if (gg_tgf and gg_tgf_ct > 1) else 0
             out.append(d)
         return out
 
