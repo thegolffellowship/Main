@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Starter Sheet — {{ pack.event.item_name }}</title>
+  <link href="https://fonts.googleapis.com/css2?family=Bitter:wght@600;700&display=swap" rel="stylesheet">
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; padding: 24px;
+      font-family: "Helvetica Neue", Arial, system-ui, sans-serif;
+      color: #111; background: #fff; font-size: 13px;
+    }
+    .sheet-head {
+      display: flex; justify-content: space-between; align-items: flex-end;
+      border-bottom: 3px solid #111; padding-bottom: 8px; margin-bottom: 14px;
+    }
+    .sheet-head h1 {
+      font-family: "Bitter", Georgia, serif; font-weight: 700;
+      font-size: 22px; margin: 0;
+    }
+    .sheet-head .sub { color: #444; font-size: 13px; margin-top: 2px; }
+    .sheet-head .meta { text-align: right; font-size: 12px; color: #444; }
+    .sheet-head .meta strong { color: #111; }
+    table { width: 100%; border-collapse: collapse; }
+    thead th {
+      text-align: left; font-size: 10px; letter-spacing: .06em;
+      text-transform: uppercase; color: #555; border-bottom: 2px solid #111;
+      padding: 4px 6px;
+    }
+    tbody td { padding: 5px 6px; border-bottom: 1px solid #ddd; white-space: normal; vertical-align: top; }
+    tr.grp-start td { border-top: 2px solid #111; }
+    .slot { font-family: "Bitter", Georgia, serif; font-weight: 700; font-size: 14px; white-space: nowrap; }
+    .grp-num { color: #666; font-size: 11px; white-space: nowrap; }
+    .pname { font-weight: 600; }
+    .tee, .idx { color: #333; white-space: nowrap; }
+    .cart { font-weight: 700; text-align: center; }
+    .cart-A { color: #0b6; }
+    .cart-B { color: #06c; }
+    .empty { color: #999; padding: 40px; text-align: center; font-style: italic; }
+    .foot { margin-top: 16px; font-size: 10px; color: #888; }
+    @media print {
+      body { padding: 0; }
+      .noprint { display: none !important; }
+      thead { display: table-header-group; }
+      tr { page-break-inside: avoid; }
+    }
+    @page { size: letter portrait; margin: 0.5in; }
+    .toolbar { margin-bottom: 12px; }
+    .toolbar button {
+      font: inherit; padding: 8px 16px; border: 0; border-radius: 999px;
+      background: #E87C3E; color: #fff; font-weight: 600; cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+  <div class="toolbar noprint">
+    <button onclick="window.print()">Print Starter Sheet</button>
+  </div>
+  <div class="sheet-head">
+    <div>
+      <h1>{{ pack.event.item_name }}</h1>
+      <div class="sub">
+        {{ pack.event.course or "" }}{% if pack.event.chapter %} · {{ pack.event.chapter }}{% endif %}
+      </div>
+    </div>
+    <div class="meta">
+      <div><strong>{{ pack.event.event_date or "" }}</strong></div>
+      <div>{{ pack.event.format or "" }}{% if pack.event.start_type %} · {{ pack.event.start_type }}{% endif %}</div>
+      <div>Starter Sheet</div>
+    </div>
+  </div>
+
+  {% if not pack.groups %}
+    <div class="empty">No pairings saved for this event yet. Generate &amp; save pairings first.</div>
+  {% else %}
+  <table>
+    <thead>
+      <tr>
+        <th style="width:70px;">Time</th>
+        <th style="width:34px;">Grp</th>
+        <th>Player</th>
+        <th style="width:70px;">Tee</th>
+        <th style="width:46px;">Idx</th>
+        <th style="width:44px;">Cart</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for g in pack.groups %}
+        {% for p in g.players %}
+        <tr class="{% if loop.first %}grp-start{% endif %}">
+          {% if loop.first %}
+            <td class="slot" rowspan="{{ g.players|length }}">{{ g.slot_label }}</td>
+            <td class="grp-num" rowspan="{{ g.players|length }}">
+              {{ g.group_num }}{% if g.holes == '18' %} · 18{% endif %}
+            </td>
+          {% endif %}
+          <td class="pname">{{ p.name }}</td>
+          <td class="tee">{{ p.tee_choice or "—" }}</td>
+          <td class="idx">{% if p.handicap_index is not none %}{{ "%.1f"|format(p.handicap_index) }}{% else %}—{% endif %}</td>
+          <td class="cart {% if (p.cart_pos or 0) in [1,2] %}cart-A{% else %}cart-B{% endif %}">
+            {% if (p.cart_pos or 0) in [1,2] %}A{% else %}B{% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      {% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+
+  <div class="foot">
+    Cart A = seats 1&amp;2 · Cart B = seats 3&amp;4. &nbsp; Idx = 9-hole handicap index carried by pairings (not the playing handicap). &nbsp; The Golf Fellowship.
+  </div>
+</body>
+</html>

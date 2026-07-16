@@ -4683,6 +4683,30 @@ def api_delete_event_alias_from_event(event_id):
     return jsonify({"status": "ok", "deleted": deleted})
 
 
+@app.route("/events/<int:event_id>/starter-sheet")
+@require_role("manager")
+def starter_sheet_page(event_id):
+    """Print-optimized Starter Sheet for an event (B5) — tee times / groups /
+    players / cart split, rendered from the saved pairings."""
+    from email_parser.database import get_event_print_pack
+    pack = get_event_print_pack(event_id)
+    if not pack:
+        return "Event not found", 404
+    return render_template("starter_sheet.html", pack=pack)
+
+
+@app.route("/events/<int:event_id>/cart-signs")
+@require_role("manager")
+def cart_signs_page(event_id):
+    """Print-optimized Cart Signs for an event (B5) — one card per cart
+    (seats 1&2 = Cart A, 3&4 = Cart B), rendered from the saved pairings."""
+    from email_parser.database import get_event_print_pack
+    pack = get_event_print_pack(event_id)
+    if not pack:
+        return "Event not found", 404
+    return render_template("cart_signs.html", pack=pack)
+
+
 @app.route("/api/events/<int:event_id>/pairings", methods=["GET"])
 @require_role("view-only")
 def api_get_pairings(event_id):
