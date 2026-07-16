@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.117.0";
+window.TGF_VERSION = "2.117.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.117.1",
+    date: "2026-07-16",
+    changes: [
+      "Three date-sensitive READ-ONLY reports delivered (financial-audit session, Kerry's priority order): docs/claude/june-2026-tax-slice.md — June ledger income $33,845.15 carries $549 of confirmed exp-promoted income double-counts (+$16 Lee Vasquez a9.13 triple-book) and $2,141 of floating income (Joe Warring $1,809, three $100 contest entries, Lee x2 $16) that any event-derived taxable base misses; corrected ledger figure $33,280.15; venmo-bd regression confirmed NOT in June; cross-month heads-up that Lee's a9.12 $16 was re-booked 07-16 so JULY carries that dup. docs/claude/k3-payout-variance-characterization.md — the -$3/-$2 exact-delta lumps are an ENGINE/MATRIX POT-TIER delta, not pay-time netting (where GG published money exists, paid == GG and our computed is the outlier: s9.10 CTP 23/20/20, s9.7 CTP 39/37/37); other classes are the known a9.13 Team-Net blind-draw shares and pay-time rounding (mostly round-UPs); proposed explanation codes ENGINE_POT_TIER / TEAMNET_SHARE / ROUNDING_PAY. S2 prize exposure run live: 9 REPORTABLE >=$600 (Straiton $1,974.26 leads), 2 W-9-REQUIRED >=$500, 5 WATCH >=$400 before championship payouts. A2 answered: zero fee-double-booked transfer chains across all 107.",
+    ],
+  },
   {
     version: "2.117.0",
     date: "2026-07-16",
