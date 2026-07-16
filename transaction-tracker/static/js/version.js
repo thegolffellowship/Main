@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.111.0";
+window.TGF_VERSION = "2.111.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.111.1",
+    date: "2026-07-16",
+    changes: [
+      "Add Player name autofill now works on mobile (Kerry: typing a name when RSVPing someone showed no roster suggestions on the phone). The field used a native <input list=datalist>, and iOS Safari renders no dropdown for <datalist> -- so desktop suggested existing players but mobile showed nothing (only the OS keyboard's own guess). Replaced it with a custom typeahead dropdown (prefix-then-contains match over the known customer names, tap to fill) that works on both desktop and mobile; selecting a known player still auto-fills status and hides the new-contact email/phone fields as before. mousedown-based selection so the tap registers before the input blur on iOS.",
+    ],
+  },
   {
     version: "2.111.0",
     date: "2026-07-16",
