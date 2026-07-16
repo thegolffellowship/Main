@@ -11225,15 +11225,30 @@ def import_gg_scorecards(tournament_url: str, event_code: str | None = None,
             is_upgrade = False
             if not existing:
                 dup = conn.execute(
-                    """SELECT id, playing_handicap FROM scoring_rounds
+                    """SELECT id, playing_handicap, holes_played FROM scoring_rounds
                        WHERE (round_date = ? OR (event_id IS NOT NULL AND event_id = ?))
                          AND COALESCE(gg_league_round_id, '') = ?
                          AND (customer_id = ? OR LOWER(player_name) = LOWER(?))""",
                     (event_date, event_id, round_key or "",
                      cid or -1, p["player_name"])).fetchone()
                 if dup:
-                    if (p.get("playing_handicap") is not None
-                            and dup["playing_handicap"] is None):
+                    incoming_holes = sum(1 for h in p["holes"].values()
+                                         if h.get("strokes") is not None)
+                    # Upgrade a stored card when the incoming one is richer:
+                    # (a) it carries a playing handicap and the stored card
+                    # didn't (a net card upgrades a raw-gross one), or
+                    # (b) it scored MORE holes than the stored card. Case (b)
+                    # is the self-heal path for a card grabbed mid-round
+                    # before GG finished score entry: GG re-keys the
+                    # tournament's aggregate ids when the round finalizes, so
+                    # the complete card arrives under a NEW aggregate id and
+                    # would otherwise be skipped as "other tournament",
+                    # freezing the partial card forever (a9.18 Forest Creek,
+                    # 2026-07-14: imported at 11pm with 4-7 of 9 holes).
+                    handicap_upgrade = (p.get("playing_handicap") is not None
+                                        and dup["playing_handicap"] is None)
+                    completeness_upgrade = incoming_holes > (dup["holes_played"] or 0)
+                    if handicap_upgrade or completeness_upgrade:
                         existing = dup
                         is_upgrade = True
                     else:

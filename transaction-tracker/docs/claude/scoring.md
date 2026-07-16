@@ -54,6 +54,19 @@ player_name) and (round_date or event_id) and SKIPS if found
 (`skipped_other_tournament` in the result). Re-importing the same
 tournament still replaces (refresh path).
 
+**Completeness upgrade (v2.109.0) — the mid-round self-heal.** GG re-keys
+a tournament's aggregate ids when the round FINALIZES, so a card first
+grabbed mid-round (partial holes, imported while entry was still in
+progress) can't be refreshed by a plain re-import: the finished card
+arrives under a NEW aggregate id and the cross-tournament dedupe skips it
+as "other tournament", freezing the partial card. Fix: the upgrade rule
+now also fires on completeness — an incoming card whose `holes_played`
+exceeds the stored row's replaces it in place (counted as
+`upgraded_with_handicap`). So re-importing any event first captured
+mid-round pulls the complete scores. (a9.18 Forest Creek, 2026-07-14:
+imported ~23:00 with 4-7 of 9 holes; the finished import self-heals to 9.)
+The fewer-holes direction never clobbers a more-complete stored card.
+
 Multi-round days (v2.28.0): Hill Country Matches is its own league
 (tgf-hcm2026.golfgenius.com, league 537708) with SIX rounds all dated
 the same Saturday (Matches 1-3, Shootout, Non-Matches 1-2). The
