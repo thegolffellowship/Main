@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.108.1";
+window.TGF_VERSION = "2.109.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.109.0",
+    date: "2026-07-16",
+    changes: [
+      "Scorecard imports now self-heal a partial card (Kerry: a9.18 points weren't updating). a9.18 Forest Creek was imported ~11pm on game night while GG score entry was still in progress, so our copy froze with only 4-7 of 9 holes per player. A plain re-import couldn't fix it: GG re-keys the tournament's aggregate ids once the round finalizes, so the COMPLETE card arrives under a NEW aggregate id and the cross-tournament dedupe skipped it as 'other tournament' (all 19 players skipped). The importer's upgrade rule now also fires on COMPLETENESS -- an incoming card with more holes scored than the stored one replaces it in place (previously it only upgraded a raw-gross card to a net card). So re-importing any event that was first grabbed mid-round now pulls the finished scores. This unblocks a9.18's points/handicap inputs. Tests: test_scorecard_refresh.py (8 checks).",
+    ],
+  },
   {
     version: "2.108.1",
     date: "2026-07-16",
