@@ -285,6 +285,22 @@ See `docs/claude/schema.md → Deferred / Known Concessions` for the
 `require_role` decorator caveat (only enforces `"admin"`; everything
 else is effectively "any authenticated").
 
+## Player ACTIONS — desktop/mobile parity (v2.111.0)
+
+Both the desktop table (⚙▾ dropdown) and the mobile roster card render
+per-player actions from ONE shared builder, `playerActionItems(r, ev, f)`
+in `events.html` (formatted by `_playerActionMenuHtml` for desktop /
+`_playerActionBtnHtml` for mobile). Before this, mobile was a separate,
+thinner implementation with **no credit-transfer branch**, so an active
+credit-transfer registration (e.g. Daniel South) showed Credit/WD on
+mobile instead of the **Undo** (revert-credit-application) desktop shows —
+Kerry couldn't revert a player from his phone. Do NOT re-inline
+per-view action logic; add new actions to `playerActionItems` only.
+Handlers are all `document`-delegated, so a mobile button with the same
+handler class + data-attributes drives the same endpoint and role gating.
+The mobile "Inactive" list stays Reverse-only, matching the desktop
+action set for credited/wd/transferred/refunded rows.
+
 ## Player ACTIONS — Visual conventions
 
 | Element | Rendering |

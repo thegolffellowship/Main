@@ -1998,6 +1998,89 @@
         return uid.startsWith("credit-excess-") || uid.startsWith("overpayment-credit-");
     }
 
+    // SINGLE SOURCE OF TRUTH for a player's per-row actions (Kerry
+    // 2026-07-16: mobile must have the same abilities as desktop — e.g.
+    // reverting a credit-transfer player like Daniel South). Returns
+    // descriptor objects; the desktop table renders them as ⚙▾ menu items
+    // and the mobile card renders them as buttons, so the two can never
+    // drift apart again. f = {isSynthetic,isRsvpOnly,isGgRsvp,isComp,
+    // isManualEmailUid,txStatus}. Handlers are all document-delegated, so
+    // the same class + data-attributes work in either view.
+    function playerActionItems(r, ev, f) {
+        const items = [];
+        const cust = escapeHtml(r.customer || '');
+        const evName = escapeHtml(ev.item_name);
+        const delName = `data-player-name="${escapeHtml(r.customer || '')}"`;
+        const creditFor = () => (rsvpCreditMap[ev.item_name] || {})[r.customer] || null;
+        if (f.isSynthetic) {
+            const ci = creditFor();
+            if (ci && ci.total_credit > 0)
+                items.push({cls: 'btn-apply-credit', label: 'Apply Credit',
+                    attrs: `data-rsvp-id="${r.rsvp_id || ''}" data-customer="${cust}" data-event-name="${evName}"`});
+            items.push({cls: 'btn-delete-manual btn-delete-gg-rsvp', label: 'Delete', danger: true,
+                attrs: `data-player-email="${escapeHtml(r.customer_email || '')}" data-event-name="${evName}" ${delName}`});
+        } else if (f.isRsvpOnly || (f.isGgRsvp && !String(r.id).startsWith('gg-rsvp'))) {
+            const ci = creditFor();
+            if (ci && ci.total_credit > 0)
+                items.push({cls: 'btn-apply-credit', label: 'Apply Credit',
+                    attrs: `data-item-id="${r.id}" data-customer="${cust}" data-event-name="${evName}"`});
+            items.push({cls: 'btn-delete-manual', label: 'Delete', danger: true,
+                attrs: `data-delete-id="${r.id}" ${delName}`});
+        } else if (f.isComp) {
+            items.push({cls: 'btn-delete-manual', label: 'Delete', danger: true,
+                attrs: `data-delete-id="${r.id}" ${delName}`});
+        } else if (f.txStatus === 'active') {
+            const isCreditTransfer = (r.merchant || '') === 'Paid Separately (Credit Transfer)';
+            if (isCreditTransfer) {
+                const cnote = r.credit_note || '';
+                if (cnote.startsWith('balance_due:')) {
+                    const owed = parseFloat(cnote.split(':')[1]) || 0;
+                    if (owed > 0) {
+                        const si = (balanceDueSendMap[ev.item_name] || {})[String(r.id)];
+                        const sent = !!(si && si.status === 'sent');
+                        const tipDate = sent && si.sent_at ? ` (last sent ${si.sent_at}, ${si.count}x)` : '';
+                        items.push({cls: 'btn-venmo-email', label: sent ? 'Remind' : 'Send Venmo Email',
+                            attrs: `data-item-id="${r.id}"`,
+                            title: sent ? `Send another reminder${tipDate}` : 'Preview & send Venmo balance-due email'});
+                    }
+                }
+                items.push({cls: 'btn-undo-credit-apply', label: 'Undo',
+                    attrs: `data-item-id="${r.id}" data-customer="${cust}" data-event-name="${evName}"`});
+                items.push({cls: 'btn-delete-manual', label: 'Delete', danger: true,
+                    attrs: `data-delete-id="${r.id}" ${delName}`});
+            } else {
+                items.push({cls: 'btn-credit', label: 'Credit', attrs: `data-credit-id="${r.id}"`});
+                items.push({cls: 'btn-wd', label: 'WD', attrs: `data-wd-id="${r.id}" data-wd-event="${evName}"`});
+                items.push({cls: 'btn-assign-guest-action', label: 'Assign Guest',
+                    attrs: `data-item-id="${r.id}" data-buyer-name="${cust}"`, title: 'Assign this spot to a guest player'});
+                items.push({cls: 'btn-assign-member-action', label: 'Assign Member',
+                    attrs: `data-item-id="${r.id}" data-buyer-name="${cust}"`, title: 'Reassign to an existing member'});
+                if (f.isManualEmailUid)
+                    items.push({cls: 'btn-delete-manual', label: 'Delete', danger: true,
+                        attrs: `data-delete-id="${r.id}" ${delName}`});
+            }
+        } else if (['credited', 'transferred', 'refunded', 'wd'].includes(f.txStatus)) {
+            if (!isCreditPoolRow(r))
+                items.push({cls: 'btn-reverse', label: 'Reverse', attrs: `data-reverse-id="${r.id}"`});
+        }
+        return items;
+    }
+
+    // Desktop: ⚙▾ dropdown menu item.
+    function _playerActionMenuHtml(d) {
+        return `<button class="ev-menu-item${d.danger ? ' ev-menu-item-danger' : ''} ${d.cls}" ${d.attrs || ''}${d.title ? ` title="${escapeHtml(d.title)}"` : ''}>${d.label}</button>`;
+    }
+    // Mobile: standalone button. Delete renders as the × icon (title carries
+    // the word); WD keeps its compact red treatment.
+    function _playerActionBtnHtml(d) {
+        const isWd = d.cls.indexOf('btn-wd') !== -1;
+        const isDel = d.cls.indexOf('btn-delete-manual') !== -1;
+        const wdStyle = isWd ? ' style="background:#dc2626;color:#fff;font-size:0.6rem;padding:0.15rem 0.35rem;line-height:1;"' : '';
+        const label = isDel ? '&times;' : d.label;
+        const title = isDel ? 'Delete' : d.title;
+        return `<button class="btn ${d.cls}" ${d.attrs || ''}${title ? ` title="${escapeHtml(title)}"` : ''}${wdStyle}>${label}</button>`;
+    }
+
     function couponTag(row) {
         const code = (row.coupon_code || "").trim();
         const amt = (row.coupon_amount || "").trim();
@@ -2265,20 +2348,12 @@
             const holes = (r.holes || "").trim();
             const topTags = `${holes ? `<span class="mc-type mc-holes">${escapeHtml(holes)}h</span>` : ''}<span class="mc-type">${escapeHtml(sideGameLabel)}</span>${tee ? `<span class="mc-type mc-tee">${escapeHtml(tee)}</span>` : ''}`;
 
-            let actionBtn = '';
-            if (isSynthetic) {
-                actionBtn = `<button class="btn btn-delete-manual btn-delete-gg-rsvp" data-player-email="${escapeHtml(r.customer_email || '')}" data-event-name="${escapeHtml(ev.item_name)}" data-player-name="${escapeHtml(r.customer || "")}" title="Delete">&times;</button>`;
-            } else if (isRsvpOnly) {
-                actionBtn = `<button class="btn btn-delete-manual" data-delete-id="${r.id}" data-player-name="${escapeHtml(r.customer || "")}" title="Delete">&times;</button>`;
-            } else if (isComp) {
-                actionBtn = `<button class="btn btn-delete-manual" data-delete-id="${r.id}" data-player-name="${escapeHtml(r.customer || "")}" title="Delete">&times;</button>`;
-            } else if (txStatus === "active") {
-                actionBtn = `<button class="btn btn-credit" data-credit-id="${r.id}">Credit</button>`;
-                actionBtn += ` <button class="btn btn-wd" data-wd-id="${r.id}" data-wd-event="${escapeHtml(ev.item_name)}" style="background:#dc2626;color:#fff;font-size:0.6rem;padding:0.15rem 0.35rem;line-height:1;">WD</button>`;
-                if (isManualEmailUid) actionBtn += ` <button class="btn btn-delete-manual" data-delete-id="${r.id}" data-player-name="${escapeHtml(r.customer || "")}" title="Delete">&times;</button>`;
-            } else if (txStatus === "credited" || txStatus === "transferred" || txStatus === "refunded" || txStatus === "wd") {
-                actionBtn = isCreditPoolRow(r) ? '' : `<button class="btn btn-reverse" data-reverse-id="${r.id}">Reverse</button>`;
-            }
+            // Full desktop action parity on mobile (Kerry 2026-07-16):
+            // same shared builder, rendered as buttons.
+            const actionBtn = playerActionItems(r, ev, {
+                isSynthetic, isRsvpOnly, isGgRsvp, isComp,
+                isManualEmailUid, txStatus,
+            }).map(_playerActionBtnHtml).join(' ');
 
             const fields = [
                 ["Order Date", r.order_date || "\u2014"],
@@ -5389,56 +5464,11 @@
                 } else if (c.key === "actions") {
                     // Build the row's action items as menu entries; collapsed
                     // into a single "⚙ ▾" dropdown for compactness.
-                    const items = [];
-                    if (isSynthetic) {
-                        const evCreditMapSyn = rsvpCreditMap[ev.item_name] || {};
-                        const creditInfoSyn = evCreditMapSyn[r.customer];
-                        if (creditInfoSyn && creditInfoSyn.total_credit > 0) {
-                            items.push(`<button class="ev-menu-item btn-apply-credit" data-rsvp-id="${r.rsvp_id || ''}" data-customer="${escapeHtml(r.customer || '')}" data-event-name="${escapeHtml(ev.item_name)}">Apply Credit</button>`);
-                        }
-                        items.push(`<button class="ev-menu-item ev-menu-item-danger btn-delete-manual btn-delete-gg-rsvp" data-player-email="${escapeHtml(r.customer_email || '')}" data-event-name="${escapeHtml(ev.item_name)}" data-player-name="${escapeHtml(r.customer || "")}">Delete</button>`);
-                    } else if (isRsvpOnly || (isGgRsvp && !String(r.id).startsWith("gg-rsvp"))) {
-                        const evCreditMapAct = rsvpCreditMap[ev.item_name] || {};
-                        const creditInfoAct = evCreditMapAct[r.customer] || null;
-                        if (creditInfoAct && creditInfoAct.total_credit > 0) {
-                            items.push(`<button class="ev-menu-item btn-apply-credit" data-item-id="${r.id}" data-customer="${escapeHtml(r.customer || '')}" data-event-name="${escapeHtml(ev.item_name)}">Apply Credit</button>`);
-                        }
-                        items.push(`<button class="ev-menu-item ev-menu-item-danger btn-delete-manual" data-delete-id="${r.id}" data-player-name="${escapeHtml(r.customer || "")}">Delete</button>`);
-                    } else if (isCompRow) {
-                        items.push(`<button class="ev-menu-item ev-menu-item-danger btn-delete-manual" data-delete-id="${r.id}" data-player-name="${escapeHtml(r.customer || "")}">Delete</button>`);
-                    } else if (txStatus === "active") {
-                        const isCreditTransfer = (r.merchant || "") === "Paid Separately (Credit Transfer)";
-                        if (isCreditTransfer) {
-                            const cnoteAct = r.credit_note || '';
-                            if (cnoteAct.startsWith('balance_due:')) {
-                                const owedAct = parseFloat(cnoteAct.split(':')[1]) || 0;
-                                if (owedAct > 0) {
-                                    const sendInfo = (balanceDueSendMap[ev.item_name] || {})[String(r.id)];
-                                    const alreadySent = !!(sendInfo && sendInfo.status === 'sent');
-                                    const label = alreadySent ? 'Remind' : 'Send Venmo Email';
-                                    const tipDate = alreadySent && sendInfo.sent_at
-                                        ? ` (last sent ${escapeHtml(sendInfo.sent_at)}, ${sendInfo.count}x)`
-                                        : '';
-                                    const tip = alreadySent
-                                        ? `Send another reminder${tipDate}`
-                                        : 'Preview & send Venmo balance-due email';
-                                    items.push(`<button class="ev-menu-item btn-venmo-email" data-item-id="${r.id}" title="${tip}">${label}</button>`);
-                                }
-                            }
-                            items.push(`<button class="ev-menu-item btn-undo-credit-apply" data-item-id="${r.id}" data-customer="${escapeHtml(r.customer || '')}" data-event-name="${escapeHtml(ev.item_name)}">Undo</button>`);
-                            items.push(`<button class="ev-menu-item ev-menu-item-danger btn-delete-manual" data-delete-id="${r.id}" data-player-name="${escapeHtml(r.customer || "")}">Delete</button>`);
-                        } else {
-                            items.push(`<button class="ev-menu-item btn-credit" data-credit-id="${r.id}">Credit</button>`);
-                            items.push(`<button class="ev-menu-item btn-wd" data-wd-id="${r.id}" data-wd-event="${escapeHtml(ev.item_name)}">WD</button>`);
-                            items.push(`<button class="ev-menu-item btn-assign-guest-action" data-item-id="${r.id}" data-buyer-name="${escapeHtml(r.customer || '')}" title="Assign this spot to a guest player">Assign Guest</button>`);
-                            items.push(`<button class="ev-menu-item btn-assign-member-action" data-item-id="${r.id}" data-buyer-name="${escapeHtml(r.customer || '')}" title="Reassign to an existing member">Assign Member</button>`);
-                            if (isManualEmailUidRow) items.push(`<button class="ev-menu-item ev-menu-item-danger btn-delete-manual" data-delete-id="${r.id}" data-player-name="${escapeHtml(r.customer || "")}">Delete</button>`);
-                        }
-                    } else if (txStatus === "credited" || txStatus === "transferred" || txStatus === "refunded" || txStatus === "wd") {
-                        if (!isCreditPoolRow(r)) {
-                            items.push(`<button class="ev-menu-item btn-reverse" data-reverse-id="${r.id}">Reverse</button>`);
-                        }
-                    }
+                    const items = playerActionItems(r, ev, {
+                        isSynthetic, isRsvpOnly, isGgRsvp,
+                        isComp: isCompRow, isManualEmailUid: isManualEmailUidRow,
+                        txStatus,
+                    }).map(_playerActionMenuHtml);
                     if (items.length === 0) {
                         html += `<td style="${style}"></td>`;
                     } else {

@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.110.1";
+window.TGF_VERSION = "2.111.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.111.0",
+    date: "2026-07-16",
+    changes: [
+      "Mobile now has the SAME per-player actions as desktop (Kerry: needed to revert Daniel South from his phone). The mobile roster card was a thinner, separate implementation -- for an active player it only offered Credit/WD/Delete and had NO credit-transfer branch, so a credit-transfer registration like Daniel South's showed Credit/WD instead of the Undo (revert-credit-application) desktop shows. Both views now render from ONE shared builder (playerActionItems), so mobile and desktop can't drift apart again: Apply Credit, Send Venmo Email/Remind, Undo, Credit, WD, Assign Guest, Assign Member, Reverse, and Delete all appear per the player's exact state, in either view. Handlers are document-delegated, so the mobile buttons drive the same endpoints with the same admin/manager gating.",
+    ],
+  },
   {
     version: "2.110.1",
     date: "2026-07-16",
