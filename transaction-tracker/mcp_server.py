@@ -2050,10 +2050,18 @@ def get_tracker_docs(name: str = "") -> str:
     """
     root = Path(__file__).resolve().parent
     docs_dir = root / "docs" / "claude"
+    gov_dir = root / "docs" / "governance"
     available = {"CLAUDE.md": root / "CLAUDE.md"}
     if docs_dir.is_dir():
         for f in sorted(docs_dir.glob("*.md")):
             available[f.name] = f
+    # Governance library (Kerry-approved 2026-07-16): OneDrive is
+    # authoritative, the Tracker copy is the enforcement mirror. Governance
+    # docs are namespaced 'governance/<name>' so they never collide with a
+    # docs/claude name.
+    if gov_dir.is_dir():
+        for f in sorted(gov_dir.glob("*.md")):
+            available[f"governance/{f.name}"] = f
     if not name:
         return json.dumps({
             "docs": [{"name": k, "bytes": v.stat().st_size}
@@ -2061,12 +2069,151 @@ def get_tracker_docs(name: str = "") -> str:
             "hint": "Call again with name='<doc>.md' for full text. "
                     "Start with state-of-the-tracker.md.",
         }, indent=2)
-    key = name.strip().lstrip("/").split("/")[-1]
-    f = available.get(key)
+    raw = name.strip().lstrip("/")
+    # Accept the namespaced 'governance/<name>' form as well as a bare basename.
+    f = available.get(raw)
+    if not f:
+        base = raw.split("/")[-1]
+        f = available.get(base) or available.get(f"governance/{base}")
     if not f or not f.is_file():
         return json.dumps({"error": f"Unknown doc {name!r}",
                            "docs": sorted(available)})
     return f.read_text(encoding="utf-8")
+
+
+# ── Read-only MCP access (Kerry-approved 2026-07-16, mailbox #194/#198) ──
+# All read-only. get_tracker_source is HARD whitelisted; secrets, the DB
+# file, and app.py/database.py stay OUT by construction.
+
+# Prefix-whitelisted directories (POSIX, relative to repo root).
+_SOURCE_DIR_WHITELIST = ("templates/", "static/css/", "static/js/", "docs/")
+# Individually-allowed pure engine modules (no DB/Flask, no secrets by design).
+_SOURCE_FILE_WHITELIST = {
+    "email_parser/handicap_calc.py",
+    "email_parser/match_play.py",
+    "email_parser/season_payouts.py",
+}
+
+
+@mcp.tool()
+def get_tracker_source(path: str) -> str:
+    """Read a whitelisted Tracker source file (read-only).
+
+    Whitelist (Kerry-approved #198): templates/**, static/css/**,
+    static/js/**, docs/**, plus the pure engine modules
+    email_parser/handicap_calc.py, match_play.py, season_payouts.py. Anything
+    else — .env, the DB file, mcp_server.py, app.py, database.py, credentials
+    — is HARD-DENIED. The scoring formula VALUES are exposed as data via
+    get_app_settings / get_scorecard_detail, not as source here.
+
+    Args:
+        path: repo-relative path (e.g. 'static/js/points-render.js')
+    """
+    root = Path(__file__).resolve().parent
+    rel = path.strip().lstrip("/")
+    # Resolve and confirm the target stays inside the repo (no ../ escape).
+    target = (root / rel).resolve()
+    try:
+        rel_posix = target.relative_to(root).as_posix()
+    except ValueError:
+        return json.dumps({"error": "path escapes repo root", "path": path})
+    allowed = (rel_posix in _SOURCE_FILE_WHITELIST
+               or any(rel_posix.startswith(p) for p in _SOURCE_DIR_WHITELIST))
+    if not allowed:
+        return json.dumps({
+            "error": "path not in read-only whitelist",
+            "path": rel_posix,
+            "whitelist_dirs": list(_SOURCE_DIR_WHITELIST),
+            "whitelist_files": sorted(_SOURCE_FILE_WHITELIST)})
+    if not target.is_file():
+        return json.dumps({"error": "file not found", "path": rel_posix})
+    try:
+        return target.read_text(encoding="utf-8")
+    except Exception as e:  # binary / unreadable
+        return json.dumps({"error": f"unreadable: {e}", "path": rel_posix})
+
+
+@mcp.tool()
+def get_app_settings(key: str = "") -> str:
+    """Read the app_settings table (live config the UI edits). Read-only.
+
+    Call with no argument to list every non-secret key + value; pass a key
+    for just that value. Secret-ish keys (anything containing pin/secret/
+    token/password/key/credential) are redacted to protect config that
+    should never leave the server.
+
+    Args:
+        key: one setting key, or empty to dump all (redacted)
+    """
+    from email_parser import database as _db
+    _SECRET = ("pin", "secret", "token", "password", "credential", "apikey",
+               "api_key")
+    def _is_secret(k: str) -> bool:
+        kl = k.lower()
+        return any(s in kl for s in _SECRET)
+    if key.strip():
+        k = key.strip()
+        if _is_secret(k):
+            return json.dumps({"key": k, "value": "<redacted>"})
+        return json.dumps({"key": k, "value": _db.get_app_setting(k)}, default=str)
+    with _db._connect(None) as conn:
+        rows = conn.execute(
+            "SELECT key, value, updated_at FROM app_settings ORDER BY key").fetchall()
+    out = []
+    for r in rows:
+        d = dict(r)
+        if _is_secret(d["key"]):
+            d["value"] = "<redacted>"
+        out.append(d)
+    return json.dumps({"count": len(out), "settings": out}, indent=2, default=str)
+
+
+@mcp.tool()
+def get_gg_snapshots(key: str = "") -> str:
+    """Read the gg_data_snapshots cache (GG-derived payloads). Read-only.
+
+    Supports results-hardening spot-checks (H-1 pattern) from this side. Call
+    with no argument to list snapshot keys + their fetched_at stamps; pass a
+    key to get that payload. Note: this table is a display CACHE (keys like
+    'monthly_points'), refreshed daily — it is not a per-event frozen results
+    ledger. For per-event GG-recorded results use the scoring/MVP/game reads.
+
+    Args:
+        key: one snapshot_key, or empty to list all keys
+    """
+    from email_parser import database as _db
+    if key.strip():
+        data = _db.load_gg_snapshot(key.strip())
+        return json.dumps(data if data is not None else {"error": "no such snapshot"},
+                          indent=2, default=str)
+    with _db._connect(None) as conn:
+        _db._ensure_gg_snapshot_table(conn)
+        rows = conn.execute(
+            "SELECT snapshot_key, fetched_at, length(payload) AS bytes "
+            "FROM gg_data_snapshots ORDER BY snapshot_key").fetchall()
+    return json.dumps({"count": len(rows), "snapshots": [dict(r) for r in rows]},
+                      indent=2, default=str)
+
+
+@mcp.tool()
+def project_playing_handicaps(event: str, allowance: float = 1.0,
+                              max_hcp: float = 0.0) -> str:
+    """Project each player's PLAYING HANDICAP + per-hole allocation from OUR
+    index and the round's selected tee, and compare to GG (Task #16 parity
+    sweep; read-only). Promotes the scoring-hcp-project bridge to a first-class
+    tool. Reports alloc-vs-GG-dots (index-independent, the 100% target) and
+    playing-hcp-exact (also requires our index == GG's).
+
+    Args:
+        event: event name / code substring (e.g. 's9.17 Silverhorn')
+        allowance: game allowance as a fraction (1.0 = 100%, 0.85 = 85%)
+        max_hcp: Max Playing Handicap cap; 0 or negative means no cap
+    """
+    from email_parser import database as _db
+    cap = max_hcp if max_hcp and max_hcp > 0 else None
+    return json.dumps(_db.project_playing_handicaps(event, allowance=allowance,
+                                                    max_hcp=cap),
+                      indent=2, default=str)
 
 
 @mcp.tool()

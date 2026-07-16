@@ -242,12 +242,20 @@ for weeks). We OWN the determination from our scorecards + formula layer:
   `import_gg_scorecards` for that event's day (badge appears as soon as
   scores land), a one-time daemon backfill on boot when the table is empty,
   and the bridge `scoring-mvp-recompute[:event]` for a manual run.
-- **Badge read:** `get_scoring_rounds_list` prefers `event_mvp_computed`
-  (mvp/co_mvp/tgf_mvp/co_tgf_mvp) and falls back to the GG `event_mvps`
-  rows only where we haven't computed yet, so no historical badge is lost.
-  `points-render.js` `prMvpBadges` renders amber **MVP**/**Co-MVP** and
-  teal **TGF MVP**/**Co-TGF MVP** pills. The GG `event_mvps` table is kept
-  for the money/purse record and cross-check (`gg_recorded_mvp`).
+- **Badge read + RETROACTIVITY BOUNDARY:** `get_scoring_rounds_list` emits
+  mvp/co_mvp/tgf_mvp/co_tgf_mvp. Our computation is authoritative **only for
+  events after the ratified boundary `_MVP_RETRO_BOUNDARY = "2026-07-14"`**
+  (a9.18/s9.18). On/before the boundary GG is bible (Kerry standing rule):
+  where GG recorded an MVP (`event_mvps`) we defer to it — our post-cap
+  handicaps must not re-crown a frozen result (e.g. s18.6 Flying L, where our
+  net points make Sanford City MVP but GG's tiebreaker MVP is Jeff Young) —
+  and our computation only fills events GG never recorded (import lag: a9.18
+  Kelly, s9.17 Jeff). `points-render.js` `prMvpBadges` renders amber
+  **MVP**/**Co-MVP** + teal **TGF MVP**/**Co-TGF MVP**. GG `event_mvps` stays
+  the money/purse record + pre-boundary authority.
+- **TGF MVP multi-chapter gate (Kerry ruling B):** TGF MVP only exists when
+  ≥2 chapters fielded the game that day; a lone City MVP on a single-chapter
+  day (other event rained out / no players) is NOT elevated (matches GG).
 
 event_mvps is in _CUSTOMER_FK_COLUMNS (merge-safe).
 
