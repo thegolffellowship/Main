@@ -632,6 +632,13 @@ All three rendering paths on the Customers page (inline expand, detail panel, mo
   `send_entry_confirmation(item_id)` force-send for a registered item (skip the balance
   guard) — the resend path for registrations made before the auto-email. "Credit applied"
   falls back to the item's price when there's no live apply result.
+  **Admin CC + redirectable copies (v2.113.2, Kerry).** Every entry-confirmation send
+  (auto + manual) now CCs `admin@thegolffellowship.com` for the record via
+  `_auto_email_cc()`; disable/repoint with the `AUTO_EMAIL_CC` env var (`AUTO_EMAIL_CC=""`
+  suppresses). `send_entry_confirmation_email` takes an optional `cc` param (default =
+  admin CC; `""` suppresses on a one-off). The `scoring-entry-confirm` bridge accepts
+  `"<item_id>[|<override_to>[|<cc>]]"` so a copy of exactly what a player received can be
+  redirected elsewhere (e.g. `kerry@`) without CC'ing admin (empty third field).
 
 # Payout Credit / Refund (WD + standalone credited rows)
 
