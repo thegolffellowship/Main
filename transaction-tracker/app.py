@@ -5927,126 +5927,34 @@ def api_balance_due_email_send(item_id):
     return jsonify({"error": "Failed to send email — check server logs"}), 500
 
 
-def _build_credit_entry_confirmation_email(item_id, result=None):
-    """Confirmation email for a player whose applied credit FULLY COVERS the
-    entry fee — they're entered, nothing owed (Kerry 2026-07-16). Returns the
-    payload dict, or None (item missing / no email on file)."""
-    import html as _html
-    from email_parser.database import _connect as _db_connect
-    with _db_connect() as conn:
-        row = conn.execute("SELECT * FROM items WHERE id = ?", (item_id,)).fetchone()
-        if not row:
-            return None
-        item = dict(row)
-        event_name = item.get("item_name") or ""
-        ev = conn.execute(
-            "SELECT * FROM events WHERE item_name = ? COLLATE NOCASE", (event_name,)
-        ).fetchone()
-        event = dict(ev) if ev else {}
-    player_name = (item.get("customer") or "").strip()
-    try:
-        player_email = _resolve_player_email(item)
-    except Exception:
-        player_email = (item.get("customer_email") or "").strip()
-    if not player_email:
-        return None
-    e = _html.escape
-    first = player_name.split(" ", 1)[0] if player_name else "there"
-    date = event.get("event_date") or ""
-    course = event.get("course") or ""
-    holes = (item.get("holes") or "").strip()
-    tee = (item.get("tee_choice") or "").strip()
-    games = (item.get("side_games") or "").strip()
-
-    rows = []
-    if date:
-        rows.append(("Date", date))
-    if course:
-        rows.append(("Course", course))
-    if holes:
-        rows.append(("Holes", holes))
-    if tee:
-        rows.append(("Tee", tee))
-    if games and games.upper() not in ("", "NONE", "NO GAMES"):
-        rows.append(("Side games", games))
-    applied = (result or {}).get("amount_applied")
-    if applied:
-        rows.append(("Credit applied", f"${float(applied):.2f}"))
-    detail = "".join(
-        f"<tr><td style='padding:4px 14px 4px 0;color:#64748b;'>{e(l)}</td>"
-        f"<td style='padding:4px 0;font-weight:600;'>{e(str(v))}</td></tr>"
-        for l, v in rows)
-
-    excess = (result or {}).get("excess") or 0
-    excess_note = ""
-    if excess and float(excess) > 0.005:
-        excess_note = (f"<p style='color:#475569;'>Your credit more than covered the "
-                       f"entry — ${float(excess):.2f} remains on your account.</p>")
-
-    subject = f"You're registered for {event_name}" + (f" — {date}" if date else "")
-    html_body = f"""
-<div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
-            max-width:560px; color:#0f172a; line-height:1.5;">
-  <p>Hi {e(first)},</p>
-  <p>You're all set — your credit has been applied and you're
-  <strong>entered into {e(event_name)}</strong>. Nothing further is due.</p>
-  <table style="border-collapse:collapse; margin:0.75rem 0; font-size:0.95rem;">{detail}</table>
-  {excess_note}
-  <p>See you on the course!</p>
-  <p style="color:#64748b;">— The Golf Fellowship</p>
-</div>"""
-    override = (os.getenv("CREDIT_ENTRY_EMAIL_OVERRIDE") or "").strip()
-    return {
-        "subject": subject, "html_body": html_body,
-        "event_name": event_name, "player_name": player_name,
-        "intended_recipient": player_email,
-        "override_recipient": override, "override_active": bool(override),
-    }
-
-
 def _send_credit_entry_confirmation(item_id, result):
     """Auto-send the entry-confirmation email when the applied credit covered
-    the WHOLE fee (amount_owed <= 0). Never raises — a mail failure must not
-    break the apply-credit response. Kill switch: AUTO_CREDIT_ENTRY_EMAIL=0.
-    Test routing: CREDIT_ENTRY_EMAIL_OVERRIDE=<addr>."""
+    the WHOLE fee (amount_owed <= 0). Delegates to the shared db helper. Never
+    raises — a mail failure must not break the apply-credit response. Kill
+    switch: AUTO_CREDIT_ENTRY_EMAIL=0."""
     try:
         if (os.getenv("AUTO_CREDIT_ENTRY_EMAIL", "1") or "1").strip().lower() \
                 not in ("1", "true", "yes", "on"):
             return
-        owed = (result or {}).get("amount_owed")
-        if owed is None or float(owed) > 0.005:
-            return  # balance still due — that's the balance-due email path
-        payload = _build_credit_entry_confirmation_email(item_id, result)
-        if not payload:
-            return
-        tenant_id = os.getenv("AZURE_TENANT_ID")
-        client_id = os.getenv("AZURE_CLIENT_ID")
-        client_secret = os.getenv("AZURE_CLIENT_SECRET")
-        from_address = os.getenv("EMAIL_ADDRESS")
-        if not all([tenant_id, client_id, client_secret, from_address]):
-            return
-        to_address = (payload["override_recipient"] if payload["override_active"]
-                      else payload["intended_recipient"])
-        if not to_address:
-            return
-        ok = send_mail_graph(
-            tenant_id=tenant_id, client_id=client_id, client_secret=client_secret,
-            from_address=from_address, to_address=to_address,
-            subject=payload["subject"], html_body=payload["html_body"])
-        try:
-            from email_parser.database import log_message
-            log_message({
-                "event_name": payload["event_name"], "channel": "email",
-                "recipient_name": payload["player_name"],
-                "recipient_address": to_address, "subject": payload["subject"],
-                "body_preview": f"Entry confirmation — credit covered fee (item:{item_id})",
-                "status": "sent" if ok else "failed", "sent_by": "auto",
-            })
-        except Exception:
-            pass
+        from email_parser.database import send_entry_confirmation_email
+        send_entry_confirmation_email(item_id, result)
     except Exception:
         logger.warning("credit-entry confirmation email failed for item %s",
                        item_id, exc_info=True)
+
+
+@app.route("/api/items/<int:item_id>/entry-confirmation/send", methods=["POST"])
+@require_role("manager")
+def api_send_entry_confirmation(item_id):
+    """Manually (re)send the entry-confirmation email for a registered item —
+    the retroactive/resend path for registrations made before the auto-email,
+    or a re-send on request (Kerry 2026-07-16). force=True skips the balance
+    guard."""
+    from email_parser.database import send_entry_confirmation_email
+    res = send_entry_confirmation_email(item_id, force=True)
+    if not res.get("ok"):
+        return jsonify({"error": res.get("error", "Failed to send")}), 400
+    return jsonify({"status": "ok", **res})
 
 
 @app.route("/api/items/<int:credit_item_id>/apply-credit-info")

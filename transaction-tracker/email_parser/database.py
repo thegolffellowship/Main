@@ -17581,6 +17581,118 @@ def get_player_credits(
     return result
 
 
+def build_entry_confirmation_email(item_id: int, result: dict | None = None,
+                                   db_path: str | Path | None = None) -> dict | None:
+    """Payload for the 'you're entered' confirmation email — sent when an
+    applied credit covers the WHOLE entry fee (Kerry 2026-07-16). Returns a
+    dict {subject, html_body, event_name, player_name, player_email}, or None
+    if the item is missing or the player has no email on file."""
+    import html as _html
+    with _connect(db_path) as conn:
+        row = conn.execute("SELECT * FROM items WHERE id = ?", (item_id,)).fetchone()
+        if not row:
+            return None
+        item = dict(row)
+        event_name = item.get("item_name") or ""
+        ev = conn.execute("SELECT * FROM events WHERE item_name = ? COLLATE NOCASE",
+                          (event_name,)).fetchone()
+        event = dict(ev) if ev else {}
+    player_name = (item.get("customer") or "").strip()
+    try:
+        player_email = resolve_player_email(item)
+    except Exception:
+        player_email = (item.get("customer_email") or "").strip()
+    if not player_email:
+        return None
+    e = _html.escape
+    first = player_name.split(" ", 1)[0] if player_name else "there"
+    date = event.get("event_date") or ""
+    course = event.get("course") or ""
+    holes = (item.get("holes") or "").strip()
+    tee = (item.get("tee_choice") or "").strip()
+    games = (item.get("side_games") or "").strip()
+    rows = []
+    if date:
+        rows.append(("Date", date))
+    if course:
+        rows.append(("Course", course))
+    if holes:
+        rows.append(("Holes", holes))
+    if tee:
+        rows.append(("Tee", tee))
+    if games and games.upper() not in ("", "NONE", "NO GAMES"):
+        rows.append(("Side games", games))
+    applied = (result or {}).get("amount_applied")
+    if not applied:
+        applied = _parse_dollar(item.get("item_price"))
+    if applied:
+        rows.append(("Credit applied", f"${float(applied):.2f}"))
+    detail = "".join(
+        f"<tr><td style='padding:4px 14px 4px 0;color:#64748b;'>{e(l)}</td>"
+        f"<td style='padding:4px 0;font-weight:600;'>{e(str(v))}</td></tr>"
+        for l, v in rows)
+    excess = (result or {}).get("excess") or 0
+    excess_note = ""
+    if excess and float(excess) > 0.005:
+        excess_note = (f"<p style='color:#475569;'>Your credit more than covered the "
+                       f"entry — ${float(excess):.2f} remains on your account.</p>")
+    subject = f"You're registered for {event_name}" + (f" — {date}" if date else "")
+    html_body = f"""
+<div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
+            max-width:560px; color:#0f172a; line-height:1.5;">
+  <p>Hi {e(first)},</p>
+  <p>You're all set — your credit has been applied and you're
+  <strong>entered into {e(event_name)}</strong>. Nothing further is due.</p>
+  <table style="border-collapse:collapse; margin:0.75rem 0; font-size:0.95rem;">{detail}</table>
+  {excess_note}
+  <p>See you on the course!</p>
+  <p style="color:#64748b;">— The Golf Fellowship</p>
+</div>"""
+    return {"subject": subject, "html_body": html_body, "event_name": event_name,
+            "player_name": player_name, "player_email": player_email}
+
+
+def send_entry_confirmation_email(item_id: int, result: dict | None = None,
+                                  db_path: str | Path | None = None,
+                                  force: bool = False,
+                                  override: str | None = None) -> dict:
+    """Build + send the entry-confirmation email via Microsoft Graph and log
+    it. ``force=True`` skips the amount_owed guard (manual / retroactive
+    resend). Test routing: ``CREDIT_ENTRY_EMAIL_OVERRIDE`` env or ``override``.
+    Returns {ok, sent_to, player_name} or {ok:False, error}."""
+    import os as _os
+    from email_parser.fetcher import send_mail_graph
+    if not force:
+        owed = (result or {}).get("amount_owed")
+        if owed is None or float(owed) > 0.005:
+            return {"ok": False, "error": "balance still due"}
+    payload = build_entry_confirmation_email(item_id, result, db_path)
+    if not payload:
+        return {"ok": False, "error": "item not found or no email on file"}
+    tenant_id = _os.getenv("AZURE_TENANT_ID")
+    client_id = _os.getenv("AZURE_CLIENT_ID")
+    client_secret = _os.getenv("AZURE_CLIENT_SECRET")
+    from_address = _os.getenv("EMAIL_ADDRESS")
+    if not all([tenant_id, client_id, client_secret, from_address]):
+        return {"ok": False, "error": "email not configured on server"}
+    to_address = (override or (_os.getenv("CREDIT_ENTRY_EMAIL_OVERRIDE") or "").strip()
+                  or payload["player_email"])
+    ok = send_mail_graph(tenant_id=tenant_id, client_id=client_id,
+                         client_secret=client_secret, from_address=from_address,
+                         to_address=to_address, subject=payload["subject"],
+                         html_body=payload["html_body"])
+    try:
+        log_message({"event_name": payload["event_name"], "channel": "email",
+                     "recipient_name": payload["player_name"],
+                     "recipient_address": to_address, "subject": payload["subject"],
+                     "body_preview": f"Entry confirmation — credit covered fee (item:{item_id})",
+                     "status": "sent" if ok else "failed",
+                     "sent_by": "manual" if force else "auto"})
+    except Exception:
+        logger.warning("Failed to log entry-confirmation email", exc_info=True)
+    return {"ok": bool(ok), "sent_to": to_address, "player_name": payload["player_name"]}
+
+
 def _calc_event_pricing_breakdown(
     event: dict,
     user_status: str,

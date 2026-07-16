@@ -156,6 +156,21 @@ def get_recent_snapshot(limit: int = 50) -> str:
 
 
 @mcp.tool()
+def send_entry_confirmation(item_id: int) -> str:
+    """Send (or re-send) the 'you're entered' confirmation email for a player's
+    registered event item whose applied credit covered the entry fee — the
+    manual / retroactive path for registrations made before the auto-email
+    (Kerry 2026-07-16). force=True, so it sends regardless of balance.
+
+    Args:
+        item_id: items.id of the player's registered event item.
+    """
+    from email_parser import database as db
+    return json.dumps(db.send_entry_confirmation_email(item_id, force=True),
+                      indent=2, default=str)
+
+
+@mcp.tool()
 def list_events(chapter: str = "", upcoming_only: bool = False) -> str:
     """List all events with pricing and registration data.
 
