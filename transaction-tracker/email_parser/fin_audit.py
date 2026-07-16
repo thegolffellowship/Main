@@ -82,8 +82,17 @@ CONVENTIONAL_FK = {
 CONVENTIONAL_FK["course_id"] = ("courses", "course_id")
 CONVENTIONAL_FK["status_id"] = ("statuses", "status_id")
 TABLE_FK_OVERRIDE = {
-    ("bank_deposits", "account_id"): ("bank_accounts", "id"),
+    # Live data proves bank_deposits.account_id points at acct_accounts
+    # (ids 3=TGF Checking, 7=Venmo), NOT the vestigial bank_accounts table.
+    ("bank_deposits", "account_id"): ("acct_accounts", "id"),
+    ("message_log", "template_id"): ("message_templates", "id"),
 }
+
+# A row is DEAD only when reversed or merged. 'reconciled' is a LIVE status
+# (matched to a bank deposit) — never count links to reconciled rows as
+# dangling evidence.
+DEAD = "('reversed','merged')"
+LIVE = "COALESCE(status,'active') NOT IN ('reversed','merged')"
 # Columns that hold EXTERNAL identifiers (Golf Genius, Platform) — no local
 # FK target exists by design, so they're not flagged as unmapped.
 EXTERNAL_ID_COLS = {"platform_user_id", "round_id", "gg_round_id",
@@ -309,7 +318,7 @@ def audit_ledger(conn):
                    ROUND(SUM(CASE WHEN customer_id IS NULL THEN ABS({amt})
                              ELSE 0 END),2) AS dollars_cid_null
             FROM acct_transactions
-            WHERE COALESCE(status,'active')='active'
+            WHERE COALESCE(status,'active') NOT IN ('reversed','merged')
             GROUP BY 1,2 ORDER BY dollars_cid_null DESC""")]
 
     out["active_by_source"] = [dict(r) for r in conn.execute(
@@ -317,14 +326,14 @@ def audit_ledger(conn):
                    ROUND(SUM({amt}),2) AS total,
                    SUM(CASE WHEN customer_id IS NULL THEN 1 ELSE 0 END) AS cid_null
             FROM acct_transactions
-            WHERE COALESCE(status,'active')='active'
+            WHERE COALESCE(status,'active') NOT IN ('reversed','merged')
             GROUP BY 1 ORDER BY n DESC""")]
 
     # source_ref families: exp-promoted-N, venmo-bd-N, godaddy-order-X …
     fam = defaultdict(lambda: [0, 0.0, 0, 0.0])
     for r in conn.execute(
             f"SELECT source_ref, {amt} AS a, customer_id FROM acct_transactions "
-            "WHERE COALESCE(status,'active')='active'"):
+            "WHERE COALESCE(status,'active') NOT IN ('reversed','merged')"):
         ref = r["source_ref"] or "(none)"
         family = re.sub(r"[-_]?\d+$", "", ref) or "(none)"
         f = fam[family]
@@ -344,7 +353,7 @@ def audit_ledger(conn):
         out["name_only_rows"] = _one(conn, f"""
             SELECT COUNT(*) AS n, ROUND(SUM(ABS({amt})),2) AS dollars
             FROM acct_transactions
-            WHERE COALESCE(status,'active')='active' AND customer_id IS NULL
+            WHERE COALESCE(status,'active') NOT IN ('reversed','merged') AND customer_id IS NULL
               AND customer IS NOT NULL AND TRIM(customer) != ''""")
 
     # Floating money: attributed to no customer, no item, no event
@@ -355,7 +364,7 @@ def audit_ledger(conn):
         SELECT COALESCE(entry_type,'(legacy-null)') AS entry_type,
                COUNT(*) AS n, ROUND(SUM(ABS({amt})),2) AS dollars
         FROM acct_transactions
-        WHERE COALESCE(status,'active')='active'
+        WHERE COALESCE(status,'active') NOT IN ('reversed','merged')
           AND customer_id IS NULL AND {item_pred} AND {ev_pred}
         GROUP BY 1 ORDER BY dollars DESC""")]
 
@@ -364,7 +373,7 @@ def audit_ledger(conn):
     if "event_name" in cols:
         out["event_name_not_in_events"] = _one(conn, """
             SELECT COUNT(*) AS n FROM acct_transactions t
-            WHERE COALESCE(t.status,'active')='active'
+            WHERE COALESCE(t.status,'active') NOT IN ('reversed','merged')
               AND t.event_name IS NOT NULL AND TRIM(t.event_name) != ''
               AND NOT EXISTS (SELECT 1 FROM events e
                               WHERE e.item_name = t.event_name)""")
@@ -373,7 +382,7 @@ def audit_ledger(conn):
     out["legacy_rows_no_entry_type"] = _one(conn, f"""
         SELECT COUNT(*) AS n, ROUND(SUM({amt}),2) AS total
         FROM acct_transactions
-        WHERE COALESCE(status,'active')='active' AND entry_type IS NULL""")
+        WHERE COALESCE(status,'active') NOT IN ('reversed','merged') AND entry_type IS NULL""")
     return out
 
 
@@ -397,21 +406,31 @@ def audit_money(conn):
                        AS linked_rows,
                    ROUND(SUM(amount),2) AS computed_total
             FROM tgf_payouts""")
+        # One Venmo payment often covers SEVERAL payout rows (a lump per
+        # golfer per event day), so variance is judged per linked ledger
+        # row: sum of computed payouts sharing that acct_transaction_id
+        # vs the actual paid amount.
         var = [dict(r) for r in conn.execute("""
-            SELECT p.id AS payout_id, p.customer_id, p.category,
-                   ROUND(p.amount,2) AS computed,
+            SELECT p.acct_transaction_id,
+                   COUNT(*) AS payout_rows,
+                   MIN(p.customer_id) AS customer_id,
+                   ROUND(SUM(p.amount),2) AS computed_sum,
                    ROUND(ABS(a.total_amount),2) AS actual_paid,
-                   ROUND(ABS(a.total_amount) - p.amount,2) AS variance
+                   ROUND(ABS(a.total_amount) - SUM(p.amount),2) AS variance
             FROM tgf_payouts p
             JOIN acct_transactions a ON a.id = p.acct_transaction_id
-            WHERE ABS(ABS(a.total_amount) - p.amount) > 0.01
-            ORDER BY ABS(ABS(a.total_amount) - p.amount) DESC LIMIT 25""")]
-        out["tgf_payouts"]["variance_rows_computed_vs_actual"] = len(var)
+            GROUP BY p.acct_transaction_id
+            HAVING ABS(ABS(a.total_amount) - SUM(p.amount)) > 0.01
+            ORDER BY ABS(ABS(a.total_amount) - SUM(p.amount)) DESC
+            LIMIT 25""")]
+        out["tgf_payouts"]["variance_lumps_computed_vs_actual"] = len(var)
+        out["tgf_payouts"]["variance_total_abs"] = round(
+            sum(abs(v["variance"] or 0) for v in var), 2)
         out["tgf_payouts"]["variance_examples"] = var
         out["tgf_payouts"]["linked_to_nonactive_ledger_row"] = _count(conn, """
             SELECT COUNT(*) FROM tgf_payouts p
             JOIN acct_transactions a ON a.id = p.acct_transaction_id
-            WHERE COALESCE(a.status,'active') != 'active'""")
+            WHERE COALESCE(a.status,'active') IN ('reversed','merged')""")
 
     # expense_transactions: staging → promotion integrity
     if "expense_transactions" in tables:
@@ -429,18 +448,18 @@ def audit_money(conn):
             "promoted_to_nonactive_ledger_row": _count(conn, """
                 SELECT COUNT(*) FROM expense_transactions e
                 JOIN acct_transactions a ON a.id = e.acct_transaction_id
-                WHERE COALESCE(a.status,'active') != 'active'"""),
+                WHERE COALESCE(a.status,'active') IN ('reversed','merged')"""),
             "promoted_rows_ledger_cid_null": _one(conn, """
                 SELECT COUNT(*) AS n, ROUND(SUM(ABS(a.total_amount)),2) AS dollars
                 FROM expense_transactions e
                 JOIN acct_transactions a ON a.id = e.acct_transaction_id
-                WHERE COALESCE(a.status,'active')='active'
+                WHERE COALESCE(a.status,'active') NOT IN ('reversed','merged')
                   AND a.customer_id IS NULL"""),
             "exp_cid_set_but_ledger_cid_null": _count(conn, """
                 SELECT COUNT(*) FROM expense_transactions e
                 JOIN acct_transactions a ON a.id = e.acct_transaction_id
                 WHERE e.customer_id IS NOT NULL AND a.customer_id IS NULL
-                  AND COALESCE(a.status,'active')='active'"""),
+                  AND COALESCE(a.status,'active') NOT IN ('reversed','merged')"""),
         }
 
     # acct_allocations: per-player money without ledger/customer anchors
@@ -470,7 +489,7 @@ def audit_money(conn):
                    ROUND(a.total_amount,2) AS parent_amount
             FROM godaddy_order_splits s
             JOIN acct_transactions a ON a.id = s.transaction_id
-            WHERE COALESCE(a.status,'active')='active'
+            WHERE COALESCE(a.status,'active') NOT IN ('reversed','merged')
             GROUP BY s.transaction_id
             HAVING ABS(split_sum - parent_net_deposit) > 0.02
             LIMIT 15""")]
@@ -479,7 +498,7 @@ def audit_money(conn):
         out["godaddy_order_splits"]["splits_on_nonactive_parent"] = _count(conn, """
             SELECT COUNT(*) FROM godaddy_order_splits s
             JOIN acct_transactions a ON a.id = s.transaction_id
-            WHERE COALESCE(a.status,'active') != 'active'""")
+            WHERE COALESCE(a.status,'active') IN ('reversed','merged')""")
 
     # bank reconciliation chain
     if "bank_deposits" in tables:
@@ -493,35 +512,44 @@ def audit_money(conn):
             "match_to_nonactive_txn": _count(conn, """
                 SELECT COUNT(*) FROM reconciliation_matches m
                 JOIN acct_transactions a ON a.id = m.acct_transaction_id
-                WHERE COALESCE(a.status,'active') != 'active'"""),
+                WHERE COALESCE(a.status,'active') IN ('reversed','merged')"""),
         }
 
-    # items: paid rows floating outside the ledger
+    # items: paid rows floating outside the ledger. item_price is stored as
+    # dollar-formatted TEXT ('$182.00') on the live DB — strip and CAST.
     if "items" in tables:
-        out["items_money"] = _one(conn, """
+        cast = ("CAST(REPLACE(REPLACE(COALESCE(item_price,'0'),'$',''),"
+                "',','') AS REAL)")
+        out["items_money"] = _one(conn, f"""
             SELECT COUNT(*) AS paid_rows,
                    SUM(CASE WHEN customer_id IS NULL THEN 1 ELSE 0 END) AS cid_null,
-                   ROUND(SUM(item_price),2) AS total
+                   ROUND(SUM({cast}),2) AS total
             FROM items
-            WHERE COALESCE(item_price,0) != 0
+            WHERE {cast} != 0
               AND COALESCE(transaction_status,'') NOT IN ('rsvp_only')""")
-        out["items_not_in_ledger"] = _one(conn, """
-            SELECT COUNT(*) AS n, ROUND(SUM(i.item_price),2) AS dollars
+        out["items_money_column_typing"] = [dict(r) for r in conn.execute(
+            """SELECT typeof(item_price) AS storage_type, COUNT(*) AS n
+               FROM items GROUP BY 1 ORDER BY n DESC""")]
+        out["items_not_in_ledger"] = _one(conn, f"""
+            SELECT COUNT(*) AS n,
+                   ROUND(SUM(CAST(REPLACE(REPLACE(COALESCE(i.item_price,'0'),
+                             '$',''),',','') AS REAL)),2) AS dollars
             FROM items i
-            WHERE COALESCE(i.item_price,0) != 0
+            WHERE CAST(REPLACE(REPLACE(COALESCE(i.item_price,'0'),'$',''),
+                       ',','') AS REAL) != 0
               AND i.merchant = 'The Golf Fellowship'
               AND COALESCE(i.transaction_status,'') NOT IN
                   ('rsvp_only','transferred')
               AND NOT EXISTS (SELECT 1 FROM acct_transactions a
                               WHERE a.item_id = i.id
-                                AND COALESCE(a.status,'active')='active')
+                                AND COALESCE(a.status,'active') NOT IN ('reversed','merged'))
               AND NOT EXISTS (SELECT 1 FROM godaddy_order_splits s
                               WHERE s.item_id = i.id)
               AND NOT EXISTS (
                   SELECT 1 FROM acct_transactions a2
                   WHERE a2.order_id = i.order_id
                     AND i.order_id IS NOT NULL
-                    AND COALESCE(a2.status,'active')='active')""")
+                    AND COALESCE(a2.status,'active') NOT IN ('reversed','merged'))""")
 
     # customer_memberships money
     if "customer_memberships" in tables:
@@ -557,9 +585,14 @@ def audit_dupes(conn):
     out = {}
     amt = "total_amount"
 
-    # Same (date, |amount|, customer_id) active in >1 source_ref family
+    # Same (date, |amount|, customer_id) active in >1 source_ref family.
+    # Transfer legs (source_ref ...-in / ...-out) are double-entry pairs by
+    # design — exclude them so they don't read as duplicates.
     fam_expr = ("CASE WHEN source_ref IS NULL THEN '(none)' "
                 "ELSE rtrim(source_ref,'0123456789') END")
+    xfer_excl = ("(source_ref IS NULL OR (source_ref NOT LIKE '%-in' "
+                 "AND source_ref NOT LIKE '%-out' "
+                 "AND source_ref NOT LIKE 'xfer%'))")
     rows = [dict(r) for r in conn.execute(f"""
         SELECT date, ROUND(ABS({amt}),2) AS aamt,
                COALESCE(customer_id,-1) AS cid,
@@ -567,7 +600,8 @@ def audit_dupes(conn):
                COUNT(DISTINCT {fam_expr}) AS families,
                GROUP_CONCAT(DISTINCT {fam_expr}) AS family_list
         FROM acct_transactions
-        WHERE COALESCE(status,'active')='active' AND ABS({amt}) > 0.01
+        WHERE COALESCE(status,'active') NOT IN ('reversed','merged')
+          AND ABS({amt}) > 0.01 AND {xfer_excl}
         GROUP BY 1,2,3
         HAVING COUNT(*) > 1 AND families > 1
         ORDER BY aamt DESC LIMIT 40""")]
@@ -578,11 +612,11 @@ def audit_dupes(conn):
     out["exp_promoted_with_active_venmo_bd_twin"] = _count(conn, """
         SELECT COUNT(*) FROM acct_transactions e
         WHERE e.source_ref LIKE 'exp-promoted-%'
-          AND COALESCE(e.status,'active')='active'
+          AND COALESCE(e.status,'active') NOT IN ('reversed','merged')
           AND EXISTS (
               SELECT 1 FROM acct_transactions v
               WHERE v.source_ref LIKE 'venmo-bd-%'
-                AND COALESCE(v.status,'active')='active'
+                AND COALESCE(v.status,'active') NOT IN ('reversed','merged')
                 AND v.date = e.date
                 AND ABS(ABS(v.total_amount) - ABS(e.total_amount)) < 0.01)""")
 

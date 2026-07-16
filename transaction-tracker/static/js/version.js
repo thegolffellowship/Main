@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.116.1";
+window.TGF_VERSION = "2.116.2";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.116.2",
+    date: "2026-07-16",
+    changes: [
+      "fin_audit refinement pass after the first live run: (1) status semantics corrected — 'reconciled' is a LIVE ledger status (bank-matched), so dead-link checks now count only reversed/merged targets; (2) FK map fixes proven by live data — bank_deposits.account_id actually references acct_accounts (ids 3/7), not the vestigial bank_accounts table, and message_log.template_id references message_templates; (3) tgf_payouts variance now judged per lump payment (sum of payout rows sharing an acct_transaction_id vs the actual paid amount) instead of per row, since one Venmo payment covers several category payouts; (4) items.item_price is dollar-formatted TEXT on the live DB — audit strips/CASTs it and reports the typeof() distribution as its own finding; (5) transfer legs (xfer -in/-out source_refs) excluded from the cross-writer duplicate scan — they are double-entry pairs by design.",
+    ],
+  },
   {
     version: "2.116.1",
     date: "2026-07-16",
