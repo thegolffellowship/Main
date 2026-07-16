@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.111.1";
+window.TGF_VERSION = "2.111.2";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.111.2",
+    date: "2026-07-16",
+    changes: [
+      "Mobile roster now shows the CREDIT badge and drops the noise NONE badge (Kerry). RSVP players with an outstanding credit now get the same green 'Credit: $X' chip mobile as desktop -- tappable to apply the credit (document-delegated handler, same as desktop). The 'NONE' side-games pill (shown for players with no side games, meaningless on an RSVP-only row) no longer renders on mobile cards; NET/GROSS/BOTH still show.",
+    ],
+  },
   {
     version: "2.111.1",
     date: "2026-07-16",
