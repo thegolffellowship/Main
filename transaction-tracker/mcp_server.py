@@ -1397,6 +1397,12 @@ def _scoring_dispatch(url: str, extract: str):
             # url = tournament_results widget (optionally &round=<id>);
             # time-budgeted — call repeatedly until rounds_left == 0
             return json.dumps(db.import_gg_event_mvps(url), indent=2)
+        if cmd == "scoring-print-pack":
+            # GATE-1 dry-run: return the assembled Starter Sheet / Cart Signs
+            # data for an event (get_event_print_pack) so the printables can be
+            # rendered + fitness-checked against real saved pairings. Read-only.
+            return json.dumps(db.get_event_print_pack(int(arg.strip())),
+                              indent=2, default=str)
         if cmd == "scoring-audit-mvp":
             # H-1 results hardening: our City MVP vs GG's recorded MVP for
             # every event before the retroactivity boundary. arg = cutoff date

@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.116.3";
+window.TGF_VERSION = "2.116.4";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.116.4",
+    date: "2026-07-16",
+    changes: [
+      "Read-only bridge scoring-print-pack:<event_id> returns the assembled Starter Sheet / Cart Signs data (get_event_print_pack) for GATE-1 dry-run fitness checks against real saved pairings.",
+    ],
+  },
   {
     version: "2.116.3",
     date: "2026-07-16",
