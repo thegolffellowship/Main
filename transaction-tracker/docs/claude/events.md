@@ -134,6 +134,20 @@ cards remain inline buttons.
 - Detection is conservative: standalone GUEST registrations (guest signed up themselves)
   are NOT flagged
 
+## Pairings printables — Starter Sheet + Cart Signs (B5, v2.116.0)
+Two print-optimized pages rendered from the SAVED pairings
+(`get_event_pairings`), assembled by `get_event_print_pack(event_id)` in
+`database.py` (event row + ordered groups + cart split — seats 1&2 = Cart A,
+3&4 = Cart B per Kerry's ruling). Manager routes: `GET /events/<id>/starter-sheet`
+→ `templates/starter_sheet.html` (tee time / group / player / tee / Idx / cart,
+one table), and `GET /events/<id>/cart-signs` → `templates/cart_signs.html`
+(one large card per cart, page-break per card, foldable placard). Both are
+standalone templates (no `_shell_nav.html`) with their own `@media print` CSS +
+`@page`. Buttons appear in the pairings toolbar **only when pairings are saved**
+(they read saved data). The handicap column is labeled **Idx** — the 9-hole
+index the pairings carry, NOT the D1 playing handicap (that upgrade needs the
+per-player selected-tee slope/rating/par and is a fast follow-up).
+
 ## Add Player
 - Modes: **comp** (manager comp, `$0.00`), **rsvp** (RSVP-only placeholder),
   **paid_separately** (Venmo/Zelle/Cash). Endpoint: `POST /api/events/add-player` (manager+).

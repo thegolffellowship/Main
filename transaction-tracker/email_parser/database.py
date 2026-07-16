@@ -11671,6 +11671,17 @@ def import_gg_scorecards(tournament_url: str, event_code: str | None = None,
                 course_id, tee_id = _upsert_course_tee(conn, p["tee"])
             holes_played = sum(1 for h in p["holes"].values()
                                if h.get("strokes") is not None)
+            # FREEZE INVARIANT (H-2, Kerry standing rule — past-events-frozen +
+            # retroactivity boundary): scoring_rounds.playing_handicap is the
+            # EVENT-TIME playing handicap and is authoritative for that round's
+            # results. It is set here at import from GG's own value and is only
+            # ever re-carried from GG on a completeness/handicap upgrade — it is
+            # NEVER recomputed by our handicap engine. When the untether path
+            # begins writing OUR self-computed playing handicap, it MUST write
+            # only where playing_handicap IS NULL (mirror the handicap_upgrade
+            # guard above) so a later index/cap change can never retroactively
+            # alter a frozen round. Our projection (project_playing_handicaps)
+            # stays read-only shadow until then.
             if existing:
                 srid = existing["id"]
                 conn.execute("DELETE FROM scoring_holes WHERE scoring_round_id = ?", (srid,))
@@ -35767,6 +35778,58 @@ def get_event_pairings(event_id: int, db_path=None) -> dict:
             "handicap_index": r["handicap_index"],
         })
     return result
+
+
+def get_event_print_pack(event_id: int, db_path=None) -> dict | None:
+    """Assemble the data for the Starter Sheet + Cart Signs printables (B5).
+
+    Reads the event row + saved pairings (get_event_pairings) and shapes them
+    into an ordered group list, each group carrying its tee-time/hole slot,
+    players, and cart split (Kerry's ruling: seats 1&2 = Cart A, 3&4 = Cart B).
+    Read-only; returns None if the event has no id. handicap_index is the value
+    the pairings carry (9-hole index the generator stored) — labeled "Idx" on
+    the sheet, NOT presented as a playing handicap."""
+    with _connect(db_path) as conn:
+        ev = conn.execute("SELECT * FROM events WHERE id = ?", (event_id,)).fetchone()
+        if not ev:
+            return None
+        ev = dict(ev)
+    pairings = get_event_pairings(event_id, db_path=db_path)
+
+    def _carts(players: list) -> list:
+        ps = sorted(players, key=lambda p: p.get("cart_pos") or 0)
+        carts = []
+        for lo, hi, label in ((1, 2, "A"), (3, 4, "B")):
+            occ = [p for p in ps if (p.get("cart_pos") or 0) in (lo, hi)]
+            if occ:
+                carts.append({"label": label, "players": occ})
+        return carts
+
+    groups = []
+    for holes in ("9", "18"):
+        for g in (pairings.get(holes) or []):
+            players = sorted(g.get("players") or [],
+                             key=lambda p: p.get("cart_pos") or 0)
+            groups.append({
+                "holes": holes,
+                "group_num": g.get("group_num"),
+                "slot_label": g.get("slot_label") or f"Group {g.get('group_num')}",
+                "players": players,
+                "carts": _carts(players),
+            })
+    return {
+        "event": {
+            "id": event_id,
+            "item_name": ev.get("item_name"),
+            "event_date": ev.get("event_date"),
+            "course": ev.get("course"),
+            "chapter": ev.get("chapter"),
+            "format": ev.get("format"),
+            "start_type": ev.get("start_type"),
+        },
+        "groups": groups,
+        "group_count": len(groups),
+    }
 
 
 def save_event_pairings(event_id: int, groups_by_holes: dict, db_path=None) -> None:

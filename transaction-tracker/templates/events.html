@@ -4337,6 +4337,9 @@
                 html += `<button class="pairings-action-btn save-btn" data-ev-id="${ev.id}" data-pairings-action="save" style="background:var(--green);color:#fff;">&#x2713; Save</button>`;
             } else {
                 html += `<span style="font-size:0.78rem;color:var(--text-muted);padding:0.25rem 0.5rem;">Saved</span>`;
+                // Printables read the SAVED pairings — only offer when clean.
+                html += `<button class="pairings-action-btn" onclick="window.open('/events/${ev.id}/starter-sheet','_blank')" title="Print starter sheet">&#x1F5A8; Starter Sheet</button>`;
+                html += `<button class="pairings-action-btn" onclick="window.open('/events/${ev.id}/cart-signs','_blank')" title="Print cart signs">&#x1F5A8; Cart Signs</button>`;
             }
         }
         html += '</div>'; // .pairings-controls

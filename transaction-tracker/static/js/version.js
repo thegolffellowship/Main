@@ -1,10 +1,24 @@
-window.TGF_VERSION = "2.115.5";
+window.TGF_VERSION = "2.116.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.116.1",
+    date: "2026-07-16",
+    changes: [
+      "Financial-audit charter Deliverable 1 instrumentation (READ-ONLY): new email_parser/fin_audit.py runs a whole-DB integrity audit — per-table customer_id coverage/null/orphan/name-only counts (lens A), dangling-FK sweep across every declared REFERENCES clause plus a conventional *_id map with live-schema introspection (lens C), and a financial lens (acct_transactions by status/entry_type/category/source_ref family, floating money, tgf_payouts computed-vs-actual variance, expense promotion integrity, GoDaddy split-sum checks, items outside the ledger, cross-writer double-count candidates). Pure SELECT/PRAGMA — writes nothing. Reachable in-session via the probe_golf_genius bridge: extract='scoring-fin-audit:<tables|customer|fks|ledger|money|dupes|summary>'.",
+    ],
+  },
+  {
+    version: "2.116.0",
+    date: "2026-07-16",
+    changes: [
+      "Starter Sheet + Cart Signs printables (B5, Kerry — ready for s9.19). Two print-optimized pages render from the saved pairings: GET /events/<id>/starter-sheet (a one-table sheet of tee time / group / player / tee / index / cart) and GET /events/<id>/cart-signs (one large foldable card per cart, page-break each). Cart split follows the ratified ruling — seats 1&2 = Cart A, 3&4 = Cart B. Print buttons appear in the pairings toolbar once pairings are Saved (the pages read the saved data). Both are standalone print templates with their own @media print / @page CSS. The handicap column is labeled 'Idx' (the 9-hole index the pairings carry) — the full D1 playing-handicap column is a fast follow-up (needs each player's selected-tee slope/rating/par). New helper get_event_print_pack(event_id).",
+    ],
+  },
   {
     version: "2.115.5",
     date: "2026-07-16",
     changes: [
-      "Financial-audit charter Deliverable 1 instrumentation (READ-ONLY): new email_parser/fin_audit.py runs a whole-DB integrity audit — per-table customer_id coverage/null/orphan/name-only counts (lens A), dangling-FK sweep across every declared REFERENCES clause plus a conventional *_id map with live-schema introspection (lens C), and a financial lens (acct_transactions by status/entry_type/category/source_ref family, floating money, tgf_payouts computed-vs-actual variance, expense promotion integrity, GoDaddy split-sum checks, items outside the ledger, cross-writer double-count candidates). Pure SELECT/PRAGMA — writes nothing. Reachable in-session via the probe_golf_genius bridge: extract='scoring-fin-audit:<tables|customer|fks|ledger|money|dupes|summary>'.",
+      "H-2 (results hardening): made the playing-handicap FREEZE explicit. scoring_rounds.playing_handicap is the event-time value written at GG import and never recomputed by our engine (our projection is read-only shadow); re-imports only re-carry GG's value under the handicap/completeness upgrade guards. Added an explicit invariant comment at the import write site and a note in handicap-projection.md: when the untether path begins writing our self-computed playing handicap, it must write ONLY where playing_handicap IS NULL, so an index/cap change can never retroactively alter a frozen round (past-events-frozen + the retroactivity boundary).",
     ],
   },
   {

@@ -80,7 +80,7 @@ Records reconcile DOWN to actual paid; never alter a paid amount.
 - Deploy workflow: bump `static/js/version.js`, update docs, `git merge --no-ff`
   to main (Railway auto-deploys), verify via `get_tracker_docs` byte markers.
 
-## Instrumentation (v2.115.5)
+## Instrumentation (v2.116.1)
 The read-only audit engine lives in `email_parser/fin_audit.py`; run it live via
 the `probe_golf_genius` bridge with
 `extract="scoring-fin-audit:<tables|customer|fks|ledger|money|dupes|summary>"`.

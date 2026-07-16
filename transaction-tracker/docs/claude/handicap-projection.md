@@ -65,6 +65,18 @@ shipped FRONT-9 values regardless of nine played. GG's export was
 nine-blind; the 177 rounds are an explained legacy defect. **Our per-round
 tee values are correct.**
 
+**H-2 — playing-handicap FREEZE, confirmed + made explicit.**
+`scoring_rounds.playing_handicap` is the **event-time** PH, written at
+`import_gg_scorecards` time from GG's own value and NEVER recomputed by our
+engine (our `project_playing_handicaps` is read-only shadow). Re-imports only
+re-carry GG's value under the `handicap_upgrade` / `completeness_upgrade`
+guards. The freeze was implicit (frozen because nothing recomputes it); an
+explicit invariant comment now sits at the write site
+(`database.py` `import_gg_scorecards`). **Untether requirement:** when we
+begin writing OUR self-computed PH, it must write **only where
+`playing_handicap IS NULL`** so an index/cap change can never retroactively
+alter a frozen round (past-events-frozen + the retroactivity boundary).
+
 This is the keystone that untethers **net** scoring from Golf Genius:
 gross points need none of it; net needs all of it. It turns a player's
 **handicap index** + their **selected tee** into a course handicap, a
