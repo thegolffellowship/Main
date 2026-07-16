@@ -2322,6 +2322,19 @@
                     }
                 }
             }
+            // Credit badge for RSVP players with outstanding credits — same
+            // green "Credit: $X" chip as desktop, tappable to apply (Kerry
+            // 2026-07-16: mobile needs the credit indicator too).
+            if (isRsvpOnly || isGgRsvp) {
+                const creditInfo = (rsvpCreditMap[ev.item_name] || {})[r.customer];
+                if (creditInfo && creditInfo.total_credit > 0) {
+                    const amt = creditInfo.total_credit.toFixed(2);
+                    const idAttr = String(r.id).startsWith("gg-rsvp")
+                        ? `data-rsvp-id="${r.rsvp_id || ''}"`
+                        : `data-item-id="${r.id}"`;
+                    tag += ` <span class="status-tag btn-apply-credit-badge" ${idAttr} data-customer="${escapeHtml(r.customer || '')}" data-event-name="${escapeHtml(ev.item_name)}" style="background:#d1fae5;color:#065f46;border:1px solid #6ee7b7;font-size:0.65rem;padding:0.1rem 0.35rem;border-radius:4px;cursor:pointer;" title="Tap to apply credit">Credit: $${amt}</span>`;
+                }
+            }
             tag += couponTag(r);
             const rsvp = getRsvpForItem(r.id, ev.item_name) || getRsvpByEmail(r.customer_email, ev.item_name);
             const manualOverride = isSynthetic
@@ -2357,7 +2370,7 @@
             const sideGameLabel = sideGame === "NO GAMES" ? "NONE" : sideGame;
             const tee = (r.tee_choice || "").trim();
             const holes = (r.holes || "").trim();
-            const topTags = `${holes ? `<span class="mc-type mc-holes">${escapeHtml(holes)}h</span>` : ''}<span class="mc-type">${escapeHtml(sideGameLabel)}</span>${tee ? `<span class="mc-type mc-tee">${escapeHtml(tee)}</span>` : ''}`;
+            const topTags = `${holes ? `<span class="mc-type mc-holes">${escapeHtml(holes)}h</span>` : ''}${sideGameLabel !== "NONE" ? `<span class="mc-type">${escapeHtml(sideGameLabel)}</span>` : ''}${tee ? `<span class="mc-type mc-tee">${escapeHtml(tee)}</span>` : ''}`;
 
             // Full desktop action parity on mobile (Kerry 2026-07-16):
             // same shared builder, rendered as buttons.

@@ -313,6 +313,13 @@ before the iOS input blur) and dispatches an `input` event so the
 existing known-player status auto-fill + new-contact-field toggling still
 run. Do NOT reintroduce `<datalist>` for a mobile-facing autocomplete.
 
+**Mobile roster badges (v2.111.2, Kerry).** The mobile card `tag` now
+renders the green `Credit: $X` chip (`btn-apply-credit-badge`, tappable
+to apply) for RSVP/gg-rsvp players with an outstanding credit — parity
+with the desktop roster. The `NONE` side-games pill is suppressed on
+mobile cards (`sideGameLabel !== "NONE"` guard in `topTags`) — it was
+noise, especially on RSVP-only rows; NET/GROSS/BOTH still show.
+
 ## Player ACTIONS — Visual conventions
 
 | Element | Rendering |
