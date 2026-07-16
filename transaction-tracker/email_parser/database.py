@@ -11671,6 +11671,17 @@ def import_gg_scorecards(tournament_url: str, event_code: str | None = None,
                 course_id, tee_id = _upsert_course_tee(conn, p["tee"])
             holes_played = sum(1 for h in p["holes"].values()
                                if h.get("strokes") is not None)
+            # FREEZE INVARIANT (H-2, Kerry standing rule — past-events-frozen +
+            # retroactivity boundary): scoring_rounds.playing_handicap is the
+            # EVENT-TIME playing handicap and is authoritative for that round's
+            # results. It is set here at import from GG's own value and is only
+            # ever re-carried from GG on a completeness/handicap upgrade — it is
+            # NEVER recomputed by our handicap engine. When the untether path
+            # begins writing OUR self-computed playing handicap, it MUST write
+            # only where playing_handicap IS NULL (mirror the handicap_upgrade
+            # guard above) so a later index/cap change can never retroactively
+            # alter a frozen round. Our projection (project_playing_handicaps)
+            # stays read-only shadow until then.
             if existing:
                 srid = existing["id"]
                 conn.execute("DELETE FROM scoring_holes WHERE scoring_round_id = ?", (srid,))
