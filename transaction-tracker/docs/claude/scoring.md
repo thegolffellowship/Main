@@ -254,6 +254,14 @@ for weeks). We OWN the determination from our scorecards + formula layer:
   Kelly, s9.17 Jeff). `points-render.js` `prMvpBadges` renders amber
   **MVP**/**Co-MVP** + teal **TGF MVP**/**Co-TGF MVP**. GG `event_mvps` stays
   the money/purse record + pre-boundary authority.
+- **GG split → Co-MVP (Kerry 2026-07-16):** when GG recorded MORE THAN ONE
+  MVP winner for a pre-boundary event, it PAID THE POT IN SHARES rather than
+  applying a tiebreaker (e.g. s18.6 Flying L: Young/Sanford/Fehlis $33.33
+  each). The badge honors that — every GG winner shows **Co-MVP**, not sole
+  MVP (winner count from `event_mvps`). This split is an OUTLIER to our
+  Net→Gross tiebreaker; **FUTURE: only an admin override may force a split
+  over our computed sole winner** (post-a9.18 our engine tiebreaks to a sole
+  MVP by default). Same rule for a multi-winner GG TGF MVP → Co-TGF MVP.
 - **TGF MVP multi-chapter gate (Kerry ruling B):** TGF MVP only exists when
   ≥2 chapters fielded the game that day; a lone City MVP on a single-chapter
   day (other event rained out / no players) is NOT elevated (matches GG).

@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.115.1";
+window.TGF_VERSION = "2.115.2";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.115.2",
+    date: "2026-07-16",
+    changes: [
+      "Pre-boundary MVP badge now shows Co-MVP when GG split the pot (Kerry): if GG recorded more than one MVP winner for an event it paid the money in shares rather than applying a tiebreaker (s18.6 Flying L: Young/Sanford/Fehlis $33.33 each), so all of them now read 'Co-MVP' instead of sole 'MVP' (winner count read from event_mvps; same for a multi-winner GG TGF MVP -> Co-TGF MVP). This split is an outlier to our Net->Gross tiebreaker; going forward (a9.18+) our engine tiebreaks to a sole MVP by default and only a future admin override should force a split.",
+    ],
+  },
   {
     version: "2.115.1",
     date: "2026-07-16",
