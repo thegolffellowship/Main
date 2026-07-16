@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.112.1";
+window.TGF_VERSION = "2.113.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.113.0",
+    date: "2026-07-16",
+    changes: [
+      "Auto entry-confirmation email when a credit covers the whole fee (Kerry). When Apply Credit & Register leaves nothing owed (amount_owed <= 0 — the credit fully covers, or overcovers, the entry), the player now automatically gets a confirmation email: 'You're all set — you're entered into [event]' with the details (date, course, holes, tee, side games, credit applied), plus an excess note if their credit overcovered. Sends on both the RSVP and GG-RSVP apply-credit paths via _send_credit_entry_confirmation, through the same Microsoft Graph sender + message log as the balance-due email; when a balance IS still due it does NOT fire (that's the balance-due email's job). Kill switch AUTO_CREDIT_ENTRY_EMAIL=0; test routing CREDIT_ENTRY_EMAIL_OVERRIDE=<addr>. Never blocks the apply response on a mail failure.",
+    ],
+  },
   {
     version: "2.112.1",
     date: "2026-07-16",

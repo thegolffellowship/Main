@@ -617,6 +617,15 @@ All three rendering paths on the Customers page (inline expand, detail panel, mo
   Venmo memo uses `origin_event` (falls back to `event_name`). Verified: a
   chained "Excess credit — s9.19 The Quarry" credit resolves to origin
   "s9.18 Cedar Creek".
+- **Auto entry-confirmation email (v2.113.0, Kerry).** When Apply Credit & Register
+  leaves **nothing owed** (`amount_owed <= 0` — the credit fully covers or overcovers
+  the entry), the player is auto-emailed a confirmation ("you're entered into [event]")
+  with the details (date, course, holes, tee, side games, credit applied) + an excess
+  note if overcovered. `_send_credit_entry_confirmation(item_id, result)` runs on BOTH
+  apply-credit endpoints (RSVP + GG-RSVP), through the same Graph sender + `log_message`
+  as the balance-due email. It does NOT fire when a balance is still due (the balance-due
+  email covers that). Kill switch `AUTO_CREDIT_ENTRY_EMAIL=0`; test routing
+  `CREDIT_ENTRY_EMAIL_OVERRIDE=<addr>`. Wrapped so a mail failure never breaks the apply.
 
 # Payout Credit / Refund (WD + standalone credited rows)
 
