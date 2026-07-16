@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.115.0";
+window.TGF_VERSION = "2.115.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.115.1",
+    date: "2026-07-16",
+    changes: [
+      "Retroactivity boundary sharpened to Kerry's clarification: a9.18 Forest Creek is the FIRST event the WHS cap affects results (and is unpaid), so it is authoritatively on our side — the MVP badge boundary is now inclusive (event_date >= 2026-07-14 = ours; before = GG bible). Functionally unchanged for current data (GG had no a9.18 record) but the code now matches the ruling precisely. Docs record the results-authority hierarchy: actual Venmo payouts (IMMUTABLE — nothing paid ever changes) > GG results (bible before a9.18) > our computation (from a9.18 forward), and the records-vs-results distinction (handicap RECORDS update retroactively with the cap; RESULTS do not change pre-a9.18).",
+    ],
+  },
   {
     version: "2.115.0",
     date: "2026-07-16",

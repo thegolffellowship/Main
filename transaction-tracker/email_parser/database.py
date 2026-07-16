@@ -8639,11 +8639,15 @@ def _resolve_scoring_player(conn: sqlite3.Connection, gg_name: str) -> int | Non
 
 
 # ── Event MVP / TGF MVP winners (v2.29.0) ──────────────────────────────
-# Retroactivity boundary (Kerry standing rule, 2026-07-16): GG is bible for
-# RESULTS through a9.18 Forest Creek / s9.18 Cedar Creek (both 2026-07-14).
-# Our self-computed MVP determination is authoritative only for events AFTER
-# this date; on/before it, GG's recorded MVP wins wherever it exists (our
-# post-cap handicaps must never alter a frozen pre-boundary result).
+# Retroactivity boundary (Kerry, 2026-07-16). Authority hierarchy for
+# RESULTS: (1) actual Venmo payouts — IMMUTABLE, nothing already paid ever
+# changes; (2) GG results — bible for every event BEFORE a9.18/s9.18; (3) our
+# self-computed determination — authoritative from a9.18 Forest Creek /
+# s9.18 Cedar Creek (2026-07-14) FORWARD. a9.18 is the FIRST event the WHS cap
+# affects (and is unpaid), so it is on the "ours" side (>= boundary). The
+# handicap RECORD layer DOES update retroactively with the cap, but that must
+# have altered ZERO results before a9.18 — enforced here by deferring to GG
+# on any event with event_date < the boundary.
 _MVP_RETRO_BOUNDARY = "2026-07-14"
 # GG runs an "<code> MVP $" game (one winner per city per event — ties are
 # settled by a tiebreaker and only the actual MVP is paid) and a
@@ -11791,14 +11795,15 @@ def get_scoring_rounds_list(player: str | None = None, event: str | None = None,
             gg_mvp, gg_tgf = d.pop("_gg_mvp", 0), d.pop("_gg_tgf", 0)
             gg_event_has = d.pop("_gg_event_has", 0)
             event_date = d.pop("_event_date", None)
-            # RETROACTIVITY BOUNDARY (Kerry standing rule): our self-computed
-            # determination is authoritative only for events AFTER a9.18/s9.18
-            # (2026-07-14). For pre-boundary events GG is bible — our
-            # (post-cap) handicaps must not alter a frozen result — so where GG
-            # recorded an MVP we defer to it; our computation only fills events
-            # GG never recorded (import lag, e.g. a9.18 / s9.17).
+            # RETROACTIVITY BOUNDARY (Kerry): our self-computed determination
+            # is authoritative from a9.18/s9.18 (2026-07-14) FORWARD (inclusive
+            # — a9.18 is the first event the cap affects). For events BEFORE
+            # the boundary GG is bible — our post-cap handicaps must not alter a
+            # frozen result — so where GG recorded an MVP we defer to it; our
+            # computation only fills events GG never recorded (import lag, e.g.
+            # s9.17). Events with no date fall to "ours" only when GG is silent.
             use_ours = (ev_computed and
-                        (not event_date or event_date > _MVP_RETRO_BOUNDARY
+                        ((event_date and event_date >= _MVP_RETRO_BOUNDARY)
                          or not gg_event_has))
             if use_ours:
                 d["mvp"] = 1 if cm == 0 else 0

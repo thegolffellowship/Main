@@ -34,10 +34,21 @@ the ratified items below changes code or data without Kerry's sign-off.**
   adjusted at 100% handicaps. Game-layer adjustments (off-lowest, allowances,
   plus zeroing) live downstream and NEVER feed back into caps/differentials.
   One-way flow — no game rule can contaminate a handicap.
-- **RETROACTIVITY BOUNDARY (STANDING RULE).** No handicap-layer change may
-  alter RESULTS for any event **before a9.18 Forest Creek / s9.18 Cedar
-  Creek**. GG is bible for results through those events; changes apply
-  forward only.
+- **RESULTS AUTHORITY HIERARCHY (Kerry, 2026-07-16):**
+  1. **Actual Venmo payouts are the HIGHEST authority — IMMUTABLE.** Nothing
+     already paid may ever change. The audit reconciles our records DOWN to
+     what was actually paid; it never proposes altering a paid amount.
+  2. **GG results are bible for every event BEFORE a9.18/s9.18.**
+  3. **Our self-computed determination is authoritative from a9.18 FORWARD.**
+- **RETROACTIVITY BOUNDARY (STANDING RULE).** The handicap **RECORD** layer
+  (indexes/differentials) **DOES update retroactively** to include the WHS
+  caps — that is correct and desired. But that record change must have altered
+  **ZERO RESULTS before a9.18 Forest Creek / s9.18 Cedar Creek**. a9.18
+  (2026-07-14) is the **first event the cap affects results** (and is not yet
+  paid, so our capped computation drives it); s9.18 rained out (moot). The MVP
+  badge enforces this with `_MVP_RETRO_BOUNDARY = "2026-07-14"`: events
+  `>=` it are ours, events before it defer to GG. **RECORDS change
+  historically; RESULTS do not, pre-a9.18.**
 - **H-5 (CLOSED) — Star Ranch tee values stand.** Our per-round capture
   carries the correct BACK-9 tee values; GG's handicap export shipped
   FRONT-9 values nine-blind. The 177 rounds are an explained legacy export
