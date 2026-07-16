@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.109.0";
+window.TGF_VERSION = "2.110.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.110.0",
+    date: "2026-07-16",
+    changes: [
+      "Task #16 (Kerry) -- playing-handicap projection engine, the keystone that untethers NET scoring. New pure module email_parser/handicap_calc.py computes, with NO Golf Genius input: course handicap (index x slope/113 + (rating - par)), playing handicap (whs_round of course handicap x allowance, optional max-handicap cap -- 100%/no-cap is the base milestone), and per-hole stroke allocation by stroke index (hardest first, wraps for a 2nd pop, TGF max 2 pops/hole, plus-handicaps give strokes back on the easiest holes). Read-only parity sweep project_playing_handicaps() + bridge hcp-project:<event> compares our projection to GG's own playing handicap and stored per-hole dots -- separating the tee/allocation math (the 100% target, index-independent) from index differences. Confirmed vector: John Wade's a9.18 (PH 5, White tee) allocates onto stroke-index 1,3,5,7,9 exactly as GG did. Nothing member-facing yet; this is the shadow/validation stage before Kerry + CA ratify the calc. Tests: test_handicap_calc.py (21 checks).",
+    ],
+  },
   {
     version: "2.109.0",
     date: "2026-07-16",

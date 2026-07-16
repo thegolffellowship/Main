@@ -1430,6 +1430,18 @@ def _scoring_dispatch(url: str, extract: str):
             # export-free path shown before it's trusted — writes nothing.
             return json.dumps(db.get_scoring_handicap_preview(arg),
                               indent=2, default=str)
+        if cmd == "hcp-project":
+            # READ-ONLY Task #16 parity: project each player's playing
+            # handicap + per-hole stroke allocation from OUR index + the
+            # selected tee (no GG input) and compare to GG's own playing
+            # handicap + stored dots. Syntax: hcp-project:<event>[|<allow>[|<cap>]]
+            # (allowance default 1.0 = 100%, cap default none).
+            parts = [p.strip() for p in arg.split("|")]
+            allow = float(parts[1]) if len(parts) > 1 and parts[1] else 1.0
+            cap = float(parts[2]) if len(parts) > 2 and parts[2] else None
+            return json.dumps(db.project_playing_handicaps(
+                parts[0], allowance=allow, max_hcp=cap),
+                indent=2, default=str)
         if cmd == "scoring-pairings":
             # GG tee-sheet pairings ingest (Kerry overnight 2026-07-14).
             # Sub-commands (| separated):

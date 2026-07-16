@@ -10819,6 +10819,171 @@ def get_scoring_handicap_preview(event_query: str,
         }
 
 
+def project_playing_handicaps(event_query: str, allowance: float = 1.0,
+                              max_hcp: float | None = None,
+                              db_path: str | Path = DB_PATH) -> dict:
+    """Task #16 parity sweep — project each player's PLAYING HANDICAP and
+    per-hole stroke allocation from OUR index + the SELECTED TEE, with NO
+    Golf Genius input, and compare to what GG actually did. READ-ONLY.
+
+    Per 9-hole round of the event:
+      * our_index — the player's index the same way get_scoring_handicap_preview
+        computes it (differential pool up to, and excluding, this round)
+      * our_ch / our_ph — course & playing handicap from our_index + the
+        round's own tee (slope/rating) and its par, via handicap_calc
+      * two allocations, to separate the tee math from index differences:
+          - alloc(gg_ph)   — allocate GG's OWN playing handicap; matching
+            GG's stored dots proves the tee/stroke-index/allocation machinery
+            independent of any index disagreement (the 100% target)
+          - alloc(our_ph)  — the full self-contained chain
+    Compares our_ph vs GG's imported playing_handicap and both allocations
+    vs GG's stored per-hole strokes_received.
+
+    allowance/max_hcp are the per-game hooks (default 100% / no cap = the
+    base milestone Kerry wants ratified first).
+    """
+    from email_parser.handicap_calc import (
+        course_handicap, playing_handicap, allocate_strokes)
+
+    settings = get_handicap_settings(db_path)
+    lookback_months = int(settings.get("lookback_months", 12))
+    cutoff_str = (datetime.now()
+                  - timedelta(days=lookback_months * 30.44)).strftime("%Y-%m-%d")
+
+    rows_out: list = []
+    events_seen: set = set()
+    n_ph_exact = n_alloc_gg = n_full = n_rounds = 0
+    skipped_18 = skipped_no_ph = skipped_no_tee = 0
+
+    with _connect(db_path) as conn:
+        _ensure_scoring_tables(conn)
+        rounds = conn.execute(
+            """SELECT sr.id AS srid, sr.player_name, sr.customer_id,
+                      sr.round_date, sr.holes_played, sr.tee_id,
+                      sr.playing_handicap AS gg_ph,
+                      e.item_name AS event_name, ct.tee_name, ct.slope, ct.rating
+               FROM scoring_rounds sr
+               JOIN events e ON e.id = sr.event_id
+               LEFT JOIN course_tees ct ON ct.tee_id = sr.tee_id
+               WHERE e.item_name LIKE ?
+               ORDER BY sr.player_name""",
+            (f"%{event_query}%",)).fetchall()
+        if not rounds:
+            return {"error": f"no imported scoring rounds match event "
+                             f"{event_query!r} — run the scorecard import first"}
+
+        for r in rounds:
+            events_seen.add(r["event_name"])
+            if (r["holes_played"] or 0) > 9:
+                skipped_18 += 1
+                continue
+            if not (r["slope"] and r["rating"] is not None):
+                skipped_no_tee += 1
+                continue
+
+            holes = conn.execute(
+                """SELECT sh.hole_number, sh.strokes, sh.strokes_received,
+                          cth.par, cth.stroke_index
+                   FROM scoring_holes sh
+                   LEFT JOIN course_tee_holes cth
+                     ON cth.tee_id = ? AND cth.hole_number = sh.hole_number
+                   WHERE sh.scoring_round_id = ? AND sh.strokes IS NOT NULL""",
+                (r["tee_id"], r["srid"])).fetchall()
+            si_by_hole = {h["hole_number"]: h["stroke_index"] for h in holes
+                          if h["stroke_index"] is not None}
+            par9 = sum(h["par"] for h in holes if h["par"] is not None)
+            gg_dots = {h["hole_number"]: (h["strokes_received"] or 0)
+                       for h in holes}
+            if not si_by_hole or not par9:
+                skipped_no_tee += 1
+                continue
+
+            # our index at event time (pool excludes this round) — same as
+            # the self-derived preview
+            names = {_normalize_player_name(r["player_name"])}
+            if r["customer_id"]:
+                for lk in conn.execute(
+                        "SELECT player_name FROM handicap_player_links "
+                        "WHERE customer_id = ?", (r["customer_id"],)).fetchall():
+                    names.add(lk["player_name"])
+            qmarks = ",".join("?" * len(names))
+            hist = conn.execute(
+                f"""SELECT differential FROM handicap_rounds
+                    WHERE player_name IN ({qmarks})
+                      AND differential IS NOT NULL AND round_date >= ?
+                      AND (scoring_round_id IS NULL OR scoring_round_id != ?)
+                    ORDER BY round_date, id""",
+                (*names, cutoff_str, r["srid"])).fetchall()
+            pool = [h["differential"] for h in hist[-20:]]
+            our_index = compute_handicap_index(pool, settings)
+
+            n_rounds += 1
+            our_ch = our_ph = None
+            our_dots = alloc_gg = {}
+            if our_index is not None:
+                our_ch = round(course_handicap(our_index, r["slope"],
+                                               r["rating"], par9), 2)
+                our_ph = playing_handicap(our_index, r["slope"], r["rating"],
+                                          par9, allowance=allowance,
+                                          max_hcp=max_hcp)
+                our_dots = allocate_strokes(our_ph, si_by_hole)
+            gg_ph = int(r["gg_ph"]) if r["gg_ph"] is not None else None
+            if gg_ph is None:
+                skipped_no_ph += 1
+            else:
+                alloc_gg = allocate_strokes(gg_ph, si_by_hole)
+
+            ph_exact = (our_ph is not None and gg_ph is not None
+                        and our_ph == gg_ph)
+            alloc_gg_match = (bool(alloc_gg)
+                              and all(alloc_gg.get(h, 0) == gg_dots.get(h, 0)
+                                      for h in si_by_hole))
+            full_match = (bool(our_dots)
+                          and all(our_dots.get(h, 0) == gg_dots.get(h, 0)
+                                  for h in si_by_hole))
+            if ph_exact:
+                n_ph_exact += 1
+            if alloc_gg_match:
+                n_alloc_gg += 1
+            if full_match:
+                n_full += 1
+
+            if not (ph_exact and alloc_gg_match and full_match):
+                rows_out.append({
+                    "player_name": _normalize_player_name(r["player_name"]),
+                    "round_date": r["round_date"], "tee_name": r["tee_name"],
+                    "slope": r["slope"], "rating": r["rating"], "par9": par9,
+                    "our_index": our_index, "our_ch": our_ch,
+                    "our_ph": our_ph, "gg_ph": gg_ph,
+                    "ph_exact": ph_exact, "alloc_gg_match": alloc_gg_match,
+                    "full_match": full_match,
+                    "gg_dots": gg_dots,
+                    "alloc_from_gg_ph": alloc_gg,
+                    "alloc_from_our_ph": our_dots,
+                })
+
+    return {
+        "event_query": event_query,
+        "events_matched": sorted(events_seen),
+        "allowance": allowance, "max_hcp": max_hcp,
+        "summary": {
+            "rounds_projected": n_rounds,
+            "playing_hcp_exact": n_ph_exact,
+            "alloc_matches_gg_dots_using_gg_ph": n_alloc_gg,
+            "full_chain_matches_gg_dots": n_full,
+            "skipped_18hole": skipped_18,
+            "skipped_no_tee_or_par": skipped_no_tee,
+            "skipped_no_gg_ph": skipped_no_ph,
+        },
+        "mismatches": rows_out,
+        "note": "READ-ONLY. alloc_matches_gg_dots_using_gg_ph isolates the "
+                "tee/stroke-index/allocation math from index differences — "
+                "that is the 100% target. playing_hcp_exact additionally "
+                "depends on our index equaling GG's (the separate index "
+                "untether). Only non-perfect rounds are listed in mismatches.",
+    }
+
+
 def derive_handicap_rounds_from_scoring(event_query: str, dry_run: bool = True,
                                         db_path: str | Path = DB_PATH) -> dict:
     """Write handicap_rounds for one event from OUR scorecards — the
