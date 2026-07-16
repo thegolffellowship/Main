@@ -80,10 +80,15 @@ Records reconcile DOWN to actual paid; never alter a paid amount.
 - Deploy workflow: bump `static/js/version.js`, update docs, `git merge --no-ff`
   to main (Railway auto-deploys), verify via `get_tracker_docs` byte markers.
 
-## Instrumentation (v2.116.1)
+## Instrumentation (v2.116.1, extended v2.117.0)
 The read-only audit engine lives in `email_parser/fin_audit.py`; run it live via
 the `probe_golf_genius` bridge with
-`extract="scoring-fin-audit:<tables|customer|fks|ledger|money|dupes|summary>"`.
+`extract="scoring-fin-audit:<section>"`. Core sections (=`summary`):
+`tables|customer|fks|ledger|money|dupes`. IRS-lane sections (v2.117.0, run
+explicitly): `taxslice=YYYY-MM` (sales-tax month slice: income base, floating
+income, ±1-day cross-writer twins), `prizes=YYYY` (S2 1099-MISC exposure w/
+$400/$500/$600 flags), `k3` (payout variance lumps vs GG published money),
+`xferchain` (A2 transfer-chain balance + fee double-book detector).
 Pure SELECT/PRAGMA against the live schema — writes nothing.
 
 ## Deliverables (phased)
