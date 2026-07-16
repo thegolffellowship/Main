@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.115.4";
+window.TGF_VERSION = "2.115.5";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.115.5",
+    date: "2026-07-16",
+    changes: [
+      "H-2 (results hardening): made the playing-handicap FREEZE explicit. scoring_rounds.playing_handicap is the event-time value written at GG import and never recomputed by our engine (our projection is read-only shadow); re-imports only re-carry GG's value under the handicap/completeness upgrade guards. Added an explicit invariant comment at the import write site and a note in handicap-projection.md: when the untether path begins writing our self-computed playing handicap, it must write ONLY where playing_handicap IS NULL, so an index/cap change can never retroactively alter a frozen round (past-events-frozen + the retroactivity boundary).",
+    ],
+  },
   {
     version: "2.115.4",
     date: "2026-07-16",
