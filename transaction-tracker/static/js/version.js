@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.113.2";
+window.TGF_VERSION = "2.113.3";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.113.3",
+    date: "2026-07-16",
+    changes: [
+      "Entry-confirmation email now always shows the Side games line, including 'None' (Kerry). Previously a NONE side-game row was omitted; showing 'Side games: None' makes the registration detail unambiguous for the player. Applies to auto + manual/retroactive sends.",
+    ],
+  },
   {
     version: "2.113.2",
     date: "2026-07-16",

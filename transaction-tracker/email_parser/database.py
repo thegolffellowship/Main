@@ -17620,8 +17620,10 @@ def build_entry_confirmation_email(item_id: int, result: dict | None = None,
         rows.append(("Holes", holes))
     if tee:
         rows.append(("Tee", tee))
-    if games and games.upper() not in ("", "NONE", "NO GAMES"):
-        rows.append(("Side games", games))
+    # Always show side games, incl. NONE (Kerry 2026-07-16 — a "NONE" line
+    # is clearer than an omitted row: the player sees exactly what they're in).
+    games_disp = games if games and games.upper() not in ("", "NO GAMES") else "None"
+    rows.append(("Side games", games_disp))
     applied = (result or {}).get("amount_applied")
     if not applied:
         applied = _parse_dollar(item.get("item_price"))
