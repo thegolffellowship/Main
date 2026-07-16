@@ -626,6 +626,12 @@ All three rendering paths on the Customers page (inline expand, detail panel, mo
   as the balance-due email. It does NOT fire when a balance is still due (the balance-due
   email covers that). Kill switch `AUTO_CREDIT_ENTRY_EMAIL=0`; test routing
   `CREDIT_ENTRY_EMAIL_OVERRIDE=<addr>`. Wrapped so a mail failure never breaks the apply.
+  **Manual / retroactive send (v2.113.1):** the build+send lives in `database.py`
+  (`build_entry_confirmation_email` / `send_entry_confirmation_email`); the auto-path
+  delegates to it. `POST /api/items/<id>/entry-confirmation/send` (manager) and MCP tool
+  `send_entry_confirmation(item_id)` force-send for a registered item (skip the balance
+  guard) — the resend path for registrations made before the auto-email. "Credit applied"
+  falls back to the item's price when there's no live apply result.
 
 # Payout Credit / Refund (WD + standalone credited rows)
 

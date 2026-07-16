@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.113.0";
+window.TGF_VERSION = "2.113.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.113.1",
+    date: "2026-07-16",
+    changes: [
+      "Entry-confirmation email can now be sent manually / retroactively (Kerry: send one to players whose credits were applied before the auto-email went live). Refactored the build+send into shared database.py helpers (build_entry_confirmation_email / send_entry_confirmation_email); the apply-credit auto-path now delegates to them. New manager endpoint POST /api/items/<id>/entry-confirmation/send and MCP tool send_entry_confirmation(item_id) both force-send for a given registered item (skip the balance guard) — the resend path for credit-covered registrations. 'Credit applied' falls back to the item's price when there's no live apply result.",
+    ],
+  },
   {
     version: "2.113.0",
     date: "2026-07-16",
