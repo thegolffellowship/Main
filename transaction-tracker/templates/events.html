@@ -11290,8 +11290,11 @@
                     if (amtOwed != null && amtOwed < -0.005) {
                         const eAmt = Math.abs(amtOwed).toFixed(2);
                         const vH = info.venmo_username ? info.venmo_username.replace(/^@/, '') : '';
-                        // Excess reads FROM the source event (Kerry 2026-07-15)
-                        const _srcEv = (info.credits && info.credits[0] && info.credits[0].event_name) || '';
+                        // Excess reads FROM the ORIGINAL event the credit came
+                        // from (Kerry 2026-07-15/16) — origin_event traces the
+                        // transfer chain; event_name is a fallback.
+                        const _c0 = (info.credits && info.credits[0]) || {};
+                        const _srcEv = _c0.origin_event || _c0.event_name || '';
                         const _exMemo = `${resolvedCustomer} - Excess credit from ${_srcEv}`.trimEnd();
                         const vUrl = vH ? venmoPayHref(vH, eAmt, _exMemo) : '';
                         // Captured so "Apply Credit & Register" can auto-open Venmo

@@ -17477,6 +17477,42 @@ _PER_GAME_ADDON_18 = 30.0  # $ per game for standalone 18 Hole events
 _PER_GAME_ADDON_27 = 27.0  # default $ per game for 27 Hole events (overridable per-event via events.per_game_addon)
 
 
+def _credit_origin_event(conn, credit, _depth: int = 0) -> str:
+    """The ORIGINAL event a credit traces back to (Kerry 2026-07-16: a
+    refund/Venmo-back memo must name the event the credit ORIGINALLY came
+    from). A normal rain-out/WD credit's ``item_name`` IS its event. An
+    excess/overpayment credit row — email_uid ``credit-excess-<rid>-…`` /
+    ``overpayment-credit-<rid>-…`` — is named for the event it was APPLIED
+    to, so trace the chain instead: the registration it funded (<rid>) →
+    that registration's ``transferred_from_id`` (the source credit) →
+    recurse — until an ordinary credit whose item_name is the origin event.
+    """
+    if not credit or _depth > 12:
+        return (credit or {}).get("item_name") or ""
+    uid = credit.get("email_uid") or ""
+    name = credit.get("item_name") or ""
+    m = re.match(r"^(?:credit-excess|overpayment-credit)-(\d+)-", uid)
+    if m:
+        reg = conn.execute("SELECT * FROM items WHERE id = ?",
+                           (int(m.group(1)),)).fetchone()
+        if reg:
+            reg = dict(reg)
+            src_id = reg.get("transferred_from_id")
+            if src_id:
+                src = conn.execute("SELECT * FROM items WHERE id = ?",
+                                   (src_id,)).fetchone()
+                if src:
+                    return _credit_origin_event(conn, dict(src), _depth + 1)
+            # No transfer link recorded — fall back to the funded event name.
+            return reg.get("item_name") or name
+    # Defensive: a display-named excess/overpayment row with no traceable uid.
+    for pref in ("Excess credit — ", "Excess credit -- ", "Excess credit from ",
+                 "Overpayment credit from ", "Overpayment — "):
+        if name.startswith(pref):
+            return name[len(pref):].strip()
+    return name
+
+
 def get_player_credits(
     customer_name: str,
     db_path: str | Path | None = None,
@@ -17531,14 +17567,17 @@ def get_player_credits(
                 ).fetchall()
 
     result = []
-    for r in rows:
-        d = dict(r)
-        if d.get("transaction_status") == "wd":
-            # WD rows store the outstanding credit directly in the credit_amount column
-            d["credit_amount"] = _parse_dollar(d.get("credit_amount") or "0")
-        else:
-            d["credit_amount"] = _parse_dollar(d.get("item_price")) + _parse_dollar(d.get("transaction_fees") or "0")
-        result.append(d)
+    with _connect(db_path) as conn:
+        for r in rows:
+            d = dict(r)
+            if d.get("transaction_status") == "wd":
+                # WD rows store the outstanding credit directly in the credit_amount column
+                d["credit_amount"] = _parse_dollar(d.get("credit_amount") or "0")
+            else:
+                d["credit_amount"] = _parse_dollar(d.get("item_price")) + _parse_dollar(d.get("transaction_fees") or "0")
+            # Original event this credit traces back to — for refund memos.
+            d["origin_event"] = _credit_origin_event(conn, d)
+            result.append(d)
     return result
 
 
@@ -17749,6 +17788,7 @@ def get_rsvp_credit_info(rsvp_id: int, db_path: str | Path | None = None) -> dic
                 {
                     "item_id": c["id"],
                     "event_name": c["item_name"],
+                    "origin_event": c.get("origin_event") or c["item_name"],
                     "credit_amount": c["credit_amount"],
                     "user_status": c.get("user_status") or "",
                     "holes": c.get("holes") or "",
@@ -17878,6 +17918,7 @@ def get_event_rsvp_credit_map(event_name: str, db_path: str | Path | None = None
                 "total_credit": sum(c["credit_amount"] for c in credits),
                 "credits": [
                     {"item_id": c["id"], "event_name": c["item_name"],
+                     "origin_event": c.get("origin_event") or c["item_name"],
                      "credit_amount": c["credit_amount"]}
                     for c in credits
                 ],
@@ -17910,6 +17951,7 @@ def get_event_rsvp_credit_map(event_name: str, db_path: str | Path | None = None
                 "total_credit": sum(c["credit_amount"] for c in credits),
                 "credits": [
                     {"item_id": c["id"], "event_name": c["item_name"],
+                     "origin_event": c.get("origin_event") or c["item_name"],
                      "credit_amount": c["credit_amount"]}
                     for c in credits
                 ],

@@ -5401,6 +5401,8 @@ def api_rsvp_credit_info_by_item(item_id):
             {
                 "id": c["id"],
                 "item_name": c.get("item_name") or "",
+                "event_name": c.get("item_name") or "",
+                "origin_event": c.get("origin_event") or c.get("item_name") or "",
                 "item_price": f"${c.get('credit_amount', 0):.2f}",
                 "credit_amount": round(c.get("credit_amount") or 0, 2),
                 "order_date": c.get("order_date") or "",
@@ -5586,6 +5588,8 @@ def api_gg_rsvp_credit_info(rsvp_id):
             {
                 "id": c["id"],
                 "item_name": c.get("item_name") or "",
+                "event_name": c.get("item_name") or "",
+                "origin_event": c.get("origin_event") or c.get("item_name") or "",
                 "item_price": f"${c.get('credit_amount', 0):.2f}",
                 "credit_amount": round(c.get("credit_amount") or 0, 2),
                 "order_date": c.get("order_date") or "",
