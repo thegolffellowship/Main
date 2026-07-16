@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.114.2";
+window.TGF_VERSION = "2.115.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.115.0",
+    date: "2026-07-16",
+    changes: [
+      "MVP badge now respects the ratified retroactivity boundary (Kerry standing rule): our self-computed determination is authoritative only for events AFTER a9.18/s9.18 (2026-07-14). For events on/before that boundary, Golf Genius stays bible — where GG recorded an MVP we defer to it, and our computation only fills events GG never recorded (import lag, e.g. a9.18 Kelly Barna, s9.17 Jeff Young). This fixes a regression where our post-cap handicaps re-crowned a pre-boundary City MVP (s18.6 Flying L: our net points made Sanford the winner, but GG's tiebreaker-resolved MVP is Jeff Young) — GG's frozen result now stands, as ratified.",
+      "Read-only MCP access for platform review (Kerry-approved #194/#198): get_tracker_source (whitelisted templates/static/docs + pure engine modules; secrets/DB/app.py/database.py hard-denied), get_app_settings (redacts secret-ish keys), get_gg_snapshots (the GG display cache), and project_playing_handicaps promoted from bridge to a first-class tool. Governance library surfaced through get_tracker_docs (docs/governance/, OneDrive-authoritative mirror). New MCP tools go live for the platform session-side; they are not callable within the session that adds them (frozen inventory).",
+    ],
+  },
   {
     version: "2.114.2",
     date: "2026-07-16",

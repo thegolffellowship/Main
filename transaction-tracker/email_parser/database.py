@@ -8639,6 +8639,12 @@ def _resolve_scoring_player(conn: sqlite3.Connection, gg_name: str) -> int | Non
 
 
 # ── Event MVP / TGF MVP winners (v2.29.0) ──────────────────────────────
+# Retroactivity boundary (Kerry standing rule, 2026-07-16): GG is bible for
+# RESULTS through a9.18 Forest Creek / s9.18 Cedar Creek (both 2026-07-14).
+# Our self-computed MVP determination is authoritative only for events AFTER
+# this date; on/before it, GG's recorded MVP wins wherever it exists (our
+# post-cap handicaps must never alter a frozen pre-boundary result).
+_MVP_RETRO_BOUNDARY = "2026-07-14"
 # GG runs an "<code> MVP $" game (one winner per city per event — ties are
 # settled by a tiebreaker and only the actual MVP is paid) and a
 # "TGF MVP $" game (can be shared). Winners are the purse>0 rows; when an
@@ -11766,7 +11772,10 @@ def get_scoring_rounds_list(player: str | None = None, event: str | None = None,
                        EXISTS(SELECT 1 FROM event_mvps m
                               WHERE m.event_id = sr.event_id
                                 AND m.customer_id = sr.customer_id
-                                AND m.kind = 'tgf_mvp') AS _gg_tgf
+                                AND m.kind = 'tgf_mvp') AS _gg_tgf,
+                       EXISTS(SELECT 1 FROM event_mvps m
+                              WHERE m.event_id = sr.event_id) AS _gg_event_has,
+                       e.event_date AS _event_date
                 FROM scoring_rounds sr
                 LEFT JOIN events e ON e.id = sr.event_id
                 LEFT JOIN courses c ON c.course_id = sr.course_id
@@ -11780,10 +11789,18 @@ def get_scoring_rounds_list(player: str | None = None, event: str | None = None,
             ev_computed = d.pop("_ev_computed", 0)
             cm, ct = d.pop("_cm_split", None), d.pop("_ct_split", None)
             gg_mvp, gg_tgf = d.pop("_gg_mvp", 0), d.pop("_gg_tgf", 0)
-            # Our computation is authoritative for any event we've computed:
-            # a winner has split=0 (sole) or 1 (Co-), a non-winner has no row.
-            # The GG event_mvps fallback applies ONLY to events never computed.
-            if ev_computed:
+            gg_event_has = d.pop("_gg_event_has", 0)
+            event_date = d.pop("_event_date", None)
+            # RETROACTIVITY BOUNDARY (Kerry standing rule): our self-computed
+            # determination is authoritative only for events AFTER a9.18/s9.18
+            # (2026-07-14). For pre-boundary events GG is bible — our
+            # (post-cap) handicaps must not alter a frozen result — so where GG
+            # recorded an MVP we defer to it; our computation only fills events
+            # GG never recorded (import lag, e.g. a9.18 / s9.17).
+            use_ours = (ev_computed and
+                        (not event_date or event_date > _MVP_RETRO_BOUNDARY
+                         or not gg_event_has))
+            if use_ours:
                 d["mvp"] = 1 if cm == 0 else 0
                 d["co_mvp"] = 1 if cm == 1 else 0
                 d["tgf_mvp"] = 1 if ct == 0 else 0
