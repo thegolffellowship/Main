@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.116.2";
+window.TGF_VERSION = "2.116.3";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.116.3",
+    date: "2026-07-16",
+    changes: [
+      "Deliverable 1 SHIPPED: docs/claude/financial-audit-gap-report.md — the whole-Tracker customer_id + financial + FK gap audit (read-only, quantified, risk-ranked P0-P7). Headlines: exp-promoted ledger rows 367/850 unattributed ($162,176.84) and no re-resolution on alias-add (P0); no event_id on acct_transactions with 1,406 live rows carrying unresolvable event_name strings, four coexisting ledger designs, money stored as dollar-text on items (P1); 8 dangling-FK classes rooted in hard deletes, zero orphaned customer_ids anywhere (P2); 158 live duplicate candidates incl. a $1,879 bank-deposit/exp-promoted twin, Duplicate Detective never run (P5); bank imports stalled since Apr 28-30 with 440 unmatched deposits (P6). tgf_payouts computed-vs-actual variance is only $52.14 total across 25 lumps (max $3) — far healthier than feared; the gap is the missing variance report, not missing money. Every number reproducible via scoring-fin-audit.",
+    ],
+  },
   {
     version: "2.116.2",
     date: "2026-07-16",
