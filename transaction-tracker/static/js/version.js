@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.114.0";
+window.TGF_VERSION = "2.114.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.114.1",
+    date: "2026-07-16",
+    changes: [
+      "MVP badge correctness: our self-computed determination is now the sole authority for any event we've scored (tracked in mvp_computed_events). The GG 'MVP $' import is used only as a fallback for events we've never computed — so a computed event can never show a stale GG badge for a player our engine didn't crown. Recompute also now handles two 18-hole events sharing a date (each is its own day-group).",
+    ],
+  },
   {
     version: "2.114.0",
     date: "2026-07-16",
