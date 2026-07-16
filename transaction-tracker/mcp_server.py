@@ -1458,6 +1458,12 @@ def _scoring_dispatch(url: str, extract: str):
             return json.dumps(db.project_playing_handicaps(
                 parts[0], allowance=allow, max_hcp=cap),
                 indent=2, default=str)
+        if cmd == "scoring-entry-confirm":
+            # Manual/retroactive entry-confirmation email (Kerry 2026-07-16),
+            # reachable here because a session's MCP tool inventory freezes at
+            # start. arg = items.id of the registered event item. force-sends.
+            return json.dumps(db.send_entry_confirmation_email(
+                int(arg.strip()), force=True), indent=2, default=str)
         if cmd == "scoring-pairings":
             # GG tee-sheet pairings ingest (Kerry overnight 2026-07-14).
             # Sub-commands (| separated):
