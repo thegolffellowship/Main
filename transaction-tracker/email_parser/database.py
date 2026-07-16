@@ -18769,12 +18769,32 @@ def get_refunds_overview(db_path: str | Path | None = None,
 
     today = today_central()
 
+    today_str = today.isoformat()
+
     def _age(datestr):
         try:
             d = _dt.datetime.strptime((datestr or "")[:10], "%Y-%m-%d").date()
-            return (today - d).days
+            return max(0, (today - d).days)
         except Exception:
             return None
+
+    def _credit_anchor(row):
+        """Date a held credit's age counts from. For a real registration
+        flipped to credited/wd (rain-out, withdrawal) the row's order_date is
+        the REGISTRATION date, not when the credit arose — so anchor to the
+        EVENT date (consistent across same-event credits, ≈ when the credit
+        was actually created). Synthetic credit rows (excess/overpayment) are
+        created AT credit time, so their order_date IS the credit date; keep
+        it. Fall back to order_date when the event has no date or is still in
+        the future (a credit on an upcoming event isn't aging yet)."""
+        uid = (row.get("email_uid") or "").lower()
+        name = (row.get("item_name") or "").lower()
+        synthetic = (uid.startswith("credit-excess-") or uid.startswith("credit-overpay")
+                     or name.startswith("excess credit") or name.startswith("overpayment"))
+        ev = row.get("event_date")
+        if synthetic or not ev or ev > today_str:
+            return row.get("order_date")
+        return ev
 
     stamp_re = _re.compile(r"Refunded \$([\d,]+\.?\d*) via (.+?) on (\d{4}-\d{2}-\d{2})")
 
@@ -18788,10 +18808,13 @@ def get_refunds_overview(db_path: str | Path | None = None,
         # OUTSTANDING — held credits not yet in flight / paid
         outstanding = []
         for r in conn.execute(
-            """SELECT id, customer, customer_id, item_name, item_price,
-                      credit_amount, transaction_status, order_date, credit_note
-               FROM items
-               WHERE LOWER(COALESCE(transaction_status,'')) IN ('wd','credited')"""
+            """SELECT it.id, it.customer, it.customer_id, it.item_name,
+                      it.item_price, it.credit_amount, it.transaction_status,
+                      it.order_date, it.credit_note, it.email_uid,
+                      ev.event_date AS event_date
+               FROM items it
+               LEFT JOIN events ev ON ev.id = it.event_id
+               WHERE LOWER(COALESCE(it.transaction_status,'')) IN ('wd','credited')"""
         ).fetchall():
             r = dict(r)
             status = (r.get("transaction_status") or "").lower()
@@ -18799,12 +18822,13 @@ def get_refunds_overview(db_path: str | Path | None = None,
                                 else r.get("item_price"))
             if amt <= 0 or r["id"] in open_watch_ids:
                 continue
+            anchor = _credit_anchor(r)
             outstanding.append({
                 "item_id": r["id"], "customer": r.get("customer"),
                 "customer_id": r.get("customer_id"), "event": r.get("item_name"),
                 "amount": round(amt, 2), "kind": status,
                 "order_date": r.get("order_date"),
-                "age_days": _age(r.get("order_date")),
+                "age_days": _age(anchor),
                 "note": r.get("credit_note") or "",
             })
         outstanding.sort(key=lambda x: (x["age_days"] is None, -(x["age_days"] or 0)))
