@@ -301,6 +301,18 @@ handler class + data-attributes drives the same endpoint and role gating.
 The mobile "Inactive" list stays Reverse-only, matching the desktop
 action set for credited/wd/transferred/refunded rows.
 
+**Add Player name autofill — custom typeahead, not `<datalist>` (v2.111.1).**
+The Add Player modal's name field (`#add-player-name`) uses a custom
+suggestion dropdown (`#ap-name-suggest`, `renderApNameSuggest` /
+`wireApNameSuggest`), NOT a native `<input list=datalist>` — iOS Safari
+renders no dropdown for `<datalist>`, so on mobile the roster autofill
+silently did nothing when RSVPing a player. The typeahead matches
+prefix-then-contains over `apCustomerNames` (unique `items.customer`
+values, set when the modal opens), selection is on `mousedown` (fires
+before the iOS input blur) and dispatches an `input` event so the
+existing known-player status auto-fill + new-contact-field toggling still
+run. Do NOT reintroduce `<datalist>` for a mobile-facing autocomplete.
+
 ## Player ACTIONS — Visual conventions
 
 | Element | Rendering |
