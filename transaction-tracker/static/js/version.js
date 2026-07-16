@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.113.1";
+window.TGF_VERSION = "2.113.2";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.113.2",
+    date: "2026-07-16",
+    changes: [
+      "Automated member-facing sends now CC admin@thegolffellowship.com for the record (Kerry). The entry-confirmation email (auto + manual/retroactive) copies admin@ on every send via a new _auto_email_cc() helper; disable or repoint with the AUTO_EMAIL_CC env var (set AUTO_EMAIL_CC=\"\" to suppress). send_entry_confirmation_email gained an optional cc param (defaults to the admin CC; pass \"\" to suppress on a one-off copy).",
+      "Manual entry-confirmation resend can now be redirected and CC-controlled: the scoring-entry-confirm bridge accepts '<item_id>[|<override_to>[|<cc>]]' so a copy of exactly what a player received can be sent to another address (e.g. kerry@) without CC'ing admin. Used to send Kerry copies of the Dan South / Jeff Rideout s9.19 confirmations.",
+    ],
+  },
   {
     version: "2.113.1",
     date: "2026-07-16",

@@ -1461,9 +1461,17 @@ def _scoring_dispatch(url: str, extract: str):
         if cmd == "scoring-entry-confirm":
             # Manual/retroactive entry-confirmation email (Kerry 2026-07-16),
             # reachable here because a session's MCP tool inventory freezes at
-            # start. arg = items.id of the registered event item. force-sends.
+            # start. arg = "<item_id>[|<override_to>[|<cc>]]": item_id is the
+            # registered event item; override_to redirects the send (e.g. a
+            # copy to Kerry); cc overrides the admin CC — pass an empty third
+            # field to suppress the default admin CC on a copy. force-sends.
+            _parts = [p.strip() for p in arg.split("|")]
+            _iid = int(_parts[0])
+            _override = _parts[1] if len(_parts) > 1 and _parts[1] else None
+            _cc = _parts[2] if len(_parts) > 2 else None
             return json.dumps(db.send_entry_confirmation_email(
-                int(arg.strip()), force=True), indent=2, default=str)
+                _iid, force=True, override=_override, cc=_cc),
+                indent=2, default=str)
         if cmd == "scoring-pairings":
             # GG tee-sheet pairings ingest (Kerry overnight 2026-07-14).
             # Sub-commands (| separated):

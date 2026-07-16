@@ -17652,14 +17652,25 @@ def build_entry_confirmation_email(item_id: int, result: dict | None = None,
             "player_name": player_name, "player_email": player_email}
 
 
+# Admin copy CC'd on automated member-facing sends for the record (Kerry
+# 2026-07-16). Configurable / disable via env (AUTO_EMAIL_CC="").
+def _auto_email_cc() -> str:
+    import os as _os
+    v = _os.getenv("AUTO_EMAIL_CC")
+    return "admin@thegolffellowship.com" if v is None else v.strip()
+
+
 def send_entry_confirmation_email(item_id: int, result: dict | None = None,
                                   db_path: str | Path | None = None,
                                   force: bool = False,
-                                  override: str | None = None) -> dict:
+                                  override: str | None = None,
+                                  cc: str | None = None) -> dict:
     """Build + send the entry-confirmation email via Microsoft Graph and log
     it. ``force=True`` skips the amount_owed guard (manual / retroactive
-    resend). Test routing: ``CREDIT_ENTRY_EMAIL_OVERRIDE`` env or ``override``.
-    Returns {ok, sent_to, player_name} or {ok:False, error}."""
+    resend). ``override`` sends to that address instead of the player (test /
+    copy). ``cc`` defaults to the admin CC (``_auto_email_cc()``); pass ``""``
+    to suppress it (e.g. when sending a plain copy). Test routing:
+    ``CREDIT_ENTRY_EMAIL_OVERRIDE`` env. Returns {ok, sent_to, player_name}."""
     import os as _os
     from email_parser.fetcher import send_mail_graph
     if not force:
@@ -17677,10 +17688,12 @@ def send_entry_confirmation_email(item_id: int, result: dict | None = None,
         return {"ok": False, "error": "email not configured on server"}
     to_address = (override or (_os.getenv("CREDIT_ENTRY_EMAIL_OVERRIDE") or "").strip()
                   or payload["player_email"])
+    cc_addr = _auto_email_cc() if cc is None else cc
     ok = send_mail_graph(tenant_id=tenant_id, client_id=client_id,
                          client_secret=client_secret, from_address=from_address,
                          to_address=to_address, subject=payload["subject"],
-                         html_body=payload["html_body"])
+                         html_body=payload["html_body"],
+                         cc_address=(cc_addr or None))
     try:
         log_message({"event_name": payload["event_name"], "channel": "email",
                      "recipient_name": payload["player_name"],
