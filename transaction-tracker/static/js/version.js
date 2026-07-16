@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.115.4";
+window.TGF_VERSION = "2.115.5";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.115.5",
+    date: "2026-07-16",
+    changes: [
+      "Financial-audit charter Deliverable 1 instrumentation (READ-ONLY): new email_parser/fin_audit.py runs a whole-DB integrity audit — per-table customer_id coverage/null/orphan/name-only counts (lens A), dangling-FK sweep across every declared REFERENCES clause plus a conventional *_id map with live-schema introspection (lens C), and a financial lens (acct_transactions by status/entry_type/category/source_ref family, floating money, tgf_payouts computed-vs-actual variance, expense promotion integrity, GoDaddy split-sum checks, items outside the ledger, cross-writer double-count candidates). Pure SELECT/PRAGMA — writes nothing. Reachable in-session via the probe_golf_genius bridge: extract='scoring-fin-audit:<tables|customer|fks|ledger|money|dupes|summary>'.",
+    ],
+  },
   {
     version: "2.115.4",
     date: "2026-07-16",

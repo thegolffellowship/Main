@@ -1574,6 +1574,13 @@ def _scoring_dispatch(url: str, extract: str):
             # READ-ONLY full-table audit: every handicap record classified
             # by how it reconciles with its scorecard (Kerry 2026-07-14).
             return json.dumps(db.audit_handicap_bridges(), indent=2, default=str)
+        if cmd == "scoring-fin-audit":
+            # READ-ONLY whole-DB financial / customer_id / FK integrity
+            # audit (financial-audit-charter.md Deliverable 1). arg = one
+            # of tables|customer|fks|ledger|money|dupes, comma-separated,
+            # or empty/"summary" for everything. Pure SELECT/PRAGMA.
+            from email_parser import fin_audit
+            return json.dumps(fin_audit.run(arg), indent=1, default=str)
         if cmd == "scoring-hcp-repair":
             # Repair Composer-import handicap rounds (adjusted stored as raw
             # gross) using GG's true Adjusted Gross from the season-scores
