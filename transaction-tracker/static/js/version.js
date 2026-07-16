@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.110.0";
+window.TGF_VERSION = "2.110.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.110.1",
+    date: "2026-07-16",
+    changes: [
+      "Task #16 playing-handicap projection validated against actual GG and documented for CA (docs/claude/handicap-projection.md). Parity sweep across 46 real rounds (a9.18 Forest Creek 19, s9.17 Silverhorn 27): the tee-based stroke ALLOCATION reproduced GG's per-hole dots 46/46 = 100% from our data alone (our tee slope + stroke index, no GG input). Playing-handicap VALUE was exact wherever our index matched GG's; every residual traced to a known/separate cause -- 3 a9.18 rounds were new Austin players with no handicap history in our system yet (our_index null), and all 4 s9.17 residuals were GG = our value + 1, the documented WHS net-double-bogey policy gap (GG uses raw gross, we cap -- Kerry ratified WHS 7/14, so our number is the intended one). Conclusion: the 100% tee-based playing-handicap calc is ratification-ready; per-game allowance/caps/par-3 rules layer on top next.",
+    ],
+  },
   {
     version: "2.110.0",
     date: "2026-07-16",
