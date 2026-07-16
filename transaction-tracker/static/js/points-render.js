@@ -70,13 +70,20 @@
     // the event label ("s9.14 Hill Country" -> "… - Oaks"): the nine rides
     // in the imported course name ("… - OAKS"). Single short word only, so
     // annotated course names (archived markers etc.) never leak through.
-    // Event-MVP badges (event_mvps via /api/scoring/rounds flags): amber
-    // MVP (one per city per event) and teal TGF MVP (can be shared)
+    // Event-MVP badges (self-computed via /api/scoring/rounds flags): amber
+    // City MVP (one per city per event) and teal TGF MVP. A tied result
+    // (Kerry rule: points, then Net, then Gross — still tied = split) shows
+    // "Co-MVP" / "Co-TGF MVP" instead of the sole title.
     function prMvpBadges(round) {
         const pill = (label, bg) =>
             ` <span style="background:${bg};color:#fff;font-size:0.62em;font-weight:700;padding:1px 4px;border-radius:3px;letter-spacing:0.03em;white-space:nowrap;vertical-align:1px;">${label}</span>`;
-        return (round && round.mvp ? pill("MVP", "#f59e0b") : "")
-            + (round && round.tgf_mvp ? pill("TGF MVP", "#0f766e") : "");
+        if (!round) return "";
+        let out = "";
+        if (round.co_mvp) out += pill("Co-MVP", "#f59e0b");
+        else if (round.mvp) out += pill("MVP", "#f59e0b");
+        if (round.co_tgf_mvp) out += pill("Co-TGF MVP", "#0f766e");
+        else if (round.tgf_mvp) out += pill("TGF MVP", "#0f766e");
+        return out;
     }
 
     // Phones: badges drop to their own line under the event name — unless

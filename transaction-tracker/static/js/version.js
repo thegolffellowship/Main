@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.113.3";
+window.TGF_VERSION = "2.114.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.114.0",
+    date: "2026-07-16",
+    changes: [
+      "MVP / TGF MVP badges are now SELF-COMPUTED from our own scorecards — no longer waiting on Golf Genius's 'MVP $' import (Kerry). The badge was missing on recent events (e.g. Kelly Barna a9.18 Forest Creek, Jeff Young s9.17 Silverhorn) because the GG import lagged; now the badge reads our determination directly. Rule (Kerry-ratified): City MVP = most points in the event's MVP side game (net Stableford); ties break Net score, then Gross score; still tied = split. TGF MVP = the City MVP with the most points across the day's linked events.",
+      "New Co-MVP and Co-TGF MVP badges for ties: when the tiebreakers can't separate the leaders they split the honor and each shows 'Co-MVP' / 'Co-TGF MVP' (amber / teal) instead of the sole title.",
+      "Determination is materialized into event_mvp_computed and refreshed automatically the moment an event's scores are imported (so the badge appears within the same import), with a one-time backfill for all past events. The GG 'MVP $' table is still kept for the money/purse record and as a cross-check.",
+    ],
+  },
   {
     version: "2.113.3",
     date: "2026-07-16",

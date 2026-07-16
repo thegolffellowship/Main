@@ -3708,6 +3708,23 @@ def init_db(db_path: str | Path | None = None) -> None:
         except Exception as e:
             logger.warning("Arias identities repair failed: %s", e)
 
+        # Self-computed MVP backfill (Kerry 2026-07-16): populate
+        # event_mvp_computed once when empty (fresh DB / first deploy of the
+        # feature) so scorecard badges show without waiting on the GG MVP
+        # import. Runs in a daemon thread with its own connections — never
+        # blocks boot; steady-state stays fresh via the per-import hook.
+        try:
+            _ensure_mvp_tables(conn)
+            _mvp_have = conn.execute(
+                "SELECT 1 FROM event_mvp_computed LIMIT 1").fetchone()
+            if not _mvp_have:
+                import threading as _th
+                _th.Thread(target=lambda: recompute_computed_mvps(db_path=db_path),
+                           name="mvp-backfill", daemon=True).start()
+                logger.info("Started one-time computed-MVP backfill (table empty)")
+        except Exception as e:
+            logger.warning("Computed-MVP backfill kickoff failed: %s", e)
+
         # One-time drain: CHAPTER_DRIFT is no longer raised (items.chapter is the
         # event/course location, not the member's home chapter, so it drifts on
         # every cross-chapter registration). Resolve any historical open ones so
@@ -8648,6 +8665,21 @@ def _ensure_mvp_tables(conn: sqlite3.Connection) -> None:
         host         TEXT NOT NULL,
         imported_at  TEXT DEFAULT (datetime('now')),
         PRIMARY KEY (gg_round_id, host))""")
+    # Self-computed City MVP / TGF MVP (Kerry-ratified rule 2026-07-16): the
+    # winner is whoever scored the most points in the event's MVP side game
+    # (net Stableford among the game's players); ties break Net score then
+    # Gross score; a still-tied result splits -> `split=1` (Co-MVP /
+    # Co-TGF MVP). This frees the badge from the lagging GG import: we own the
+    # determination from our scorecards + formula layer (determine_tgf_mvp).
+    conn.execute("""CREATE TABLE IF NOT EXISTS event_mvp_computed (
+        event_id     INTEGER NOT NULL REFERENCES events(id),
+        customer_id  INTEGER NOT NULL REFERENCES customers(customer_id),
+        kind         TEXT NOT NULL CHECK (kind IN ('mvp','tgf_mvp')),
+        split        INTEGER NOT NULL DEFAULT 0,
+        player_name  TEXT,
+        points       REAL,
+        computed_at  TEXT DEFAULT (datetime('now')),
+        PRIMARY KEY (event_id, customer_id, kind))""")
 
 
 def _parse_money(v) -> float:
@@ -9068,6 +9100,96 @@ def determine_tgf_mvp(event_name: str, db_path: str | Path = DB_PATH) -> dict:
                                    "day_points": w["day_points"]}
                                   for w in winners]}
     return out
+
+
+def recompute_computed_mvps(scope_event: str | None = None,
+                            db_path: str | Path = DB_PATH) -> dict:
+    """Materialize the self-computed City MVP / TGF MVP into
+    ``event_mvp_computed`` so the scorecard badges read our own
+    determination (``determine_tgf_mvp``) instead of the lagging GG import.
+
+    Kerry-ratified rule (2026-07-16): MVP = most points in the event's MVP
+    side game; ties break Net score then Gross score; a still-tied result
+    splits (``split=1`` -> Co-MVP / Co-TGF MVP). ``scope_event`` recomputes
+    just that event's same-day group; ``None`` recomputes every date that
+    has linked scorecards. Idempotent: a day's rows are cleared and rewritten
+    each run, so a corrected/late score reshuffles the badges cleanly."""
+    with _connect(db_path) as conn:
+        _ensure_scoring_tables(conn)
+        _ensure_mvp_tables(conn)
+        name_to_id = {r["item_name"].lower(): r["id"]
+                      for r in conn.execute(
+                          "SELECT id, item_name FROM events").fetchall()}
+        if scope_event:
+            row = conn.execute(
+                "SELECT event_date FROM events WHERE item_name = ? COLLATE NOCASE",
+                (scope_event,)).fetchone()
+            dates = [row["event_date"]] if row and row["event_date"] else []
+        else:
+            dates = [r["date"] for r in conn.execute(
+                """SELECT DISTINCT e.event_date AS date
+                     FROM scoring_rounds sr JOIN events e ON e.id = sr.event_id
+                    WHERE e.event_date IS NOT NULL""").fetchall()]
+
+    reps = {}   # event_date -> one representative event_name to drive the day
+    with _connect(db_path) as conn:
+        for d in dates:
+            r = conn.execute(
+                "SELECT item_name FROM events WHERE event_date = ? ORDER BY id LIMIT 1",
+                (d,)).fetchone()
+            if r:
+                reps[d] = r["item_name"]
+
+    days_done, mvp_rows, tgf_rows = 0, 0, 0
+    for d, rep in reps.items():
+        det = determine_tgf_mvp(rep, db_path=db_path)
+        if det.get("error"):
+            continue
+        # Every event that shares this date is in-scope for the clear+rewrite.
+        with _connect(db_path) as conn:
+            day_ids = [r["id"] for r in conn.execute(
+                "SELECT id FROM events WHERE event_date = ?", (d,)).fetchall()]
+            if day_ids:
+                ph = ",".join("?" for _ in day_ids)
+                conn.execute(
+                    f"DELETE FROM event_mvp_computed WHERE event_id IN ({ph})",
+                    day_ids)
+            for pe in det.get("per_event", []):
+                cm = pe.get("city_mvp") or {}
+                if cm.get("status") != "determined":
+                    continue
+                eid = name_to_id.get((pe.get("event_name") or "").lower())
+                if not eid:
+                    continue
+                split = 1 if cm.get("split") else 0
+                for w in cm.get("winners", []):
+                    if not w.get("customer_id"):
+                        continue
+                    conn.execute(
+                        """INSERT OR REPLACE INTO event_mvp_computed
+                               (event_id, customer_id, kind, split, player_name, points)
+                           VALUES (?, ?, 'mvp', ?, ?, ?)""",
+                        (eid, w["customer_id"], split, w.get("player"),
+                         w.get("points")))
+                    mvp_rows += 1
+            tm = det.get("tgf_mvp") or {}
+            if tm.get("status") == "determined":
+                tsplit = 1 if tm.get("split") else 0
+                for w in tm.get("winners", []):
+                    eid = name_to_id.get((w.get("event_name") or "").lower())
+                    if not eid or not w.get("customer_id"):
+                        continue
+                    conn.execute(
+                        """INSERT OR REPLACE INTO event_mvp_computed
+                               (event_id, customer_id, kind, split, player_name, points)
+                           VALUES (?, ?, 'tgf_mvp', ?, ?, ?)""",
+                        (eid, w["customer_id"], tsplit, w.get("player"),
+                         w.get("day_points")))
+                    tgf_rows += 1
+            conn.commit()
+        days_done += 1
+    return {"days": days_done, "mvp_rows": mvp_rows, "tgf_mvp_rows": tgf_rows,
+            "scope": scope_event or "all"}
 
 
 # ── Event game results (v2.35.0; flight rule per Kerry 2026-07-07) ─────
@@ -11542,6 +11664,19 @@ def import_gg_scorecards(tournament_url: str, event_code: str | None = None,
                 "bridged, %d verified OK, %d discrepancies",
                 imported, replaced, upgraded, skipped, unresolved, bridged,
                 n_ok, len(discrepancies))
+    # Refresh the self-computed MVP / TGF MVP badges for this event's day as
+    # soon as its scores land — the badge no longer waits on the GG MVP
+    # import (Kerry 2026-07-16). Never let a badge-refresh failure break an
+    # otherwise-successful import.
+    if event_id and (imported or replaced or upgraded):
+        try:
+            with _connect(db_path) as _c:
+                ev = _c.execute("SELECT item_name FROM events WHERE id = ?",
+                                (event_id,)).fetchone()
+            if ev:
+                recompute_computed_mvps(ev["item_name"], db_path=db_path)
+        except Exception:
+            logger.warning("MVP recompute after import failed", exc_info=True)
     return {"imported": imported, "replaced": replaced,
             "upgraded_with_handicap": upgraded,
             "skipped_other_tournament": skipped,
@@ -11565,20 +11700,32 @@ def get_scoring_rounds_list(player: str | None = None, event: str | None = None,
         if event:
             clauses.append("e.item_name LIKE ?"); params.append(f"%{event}%")
         params.append(limit)
+        # Badge source of truth is our self-computed determination
+        # (event_mvp_computed; Kerry-ratified 2026-07-16) with split -> Co-.
+        # The GG import (event_mvps) is a fallback for any round we haven't
+        # computed yet, so no historical badge is lost during rollout.
         rows = conn.execute(
             f"""SELECT sr.*, e.item_name AS event_name, c.name AS course_name,
                        t.tee_name, t.slope, t.rating,
                        (SELECT MIN(h.hole_number) FROM scoring_holes h
                         WHERE h.scoring_round_id = sr.id
                           AND h.strokes IS NOT NULL) AS first_hole,
+                       (SELECT cm.split FROM event_mvp_computed cm
+                          WHERE cm.event_id = sr.event_id
+                            AND cm.customer_id = sr.customer_id
+                            AND cm.kind = 'mvp') AS _cm_split,
+                       (SELECT ct.split FROM event_mvp_computed ct
+                          WHERE ct.event_id = sr.event_id
+                            AND ct.customer_id = sr.customer_id
+                            AND ct.kind = 'tgf_mvp') AS _ct_split,
                        EXISTS(SELECT 1 FROM event_mvps m
                               WHERE m.event_id = sr.event_id
                                 AND m.customer_id = sr.customer_id
-                                AND m.kind = 'mvp') AS mvp,
+                                AND m.kind = 'mvp') AS _gg_mvp,
                        EXISTS(SELECT 1 FROM event_mvps m
                               WHERE m.event_id = sr.event_id
                                 AND m.customer_id = sr.customer_id
-                                AND m.kind = 'tgf_mvp') AS tgf_mvp
+                                AND m.kind = 'tgf_mvp') AS _gg_tgf
                 FROM scoring_rounds sr
                 LEFT JOIN events e ON e.id = sr.event_id
                 LEFT JOIN courses c ON c.course_id = sr.course_id
@@ -11586,7 +11733,18 @@ def get_scoring_rounds_list(player: str | None = None, event: str | None = None,
                 WHERE {' AND '.join(clauses)}
                 ORDER BY sr.round_date DESC, sr.id DESC LIMIT ?""",
             params).fetchall()
-        return [dict(r) for r in rows]
+        out = []
+        for r in rows:
+            d = dict(r)
+            cm, ct = d.pop("_cm_split", None), d.pop("_ct_split", None)
+            gg_mvp, gg_tgf = d.pop("_gg_mvp", 0), d.pop("_gg_tgf", 0)
+            # sole MVP: computed row with split=0, else GG fallback (sole).
+            d["mvp"] = 1 if (cm == 0 or (cm is None and gg_mvp)) else 0
+            d["co_mvp"] = 1 if cm == 1 else 0
+            d["tgf_mvp"] = 1 if (ct == 0 or (ct is None and gg_tgf)) else 0
+            d["co_tgf_mvp"] = 1 if ct == 1 else 0
+            out.append(d)
+        return out
 
 
 def get_scorecard(scoring_round_id: int, db_path: str | Path = DB_PATH) -> dict | None:

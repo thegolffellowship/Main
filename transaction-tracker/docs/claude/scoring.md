@@ -215,9 +215,40 @@ purse falls back to the outright Pos 1 row, and unresolved T1 ties
 record nothing. `import_gg_event_mvps(widget_url)` walks a portal's
 Event Results rounds (mvp_import_rounds tracks progress; time-budgeted
 — call until rounds_left==0); bridge command `scoring-mvp-import` with
-url = the tournament_results widget. `/api/scoring/rounds` rows carry
-`mvp` / `tgf_mvp` flags (EXISTS on event_id+customer_id); the Contests
-drill-down renders amber MVP / teal TGF MVP pills after the event name.
+url = the tournament_results widget.
+
+**Live GG portals** (the Event Results page carries the round dropdown;
+its iframe is the `tournament_results` widget):
+- San Antonio — `https://tgf-sa.golfgenius.com`
+- Austin — `https://tgf-austin.golfgenius.com`
+Archive/history portals (past seasons) are cataloged in `gg-history.md`.
+
+### Self-computed MVP badges (Kerry-ratified 2026-07-16) — the source of truth
+The scorecard badge no longer depends on the GG "MVP $" import (which
+lags — it must be manually re-walked, so recent events showed no badge
+for weeks). We OWN the determination from our scorecards + formula layer:
+
+- **Rule:** City MVP = whoever scored the **most points in the event's MVP
+  side game** (net Stableford among the game's players). Ties break
+  **1) Net score, 2) Gross score**; still tied ⇒ **split → Co-MVP**. TGF
+  MVP = the City MVP with the most points across the day's linked events;
+  a tie ⇒ **Co-TGF MVP**. (This is exactly what `determine_tgf_mvp`
+  already computed — we just materialize it for the badge.)
+- **Storage:** `event_mvp_computed(event_id, customer_id, kind
+  ['mvp'|'tgf_mvp'], split, player_name, points)` — `split=1` means a Co-
+  winner. In `_CUSTOMER_FK_COLUMNS` intent (customer_id FK per rule 6).
+- **Populate:** `recompute_computed_mvps(scope_event=None)` clears+rewrites
+  a day's rows from `determine_tgf_mvp`. Auto-runs after every
+  `import_gg_scorecards` for that event's day (badge appears as soon as
+  scores land), a one-time daemon backfill on boot when the table is empty,
+  and the bridge `scoring-mvp-recompute[:event]` for a manual run.
+- **Badge read:** `get_scoring_rounds_list` prefers `event_mvp_computed`
+  (mvp/co_mvp/tgf_mvp/co_tgf_mvp) and falls back to the GG `event_mvps`
+  rows only where we haven't computed yet, so no historical badge is lost.
+  `points-render.js` `prMvpBadges` renders amber **MVP**/**Co-MVP** and
+  teal **TGF MVP**/**Co-TGF MVP** pills. The GG `event_mvps` table is kept
+  for the money/purse record and cross-check (`gg_recorded_mvp`).
+
 event_mvps is in _CUSTOMER_FK_COLUMNS (merge-safe).
 
 ## Shared drill-down renderers (v2.31.0)
