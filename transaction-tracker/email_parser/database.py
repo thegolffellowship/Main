@@ -18467,11 +18467,13 @@ def apply_credit_to_rsvp(
             logger.warning("Failed to write transfer_in for rsvp item %s", rsvp_item_id, exc_info=True)
 
         # If excess and keep/venmo: create a new credited item for the remainder.
-        # 'venmo' is treated like 'keep' here — the excess credit row is the audit
-        # trail; the Venmo refund itself is a manual followup recorded separately.
+        # The excess credit row is the audit trail; for 'venmo' the caller
+        # (app layer) arms a refund watch on excess_credit_id and opens Venmo,
+        # so the receipt auto-records the refund — no manual followup.
+        excess_credit_id = None
         if excess > 0 and excess_action in ("keep", "venmo"):
             uid = f"credit-excess-{rsvp_item_id}-{int(_time.time() * 1000)}"
-            conn.execute(
+            cur = conn.execute(
                 """INSERT INTO items
                    (email_uid, merchant, customer, customer_email, item_name,
                     item_price, transaction_status, credit_note,
@@ -18491,12 +18493,14 @@ def apply_credit_to_rsvp(
                     rsvp_item.get("customer_id"),
                 ),
             )
+            excess_credit_id = cur.lastrowid
 
         conn.commit()
         return {
             "ok": True,
             "amount_applied": applied,
             "excess": excess,
+            "excess_credit_id": excess_credit_id,
             "amount_owed": amount_owed,
             "already_paid_via_children": already_paid,
             "existing_child_payment_ids": existing_children["ids"],

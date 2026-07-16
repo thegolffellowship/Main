@@ -11292,9 +11292,13 @@
                         const vH = info.venmo_username ? info.venmo_username.replace(/^@/, '') : '';
                         // Excess reads FROM the source event (Kerry 2026-07-15)
                         const _srcEv = (info.credits && info.credits[0] && info.credits[0].event_name) || '';
-                        const vUrl = vH ? venmoPayHref(vH, eAmt, `${resolvedCustomer} - Excess credit from ${_srcEv}`.trimEnd()) : '';
+                        const _exMemo = `${resolvedCustomer} - Excess credit from ${_srcEv}`.trimEnd();
+                        const vUrl = vH ? venmoPayHref(vH, eAmt, _exMemo) : '';
+                        // Captured so "Apply Credit & Register" can auto-open Venmo
+                        // in the click gesture + arm the refund watch (Kerry 2026-07-16).
+                        applyCreditState.excessVenmo = vH ? { handle: vH, amount: eAmt, memo: _exMemo } : null;
                         const venmoLine = vH
-                            ? `Venmo back ($${eAmt}) — <a href="${vUrl}" target="_blank" rel="noopener" style="color:#3D95CE;">open Venmo link for @${escapeHtml(vH)}</a>`
+                            ? `Venmo back ($${eAmt}) to @${escapeHtml(vH)} — <span style="color:#065f46;">Venmo opens automatically on Apply</span> · <a href="${vUrl}" target="_blank" rel="noopener" style="color:#3D95CE;">open now</a>`
                             : `Venmo back ($${eAmt}) — <span style="color:#9a3412;">no handle on file</span> ` +
                               `<button type="button" id="credit-venmo-add-btn" style="margin-left:0.4rem; font-size:0.72rem; padding:0.1rem 0.45rem; border:1px solid #cbd5e1; background:#f1f5f9; border-radius:4px; cursor:pointer;">+ Add @handle</button>` +
                               `<span id="credit-venmo-handle-row" style="display:none; margin-top:0.3rem; gap:0.3rem; align-items:center;">` +
@@ -11350,6 +11354,7 @@
                         }
                     } else {
                         excessEl.style.display = 'none';
+                        applyCreditState.excessVenmo = null;
                     }
                 }
 
@@ -11422,6 +11427,9 @@
         const prev = info.previous_selections || {};
         const curSel = applyCreditState.currentSelections || {};
 
+        const exV = applyCreditState.excessVenmo;
+        const doVenmo = excessAction === 'venmo' && exV && exV.handle;
+
         const submitBtn = document.getElementById('apply-credit-submit');
         submitBtn.disabled = true;
         submitBtn.textContent = 'Applying…';
@@ -11435,18 +11443,27 @@
                 .filter(cb => cb.checked)
                 .map(cb => parseInt(cb.dataset.creditId, 10))
                 .filter(n => !isNaN(n));
-            const resp = await fetch(applyUrl, {
+            // Dispatch the apply FIRST (server arms the refund watch on the new
+            // excess item for a venmo refund), THEN open Venmo synchronously
+            // within this click gesture so iOS lets the app-scheme link fire.
+            const applyPromise = fetch(applyUrl, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     credited_item_ids: selectedIds.length ? selectedIds : (info.credits || []).map(c => c.id),
                     excess_action: excessAction,
+                    excess_venmo: doVenmo ? { handle: exV.handle, memo: exV.memo } : undefined,
                     holes: curSel.holes || prev.holes || '',
                     side_games: curSel.side_games || prev.side_games || '',
                     tee_choice: curSel.tee_choice || prev.tee_choice || '',
                     user_status: curSel.user_status || prev.user_status || '',
                 })
             });
+            if (doVenmo) {
+                scheduleVenmoCheckEv();
+                window.location.href = venmoPayHref(exV.handle, exV.amount, exV.memo);
+            }
+            const resp = await applyPromise;
             const data = await resp.json();
             if (!resp.ok) { alert(data.error || 'Failed to apply credit.'); return; }
 

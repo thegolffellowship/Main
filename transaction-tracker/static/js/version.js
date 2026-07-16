@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.111.2";
+window.TGF_VERSION = "2.112.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.112.0",
+    date: "2026-07-16",
+    changes: [
+      "Apply Credit & Register now Venmos the excess in one tap (Kerry): pick 'Venmo back', tap Apply Credit & Register, and Venmo opens automatically with the right person, amount, and memo -- no separate 'open Venmo link' click -- and the refund self-records when you come back. How it works: the apply request is dispatched first (the server arms a refund watch on the new excess-credit item via _arm_excess_venmo_watch, so the receipt matches even though it arrives after), then Venmo opens synchronously inside the click gesture (iOS blocks app-scheme links fired after an await, so ordering matters). The provider receipt then auto-records the refund through the same watch/verify path as the red Refund buttons (amount + customer/handle, ~75s/180s quick sweeps + the 2-min cycle), flipping the excess item credited -> refunded with no manual step. apply_credit_to_rsvp now returns excess_credit_id; the memo follows the ratified 'Excess credit from [origin event]' grammar. Works on both the RSVP and GG-RSVP apply-credit paths.",
+    ],
+  },
   {
     version: "2.111.2",
     date: "2026-07-16",
