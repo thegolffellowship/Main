@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.115.5";
+window.TGF_VERSION = "2.116.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.116.0",
+    date: "2026-07-16",
+    changes: [
+      "Starter Sheet + Cart Signs printables (B5, Kerry — ready for s9.19). Two print-optimized pages render from the saved pairings: GET /events/<id>/starter-sheet (a one-table sheet of tee time / group / player / tee / index / cart) and GET /events/<id>/cart-signs (one large foldable card per cart, page-break each). Cart split follows the ratified ruling — seats 1&2 = Cart A, 3&4 = Cart B. Print buttons appear in the pairings toolbar once pairings are Saved (the pages read the saved data). Both are standalone print templates with their own @media print / @page CSS. The handicap column is labeled 'Idx' (the 9-hole index the pairings carry) — the full D1 playing-handicap column is a fast follow-up (needs each player's selected-tee slope/rating/par). New helper get_event_print_pack(event_id).",
+    ],
+  },
   {
     version: "2.115.5",
     date: "2026-07-16",
