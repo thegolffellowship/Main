@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.112.0";
+window.TGF_VERSION = "2.112.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.112.1",
+    date: "2026-07-16",
+    changes: [
+      "Excess Venmo-back memo now always names the ORIGINAL event the credit came from (Kerry). A normal rain-out/WD credit already carried its source event, but a chained credit (an 'Excess credit — [applied event]' row from a prior application) named the event it was applied to, not the origin. get_player_credits now attaches origin_event to every credit via a new _credit_origin_event() that traces the transfer chain (excess email_uid credit-excess-<rid> -> that registration's transferred_from_id -> the source credit -> recurse) back to the true origin; all credit-info responses expose it and the Apply Credit modal's Venmo memo uses origin_event. So applying a Cedar-Creek-origin credit that had already been bounced through another event still reads 'Excess credit from s9.18 Cedar Creek'.",
+    ],
+  },
   {
     version: "2.112.0",
     date: "2026-07-16",

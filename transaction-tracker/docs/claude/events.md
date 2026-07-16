@@ -607,6 +607,16 @@ All three rendering paths on the Customers page (inline expand, detail panel, mo
   `credited → refunded`. The client passes `excess_venmo:{handle,memo}` so the watch memo
   matches what's paid; memo uses the ratified "Excess credit from [origin event]" grammar.
   Both the RSVP and GG-RSVP apply-credit endpoints call the helper.
+  **Memo origin (v2.112.1, Kerry):** the memo names the ORIGINAL event the
+  credit came from, not the event it was last applied to. `get_player_credits`
+  attaches `origin_event` to every credit via `_credit_origin_event()`, which
+  traces the transfer chain for excess/overpayment rows (email_uid
+  `credit-excess-<rid>` → that registration's `transferred_from_id` → the
+  source credit → recurse) back to the origin; normal rain-out/WD credits keep
+  their own event. All credit-info responses expose `origin_event`; the modal's
+  Venmo memo uses `origin_event` (falls back to `event_name`). Verified: a
+  chained "Excess credit — s9.19 The Quarry" credit resolves to origin
+  "s9.18 Cedar Creek".
 
 # Payout Credit / Refund (WD + standalone credited rows)
 
