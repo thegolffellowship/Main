@@ -1397,6 +1397,13 @@ def _scoring_dispatch(url: str, extract: str):
             # url = tournament_results widget (optionally &round=<id>);
             # time-budgeted — call repeatedly until rounds_left == 0
             return json.dumps(db.import_gg_event_mvps(url), indent=2)
+        if cmd == "scoring-audit-mvp":
+            # H-1 results hardening: our City MVP vs GG's recorded MVP for
+            # every event before the retroactivity boundary. arg = cutoff date
+            # (default 2026-07-14). Read-only; returns the mismatch list.
+            return json.dumps(
+                db.audit_pre_boundary_mvp(arg.strip() or "2026-07-14"),
+                indent=2, default=str)
         if cmd == "scoring-mvp-recompute":
             # Self-computed City MVP / TGF MVP (Kerry-ratified 2026-07-16):
             # materialize determine_tgf_mvp winners + split -> Co- into

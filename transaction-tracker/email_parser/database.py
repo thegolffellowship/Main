@@ -9241,6 +9241,80 @@ def recompute_computed_mvps(scope_event: str | None = None,
             "events_computed": len(processed), "scope": scope_event or "all"}
 
 
+def _norm_player(name: str) -> str:
+    """Normalize a player name for cross-source comparison. GG names are
+    'LAST, First'; strip a trailing ' TGF <chapter>' tag, uppercase, collapse
+    whitespace so 'YOUNG, Jeff' == 'young,  jeff'."""
+    s = re.sub(r"\s+TGF\s+[A-Za-z .'-]+$", "", (name or "").strip())
+    return re.sub(r"\s+", " ", s).strip().upper()
+
+
+def audit_pre_boundary_mvp(before_date: str = "2026-07-14",
+                           db_path: str | Path = DB_PATH) -> dict:
+    """RESULTS-HARDENING (H-1, Kerry): for every event BEFORE the retroactivity
+    boundary, compare OUR self-computed City MVP (net-points winner, our
+    handicaps) against GG's RECORDED MVP (event_mvps, purse winners). This is
+    the top of the net-points ranking — the first place a cap-driven points
+    change surfaces. Read-only; changes nothing. Returns the full mismatch
+    list so pre-boundary divergences can be resolved (GG stays bible)."""
+    with _connect(db_path) as conn:
+        _ensure_scoring_tables(conn)
+        _ensure_mvp_tables(conn)
+        events = [dict(r) for r in conn.execute(
+            """SELECT DISTINCT e.id, e.item_name, e.event_date
+                 FROM scoring_rounds sr JOIN events e ON e.id = sr.event_id
+                WHERE e.event_date IS NOT NULL AND e.event_date < ?
+                ORDER BY e.event_date, e.item_name""", (before_date,)).fetchall()]
+
+    checked, matches, mismatches, skipped = 0, 0, [], []
+    for ev in events:
+        det = determine_tgf_mvp(ev["item_name"], db_path=db_path)
+        if det.get("error"):
+            skipped.append({"event": ev["item_name"], "reason": det["error"]})
+            continue
+        pe = next((p for p in det.get("per_event", [])
+                   if (p.get("event_name") or "").lower() == ev["item_name"].lower()),
+                  None)
+        if not pe:
+            continue
+        cm = pe.get("city_mvp") or {}
+        gg = {_norm_player(n) for n in (pe.get("gg_recorded_mvp") or [])}
+        if cm.get("status") != "determined":
+            # We can't compute a winner (no net buyers / awaiting) — only a
+            # gap if GG DID record one.
+            if gg:
+                mismatches.append({
+                    "event": ev["item_name"], "date": ev["event_date"],
+                    "kind": "we_have_no_winner",
+                    "our_mvp": [], "gg_mvp": sorted(gg),
+                    "our_status": cm.get("status")})
+            continue
+        ours = {_norm_player(w.get("player")) for w in cm.get("winners", [])}
+        checked += 1
+        if not gg:
+            # GG never recorded this one (import lag) — cannot verify against
+            # GG; note it but don't call it a mismatch.
+            skipped.append({"event": ev["item_name"], "date": ev["event_date"],
+                            "reason": "no GG MVP on record to compare",
+                            "our_mvp": sorted(ours)})
+            continue
+        if ours == gg:
+            matches += 1
+        else:
+            mismatches.append({
+                "event": ev["item_name"], "date": ev["event_date"],
+                "kind": "winner_set_differs",
+                "our_mvp": sorted(ours), "gg_mvp": sorted(gg),
+                "our_split": cm.get("split"),
+                "field": [{"p": w.get("player"), "pts": w.get("points"),
+                           "net": w.get("net"), "gross": w.get("gross")}
+                          for w in (cm.get("field") or [])[:5]]})
+    return {"before_date": before_date, "events_with_scores": len(events),
+            "compared_vs_gg": checked, "matches": matches,
+            "mismatch_count": len(mismatches), "mismatches": mismatches,
+            "uncomparable": skipped}
+
+
 # ── Event game results (v2.35.0; flight rule per Kerry 2026-07-07) ─────
 # Shadow-computes the scorecard-derivable side-game winners for one
 # event from OUR imported scorecards + formula layer, mirroring

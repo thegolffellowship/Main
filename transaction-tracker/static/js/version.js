@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.115.2";
+window.TGF_VERSION = "2.115.3";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.115.3",
+    date: "2026-07-16",
+    changes: [
+      "H-1 results-hardening audit (read-only): audit_pre_boundary_mvp compares OUR self-computed City MVP (net-points winner) against GG's recorded MVP for every event before the 2026-07-14 boundary and returns the full mismatch list. This is the first place a WHS-cap-driven net-points change surfaces. Bridge scoring-audit-mvp. Changes nothing — it's the pre-July-14 'do our results still match GG' proof.",
+    ],
+  },
   {
     version: "2.115.2",
     date: "2026-07-16",
