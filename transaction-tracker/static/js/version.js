@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.117.6";
+window.TGF_VERSION = "2.118.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.118.0",
+    date: "2026-07-17",
+    changes: [
+      "Match Play visual rollout (#228, platform-claude-approved canvas) — the new Slate (#2F5D74) & Clay (#C1673F) scoreboards, bracket views with seed numbers + wildcard chips + legend (P4), the D-MP-08 consolation block (gated hasConsolation = fieldN>=6, field-aware fallback copy, nothing at N=4-5), the D-MP-09 'Everyone counts three matches' pool note (shown only where a 4-match player exists), D-MP-07 PUTT/TIE/walkover states, and the private-match provenance chip. Plus the five carry-forwards: D-MP-02 chapter/season selectors, D-MP-06 wildcard 'Next In' cut-line, D-MP-03 mode-dynamic pool-assignment copy, N=12 bye render check, and go-green #0d7556 buttons (money stays #047857). POT never PURSE; Stableford labeled; no member-facing 'match points'.",
+      "GATED behind the MATCHPLAY_V2 kill switch (SHELL_V2-style): default OFF so members/managers keep the current tab byte-for-byte. Admins preview the new tab on LIVE data at /admin/matchplay-preview; flip env MATCHPLAY_V2=1 to promote it live everywhere after sign-off. The consolation manager control POSTs /api/cmp/consolation and reads the payout `consolation` block (both live from 2.117.6).",
+    ],
+  },
   {
     version: "2.117.6",
     date: "2026-07-17",

@@ -9608,9 +9608,31 @@ def api_delete_season_contest(enrollment_id):
 # Routes — Contests page
 # ---------------------------------------------------------------------------
 
+def _matchplay_v2_flag():
+    """SHELL_V2-style kill switch for the Match Play visual rollout (#228).
+    Default OFF so members/managers keep the CURRENT Match Play tab until
+    Kerry signs off from the admin sandbox. Flip env MATCHPLAY_V2=1 on
+    Railway to promote the new tab live everywhere; the admin preview route
+    forces it on regardless so Kerry can play with it on live data first."""
+    return os.environ.get("MATCHPLAY_V2", "0") == "1"
+
+
 @app.route("/contests")
 def contests_page():
-    return render_template("contests.html")
+    return render_template("contests.html", MATCHPLAY_V2=_matchplay_v2_flag())
+
+
+@app.route("/admin/matchplay-preview")
+@require_role("admin")
+def matchplay_v2_preview():
+    """Admin-only SANDBOX: the NEW (platform-claude-approved, #228) Match
+    Play tab rendered against the LIVE data — same /api/cmp/* endpoints, all
+    current pools/brackets/standings/payouts — so Kerry can play with it
+    before it goes live to members. Forces MATCHPLAY_V2 on for this route
+    only; /contests + /member/contests stay on the current tab until the env
+    flag is flipped. Nothing here changes data — it is a read-through preview
+    of the existing live contest data with the new visuals."""
+    return render_template("contests.html", MATCHPLAY_V2=True)
 
 
 # ── Member view (v2.53.0, Kerry): pinless read-only pages members can
@@ -9625,7 +9647,8 @@ def member_home():
 
 @app.route("/member/contests")
 def member_contests():
-    return render_template("contests.html", member_mode=True)
+    return render_template("contests.html", member_mode=True,
+                           MATCHPLAY_V2=_matchplay_v2_flag())
 
 
 @app.route("/member/handicaps")
