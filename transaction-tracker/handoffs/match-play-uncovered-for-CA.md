@@ -39,9 +39,15 @@ reconciliation aligns *display detail* to the recorded winner, never the reverse
 7. **Extra holes / sudden death — GAP (not modeled).** A match all-square after
    regulation goes to extra hole(s); the winner takes the next hole. Confirmed cases:
    **Youngs v Marques** and **Barna v Cloer** were AS after 9, both played **hole 10**,
-   decided there (recorded **1 UP**; GG's 9-hole card shows **AS**). We have no
-   extra-hole entity and no extra-hole score. Needs: record winner + hole(s) played +
-   result, distinct from regulation.
+   decided there. We have no extra-hole entity and no extra-hole score. Needs: record
+   winner + hole(s) played + result, distinct from regulation.
+   - **Notation (proposed, for CA to ratify):** an extra-hole win is recorded as the
+     hole it ended on — e.g. **`10H`** (won on the 10th; H = hole), the 18-hole analog
+     being the "19th hole." These two are currently stored as **`1 UP`**, which is
+     technically true at the moment of victory but reads like a *regulation* 1-up and
+     hides the sudden-death fact — `10H` carries the real information. (Correcting the
+     two historical margins is Kerry's call; winner/record/seed are untouched either
+     way.)
 8. **Putt-offs — GAP.** Another all-square resolution class (Chandler/Peterson s9.12,
    Niester/Wade s9.15). Needs a recordation path + display.
 9. **Concessions / gimmes.** GG's match state reflects conceded holes/putts that raw
