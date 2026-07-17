@@ -25546,19 +25546,48 @@ def cmp_get_payout_sheet(season: str, chapter: str, db_path=None) -> dict:
         ladder_rows.append({"place_label": "2nd", "player_name": runner_up,
                             "amount": amounts[1] / 100.0,
                             "status": "final" if runner_up else "tbd"})
+    # ── D-MP-08 (ratified 2026-07-16, config v2): the two SF losers' 3rd/4th
+    # is decided by a CONSOLATION MATCH (primary) at N≥6; if it can't be
+    # coordinated (no recorded result), FALLBACK to splitting the combined
+    # place money. N=4–5 has only 2 ladder places, so this block never runs
+    # there ("nothing at N=4–5" is automatic). The consolation is stored as a
+    # single bracket row (round='consolation', player+opponent+winner).
+    conso_row = next((b for b in bracket if b["round"] == "consolation"), None)
+    conso_winner = conso_row["winner_name"] if conso_row else None
+    conso_loser = None
+    if conso_row:
+        for x in (conso_row.get("player_name"), conso_row.get("opponent_name")):
+            if x and x != conso_winner:
+                conso_loser = x
     if len(amounts) > 2:
-        # Places 3(+4) belong to the TWO semifinal losers jointly (tie
-        # policy: split combined places). Always split by the expected two
-        # so a lone recorded SF loser never shows the full combined amount.
-        combined = sum(amounts[2:4])
-        label = "3rd" if len(amounts) == 3 else "3rd–4th (T)"
-        shares = split_cents(combined, 2)
         losers = sorted(sf_losers)[:2]
-        for i, cents in enumerate(shares):
-            name = losers[i] if i < len(losers) else None
-            ladder_rows.append({"place_label": label, "player_name": name,
-                                "amount": cents / 100.0,
-                                "status": "final" if name else "tbd"})
+        if conso_winner:
+            # Consolation played: winner takes 3rd outright; on a 4-place
+            # ladder the loser takes 4th, on a 3-place ladder the loser gets
+            # nothing.
+            ladder_rows.append({"place_label": "3rd", "player_name": conso_winner,
+                                "amount": amounts[2] / 100.0, "status": "final",
+                                "via": "consolation"})
+            if len(amounts) >= 4:
+                ladder_rows.append({"place_label": "4th",
+                                    "player_name": conso_loser,
+                                    "amount": amounts[3] / 100.0,
+                                    "status": "final" if conso_loser else "tbd",
+                                    "via": "consolation"})
+        else:
+            # FALLBACK — split the combined place money between the two SF
+            # losers (3-place: 3rd split 10/10 · 4-place: 3rd+4th split
+            # 12.5/12.5). Split by the expected two so a lone recorded loser
+            # never shows the full combined amount.
+            combined = sum(amounts[2:4])
+            label = "3rd" if len(amounts) == 3 else "3rd–4th (T)"
+            shares = split_cents(combined, 2)
+            for i, cents in enumerate(shares):
+                name = losers[i] if i < len(losers) else None
+                ladder_rows.append({"place_label": label, "player_name": name,
+                                    "amount": cents / 100.0,
+                                    "status": "final" if name else "tbd",
+                                    "via": "fallback_split"})
     # Any configured places beyond 4th still render (TBD) so the sheet
     # always sums to the pot even under a nonstandard admin config.
     for idx in range(4, len(amounts)):
@@ -25584,6 +25613,10 @@ def cmp_get_payout_sheet(season: str, chapter: str, db_path=None) -> dict:
             f"{n} enrolled but {pool_member_count} in pools — pot is based "
             "on enrollment."
         )
+    # D-MP-08 consolation state for the UI: applies at N≥6 (a 3rd place
+    # exists), both SF losers known once the semis are decided.
+    has_consolation = n >= int(active["config"].get(
+        "consolation", {}).get("min_field_n", 6)) and len(amounts) > 2
     return {
         "n": n,
         "structure": structure,
@@ -25592,8 +25625,58 @@ def cmp_get_payout_sheet(season: str, chapter: str, db_path=None) -> dict:
         "bonus_rows": bonus_rows,
         "ladder_rows": ladder_rows,
         "bracket_seeded": bracket_seeded,
+        "consolation": {
+            "applies": has_consolation,
+            "sf_losers": sorted(sf_losers)[:2],
+            "winner": conso_winner,
+            "recorded": conso_row is not None and conso_winner is not None,
+            "places": len(amounts),   # 3 → 3rd vs nothing · 4 → 3rd vs 4th
+        },
         "warnings": warnings,
     }
+
+
+def cmp_record_consolation(season: str, chapter: str,
+                           loser_a: str, loser_b: str,
+                           winner_name: str | None = None,
+                           margin: str | None = None,
+                           by: str | None = None, db_path=None) -> dict:
+    """D-MP-08: record (or clear) the 3rd-place consolation match between the
+    two semifinal losers. Stored as ONE cmp_bracket row (round='consolation',
+    slot 0: player_name=loser_a, opponent_name=loser_b, winner_name). Passing
+    winner_name=None clears the result → the payout sheet reverts to the
+    fallback split. winner must be one of the two losers. customer_ids are
+    resolved from pool membership (Principle 6)."""
+    a, b = (loser_a or "").strip(), (loser_b or "").strip()
+    if not a or not b or a == b:
+        raise ValueError("consolation needs two distinct semifinal losers")
+    w = (winner_name or "").strip() or None
+    if w is not None and w not in (a, b):
+        raise ValueError("consolation winner must be one of the two losers")
+    with _connect(db_path) as conn:
+        idmap = {r["customer_name"]: r["customer_id"] for r in conn.execute(
+            """SELECT pm.customer_name, pm.customer_id FROM cmp_pool_members pm
+               JOIN cmp_pools p ON p.id = pm.pool_id
+               WHERE p.season = ? AND p.chapter = ?""",
+            (season, chapter)).fetchall()}
+        conn.execute(
+            """INSERT INTO cmp_bracket
+                 (season, chapter, round, slot, player_name, player_id,
+                  opponent_name, opponent_id, winner_name, winner_id, margin)
+               VALUES (?, ?, 'consolation', 0, ?, ?, ?, ?, ?, ?, ?)
+               ON CONFLICT(season, chapter, round, slot)
+               DO UPDATE SET player_name=excluded.player_name,
+                             player_id=excluded.player_id,
+                             opponent_name=excluded.opponent_name,
+                             opponent_id=excluded.opponent_id,
+                             winner_name=excluded.winner_name,
+                             winner_id=excluded.winner_id,
+                             margin=excluded.margin""",
+            (season, chapter, a, idmap.get(a), b, idmap.get(b),
+             w, idmap.get(w) if w else None, margin))
+        conn.commit()
+    return {"season": season, "chapter": chapter, "loser_a": a, "loser_b": b,
+            "winner": w, "cleared": w is None}
 
 
 # ---------------------------------------------------------------------------

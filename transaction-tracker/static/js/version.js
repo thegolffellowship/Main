@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.117.5";
+window.TGF_VERSION = "2.117.6";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.117.6",
+    date: "2026-07-17",
+    changes: [
+      "D-MP-08 consolation match RECORDING (backend, config v2): cmp_record_consolation(season, chapter, loser_a, loser_b, winner_name) stores the 3rd-place playoff between the two semifinal losers as one cmp_bracket row (round 'consolation'); POST /api/cmp/consolation records or clears it (winner blank = clear). cmp_get_payout_sheet now awards 3rd — and 4th on 4-place ladders — to the consolation winner when recorded, and falls back to the combined-place split (3-place 10/10 · 4-place 12.5/12.5) when it can't be coordinated. Nothing at N=4–5 (only 2 ladder places). Sum-to-pot preserved either way; default behavior unchanged (no consolation row → existing split). The payout return carries a `consolation` block (applies / sf_losers / winner / recorded / places) to drive the manager UI.",
+    ],
+  },
   {
     version: "2.117.5",
     date: "2026-07-17",
