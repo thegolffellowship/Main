@@ -2106,7 +2106,10 @@ def get_tracker_docs(name: str = "") -> str:
 # file, and app.py/database.py stay OUT by construction.
 
 # Prefix-whitelisted directories (POSIX, relative to repo root).
-_SOURCE_DIR_WHITELIST = ("templates/", "static/css/", "static/js/", "docs/")
+# handoffs/ added #212 (Kerry): opens the design-claude canvas handoffs to
+# MCP read so platform-claude's visual-pass review pipeline can pull them.
+_SOURCE_DIR_WHITELIST = ("templates/", "static/css/", "static/js/", "docs/",
+                         "handoffs/")
 # Individually-allowed pure engine modules (no DB/Flask, no secrets by design).
 _SOURCE_FILE_WHITELIST = {
     "email_parser/handicap_calc.py",
