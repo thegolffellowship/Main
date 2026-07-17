@@ -24545,6 +24545,159 @@ def cmp_get_matches(pool_id: int, db_path=None) -> list[dict]:
         return [dict(r) for r in rows]
 
 
+def _cmp_holes_for(conn, event_id, customer_id):
+    """Per-hole (strokes, strokes_received) for a player at an event, from
+    the imported GG scorecard. Returns {hole_number: (gross, pops)} or {}."""
+    if not event_id or not customer_id:
+        return {}
+    row = conn.execute(
+        """SELECT id FROM scoring_rounds
+           WHERE event_id = ? AND customer_id = ?
+           ORDER BY holes_played DESC, id DESC LIMIT 1""",
+        (event_id, customer_id)).fetchone()
+    if not row:
+        return {}
+    holes = {}
+    for h in conn.execute(
+            "SELECT hole_number, strokes, strokes_received FROM scoring_holes "
+            "WHERE scoring_round_id = ? ORDER BY hole_number", (row["id"],)):
+        holes[h["hole_number"]] = (h["strokes"], h["strokes_received"] or 0)
+    return holes
+
+
+def _cmp_derive_match(a_holes: dict, b_holes: dict) -> dict:
+    """Net match-play result from per-hole scores. a_holes/b_holes:
+    {hole: (gross, pops)}. Net = gross − pops; lower net wins the hole.
+    Returns {holes:[{h,winner:'A'|'B'|'H',a_net,b_net}], leader:'A'|'B'|None,
+    margin, thru, closed_at, n_holes} using standard close-out semantics
+    (X&Y = X up with Y to play). None if not enough data."""
+    common = sorted(set(a_holes) & set(b_holes))
+    common = [h for h in common
+              if a_holes[h][0] is not None and b_holes[h][0] is not None]
+    if len(common) < 1:
+        return None
+    seq, up, closed_at, up_at_close = [], 0, None, None
+    for i, h in enumerate(common):
+        anet = a_holes[h][0] - (a_holes[h][1] or 0)
+        bnet = b_holes[h][0] - (b_holes[h][1] or 0)
+        w = "A" if anet < bnet else ("B" if bnet < anet else "H")
+        up += 1 if w == "A" else (-1 if w == "B" else 0)
+        seq.append({"h": h, "winner": w, "a_net": anet, "b_net": bnet})
+        remaining = len(common) - (i + 1)
+        if closed_at is None and abs(up) > remaining:
+            closed_at, up_at_close = i + 1, up
+    if closed_at is not None:
+        leader = "A" if up_at_close > 0 else "B"
+        lead, to_play = abs(up_at_close), len(common) - closed_at
+        margin = f"{lead}&{to_play}" if to_play > 0 else f"{lead} UP"
+        thru = closed_at
+    else:
+        leader = "A" if up > 0 else ("B" if up < 0 else None)
+        margin = "AS" if up == 0 else f"{abs(up)} UP"
+        thru = len(common)
+    return {"holes": seq, "leader": leader, "margin": margin, "thru": thru,
+            "closed_at": closed_at, "n_holes": len(common)}
+
+
+def _cmp_norm_margin(s: str) -> str:
+    s = (s or "").strip().upper().replace(" ", "")
+    if s in ("HALVED", "ALLSQUARE", "AS", "TIE", "TIED", "T"):
+        return "AS"
+    return s
+
+
+def cmp_reconcile_hole_results(season: str | None = None,
+                               chapter: str | None = None,
+                               db_path=None) -> dict:
+    """READ-ONLY (Kerry 2026-07-17): derive each Match Play match's result
+    from the imported GG per-hole scores (net = gross − pops, lower net wins
+    the hole) and DIFF it against our stored winner/margin. Reports every
+    match that does NOT align so Kerry can resolve it. Changes nothing.
+
+    Buckets: aligned (computed winner+margin == stored), winner_mismatch,
+    margin_mismatch, putt_off (stored has a winner but holes are all-square —
+    a putt-off/extra-holes decision hole data can't show), no_event (match
+    has no event assigned), no_holes (a player's GG scorecard isn't imported
+    for that event)."""
+    where, params = [], []
+    if season:
+        where.append("p.season = ?"); params.append(season)
+    if chapter:
+        where.append("p.chapter = ?"); params.append(chapter)
+    wsql = (" WHERE " + " AND ".join(where)) if where else ""
+    with _connect(db_path) as conn:
+        matches = [dict(r) for r in conn.execute(
+            f"""SELECT m.*, p.season, p.chapter, p.pool_name,
+                       e.item_name AS event_name, e.event_date
+                  FROM cmp_matches m
+                  JOIN cmp_pools p ON p.id = m.pool_id
+                  LEFT JOIN events e ON e.id = m.event_id
+                  {wsql} ORDER BY p.season, p.chapter, p.pool_name, m.id""",
+            params).fetchall()]
+        memb = {}
+        for r in conn.execute(
+                """SELECT pm.pool_id, pm.customer_name, pm.customer_id
+                     FROM cmp_pool_members pm"""):
+            memb[(r["pool_id"], (r["customer_name"] or "").strip().lower())] = r["customer_id"]
+
+        out = {"checked": 0, "aligned": 0, "mismatches": [], "putt_offs": [],
+               "uncheckable": [], "season": season, "chapter": chapter}
+        for m in matches:
+            if not m.get("winner_name") and m.get("player1_stableford") is None:
+                continue  # not played / no result recorded
+            out["checked"] += 1
+            p1, p2 = m["player1_name"], m["player2_name"]
+            a_id = m.get("player1_id") or memb.get((m["pool_id"], (p1 or "").strip().lower()))
+            b_id = m.get("player2_id") or memb.get((m["pool_id"], (p2 or "").strip().lower()))
+            tag = {"season": m["season"], "chapter": m["chapter"],
+                   "pool": m["pool_name"], "match": f"{p1} vs {p2}",
+                   "event": m.get("event_name"), "date": m.get("event_date"),
+                   "stored_winner": m.get("winner_name"),
+                   "stored_margin": m.get("margin")}
+            if not m.get("event_id"):
+                out["uncheckable"].append({**tag, "reason": "no_event_assigned"})
+                continue
+            a_holes = _cmp_holes_for(conn, m["event_id"], a_id)
+            b_holes = _cmp_holes_for(conn, m["event_id"], b_id)
+            if not a_holes or not b_holes:
+                miss = []
+                if not a_holes: miss.append(p1)
+                if not b_holes: miss.append(p2)
+                out["uncheckable"].append(
+                    {**tag, "reason": "no_hole_scores_imported",
+                     "missing": miss})
+                continue
+            d = _cmp_derive_match(a_holes, b_holes)
+            if not d:
+                out["uncheckable"].append({**tag, "reason": "insufficient_holes"})
+                continue
+            comp_winner = (p1 if d["leader"] == "A"
+                           else p2 if d["leader"] == "B" else None)
+            comp = {**tag, "computed_winner": comp_winner,
+                    "computed_margin": d["margin"], "holes_used": d["n_holes"],
+                    "thru": d["thru"]}
+            stored_w = (m.get("winner_name") or "").strip()
+            stored_m = _cmp_norm_margin(m.get("margin"))
+            # Putt-off / tie class: holes all-square but a winner is stored.
+            if d["leader"] is None and stored_w:
+                out["putt_offs"].append(
+                    {**comp, "note": "holes all-square; stored winner implies "
+                     "a putt-off / extra holes (not in hole data)"})
+                continue
+            winner_ok = (not stored_w) or (comp_winner and
+                         stored_w.lower() == comp_winner.lower())
+            margin_ok = (not stored_m) or (stored_m == _cmp_norm_margin(d["margin"]))
+            if winner_ok and margin_ok:
+                out["aligned"] += 1
+            else:
+                out["mismatches"].append(
+                    {**comp, "winner_ok": winner_ok, "margin_ok": margin_ok})
+        out["mismatch_count"] = len(out["mismatches"])
+        out["putt_off_count"] = len(out["putt_offs"])
+        out["uncheckable_count"] = len(out["uncheckable"])
+        return out
+
+
 def cmp_clear_match(pool_id: int, player1: str, player2: str, db_path=None) -> None:
     p1, p2 = sorted([player1, player2])
     with _connect(db_path) as conn:

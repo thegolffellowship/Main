@@ -1418,6 +1418,15 @@ def _scoring_dispatch(url: str, extract: str):
             # iff no advancer/winner-runnerup change anywhere. Changes nothing.
             return json.dumps(db.cmp_standings_diff_dmp09(), indent=2,
                               default=str)
+        if cmd == "scoring-mp-reconcile":
+            # READ-ONLY (Kerry 2026-07-17): derive each Match Play match's
+            # result from imported GG per-hole scores (net = gross-pops) and
+            # diff vs our stored winner/margin. Reports the non-aligning ones.
+            # arg: "" (all) or "<season>|<chapter>".
+            _s, _sep, _c = (arg or "").partition("|")
+            return json.dumps(db.cmp_reconcile_hole_results(
+                season=(_s.strip() or None), chapter=(_c.strip() or None)),
+                indent=2, default=str)
         if cmd == "scoring-sweep-i2":
             # I-2 (READ-ONLY): ×0.96 multiplier-removal impact — per-player
             # index with/without the 0.96 factor, delta, and whole-number PH
