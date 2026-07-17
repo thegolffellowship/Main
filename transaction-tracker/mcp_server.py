@@ -1418,6 +1418,14 @@ def _scoring_dispatch(url: str, extract: str):
             # iff no advancer/winner-runnerup change anywhere. Changes nothing.
             return json.dumps(db.cmp_standings_diff_dmp09(), indent=2,
                               default=str)
+        if cmd == "scoring-mp-repin":
+            # #223 (Kerry-approved 2026-07-17): author the D-MP-01..09 config
+            # version and pin both 2026 season snapshots (SA + Austin) to it.
+            # WRITE — gated by Kerry's explicit re-pin approval. Returns the
+            # new version id/no + the pinned (season, chapter) list.
+            return json.dumps(
+                db.cmp_repin_2026_to_dmp_register(by=(arg.strip() or None)),
+                indent=2, default=str)
         if cmd == "scoring-mvp-recompute":
             # Self-computed City MVP / TGF MVP (Kerry-ratified 2026-07-16):
             # materialize determine_tgf_mvp winners + split -> Co- into
@@ -2137,8 +2145,13 @@ def get_tracker_source(path: str) -> str:
     — is HARD-DENIED. The scoring formula VALUES are exposed as data via
     get_app_settings / get_scorecard_detail, not as source here.
 
+    LIST MODE (#220): pass a whitelisted directory (e.g. 'handoffs/' or
+    'docs/') and it returns the filenames in that dir instead of file text —
+    so special-character filenames don't have to be guessed byte-for-byte.
+
     Args:
-        path: repo-relative path (e.g. 'static/js/points-render.js')
+        path: repo-relative file path (e.g. 'static/js/points-render.js')
+              or a whitelisted directory (e.g. 'handoffs/') for a listing.
     """
     root = Path(__file__).resolve().parent
     rel = path.strip().lstrip("/")
@@ -2148,14 +2161,24 @@ def get_tracker_source(path: str) -> str:
         rel_posix = target.relative_to(root).as_posix()
     except ValueError:
         return json.dumps({"error": "path escapes repo root", "path": path})
+    is_dir = target.is_dir() or path.strip().endswith("/")
+    rel_check = (rel_posix + "/") if is_dir else rel_posix
     allowed = (rel_posix in _SOURCE_FILE_WHITELIST
-               or any(rel_posix.startswith(p) for p in _SOURCE_DIR_WHITELIST))
+               or any(rel_check.startswith(p) for p in _SOURCE_DIR_WHITELIST))
     if not allowed:
         return json.dumps({
             "error": "path not in read-only whitelist",
             "path": rel_posix,
             "whitelist_dirs": list(_SOURCE_DIR_WHITELIST),
             "whitelist_files": sorted(_SOURCE_FILE_WHITELIST)})
+    if is_dir:
+        if not target.is_dir():
+            return json.dumps({"error": "directory not found",
+                               "path": rel_posix + "/"})
+        files = sorted(p.relative_to(root).as_posix()
+                       for p in target.rglob("*") if p.is_file())
+        return json.dumps({"dir": rel_posix + "/", "count": len(files),
+                           "files": files}, indent=2)
     if not target.is_file():
         return json.dumps({"error": "file not found", "path": rel_posix})
     try:

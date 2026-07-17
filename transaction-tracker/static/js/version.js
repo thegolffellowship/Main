@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.117.3";
+window.TGF_VERSION = "2.117.4";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.117.4",
+    date: "2026-07-17",
+    changes: [
+      "D-MP-09 goes LIVE for standings (config-gated): cmp_get_standings now honors pool_rank_rule='dmp09' on a season's PINNED config — first-3-by-date counting, match points-of-3 with ½-ties, aggregate H2H, pool Stableford. Seasons pinned to an older version keep the legacy wins→W−L→Stableford sort (past events frozen). Verified clean by the #217 diff: no advancer/winner changes, only 3 non-advancing reorderings harden.",
+      "Re-pin (#223, Kerry-approved): cmp_repin_2026_to_dmp_register() authors a new match_play config version carrying the D-MP-01→09 register as rules-as-data (pool_rank_rule=dmp09, pool_assignment_mode=random, seed_placement=p1_p4, consolation min-N-6 + fallback split, unchanged cross-pool 4-player exception) and pins both 2026 season snapshots (SA + Austin) to it. Bridge extract='scoring-mp-repin'.",
+      "get_tracker_source list mode (#220): passing a whitelisted directory (e.g. 'handoffs/') returns its filenames instead of file text, so special-character handoff names no longer have to be guessed. New handoffs/README.md documents the CD review-bundle delivery + deploy-included rule (#222) and naming convention.",
+    ],
+  },
   {
     version: "2.117.3",
     date: "2026-07-17",
