@@ -22710,6 +22710,86 @@ def get_all_handicap_players(db_path: str | Path | None = None) -> list[dict]:
     return players
 
 
+def sweep_i2_multiplier_removal(db_path: str | Path | None = None) -> dict:
+    """I-2 (READ-ONLY): impact of removing the ×0.96 'Bonus for Excellence'
+    multiplier from the index formula. The 0.96 factor is the pre-2020 USGA
+    rule; modern WHS averages the best differentials with NO 0.96. This sweep
+    computes, for every handicap player, the current index (×0.96) vs the
+    index WITHOUT it (×1.00), the delta, and whether the change crosses a
+    whole-number 9-hole Playing Handicap line at reference tees.
+
+    PH-crossing is course-dependent, so we report it at two reference slopes:
+      - 113 (neutral: CH = index, PH = whs_round(index)) — the floor case;
+      - 125 (a typical Texas 9-hole slope) — where the delta is amplified
+        (CH change = delta × slope/113), so more players cross.
+    Rating−par is taken as 0 at both references. A real home tee steeper than
+    113 crosses at least as often as the 113 column. Changes NOTHING.
+    Gates R1 (the multiplier apply) — decision package only.
+    """
+    from email_parser.handicap_calc import whs_round, course_handicap
+
+    cfg = get_handicap_settings(db_path)
+    lookback_months = int(cfg.get("lookback_months", 12))
+    cutoff_str = (datetime.now()
+                  - timedelta(days=lookback_months * 30.44)).strftime("%Y-%m-%d")
+    cfg_96 = dict(cfg); cfg_96["multiplier"] = "0.96"
+    cfg_no = dict(cfg); cfg_no["multiplier"] = "1.0"
+
+    with _connect(db_path) as conn:
+        rows = conn.execute(
+            """SELECT player_name, differential,
+                      ROW_NUMBER() OVER (PARTITION BY player_name
+                          ORDER BY round_date DESC, id DESC) AS rn
+               FROM handicap_rounds
+               WHERE differential IS NOT NULL AND round_date >= ?""",
+            (cutoff_str,)).fetchall()
+    diffs_by_player: dict[str, list[float]] = {}
+    for r in rows:
+        if r["rn"] <= 20:
+            diffs_by_player.setdefault(r["player_name"], []).append(r["differential"])
+
+    def _ph(index, slope):
+        return whs_round(course_handicap(index, slope, 0.0, 0.0))
+
+    players, cross113, cross125, both_none = [], 0, 0, 0
+    max_delta = 0.0
+    for name in sorted(diffs_by_player):
+        diffs = diffs_by_player[name]
+        i96 = compute_handicap_index(diffs, cfg_96)
+        ino = compute_handicap_index(diffs, cfg_no)
+        if i96 is None or ino is None:
+            both_none += 1
+            continue
+        delta = round(ino - i96, 1)
+        ph113_96, ph113_no = _ph(i96, 113), _ph(ino, 113)
+        ph125_96, ph125_no = _ph(i96, 125), _ph(ino, 125)
+        c113 = ph113_96 != ph113_no
+        c125 = ph125_96 != ph125_no
+        cross113 += int(c113)
+        cross125 += int(c125)
+        max_delta = max(max_delta, abs(delta))
+        players.append({
+            "player": name, "n_rounds": len(diffs),
+            "index_0_96": i96, "index_no_96": ino, "delta": delta,
+            "ph9_113": [ph113_96, ph113_no], "crosses_at_113": c113,
+            "ph9_125": [ph125_96, ph125_no], "crosses_at_125": c125,
+        })
+    players.sort(key=lambda p: (-int(p["crosses_at_125"]), -abs(p["delta"])))
+    return {
+        "note": "READ-ONLY. Removing ×0.96 RAISES every index (0.96→1.00), "
+                "more for higher handicaps. PH-crossing reported at slope 113 "
+                "(floor) and 125 (typical); steeper home tees cross ≥ the 113 "
+                "count. Gates R1.",
+        "lookback_cutoff": cutoff_str,
+        "players_evaluated": len(players),
+        "players_insufficient_rounds": both_none,
+        "max_abs_delta": round(max_delta, 1),
+        "crossing_a_whole_PH_line_at_113": cross113,
+        "crossing_a_whole_PH_line_at_125": cross125,
+        "players": players,
+    }
+
+
 # ---------------------------------------------------------------------------
 # Handicap Email Card — data assembly + HTML builder
 # ---------------------------------------------------------------------------

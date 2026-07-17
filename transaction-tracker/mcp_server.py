@@ -1418,6 +1418,12 @@ def _scoring_dispatch(url: str, extract: str):
             # iff no advancer/winner-runnerup change anywhere. Changes nothing.
             return json.dumps(db.cmp_standings_diff_dmp09(), indent=2,
                               default=str)
+        if cmd == "scoring-sweep-i2":
+            # I-2 (READ-ONLY): ×0.96 multiplier-removal impact — per-player
+            # index with/without the 0.96 factor, delta, and whole-number PH
+            # crossings at reference slopes 113/125. Decision package; gates R1.
+            return json.dumps(db.sweep_i2_multiplier_removal(), indent=2,
+                              default=str)
         if cmd == "scoring-mp-repin":
             # #223 (Kerry-approved 2026-07-17): author the D-MP-01..09 config
             # version and pin both 2026 season snapshots (SA + Austin) to it.
