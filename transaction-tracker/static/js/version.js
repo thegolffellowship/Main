@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.118.8";
+window.TGF_VERSION = "2.118.9";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.118.9",
+    date: "2026-07-17",
+    changes: [
+      "Docs: extra-hole win notation. An extra-hole (sudden-death) win is recorded as the hole it ended on — e.g. 10H (won on the 10th; H = hole), 18-hole analog the 19th hole — rather than 1 UP, which reads like a regulation win and hides the sudden-death fact. Captured in game-engine.md D-MP-11 and the CA handoff. Correcting the two historical a9.17 margins (Youngs/Marques, Barna/Cloer) from 1 UP to 10H is pending Kerry (winner/record/seed unaffected).",
+    ],
+  },
   {
     version: "2.118.8",
     date: "2026-07-17",
