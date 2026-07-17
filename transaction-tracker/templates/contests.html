@@ -473,6 +473,212 @@
             content: '→'; color: var(--text-muted); font-size: 1rem;
         }
 
+        /* ═══════════════════════════════════════════════════════════════
+           Slate & Clay Match Play visual rollout (#228, Kerry-ratified)
+           Single-source palette vars — Slate (home/A), Clay (away/B),
+           Stone (neutral/halved). Accent orange for action only. Money
+           amounts use winnings-green #047857; go/primary buttons #0d7556.
+           ═══════════════════════════════════════════════════════════════ */
+        :root {
+            --mp-slate: #2F5D74;
+            --mp-clay: #C1673F;
+            --mp-stone: #BFB8AC;
+            --mp-slate-tint: rgba(47,93,116,.12);
+            --mp-clay-tint: rgba(193,103,63,.12);
+            --mp-slate-edge: rgba(47,93,116,.30);
+            --mp-clay-edge: rgba(193,103,63,.30);
+            --mp-accent: #E87C3E;      /* action accent only */
+            --mp-money: #047857;       /* winnings-green — money amounts only */
+            --mp-money-bg: #D1FAE5;
+            --mp-money-text: #065F46;
+            --mp-go: #0d7556;          /* real Tracker go/primary green */
+            --mp-wc-bg: #FEF3C7;
+            --mp-wc-text: #92400E;
+        }
+
+        /* ALL rules below are scoped under .mpv2 so they NEVER touch the live
+           (flag-off) Match Play tab. The .mpv2 class rides on #section-match-play
+           only when MATCHPLAY_V2 is true. The :root palette vars above are inert
+           definitions (used only by .mpv2 selectors), so they are safe global. */
+
+        /* ── D-MP-02 · Chapter + Season selectors (dropdowns) ── */
+        .mpv2 .mp-selectors {
+            display: flex; gap: 1rem; align-items: flex-end; flex-wrap: wrap;
+        }
+        .mpv2 .mp-select-field { display: flex; flex-direction: column; gap: 0.25rem; }
+        .mpv2 .mp-select-field label {
+            font-size: 0.62rem; font-weight: 700; text-transform: uppercase;
+            letter-spacing: 0.06em; color: var(--text-muted);
+        }
+        .mpv2 .mp-select, .mpv2 .mp-season-input {
+            font-size: 0.85rem; font-weight: 600; color: var(--text);
+            padding: 0.4rem 0.7rem; border: 1px solid var(--border);
+            border-radius: 8px; background: #fff; min-width: 150px;
+            appearance: auto;
+        }
+        .mpv2 .mp-select:focus, .mpv2 .mp-season-input:focus {
+            outline: none; border-color: var(--mp-go);
+            box-shadow: 0 0 0 2px rgba(13,117,86,.20);
+        }
+
+        /* ── D-MP-03 · pool-assignment mode copy line ── */
+        .mpv2 .mp-assign-note {
+            font-size: 0.72rem; color: var(--text-muted); line-height: 1.5;
+            margin-top: 0.5rem;
+        }
+
+        /* ── Slate & Clay bracket scoreboards ── */
+        .mpv2 .mp-bracket-head {
+            display: flex; align-items: baseline; justify-content: space-between;
+            gap: 0.75rem; flex-wrap: wrap; margin-bottom: 0.75rem;
+        }
+        .mpv2 .mp-bracket-title {
+            font-size: 0.72rem; font-weight: 700; text-transform: uppercase;
+            letter-spacing: 0.08em; color: var(--text-body, #4B5563);
+        }
+        .mpv2 .mp-legend {
+            font-size: 0.68rem; color: var(--text-muted);
+            display: inline-flex; align-items: center; gap: 0.35rem; flex-wrap: wrap;
+        }
+        .mpv2 .mp-legend .seed-chip, .mpv2 .mp-legend .wc-chip { transform: scale(0.92); }
+        .mpv2 .bracket-slot { border-left: 3px solid transparent; }
+        .mpv2 .bracket-slot.slot-a { border-left-color: var(--mp-slate); }
+        .mpv2 .bracket-slot.slot-b { border-left-color: var(--mp-clay); }
+        .mpv2 .bracket-slot.winner.slot-a { background: var(--mp-slate-tint); }
+        .mpv2 .bracket-slot.winner.slot-b { background: var(--mp-clay-tint); }
+        .mpv2 .mp-slot-mono {
+            width: 18px; height: 18px; flex: none; border-radius: 3px;
+            display: inline-flex; align-items: center; justify-content: center;
+            font-size: 0.58rem; font-weight: 700; color: #fff;
+        }
+        .mpv2 .mp-slot-mono.slot-a { background: var(--mp-slate); }
+        .mpv2 .mp-slot-mono.slot-b { background: var(--mp-clay); }
+        .mpv2 .bracket-slot .seed-chip {
+            background: #eef2f5; color: var(--mp-slate);
+            font-variant-numeric: tabular-nums;
+        }
+        .mpv2 .bracket-slot.slot-b .seed-chip { color: var(--mp-clay); background: #f6efeb; }
+        .mpv2 .mp-champ {
+            border: 1.5px solid #C9A227; border-radius: 6px; background: #FEFBF0;
+            padding: 0.4rem 0.5rem; text-align: center; margin-bottom: 1rem;
+        }
+        .mpv2 .mp-champ-label {
+            font-size: 0.56rem; font-weight: 700; letter-spacing: 0.08em;
+            text-transform: uppercase; color: #C9A227;
+        }
+        .mpv2 .mp-champ-name {
+            font-size: 0.82rem; font-weight: 700; color: var(--text);
+            text-transform: uppercase; margin-top: 0.15rem;
+        }
+
+        /* ── D-MP-08 · Consolation (3rd place) block ── */
+        .mpv2 .mp-consolation {
+            margin-top: 1rem; padding-top: 0.85rem;
+            border-top: 1px dashed var(--border);
+        }
+        .mpv2 .mp-consolation-label {
+            font-size: 0.6rem; font-weight: 700; letter-spacing: 0.06em;
+            text-transform: uppercase; color: var(--text-muted);
+            margin-bottom: 0.4rem;
+        }
+        .mpv2 .mp-cons-note {
+            font-size: 0.7rem; color: var(--text-muted); line-height: 1.5;
+            margin-top: 0.5rem;
+        }
+
+        /* ── D-MP-06 · Wildcard "Next In" cut-line ── */
+        .mpv2 .mp-nextin {
+            margin-top: 0.85rem; padding: 0.6rem 0.75rem;
+            background: #FBFBFA; border: 1px dashed var(--border);
+            border-radius: 8px;
+        }
+        .mpv2 .mp-nextin-label {
+            font-size: 0.6rem; font-weight: 700; letter-spacing: 0.06em;
+            text-transform: uppercase; color: var(--mp-wc-text);
+            margin-bottom: 0.35rem;
+        }
+        .mpv2 .mp-nextin-row {
+            display: flex; align-items: center; gap: 0.5rem;
+            font-size: 0.78rem; padding: 0.15rem 0; color: var(--text-body, #4B5563);
+        }
+        .mpv2 .mp-nextin-seed {
+            font-size: 0.6rem; font-weight: 700; color: var(--text-muted);
+            font-variant-numeric: tabular-nums; min-width: 1.4rem;
+        }
+        .mpv2 .mp-nextin-note { font-size: 0.68rem; color: var(--text-muted); margin-top: 0.35rem; }
+
+        /* ── D-MP-09 · Pool note (everyone counts three matches) ── */
+        .mpv2 .mp-pool-note {
+            display: flex; gap: 0.6rem; align-items: flex-start;
+            margin: 0.5rem 0 0; padding: 0.55rem 0.7rem;
+            background: #F6F5F2; border-radius: 8px;
+        }
+        .mpv2 .mp-pool-note-head {
+            font-size: 0.6rem; font-weight: 700; letter-spacing: 0.04em;
+            text-transform: uppercase; color: var(--text-body, #4B5563);
+            flex: none; padding-top: 1px;
+        }
+        .mpv2 .mp-pool-note-body { font-size: 0.7rem; color: var(--text-muted); line-height: 1.45; }
+
+        /* ── Pool standings tags + rank colouring (D-MP-07 states) ── */
+        .mpv2 .mp-tag {
+            font-size: 0.6rem; font-weight: 700; margin-left: 0.35rem;
+            padding: 0.05rem 0.35rem; border-radius: 6px;
+            font-family: 'Bitter', Georgia, serif;
+        }
+        .mpv2 .mp-tag.pot { background: var(--mp-money-bg); color: var(--mp-money-text); }
+        .mpv2 .mp-tag.adv { background: var(--mp-money-bg); color: var(--mp-money-text); }
+        .mpv2 .mp-tag.wd  { background: var(--mp-wc-bg); color: var(--mp-wc-text); }
+        .mpv2 .mp-tag.putt { background: var(--mp-slate); color: #fff; }
+        .mpv2 .mp-tag.putt.clay { background: var(--mp-clay); }
+        .mpv2 .mp-tag.tie { background: #F3F2EF; color: var(--text-body, #4B5563); }
+        .mpv2 .standings-table td .mp-rank1 { color: var(--mp-accent); font-weight: 700; }
+        .mpv2 .mp-money { color: var(--mp-money); font-weight: 700; }
+
+        /* ── Match read-display state chips (winner / halved / walkover) ── */
+        .mpv2 .mp-state { font-weight: 700; }
+        .mpv2 .mp-state.won { color: var(--mp-money-text); }
+        .mpv2 .mp-state.tie { color: var(--text-muted); }
+        .mpv2 .mp-state.wo  { color: var(--mp-wc-text); }
+        .mpv2 .mp-provenance {
+            font-size: 0.64rem; color: var(--text-muted); font-style: italic;
+            margin-left: 0.35rem;
+        }
+
+        /* ── POT waterfall card (Payouts) ── */
+        .mpv2 .mp-pot-card {
+            background: #1B1B1B; border-radius: 12px; padding: 0.9rem 1rem;
+            color: #fff; margin-bottom: 1rem;
+        }
+        .mpv2 .mp-pot-label {
+            font-size: 0.6rem; font-weight: 700; letter-spacing: 0.12em;
+            text-transform: uppercase; color: var(--mp-accent);
+        }
+        .mpv2 .mp-pot-top {
+            display: flex; align-items: baseline; justify-content: space-between;
+            margin-top: 0.5rem; padding-bottom: 0.5rem; border-bottom: 1px solid #374151;
+        }
+        .mpv2 .mp-pot-amount {
+            font-family: 'Bitter', Georgia, serif; font-weight: 700; font-size: 1.7rem;
+            font-variant-numeric: tabular-nums;
+        }
+        .mpv2 .mp-pot-sub { font-size: 0.72rem; color: #9CA3AF; }
+        .mpv2 .mp-pot-row {
+            display: flex; justify-content: space-between; margin-top: 0.5rem;
+            font-size: 0.78rem;
+        }
+        .mpv2 .mp-pot-row .neg { color: #F0A882; font-family: 'Bitter', Georgia, serif; font-weight: 700; font-variant-numeric: tabular-nums; }
+        .mpv2 .mp-pot-row.total {
+            margin-top: 0.5rem; padding-top: 0.5rem; border-top: 1px solid #374151;
+            font-weight: 700;
+        }
+        .mpv2 .mp-pot-row.total span:last-child { font-family: 'Bitter', Georgia, serif; font-variant-numeric: tabular-nums; }
+
+        @media (max-width: 640px) {
+            .mpv2 .mp-selectors { gap: 0.6rem; }
+            .mpv2 .mp-select, .mpv2 .mp-season-input { min-width: 120px; }
+        }
+
         /* ── Enrollment ── */
         .enrollment-section { padding: 1.25rem 2rem; }
         .enrollment-controls {
@@ -792,14 +998,45 @@
             </div>
         </div>
 
-        <!-- ═══════════ MATCH PLAY ═══════════ -->
-        <div id="section-match-play" class="section-hidden">
+        <!-- ═══════════ MATCH PLAY ═══════════
+             MATCHPLAY_V2 (#228, admin sandbox preview) gates the NEW Slate and Clay
+             tab. Default/live is false so the ORIGINAL tab renders UNCHANGED in the
+             else-branch below. Both branches drive the SAME live /api/cmp/* data. -->
+        <div id="section-match-play" class="section-hidden{% if MATCHPLAY_V2 %} mpv2{% endif %}">
             <!-- On phones the chapter menu drops from the MATCH PLAY tab
                  (Kerry, 2026-07-10) — same pattern as the race menu -->
             <div class="shell-menu cmp-chapter-dd-menu" id="cmp-chapter-dd-menu" style="display:none;">
                 <button data-cmp-dd="Austin" class="active">Austin</button>
                 <button data-cmp-dd="San Antonio">San Antonio</button>
             </div>
+            {% if MATCHPLAY_V2 %}
+            <!-- D-MP-02 (#228): ratified selector pattern — chapter + season as
+                 labeled dropdowns. The legacy .cmp-chapter-tab buttons stay in the
+                 DOM (hidden) so the existing tab handler + the mobile .shell-menu
+                 dropdown keep driving cmpState/cmpLoad unchanged. -->
+            <div class="cmp-chapter-bar">
+                <button class="cmp-chapter-tab active" data-chapter="Austin" style="display:none;">Austin</button>
+                <button class="cmp-chapter-tab" data-chapter="San Antonio" style="display:none;">San Antonio</button>
+                <div class="mp-selectors">
+                    <div class="mp-select-field">
+                        <label for="cmp-chapter-select">Chapter</label>
+                        <select class="mp-select" id="cmp-chapter-select">
+                            <option value="Austin">Austin</option>
+                            <option value="San Antonio">San Antonio</option>
+                        </select>
+                    </div>
+                    <div class="mp-select-field">
+                        <label for="cmp-season">Season</label>
+                        <input type="text" class="mp-season-input" id="cmp-season" value="2026" list="cmp-season-options">
+                        <datalist id="cmp-season-options">
+                            <option value="2026"></option>
+                            <option value="2025"></option>
+                        </datalist>
+                    </div>
+                    <button class="btn manager-only" id="cmp-add-pool-btn" style="display:none;">+ Add Pool</button>
+                </div>
+            </div>
+            {% else %}
             <div class="cmp-chapter-bar">
                 <button class="cmp-chapter-tab active" data-chapter="Austin">Austin</button>
                 <button class="cmp-chapter-tab" data-chapter="San Antonio">San Antonio</button>
@@ -809,6 +1046,7 @@
                     <button class="btn manager-only" id="cmp-add-pool-btn" style="display:none;">+ Add Pool</button>
                 </div>
             </div>
+            {% endif %}
             <div class="cmp-body">
                 <div style="display:flex;justify-content:flex-end;margin:0 0 0.6rem;">
                     <button id="cmp-hiw-btn" class="pr-hiw-link" type="button">How It Works</button>
@@ -1072,6 +1310,7 @@
         </div>
     </div>
 
+    <script>window.MATCHPLAY_V2 = {% if MATCHPLAY_V2 %}true{% else %}false{% endif %};</script>
     {% if member_mode %}<script>window.MEMBER_MODE = true;</script><script src="/static/js/member-nudges.js" defer></script>
     <style>
         /* Member view: manager/admin controls can NEVER show, including
@@ -1633,8 +1872,14 @@
         customerIdToName: {},   // customer_id → canonical customer_name (for hcp fallback)
         events: [],             // [{id, item_name, event_date, chapter}, …] sorted newest first
         configMeta: null,       // /api/cmp/config response: versioned config + structure for N
-        structure: null         // computed matrix row for the enrolled N (null if N out of range)
+        structure: null,        // computed matrix row for the enrolled N (null if N out of range)
+        allStandings: [],       // cached full standings (D-MP-06 Next In cut-line)
+        consolation: null       // D-MP-08 consolation block from the payout sheet
     };
+
+    // MATCHPLAY_V2 (#228): when false the shared render fns reproduce the ORIGINAL
+    // tab byte-for-byte; the new Slate & Clay visuals only apply when true.
+    const MATCHPLAY_V2 = !!window.MATCHPLAY_V2;
 
     // ── Chapter tabs ──
     $$(".cmp-chapter-tab").forEach(btn => {
@@ -1645,9 +1890,21 @@
             document.querySelectorAll("[data-cmp-dd]").forEach(mi =>
                 mi.classList.toggle("active", mi.dataset.cmpDd === btn.dataset.chapter));
             cmpState.chapter = btn.dataset.chapter;
+            // D-MP-02: keep the new selector dropdown in sync
+            const csel = $("cmp-chapter-select");
+            if (csel && csel.value !== btn.dataset.chapter) csel.value = btn.dataset.chapter;
             cmpLoad();
         });
     });
+
+    // ── D-MP-02 · Chapter dropdown drives the (hidden) legacy tab handler ──
+    const cmpChapterSelect = $("cmp-chapter-select");
+    if (cmpChapterSelect) {
+        cmpChapterSelect.addEventListener("change", () => {
+            const tab = document.querySelector(`.cmp-chapter-tab[data-chapter="${cmpChapterSelect.value}"]`);
+            if (tab) tab.click();
+        });
+    }
 
     // ── Season input — auto-reload on change ──
     $("cmp-season").addEventListener("change", () => { cmpLoad(); });
@@ -1744,6 +2001,16 @@
         cmpRenderBanner();
         cmpRender();
 
+        // Pre-fetch full standings once (MATCHPLAY_V2 only) so the bracket's
+        // D-MP-06 "Next In" cut-line has the cross-pool non-advancer order on
+        // first paint. Skipped when the flag is off — the old tab is untouched.
+        if (MATCHPLAY_V2) {
+            try {
+                const stRes = await fetch(`/api/cmp/standings?season=${encodeURIComponent(season)}&chapter=${encodeURIComponent(chapter)}`);
+                if (stRes.ok) cmpState.allStandings = await stRes.json();
+            } catch (_) { /* non-fatal — Next In simply omits until standings load */ }
+        }
+
         const bRes = await fetch(`/api/cmp/bracket?season=${encodeURIComponent(season)}&chapter=${encodeURIComponent(chapter)}`);
         cmpState.bracket = bRes.ok ? await bRes.json() : [];
         cmpRenderBracket();
@@ -1784,6 +2051,17 @@
         } else if (meta.structure_error) {
             warn = `<div class="cmp-banner-warn">${escapeHtml(meta.structure_error)} — pools and payouts activate at 4+ entrants.</div>`;
         }
+        // D-MP-03 (#228, MATCHPLAY_V2 only): mode-dynamic pool-assignment copy,
+        // data-driven from the active config's pool_assignment_mode (default 'random').
+        const assignMode = ((meta.config || {}).pool_assignment_mode || "random");
+        const assignCopy = assignMode === "random"
+            ? "Pools are set by a random draw of the enrolled field — no seeding into pools."
+            : assignMode === "abcd"
+                ? "Pools are set by A/B/C/D snake seeding across the enrolled field."
+                : `Pools are set by the ${escapeHtml(assignMode)} method.`;
+        const assignNote = (MATCHPLAY_V2 && s)
+            ? `<div class="mp-assign-note">${assignCopy}</div>`
+            : "";
         el.innerHTML = `
             <div class="cmp-banner">
                 <div class="cmp-banner-head">
@@ -1794,6 +2072,7 @@
                     ${isAdmin ? `<button class="btn admin-only" id="cmp-config-btn" style="font-size:0.75rem;">&#9881; Config</button>` : ""}
                 </div>
                 ${chips}
+                ${assignNote}
                 ${warn}
             </div>`;
         const aab = $("cmp-auto-assign-btn");
@@ -1842,31 +2121,70 @@
             el.innerHTML = `<p style="color:var(--text-muted);font-size:0.85rem;">${escapeHtml((sheet && sheet.error) || "Payouts unavailable.")}</p>`;
             return;
         }
+        // MATCHPLAY_V2 (#228): cache the consolation block and refresh the bracket
+        // so its D-MP-08 control reflects the recorded 3rd-place result.
+        if (MATCHPLAY_V2) {
+            const prevRec = cmpState.consolation && cmpState.consolation.recorded;
+            cmpState.consolation = sheet.consolation || null;
+            const nowRec = cmpState.consolation && cmpState.consolation.recorded;
+            // Re-render the bracket once when consolation state first arrives/changes.
+            if (cmpState.consolation && cmpState.consolation.applies && prevRec !== nowRec) {
+                setTimeout(cmpRenderBracket, 0);
+            }
+        }
         const s = sheet.structure;
+        const moneyCell = MATCHPLAY_V2 ? ' class="mp-money"' : '';
+        const moneyStyle = MATCHPLAY_V2 ? 'text-align:right;' : 'text-align:right;font-weight:600;';
         const statusPill = st => `<span class="payout-status ${st}">${st === "tbd" ? "TBD" : st}</span>`;
         const bonusRows = sheet.bonus_rows.map(r => `
             <tr>
                 <td>${escapeHtml(r.pool_name)}</td>
                 <td>${r.player_name ? escapeHtml(r.player_name) : '<span style="color:var(--text-muted);">—</span>'}</td>
-                <td style="text-align:right;font-weight:600;">${fmtMoney(r.amount)}</td>
+                <td${moneyCell} style="${moneyStyle}">${fmtMoney(r.amount)}</td>
                 <td>${statusPill(r.status)}</td>
             </tr>`).join("");
         const ladderRows = sheet.ladder_rows.map(r => `
             <tr>
                 <td>${escapeHtml(r.place_label)}</td>
                 <td>${r.player_name ? escapeHtml(r.player_name) : '<span style="color:var(--text-muted);">—</span>'}</td>
-                <td style="text-align:right;font-weight:600;">${fmtMoney(r.amount)}</td>
+                <td${moneyCell} style="${moneyStyle}">${fmtMoney(r.amount)}</td>
                 <td>${statusPill(r.status)}</td>
             </tr>`).join("");
         const warns = (sheet.warnings || []).map(w =>
             `<div class="cmp-banner-warn">${escapeHtml(w)}</div>`).join("");
-        el.innerHTML = `
-            <div class="cmp-chips" style="margin-bottom:0.75rem;">
+        // POT waterfall dark card (#228, flag ON): POT → − pool-winner bonuses →
+        // adjusted knockout ladder. "POT", never "PURSE". Money in winnings-green.
+        const potCard = MATCHPLAY_V2 ? `
+            <div class="mp-pot-card">
+                <div class="mp-pot-label">Pot</div>
+                <div class="mp-pot-top">
+                    <span class="mp-pot-amount">${fmtMoney(s.pot)}</span>
+                    <span class="mp-pot-sub">${s.n} × ${fmtMoney(s.entry_fee)} entered</span>
+                </div>
+                <div class="mp-pot-row">
+                    <span>− Pool-winner bonuses</span>
+                    <span class="neg">−${fmtMoney(s.pool_winner_bonus_total)}</span>
+                </div>
+                <div class="mp-pot-row total">
+                    <span>Adjusted → Knockout Ladder</span>
+                    <span>${fmtMoney(s.adjusted_pot)}</span>
+                </div>
+            </div>` : '';
+        // Flag ON shows the POT card + a slim config chip; flag OFF keeps the
+        // original four summary chips exactly as before.
+        const chipsHtml = MATCHPLAY_V2
+            ? `<div class="cmp-chips" style="margin-bottom:0.75rem;">
+                <span class="cmp-chip">Config v<b>${sheet.config_version}</b>${sheet.snapshotted ? " (pinned)" : ""}</span>
+            </div>`
+            : `<div class="cmp-chips" style="margin-bottom:0.75rem;">
                 <span class="cmp-chip">Pot <b>${fmtMoney(s.pot)}</b> (${s.n} × ${fmtMoney(s.entry_fee)})</span>
                 <span class="cmp-chip">Pool winner bonuses <b>${fmtMoney(s.pool_winner_bonus_total)}</b></span>
                 <span class="cmp-chip">Knockout ladder <b>${fmtMoney(s.adjusted_pot)}</b></span>
                 <span class="cmp-chip">Config v<b>${sheet.config_version}</b>${sheet.snapshotted ? " (pinned)" : ""}</span>
-            </div>
+            </div>`;
+        el.innerHTML = `
+            ${potCard}
+            ${chipsHtml}
             <div class="payout-grid">
                 <div>
                     <h4 style="font-size:0.72rem;text-transform:uppercase;color:var(--text-muted);margin-bottom:0.4rem;">Pool Winner Bonuses</h4>
@@ -2156,9 +2474,14 @@
                 const evSel = row.querySelector(".match-event-sel");
                 if (evSel && m.event_id) evSel.value = m.event_id;
 
-                // Read-only display
+                // Read-only display. Flag ON → D-MP-07 states (#228): PUTT (winner
+                // colour), TIE, walkover/WD, plain win + provenance chip. Flag OFF →
+                // original plain-text winner + event display, unchanged.
                 const wd = row.querySelector(".match-winner-display");
-                if (wd) wd.textContent = m.winner_name ? `${m.winner_name}${m.margin ? ' (' + m.margin + ')' : ''}` : (m.margin || '—');
+                if (wd) {
+                    if (MATCHPLAY_V2) wd.innerHTML = mpMatchStateHtml(m, p1, p2);
+                    else wd.textContent = m.winner_name ? `${m.winner_name}${m.margin ? ' (' + m.margin + ')' : ''}` : (m.margin || '—');
+                }
                 const sd1 = row.querySelector(".match-stab-display1");
                 if (sd1) sd1.textContent = m.player1_stableford != null ? m.player1_stableford : '—';
                 const sd2 = row.querySelector(".match-stab-display2");
@@ -2168,6 +2491,10 @@
                     if (m.event_name) {
                         const d = (m.event_date_val || '').slice(5).replace('-', '/');
                         ed.textContent = d ? `${d} ${m.event_name}` : m.event_name;
+                    } else if (MATCHPLAY_V2) {
+                        // Provenance chip: a played match with no linked event was
+                        // entered as a private match (counts for Match Play only).
+                        ed.innerHTML = '<span class="mp-provenance">Private match · counts for Match Play only</span>';
                     } else {
                         ed.textContent = '—';
                     }
@@ -2182,6 +2509,9 @@
         const res = await fetch(`/api/cmp/standings?season=${encodeURIComponent(season)}&chapter=${encodeURIComponent(chapter)}`);
         if (!res.ok) return;
         const standings = await res.json();
+        // Cache full standings so the bracket's D-MP-06 "Next In" cut-line can
+        // read the cross-pool non-advancer order without another fetch.
+        cmpState.allStandings = standings;
         const poolRows = standings.filter(r => r.pool_id === poolId);
         const el = $("standings-" + poolId);
         if (!el) return;
@@ -2189,19 +2519,59 @@
             el.innerHTML = '<h4>Pool Standings</h4><p style="color:var(--text-muted);font-size:0.8rem;">No results recorded yet.</p>';
             return;
         }
-        const rows = poolRows.map(r => `
+
+        // ── Flag OFF: original standings table, byte-for-byte unchanged ──
+        if (!MATCHPLAY_V2) {
+            const rowsOld = poolRows.map(r => `
+                <tr>
+                    <td>${escapeHtml(r.player_name)}${r.advances ? '<span class="advances-badge">Advances</span>' : ''}</td>
+                    <td>${r.wins}</td><td>${r.losses}</td><td>${r.draws}</td>
+                    <td>${r.stableford_pts}</td>
+                </tr>`).join("");
+            el.innerHTML = `
+                <h4>Pool Standings <span style="font-size:0.68rem;font-weight:400;color:var(--text-muted);margin-left:0.4rem;">Top ${(cmpState.structure || {}).advance_per_pool ?? 2} advance${(cmpState.structure || {}).wildcards ? ` (+${cmpState.structure.wildcards} wildcards across pools)` : ""} · tiebreaker: Stableford pts</span></h4>
+                <table class="standings-table">
+                    <thead><tr><th style="text-align:left;">Player</th><th>W</th><th>L</th><th>D</th><th title="Total Stableford points accumulated">Pts</th></tr></thead>
+                    <tbody>${rowsOld}</tbody>
+                </table>`;
+            return;
+        }
+
+        // D-MP-09 (#228): show the "everyone counts three matches" note only when
+        // a row carries the dmp09 shape and a player actually played a 4th match.
+        const hasDmp09 = poolRows.some(r => r.match_points != null);
+        const hasDropped4th = poolRows.some(r => r.dropped_4th && r.played > r.counted);
+        const rows = poolRows.map(r => {
+            const advTag = r.advances ? '<span class="mp-tag adv">ADV</span>' : '';
+            // D-MP-07 walkover/WD state: a player with a played-but-not-counted 4th
+            // or zero counted results reads as a withdrawal in the mock's tag lane.
+            const wdTag = (r.wins === 0 && r.losses === 0 && r.draws === 0 && (r.played || 0) === 0)
+                ? '<span class="mp-tag wd">WD</span>' : '';
+            const nameCls = r.rank === 1 ? 'mp-rank1' : '';
+            const mpCell = hasDmp09
+                ? `<td title="Match points from your first three matches">${r.match_points != null ? r.match_points : '—'}</td>`
+                : '';
+            return `
             <tr>
-                <td>${escapeHtml(r.player_name)}${r.advances ? '<span class="advances-badge">Advances</span>' : ''}</td>
+                <td><span class="${nameCls}">${escapeHtml(r.player_name)}</span>${advTag}${wdTag}</td>
                 <td>${r.wins}</td><td>${r.losses}</td><td>${r.draws}</td>
+                ${mpCell}
                 <td>${r.stableford_pts}</td>
-            </tr>
-        `).join("");
+            </tr>`;
+        }).join("");
+        const mpHead = hasDmp09 ? '<th title="Match points from first three matches">MP</th>' : '';
+        const poolNote = hasDropped4th ? `
+            <div class="mp-pool-note">
+                <span class="mp-pool-note-head">Everyone counts three matches</span>
+                <span class="mp-pool-note-body">Pools with a scheduling extra include one additional match — a player's standing counts their first three by date; the 4th counts only for the opponent.</span>
+            </div>` : '';
         el.innerHTML = `
-            <h4>Pool Standings <span style="font-size:0.68rem;font-weight:400;color:var(--text-muted);margin-left:0.4rem;">Top ${(cmpState.structure || {}).advance_per_pool ?? 2} advance${(cmpState.structure || {}).wildcards ? ` (+${cmpState.structure.wildcards} wildcards across pools)` : ""} · tiebreaker: Stableford pts</span></h4>
+            <h4>Pool Standings <span style="font-size:0.68rem;font-weight:400;color:var(--text-muted);margin-left:0.4rem;">Top ${(cmpState.structure || {}).advance_per_pool ?? 2} advance${(cmpState.structure || {}).wildcards ? ` (+${cmpState.structure.wildcards} wildcards across pools)` : ""} · ${hasDmp09 ? "rank: match points → head-to-head → Stableford" : "tiebreaker: Stableford pts"}</span></h4>
             <table class="standings-table">
-                <thead><tr><th style="text-align:left;">Player</th><th>W</th><th>L</th><th>D</th><th title="Total Stableford points accumulated">Pts</th></tr></thead>
+                <thead><tr><th style="text-align:left;">Player</th><th>W</th><th>L</th><th>D</th>${mpHead}<th title="Total Stableford points accumulated">Pts</th></tr></thead>
                 <tbody>${rows}</tbody>
-            </table>`;
+            </table>
+            ${poolNote}`;
     }
 
     function wirePools() {
@@ -2393,9 +2763,51 @@
 
     function seedChips(slot) {
         if (!slot || !slot.player_name) return '';
+        // Seed number renders on EVERY seeded entrant (P4 transparency, #228).
         const seed = slot.player_seed ? `<span class="seed-chip">#${slot.player_seed}</span>` : '';
+        // WC render path shows ONLY when is_wildcard is set (amber chip).
         const wc = slot.is_wildcard ? '<span class="wc-chip" title="Wildcard qualifier">WC</span>' : '';
         return seed + wc;
+    }
+
+    // Monogram from a display name — "Robert Straiton" → "RS" (Slate & Clay).
+    function mpMono(name) {
+        if (!name) return '';
+        const parts = String(name).trim().split(/\s+/);
+        const a = parts[0] ? parts[0][0] : '';
+        const b = parts.length > 1 ? parts[parts.length - 1][0] : '';
+        return (a + b).toUpperCase();
+    }
+
+    // D-MP-07 state chip for a played pool match. p1 = slate (a), p2 = clay (b).
+    function mpMatchStateHtml(m, p1, p2) {
+        const margin = (m.margin || "").trim();
+        const ml = margin.toLowerCase();
+        const halved = ml === "halved" || ml === "all square" || ml === "as";
+        const walkover = ml.includes("walkover") || ml.includes("w/o") || ml.includes("wd") || ml.includes("concede");
+        if (walkover) {
+            return `<span class="mp-tag wd">W/O</span>${m.winner_name ? ` <span class="mp-state wo">${escapeHtml(m.winner_name)}</span>` : ''}`;
+        }
+        if (halved || !m.winner_name) {
+            return `<span class="mp-tag tie">TIE</span>`;
+        }
+        // PUTT chip when a putt-off decided it — coloured to the winner's side.
+        const isPutt = ml.includes("putt");
+        const winnerClay = m.winner_name === p2;
+        if (isPutt) {
+            return `<span class="mp-tag putt${winnerClay ? ' clay' : ''}">PUTT</span> <span class="mp-state won">${escapeHtml(m.winner_name)}</span>`;
+        }
+        return `<span class="mp-state won">${escapeHtml(m.winner_name)}</span>${margin ? ` <span style="color:var(--text-muted);font-weight:400;">(${escapeHtml(margin)})</span>` : ''}`;
+    }
+
+    // Render one Slate & Clay bracket slot. side = 'a' (slate) | 'b' (clay).
+    function mpBracketSlot(slot, side, isWinner) {
+        const cls = `bracket-slot slot-${side}${isWinner ? ' winner' : ''}`;
+        const nm = slot && slot.player_name;
+        const mono = nm ? `<span class="mp-slot-mono slot-${side}">${escapeHtml(mpMono(nm))}</span>` : '';
+        return `<div class="${cls}">
+            ${seedChips(slot || {})}${mono}<span class="bracket-slot-name">${escapeHtml(nm || '—')}</span>
+        </div>`;
     }
 
     function cmpRenderBracket() {
@@ -2421,6 +2833,19 @@
                 // First round of a bye bracket (e.g. 12 inside a 16 template):
                 // matches with no players at all are byes — don't render them.
                 if (ri === 0 && bracket.length && !s1.player_name && !s2.player_name) return '';
+                // N=12 bye render check (#228, MATCHPLAY_V2 only): the engine lands
+                // bye seeds directly in round 2 (bye_placements), so a first-round
+                // match should never hold exactly one entrant. If it ever does, draw
+                // it as an explicit bye card rather than a half-empty match.
+                if (MATCHPLAY_V2 && ri === 0 && bracket.length && (!!s1.player_name !== !!s2.player_name)) {
+                    const byeSlot = s1.player_name ? s1 : s2;
+                    const byeSide = s1.player_name ? 'a' : 'b';
+                    return `
+                    <div class="bracket-match" style="margin-bottom:${round.matchCount > 1 ? '1rem' : '0'};">
+                        ${mpBracketSlot(byeSlot, byeSide, true)}
+                        <div class="bracket-slot" style="justify-content:center;color:var(--text-muted);font-size:0.68rem;font-style:italic;">Bye — advances</div>
+                    </div>`;
+                }
                 const winner = s1.winner_name || s2.winner_name || null;
                 const slot1Win = winner && winner === s1.player_name;
                 const slot2Win = winner && winner === s2.player_name;
@@ -2433,14 +2858,18 @@
                 }).join('');
                 const eventDisplay = eventId ? (cmpState.events.find(e => e.id === eventId) || {}).item_name || '' : '';
 
-                return `
-                <div class="bracket-match" style="margin-bottom:${round.matchCount > 1 ? '1rem' : '0'};">
-                    <div class="bracket-slot${slot1Win ? ' winner' : ''}">
+                // Slate & Clay slots when the flag is on; original slots otherwise.
+                const slotsHtml = MATCHPLAY_V2
+                    ? (mpBracketSlot(s1, 'a', slot1Win) + mpBracketSlot(s2, 'b', slot2Win))
+                    : `<div class="bracket-slot${slot1Win ? ' winner' : ''}">
                         ${seedChips(s1)}<span class="bracket-slot-name">${escapeHtml(s1.player_name || '—')}</span>
                     </div>
                     <div class="bracket-slot${slot2Win ? ' winner' : ''}">
                         ${seedChips(s2)}<span class="bracket-slot-name">${escapeHtml(s2.player_name || '—')}</span>
-                    </div>
+                    </div>`;
+                return `
+                <div class="bracket-match" style="margin-bottom:${round.matchCount > 1 ? '1rem' : '0'};">
+                    ${slotsHtml}
                     ${isManager ? `
                     <div class="bracket-match-footer">
                         <button class="match-save-btn bracket-save-btn"
@@ -2480,7 +2909,151 @@
             </div>${connector}`;
         }).join("");
 
-        container.innerHTML = `<div class="bracket-tree">${html || '<p style="color:var(--text-muted);">No bracket data yet.</p>'}</div>`;
+        // ── Flag OFF: original bracket tree only, byte-for-byte unchanged ──
+        if (!MATCHPLAY_V2) {
+            container.innerHTML = `<div class="bracket-tree">${html || '<p style="color:var(--text-muted);">No bracket data yet.</p>'}</div>`;
+        } else {
+            // ── Bracket header: title + seed/WC legend (P4 transparency, #228) ──
+            const koSize = cmpBracketSize();
+            const legendHtml = `
+                <div class="mp-bracket-head">
+                    <span class="mp-bracket-title">Bracket · Knockout of ${koSize}</span>
+                    <span class="mp-legend">
+                        <span class="seed-chip">#</span> seed &nbsp;·&nbsp;
+                        <span class="wc-chip">WC</span> wildcard
+                    </span>
+                </div>`;
+
+            // ── Champion card: when the Final has a recorded winner ──
+            const finalMatch = (slotMap['final:0'] || {});
+            const finalMatch2 = (slotMap['final:1'] || {});
+            const champ = finalMatch.winner_name || finalMatch2.winner_name || null;
+            const champHtml = champ ? `
+                <div class="mp-champ">
+                    <div class="mp-champ-label">Champion</div>
+                    <div class="mp-champ-name">${escapeHtml(champ)}</div>
+                </div>` : '';
+
+            // ── D-MP-08 · Consolation (3rd place) block ──
+            // Gate strictly on enrolled field size: hasConsolation = fieldN >= 6.
+            const fieldN = (cmpState.structure && cmpState.structure.n != null)
+                ? cmpState.structure.n
+                : (cmpState.enrollees || []).length;
+            const hasConsolation = fieldN >= 6;
+            let consolationHtml = '';
+            if (hasConsolation) {
+                // Prefer the payout sheet's consolation block (authoritative sf
+                // losers + recorded winner); fall back to deriving from sf rounds.
+                const cons = cmpState.consolation || null;
+                let sfLosers = [];
+                if (cons && Array.isArray(cons.sf_losers) && cons.sf_losers.length) {
+                    sfLosers = cons.sf_losers.map(x => (typeof x === "string" ? { player_name: x } : x));
+                } else {
+                    for (let mi = 0; mi < 2; mi++) {
+                        const a = slotMap[`sf:${mi * 2}`] || {};
+                        const b = slotMap[`sf:${mi * 2 + 1}`] || {};
+                        const w = a.winner_name || b.winner_name || null;
+                        if (w && a.player_name && b.player_name) {
+                            sfLosers.push(a.player_name === w ? b : a);
+                        }
+                    }
+                }
+                // Field-aware fallback copy (#228, verbatim-style) — ladder length
+                // decides the three-place (N=8–10) vs four-place (N≥11) wording.
+                const ladderLen = ((cmpState.structure || {}).ladder_amounts || []).length;
+                const consNote = ladderLen >= 4
+                    ? "Played when both semifinal losers can coordinate — decides 3rd vs 4th. If it can't be scheduled, 3rd+4th money is split evenly (12.5/12.5)."
+                    : "Played when both semifinal losers can coordinate — decides 3rd-place money. If it can't be scheduled, 3rd money is split evenly (10/10).";
+                const consWinner = cons ? cons.winner : null;
+                const consSlots = sfLosers.length === 2
+                    ? mpBracketSlot(sfLosers[0], 'a', consWinner && sfLosers[0].player_name === consWinner) +
+                      mpBracketSlot(sfLosers[1], 'b', consWinner && sfLosers[1].player_name === consWinner)
+                    : mpBracketSlot({}, 'a', false) + mpBracketSlot({}, 'b', false);
+                // Manager control → POST /api/cmp/consolation (already live).
+                let consControl = '';
+                if (isManager && sfLosers.length === 2 && !(cons && cons.recorded)) {
+                    const la = escapeHtml(sfLosers[0].player_name);
+                    const lb = escapeHtml(sfLosers[1].player_name);
+                    consControl = `
+                        <div class="bracket-match-footer" style="margin-top:0.4rem;border-top:none;background:transparent;padding-left:0;">
+                            <select class="cmp-cons-winner bracket-winner-sel"
+                                data-loser-a="${la}" data-loser-b="${lb}">
+                                <option value="">3rd-place winner…</option>
+                                <option value="${la}">${la} wins</option>
+                                <option value="${lb}">${lb} wins</option>
+                            </select>
+                            <button class="match-save-btn cmp-cons-save" style="flex-shrink:0;">Record 3rd place</button>
+                        </div>`;
+                }
+                consolationHtml = `
+                    <div class="mp-consolation">
+                        <div class="mp-consolation-label">3rd place${cons && cons.recorded ? " · recorded" : ""}</div>
+                        <div class="bracket-match" style="max-width:280px;">${consSlots}</div>
+                        ${consControl}
+                        <div class="mp-cons-note">${consNote}</div>
+                    </div>`;
+            }
+
+            // ── D-MP-06 · Wildcard "Next In" cut-line (LSC-alternates pattern) ──
+            let nextInHtml = '';
+            const wildcards = (cmpState.structure || {}).wildcards || 0;
+            if (wildcards > 0) {
+                const wcNames = new Set(bracket.filter(b => b.is_wildcard && b.player_name)
+                                               .map(b => b.player_name));
+                const nonAdvancers = (cmpState.allStandings || [])
+                    .filter(r => !r.advances && !wcNames.has(r.player_name))
+                    .sort((a, b) => (b.stableford_pts || 0) - (a.stableford_pts || 0))
+                    .slice(0, 2);
+                if (nonAdvancers.length) {
+                    const rowsHtml = nonAdvancers.map((r, i) => `
+                        <div class="mp-nextin-row">
+                            <span class="mp-nextin-seed">${i + 1}.</span>
+                            <span>${escapeHtml(r.player_name)}</span>
+                            <span style="margin-left:auto;color:var(--text-muted);font-size:0.72rem;">${r.stableford_pts} pts · ${escapeHtml(r.pool_name || '')}</span>
+                        </div>`).join('');
+                    nextInHtml = `
+                        <div class="mp-nextin">
+                            <div class="mp-nextin-label">Next in — wildcard cut-line</div>
+                            ${rowsHtml}
+                            <div class="mp-nextin-note">Ranked by pool-match Stableford. First alternate in if a bracket slot opens up.</div>
+                        </div>`;
+                }
+            }
+
+            container.innerHTML =
+                legendHtml +
+                `<div class="bracket-tree">${html || '<p style="color:var(--text-muted);">No bracket data yet.</p>'}</div>` +
+                champHtml + consolationHtml + nextInHtml;
+
+            // Wire the D-MP-08 consolation record control (manager).
+            const consSaveBtn = container.querySelector(".cmp-cons-save");
+            if (consSaveBtn) {
+                consSaveBtn.addEventListener("click", async () => {
+                    const sel = container.querySelector(".cmp-cons-winner");
+                    const winner_name = sel ? sel.value : "";
+                    if (!winner_name) { alert("Pick the 3rd-place winner."); return; }
+                    const { season, chapter } = cmpState;
+                    consSaveBtn.textContent = "Saving…"; consSaveBtn.disabled = true;
+                    const resp = await fetch("/api/cmp/consolation", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({
+                            season, chapter,
+                            loser_a: sel.dataset.loserA,
+                            loser_b: sel.dataset.loserB,
+                            winner_name,
+                        }),
+                    });
+                    if (!resp.ok) {
+                        const e = await resp.json().catch(() => ({}));
+                        alert(e.error || "Could not record 3rd place.");
+                        consSaveBtn.textContent = "Record 3rd place"; consSaveBtn.disabled = false;
+                        return;
+                    }
+                    loadCmpPayouts();
+                });
+            }
+        }
 
         // Wire save buttons
         if (isManager) {
