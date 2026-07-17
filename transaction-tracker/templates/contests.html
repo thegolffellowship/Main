@@ -2592,7 +2592,56 @@
             const srB = wnr !== null && recv === 'B' && hardest.includes(i);
             return { winner: wnr, played: wnr !== null, par: p, parA, parB, ptsA, ptsB, srA, srB };
         });
-        return { count, nine, played, thru: played, closedAt, putt: pm.kind === 'putt', inProgress, holes };
+        return { count, nine, played, thru: played, closedAt, putt: pm.kind === 'putt', inProgress, holes, source: 'placeholder' };
+    }
+
+    // (surname, first-initial) — matches our "First Last" to GG's "LAST, First".
+    function mpPersonKey(name) {
+        let n = String(name || '').replace(/\bTGF\b.*$/i, '').trim();
+        let last, first;
+        if (n.indexOf(',') >= 0) { const p = n.split(','); last = p[0]; first = p[1] || ''; }
+        else { const p = n.trim().split(/\s+/); first = p[0] || ''; last = p.length > 1 ? p[p.length - 1] : (p[0] || ''); }
+        last = last.toLowerCase().replace(/[^a-z]/g, '');
+        const fi = first.toLowerCase().replace(/[^a-z]/g, '').slice(0, 1);
+        return last + '|' + fi;
+    }
+
+    /* REAL Golf Genius hole detail → the SAME shape as mpGenerateHoles, so the
+       dots + scorecard render identically but from GG's own match card:
+       actual hole count (9 or 18 — both exist), real starting-hole PLAY ORDER,
+       real per-hole NET winner, real gross, real handicap-stroke dots. Frozen
+       winner/margin still come from the stored record (o.aWin/o.bWin/o.margin). */
+    function mpHolesFromGG(gg, o) {
+        const gh = (gg && gg.holes) || [];
+        if (!gh.length) return null;
+        const aIsP1 = mpPersonKey((gg.players && gg.players[0] && gg.players[0].name) || '') === mpPersonKey(o.aName);
+        const holes = gh.map(h => {
+            const grossA = aIsP1 ? h.p1_gross : h.p2_gross;
+            const grossB = aIsP1 ? h.p2_gross : h.p1_gross;
+            const strA = aIsP1 ? h.p1_strokes : h.p2_strokes;
+            const strB = aIsP1 ? h.p2_strokes : h.p1_strokes;
+            let wnr = null;                       // GG flag: 1=p1, 2=p2, 0=halve
+            if (h.winner === 0) wnr = 'H';
+            else if (h.winner === 1) wnr = aIsP1 ? 'A' : 'B';
+            else if (h.winner === 2) wnr = aIsP1 ? 'B' : 'A';
+            const played = grossA != null && grossB != null;
+            return {
+                winner: played ? wnr : null, played, holeNo: h.hole,
+                par: null, parA: grossA, parB: grossB, ptsA: null, ptsB: null,
+                srA: (strA || 0) > 0, srB: (strB || 0) > 0
+            };
+        });
+        const count = holes.length;
+        const nums = holes.map(h => h.holeNo).filter(x => x != null);
+        let nine = null;
+        if (count <= 9) nine = (nums.length && Math.max(...nums) <= 9) ? 'front'
+            : (nums.length && Math.min(...nums) >= 10) ? 'back' : 'front';
+        const closedAt = gg.closed_at_order || null;
+        return {
+            count, nine, played: count, thru: gg.thru || count, closedAt,
+            putt: /putt/i.test(o.margin || ''), inProgress: false, holes,
+            source: 'gg', startHole: gg.start_hole
+        };
     }
 
     // Center hole-dots row (collapsed strip) — one dot per hole, coloured by winner.
@@ -2606,59 +2655,80 @@
         return `<div class="mp-hole-dots" aria-hidden="true">${dots}${p}</div>`;
     }
 
-    // Expanded scorecard grid — 9-hole block(s); 18-hole splits FRONT/BACK.
+    // Expanded scorecard grid — 9-hole block; 18-hole splits into two blocks.
+    // GG-sourced cards (gen.source==='gg') show REAL gross in PLAY ORDER with
+    // real hole numbers + real handicap-stroke dots, and omit the Par/Pts rows
+    // (match play has no per-hole Stableford). Placeholder cards keep the full
+    // illustrative grid.
     function mpScorecardGridHtml(gen, o) {
+        const isGG = gen.source === 'gg';
         const aMono = `<span class="mp-sc-monochip a">${escapeHtml(mpMono(o.aName))}</span>`;
         const bMono = `<span class="mp-sc-monochip b">${escapeHtml(mpMono(o.bName))}</span>`;
         const cell = (v, cls) => `<td class="${cls || ''}">${v == null ? '' : v}</td>`;
-        function block(start, len, label) {
+        function block(start, len) {
             const hs = [], pars = [], aS = [], aP = [], bS = [], bP = [];
             let parTot = 0, aStr = 0, bStr = 0, aPts = 0, bPts = 0;
+            let firstNo = null, lastNo = null;
             for (let i = start; i < start + len; i++) {
-                const h = gen.holes[i];
+                const h = gen.holes[i]; if (!h) continue;
                 const dim = h.played ? '' : ' dim';
-                hs.push(`<td>${i + 1}</td>`);
-                pars.push(`<td>${h.par}</td>`); parTot += h.par;
+                const no = h.holeNo != null ? h.holeNo : (i + 1);
+                if (firstNo == null) firstNo = no; lastNo = no;
+                hs.push(`<td>${no}</td>`);
+                if (h.par != null) { pars.push(`<td>${h.par}</td>`); parTot += h.par; }
                 const aMk = h.winner === 'A' ? `<span class="mp-sc-mk won-a">${h.parA}</span>` : (h.parA == null ? '' : h.parA);
                 const bMk = h.winner === 'B' ? `<span class="mp-sc-mk won-b">${h.parB}</span>` : (h.parB == null ? '' : h.parB);
                 aS.push(`<td class="${'strk' + dim}">${aMk}${h.srA ? '<span class="mp-sc-tick"></span>' : ''}</td>`);
                 bS.push(`<td class="${'strk' + dim}">${bMk}${h.srB ? '<span class="mp-sc-tick"></span>' : ''}</td>`);
                 aP.push(cell(h.ptsA, dim.trim())); bP.push(cell(h.ptsB, dim.trim()));
-                if (h.played) { aStr += h.parA; bStr += h.parB; aPts += h.ptsA; bPts += h.ptsB; }
+                if (h.played) { aStr += (h.parA || 0); bStr += (h.parB || 0); aPts += (h.ptsA || 0); bPts += (h.ptsB || 0); }
             }
+            const label = isGG
+                ? (gen.count > 9 ? `Holes ${firstNo}–${lastNo}` : (gen.startHole ? `Started hole ${gen.startHole}` : ''))
+                : (start === 0 && gen.count === 18 ? 'Front 9' : (gen.count === 18 ? 'Back 9' : (gen.nine === 'back' ? 'Back 9' : 'Front 9')));
+            const parRow = (!isGG) ? `<tr class="mp-sc-par"><th class="mp-sc-rowlabel">Par</th>${pars.join('')}<th class="mp-sc-tot">${parTot}</th></tr>` : '';
+            const aPtsRow = (!isGG) ? `<tr class="mp-sc-pts"><th class="mp-sc-rowlabel">Pts</th>${aP.join('')}<th class="mp-sc-tot">${aPts}</th></tr>` : '';
+            const bPtsRow = (!isGG) ? `<tr class="mp-sc-pts"><th class="mp-sc-rowlabel">Pts</th>${bP.join('')}<th class="mp-sc-tot">${bPts}</th></tr>` : '';
             return `
             ${label ? `<div class="mp-sc-block-label">${label}</div>` : ''}
             <table class="mp-sc">
                 <tr class="mp-sc-hole"><th class="mp-sc-rowlabel">Hole</th>${hs.join('')}<th class="mp-sc-tot">Tot</th></tr>
-                <tr class="mp-sc-par"><th class="mp-sc-rowlabel">Par</th>${pars.join('')}<th class="mp-sc-tot">${parTot}</th></tr>
+                ${parRow}
                 <tr class="mp-sc-strokes"><th class="mp-sc-rowlabel mp-mono-cell">${aMono}</th>${aS.join('')}<th class="mp-sc-tot">${aStr}</th></tr>
-                <tr class="mp-sc-pts"><th class="mp-sc-rowlabel">Pts</th>${aP.join('')}<th class="mp-sc-tot">${aPts}</th></tr>
+                ${aPtsRow}
                 <tr class="mp-sc-strokes"><th class="mp-sc-rowlabel mp-mono-cell">${bMono}</th>${bS.join('')}<th class="mp-sc-tot">${bStr}</th></tr>
-                <tr class="mp-sc-pts"><th class="mp-sc-rowlabel">Pts</th>${bP.join('')}<th class="mp-sc-tot">${bPts}</th></tr>
+                ${bPtsRow}
             </table>`;
         }
         let nines;
-        if (gen.count === 18) {
-            nines = `<div class="mp-sc-block">${block(0, 9, 'Front 9')}</div><div class="mp-sc-block">${block(9, 9, 'Back 9')}</div>`;
+        if (gen.count > 9) {
+            const half = Math.ceil(gen.count / 2);
+            nines = `<div class="mp-sc-block">${block(0, half)}</div><div class="mp-sc-block">${block(half, gen.count - half)}</div>`;
         } else {
-            nines = `<div class="mp-sc-block">${block(0, gen.count, gen.nine === 'back' ? 'Back 9' : 'Front 9')}</div>`;
+            nines = `<div class="mp-sc-block">${block(0, gen.count)}</div>`;
         }
-        // Winner margin stays on the winner's side.
+        // Winner margin stays on the winner's side (from the FROZEN record).
         let result = '';
         if (o.aWin) result = `<span class="mp-sc-result a">&#9656; ${escapeHtml(mpFirstLast(o.aName).last)} ${escapeHtml(o.margin || 'WON')}</span>`;
         else if (o.bWin) result = `<span class="mp-sc-result b">${escapeHtml(mpFirstLast(o.bName).last)} ${escapeHtml(o.margin || 'WON')} &#9666;</span>`;
         else if (o.tie) result = `<span class="mp-sc-result tie">${gen.putt ? 'Putt-off' : 'All square'}</span>`;
         const prog = gen.inProgress ? ` &middot; in progress, thru ${gen.played}` : '';
+        const caption = isGG
+            ? `Hole-by-hole from Golf Genius${gen.startHole ? ` · started on hole ${gen.startHole}, shown in play order` : ''}. Circles mark the hole winner (net); ticks are handicap strokes.`
+            : `Illustrative hole detail — generated from the match result${prog}; live hole-by-hole scoring wires in from Golf Genius. Strokes: hole winner takes par, loser par+1.`;
         return `<div class="mp-sc-nines">${nines}</div>
             <div>${result}</div>
-            <div class="mp-sc-caption">Illustrative hole detail — generated from the match result${prog}; live hole-by-hole scoring wires in from Golf Genius. Strokes: hole winner takes par, loser par+1.</div>`;
+            <div class="mp-sc-caption">${caption}</div>`;
     }
 
     // Shared match card: clickable head (meta + strip + hole-dots + caption) and
     // a pre-rendered, hidden scorecard grid revealed on click. Used by both the
     // pool-match and knockout-slot renderers so every strip behaves identically.
     function mpMatchCard(o, opts) {
-        const gen = opts.hasResult ? mpGenerateHoles(o) : null;
+        let gen = null;
+        if (opts.hasResult) {
+            gen = (o.gg ? mpHolesFromGG(o.gg, o) : null) || mpGenerateHoles(o);
+        }
         const strip = mpStripHtml(o);
         const meta = `<div class="mp-match-meta"><span>${escapeHtml(opts.metaL)}</span><span class="status${opts.live ? ' live' : ''}">${escapeHtml(opts.status)}</span></div>`;
         if (!gen) {
@@ -2666,8 +2736,11 @@
         }
         const dots = mpHoleDotsHtml(gen);
         const grid = mpScorecardGridHtml(gen, o);
+        const note = gen.source === 'gg'
+            ? `Hole-by-hole from Golf Genius${gen.startHole ? ` · started on hole ${gen.startHole}` : ''}.`
+            : 'Illustrative hole map — generated from the result; real scoring wires in from Golf Genius.';
         const toggle = `<div class="mp-card-toggle">
-            <span class="mp-illus-note">Illustrative hole map — generated from the result; real scoring wires in from Golf Genius.</span>
+            <span class="mp-illus-note">${note}</span>
             <span class="mp-toggle-hint">&rsaquo; open card</span></div>`;
         return `<div class="mp-match-card">
             <div class="mp-card-head mp-clickable" role="button" tabindex="0" aria-expanded="false" aria-label="Show hole-by-hole scorecard">
@@ -2693,8 +2766,13 @@
         const status = played ? (tie ? 'TIE' : 'FINAL') : 'SCHEDULED';
         const prov = (played && !m.event_name)
             ? `<div class="mp-strip-provenance">Private match · counts for Match Play only</div>` : '';
+        let gg = null;
+        if (m.gg_match_detail) {
+            try { gg = typeof m.gg_match_detail === 'string' ? JSON.parse(m.gg_match_detail) : m.gg_match_detail; }
+            catch (e) { gg = null; }
+        }
         const o = {
-            aName: p1, bName: p2, aWin, bWin, tie, margin: m.margin,
+            aName: p1, bName: p2, aWin, bWin, tie, margin: m.margin, gg,
             seedKey: [p1, p2, m.event_name || '', m.event_date_val || m.match_date || ''].join('|'),
             holesHint: (m.event_name || '') + ' ' + (m.notes || '')
         };

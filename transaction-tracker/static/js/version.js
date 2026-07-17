@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.119.0";
+window.TGF_VERSION = "2.119.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.119.1",
+    date: "2026-07-17",
+    changes: [
+      "Match Play sandbox render now uses REAL Golf Genius hole detail when available (cmp_matches.gg_match_detail), replacing the placeholder engine per match. mpHolesFromGG() converts GG detail to the same render shape: actual hole COUNT (9 or 18 — both exist; a 9-hole match no longer renders as 18), real starting-hole PLAY ORDER, real per-hole NET winner (dots + winner circles), real gross scores, and real handicap-stroke ticks. GG players are mapped to the strip A/B sides by surname+first-initial so the dots align with the recorded winner. GG-sourced scorecards show gross in play order with real hole numbers and omit the Par/Pts rows (match play has no per-hole Stableford); the caption reads from Golf Genius rather than illustrative. Matches without GG detail fall back to the labeled placeholder. Frozen winner/margin still come from the stored record.",
+    ],
+  },
   {
     version: "2.119.0",
     date: "2026-07-17",
