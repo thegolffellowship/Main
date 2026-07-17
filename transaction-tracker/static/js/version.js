@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.118.6";
+window.TGF_VERSION = "2.118.7";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.118.7",
+    date: "2026-07-17",
+    changes: [
+      "Match Play GG importer: align by player PAIR across the whole chapter, not by event. TGF match-play matches are played/made-up across different events (e.g. Hogue def. Kirksey 4&3 is recorded on a9.12 in our data but GG scored it under a9.17), so matching within the GG event missed them. Now the importer indexes every cmp_matches row in the chapter (derived from the portal host) by customer_id pair (rule-6) with a surname+first-initial fallback, and records both the GG event and our stored event on each snapshot/mismatch. Added a done-rounds tracker (cmp_mp_import_rounds) so store-mode sweeps converge instead of re-walking every call.",
+    ],
+  },
   {
     version: "2.118.6",
     date: "2026-07-17",

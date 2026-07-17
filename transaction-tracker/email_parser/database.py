@@ -24989,22 +24989,51 @@ def cmp_import_gg_match_play(widget_url: str, db_path: str | Path = DB_PATH,
            "stored": 0, "matched": 0, "unmatched": [], "mismatches": [],
            "aligned": 0, "no_match_play_game": 0, "rounds_left": 0}
 
+    # A TGF match-play match is a unique PAIRING in a pool; it may be played
+    # (or made up) at a DIFFERENT event than GG scored it under, so we align by
+    # player pair across the whole chapter — NOT by event. Chapter comes from
+    # the portal host.
+    host_l = (parts.netloc or "").lower()
+    chapter = ("Austin" if "austin" in host_l
+               else "San Antonio" if "-sa" in host_l or "sanantonio" in host_l
+               else None)
+
     with _connect(db_path) as conn:
-        code_map = {}
-        for r in conn.execute("SELECT id, item_name FROM events").fetchall():
-            m = _GG_EVENT_CODE_COMPOUND_RE.match((r["item_name"] or "").strip())
-            if m:
-                code_map.setdefault(m.group(1).lower(), r["id"])
+        # index EVERY match in this chapter (all events) by pair
+        crows = conn.execute(
+            """SELECT m.id, m.player1_name, m.player2_name, m.player1_id,
+                      m.player2_id, m.winner_name, m.margin, m.event_id,
+                      e.item_name AS stored_event, p.chapter, p.season
+                 FROM cmp_matches m
+                 JOIN cmp_pools p ON p.id = m.pool_id
+                 LEFT JOIN events e ON e.id = m.event_id
+                WHERE (? IS NULL OR p.chapter = ?)""",
+            (chapter, chapter)).fetchall()
+        by_ids, by_key = {}, {}
+        for r in crows:
+            sm = dict(r)
+            if sm.get("player1_id") and sm.get("player2_id"):
+                by_ids.setdefault(
+                    frozenset([sm["player1_id"], sm["player2_id"]]), sm)
+            by_key.setdefault(
+                frozenset([_cmp_person_key(sm["player1_name"]),
+                           _cmp_person_key(sm["player2_name"])]), sm)
+        out["chapter"] = chapter
 
-        def matches_for_event(ev_id):
-            rows = conn.execute(
-                """SELECT m.id, m.player1_name, m.player2_name, m.player1_id,
-                          m.player2_id, m.winner_name, m.margin
-                     FROM cmp_matches m WHERE m.event_id = ?""",
-                (ev_id,)).fetchall()
-            return [dict(r) for r in rows]
+        # done-rounds tracker so store-mode sweeps converge instead of
+        # re-walking from the top each call (verify mode ignores it).
+        conn.execute("""CREATE TABLE IF NOT EXISTS cmp_mp_import_rounds (
+            host TEXT NOT NULL, round_id TEXT NOT NULL,
+            imported_at TEXT DEFAULT (datetime('now')),
+            PRIMARY KEY (host, round_id))""")
+        done = set()
+        if store:
+            done = {r["round_id"] for r in conn.execute(
+                "SELECT round_id FROM cmp_mp_import_rounds WHERE host = ?",
+                (parts.netloc,)).fetchall()}
 
-        pending = list(options)
+        pending = [(rid, lbl) for rid, lbl in options if rid not in done]
+        out["rounds_skipped_done"] = len(options) - len(pending)
         for rid, lbl in pending:
             if monotonic() - started > time_budget:
                 break
@@ -25017,19 +25046,13 @@ def cmp_import_gg_match_play(widget_url: str, db_path: str | Path = DB_PATH,
             out["rounds_done"] += 1
             if not mp:
                 out["no_match_play_game"] += 1
+                if store:
+                    conn.execute("INSERT OR IGNORE INTO cmp_mp_import_rounds "
+                                 "(host, round_id) VALUES (?, ?)",
+                                 (parts.netloc, rid))
                 continue
             code_m = re.search(r"\b([as]\d+(?:\.\d+)?)\b", mp.get("text") or "")
-            ev_id = code_map.get(code_m.group(1).lower()) if code_m else None
-            ev_matches = matches_for_event(ev_id) if ev_id else []
-            # Index stored matches two ways: by customer_id pair (rule-6 truth,
-            # when player ids are set) and by (surname, first-initial) pair
-            # (nickname-robust fallback). Match on ids first, then the fallback.
-            by_ids, by_key = {}, {}
-            for sm in ev_matches:
-                if sm.get("player1_id") and sm.get("player2_id"):
-                    by_ids[frozenset([sm["player1_id"], sm["player2_id"]])] = sm
-                by_key[frozenset([_cmp_person_key(sm["player1_name"]),
-                                  _cmp_person_key(sm["player2_name"])])] = sm
+            gg_event = code_m.group(1) if code_m else None
 
             tid_html = fetch(mp["href"])
             seen_pairs = set()          # dedup: each match has 2 aggregates
@@ -25053,8 +25076,7 @@ def cmp_import_gg_match_play(widget_url: str, db_path: str | Path = DB_PATH,
                     sm = by_ids.get(frozenset(cids))
                 if sm is None:
                     sm = by_key.get(keysig)
-                tag = {"event": code_m.group(1) if code_m else None,
-                       "gg_players": gg_names,
+                tag = {"gg_event": gg_event, "gg_players": gg_names,
                        "gg_winner": d["gg_winner_name"],
                        "gg_margin": d["gg_margin"],
                        "start_hole": d["start_hole"]}
@@ -25064,7 +25086,8 @@ def cmp_import_gg_match_play(widget_url: str, db_path: str | Path = DB_PATH,
                 out["matched"] += 1
                 snap = {**d, "source_url":
                         f"{base_host}/tournaments2/details/{agg}",
-                        "cmp_match_id": sm["id"],
+                        "cmp_match_id": sm["id"], "gg_event": gg_event,
+                        "stored_event": sm.get("stored_event"),
                         "p1_customer_id": cids[0], "p2_customer_id": cids[1]}
                 if store:
                     conn.execute(
@@ -25085,12 +25108,19 @@ def cmp_import_gg_match_play(widget_url: str, db_path: str | Path = DB_PATH,
                     out["aligned"] += 1
                 else:
                     out["mismatches"].append(
-                        {**tag, "stored_winner": sm.get("winner_name"),
+                        {**tag, "stored_event": sm.get("stored_event"),
+                         "stored_winner": sm.get("winner_name"),
                          "stored_margin": sm.get("margin"),
                          "winner_ok": win_ok, "margin_ok": marg_ok})
+            # mark the round done only if it finished within budget (a
+            # mid-round budget cut leaves it undone so the next call retries).
+            if store and monotonic() - started <= time_budget:
+                conn.execute("INSERT OR IGNORE INTO cmp_mp_import_rounds "
+                             "(host, round_id) VALUES (?, ?)",
+                             (parts.netloc, rid))
         if store:
             conn.commit()
-        out["rounds_left"] = max(0, len(options) - out["rounds_done"])
+        out["rounds_left"] = max(0, len(pending) - out["rounds_done"])
         out["unmatched_count"] = len(out["unmatched"])
         out["mismatch_count"] = len(out["mismatches"])
         return out
