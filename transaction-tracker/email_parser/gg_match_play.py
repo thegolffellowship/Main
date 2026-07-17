@@ -100,6 +100,11 @@ def parse_match_play_detail(fragment: str) -> dict | None:
                 start_hole = int(txt)
                 break
 
+    # GG profile ids present in the fragment (the detail card usually only
+    # carries the aggregate OWNER's id, repeated) — best-effort identity hint,
+    # NOT a reliable per-player key; the caller aligns by resolved name.
+    distinct_pids = list(dict.fromkeys(re.findall(r"/profiles/(\d+)", doc)))
+
     # two net-line rows
     net_rows = re.findall(
         r"<tr\b[^>]*class=['\"][^'\"]*net-line[^'\"]*['\"][^>]*"
@@ -133,7 +138,12 @@ def parse_match_play_detail(fragment: str) -> dict | None:
             holes[hn] = {"gross": gross, "strokes": dots}
         if col_holes is None:
             col_holes = order_cols
-        players.append({"name": name, "handicap": hcp})
+        # only assign a profile id when the fragment actually distinguishes
+        # both players (2+ distinct ids); otherwise leave None.
+        pid = (distinct_pids[len(players)]
+               if len(distinct_pids) >= 2 and len(players) < len(distinct_pids)
+               else None)
+        players.append({"name": name, "handicap": hcp, "gg_profile_id": pid})
         per_player_holes.append(holes)
 
     # match-lead row → per-hole winner flag. The lead cells carry class

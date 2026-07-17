@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.118.4";
+window.TGF_VERSION = "2.118.5";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.118.5",
+    date: "2026-07-17",
+    changes: [
+      "Match Play GG importer alignment hardening: match GG's match-play players to our stored cmp_matches by customer_id pair (resolved via _resolve_scoring_player, the same LAST,First + alias spine the scorecard importer uses), with a nickname-robust (surname, first-initial) fallback so GG 'JENKINS, Matt' aligns to our 'Matthew Jenkins'. Also dedup the two GG aggregates per match (GG exposes one detail card per player) so each match is snapshotted once. Parser now also captures the GG profile id when the fragment distinguishes both players.",
+    ],
+  },
   {
     version: "2.118.4",
     date: "2026-07-17",
