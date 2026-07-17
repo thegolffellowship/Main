@@ -9626,13 +9626,19 @@ def contests_page():
 @require_role("admin")
 def matchplay_v2_preview():
     """Admin-only SANDBOX: the NEW (platform-claude-approved, #228) Match
-    Play tab rendered against the LIVE data — same /api/cmp/* endpoints, all
-    current pools/brackets/standings/payouts — so Kerry can play with it
-    before it goes live to members. Forces MATCHPLAY_V2 on for this route
-    only; /contests + /member/contests stay on the current tab until the env
-    flag is flipped. Nothing here changes data — it is a read-through preview
-    of the existing live contest data with the new visuals."""
-    return render_template("contests.html", MATCHPLAY_V2=True)
+    Play tab on LIVE data — same /api/cmp/* endpoints, all current
+    pools/brackets/standings/payouts — so Kerry can play with it before it
+    goes live to members. Forces MATCHPLAY_V2 on for this route only;
+    /contests + /member/contests stay on the current tab until the env flag
+    is flipped. Read-through preview; changes no data.
+
+    ?view=member renders the MEMBER presentation (read-only scoreboards);
+    ?view=admin (default) renders the manager/admin editing view. The sandbox
+    toggle bar (SANDBOX_PREVIEW flag) flips between them in-page."""
+    view = (request.args.get("view") or "admin").strip().lower()
+    return render_template("contests.html", MATCHPLAY_V2=True,
+                           SANDBOX_PREVIEW=True,
+                           member_mode=(view == "member"))
 
 
 # ── Member view (v2.53.0, Kerry): pinless read-only pages members can
