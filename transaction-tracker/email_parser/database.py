@@ -25126,6 +25126,66 @@ def cmp_import_gg_match_play(widget_url: str, db_path: str | Path = DB_PATH,
         return out
 
 
+def cmp_relabel_margins(updates: list, chapter: str | None = None,
+                        apply: bool = False, db_path=None) -> dict:
+    """Surgically relabel a match's MARGIN only (e.g. an extra-hole win stored
+    as '1 UP' → '10H'). Winner, records, seeding, stableford are untouched.
+
+    updates: [{"players": ["Luke Youngs", "Mike Marques"], "to": "10H",
+               "expect_margin": "1 UP", "expect_winner": "Luke Youngs"}].
+    Matches by nickname-robust person-key pair, scoped to `chapter` if given.
+    Guards: only updates when the current margin/winner match the stated
+    expectations (so a stale directive can't clobber the wrong row). Default is
+    DRY-RUN (apply=False) — pass apply=True to write. Returns per-update audit
+    (before/after, matched id, applied)."""
+    out = {"chapter": chapter, "apply": apply, "results": []}
+    with _connect(db_path) as conn:
+        rows = [dict(r) for r in conn.execute(
+            """SELECT m.id, m.player1_name, m.player2_name, m.winner_name,
+                      m.margin, e.item_name AS event, p.chapter
+                 FROM cmp_matches m
+                 JOIN cmp_pools p ON p.id = m.pool_id
+                 LEFT JOIN events e ON e.id = m.event_id
+                WHERE (? IS NULL OR p.chapter = ?)""",
+            (chapter, chapter)).fetchall()]
+        index = {}
+        for r in rows:
+            index.setdefault(
+                frozenset([_cmp_person_key(r["player1_name"]),
+                           _cmp_person_key(r["player2_name"])]), []).append(r)
+        for u in updates:
+            pa, pb = u["players"]
+            sig = frozenset([_cmp_person_key(pa), _cmp_person_key(pb)])
+            cands = index.get(sig, [])
+            rec = {"players": [pa, pb], "to": u["to"], "matched": len(cands)}
+            if len(cands) != 1:
+                rec["status"] = ("no_match" if not cands else "ambiguous")
+                out["results"].append(rec); continue
+            m = cands[0]
+            rec.update({"id": m["id"], "event": m["event"],
+                        "before_margin": m["margin"],
+                        "winner": m["winner_name"]})
+            ok = True
+            if u.get("expect_margin") is not None and \
+               _cmp_norm_margin(m["margin"]) != _cmp_norm_margin(u["expect_margin"]):
+                ok = False; rec["status"] = "margin_mismatch"
+            if u.get("expect_winner") is not None and m["winner_name"] and \
+               _cmp_person_key(m["winner_name"]) != _cmp_person_key(u["expect_winner"]):
+                ok = False; rec["status"] = "winner_mismatch"
+            if not ok:
+                out["results"].append(rec); continue
+            if apply:
+                conn.execute("UPDATE cmp_matches SET margin = ? WHERE id = ?",
+                             (u["to"], m["id"]))
+                rec["status"] = "applied"
+            else:
+                rec["status"] = "would_apply"
+            out["results"].append(rec)
+        if apply:
+            conn.commit()
+    return out
+
+
 def cmp_clear_match(pool_id: int, player1: str, player2: str, db_path=None) -> None:
     p1, p2 = sorted([player1, player2])
     with _connect(db_path) as conn:

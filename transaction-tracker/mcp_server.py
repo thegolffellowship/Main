@@ -1433,6 +1433,19 @@ def _scoring_dispatch(url: str, extract: str):
             return json.dumps(db.cmp_reconcile_hole_results(
                 season=(_s.strip() or None), chapter=(_c.strip() or None)),
                 indent=2, default=str)
+        if cmd == "scoring-mp-relabel-extrahole":
+            # Kerry 2026-07-17: relabel the two a9.17 extra-hole margins stored
+            # as '1 UP' → '10H' (Ryder Cup: holes played + H). Winner/records/
+            # seeding untouched. arg "apply" writes; anything else is dry-run.
+            _apply = (arg or "").strip().lower() == "apply"
+            _upd = [
+                {"players": ["Luke Youngs", "Mike Marques"], "to": "10H",
+                 "expect_margin": "1 UP", "expect_winner": "Luke Youngs"},
+                {"players": ["Kelly Barna", "Neal Cloer"], "to": "10H",
+                 "expect_margin": "1 UP", "expect_winner": "Kelly Barna"},
+            ]
+            return json.dumps(db.cmp_relabel_margins(
+                _upd, chapter="Austin", apply=_apply), indent=2, default=str)
         if cmd == "scoring-mp-import-gg":
             # Kerry 2026-07-17 (schema-ratified): walk the tournament_results
             # widget (url = .../leagues/<lid>/widgets/tournament_results?
