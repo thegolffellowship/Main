@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.117.2";
+window.TGF_VERSION = "2.117.3";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.117.3",
+    date: "2026-07-17",
+    changes: [
+      "D-MP register: game-engine.md updated to the closed D-MP-01→09 register (D-MP-03 random default, D-MP-04 P1–P4 asymmetric placement incl. the index-snapshot → enrollment-date tiebreak, D-MP-08 consolation + fallback split, D-MP-09 unified 3-match counting + points-of-3 rank chain), and the two stale #181 lines folded (flat $20 bonus; N=4 ladder $97/$38 → $100.10/$39.90).",
+      "D-MP-09 pool-standings engine: match_play.dmp09_pool_standings() — pure function ranking a pool under the ratified rule (first-3-by-date counting so a forced 4th match counts only for its opponent; match points of 3 with ½-ties → aggregate head-to-head → pool Stableford). Unit-checked against pool-of-4/5/3 and draw/H2H cases.",
+      "READ-ONLY standings diff (#217 step 1): database.cmp_standings_diff_dmp09() recomputes both chapters' 2026 pool standings under D-MP-09 and diffs against the live standings that seeded the knockouts, flagging any advancer or winner/runner-up change (verdict clean vs review). Reachable via the probe_golf_genius bridge extract='scoring-mp-standings-diff'. Changes no data — the live brackets and played results stand.",
+    ],
+  },
   {
     version: "2.117.2",
     date: "2026-07-17",

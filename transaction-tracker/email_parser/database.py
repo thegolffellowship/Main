@@ -24621,6 +24621,115 @@ def cmp_get_bracket(season: str, chapter: str, db_path=None) -> list[dict]:
         return [dict(r) for r in rows]
 
 
+def cmp_standings_diff_dmp09(db_path=None, advance_per_pool: int = 2) -> dict:
+    """READ-ONLY (#217 step 1). Recompute every chapter/season's pool
+    standings under the ratified D-MP-09 rule (first-3-by-date counting,
+    match points-of-3 with ½-ties, aggregate H2H) and DIFF against the
+    CURRENT live standings (wins → W−L → Stableford, all matches) that
+    were used to seed the knockouts. Changes nothing.
+
+    Kerry's expectation is CLEAN — no advancer or seed-order change. A
+    row 'moves' only matters if it flips advancement (top-2) or the
+    winner/runner-up order (which sets the P1 seed tier). Anything that
+    moves is a documentation decision; the live bracket stands.
+
+    Returns per (season, chapter): per-pool old vs new order, whether
+    advancers or the winner/runner-up pair changed, the full row detail,
+    and the seeded-bracket occupants for cross-check. Top-level
+    `verdict` is 'clean' iff no advancer/winner-runnerup change anywhere.
+    """
+    from email_parser.match_play import dmp09_pool_standings
+
+    out = {"verdict": "clean", "chapters": [], "moves": []}
+    with _connect(db_path) as conn:
+        pairs = conn.execute(
+            "SELECT DISTINCT season, chapter FROM cmp_pools ORDER BY season, chapter"
+        ).fetchall()
+
+    for pr in pairs:
+        season, chapter = pr["season"], pr["chapter"]
+        old = cmp_get_standings(season, chapter, db_path=db_path,
+                                advance_per_pool=advance_per_pool)
+        old_by_pool: dict = {}
+        for r in old:
+            old_by_pool.setdefault(r["pool_name"], []).append(r)
+
+        bracket = cmp_get_bracket(season, chapter, db_path=db_path)
+        seeded = sorted(
+            [{"seed": b.get("player_seed"), "name": b.get("player_name"),
+              "wildcard": b.get("is_wildcard"), "round": b.get("round"),
+              "slot": b.get("slot")}
+             for b in bracket if b.get("player_name")
+             and b.get("player_seed") is not None],
+            key=lambda x: x["seed"])
+
+        ch = {"season": season, "chapter": chapter, "pools": [],
+              "seeded_bracket": seeded}
+        with _connect(db_path) as conn:
+            pools = [dict(p) for p in conn.execute(
+                "SELECT id, pool_name FROM cmp_pools WHERE season=? AND chapter=? "
+                "ORDER BY pool_name", (season, chapter)).fetchall()]
+            members_by_pool = {}
+            for pool in pools:
+                members_by_pool[pool["id"]] = [
+                    r["customer_name"] for r in conn.execute(
+                        "SELECT customer_name FROM cmp_pool_members WHERE pool_id=?",
+                        (pool["id"],)).fetchall()]
+        for pool in pools:
+            members = members_by_pool[pool["id"]]
+            matches = cmp_get_matches(pool["id"], db_path=db_path)
+            new = dmp09_pool_standings(members, matches,
+                                       advance_per_pool=advance_per_pool)
+            old_rows = old_by_pool.get(pool["pool_name"], [])
+            old_order = [r["player_name"] for r in
+                         sorted(old_rows, key=lambda r: r["rank"])]
+            new_order = [r["player_name"] for r in new]
+            old_adv = {r["player_name"] for r in old_rows if r["advances"]}
+            new_adv = {r["player_name"] for r in new if r["advances"]}
+            old_top2 = old_order[:2]
+            new_top2 = new_order[:2]
+            advancers_changed = old_adv != new_adv
+            winner_runnerup_swapped = old_top2 != new_top2
+
+            old_rank = {r["player_name"]: r["rank"] for r in old_rows}
+            rows = []
+            for r in new:
+                nm = r["player_name"]
+                rows.append({
+                    "player": nm,
+                    "old_rank": old_rank.get(nm),
+                    "new_rank": r["rank"],
+                    "moved": old_rank.get(nm) != r["rank"],
+                    "points_of_3": r["points"],
+                    "record": f'{r["wins"]}-{r["losses"]}-{r["draws"]}',
+                    "stableford": r["stableford"],
+                    "played": r["played"], "counted": r["counted"],
+                    "dropped_4th": r["dropped_4th"],
+                    "advances_new": r["advances"],
+                    "advances_old": nm in old_adv,
+                })
+            pool_out = {
+                "pool": pool["pool_name"],
+                "old_order": old_order, "new_order": new_order,
+                "advancers_changed": advancers_changed,
+                "winner_runnerup_swapped": winner_runnerup_swapped,
+                "has_4match_player": any(r["dropped_4th"] for r in new),
+                "rows": rows,
+            }
+            ch["pools"].append(pool_out)
+            if advancers_changed or winner_runnerup_swapped:
+                out["verdict"] = "review"
+                out["moves"].append({
+                    "season": season, "chapter": chapter,
+                    "pool": pool["pool_name"],
+                    "advancers_changed": advancers_changed,
+                    "winner_runnerup_swapped": winner_runnerup_swapped,
+                    "old_order": old_order, "new_order": new_order,
+                })
+        out["chapters"].append(ch)
+    return out
+
+
 def cmp_save_bracket_slot(season: str, chapter: str, round_: str, slot: int,
                            player_name: str | None = None,
                            player_stableford: float | None = None,

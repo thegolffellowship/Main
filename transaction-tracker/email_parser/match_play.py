@@ -367,3 +367,133 @@ def _ordinal(n: int) -> str:
     else:
         suffix = {1: "st", 2: "nd", 3: "rd"}.get(n % 10, "th")
     return f"{n}{suffix}"
+
+
+# ---------------------------------------------------------------------------
+# D-MP-09 pool standings (RATIFIED 2026-07-16/17, mailbox #215/#217)
+# ---------------------------------------------------------------------------
+# Every player's pool standing counts EXACTLY 3 matches, at every pool size.
+# Pools of 4 play a clean round robin (3 each, all count). Pools of 3
+# (5 matches: single RR + two repeats) and pools of 5 (8 matches) force ONE
+# player to a 4th match; that 4th match — the LATEST by date for that player —
+# counts only for the OPPONENT, never for the 4-match player (record AND
+# Stableford). Rank = match points of 3 (win 1, TIE ½, loss 0) → aggregate
+# head-to-head among the tied set (across repeat meetings; empty → fall
+# through) → pool Stableford (first-3 only). Supersedes wins → W−L →
+# Stableford. Pure function — DB read/write stays in database.py.
+
+def _mp_match_sort_key(m: dict):
+    """Deterministic chronological order for the 'first 3 by date' cut."""
+    return (str(m.get("match_date") or m.get("played_at") or ""),
+            str(m.get("played_at") or ""),
+            m.get("id") or 0)
+
+
+def _mp_is_played(m: dict) -> bool:
+    if m.get("played_at"):
+        return True
+    return (m.get("winner_name") is not None
+            or m.get("player1_stableford") is not None
+            or m.get("player2_stableford") is not None)
+
+
+def _mp_is_draw(m: dict) -> bool:
+    margin = (m.get("margin") or "").strip().lower()
+    if margin in ("halved", "all square", "as"):
+        return True
+    return (m.get("winner_name") is None
+            and m.get("player1_stableford") is not None
+            and m.get("player2_stableford") is not None)
+
+
+def dmp09_pool_standings(members: list[str], matches: list[dict],
+                         advance_per_pool: int = 2) -> list[dict]:
+    """Rank one pool under D-MP-09. Pure function (no DB/Flask).
+
+    members: player names in the pool.
+    matches: cmp_matches rows (dicts) for this pool — keys player1_name,
+             player2_name, winner_name, margin, player1_stableford,
+             player2_stableford, match_date, played_at, id.
+    Returns rows best-first with rank, points (of 3), W/L/D, stableford
+    (first-3), counted/played counts, dropped_4th, advances.
+    """
+    played = [m for m in matches if _mp_is_played(m)]
+
+    by_player: dict[str, list[dict]] = {n: [] for n in members}
+    for m in played:
+        by_player.setdefault(m["player1_name"], [])
+        by_player.setdefault(m["player2_name"], [])
+    for m in played:
+        by_player[m["player1_name"]].append(m)
+        by_player[m["player2_name"]].append(m)
+
+    # The matches that COUNT for each player: their first 3 by date.
+    counted: dict[str, set] = {}
+    for name, ms in by_player.items():
+        ms_sorted = sorted(ms, key=_mp_match_sort_key)
+        counted[name] = {id(m) for m in ms_sorted[:3]}
+
+    def _result_for(name, m):
+        p1, p2 = m["player1_name"], m["player2_name"]
+        sf = (m.get("player1_stableford") if name == p1
+              else m.get("player2_stableford")) or 0.0
+        if _mp_is_draw(m):
+            return 0.5, sf, 0, 0, 1
+        w = m.get("winner_name")
+        if w == name:
+            return 1.0, sf, 1, 0, 0
+        if w in (p1, p2):
+            return 0.0, sf, 0, 1, 0
+        return 0.0, sf, 0, 0, 0
+
+    stats = {}
+    for name, ms in by_player.items():
+        pts = sf = 0.0
+        wins = losses = draws = cnt = 0
+        for m in ms:
+            if id(m) not in counted[name]:
+                continue  # the forced 4th — counts only for the opponent
+            p, s, w, l, d = _result_for(name, m)
+            pts += p; sf += s; wins += w; losses += l; draws += d; cnt += 1
+        stats[name] = {"points": pts, "stableford": round(sf, 1),
+                       "wins": wins, "losses": losses, "draws": draws,
+                       "counted": cnt, "played": len(ms),
+                       "dropped_4th": len(ms) > cnt}
+
+    def _h2h_points(name, group):
+        """Aggregate match points `name` earned vs the tied set, counted
+        matches only (the dropped 4th never advantages its player)."""
+        others = set(group) - {name}
+        tot = 0.0
+        for m in by_player[name]:
+            if id(m) not in counted[name]:
+                continue
+            opp = (m["player2_name"] if m["player1_name"] == name
+                   else m["player1_name"])
+            if opp in others:
+                tot += _result_for(name, m)[0]
+        return tot
+
+    order = sorted(stats.keys(), key=lambda n: -stats[n]["points"])
+    ranked: list[str] = []
+    i = 0
+    while i < len(order):
+        j = i
+        while (j < len(order)
+               and stats[order[j]]["points"] == stats[order[i]]["points"]):
+            j += 1
+        group = order[i:j]
+        if len(group) > 1:
+            group = sorted(group, key=lambda n: (-_h2h_points(n, group),
+                                                 -stats[n]["stableford"]))
+        ranked.extend(group)
+        i = j
+
+    return [{"player_name": n, "rank": r,
+             "points": stats[n]["points"], "wins": stats[n]["wins"],
+             "losses": stats[n]["losses"], "draws": stats[n]["draws"],
+             "stableford": stats[n]["stableford"],
+             "counted": stats[n]["counted"], "played": stats[n]["played"],
+             "dropped_4th": stats[n]["dropped_4th"],
+             "advances": r <= advance_per_pool}
+            for r, n in enumerate(ranked, 1)]
