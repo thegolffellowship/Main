@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.118.9";
+window.TGF_VERSION = "2.118.10";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.118.10",
+    date: "2026-07-17",
+    changes: [
+      "Docs: Match Play registration/eligibility for CA. Added the front-of-lifecycle stage — signup timing + prerequisites, notably an established-handicap GATE (a player without an established handicap is held out until X qualifying rounds; X, what qualifies, hard-block vs flag, and refund/hold/defer interaction TBD), plus membership/chapter/good-standing prerequisites. Captured in the CA handoff (section 0) and game-engine.md D-MP-11.",
+    ],
+  },
   {
     version: "2.118.9",
     date: "2026-07-17",
