@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.118.12";
+window.TGF_VERSION = "2.118.13";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.118.13",
+    date: "2026-07-17",
+    changes: [
+      "Match Play: relabel the two a9.17 extra-hole margins from 1 UP to 10H (Kerry-directed). Youngs def. Marques and Barna def. Cloer were all square through regulation and decided on an extra hole; the recorded 1 UP hid the sudden-death fact. cmp_relabel_margins() updates ONLY the margin (winner, W-L-T records, knockout qualifiers, and seeding untouched), guarded so it only writes when the current margin/winner match the expected values. Bridge scoring-mp-relabel-extrahole (dry-run by default; :apply writes).",
+    ],
+  },
   {
     version: "2.118.12",
     date: "2026-07-17",
