@@ -22701,6 +22701,17 @@ def get_all_handicap_players(db_path: str | Path | None = None) -> list[dict]:
         index_prev = compute_handicap_index(diffs[1:], cfg) if len(diffs) > 1 else None
         trend = (round(index - index_prev, 1)
                  if index is not None and index_prev is not None else None)
+        # Suppress the trend mark for players idle 30+ days (Kerry 2026-07-17):
+        # a trend arrow off stale rounds is misleading, so drop it once the
+        # player hasn't posted a round in over a month.
+        if trend is not None and row["latest_round_date"]:
+            try:
+                _last = datetime.strptime(
+                    str(row["latest_round_date"])[:10], "%Y-%m-%d").date()
+                if (today_central() - _last).days > 30:
+                    trend = None
+            except (ValueError, TypeError):
+                pass
         players.append({
             "player_name": name,
             "customer_name": row["customer_name"],

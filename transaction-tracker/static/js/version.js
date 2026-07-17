@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.119.1";
+window.TGF_VERSION = "2.119.2";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.119.2",
+    date: "2026-07-17",
+    changes: [
+      "Handicaps: suppress the trend arrow for players idle 30+ days (Kerry). A trend mark computed off stale rounds is misleading, so get_all_handicap_players now nulls handicap_trend when the player has not posted a round in more than 30 days (measured to today, Central). The row then shows the neutral — in place of the up/down arrow, the same no-trend state new players already display. Index and round counts are unaffected.",
+    ],
+  },
   {
     version: "2.119.1",
     date: "2026-07-17",
