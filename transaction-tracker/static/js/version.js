@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.116.4";
+window.TGF_VERSION = "2.116.5";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.116.5",
+    date: "2026-07-17",
+    changes: [
+      "get_tracker_source read-only whitelist now includes handoffs/ (#212, Kerry) — opens the design-claude Match Play canvas handoffs to MCP read so platform-claude's visual-pass review can pull them. Head of the critical path for the member-facing Match Play visual rollout; ships ahead of the D-MP encode work.",
+    ],
+  },
   {
     version: "2.116.4",
     date: "2026-07-16",
