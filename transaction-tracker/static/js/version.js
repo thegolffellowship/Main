@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.118.11";
+window.TGF_VERSION = "2.118.12";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.118.12",
+    date: "2026-07-17",
+    changes: [
+      "Docs: extra-hole notation corrected to Ryder Cup shorthand (Kerry) — holes PLAYED + H (a 9-hole match decided on the first extra hole = 10H; holes played, not the physical hole number, so a shotgun match started on 5 also reads 10H). Added the extra-holes feature requirement: score entry for the extra hole(s) that ALSO configures the handicap pops (continue the off-lowest allocation onto extra holes by stroke index so net decides the hole), recorded as NH. Captured in the CA handoff and game-engine.md D-MP-11.",
+    ],
+  },
   {
     version: "2.118.11",
     date: "2026-07-17",

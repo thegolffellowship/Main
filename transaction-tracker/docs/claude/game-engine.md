@@ -365,13 +365,14 @@ below wherever they conflict.
     dots must be recorded and shown.
   - **Extra holes / sudden death (GAP — not modeled).** A match all-square after
     regulation goes to extra hole(s); the winner wins the next hole (e.g. Youngs
-    v Marques and Barna v Cloer were AS after 9, both played hole 10, decided
-    there — currently stored `1 UP`, GG's 9-hole card shows AS). The Tracker has
-    NO extra-hole entity; needs one (winner + hole(s) + result) distinct from
-    regulation, plus a member-display treatment ("decided in a playoff → X").
-    **Notation (proposed):** record an extra-hole win as the hole it ended on —
-    `10H` (won on the 10th; H = hole), 18-hole analog "19th hole" — rather than
-    `1 UP`, which hides the sudden-death fact. CA to ratify the label.
+    v Marques and Barna v Cloer were AS after 9, decided on the first extra hole
+    — currently stored `1 UP`, GG's 9-hole card shows AS). The Tracker has NO
+    extra-hole entity. **Notation (Ryder Cup, Kerry):** holes PLAYED + "H" — a
+    9-hole match decided on the first extra hole = `10H` (holes played, not the
+    physical hole number; a shotgun match started on 5 also reads `10H`). **Needs:
+    score entry for the extra hole(s) that ALSO configures handicap pops**
+    (continue the off-lowest allocation onto extra holes by stroke index → net
+    decides the hole), the recorded `NH` result, and a member-display treatment.
   - **Putt-offs (GAP).** Another all-square resolution class (Chandler/Peterson
     s9.12, Niester/Wade s9.15). Needs a recordation path + display.
   - **All-square resolution ladder.** Canonical order (extra holes → putt-off →
