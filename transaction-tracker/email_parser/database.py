@@ -24541,7 +24541,53 @@ def cmp_get_standings(season: str, chapter: str, db_path=None,
     Advancement (top advance_per_pool, from the versioned config) = W/L/D
     record; tiebreaker = total Stableford points.
     Bracket seeding = total Stableford points across all pool matches.
+
+    D-MP-09 (config-gated): when the season's PINNED config carries
+    pool_rank_rule == "dmp09" (ratified 2026-07-16/17, mailbox #215/#217),
+    ranking switches to the register rule — every player counts exactly 3
+    matches (first-3-by-date; a forced 4th counts only for its opponent),
+    rank = match points of 3 (win 1, tie ½, loss 0) → aggregate H2H →
+    pool Stableford. Seasons pinned to an older version keep the legacy
+    wins → W−L → Stableford sort (past events frozen, Principle 4).
     """
+    rule = "legacy"
+    try:
+        _ac = sct_get_active_config("match_play", season, chapter, db_path=db_path)
+        if _ac and (_ac.get("config") or {}).get("pool_rank_rule") == "dmp09":
+            rule = "dmp09"
+    except Exception:
+        rule = "legacy"
+
+    if rule == "dmp09":
+        from email_parser.match_play import dmp09_pool_standings
+        with _connect(db_path) as conn:
+            pools = [dict(p) for p in conn.execute(
+                "SELECT id, pool_name FROM cmp_pools WHERE season=? AND chapter=? "
+                "ORDER BY pool_name", (season, chapter)).fetchall()]
+            members_by_pool = {}
+            for pool in pools:
+                members_by_pool[pool["id"]] = [
+                    r["customer_name"] for r in conn.execute(
+                        "SELECT customer_name FROM cmp_pool_members WHERE pool_id=?",
+                        (pool["id"],)).fetchall()]
+        standings = []
+        for pool in pools:
+            ranked = dmp09_pool_standings(
+                members_by_pool[pool["id"]],
+                cmp_get_matches(pool["id"], db_path=db_path),
+                advance_per_pool=advance_per_pool)
+            for r in ranked:
+                standings.append({
+                    "pool_id": pool["id"], "pool_name": pool["pool_name"],
+                    "player_name": r["player_name"], "rank": r["rank"],
+                    "wins": r["wins"], "losses": r["losses"], "draws": r["draws"],
+                    "stableford_pts": r["stableford"],
+                    "match_points": r["points"], "counted": r["counted"],
+                    "played": r["played"], "dropped_4th": r["dropped_4th"],
+                    "advances": r["advances"],
+                })
+        return standings
+
     with _connect(db_path) as conn:
         pools = conn.execute(
             "SELECT id, pool_name FROM cmp_pools WHERE season = ? AND chapter = ? ORDER BY pool_name",
@@ -25021,6 +25067,71 @@ def sct_pin_snapshot(kind: str, season: str, chapter: str,
             (season, chapter, t["id"]),
         ).fetchone()
         return dict(snap)
+
+
+def cmp_repin_2026_to_dmp_register(by: str | None = None, db_path=None) -> dict:
+    """RE-PIN (#223, Kerry-approved 2026-07-17). Author a new match_play
+    config version carrying the ratified D-MP-01→09 register as rules-as-data,
+    then pin every 2026 season/chapter that has pools to it.
+
+    The new version overlays the register flags onto the current base config
+    (ladders/structure unchanged — sct_save_version re-validates every N):
+      - pool_rank_rule = 'dmp09'       (D-MP-09; honored live by cmp_get_standings)
+      - pool_assignment_mode = 'random' (D-MP-03 default)
+      - seed_placement = 'p1_p4'       (D-MP-04 P1–P4; seeding-code adoption tracked)
+      - consolation {min_n, primary, fallback} (D-MP-08)
+      - tie_policy stays 'split_combined_places' (the D-MP-08 fallback)
+      - seeding_knockout4 stays 'cross_pool' (the unchanged 4-player exception)
+
+    Idempotent-safe: re-running authors another version and re-pins to it;
+    the pin is a pointer, snapshots update in place. Returns the new
+    version id/no and the list of pinned (season, chapter). Only pins 2026.
+    """
+    base = sct_get_active_config("match_play", db_path=db_path)
+    if not base:
+        raise ValueError("No match_play template/config found")
+    cfg = dict(base["config"])  # shallow copy of the current base
+    cfg["pool_rank_rule"] = "dmp09"
+    cfg.setdefault("pool_assignment_mode", "random")
+    cfg["pool_assignment_mode"] = "random"
+    cfg["seed_placement"] = "p1_p4"
+    cfg["seeding_knockout4"] = cfg.get("seeding_knockout4", "cross_pool")
+    cfg["tie_policy"] = cfg.get("tie_policy", "split_combined_places")
+    cfg["consolation"] = {
+        "min_field_n": 6,          # no consolation at N=4–5
+        "primary": "match",         # SF losers play to decide 3rd vs 4th/none
+        "fallback": "split_combined_places",  # split place money if uncoordinated
+    }
+    cfg["dmp_register"] = "D-MP-01..09 (2026-07-16/17)"
+
+    saved = sct_save_version(
+        "match_play", cfg, saved_by=by or "tracker-claude (#223 re-pin)",
+        notes="D-MP-01..09 register: D-MP-09 pool counting/rank (live), "
+              "D-MP-03 random default, D-MP-04 P1–P4 seed placement, "
+              "D-MP-08 consolation+fallback. Re-pin approved by Kerry #223.",
+        db_path=db_path)
+    vid = saved["version_id"]
+
+    with _connect(db_path) as conn:
+        pairs = [dict(r) for r in conn.execute(
+            "SELECT DISTINCT season, chapter FROM cmp_pools WHERE season = '2026' "
+            "ORDER BY chapter").fetchall()]
+    pinned = []
+    for pr in pairs:
+        snap = sct_pin_snapshot("match_play", pr["season"], pr["chapter"],
+                                version_id=vid, by=by or "tracker-claude",
+                                db_path=db_path)
+        pinned.append({"season": pr["season"], "chapter": pr["chapter"],
+                       "version_id": snap["version_id"],
+                       "snapped_at": snap.get("snapped_at")})
+    return {"version_id": vid, "version_no": saved["version_no"],
+            "pinned": pinned, "config_flags": {
+                "pool_rank_rule": cfg["pool_rank_rule"],
+                "pool_assignment_mode": cfg["pool_assignment_mode"],
+                "seed_placement": cfg["seed_placement"],
+                "seeding_knockout4": cfg["seeding_knockout4"],
+                "consolation": cfg["consolation"],
+                "tie_policy": cfg["tie_policy"]}}
 
 
 # ---------------------------------------------------------------------------
