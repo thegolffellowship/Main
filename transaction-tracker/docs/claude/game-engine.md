@@ -352,7 +352,10 @@ below wherever they conflict.
   Match Play documentation; several are Tracker GAPS).** The GG-source audit
   (`cmp_import_gg_match_play`, `email_parser/gg_match_play.py`) surfaced
   mechanics that affect SETUP, RECORDATION, and WINNER DETERMINATION and are
-  not yet fully modeled:
+  not yet fully modeled. **North star (Kerry): simplicity for MANY chapters +
+  scaling** — one rule over per-chapter special cases, derive-don't-ask,
+  near-zero bespoke setup per chapter (the future uniform allowance is the
+  model for collapsing per-chapter divergence):
   - **Starting hole (shotgun).** Each match may begin on a different hole
     (Niester/Wade started on 5; a9.17 matches on 10, the back nine). Winner /
     margin must be computed in PLAY ORDER from the starting hole ("X up with Y
@@ -373,6 +376,14 @@ below wherever they conflict.
     s9.12, Niester/Wade s9.15). Needs a recordation path + display.
   - **All-square resolution ladder.** Canonical order (extra holes → putt-off →
     …?) and how each is recorded and shown is unspecified — for CA.
+  - **Tie-resolution decision flow (ultimate-app).** At end of regulation on an
+    All Square match the app presents STAGE-AWARE options (rules-derived): a
+    **pool** round (tie-allowed stage) offers "End in a tie / Halved" (½ each
+    under D-MP-09); a **knockout** (must-produce-a-winner) prompts "How do you
+    want to determine the match? Putt-Off or Extra Holes?", surfacing practical
+    constraints ("has to be completed tonight" — daylight/pace/availability).
+    The choice feeds recordation (extra holes / putt-off) + display and yields
+    the winner or recorded halve.
   - **Matches span events.** A match may be played/made-up at a DIFFERENT event
     than its home/pool event (Hogue/Kirksey is on a9.12 in our data, a9.17 in
     GG). Recordation must not tie a match to one event; alignment is by pool
