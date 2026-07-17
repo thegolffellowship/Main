@@ -1367,6 +1367,8 @@ def _scoring_dispatch(url: str, extract: str):
       scoring-gg-results:<event>   GG-recorded winners for one event
       scoring-hcp-preview:<event>  read-only self-derived handicap preview
       scoring-hcp-import:<event>[|apply]  self-derive handicap rounds (WHS NDB)
+      scoring-mp-reconcile75[:<season>|<chapter>|<allow>]  match-play reconcile
+                                   with off-lowest per-chapter allowance
     """
     if not extract.startswith("scoring-"):
         return None
@@ -1427,6 +1429,19 @@ def _scoring_dispatch(url: str, extract: str):
             return json.dumps(db.cmp_reconcile_hole_results(
                 season=(_s.strip() or None), chapter=(_c.strip() or None)),
                 indent=2, default=str)
+        if cmd == "scoring-mp-reconcile75":
+            # READ-ONLY (Kerry 2026-07-17): the CORRECT match-play reconciler.
+            # Re-derives each match from imported GG per-hole GROSS using TGF's
+            # real OFF-LOWEST pops with PER-CHAPTER allowance (San Antonio 75%,
+            # Austin 100%). Supersedes scoring-mp-reconcile (which used the
+            # stroke-play 100% full-field strokes_received). arg: "" (all) or
+            # "<season>|<chapter>" or "<season>|<chapter>|<forced_allowance>".
+            _p = [x.strip() for x in (arg or "").split("|")]
+            _s = _p[0] if len(_p) > 0 and _p[0] else None
+            _c = _p[1] if len(_p) > 1 and _p[1] else None
+            _a = float(_p[2]) if len(_p) > 2 and _p[2] else None
+            return json.dumps(db.cmp_reconcile_match_play_75(
+                season=_s, chapter=_c, allowance=_a), indent=2, default=str)
         if cmd == "scoring-sweep-i2":
             # I-2 (READ-ONLY): ×0.96 multiplier-removal impact — per-player
             # index with/without the 0.96 factor, delta, and whole-number PH
