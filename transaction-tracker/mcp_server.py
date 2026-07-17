@@ -1369,6 +1369,10 @@ def _scoring_dispatch(url: str, extract: str):
       scoring-hcp-import:<event>[|apply]  self-derive handicap rounds (WHS NDB)
       scoring-mp-reconcile75[:<season>|<chapter>|<allow>]  match-play reconcile
                                    with off-lowest per-chapter allowance
+      scoring-mp-import-gg[:<round>|verify[:<round>]]  snapshot GG's own
+                                   match-play detail (start hole + NET per-hole
+                                   winner/strokes) onto cmp_matches; url = the
+                                   tournament_results widget
     """
     if not extract.startswith("scoring-"):
         return None
@@ -1429,6 +1433,27 @@ def _scoring_dispatch(url: str, extract: str):
             return json.dumps(db.cmp_reconcile_hole_results(
                 season=(_s.strip() or None), chapter=(_c.strip() or None)),
                 indent=2, default=str)
+        if cmd == "scoring-mp-import-gg":
+            # Kerry 2026-07-17 (schema-ratified): walk the tournament_results
+            # widget (url = .../leagues/<lid>/widgets/tournament_results?
+            # shared=false), pull GG's OWN match-play detail (starting hole +
+            # per-hole NET winner/strokes + margin) for every match, snapshot
+            # it onto cmp_matches.gg_match_detail, and report gg-vs-stored.
+            # Time-budgeted — repeat until rounds_left == 0. arg forms:
+            #   ""            store + verify, all rounds (budgeted)
+            #   "<round_id>"  one round only
+            #   "verify"      verify-only, do not store
+            #   "verify:<r>"  verify-only, one round
+            a = (arg or "").strip()
+            store = True
+            rnd = None
+            if a.startswith("verify"):
+                store = False
+                rnd = a.partition(":")[2].strip() or None
+            elif a:
+                rnd = a
+            return json.dumps(db.cmp_import_gg_match_play(
+                url, only_round=rnd, store=store), indent=2, default=str)
         if cmd == "scoring-mp-reconcile75":
             # READ-ONLY (Kerry 2026-07-17): the CORRECT match-play reconciler.
             # Re-derives each match from imported GG per-hole GROSS using TGF's

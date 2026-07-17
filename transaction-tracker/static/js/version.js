@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.118.3";
+window.TGF_VERSION = "2.118.4";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.118.4",
+    date: "2026-07-17",
+    changes: [
+      "Match Play GG source importer (Kerry-ratified, schema): reads GG's OWN computed match-play detail as the audit source instead of re-deriving it. New email_parser/gg_match_play.py parses each match's /tournaments2/details/<agg> fragment for the STARTING HOLE (GG's starting_hole_mark — shotgun matches start on different holes, e.g. Niester/Wade on 5), the per-hole NET winner flag (GG's own match row), each player's per-hole gross, and the handicap-stroke dots (NET matches). Reading GG's winner flags in PLAY ORDER from the start hole reproduces the recorded winner + margin exactly (validated: a9.16 REYES/JENKINS → start hole 2, JENKINS 5&4, REYES stroked on 8 of 9). cmp_import_gg_match_play() walks the tournament_results widget on a portal, finds each round's MATCH PLAY game, and snapshots the detail onto the new cmp_matches.gg_match_detail column, keyed to the stored match by event + player-name tokens. DISPLAY-ONLY: it never overwrites the frozen winner/margin/records/seeding — any GG-vs-stored disagreement is reported, not applied. Bridge extract='scoring-mp-import-gg[:<round>|verify]'.",
+    ],
+  },
   {
     version: "2.118.3",
     date: "2026-07-17",

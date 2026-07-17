@@ -3333,6 +3333,15 @@ def init_db(db_path: str | Path | None = None) -> None:
             ("player1_id",         "INTEGER REFERENCES customers(customer_id)"),
             ("player2_id",         "INTEGER REFERENCES customers(customer_id)"),
             ("winner_id",          "INTEGER REFERENCES customers(customer_id)"),
+            # GG match-play detail snapshot (Kerry 2026-07-17): JSON
+            # {start_hole, holes:[{hole,order,p1_gross,p2_gross,p1_strokes,
+            # p2_strokes,winner}], gg_winner_name, gg_margin, source_url,
+            # imported_at}. Read from GG's own /tournaments2/details/<agg>
+            # match fragment (starting hole + per-hole winner + NET strokes).
+            # DISPLAY-ONLY: drives the member scoreboard dots + expandable
+            # scorecard in play order from the start hole. Never overrides the
+            # frozen winner_name/margin — a mismatch is surfaced, not applied.
+            ("gg_match_detail",    "TEXT"),
         ]:
             try:
                 conn.execute(f"ALTER TABLE cmp_matches ADD COLUMN {_col} {_def}")
@@ -24901,6 +24910,156 @@ def cmp_reconcile_match_play_75(season: str | None = None,
         out["mismatch_count"] = len(out["mismatches"])
         out["putt_off_count"] = len(out["putt_offs"])
         out["uncheckable_count"] = len(out["uncheckable"])
+        return out
+
+
+def _cmp_name_tokens(name: str) -> frozenset:
+    """Order-insensitive comparable identity from a display name. Strips a
+    trailing 'TGF <chapter>' club label GG appends. 'REYES, Isaac TGF Austin'
+    and 'Isaac Reyes' both → frozenset({'reyes','isaac'})."""
+    n = re.sub(r"\bTGF\b.*$", "", name or "", flags=re.I)
+    return frozenset(t for t in re.findall(r"[a-z]+", n.lower()) if len(t) > 1)
+
+
+def cmp_import_gg_match_play(widget_url: str, db_path: str | Path = DB_PATH,
+                             time_budget: float = 42.0,
+                             only_round: str | None = None,
+                             store: bool = True) -> dict:
+    """Walk a portal's tournament_results widget, pull GG's OWN match-play
+    detail for every match, and snapshot it onto cmp_matches.gg_match_detail
+    (Kerry 2026-07-17). This is the AUDIT-THE-SOURCE path: GG computed the
+    starting hole, the 75%/100% off-lowest NET strokes, the per-hole winner,
+    and the margin — we read it, we do not recompute it.
+
+    Per round: find the 'MATCH PLAY' game link → /v2tournaments/<tid> →
+    parse_tournament_aggregates → /tournaments2/details/<agg> (XHR) →
+    parse_match_play_detail. Match each GG pair to a cmp_matches row by event
+    code + both players' name tokens. Stores the snapshot (unless store=False)
+    and ALWAYS reports gg_winner/margin vs our FROZEN winner/margin — never
+    overwrites the stored result; a disagreement is surfaced for review.
+
+    Time-budgeted like import_gg_game_results — call repeatedly until
+    rounds_left == 0. widget_url =
+    .../leagues/<league_id>/widgets/tournament_results?shared=false
+    """
+    from time import monotonic
+    from urllib.parse import urlparse, parse_qs, urlencode, urlunparse
+    from golf_genius_sync import (fetch_public_page, parse_page_structure,
+                                  parse_tournament_aggregates)
+    from email_parser.gg_match_play import parse_match_play_detail
+
+    started = monotonic()
+    parts = urlparse(widget_url)
+    base_host = f"https://{parts.netloc}"
+    qs = parse_qs(parts.query)
+    forced = only_round or (qs.pop("round", [None]) or [None])[0]
+    base_url = urlunparse(parts._replace(query=urlencode(qs, doseq=True)))
+
+    def fetch(url, xhr=False):
+        page = fetch_public_page(url, xhr=xhr)
+        if page["status_code"] != 200:
+            raise RuntimeError(f"GG HTTP {page['status_code']} for {url}")
+        return page["html"]
+
+    html = fetch(base_url)
+    sel = re.search(r'<select[^>]*name="round"[^>]*>(.*?)</select>', html, re.S)
+    options = re.findall(r'<option[^>]*value="(\d+)"[^>]*>(.*?)</option>',
+                         sel.group(1) if sel else "", re.S)
+    if forced:
+        options = [(rid, lbl) for rid, lbl in options if rid == forced] \
+            or [(forced, "")]
+
+    out = {"host": parts.netloc, "rounds_done": 0, "matches_seen": 0,
+           "stored": 0, "matched": 0, "unmatched": [], "mismatches": [],
+           "aligned": 0, "no_match_play_game": 0, "rounds_left": 0}
+
+    with _connect(db_path) as conn:
+        code_map = {}
+        for r in conn.execute("SELECT id, item_name FROM events").fetchall():
+            m = _GG_EVENT_CODE_COMPOUND_RE.match((r["item_name"] or "").strip())
+            if m:
+                code_map.setdefault(m.group(1).lower(), r["id"])
+
+        def matches_for_event(ev_id):
+            rows = conn.execute(
+                """SELECT m.id, m.player1_name, m.player2_name, m.winner_name,
+                          m.margin FROM cmp_matches m WHERE m.event_id = ?""",
+                (ev_id,)).fetchall()
+            return [dict(r) for r in rows]
+
+        pending = list(options)
+        for rid, lbl in pending:
+            if monotonic() - started > time_budget:
+                break
+            round_url = f"{base_url}&round={rid}"
+            struct = parse_page_structure(fetch(round_url), round_url)
+            links = struct.get("links") or []
+            mp = next((l for l in links
+                       if re.search(r"match\s*play", l.get("text") or "", re.I)
+                       and "/v2tournaments/" in (l.get("href") or "")), None)
+            out["rounds_done"] += 1
+            if not mp:
+                out["no_match_play_game"] += 1
+                continue
+            code_m = re.search(r"\b([as]\d+(?:\.\d+)?)\b", mp.get("text") or "")
+            ev_id = code_map.get(code_m.group(1).lower()) if code_m else None
+            ev_matches = matches_for_event(ev_id) if ev_id else []
+            # index stored matches by the pair's combined token signature
+            by_pair = {}
+            for sm in ev_matches:
+                sig = frozenset([_cmp_name_tokens(sm["player1_name"]),
+                                 _cmp_name_tokens(sm["player2_name"])])
+                by_pair[sig] = sm
+
+            tid_html = fetch(mp["href"])
+            for agg in parse_tournament_aggregates(tid_html):
+                if monotonic() - started > time_budget:
+                    break
+                frag = fetch(f"{base_host}/tournaments2/details/{agg}", xhr=True)
+                d = parse_match_play_detail(frag)
+                if not d or len(d.get("players", [])) < 2:
+                    continue
+                out["matches_seen"] += 1
+                gt = [_cmp_name_tokens(p["name"]) for p in d["players"]]
+                sig = frozenset(gt)
+                sm = by_pair.get(sig)
+                tag = {"event": code_m.group(1) if code_m else None,
+                       "gg_players": [p["name"] for p in d["players"]],
+                       "gg_winner": d["gg_winner_name"],
+                       "gg_margin": d["gg_margin"],
+                       "start_hole": d["start_hole"]}
+                if not sm:
+                    out["unmatched"].append(tag)
+                    continue
+                out["matched"] += 1
+                snap = {**d, "source_url":
+                        f"{base_host}/tournaments2/details/{agg}",
+                        "cmp_match_id": sm["id"]}
+                if store:
+                    conn.execute(
+                        "UPDATE cmp_matches SET gg_match_detail = ? WHERE id = ?",
+                        (json.dumps(snap), sm["id"]))
+                    out["stored"] += 1
+                # verify vs frozen result (never overwrite)
+                sw = (sm.get("winner_name") or "").strip().lower()
+                gw = (d.get("gg_winner_name") or "").strip().lower()
+                sm_marg = _cmp_norm_margin(sm.get("margin"))
+                gg_marg = _cmp_norm_margin(d.get("gg_margin"))
+                win_ok = (not sw) or (not gw) or \
+                    _cmp_name_tokens(sw) == _cmp_name_tokens(gw)
+                marg_ok = (not sm_marg) or (sm_marg == gg_marg)
+                if win_ok and marg_ok:
+                    out["aligned"] += 1
+                else:
+                    out["mismatches"].append(
+                        {**tag, "stored_winner": sm.get("winner_name"),
+                         "stored_margin": sm.get("margin"),
+                         "winner_ok": win_ok, "margin_ok": marg_ok})
+        if store:
+            conn.commit()
+        out["rounds_left"] = max(0, len(options) - out["rounds_done"])
+        out["unmatched_count"] = len(out["unmatched"])
+        out["mismatch_count"] = len(out["mismatches"])
         return out
 
 
