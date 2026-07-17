@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.118.10";
+window.TGF_VERSION = "2.118.11";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.118.11",
+    date: "2026-07-17",
+    changes: [
+      "Docs: Match Play tie-resolution decision flow + scaling north star for CA. Added the ultimate-app requirement that at end of regulation on an All Square match the app presents STAGE-AWARE options (rules-derived): a pool round offers End-in-a-tie/Halved (half point each); a knockout prompts How do you want to determine the match? Putt-Off or Extra Holes, surfacing practical constraints (has to be completed tonight - daylight/pace/availability). Added the overarching design north star: simplicity for MANY chapters + scaling (one rule over per-chapter special cases, derive-dont-ask, near-zero bespoke per-chapter setup; the future uniform allowance is the model). Captured in the CA handoff and game-engine.md D-MP-11.",
+    ],
+  },
   {
     version: "2.118.10",
     date: "2026-07-17",

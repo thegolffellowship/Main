@@ -9,6 +9,18 @@ winners** and belong in the end-to-end Match Play spec. Several are **Tracker ga
 modeled yet). None of this changes any **frozen** result, record, qualifier, or seed —
 reconciliation aligns *display detail* to the recorded winner, never the reverse.
 
+## Design north star (applies to everything below)
+
+**Simplicity for MANY chapters and SCALING.** The spec must scale cleanly to many
+chapters (national), so favor **one rule over per-chapter special cases**, and **derive,
+don't ask** (rules-based defaults; manager/player screens compute, not collect). Minimize
+manual input and per-chapter divergence at every stage. The **future uniform, adjustable
+allowance** (one % for all chapters, replacing the historical SA-75/Austin-100 split, A2)
+is the model: collapse historical per-chapter divergence into a single configurable rule.
+Every decision point (eligibility gate, tie-resolution flow, extra-hole/putt-off
+recordation, display) should be as simple and self-serve as possible so a new chapter
+needs near-zero bespoke setup.
+
 ---
 
 ## 0. REGISTRATION / ELIGIBILITY / PREREQUISITES
@@ -76,6 +88,21 @@ reconciliation aligns *display detail* to the recorded winner, never the reverse
     **play order from the starting hole**, not hole-number order.
 12. **All-square resolution ladder — for CA.** Canonical order (extra holes → putt-off →
     …?) and exactly how each is recorded and shown is unspecified.
+12a. **Tie-resolution DECISION FLOW at end of regulation (ultimate-app requirement).**
+     When a match is All Square after the regulation holes, the app must present
+     **stage-aware guidance/options** — derived from the match's stage (rules-based, not
+     asked blindly):
+     - **Pool round (or any stage where a tie is allowed):** offer **"End in a tie /
+       Halved"** as a valid outcome (counts as a halve — ½ point each under D-MP-09).
+     - **Knockout / any must-produce-a-winner stage:** a tie is NOT allowed → prompt
+       **"How do you want to determine the match?"** → **Putt-Off** or **Extra Holes**.
+     - **Practical constraints surfaced in the prompt:** e.g. *"It has to be completed
+       tonight"* — daylight/time/pace, group availability, course access — nudging toward
+       the feasible method (a putt-off is faster than extra holes).
+     - The chosen method + its result feed **recordation** (B7 extra holes / B8 putt-off)
+       and the **display** (D16/D17), and produce the winner (or the recorded tie).
+     - This is the interactive front end to the all-square ladder (item 12) — the app
+       guides players/manager through the decision at the moment of the tie.
 13. **Off-lowest pops feed net → hole winner** (see A1–A3), at the event's allowance.
 14. **GG is the audit source.** Our own computation must reconcile to GG; where they
     differ it is a concession/putt-off/extra-hole the gross can't show — surfaced, not
