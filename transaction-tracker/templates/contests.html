@@ -1,3 +1,13 @@
+{#- Match Play sandbox wiring (#228). The admin preview route
+    /admin/matchplay-preview forces MATCHPLAY_V2 on; here we derive the
+    Admin/Member toggle from ?view so Kerry can flip the two presentations
+    inside the sandbox WITHOUT any app.py change. Detection is request-based
+    (contests.html is the only edited file). Elsewhere is_sandbox is false
+    and member_mode keeps whatever the route passed. -#}
+{% set is_sandbox = (request is defined and request and request.path == '/admin/matchplay-preview') %}
+{% set SANDBOX_PREVIEW = (SANDBOX_PREVIEW if (SANDBOX_PREVIEW is defined and SANDBOX_PREVIEW) else is_sandbox) %}
+{% set mp_view = (request.args.get('view', 'admin') if (request is defined and request) else 'admin') %}
+{% set member_mode = member_mode or (SANDBOX_PREVIEW and mp_view == 'member') %}
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -679,6 +689,218 @@
             .mpv2 .mp-select, .mpv2 .mp-season-input { min-width: 120px; }
         }
 
+        /* ══════════════════════════════════════════════════════════════
+           NEW member-facing scoreboard system (#228, canvas v2)
+           All rules scoped under .mpv2 — flag-off is untouched.
+           ══════════════════════════════════════════════════════════════ */
+
+        /* ── Sandbox Admin/Member toggle bar ── */
+        .mpv2 .mp-sandbox-bar {
+            position: fixed; top: 0; left: 0; right: 0; z-index: 2000;
+            display: flex; align-items: center; gap: 0.5rem;
+            padding: 0.4rem 0.9rem; background: #1B1B1B; color: #fff;
+            box-shadow: 0 1px 6px rgba(0,0,0,.25);
+        }
+        .mpv2 .mp-sandbox-label {
+            font: 700 0.62rem/1 'Bitter', Georgia, serif; letter-spacing: 0.1em;
+            text-transform: uppercase; color: var(--mp-accent);
+        }
+        .mpv2 .mp-sandbox-spacer { flex: 1; }
+        .mpv2 .mp-sandbox-btn {
+            font: 700 0.72rem/1 'Bitter', Georgia, serif; letter-spacing: 0.04em;
+            text-transform: uppercase; text-decoration: none;
+            color: #D1D5DB; background: #2A2A2A; border: 1px solid #3A3A3A;
+            padding: 0.35rem 0.75rem; border-radius: 9999px;
+        }
+        .mpv2 .mp-sandbox-btn.active { color: #fff; background: var(--mp-accent); border-color: var(--mp-accent); }
+        .mpv2 .mp-sandbox-spacer-block { height: 40px; }
+
+        /* ── Body + How-it-works row ── */
+        .mpv2 .mp-body { max-width: 760px; margin: 0 auto; }
+        .mpv2 .mp-hiw-row { display: flex; justify-content: flex-end; margin: 0 0 0.6rem; }
+
+        /* ── Header card ── */
+        .mpv2 .mp-header-card { margin-bottom: 0.9rem; }
+        .mpv2 .mp-header-title {
+            font: 700 1.4rem/1.15 'Bitter', Georgia, serif; color: var(--text);
+            letter-spacing: -0.01em; margin: 0;
+        }
+        .mpv2 .mp-header-sub {
+            font-size: 0.82rem; color: var(--text-muted); margin-top: 0.3rem;
+            font-variant-numeric: tabular-nums;
+        }
+        .mpv2 .mp-header-admin { display: flex; gap: 0.4rem; margin-top: 0.6rem; flex-wrap: wrap; }
+        .mpv2 .mp-header-warn {
+            margin-top: 0.5rem; font-size: 0.78rem; color: var(--mp-wc-text);
+            background: var(--mp-wc-bg); border-radius: 8px; padding: 0.5rem 0.65rem;
+        }
+
+        /* ── Pill sub-tabs ── */
+        .mpv2 .mp-subtabs {
+            display: inline-flex; gap: 0.25rem; padding: 0.25rem;
+            background: #EFEEEB; border-radius: 9999px; margin-bottom: 1rem;
+        }
+        .mpv2 .mp-subtab {
+            font: 700 0.74rem/1 'Bitter', Georgia, serif; letter-spacing: 0.06em;
+            text-transform: uppercase; color: var(--text-muted);
+            background: transparent; border: none; cursor: pointer;
+            padding: 0.5rem 1.1rem; border-radius: 9999px;
+        }
+        .mpv2 .mp-subtab.active { color: #fff; background: #1B1B1B; }
+
+        /* ── Pool card + standings list ── */
+        .mpv2 .mp-pool { margin-bottom: 1.5rem; }
+        .mpv2 .mp-pool-head {
+            display: flex; align-items: baseline; gap: 0.5rem;
+            padding: 0 0.15rem 0.55rem; border-bottom: 2px solid var(--text);
+        }
+        .mpv2 .mp-pool-name { font: 700 1.05rem/1 'Bitter', Georgia, serif; color: var(--text); }
+        .mpv2 .mp-pool-meta { font-size: 0.75rem; color: var(--text-muted); }
+        .mpv2 .mp-matches-chip {
+            margin-left: auto; font: 700 0.62rem/1 'Bitter', Georgia, serif;
+            letter-spacing: 0.06em; text-transform: uppercase; color: var(--mp-accent);
+            background: #fff; border: 1px solid var(--mp-clay-edge); border-radius: 9999px;
+            padding: 0.3rem 0.6rem; cursor: pointer;
+        }
+        .mpv2 .mp-col-head {
+            display: grid; grid-template-columns: 1.7rem 1fr auto auto 1.1rem;
+            gap: 0.5rem; align-items: center; padding: 0.4rem 0.15rem 0.25rem;
+            font: 700 0.58rem/1 'Bitter', Georgia, serif; letter-spacing: 0.08em;
+            text-transform: uppercase; color: var(--text-placeholder, #9CA3AF);
+        }
+        .mpv2 .mp-col-head .mp-ch-wlt { text-align: center; }
+        .mpv2 .mp-col-head .mp-ch-pts { text-align: right; }
+        .mpv2 .mp-row {
+            display: grid; grid-template-columns: 1.7rem 1fr auto auto 1.1rem;
+            gap: 0.5rem; align-items: center;
+            padding: 0.7rem 0.15rem; border-bottom: 1px solid var(--border);
+        }
+        .mpv2 .mp-row.rank1 { background: #FCF6F1; margin: 0 -0.4rem; padding: 0.7rem 0.55rem; border-radius: 8px; border-bottom: 1px solid var(--border); }
+        .mpv2 .mp-row.wd { opacity: 0.55; }
+        .mpv2 .mp-rank { font: 700 0.9rem/1 'Bitter', Georgia, serif; color: var(--text-muted); font-variant-numeric: tabular-nums; text-align: center; }
+        .mpv2 .mp-row.rank1 .mp-rank { color: var(--mp-accent); }
+        .mpv2 .mp-name-cell { display: flex; align-items: center; gap: 0.4rem; min-width: 0; }
+        .mpv2 .mp-name { font-weight: 700; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .mpv2 .mp-row.wd .mp-name { font-weight: 600; }
+        .mpv2 .mp-chip {
+            font: 700 0.6rem/1 'Bitter', Georgia, serif; flex: none;
+            padding: 0.15rem 0.4rem; border-radius: 6px;
+        }
+        .mpv2 .mp-chip.money { background: var(--mp-money-bg); color: var(--mp-money-text); }
+        .mpv2 .mp-chip.adv { background: var(--mp-money-bg); color: var(--mp-money-text); }
+        .mpv2 .mp-chip.wd { background: var(--mp-wc-bg); color: var(--mp-wc-text); }
+        .mpv2 .mp-dots { display: inline-flex; gap: 0.28rem; justify-content: center; }
+        .mpv2 .mp-dot { width: 11px; height: 11px; border-radius: 50%; flex: none; }
+        .mpv2 .mp-dot.win { background: #16a34a; }
+        .mpv2 .mp-dot.loss { background: #dc2626; }
+        .mpv2 .mp-dot.tie { background: var(--mp-stone); }
+        .mpv2 .mp-dot.empty { background: transparent; border: 1.5px solid #D6D3CC; }
+        .mpv2 .mp-pts { font: 700 1.05rem/1 'Bitter', Georgia, serif; color: var(--text); font-variant-numeric: tabular-nums; text-align: right; }
+        .mpv2 .mp-chev {
+            background: none; border: none; cursor: pointer; color: var(--text-placeholder, #9CA3AF);
+            font-size: 1rem; line-height: 1; padding: 0; transition: transform 0.15s;
+        }
+        .mpv2 .mp-chev.open { transform: rotate(90deg); color: var(--mp-accent); }
+        .mpv2 .mp-expand { padding: 0.5rem 0 0.75rem; }
+        .mpv2 .mp-expand-empty { font-size: 0.76rem; color: var(--text-muted); padding: 0.4rem 0.15rem; }
+        .mpv2 .mp-rank-note {
+            font-size: 0.74rem; color: var(--text-muted); line-height: 1.55;
+            margin-top: 0.5rem; padding: 0 0.15rem;
+        }
+        .mpv2 .mp-rank-note b { color: var(--mp-money-text); }
+
+        /* ── Slate & Clay match strip (score card) ── */
+        .mpv2 .mp-match-card {
+            border: 1px solid var(--border); border-radius: 10px; overflow: hidden;
+            background: #fff; margin-bottom: 0.6rem;
+        }
+        .mpv2 .mp-match-meta {
+            display: flex; align-items: center; justify-content: space-between;
+            gap: 0.5rem; padding: 0.4rem 0.7rem; background: #FAFAF8;
+            font-size: 0.72rem; color: var(--text-muted); font-style: italic;
+            border-bottom: 1px solid var(--border);
+        }
+        .mpv2 .mp-match-meta .status { font-style: normal; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; font-size: 0.62rem; color: var(--text-body, #4B5563); }
+        .mpv2 .mp-match-meta .status.live { color: var(--mp-money-text); }
+        .mpv2 .mp-strip { display: flex; align-items: stretch; min-height: 52px; }
+        .mpv2 .mp-strip-mono {
+            width: 40px; flex: none; display: flex; align-items: center; justify-content: center;
+            font: 700 0.82rem/1 'Bitter', Georgia, serif; color: #fff;
+        }
+        .mpv2 .mp-strip-mono.slate { background: var(--mp-slate); }
+        .mpv2 .mp-strip-mono.clay { background: var(--mp-clay); }
+        .mpv2 .mp-strip-mono.stone { background: var(--mp-stone); }
+        .mpv2 .mp-strip-name {
+            display: flex; flex-direction: column; justify-content: center;
+            padding: 0 0.6rem; min-width: 0; flex: 1;
+        }
+        .mpv2 .mp-strip-name.right { align-items: flex-end; text-align: right; }
+        .mpv2 .mp-strip-name em { font-style: normal; font-size: 0.68rem; color: var(--text-muted); }
+        .mpv2 .mp-strip-name b { font: 700 0.9rem/1.1 'Bitter', Georgia, serif; text-transform: uppercase; letter-spacing: 0.01em; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+        .mpv2 .mp-strip-bar {
+            flex: none; min-width: 84px; display: flex; align-items: center; justify-content: center;
+            color: #fff; font: 700 1.05rem/1 'Bitter', Georgia, serif; letter-spacing: 0.02em;
+            padding: 0 0.5rem;
+        }
+        .mpv2 .mp-strip-bar.slate { background: var(--mp-slate); clip-path: polygon(14px 0, 100% 0, 100% 100%, 14px 100%, 0 50%); }
+        .mpv2 .mp-strip-bar.clay { background: var(--mp-clay); clip-path: polygon(0 0, calc(100% - 14px) 0, 100% 50%, calc(100% - 14px) 100%, 0 100%); }
+        .mpv2 .mp-strip-bar.tie { background: var(--mp-stone); color: #fff; }
+        .mpv2 .mp-strip-provenance { padding: 0.35rem 0.7rem; font-size: 0.66rem; font-style: italic; color: var(--text-muted); border-top: 1px solid var(--border); }
+
+        /* ── Knockout panel: stacked full-width match cards grouped by round ── */
+        .mpv2 #mp-panel-knockout .bracket-tree { display: block; }
+        .mpv2 #mp-panel-knockout .bracket-round { display: block; margin-bottom: 1.2rem; }
+        .mpv2 #mp-panel-knockout .bracket-round-label {
+            font: 700 0.62rem/1 'Bitter', Georgia, serif; letter-spacing: 0.08em;
+            text-transform: uppercase; color: var(--text-placeholder, #9CA3AF);
+            margin-bottom: 0.5rem;
+        }
+        .mpv2 #mp-panel-knockout .bracket-match { display: block; border: none; margin-bottom: 0.6rem; background: transparent; }
+        .mpv2 #mp-panel-knockout .bracket-connector { display: none; }
+        .mpv2 .bracket-match-footer { display: flex; gap: 0.4rem; flex-wrap: wrap; align-items: center; padding: 0.4rem 0.55rem; background: #FAFAF8; border-top: 1px solid var(--border); }
+
+        /* ── Payouts cards ── */
+        .mpv2 .mp-pay-section-label {
+            font: 700 0.62rem/1 'Bitter', Georgia, serif; letter-spacing: 0.08em;
+            text-transform: uppercase; color: var(--text-placeholder, #9CA3AF);
+            margin: 1.1rem 0 0.5rem;
+        }
+        .mpv2 .mp-pay-card {
+            display: flex; align-items: center; gap: 0.6rem;
+            border: 1px solid var(--border); border-radius: 10px; background: #fff;
+            padding: 0.7rem 0.85rem; margin-bottom: 0.5rem;
+        }
+        .mpv2 .mp-pay-info { min-width: 0; flex: 1; }
+        .mpv2 .mp-pay-name { font-weight: 700; color: var(--text); }
+        .mpv2 .mp-pay-sub { font-size: 0.75rem; color: var(--text-muted); margin-top: 0.1rem; }
+        .mpv2 .mp-pay-amount { font: 700 1.05rem/1 'Bitter', Georgia, serif; color: var(--mp-money); font-variant-numeric: tabular-nums; }
+        .mpv2 .mp-pay-status {
+            font: 700 0.6rem/1 'Bitter', Georgia, serif; padding: 0.25rem 0.5rem;
+            border-radius: 9999px; flex: none; white-space: nowrap;
+        }
+        .mpv2 .mp-pay-status.paid { background: var(--mp-money-bg); color: var(--mp-money-text); }
+        .mpv2 .mp-pay-status.await { background: #F3F2EF; color: var(--text-body, #4B5563); }
+        .mpv2 .mp-pay-status.pending { background: var(--mp-wc-bg); color: var(--mp-wc-text); }
+        .mpv2 .mp-pay-foot { font-size: 0.72rem; color: var(--text-muted); line-height: 1.5; margin-top: 0.75rem; }
+
+        /* ── Manager inline editor (admin/manager only, below member view) ── */
+        .mpv2 .mp-mgr-editor { margin-top: 0.75rem; border: 1px dashed var(--border); border-radius: 10px; background: #FBFBFA; }
+        .mpv2 .mp-mgr-editor > summary {
+            cursor: pointer; padding: 0.55rem 0.75rem; list-style: none;
+            font: 700 0.64rem/1 'Bitter', Georgia, serif; letter-spacing: 0.06em;
+            text-transform: uppercase; color: var(--mp-accent);
+        }
+        .mpv2 .mp-mgr-editor > summary::-webkit-details-marker { display: none; }
+        .mpv2 .mp-mgr-editor .pool-card { margin: 0; border: none; box-shadow: none; background: transparent; }
+        .mpv2 .mp-mgr-editor .standings-section { display: none; }
+
+        @media (max-width: 640px) {
+            .mpv2 .mp-header-title { font-size: 1.2rem; }
+            .mpv2 .mp-subtab { padding: 0.5rem 0.85rem; }
+            .mpv2 .mp-strip-mono { width: 34px; }
+            .mpv2 .mp-strip-bar { min-width: 64px; font-size: 0.95rem; }
+        }
+
         /* ── Enrollment ── */
         .enrollment-section { padding: 1.25rem 2rem; }
         .enrollment-controls {
@@ -1047,9 +1269,78 @@
                 </div>
             </div>
             {% endif %}
+            {% if MATCHPLAY_V2 %}
+            {% if SANDBOX_PREVIEW %}
+            <!-- Sandbox Admin/Member toggle (#228) — only on /admin/matchplay-preview -->
+            <div class="mp-sandbox-bar">
+                <span class="mp-sandbox-label">New design &middot; Preview</span>
+                <span class="mp-sandbox-spacer"></span>
+                <a class="mp-sandbox-btn{% if mp_view != 'member' %} active{% endif %}" href="/admin/matchplay-preview?view=admin">Admin view</a>
+                <a class="mp-sandbox-btn{% if mp_view == 'member' %} active{% endif %}" href="/admin/matchplay-preview?view=member">Member view</a>
+            </div>
+            <div class="mp-sandbox-spacer-block"></div>
+            {% endif %}
+            <!-- ═══ NEW member-facing scoreboard (Slate & Clay, #228) ═══
+                 Header card + three pill sub-tabs (POOLS · KNOCKOUT · PAYOUTS)
+                 that switch the panel below. Container IDs are preserved so the
+                 shared /api/cmp/* data flows are untouched — only the rendering
+                 (mpv2 branches in the render fns) is new. -->
+            <div class="cmp-body mp-body">
+                <div class="mp-hiw-row">
+                    <button id="cmp-hiw-btn" class="pr-hiw-link" type="button">How It Works</button>
+                </div>
+                <!-- Header card (filled by cmpRenderBanner mpv2 branch) -->
+                <div id="cmp-structure-banner"></div>
+                <!-- Three pill sub-tabs -->
+                <div class="mp-subtabs" role="tablist">
+                    <button class="mp-subtab active" data-mp-panel="pools" role="tab">Pools</button>
+                    <button class="mp-subtab" data-mp-panel="knockout" role="tab">Knockout</button>
+                    <button class="mp-subtab" data-mp-panel="payouts" role="tab">Payouts</button>
+                </div>
+                <!-- POOLS panel -->
+                <div class="mp-panel" id="mp-panel-pools">
+                    <div id="cmp-pools-container">
+                        <div class="empty-state">
+                            <h3>Select a chapter and season, then click Load</h3>
+                        </div>
+                    </div>
+                </div>
+                <!-- KNOCKOUT panel -->
+                <div class="mp-panel" id="mp-panel-knockout" style="display:none;">
+                    <div id="cmp-bracket-section" style="display:none;">
+                        <div class="bracket-controls">
+                            <button class="btn manager-only" id="cmp-seed-bracket-btn" style="display:none;">
+                                &#8635; Seed Knockout
+                            </button>
+                            <button class="btn btn-danger manager-only" id="cmp-clear-bracket-btn" style="display:none;">
+                                &#215; Clear Bracket
+                            </button>
+                        </div>
+                        <div id="cmp-bracket-container">
+                            <p style="color:var(--text-muted);font-size:0.85rem;">
+                                Once pool play is complete the knockout is seeded from the pool
+                                standings — pool winners and runners-up carry a seed number and
+                                any wildcards are flagged.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+                <!-- PAYOUTS panel -->
+                <div class="mp-panel" id="mp-panel-payouts" style="display:none;">
+                    <div id="cmp-payouts-section" style="display:none;">
+                        <div id="cmp-payouts-container">
+                            <p style="color:var(--text-muted);font-size:0.85rem;">Loading…</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            {% else %}
             <div class="cmp-body">
                 <div style="display:flex;justify-content:flex-end;margin:0 0 0.6rem;">
                     <button id="cmp-hiw-btn" class="pr-hiw-link" type="button">How It Works</button>
+                    {% if not member_mode %}
+                    <a href="/admin/matchplay-preview" class="btn admin-only mp-preview-link" style="display:none;margin-left:0.5rem;font-size:0.75rem;">&#128269; Preview new Match Play design &rarr;</a>
+                    {% endif %}
                 </div>
                 <div id="cmp-structure-banner"></div>
                 <div id="cmp-pools-container">
@@ -1087,6 +1378,7 @@
                     </div>
                 </div>
             </div>
+            {% endif %}
         </div>
 
         <!-- ═══════════ POINTS RACE ═══════════ -->
@@ -1861,6 +2153,11 @@
                 if (activePr === "tfc" && prLastCupData) renderFellowshipCup(prLastCupData);
                 else if (activePr !== "tfc" && prLastData) renderPointsRace(prLastData);
             } catch (e) { /* ignore */ }
+            // MATCHPLAY_V2 (#228): if the role resolved AFTER the pools painted,
+            // re-render so the manager inline editors appear (member→admin flip).
+            try {
+                if (window.MATCHPLAY_V2 && cmpState && cmpState.pools && cmpState.pools.length) cmpRender();
+            } catch (e) { /* ignore */ }
         }
     }
 
@@ -1880,6 +2177,276 @@
     // MATCHPLAY_V2 (#228): when false the shared render fns reproduce the ORIGINAL
     // tab byte-for-byte; the new Slate & Clay visuals only apply when true.
     const MATCHPLAY_V2 = !!window.MATCHPLAY_V2;
+
+    /* ══════════════════════════════════════════════════════════════════
+       NEW member-facing scoreboard renderers (#228, canvas v2).
+       Reuse the SAME cmpState + /api/cmp/* data the flag-off tab uses;
+       only the presentation is new. Delegated to from the shared render
+       fns via `if (MATCHPLAY_V2) { …; return; }` early-returns.
+       ══════════════════════════════════════════════════════════════════ */
+    const mpMatchCache = {};
+
+    function mpIsWd(r) {
+        return (r.wins||0)===0 && (r.losses||0)===0 && (r.draws||0)===0 && (r.played||0)===0;
+    }
+    function mpFirstLast(name) {
+        const parts = String(name||'').trim().split(/\s+/);
+        if (parts.length <= 1) return { first: '', last: parts[0] || '—' };
+        return { first: parts.slice(0,-1).join(' '), last: parts[parts.length-1] };
+    }
+    function mpDotsHtml(r, expected) {
+        let dots = '';
+        const w=r.wins||0, l=r.losses||0, d=r.draws||0;
+        for (let i=0;i<w;i++) dots += '<span class="mp-dot win"></span>';
+        for (let i=0;i<l;i++) dots += '<span class="mp-dot loss"></span>';
+        for (let i=0;i<d;i++) dots += '<span class="mp-dot tie"></span>';
+        const played = w+l+d;
+        for (let i=played;i<expected;i++) dots += '<span class="mp-dot empty"></span>';
+        if (!dots) dots = '<span class="mp-dot empty"></span>';
+        return `<span class="mp-dots">${dots}</span>`;
+    }
+
+    // ── Header card (POOLS/KNOCKOUT/PAYOUTS live under this) ──
+    function mpRenderHeader() {
+        const el = $("cmp-structure-banner");
+        if (!el) return;
+        const meta = cmpState.configMeta, s = cmpState.structure;
+        const isManager = userRole === "admin" || userRole === "manager";
+        const isAdmin = userRole === "admin";
+        let sub = '', warn = '';
+        if (s) {
+            const entry = s.n ? Math.round(s.pot / s.n) : 40;
+            sub = `${fmtMoney(entry)} × ${s.n} entered · ${fmtMoney(s.pot)} pot · ${s.pools} pool${s.pools===1?'':'s'} → knockout of ${s.knockout}`;
+        } else if (meta && meta.structure_error) {
+            warn = `<div class="mp-header-warn">${escapeHtml(meta.structure_error)} — pools and payouts activate at 4+ entrants.</div>`;
+        } else {
+            sub = 'Select a chapter and season above.';
+        }
+        const adminRow = isManager ? `<div class="mp-header-admin">
+            <button class="btn manager-only" id="cmp-auto-assign-btn" style="font-size:0.72rem;">&#9861; Auto-Assign Pools</button>
+            ${isAdmin ? `<button class="btn admin-only" id="cmp-config-btn" style="font-size:0.72rem;">&#9881; Config</button>` : ''}
+        </div>` : '';
+        el.innerHTML = `<div class="mp-header-card">
+            <h2 class="mp-header-title">City Match Play &mdash; ${escapeHtml(cmpState.chapter)} ${escapeHtml(cmpState.season)}</h2>
+            ${sub ? `<div class="mp-header-sub">${escapeHtml(sub)}</div>` : ''}
+            ${warn}
+            ${adminRow}
+        </div>`;
+        const aab = $("cmp-auto-assign-btn"); if (aab) aab.addEventListener("click", cmpAutoAssignPools);
+        const cfg = $("cmp-config-btn"); if (cfg) cfg.addEventListener("click", openCfgModal);
+    }
+
+    // ── POOLS panel: per-pool standings list + note + (manager) editor ──
+    async function mpRenderPools() {
+        const container = $("cmp-pools-container");
+        if (!container) return;
+        Object.keys(mpMatchCache).forEach(k => delete mpMatchCache[k]);
+        const isManager = userRole === "admin" || userRole === "manager";
+        if (!cmpState.pools.length) {
+            container.innerHTML = `<div class="empty-state"><h3>No pools yet for ${escapeHtml(cmpState.chapter)} ${escapeHtml(cmpState.season)}</h3>${isManager ? '<p>Use the “+ Add Pool” control to create the first pool.</p>' : '<p>Pools appear here once the draw is set.</p>'}</div>`;
+            $("cmp-bracket-section").style.display = "none";
+            return;
+        }
+        let standings = cmpState.allStandings;
+        if (!standings || !standings.length) {
+            try {
+                const r = await fetch(`/api/cmp/standings?season=${encodeURIComponent(cmpState.season)}&chapter=${encodeURIComponent(cmpState.chapter)}`);
+                if (r.ok) { standings = await r.json(); cmpState.allStandings = standings; }
+            } catch (_) { /* non-fatal */ }
+        }
+        standings = standings || [];
+        let html = isManager ? renderUnassignedPanel() : '';
+        cmpState.pools.forEach(pool => {
+            const rows = standings.filter(r => r.pool_id === pool.id)
+                                  .sort((a,b) => (a.rank||99) - (b.rank||99));
+            html += mpPoolBlock(pool, rows, isManager);
+        });
+        html += mpRankExplainer(standings);
+        container.innerHTML = html;
+        $("cmp-bracket-section").style.display = "";
+        // Manager: wire the existing editor cards (match save/clear, add/delete
+        // pool, add player, unassigned) + load their scores/standings.
+        if (isManager) wirePools();
+    }
+
+    function mpPoolBlock(pool, rows, isManager) {
+        const n = pool.members.length;
+        const bonusEach = (cmpState.structure || {}).pool_winner_bonus_each ?? 20;
+        // Dot count = the number of matches the pool's front-runners have played
+        // (handles "counts three" pools where n-1 would over-count). A player
+        // still behind that pace shows a hollow dot for each unplayed match.
+        const counts = rows.filter(r => !mpIsWd(r))
+            .map(r => (r.wins||0)+(r.losses||0)+(r.draws||0));
+        const maxPlayed = counts.length ? Math.max(...counts) : 0;
+        const expected = Math.max(1, maxPlayed);
+        const complete = maxPlayed > 0 && counts.every(c => c >= maxPlayed);
+        const statusTxt = rows.length ? (complete ? 'complete' : 'in progress') : 'not started';
+        const listRows = rows.length
+            ? rows.map(r => mpStandRow(r, pool, expected, bonusEach)).join('')
+            : `<div class="mp-expand-empty">No results recorded yet.</div>`;
+        const hasDropped4th = rows.some(r => r.dropped_4th && r.played > r.counted);
+        const note = hasDropped4th ? `
+            <div class="mp-pool-note">
+                <span class="mp-pool-note-head">Everyone counts three matches</span>
+                <span class="mp-pool-note-body">Pools with a scheduling extra include one additional match — a player's standing counts their first three by date; the 4th counts only for the opponent.</span>
+            </div>` : '';
+        const editor = isManager
+            ? `<details class="mp-mgr-editor"><summary>Manager &middot; edit pool &amp; results</summary>${renderPoolCard(pool)}</details>`
+            : '';
+        return `
+        <div class="mp-pool" data-pool="${pool.id}">
+            <div class="mp-pool-head">
+                <span class="mp-pool-name">${escapeHtml(pool.pool_name)}</span>
+                <span class="mp-pool-meta">${n} player${n===1?'':'s'} &middot; ${statusTxt}</span>
+                <button class="mp-matches-chip" type="button">Matches &rsaquo;</button>
+            </div>
+            <div class="mp-col-head"><span></span><span>Player</span><span class="mp-ch-wlt">W-L-T</span><span class="mp-ch-pts">Pts</span><span></span></div>
+            <div class="mp-standings">${listRows}</div>
+            <div class="mp-pool-matches-expand" style="display:none;"></div>
+            ${note}
+            ${editor}
+        </div>`;
+    }
+
+    function mpStandRow(r, pool, expected, bonusEach) {
+        const wd = mpIsWd(r);
+        const rank1 = r.rank === 1 && !wd;
+        let chip = '';
+        if (wd) chip = `<span class="mp-chip wd">WD</span>`;
+        else if (rank1) chip = `<span class="mp-chip money">${fmtMoney(bonusEach)}</span>`;
+        else if (r.advances) chip = `<span class="mp-chip adv">ADV</span>`;
+        const dots = wd
+            ? `<span class="mp-dots"><span class="mp-dot loss" style="opacity:.5"></span></span>`
+            : mpDotsHtml(r, expected);
+        return `
+        <div class="mp-row ${rank1?'rank1':''} ${wd?'wd':''}">
+            <span class="mp-rank">${wd ? '&mdash;' : (r.rank || '')}</span>
+            <span class="mp-name-cell"><span class="mp-name">${escapeHtml(r.player_name)}</span>${chip}</span>
+            ${dots}
+            <span class="mp-pts">${r.stableford_pts != null ? r.stableford_pts : '&mdash;'}</span>
+            <button class="mp-chev" type="button" data-pool="${pool.id}" data-player="${escapeHtml(r.player_name)}" title="Show this player's matches">&rsaquo;</button>
+        </div>
+        <div class="mp-expand" style="display:none;"></div>`;
+    }
+
+    function mpRankExplainer(standings) {
+        const hasDmp09 = standings.some(r => r.match_points != null);
+        const rankRule = hasDmp09 ? 'match points → head-to-head → Stableford'
+                                  : 'wins → head-to-head → Stableford';
+        const bonusEach = fmtMoney((cmpState.structure || {}).pool_winner_bonus_each ?? 20);
+        return `<div class="mp-rank-note">Rank: ${rankRule}. Tap a player for their matches, or “Matches” for the whole pool. <b>${bonusEach}</b> = pool-winner bonus, paid on the card the moment the pool completes. <b>ADV</b> = advances to the knockout; <b>WD</b> = withdrew.</div>`;
+    }
+
+    // ── Slate & Clay match strip (shared by pool expands + knockout) ──
+    function mpStripHtml(o) {
+        const A = mpFirstLast(o.aName), B = mpFirstLast(o.bName);
+        const aMono = o.aName ? `<span class="mp-strip-mono slate">${escapeHtml(mpMono(o.aName))}</span>` : '<span class="mp-strip-mono stone"></span>';
+        const bMono = o.bName ? `<span class="mp-strip-mono clay">${escapeHtml(mpMono(o.bName))}</span>` : '<span class="mp-strip-mono stone"></span>';
+        let barCls, barTxt;
+        if (o.tie) { barCls = 'tie'; barTxt = (o.margin && /putt/i.test(o.margin)) ? 'PUTT' : 'TIE'; }
+        else if (o.aWin) { barCls = 'slate'; barTxt = o.margin || 'WON'; }
+        else if (o.bWin) { barCls = 'clay'; barTxt = o.margin || 'WON'; }
+        else { barCls = 'tie'; barTxt = o.margin || 'vs'; }
+        const aName = `<span class="mp-strip-name"><em>${escapeHtml(A.first)}</em><b>${escapeHtml(A.last)}</b></span>`;
+        const bName = `<span class="mp-strip-name right"><em>${escapeHtml(B.first)}</em><b>${escapeHtml(B.last)}</b></span>`;
+        return `<div class="mp-strip">${aMono}${aName}<span class="mp-strip-bar ${barCls}">${escapeHtml(barTxt)}</span>${bName}${bMono}</div>`;
+    }
+
+    function mpMatchCardFromMatch(m, perspective) {
+        const played = m.played_at != null;
+        let p1 = m.player1_name, p2 = m.player2_name;
+        if (perspective && m.player2_name === perspective) { const t = p1; p1 = p2; p2 = t; }
+        const ml = (m.margin || '').toLowerCase();
+        const tie = played && (!m.winner_name || ml === 'halved' || ml === 'all square' || ml === 'as');
+        const aWin = played && m.winner_name === p1;
+        const bWin = played && m.winner_name === p2;
+        const strip = mpStripHtml({ aName: p1, bName: p2, aWin, bWin, tie, margin: m.margin });
+        let metaL = 'Match';
+        if (m.event_name) {
+            const d = (m.event_date_val || '').slice(5).replace('-', '/');
+            metaL = `${d ? d + ' · ' : ''}${m.event_name}`;
+        }
+        const status = played ? (tie ? 'TIE' : 'FINAL') : 'SCHEDULED';
+        const prov = (played && !m.event_name)
+            ? `<div class="mp-strip-provenance">Private match · counts for Match Play only</div>` : '';
+        return `<div class="mp-match-card"><div class="mp-match-meta"><span>${escapeHtml(metaL)}</span><span class="status">${status}</span></div>${strip}${prov}</div>`;
+    }
+
+    function mpMatchCardFromSlots(s1, s2, roundKey, eventName, eventDate) {
+        const winner = s1.winner_name || s2.winner_name || null;
+        const margin = s1.margin || s2.margin || '';
+        const ml = (margin || '').toLowerCase();
+        const bothPresent = !!(s1.player_name && s2.player_name);
+        const tie = bothPresent && !winner && (ml === 'halved' || ml === 'all square' || ml === 'as');
+        const aWin = !!(winner && winner === s1.player_name);
+        const bWin = !!(winner && winner === s2.player_name);
+        const strip = mpStripHtml({ aName: s1.player_name, bName: s2.player_name, aWin, bWin, tie, margin });
+        const roundLabel = (ROUND_DEFS[roundKey] || {}).label || roundKey;
+        const d = (eventDate || '').slice(5).replace('-', '/');
+        const metaL = `${roundLabel}${eventName ? ' · ' + eventName : ''}${d ? ' · ' + d : ''}`;
+        const status = winner ? 'FINAL' : (bothPresent ? '—' : 'TBD');
+        return `<div class="mp-match-card"><div class="mp-match-meta"><span>${escapeHtml(metaL)}</span><span class="status">${status}</span></div>${strip}</div>`;
+    }
+
+    async function mpGetMatches(poolId) {
+        if (mpMatchCache[poolId]) return mpMatchCache[poolId];
+        try {
+            const r = await fetch(`/api/cmp/matches?pool_id=${poolId}`);
+            mpMatchCache[poolId] = r.ok ? await r.json() : [];
+        } catch (_) { mpMatchCache[poolId] = []; }
+        return mpMatchCache[poolId];
+    }
+
+    // Delegated clicks inside the pools container (chevron + Matches chip)
+    async function mpPoolClick(e) {
+        const chev = e.target.closest('.mp-chev');
+        if (chev) {
+            const row = chev.closest('.mp-row');
+            const exp = row && row.nextElementSibling;
+            if (!exp || !exp.classList.contains('mp-expand')) return;
+            const open = exp.style.display !== 'none';
+            if (open) { exp.style.display = 'none'; chev.classList.remove('open'); return; }
+            chev.classList.add('open');
+            const matches = await mpGetMatches(Number(chev.dataset.pool));
+            const player = chev.dataset.player;
+            const mine = matches.filter(m => m.played_at != null && (m.player1_name === player || m.player2_name === player));
+            exp.innerHTML = mine.length
+                ? mine.map(m => mpMatchCardFromMatch(m, player)).join('')
+                : '<div class="mp-expand-empty">No completed matches yet.</div>';
+            exp.style.display = '';
+            return;
+        }
+        const chip = e.target.closest('.mp-matches-chip');
+        if (chip) {
+            const poolEl = chip.closest('.mp-pool');
+            const exp = poolEl && poolEl.querySelector('.mp-pool-matches-expand');
+            if (!exp) return;
+            const open = exp.style.display !== 'none';
+            if (open) { exp.style.display = 'none'; return; }
+            const matches = await mpGetMatches(Number(poolEl.dataset.pool));
+            const played = matches.filter(m => m.played_at != null);
+            exp.innerHTML = played.length
+                ? played.map(m => mpMatchCardFromMatch(m)).join('')
+                : '<div class="mp-expand-empty">No completed matches yet.</div>';
+            exp.style.display = '';
+            return;
+        }
+    }
+
+    // One-time wiring: pill sub-tabs + delegated pool clicks.
+    if (MATCHPLAY_V2) {
+        document.querySelectorAll('.mp-subtab').forEach(btn => {
+            btn.addEventListener('click', () => {
+                document.querySelectorAll('.mp-subtab').forEach(b => b.classList.toggle('active', b === btn));
+                const p = btn.dataset.mpPanel;
+                ['pools','knockout','payouts'].forEach(k => {
+                    const el = $('mp-panel-' + k); if (el) el.style.display = (k === p) ? '' : 'none';
+                });
+            });
+        });
+        const pc = $("cmp-pools-container");
+        if (pc) pc.addEventListener('click', mpPoolClick);
+    }
 
     // ── Chapter tabs ──
     $$(".cmp-chapter-tab").forEach(btn => {
@@ -2025,6 +2592,7 @@
     }
 
     function cmpRenderBanner() {
+        if (MATCHPLAY_V2) { mpRenderHeader(); return; }
         const el = $("cmp-structure-banner");
         const meta = cmpState.configMeta;
         if (!meta) { el.innerHTML = ""; return; }
@@ -2133,6 +2701,65 @@
             }
         }
         const s = sheet.structure;
+
+        // ── Flag ON: card-based PAYOUTS panel (canvas v2) ──
+        if (MATCHPLAY_V2) {
+            const payStatus = st => {
+                const k = (st || '').toLowerCase();
+                if (k === 'paid') return '<span class="mp-pay-status paid">Paid</span>';
+                if (k === 'pending' || k === 'pending_finalize' || k === 'unresolved')
+                    return '<span class="mp-pay-status pending">Pending finalize</span>';
+                if (k === 'tbd' || k === 'awaiting' || k === 'provisional' || k === 'projected')
+                    return '<span class="mp-pay-status await">Awaiting result</span>';
+                return `<span class="mp-pay-status await">${escapeHtml(st || 'Awaiting result')}</span>`;
+            };
+            const potCardV2 = `
+                <div class="mp-pot-card">
+                    <div class="mp-pot-label">Pot</div>
+                    <div class="mp-pot-top">
+                        <span class="mp-pot-amount">${fmtMoney(s.pot)}</span>
+                        <span class="mp-pot-sub">${s.n} × ${fmtMoney(s.entry_fee)} entered</span>
+                    </div>
+                    <div class="mp-pot-row">
+                        <span>− Pool-winner bonuses</span>
+                        <span class="neg">−${fmtMoney(s.pool_winner_bonus_total)}</span>
+                    </div>
+                    <div class="mp-pot-row total">
+                        <span>Adjusted → Knockout Ladder</span>
+                        <span>${fmtMoney(s.adjusted_pot)}</span>
+                    </div>
+                </div>`;
+            const bonusCards = sheet.bonus_rows.map(r => `
+                <div class="mp-pay-card">
+                    <div class="mp-pay-info">
+                        <div class="mp-pay-name">${escapeHtml(r.pool_name)} winner</div>
+                        <div class="mp-pay-sub">${r.player_name ? escapeHtml(r.player_name) : 'Not yet decided'}</div>
+                    </div>
+                    <span class="mp-pay-amount">${fmtMoney(r.amount)}</span>
+                    ${payStatus(r.status)}
+                </div>`).join('');
+            const ladderCards = sheet.ladder_rows.map(r => `
+                <div class="mp-pay-card">
+                    <div class="mp-pay-info">
+                        <div class="mp-pay-name">${escapeHtml(r.place_label)}</div>
+                        <div class="mp-pay-sub">${r.player_name ? escapeHtml(r.player_name) : 'Awaiting result'}</div>
+                    </div>
+                    <span class="mp-pay-amount">${fmtMoney(r.amount)}</span>
+                    ${payStatus(r.status)}
+                </div>`).join('');
+            const warnsV2 = (sheet.warnings || []).map(w =>
+                `<div class="mp-header-warn">${escapeHtml(w)}</div>`).join('');
+            el.innerHTML = `
+                ${potCardV2}
+                <div class="mp-pay-section-label">Pool-winner bonuses</div>
+                ${bonusCards || '<div class="mp-expand-empty">No pool winners yet.</div>'}
+                <div class="mp-pay-section-label">Knockout ladder</div>
+                ${ladderCards || '<div class="mp-expand-empty">Ladder activates once the knockout is seeded.</div>'}
+                <div class="mp-pay-foot">Nothing pays out until the manager finalizes the knockout stage. Ladder amounts are locked by the matrix. Semifinal losers split the combined 3rd${s.ladder_amounts.length > 3 ? "+4th" : ""}-place money if the consolation can't be scheduled.</div>
+                ${warnsV2}`;
+            return;
+        }
+
         const moneyCell = MATCHPLAY_V2 ? ' class="mp-money"' : '';
         const moneyStyle = MATCHPLAY_V2 ? 'text-align:right;' : 'text-align:right;font-weight:600;';
         const statusPill = st => `<span class="payout-status ${st}">${st === "tbd" ? "TBD" : st}</span>`;
@@ -2211,6 +2838,7 @@
     }
 
     function cmpRender() {
+        if (MATCHPLAY_V2) { mpRenderPools(); return; }
         const container = $("cmp-pools-container");
         const unassignedHtml = renderUnassignedPanel();
         if (!cmpState.pools.length) {
@@ -2856,11 +3484,13 @@
                     const nm = ev.item_name.length > 14 ? ev.item_name.slice(0, 14) + '…' : ev.item_name;
                     return `<option value="${ev.id}" ${eventId === ev.id ? 'selected' : ''} title="${escapeHtml(ev.item_name)}">${escapeHtml(d ? d + ' ' + nm : nm)}</option>`;
                 }).join('');
-                const eventDisplay = eventId ? (cmpState.events.find(e => e.id === eventId) || {}).item_name || '' : '';
+                const eventObj = eventId ? (cmpState.events.find(e => e.id === eventId) || null) : null;
+                const eventDisplay = eventObj ? (eventObj.item_name || '') : '';
 
-                // Slate & Clay slots when the flag is on; original slots otherwise.
+                // Slate & Clay arrow scoreboard strip when the flag is on;
+                // original slot pills otherwise.
                 const slotsHtml = MATCHPLAY_V2
-                    ? (mpBracketSlot(s1, 'a', slot1Win) + mpBracketSlot(s2, 'b', slot2Win))
+                    ? mpMatchCardFromSlots(s1, s2, round.key, eventDisplay, eventObj ? eventObj.event_date : '')
                     : `<div class="bracket-slot${slot1Win ? ' winner' : ''}">
                         ${seedChips(s1)}<span class="bracket-slot-name">${escapeHtml(s1.player_name || '—')}</span>
                     </div>

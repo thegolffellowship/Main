@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.118.0";
+window.TGF_VERSION = "2.118.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.118.1",
+    date: "2026-07-17",
+    changes: [
+      "Match Play visual rollout REBUILT to the approved CD member scoreboard (the first pass had layered D-MP labels on the manager table instead — corrected). New member-facing design: POOLS · KNOCKOUT · PAYOUTS pill sub-tabs that swap; pool standings as rows with rank, $20/ADV/WD chips, W-L-T as colored dots, big Stableford, per-player expand; Slate (#2F5D74) & Clay (#C1673F) arrow match strips with monograms, margins, TIE/PUTT/provenance states; knockout rail with seed/WC chips + legend + consolation + Next-In; dark POT waterfall + bonus/ladder cards. member_mode = read-only scoreboard; admin/manager = same scoreboard plus a collapsible MANAGER editor per pool (result entry, Add/Delete, Seed/Clear, consolation control). Still gated behind MATCHPLAY_V2 (flag off = current tab unchanged).",
+      "Sandbox controls: /admin/matchplay-preview gains an Admin | Member view toggle bar (?view=) via SANDBOX_PREVIEW, and the live tab shows an admin-only 'Preview new Match Play design' button so admins reach the sandbox without typing the URL. Known canvas gaps (no per-hole data in /api/cmp): hole-by-hole scorecard grid and live 'thru 13' omitted rather than fabricated.",
+    ],
+  },
   {
     version: "2.118.0",
     date: "2026-07-17",
