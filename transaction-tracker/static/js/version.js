@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.118.1";
+window.TGF_VERSION = "2.118.2";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.118.2",
+    date: "2026-07-17",
+    changes: [
+      "Match Play per-hole reconciliation (READ-ONLY, Kerry): cmp_reconcile_hole_results() derives each match's result from the imported GG per-hole scores (net = gross \u2212 strokes_received/pops, lower net wins the hole; standard X&Y close-out) and diffs it against our stored winner/margin. Buckets: aligned, winner_mismatch, margin_mismatch, putt_off (holes all-square but a winner stored \u2014 extra-holes decision hole data can\u0027t show), no_event, no_hole_scores_imported. Feeds the real Slate & Clay hole-dots + expandable scorecard grid (replacing the placeholder engine where GG holes exist). Bridge extract=\u0027scoring-mp-reconcile[:<season>|<chapter>]\u0027.",
+    ],
+  },
   {
     version: "2.118.1",
     date: "2026-07-17",
