@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.117.4";
+window.TGF_VERSION = "2.117.5";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.117.5",
+    date: "2026-07-17",
+    changes: [
+      "I-2 sweep (READ-ONLY, gates R1): sweep_i2_multiplier_removal() computes every handicap player's index with the current ×0.96 'Bonus for Excellence' factor vs without it (×1.00 = modern WHS), the delta, and whether the change crosses a whole-number 9-hole Playing Handicap line at reference slopes 113 (floor) and 125 (typical Texas). Removing 0.96 raises every index, more for higher handicaps. Decision package only — changes nothing. Bridge extract='scoring-sweep-i2'.",
+    ],
+  },
   {
     version: "2.117.4",
     date: "2026-07-17",
