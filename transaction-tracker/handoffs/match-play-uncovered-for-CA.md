@@ -63,16 +63,21 @@ needs near-zero bespoke setup.
    single event; a match is a unique **pool pairing** regardless of when/where played.
 7. **Extra holes / sudden death — GAP (not modeled).** A match all-square after
    regulation goes to extra hole(s); the winner takes the next hole. Confirmed cases:
-   **Youngs v Marques** and **Barna v Cloer** were AS after 9, both played **hole 10**,
-   decided there. We have no extra-hole entity and no extra-hole score. Needs: record
-   winner + hole(s) played + result, distinct from regulation.
-   - **Notation (proposed, for CA to ratify):** an extra-hole win is recorded as the
-     hole it ended on — e.g. **`10H`** (won on the 10th; H = hole), the 18-hole analog
-     being the "19th hole." These two are currently stored as **`1 UP`**, which is
-     technically true at the moment of victory but reads like a *regulation* 1-up and
-     hides the sudden-death fact — `10H` carries the real information. (Correcting the
-     two historical margins is Kerry's call; winner/record/seed are untouched either
-     way.)
+   **Youngs v Marques** and **Barna v Cloer** were AS after 9, decided on the first extra
+   hole. We have no extra-hole entity and no extra-hole score.
+   - **Notation (Ryder Cup, Kerry-confirmed):** an extra-hole result is written as the
+     **number of holes PLAYED + "H"** — a 9-hole match decided on the first extra hole =
+     10 holes played = **`10H`**. The number is holes *played*, NOT the physical hole
+     number (matters for shotgun starts: a match that began on hole 5 and went one extra
+     also reads `10H`, played on physical hole 5). These two are currently stored as
+     **`1 UP`**, which reads like a *regulation* 1-up and hides the extra-hole fact —
+     `10H` carries the real information. (Correcting the two historical margins is Kerry's
+     call; winner/record/seed untouched either way.)
+   - **Feature needed (recordation):** in an extra-holes situation the app must provide
+     **score entry for the extra hole(s) that ALSO configures the handicap pops** —
+     continuing the off-lowest stroke allocation onto the extra holes by stroke index so
+     **net** decides the hole. Not just a "who won" toggle: enter the strokes, apply the
+     correct pops, compute net, determine the winner, and record the result as `NH`.
 8. **Putt-offs — GAP.** Another all-square resolution class (Chandler/Peterson s9.12,
    Niester/Wade s9.15). Needs a recordation path + display.
 9. **Concessions / gimmes.** GG's match state reflects conceded holes/putts that raw
