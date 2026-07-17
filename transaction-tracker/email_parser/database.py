@@ -24921,6 +24921,22 @@ def _cmp_name_tokens(name: str) -> frozenset:
     return frozenset(t for t in re.findall(r"[a-z]+", n.lower()) if len(t) > 1)
 
 
+def _cmp_person_key(name: str) -> tuple:
+    """(surname, first-initial) — nickname-robust identity within an event.
+    Handles both GG 'LAST, First TGF Austin' and our 'First Last'. Matt and
+    Matthew collapse to ('jenkins','m'); unique enough inside one match pool."""
+    n = re.sub(r"\bTGF\b.*$", "", name or "", flags=re.I).strip()
+    if "," in n:
+        last, _, first = n.partition(",")
+    else:
+        parts = n.split()
+        first = parts[0] if parts else ""
+        last = parts[-1] if len(parts) > 1 else (parts[0] if parts else "")
+    last = re.sub(r"[^a-z]", "", last.lower())
+    fi = re.sub(r"[^a-z]", "", first.lower())[:1]
+    return (last, fi)
+
+
 def cmp_import_gg_match_play(widget_url: str, db_path: str | Path = DB_PATH,
                              time_budget: float = 42.0,
                              only_round: str | None = None,
@@ -24982,8 +24998,9 @@ def cmp_import_gg_match_play(widget_url: str, db_path: str | Path = DB_PATH,
 
         def matches_for_event(ev_id):
             rows = conn.execute(
-                """SELECT m.id, m.player1_name, m.player2_name, m.winner_name,
-                          m.margin FROM cmp_matches m WHERE m.event_id = ?""",
+                """SELECT m.id, m.player1_name, m.player2_name, m.player1_id,
+                          m.player2_id, m.winner_name, m.margin
+                     FROM cmp_matches m WHERE m.event_id = ?""",
                 (ev_id,)).fetchall()
             return [dict(r) for r in rows]
 
@@ -25004,14 +25021,18 @@ def cmp_import_gg_match_play(widget_url: str, db_path: str | Path = DB_PATH,
             code_m = re.search(r"\b([as]\d+(?:\.\d+)?)\b", mp.get("text") or "")
             ev_id = code_map.get(code_m.group(1).lower()) if code_m else None
             ev_matches = matches_for_event(ev_id) if ev_id else []
-            # index stored matches by the pair's combined token signature
-            by_pair = {}
+            # Index stored matches two ways: by customer_id pair (rule-6 truth,
+            # when player ids are set) and by (surname, first-initial) pair
+            # (nickname-robust fallback). Match on ids first, then the fallback.
+            by_ids, by_key = {}, {}
             for sm in ev_matches:
-                sig = frozenset([_cmp_name_tokens(sm["player1_name"]),
-                                 _cmp_name_tokens(sm["player2_name"])])
-                by_pair[sig] = sm
+                if sm.get("player1_id") and sm.get("player2_id"):
+                    by_ids[frozenset([sm["player1_id"], sm["player2_id"]])] = sm
+                by_key[frozenset([_cmp_person_key(sm["player1_name"]),
+                                  _cmp_person_key(sm["player2_name"])])] = sm
 
             tid_html = fetch(mp["href"])
+            seen_pairs = set()          # dedup: each match has 2 aggregates
             for agg in parse_tournament_aggregates(tid_html):
                 if monotonic() - started > time_budget:
                     break
@@ -25019,22 +25040,32 @@ def cmp_import_gg_match_play(widget_url: str, db_path: str | Path = DB_PATH,
                 d = parse_match_play_detail(frag)
                 if not d or len(d.get("players", [])) < 2:
                     continue
+                gg_names = [p["name"] for p in d["players"]]
+                keysig = frozenset(_cmp_person_key(n) for n in gg_names)
+                if keysig in seen_pairs:
+                    continue            # already handled this match's other card
+                seen_pairs.add(keysig)
                 out["matches_seen"] += 1
-                gt = [_cmp_name_tokens(p["name"]) for p in d["players"]]
-                sig = frozenset(gt)
-                sm = by_pair.get(sig)
+                # resolve GG names -> customer_id (LAST,First aware + aliases)
+                cids = [_resolve_scoring_player(conn, n) for n in gg_names]
+                sm = None
+                if cids[0] and cids[1]:
+                    sm = by_ids.get(frozenset(cids))
+                if sm is None:
+                    sm = by_key.get(keysig)
                 tag = {"event": code_m.group(1) if code_m else None,
-                       "gg_players": [p["name"] for p in d["players"]],
+                       "gg_players": gg_names,
                        "gg_winner": d["gg_winner_name"],
                        "gg_margin": d["gg_margin"],
                        "start_hole": d["start_hole"]}
                 if not sm:
-                    out["unmatched"].append(tag)
+                    out["unmatched"].append({**tag, "resolved_ids": cids})
                     continue
                 out["matched"] += 1
                 snap = {**d, "source_url":
                         f"{base_host}/tournaments2/details/{agg}",
-                        "cmp_match_id": sm["id"]}
+                        "cmp_match_id": sm["id"],
+                        "p1_customer_id": cids[0], "p2_customer_id": cids[1]}
                 if store:
                     conn.execute(
                         "UPDATE cmp_matches SET gg_match_detail = ? WHERE id = ?",
