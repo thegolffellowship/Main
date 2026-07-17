@@ -327,6 +327,27 @@ below wherever they conflict.
     for the forced 4th, assign to lower TGF index, then earliest signup.
   - Member-facing sentence: "Everyone counts three matches."
 
+- **D-MP-10 · handicap allowance is OFF LOWEST; percentage differs
+  historical-vs-future (Kerry 2026-07-17).** Every TGF match plays OFF THE
+  LOWEST: the lower course handicap is subtracted from both, so the lower
+  handicapper plays scratch and the higher receives the (rounded) difference,
+  allocated on the hardest holes by stroke index; equal handicaps play
+  straight up.
+  - **Historical (GG-originated) events — allowance was PER CHAPTER:** San
+    Antonio **75%**, Austin **100%**. Robert ran Austin at 100%; Kerry ran SA
+    at 75%. The read-only reconciler (`cmp_reconcile_match_play_75`,
+    `_CMP_ALLOWANCE_BY_CHAPTER`) must use each chapter's real historical
+    allowance when checking stored results against GG.
+  - **Future (Tracker-originated) events — ONE uniform, adjustable allowance
+    for ALL chapters:** default **75%**, settable (e.g. 90%, 100%). Single
+    game-engine config value, not per-chapter. **Config encode PENDING Kerry's
+    ship-approval** (money/member-facing → rule 3b); the design intent is
+    ratified, the durable config key is not yet written.
+  - Why it matters: the earlier reconciliation derived pops from the
+    stroke-play `strokes_received` in the GG import — 100% allowance, full
+    field allocation, NOT off-lowest — so its margins/all-square calls were
+    wrong (Chandler/Rideout s9.15 computed AS while GG shows Chandler 1 up).
+
 **Implementation status (2026-07-17):** config **v2** authored + both
 2026 snapshots **pinned** (`cmp_repin_2026_to_dmp_register`, #223);
 **D-MP-09 pool rank LIVE** (`cmp_get_standings` honors
