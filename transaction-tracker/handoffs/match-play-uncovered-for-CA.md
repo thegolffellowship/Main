@@ -21,7 +21,34 @@ Every decision point (eligibility gate, tie-resolution flow, extra-hole/putt-off
 recordation, display) should be as simple and self-serve as possible so a new chapter
 needs near-zero bespoke setup.
 
+**Format history (context for CA).** Match Play has been the hardest contest to run —
+years of hair-pulling. An earlier **double-elimination** format (playback to the
+championship even after one loss, à la NCAA wrestling) was used; it produces **more
+matches** than the current World-Cup-style pools→knockout, which compounds the
+participation/scheduling load. Format choice trades competitive fairness against match
+volume and manageability — weigh against the simplicity/scaling north star and the
+participation layer above.
+
 ---
+
+## PARTICIPATION & COMMUNICATION (cross-cutting — a whole layer for CA)
+
+Match Play inherently demands **more participation** than stroke events, so a player who
+goes quiet for a few weeks is a real problem for the whole pool/bracket. This layer needs
+its own guidance and automated comms:
+
+- **Completion deadlines.** Each match / round must be **completed by a date X**; the app
+  should communicate the deadline, send reminders, and escalate as X approaches.
+- **Disqualification for non-participation.** Define the **boundary** at which a
+  non-participating player is DQ'd (missed matches, past-deadline, N weeks idle), what
+  happens to their opponent(s) and the standings/bracket (walkover? forfeit recorded
+  how?), and whether/how it's appealable.
+- **Matches outside TGF events (self-scheduled makeups).** Players must be able to play a
+  match **on their own, away from a TGF event**, and record it — how it's scheduled,
+  verified, and entered (ties to recordation: event-independent, pair-keyed).
+- **Automated participant communication.** Reminders, nudges, deadline warnings, "your
+  match vs X must be played by [date]", makeup-scheduling prompts, DQ warnings — driven by
+  match state so managers don't chase people manually (scaling north star).
 
 ## 0. REGISTRATION / ELIGIBILITY / PREREQUISITES
 

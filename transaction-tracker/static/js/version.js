@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.118.13";
+window.TGF_VERSION = "2.118.14";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.118.14",
+    date: "2026-07-17",
+    changes: [
+      "Docs: Match Play PARTICIPATION & COMMUNICATION layer for CA. Match Play demands more participation, so idle players break the pool/bracket. Captured: per-match/round completion deadlines (complete-by X) with automated reminders/escalation; DQ boundaries for non-participation (missed matches / past-deadline / weeks idle) and walkover/forfeit + standings handling; matches played OUTSIDE TGF events (self-scheduled makeups, event-independent, pair-keyed); automated participant comms driven by match state. Plus format-history context (earlier double-elimination playback format produced more matches than the current pools->knockout). In the CA handoff and game-engine.md D-MP-11.",
+    ],
+  },
   {
     version: "2.118.13",
     date: "2026-07-17",
