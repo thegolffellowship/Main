@@ -752,15 +752,21 @@
         .mpv2 .mp-pool { margin-bottom: 1.5rem; }
         .mpv2 .mp-pool-head {
             display: flex; align-items: baseline; gap: 0.5rem;
-            padding: 0 0.15rem 0.55rem; border-bottom: 2px solid var(--text);
+            padding: 0.35rem 0.15rem 0.55rem; border-bottom: 2px solid var(--text);
         }
+        /* whole pool head is the expand target (full width, not just the chip) */
+        .mpv2 .mp-pool-toggle { cursor: pointer; border-radius: 8px 8px 0 0; transition: background 0.12s; }
+        .mpv2 .mp-pool-toggle:hover { background: #F7F5F2; }
+        .mpv2 .mp-pool-toggle:active { background: #F0EDE8; }
+        .mpv2 .mp-pool-toggle:focus-visible { outline: 2px solid var(--mp-accent); outline-offset: -2px; }
+        .mpv2 .mp-pool-toggle.open .mp-matches-chip { background: var(--mp-accent); color: #fff; border-color: var(--mp-accent); }
         .mpv2 .mp-pool-name { font: 700 1.05rem/1 'Bitter', Georgia, serif; color: var(--text); }
         .mpv2 .mp-pool-meta { font-size: 0.75rem; color: var(--text-muted); }
         .mpv2 .mp-matches-chip {
             margin-left: auto; font: 700 0.62rem/1 'Bitter', Georgia, serif;
             letter-spacing: 0.06em; text-transform: uppercase; color: var(--mp-accent);
             background: #fff; border: 1px solid var(--mp-clay-edge); border-radius: 9999px;
-            padding: 0.3rem 0.6rem; cursor: pointer;
+            padding: 0.3rem 0.6rem; transition: background 0.12s, color 0.12s;
         }
         .mpv2 .mp-col-head {
             display: grid; grid-template-columns: 1.7rem 1fr auto auto 1.1rem;
@@ -777,6 +783,13 @@
         }
         .mpv2 .mp-row.rank1 { background: #FCF6F1; margin: 0 -0.4rem; padding: 0.7rem 0.55rem; border-radius: 8px; border-bottom: 1px solid var(--border); }
         .mpv2 .mp-row.wd { opacity: 0.55; }
+        /* The whole player row is the expand/collapse hit target (accordion). */
+        .mpv2 .mp-row-toggle { cursor: pointer; border-radius: 8px; transition: background 0.12s; }
+        .mpv2 .mp-row-toggle:hover { background: #F7F5F2; }
+        .mpv2 .mp-row-toggle.rank1:hover { background: #FBEFE6; }
+        .mpv2 .mp-row-toggle:active { background: #F0EDE8; }
+        .mpv2 .mp-row-toggle:focus-visible { outline: 2px solid var(--mp-accent); outline-offset: -2px; }
+        .mpv2 .mp-row-toggle.open .mp-chev { transform: rotate(90deg); color: var(--mp-accent); }
         .mpv2 .mp-rank { font: 700 0.9rem/1 'Bitter', Georgia, serif; color: var(--text-muted); font-variant-numeric: tabular-nums; text-align: center; }
         .mpv2 .mp-row.rank1 .mp-rank { color: var(--mp-accent); }
         .mpv2 .mp-name-cell { display: flex; align-items: center; gap: 0.4rem; min-width: 0; }
@@ -795,6 +808,7 @@
         .mpv2 .mp-dot.loss { background: #dc2626; }
         .mpv2 .mp-dot.tie { background: var(--mp-stone); }
         .mpv2 .mp-dot.empty { background: transparent; border: 1.5px solid #D6D3CC; }
+        .mpv2 .mp-dot.extra { opacity: 0.4; }   /* D-MP-09 non-counting 4th match */
         .mpv2 .mp-pts { font: 700 1.05rem/1 'Bitter', Georgia, serif; color: var(--text); font-variant-numeric: tabular-nums; text-align: right; }
         .mpv2 .mp-chev {
             background: none; border: none; cursor: pointer; color: var(--text-placeholder, #9CA3AF);
@@ -846,6 +860,83 @@
         .mpv2 .mp-strip-bar.clay { background: var(--mp-clay); clip-path: polygon(0 0, calc(100% - 14px) 0, 100% 50%, calc(100% - 14px) 100%, 0 100%); }
         .mpv2 .mp-strip-bar.tie { background: var(--mp-stone); color: #fff; }
         .mpv2 .mp-strip-provenance { padding: 0.35rem 0.7rem; font-size: 0.66rem; font-style: italic; color: var(--text-muted); border-top: 1px solid var(--border); }
+
+        /* ── Center hole-dots row + click-to-expand scorecard grid (#228 hole
+           detail, Kerry-ratified · PLACEHOLDER hole data labelled illustrative) ── */
+        .mpv2 .mp-card-head { display: block; }
+        .mpv2 .mp-card-head.mp-clickable { cursor: pointer; }
+        .mpv2 .mp-card-head.mp-clickable:hover { background: #FCFBF9; }
+        .mpv2 .mp-hole-dots {
+            display: flex; flex-wrap: wrap; align-items: center; justify-content: center;
+            gap: 0.3rem; padding: 0.55rem 0.7rem 0.15rem;
+        }
+        .mpv2 .mp-hdot { width: 9px; height: 9px; border-radius: 50%; flex: none; }
+        .mpv2 .mp-hdot.a { background: var(--mp-slate); }
+        .mpv2 .mp-hdot.b { background: var(--mp-clay); }
+        .mpv2 .mp-hdot.halve { background: var(--mp-stone); }
+        .mpv2 .mp-hdot.empty { background: transparent; border: 1.5px solid #D6D3CC; }
+        .mpv2 .mp-putt-chip {
+            margin-left: 0.2rem; width: 15px; height: 15px; border-radius: 50%;
+            display: inline-flex; align-items: center; justify-content: center;
+            font: 700 0.58rem/1 'Bitter', Georgia, serif; color: #fff; background: var(--mp-stone);
+        }
+        .mpv2 .mp-card-toggle {
+            display: flex; align-items: center; justify-content: space-between;
+            gap: 0.6rem; padding: 0.15rem 0.7rem 0.55rem; flex-wrap: wrap;
+        }
+        .mpv2 .mp-illus-note {
+            font-size: 0.62rem; font-style: italic; color: var(--text-placeholder, #9CA3AF);
+            line-height: 1.35; flex: 1 1 55%; min-width: 0;
+        }
+        .mpv2 .mp-toggle-hint {
+            font: 700 0.56rem/1 'Bitter', Georgia, serif; letter-spacing: 0.05em;
+            text-transform: uppercase; color: var(--mp-accent); white-space: nowrap; flex: none;
+        }
+        .mpv2 .mp-scorecard[hidden] { display: none; }
+        .mpv2 .mp-scorecard { border-top: 1px solid var(--border); padding: 0.75rem 0.7rem; background: #FCFCFB; }
+        .mpv2 .mp-sc-nines { display: flex; flex-wrap: wrap; gap: 0.9rem 1.1rem; }
+        .mpv2 .mp-sc-block { flex: 1 1 320px; min-width: 0; overflow-x: auto; }
+        .mpv2 .mp-sc-block-label {
+            font: 700 0.56rem/1 'Bitter', Georgia, serif; letter-spacing: 0.08em;
+            text-transform: uppercase; color: var(--text-placeholder, #9CA3AF); margin-bottom: 0.35rem;
+        }
+        .mpv2 table.mp-sc { border-collapse: collapse; width: 100%; font-variant-numeric: tabular-nums; }
+        .mpv2 table.mp-sc th, .mpv2 table.mp-sc td {
+            text-align: center; padding: 0.16rem 0.12rem; font-size: 0.66rem;
+            color: var(--text-body, #4B5563); white-space: nowrap; border: none;
+        }
+        .mpv2 table.mp-sc .mp-sc-rowlabel { text-align: left; font-weight: 700; padding-right: 0.35rem; }
+        .mpv2 table.mp-sc .mp-sc-tot { font-weight: 700; color: var(--text); border-left: 1px solid var(--border); }
+        .mpv2 table.mp-sc tr.mp-sc-hole th, .mpv2 table.mp-sc tr.mp-sc-hole td {
+            font: 700 0.58rem/1 'Bitter', Georgia, serif; letter-spacing: 0.03em;
+            color: var(--text-placeholder, #9CA3AF); text-transform: uppercase;
+            border-bottom: 1px solid var(--border);
+        }
+        .mpv2 table.mp-sc tr.mp-sc-par td, .mpv2 table.mp-sc tr.mp-sc-par th { color: var(--text-placeholder, #9CA3AF); }
+        .mpv2 table.mp-sc tr.mp-sc-strokes td { font-size: 0.74rem; font-weight: 600; color: var(--text); position: relative; }
+        .mpv2 table.mp-sc tr.mp-sc-strokes .mp-mono-cell { padding: 0; }
+        .mpv2 .mp-sc-monochip {
+            display: inline-flex; align-items: center; justify-content: center;
+            width: 22px; height: 22px; border-radius: 5px; color: #fff;
+            font: 700 0.6rem/1 'Bitter', Georgia, serif;
+        }
+        .mpv2 .mp-sc-monochip.a { background: var(--mp-slate); }
+        .mpv2 .mp-sc-monochip.b { background: var(--mp-clay); }
+        .mpv2 .mp-sc-mk { display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px; border-radius: 50%; }
+        .mpv2 .mp-sc-mk.won-a { background: var(--mp-slate); color: #fff; }
+        .mpv2 .mp-sc-mk.won-b { background: var(--mp-clay); color: #fff; }
+        .mpv2 table.mp-sc td.dim { opacity: 0.32; }
+        .mpv2 .mp-sc-tick { position: absolute; left: 50%; bottom: 1px; transform: translateX(-50%); width: 3px; height: 3px; border-radius: 50%; background: var(--text-placeholder, #9CA3AF); }
+        .mpv2 table.mp-sc tr.mp-sc-pts td, .mpv2 table.mp-sc tr.mp-sc-pts th { font-size: 0.56rem; color: var(--text-placeholder, #9CA3AF); padding-top: 0; }
+        .mpv2 .mp-sc-result {
+            display: inline-flex; align-items: center; gap: 0.4rem; margin-top: 0.6rem;
+            font: 700 0.66rem/1 'Bitter', Georgia, serif; letter-spacing: 0.03em;
+            padding: 0.28rem 0.55rem; border-radius: 6px; color: #fff;
+        }
+        .mpv2 .mp-sc-result.a { background: var(--mp-slate); }
+        .mpv2 .mp-sc-result.b { background: var(--mp-clay); }
+        .mpv2 .mp-sc-result.tie { background: var(--mp-stone); }
+        .mpv2 .mp-sc-caption { font-size: 0.62rem; font-style: italic; color: var(--text-placeholder, #9CA3AF); line-height: 1.4; margin-top: 0.55rem; }
 
         /* ── Knockout panel: stacked full-width match cards grouped by round ── */
         .mpv2 #mp-panel-knockout .bracket-tree { display: block; }
@@ -2194,14 +2285,36 @@
         if (parts.length <= 1) return { first: '', last: parts[0] || '—' };
         return { first: parts.slice(0,-1).join(' '), last: parts[parts.length-1] };
     }
-    function mpDotsHtml(r, expected) {
+    // This player's result in one match: win | loss | tie.
+    function mpMatchResultFor(m, player) {
+        const ml = (m.margin || '').toLowerCase();
+        if (!m.winner_name || ml === 'halved' || ml === 'all square' || ml === 'as' || ml === 'tie')
+            return 'tie';
+        return m.winner_name === player ? 'win' : 'loss';
+    }
+    // W-L-T dots in CHRONOLOGICAL (by match date) order — one dot per match, in
+    // the order the matches were played. green=won, red=lost, stone=halved,
+    // hollow=unplayed/scheduled. Under D-MP-09 a 4-match player's non-counting
+    // 4th (latest by date) renders as a faint dot after the counted three.
+    function mpChronoDots(r, matches, expected) {
+        const player = r.player_name;
+        const mine = (matches || [])
+            .filter(m => m.played_at != null && (m.player1_name === player || m.player2_name === player))
+            .sort((a, b) => {
+                const da = a.event_date_val || a.match_date || '';
+                const db = b.event_date_val || b.match_date || '';
+                if (da !== db) return da < db ? -1 : 1;
+                return (a.id || 0) - (b.id || 0);
+            });
+        const counted = (r.dropped_4th && r.counted != null) ? r.counted : mine.length;
         let dots = '';
-        const w=r.wins||0, l=r.losses||0, d=r.draws||0;
-        for (let i=0;i<w;i++) dots += '<span class="mp-dot win"></span>';
-        for (let i=0;i<l;i++) dots += '<span class="mp-dot loss"></span>';
-        for (let i=0;i<d;i++) dots += '<span class="mp-dot tie"></span>';
-        const played = w+l+d;
-        for (let i=played;i<expected;i++) dots += '<span class="mp-dot empty"></span>';
+        mine.forEach((m, i) => {
+            const res = mpMatchResultFor(m, player);
+            const extra = i >= counted ? ' extra' : '';
+            dots += `<span class="mp-dot ${res}${extra}"></span>`;
+        });
+        const target = Math.max(expected, counted);
+        for (let i = mine.length; i < target; i++) dots += '<span class="mp-dot empty"></span>';
         if (!dots) dots = '<span class="mp-dot empty"></span>';
         return `<span class="mp-dots">${dots}</span>`;
     }
@@ -2255,11 +2368,17 @@
             } catch (_) { /* non-fatal */ }
         }
         standings = standings || [];
+        // Fetch each pool's matches up front so the standings-row dots render in
+        // CHRONOLOGICAL (by-date) order rather than aggregated W/L/T counts.
+        const matchMap = {};
+        await Promise.all(cmpState.pools.map(async pool => {
+            matchMap[pool.id] = await mpGetMatches(pool.id);
+        }));
         let html = isManager ? renderUnassignedPanel() : '';
         cmpState.pools.forEach(pool => {
             const rows = standings.filter(r => r.pool_id === pool.id)
                                   .sort((a,b) => (a.rank||99) - (b.rank||99));
-            html += mpPoolBlock(pool, rows, isManager);
+            html += mpPoolBlock(pool, rows, isManager, matchMap[pool.id] || []);
         });
         html += mpRankExplainer(standings);
         container.innerHTML = html;
@@ -2269,7 +2388,7 @@
         if (isManager) wirePools();
     }
 
-    function mpPoolBlock(pool, rows, isManager) {
+    function mpPoolBlock(pool, rows, isManager, matches) {
         const n = pool.members.length;
         const bonusEach = (cmpState.structure || {}).pool_winner_bonus_each ?? 20;
         // Dot count = the number of matches the pool's front-runners have played
@@ -2282,7 +2401,7 @@
         const complete = maxPlayed > 0 && counts.every(c => c >= maxPlayed);
         const statusTxt = rows.length ? (complete ? 'complete' : 'in progress') : 'not started';
         const listRows = rows.length
-            ? rows.map(r => mpStandRow(r, pool, expected, bonusEach)).join('')
+            ? rows.map(r => mpStandRow(r, pool, expected, bonusEach, matches)).join('')
             : `<div class="mp-expand-empty">No results recorded yet.</div>`;
         const hasDropped4th = rows.some(r => r.dropped_4th && r.played > r.counted);
         const note = hasDropped4th ? `
@@ -2295,10 +2414,11 @@
             : '';
         return `
         <div class="mp-pool" data-pool="${pool.id}">
-            <div class="mp-pool-head">
+            <div class="mp-pool-head mp-pool-toggle" role="button" tabindex="0"
+                 aria-expanded="false" aria-label="Show matches for ${escapeHtml(pool.pool_name)}">
                 <span class="mp-pool-name">${escapeHtml(pool.pool_name)}</span>
                 <span class="mp-pool-meta">${n} player${n===1?'':'s'} &middot; ${statusTxt}</span>
-                <button class="mp-matches-chip" type="button">Matches &rsaquo;</button>
+                <span class="mp-matches-chip" aria-hidden="true">Matches &rsaquo;</span>
             </div>
             <div class="mp-col-head"><span></span><span>Player</span><span class="mp-ch-wlt">W-L-T</span><span class="mp-ch-pts">Pts</span><span></span></div>
             <div class="mp-standings">${listRows}</div>
@@ -2308,7 +2428,7 @@
         </div>`;
     }
 
-    function mpStandRow(r, pool, expected, bonusEach) {
+    function mpStandRow(r, pool, expected, bonusEach, matches) {
         const wd = mpIsWd(r);
         const rank1 = r.rank === 1 && !wd;
         let chip = '';
@@ -2317,14 +2437,18 @@
         else if (r.advances) chip = `<span class="mp-chip adv">ADV</span>`;
         const dots = wd
             ? `<span class="mp-dots"><span class="mp-dot loss" style="opacity:.5"></span></span>`
-            : mpDotsHtml(r, expected);
+            : mpChronoDots(r, matches, expected);
+        // The ENTIRE row is the expand/collapse target (role=button, keyboard-
+        // accessible). The chevron is kept purely as the visual affordance.
         return `
-        <div class="mp-row ${rank1?'rank1':''} ${wd?'wd':''}">
+        <div class="mp-row mp-row-toggle ${rank1?'rank1':''} ${wd?'wd':''}" role="button" tabindex="0"
+             aria-expanded="false" data-pool="${pool.id}" data-player="${escapeHtml(r.player_name)}"
+             aria-label="Show matches for ${escapeHtml(r.player_name)}">
             <span class="mp-rank">${wd ? '&mdash;' : (r.rank || '')}</span>
             <span class="mp-name-cell"><span class="mp-name">${escapeHtml(r.player_name)}</span>${chip}</span>
             ${dots}
             <span class="mp-pts">${r.stableford_pts != null ? r.stableford_pts : '&mdash;'}</span>
-            <button class="mp-chev" type="button" data-pool="${pool.id}" data-player="${escapeHtml(r.player_name)}" title="Show this player's matches">&rsaquo;</button>
+            <span class="mp-chev" aria-hidden="true">&rsaquo;</span>
         </div>
         <div class="mp-expand" style="display:none;"></div>`;
     }
@@ -2352,6 +2476,207 @@
         return `<div class="mp-strip">${aMono}${aName}<span class="mp-strip-bar ${barCls}">${escapeHtml(barTxt)}</span>${bName}${bMono}</div>`;
     }
 
+    /* ══════════════════════════════════════════════════════════════════
+       PLACEHOLDER HOLE ENGINE  (#228 hole-detail, Kerry-ratified)
+       Deterministic hole-by-hole generator, CONSISTENT with the known
+       match result (never contradicts winner/margin). This is illustrative
+       data only until real Golf Genius per-hole scoring wires in — at which
+       point GG data replaces this function's OUTPUT with the SAME shape,
+       a clean seam:  mpGenerateHoles(o) ->
+         { count, nine, played, thru, closedAt, putt, inProgress,
+           holes:[{ winner:'A'|'B'|'H'|null, played:bool,
+                    par, parA, parB, ptsA, ptsB, srA, srB }] }
+       parA/parB = each player's STROKES that hole (winner=par, loser=par+1
+       per CD's heuristic); ptsA/ptsB = illustrative net-Stableford points.
+       ══════════════════════════════════════════════════════════════════ */
+    const MP_PAR_F = [4, 3, 5, 4, 4, 3, 4, 5, 4];   // front-9 par template (36)
+    const MP_PAR_B = [4, 4, 3, 4, 5, 4, 3, 5, 4];   // back-9 par template (36)
+
+    function mpHash(str) {                 // FNV-1a → 32-bit unsigned seed
+        let h = 2166136261 >>> 0;
+        for (let i = 0; i < str.length; i++) { h ^= str.charCodeAt(i); h = Math.imul(h, 16777619); }
+        return h >>> 0;
+    }
+    function mpRng(seed) {                  // mulberry32 PRNG (stable, no Math.random)
+        let a = seed >>> 0;
+        return function () {
+            a = (a + 0x6D2B79F5) | 0;
+            let t = Math.imul(a ^ (a >>> 15), 1 | a);
+            t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+            return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+        };
+    }
+    function mpShuffled(n, rnd) {           // deterministic Fisher–Yates of [0..n-1]
+        const a = Array.from({ length: n }, (_, i) => i);
+        for (let i = n - 1; i > 0; i--) { const j = Math.floor(rnd() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; }
+        return a;
+    }
+    // Parse a margin string into structured close-out info.
+    function mpParseMargin(margin) {
+        const ml = String(margin || '').trim().toLowerCase();
+        const thru = ml.match(/thru\s*(\d+)/);
+        if (thru) return { kind: 'progress', up: 0, toPlay: 0, thru: +thru[1] };
+        if (/putt/.test(ml)) return { kind: 'putt', up: 0, toPlay: 0 };
+        if (ml === '' || ml === 'as' || ml === 'all square' || ml === 'halved' || ml === 'tie')
+            return { kind: 'tie', up: 0, toPlay: 0 };
+        let g = ml.match(/(\d+)\s*&\s*(\d+)/);          // "3&2"
+        if (g) return { kind: 'closed', up: +g[1], toPlay: +g[2] };
+        g = ml.match(/(\d+)\s*up/);                     // "1 up" / "2up"
+        if (g) return { kind: 'up', up: +g[1], toPlay: 0 };
+        return { kind: 'up', up: 1, toPlay: 0 };        // fallback: decided on last hole
+    }
+
+    // The generator — o carries { aName,bName, aWin,bWin,tie, margin, seedKey, holesHint }
+    function mpGenerateHoles(o) {
+        const pm = mpParseMargin(o.margin);
+        const hint = String(o.holesHint || '').toLowerCase();
+        const seed = mpHash((o.seedKey || '') + '|' + (o.margin || ''));
+        const rnd = mpRng(seed);
+        // Hole count + which nine (front/back) — derived from the event/round meta,
+        // else deterministically chosen. Illustrative when the source is silent.
+        let count = 18, nine = null;
+        if (/front/.test(hint)) { count = 9; nine = 'front'; }
+        else if (/back/.test(hint)) { count = 9; nine = 'back'; }
+        else if (/\b9\b|nine[- ]?hole|\bnine\b/.test(hint)) { count = 9; }
+        else if (/\b18\b|eighteen/.test(hint)) { count = 18; }
+        if (count === 9 && !nine) nine = rnd() < 0.5 ? 'front' : 'back';
+        const par = count === 9
+            ? (nine === 'back' ? MP_PAR_B.slice() : MP_PAR_F.slice())
+            : MP_PAR_F.concat(MP_PAR_B);
+
+        const winSide = o.aWin ? 'A' : (o.bWin ? 'B' : null);
+        let played = count, closedAt = count, inProgress = false;
+        if (pm.kind === 'progress') { played = Math.min(pm.thru, count); inProgress = true; closedAt = null; }
+        else if (pm.kind === 'closed') { played = Math.max(1, count - pm.toPlay); closedAt = played; }
+
+        // Win pattern over the played holes: 'A' | 'B' | 'H' (halved); unplayed => null.
+        const wins = new Array(count).fill('H');
+        if (pm.kind === 'tie' || pm.kind === 'putt' || (pm.kind === 'progress' && !winSide)) {
+            // All square through the played holes: equal A/B wins, remainder halved.
+            const pairs = Math.floor(rnd() * (Math.floor(played / 2) + 1));
+            const idx = mpShuffled(played, rnd);
+            let k = 0;
+            for (let i = 0; i < pairs; i++) { wins[idx[k++]] = 'A'; wins[idx[k++]] = 'B'; }
+        } else if (winSide) {
+            const up = Math.max(1, pm.up);
+            const hi = winSide, lo = winSide === 'A' ? 'B' : 'A';
+            const maxL = Math.max(0, Math.floor((played - up) / 2));   // loser-won holes budget
+            const l = maxL > 0 ? Math.floor(rnd() * (maxL + 1)) : 0;
+            const w = l + up;                                          // winner-won holes
+            const clinch = played - 1;                                // last played hole = winner win
+            const pool = mpShuffled(played, rnd).filter(i => i !== clinch);
+            let k = 0;
+            for (let i = 0; i < w - 1; i++) wins[pool[k++]] = hi;
+            for (let i = 0; i < l; i++) wins[pool[k++]] = lo;
+            wins[clinch] = hi;
+        }
+        for (let i = played; i < count; i++) wins[i] = null;
+
+        // Illustrative stroke-received ticks: the side that won fewer holes (proxy
+        // for higher handicap) receives a stroke on the hardest (highest-par) holes.
+        let aw = 0, bw = 0;
+        wins.forEach(x => { if (x === 'A') aw++; else if (x === 'B') bw++; });
+        const recv = bw <= aw ? 'B' : 'A';
+        const nRecv = count >= 18 ? 3 : 1;
+        const hardest = par.map((p, i) => [p, i]).sort((x, y) => y[0] - x[0] || x[1] - y[1])
+            .slice(0, nRecv).map(t => t[1]);
+
+        const holes = wins.map((wnr, i) => {
+            const p = par[i];
+            let parA, parB, ptsA, ptsB;
+            if (wnr === null) { parA = parB = ptsA = ptsB = null; }
+            else if (wnr === 'A') { parA = p; parB = p + 1; ptsA = 2; ptsB = 1; }
+            else if (wnr === 'B') { parA = p + 1; parB = p; ptsA = 1; ptsB = 2; }
+            else { parA = parB = p; ptsA = ptsB = 2; }
+            const srA = wnr !== null && recv === 'A' && hardest.includes(i);
+            const srB = wnr !== null && recv === 'B' && hardest.includes(i);
+            return { winner: wnr, played: wnr !== null, par: p, parA, parB, ptsA, ptsB, srA, srB };
+        });
+        return { count, nine, played, thru: played, closedAt, putt: pm.kind === 'putt', inProgress, holes };
+    }
+
+    // Center hole-dots row (collapsed strip) — one dot per hole, coloured by winner.
+    function mpHoleDotsHtml(gen) {
+        const dots = gen.holes.map(h => {
+            if (!h.played) return '<span class="mp-hdot empty"></span>';
+            const c = h.winner === 'A' ? 'a' : (h.winner === 'B' ? 'b' : 'halve');
+            return `<span class="mp-hdot ${c}"></span>`;
+        }).join('');
+        const p = gen.putt ? '<span class="mp-putt-chip" title="Decided by a putt-off">P</span>' : '';
+        return `<div class="mp-hole-dots" aria-hidden="true">${dots}${p}</div>`;
+    }
+
+    // Expanded scorecard grid — 9-hole block(s); 18-hole splits FRONT/BACK.
+    function mpScorecardGridHtml(gen, o) {
+        const aMono = `<span class="mp-sc-monochip a">${escapeHtml(mpMono(o.aName))}</span>`;
+        const bMono = `<span class="mp-sc-monochip b">${escapeHtml(mpMono(o.bName))}</span>`;
+        const cell = (v, cls) => `<td class="${cls || ''}">${v == null ? '' : v}</td>`;
+        function block(start, len, label) {
+            const hs = [], pars = [], aS = [], aP = [], bS = [], bP = [];
+            let parTot = 0, aStr = 0, bStr = 0, aPts = 0, bPts = 0;
+            for (let i = start; i < start + len; i++) {
+                const h = gen.holes[i];
+                const dim = h.played ? '' : ' dim';
+                hs.push(`<td>${i + 1}</td>`);
+                pars.push(`<td>${h.par}</td>`); parTot += h.par;
+                const aMk = h.winner === 'A' ? `<span class="mp-sc-mk won-a">${h.parA}</span>` : (h.parA == null ? '' : h.parA);
+                const bMk = h.winner === 'B' ? `<span class="mp-sc-mk won-b">${h.parB}</span>` : (h.parB == null ? '' : h.parB);
+                aS.push(`<td class="${'strk' + dim}">${aMk}${h.srA ? '<span class="mp-sc-tick"></span>' : ''}</td>`);
+                bS.push(`<td class="${'strk' + dim}">${bMk}${h.srB ? '<span class="mp-sc-tick"></span>' : ''}</td>`);
+                aP.push(cell(h.ptsA, dim.trim())); bP.push(cell(h.ptsB, dim.trim()));
+                if (h.played) { aStr += h.parA; bStr += h.parB; aPts += h.ptsA; bPts += h.ptsB; }
+            }
+            return `
+            ${label ? `<div class="mp-sc-block-label">${label}</div>` : ''}
+            <table class="mp-sc">
+                <tr class="mp-sc-hole"><th class="mp-sc-rowlabel">Hole</th>${hs.join('')}<th class="mp-sc-tot">Tot</th></tr>
+                <tr class="mp-sc-par"><th class="mp-sc-rowlabel">Par</th>${pars.join('')}<th class="mp-sc-tot">${parTot}</th></tr>
+                <tr class="mp-sc-strokes"><th class="mp-sc-rowlabel mp-mono-cell">${aMono}</th>${aS.join('')}<th class="mp-sc-tot">${aStr}</th></tr>
+                <tr class="mp-sc-pts"><th class="mp-sc-rowlabel">Pts</th>${aP.join('')}<th class="mp-sc-tot">${aPts}</th></tr>
+                <tr class="mp-sc-strokes"><th class="mp-sc-rowlabel mp-mono-cell">${bMono}</th>${bS.join('')}<th class="mp-sc-tot">${bStr}</th></tr>
+                <tr class="mp-sc-pts"><th class="mp-sc-rowlabel">Pts</th>${bP.join('')}<th class="mp-sc-tot">${bPts}</th></tr>
+            </table>`;
+        }
+        let nines;
+        if (gen.count === 18) {
+            nines = `<div class="mp-sc-block">${block(0, 9, 'Front 9')}</div><div class="mp-sc-block">${block(9, 9, 'Back 9')}</div>`;
+        } else {
+            nines = `<div class="mp-sc-block">${block(0, gen.count, gen.nine === 'back' ? 'Back 9' : 'Front 9')}</div>`;
+        }
+        // Winner margin stays on the winner's side.
+        let result = '';
+        if (o.aWin) result = `<span class="mp-sc-result a">&#9656; ${escapeHtml(mpFirstLast(o.aName).last)} ${escapeHtml(o.margin || 'WON')}</span>`;
+        else if (o.bWin) result = `<span class="mp-sc-result b">${escapeHtml(mpFirstLast(o.bName).last)} ${escapeHtml(o.margin || 'WON')} &#9666;</span>`;
+        else if (o.tie) result = `<span class="mp-sc-result tie">${gen.putt ? 'Putt-off' : 'All square'}</span>`;
+        const prog = gen.inProgress ? ` &middot; in progress, thru ${gen.played}` : '';
+        return `<div class="mp-sc-nines">${nines}</div>
+            <div>${result}</div>
+            <div class="mp-sc-caption">Illustrative hole detail — generated from the match result${prog}; live hole-by-hole scoring wires in from Golf Genius. Strokes: hole winner takes par, loser par+1.</div>`;
+    }
+
+    // Shared match card: clickable head (meta + strip + hole-dots + caption) and
+    // a pre-rendered, hidden scorecard grid revealed on click. Used by both the
+    // pool-match and knockout-slot renderers so every strip behaves identically.
+    function mpMatchCard(o, opts) {
+        const gen = opts.hasResult ? mpGenerateHoles(o) : null;
+        const strip = mpStripHtml(o);
+        const meta = `<div class="mp-match-meta"><span>${escapeHtml(opts.metaL)}</span><span class="status${opts.live ? ' live' : ''}">${escapeHtml(opts.status)}</span></div>`;
+        if (!gen) {
+            return `<div class="mp-match-card"><div class="mp-card-head">${meta}${strip}${opts.prov || ''}</div></div>`;
+        }
+        const dots = mpHoleDotsHtml(gen);
+        const grid = mpScorecardGridHtml(gen, o);
+        const toggle = `<div class="mp-card-toggle">
+            <span class="mp-illus-note">Illustrative hole map — generated from the result; real scoring wires in from Golf Genius.</span>
+            <span class="mp-toggle-hint">&rsaquo; open card</span></div>`;
+        return `<div class="mp-match-card">
+            <div class="mp-card-head mp-clickable" role="button" tabindex="0" aria-expanded="false" aria-label="Show hole-by-hole scorecard">
+                ${meta}${strip}${dots}${toggle}${opts.prov || ''}
+            </div>
+            <div class="mp-scorecard" hidden>${grid}</div>
+        </div>`;
+    }
+
     function mpMatchCardFromMatch(m, perspective) {
         const played = m.played_at != null;
         let p1 = m.player1_name, p2 = m.player2_name;
@@ -2360,7 +2685,6 @@
         const tie = played && (!m.winner_name || ml === 'halved' || ml === 'all square' || ml === 'as');
         const aWin = played && m.winner_name === p1;
         const bWin = played && m.winner_name === p2;
-        const strip = mpStripHtml({ aName: p1, bName: p2, aWin, bWin, tie, margin: m.margin });
         let metaL = 'Match';
         if (m.event_name) {
             const d = (m.event_date_val || '').slice(5).replace('-', '/');
@@ -2369,7 +2693,12 @@
         const status = played ? (tie ? 'TIE' : 'FINAL') : 'SCHEDULED';
         const prov = (played && !m.event_name)
             ? `<div class="mp-strip-provenance">Private match · counts for Match Play only</div>` : '';
-        return `<div class="mp-match-card"><div class="mp-match-meta"><span>${escapeHtml(metaL)}</span><span class="status">${status}</span></div>${strip}${prov}</div>`;
+        const o = {
+            aName: p1, bName: p2, aWin, bWin, tie, margin: m.margin,
+            seedKey: [p1, p2, m.event_name || '', m.event_date_val || m.match_date || ''].join('|'),
+            holesHint: (m.event_name || '') + ' ' + (m.notes || '')
+        };
+        return mpMatchCard(o, { metaL, status, prov, hasResult: played, live: false });
     }
 
     function mpMatchCardFromSlots(s1, s2, roundKey, eventName, eventDate) {
@@ -2378,14 +2707,19 @@
         const ml = (margin || '').toLowerCase();
         const bothPresent = !!(s1.player_name && s2.player_name);
         const tie = bothPresent && !winner && (ml === 'halved' || ml === 'all square' || ml === 'as');
+        const inProgress = bothPresent && !winner && /thru/i.test(ml);
         const aWin = !!(winner && winner === s1.player_name);
         const bWin = !!(winner && winner === s2.player_name);
-        const strip = mpStripHtml({ aName: s1.player_name, bName: s2.player_name, aWin, bWin, tie, margin });
         const roundLabel = (ROUND_DEFS[roundKey] || {}).label || roundKey;
         const d = (eventDate || '').slice(5).replace('-', '/');
         const metaL = `${roundLabel}${eventName ? ' · ' + eventName : ''}${d ? ' · ' + d : ''}`;
-        const status = winner ? 'FINAL' : (bothPresent ? '—' : 'TBD');
-        return `<div class="mp-match-card"><div class="mp-match-meta"><span>${escapeHtml(metaL)}</span><span class="status">${status}</span></div>${strip}</div>`;
+        const status = winner ? 'FINAL' : (inProgress ? 'IN PROGRESS' : (bothPresent ? '—' : 'TBD'));
+        const o = {
+            aName: s1.player_name, bName: s2.player_name, aWin, bWin, tie, margin,
+            seedKey: [s1.player_name || '', s2.player_name || '', roundKey, eventName || ''].join('|'),
+            holesHint: (eventName || '') + ' ' + roundLabel
+        };
+        return mpMatchCard(o, { metaL, status, hasResult: winner || tie || inProgress, live: inProgress });
     }
 
     async function mpGetMatches(poolId) {
@@ -2397,43 +2731,87 @@
         return mpMatchCache[poolId];
     }
 
-    // Delegated clicks inside the pools container (chevron + Matches chip)
-    async function mpPoolClick(e) {
-        const chev = e.target.closest('.mp-chev');
-        if (chev) {
-            const row = chev.closest('.mp-row');
-            const exp = row && row.nextElementSibling;
-            if (!exp || !exp.classList.contains('mp-expand')) return;
-            const open = exp.style.display !== 'none';
-            if (open) { exp.style.display = 'none'; chev.classList.remove('open'); return; }
-            chev.classList.add('open');
-            const matches = await mpGetMatches(Number(chev.dataset.pool));
-            const player = chev.dataset.player;
-            const mine = matches.filter(m => m.played_at != null && (m.player1_name === player || m.player2_name === player));
-            exp.innerHTML = mine.length
-                ? mine.map(m => mpMatchCardFromMatch(m, player)).join('')
-                : '<div class="mp-expand-empty">No completed matches yet.</div>';
-            exp.style.display = '';
+    // Expand/collapse a player's matches. The WHOLE row is the hit target, and
+    // this behaves as an ACCORDION — opening one player row collapses any other
+    // player row that is currently open across the standings.
+    async function mpExpandPlayerRow(row) {
+        const exp = row.nextElementSibling;
+        if (!exp || !exp.classList.contains('mp-expand')) return;
+        const scope = row.closest('#cmp-pools-container') || document;
+        const wasOpen = exp.style.display !== 'none';
+        // Accordion: collapse every other open player row first.
+        scope.querySelectorAll('.mp-row-toggle.open').forEach(other => {
+            if (other === row) return;
+            other.classList.remove('open');
+            other.setAttribute('aria-expanded', 'false');
+            const oe = other.nextElementSibling;
+            if (oe && oe.classList.contains('mp-expand')) oe.style.display = 'none';
+        });
+        if (wasOpen) {
+            exp.style.display = 'none';
+            row.classList.remove('open');
+            row.setAttribute('aria-expanded', 'false');
             return;
         }
-        const chip = e.target.closest('.mp-matches-chip');
-        if (chip) {
-            const poolEl = chip.closest('.mp-pool');
-            const exp = poolEl && poolEl.querySelector('.mp-pool-matches-expand');
-            if (!exp) return;
-            const open = exp.style.display !== 'none';
-            if (open) { exp.style.display = 'none'; return; }
-            const matches = await mpGetMatches(Number(poolEl.dataset.pool));
-            const played = matches.filter(m => m.played_at != null);
-            exp.innerHTML = played.length
-                ? played.map(m => mpMatchCardFromMatch(m)).join('')
-                : '<div class="mp-expand-empty">No completed matches yet.</div>';
-            exp.style.display = '';
-            return;
-        }
+        row.classList.add('open');
+        row.setAttribute('aria-expanded', 'true');
+        const matches = await mpGetMatches(Number(row.dataset.pool));
+        const player = row.dataset.player;
+        const mine = matches.filter(m => m.played_at != null && (m.player1_name === player || m.player2_name === player));
+        exp.innerHTML = mine.length
+            ? mine.map(m => mpMatchCardFromMatch(m, player)).join('')
+            : '<div class="mp-expand-empty">No completed matches yet.</div>';
+        exp.style.display = '';
     }
 
-    // One-time wiring: pill sub-tabs + delegated pool clicks.
+    // Toggle a pool's completed-matches panel. The WHOLE pool head is the target
+    // (full width, not just the chevron), keyboard-accessible.
+    async function mpTogglePoolMatches(head) {
+        const poolEl = head.closest('.mp-pool');
+        const exp = poolEl && poolEl.querySelector('.mp-pool-matches-expand');
+        if (!exp) return;
+        const open = exp.style.display !== 'none';
+        if (open) {
+            exp.style.display = 'none';
+            head.classList.remove('open');
+            head.setAttribute('aria-expanded', 'false');
+            return;
+        }
+        const matches = await mpGetMatches(Number(poolEl.dataset.pool));
+        const played = matches.filter(m => m.played_at != null);
+        exp.innerHTML = played.length
+            ? played.map(m => mpMatchCardFromMatch(m)).join('')
+            : '<div class="mp-expand-empty">No completed matches yet.</div>';
+        exp.style.display = '';
+        head.classList.add('open');
+        head.setAttribute('aria-expanded', 'true');
+    }
+
+    // Delegated clicks inside the pools container (full pool head + full player row)
+    async function mpPoolClick(e) {
+        const head = e.target.closest('.mp-pool-toggle');
+        if (head) { await mpTogglePoolMatches(head); return; }
+        // Any OTHER inner interactive control (manager editor inputs/buttons,
+        // links) must keep working and must NOT toggle the row.
+        if (e.target.closest('a,button,input,select,textarea,summary,.mp-mgr-editor')) return;
+        const row = e.target.closest('.mp-row-toggle');
+        if (row) { await mpExpandPlayerRow(row); return; }
+    }
+
+    // Expand/collapse the inline scorecard grid on a match strip (pools + knockout).
+    function mpCardToggle(head) {
+        const card = head.closest('.mp-match-card');
+        const sc = card && card.querySelector('.mp-scorecard');
+        if (!sc) return;
+        const open = !sc.hidden;
+        sc.hidden = open;
+        head.classList.toggle('open', !open);
+        head.setAttribute('aria-expanded', String(!open));
+        const hint = head.querySelector('.mp-toggle-hint');
+        if (hint) hint.innerHTML = open ? '&rsaquo; open card' : '&#9652; collapse card';
+    }
+
+    // One-time wiring: pill sub-tabs + delegated pool clicks + card expanders.
     if (MATCHPLAY_V2) {
         document.querySelectorAll('.mp-subtab').forEach(btn => {
             btn.addEventListener('click', () => {
@@ -2445,7 +2823,35 @@
             });
         });
         const pc = $("cmp-pools-container");
-        if (pc) pc.addEventListener('click', mpPoolClick);
+        if (pc) {
+            pc.addEventListener('click', mpPoolClick);
+            // Keyboard access for the player-row buttons (Enter / Space).
+            pc.addEventListener('keydown', (e) => {
+                if (e.key !== 'Enter' && e.key !== ' ' && e.key !== 'Spacebar') return;
+                const head = e.target.closest('.mp-pool-toggle');
+                if (head && head === e.target) {
+                    e.preventDefault();
+                    mpTogglePoolMatches(head);
+                    return;
+                }
+                const row = e.target.closest('.mp-row-toggle');
+                if (!row || row !== e.target) return;
+                e.preventDefault();
+                mpExpandPlayerRow(row);
+            });
+        }
+        // Match-strip scorecard expand (grids live in pools AND knockout, so the
+        // listeners sit on document and match by class).
+        document.addEventListener('click', (e) => {
+            if (e.target.closest('input,select,textarea,button,a,summary')) return;
+            const head = e.target.closest('.mp-card-head.mp-clickable');
+            if (head) mpCardToggle(head);
+        });
+        document.addEventListener('keydown', (e) => {
+            if (e.key !== 'Enter' && e.key !== ' ' && e.key !== 'Spacebar') return;
+            const head = e.target.closest('.mp-card-head.mp-clickable');
+            if (head && head === e.target) { e.preventDefault(); mpCardToggle(head); }
+        });
     }
 
     // ── Chapter tabs ──

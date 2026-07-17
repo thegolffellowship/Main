@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.118.14";
+window.TGF_VERSION = "2.119.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.119.0",
+    date: "2026-07-17",
+    changes: [
+      "Match Play sandbox render updated to the full CD member-scoreboard spec (gated behind MATCHPLAY_V2, off in prod): each match strip carries a center hole-dots row (per-hole winner colors) and a click-to-expand hole-by-hole scorecard grid (FRONT/BACK 9, winner circles, stroke ticks, margin pill); pool standings show chronological W-L-T dots; player rows are full-width accordion toggles (opening one collapses the previous). Placeholder hole engine is deterministic and never contradicts the recorded result (labeled illustrative) until real GG match detail is wired in.",
+      "Match Play pools: the WHOLE pool header is now the expand target (full width), not just the Matches chevron — click or keyboard-activate anywhere on the pool name row to show/hide that pool completed matches. The chip is now a visual affordance that fills accent when open; role=button + aria-expanded + focus ring for accessibility.",
+    ],
+  },
   {
     version: "2.118.14",
     date: "2026-07-17",
