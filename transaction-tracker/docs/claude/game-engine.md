@@ -327,6 +327,19 @@ below wherever they conflict.
     for the forced 4th, assign to lower TGF index, then earliest signup.
   - Member-facing sentence: "Everyone counts three matches."
 
+**Implementation status (2026-07-17):** config **v2** authored + both
+2026 snapshots **pinned** (`cmp_repin_2026_to_dmp_register`, #223);
+**D-MP-09 pool rank LIVE** (`cmp_get_standings` honors
+`pool_rank_rule='dmp09'`); **D-MP-08 consolation RECORDING live** —
+`cmp_record_consolation(season, chapter, loser_a, loser_b, winner_name)`
+stores one `cmp_bracket` row (round `consolation`), `POST
+/api/cmp/consolation` records/clears it, and `cmp_get_payout_sheet`
+awards 3rd (+4th on 4-place ladders) to the consolation winner, falling
+back to the combined-place split when unrecorded (the `consolation`
+block in the payout return drives the UI). **P1–P4 re-seed code**
+(cmp_seed_knockout) is the remaining code adoption — latent for 2026's
+cross-pool brackets, required before any 6+-field bracket.
+
 **Live-2026 adoption (#217):** both chapters (SA + Austin) are already
 into the knockout; **brackets and played results STAND** — protected
 exactly like the handicap retroactivity boundary. The pool-round

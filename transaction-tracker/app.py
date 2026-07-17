@@ -9820,6 +9820,31 @@ def api_cmp_clear_bracket():
     return jsonify({"ok": True, "deleted": deleted})
 
 
+@app.route("/api/cmp/consolation", methods=["POST"])
+@require_role("manager")
+def api_cmp_consolation():
+    """D-MP-08: record or clear the 3rd-place consolation match between the
+    two semifinal losers. Body: season, chapter, loser_a, loser_b,
+    winner_name (omit/empty to clear → reverts to the fallback split)."""
+    data = request.get_json(silent=True) or {}
+    season = (data.get("season") or "").strip()
+    chapter = (data.get("chapter") or "").strip()
+    loser_a = (data.get("loser_a") or "").strip()
+    loser_b = (data.get("loser_b") or "").strip()
+    if not season or not chapter or not loser_a or not loser_b:
+        return jsonify({"error": "season, chapter, loser_a, loser_b required"}), 400
+    from email_parser.database import cmp_record_consolation
+    try:
+        row = cmp_record_consolation(
+            season, chapter, loser_a, loser_b,
+            winner_name=(data.get("winner_name") or "").strip() or None,
+            margin=(data.get("margin") or "").strip() or None,
+            by=session.get("role"))
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+    return jsonify(row)
+
+
 # ── Match Play versioned config + config-driven operations (v2.34.0) ──
 
 @app.route("/api/cmp/config")
