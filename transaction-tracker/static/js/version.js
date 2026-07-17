@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.118.5";
+window.TGF_VERSION = "2.118.6";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.118.6",
+    date: "2026-07-17",
+    changes: [
+      "Match Play GG importer verify: compare GG-vs-stored winner on the nickname-robust person key (surname + first initial) instead of raw name tokens, so a spelling variant like GG 'JENKINS, Matt' vs our 'Matthew Jenkins' is recognised as the same winner (aligned) rather than a false mismatch. Margin comparison unchanged.",
+    ],
+  },
   {
     version: "2.118.5",
     date: "2026-07-17",
