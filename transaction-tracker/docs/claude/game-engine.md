@@ -399,6 +399,17 @@ below wherever they conflict.
     **X qualifying rounds** (value of X, what qualifies, hard-block vs flag,
     and refund/hold/defer interaction TBD). Also membership/chapter/
     good-standing prerequisites. Gates who may be pooled and seeded.
+  - **Participation & communication layer (for CA).** Match Play demands more
+    participation, so idle players break the pool/bracket. Needs: per-match/round
+    **completion deadlines** (complete-by X) with automated reminders/escalation;
+    **DQ boundaries** for non-participation (missed matches / past-deadline / N
+    weeks idle) and the walkover/forfeit + standings/bracket handling; **matches
+    played outside TGF events** (self-scheduled makeups, event-independent,
+    pair-keyed recordation); and automated participant comms driven by match
+    state (no manual chasing). Format note: an earlier double-elimination format
+    (playback to the championship) produced MORE matches than the current
+    pools→knockout — format choice weighs fairness vs match volume vs the
+    simplicity/scaling north star.
 
 **Implementation status (2026-07-17):** config **v2** authored + both
 2026 snapshots **pinned** (`cmp_repin_2026_to_dmp_register`, #223);
