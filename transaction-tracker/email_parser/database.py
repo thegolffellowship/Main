@@ -25072,12 +25072,14 @@ def cmp_import_gg_match_play(widget_url: str, db_path: str | Path = DB_PATH,
                         (json.dumps(snap), sm["id"]))
                     out["stored"] += 1
                 # verify vs frozen result (never overwrite)
-                sw = (sm.get("winner_name") or "").strip().lower()
-                gw = (d.get("gg_winner_name") or "").strip().lower()
+                sw = (sm.get("winner_name") or "").strip()
+                gw = (d.get("gg_winner_name") or "").strip()
                 sm_marg = _cmp_norm_margin(sm.get("margin"))
                 gg_marg = _cmp_norm_margin(d.get("gg_margin"))
+                # compare on the nickname-robust person key (Matt == Matthew),
+                # not raw name tokens, so a spelling variant isn't a mismatch.
                 win_ok = (not sw) or (not gw) or \
-                    _cmp_name_tokens(sw) == _cmp_name_tokens(gw)
+                    _cmp_person_key(sw) == _cmp_person_key(gw)
                 marg_ok = (not sm_marg) or (sm_marg == gg_marg)
                 if win_ok and marg_ok:
                     out["aligned"] += 1
