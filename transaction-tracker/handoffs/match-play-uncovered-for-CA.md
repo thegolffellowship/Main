@@ -11,6 +11,19 @@ reconciliation aligns *display detail* to the recorded winner, never the reverse
 
 ---
 
+## 0. REGISTRATION / ELIGIBILITY / PREREQUISITES
+
+0a. **Registration timing.** When enrollment opens/closes relative to the season and the
+    pool/bracket build — and what happens to late signups. *(We have some of this; CA to
+    make it explicit end-to-end.)*
+0b. **Eligibility gate — established handicap (NEW rule to specify).** A player **without
+    an established handicap** should be **held out of Match Play until they have X
+    qualifying rounds**. Needs: the value of **X**, what counts as a qualifying round,
+    whether it's a hard block at signup vs. a flag, and how it interacts with the paid
+    enrollment (refund/hold/defer). This gates who may be pooled and seeded.
+0c. **Other prerequisites to confirm:** membership status, chapter, prior-participation
+    or good-standing requirements, and any per-season cap.
+
 ## A. SETUP / STRUCTURE
 
 1. **Handicap allowance is OFF LOWEST.** The lower course handicap is subtracted from

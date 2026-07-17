@@ -381,6 +381,12 @@ below wherever they conflict.
     records, knockout qualifiers, and seeding are frozen; reconciliation reads
     GG's computed match (concessions/gimmes included) to align DISPLAY detail
     to the recorded winner — never to change it.
+  - **Registration / eligibility (front of the lifecycle, for CA).** Signup
+    timing + prerequisites. Notably an **established-handicap gate**: a player
+    without an established handicap is held out of Match Play until they have
+    **X qualifying rounds** (value of X, what qualifies, hard-block vs flag,
+    and refund/hold/defer interaction TBD). Also membership/chapter/
+    good-standing prerequisites. Gates who may be pooled and seeded.
 
 **Implementation status (2026-07-17):** config **v2** authored + both
 2026 snapshots **pinned** (`cmp_repin_2026_to_dmp_register`, #223);
