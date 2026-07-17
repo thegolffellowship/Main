@@ -1410,6 +1410,14 @@ def _scoring_dispatch(url: str, extract: str):
             return json.dumps(
                 db.audit_pre_boundary_mvp(arg.strip() or "2026-07-14"),
                 indent=2, default=str)
+        if cmd == "scoring-mp-standings-diff":
+            # #217 step 1 (READ-ONLY): recompute both chapters' Match Play
+            # pool standings under the ratified D-MP-09 rule (first-3-by-date
+            # counting, points-of-3 w/ ½-ties, aggregate H2H) and diff against
+            # the live standings used to seed the knockouts. verdict='clean'
+            # iff no advancer/winner-runnerup change anywhere. Changes nothing.
+            return json.dumps(db.cmp_standings_diff_dmp09(), indent=2,
+                              default=str)
         if cmd == "scoring-mvp-recompute":
             # Self-computed City MVP / TGF MVP (Kerry-ratified 2026-07-16):
             # materialize determine_tgf_mvp winners + split -> Co- into

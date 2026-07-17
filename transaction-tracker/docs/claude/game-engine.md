@@ -243,18 +243,99 @@ on every column. Matrix by N (4-32):
   **EXCEPTION — 4-player knockout (Kerry 2026-07-14): semis are
   CROSS-POOL — each pool winner vs the OTHER pool's runner-up.
   Stableford does NOT seed that bracket; it only breaks record ties in
-  pool finishes (already applied in pool rank: wins → W−L → Stableford).**
+  pool finishes (pool rank amended by D-MP-09 to points-of-3 →
+  aggregate H2H → Stableford — see register below).**
   Engine: `cross_pool_semi_order()` in match_play.py; config key
   `seeding_knockout4` (default `cross_pool` — old snapshots without the
   key get the rule too); `cmp_seed_knockout` falls back to Stableford
   seeding with a warning if the field isn't two pools × two advancers.
-- POOL WINNER BONUS: $20/pool winner ($25 at N=4), off the pot first
-- LADDERS (% of adjusted pot): 4→71.5/28.5 (=$97/$38) | 5→66.67/33.33
-  (=$120/$60) | 6→62.5/22.5/15 | 7→55/25/20 | 8-10→50/30/20 |
-  11+→50/25/15/10. (The xlsx supersedes the earlier "4-5→75/25" note.)
-  Pot = $40×N. Largest-remainder cents allocation → payouts always sum
-  exactly. Ties split combined places (SF losers split 3rd+4th);
-  default pending Kerry confirm, posted as mailbox id 21 Q2.
+- POOL WINNER BONUS: flat $20/pool winner, off the pot first (the
+  earlier "$25 at N=4" is stale — #181 fold; the badge is flat $20 at
+  every N, confirmed in the CD canvas review #213).
+- LADDERS (% of adjusted pot): 4→71.5/28.5 (=$100.10/$39.90) |
+  5→66.67/33.33 (=$120/$60) | 6→62.5/22.5/15 | 7→55/25/20 | 8-10→50/30/20
+  | 11+→50/25/15/10. (The xlsx supersedes the earlier "4-5→75/25" note;
+  the earlier "$97/$38" N=4 figure was computed off the stale $25 bonus —
+  with the flat $20 bonus the N=4 adjusted pot is $160−$20=$140 →
+  $100.10/$39.90. #181 fold.) Pot = $40×N. Largest-remainder cents
+  allocation → payouts always sum exactly. TIE-SPLIT: closed as D-MP-08
+  (see register below) — consolation match is primary at N≥6, the
+  SF-losers combined-place split is the FALLBACK.
+
+### D-MP RULES REGISTER — COMPLETE (ratified 2026-07-16/17, mailbox #213–#217)
+
+The full Match Play rules register **D-MP-01 → 09 is closed** (D-MP-09
+closed the last #21 item, pools-of-5 scheduling). This register is the
+ruling of record and supersedes the "Open questions (id 21)" defaults
+below wherever they conflict.
+
+- **D-MP-03 · pool assignment default = `random`.** `pool_assignment_mode`
+  defaults to random draw (not handicap-snake). Pool-view copy renders
+  random-draw language by default.
+
+- **D-MP-04 · asymmetric knockout placement (P1–P4), all ratified:**
+  - **P1 SEED ORDER:** tiers are absolute — pool winners (1–3) > runners-up
+    > wildcards. Within a tier, rank by pool-play Stableford. Residual
+    ties: pool W–L → head-to-head (where played) → **lower TGF index takes
+    the higher seed (index SNAPSHOTTED at bracket-seeding time)** →
+    **earliest Match Play enrollment date** (final backstop). Fully
+    deterministic, zero manager steps — the witnessed-draw step is
+    replaced by the index + enrollment-date chain. (New vs current code:
+    the index-snapshot + enrollment-date steps did not previously exist.)
+  - **P2 SLOTTING:** classic 1v8/4v5 top half, 2v7/3v6 bottom; 12-in-16
+    band byes to seeds 1–4.
+  - **P3 SEPARATION:** any same-pool round-one pairing → the LOWER seed
+    swaps to the nearest seed line in the OPPOSITE half (same-tier trade
+    preferred; minimal cross-tier swap otherwise; unavoidable collisions
+    land on the lowest seed lines). **The higher seed never moves.**
+  - **P4 TRANSPARENCY (requirement, not a design choice):** seed numbers
+    + WC chips visible on every bracket surface (member, manager, CD
+    canvas). The bracket must show its math.
+  - The **4-player cross-pool exception** (2026-07-14, above) stands
+    unchanged — P1–P3 govern 8/12/16 brackets only.
+
+- **D-MP-08 · 3rd-place consolation + fallback (N≥6).** The consolation
+  match between the two semifinal losers is the STANDARD mechanism at
+  N≥6 — it decides 3rd vs 4th money (or 3rd vs nothing on 3-place
+  ladders). **No consolation at N=4–5** (2 places only). **FALLBACK when
+  the match can't be coordinated:** split the remaining place money
+  evenly — 3-place ladders (N=8–10) split 3rd (20% → 10/10); 4-place
+  ladders (N=11+) split 3rd+4th combined (25% → 12.5/12.5). Stableford
+  tiebreak rejected for this purpose. Encode as a consolation-match
+  entity with played/unplayed state; the previously-coded SF-losers-split
+  becomes the FALLBACK path, not the primary. (Side effect: confirms
+  split-combined for Match Play ties of this class.)
+
+- **D-MP-09 · unified pool counting — every player counts exactly 3
+  matches, at every pool size.**
+  - Pool of 4: clean round robin, 3 matches, all count.
+  - Pool of 5: 8 matches total — one player plays a forced 4th (parity
+    makes "all play 3" impossible).
+  - Pool of 3: **5 matches total** (single RR + two repeats) — same shape;
+    one player plays a forced 4th, each player's counting schedule
+    includes one repeat opponent.
+  - **Counting rule for the 4-match player: FIRST 3 BY MATCH DATE count —
+    record AND Stableford; the 4th counts only for its opponent.** (Chosen
+    over best-3-of-4 and over win-%/per-match-average; the extra match must
+    never advantage its player.)
+  - **Pool RANK = match points of 3 (win 1, TIE ½, loss 0) → head-to-head
+    (AGGREGATE across repeat meetings; may be empty in 5-pools → fall
+    through) → pool Stableford (first-3-only for the 4-match player).**
+    This supersedes the earlier `wins → W−L → Stableford`.
+  - **4th-match assignment** (banked as pairings-generator requirement #1,
+    NOT the full pairings spec): when multiple pool-mates are available
+    for the forced 4th, assign to lower TGF index, then earliest signup.
+  - Member-facing sentence: "Everyone counts three matches."
+
+**Live-2026 adoption (#217):** both chapters (SA + Austin) are already
+into the knockout; **brackets and played results STAND** — protected
+exactly like the handicap retroactivity boundary. The pool-round
+recompute under D-MP-09 is accounting-hardening only: if any row moves
+it is a **documentation decision, never a bracket/advancer change**.
+D-MP-08 applies FORWARD — this season's semifinal losers are the first
+consolation matches under the new rule (encode before the semis
+complete). Re-pin both 2026 season snapshots to the new config version
+after the standings diff reports, on Kerry's go.
 
 **Implementation (the Game Creator engine's first concrete instance):**
 - `email_parser/match_play.py` — pure engine (no DB/Flask; Platform-
@@ -287,11 +368,14 @@ on every column. Matrix by N (4-32):
   computed-matrix preview via ?version_id, save-as-new-version,
   pin-season-to-version).
 
-Open questions to Kerry live in mailbox topic
-**match-play-implementation** (id 21): N=4/5 ladder per xlsx, tie-split
-default, wildcard rule, bye scope, random vs handicap-snake pool
-assignment, pools-of-5 scheduling. Defaults are implemented; answers
-only require a config edit or small rule tweak.
+Open-questions thread (mailbox topic **match-play-implementation**, id
+21) is now **CLOSED** — every item ratified in the D-MP register above:
+N=4/5 ladder (D-MP-01/xlsx), tie-split (D-MP-08), wildcard rule
+(D-MP-04/06 + P1 chain), bye scope (P2), random vs handicap-snake pool
+assignment (D-MP-03 default = random), pools-of-5 scheduling (D-MP-09).
+The encode work (D-MP-08 consolation entity, D-MP-09 counting + rank
+chain, P1–P4 placement) lands in `match_play.py` + a new config version;
+`cmp_seed_knockout` is being reconciled against P1–P3.
 
 ## Season-total rule: Best 10 + City Championship (RATIFIED, Kerry 2026-07-09, mailbox #65)
 
