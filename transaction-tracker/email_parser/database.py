@@ -24698,6 +24698,212 @@ def cmp_reconcile_hole_results(season: str | None = None,
         return out
 
 
+def _cmp_match_round(conn, event_id, customer_id):
+    """A player's match-play round row: (playing_handicap, tee_id,
+    {hole: gross}, [holes_played]) from the imported GG scorecard, or None.
+
+    Unlike _cmp_holes_for this returns the FULL 18/9-hole playing handicap
+    and the tee so the caller can re-allocate match-play pops (75% off the
+    lowest), NOT the stroke-play strokes_received baked into the import."""
+    if not event_id or not customer_id:
+        return None
+    r = conn.execute(
+        """SELECT id, playing_handicap, tee_id FROM scoring_rounds
+           WHERE event_id = ? AND customer_id = ?
+           ORDER BY holes_played DESC, id DESC LIMIT 1""",
+        (event_id, customer_id)).fetchone()
+    if not r:
+        return None
+    gross, si_sum = {}, 0
+    for h in conn.execute(
+            "SELECT hole_number, strokes, strokes_received FROM scoring_holes "
+            "WHERE scoring_round_id = ? ORDER BY hole_number", (r["id"],)):
+        gross[h["hole_number"]] = h["strokes"]
+        si_sum += (h["strokes_received"] or 0)
+    ph = r["playing_handicap"]
+    # Fallback: if GG playing_handicap wasn't stored, the sum of the imported
+    # (100%) strokes_received IS the full-allowance course handicap.
+    if ph is None:
+        ph = si_sum
+    return {"ph": ph, "tee_id": r["tee_id"], "gross": gross,
+            "holes": sorted(gross)}
+
+
+def _cmp_si_for_tee(conn, tee_id):
+    """{hole_number: stroke_index} for a tee, from course_tee_holes."""
+    if not tee_id:
+        return {}
+    return {h["hole_number"]: h["stroke_index"] for h in conn.execute(
+        "SELECT hole_number, stroke_index FROM course_tee_holes "
+        "WHERE tee_id = ? AND stroke_index IS NOT NULL", (tee_id,))}
+
+
+def _cmp_match_pops(a_round, b_round, si_map, allowance=0.75):
+    """Match-play pops per hole under TGF's OFF-LOWEST 75% rule.
+
+    Each player's playing handicap is taken to `allowance` (75%) and rounded;
+    the lower plays off scratch, the higher receives the DIFFERENCE, allocated
+    on the hardest holes actually played (stroke index ascending, wrap for
+    diff > holes played). Returns (a_pops, b_pops, meta).  If the two round off
+    to the same figure both play straight up (all zeros)."""
+    holes = a_round["holes"] or b_round["holes"]
+    n = len(holes)
+    da = round((a_round["ph"] or 0) * allowance)
+    db = round((b_round["ph"] or 0) * allowance)
+    diff = da - db
+    a_pops = {h: 0 for h in holes}
+    b_pops = {h: 0 for h in holes}
+    higher = None
+    if diff != 0 and n:
+        higher = "A" if diff > 0 else "B"
+        strokes = abs(diff)
+        # holes played, ordered by stroke index (hardest first); SI falls back
+        # to hole order if the tee's stroke_index isn't loaded.
+        ordered = sorted(holes, key=lambda h: (si_map.get(h, 99), h))
+        target = a_pops if higher == "A" else b_pops
+        for k in range(strokes):
+            target[ordered[k % n]] += 1
+    return a_pops, b_pops, {"da": da, "db": db, "diff": diff,
+                            "higher": higher, "allowance": allowance,
+                            "n_holes": n, "si_loaded": bool(si_map)}
+
+
+# TGF match-play handicap allowance is per CHAPTER (Kerry 2026-07-17):
+# San Antonio plays 75% off the lowest; Austin plays 100% off the lowest.
+# Both chapters play OFF LOWEST (lower handicapper to scratch). This map is
+# the read-only reconciler's assumption; the durable per-chapter config lives
+# in the ratified game-engine version (see docs/claude/game-engine.md).
+_CMP_ALLOWANCE_BY_CHAPTER = {
+    "san antonio": 0.75, "sa": 0.75,
+    "austin": 1.00,
+}
+
+
+def _cmp_allowance_for(chapter, amap=None, default=0.75):
+    """Resolve the match-play handicap allowance for a chapter (case- and
+    substring-insensitive). SA → 75%, Austin → 100%."""
+    amap = amap or _CMP_ALLOWANCE_BY_CHAPTER
+    key = (chapter or "").strip().lower()
+    if key in amap:
+        return amap[key]
+    for k, v in amap.items():
+        if k in key or key in k:
+            return v
+    return default
+
+
+def cmp_reconcile_match_play_75(season: str | None = None,
+                                chapter: str | None = None,
+                                allowance: float | None = None,
+                                allowance_by_chapter: dict | None = None,
+                                db_path=None) -> dict:
+    """READ-ONLY (Kerry 2026-07-17): re-derive each Match Play match's result
+    from imported GG per-hole GROSS scores using TGF's REAL match-play pops —
+    allowance OFF THE LOWEST (lower handicapper plays scratch, higher gets the
+    difference on the hardest holes) — and diff vs our stored winner/margin.
+
+    Allowance is PER CHAPTER: San Antonio 75%, Austin 100% (both off lowest).
+    Pass `allowance` to force a single value for every match, or
+    `allowance_by_chapter` to override the default map; otherwise each match
+    uses _cmp_allowance_for(its chapter).
+
+    This supersedes cmp_reconcile_hole_results, which used the stroke-play
+    strokes_received baked into the import (100% allowance, full-field
+    allocation) and therefore produced wrong margins/all-square calls (the
+    Chandler/Rideout s9.15 case computed AS while GG shows Chandler 1 up).
+
+    NOTE: hole GROSS is authoritative but CONCESSIONS/GIMMES and putt-offs are
+    not in the scorecard, so a residual set of matches will still differ from
+    GG's own computed match state; those need the GG match game itself. Buckets
+    mirror cmp_reconcile_hole_results. Changes nothing."""
+    where, params = [], []
+    if season:
+        where.append("p.season = ?"); params.append(season)
+    if chapter:
+        where.append("p.chapter = ?"); params.append(chapter)
+    wsql = (" WHERE " + " AND ".join(where)) if where else ""
+    with _connect(db_path) as conn:
+        matches = [dict(r) for r in conn.execute(
+            f"""SELECT m.*, p.season, p.chapter, p.pool_name,
+                       e.item_name AS event_name, e.event_date
+                  FROM cmp_matches m
+                  JOIN cmp_pools p ON p.id = m.pool_id
+                  LEFT JOIN events e ON e.id = m.event_id
+                  {wsql} ORDER BY p.season, p.chapter, p.pool_name, m.id""",
+            params).fetchall()]
+        memb = {}
+        for r in conn.execute(
+                "SELECT pool_id, customer_name, customer_id FROM cmp_pool_members"):
+            memb[(r["pool_id"], (r["customer_name"] or "").strip().lower())] = r["customer_id"]
+
+        out = {"checked": 0, "aligned": 0, "mismatches": [], "putt_offs": [],
+               "uncheckable": [], "season": season, "chapter": chapter,
+               "rule": "off_lowest", "allowance_forced": allowance,
+               "allowance_by_chapter": {}}
+        for m in matches:
+            if not m.get("winner_name") and m.get("player1_stableford") is None:
+                continue
+            out["checked"] += 1
+            m_allow = (allowance if allowance is not None
+                       else _cmp_allowance_for(m["chapter"], allowance_by_chapter))
+            out["allowance_by_chapter"][m["chapter"]] = m_allow
+            p1, p2 = m["player1_name"], m["player2_name"]
+            a_id = m.get("player1_id") or memb.get((m["pool_id"], (p1 or "").strip().lower()))
+            b_id = m.get("player2_id") or memb.get((m["pool_id"], (p2 or "").strip().lower()))
+            tag = {"season": m["season"], "chapter": m["chapter"],
+                   "pool": m["pool_name"], "match": f"{p1} vs {p2}",
+                   "event": m.get("event_name"), "date": m.get("event_date"),
+                   "stored_winner": m.get("winner_name"),
+                   "stored_margin": m.get("margin")}
+            if not m.get("event_id"):
+                out["uncheckable"].append({**tag, "reason": "no_event_assigned"})
+                continue
+            ra = _cmp_match_round(conn, m["event_id"], a_id)
+            rb = _cmp_match_round(conn, m["event_id"], b_id)
+            if not ra or not rb:
+                miss = []
+                if not ra: miss.append(p1)
+                if not rb: miss.append(p2)
+                out["uncheckable"].append(
+                    {**tag, "reason": "no_hole_scores_imported", "missing": miss})
+                continue
+            si_map = _cmp_si_for_tee(conn, ra["tee_id"]) or \
+                _cmp_si_for_tee(conn, rb["tee_id"])
+            a_pops, b_pops, meta = _cmp_match_pops(ra, rb, si_map, m_allow)
+            a_holes = {h: (ra["gross"].get(h), a_pops.get(h, 0)) for h in ra["gross"]}
+            b_holes = {h: (rb["gross"].get(h), b_pops.get(h, 0)) for h in rb["gross"]}
+            d = _cmp_derive_match(a_holes, b_holes)
+            if not d:
+                out["uncheckable"].append({**tag, "reason": "insufficient_holes"})
+                continue
+            comp_winner = (p1 if d["leader"] == "A"
+                           else p2 if d["leader"] == "B" else None)
+            comp = {**tag, "computed_winner": comp_winner,
+                    "computed_margin": d["margin"], "holes_used": d["n_holes"],
+                    "thru": d["thru"], "pops": {"da": meta["da"], "db": meta["db"],
+                    "diff": meta["diff"], "higher": meta["higher"],
+                    "si_loaded": meta["si_loaded"]}}
+            stored_w = (m.get("winner_name") or "").strip()
+            stored_m = _cmp_norm_margin(m.get("margin"))
+            if d["leader"] is None and stored_w:
+                out["putt_offs"].append(
+                    {**comp, "note": "holes all-square under 75% off-lowest; "
+                     "stored winner implies a putt-off / concession"})
+                continue
+            winner_ok = (not stored_w) or (comp_winner and
+                         stored_w.lower() == comp_winner.lower())
+            margin_ok = (not stored_m) or (stored_m == _cmp_norm_margin(d["margin"]))
+            if winner_ok and margin_ok:
+                out["aligned"] += 1
+            else:
+                out["mismatches"].append(
+                    {**comp, "winner_ok": winner_ok, "margin_ok": margin_ok})
+        out["mismatch_count"] = len(out["mismatches"])
+        out["putt_off_count"] = len(out["putt_offs"])
+        out["uncheckable_count"] = len(out["uncheckable"])
+        return out
+
+
 def cmp_clear_match(pool_id: int, player1: str, player2: str, db_path=None) -> None:
     p1, p2 = sorted([player1, player2])
     with _connect(db_path) as conn:

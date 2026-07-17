@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.118.2";
+window.TGF_VERSION = "2.118.3";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.118.3",
+    date: "2026-07-17",
+    changes: [
+      "Match Play reconciliation CORRECTED for TGF's real handicapping (READ-ONLY, Kerry): the prior cmp_reconcile_hole_results() used the stroke-play strokes_received baked into the GG import — 100% allowance, full-field allocation — which is the WRONG pops for match play and gave bad margins/all-square calls (Chandler/Rideout s9.15 computed AS while GG shows Chandler 1 up). New cmp_reconcile_match_play_75() re-derives each match from the per-hole GROSS using TGF's OFF-LOWEST rule (lower handicapper plays scratch; higher receives the difference on the hardest holes by stroke index) with PER-CHAPTER allowance — San Antonio 75%, Austin 100% — taken from _CMP_ALLOWANCE_BY_CHAPTER. Concessions/gimmes/putt-offs still aren't in the scorecard, so a residual set will still need GG's own match state. Bridge extract='scoring-mp-reconcile75[:<season>|<chapter>|<allow>]'. No data or member-facing change.",
+    ],
+  },
   {
     version: "2.118.2",
     date: "2026-07-17",
