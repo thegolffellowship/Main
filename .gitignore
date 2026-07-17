@@ -1,1 +1,4 @@
 *.db
+
+# Claude Code tooling (agent worktrees, session state) — never track
+.claude/
