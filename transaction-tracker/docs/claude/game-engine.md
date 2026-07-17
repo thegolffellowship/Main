@@ -348,6 +348,37 @@ below wherever they conflict.
     field allocation, NOT off-lowest — so its margins/all-square calls were
     wrong (Chandler/Rideout s9.15 computed AS while GG shows Chandler 1 up).
 
+- **D-MP-11 · match mechanics uncovered 2026-07-17 (→ CA for the end-to-end
+  Match Play documentation; several are Tracker GAPS).** The GG-source audit
+  (`cmp_import_gg_match_play`, `email_parser/gg_match_play.py`) surfaced
+  mechanics that affect SETUP, RECORDATION, and WINNER DETERMINATION and are
+  not yet fully modeled:
+  - **Starting hole (shotgun).** Each match may begin on a different hole
+    (Niester/Wade started on 5; a9.17 matches on 10, the back nine). Winner /
+    margin must be computed in PLAY ORDER from the starting hole ("X up with Y
+    to play"), and the member scorecard + dots must render from the starting
+    hole, wrapping (5→9→1→4). GG marks it (`starting_hole_mark`); we read it.
+  - **NET matches.** net = gross − off-lowest strokes; per-hole handicap stroke
+    dots must be recorded and shown.
+  - **Extra holes / sudden death (GAP — not modeled).** A match all-square after
+    regulation goes to extra hole(s); the winner wins the next hole (e.g. Youngs
+    v Marques and Barna v Cloer were AS after 9, both played hole 10, decided
+    there — recorded 1 UP, GG's 9-hole card shows AS). The Tracker has NO
+    extra-hole entity; needs one (winner + hole(s) + result) distinct from
+    regulation, plus a member-display treatment ("decided in a playoff → X").
+  - **Putt-offs (GAP).** Another all-square resolution class (Chandler/Peterson
+    s9.12, Niester/Wade s9.15). Needs a recordation path + display.
+  - **All-square resolution ladder.** Canonical order (extra holes → putt-off →
+    …?) and how each is recorded and shown is unspecified — for CA.
+  - **Matches span events.** A match may be played/made-up at a DIFFERENT event
+    than its home/pool event (Hogue/Kirksey is on a9.12 in our data, a9.17 in
+    GG). Recordation must not tie a match to one event; alignment is by pool
+    PAIR, not event.
+  - **GG is the audit source; frozen results never move.** Winners, W-L-T
+    records, knockout qualifiers, and seeding are frozen; reconciliation reads
+    GG's computed match (concessions/gimmes included) to align DISPLAY detail
+    to the recorded winner — never to change it.
+
 **Implementation status (2026-07-17):** config **v2** authored + both
 2026 snapshots **pinned** (`cmp_repin_2026_to_dmp_register`, #223);
 **D-MP-09 pool rank LIVE** (`cmp_get_standings` honors

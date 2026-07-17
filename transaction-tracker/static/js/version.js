@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.118.7";
+window.TGF_VERSION = "2.118.8";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.118.8",
+    date: "2026-07-17",
+    changes: [
+      "Docs: captured the Match Play mechanics the GG-source audit uncovered. game-engine.md D-MP-11 records the setup/recordation/winner-determination items — starting hole (shotgun, play-order close-out), NET stroke dots, EXTRA HOLES / sudden death (a Tracker GAP: AS-after-regulation matches decided on an extra hole, e.g. Youngs/Marques and Barna/Cloer on hole 10), putt-offs (GAP), the all-square resolution ladder, matches spanning events, and GG-as-audit-source with frozen results. New handoffs/match-play-uncovered-for-CA.md is the lifecycle-organized (purchase→conclusion) handoff for CA's overall Match Play documentation, listing built-vs-gap status. No behavior change.",
+    ],
+  },
   {
     version: "2.118.7",
     date: "2026-07-17",
