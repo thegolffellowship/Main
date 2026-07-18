@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.119.2";
+window.TGF_VERSION = "2.119.3";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.119.3",
+    date: "2026-07-17",
+    changes: [
+      "Match Play render: 9-hole matches now show a 9-hole card and 9 dots (was 18). GG cards carry all 18 hole columns even for a 9-hole match (holes 10-18 blank), so the converter now drops the unplayed holes before rendering: a 9-hole match yields 9 dots and a single 9-hole scorecard starting on its actual starting hole and ending on the last hole played with the total, instead of a padded 18-hole grid with an empty back-nine block.",
+    ],
+  },
   {
     version: "2.119.2",
     date: "2026-07-17",
