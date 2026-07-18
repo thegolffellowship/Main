@@ -2642,7 +2642,10 @@
             // Holes played out AFTER the match was decided are "dead": show the
             // score but greyed, no winner circle (dots go hollow).
             const order = h.order != null ? h.order : (i + 1);
-            const dead = closedAt != null && order > closedAt;
+            // A LIVE match is never "closed" — the parser's closed_at is only
+            // meaningful for a completed match, and mid-round it can falsely
+            // flag a running lead as a clinch. Never grey live holes.
+            const dead = !o.live && closedAt != null && order > closedAt;
             // Per-hole match points, same model as the placeholder engine so the
             // 9-hole GG cards and 18-hole cards read identically: hole winner 2,
             // loser 1, halve 2/2. Dead / unplayed holes carry no points.

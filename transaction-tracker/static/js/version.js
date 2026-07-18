@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.120.0";
+window.TGF_VERSION = "2.120.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.120.1",
+    date: "2026-07-18",
+    changes: [
+      "Match Play live scoring: a live (in-progress) match no longer greys out holes mid-round. The GG parser's closed_at (clinch hole) is only meaningful for a completed match; mid-round it can flag a running lead as a false clinch, which would have greyed real live holes. Live cards now ignore closed_at entirely — every played hole shows in full color as the round progresses.",
+    ],
+  },
   {
     version: "2.120.0",
     date: "2026-07-18",
