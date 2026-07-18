@@ -900,13 +900,16 @@
             font: 700 0.56rem/1 'Bitter', Georgia, serif; letter-spacing: 0.08em;
             text-transform: uppercase; color: var(--text-placeholder, #9CA3AF); margin-bottom: 0.35rem;
         }
-        .mpv2 table.mp-sc { border-collapse: collapse; width: 100%; font-variant-numeric: tabular-nums; }
+        /* table-layout:fixed + equal hole columns so every hole is the same
+           width (winner-circle cells don't push their column wider). */
+        .mpv2 table.mp-sc { border-collapse: collapse; width: 100%; table-layout: fixed; font-variant-numeric: tabular-nums; }
         .mpv2 table.mp-sc th, .mpv2 table.mp-sc td {
-            text-align: center; padding: 0.16rem 0.12rem; font-size: 0.66rem;
+            text-align: center; padding: 0.16rem 0.04rem; font-size: 0.66rem;
             color: var(--text-body, #4B5563); white-space: nowrap; border: none;
+            width: auto; overflow: hidden;
         }
-        .mpv2 table.mp-sc .mp-sc-rowlabel { text-align: left; font-weight: 700; padding-right: 0.35rem; }
-        .mpv2 table.mp-sc .mp-sc-tot { font-weight: 700; color: var(--text); border-left: 1px solid var(--border); }
+        .mpv2 table.mp-sc .mp-sc-rowlabel { text-align: left; font-weight: 700; padding-right: 0.2rem; width: 2rem; }
+        .mpv2 table.mp-sc .mp-sc-tot { font-weight: 700; color: var(--text); border-left: 1px solid var(--border); width: 2.1rem; }
         .mpv2 table.mp-sc tr.mp-sc-hole th, .mpv2 table.mp-sc tr.mp-sc-hole td {
             font: 700 0.58rem/1 'Bitter', Georgia, serif; letter-spacing: 0.03em;
             color: var(--text-placeholder, #9CA3AF); text-transform: uppercase;
@@ -2991,6 +2994,10 @@
         if (!season) return;
         const chapter = cmpState.chapter;
         cmpState.season = season;
+        // Clear cross-chapter cached state so a chapter switch never renders the
+        // previous chapter's standings/bracket against the new chapter's pools.
+        cmpState.allStandings = null;
+        cmpState.bracket = [];
 
         // Fetch pools, enrollees, handicap map, events, config, and (if not cached) customers in parallel
         const fetches = [
