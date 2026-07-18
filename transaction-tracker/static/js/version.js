@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.120.4";
+window.TGF_VERSION = "2.121.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.121.0",
+    date: "2026-07-18",
+    changes: [
+      "Match Play one-tap record from Golf Genius (Kerry-ratified): when GG shows a DECISIVE final for an in-progress bracket match, the manager card surfaces a highlighted 'Record from GG: <winner> <margin>' button and pre-fills the winner + margin controls. Tapping it runs the exact same Save path (records the result and auto-advances the winner) — and it stays fully editable afterward, so a scoring correction or an extra-holes result can be changed. Deliberately does NOT fire on a mid-round lead or an all-square-through-18 (extra holes) — those still need a human decision. Manager view only.",
+      "Match Play live scoring now persists across reloads: the last live score is cached in the browser and painted instantly on load, so an in-progress card no longer sits blank for ~30s waiting on Golf Genius — it shows the last-known state immediately, then refreshes live.",
+    ],
+  },
   {
     version: "2.120.4",
     date: "2026-07-18",
