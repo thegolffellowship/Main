@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.119.5";
+window.TGF_VERSION = "2.119.6";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.119.6",
+    date: "2026-07-17",
+    changes: [
+      "Match Play scorecard: removed the per-hole Pts (Stableford) rows everywhere. Match play is decided hole-by-hole, not by Stableford points, so points no longer show on the placeholder 18-hole cards (they were never on the GG-sourced 9-hole cards) — the two now match.",
+    ],
+  },
   {
     version: "2.119.5",
     date: "2026-07-17",

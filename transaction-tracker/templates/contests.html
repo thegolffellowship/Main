@@ -2700,8 +2700,10 @@
                 ? (gen.count > 9 ? `Holes ${firstNo}–${lastNo}` : (gen.startHole ? `Started hole ${gen.startHole}` : ''))
                 : (start === 0 && gen.count === 18 ? 'Front 9' : (gen.count === 18 ? 'Back 9' : (gen.nine === 'back' ? 'Back 9' : 'Front 9')));
             const parRow = (!isGG) ? `<tr class="mp-sc-par"><th class="mp-sc-rowlabel">Par</th>${pars.join('')}<th class="mp-sc-tot">${parTot}</th></tr>` : '';
-            const aPtsRow = (!isGG) ? `<tr class="mp-sc-pts"><th class="mp-sc-rowlabel">Pts</th>${aP.join('')}<th class="mp-sc-tot">${aPts}</th></tr>` : '';
-            const bPtsRow = (!isGG) ? `<tr class="mp-sc-pts"><th class="mp-sc-rowlabel">Pts</th>${bP.join('')}<th class="mp-sc-tot">${bPts}</th></tr>` : '';
+            // Match play has no per-hole Stableford points — never show Pts rows
+            // (keeps the 9-hole GG cards and 18-hole placeholder cards consistent).
+            const aPtsRow = '';
+            const bPtsRow = '';
             return `
             ${label ? `<div class="mp-sc-block-label">${label}</div>` : ''}
             <table class="mp-sc">
