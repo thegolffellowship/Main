@@ -1446,6 +1446,9 @@ def _scoring_dispatch(url: str, extract: str):
             ]
             return json.dumps(db.cmp_relabel_margins(
                 _upd, chapter="Austin", apply=_apply), indent=2, default=str)
+        if cmd == "scoring-mp-pools-audit":
+            # READ-ONLY: distinct (chapter, season) in cmp_pools + counts.
+            return json.dumps(db.cmp_pools_audit(), indent=2, default=str)
         if cmd == "scoring-mp-import-gg":
             # Kerry 2026-07-17 (schema-ratified): walk the tournament_results
             # widget (url = .../leagues/<lid>/widgets/tournament_results?

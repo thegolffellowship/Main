@@ -24479,6 +24479,23 @@ def sync_season_contests_from_items(db_path: str | Path | None = None) -> dict:
 # City Match Play — pools, members, matches, bracket
 # ---------------------------------------------------------------------------
 
+def cmp_pools_audit(db_path=None) -> list[dict]:
+    """READ-ONLY: distinct (chapter, season) in cmp_pools with pool + match
+    counts. Diagnoses why a chapter/season combo returns no pools (e.g. SA
+    pools stored under a different season label than the selector sends)."""
+    with _connect(db_path) as conn:
+        return [dict(r) for r in conn.execute(
+            """SELECT p.chapter, p.season,
+                      COUNT(DISTINCT p.id) AS pools,
+                      COUNT(DISTINCT pm.id) AS members,
+                      COUNT(m.id) AS matches
+                 FROM cmp_pools p
+                 LEFT JOIN cmp_pool_members pm ON pm.pool_id = p.id
+                 LEFT JOIN cmp_matches m ON m.pool_id = p.id
+                GROUP BY p.chapter, p.season
+                ORDER BY p.season DESC, p.chapter""")]
+
+
 def cmp_get_pools(season: str, chapter: str, db_path=None) -> list[dict]:
     with _connect(db_path) as conn:
         pools = conn.execute(
