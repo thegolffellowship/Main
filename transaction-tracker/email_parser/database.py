@@ -24530,6 +24530,94 @@ def cmp_pools_audit(db_path=None) -> list[dict]:
                 ORDER BY p.season DESC, p.chapter""")]
 
 
+_CMP_MP_WIDGETS = {
+    "austin": "https://tgf-austin.golfgenius.com/leagues/514705/widgets/tournament_results?shared=false",
+    "san antonio": "https://tgf-sa.golfgenius.com/leagues/514047/widgets/tournament_results?shared=false",
+    "sa": "https://tgf-sa.golfgenius.com/leagues/514047/widgets/tournament_results?shared=false",
+}
+_CMP_LIVE_CACHE = {}    # (host, pairkey) -> (epoch_ts, detail)
+
+
+def cmp_fetch_live_match(chapter: str, player_a: str, player_b: str,
+                         max_age: float = 25.0, db_path=None) -> dict:
+    """Fetch GG's CURRENT match-play detail for one (in-progress) match, live —
+    for the minute-by-minute semifinal wiring. Walks the chapter's
+    tournament_results widget, finds the newest round whose MATCH PLAY game
+    contains the pair, and returns the parsed per-hole detail (same shape as
+    the stored gg_match_detail, with thru / gg_margin reflecting the live
+    state). In-memory cached `max_age` seconds so many viewers polling every
+    60s collapse to one GG walk. Never writes."""
+    import time as _t
+    import re as _re
+    from urllib.parse import urlparse
+    from golf_genius_sync import (fetch_public_page, parse_page_structure,
+                                  parse_tournament_aggregates)
+    from email_parser.gg_match_play import parse_match_play_detail
+
+    ch = (chapter or "").strip().lower()
+    widget = _CMP_MP_WIDGETS.get(ch)
+    if not widget:
+        widget = (_CMP_MP_WIDGETS["austin"] if "austin" in ch
+                  else _CMP_MP_WIDGETS["san antonio"] if "antonio" in ch or ch == "sa"
+                  else None)
+    if not widget:
+        return {"error": "unknown chapter", "chapter": chapter}
+    host = urlparse(widget).netloc
+    base_host = f"https://{host}"
+    pairkey = frozenset([_cmp_person_key(player_a), _cmp_person_key(player_b)])
+    ck = (host, pairkey)
+    now = _t.time()
+    cached = _CMP_LIVE_CACHE.get(ck)
+    if cached and now - cached[0] < max_age:
+        return {**cached[1], "cached": True}
+
+    def fetch(url, xhr=False):
+        p = fetch_public_page(url, xhr=xhr)
+        if p["status_code"] != 200:
+            raise RuntimeError(f"GG HTTP {p['status_code']}")
+        return p["html"]
+
+    started = _t.monotonic()
+    result = None
+    try:
+        html = fetch(widget)
+        sel = _re.search(r'<select[^>]*name="round"[^>]*>(.*?)</select>', html, _re.S)
+        options = _re.findall(r'<option[^>]*value="(\d+)"[^>]*>(.*?)</option>',
+                              sel.group(1) if sel else "", _re.S)
+        # newest first (GG lists most-recent round at the top); stop at first hit
+        for rid, lbl in options:
+            if _t.monotonic() - started > 20:
+                break
+            struct = parse_page_structure(fetch(f"{widget}&round={rid}"), widget)
+            mp = next((l for l in (struct.get("links") or [])
+                       if _re.search(r"match\s*play", l.get("text") or "", _re.I)
+                       and "/v2tournaments/" in (l.get("href") or "")), None)
+            if not mp:
+                continue
+            code_m = _re.search(r"\b([as]\d+(?:\.\d+)?)\b", mp.get("text") or "")
+            for agg in parse_tournament_aggregates(fetch(mp["href"])):
+                if _t.monotonic() - started > 20:
+                    break
+                d = parse_match_play_detail(fetch(
+                    f"{base_host}/tournaments2/details/{agg}", xhr=True))
+                if not d or len(d.get("players", [])) < 2:
+                    continue
+                if frozenset(_cmp_person_key(p["name"]) for p in d["players"]) == pairkey:
+                    result = {**d, "gg_event": code_m.group(1) if code_m else None,
+                              "source_url": f"{base_host}/tournaments2/details/{agg}"}
+                    break
+            if result:
+                break
+    except Exception as e:
+        return {"error": str(e), "chapter": chapter,
+                "players": [player_a, player_b]}
+
+    out = result or {"error": "match not found on GG",
+                     "chapter": chapter, "players": [player_a, player_b]}
+    _CMP_LIVE_CACHE[ck] = (now, out)
+    return out
+
+
 def cmp_get_pools(season: str, chapter: str, db_path=None) -> list[dict]:
     with _connect(db_path) as conn:
         pools = conn.execute(

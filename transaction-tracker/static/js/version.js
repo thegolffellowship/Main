@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.119.7";
+window.TGF_VERSION = "2.119.8";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.119.8",
+    date: "2026-07-17",
+    changes: [
+      "Match Play live scoring (backend): cmp_fetch_live_match() fetches Golf Genius current match-play detail for one in-progress match on demand (walks the chapter tournament_results widget, finds the newest round MATCH PLAY game containing the pair, returns the live per-hole detail with thru/margin). Server-side cached ~25s so many viewers polling every 60s collapse to one GG walk. Exposed at GET /api/cmp/live-match?chapter=&a=&b= (member read). Frontend polling wires next.",
+    ],
+  },
   {
     version: "2.119.7",
     date: "2026-07-17",

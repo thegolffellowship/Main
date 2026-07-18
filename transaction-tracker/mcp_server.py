@@ -1446,6 +1446,13 @@ def _scoring_dispatch(url: str, extract: str):
             ]
             return json.dumps(db.cmp_relabel_margins(
                 _upd, chapter="Austin", apply=_apply), indent=2, default=str)
+        if cmd == "scoring-mp-live":
+            # Test the live GG match-play fetch. arg: "<chapter>|<A>|<B>"
+            _p = [x.strip() for x in (arg or "").split("|")]
+            if len(_p) < 3:
+                return json.dumps({"error": "need <chapter>|<A>|<B>"})
+            return json.dumps(db.cmp_fetch_live_match(_p[0], _p[1], _p[2],
+                              max_age=0), indent=2, default=str)
         if cmd == "scoring-mp-detail":
             # READ-ONLY dump of a stored gg_match_detail.
             # arg: "<chapter>|<playerA>|<playerB>"
