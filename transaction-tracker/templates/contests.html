@@ -2612,7 +2612,10 @@
        real per-hole NET winner, real gross, real handicap-stroke dots. Frozen
        winner/margin still come from the stored record (o.aWin/o.bWin/o.margin). */
     function mpHolesFromGG(gg, o) {
-        const gh = (gg && gg.holes) || [];
+        // GG's card carries all 18 hole columns even for a 9-hole match (holes
+        // 10-18 blank), so keep only holes that were actually played — a
+        // 9-hole match shows 9 dots and one 9-hole card, not 18.
+        const gh = ((gg && gg.holes) || []).filter(h => h.p1_gross != null || h.p2_gross != null);
         if (!gh.length) return null;
         const aIsP1 = mpPersonKey((gg.players && gg.players[0] && gg.players[0].name) || '') === mpPersonKey(o.aName);
         const holes = gh.map(h => {
