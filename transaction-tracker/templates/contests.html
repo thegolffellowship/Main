@@ -2621,11 +2621,27 @@
        actual hole count (9 or 18 — both exist), real starting-hole PLAY ORDER,
        real per-hole NET winner, real gross, real handicap-stroke dots. Frozen
        winner/margin still come from the stored record (o.aWin/o.bWin/o.margin). */
+    // Match length (9 or 18) from the GG event code — "s18.8" → 18, "a9.16" → 9
+    // — falling back to the event/notes hint. Null when it can't be determined.
+    function mpMatchHoleCount(gg, o) {
+        const src = String((gg && gg.gg_event) || (o && o.holesHint) || '');
+        const m = src.match(/\b[as](\d{1,2})\.\d/i);   // TGF code: letter + holes + ".event"
+        if (m) { const n = parseInt(m[1], 10); return n >= 10 ? 18 : 9; }
+        return null;
+    }
+
     function mpHolesFromGG(gg, o) {
-        // GG's card carries all 18 hole columns even for a 9-hole match (holes
-        // 10-18 blank), so keep only holes that were actually played — a
-        // 9-hole match shows 9 dots and one 9-hole card, not 18.
-        const gh = ((gg && gg.holes) || []).filter(h => h.p1_gross != null || h.p2_gross != null);
+        // Show the FULL match scorecard — every hole they'll play (9 or 18),
+        // not just the holes posted so far: played holes fill in, the rest
+        // render blank/pending. GG's card always carries 18 hole columns (a
+        // 9-hole match leaves the other 9 blank), and gg.holes is already in
+        // play order, so we take the first <matchLen> in play order. When the
+        // match length can't be determined (older stored details with no event
+        // code) fall back to played-holes-only so nothing over-renders.
+        const allH = ((gg && gg.holes) || []);
+        const matchLen = mpMatchHoleCount(gg, o);
+        const gh = matchLen ? allH.slice(0, matchLen)
+                            : allH.filter(h => h.p1_gross != null || h.p2_gross != null);
         if (!gh.length) return null;
         const aIsP1 = mpPersonKey((gg.players && gg.players[0] && gg.players[0].name) || '') === mpPersonKey(o.aName);
         const closedAt = gg.closed_at_order || null;   // play-order pos of the clinch
