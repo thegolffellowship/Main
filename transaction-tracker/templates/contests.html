@@ -2944,6 +2944,10 @@
         // No holes posted yet → nothing to show live; keep the scheduled card.
         const anyPlayed = (detail.holes || []).some(h => h.p1_gross != null || h.p2_gross != null);
         if (!anyPlayed) { setStatus('Live scoring connected — waiting for the first hole'); return; }
+        // Persist the latest live detail so a reload paints instantly.
+        try { localStorage.setItem(mpLiveKey(chapter, a, b), JSON.stringify({ t: Date.now(), detail })); } catch (_) {}
+        // Manager one-tap: pre-fill + offer to record a decisive GG final.
+        mpMaybeOfferRecord(card, detail, a, b);
         const s1 = { player_name: a }, s2 = { player_name: b };
         const html = mpMatchCardFromSlots(
             s1, s2, card.dataset.liveRound || '',
@@ -2972,10 +2976,93 @@
         }
         return container.querySelectorAll('.mp-match-card[data-live-a]').length > 0;
     }
+    // localStorage key for a match's last live detail (order-independent pair).
+    function mpLiveKey(chapter, a, b) {
+        const pk = [mpPersonKey(a), mpPersonKey(b)].sort().join('~');
+        return 'mpLive:' + String(chapter || '') + '|' + pk;
+    }
+
+    // Manager one-tap record: when GG shows a DECISIVE final for an in-progress
+    // bracket card, pre-fill that match's winner + margin controls and add a
+    // highlighted "Record from GG" button that just triggers the existing Save
+    // (so it reuses the exact write + auto-advance path and stays editable).
+    // Skipped for non-managers (no footer) and for anything not yet decisive —
+    // a mid-round lead or an all-square-through-18 (extra holes) shows no button.
+    function mpMaybeOfferRecord(card, detail, aName, bName) {
+        const wrap = card.closest('.bracket-match');
+        if (!wrap) return;
+        const winSel = wrap.querySelector('.bracket-winner-sel');
+        const marginEl = wrap.querySelector('.bracket-margin-input');
+        const saveBtn = wrap.querySelector('.bracket-save-btn');
+        if (!winSel || !saveBtn) return;                 // not the manager view
+        const wi = detail.gg_winner_idx;
+        const marg = detail.gg_margin || '';
+        const thru = detail.thru || 0, n = detail.n_holes || 18;
+        const decisive = wi && marg && marg !== 'AS' && (/&/.test(marg) || thru >= n);
+        if (!decisive) return;
+        const ggName = (detail.players && detail.players[wi - 1] && detail.players[wi - 1].name) || '';
+        const winnerName = mpPersonKey(ggName) === mpPersonKey(aName) ? aName
+                         : mpPersonKey(ggName) === mpPersonKey(bName) ? bName : null;
+        if (!winnerName) return;
+        // Pre-fill once (don't stomp a manager's manual change on later polls).
+        if (winSel.dataset.ggFilled !== winnerName) {
+            winSel.dataset.ggFilled = winnerName;
+            winSel.value = winnerName;
+            if (marginEl && !marginEl.value.trim()) marginEl.value = marg;
+        }
+        if (!wrap.querySelector('.mp-record-gg')) {
+            const btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = 'match-save-btn mp-record-gg';
+            btn.style.cssText = 'flex-shrink:0;background:var(--primary);color:#fff;border:none;';
+            btn.textContent = `Record from GG: ${mpFirstLast(winnerName).last} ${marg}`;
+            btn.title = 'Confirm this result from Golf Genius (you can still change it after)';
+            btn.addEventListener('click', () => {
+                winSel.value = winnerName;
+                if (marginEl) marginEl.value = marg;
+                saveBtn.click();
+            });
+            (saveBtn.closest('.bracket-match-footer') || saveBtn.parentElement).appendChild(btn);
+        }
+    }
+
+    // Paint in-progress cards from the last cached live detail so a reload shows
+    // the last-known score instantly (before the ~fresh GG walk returns).
+    function mpHydrateFromCache(container) {
+        const cards = Array.from(container.querySelectorAll('.mp-match-card[data-live-a]'));
+        for (const card of cards) {
+            const chapter = card.dataset.liveChapter, a = card.dataset.liveA, b = card.dataset.liveB;
+            if (!chapter || !a || !b) continue;
+            if (card.querySelector('.mp-hole-dots')) continue;   // already live
+            let cached = null;
+            try {
+                const raw = localStorage.getItem(mpLiveKey(chapter, a, b));
+                if (raw) {
+                    const o = JSON.parse(raw);
+                    if (o && o.detail && (Date.now() - (o.t || 0) < 12 * 3600 * 1000)) cached = o.detail;
+                }
+            } catch (_) {}
+            if (!cached) continue;
+            const anyPlayed = (cached.holes || []).some(h => h.p1_gross != null || h.p2_gross != null);
+            if (!anyPlayed) continue;
+            try {
+                const html = mpMatchCardFromSlots({ player_name: a }, { player_name: b },
+                    card.dataset.liveRound || '', card.dataset.liveEvent || '',
+                    card.dataset.liveDate || '', cached);
+                const tmp = document.createElement('div');
+                tmp.innerHTML = html.trim();
+                const fresh = tmp.firstElementChild;
+                if (fresh) { mpMaybeOfferRecord(card, cached, a, b); card.replaceWith(fresh); }
+            } catch (_) {}
+        }
+    }
+
     function mpStartBracketLive(container) {
         if (_mpLiveTimer) { clearInterval(_mpLiveTimer); _mpLiveTimer = null; }
         if (_mpLiveKick) { clearTimeout(_mpLiveKick); _mpLiveKick = null; }
         if (!container.querySelector('.mp-match-card[data-live-a]')) return;
+        // Instant paint from the last known score, then refresh live.
+        mpHydrateFromCache(container);
         // A live-swapped card carries a hole-dots row; a still-scheduled one
         // doesn't. Any in-progress card without dots is "pending" — GG's first
         // walk can lag a few seconds (or briefly miss), so kick quick retries
