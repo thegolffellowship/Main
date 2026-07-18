@@ -2912,6 +2912,7 @@
        manager footer sibling and the delegated card-toggle handler are
        untouched. */
     let _mpLiveTimer = null;
+    let _mpLiveKick = null;
     async function mpLivePollCard(card) {
         const chapter = card.dataset.liveChapter;
         const a = card.dataset.liveA, b = card.dataset.liveB;
@@ -2954,15 +2955,34 @@
         for (const card of cards) {
             // A card that GG already reports final loses its data-live-a on
             // re-render (winner recorded) — poll only those still marked live.
-            if (card.isConnected) await mpLivePollCard(card);
+            // Guard each card so one bad fetch/render can't stall the rest.
+            if (card.isConnected) { try { await mpLivePollCard(card); } catch (_) {} }
         }
         return container.querySelectorAll('.mp-match-card[data-live-a]').length > 0;
     }
     function mpStartBracketLive(container) {
         if (_mpLiveTimer) { clearInterval(_mpLiveTimer); _mpLiveTimer = null; }
+        if (_mpLiveKick) { clearTimeout(_mpLiveKick); _mpLiveKick = null; }
         if (!container.querySelector('.mp-match-card[data-live-a]')) return;
-        // Immediate first pass, then every 60s until no in-progress cards remain.
-        mpLivePollAll(container);
+        // A live-swapped card carries a hole-dots row; a still-scheduled one
+        // doesn't. Any in-progress card without dots is "pending" — GG's first
+        // walk can lag a few seconds (or briefly miss), so kick quick retries
+        // on load until every in-progress card has gone live, then settle to
+        // the steady 60s poll.
+        let kicks = 0;
+        const anyPending = () => Array.from(
+            container.querySelectorAll('.mp-match-card[data-live-a]'))
+            .some(c => !c.querySelector('.mp-hole-dots'));
+        const kick = async () => {
+            _mpLiveKick = null;
+            if (!container.isConnected) return;
+            await mpLivePollAll(container);
+            if (container.isConnected && anyPending() && kicks < 5) {
+                kicks++;
+                _mpLiveKick = setTimeout(kick, 5000);
+            }
+        };
+        kick();
         _mpLiveTimer = setInterval(async () => {
             // Stop if the bracket was re-rendered away or has no live cards left.
             if (!container.isConnected || !container.querySelector('.mp-match-card[data-live-a]')) {

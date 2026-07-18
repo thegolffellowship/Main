@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.120.2";
+window.TGF_VERSION = "2.120.3";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.120.3",
+    date: "2026-07-18",
+    changes: [
+      "Match Play live poll made reliable on load: an in-progress bracket card now kicks quick retries (every 5s, up to 5x) until it goes live, instead of showing the plain scheduled strip for up to a full minute while Golf Genius's first server-side walk lagged or briefly missed. Each card's fetch/render is also guarded so one hiccup can't stall the others. Once live, it settles into the steady 60s refresh.",
+    ],
+  },
   {
     version: "2.120.2",
     date: "2026-07-18",
