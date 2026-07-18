@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.120.3";
+window.TGF_VERSION = "2.120.4";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.120.4",
+    date: "2026-07-18",
+    changes: [
+      "Match Play live scoring now shows a status line on an in-progress card until it goes live (\"Connecting to live scoring…\", or the specific reason it can't yet — network/HTTP error, no match found, or waiting for the first hole). Surfaces why a card is still on the scheduled strip instead of leaving it silent, and confirms when the live feed is connected but no holes are posted.",
+    ],
+  },
   {
     version: "2.120.3",
     date: "2026-07-18",
