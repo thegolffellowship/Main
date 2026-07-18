@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.119.8";
+window.TGF_VERSION = "2.119.9";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.119.9",
+    date: "2026-07-18",
+    changes: [
+      "Match Play live scoring (frontend): in-progress bracket matches now live-poll Golf Genius once a minute and re-render just that card with the current match state — running net hole-dots from the correct starting hole, a 'LIVE · thru N' status chip, the leader's running margin on the strip bar (e.g. Moreno 2 UP), and a LIVE result line on the expanded scorecard. Wired for today's 18-hole semifinal (Moreno vs Chandler). Polling targets only cards tagged in progress (both players present, no recorded winner) via /api/cmp/live-match; a card drops out of the poll once GG shows a winner, and the frozen recorded result takes over on the next load. Cards with no holes posted yet stay as scheduled. MATCHPLAY_V2-gated; flag-off behavior unchanged.",
+    ],
+  },
   {
     version: "2.119.8",
     date: "2026-07-17",
