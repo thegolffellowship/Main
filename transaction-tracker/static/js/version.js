@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.119.3";
+window.TGF_VERSION = "2.119.4";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.119.4",
+    date: "2026-07-17",
+    changes: [
+      "Match Play scorecard: hole columns are now uniform width. The grid uses table-layout:fixed with fixed label/total columns so the nine (or eighteen) hole columns share the remaining width equally — a winner-circle cell no longer pushes its column wider than the plain-number columns.",
+      "Match Play: clear cached cross-chapter standings/bracket at the start of each pool load so switching Chapter never renders the previous chapter's standings against the new chapter's pools (defensive fix while chasing an SA-shows-empty report; SA pools/matches are confirmed present in the data).",
+    ],
+  },
   {
     version: "2.119.3",
     date: "2026-07-17",
