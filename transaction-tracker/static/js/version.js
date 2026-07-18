@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.121.0";
+window.TGF_VERSION = "2.121.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.121.1",
+    date: "2026-07-18",
+    changes: [
+      "Match Play scorecards no longer show a fabricated (illustrative) hole map — ever. A card renders ONLY Golf Genius's real hole-by-hole (scores + handicap pops); with no GG detail it shows just the result strip. Fixes recorded bracket matches falling back to invented scores/pops that didn't match the GG card (result was right, the hole detail wasn't).",
+      "Recorded bracket matches now pull GG's real card behind the frozen result: the poller/cache hydrates a recorded card once with GG's actual scores and pops (aligning display to GG per the frozen-results rule — the recorded winner/margin never change), instead of leaving it on a placeholder. In-progress cards still refresh every 60s; recorded cards are hydrated once, not re-polled.",
+    ],
+  },
   {
     version: "2.121.0",
     date: "2026-07-18",
