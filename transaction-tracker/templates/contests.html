@@ -2785,9 +2785,12 @@
     // a pre-rendered, hidden scorecard grid revealed on click. Used by both the
     // pool-match and knockout-slot renderers so every strip behaves identically.
     function mpMatchCard(o, opts) {
+        // Only ever render REAL Golf Genius hole detail — never a fabricated
+        // placeholder. Without GG detail the card shows just the result strip
+        // (a made-up scorecard/pops that don't match GG is worse than none).
         let gen = null;
-        if (opts.hasResult) {
-            gen = (o.gg ? mpHolesFromGG(o.gg, o) : null) || mpGenerateHoles(o);
+        if (opts.hasResult && o.gg) {
+            gen = mpHolesFromGG(o.gg, o);
         }
         const strip = mpStripHtml(o);
         const meta = `<div class="mp-match-meta"><span>${escapeHtml(opts.metaL)}</span><span class="status${opts.live ? ' live' : ''}">${escapeHtml(opts.status)}</span></div>`;
@@ -2879,20 +2882,29 @@
         else if (inProgress) status = 'IN PROGRESS';
         const o = {
             aName: s1.player_name, bName: s2.player_name, aWin, bWin, tie, margin,
-            gg: live ? liveGG : null, live, liveLead: lead,
+            // Attach GG detail whenever we have it — for a RECORDED match too, so
+            // the frozen result keeps GG's real hole-by-hole (scores + pops), not
+            // a fabricated placeholder. `live` only gates the running-margin UI.
+            gg: liveGG || null, live, liveLead: lead,
             seedKey: [s1.player_name || '', s2.player_name || '', roundKey, eventName || ''].join('|'),
             holesHint: (eventName || '') + ' ' + roundLabel
         };
-        // Tag an in-progress card (both players present, no recorded winner) so the
-        // bracket live-poller can find and refresh just this card.
+        // Tag any both-present bracket card so the poller can attach GG's real
+        // hole detail. In-progress cards (no winner) keep refreshing every 60s;
+        // recorded cards (winner set) carry the frozen winner/margin and are
+        // hydrated ONCE to show GG's actual card behind the recorded result.
         let dataAttrs = '';
-        if (bothPresent && !winner) {
+        if (bothPresent) {
             dataAttrs = ` data-live-chapter="${escapeHtml(cmpState.chapter)}"`
                 + ` data-live-a="${escapeHtml(s1.player_name)}"`
                 + ` data-live-b="${escapeHtml(s2.player_name)}"`
                 + ` data-live-round="${escapeHtml(roundKey)}"`
                 + ` data-live-event="${escapeHtml(eventName || '')}"`
                 + ` data-live-date="${escapeHtml(eventDate || '')}"`;
+            if (winner) {
+                dataAttrs += ` data-live-winner="${escapeHtml(winner)}"`
+                    + ` data-live-margin="${escapeHtml(margin || '')}"`;
+            }
         }
         // While an in-progress card hasn't gone live yet, show a small status
         // line (the poller updates it) so a stuck card explains itself instead
@@ -2946,9 +2958,14 @@
         if (!anyPlayed) { setStatus('Live scoring connected — waiting for the first hole'); return; }
         // Persist the latest live detail so a reload paints instantly.
         try { localStorage.setItem(mpLiveKey(chapter, a, b), JSON.stringify({ t: Date.now(), detail })); } catch (_) {}
-        // Manager one-tap: pre-fill + offer to record a decisive GG final.
-        mpMaybeOfferRecord(card, detail, a, b);
-        const s1 = { player_name: a }, s2 = { player_name: b };
+        // Manager one-tap: pre-fill + offer to record a decisive GG final
+        // (only meaningful while the match is still unrecorded).
+        if (!card.dataset.liveWinner) mpMaybeOfferRecord(card, detail, a, b);
+        // Carry the frozen winner/margin onto a recorded card so it renders as
+        // FINAL with GG's real hole detail (not as a live/in-progress card).
+        const s1 = { player_name: a, winner_name: card.dataset.liveWinner || null,
+                     margin: card.dataset.liveMargin || null };
+        const s2 = { player_name: b };
         const html = mpMatchCardFromSlots(
             s1, s2, card.dataset.liveRound || '',
             card.dataset.liveEvent || '', card.dataset.liveDate || '', detail);
@@ -2969,12 +2986,16 @@
     async function mpLivePollAll(container) {
         const cards = Array.from(container.querySelectorAll('.mp-match-card[data-live-a]'));
         for (const card of cards) {
-            // A card that GG already reports final loses its data-live-a on
-            // re-render (winner recorded) — poll only those still marked live.
+            if (!card.isConnected) continue;
+            // A recorded (final) card only needs GG's real detail attached ONCE;
+            // once it has a hole-dots row it's done — don't keep re-fetching it.
+            // In-progress cards keep refreshing every tick.
+            if (card.dataset.liveWinner && card.querySelector('.mp-hole-dots')) continue;
             // Guard each card so one bad fetch/render can't stall the rest.
-            if (card.isConnected) { try { await mpLivePollCard(card); } catch (_) {} }
+            try { await mpLivePollCard(card); } catch (_) {}
         }
-        return container.querySelectorAll('.mp-match-card[data-live-a]').length > 0;
+        // Only in-progress cards (no recorded winner) keep the 60s loop alive.
+        return container.querySelectorAll('.mp-match-card[data-live-a]:not([data-live-winner])').length > 0;
     }
     // localStorage key for a match's last live detail (order-independent pair).
     function mpLiveKey(chapter, a, b) {
@@ -3046,13 +3067,18 @@
             const anyPlayed = (cached.holes || []).some(h => h.p1_gross != null || h.p2_gross != null);
             if (!anyPlayed) continue;
             try {
-                const html = mpMatchCardFromSlots({ player_name: a }, { player_name: b },
+                const s1 = { player_name: a, winner_name: card.dataset.liveWinner || null,
+                             margin: card.dataset.liveMargin || null };
+                const html = mpMatchCardFromSlots(s1, { player_name: b },
                     card.dataset.liveRound || '', card.dataset.liveEvent || '',
                     card.dataset.liveDate || '', cached);
                 const tmp = document.createElement('div');
                 tmp.innerHTML = html.trim();
                 const fresh = tmp.firstElementChild;
-                if (fresh) { mpMaybeOfferRecord(card, cached, a, b); card.replaceWith(fresh); }
+                if (fresh) {
+                    if (!card.dataset.liveWinner) mpMaybeOfferRecord(card, cached, a, b);
+                    card.replaceWith(fresh);
+                }
             } catch (_) {}
         }
     }
@@ -3083,8 +3109,10 @@
         };
         kick();
         _mpLiveTimer = setInterval(async () => {
-            // Stop if the bracket was re-rendered away or has no live cards left.
-            if (!container.isConnected || !container.querySelector('.mp-match-card[data-live-a]')) {
+            // Stop once no IN-PROGRESS card remains (recorded cards are hydrated
+            // once, not re-polled) or the bracket was re-rendered away.
+            if (!container.isConnected
+                || !container.querySelector('.mp-match-card[data-live-a]:not([data-live-winner])')) {
                 clearInterval(_mpLiveTimer); _mpLiveTimer = null; return;
             }
             await mpLivePollAll(container);
