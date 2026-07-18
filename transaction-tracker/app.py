@@ -9786,6 +9786,21 @@ def api_cmp_get_matches():
     return jsonify(cmp_get_matches(pool_id))
 
 
+@app.route("/api/cmp/live-match")
+@require_role("member")
+def api_cmp_live_match():
+    """Live GG match-play detail for an in-progress match (polled ~1/min by the
+    scoreboard). Read-only; server-side cached so concurrent viewers collapse
+    to one GG walk."""
+    chapter = request.args.get("chapter", "")
+    a = request.args.get("a", "")
+    b = request.args.get("b", "")
+    if not chapter or not a or not b:
+        return jsonify({"error": "chapter, a, b required"}), 400
+    from email_parser.database import cmp_fetch_live_match
+    return jsonify(cmp_fetch_live_match(chapter, a, b))
+
+
 @app.route("/api/cmp/standings")
 @require_role("member")
 def api_cmp_standings():
