@@ -2793,7 +2793,7 @@
         const meta = `<div class="mp-match-meta"><span>${escapeHtml(opts.metaL)}</span><span class="status${opts.live ? ' live' : ''}">${escapeHtml(opts.status)}</span></div>`;
         const da = opts.dataAttrs || '';
         if (!gen) {
-            return `<div class="mp-match-card"${da}><div class="mp-card-head">${meta}${strip}${opts.prov || ''}</div></div>`;
+            return `<div class="mp-match-card"${da}><div class="mp-card-head">${meta}${strip}${opts.liveNote || ''}${opts.prov || ''}</div></div>`;
         }
         const dots = mpHoleDotsHtml(gen);
         const grid = mpScorecardGridHtml(gen, o);
@@ -2894,8 +2894,14 @@
                 + ` data-live-event="${escapeHtml(eventName || '')}"`
                 + ` data-live-date="${escapeHtml(eventDate || '')}"`;
         }
+        // While an in-progress card hasn't gone live yet, show a small status
+        // line (the poller updates it) so a stuck card explains itself instead
+        // of looking like a plain scheduled match.
+        const liveNote = (bothPresent && !winner && !live)
+            ? '<div class="mp-live-status" data-live-status style="font-size:0.72rem;color:var(--text-muted);font-style:italic;padding:0.1rem 0.65rem 0.4rem;">Connecting to live scoring…</div>'
+            : '';
         return mpMatchCard(o, {
-            metaL, status, dataAttrs,
+            metaL, status, dataAttrs, liveNote,
             hasResult: winner || tie || inProgress || live,
             live: live || inProgress
         });
@@ -2917,21 +2923,27 @@
         const chapter = card.dataset.liveChapter;
         const a = card.dataset.liveA, b = card.dataset.liveB;
         if (!chapter || !a || !b) return;
-        let detail = null;
+        const setStatus = (m) => {
+            const el = card.querySelector('[data-live-status]');
+            if (el) el.textContent = m;
+        };
+        let detail = null, err = null;
         try {
             const url = `/api/cmp/live-match?chapter=${encodeURIComponent(chapter)}`
                 + `&a=${encodeURIComponent(a)}&b=${encodeURIComponent(b)}`;
             const r = await fetch(url);
-            if (r.ok) {
+            if (!r.ok) { err = 'HTTP ' + r.status; }
+            else {
                 const j = await r.json();
-                detail = (j && j.detail) ? j.detail
-                       : (j && j.holes) ? j : null;
+                if (j && j.holes) detail = j;
+                else if (j && j.detail) detail = j.detail;
+                else err = (j && j.error) ? String(j.error).slice(0, 40) : 'no match';
             }
-        } catch (_) { return; }
-        if (!detail) return;                       // no live match found — leave card
+        } catch (e) { err = 'network'; }
+        if (!detail) { setStatus('Live scoring: ' + (err || 'unavailable') + ' — retrying'); return; }
         // No holes posted yet → nothing to show live; keep the scheduled card.
         const anyPlayed = (detail.holes || []).some(h => h.p1_gross != null || h.p2_gross != null);
-        if (!anyPlayed) return;
+        if (!anyPlayed) { setStatus('Live scoring connected — waiting for the first hole'); return; }
         const s1 = { player_name: a }, s2 = { player_name: b };
         const html = mpMatchCardFromSlots(
             s1, s2, card.dataset.liveRound || '',
