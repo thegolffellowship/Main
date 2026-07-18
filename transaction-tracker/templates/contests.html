@@ -2470,7 +2470,14 @@
         const aMono = o.aName ? `<span class="mp-strip-mono slate">${escapeHtml(mpMono(o.aName))}</span>` : '<span class="mp-strip-mono stone"></span>';
         const bMono = o.bName ? `<span class="mp-strip-mono clay">${escapeHtml(mpMono(o.bName))}</span>` : '<span class="mp-strip-mono stone"></span>';
         let barCls, barTxt;
-        if (o.tie) { barCls = 'tie'; barTxt = (o.margin && /putt/i.test(o.margin)) ? 'PUTT' : 'TIE'; }
+        if (o.live) {
+            // Live, not-yet-decided match: colour the bar for the CURRENT leader
+            // (or neutral when all-square) and show GG's running margin.
+            const L = o.liveLead || {};
+            barCls = L.side === 'A' ? 'slate' : (L.side === 'B' ? 'clay' : 'tie');
+            barTxt = L.bar || 'LIVE';
+        }
+        else if (o.tie) { barCls = 'tie'; barTxt = (o.margin && /putt/i.test(o.margin)) ? 'PUTT' : 'TIE'; }
         else if (o.aWin) { barCls = 'slate'; barTxt = o.margin || 'WON'; }
         else if (o.bWin) { barCls = 'clay'; barTxt = o.margin || 'WON'; }
         else { barCls = 'tie'; barTxt = o.margin || 'vs'; }
@@ -2648,9 +2655,10 @@
         let nine = null;
         if (count <= 9) nine = (nums.length && Math.max(...nums) <= 9) ? 'front'
             : (nums.length && Math.min(...nums) >= 10) ? 'back' : 'front';
+        const playedCount = holes.filter(h => h.played).length;
         return {
-            count, nine, played: count, thru: gg.thru || count, closedAt,
-            putt: /putt/i.test(o.margin || ''), inProgress: false, holes,
+            count, nine, played: playedCount, thru: gg.thru || playedCount, closedAt,
+            putt: /putt/i.test(o.margin || ''), inProgress: !!o.live, holes,
             source: 'gg', startHole: gg.start_hole
         };
     }
@@ -2724,7 +2732,15 @@
         }
         // Winner margin stays on the winner's side (from the FROZEN record).
         let result = '';
-        if (o.aWin) result = `<span class="mp-sc-result a">&#9656; ${escapeHtml(mpFirstLast(o.aName).last)} ${escapeHtml(o.margin || 'WON')}</span>`;
+        if (o.live && o.liveLead) {
+            const L = o.liveLead;
+            const cls = L.side === 'A' ? 'a' : (L.side === 'B' ? 'b' : 'tie');
+            const txt = (L.side && L.leaderName)
+                ? `${escapeHtml(mpFirstLast(L.leaderName).last)} ${escapeHtml(L.margin)} · thru ${L.thru}`
+                : `All square · thru ${L.thru}`;
+            result = `<span class="mp-sc-result ${cls}">LIVE · ${txt}</span>`;
+        }
+        else if (o.aWin) result = `<span class="mp-sc-result a">&#9656; ${escapeHtml(mpFirstLast(o.aName).last)} ${escapeHtml(o.margin || 'WON')}</span>`;
         else if (o.bWin) result = `<span class="mp-sc-result b">${escapeHtml(mpFirstLast(o.bName).last)} ${escapeHtml(o.margin || 'WON')} &#9666;</span>`;
         else if (o.tie) result = `<span class="mp-sc-result tie">${gen.putt ? 'Putt-off' : 'All square'}</span>`;
         const prog = gen.inProgress ? ` &middot; in progress, thru ${gen.played}` : '';
@@ -2746,8 +2762,9 @@
         }
         const strip = mpStripHtml(o);
         const meta = `<div class="mp-match-meta"><span>${escapeHtml(opts.metaL)}</span><span class="status${opts.live ? ' live' : ''}">${escapeHtml(opts.status)}</span></div>`;
+        const da = opts.dataAttrs || '';
         if (!gen) {
-            return `<div class="mp-match-card"><div class="mp-card-head">${meta}${strip}${opts.prov || ''}</div></div>`;
+            return `<div class="mp-match-card"${da}><div class="mp-card-head">${meta}${strip}${opts.prov || ''}</div></div>`;
         }
         const dots = mpHoleDotsHtml(gen);
         const grid = mpScorecardGridHtml(gen, o);
@@ -2757,7 +2774,7 @@
         const toggle = `<div class="mp-card-toggle">
             <span class="mp-illus-note">${note}</span>
             <span class="mp-toggle-hint">&rsaquo; open card</span></div>`;
-        return `<div class="mp-match-card">
+        return `<div class="mp-match-card"${da}>
             <div class="mp-card-head mp-clickable" role="button" tabindex="0" aria-expanded="false" aria-label="Show hole-by-hole scorecard">
                 ${meta}${strip}${dots}${toggle}${opts.prov || ''}
             </div>
@@ -2794,7 +2811,23 @@
         return mpMatchCard(o, { metaL, status, prov, hasResult: played, live: false });
     }
 
-    function mpMatchCardFromSlots(s1, s2, roundKey, eventName, eventDate) {
+    // Map GG's current match state (from /api/cmp/live-match) onto our A/B sides
+    // and derive a compact live lead descriptor for the strip bar + status chip.
+    function mpLiveLead(liveGG, aName, bName) {
+        if (!liveGG) return null;
+        const aIsP1 = mpPersonKey((liveGG.players && liveGG.players[0] && liveGG.players[0].name) || '') === mpPersonKey(aName);
+        const wi = liveGG.gg_winner_idx;               // 1=p1, 2=p2, null=all square
+        let side = null;
+        if (wi === 1) side = aIsP1 ? 'A' : 'B';
+        else if (wi === 2) side = aIsP1 ? 'B' : 'A';
+        const marg = liveGG.gg_margin || 'AS';         // "2 UP" / "AS"
+        const thru = liveGG.thru != null ? liveGG.thru : 0;
+        const bar = (marg === 'AS' || side === null) ? 'AS' : marg;
+        const leaderName = side === 'A' ? aName : (side === 'B' ? bName : null);
+        return { side, bar, thru, margin: marg, leaderName };
+    }
+
+    function mpMatchCardFromSlots(s1, s2, roundKey, eventName, eventDate, liveGG) {
         const winner = s1.winner_name || s2.winner_name || null;
         const margin = s1.margin || s2.margin || '';
         const ml = (margin || '').toLowerCase();
@@ -2806,13 +2839,108 @@
         const roundLabel = (ROUND_DEFS[roundKey] || {}).label || roundKey;
         const d = (eventDate || '').slice(5).replace('-', '/');
         const metaL = `${roundLabel}${eventName ? ' · ' + eventName : ''}${d ? ' · ' + d : ''}`;
-        const status = winner ? 'FINAL' : (inProgress ? 'IN PROGRESS' : (bothPresent ? '—' : 'TBD'));
+        // Live GG detail (present only for an in-progress, not-yet-final match that
+        // the poller resolved). It drives the hole strip, the running margin bar,
+        // and a "LIVE · thru N" status — the frozen record stays authoritative once
+        // a winner is recorded.
+        const live = !winner && !!liveGG;
+        const lead = live ? mpLiveLead(liveGG, s1.player_name, s2.player_name) : null;
+        let status = winner ? 'FINAL' : (bothPresent ? '—' : 'TBD');
+        if (live && lead) status = `LIVE · thru ${lead.thru}`;
+        else if (inProgress) status = 'IN PROGRESS';
         const o = {
             aName: s1.player_name, bName: s2.player_name, aWin, bWin, tie, margin,
+            gg: live ? liveGG : null, live, liveLead: lead,
             seedKey: [s1.player_name || '', s2.player_name || '', roundKey, eventName || ''].join('|'),
             holesHint: (eventName || '') + ' ' + roundLabel
         };
-        return mpMatchCard(o, { metaL, status, hasResult: winner || tie || inProgress, live: inProgress });
+        // Tag an in-progress card (both players present, no recorded winner) so the
+        // bracket live-poller can find and refresh just this card.
+        let dataAttrs = '';
+        if (bothPresent && !winner) {
+            dataAttrs = ` data-live-chapter="${escapeHtml(cmpState.chapter)}"`
+                + ` data-live-a="${escapeHtml(s1.player_name)}"`
+                + ` data-live-b="${escapeHtml(s2.player_name)}"`
+                + ` data-live-round="${escapeHtml(roundKey)}"`
+                + ` data-live-event="${escapeHtml(eventName || '')}"`
+                + ` data-live-date="${escapeHtml(eventDate || '')}"`;
+        }
+        return mpMatchCard(o, {
+            metaL, status, dataAttrs,
+            hasResult: winner || tie || inProgress || live,
+            live: live || inProgress
+        });
+    }
+
+    /* ── Live bracket polling ──────────────────────────────────────────────
+       In-progress bracket cards (both players present, no recorded winner)
+       carry data-live-* attributes. This polls /api/cmp/live-match once a
+       minute for each and re-renders JUST that card with the current GG match
+       state (running dots + "LIVE · thru N"). A card drops out of the poll
+       once GG shows the match final (a winner emerges) or the match hasn't
+       started (no holes yet — card left as-is). Frozen record takes over on
+       the next cmpLoad. Only the .mp-match-card element is swapped; the
+       manager footer sibling and the delegated card-toggle handler are
+       untouched. */
+    let _mpLiveTimer = null;
+    async function mpLivePollCard(card) {
+        const chapter = card.dataset.liveChapter;
+        const a = card.dataset.liveA, b = card.dataset.liveB;
+        if (!chapter || !a || !b) return;
+        let detail = null;
+        try {
+            const url = `/api/cmp/live-match?chapter=${encodeURIComponent(chapter)}`
+                + `&a=${encodeURIComponent(a)}&b=${encodeURIComponent(b)}`;
+            const r = await fetch(url);
+            if (r.ok) {
+                const j = await r.json();
+                detail = (j && j.detail) ? j.detail
+                       : (j && j.holes) ? j : null;
+            }
+        } catch (_) { return; }
+        if (!detail) return;                       // no live match found — leave card
+        // No holes posted yet → nothing to show live; keep the scheduled card.
+        const anyPlayed = (detail.holes || []).some(h => h.p1_gross != null || h.p2_gross != null);
+        if (!anyPlayed) return;
+        const s1 = { player_name: a }, s2 = { player_name: b };
+        const html = mpMatchCardFromSlots(
+            s1, s2, card.dataset.liveRound || '',
+            card.dataset.liveEvent || '', card.dataset.liveDate || '', detail);
+        const tmp = document.createElement('div');
+        tmp.innerHTML = html.trim();
+        const fresh = tmp.firstElementChild;
+        if (!fresh) return;
+        // Preserve an open scorecard across the swap.
+        const wasOpen = card.querySelector('.mp-scorecard') && !card.querySelector('.mp-scorecard').hidden;
+        if (wasOpen) {
+            const sc = fresh.querySelector('.mp-scorecard');
+            const head = fresh.querySelector('.mp-card-head');
+            if (sc) sc.hidden = false;
+            if (head) head.setAttribute('aria-expanded', 'true');
+        }
+        card.replaceWith(fresh);
+    }
+    async function mpLivePollAll(container) {
+        const cards = Array.from(container.querySelectorAll('.mp-match-card[data-live-a]'));
+        for (const card of cards) {
+            // A card that GG already reports final loses its data-live-a on
+            // re-render (winner recorded) — poll only those still marked live.
+            if (card.isConnected) await mpLivePollCard(card);
+        }
+        return container.querySelectorAll('.mp-match-card[data-live-a]').length > 0;
+    }
+    function mpStartBracketLive(container) {
+        if (_mpLiveTimer) { clearInterval(_mpLiveTimer); _mpLiveTimer = null; }
+        if (!container.querySelector('.mp-match-card[data-live-a]')) return;
+        // Immediate first pass, then every 60s until no in-progress cards remain.
+        mpLivePollAll(container);
+        _mpLiveTimer = setInterval(async () => {
+            // Stop if the bracket was re-rendered away or has no live cards left.
+            if (!container.isConnected || !container.querySelector('.mp-match-card[data-live-a]')) {
+                clearInterval(_mpLiveTimer); _mpLiveTimer = null; return;
+            }
+            await mpLivePollAll(container);
+        }, 60000);
     }
 
     async function mpGetMatches(poolId) {
@@ -4157,6 +4285,9 @@
                 legendHtml +
                 `<div class="bracket-tree">${html || '<p style="color:var(--text-muted);">No bracket data yet.</p>'}</div>` +
                 champHtml + consolationHtml + nextInHtml;
+
+            // Live-poll any in-progress bracket card against Golf Genius.
+            mpStartBracketLive(container);
 
             // Wire the D-MP-08 consolation record control (manager).
             const consSaveBtn = container.querySelector(".cmp-cons-save");
