@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.119.6";
+window.TGF_VERSION = "2.119.7";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.119.7",
+    date: "2026-07-17",
+    changes: [
+      "Match Play GG importer: unwrap a GG name marker like Bl[HAMILTON, Doug] to the real HAMILTON, Doug so Doug Hamilton match-play matches resolve and store instead of falling to the 18-hole placeholder. Applied in the parser and in the name-match helpers. Added a reset option to the importer/bridge (scoring-mp-import-gg:reset) to force a full re-walk so previously-unmatched matches get stored.",
+    ],
+  },
   {
     version: "2.119.6",
     date: "2026-07-17",

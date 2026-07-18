@@ -24975,11 +24975,17 @@ def cmp_reconcile_match_play_75(season: str | None = None,
         return out
 
 
+def _cmp_unwrap_name(name: str) -> str:
+    """Unwrap a GG marker like 'Bl[HAMILTON, Doug]' → 'HAMILTON, Doug'."""
+    m = re.search(r"\[([^\]]+)\]", name or "")
+    return m.group(1).strip() if m else (name or "")
+
+
 def _cmp_name_tokens(name: str) -> frozenset:
     """Order-insensitive comparable identity from a display name. Strips a
     trailing 'TGF <chapter>' club label GG appends. 'REYES, Isaac TGF Austin'
     and 'Isaac Reyes' both → frozenset({'reyes','isaac'})."""
-    n = re.sub(r"\bTGF\b.*$", "", name or "", flags=re.I)
+    n = re.sub(r"\bTGF\b.*$", "", _cmp_unwrap_name(name), flags=re.I)
     return frozenset(t for t in re.findall(r"[a-z]+", n.lower()) if len(t) > 1)
 
 
@@ -24987,7 +24993,7 @@ def _cmp_person_key(name: str) -> tuple:
     """(surname, first-initial) — nickname-robust identity within an event.
     Handles both GG 'LAST, First TGF Austin' and our 'First Last'. Matt and
     Matthew collapse to ('jenkins','m'); unique enough inside one match pool."""
-    n = re.sub(r"\bTGF\b.*$", "", name or "", flags=re.I).strip()
+    n = re.sub(r"\bTGF\b.*$", "", _cmp_unwrap_name(name), flags=re.I).strip()
     if "," in n:
         last, _, first = n.partition(",")
     else:
@@ -25002,7 +25008,7 @@ def _cmp_person_key(name: str) -> tuple:
 def cmp_import_gg_match_play(widget_url: str, db_path: str | Path = DB_PATH,
                              time_budget: float = 42.0,
                              only_round: str | None = None,
-                             store: bool = True) -> dict:
+                             store: bool = True, reset: bool = False) -> dict:
     """Walk a portal's tournament_results widget, pull GG's OWN match-play
     detail for every match, and snapshot it onto cmp_matches.gg_match_detail
     (Kerry 2026-07-17). This is the AUDIT-THE-SOURCE path: GG computed the
@@ -25088,8 +25094,12 @@ def cmp_import_gg_match_play(widget_url: str, db_path: str | Path = DB_PATH,
             host TEXT NOT NULL, round_id TEXT NOT NULL,
             imported_at TEXT DEFAULT (datetime('now')),
             PRIMARY KEY (host, round_id))""")
+        if reset and store:
+            conn.execute("DELETE FROM cmp_mp_import_rounds WHERE host = ?",
+                         (parts.netloc,))
+            conn.commit()
         done = set()
-        if store:
+        if store and not reset:
             done = {r["round_id"] for r in conn.execute(
                 "SELECT round_id FROM cmp_mp_import_rounds WHERE host = ?",
                 (parts.netloc,)).fetchall()}

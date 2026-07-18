@@ -1471,13 +1471,17 @@ def _scoring_dispatch(url: str, extract: str):
             a = (arg or "").strip()
             store = True
             rnd = None
+            reset = False
             if a.startswith("verify"):
                 store = False
                 rnd = a.partition(":")[2].strip() or None
+            elif a == "reset":
+                reset = True
             elif a:
                 rnd = a
             return json.dumps(db.cmp_import_gg_match_play(
-                url, only_round=rnd, store=store), indent=2, default=str)
+                url, only_round=rnd, store=store, reset=reset),
+                indent=2, default=str)
         if cmd == "scoring-mp-reconcile75":
             # READ-ONLY (Kerry 2026-07-17): the CORRECT match-play reconciler.
             # Re-derives each match from imported GG per-hole GROSS using TGF's
