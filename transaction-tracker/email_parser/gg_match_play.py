@@ -117,6 +117,11 @@ def parse_match_play_detail(fragment: str) -> dict | None:
     col_holes = None                      # column order of holes (from net row)
     for name, row_html in net_rows:
         name = _html.unescape(name).strip()
+        # GG sometimes wraps a name in a marker like "Bl[HAMILTON, Doug]"
+        # (blind/substitute tag) — unwrap to the real "LAST, First".
+        mbr = re.search(r"\[([^\]]+)\]", name)
+        if mbr:
+            name = mbr.group(1).strip()
         # handicap from the name link "NAME (H)"
         hcp = None
         hm = re.search(re.escape(name) + r"\s*\((\+?\d+)\)", doc)
