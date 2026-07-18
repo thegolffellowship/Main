@@ -411,6 +411,26 @@ below wherever they conflict.
     pools→knockout — format choice weighs fairness vs match volume vs the
     simplicity/scaling north star.
 
+**Live scoring + one-tap record (SHIPPED 2026-07-18, v2.120–v2.121; Match
+Play LIVE app-wide, `MATCHPLAY_V2` default ON, env kill switch preserved).**
+The new bracket cards read GG's *current* match state during a round:
+`cmp_fetch_live_match(chapter, a, b)` walks the chapter's
+`tournament_results` widget (in-mem cached ~25s) → `GET /api/cmp/live-match`
+(member/public read). The front end (`contests.html`) live-polls each
+in-progress card (both players present, no recorded winner): quick retries
+on load then 60s steady, an on-card status line while connecting, and a
+localStorage cache so a reload paints the last-known score instantly. The
+card renders the FULL match scorecard (hole count from the GG event code —
+`s18.8`→18, `a9.16`→9), running net dots from the starting hole in play
+order, per-hole points, and a "LIVE · thru N" chip. **One-tap record
+(Kerry-ratified):** on a DECISIVE GG final (closeout margin, or `thru ==
+n_holes` with a winner — NOT a mid-round lead and NOT all-square-through-18,
+which still needs the human extra-holes decision) the manager card pre-fills
+the winner + margin and shows a "Record from GG: <winner> <margin>" button
+that reuses the existing Save path (records + auto-advances) and stays
+editable afterward. The stored `gg_match_detail` snapshot remains the frozen
+display source once recorded.
+
 **Implementation status (2026-07-17):** config **v2** authored + both
 2026 snapshots **pinned** (`cmp_repin_2026_to_dmp_register`, #223);
 **D-MP-09 pool rank LIVE** (`cmp_get_standings` honors
