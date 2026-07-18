@@ -24479,6 +24479,40 @@ def sync_season_contests_from_items(db_path: str | Path | None = None) -> dict:
 # City Match Play — pools, members, matches, bracket
 # ---------------------------------------------------------------------------
 
+def cmp_gg_detail_dump(chapter: str, player_a: str, player_b: str,
+                       db_path=None) -> dict:
+    """READ-ONLY: return the stored gg_match_detail for one match (by chapter +
+    the two players, nickname-robust) so we can inspect whether GG's per-hole
+    strokes/pops were captured."""
+    key = frozenset([_cmp_person_key(player_a), _cmp_person_key(player_b)])
+    with _connect(db_path) as conn:
+        rows = conn.execute(
+            """SELECT m.id, m.player1_name, m.player2_name, m.winner_name,
+                      m.margin, m.gg_match_detail, e.item_name AS event
+                 FROM cmp_matches m
+                 JOIN cmp_pools p ON p.id = m.pool_id
+                 LEFT JOIN events e ON e.id = m.event_id
+                WHERE p.chapter = ?""", (chapter,)).fetchall()
+    for r in rows:
+        if frozenset([_cmp_person_key(r["player1_name"]),
+                      _cmp_person_key(r["player2_name"])]) == key:
+            d = dict(r)
+            try:
+                d["gg_match_detail"] = json.loads(d["gg_match_detail"]) \
+                    if d["gg_match_detail"] else None
+            except Exception:
+                pass
+            # compact per-hole stroke view
+            gg = d.get("gg_match_detail") or {}
+            d["stroke_summary"] = [
+                {"hole": h.get("hole"), "p1_str": h.get("p1_strokes"),
+                 "p2_str": h.get("p2_strokes")}
+                for h in (gg.get("holes") or []) if h.get("p1_gross") is not None]
+            return d
+    return {"error": "no match found", "chapter": chapter,
+            "players": [player_a, player_b]}
+
+
 def cmp_pools_audit(db_path=None) -> list[dict]:
     """READ-ONLY: distinct (chapter, season) in cmp_pools with pool + match
     counts. Diagnoses why a chapter/season combo returns no pools (e.g. SA
