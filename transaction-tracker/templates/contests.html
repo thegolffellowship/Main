@@ -2621,7 +2621,8 @@
         const gh = ((gg && gg.holes) || []).filter(h => h.p1_gross != null || h.p2_gross != null);
         if (!gh.length) return null;
         const aIsP1 = mpPersonKey((gg.players && gg.players[0] && gg.players[0].name) || '') === mpPersonKey(o.aName);
-        const holes = gh.map(h => {
+        const closedAt = gg.closed_at_order || null;   // play-order pos of the clinch
+        const holes = gh.map((h, i) => {
             const grossA = aIsP1 ? h.p1_gross : h.p2_gross;
             const grossB = aIsP1 ? h.p2_gross : h.p1_gross;
             const strA = aIsP1 ? h.p1_strokes : h.p2_strokes;
@@ -2631,9 +2632,14 @@
             else if (h.winner === 1) wnr = aIsP1 ? 'A' : 'B';
             else if (h.winner === 2) wnr = aIsP1 ? 'B' : 'A';
             const played = grossA != null && grossB != null;
+            // Holes played out AFTER the match was decided are "dead": show the
+            // score but greyed, no winner circle (dots go hollow).
+            const order = h.order != null ? h.order : (i + 1);
+            const dead = closedAt != null && order > closedAt;
             return {
-                winner: played ? wnr : null, played, holeNo: h.hole,
-                par: null, parA: grossA, parB: grossB, ptsA: null, ptsB: null,
+                winner: (played && !dead) ? wnr : null, played, dead,
+                holeNo: h.hole, par: null, parA: grossA, parB: grossB,
+                ptsA: null, ptsB: null,
                 srA: (strA || 0) > 0, srB: (strB || 0) > 0
             };
         });
@@ -2642,7 +2648,6 @@
         let nine = null;
         if (count <= 9) nine = (nums.length && Math.max(...nums) <= 9) ? 'front'
             : (nums.length && Math.min(...nums) >= 10) ? 'back' : 'front';
-        const closedAt = gg.closed_at_order || null;
         return {
             count, nine, played: count, thru: gg.thru || count, closedAt,
             putt: /putt/i.test(o.margin || ''), inProgress: false, holes,
@@ -2653,7 +2658,8 @@
     // Center hole-dots row (collapsed strip) — one dot per hole, coloured by winner.
     function mpHoleDotsHtml(gen) {
         const dots = gen.holes.map(h => {
-            if (!h.played) return '<span class="mp-hdot empty"></span>';
+            // unplayed OR dead (played out after the match was decided) → hollow
+            if (!h.played || h.dead) return '<span class="mp-hdot empty"></span>';
             const c = h.winner === 'A' ? 'a' : (h.winner === 'B' ? 'b' : 'halve');
             return `<span class="mp-hdot ${c}"></span>`;
         }).join('');
@@ -2677,7 +2683,8 @@
             let firstNo = null, lastNo = null;
             for (let i = start; i < start + len; i++) {
                 const h = gen.holes[i]; if (!h) continue;
-                const dim = h.played ? '' : ' dim';
+                // dead (post-decision) holes grey out like unplayed ones
+                const dim = (h.played && !h.dead) ? '' : ' dim';
                 const no = h.holeNo != null ? h.holeNo : (i + 1);
                 if (firstNo == null) firstNo = no; lastNo = no;
                 hs.push(`<td>${no}</td>`);

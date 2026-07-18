@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.119.4";
+window.TGF_VERSION = "2.119.5";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.119.5",
+    date: "2026-07-17",
+    changes: [
+      "Match Play scorecard/dots: once a match is decided, the holes played out AFTER the clinch (dead holes) no longer show a winner color circle. Their gross scores still show but greyed out; in the collapsed dots row those holes render as empty (hollow) circles. Driven by GG closed_at_order in play order, so a 4&3 greys the last holes correctly.",
+      "Read-only diagnostic scoring-mp-detail:<chapter>|<A>|<B> dumps a stored gg_match_detail (incl. a per-hole p1/p2 stroke summary) to check whether GG per-hole pops were captured.",
+    ],
+  },
   {
     version: "2.119.4",
     date: "2026-07-17",
