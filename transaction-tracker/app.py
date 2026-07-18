@@ -9610,11 +9610,11 @@ def api_delete_season_contest(enrollment_id):
 
 def _matchplay_v2_flag():
     """SHELL_V2-style kill switch for the Match Play visual rollout (#228).
-    Default OFF so members/managers keep the CURRENT Match Play tab until
-    Kerry signs off from the admin sandbox. Flip env MATCHPLAY_V2=1 on
-    Railway to promote the new tab live everywhere; the admin preview route
-    forces it on regardless so Kerry can play with it on live data first."""
-    return os.environ.get("MATCHPLAY_V2", "0") == "1"
+    Default ON as of the live go (Kerry, 2026-07-18) — members/managers now
+    see the new Match Play tab everywhere. Kill switch preserved: set env
+    MATCHPLAY_V2=0 on Railway to instantly revert everyone to the legacy tab.
+    The admin preview route forces it on regardless."""
+    return os.environ.get("MATCHPLAY_V2", "1") == "1"
 
 
 @app.route("/contests")
