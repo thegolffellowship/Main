@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.120.1";
+window.TGF_VERSION = "2.120.2";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.120.2",
+    date: "2026-07-18",
+    changes: [
+      "Match Play scorecard now shows the FULL match — every hole they'll play (all 18, or 9 for a 9-hole match), not just the holes posted so far. Played holes fill in with scores/dots/points; the rest render blank/pending. Match length comes from the Golf Genius event code (s18.8 → 18, a9.16 → 9); when the code isn't available (older stored details) it falls back to showing the posted holes. Applies to the collapsed hole-dots row and the expanded scorecard alike, so a live match mid-round reads as a full card filling in hole by hole.",
+    ],
+  },
   {
     version: "2.120.1",
     date: "2026-07-18",
