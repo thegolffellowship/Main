@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.119.9";
+window.TGF_VERSION = "2.120.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.120.0",
+    date: "2026-07-18",
+    changes: [
+      "Match Play is LIVE (Kerry go, 2026-07-18): the new Match Play tab — CD scoreboard, pool cards, hole-dots, expandable scorecards, seeded bracket, and Golf Genius live scoring — now shows for all members and managers. Kill switch preserved: set MATCHPLAY_V2=0 on Railway to instantly revert everyone to the legacy tab.",
+      "Match Play scorecard: per-hole match points now show on EVERY expanded card — restored on the 18-hole cards and ADDED to the 9-hole Golf Genius cards (previously blank). Points come from the per-hole winner flag (hole winner 2, loser 1, halve 2/2); dead holes after the clinch and unplayed holes carry no points. Corrects the prior release that removed them from the 18s instead of adding them to the 9s.",
+    ],
+  },
   {
     version: "2.119.9",
     date: "2026-07-18",

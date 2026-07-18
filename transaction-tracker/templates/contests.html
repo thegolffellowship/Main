@@ -2643,10 +2643,19 @@
             // score but greyed, no winner circle (dots go hollow).
             const order = h.order != null ? h.order : (i + 1);
             const dead = closedAt != null && order > closedAt;
+            // Per-hole match points, same model as the placeholder engine so the
+            // 9-hole GG cards and 18-hole cards read identically: hole winner 2,
+            // loser 1, halve 2/2. Dead / unplayed holes carry no points.
+            let ptsA = null, ptsB = null;
+            if (played && !dead) {
+                if (wnr === 'A') { ptsA = 2; ptsB = 1; }
+                else if (wnr === 'B') { ptsA = 1; ptsB = 2; }
+                else if (wnr === 'H') { ptsA = 2; ptsB = 2; }
+            }
             return {
                 winner: (played && !dead) ? wnr : null, played, dead,
                 holeNo: h.hole, par: null, parA: grossA, parB: grossB,
-                ptsA: null, ptsB: null,
+                ptsA, ptsB,
                 srA: (strA || 0) > 0, srB: (strB || 0) > 0
             };
         });
@@ -2708,10 +2717,11 @@
                 ? (gen.count > 9 ? `Holes ${firstNo}–${lastNo}` : (gen.startHole ? `Started hole ${gen.startHole}` : ''))
                 : (start === 0 && gen.count === 18 ? 'Front 9' : (gen.count === 18 ? 'Back 9' : (gen.nine === 'back' ? 'Back 9' : 'Front 9')));
             const parRow = (!isGG) ? `<tr class="mp-sc-par"><th class="mp-sc-rowlabel">Par</th>${pars.join('')}<th class="mp-sc-tot">${parTot}</th></tr>` : '';
-            // Match play has no per-hole Stableford points — never show Pts rows
-            // (keeps the 9-hole GG cards and 18-hole placeholder cards consistent).
-            const aPtsRow = '';
-            const bPtsRow = '';
+            // Per-hole match points show on EVERY card — 9-hole GG and 18-hole
+            // alike (hole winner 2, loser 1, halve 2/2). Populated for GG cards
+            // from the per-hole winner flag in mpHolesFromGG.
+            const aPtsRow = `<tr class="mp-sc-pts"><th class="mp-sc-rowlabel">Pts</th>${aP.join('')}<th class="mp-sc-tot">${aPts}</th></tr>`;
+            const bPtsRow = `<tr class="mp-sc-pts"><th class="mp-sc-rowlabel">Pts</th>${bP.join('')}<th class="mp-sc-tot">${bPts}</th></tr>`;
             return `
             ${label ? `<div class="mp-sc-block-label">${label}</div>` : ''}
             <table class="mp-sc">
