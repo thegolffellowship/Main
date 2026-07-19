@@ -22551,16 +22551,26 @@ def persist_handicap_round_nines(dry_run: bool = True,
             "SELECT id, player_name, round_date, tee_id, customer_id "
             "FROM scoring_rounds").fetchall()
         cards_by_id = {c["id"]: c for c in cards}
+
+        def _norm(n):
+            # "LAST, First" (scorecards) and "First Last" (handicap postings)
+            # collapse to the same key so an unlinked posting still matches.
+            s = str(n or "").strip()
+            if "," in s:
+                last, _, first = s.partition(",")
+                s = f"{first.strip()} {last.strip()}"
+            return " ".join(s.lower().split())
+
         # An unbridged posting is matched to a scorecard by customer_id (the one
-        # true identity key) — handicap_rounds stores "First Last" while
-        # scorecards store "LAST, First", so a name match would silently miss.
-        # A player_name key is kept only as a last resort.
+        # true identity key) first, then by normalized name (handicap_rounds
+        # store "First Last" while scorecards store "LAST, First", so the raw
+        # strings would silently miss).
         by_cd: dict = defaultdict(list)   # (customer_id, round_date) -> cards
-        by_pd: dict = defaultdict(list)   # (player_name, round_date) -> cards
+        by_nd: dict = defaultdict(list)   # (normalized_name, round_date) -> cards
         for c in cards:
             if c["customer_id"]:
                 by_cd[(c["customer_id"], c["round_date"])].append(c)
-            by_pd[(c["player_name"], c["round_date"])].append(c)
+            by_nd[(_norm(c["player_name"]), c["round_date"])].append(c)
         hr_cust = {r["player_name"]: r["customer_id"] for r in conn.execute(
             "SELECT player_name, customer_id FROM handicap_player_links "
             "WHERE customer_id IS NOT NULL").fetchall()}
@@ -22592,7 +22602,7 @@ def persist_handicap_round_nines(dry_run: bool = True,
                 if cust_id:
                     cand = by_cd.get((cust_id, r["round_date"]), [])
                 if not cand:
-                    cand = by_pd.get((r["player_name"], r["round_date"]), [])
+                    cand = by_nd.get((_norm(r["player_name"]), r["round_date"]), [])
             options = []  # (side, adjusted_total)
             for c in cand:
                 options.extend(_sides_for(c))
