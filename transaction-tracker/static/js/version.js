@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.121.9";
+window.TGF_VERSION = "2.121.10";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.121.10",
+    date: "2026-07-19",
+    changes: [
+      "Handicaps/Scores: TPC San Antonio's Oaks and Canyons now read '— Front / — Back' for the side played, instead of being treated as named nines. TPC San Antonio is one facility with TWO 18-hole courses (the Oaks Course and the Canyons Course), so 'Oaks'/'Canyons' name the COURSE, not a nine — a played side of either is a Front or Back like any other 18-hole course. The named-nine rule previously matched on the trailing word alone, which couldn't tell 'TPC | Oaks' (a course) from 'Hill Country | Oaks' (a genuine Hyatt nine); it now excludes multi-18-course facilities (TPC) by name, so the real tri-nine facilities — Comanche Trace (Creeks/Hills/Valley) and Hyatt Hill Country (Lakes/Oaks/Creeks) — keep their nine names and everything else reads Front/Back.",
+    ],
+  },
   {
     version: "2.121.9",
     date: "2026-07-19",

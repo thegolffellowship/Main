@@ -22421,7 +22421,7 @@ def _repair_handicap_bridge_assignments(conn: sqlite3.Connection,
 
 # Nine NAMES a course may use instead of generic Front/Back. A course whose
 # name ends with one of these after a separator (| / -) is a NAMED-nine course
-# (Comanche Creeks/Hills/Valley, TPC Oaks/Canyons, Hyatt Oaks/Lakes...) — it
+# (Comanche Creeks/Hills/Valley, Hyatt Hill Country Lakes/Oaks/Creeks) — it
 # shows its nine's name and is NEVER labeled Front/Back. Any OTHER 9-hole round
 # is a front/back of an 18-hole course (no true 9-hole courses on the schedule,
 # Kerry 2026-07-18). Editable list — add a chapter's nine names here.
@@ -22429,13 +22429,28 @@ _NAMED_NINE_WORDS = {
     "oaks", "creeks", "hills", "valley", "lakes", "canyons",
 }
 
+# Facilities that have MULTIPLE 18-hole courses whose names happen to reuse a
+# nine word. TPC San Antonio has two 18-hole courses — the Oaks Course and the
+# Canyons Course — so "Oaks"/"Canyons" name the 18-hole COURSE, not a nine; a
+# played side of them is a Front/Back like any other 18-hole course (Kerry
+# 2026-07-19). The nine word alone can't tell "TPC | Oaks" (a course) from
+# "Hill Country | Oaks" (a nine), so we key off the facility.
+_MULTI_COURSE_18_FACILITIES = ("tpc",)
+
 
 def _course_names_its_nines(course_name) -> bool:
     """True when the course names its nines (nine name after a | / - separator),
     so it should show that NAME, not a generic Front/Back. Requiring a separator
-    avoids matching a base course name like 'Cedar Creek'."""
-    m = re.search(r"[|/\-]\s*([A-Za-z]+)\s*$", str(course_name or ""))
-    return bool(m) and m.group(1).lower() in _NAMED_NINE_WORDS
+    avoids matching a base course name like 'Cedar Creek'. A multi-18-course
+    facility (TPC San Antonio) is excluded — its trailing name is a COURSE, not
+    a nine, so its played side reads Front/Back."""
+    s = str(course_name or "")
+    m = re.search(r"[|/\-]\s*([A-Za-z]+)\s*$", s)
+    if not (m and m.group(1).lower() in _NAMED_NINE_WORDS):
+        return False
+    if any(fac in s.lower() for fac in _MULTI_COURSE_18_FACILITIES):
+        return False
+    return True
 
 
 def _nine_totals_for_card(conn: sqlite3.Connection, scoring_round_id: int,
@@ -22528,9 +22543,11 @@ def get_handicap_rounds(player_name: str | None = None,
                     if (group[0].get("sr_holes") or 0) <= 9:
                         # Label the played side (Front = holes 1-9, Back = 10-18)
                         # on every course EXCEPT one that NAMES its nines
-                        # (Comanche Creeks/Hills/Valley, TPC Oaks/Canyons, Hyatt
-                        # Oaks/Lakes...) — those already carry the nine's NAME in
-                        # course_name and must never read "Front/Back". No true
+                        # (Comanche Creeks/Hills/Valley, Hyatt Hill Country
+                        # Lakes/Oaks/Creeks) — those already carry the nine's
+                        # NAME in course_name and must never read "Front/Back".
+                        # TPC San Antonio's Oaks/Canyons are 18-hole COURSES, not
+                        # nines, so they DO read Front/Back. No true
                         # 9-hole courses are on the schedule, so any other 9-hole
                         # round is a front/back of an 18-hole course (Kerry
                         # 2026-07-18; supersedes the tee-hole-count guard, which
