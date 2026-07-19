@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.121.7";
+window.TGF_VERSION = "2.121.8";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.121.8",
+    date: "2026-07-18",
+    changes: [
+      "Handicaps: generic 18-hole courses played as a single nine (Silverhorn, The Quarry, Canyon Springs, etc.) now correctly show '— Front / — Back'. The prior guard keyed on whether the tee had 18 holes imported, which failed for a course only ever played as one nine; it now keys on whether the course NAMES its nines. A course that names its nines (Comanche Creeks/Hills/Valley, TPC Oaks/Canyons, Hyatt Oaks/Lakes) keeps its nine's name and is never labeled Front/Back; every other 9-hole round is a front (holes 1–9) or back (10–18) of an 18-hole course.",
+    ],
+  },
   {
     version: "2.121.7",
     date: "2026-07-18",
