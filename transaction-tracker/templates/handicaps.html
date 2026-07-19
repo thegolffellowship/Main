@@ -1459,7 +1459,7 @@
             return `<tr class="${rowClass}" ${rowStyle ? `style="${rowStyle}"` : ''}>
                 <td class="date-col">${dateCell}</td>
                 <td class="course-col">${esc(courseLabel)}</td>
-                <td class="narrow-col">${esc(rnd.tee_name || '—')}</td>
+                <td class="narrow-col">${esc(hcpTeeLabel(rnd.tee_name))}</td>
                 <td class="diff-col">${grossCell}</td>
                 <td class="diff-col">${adjCell}</td>
                 <td class="diff-col">${rnd.rating}</td>
@@ -1615,7 +1615,7 @@
             ? `(${latest.adjusted_score} − ${latest.rating}) × 113.0 / ${latest.slope} = <strong>${latest.differential !== null ? latest.differential.toFixed(1) : '?'}</strong>`
             : '';
         const latestPara = latest ? `<p>The most recent score is <strong>${latest.adjusted_score}</strong>, played on the
-            <strong>${esc(latest.tee_name || '—')}</strong> tee at <strong>${esc(latest.course_name || '—')}</strong>.
+            <strong>${esc(hcpTeeLabel(latest.tee_name))}</strong> tee at <strong>${esc(latest.course_name || '—')}</strong>.
             The rating is <strong>${latest.rating}</strong> and the slope is <strong>${latest.slope}</strong>,
             therefore the differential is (score − rating) × 113.0 / slope = ${diffFormula}.</p>` : '';
 
@@ -1836,6 +1836,16 @@
     // ── Utilities ───────────────────────────────────────────────────
     function esc(s) {
         return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    }
+    // Tidy a tee label for display: drop the redundant word "Tee" and shorten a
+    // "Front 9"/"Back 9" nine suffix to "Front"/"Back" (Kerry 2026-07-18).
+    function hcpTeeLabel(name) {
+        const out = String(name || '')
+            .replace(/\s*\bTee\b/gi, '')
+            .replace(/\b(Front|Back)\s*9\b/gi, '$1')
+            .replace(/\s{2,}/g, ' ')
+            .trim();
+        return out || '—';
     }
     function safeid(s) {
         return s.replace(/[^a-zA-Z0-9]/g, '_');
