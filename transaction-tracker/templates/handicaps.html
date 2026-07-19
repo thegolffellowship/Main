@@ -1475,6 +1475,7 @@
         // Render all rows in one table; insert separators at key boundaries
         let cutoffInserted = false;
         let poolLimitInserted = false;
+        let lastRoundYear = null;   // year-change breaker (dates render M/D)
         // Green line: after the 20th active round if there are >20 active rounds
         const showPoolLimit = activeRounds.length > 20;
         for (let i = 0; i < rounds.length; i++) {
@@ -1507,6 +1508,16 @@
                         border-top:2px solid #dc2626;border-bottom:2px solid #dc2626;">
                         ── ${lookbackMonths}-month lookback cutoff (${cutoffStr}) ──
                     </td></tr>`;
+            }
+            // Year breaker: a colored full-width band whenever the calendar
+            // year changes (the date column shows only M/D, so the boundary
+            // is otherwise invisible). Hides/shows with the older-rounds toggle.
+            const rndYear = String(rnd.round_date || '').slice(0, 4);
+            if (rndYear && rndYear !== lastRoundYear) {
+                lastRoundYear = rndYear;
+                html += `<tr class="year-breaker ${isOlder ? 'older-round' : ''}" ${isOlder ? 'style="display:none"' : ''}>
+                    <td colspan="${colspan}" style="padding:4px 11px;background:#1B1B1B;color:#fff;
+                        font:700 12px/1 'Bitter',serif;letter-spacing:0.08em;">${rndYear}</td></tr>`;
             }
             html += roundRow(rnd, isOlder);
         }

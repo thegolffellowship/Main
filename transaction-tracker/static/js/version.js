@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.122.5";
+window.TGF_VERSION = "2.122.6";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.122.6",
+    date: "2026-07-19",
+    changes: [
+      "Rounds tables now show a colored year breaker row whenever the list crosses into another calendar year. Because dates render as M/D, a year boundary (e.g. from 2026 rounds into 2025) was invisible; a dark full-width band with the year now marks each transition. Added on both the Handicaps expanded-rounds table and the Customers → Scores table. On Handicaps the breaker hides/shows with the 'older rounds' toggle like the other separators.",
+    ],
+  },
   {
     version: "2.122.5",
     date: "2026-07-19",

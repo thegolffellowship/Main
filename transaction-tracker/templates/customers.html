@@ -2356,7 +2356,13 @@
             html += `<th style="padding:${pad}; text-align:${alignCtr};">Used</th>`;
             html += '</tr></thead><tbody>';
 
+            let lastYear = null;   // year-change breaker (dates render M/D)
             data.rounds.forEach(r => {
+                const yr = String(r.round_date || '').slice(0, 4);
+                if (yr && yr !== lastYear) {
+                    lastYear = yr;
+                    html += `<tr><td colspan="6" style="padding:${pad}; background:#1B1B1B; color:#fff; font-weight:700; letter-spacing:0.06em;">${yr}</td></tr>`;
+                }
                 const isActive = r.round_date >= cutoffStr;
                 const isUsed = usedIds.has(r.id);
                 const rowBg = isUsed ? 'background:#fef08a;' : (!isActive ? 'opacity:0.4;' : '');
