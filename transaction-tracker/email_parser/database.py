@@ -22419,6 +22419,25 @@ def _repair_handicap_bridge_assignments(conn: sqlite3.Connection,
                     unmatched)
 
 
+# Nine NAMES a course may use instead of generic Front/Back. A course whose
+# name ends with one of these after a separator (| / -) is a NAMED-nine course
+# (Comanche Creeks/Hills/Valley, TPC Oaks/Canyons, Hyatt Oaks/Lakes...) — it
+# shows its nine's name and is NEVER labeled Front/Back. Any OTHER 9-hole round
+# is a front/back of an 18-hole course (no true 9-hole courses on the schedule,
+# Kerry 2026-07-18). Editable list — add a chapter's nine names here.
+_NAMED_NINE_WORDS = {
+    "oaks", "creeks", "hills", "valley", "lakes", "canyons",
+}
+
+
+def _course_names_its_nines(course_name) -> bool:
+    """True when the course names its nines (nine name after a | / - separator),
+    so it should show that NAME, not a generic Front/Back. Requiring a separator
+    avoids matching a base course name like 'Cedar Creek'."""
+    m = re.search(r"[|/\-]\s*([A-Za-z]+)\s*$", str(course_name or ""))
+    return bool(m) and m.group(1).lower() in _NAMED_NINE_WORDS
+
+
 def _nine_totals_for_card(conn: sqlite3.Connection, scoring_round_id: int,
                           tee_id: int | None, formulas: dict) -> dict:
     """Per-nine gross + WHS-adjusted totals for one scoring card. Used to
@@ -22507,27 +22526,21 @@ def get_handicap_rounds(player_name: str | None = None,
                         conn, srid, group[0].get("sr_tee_id"), formulas)
                     sides = [s for s in ("front", "back") if sp[s]["n"]]
                     if (group[0].get("sr_holes") or 0) <= 9:
-                        # Show the played side (Front/Back) only on courses
-                        # whose tee has a FULL 18 holes defined — i.e. courses
-                        # with generic front/back nines (Kissing Tree, Vaaler,
-                        # Silverhorn, Quarry...). Kerry 2026-07-18, supersedes
-                        # the 07-14 back-only rule.
-                        # A course that NAMES its nines (Comanche Creeks/Hills/
-                        # Valley, Hyatt Oaks/Lakes/Creeks...) is stored as a
-                        # single 9-hole entry per nine — only holes 1-9, and the
-                        # nine's NAME is already in course_name — so it has no
-                        # 18-hole tee here, stays unlabeled, and shows its NAME,
-                        # never "Front/Back". (No true 9-hole courses are on the
-                        # schedule; every 9-hole entry is a named nine.)
+                        # Label the played side (Front = holes 1-9, Back = 10-18)
+                        # on every course EXCEPT one that NAMES its nines
+                        # (Comanche Creeks/Hills/Valley, TPC Oaks/Canyons, Hyatt
+                        # Oaks/Lakes...) — those already carry the nine's NAME in
+                        # course_name and must never read "Front/Back". No true
+                        # 9-hole courses are on the schedule, so any other 9-hole
+                        # round is a front/back of an 18-hole course (Kerry
+                        # 2026-07-18; supersedes the tee-hole-count guard, which
+                        # wrongly skipped 18-hole courses only ever played as one
+                        # nine — Silverhorn, The Quarry, Canyon Springs).
                         played_side = ("back" if sides == ["back"]
                                        else "front" if sides == ["front"]
                                        else None)
-                        tee_id = group[0].get("sr_tee_id")
-                        course_is_18 = bool(tee_id and conn.execute(
-                            "SELECT 1 FROM course_tee_holes "
-                            "WHERE tee_id = ? AND hole_number > 9 LIMIT 1",
-                            (tee_id,)).fetchone())
-                        if played_side and course_is_18:
+                        if played_side and not _course_names_its_nines(
+                                group[0].get("course_name")):
                             for r in group:
                                 r["nine"] = played_side
                         continue
