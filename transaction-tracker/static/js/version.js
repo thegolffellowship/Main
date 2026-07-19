@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.121.10";
+window.TGF_VERSION = "2.121.11";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.121.11",
+    date: "2026-07-19",
+    changes: [
+      "Customers → Scores table is tighter on mobile: every column is left-aligned (Score/Diff/Used were right/center-aligned, which spread them out on the narrow horizontal scroll), horizontal cell padding is reduced, and dates show as M/D (e.g. 7/18) instead of the full YYYY-MM-DD. The six columns now pack close together on the left so the sideways scroll is short. Desktop keeps its roomier layout with right-aligned numerics and full dates.",
+    ],
+  },
   {
     version: "2.121.10",
     date: "2026-07-19",

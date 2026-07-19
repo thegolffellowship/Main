@@ -2332,14 +2332,28 @@
             const sorted = [...recent20].sort((a, b) => a.differential - b.differential);
             const usedIds = new Set(sorted.slice(0, n).map(r => r.id));
 
+            // Mobile: tighten padding, left-align every column, and shorten
+            // dates to M/D so the six columns pack close together and the
+            // scroll is short (Kerry 2026-07-19). Desktop keeps its roomier
+            // layout with right-aligned numerics.
+            const isMobile = !!(window.matchMedia && window.matchMedia('(max-width: 768px)').matches);
+            const pad = isMobile ? '0.25rem 0.4rem' : '0.3rem 0.6rem';
+            const alignNum = isMobile ? 'left' : 'right';
+            const alignCtr = isMobile ? 'left' : 'center';
+            const fmtDate = (d) => {
+                if (!isMobile) return d || '';
+                const m = String(d || '').match(/^(\d{4})-(\d{2})-(\d{2})/);
+                return m ? `${parseInt(m[2], 10)}/${parseInt(m[3], 10)}` : (d || '');
+            };
+
             let html = '<table style="width:auto; border-collapse:collapse; font-size:0.78rem;">';
             html += '<thead><tr style="border-bottom:1px solid var(--border);">';
-            html += '<th style="padding:0.3rem 0.6rem; text-align:left;">Date</th>';
-            html += '<th style="padding:0.3rem 0.6rem; text-align:left;">Course</th>';
-            html += '<th style="padding:0.3rem 0.6rem; text-align:left;">Tee</th>';
-            html += '<th style="padding:0.3rem 0.6rem; text-align:right;">Score</th>';
-            html += '<th style="padding:0.3rem 0.6rem; text-align:right;">Diff</th>';
-            html += '<th style="padding:0.3rem 0.6rem; text-align:center;">Used</th>';
+            html += `<th style="padding:${pad}; text-align:left;">Date</th>`;
+            html += `<th style="padding:${pad}; text-align:left;">Course</th>`;
+            html += `<th style="padding:${pad}; text-align:left;">Tee</th>`;
+            html += `<th style="padding:${pad}; text-align:${alignNum};">Score</th>`;
+            html += `<th style="padding:${pad}; text-align:${alignNum};">Diff</th>`;
+            html += `<th style="padding:${pad}; text-align:${alignCtr};">Used</th>`;
             html += '</tr></thead><tbody>';
 
             data.rounds.forEach(r => {
@@ -2347,14 +2361,14 @@
                 const isUsed = usedIds.has(r.id);
                 const rowBg = isUsed ? 'background:#fef08a;' : (!isActive ? 'opacity:0.4;' : '');
                 html += `<tr style="${rowBg} border-bottom:1px solid var(--border);">`;
-                html += `<td style="padding:0.3rem 0.6rem;">${escapeHtml(r.round_date || '')}</td>`;
+                html += `<td style="padding:${pad};">${escapeHtml(fmtDate(r.round_date))}</td>`;
                 const courseLbl = window.courseNineLabel ? window.courseNineLabel(r) : (r.course_name || '');
                 const teeLbl = window.teeLabel ? window.teeLabel(r.tee_name) : (r.tee_name || '');
-                html += `<td style="padding:0.3rem 0.6rem;">${escapeHtml(courseLbl)}</td>`;
-                html += `<td style="padding:0.3rem 0.6rem;">${escapeHtml(teeLbl)}</td>`;
-                html += `<td style="padding:0.3rem 0.6rem; text-align:right;">${r.adjusted_score != null ? r.adjusted_score : ''}</td>`;
-                html += `<td style="padding:0.3rem 0.6rem; text-align:right;">${r.differential != null ? r.differential.toFixed(1) : ''}</td>`;
-                html += `<td style="padding:0.3rem 0.6rem; text-align:center;">${isUsed ? '★' : ''}</td>`;
+                html += `<td style="padding:${pad};">${escapeHtml(courseLbl)}</td>`;
+                html += `<td style="padding:${pad};">${escapeHtml(teeLbl)}</td>`;
+                html += `<td style="padding:${pad}; text-align:${alignNum};">${r.adjusted_score != null ? r.adjusted_score : ''}</td>`;
+                html += `<td style="padding:${pad}; text-align:${alignNum};">${r.differential != null ? r.differential.toFixed(1) : ''}</td>`;
+                html += `<td style="padding:${pad}; text-align:${alignCtr};">${isUsed ? '★' : ''}</td>`;
                 html += '</tr>';
             });
             html += '</tbody></table>';
