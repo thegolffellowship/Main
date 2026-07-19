@@ -9734,7 +9734,8 @@ def api_cmp_set_member_withdrawn(pool_id, customer_name):
     data = request.get_json(silent=True) or {}
     from email_parser.database import cmp_set_member_withdrawn
     return jsonify(cmp_set_member_withdrawn(
-        pool_id, customer_name, bool(data.get("withdrawn", True))))
+        pool_id, customer_name, bool(data.get("withdrawn", True)),
+        reason=data.get("reason")))
 
 
 @app.route("/api/cmp/matches", methods=["POST"])

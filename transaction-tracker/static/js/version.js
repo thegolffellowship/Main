@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.124.0";
+window.TGF_VERSION = "2.124.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.124.1",
+    date: "2026-07-19",
+    changes: [
+      "Withdrawals can carry a short reason code shown on the chip (Kerry): 'WD · INJ' for an injury withdrawal, stored as cmp_pool_members.withdrawn_reason (uppercased, max 12 chars, cleared when the WD flag is cleared). The manager route and the scoring-mp-wd bridge both accept the reason. Campos is flagged WD · INJ.",
+    ],
+  },
   {
     version: "2.124.0",
     date: "2026-07-19",
