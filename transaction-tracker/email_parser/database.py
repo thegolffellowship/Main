@@ -12332,6 +12332,10 @@ _COURSE_SHORT_PINS: list = [
     # "squaw" so they never collide with The Club at Comanche Trace.
     (r"squaw.*(apache|links)", "Squaw Valley | Links"),
     (r"squaw.*(comanche|lakes)", "Squaw Valley | Lakes"),
+    # Multi-course Houston facilities — reduce to Facility | Course
+    # (Kerry 2026-07-19).
+    (r"cypresswood.*tradition", "Cypresswood | Tradition"),
+    (r"bentwater.*weiskopf", "Bentwater | Weiskopf"),
     # Silverhorn's formal name is "Silverhorn Golf Club of Texas" — it must
     # match BEFORE the (distinct) Golf Club of Texas course (v2.57.2 fix)
     (r"silverhorn", "Silverhorn"),
