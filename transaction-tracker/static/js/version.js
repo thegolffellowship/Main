@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.122.2";
+window.TGF_VERSION = "2.122.3";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.122.3",
+    date: "2026-07-19",
+    changes: [
+      "Played-side backfill now tolerates the one-day date offset between a handicap posting and its scorecard. Some events (e.g. s9.1 The Quarry) have the handicap posting stamped 03-18 while the scorecard is 03-17, so the exact-date match found no card and left the side blank even though the card clearly existed. When there's no exact-date card, the backfill now accepts a same-course card within ±1 day (course name normalized so 'The Quarry Golf Club' and 'The Quarry Golf Course (OLD) …' match). This fills the last blank sides where a scorecard exists.",
+    ],
+  },
   {
     version: "2.122.2",
     date: "2026-07-19",

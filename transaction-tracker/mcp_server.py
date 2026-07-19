@@ -1713,6 +1713,12 @@ def _scoring_dispatch(url: str, extract: str):
             return json.dumps(db.derive_handicap_rounds_from_scoring(
                 ev_arg.strip(), dry_run=(mode.strip().lower() != "apply")),
                 indent=2, default=str)
+        if cmd == "scoring-hcp-dump":
+            # READ-ONLY diagnostic: handicap_rounds for a player (arg =
+            # "<player>" or "<player>|<date>").
+            p, _, d = arg.partition("|")
+            return json.dumps(db.debug_dump_handicap_rounds(
+                p.strip(), d.strip() or None), indent=2, default=str)
         if cmd == "scoring-hcp-nines":
             # Persist the played side (front/back) onto handicap_rounds.nine
             # from each round's scorecard (Kerry 2026-07-19). ":dry" (default)

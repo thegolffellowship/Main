@@ -22515,6 +22515,23 @@ def _nine_totals_for_card(conn: sqlite3.Connection, scoring_round_id: int,
     return out
 
 
+def debug_dump_handicap_rounds(player_substr: str, date_substr: str | None = None,
+                               db_path: str | Path | None = None) -> list[dict]:
+    """READ-ONLY: dump handicap_rounds rows matching a player-name substring
+    (and optional date substring) with the columns that drive the played-side
+    resolution — so a blank side can be diagnosed against the scorecard."""
+    with _connect(db_path) as conn:
+        q = ("SELECT id, player_name, round_date, course_name, tee_name, "
+             "adjusted_score, scoring_round_id, nine FROM handicap_rounds "
+             "WHERE player_name LIKE ?")
+        args = [f"%{player_substr}%"]
+        if date_substr:
+            q += " AND round_date LIKE ?"
+            args.append(f"%{date_substr}%")
+        q += " ORDER BY round_date DESC, id DESC"
+        return [dict(r) for r in conn.execute(q, args).fetchall()]
+
+
 def persist_handicap_round_nines(dry_run: bool = True,
                                  db_path: str | Path | None = None) -> dict:
     """RECORD the played side (front/back) onto handicap_rounds.nine so the
@@ -22561,16 +22578,39 @@ def persist_handicap_round_nines(dry_run: bool = True,
                 s = f"{first.strip()} {last.strip()}"
             return " ".join(s.lower().split())
 
+        def _course_key(n):
+            # Reduce a course name to its distinctive core so "The Quarry Golf
+            # Club" and "The Quarry Golf Course (OLD) - Archived on 04-01-2025"
+            # match. Used only for the date-tolerant fallback.
+            s = str(n or "").lower()
+            s = re.sub(r"\(old\).*$", " ", s)
+            s = re.sub(r"archived on.*$", " ", s)
+            s = re.sub(r"[|/].*$", " ", s)          # drop a nine/chapter suffix
+            s = re.sub(r"\b(the|golf|club|course|country|resort|of|texas|at|"
+                       r"conference|center|event|links|gc|spa)\b", " ", s)
+            s = re.sub(r"[^a-z0-9]+", " ", s)
+            return " ".join(s.split())
+
+        def _days_apart(a, b):
+            try:
+                da = datetime.strptime(str(a)[:10], "%Y-%m-%d")
+                db = datetime.strptime(str(b)[:10], "%Y-%m-%d")
+                return abs((da - db).days)
+            except (ValueError, TypeError):
+                return 999
+
         # An unbridged posting is matched to a scorecard by customer_id (the one
         # true identity key) first, then by normalized name (handicap_rounds
-        # store "First Last" while scorecards store "LAST, First", so the raw
-        # strings would silently miss).
-        by_cd: dict = defaultdict(list)   # (customer_id, round_date) -> cards
-        by_nd: dict = defaultdict(list)   # (normalized_name, round_date) -> cards
+        # store "First Last" while scorecards store "LAST, First"). Exact date
+        # wins; if none, a same-course card within ±1 day is accepted — GG
+        # sometimes stamps the handicap posting a day off the scorecard (e.g.
+        # the s9.1 Quarry posting is 03-18 while the card is 03-17).
+        cards_by_cust: dict = defaultdict(list)   # customer_id -> [cards]
+        cards_by_norm: dict = defaultdict(list)   # normalized_name -> [cards]
         for c in cards:
             if c["customer_id"]:
-                by_cd[(c["customer_id"], c["round_date"])].append(c)
-            by_nd[(_norm(c["player_name"]), c["round_date"])].append(c)
+                cards_by_cust[c["customer_id"]].append(c)
+            cards_by_norm[_norm(c["player_name"])].append(c)
         hr_cust = {r["player_name"]: r["customer_id"] for r in conn.execute(
             "SELECT player_name, customer_id FROM handicap_player_links "
             "WHERE customer_id IS NOT NULL").fetchall()}
@@ -22598,11 +22638,14 @@ def persist_handicap_round_nines(dry_run: bool = True,
                 if c:
                     cand = [c]
             if not cand:
-                cust_id = hr_cust.get(r["player_name"])
-                if cust_id:
-                    cand = by_cd.get((cust_id, r["round_date"]), [])
+                pool = (cards_by_cust.get(hr_cust.get(r["player_name"]))
+                        or cards_by_norm.get(_norm(r["player_name"])) or [])
+                cand = [c for c in pool if c["round_date"] == r["round_date"]]
                 if not cand:
-                    cand = by_nd.get((_norm(r["player_name"]), r["round_date"]), [])
+                    rk = _course_key(r["course_name"])
+                    cand = [c for c in pool
+                            if _course_key(c["course_name"]) == rk
+                            and _days_apart(c["round_date"], r["round_date"]) <= 1]
             options = []  # (side, adjusted_total)
             for c in cand:
                 options.extend(_sides_for(c))
