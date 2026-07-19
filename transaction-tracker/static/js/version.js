@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.122.7";
+window.TGF_VERSION = "2.122.8";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.122.8",
+    date: "2026-07-19",
+    changes: [
+      "Course-database cleanup tooling (Kerry). New audit_courses() reports duplicate course rows (grouped by a normalized key, with per-row scoring-round counts) and every handicap-round course name that has no courses row yet. New ensure_courses_from_history() gives each such course its own courses row + course_id, dup-aware so a venue already present under a different label isn't duplicated (those are withheld for the dedupe review); new rows carry name + short_name and get chapter/city/rating details enriched later as GG history fills in. Bridges: scoring-courses-audit, scoring-courses-ensure.",
+    ],
+  },
   {
     version: "2.122.7",
     date: "2026-07-19",

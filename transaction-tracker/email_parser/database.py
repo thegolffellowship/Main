@@ -12401,6 +12401,113 @@ def apply_course_short_name_pins(db_path: str | Path = DB_PATH) -> dict:
             "created_from_round_history": inserted, "pins_without_a_course": missed}
 
 
+def _course_dedup_key(n) -> str:
+    """Normalize a course name to a comparison key for dedupe/backfill: strip
+    the archived suffix and generic boilerplate so obvious variants of the same
+    venue collapse. Advisory — the audit surfaces clusters for human review."""
+    s = str(n or "").lower()
+    s = re.sub(r"\(old\).*$", " ", s)
+    s = re.sub(r"archived on.*$", " ", s)
+    s = re.sub(r"\b(the|golf|club|course|country|resort|of|at|conference|"
+               r"center|event|gc|spa|yacht|and)\b", " ", s)
+    s = re.sub(r"[^a-z0-9]+", " ", s)
+    return " ".join(s.split())
+
+
+def audit_courses(db_path: str | Path | None = None) -> dict:
+    """READ-ONLY course-table health (Kerry 2026-07-19). Duplicate clusters in
+    `courses` (grouped by normalized key, with per-row scoring-round counts) and
+    the handicap_rounds course names that have no matching courses row yet."""
+    from collections import defaultdict
+    with _connect(db_path) as conn:
+        courses = [dict(r) for r in conn.execute(
+            "SELECT course_id, name, short_name, status FROM courses").fetchall()]
+        srcnt = {r["course_id"]: r["n"] for r in conn.execute(
+            "SELECT course_id, COUNT(*) n FROM scoring_rounds "
+            "WHERE course_id IS NOT NULL GROUP BY course_id").fetchall()}
+        clusters: dict = defaultdict(list)
+        for c in courses:
+            clusters[_course_dedup_key(c["name"])].append(c)
+        dup_clusters = []
+        for k, rows in clusters.items():
+            if len(rows) > 1:
+                rows2 = sorted(rows, key=lambda x: -srcnt.get(x["course_id"], 0))
+                dup_clusters.append({
+                    "key": k,
+                    "total_scoring_rounds": sum(srcnt.get(x["course_id"], 0) for x in rows),
+                    "courses": [{"course_id": c["course_id"], "name": c["name"],
+                                 "short_name": c["short_name"], "status": c["status"],
+                                 "scoring_rounds": srcnt.get(c["course_id"], 0)}
+                                for c in rows2]})
+        dup_clusters.sort(key=lambda d: -d["total_scoring_rounds"])
+        have = {c["name"].strip().lower() for c in courses}
+        have_keys = {_course_dedup_key(c["name"]) for c in courses}
+        missing = []
+        for r in conn.execute(
+                "SELECT course_name, COUNT(*) n FROM handicap_rounds "
+                "WHERE course_name IS NOT NULL AND TRIM(course_name) != '' "
+                "GROUP BY course_name").fetchall():
+            nm = r["course_name"]
+            if nm.strip().lower() in have:
+                continue
+            missing.append({"course_name": nm, "handicap_rounds": r["n"],
+                            "matches_existing_course": _course_dedup_key(nm) in have_keys})
+        missing.sort(key=lambda m: -m["handicap_rounds"])
+        return {"total_courses": len(courses),
+                "duplicate_cluster_count": len(dup_clusters),
+                "duplicate_clusters": dup_clusters,
+                "missing_from_courses_count": len(missing),
+                "handicap_names_missing_from_courses": missing}
+
+
+def ensure_courses_from_history(dry_run: bool = True,
+                                db_path: str | Path | None = None) -> dict:
+    """Give every course that appears in handicap_rounds a `courses` row (and
+    thus a course_id) — Kerry 2026-07-19. Inserts a row for each distinct
+    handicap course name not already present (exact OR by normalized key, so a
+    known venue under a different label isn't duplicated). Names whose key
+    matches an existing course are withheld for the dedupe review instead.
+    short_name comes from the pin list, else derive_course_short_name(). New
+    rows carry only name + short_name; chapter/city/rating details are enriched
+    later as GG history fills in (Kerry). Idempotent."""
+    def short_for(name):
+        low = name.lower()
+        for pat, short in _COURSE_SHORT_PINS:
+            if re.search(pat, low):
+                return short
+        return derive_course_short_name(name)
+
+    inserted, skipped_variant = [], []
+    with _connect(db_path) as conn:
+        have = {r["name"].strip().lower() for r in conn.execute(
+            "SELECT name FROM courses").fetchall()}
+        have_keys = {_course_dedup_key(n) for n in have}
+        names = [r["course_name"] for r in conn.execute(
+            "SELECT DISTINCT course_name FROM handicap_rounds "
+            "WHERE course_name IS NOT NULL AND TRIM(course_name) != ''").fetchall()]
+        for raw in names:
+            nm = (raw or "").strip()
+            if not nm or nm.lower() in have:
+                continue
+            k = _course_dedup_key(nm)
+            if k in have_keys:
+                skipped_variant.append({"course_name": nm,
+                                        "reason": "normalized-key matches an existing course"})
+                continue
+            sn = short_for(nm)
+            if not dry_run:
+                conn.execute("INSERT OR IGNORE INTO courses (name, short_name) "
+                             "VALUES (?, ?)", (nm, sn))
+            have.add(nm.lower()); have_keys.add(k)
+            inserted.append({"name": nm, "short_name": sn})
+        if not dry_run:
+            conn.commit()
+    return {("inserted" if not dry_run else "would_insert"): inserted,
+            "inserted_count": len(inserted),
+            "skipped_as_variant": skipped_variant,
+            "skipped_variant_count": len(skipped_variant)}
+
+
 # ─── Member-side traffic analytics (v2.62.0, Kerry) ────────────────────
 # Anonymous, PII-free: event ('open'|'click'), path, and a short label.
 # No customer reference by design — the member tier is anonymous.

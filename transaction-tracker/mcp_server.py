@@ -1713,6 +1713,17 @@ def _scoring_dispatch(url: str, extract: str):
             return json.dumps(db.derive_handicap_rounds_from_scoring(
                 ev_arg.strip(), dry_run=(mode.strip().lower() != "apply")),
                 indent=2, default=str)
+        if cmd == "scoring-courses-audit":
+            # READ-ONLY: duplicate clusters in `courses` + handicap course
+            # names with no courses row (Kerry 2026-07-19).
+            return json.dumps(db.audit_courses(), indent=2, default=str)
+        if cmd == "scoring-courses-ensure":
+            # Insert a courses row (course_id) for each handicap course name
+            # not already present (dup-aware). ":dry" (default) previews;
+            # ":apply" writes.
+            mode = arg.strip().lower()
+            return json.dumps(db.ensure_courses_from_history(
+                dry_run=(mode != "apply")), indent=2, default=str)
         if cmd == "scoring-hcp-dump":
             # READ-ONLY diagnostic: handicap_rounds for a player (arg =
             # "<player>" or "<player>|<date>").
