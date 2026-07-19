@@ -2472,7 +2472,7 @@
         const wd = mpIsWd(r);
         const rank1 = r.rank === 1 && !wd;
         let chip = '';
-        if (wd) chip = `<span class="mp-chip wd">WD</span>`;
+        if (wd) chip = `<span class="mp-chip wd">WD${r.withdrawn_reason ? ' · ' + escapeHtml(r.withdrawn_reason) : ''}</span>`;
         else if (rank1) chip = `<span class="mp-chip money">${fmtMoney(bonusEach)}</span>`;
         else if (r.advances) chip = `<span class="mp-chip adv">ADV</span>`;
         // A mid-pool withdrawal keeps their real result dots (they played);
