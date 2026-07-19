@@ -929,8 +929,18 @@
         .mpv2 .mp-sc-mk.won-a { background: var(--mp-slate); color: #fff; }
         .mpv2 .mp-sc-mk.won-b { background: var(--mp-clay); color: #fff; }
         .mpv2 table.mp-sc td.dim { opacity: 0.32; }
-        .mpv2 .mp-sc-tick { position: absolute; left: 50%; bottom: 1px; transform: translateX(-50%); width: 3px; height: 3px; border-radius: 50%; background: var(--text-placeholder, #9CA3AF); }
-        .mpv2 table.mp-sc tr.mp-sc-pts td, .mpv2 table.mp-sc tr.mp-sc-pts th { font-size: 0.56rem; color: var(--text-placeholder, #9CA3AF); padding-top: 0; }
+        /* Handicap-stroke pop dots: a clear player-colored dot per stroke,
+           pinned to the top-right of the hole cell so it reads at a glance
+           (Kerry 2026-07-19, replacing the near-invisible grey tick). */
+        .mpv2 .mp-sc-pops { position: absolute; top: 1px; right: 1px; display: flex; gap: 1px; }
+        .mpv2 .mp-sc-pop { display: inline-block; width: 6px; height: 6px; border-radius: 50%; box-shadow: 0 0 0 1px #fff; }
+        .mpv2 .mp-sc-pop.a { background: var(--mp-slate); }
+        .mpv2 .mp-sc-pop.b { background: var(--mp-clay); }
+        .mpv2 .mp-sc-strokebar { display: flex; align-items: center; flex-wrap: wrap; gap: 0.4rem 0.85rem; margin: 0 0 0.55rem; font-size: 0.78rem; color: var(--text); }
+        .mpv2 .mp-sc-strokebar-t { font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; font-size: 0.66rem; color: var(--text-muted, #6B7280); }
+        .mpv2 .mp-sc-sb-item { display: inline-flex; align-items: center; gap: 0.32rem; }
+        .mpv2 .mp-sc-sb-item .mp-sc-pop { position: static; box-shadow: none; }
+        .mpv2 .mp-sc-sb-item b { font-variant-numeric: tabular-nums; }
         .mpv2 .mp-sc-result {
             display: inline-flex; align-items: center; gap: 0.4rem; margin-top: 0.6rem;
             font: 700 0.66rem/1 'Bitter', Georgia, serif; letter-spacing: 0.03em;
@@ -2712,10 +2722,21 @@
         const isGG = gen.source === 'gg';
         const aMono = `<span class="mp-sc-monochip a">${escapeHtml(mpMono(o.aName))}</span>`;
         const bMono = `<span class="mp-sc-monochip b">${escapeHtml(mpMono(o.bName))}</span>`;
+        // Handicap strokes off the low man: the total pops each player gets in
+        // the match (one side is always 0). Surfaced as a header strip + a
+        // clear per-hole dot, so it's easy to see how many strokes and where.
+        let popsA = 0, popsB = 0;
+        (gen.holes || []).forEach(h => { popsA += (h.srA || 0); popsB += (h.srB || 0); });
+        const popDots = (n, side) => {
+            if (!n) return '';
+            let d = '';
+            for (let i = 0; i < Math.min(n, 3); i++) d += `<i class="mp-sc-pop ${side}"></i>`;
+            return `<span class="mp-sc-pops">${d}</span>`;
+        };
         const cell = (v, cls) => `<td class="${cls || ''}">${v == null ? '' : v}</td>`;
         function block(start, len) {
-            const hs = [], pars = [], aS = [], aP = [], bS = [], bP = [];
-            let parTot = 0, aStr = 0, bStr = 0, aPts = 0, bPts = 0;
+            const hs = [], pars = [], aS = [], bS = [];
+            let parTot = 0, aStr = 0, bStr = 0;
             let firstNo = null, lastNo = null;
             for (let i = start; i < start + len; i++) {
                 const h = gen.holes[i]; if (!h) continue;
@@ -2727,29 +2748,24 @@
                 if (h.par != null) { pars.push(`<td>${h.par}</td>`); parTot += h.par; }
                 const aMk = h.winner === 'A' ? `<span class="mp-sc-mk won-a">${h.parA}</span>` : (h.parA == null ? '' : h.parA);
                 const bMk = h.winner === 'B' ? `<span class="mp-sc-mk won-b">${h.parB}</span>` : (h.parB == null ? '' : h.parB);
-                aS.push(`<td class="${'strk' + dim}">${aMk}${h.srA ? '<span class="mp-sc-tick"></span>' : ''}</td>`);
-                bS.push(`<td class="${'strk' + dim}">${bMk}${h.srB ? '<span class="mp-sc-tick"></span>' : ''}</td>`);
-                aP.push(cell(h.ptsA, dim.trim())); bP.push(cell(h.ptsB, dim.trim()));
-                if (h.played) { aStr += (h.parA || 0); bStr += (h.parB || 0); aPts += (h.ptsA || 0); bPts += (h.ptsB || 0); }
+                aS.push(`<td class="${'strk' + dim}">${aMk}${popDots(h.srA, 'a')}</td>`);
+                bS.push(`<td class="${'strk' + dim}">${bMk}${popDots(h.srB, 'b')}</td>`);
+                if (h.played) { aStr += (h.parA || 0); bStr += (h.parB || 0); }
             }
             const label = isGG
                 ? (gen.count > 9 ? `Holes ${firstNo}–${lastNo}` : (gen.startHole ? `Started hole ${gen.startHole}` : ''))
                 : (start === 0 && gen.count === 18 ? 'Front 9' : (gen.count === 18 ? 'Back 9' : (gen.nine === 'back' ? 'Back 9' : 'Front 9')));
             const parRow = (!isGG) ? `<tr class="mp-sc-par"><th class="mp-sc-rowlabel">Par</th>${pars.join('')}<th class="mp-sc-tot">${parTot}</th></tr>` : '';
-            // Per-hole match points show on EVERY card — 9-hole GG and 18-hole
-            // alike (hole winner 2, loser 1, halve 2/2). Populated for GG cards
-            // from the per-hole winner flag in mpHolesFromGG.
-            const aPtsRow = `<tr class="mp-sc-pts"><th class="mp-sc-rowlabel">Pts</th>${aP.join('')}<th class="mp-sc-tot">${aPts}</th></tr>`;
-            const bPtsRow = `<tr class="mp-sc-pts"><th class="mp-sc-rowlabel">Pts</th>${bP.join('')}<th class="mp-sc-tot">${bPts}</th></tr>`;
+            // Match play has no per-hole Stableford — the running state is the
+            // hole-winner circles + the margin, so no "Pts" rows here (Kerry
+            // 2026-07-19). Gross total rides along in the Tot column.
             return `
             ${label ? `<div class="mp-sc-block-label">${label}</div>` : ''}
             <table class="mp-sc">
                 <tr class="mp-sc-hole"><th class="mp-sc-rowlabel">Hole</th>${hs.join('')}<th class="mp-sc-tot">Tot</th></tr>
                 ${parRow}
                 <tr class="mp-sc-strokes"><th class="mp-sc-rowlabel mp-mono-cell">${aMono}</th>${aS.join('')}<th class="mp-sc-tot">${aStr}</th></tr>
-                ${aPtsRow}
                 <tr class="mp-sc-strokes"><th class="mp-sc-rowlabel mp-mono-cell">${bMono}</th>${bS.join('')}<th class="mp-sc-tot">${bStr}</th></tr>
-                ${bPtsRow}
             </table>`;
         }
         let nines;
@@ -2774,9 +2790,19 @@
         else if (o.tie) result = `<span class="mp-sc-result tie">${gen.putt ? 'Putt-off' : 'All square'}</span>`;
         const prog = gen.inProgress ? ` &middot; in progress, thru ${gen.played}` : '';
         const caption = isGG
-            ? `Hole-by-hole from Golf Genius${gen.startHole ? ` · started on hole ${gen.startHole}, shown in play order` : ''}. Circles mark the hole winner (net); ticks are handicap strokes.`
+            ? `Hole-by-hole from Golf Genius${gen.startHole ? ` · started on hole ${gen.startHole}, shown in play order` : ''}. Circles mark the hole winner (net); colored dots mark handicap strokes.`
             : `Illustrative hole detail — generated from the match result${prog}; live hole-by-hole scoring wires in from Golf Genius. Strokes: hole winner takes par, loser par+1.`;
-        return `<div class="mp-sc-nines">${nines}</div>
+        // Strokes off the low man — total pops each player gets in the match.
+        const aLast = escapeHtml(mpFirstLast(o.aName).last);
+        const bLast = escapeHtml(mpFirstLast(o.bName).last);
+        const strokeBar = isGG
+            ? `<div class="mp-sc-strokebar">
+                   <span class="mp-sc-strokebar-t">Strokes off low</span>
+                   <span class="mp-sc-sb-item"><i class="mp-sc-pop a"></i>${aLast}&nbsp;<b>${popsA}</b></span>
+                   <span class="mp-sc-sb-item"><i class="mp-sc-pop b"></i>${bLast}&nbsp;<b>${popsB}</b></span>
+               </div>`
+            : '';
+        return `${strokeBar}<div class="mp-sc-nines">${nines}</div>
             <div>${result}</div>
             <div class="mp-sc-caption">${caption}</div>`;
     }

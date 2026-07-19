@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.122.9";
+window.TGF_VERSION = "2.123.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.123.0",
+    date: "2026-07-19",
+    changes: [
+      "Match Play knockout scorecard cleaned up (Kerry). Removed the per-hole 'Pts' rows — match play has no per-hole Stableford, so the running state is just the hole-winner circles and the margin. Handicap strokes ('pops') are now a clear player-colored dot pinned to the top-right corner of each hole cell, instead of the near-invisible 3px grey tick. Added a 'Strokes off low' header on each card showing each player's total match pops (e.g. Barna 0 · Hogue 1), so the match handicap is visible at a glance.",
+    ],
+  },
   {
     version: "2.122.9",
     date: "2026-07-19",
