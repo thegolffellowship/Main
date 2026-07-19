@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.122.8";
+window.TGF_VERSION = "2.122.9";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.122.9",
+    date: "2026-07-19",
+    changes: [
+      "ensure_courses_from_history now skips Golf Genius artifacts rather than minting them as real courses: 'Copy of …' event copies, '… - 2' second-instance re-runs, and bare nine fragments (e.g. 'Lakes'). Those are reported under skipped_as_junk for review.",
+    ],
+  },
   {
     version: "2.122.8",
     date: "2026-07-19",
