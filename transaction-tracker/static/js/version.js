@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.123.10";
+window.TGF_VERSION = "2.123.11";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.123.11",
+    date: "2026-07-19",
+    changes: [
+      "Pool headers get the same dark #1B1B1B band as the match cards (Kerry): 'POOL B · 5 players · in progress' in Bitter uppercase on dark with the MATCHES chip in TGF orange, replacing the plain underlined row. Hover/tap states darken the band; the expanded state keeps the orange-filled chip.",
+    ],
+  },
   {
     version: "2.123.10",
     date: "2026-07-19",
