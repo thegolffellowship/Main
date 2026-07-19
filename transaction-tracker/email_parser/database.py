@@ -22565,8 +22565,10 @@ def persist_handicap_round_nines(dry_run: bool = True,
             "SELECT id, player_name, round_date, course_name, adjusted_score, "
             "scoring_round_id, nine FROM handicap_rounds").fetchall()
         cards = conn.execute(
-            "SELECT id, player_name, round_date, tee_id, customer_id, "
-            "course_name FROM scoring_rounds").fetchall()
+            "SELECT sr.id, sr.player_name, sr.round_date, sr.tee_id, "
+            "sr.customer_id, c.name AS course_name "
+            "FROM scoring_rounds sr "
+            "LEFT JOIN courses c ON c.course_id = sr.course_id").fetchall()
         cards_by_id = {c["id"]: c for c in cards}
 
         def _norm(n):

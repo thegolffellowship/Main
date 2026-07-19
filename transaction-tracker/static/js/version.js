@@ -1,10 +1,10 @@
-window.TGF_VERSION = "2.122.4";
+window.TGF_VERSION = "2.122.5";
 window.TGF_CHANGELOG = [
   {
-    version: "2.122.4",
+    version: "2.122.5",
     date: "2026-07-19",
     changes: [
-      "Fix: the ±1-day played-side fallback read course_name off the scorecard rows but that column wasn't selected, so the backfill errored. Added course_name to the query.",
+      "Fix: the ±1-day played-side fallback needs the scorecard's course name, but scoring_rounds stores course_id, not a name — the backfill query now joins the courses table to get it. (Supersedes the .4 attempt that selected a non-existent column.)",
     ],
   },
   {
