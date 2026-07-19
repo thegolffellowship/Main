@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.123.1";
+window.TGF_VERSION = "2.123.2";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.123.2",
+    date: "2026-07-19",
+    changes: [
+      "Match Play header/card polish (Kerry). HOW IT WORKS button is left-aligned. The City Match Play subtext is shortened to fit one line ('$40 × 10 · $400 pot · 2 pools → KO of 4'). The seed/wildcard legend is hidden in the current (arrow-strip) bracket view since those cards don't show seed/WC chips. Removed the redundant 'Holes 10–18' / 'Holes 1–9' block labels — the hole numbers are already in each block's Hole row. Course now shows in the match header for MEMBERS too: cmp_get_bracket joins the linked event so the bracket carries a member-safe course + event name + date (the /api/events list is view-only+ and members can't fetch it). The numbered round label ('Semifinal 1 - Falconhead') and the course now survive the live/cache re-render paths via data-live-matchno/matchcount/course.",
+    ],
+  },
   {
     version: "2.123.1",
     date: "2026-07-19",

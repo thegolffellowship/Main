@@ -26126,10 +26126,16 @@ def cmp_get_standings(season: str, chapter: str, db_path=None,
 
 def cmp_get_bracket(season: str, chapter: str, db_path=None) -> list[dict]:
     with _connect(db_path) as conn:
+        # Join the linked event so the bracket carries a member-safe course +
+        # event name (the /api/events list is view-only+; members can't fetch
+        # it to resolve event_id → course themselves). Kerry 2026-07-19.
         rows = conn.execute(
-            """SELECT * FROM cmp_bracket
-               WHERE season = ? AND chapter = ?
-               ORDER BY round, slot""",
+            """SELECT b.*, e.item_name AS event_name, e.course AS event_course,
+                      e.event_date AS event_date
+               FROM cmp_bracket b
+               LEFT JOIN events e ON e.id = b.event_id
+               WHERE b.season = ? AND b.chapter = ?
+               ORDER BY b.round, b.slot""",
             (season, chapter),
         ).fetchall()
         return [dict(r) for r in rows]
