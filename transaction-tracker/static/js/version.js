@@ -1,10 +1,17 @@
-window.TGF_VERSION = "2.121.5";
+window.TGF_VERSION = "2.121.6";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.121.6",
+    date: "2026-07-18",
+    changes: [
+      "Handicaps nine-label clarification (Kerry): a course that NAMES its nines (Comanche Creeks/Hills/Valley, Hyatt Oaks/Lakes/Creeks, etc.) keeps that nine's NAME on the Course column and never gets a generic 'Front/Back' — those are stored as single-nine entries with the name already in the course name. Only courses with generic front/back nines (Kissing Tree, Vaaler, Silverhorn, Quarry) get '— Front / — Back'. No behavior change from 2.121.5; corrects the wording (there are no true 9-hole courses on the schedule).",
+    ],
+  },
   {
     version: "2.121.5",
     date: "2026-07-18",
     changes: [
-      "Handicaps card now shows the nine PLAYED (— Front / — Back) on the Course column for every 18-hole course, not just when the back nine deviated. Derived from the holes actually played (1–9 = Front, 10–18 = Back). A true 9-hole course (only holes 1–9 defined, e.g. Comanche) stays unlabeled since it has no front/back distinction. Supersedes the earlier back-only rule.",
+      "Handicaps card now shows the nine PLAYED (— Front / — Back) on the Course column for every generic 18-hole course, not just when the back nine deviated. Derived from the holes actually played (1–9 = Front, 10–18 = Back). Courses that name their nines keep their nine name instead (see 2.121.6). Supersedes the earlier back-only rule.",
     ],
   },
   {
