@@ -1724,6 +1724,29 @@ def _scoring_dispatch(url: str, extract: str):
             mode = arg.strip().lower()
             return json.dumps(db.ensure_courses_from_history(
                 dry_run=(mode != "apply")), indent=2, default=str)
+        if cmd == "scoring-unenroll":
+            # Remove a season-contest enrollment + record the removal (same
+            # flow as the Enrollment tab's remove): pot/N recompute from the
+            # remaining entrants. "scoring-unenroll:<enrollment_id>|<reason>
+            # |<refund_amount>|<refund_method>|<note>" — trailing parts optional.
+            parts = [p.strip() for p in arg.split("|")]
+            if not parts or not parts[0].isdigit():
+                return json.dumps({"error": "enrollment_id|reason|refund_amount|refund_method|note"})
+            amt = None
+            if len(parts) > 2 and parts[2]:
+                try:
+                    amt = float(parts[2])
+                except ValueError:
+                    return json.dumps({"error": f"bad refund_amount {parts[2]!r}"})
+            res = db.remove_season_contest_enrollment(
+                int(parts[0]),
+                reason=(parts[1] if len(parts) > 1 else None),
+                refund_amount=amt,
+                refund_method=(parts[3] if len(parts) > 3 else None),
+                note=(parts[4] if len(parts) > 4 else None))
+            return json.dumps(res if res is not None
+                              else {"error": "enrollment not found"},
+                              indent=2, default=str)
         if cmd == "scoring-mp-wd":
             # Record/clear a pool member's withdrawal:
             # "scoring-mp-wd:<chapter>|<season>|<player>|<1/0>[|reason]"
