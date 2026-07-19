@@ -1713,6 +1713,13 @@ def _scoring_dispatch(url: str, extract: str):
             return json.dumps(db.derive_handicap_rounds_from_scoring(
                 ev_arg.strip(), dry_run=(mode.strip().lower() != "apply")),
                 indent=2, default=str)
+        if cmd == "scoring-hcp-nines":
+            # Persist the played side (front/back) onto handicap_rounds.nine
+            # from each round's scorecard (Kerry 2026-07-19). ":dry" (default)
+            # previews the counts; ":apply" writes.
+            mode = arg.strip().lower()
+            return json.dumps(db.persist_handicap_round_nines(
+                dry_run=(mode != "apply")), indent=2, default=str)
         if cmd == "scoring-hcp-2nines-vaaler":
             # Post the s18.8 Vaaler Creek 18-hole event as TWO 9-hole handicap
             # rounds per player (front + back), each with that nine's own course
