@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.122.3";
+window.TGF_VERSION = "2.122.4";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.122.4",
+    date: "2026-07-19",
+    changes: [
+      "Fix: the ±1-day played-side fallback read course_name off the scorecard rows but that column wasn't selected, so the backfill errored. Added course_name to the query.",
+    ],
+  },
   {
     version: "2.122.3",
     date: "2026-07-19",
