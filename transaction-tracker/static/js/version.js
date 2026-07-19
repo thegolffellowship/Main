@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.123.8";
+window.TGF_VERSION = "2.123.9";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.123.9",
+    date: "2026-07-19",
+    changes: [
+      "Pool note ('Everyone counts three matches') fixed on mobile: the side-by-side label + paragraph layout squeezed the text into a near one-word-per-line column with a tall dead box. It now stacks — label on top, one full-width line under it — and the copy is cut to a single sentence: 'Standings count each player's first three matches by date — a 4th (scheduling extra) counts only for the opponent.'",
+    ],
+  },
   {
     version: "2.123.8",
     date: "2026-07-19",

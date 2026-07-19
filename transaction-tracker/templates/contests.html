@@ -617,16 +617,17 @@
         }
         .mpv2 .mp-nextin-note { font-size: 0.68rem; color: var(--text-muted); margin-top: 0.35rem; }
 
-        /* ── D-MP-09 · Pool note (everyone counts three matches) ── */
+        /* ── D-MP-09 · Pool note (everyone counts three matches) ──
+           Stacked label-over-text (Kerry 2026-07-19: the side-by-side layout
+           squeezed the paragraph into a near one-word-per-line column). */
         .mpv2 .mp-pool-note {
-            display: flex; gap: 0.6rem; align-items: flex-start;
-            margin: 0.5rem 0 0; padding: 0.55rem 0.7rem;
+            display: flex; flex-direction: column; gap: 0.2rem;
+            margin: 0.5rem 0 0; padding: 0.5rem 0.7rem;
             background: #F6F5F2; border-radius: 8px;
         }
         .mpv2 .mp-pool-note-head {
             font-size: 0.6rem; font-weight: 700; letter-spacing: 0.04em;
             text-transform: uppercase; color: var(--text-body, #4B5563);
-            flex: none; padding-top: 1px;
         }
         .mpv2 .mp-pool-note-body { font-size: 0.7rem; color: var(--text-muted); line-height: 1.45; }
 
@@ -2440,7 +2441,7 @@
         const note = hasDropped4th ? `
             <div class="mp-pool-note">
                 <span class="mp-pool-note-head">Everyone counts three matches</span>
-                <span class="mp-pool-note-body">Pools with a scheduling extra include one additional match — a player's standing counts their first three by date; the 4th counts only for the opponent.</span>
+                <span class="mp-pool-note-body">Standings count each player's first three matches by date — a 4th (scheduling extra) counts only for the opponent.</span>
             </div>` : '';
         const editor = isManager
             ? `<details class="mp-mgr-editor"><summary>Manager &middot; edit pool &amp; results</summary>${renderPoolCard(pool)}</details>`
@@ -4077,7 +4078,7 @@
         const poolNote = hasDropped4th ? `
             <div class="mp-pool-note">
                 <span class="mp-pool-note-head">Everyone counts three matches</span>
-                <span class="mp-pool-note-body">Pools with a scheduling extra include one additional match — a player's standing counts their first three by date; the 4th counts only for the opponent.</span>
+                <span class="mp-pool-note-body">Standings count each player's first three matches by date — a 4th (scheduling extra) counts only for the opponent.</span>
             </div>` : '';
         el.innerHTML = `
             <h4>Pool Standings <span style="font-size:0.68rem;font-weight:400;color:var(--text-muted);margin-left:0.4rem;">Top ${(cmpState.structure || {}).advance_per_pool ?? 2} advance${(cmpState.structure || {}).wildcards ? ` (+${cmpState.structure.wildcards} wildcards across pools)` : ""} · ${hasDmp09 ? "rank: match points → head-to-head → Stableford" : "tiebreaker: Stableford pts"}</span></h4>
