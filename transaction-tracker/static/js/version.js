@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.121.8";
+window.TGF_VERSION = "2.121.9";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.121.9",
+    date: "2026-07-19",
+    changes: [
+      "Customers → Scores tab now scrolls sideways on mobile. The scores table has six columns (Date, Course, Tee, Score, Diff, Used) but its wrapper had no horizontal-scroll setting, so on a phone the Tee/Score/Diff/Used columns were simply clipped off the right edge with no way to reach them. The wrapper now has overflow-x:auto (max-width 100%, touch momentum), so the table scrolls within its card while the rest of the page stays put — same fix on all three render paths (mobile expand + both desktop detail cards).",
+    ],
+  },
   {
     version: "2.121.8",
     date: "2026-07-18",
