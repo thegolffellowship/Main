@@ -22507,12 +22507,18 @@ def get_handicap_rounds(player_name: str | None = None,
                         conn, srid, group[0].get("sr_tee_id"), formulas)
                     sides = [s for s in ("front", "back") if sp[s]["n"]]
                     if (group[0].get("sr_holes") or 0) <= 9:
-                        # Show the side actually played (Front/Back) on every
-                        # 18-hole course — the nine belongs on the course label
-                        # (Kerry 2026-07-18, supersedes the 07-14 back-only
-                        # rule). A TRUE 9-hole course (only holes 1-9 defined —
-                        # e.g. Comanche CREEKS/HILLS/VALLEY) has no front/back
-                        # distinction, so it stays unlabeled.
+                        # Show the played side (Front/Back) only on courses
+                        # whose tee has a FULL 18 holes defined — i.e. courses
+                        # with generic front/back nines (Kissing Tree, Vaaler,
+                        # Silverhorn, Quarry...). Kerry 2026-07-18, supersedes
+                        # the 07-14 back-only rule.
+                        # A course that NAMES its nines (Comanche Creeks/Hills/
+                        # Valley, Hyatt Oaks/Lakes/Creeks...) is stored as a
+                        # single 9-hole entry per nine — only holes 1-9, and the
+                        # nine's NAME is already in course_name — so it has no
+                        # 18-hole tee here, stays unlabeled, and shows its NAME,
+                        # never "Front/Back". (No true 9-hole courses are on the
+                        # schedule; every 9-hole entry is a named nine.)
                         played_side = ("back" if sides == ["back"]
                                        else "front" if sides == ["front"]
                                        else None)
