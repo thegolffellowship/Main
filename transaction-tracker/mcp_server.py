@@ -1713,6 +1713,15 @@ def _scoring_dispatch(url: str, extract: str):
             return json.dumps(db.derive_handicap_rounds_from_scoring(
                 ev_arg.strip(), dry_run=(mode.strip().lower() != "apply")),
                 indent=2, default=str)
+        if cmd == "scoring-hcp-2nines-vaaler":
+            # Post the s18.8 Vaaler Creek 18-hole event as TWO 9-hole handicap
+            # rounds per player (front + back), each with that nine's own course
+            # rating + slope from GG's course setup (Kerry-provided 2026-07-18).
+            # ":dry" (default) previews; ":apply" writes.
+            mode = arg.strip().lower()
+            return json.dumps(db.derive_18hole_rounds_as_two_nines(
+                "s18.8", db._VAALER_PER_NINE, dry_run=(mode != "apply")),
+                indent=2, default=str)
         if cmd == "scoring-gg-drift":
             # D1 drift report (Kerry #150): GG roster tag vs Tracker financial
             # status. NO ARG (default): compares the affiliation tags already
