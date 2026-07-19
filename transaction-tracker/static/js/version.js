@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.123.9";
+window.TGF_VERSION = "2.123.10";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.123.10",
+    date: "2026-07-19",
+    changes: [
+      "Pool footer legend rewritten from a five-line run-on paragraph into three short lines: 'Rank: match points → head-to-head → Stableford' / '$20 pool-winner bonus · ADV advances · WD withdrew' / 'Tap a player for their matches.' Dropped the when-it-pays detail (lives on the Payouts tab) and the 'or Matches for the whole pool' hint (the button is self-labelling).",
+    ],
+  },
   {
     version: "2.123.9",
     date: "2026-07-19",
