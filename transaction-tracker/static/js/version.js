@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.123.3";
+window.TGF_VERSION = "2.123.4";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.123.4",
+    date: "2026-07-19",
+    changes: [
+      "Removed the stray horizontal bar between bracket match cards (Kerry). The invisible match wrapper kept its base box-shadow, and the empty space under each card (the card's contained bottom margin) painted that shadow as a faint rounded grey rule between Semifinal 1 and 2. The wrapper is now fully unstyled in the V2 view and matches are separated by a plain 12px gap.",
+    ],
+  },
   {
     version: "2.123.3",
     date: "2026-07-19",
