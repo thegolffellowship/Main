@@ -120,6 +120,31 @@ and points-render.js — keep in sync) now include an **ADJ SCORE row**
 that appears only when the WHS cap lowered at least one hole, capped
 holes in orange. Applies to admin/manager AND the pinless member view.
 
+**Played side is RECORDED, not derived live (v2.122.0, Kerry-ratified
+2026-07-19).** The nine a 9-hole handicap posting represents is stored in
+`handicap_rounds.nine` ('front' | 'back' | NULL), populated at import time
+from the round's scorecard — **front = holes 1-9 scored, back = 10-18**;
+an 18-hole card is split by matching the posting's adjusted score to the
+nine's WHS-adjusted total. Previously the side was re-derived live in
+`get_handicap_rounds` on every page load from each round's bridged card,
+so a posting with a missing/ambiguous bridge showed a BLANK side even when
+a scorecard proving the nine existed. The read path still surfaces the
+stored value (via `hr.*`), and the live derivation remains a self-healing
+fallback for not-yet-stamped bridged rounds. **Named-nine courses stay
+NULL** (their nine is in course_name). Backfill/going-forward:
+`persist_handicap_round_nines(dry_run)` (bridge `scoring-hcp-nines:dry|
+apply`) resolves the side from the bridged card, else any scorecard for
+the same **customer_id** (via `handicap_player_links`) or normalized name
+(`LAST, First` ↔ `First Last`) + date; idempotent, only fills NULL, never
+overwrites, never touches scores/differentials (frozen-safe). It runs
+after every CSV import and after the single-nine/two-nine self-derives, so
+new rounds get a side immediately. Rounds with **no imported scorecard
+anywhere** (the ~10.8k legacy no-card bucket) genuinely can't get a side
+and stay blank until their card is imported. **Multi-18-course facilities**
+(TPC San Antonio Oaks/Canyons, Squaw Valley Apache Links/Comanche Lakes)
+are NOT named-nine — their side reads Front/Back like any 18-hole course;
+`_MULTI_COURSE_18_FACILITIES` + `_course_names_its_nines` in database.py.
+
 **Nine display + resolution (v2.90.3, Kerry):** records that are one
 nine of an 18-hole round label the COURSE, not the score: "- Front" /
 "- Back" appended, or the nine's own name when the course name carries
