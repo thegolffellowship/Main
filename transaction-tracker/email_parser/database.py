@@ -22525,7 +22525,8 @@ def persist_handicap_round_nines(dry_run: bool = True,
 
     For every round whose nine is not yet stored and whose course does NOT name
     its nines, resolve front/back from the player's scorecard: the round's
-    bridged card when present, else any scorecard for the same player+date.
+    bridged card when present, else any scorecard for the same customer+date
+    (matched by customer_id via handicap_player_links; name is last resort).
     Holes 1-9 = front, 10-18 = back; an 18-hole card is split by matching the
     posting's adjusted score to the nine's WHS-adjusted total. Idempotent —
     only fills NULL nines, never overwrites. Named-nine courses stay NULL
@@ -22547,11 +22548,22 @@ def persist_handicap_round_nines(dry_run: bool = True,
             "SELECT id, player_name, round_date, course_name, adjusted_score, "
             "scoring_round_id, nine FROM handicap_rounds").fetchall()
         cards = conn.execute(
-            "SELECT id, player_name, round_date, tee_id FROM scoring_rounds"
-        ).fetchall()
-        by_pd: dict = defaultdict(list)
+            "SELECT id, player_name, round_date, tee_id, customer_id "
+            "FROM scoring_rounds").fetchall()
+        cards_by_id = {c["id"]: c for c in cards}
+        # An unbridged posting is matched to a scorecard by customer_id (the one
+        # true identity key) — handicap_rounds stores "First Last" while
+        # scorecards store "LAST, First", so a name match would silently miss.
+        # A player_name key is kept only as a last resort.
+        by_cd: dict = defaultdict(list)   # (customer_id, round_date) -> cards
+        by_pd: dict = defaultdict(list)   # (player_name, round_date) -> cards
         for c in cards:
+            if c["customer_id"]:
+                by_cd[(c["customer_id"], c["round_date"])].append(c)
             by_pd[(c["player_name"], c["round_date"])].append(c)
+        hr_cust = {r["player_name"]: r["customer_id"] for r in conn.execute(
+            "SELECT player_name, customer_id FROM handicap_player_links "
+            "WHERE customer_id IS NOT NULL").fetchall()}
         sp_cache: dict = {}
 
         def _sides_for(card):
@@ -22572,11 +22584,15 @@ def persist_handicap_round_nines(dry_run: bool = True,
                 continue
             cand = []
             if r["scoring_round_id"]:
-                c = next((x for x in cards if x["id"] == r["scoring_round_id"]), None)
+                c = cards_by_id.get(r["scoring_round_id"])
                 if c:
                     cand = [c]
             if not cand:
-                cand = by_pd.get((r["player_name"], r["round_date"]), [])
+                cust_id = hr_cust.get(r["player_name"])
+                if cust_id:
+                    cand = by_cd.get((cust_id, r["round_date"]), [])
+                if not cand:
+                    cand = by_pd.get((r["player_name"], r["round_date"]), [])
             options = []  # (side, adjusted_total)
             for c in cand:
                 options.extend(_sides_for(c))

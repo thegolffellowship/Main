@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.122.0";
+window.TGF_VERSION = "2.122.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.122.1",
+    date: "2026-07-19",
+    changes: [
+      "Played-side backfill now matches unbridged handicap postings to their scorecard by customer_id (via handicap_player_links), not by name. Handicap rounds store names as 'First Last' while scorecards store 'LAST, First', so the earlier name-based fallback silently missed every posting that wasn't already bridged to a card — including rounds whose scorecard clearly exists (e.g. a Quarry front nine). Matching on the customer identity key catches those, so more rounds get their front/back recorded.",
+    ],
+  },
   {
     version: "2.122.0",
     date: "2026-07-19",
