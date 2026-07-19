@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.122.6";
+window.TGF_VERSION = "2.122.7";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.122.7",
+    date: "2026-07-19",
+    changes: [
+      "Short-name pins for two Houston multi-course facilities: 'Cypresswood Golf Club | Tradition' → 'Cypresswood | Tradition' and 'Bentwater Yacht & Country Club | Weiskopf Course' → 'Bentwater | Weiskopf', matching the Facility | Course convention. Applied via the scoring-course-short-pins bridge.",
+    ],
+  },
   {
     version: "2.122.6",
     date: "2026-07-19",
