@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.121.6";
+window.TGF_VERSION = "2.121.7";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.121.7",
+    date: "2026-07-18",
+    changes: [
+      "Played-nine label now shows consistently on the Customers → Scores tab too, via a new shared static/js/course-label.js (window.courseNineLabel / window.teeLabel). A round reads its course with the nine PLAYED — generic 18-hole courses as 'Course - Front/Back' (holes 1–9 = Front, 10–18 = Back), named-nine courses (Comanche Creeks/Hills/Valley, Hyatt Oaks/Lakes) as their name — and the Tee column drops 'Tee' and the nine suffix. Same rule the Handicaps card uses, now shared so both stay in sync.",
+    ],
+  },
   {
     version: "2.121.6",
     date: "2026-07-18",
