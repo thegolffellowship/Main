@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.124.1";
+window.TGF_VERSION = "2.124.2";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.124.2",
+    date: "2026-07-19",
+    changes: [
+      "New scoring-unenroll bridge command exposing the existing remove_season_contest_enrollment flow (snapshot removal record, clear the purchase's contest flag, drop the enrollment) so a refund-withdrawal can be recorded without the UI. Used for Campos's injury withdrawal from SA City Match Play — the pot recomputes from remaining entrants (10 → 9 × $40 = $360) automatically, since the Payouts sheet derives N live from enrollments.",
+    ],
+  },
   {
     version: "2.124.1",
     date: "2026-07-19",
