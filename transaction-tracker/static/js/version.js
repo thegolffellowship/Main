@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.121.11";
+window.TGF_VERSION = "2.121.12";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.121.12",
+    date: "2026-07-19",
+    changes: [
+      "Squaw Valley Golf Course joins TPC San Antonio as a multi-18-course facility: it has two 18-hole courses (Lakes and Creeks), so 'Lakes'/'Creeks' name the COURSE, not a nine, and a played side reads Front/Back. Added 'squaw' to the multi-18-course facility list, so 'Squaw Valley GC | LAKES' now shows the side played instead of being treated as a named nine. Genuine tri-nine facilities (Comanche Trace, Hyatt Hill Country) are unaffected.",
+    ],
+  },
   {
     version: "2.121.11",
     date: "2026-07-19",

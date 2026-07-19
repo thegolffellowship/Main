@@ -22433,9 +22433,11 @@ _NAMED_NINE_WORDS = {
 # nine word. TPC San Antonio has two 18-hole courses — the Oaks Course and the
 # Canyons Course — so "Oaks"/"Canyons" name the 18-hole COURSE, not a nine; a
 # played side of them is a Front/Back like any other 18-hole course (Kerry
-# 2026-07-19). The nine word alone can't tell "TPC | Oaks" (a course) from
-# "Hill Country | Oaks" (a nine), so we key off the facility.
-_MULTI_COURSE_18_FACILITIES = ("tpc",)
+# 2026-07-19). Squaw Valley Golf Course is the same — two 18-hole courses,
+# Lakes and Creeks (Kerry 2026-07-19). The nine word alone can't tell
+# "TPC | Oaks" (a course) from "Hill Country | Oaks" (a nine), so we key off
+# the facility.
+_MULTI_COURSE_18_FACILITIES = ("tpc", "squaw")
 
 
 def _course_names_its_nines(course_name) -> bool:
