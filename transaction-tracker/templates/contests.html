@@ -2362,7 +2362,7 @@
         let sub = '', warn = '';
         if (s) {
             const entry = s.n ? Math.round(s.pot / s.n) : 40;
-            sub = `${fmtMoney(entry)} × ${s.n} · ${fmtMoney(s.pot)} pot · ${s.pools} pool${s.pools===1?'':'s'} → KO of ${s.knockout}`;
+            sub = `${fmtMoney(entry)} × ${s.n} · ${fmtMoney(s.pot)} pot · ${s.pools} pool${s.pools===1?'':'s'} → knockout of ${s.knockout}`;
         } else if (meta && meta.structure_error) {
             warn = `<div class="mp-header-warn">${escapeHtml(meta.structure_error)} — pools and payouts activate at 4+ entrants.</div>`;
         } else {
