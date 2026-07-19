@@ -959,7 +959,12 @@
             text-transform: uppercase; color: #1B1B1B;
             margin-bottom: 0.5rem;
         }
-        .mpv2 #mp-panel-knockout .bracket-match { display: block; border: none; margin-bottom: 0.6rem; background: transparent; }
+        /* The wrapper is invisible in V2 — border, bg AND shadow off (the
+           leftover box-shadow painted a faint grey bar in the empty space
+           below each card, reading as a stray horizontal rule — Kerry
+           2026-07-19). Spacing between matches is a plain 12px gap. */
+        .mpv2 #mp-panel-knockout .bracket-match { display: block; border: none; margin-bottom: 0.6rem; background: transparent; box-shadow: none; border-radius: 0; overflow: visible; }
+        .mpv2 #mp-panel-knockout .bracket-match .mp-match-card { margin-bottom: 0; }
         .mpv2 #mp-panel-knockout .bracket-connector { display: none; }
         .mpv2 .bracket-match-footer { display: flex; gap: 0.4rem; flex-wrap: wrap; align-items: center; padding: 0.4rem 0.55rem; background: #FAFAF8; border-top: 1px solid var(--border); }
 
@@ -4335,7 +4340,7 @@
                     const byeSlot = s1.player_name ? s1 : s2;
                     const byeSide = s1.player_name ? 'a' : 'b';
                     return `
-                    <div class="bracket-match" style="margin-bottom:${round.matchCount > 1 ? '1rem' : '0'};">
+                    <div class="bracket-match" style="margin-bottom:${round.matchCount > 1 ? '12px' : '0'};">
                         ${mpBracketSlot(byeSlot, byeSide, true)}
                         <div class="bracket-slot" style="justify-content:center;color:var(--text-muted);font-size:0.68rem;font-style:italic;">Bye — advances</div>
                     </div>`;
@@ -4368,7 +4373,7 @@
                         ${seedChips(s2)}<span class="bracket-slot-name">${escapeHtml(s2.player_name || '—')}</span>
                     </div>`;
                 return `
-                <div class="bracket-match" style="margin-bottom:${round.matchCount > 1 ? '1rem' : '0'};">
+                <div class="bracket-match" style="margin-bottom:${round.matchCount > 1 ? '12px' : '0'};">
                     ${slotsHtml}
                     ${isManager ? `
                     <div class="bracket-match-footer">
