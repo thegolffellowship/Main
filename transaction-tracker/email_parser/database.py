@@ -22507,14 +22507,23 @@ def get_handicap_rounds(player_name: str | None = None,
                         conn, srid, group[0].get("sr_tee_id"), formulas)
                     sides = [s for s in ("front", "back") if sp[s]["n"]]
                     if (group[0].get("sr_holes") or 0) <= 9:
-                        # Label a 9-hole round only when it DEVIATES — the
-                        # back nine was played. Front-nine rounds and true
-                        # 9-hole courses (Comanche CREEKS/HILLS/VALLEY are
-                        # holes 1-9 — Kerry 2026-07-14) carry no suffix;
-                        # the label would say nothing.
-                        for r in group:
-                            if sides == ["back"]:
-                                r["nine"] = "back"
+                        # Show the side actually played (Front/Back) on every
+                        # 18-hole course — the nine belongs on the course label
+                        # (Kerry 2026-07-18, supersedes the 07-14 back-only
+                        # rule). A TRUE 9-hole course (only holes 1-9 defined —
+                        # e.g. Comanche CREEKS/HILLS/VALLEY) has no front/back
+                        # distinction, so it stays unlabeled.
+                        played_side = ("back" if sides == ["back"]
+                                       else "front" if sides == ["front"]
+                                       else None)
+                        tee_id = group[0].get("sr_tee_id")
+                        course_is_18 = bool(tee_id and conn.execute(
+                            "SELECT 1 FROM course_tee_holes "
+                            "WHERE tee_id = ? AND hole_number > 9 LIMIT 1",
+                            (tee_id,)).fetchone())
+                        if played_side and course_is_18:
+                            for r in group:
+                                r["nine"] = played_side
                         continue
                     claimed: set = set()
                     for r in sorted(group, key=lambda x: x["id"]):

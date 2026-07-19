@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.121.4";
+window.TGF_VERSION = "2.121.5";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.121.5",
+    date: "2026-07-18",
+    changes: [
+      "Handicaps card now shows the nine PLAYED (— Front / — Back) on the Course column for every 18-hole course, not just when the back nine deviated. Derived from the holes actually played (1–9 = Front, 10–18 = Back). A true 9-hole course (only holes 1–9 defined, e.g. Comanche) stays unlabeled since it has no front/back distinction. Supersedes the earlier back-only rule.",
+    ],
+  },
   {
     version: "2.121.4",
     date: "2026-07-18",
