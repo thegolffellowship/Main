@@ -22565,8 +22565,8 @@ def persist_handicap_round_nines(dry_run: bool = True,
             "SELECT id, player_name, round_date, course_name, adjusted_score, "
             "scoring_round_id, nine FROM handicap_rounds").fetchall()
         cards = conn.execute(
-            "SELECT id, player_name, round_date, tee_id, customer_id "
-            "FROM scoring_rounds").fetchall()
+            "SELECT id, player_name, round_date, tee_id, customer_id, "
+            "course_name FROM scoring_rounds").fetchall()
         cards_by_id = {c["id"]: c for c in cards}
 
         def _norm(n):
