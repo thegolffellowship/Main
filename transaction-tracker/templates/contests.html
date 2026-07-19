@@ -965,6 +965,18 @@
            2026-07-19). Spacing between matches is a plain 12px gap. */
         .mpv2 #mp-panel-knockout .bracket-match { display: block; border: none; margin-bottom: 0.6rem; background: transparent; box-shadow: none; border-radius: 0; overflow: visible; }
         .mpv2 #mp-panel-knockout .bracket-match .mp-match-card { margin-bottom: 0; }
+        /* Kerry 2026-07-19: max 15px between any two sections on this page.
+           The empty (member-hidden buttons) bracket-controls row was stacking
+           its 1rem margin on top of the subtabs' 1rem — margin moves onto the
+           buttons themselves so hidden buttons contribute zero gap. */
+        .mpv2 .mp-subtabs { margin-bottom: 14px; }
+        .mpv2 #mp-panel-knockout .bracket-controls { margin: 0; }
+        .mpv2 #mp-panel-knockout .bracket-controls .btn { margin-bottom: 12px; }
+        .mpv2 #mp-panel-knockout .bracket-round { margin-bottom: 14px; }
+        .mpv2 .mp-pool { margin-bottom: 14px; }
+        .mpv2 .mp-champ { margin-bottom: 14px; }
+        .mpv2 .mp-consolation { margin-top: 14px; }
+        .mpv2 .mp-header-card { margin-bottom: 14px; }
         .mpv2 #mp-panel-knockout .bracket-connector { display: none; }
         .mpv2 .bracket-match-footer { display: flex; gap: 0.4rem; flex-wrap: wrap; align-items: center; padding: 0.4rem 0.55rem; background: #FAFAF8; border-top: 1px solid var(--border); }
 

@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.123.4";
+window.TGF_VERSION = "2.123.5";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.123.5",
+    date: "2026-07-19",
+    changes: [
+      "Match Play vertical rhythm tightened to Kerry's max-15px rule: every gap between sections is now ≤15px. The biggest offender was the (member-hidden) Seed/Clear button row above the bracket, whose 16px margin stacked on the subtab pills' 16px for a ~32px hole between the pills and SEMIFINALS — its margin now lives on the buttons themselves so hidden buttons add zero gap. Also capped: subtabs (14px), header card (14px), between rounds (14px, was 19), pool cards (14px, was 24), champion card and consolation block (14px).",
+    ],
+  },
   {
     version: "2.123.4",
     date: "2026-07-19",
