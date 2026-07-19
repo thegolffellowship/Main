@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.121.12";
+window.TGF_VERSION = "2.121.13";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.121.13",
+    date: "2026-07-19",
+    changes: [
+      "Squaw Valley (Glen Rose) short names corrected. Its two 18-hole courses are Apache Links and Comanche Lakes (confirmed on the course's site) — not 'Lakes/Creeks'. Added short-name pins so they read 'Squaw Valley | Links' and 'Squaw Valley | Lakes', matching the Facility | Course convention used for TPC and Comanche. The stored course that was showing 'Squaw Valley GC | LAKES' is the Comanche Lakes course and now shows 'Squaw Valley | Lakes - <side>'. Pins are keyed on 'squaw' so they never collide with The Club at Comanche Trace.",
+    ],
+  },
   {
     version: "2.121.12",
     date: "2026-07-19",

@@ -12305,6 +12305,11 @@ _COURSE_SHORT_PINS: list = [
     (r"hill\s+country.*creeks?", "Hill Country | Creeks"),
     (r"hill\s+country.*lakes", "Hill Country | Lakes"),
     (r"hill\s+country.*oaks", "Hill Country | Oaks"),
+    # Squaw Valley (Glen Rose) has two 18-hole courses — Apache Links and
+    # Comanche Lakes. Short them to Links / Lakes (Kerry 2026-07-19). Keyed on
+    # "squaw" so they never collide with The Club at Comanche Trace.
+    (r"squaw.*(apache|links)", "Squaw Valley | Links"),
+    (r"squaw.*(comanche|lakes)", "Squaw Valley | Lakes"),
     # Silverhorn's formal name is "Silverhorn Golf Club of Texas" — it must
     # match BEFORE the (distinct) Golf Club of Texas course (v2.57.2 fix)
     (r"silverhorn", "Silverhorn"),
