@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.121.1";
+window.TGF_VERSION = "2.121.2";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.121.2",
+    date: "2026-07-18",
+    changes: [
+      "Handicaps (backend): added the two-nine posting path for 18-hole events — derive_18hole_rounds_as_two_nines() writes each player's round as a front-9 and a back-9 handicap record, each with that nine's own course rating + slope (TGF is a 9-hole-index league). Same WHS net-double-bogey math and identity/dedup as the 9-hole path; a tee with no per-nine rating supplied is skipped, never guessed. Wired the s18.8 Vaaler Creek event (per-nine ratings from GG course setup) behind a dry-run/apply bridge. No member-facing UI change.",
+    ],
+  },
   {
     version: "2.121.1",
     date: "2026-07-18",

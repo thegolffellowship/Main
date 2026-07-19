@@ -11373,6 +11373,216 @@ def derive_handicap_rounds_from_scoring(event_query: str, dry_run: bool = True,
                         "(Kerry-ratified 2026-07-14)"}
 
 
+# Per-nine (front/back) course ratings are NOT in course_tees (which stores
+# only the 18-hole rating/slope). For an 18-hole event posted as two 9-hole
+# records, the caller supplies each tee's per-nine rating/slope. Vaaler Creek
+# (from GG course setup, Kerry 2026-07-18) — F rating + B rating sum exactly to
+# the stored 18-hole rating, confirming the numbers:
+_VAALER_PER_NINE = {
+    # tee_id: {"front": (rating, slope), "back": (rating, slope)}
+    2491: {"front": (34.2, 121), "back": (34.7, 128)},   # 23 - White  (18: 68.9/125)
+    2492: {"front": (35.6, 130), "back": (36.2, 140)},   # 1 - Blue    (18: 71.8/135)
+    2509: {"front": (33.3, 114), "back": (34.4, 123)},   # 4 - Red (L) (18: 67.7/119)
+}
+
+
+def derive_18hole_rounds_as_two_nines(event_query: str, per_nine: dict,
+                                      dry_run: bool = True,
+                                      db_path: str | Path = DB_PATH) -> dict:
+    """Post an 18-hole event as TWO 9-hole handicap_rounds per player (front +
+    back), each with its OWN per-nine course rating + slope. TGF is a 9-hole-
+    index league, so an 18-hole round is two 9-hole scores — the 9-hole derive
+    path deliberately skips 18-hole rounds, and this is the companion for them.
+
+    `per_nine` maps tee_id -> {"front": (rating, slope), "back": (rating, slope)}.
+    A round on a tee absent from `per_nine` is SKIPPED and listed — never guess
+    a rating. Same WHS math as the 9-hole path (per-hole net-double-bogey via
+    compute_hole_derivations; differential = (adjusted_9 - rating_9)*113/slope_9)
+    and the same identity-reuse + dedup rules; the two rows get distinct tee
+    labels ("<tee> — Front 9" / "<tee> — Back 9") so re-runs dedupe cleanly.
+    dry_run=True (default) returns the plan without writing.
+    """
+    formulas = get_scoring_formulas(db_path=db_path)
+    settings = get_handicap_settings(db_path)
+    lookback_months = int(settings.get("lookback_months", 12))
+    cutoff_str = (datetime.now()
+                  - timedelta(days=lookback_months * 30.44)).strftime("%Y-%m-%d")
+    plan: list = []
+    skipped: list = []
+    events_seen: set = set()
+    with _connect(db_path) as conn:
+        _ensure_scoring_tables(conn)
+        rounds = conn.execute(
+            """SELECT sr.id AS srid, sr.player_name, sr.customer_id,
+                      sr.round_date, sr.holes_played, sr.gross, sr.tee_id,
+                      e.item_name AS event_name, c.name AS course_name,
+                      ct.tee_name
+               FROM scoring_rounds sr
+               JOIN events e ON e.id = sr.event_id
+               LEFT JOIN courses c ON c.course_id = sr.course_id
+               LEFT JOIN course_tees ct ON ct.tee_id = sr.tee_id
+               WHERE e.item_name LIKE ?
+               ORDER BY sr.player_name""",
+            (f"%{event_query}%",)).fetchall()
+        if not rounds:
+            return {"error": f"no imported scoring rounds match event "
+                             f"{event_query!r} — run the scorecard import first"}
+
+        for r in rounds:
+            events_seen.add(r["event_name"])
+            if (r["holes_played"] or 0) <= 9:
+                skipped.append({"player_name": r["player_name"],
+                                "scoring_round_id": r["srid"],
+                                "reason": "not an 18-hole round (use the 9-hole path)"})
+                continue
+            pn = per_nine.get(r["tee_id"])
+            if not pn:
+                skipped.append({"player_name": r["player_name"],
+                                "scoring_round_id": r["srid"],
+                                "reason": f"no per-nine rating for tee_id {r['tee_id']} "
+                                          f"({r['tee_name']}) — provide it, not guessing"})
+                continue
+
+            hrows = conn.execute(
+                """SELECT sh.hole_number, sh.strokes, sh.strokes_received, cth.par
+                   FROM scoring_holes sh
+                   LEFT JOIN course_tee_holes cth
+                     ON cth.tee_id = ? AND cth.hole_number = sh.hole_number
+                   WHERE sh.scoring_round_id = ?""",
+                (r["tee_id"], r["srid"])).fetchall()
+            by_hole = {h["hole_number"]: h for h in hrows}
+
+            # Reuse the freshest existing handicap identity for this customer.
+            target_name = _normalize_player_name(r["player_name"])
+            if r["customer_id"]:
+                best = conn.execute(
+                    """SELECT l.player_name,
+                              (SELECT COUNT(*) FROM handicap_rounds hr
+                               WHERE hr.player_name = l.player_name) AS n,
+                              (SELECT MAX(hr.round_date) FROM handicap_rounds hr
+                               WHERE hr.player_name = l.player_name) AS last_round
+                       FROM handicap_player_links l WHERE l.customer_id = ?
+                       ORDER BY last_round DESC, n DESC, l.player_name LIMIT 1""",
+                    (r["customer_id"],)).fetchone()
+                if best and best["n"]:
+                    target_name = best["player_name"]
+
+            names = {_normalize_player_name(r["player_name"]), target_name}
+            if r["customer_id"]:
+                for lk in conn.execute(
+                        "SELECT player_name FROM handicap_player_links WHERE customer_id = ?",
+                        (r["customer_id"],)).fetchall():
+                    names.add(lk["player_name"])
+            qmarks = ",".join("?" * len(names))
+            hist = conn.execute(
+                f"""SELECT round_date, differential FROM handicap_rounds
+                    WHERE player_name IN ({qmarks}) AND differential IS NOT NULL
+                      AND round_date >= ?
+                    ORDER BY round_date, id""",
+                (*names, cutoff_str)).fetchall()
+            hist_pairs = [(h["round_date"], h["differential"]) for h in hist]
+            index_now = compute_handicap_index(
+                [d for _, d in hist_pairs[-20:]], settings)
+
+            nines_out = []
+            for nine, holeset in (("Front 9", range(1, 10)),
+                                  ("Back 9", range(10, 19))):
+                rating9, slope9 = (pn["front"] if nine == "Front 9" else pn["back"])
+                adj = gross9 = capped = 0
+                missing = False
+                for hn in holeset:
+                    h = by_hole.get(hn)
+                    if not h or h["strokes"] is None:
+                        missing = True
+                        continue
+                    gross9 += h["strokes"]
+                    if h["par"] is None:
+                        missing = True
+                        adj += h["strokes"]
+                        continue
+                    a = compute_hole_derivations(
+                        h["par"], h["strokes"], h["strokes_received"] or 0,
+                        formulas)["adjusted_strokes"]
+                    adj += a
+                    if a < h["strokes"]:
+                        capped += 1
+                diff9 = round((adj - rating9) * 113.0 / slope9, 1)
+                tee_lbl = f"{r['tee_name']} — {nine}"
+                dup = conn.execute(
+                    """SELECT id FROM handicap_rounds
+                       WHERE player_name = ? AND round_date = ? AND round_id IS NULL
+                         AND COALESCE(course_name,'') = COALESCE(?,'')
+                         AND COALESCE(tee_name,'') = COALESCE(?,'')""",
+                    (target_name, r["round_date"], r["course_name"], tee_lbl)).fetchone()
+                nines_out.append({
+                    "nine": nine, "tee_name": tee_lbl, "rating": rating9,
+                    "slope": slope9, "gross9": gross9, "adjusted9": adj,
+                    "capped_holes": capped, "differential": diff9,
+                    "missing": missing, "dup_id": dup["id"] if dup else None,
+                })
+
+            merged = sorted(hist_pairs + [(r["round_date"], n["differential"])
+                                          for n in nines_out])
+            index_after = compute_handicap_index(
+                [d for _, d in merged[-20:]], settings)
+
+            for n in nines_out:
+                if n["dup_id"]:
+                    skipped.append({"player_name": target_name, "nine": n["nine"],
+                                    "scoring_round_id": r["srid"],
+                                    "reason": f"already posted (hr {n['dup_id']})"})
+                    continue
+                plan.append({
+                    "player_name": target_name, "customer_id": r["customer_id"],
+                    "scoring_round_id": r["srid"], "round_date": r["round_date"],
+                    "course_name": r["course_name"], "tee_name": n["tee_name"],
+                    "nine": n["nine"], "gross9": n["gross9"],
+                    "adjusted_score": n["adjusted9"], "capped_holes": n["capped_holes"],
+                    "rating": n["rating"], "slope": n["slope"],
+                    "differential": n["differential"],
+                    "index_now": index_now, "index_after": index_after,
+                    "flags": (["missing_par_or_holes"] if n["missing"] else []),
+                })
+
+        if not dry_run:
+            for p in plan:
+                conn.execute(
+                    """INSERT INTO handicap_rounds
+                       (player_name, round_date, round_id, course_name, tee_name,
+                        adjusted_score, rating, slope, differential, scoring_round_id)
+                       VALUES (?, ?, NULL, ?, ?, ?, ?, ?, ?, ?)""",
+                    (p["player_name"], p["round_date"], p["course_name"],
+                     p["tee_name"], p["adjusted_score"], p["rating"], p["slope"],
+                     p["differential"], p["scoring_round_id"]))
+                if not conn.execute(
+                        "SELECT 1 FROM handicap_player_links WHERE player_name = ?",
+                        (p["player_name"],)).fetchone():
+                    cname = None
+                    if p["customer_id"]:
+                        c = conn.execute(
+                            """SELECT TRIM(COALESCE(first_name,'') || ' ' ||
+                                       COALESCE(last_name,'')) AS nm
+                               FROM customers WHERE customer_id = ?""",
+                            (p["customer_id"],)).fetchone()
+                        cname = (c["nm"] or "").strip() or None
+                    conn.execute(
+                        """INSERT INTO handicap_player_links
+                           (player_name, customer_name, customer_id) VALUES (?, ?, ?)""",
+                        (p["player_name"], cname, p["customer_id"]))
+            conn.commit()
+            logger.info("Posted %d two-nine handicap rounds for %r (18-hole "
+                        "event split, WHS NDB per nine)", len(plan), event_query)
+
+    return {"event_query": event_query, "events_matched": sorted(events_seen),
+            "dry_run": dry_run,
+            ("would_write" if dry_run else "written"): plan,
+            "skipped": skipped,
+            "summary": {"planned": len(plan), "skipped": len(skipped),
+                        "players": len(set(p["player_name"] for p in plan))},
+            "standard": "WHS net double bogey per nine; each nine its own "
+                        "course rating + slope (18-hole event → two 9-hole records)"}
+
+
 def repair_handicap_adjusted_scores(cells: list[dict], dry_run: bool = True,
                                     db_path: str | Path = DB_PATH) -> dict:
     """Repair 2026 handicap_rounds whose adjusted_score was imported as
