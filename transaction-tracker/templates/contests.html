@@ -799,8 +799,8 @@
         .mpv2 .mp-name { font-weight: 700; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
         .mpv2 .mp-row.wd .mp-name { font-weight: 600; }
         .mpv2 .mp-chip {
-            font: 700 0.6rem/1 'Bitter', Georgia, serif; flex: none;
-            padding: 0.15rem 0.4rem; border-radius: 6px;
+            font: 700 0.74rem/1 'Bitter', Georgia, serif; flex: none;
+            padding: 0.24rem 0.55rem; border-radius: 7px;
         }
         .mpv2 .mp-chip.money { background: var(--mp-money-bg); color: var(--mp-money-text); }
         .mpv2 .mp-chip.adv { background: var(--mp-money-bg); color: var(--mp-money-text); }
@@ -2315,6 +2315,9 @@
     const mpMatchCache = {};
 
     function mpIsWd(r) {
+        // Recorded flag first (manager-set, catches a mid-pool withdrawal like
+        // Campos — played 1 then withdrew); zero-matches heuristic as fallback.
+        if (r.withdrawn) return true;
         return (r.wins||0)===0 && (r.losses||0)===0 && (r.draws||0)===0 && (r.played||0)===0;
     }
     function mpFirstLast(name) {
@@ -2472,7 +2475,10 @@
         if (wd) chip = `<span class="mp-chip wd">WD</span>`;
         else if (rank1) chip = `<span class="mp-chip money">${fmtMoney(bonusEach)}</span>`;
         else if (r.advances) chip = `<span class="mp-chip adv">ADV</span>`;
-        const dots = wd
+        // A mid-pool withdrawal keeps their real result dots (they played);
+        // only a never-played WD collapses to the single faded dot.
+        const anyPlayed = ((r.wins||0)+(r.losses||0)+(r.draws||0)+(r.played||0)) > 0;
+        const dots = (wd && !anyPlayed)
             ? `<span class="mp-dots"><span class="mp-dot loss" style="opacity:.5"></span></span>`
             : mpChronoDots(r, matches, expected);
         // The ENTIRE row is the expand/collapse target (role=button, keyboard-

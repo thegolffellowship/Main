@@ -3302,6 +3302,14 @@ def init_db(db_path: str | Path | None = None) -> None:
             )
             """
         )
+        # Recorded withdrawal (Kerry 2026-07-19): the WD tag previously relied
+        # on a played-zero-matches heuristic, which misses a player who played
+        # some matches and THEN withdrew (Campos). Manager-set flag.
+        try:
+            conn.execute("ALTER TABLE cmp_pool_members ADD COLUMN withdrawn "
+                         "INTEGER NOT NULL DEFAULT 0")
+        except sqlite3.OperationalError:
+            pass
         conn.execute(
             """
             CREATE TABLE IF NOT EXISTS cmp_matches (
@@ -25265,6 +25273,46 @@ def cmp_add_member(pool_id: int, customer_name: str, customer_id: int | None = N
         return dict(row) if row else {}
 
 
+def cmp_set_member_withdrawn(pool_id: int, customer_name: str, withdrawn: bool,
+                             db_path=None) -> dict:
+    """Record (or clear) a pool member's withdrawal (Kerry 2026-07-19).
+    Keeps the member and their played matches — only the WD tag/state; the
+    played-zero-matches heuristic can't see a mid-pool withdrawal."""
+    with _connect(db_path) as conn:
+        cur = conn.execute(
+            "UPDATE cmp_pool_members SET withdrawn = ? "
+            "WHERE pool_id = ? AND customer_name = ?",
+            (1 if withdrawn else 0, pool_id, customer_name))
+        conn.commit()
+        return {"pool_id": pool_id, "customer_name": customer_name,
+                "withdrawn": bool(withdrawn), "updated": cur.rowcount}
+
+
+def cmp_set_withdrawn_by_name(season: str, chapter: str, player_substr: str,
+                              withdrawn: bool, db_path=None) -> dict:
+    """Bridge helper: flag withdrawal by (season, chapter, name substring)
+    without needing the pool id. Errors if the name is ambiguous."""
+    with _connect(db_path) as conn:
+        rows = conn.execute(
+            """SELECT m.id, m.pool_id, m.customer_name, p.pool_name
+               FROM cmp_pool_members m JOIN cmp_pools p ON p.id = m.pool_id
+               WHERE p.season = ? AND p.chapter = ?
+                 AND m.customer_name LIKE ?""",
+            (season, chapter, f"%{player_substr}%")).fetchall()
+        if not rows:
+            return {"error": f"no pool member matching {player_substr!r} "
+                             f"in {chapter} {season}"}
+        if len(rows) > 1:
+            return {"error": "ambiguous name",
+                    "matches": [dict(r) for r in rows]}
+        r = rows[0]
+        conn.execute("UPDATE cmp_pool_members SET withdrawn = ? WHERE id = ?",
+                     (1 if withdrawn else 0, r["id"]))
+        conn.commit()
+        return {"pool": r["pool_name"], "customer_name": r["customer_name"],
+                "withdrawn": bool(withdrawn)}
+
+
 def cmp_remove_member(pool_id: int, customer_name: str, db_path=None) -> None:
     with _connect(db_path) as conn:
         conn.execute(
@@ -26033,11 +26081,15 @@ def cmp_get_standings(season: str, chapter: str, db_path=None,
                 "SELECT id, pool_name FROM cmp_pools WHERE season=? AND chapter=? "
                 "ORDER BY pool_name", (season, chapter)).fetchall()]
             members_by_pool = {}
+            wd_by_pool = {}
             for pool in pools:
-                members_by_pool[pool["id"]] = [
-                    r["customer_name"] for r in conn.execute(
-                        "SELECT customer_name FROM cmp_pool_members WHERE pool_id=?",
-                        (pool["id"],)).fetchall()]
+                rows_m = conn.execute(
+                    "SELECT customer_name, COALESCE(withdrawn, 0) AS withdrawn "
+                    "FROM cmp_pool_members WHERE pool_id=?",
+                    (pool["id"],)).fetchall()
+                members_by_pool[pool["id"]] = [r["customer_name"] for r in rows_m]
+                wd_by_pool[pool["id"]] = {r["customer_name"] for r in rows_m
+                                          if r["withdrawn"]}
         standings = []
         for pool in pools:
             ranked = dmp09_pool_standings(
@@ -26053,6 +26105,7 @@ def cmp_get_standings(season: str, chapter: str, db_path=None,
                     "match_points": r["points"], "counted": r["counted"],
                     "played": r["played"], "dropped_4th": r["dropped_4th"],
                     "advances": r["advances"],
+                    "withdrawn": r["player_name"] in wd_by_pool[pool["id"]],
                 })
         return standings
 
@@ -26067,6 +26120,10 @@ def cmp_get_standings(season: str, chapter: str, db_path=None,
             members = conn.execute(
                 "SELECT customer_name FROM cmp_pool_members WHERE pool_id = ?", (pid,)
             ).fetchall()
+            wd_names = {r["customer_name"] for r in conn.execute(
+                "SELECT customer_name FROM cmp_pool_members "
+                "WHERE pool_id = ? AND COALESCE(withdrawn, 0) = 1", (pid,)
+            ).fetchall()}
             matches = conn.execute(
                 "SELECT * FROM cmp_matches WHERE pool_id = ? AND played_at IS NOT NULL",
                 (pid,),
@@ -26120,6 +26177,7 @@ def cmp_get_standings(season: str, chapter: str, db_path=None,
                     "draws": s["draws"],
                     "stableford_pts": round(s["pts"], 1),
                     "advances": rank <= advance_per_pool,
+                    "withdrawn": name in wd_names,
                 })
         return standings
 

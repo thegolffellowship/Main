@@ -9728,6 +9728,15 @@ def api_cmp_remove_member(pool_id, customer_name):
     return jsonify({"ok": True})
 
 
+@app.route("/api/cmp/pools/<int:pool_id>/members/<path:customer_name>/withdrawn", methods=["POST"])
+@require_role("manager")
+def api_cmp_set_member_withdrawn(pool_id, customer_name):
+    data = request.get_json(silent=True) or {}
+    from email_parser.database import cmp_set_member_withdrawn
+    return jsonify(cmp_set_member_withdrawn(
+        pool_id, customer_name, bool(data.get("withdrawn", True))))
+
+
 @app.route("/api/cmp/matches", methods=["POST"])
 @require_role("manager")
 def api_cmp_save_match():

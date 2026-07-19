@@ -1724,6 +1724,15 @@ def _scoring_dispatch(url: str, extract: str):
             mode = arg.strip().lower()
             return json.dumps(db.ensure_courses_from_history(
                 dry_run=(mode != "apply")), indent=2, default=str)
+        if cmd == "scoring-mp-wd":
+            # Record/clear a pool member's withdrawal:
+            # "scoring-mp-wd:<chapter>|<season>|<player>|<1/0>"
+            parts = [p.strip() for p in arg.split("|")]
+            if len(parts) < 3:
+                return json.dumps({"error": "chapter|season|player[|1/0]"})
+            flag = (parts[3] if len(parts) > 3 else "1") not in ("0", "false")
+            return json.dumps(db.cmp_set_withdrawn_by_name(
+                parts[1], parts[0], parts[2], flag), indent=2, default=str)
         if cmd == "scoring-hcp-dump":
             # READ-ONLY diagnostic: handicap_rounds for a player (arg =
             # "<player>" or "<player>|<date>").

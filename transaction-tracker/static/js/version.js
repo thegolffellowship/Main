@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.123.11";
+window.TGF_VERSION = "2.124.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.124.0",
+    date: "2026-07-19",
+    changes: [
+      "Withdrawal is now RECORDED on Match Play pool members (Kerry: WD wasn't showing on Campos). The WD tag previously relied on a played-zero-matches guess, which misses a player who played some matches and THEN withdrew. New cmp_pool_members.withdrawn flag, set by managers (POST /api/cmp/pools/<id>/members/<name>/withdrawn, or the scoring-mp-wd bridge); standings carry it and the UI shows WD + dimmed row while keeping the real result dots for matches actually played. The zero-matches heuristic remains as a fallback.",
+      "Pool standings badges ($20 pool-winner, ADV, WD) are larger — 0.74rem with roomier padding (were a squinty 0.6rem).",
+    ],
+  },
   {
     version: "2.123.11",
     date: "2026-07-19",
