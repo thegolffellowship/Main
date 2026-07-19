@@ -1837,12 +1837,13 @@
     function esc(s) {
         return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
     }
-    // Tidy a tee label for display: drop the redundant word "Tee" and shorten a
-    // "Front 9"/"Back 9" nine suffix to "Front"/"Back" (Kerry 2026-07-18).
+    // Tidy a tee label for display (Kerry 2026-07-18): drop the redundant word
+    // "Tee", and drop any "— Front 9 / — Back 9" nine suffix entirely — the nine
+    // already shows on the Course column, so it's redundant on the tee.
     function hcpTeeLabel(name) {
         const out = String(name || '')
+            .replace(/\s*[—–-]\s*(Front|Back)\s*9?\b/gi, '')
             .replace(/\s*\bTee\b/gi, '')
-            .replace(/\b(Front|Back)\s*9\b/gi, '$1')
             .replace(/\s{2,}/g, ' ')
             .trim();
         return out || '—';

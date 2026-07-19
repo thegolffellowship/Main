@@ -1,10 +1,10 @@
-window.TGF_VERSION = "2.121.3";
+window.TGF_VERSION = "2.121.4";
 window.TGF_CHANGELOG = [
   {
-    version: "2.121.3",
+    version: "2.121.4",
     date: "2026-07-18",
     changes: [
-      "Handicaps card: tidied the Tee column — drops the redundant word \"Tee\" and shortens the two-nine suffix (so \"1 - Blue Tee — Back 9\" now reads \"1 - Blue — Back\", and \"1 - Gold Tee\" reads \"1 - Gold\"). Display-only; the stored tee names are unchanged.",
+      "Handicaps card Tee column: drop the Front/Back nine off the tee entirely (the nine already shows on the Course column), so \"1 - Blue Tee — Back 9\" now reads just \"1 - Blue\". Still drops the redundant word \"Tee\" (\"1 - Gold Tee\" → \"1 - Gold\"). Display-only; stored tee names unchanged.",
     ],
   },
   {
