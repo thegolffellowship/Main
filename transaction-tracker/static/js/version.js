@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.121.13";
+window.TGF_VERSION = "2.122.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.122.0",
+    date: "2026-07-19",
+    changes: [
+      "Played side is now RECORDED, not derived live (Kerry-ratified). Each 9-hole handicap posting stores the nine it represents — front (holes 1–9) or back (10–18) — in a new handicap_rounds.nine column, populated from the round's scorecard at import time. Previously the Scores/Handicaps card figured the side out live from each round's linked scorecard on every page load, so a posting whose scorecard link was missing or ambiguous showed a BLANK side even when a scorecard proving the nine existed (e.g. Kerry's 3/18 The Quarry front nine). Now the side is stamped once and read everywhere. A one-time backfill stamps front/back onto every existing round we can resolve from a scorecard; named-nine courses (Comanche, Hyatt) stay blank by design since their nine is in the course name. Scores/differentials are never touched, so frozen results are unaffected.",
+    ],
+  },
   {
     version: "2.121.13",
     date: "2026-07-19",

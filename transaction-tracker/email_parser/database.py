@@ -8480,6 +8480,16 @@ def _ensure_scoring_tables(conn: sqlite3.Connection) -> None:
                      "INTEGER REFERENCES scoring_rounds(id)")
     except sqlite3.OperationalError:
         pass
+    # Persisted played side (Kerry 2026-07-19): 'front' | 'back' | NULL. The
+    # nine a 9-hole handicap posting represents is RECORDED here at import
+    # time (from the scorecard: holes 1-9 = front, 10-18 = back) instead of
+    # being re-derived live on every page load — a round with no clean card
+    # bridge otherwise shows a blank side. NULL for named-nine courses
+    # (Comanche/Hyatt), whose nine is carried in course_name.
+    try:
+        conn.execute("ALTER TABLE handicap_rounds ADD COLUMN nine TEXT")
+    except sqlite3.OperationalError:
+        pass
     # Multi-round days (Hill Country Matches: six GG rounds all dated the
     # same Saturday): the cross-tournament dedupe scopes to the GG league
     # round when the importer passes one — NULL for ordinary one-round
@@ -11361,6 +11371,14 @@ def derive_handicap_rounds_from_scoring(event_query: str, dry_run: bool = True,
             logger.info("Self-derived %d handicap rounds for %r (WHS NDB, "
                         "Kerry-ratified 2026-07-14)", len(plan), event_query)
 
+    if not dry_run:
+        # Record the played side on the rounds just derived (bridged to their
+        # card, so the side resolves cleanly). Non-fatal.
+        try:
+            persist_handicap_round_nines(dry_run=False, db_path=db_path)
+        except Exception:
+            logger.exception("Non-fatal: persist_handicap_round_nines after derive failed")
+
     return {"event_query": event_query,
             "events_matched": preview["events_matched"],
             "dry_run": dry_run,
@@ -11546,14 +11564,18 @@ def derive_18hole_rounds_as_two_nines(event_query: str, per_nine: dict,
 
         if not dry_run:
             for p in plan:
+                # The played side is authoritative here (the round was split
+                # into its front/back nines) — record it so the card never has
+                # to re-derive it. Named-nine courses keep NULL (nine in name).
+                nine_val = None if _course_names_its_nines(p["course_name"]) else p.get("nine")
                 conn.execute(
                     """INSERT INTO handicap_rounds
                        (player_name, round_date, round_id, course_name, tee_name,
-                        adjusted_score, rating, slope, differential, scoring_round_id)
-                       VALUES (?, ?, NULL, ?, ?, ?, ?, ?, ?, ?)""",
+                        adjusted_score, rating, slope, differential, scoring_round_id, nine)
+                       VALUES (?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?)""",
                     (p["player_name"], p["round_date"], p["course_name"],
                      p["tee_name"], p["adjusted_score"], p["rating"], p["slope"],
-                     p["differential"], p["scoring_round_id"]))
+                     p["differential"], p["scoring_round_id"], nine_val))
                 if not conn.execute(
                         "SELECT 1 FROM handicap_player_links WHERE player_name = ?",
                         (p["player_name"],)).fetchone():
@@ -22265,6 +22287,13 @@ def import_handicap_rounds(rounds: list[dict],
 
         conn.commit()
 
+    # Stamp the played side (front/back) onto any newly-inserted rounds that
+    # can be resolved from a scorecard (Kerry 2026-07-19). Non-fatal.
+    try:
+        persist_handicap_round_nines(dry_run=False, db_path=db_path)
+    except Exception:
+        logger.exception("Non-fatal: persist_handicap_round_nines after import failed")
+
     return {"inserted": inserted, "skipped": skipped, "matched": matched, "errors": errors[:50]}
 
 
@@ -22484,6 +22513,101 @@ def _nine_totals_for_card(conn: sqlite3.Connection, scoring_round_id: int,
             h["par"], h["strokes"], h["strokes_received"] or 0,
             formulas)["adjusted_strokes"] if h["par"] is not None else h["strokes"])
     return out
+
+
+def persist_handicap_round_nines(dry_run: bool = True,
+                                 db_path: str | Path | None = None) -> dict:
+    """RECORD the played side (front/back) onto handicap_rounds.nine so the
+    Scores/Handicaps card reads a STORED value instead of re-deriving it live
+    from each round's scorecard bridge every page load (Kerry 2026-07-19). A
+    posting with no clean bridge otherwise shows a blank side even when a
+    scorecard proving the nine exists.
+
+    For every round whose nine is not yet stored and whose course does NOT name
+    its nines, resolve front/back from the player's scorecard: the round's
+    bridged card when present, else any scorecard for the same player+date.
+    Holes 1-9 = front, 10-18 = back; an 18-hole card is split by matching the
+    posting's adjusted score to the nine's WHS-adjusted total. Idempotent —
+    only fills NULL nines, never overwrites. Named-nine courses stay NULL
+    (their nine lives in course_name). Never touches scores/differentials, so
+    frozen results are unaffected.
+    """
+    from collections import defaultdict
+    formulas = get_scoring_formulas(db_path=db_path)
+    res = {"set_front": 0, "set_back": 0, "already_stored": 0,
+           "skipped_named_nine": 0, "skipped_no_card": 0,
+           "skipped_ambiguous": 0, "examples": []}
+    with _connect(db_path) as conn:
+        _ensure_scoring_tables(conn)
+        try:
+            conn.execute("ALTER TABLE handicap_rounds ADD COLUMN nine TEXT")
+        except sqlite3.OperationalError:
+            pass
+        rows = conn.execute(
+            "SELECT id, player_name, round_date, course_name, adjusted_score, "
+            "scoring_round_id, nine FROM handicap_rounds").fetchall()
+        cards = conn.execute(
+            "SELECT id, player_name, round_date, tee_id FROM scoring_rounds"
+        ).fetchall()
+        by_pd: dict = defaultdict(list)
+        for c in cards:
+            by_pd[(c["player_name"], c["round_date"])].append(c)
+        sp_cache: dict = {}
+
+        def _sides_for(card):
+            key = card["id"]
+            if key not in sp_cache:
+                sp = _nine_totals_for_card(conn, card["id"], card["tee_id"], formulas)
+                sp_cache[key] = [(s, sp[s]["adj"]) for s in ("front", "back")
+                                 if sp[s]["n"]]
+            return sp_cache[key]
+
+        updates = []
+        for r in rows:
+            if r["nine"]:
+                res["already_stored"] += 1
+                continue
+            if _course_names_its_nines(r["course_name"]):
+                res["skipped_named_nine"] += 1
+                continue
+            cand = []
+            if r["scoring_round_id"]:
+                c = next((x for x in cards if x["id"] == r["scoring_round_id"]), None)
+                if c:
+                    cand = [c]
+            if not cand:
+                cand = by_pd.get((r["player_name"], r["round_date"]), [])
+            options = []  # (side, adjusted_total)
+            for c in cand:
+                options.extend(_sides_for(c))
+            if not options:
+                res["skipped_no_card"] += 1
+                continue
+            # Prefer the nine whose adjusted total matches this posting; else
+            # fall back only when every candidate agrees on the same side.
+            by_adj = [s for (s, adj) in options if adj == r["adjusted_score"]]
+            distinct_sides = {s for (s, _) in options}
+            side = None
+            if len(by_adj) == 1:
+                side = by_adj[0]
+            elif len(distinct_sides) == 1:
+                side = next(iter(distinct_sides))
+            if not side:
+                res["skipped_ambiguous"] += 1
+                continue
+            updates.append((side, r["id"]))
+            res["set_" + side] += 1
+            if len(res["examples"]) < 25:
+                res["examples"].append(
+                    {"id": r["id"], "player": r["player_name"],
+                     "date": r["round_date"], "course": r["course_name"],
+                     "nine": side})
+        if not dry_run and updates:
+            conn.executemany(
+                "UPDATE handicap_rounds SET nine = ? WHERE id = ?", updates)
+            conn.commit()
+        res["would_update" if dry_run else "updated"] = len(updates)
+    return res
 
 
 def get_handicap_rounds(player_name: str | None = None,
