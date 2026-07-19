@@ -819,9 +819,10 @@
         .mpv2 .mp-expand { padding: 0.5rem 0 0.75rem; }
         .mpv2 .mp-expand-empty { font-size: 0.76rem; color: var(--text-muted); padding: 0.4rem 0.15rem; }
         .mpv2 .mp-rank-note {
-            font-size: 0.74rem; color: var(--text-muted); line-height: 1.55;
+            font-size: 0.74rem; color: var(--text-muted); line-height: 1.5;
             margin-top: 0.5rem; padding: 0 0.15rem;
         }
+        .mpv2 .mp-rank-note div + div { margin-top: 0.18rem; }
         .mpv2 .mp-rank-note b { color: var(--mp-money-text); }
 
         /* ── Slate & Clay match strip (score card) ── */
@@ -2492,7 +2493,14 @@
         const rankRule = hasDmp09 ? 'match points → head-to-head → Stableford'
                                   : 'wins → head-to-head → Stableford';
         const bonusEach = fmtMoney((cmpState.structure || {}).pool_winner_bonus_each ?? 20);
-        return `<div class="mp-rank-note">Rank: ${rankRule}. Tap a player for their matches, or “Matches” for the whole pool. <b>${bonusEach}</b> = pool-winner bonus, paid on the card the moment the pool completes. <b>ADV</b> = advances to the knockout; <b>WD</b> = withdrew.</div>`;
+        // Three short lines, not a run-on paragraph (Kerry 2026-07-19). The
+        // when-it-pays detail lives on the Payouts tab; "Matches" button is
+        // self-labelling.
+        return `<div class="mp-rank-note">
+            <div>Rank: ${rankRule}</div>
+            <div><b>${bonusEach}</b> pool-winner bonus &middot; <b>ADV</b> advances &middot; <b>WD</b> withdrew</div>
+            <div>Tap a player for their matches.</div>
+        </div>`;
     }
 
     // ── Slate & Clay match strip (shared by pool expands + knockout) ──
