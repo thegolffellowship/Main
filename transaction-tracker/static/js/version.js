@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.123.5";
+window.TGF_VERSION = "2.123.6";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.123.6",
+    date: "2026-07-19",
+    changes: [
+      "The 3rd-place (consolation) match block on the Match Play knockout is now MANAGER-ONLY (Kerry: may not run this season). Members and view-only no longer see it; managers/admins keep the block — labeled '· hidden from members' — so they can still schedule and record a 3rd-place match if they decide to run one. The payout tie-policy (semifinal losers split 3rd/3rd+4th money if no consolation is played) is unchanged.",
+    ],
+  },
   {
     version: "2.123.5",
     date: "2026-07-19",
