@@ -2791,8 +2791,10 @@
         // shows the winner + margin, so a second "Hogue 6&5" pill is redundant
         // (Kerry 2026-07-19). Only the live running margin stays.
         const prog = gen.inProgress ? ` &middot; in progress, thru ${gen.played}` : '';
+        // The card head already carries "Started on hole N" — don't restate it
+        // here (Kerry 2026-07-19).
         const caption = isGG
-            ? `${gen.startHole ? `Started on hole ${gen.startHole}, shown in play order. ` : ''}Circles mark the hole winner (net); colored dots mark handicap strokes.`
+            ? `${gen.startHole ? 'Shown in play order. ' : ''}Circles mark the hole winner (net); colored dots mark handicap strokes.`
             : `Illustrative hole detail — generated from the match result${prog}; live hole-by-hole scoring wires in from Golf Genius. Strokes: hole winner takes par, loser par+1.`;
         // Strokes off the low man — total pops each player gets in the match.
         const aLast = escapeHtml(mpFirstLast(o.aName).last);
@@ -2955,8 +2957,12 @@
         }
         // While an in-progress card hasn't gone live yet, show a small status
         // line (the poller updates it) so a stuck card explains itself instead
-        // of looking like a plain scheduled match.
-        const liveNote = (bothPresent && !winner && !live)
+        // of looking like a plain scheduled match. Only when the match has an
+        // event dated today-or-earlier — an unscheduled/future match has
+        // nothing to connect to and the note is just noise (Kerry 2026-07-19).
+        const todayStr = new Date().toISOString().slice(0, 10);
+        const playable = !!eventDate && String(eventDate).slice(0, 10) <= todayStr;
+        const liveNote = (bothPresent && !winner && !live && playable)
             ? '<div class="mp-live-status" data-live-status style="font-size:0.72rem;color:var(--text-muted);font-style:italic;padding:0.1rem 0.65rem 0.4rem;">Connecting to live scoring…</div>'
             : '';
         return mpMatchCard(o, {
@@ -4386,10 +4392,10 @@
                             <option value="">— event —</option>
                             ${eventOptions}
                         </select>
-                    </div>` : (winner ? `<div style="padding:0.25rem 0.65rem;font-size:0.72rem;font-weight:700;color:#166534;">
+                    </div>` : (MATCHPLAY_V2 ? '' : (winner ? `<div style="padding:0.25rem 0.65rem;font-size:0.72rem;font-weight:700;color:#166534;">
                         ${escapeHtml(winner)} ${margin ? '(' + escapeHtml(margin) + ')' : ''}
                         ${eventDisplay ? `<span style="font-weight:400;color:var(--text-muted);margin-left:0.4rem;">${escapeHtml(eventDisplay)}</span>` : ''}
-                    </div>` : '')}
+                    </div>` : ''))}
                 </div>`;
             }).join("");
 

@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.123.2";
+window.TGF_VERSION = "2.123.3";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.123.3",
+    date: "2026-07-19",
+    changes: [
+      "More Match Play redundancy trimmed (Kerry review). The green winner footer under a decided bracket match ('Jay Hogue (6&5) City Champ Practice Round - Falconhead') is gone in the V2 view — the arrow strip already shows winner + margin and the header shows the course; the legacy pill view keeps it. The expanded scorecard caption no longer restates 'Started on hole 10' (the card head carries it) — it now reads 'Shown in play order. Circles mark…'. 'Connecting to live scoring…' only appears when the match has an event dated today or earlier — an unscheduled/future match (Semifinal 2) has nothing to connect to. Also fixed the 'Falcomhead' typo in the Practice Round event's course field.",
+    ],
+  },
   {
     version: "2.123.2",
     date: "2026-07-19",
