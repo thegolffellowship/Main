@@ -12477,7 +12477,20 @@ def ensure_courses_from_history(dry_run: bool = True,
                 return short
         return derive_course_short_name(name)
 
-    inserted, skipped_variant = [], []
+    _NINE_FRAGMENTS = {"lakes", "creeks", "oaks", "hills", "valley", "links",
+                       "front", "back", "cypress", "tradition", "creek"}
+
+    def looks_like_junk(nm):
+        low = nm.strip().lower()
+        if re.match(r"^copy of\b", low):            # GG copy-of-event artifact
+            return True
+        if re.search(r"[-|]\s*\d+\s*$", nm):         # GG "- 2" second instance
+            return True
+        if len(low.split()) == 1 and low in _NINE_FRAGMENTS:
+            return True                              # bare nine fragment ("Lakes")
+        return False
+
+    inserted, skipped_variant, skipped_junk = [], [], []
     with _connect(db_path) as conn:
         have = {r["name"].strip().lower() for r in conn.execute(
             "SELECT name FROM courses").fetchall()}
@@ -12488,6 +12501,10 @@ def ensure_courses_from_history(dry_run: bool = True,
         for raw in names:
             nm = (raw or "").strip()
             if not nm or nm.lower() in have:
+                continue
+            if looks_like_junk(nm):
+                skipped_junk.append({"course_name": nm,
+                                     "reason": "GG artifact / fragment — not a real course"})
                 continue
             k = _course_dedup_key(nm)
             if k in have_keys:
@@ -12505,7 +12522,9 @@ def ensure_courses_from_history(dry_run: bool = True,
     return {("inserted" if not dry_run else "would_insert"): inserted,
             "inserted_count": len(inserted),
             "skipped_as_variant": skipped_variant,
-            "skipped_variant_count": len(skipped_variant)}
+            "skipped_variant_count": len(skipped_variant),
+            "skipped_as_junk": skipped_junk,
+            "skipped_junk_count": len(skipped_junk)}
 
 
 # ─── Member-side traffic analytics (v2.62.0, Kerry) ────────────────────
