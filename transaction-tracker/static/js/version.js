@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.123.6";
+window.TGF_VERSION = "2.123.7";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.123.7",
+    date: "2026-07-19",
+    changes: [
+      "Match card headers are now a dark #1B1B1B band (Kerry: the pale strip was too washed out) — 'Semifinal 1 - Falconhead · 07/19' renders in Bitter uppercase on dark, echoing the nav and the active KNOCKOUT pill, with the status (FINAL/TBD) in TGF orange and LIVE in green. Applies to every Match Play card (knockout, pools).",
+    ],
+  },
   {
     version: "2.123.6",
     date: "2026-07-19",
