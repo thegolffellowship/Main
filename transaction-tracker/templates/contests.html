@@ -955,8 +955,8 @@
         .mpv2 #mp-panel-knockout .bracket-tree { display: block; }
         .mpv2 #mp-panel-knockout .bracket-round { display: block; margin-bottom: 1.2rem; }
         .mpv2 #mp-panel-knockout .bracket-round-label {
-            font: 700 0.62rem/1 'Bitter', Georgia, serif; letter-spacing: 0.08em;
-            text-transform: uppercase; color: var(--text-placeholder, #9CA3AF);
+            font: 700 0.82rem/1 'Bitter', Georgia, serif; letter-spacing: 0.06em;
+            text-transform: uppercase; color: #1B1B1B;
             margin-bottom: 0.5rem;
         }
         .mpv2 #mp-panel-knockout .bracket-match { display: block; border: none; margin-bottom: 0.6rem; background: transparent; }
@@ -2785,12 +2785,12 @@
                 : `All square · thru ${L.thru}`;
             result = `<span class="mp-sc-result ${cls}">LIVE · ${txt}</span>`;
         }
-        else if (o.aWin) result = `<span class="mp-sc-result a">&#9656; ${escapeHtml(mpFirstLast(o.aName).last)} ${escapeHtml(o.margin || 'WON')}</span>`;
-        else if (o.bWin) result = `<span class="mp-sc-result b">${escapeHtml(mpFirstLast(o.bName).last)} ${escapeHtml(o.margin || 'WON')} &#9666;</span>`;
-        else if (o.tie) result = `<span class="mp-sc-result tie">${gen.putt ? 'Putt-off' : 'All square'}</span>`;
+        // A FINAL result is NOT restated here — the head arrow strip already
+        // shows the winner + margin, so a second "Hogue 6&5" pill is redundant
+        // (Kerry 2026-07-19). Only the live running margin stays.
         const prog = gen.inProgress ? ` &middot; in progress, thru ${gen.played}` : '';
         const caption = isGG
-            ? `Hole-by-hole from Golf Genius${gen.startHole ? ` · started on hole ${gen.startHole}, shown in play order` : ''}. Circles mark the hole winner (net); colored dots mark handicap strokes.`
+            ? `${gen.startHole ? `Started on hole ${gen.startHole}, shown in play order. ` : ''}Circles mark the hole winner (net); colored dots mark handicap strokes.`
             : `Illustrative hole detail — generated from the match result${prog}; live hole-by-hole scoring wires in from Golf Genius. Strokes: hole winner takes par, loser par+1.`;
         // Strokes off the low man — total pops each player gets in the match.
         const aLast = escapeHtml(mpFirstLast(o.aName).last);
@@ -2827,7 +2827,7 @@
         const dots = mpHoleDotsHtml(gen);
         const grid = mpScorecardGridHtml(gen, o);
         const note = gen.source === 'gg'
-            ? `Hole-by-hole from Golf Genius${gen.startHole ? ` · started on hole ${gen.startHole}` : ''}.`
+            ? (gen.startHole ? `Started on hole ${gen.startHole}.` : '')
             : 'Illustrative hole map — generated from the result; real scoring wires in from Golf Genius.';
         const toggle = `<div class="mp-card-toggle">
             <span class="mp-illus-note">${note}</span>
@@ -2885,7 +2885,17 @@
         return { side, bar, thru, margin: marg, leaderName };
     }
 
-    function mpMatchCardFromSlots(s1, s2, roundKey, eventName, eventDate, liveGG) {
+    // Course from an event name: the part after a " - "/" | " separator (City
+    // Champ Practice Round - Falconhead → Falconhead), else the name minus a
+    // leading event code (a9.18 Forest Creek → Forest Creek).
+    function mpEventCourse(eventName) {
+        if (!eventName) return '';
+        const s = String(eventName).trim();
+        const m = s.match(/[-|]\s*([^-|]+?)\s*$/);
+        if (m) return m[1].trim();
+        return s.replace(/^\s*[A-Za-z]?\d+(?:\.\d+)?\s+/, '').trim();
+    }
+    function mpMatchCardFromSlots(s1, s2, roundKey, eventName, eventDate, liveGG, matchNo, matchCount) {
         const winner = s1.winner_name || s2.winner_name || null;
         const margin = s1.margin || s2.margin || '';
         const ml = (margin || '').toLowerCase();
@@ -2894,9 +2904,15 @@
         const inProgress = bothPresent && !winner && /thru/i.test(ml);
         const aWin = !!(winner && winner === s1.player_name);
         const bWin = !!(winner && winner === s2.player_name);
-        const roundLabel = (ROUND_DEFS[roundKey] || {}).label || roundKey;
+        // Numbered round label ("Semifinal 1"/"Semifinal 2") when the round has
+        // more than one match; the header shows round + course (Kerry 2026-07-19).
+        const rdef = ROUND_DEFS[roundKey] || {};
+        const roundLabel = ((matchCount > 1) && matchNo != null)
+            ? `${rdef.single || rdef.label || roundKey} ${matchNo + 1}`
+            : (rdef.label || roundKey);
+        const course = mpEventCourse(eventName);
         const d = (eventDate || '').slice(5).replace('-', '/');
-        const metaL = `${roundLabel}${eventName ? ' · ' + eventName : ''}${d ? ' · ' + d : ''}`;
+        const metaL = `${roundLabel}${course ? ' - ' + course : ''}${d ? ' · ' + d : ''}`;
         // Live GG detail (present only for an in-progress, not-yet-final match that
         // the poller resolved). It drives the hole strip, the running margin bar,
         // and a "LIVE · thru N" status — the frozen record stays authoritative once
@@ -2926,7 +2942,9 @@
                 + ` data-live-b="${escapeHtml(s2.player_name)}"`
                 + ` data-live-round="${escapeHtml(roundKey)}"`
                 + ` data-live-event="${escapeHtml(eventName || '')}"`
-                + ` data-live-date="${escapeHtml(eventDate || '')}"`;
+                + ` data-live-date="${escapeHtml(eventDate || '')}"`
+                + (matchNo != null ? ` data-live-matchno="${matchNo}"` : '')
+                + (matchCount != null ? ` data-live-matchcount="${matchCount}"` : '');
             if (winner) {
                 dataAttrs += ` data-live-winner="${escapeHtml(winner)}"`
                     + ` data-live-margin="${escapeHtml(margin || '')}"`;
@@ -2994,7 +3012,9 @@
         const s2 = { player_name: b };
         const html = mpMatchCardFromSlots(
             s1, s2, card.dataset.liveRound || '',
-            card.dataset.liveEvent || '', card.dataset.liveDate || '', detail);
+            card.dataset.liveEvent || '', card.dataset.liveDate || '', detail,
+            card.dataset.liveMatchno != null ? +card.dataset.liveMatchno : null,
+            card.dataset.liveMatchcount != null ? +card.dataset.liveMatchcount : null);
         const tmp = document.createElement('div');
         tmp.innerHTML = html.trim();
         const fresh = tmp.firstElementChild;
@@ -4188,10 +4208,10 @@
     // ── Bracket ──
 
     const ROUND_DEFS = {
-        r16:   { label: "Round of 16",  matchCount: 8 },
-        qf:    { label: "Quarterfinals", matchCount: 4 },
-        sf:    { label: "Semifinals",    matchCount: 2 },
-        final: { label: "Final",         matchCount: 1 },
+        r16:   { label: "Round of 16",  single: "Round of 16 · Match", matchCount: 8 },
+        qf:    { label: "Quarterfinals", single: "Quarterfinal", matchCount: 4 },
+        sf:    { label: "Semifinals",    single: "Semifinal", matchCount: 2 },
+        final: { label: "Final",         single: "Final", matchCount: 1 },
     };
 
     function buildBracketRounds(bracketSize) {
@@ -4323,7 +4343,7 @@
                 // Slate & Clay arrow scoreboard strip when the flag is on;
                 // original slot pills otherwise.
                 const slotsHtml = MATCHPLAY_V2
-                    ? mpMatchCardFromSlots(s1, s2, round.key, eventDisplay, eventObj ? eventObj.event_date : '')
+                    ? mpMatchCardFromSlots(s1, s2, round.key, eventDisplay, eventObj ? eventObj.event_date : '', null, mi, round.matchCount)
                     : `<div class="bracket-slot${slot1Win ? ' winner' : ''}">
                         ${seedChips(s1)}<span class="bracket-slot-name">${escapeHtml(s1.player_name || '—')}</span>
                     </div>
@@ -4376,16 +4396,17 @@
         if (!MATCHPLAY_V2) {
             container.innerHTML = `<div class="bracket-tree">${html || '<p style="color:var(--text-muted);">No bracket data yet.</p>'}</div>`;
         } else {
-            // ── Bracket header: title + seed/WC legend (P4 transparency, #228) ──
-            const koSize = cmpBracketSize();
-            const legendHtml = `
+            // ── Bracket header: seed/WC legend ONLY when the bracket actually
+            // carries seeds or wildcards; the "Bracket · Knockout of N" title is
+            // dropped as redundant (Kerry 2026-07-19). ──
+            const hasSeedOrWc = (bracket || []).some(b => b.player_seed || b.is_wildcard);
+            const legendHtml = hasSeedOrWc ? `
                 <div class="mp-bracket-head">
-                    <span class="mp-bracket-title">Bracket · Knockout of ${koSize}</span>
                     <span class="mp-legend">
                         <span class="seed-chip">#</span> seed &nbsp;·&nbsp;
                         <span class="wc-chip">WC</span> wildcard
                     </span>
-                </div>`;
+                </div>` : '';
 
             // ── Champion card: when the Final has a recorded winner ──
             const finalMatch = (slotMap['final:0'] || {});

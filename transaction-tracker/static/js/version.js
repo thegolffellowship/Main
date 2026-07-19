@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.123.0";
+window.TGF_VERSION = "2.123.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.123.1",
+    date: "2026-07-19",
+    changes: [
+      "Match Play bracket de-cluttered (Kerry). Dropped the redundant final-result pill on the scorecard (e.g. 'Hogue 6&5') — the head arrow already shows the winner and margin; the live running margin still shows. The seed/wildcard legend now appears only when the bracket actually carries seeds or wildcards. Removed the 'Bracket · Knockout of N' title. The round-group header (SEMIFINALS) is now black and a bit larger. Each match header is numbered with its course — 'Semifinal 1 - Falconhead', 'Semifinal 2 - <course>' — instead of the shared 'Semifinals · <event> · <date>'. Scorecard captions drop 'Hole-by-hole from Golf Genius' and keep 'Started on hole N'.",
+    ],
+  },
   {
     version: "2.123.0",
     date: "2026-07-19",
