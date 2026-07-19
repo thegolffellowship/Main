@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.122.1";
+window.TGF_VERSION = "2.122.2";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.122.2",
+    date: "2026-07-19",
+    changes: [
+      "Played-side backfill name fallback now normalizes 'LAST, First' (scorecards) and 'First Last' (handicap postings) to one key, so a posting with no customer link still matches its scorecard by name. This catches rounds the customer_id match can't reach because the posting was never linked to a customer.",
+    ],
+  },
   {
     version: "2.122.1",
     date: "2026-07-19",
