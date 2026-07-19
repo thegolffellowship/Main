@@ -828,14 +828,17 @@
             border: 1px solid var(--border); border-radius: 10px; overflow: hidden;
             background: #fff; margin-bottom: 0.6rem;
         }
+        /* Dark header band per match (Kerry 2026-07-19: the pale #FAFAF8 strip
+           was too washed out) — echoes the #1B1B1B nav / active pill. */
         .mpv2 .mp-match-meta {
             display: flex; align-items: center; justify-content: space-between;
-            gap: 0.5rem; padding: 0.4rem 0.7rem; background: #FAFAF8;
-            font-size: 0.72rem; color: var(--text-muted); font-style: italic;
-            border-bottom: 1px solid var(--border);
+            gap: 0.5rem; padding: 0.45rem 0.7rem; background: #1B1B1B;
+            font: 700 0.66rem/1.25 'Bitter', Georgia, serif;
+            letter-spacing: 0.05em; text-transform: uppercase;
+            color: #F3F1EC; font-style: normal;
         }
-        .mpv2 .mp-match-meta .status { font-style: normal; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; font-size: 0.62rem; color: var(--text-body, #4B5563); }
-        .mpv2 .mp-match-meta .status.live { color: var(--mp-money-text); }
+        .mpv2 .mp-match-meta .status { font-style: normal; font-weight: 700; letter-spacing: 0.07em; text-transform: uppercase; font-size: 0.62rem; color: var(--primary, #E87C3E); }
+        .mpv2 .mp-match-meta .status.live { color: #4ADE80; }
         .mpv2 .mp-strip { display: flex; align-items: stretch; min-height: 52px; }
         .mpv2 .mp-strip-mono {
             width: 40px; flex: none; display: flex; align-items: center; justify-content: center;
