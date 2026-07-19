@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.123.7";
+window.TGF_VERSION = "2.123.8";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.123.8",
+    date: "2026-07-19",
+    changes: [
+      "City Match Play subtext: 'KO of 4' → 'knockout of 4' (Kerry — still fits on one line with the earlier trims).",
+    ],
+  },
   {
     version: "2.123.7",
     date: "2026-07-19",
