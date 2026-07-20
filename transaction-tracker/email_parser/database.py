@@ -9727,6 +9727,10 @@ def import_gg_game_results(widget_url: str, db_path: str | Path = DB_PATH,
         # A live round gets marked done before its results are entered —
         # always re-walk the newest N rounds (upserts make it safe).
         done -= {rid for rid, _ in options[:rewalk_recent]}
+        # An EXPLICITLY requested round (&round=<id> on the widget URL)
+        # always re-walks — that's how a stale capture is healed on demand.
+        if only_round:
+            done.discard(only_round)
         code_map = {}
         for r in conn.execute("SELECT id, item_name FROM events").fetchall():
             m = _GG_EVENT_CODE_COMPOUND_RE.match((r["item_name"] or "").strip())
@@ -9764,30 +9768,49 @@ def import_gg_game_results(widget_url: str, db_path: str | Path = DB_PATH,
                 if href.startswith("/"):
                     href = f"https://{host}{href}"
                 tstruct = parse_page_structure(fetch(href), href)
+                tid = tid_m.group(1)
+                fresh: list = []
                 for table in tstruct.get("tables") or []:
-                    for w in _game_winners_from_table(table):
-                        cid = None
-                        if not w["is_team"]:
-                            cid = _resolve_scoring_player(conn, w["player"])
-                            if cid is None and w["player"] not in result["unresolved_names"]:
-                                result["unresolved_names"].append(w["player"])
-                        conn.execute(
-                            """INSERT INTO gg_game_results
-                                   (event_id, event_code, gg_round_id,
-                                    gg_tournament_id, game, game_label,
-                                    customer_id, player_name, is_team,
-                                    chapter, position, detail, purse)
-                               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                               ON CONFLICT (gg_tournament_id, player_name)
-                               DO UPDATE SET purse = excluded.purse,
-                                             position = excluded.position,
-                                             detail = excluded.detail,
-                                             customer_id = COALESCE(excluded.customer_id, gg_game_results.customer_id),
-                                             event_id = COALESCE(excluded.event_id, gg_game_results.event_id)""",
-                            (ev_id, ev_code, rid, tid_m.group(1), game, text,
-                             cid, w["player"], w["is_team"], w["chapter"],
-                             w["position"], w["detail"], w["purse"]))
-                        result["winners_recorded"] += 1
+                    fresh.extend(_game_winners_from_table(table))
+                for w in fresh:
+                    cid = None
+                    if not w["is_team"]:
+                        cid = _resolve_scoring_player(conn, w["player"])
+                        if cid is None and w["player"] not in result["unresolved_names"]:
+                            result["unresolved_names"].append(w["player"])
+                    conn.execute(
+                        """INSERT INTO gg_game_results
+                               (event_id, event_code, gg_round_id,
+                                gg_tournament_id, game, game_label,
+                                customer_id, player_name, is_team,
+                                chapter, position, detail, purse)
+                           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                           ON CONFLICT (gg_tournament_id, player_name)
+                           DO UPDATE SET purse = excluded.purse,
+                                         position = excluded.position,
+                                         detail = excluded.detail,
+                                         customer_id = COALESCE(excluded.customer_id, gg_game_results.customer_id),
+                                         event_id = COALESCE(excluded.event_id, gg_game_results.event_id)""",
+                        (ev_id, ev_code, rid, tid, game, text,
+                         cid, w["player"], w["is_team"], w["chapter"],
+                         w["position"], w["detail"], w["purse"]))
+                    result["winners_recorded"] += 1
+                # REPLACE semantics per tournament (v2.126.3): drop rows a
+                # previous walk stored that are NOT in the current winner
+                # set. A walk during a live round captures transient
+                # standings (e.g. every team "T1 · $0"); the later re-walk
+                # upserted the real winners but left the stale rows — the
+                # a9.18/s18.8 phantom Team Net "ties".
+                if fresh:
+                    names = [w["player"] for w in fresh]
+                    ph = ",".join("?" * len(names))
+                    stale = conn.execute(
+                        f"DELETE FROM gg_game_results WHERE gg_tournament_id"
+                        f" = ? AND player_name NOT IN ({ph})",
+                        [tid, *names]).rowcount
+                    if stale:
+                        result.setdefault("stale_rows_dropped", 0)
+                        result["stale_rows_dropped"] += stale
             conn.execute(
                 "INSERT OR IGNORE INTO gg_game_results_rounds (gg_round_id, host) VALUES (?, ?)",
                 (rid, host))
@@ -36983,6 +37006,17 @@ def assemble_event_game_payouts(event_name: str, db_path=None) -> dict:
             team_pos_groups.setdefault(
                 int(pm.group(1)) if pm else idx + 1, []).append(t)
         place_cents = [round(a * 100) for a in team_amts]
+
+        # Blind-draw partners ARE paid their team share (Kerry 2026-07-13,
+        # verified vs GG's Player Purse Summary on s9.17 Silverhorn: GG
+        # splits $54 across all 4 slots incl. Bl[HAMILTON, Doug] → $13.50
+        # each). Unwrap the GG 'Bl[LAST, First]' wrapper to the real name
+        # so the payout resolves to that customer.
+        def _unwrap_blind(nm):
+            bm = re.match(r"^Bl\[(.+)\]$", nm)
+            return bm.group(1).strip() if bm else nm
+
+        paid_teams: list = []
         for pos in sorted(team_pos_groups):
             grp = team_pos_groups[pos]
             pool = sum(place_cents[pos - 1: pos - 1 + len(grp)])
@@ -36991,25 +37025,45 @@ def assemble_event_game_payouts(event_name: str, db_path=None) -> dict:
             team_shares = split_cents(pool, len(grp))
             suffix = {1: "1st", 2: "2nd", 3: "3rd"}.get(pos, f"{pos}th")
             for t, tc in zip(grp, team_shares):
-                # Blind-draw partners ARE paid their team share (Kerry
-                # 2026-07-13, verified vs GG's Player Purse Summary on
-                # s9.17 Silverhorn: GG splits $54 across all 4 slots incl.
-                # Bl[HAMILTON, Doug] → $13.50 each; the old code excluded
-                # the blind draw and split 3 ways at $18, over-paying the
-                # real members and zeroing the drawn player). Unwrap the
-                # GG 'Bl[LAST, First]' wrapper to the real name so the
-                # payout resolves to that customer.
-                def _unwrap_blind(nm):
-                    bm = re.match(r"^Bl\[(.+)\]$", nm)
-                    return bm.group(1).strip() if bm else nm
                 members = [_unwrap_blind(mname.strip())
                            for mname in t["player_name"].split("+")
                            if mname.strip()]
-                if not members:
+                if not members or tc <= 0:
                     continue
-                _money_split(tc / 100.0, members, "team_net",
-                             f"{g_event.get('teamType') or 'Team Net'} {suffix}"
-                             f"{' (T)' if len(grp) > 1 else ''} (team split)")
+                paid_teams.append({
+                    "cents": tc, "members": members,
+                    "desc": f"{g_event.get('teamType') or 'Team Net'} "
+                            f"{suffix}{' (T)' if len(grp) > 1 else ''} "
+                            f"(team split)"})
+        # Kerry ruling 2026-07-20: Team/Cart Net splits evenly among UNIQUE
+        # players. A player on TWO paid teams (real slot on one, blind on
+        # the other) receives only the HIGHER per-player share; the lower
+        # team's pot then splits among its REMAINING members (the pot
+        # amount itself doesn't shrink).
+        deduping = True
+        while deduping:
+            deduping = False
+            seen: dict = {}
+            for ti, team in enumerate(paid_teams):
+                for nm in team["members"]:
+                    k = _cmp_person_key(nm)
+                    if k in seen and seen[k] != ti:
+                        def _share(t):
+                            return t["cents"] // max(1, len(t["members"]))
+                        drop = ti if _share(paid_teams[ti]) <= \
+                            _share(paid_teams[seen[k]]) else seen[k]
+                        paid_teams[drop]["members"] = [
+                            m for m in paid_teams[drop]["members"]
+                            if _cmp_person_key(m) != k]
+                        deduping = True
+                        break
+                    seen[k] = ti
+                if deduping:
+                    break
+        for team in paid_teams:
+            if team["members"]:
+                _money_split(team["cents"] / 100.0, team["members"],
+                             "team_net", team["desc"])
     proxies = ([r for r in gg_rows if r["game"] == "ctp"]
                + [r for r in gg_rows if r["game"] == "longest_putt"])
     ctp_vals = [v for v in (
