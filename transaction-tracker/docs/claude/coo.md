@@ -102,3 +102,26 @@ The `events` table has extensive pricing columns:
 - `PATCH /api/coo/chat-sessions/<id>` — rename session
 - `DELETE /api/coo/chat-sessions/<id>` — delete session
 - `GET /api/coo/agents` — list active agents
+
+## Daily Briefing email (email_parser/coo_email.py — restructured v2.129.17)
+
+Kerry 2026-07-20: "My daily briefing is honestly overwhelming" (200 action
+items rendered as full cards). The email now leads with an overview and
+rolls the backlog up:
+
+1. **Administrative Overview — Last 24 Hours**: stat chips (new-24h /
+   open backlog / high urgency / expiring memberships) + a Claude-written
+   3-6 bullet prioritized summary of the last 24h (one call, model
+   claude-sonnet-4-5; on any failure the email still sends without it).
+2. **Quick Wins**: 0-4 AI-suggested sub-5-minute actions (same call).
+3. **Memberships**: expiring-soon + just-lapsed (personal-outreach
+   lists, names shown), renewed and first-time members in the recent
+   window. From customer_memberships (latest term per customer).
+4. **Action Required**: FULL cards only for new-in-24h + high-urgency
+   backlog, capped; the standing backlog renders as one row per category
+   (count + oldest date + dashboard link) — detail is one click away.
+
+DIALS (app_settings): `daily_briefing_detail_cap` (default 10),
+`daily_briefing_expiry_window` (days ahead, default 30),
+`daily_briefing_recent_window` (days back, default 7).
+Subject format: "TGF Daily Briefing — <day> | N new · M open".
