@@ -37468,6 +37468,68 @@ def restore_tgf_payouts_from_ledger(event_code: str, apply: bool = False,
             "already_present": already, "unparsable": skipped}
 
 
+def restore_tgf_payouts_explicit(rows: list, apply: bool = False,
+                                 db_path=None) -> dict:
+    """Second-stage repair for the 2026-07-20 clear-auto over-match: the 8
+    deleted rows with NO surviving ledger mirror, reconstructed from GG's
+    round boards (skins/ind-net/ctp purse tables + team roster) and
+    Kerry-directed ('Of course rebuild what you screwed up'). Each row is
+    re-inserted under its ORIGINAL id and marked paid exactly the way the
+    app's bulk Mark Paid does — a source='venmo' '(bulk-confirmed paid)'
+    ledger mirror dated to the event — because these players were in fact
+    paid back in Feb/Mar. Idempotent: existing payout ids are skipped.
+
+    rows: [{id, event_code, customer_id, customer_name, category,
+            amount, date}, ...]"""
+    out = {"apply": apply, "restored": [], "skipped": []}
+    with _connect(db_path) as conn:
+        for r in rows:
+            trow = conn.execute(
+                "SELECT id, code FROM tgf_events WHERE TRIM(code) = ? "
+                "COLLATE NOCASE", (r["event_code"].strip(),)).fetchone()
+            if not trow:
+                out["skipped"].append({**r, "why": "tgf_events code not found"})
+                continue
+            if conn.execute("SELECT 1 FROM tgf_payouts WHERE id = ?",
+                            (r["id"],)).fetchone():
+                out["skipped"].append({**r, "why": "payout id already present"})
+                continue
+            if apply:
+                cur = conn.execute(
+                    """INSERT INTO acct_transactions
+                           (date, description, total_amount, type, source,
+                            source_ref, customer, customer_id, order_id,
+                            entry_type, category, amount, account, status,
+                            event_name)
+                       VALUES (?, ?, ?, 'expense', 'venmo', ?, ?, ?, ?,
+                               'expense', 'prize_payout', ?, 'Venmo',
+                               'active', ?)""",
+                    (r["date"],
+                     f"Payout: {r['category']} — {trow['code']} "
+                     f"(bulk-confirmed paid)",
+                     round(float(r["amount"]), 2), f"payout-{r['id']}",
+                     r.get("customer_name", ""), r["customer_id"],
+                     f"PAYOUT-{r['id']}",
+                     -round(float(r["amount"]), 2), trow["code"]))
+                conn.execute(
+                    """INSERT INTO tgf_payouts
+                           (id, event_id, customer_id, category, amount,
+                            description, acct_transaction_id, paid_at)
+                       VALUES (?,?,?,?,?,?,?,?)""",
+                    (r["id"], trow["id"], r["customer_id"], r["category"],
+                     round(float(r["amount"]), 2),
+                     "restored 2026-07-20: rebuilt from GG round boards "
+                     "after clear-auto over-match (no ledger mirror "
+                     "survived)", cur.lastrowid, r["date"]))
+            out["restored"].append({"payout_id": r["id"],
+                                    "name": r.get("customer_name"),
+                                    "category": r["category"],
+                                    "amount": r["amount"]})
+        if apply:
+            conn.commit()
+    return out
+
+
 def assemble_event_game_payouts(event_name: str, db_path=None) -> dict:
     """Server-side assembly of every DETERMINED winner for one event into
     payout rows — the single source of truth behind both the Games tab's

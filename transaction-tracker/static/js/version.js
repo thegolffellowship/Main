@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.129.7";
+window.TGF_VERSION = "2.129.8";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.129.8",
+    date: "2026-07-20",
+    changes: [
+      "API responses are never browser-cached: Safari/iOS caches GET XHRs that carry no Cache-Control header, so the Payouts PWA kept re-serving a stale /api/tgf payload long after the DB was corrected (Kerry: 'Taking forever for the BARNA and Cedar Creek thing to resolve' — the server had been right for a while). A global after_request hook stamps Cache-Control: no-store on every /api/* response.",
+      "scoring-payouts-restore-explicit bridge — stage-2 of the over-match repair (Kerry: 'Of course rebuild what you screwed up'): re-inserts the 8 deleted rows that had NO surviving ledger mirror, reconstructed from GG's round boards (s18.3 net/skins purse tables reconcile the event to GG's $1,118.00 total to the penny; s18.1's two rows keyed off GG's team roster + CTP winners at the sheet's sibling amounts). Each restores under its original id and is marked paid via the app's own bulk-confirm ledger-mirror mechanism, dated to the event.",
+    ],
+  },
   {
     version: "2.129.7",
     date: "2026-07-20",

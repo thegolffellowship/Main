@@ -375,6 +375,20 @@ if not _secret_key:
 app.secret_key = _secret_key
 
 
+@app.after_request
+def _no_store_api_responses(resp):
+    """Live operational data must never be served from the browser's HTTP
+    cache. Safari/iOS caches GET XHRs that carry no Cache-Control header,
+    so the Payouts PWA kept re-serving a stale /api/tgf payload for many
+    minutes after the DB changed (Kerry 2026-07-20: 'Taking forever for
+    the BARNA and Cedar Creek thing to resolve' — the server was long
+    since correct). Applies to /api/* only; static assets keep their
+    defaults."""
+    if request.path.startswith("/api/") and "Cache-Control" not in resp.headers:
+        resp.headers["Cache-Control"] = "no-store"
+    return resp
+
+
 @app.context_processor
 def _inject_shell_flag():
     """Nav Shell v2 kill switch (nav-shell-070926, Kerry-ratified #58).
