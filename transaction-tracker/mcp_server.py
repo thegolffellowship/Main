@@ -1637,6 +1637,13 @@ def _scoring_dispatch(url: str, extract: str):
                 _c.commit()
             return json.dumps({"deleted_duplicate_74_entries": _del,
                                "added_18_59_entry": not _dup})
+        if cmd == "scoring-setting-set":
+            # "<key>|<value>" — write an app_settings dial ("stored as a
+            # setting is our standard for everything" — Kerry).
+            _k, _, _v = arg.partition("|")
+            db.set_app_setting(_k.strip(), _v.strip())
+            return json.dumps({"key": _k.strip(), "value": _v.strip(),
+                               "saved": True})
         if cmd == "scoring-credit-stamp":
             # "<item_id>|<method>|<date>|<note>" — stamp refunded WITHOUT
             # a ledger write (receipt already promoted to acct_transactions;

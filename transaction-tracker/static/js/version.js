@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.130.8";
+window.TGF_VERSION = "2.130.9";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.130.9",
+    date: "2026-07-20",
+    changes: [
+      "HOLE-IN-ONE watch (Kerry): scorecard imports now raise a HIGH action item whenever an imported card contains an ace (strokes = 1 on any hole) — the HIO pot pays out, and recording the payout under category 'hio' drains the pot. Dedup-guarded so re-imports don't re-alarm.",
+      "scoring-setting-set:<key>|<value> bridge for writing app_settings dials.",
+      "HIO pot carry-in ratified and documented: $1,150 remained after the Julius Jenkins half-pot payout at the 2025 TGF Championship, + $672 added through fall 2025 play (GG ALL-Gross-verified) = $1,822 entering 2026.",
+    ],
+  },
   {
     version: "2.130.8",
     date: "2026-07-20",

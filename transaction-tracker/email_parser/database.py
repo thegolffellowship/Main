@@ -12214,6 +12214,46 @@ def import_gg_scorecards(tournament_url: str, event_code: str | None = None,
                               f"correct the course/tee data."))
         conn.commit()
 
+    # HOLE-IN-ONE watch (Kerry 2026-07-20: "look out for any actual hole
+    # in one's"). An ace — strokes = 1 on any imported hole — raises a
+    # HIGH action item: the accrued HIO pot pays out to that player, and
+    # recording the payout under category 'hio' is what drains the pot
+    # (get_hio_pot). Dedup by subject so re-imports don't re-alarm.
+    holes_in_one = []
+    with _connect(db_path) as conn:
+        for srid in verified_ids:
+            for h in conn.execute(
+                    """SELECT sh.hole_number, sr.player_name, sr.round_date
+                         FROM scoring_holes sh
+                         JOIN scoring_rounds sr ON sr.id = sh.scoring_round_id
+                        WHERE sh.scoring_round_id = ? AND sh.strokes = 1""",
+                    (srid,)):
+                ace = {"player_name": h["player_name"],
+                       "hole": h["hole_number"], "date": h["round_date"],
+                       "scoring_round_id": srid}
+                holes_in_one.append(ace)
+                subject = (f"HOLE-IN-ONE: {h['player_name']} — "
+                           f"hole {h['hole_number']} ({h['round_date']})")
+                if not conn.execute(
+                        """SELECT 1 FROM action_items
+                           WHERE subject = ? AND status IN
+                                 ('open', 'in_progress') LIMIT 1""",
+                        (subject,)).fetchone():
+                    conn.execute(
+                        """INSERT INTO action_items
+                               (subject, from_name, summary, urgency,
+                                category)
+                           VALUES (?, 'HIO watch', ?, 'high', 'scoring')""",
+                        (subject,
+                         "An ACE was imported on this scorecard. The "
+                         "running Hole-In-One pot pays out — verify on the "
+                         "GG board, then record the payout with category "
+                         "'hio' so the pot drains correctly."))
+                    logger.info("HOLE-IN-ONE detected: %s hole %s (%s)",
+                                h["player_name"], h["hole_number"],
+                                h["round_date"])
+        conn.commit()
+
     logger.info("Scorecard import: %d new, %d replaced, %d upgraded with "
                 "handicap, %d skipped (round already captured from another "
                 "tournament), %d unresolved names, %d handicap rounds "
