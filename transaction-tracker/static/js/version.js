@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.129.18";
+window.TGF_VERSION = "2.129.19";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.129.19",
+    date: "2026-07-20",
+    changes: [
+      "Daily Briefing money chips (Kerry 2026-07-20): a second overview row shows Outstanding Payouts ($ + golfer count), Outstanding Refunds, and Open Credits at a glance.",
+      "Quick Wins now leads with OVERDUE PAYOUTS rendered deterministically — any unpaid payout group past the 24-hour-after-event standard shows as 'Pay <golfer> $X — <event>, Nd past the 24h payout standard' with an Unpaid-queue link; the money SLA is not left to the AI's judgement. SLA is a dial: app_settings payout_sla_hours (default 24).",
+    ],
+  },
   {
     version: "2.129.18",
     date: "2026-07-20",

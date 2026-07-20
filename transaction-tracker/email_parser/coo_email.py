@@ -122,6 +122,7 @@ def build_coo_email_html() -> tuple[str, str]:
     _high_total = len(high_backlog) + sum(
         1 for a in new_items if a.get("urgency") == "high")
     mem = _get_membership_summary()
+    money = _get_outstanding_money()
     html += f"""
 <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:10px;">
 <tr>
@@ -145,16 +146,45 @@ def build_coo_email_html() -> tuple[str, str]:
     <div style="font-size:18px;font-weight:700;color:{_AMBER if mem["expiring"] else _GREEN};">{len(mem["expiring"])}</div>
   </td>
 </tr>
+</table>
+<table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:10px;">
+<tr>
+  <td style="padding:8px 10px;background:#fff;border:1px solid #e5e7eb;border-radius:8px;text-align:center;">
+    <div style="font-size:10px;color:{_GRAY};text-transform:uppercase;">Outstanding payouts</div>
+    <div style="font-size:16px;font-weight:700;color:{_RED if money["payout_total"] else _GREEN};">{_fmt(money["payout_total"])}</div>
+    <div style="font-size:10px;color:{_GRAY};">{money["payout_groups"]} golfer{"s" if money["payout_groups"] != 1 else ""}</div>
+  </td>
+  <td style="width:6px;"></td>
+  <td style="padding:8px 10px;background:#fff;border:1px solid #e5e7eb;border-radius:8px;text-align:center;">
+    <div style="font-size:10px;color:{_GRAY};text-transform:uppercase;">Outstanding refunds</div>
+    <div style="font-size:16px;font-weight:700;color:{_RED if money["refund_total"] else _GREEN};">{_fmt(money["refund_total"])}</div>
+    <div style="font-size:10px;color:{_GRAY};">{money["refund_count"]} item{"s" if money["refund_count"] != 1 else ""}</div>
+  </td>
+  <td style="width:6px;"></td>
+  <td style="padding:8px 10px;background:#fff;border:1px solid #e5e7eb;border-radius:8px;text-align:center;">
+    <div style="font-size:10px;color:{_GRAY};text-transform:uppercase;">Open credits</div>
+    <div style="font-size:16px;font-weight:700;color:{_AMBER if money["credit_total"] else _GREEN};">{_fmt(money["credit_total"])}</div>
+    <div style="font-size:10px;color:{_GRAY};">{money["credit_count"]} item{"s" if money["credit_count"] != 1 else ""}</div>
+  </td>
+</tr>
 </table>"""
-    ai = _get_admin_overview(new_items, backlog, snapshot, upcoming, mem)
+    ai = _get_admin_overview(new_items, backlog, snapshot, upcoming, mem, money)
     for line in ai.get("summary", []):
         html += f"""<div style="padding:8px 14px;margin-bottom:6px;background:#fff;border:1px solid #e5e7eb;border-left:4px solid {_NAVY};border-radius:6px;font-size:13px;line-height:1.5;">{line}</div>"""
     html += _section_end()
 
-    # ── Section 0b: Quick Wins ──
-    if ai.get("quick_wins"):
+    # ── Section 0b: Quick Wins ── overdue payouts render
+    # deterministically (money SLA is not left to the AI's judgement:
+    # Kerry 2026-07-20 "payouts should go out within 24 hours of event"),
+    # then the AI's sub-5-minute suggestions.
+    qw_payouts = money.get("overdue", [])[:4]
+    if qw_payouts or ai.get("quick_wins"):
         html += _section_header("\u26a1 Quick Wins")
-        for line in ai["quick_wins"]:
+        for o in qw_payouts:
+            html += f"""<div style="padding:8px 14px;margin-bottom:6px;background:#fef2f2;border:1px solid #fecaca;border-radius:6px;font-size:13px;line-height:1.5;"><strong>Pay {o["name"]} {_fmt(o["amount"])}</strong> — {o["event"]}, {o["days"]}d past the 24h payout standard &nbsp;<a href="{_BASE_URL}/tgf" style="font-size:12px;color:#2563eb;text-decoration:none;">Open Unpaid queue &rarr;</a></div>"""
+        if len(money.get("overdue", [])) > 4:
+            html += f"""<div style="font-size:12px;color:{_GRAY};margin-bottom:6px;">+{len(money["overdue"]) - 4} more overdue payout groups in the Unpaid queue</div>"""
+        for line in ai.get("quick_wins", []):
             html += f"""<div style="padding:8px 14px;margin-bottom:6px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:6px;font-size:13px;line-height:1.5;">{line}</div>"""
         html += _section_end()
 
@@ -368,6 +398,68 @@ def _info_box(text: str) -> str:
     return f"""<div style="padding:12px 16px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:6px;font-size:13px;color:{_GREEN};">{text}</div>"""
 
 
+def _get_outstanding_money() -> dict:
+    """Outstanding payouts / refunds / credits for the briefing chips +
+    Quick Wins (Kerry 2026-07-20: payouts should go out within 24 hours
+    of the event — SLA dial app_settings payout_sla_hours, default 24)."""
+    out = {"payout_total": 0.0, "payout_groups": 0, "overdue": [],
+           "refund_total": 0.0, "refund_count": 0,
+           "credit_total": 0.0, "credit_count": 0}
+    try:
+        sla_h = int(get_app_setting("payout_sla_hours") or 24)
+    except Exception:
+        sla_h = 24
+    today = now_central()
+    try:
+        from email_parser.database import get_unpaid_payout_groups
+        groups = (get_unpaid_payout_groups() or {}).get("groups", [])
+        out["payout_groups"] = len(groups)
+        out["payout_total"] = round(sum(float(g.get("total") or 0) for g in groups), 2)
+        for g in groups:
+            ev_date = (g.get("event_date") or "")[:10]
+            try:
+                age_h = (today - datetime.strptime(ev_date, "%Y-%m-%d")).total_seconds() / 3600
+            except Exception:
+                continue
+            if age_h > sla_h:
+                out["overdue"].append({
+                    "name": g.get("name"), "amount": float(g.get("total") or 0),
+                    "event": g.get("code"), "days": int(age_h // 24)})
+        out["overdue"].sort(key=lambda x: -x["amount"])
+    except Exception:
+        logger.exception("briefing: unpaid payouts fetch failed")
+    try:
+        from email_parser.database import get_refunds_overview
+        ro = get_refunds_overview() or {}
+        outstanding = ro.get("outstanding") or []
+        out["refund_count"] = len(outstanding)
+        out["refund_total"] = round(sum(float(r.get("amount") or 0) for r in outstanding), 2)
+    except Exception:
+        logger.exception("briefing: refunds overview fetch failed")
+    try:
+        from email_parser.database import _parse_dollar
+        with _connect() as conn:
+            rows = conn.execute("""
+                SELECT item_price, transaction_fees, credit_amount,
+                       transaction_status
+                  FROM items
+                 WHERE transaction_status = 'credited'
+                    OR (transaction_status = 'wd'
+                        AND COALESCE(credit_amount, '') != '')""").fetchall()
+        total = 0.0
+        for r in rows:
+            if r["transaction_status"] == "wd":
+                total += _parse_dollar(r["credit_amount"] or "0")
+            else:
+                total += (_parse_dollar(r["item_price"])
+                          + _parse_dollar(r["transaction_fees"] or "0"))
+        out["credit_count"] = len(rows)
+        out["credit_total"] = round(total, 2)
+    except Exception:
+        logger.exception("briefing: credits fetch failed")
+    return out
+
+
 def _get_membership_summary() -> dict:
     """Membership movement for the briefing (Kerry 2026-07-20: "Who's
     about to expire, vs who's renewed or new. Need to know who I can
@@ -424,7 +516,7 @@ def _get_membership_summary() -> dict:
     return out
 
 
-def _get_admin_overview(new_items, backlog, snapshot, upcoming, mem) -> dict:
+def _get_admin_overview(new_items, backlog, snapshot, upcoming, mem, money) -> dict:
     """One Claude call producing the prioritized 24h summary + quick
     wins for the top of the briefing. Returns {"summary": [...],
     "quick_wins": [...]} — empty lists on any failure so the email
@@ -447,6 +539,11 @@ def _get_admin_overview(new_items, backlog, snapshot, upcoming, mem) -> dict:
             "new_recent": len(mem["new"])},
         "available_to_spend": snapshot["obligations"]["available_to_spend"],
         "upcoming_events": [e.get("item_name") for e in upcoming[:6]],
+        "outstanding_money": {
+            "unpaid_payout_total": money["payout_total"],
+            "overdue_payout_groups": len(money["overdue"]),
+            "outstanding_refund_total": money["refund_total"],
+            "open_credit_total": money["credit_total"]},
     }
     for a in backlog:
         c = (a.get("category") or "other")
