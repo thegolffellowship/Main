@@ -18775,6 +18775,24 @@ def get_player_credits(
                 d["credit_amount"] = _parse_dollar(d.get("credit_amount") or "0")
             else:
                 d["credit_amount"] = _parse_dollar(d.get("item_price")) + _parse_dollar(d.get("transaction_fees") or "0")
+            # Partial carve-outs (Kerry 2026-07-20, the John White case):
+            # item_price still reflects the ORIGINAL bundle, but a partial
+            # refund/credit child (event downgrade 18→9, dropped side
+            # game) already took part of that money out of this row —
+            # either as a separate credited child (which surfaces as its
+            # own credit line) or as a real outbound refund. Either way
+            # the parent's credit must shrink by the carved-out amount or
+            # the same $15.65 counts twice / stays claimable after being
+            # refunded.
+            for k in conn.execute(
+                    "SELECT item_price FROM items "
+                    "WHERE CAST(parent_item_id AS INTEGER) = ? "
+                    "AND (merchant = 'Partial Credit' "
+                    "     OR merchant = 'Partial Refund' "
+                    "     OR merchant LIKE 'Refund (%')",
+                    (d["id"],)).fetchall():
+                d["credit_amount"] -= abs(_parse_dollar(k["item_price"]))
+            d["credit_amount"] = max(0.0, round(d["credit_amount"], 2))
             # Original event this credit traces back to — for refund memos.
             d["origin_event"] = _credit_origin_event(conn, d)
             result.append(d)
