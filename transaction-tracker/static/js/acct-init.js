@@ -55,7 +55,19 @@ function switchTab(tab) {
     ACCT.activeTab = tab;
     $$('.acct-subtab[data-tab]').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
     $$('.acct-tab-panel').forEach(p => p.classList.toggle('active', p.id === 'panel-' + tab));
+    // keep the tab in the URL so refresh + deep links (Reconcile/Cash
+    // Flow pages link back to /accounting#<tab>) land on the right tab
+    history.replaceState(null, '', '#' + tab);
     refreshActiveTab();
+}
+
+// Valid #hash → tab deep links (legacy alias: #transactions → ledger)
+const ACCT_HASH_TABS = ['dashboard', 'ledger', 'accounts', 'categories',
+    'reports', 'reconciliation', 'liabilities', 'contractors', 'rules'];
+function tabFromHash() {
+    let h = (location.hash || '').replace('#', '');
+    if (h === 'transactions') h = 'ledger';
+    return ACCT_HASH_TABS.includes(h) ? h : null;
 }
 
 function refreshActiveTab() {
@@ -81,6 +93,11 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Sub-tab switching
     $$('.acct-subtab[data-tab]').forEach(btn => {
         btn.addEventListener('click', () => switchTab(btn.dataset.tab));
+    });
+
+    window.addEventListener('hashchange', () => {
+        const t = tabFromHash();
+        if (t && t !== ACCT.activeTab) switchTab(t);
     });
 
     // Ledger column toggle
@@ -313,6 +330,9 @@ document.addEventListener('DOMContentLoaded', async () => {
         });
     });
 
-    // Load initial tab
-    refreshActiveTab();
+    // Load initial tab — honor #hash deep links (the Reconcile / Cash
+    // Flow pages link back to /accounting#<tab>); default stays Ledger.
+    const hashTab = tabFromHash();
+    if (hashTab && hashTab !== ACCT.activeTab) switchTab(hashTab);
+    else refreshActiveTab();
 });
