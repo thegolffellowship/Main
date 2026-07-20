@@ -37132,6 +37132,85 @@ def _rows_from_place_ladder(ranking: list, amounts: list, category: str,
     return rows
 
 
+def rainout_audit(db_path=None) -> dict:
+    """Find UNLABELED shut-down events (Kerry 2026-07-20: 'We had other
+    rain outs. They need to be labeled as such.').
+
+    Every past event with its shutdown signals: status/badge, registration
+    count, credited/WD/refunded count + ratio, and recorded payout rows.
+    `candidates` = ACTIVE-status events whose credited ratio ≥ 50%
+    (deliberately wider than the 75% payout backstop so Kerry reviews the
+    gray zone) — he confirms which were true washouts, then each gets its
+    badge via scoring-rainout-label."""
+    from email_parser.timezone_utils import today_central_str
+    out_events, candidates = [], []
+    with _connect(db_path) as conn:
+        for ev in conn.execute(
+                """SELECT id, item_name, event_date,
+                          COALESCE(status,'active') AS status, status_badge
+                     FROM events
+                    WHERE event_date IS NOT NULL AND event_date <= ?
+                    ORDER BY event_date""",
+                (today_central_str(),)).fetchall():
+            r = conn.execute(
+                """SELECT COUNT(*) AS total,
+                          SUM(CASE WHEN LOWER(COALESCE(transaction_status,''))
+                                   IN ('wd','credited','refunded')
+                                   THEN 1 ELSE 0 END) AS credited
+                     FROM items WHERE item_name = ? COLLATE NOCASE""",
+                (ev["item_name"],)).fetchone()
+            total, credited = r["total"] or 0, r["credited"] or 0
+            full = ev["item_name"].strip()
+            m = _GG_EVENT_CODE_COMPOUND_RE.match(full)
+            bare = m.group(1).lower() if m else full.lower()
+            prow = conn.execute(
+                """SELECT COUNT(*) AS n FROM tgf_payouts p
+                    JOIN tgf_events te ON te.id = p.event_id
+                   WHERE LOWER(te.code) IN (?, ?)""",
+                (full.lower(), bare)).fetchone()
+            row = {"event": full, "date": ev["event_date"],
+                   "status": ev["status"], "badge": ev["status_badge"],
+                   "registrations": total, "credited": credited,
+                   "credited_ratio": round(credited / total, 2) if total else 0,
+                   "payout_rows": prow["n"] or 0}
+            out_events.append(row)
+            if ev["status"] == "active" and total >= 4 and \
+                    credited >= 0.5 * total:
+                candidates.append(row)
+    return {"events_checked": len(out_events), "candidates": candidates,
+            "already_labeled": [e for e in out_events
+                                if e["status"] != "active"],
+            "all": out_events}
+
+
+def label_event_rainout(event_name: str, badge: str = "RAINED OUT",
+                        apply: bool = False, db_path=None) -> dict:
+    """Stamp a shut-down event with its cancelled status + badge (the
+    authoritative everything-is-shut-down signal the payout/HIO guards
+    read). Kerry-directed per event; dry-run default."""
+    with _connect(db_path) as conn:
+        ev = conn.execute(
+            "SELECT id, item_name, COALESCE(status,'active') AS status, "
+            "status_badge FROM events WHERE item_name = ? COLLATE NOCASE",
+            (event_name,)).fetchone()
+    if not ev:
+        return {"error": f"event not found: {event_name}"}
+    out = {"event": ev["item_name"], "current_status": ev["status"],
+           "current_badge": ev["status_badge"], "badge": badge,
+           "apply": apply}
+    if ev["status"] != "active":
+        out["note"] = "already labeled"
+        return out
+    if apply:
+        ok = set_event_status(ev["id"], "cancelled",
+                              reason=f"{badge} — labeled via rain-out audit",
+                              badge=badge, db_path=db_path)
+        out["applied"] = bool(ok)
+    else:
+        out["note"] = "dry-run — pass apply to stamp"
+    return out
+
+
 def get_hio_pot(db_path=None) -> dict:
     """Running Hole-In-One pot (Kerry 2026-07-20: 'I need a running
     Hole-In-One pot amount. Can you add up from all events?').
