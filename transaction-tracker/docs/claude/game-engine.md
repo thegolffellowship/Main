@@ -382,8 +382,15 @@ below wherever they conflict.
     decides the hole), the recorded `NH` result, and a member-display treatment.
   - **Putt-offs (GAP).** Another all-square resolution class (Chandler/Peterson
     s9.12, Niester/Wade s9.15). Needs a recordation path + display.
-  - **All-square resolution ladder.** Canonical order (extra holes → putt-off →
-    …?) and how each is recorded and shown is unspecified — for CA.
+  - **All-square resolution ladder — notation RATIFIED (Kerry 2026-07-20):
+    KEEP BOTH conventions; the label describes the MECHANISM.** `NH`
+    (holes played + H, Ryder style — e.g. `10H`) when extra hole(s) were
+    actually played; `Putt Off` when a putt-off decided it. Nothing
+    relabels; both are live (Austin's two 10H matches, SA's three
+    Putt Offs). The future untethered app PRESENTS the directional choice
+    to players on an AS knockout match (Putt-Off vs Extra Holes, with
+    practical constraints surfaced) and the pick drives recordation +
+    label — see the tie-resolution decision flow below.
   - **Tie-resolution decision flow (ultimate-app).** At end of regulation on an
     All Square match the app presents STAGE-AWARE options (rules-derived): a
     **pool** round (tie-allowed stage) offers "End in a tie / Halved" (½ each
