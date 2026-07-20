@@ -264,3 +264,24 @@ window.addEventListener("resize", _setStickyOffsets);
         update();
     }
 })();
+
+// External links open in a NEW window, app-wide (Kerry 2026-07-20:
+// "Any link that sends to an outside website outside of a Tracker URL
+// should be brought up in a separate window"). Capture-phase delegation
+// so it covers dynamically-rendered anchors on every page without each
+// call site remembering target=_blank. Protocol handlers (venmo://,
+// mailto:, tel:) are left alone — they hand off to an app, not a page.
+document.addEventListener("click", function (e) {
+    const a = e.target && e.target.closest ? e.target.closest("a[href]") : null;
+    if (!a || a.target === "_blank") return;
+    const raw = a.getAttribute("href") || "";
+    if (/^(mailto:|tel:|sms:|venmo:|javascript:|#)/i.test(raw)) return;
+    try {
+        const u = new URL(a.href, location.href);
+        if ((u.protocol === "http:" || u.protocol === "https:") &&
+                u.origin !== location.origin) {
+            a.target = "_blank";
+            a.rel = a.rel ? a.rel + " noopener" : "noopener";
+        }
+    } catch (_) { /* unparsable href — leave default behavior */ }
+}, true);
