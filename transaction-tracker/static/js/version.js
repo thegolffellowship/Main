@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.129.5";
+window.TGF_VERSION = "2.129.6";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.129.6",
+    date: "2026-07-20",
+    changes: [
+      "Cedar Creek '$229' mystery SOLVED: the Payouts sidebar shows tgf_events.total_purse (a stored screenshot-import column), not the sum of payout rows — the rain-out's shell row had $229 stored and ZERO payout rows, so every row-only sweep truthfully reported 'removed: 0' while the sidebar kept showing money. clear-auto '<event>|all' now also deletes matched tgf_events rows left with zero payout rows and reports them (empty_event_rows_deleted with the purse figure).",
+      "Payouts page mobile (Kerry 2026-07-20 screenshot): with no event selected, the events list now takes the screen and the 'Select an event' placeholder shrinks to a slim bottom bar — 'uncover many more events'. Picking an event restores the compact-list + detail split.",
+      "scoring-payouts-restore arg parsing: event codes containing pipes ('s18.3 SAN ANTONIO KICKOFF | Cedar Creek') no longer swallow the |apply flag (rpartition + literal-apply check).",
+    ],
+  },
   {
     version: "2.129.5",
     date: "2026-07-20",
