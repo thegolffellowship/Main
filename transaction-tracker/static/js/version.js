@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.130.9";
+window.TGF_VERSION = "2.130.10";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.130.10",
+    date: "2026-07-20",
+    changes: [
+      "HIO pot includes scheduled (future) events as soon as they have registrations (Kerry: 'The event itself should be included just like the event's pot is included in that event's payouts') — the HIO dollars are collected at registration, and each event's contribution self-corrects as its field grows because the pot recomputes live. Rain-out and cancelled-event guards unchanged.",
+    ],
+  },
   {
     version: "2.130.9",
     date: "2026-07-20",

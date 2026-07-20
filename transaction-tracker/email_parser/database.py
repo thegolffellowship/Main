@@ -37458,11 +37458,15 @@ def get_hio_pot(db_path=None) -> dict:
     payout). Shut-down events (rain-outs — badge or credited-registration
     backstop) contributed nothing: their fees were credited back.
 
-    Carry-in: app_settings 'hio_pot_carry_in' (a DIAL — the end-of-2025
-    balance Kerry recalls near $2000; set it once found, with
-    'hio_pot_carry_in_note' for provenance). Each event row carries
-    `running` = carry-in + contributions through that event."""
-    from email_parser.timezone_utils import today_central_str
+    Carry-in: app_settings 'hio_pot_carry_in' (a DIAL — ratified $1,822,
+    2026-07-20; 'hio_pot_carry_in_note' carries provenance). Each event
+    row carries `running` = carry-in + contributions through that event.
+
+    Scheduled (future) events are INCLUDED as soon as they have
+    registrations (Kerry 2026-07-20: 'The event itself should be included
+    just like the event's pot is included in that event's payouts') —
+    the HIO dollars are collected at registration, and the contribution
+    self-corrects as the field grows because the pot recomputes live."""
     m9, m18 = _load_games_matrix(db_path=db_path)
     try:
         carry_in = float(get_app_setting("hio_pot_carry_in", db_path=db_path)
@@ -37475,8 +37479,8 @@ def get_hio_pot(db_path=None) -> dict:
         rows = [dict(r) for r in conn.execute(
             """SELECT item_name, event_date, COALESCE(status,'active') AS status
                  FROM events
-                WHERE event_date IS NOT NULL AND event_date <= ?
-                ORDER BY event_date""", (today_central_str(),)).fetchall()]
+                WHERE event_date IS NOT NULL
+                ORDER BY event_date""").fetchall()]
         for ev in rows:
             if ev["status"] != "active" or \
                     _event_looks_rained_out(conn, ev["item_name"]):
