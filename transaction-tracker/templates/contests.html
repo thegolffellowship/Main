@@ -939,6 +939,8 @@
         /* Handicap-stroke pop dots: a clear player-colored dot per stroke,
            pinned to the top-right of the hole cell so it reads at a glance
            (Kerry 2026-07-19, replacing the near-invisible grey tick). */
+        /* Per-hole match-points rows — POOL cards only (every hole counts). */
+        .mpv2 table.mp-sc tr.mp-sc-pts td, .mpv2 table.mp-sc tr.mp-sc-pts th { font-size: 0.56rem; color: var(--text-placeholder, #9CA3AF); padding-top: 0; }
         .mpv2 .mp-sc-pops { position: absolute; top: 1px; right: 1px; display: flex; gap: 1px; }
         .mpv2 .mp-sc-pop { display: inline-block; width: 6px; height: 6px; border-radius: 50%; box-shadow: 0 0 0 1px #fff; }
         .mpv2 .mp-sc-pop.a { background: var(--mp-slate); }
@@ -2771,9 +2773,13 @@
             return `<span class="mp-sc-pops">${d}</span>`;
         };
         const cell = (v, cls) => `<td class="${cls || ''}">${v == null ? '' : v}</td>`;
+        // POOL cards show the per-hole Pts rows — every pool hole counts toward
+        // Match Play points, so members see where the points came from.
+        // KNOCKOUT cards don't (Kerry 2026-07-19: circles + margin carry it).
+        const showPts = !!o.pool;
         function block(start, len) {
-            const hs = [], pars = [], aS = [], bS = [];
-            let parTot = 0, aStr = 0, bStr = 0;
+            const hs = [], pars = [], aS = [], bS = [], aP = [], bP = [];
+            let parTot = 0, aStr = 0, bStr = 0, aPts = 0, bPts = 0;
             let firstNo = null, lastNo = null;
             for (let i = start; i < start + len; i++) {
                 const h = gen.holes[i]; if (!h) continue;
@@ -2787,6 +2793,11 @@
                 const bMk = h.winner === 'B' ? `<span class="mp-sc-mk won-b">${h.parB}</span>` : (h.parB == null ? '' : h.parB);
                 aS.push(`<td class="${'strk' + dim}">${aMk}${popDots(h.srA, 'a')}</td>`);
                 bS.push(`<td class="${'strk' + dim}">${bMk}${popDots(h.srB, 'b')}</td>`);
+                if (showPts) {
+                    aP.push(cell(h.ptsA, dim.trim()));
+                    bP.push(cell(h.ptsB, dim.trim()));
+                    if (h.played) { aPts += (h.ptsA || 0); bPts += (h.ptsB || 0); }
+                }
                 if (h.played) { aStr += (h.parA || 0); bStr += (h.parB || 0); }
             }
             // GG cards carry the real hole numbers in the Hole row, so a
@@ -2795,16 +2806,17 @@
                 ? ''
                 : (start === 0 && gen.count === 18 ? 'Front 9' : (gen.count === 18 ? 'Back 9' : (gen.nine === 'back' ? 'Back 9' : 'Front 9')));
             const parRow = (!isGG) ? `<tr class="mp-sc-par"><th class="mp-sc-rowlabel">Par</th>${pars.join('')}<th class="mp-sc-tot">${parTot}</th></tr>` : '';
-            // Match play has no per-hole Stableford — the running state is the
-            // hole-winner circles + the margin, so no "Pts" rows here (Kerry
-            // 2026-07-19). Gross total rides along in the Tot column.
+            const aPtsRow = showPts ? `<tr class="mp-sc-pts"><th class="mp-sc-rowlabel">Pts</th>${aP.join('')}<th class="mp-sc-tot">${aPts}</th></tr>` : '';
+            const bPtsRow = showPts ? `<tr class="mp-sc-pts"><th class="mp-sc-rowlabel">Pts</th>${bP.join('')}<th class="mp-sc-tot">${bPts}</th></tr>` : '';
             return `
             ${label ? `<div class="mp-sc-block-label">${label}</div>` : ''}
             <table class="mp-sc">
                 <tr class="mp-sc-hole"><th class="mp-sc-rowlabel">Hole</th>${hs.join('')}<th class="mp-sc-tot">Tot</th></tr>
                 ${parRow}
                 <tr class="mp-sc-strokes"><th class="mp-sc-rowlabel mp-mono-cell">${aMono}</th>${aS.join('')}<th class="mp-sc-tot">${aStr}</th></tr>
+                ${aPtsRow}
                 <tr class="mp-sc-strokes"><th class="mp-sc-rowlabel mp-mono-cell">${bMono}</th>${bS.join('')}<th class="mp-sc-tot">${bStr}</th></tr>
+                ${bPtsRow}
             </table>`;
         }
         let nines;
@@ -2855,6 +2867,7 @@
         // Only ever render REAL Golf Genius hole detail — never a fabricated
         // placeholder. Without GG detail the card shows just the result strip
         // (a made-up scorecard/pops that don't match GG is worse than none).
+        o.pool = !!opts.pool;   // pool cards render the per-hole Pts rows
         let gen = null;
         if (opts.hasResult && o.gg) {
             gen = mpHolesFromGG(o.gg, o);
@@ -2907,7 +2920,9 @@
             seedKey: [p1, p2, m.event_name || '', m.event_date_val || m.match_date || ''].join('|'),
             holesHint: (m.event_name || '') + ' ' + (m.notes || '')
         };
-        return mpMatchCard(o, { metaL, status, prov, hasResult: played, live: false });
+        // Pool cards show per-hole match points (Kerry 2026-07-19: pool play
+        // shows points, knockout doesn't — every pool hole counts).
+        return mpMatchCard(o, { metaL, status, prov, hasResult: played, live: false, pool: true });
     }
 
     // Map GG's current match state (from /api/cmp/live-match) onto our A/B sides
