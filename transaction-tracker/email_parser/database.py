@@ -37477,7 +37477,8 @@ def get_hio_pot(db_path=None) -> dict:
     events_out, total = [], 0.0
     with _connect(db_path) as conn:
         rows = [dict(r) for r in conn.execute(
-            """SELECT item_name, event_date, COALESCE(status,'active') AS status
+            """SELECT id, item_name, event_date,
+                      COALESCE(status,'active') AS status
                  FROM events
                 WHERE event_date IS NOT NULL
                 ORDER BY event_date""").fetchall()]
@@ -37504,9 +37505,19 @@ def get_hio_pot(db_path=None) -> dict:
                     _event_looks_rained_out(conn, ev["item_name"]):
                 continue
             counts = _event_player_counts(conn, ev["item_name"])
+            # True field = the larger of registrations and distinct
+            # players on the event's banked scorecards (Kerry 2026-07-20,
+            # Hill Country Matches: 3 golfers were staged as individuals
+            # so registrations undercount; "if you look at portal results
+            # you'll find 32 unique golfers"). Imports self-correct this.
+            banked = conn.execute(
+                """SELECT COUNT(DISTINCT player_name) AS n
+                     FROM scoring_rounds WHERE event_id = ?""",
+                (ev["id"],)).fetchone()["n"] or 0
             name_u = ev["item_name"].upper()
             players = next((n for pat, n in overrides.items()
-                            if pat in name_u), counts["players"])
+                            if pat in name_u),
+                           max(counts["players"] or 0, banked))
             if any(p in name_u for p in pats_27h):
                 hio = float(players or 0) * 3.0
             else:

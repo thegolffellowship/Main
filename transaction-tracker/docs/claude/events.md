@@ -1196,7 +1196,12 @@ $2/player 18-hole; 27-hole days like HILL COUNTRY MATCHES are $3/player
 'HILL COUNTRY MATCHES'). Field-size overrides for days where tracker
 registrations lag the true field live in `hio_player_count_overrides`
 (format `NAME PATTERN=COUNT,...`; currently `HILL COUNTRY MATCHES=32`
-— Kerry: 32 played on 2026-05-17, tracker holds 29 registrations). Scheduled (future) events are INCLUDED as soon as
+— Kerry: 32 played on 2026-05-17, tracker holds 29 registrations
+because 3 golfers were staged as GG individuals outside the match
+pairings). Absent an override, the field is MAX(registrations,
+distinct players on the event's banked scorecards) — importing an
+event's cards self-corrects its pot contribution, so overrides are a
+stopgap until import. Scheduled (future) events are INCLUDED as soon as
 they have registrations (Kerry 2026-07-20: the HIO dollars are collected
 at registration, like the event's own pots in its payouts); the
 contribution self-corrects as the field grows since the pot recomputes
