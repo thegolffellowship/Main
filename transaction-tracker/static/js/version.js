@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.130.7";
+window.TGF_VERSION = "2.130.8";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.130.8",
+    date: "2026-07-20",
+    changes: [
+      "scoring-hio-gross: GG truncates round-selector labels (~28 chars), cutting off the parenthetical dates — round dates now come from prefix-matching the truncated label against the archive's full event labels, with label-embedded dates as fallback.",
+    ],
+  },
   {
     version: "2.130.7",
     date: "2026-07-20",
