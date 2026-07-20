@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.126.0";
+window.TGF_VERSION = "2.126.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.126.1",
+    date: "2026-07-20",
+    changes: [
+      "Course registry migration fix: the live run aborted at the Cedar Creek merge because course_tees' UNIQUE(course_id, tee_name, slope, rating) rejects moving an archived tee whose spec never actually changed (GG archived the course anyway). Tees now move one at a time — an identical-spec tee COLLAPSES into the winner's existing row (rounds re-pin to the surviving tee_id, holes fill gaps, duplicate deleted; ratings identical so nothing moves numerically), distinct tees carry over with their version tag. Each merge/stub step is also isolated so one failure can't abort the rest of the migration. First run had completed only the Quarry merge (verified: 335 rounds on the canonical row); this deploy completes the remaining 5 merges, 26 stub deletions, and the facilities backfill.",
+    ],
+  },
   {
     version: "2.126.0",
     date: "2026-07-20",
