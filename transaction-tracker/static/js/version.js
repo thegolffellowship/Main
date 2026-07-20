@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.130.3";
+window.TGF_VERSION = "2.130.4";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.130.4",
+    date: "2026-07-20",
+    changes: [
+      "scoring-hio-archive:<subdomains> bridge — per-event field sizes and games-matrix HIO contributions computed from the GG History archive (distinct leaderboard names per event; 9/18 from banked hole rounds where available), for reconstructing the 2025 HIO pot carry-in after the Julius Jenkins payout.",
+    ],
+  },
   {
     version: "2.130.3",
     date: "2026-07-20",

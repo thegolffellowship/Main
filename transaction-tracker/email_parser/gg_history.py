@@ -2083,6 +2083,66 @@ def search_customers_for_link(q: str, limit: int = 10, db_path=None) -> list:
         return [dict(r) for r in rows]
 
 
+def hio_archive_events(subdomains: list, db_path=None) -> dict:
+    """Per-event field sizes + games-matrix HIO contributions from the GG
+    HISTORY archive — for reconstructing the 2025 HIO pot carry-in
+    (Kerry 2026-07-20: how much did fall 2025 play add in Austin + SA
+    after the Julius Jenkins payout?).
+
+    players = distinct names on the event's result leaderboards.
+    holes   = holes_played from banked hole-by-hole rounds when the
+              event's gg_round_id was imported, else None (caller
+              decides 9 vs 18).
+    hio9/hio18 = the LIVE games matrix holeInOne amount at that player
+              count under each assumption. The matrix is today's ratified
+              rule — best available proxy for 2025."""
+    from email_parser.database import _connect, DB_PATH, _load_games_matrix
+    m9, m18 = _load_games_matrix(db_path=db_path)
+
+    def _num(v):
+        try:
+            return float(str(v).replace("$", "").replace(",", "") or 0)
+        except (TypeError, ValueError):
+            return 0.0
+
+    out = []
+    with _connect(db_path or DB_PATH) as conn:
+        ensure_gg_history_tables(conn)
+        marks = ",".join("?" * len(subdomains))
+        rows = conn.execute(
+            f"""SELECT e.id, e.event_label, e.event_date, e.course,
+                       e.chapter, e.season, e.gg_round_id, p.subdomain,
+                       (SELECT COUNT(DISTINCT r.player_name)
+                          FROM gg_history_results r
+                         WHERE r.gg_event_id = e.id) AS players
+                FROM gg_history_events e
+                JOIN gg_history_portals p ON p.id = e.portal_id
+                WHERE p.subdomain IN ({marks})
+                ORDER BY p.subdomain, e.event_date, e.id""",
+            list(subdomains)).fetchall()
+        for r in rows:
+            holes = None
+            if r["gg_round_id"]:
+                h = conn.execute(
+                    """SELECT holes_played, COUNT(*) AS n
+                         FROM scoring_rounds
+                        WHERE gg_round_id = ? AND holes_played IS NOT NULL
+                        GROUP BY holes_played ORDER BY n DESC LIMIT 1""",
+                    (str(r["gg_round_id"]),)).fetchone()
+                if h:
+                    holes = h["holes_played"]
+            n = str(r["players"] or 0)
+            out.append({
+                "subdomain": r["subdomain"], "event": r["event_label"],
+                "date": r["event_date"], "course": r["course"],
+                "season": r["season"], "players": r["players"],
+                "holes": holes,
+                "hio9": round(_num((m9.get(n) or {}).get("holeInOne")), 2),
+                "hio18": round(_num((m18.get(n) or {}).get("holeInOne")), 2),
+            })
+    return {"events": out, "count": len(out)}
+
+
 def portal_overview(db_path=None) -> dict:
     """Per-portal coverage for the review UI: pages, standings, events,
     results, hole-by-hole rounds, pending names."""
