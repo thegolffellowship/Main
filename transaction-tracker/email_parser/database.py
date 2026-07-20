@@ -37500,9 +37500,22 @@ def get_hio_pot(db_path=None) -> dict:
             pat, _, num = part.partition("=")
             if pat.strip() and num.strip().isdigit():
                 overrides[pat.strip().upper()] = int(num.strip())
+        # Future events join the pot only when NEXT IN LINE (Kerry
+        # 2026-07-20: "you can't count those until the prior event is
+        # completed") — everything dated through today counts; among
+        # later dates only the earliest upcoming date counts, and the
+        # ones behind it wait their turn.
+        from email_parser.timezone_utils import today_central_str
+        _today = today_central_str()
+        _future = sorted({ev["event_date"] for ev in rows
+                          if ev["status"] == "active"
+                          and ev["event_date"] > _today})
+        _next_date = _future[0] if _future else None
         for ev in rows:
             if ev["status"] != "active" or \
                     _event_looks_rained_out(conn, ev["item_name"]):
+                continue
+            if ev["event_date"] > _today and ev["event_date"] != _next_date:
                 continue
             counts = _event_player_counts(conn, ev["item_name"])
             # True field = the larger of registrations and distinct
