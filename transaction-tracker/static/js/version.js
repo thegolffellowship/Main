@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.125.0";
+window.TGF_VERSION = "2.125.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.125.1",
+    date: "2026-07-20",
+    changes: [
+      "scoring-mp-lock classifier: a halved pool match (stored 'Tied'/no winner, GG card AS/no winner) is agreement, not a conflict — locks as gg-verified. Caught by the SA dry run (Rideout/McCrary s18.7).",
+    ],
+  },
   {
     version: "2.125.0",
     date: "2026-07-20",

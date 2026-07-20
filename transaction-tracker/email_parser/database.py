@@ -26131,6 +26131,11 @@ def cmp_lock_verified_results(season: str | None = None,
             elif (stored_m == gg_margin and stored_w and gg_winner and
                   _cmp_person_key(stored_w) == _cmp_person_key(gg_winner)):
                 note = "gg-verified 2026: matches GG's own match card exactly"
+            elif stored_m == "AS" and gg_margin == "AS" and \
+                    not stored_w and not gg_winner:
+                # halved pool match (tie allowed in pool play): both sides
+                # agree — AS/Tied with no winner on either record.
+                note = "gg-verified 2026: halved, matches GG's own match card"
             else:
                 out["conflicts"].append(
                     {**tag, "gg_winner": gg_winner, "gg_margin": gg_margin})
