@@ -5,6 +5,7 @@ window.TGF_CHANGELOG = [
     date: "2026-07-20",
     changes: [
       "Rain-out guard fix: the registration query referenced items.status, which doesn't exist (that column lives on acct_transactions) — every payout assembly errored with 'no such column'. Guard now counts credited/WD registrations without the phantom filter.",
+      "Rain-out guard reads the BADGE first (Kerry: 'It should simply see that the event was rained out. We have a badge on it. That means everything is shut down.'): events.status != 'active' — stamped by the cancel flow with badges like RAINED OUT — is the authoritative shut-down signal for payout assembly. The credited-registrations ratio stays only as a backstop for events cancelled before the status field existed.",
     ],
   },
   {

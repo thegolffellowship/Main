@@ -37020,12 +37020,21 @@ def _rows_from_place_ladder(ranking: list, amounts: list, category: str,
 
 
 def _event_looks_rained_out(conn, event_name: str) -> dict | None:
-    """Rules-based rain-out detection (Kerry 2026-07-20, s9.18 Cedar Creek:
-    'It was a RAIN OUT. There were no winners... all amounts were credited').
-    When the event's registrations are overwhelmingly credited/WD'd, the
-    event produced no winners and game payouts must not be assembled or
-    auto-recorded. Threshold 75% so ordinary per-player WDs (s18.7 had two)
-    never trip it. Returns {credited, total} when rained out, else None."""
+    """No payouts for a shut-down event (Kerry 2026-07-20, s9.18 Cedar
+    Creek: 'It was a RAIN OUT. We have a badge on it. That means
+    everything is shut down.').
+
+    AUTHORITATIVE check: events.status != 'active' — the cancel flow
+    (set_event_status) stamps status cancelled/postponed with a badge like
+    'RAINED OUT'. Backstop for anything cancelled before the status field
+    existed: registrations overwhelmingly (>=75%) credited/WD'd. Returns
+    a reason dict when shut down, else None."""
+    ev = conn.execute(
+        """SELECT status, status_badge FROM events
+            WHERE item_name = ? COLLATE NOCASE""", (event_name,)).fetchone()
+    if ev and (ev["status"] or "active") != "active":
+        return {"badge": ev["status_badge"] or ev["status"],
+                "source": "event_status"}
     row = conn.execute(
         """SELECT COUNT(*) AS total,
                   SUM(CASE WHEN LOWER(COALESCE(transaction_status,''))
@@ -37036,7 +37045,8 @@ def _event_looks_rained_out(conn, event_name: str) -> dict | None:
         (event_name,)).fetchone()
     total, credited = row["total"] or 0, row["credited"] or 0
     if total >= 4 and credited >= 0.75 * total:
-        return {"credited": credited, "total": total}
+        return {"credited": credited, "total": total,
+                "source": "credited_registrations"}
     return None
 
 
@@ -37100,9 +37110,12 @@ def assemble_event_game_payouts(event_name: str, db_path=None) -> dict:
         ev = dict(ev)
         rained = _event_looks_rained_out(conn, ev["item_name"])
         if rained:
-            return {"error": f"rain-out: {rained['credited']} of "
-                             f"{rained['total']} registrations credited/WD "
-                             f"— no winners, game payouts not assembled",
+            why = (f"event marked {rained['badge']}"
+                   if rained.get("source") == "event_status" else
+                   f"{rained['credited']} of {rained['total']} registrations "
+                   f"credited/WD")
+            return {"error": f"event shut down ({why}) — no winners, game "
+                             f"payouts not assembled",
                     "rained_out": True}
         counts = _event_player_counts(conn, ev["item_name"])
     holes = _event_holes_type(ev["item_name"], ev.get("format"))
