@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.129.14";
+window.TGF_VERSION = "2.129.15";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.129.15",
+    date: "2026-07-20",
+    changes: [
+      "Refund memo reason condenses to Kerry's exact shorthand (2026-07-20): a stored removal reason like 'Withdrew — Injury' renders as 'WD (Injury)' — full memo 'Rolando Campos - WD (Injury) Refund for Match Play 2026'. Withdrew/withdrawal/withdrawn heads map to WD; the detail after a dash/colon/parenthesis becomes the parenthetical.",
+    ],
+  },
   {
     version: "2.129.14",
     date: "2026-07-20",

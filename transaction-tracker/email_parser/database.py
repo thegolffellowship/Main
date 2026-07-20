@@ -20419,15 +20419,27 @@ def get_refunds_overview(db_path: str | Path | None = None,
                     None)
                 label = (f"{rm.get('contest_type')} {rm.get('season')} "
                          f"({rm.get('chapter')}) — removal refund")
-                # Venmo memo format (Kerry 2026-07-20): "[Player] -
-                # [Reason] Refund for [Contest]" — no "City" prefix, no
-                # chapter, no trailing "removal refund". A long free-text
-                # reason falls back to the generic word.
+                # Venmo memo format (Kerry 2026-07-20, refined same day):
+                # "[Player] - [Reason] Refund for [Contest]" where a
+                # stored reason like "Withdrew — Injury" condenses to
+                # "WD (Injury)". No "City" prefix, no chapter, no
+                # trailing "removal refund".
                 _contest = re.sub(r"^City\s+", "",
                                   rm.get("contest_type") or "", flags=re.I)
-                _reason = (rm.get("reason") or "").strip()
-                _reason = (_reason.title()
-                           if _reason and len(_reason) <= 20 else "Removal")
+                _raw = (rm.get("reason") or "").strip()
+                _head, _detail = _raw, ""
+                _m = re.match(r"^\s*([^—:-]+?)\s*(?:[—:-]|\()\s*(.*?)\)?\s*$",
+                              _raw)
+                if _m:
+                    _head, _detail = _m.group(1).strip(), _m.group(2).strip()
+                if re.match(r"^(withdrew|withdrawal|withdrawn|wd)\b",
+                            _head, flags=re.I):
+                    _head = "WD"
+                elif _head:
+                    _head = _head.title() if len(_head) <= 20 else "Removal"
+                else:
+                    _head = "Removal"
+                _reason = _head + (f" ({_detail.title()})" if _detail else "")
                 memo = (f"{rm.get('customer_name')} - {_reason} Refund "
                         f"for {_contest} {rm.get('season')}").strip()
                 if paid:
