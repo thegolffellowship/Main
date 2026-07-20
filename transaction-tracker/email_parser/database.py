@@ -37019,6 +37019,71 @@ def _rows_from_place_ladder(ranking: list, amounts: list, category: str,
     return rows
 
 
+def _event_looks_rained_out(conn, event_name: str) -> dict | None:
+    """Rules-based rain-out detection (Kerry 2026-07-20, s9.18 Cedar Creek:
+    'It was a RAIN OUT. There were no winners... all amounts were credited').
+    When the event's registrations are overwhelmingly credited/WD'd, the
+    event produced no winners and game payouts must not be assembled or
+    auto-recorded. Threshold 75% so ordinary per-player WDs (s18.7 had two)
+    never trip it. Returns {credited, total} when rained out, else None."""
+    row = conn.execute(
+        """SELECT COUNT(*) AS total,
+                  SUM(CASE WHEN LOWER(COALESCE(transaction_status,''))
+                           IN ('wd','credited','refunded') THEN 1 ELSE 0 END)
+                      AS credited
+             FROM items
+            WHERE item_name = ? COLLATE NOCASE
+              AND COALESCE(status,'active') = 'active'""",
+        (event_name,)).fetchone()
+    total, credited = row["total"] or 0, row["credited"] or 0
+    if total >= 4 and credited >= 0.75 * total:
+        return {"credited": credited, "total": total}
+    return None
+
+
+def clear_event_auto_payouts(event_name: str, db_path=None) -> dict:
+    """Remove an event's auto-recorded payout rows (description 'auto:…')
+    and their PENDING ledger entries — never a matched real Venmo
+    transaction. Built for wrongly auto-recorded events (the s9.18 rain-out);
+    manual/screenshot rows are untouched."""
+    with _connect(db_path) as conn:
+        ev = conn.execute(
+            "SELECT item_name FROM events WHERE item_name = ? COLLATE NOCASE",
+            (event_name,)).fetchone()
+        if not ev:
+            return {"error": f"event not found: {event_name}"}
+        full = ev["item_name"].strip()
+        m = _GG_EVENT_CODE_COMPOUND_RE.match(full)
+        bare = m.group(1).lower() if m else full.lower()
+        trow = conn.execute(
+            "SELECT id FROM tgf_events WHERE LOWER(code) IN (?, ?)",
+            (full.lower(), bare)).fetchone()
+        if not trow:
+            return {"event": full, "removed": 0,
+                    "note": "no tgf_events row — nothing recorded"}
+        removed = pending_deleted = kept_matched = 0
+        for r in conn.execute(
+                "SELECT id, acct_transaction_id FROM tgf_payouts "
+                "WHERE event_id = ? AND description LIKE 'auto:%'",
+                (trow["id"],)).fetchall():
+            if r["acct_transaction_id"]:
+                txn = conn.execute(
+                    "SELECT id, source FROM acct_transactions WHERE id = ?",
+                    (r["acct_transaction_id"],)).fetchone()
+                if txn and txn["source"] == "pending":
+                    conn.execute("DELETE FROM acct_transactions WHERE id = ?",
+                                 (txn["id"],))
+                    pending_deleted += 1
+                elif txn:
+                    kept_matched += 1
+            conn.execute("DELETE FROM tgf_payouts WHERE id = ?", (r["id"],))
+            removed += 1
+        conn.commit()
+    return {"event": full, "removed": removed,
+            "pending_ledger_deleted": pending_deleted,
+            "matched_venmo_kept": kept_matched}
+
+
 def assemble_event_game_payouts(event_name: str, db_path=None) -> dict:
     """Server-side assembly of every DETERMINED winner for one event into
     payout rows — the single source of truth behind both the Games tab's
@@ -37034,6 +37099,12 @@ def assemble_event_game_payouts(event_name: str, db_path=None) -> dict:
         if not ev:
             return {"error": f"event not found: {event_name}"}
         ev = dict(ev)
+        rained = _event_looks_rained_out(conn, ev["item_name"])
+        if rained:
+            return {"error": f"rain-out: {rained['credited']} of "
+                             f"{rained['total']} registrations credited/WD "
+                             f"— no winners, game payouts not assembled",
+                    "rained_out": True}
         counts = _event_player_counts(conn, ev["item_name"])
     holes = _event_holes_type(ev["item_name"], ev.get("format"))
     matrix = m9 if holes == 9 else m18
