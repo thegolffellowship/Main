@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.124.3";
+window.TGF_VERSION = "2.124.4";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.124.4",
+    date: "2026-07-20",
+    changes: [
+      "Match Play standings: tapping a player's name now scrolls that name to the top of the window (under the sticky header stack) when their match cards expand, so the cards fill the screen instead of opening below the fold (Kerry 2026-07-20).",
+    ],
+  },
   {
     version: "2.124.3",
     date: "2026-07-19",
