@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.129.24";
+window.TGF_VERSION = "2.129.25";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.129.25",
+    date: "2026-07-20",
+    changes: [
+      "Apply Credit auto-sends the balance-due email (Kerry 2026-07-20): when the member still owes after credit is applied, the STANDARD balance-due email with the prepared Venmo request link goes out automatically on Apply — a pre-checked 'Auto-send balance-due email' box in the modal's note section opts out per-application. Works on both the item and GG-RSVP apply paths (server-side send, so mobile behaves identically); the confirmation alert reports where the email went, and a failed send tells you to use the manual Send Balance Email instead of failing silently.",
+    ],
+  },
   {
     version: "2.129.24",
     date: "2026-07-20",

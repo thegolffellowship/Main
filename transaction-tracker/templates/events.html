@@ -11413,7 +11413,8 @@
                 const noteEl = document.getElementById('credit-balance-note');
                 if (noteEl) {
                     if (amtOwed != null && amtOwed > 0.005) {
-                        noteEl.innerHTML = `<strong>Note:</strong> Collect remaining ${fmt2(amtOwed)} from player before or after applying.`;
+                        noteEl.innerHTML = `<strong>Note:</strong> Collect remaining ${fmt2(amtOwed)} from player before or after applying.
+                            <label style="display:block;margin-top:0.4rem;font-weight:600;cursor:pointer;"><input type="checkbox" id="credit-auto-email" checked style="margin-right:0.35rem;">Auto-send balance-due email with Venmo request (${fmt2(amtOwed)})</label>`;
                         noteEl.style.display = '';
                     } else {
                         noteEl.style.display = 'none';
@@ -11514,6 +11515,7 @@
                     side_games: curSel.side_games || prev.side_games || '',
                     tee_choice: curSel.tee_choice || prev.tee_choice || '',
                     user_status: curSel.user_status || prev.user_status || '',
+                    auto_email: (document.getElementById('credit-auto-email') || {checked: true}).checked,
                 })
             });
             if (doVenmo) {
@@ -11523,6 +11525,14 @@
             const resp = await applyPromise;
             const data = await resp.json();
             if (!resp.ok) { alert(data.error || 'Failed to apply credit.'); return; }
+            // Surface the auto-sent balance-due email result (Kerry
+            // 2026-07-20) without blocking the flow.
+            const be = data.balance_email;
+            if (be && be.status === 'sent') {
+                alert(`Credit applied. Balance-due email with Venmo request sent to ${be.to}.`);
+            } else if (be && (be.error || be.status === 'failed')) {
+                alert('Credit applied, but the balance-due email did NOT send — use Send Balance Email on the player row.');
+            }
 
             closeApplyCreditModal();
 

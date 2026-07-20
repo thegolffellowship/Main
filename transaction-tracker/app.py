@@ -5530,6 +5530,7 @@ def api_apply_credit_to_rsvp(item_id):
         return jsonify({"error": result.get("error", "Failed")}), 400
     _arm_excess_venmo_watch(result, data)
     _send_credit_entry_confirmation(item_id, result)
+    result["balance_email"] = _maybe_auto_send_balance_email(item_id, result, data)
     return jsonify(result)
 
 
@@ -5662,6 +5663,7 @@ def api_gg_rsvp_apply_credit(rsvp_id):
         return jsonify({"error": result.get("error", "Failed")}), 400
     _arm_excess_venmo_watch(result, data)
     _send_credit_entry_confirmation(new_item_id, result)
+    result["balance_email"] = _maybe_auto_send_balance_email(new_item_id, result, data)
     return jsonify({**result, "item_id": new_item_id})
 
 
@@ -5864,27 +5866,49 @@ def api_balance_due_email_preview(item_id):
     return jsonify(result)
 
 
-@app.route("/api/items/<int:item_id>/balance-due-email/send", methods=["POST"])
-@require_role("manager")
-def api_balance_due_email_send(item_id):
-    """Send the balance-due Venmo email. During testing, sends to override recipient."""
+def _maybe_auto_send_balance_email(item_id: int, result: dict,
+                                   data: dict) -> dict | None:
+    """Auto-send the standard balance-due Venmo email after Apply Credit
+    when the member still owes money (Kerry 2026-07-20: 'auto-send the
+    standard email we created with the prepared Venmo link, with an
+    option to uncheck'). The modal passes auto_email; default ON."""
+    try:
+        if not data.get("auto_email", True):
+            return {"skipped": "unchecked"}
+        owed = result.get("remaining_owed")
+        if owed is None:
+            owed = result.get("amount_owed") or 0
+        if float(owed) <= 0:
+            return None
+        return _send_balance_due_email_now(item_id)
+    except Exception:
+        logger.warning("auto balance-due email failed for item %s",
+                       item_id, exc_info=True)
+        return {"error": "auto-send failed"}
+
+
+def _send_balance_due_email_now(item_id: int) -> dict:
+    """Build + send the standard balance-due Venmo email for an item.
+    Shared by the manual send route and the Apply Credit auto-send
+    (Kerry 2026-07-20: when the member owes more, auto-send the
+    standard email with the prepared Venmo link)."""
     payload = _build_balance_due_email(item_id)
     if not payload:
-        return jsonify({"error": "Failed to build email"}), 400
+        return {"error": "Failed to build email"}
     if "error" in payload:
-        return jsonify(payload), 400
+        return payload
 
     tenant_id = os.getenv("AZURE_TENANT_ID")
     client_id = os.getenv("AZURE_CLIENT_ID")
     client_secret = os.getenv("AZURE_CLIENT_SECRET")
     from_address = os.getenv("EMAIL_ADDRESS")
     if not all([tenant_id, client_id, client_secret, from_address]):
-        return jsonify({"error": "Email credentials not configured on server"}), 500
+        return {"error": "Email credentials not configured on server"}
 
     # During testing, route to admin override; remove env var to send to player.
     to_address = payload["override_recipient"] if payload["override_active"] else payload["intended_recipient"]
     if not to_address:
-        return jsonify({"error": "No recipient address available"}), 400
+        return {"error": "No recipient address available"}
 
     ok = send_mail_graph(
         tenant_id=tenant_id,
@@ -5913,30 +5937,19 @@ def api_balance_due_email_send(item_id):
     except Exception:
         logger.warning("Failed to log balance-due email", exc_info=True)
 
-    if ok:
-        return jsonify({
-            "status": "ok",
-            "sent_to": to_address,
-            "intended_recipient": payload["intended_recipient"],
-            "override_active": payload["override_active"],
-        })
-    return jsonify({"error": "Failed to send email — check server logs"}), 500
+    return {"status": status, "to": to_address,
+            "amount_owed": payload["amount_owed"]}
 
 
-def _send_credit_entry_confirmation(item_id, result):
-    """Auto-send the entry-confirmation email when the applied credit covered
-    the WHOLE fee (amount_owed <= 0). Delegates to the shared db helper. Never
-    raises — a mail failure must not break the apply-credit response. Kill
-    switch: AUTO_CREDIT_ENTRY_EMAIL=0."""
-    try:
-        if (os.getenv("AUTO_CREDIT_ENTRY_EMAIL", "1") or "1").strip().lower() \
-                not in ("1", "true", "yes", "on"):
-            return
-        from email_parser.database import send_entry_confirmation_email
-        send_entry_confirmation_email(item_id, result)
-    except Exception:
-        logger.warning("credit-entry confirmation email failed for item %s",
-                       item_id, exc_info=True)
+@app.route("/api/items/<int:item_id>/balance-due-email/send", methods=["POST"])
+@require_role("manager")
+def api_balance_due_email_send(item_id):
+    """Send the balance-due Venmo email. During testing, sends to override recipient."""
+    res = _send_balance_due_email_now(item_id)
+    if res.get("error"):
+        code = 500 if "credentials" in res["error"] else 400
+        return jsonify(res), code
+    return jsonify(res)
 
 
 @app.route("/api/items/<int:item_id>/entry-confirmation/send", methods=["POST"])
