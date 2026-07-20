@@ -820,7 +820,12 @@
             const alreadyPaid = g.payment_status === "paid";
             // paid rows drop any stale "verifying" marker
             if (alreadyPaid) _clearVerifying(ev.id, g.golfer_id);
-            const act = !alreadyPaid ? payAction(winData, g.total, ev.code, ev.name, g.name) : null;
+            // Partial payments (Kerry 2026-07-20): Pay carries only the
+            // unpaid remainder when some rows are already paid.
+            const gDue = g.items.filter(p => p.payment_status !== "paid")
+                .reduce((s, p) => s + p.amount, 0);
+            const gPartial = gDue > 0.005 && (g.total - gDue) > 0.005;
+            const act = !alreadyPaid ? payAction(winData, gPartial ? gDue : g.total, ev.code, ev.name, g.name) : null;
             let venmoHtml = "";
             if (act && act.href) {
                 const age = _verifyingAgeMs(ev.id, g.golfer_id);
@@ -855,12 +860,15 @@
             // (genuinely mixed state).
             const statusBadge = (g.payment_status === "paid" || g.payment_status === "mixed")
                 ? (TGF_STATUS_BADGE[g.payment_status] || "") : "";
+            const dueNote = gPartial
+                ? `<span style="font-size:0.7rem;font-weight:700;color:#b45309;margin-left:4px;white-space:nowrap;">DUE $${gDue.toFixed(2)}</span>`
+                : "";
             const isPending = g.payment_status !== "paid";
             const markPaidBtn = isPending
-                ? `<button class="mark-paid-btn" data-event-id="${ev.id}" data-customer-id="${g.golfer_id}" data-amount="${g.total}" data-name="${g.name.replace(/"/g, '&quot;')}" style="font-size:0.72rem;padding:2px 8px;border-radius:99px;background:#dcfce7;color:#166534;border:1px solid #86efac;font-weight:600;cursor:pointer;margin-left:4px;" onclick="event.stopPropagation()">Mark Paid</button>`
+                ? `<button class="mark-paid-btn" data-event-id="${ev.id}" data-customer-id="${g.golfer_id}" data-amount="${gPartial ? gDue.toFixed(2) : g.total}" data-name="${g.name.replace(/"/g, '&quot;')}" style="font-size:0.72rem;padding:2px 8px;border-radius:99px;background:#dcfce7;color:#166534;border:1px solid #86efac;font-weight:600;cursor:pointer;margin-left:4px;" onclick="event.stopPropagation()">Mark Paid</button>`
                 : "";
             // badge AFTER the pay link (Kerry, 2026-07-08)
-            return `${venmoHtml} ${markPaidBtn} ${statusBadge}`;
+            return `${venmoHtml} ${markPaidBtn} ${statusBadge}${dueNote}`;
         }
 
         function attachMarkPaidHandlers(container) {

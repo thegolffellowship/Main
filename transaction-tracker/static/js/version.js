@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.128.1";
+window.TGF_VERSION = "2.129.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.129.0",
+    date: "2026-07-20",
+    changes: [
+      "Partial-payment awareness end to end (Kerry 2026-07-20, the Barna a9.18 case — $146.83 already Venmo'd, then the $26 TGF MVP row landed): the P2P receipt matcher gains a SUBSET pass — when no payout group's total matches a receipt, it finds the subset of one candidate group's unpaid rows summing exactly to the receipt and marks just those rows paid. Both payout UIs (Events PAYOUTS tab + TGF page) now show a PAID/DUE subline on partially-paid golfers, and the Pay / Mark Paid buttons carry ONLY the unpaid remainder.",
+      "Hole-In-One pot on the GAMES tab: the banner now shows this event's contribution AND the running cross-event pot THROUGH that event. get_hio_pot carries per-event running totals and an app_settings carry-in dial (hio_pot_carry_in + note) for the end-of-2025 balance once Kerry confirms it (~$2000 recalled).",
+      "scoring-payouts-clear-auto gains '<event>|all' to ALSO remove manual/screenshot-imported payout rows (Kerry-directed only — the s9.18 Cedar Creek rain-out sheet was manual rows the auto-only clear couldn't touch), and the sweep now covers duplicate tgf_events code rows.",
+    ],
+  },
   {
     version: "2.128.1",
     date: "2026-07-20",
