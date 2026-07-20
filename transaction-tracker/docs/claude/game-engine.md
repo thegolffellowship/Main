@@ -416,7 +416,18 @@ below wherever they conflict.
     Straiton/Cloer a18.3) lock via `cmp_lock_match_manual` (bridge
     `scoring-mp-lock-one:<chapter>|<A>|<B>[|apply]`), stamping a
     "Kerry-confirmed <date>, no GG card" note — run only on Kerry's
-    explicit per-match confirmation.
+    explicit per-match confirmation. **Identity backfill (v2.125.4):** the
+    reconcilers' `no_hole_scores_imported` bucket had been reporting cards
+    that WERE imported — `cmp_pool_members` rows with NULL `customer_id`
+    broke the id-based round lookup (the "Austin missing 11", all of which
+    had cards). Boot backfill `_backfill_customer_id_on_cmp_pool_members`
+    links pool members + `cmp_matches` player/winner ids; both reconcilers
+    also fall back to a nickname-robust person-key name match
+    (`_cmp_round_row_for`); `scoring-mp-pools-audit` lists any
+    still-unlinked member rows. Post-fix: 30/30 matches checkable, zero
+    uncheckable in both chapters — residual margin deltas are the known
+    concession/gimme class plus the two 10H extra-hole matches (hole data
+    correctly shows AS through regulation).
   - **Registration / eligibility (front of the lifecycle, for CA).** Signup
     timing + prerequisites. Notably an **established-handicap gate**: a player
     without an established handicap is held out of Match Play until they have
