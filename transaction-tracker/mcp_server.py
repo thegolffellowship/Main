@@ -1528,6 +1528,10 @@ def _scoring_dispatch(url: str, extract: str):
             return json.dumps(db.import_event_scorecards_by_code(
                 url, code.strip(), only_round=(rkey.strip() or None),
                 refresh_players=refresh), indent=2, default=str)
+        if cmd == "scoring-refunds-overview":
+            # READ-ONLY: the REFUNDS console payload (outstanding / in-flight
+            # / completed) — incl. season-contest removal refunds.
+            return json.dumps(db.get_refunds_overview(), indent=2, default=str)
         if cmd == "scoring-facilities":
             # READ-ONLY: facilities + their courses (course registry v1).
             with db._connect(None) as _c:

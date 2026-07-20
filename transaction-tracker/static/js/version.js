@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.126.4";
+window.TGF_VERSION = "2.127.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.127.0",
+    date: "2026-07-20",
+    changes: [
+      "Season-contest removal refunds now surface in the REFUNDS console (Kerry 2026-07-20: 'is it in overall PAYOUTS where it should be, so I don't miss it?'). A removal recorded with a refund amount previously lived only on the Enrollment tab's removals list — the Campos $40 sat invisible to every work queue. It now appears OUTSTANDING (with a one-tap Venmo pay link carrying amount + memo when the player has a handle on file) until a matching outbound Venmo receipt lands via the expense inbox — same person, same amount, on/after the removal date — at which point it shows COMPLETED. Rules-based/derived; no new schema. New read bridge scoring-refunds-overview.",
+      "Team/Cart Net unique-player rule refined for the equal-shares case (two-team tie for 1st with a player on both teams): shares are equal so 'higher share' can't decide — the player keeps their REAL slot and vacates the BLIND one; the blind team's pot splits among its remaining members. Unequal shares still pay the higher share regardless of which slot is the blind.",
+    ],
+  },
   {
     version: "2.126.4",
     date: "2026-07-20",

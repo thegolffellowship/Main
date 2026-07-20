@@ -993,15 +993,34 @@
             const el = $("#refunds-main");
             const t = data.totals || {};
 
-            const outRows = (data.outstanding || []).map(r => `
+            const outRows = (data.outstanding || []).map(r => {
+                // Season-contest removal refunds (kind contest_refund) get a
+                // direct Venmo pay link — the receipt lands via the expense
+                // inbox and flips the row to COMPLETED on its own (Kerry
+                // 2026-07-20: "so I don't miss it").
+                let action;
+                if (r.kind === "contest_refund" && r.venmo_handle) {
+                    const memo = encodeURIComponent(`TGF refund — ${r.event || "season contest"}`);
+                    const amt = Number(r.amount || 0).toFixed(2);
+                    const h = r.venmo_handle.replace(/^@/, "");
+                    const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+                    const href = isMobile
+                        ? `venmo://paycharge?txn=pay&recipients=${encodeURIComponent(h)}&amount=${amt}&note=${memo}`
+                        : `https://venmo.com/${encodeURIComponent(h)}?txn=pay&amount=${amt}&note=${memo}`;
+                    action = `<a href="${href}"
+                           style="display:inline-block;text-decoration:none;background:#008CFF;color:#fff;font-size:0.78rem;font-weight:600;padding:4px 12px;border-radius:14px;">Venmo ${fmt(r.amount)}</a>`;
+                } else {
+                    action = `<a href="/customers?cid=${r.customer_id || ""}"
+                           style="display:inline-block;text-decoration:none;background:#E87C3E;color:#fff;font-size:0.78rem;font-weight:600;padding:4px 12px;border-radius:14px;">Refund…</a>`;
+                }
+                return `
                 <tr>
                     <td>${playerCell(r.customer, r.customer_id, r.event)}</td>
                     <td class="right">${ageChip(r.age_days)}</td>
                     <td class="right total-amount" style="white-space:nowrap;">${fmt(r.amount)}</td>
-                    <td class="right" style="white-space:nowrap;">
-                        <a href="/customers?cid=${r.customer_id || ""}"
-                           style="display:inline-block;text-decoration:none;background:#E87C3E;color:#fff;font-size:0.78rem;font-weight:600;padding:4px 12px;border-radius:14px;">Refund…</a></td>
-                </tr>`).join("");
+                    <td class="right" style="white-space:nowrap;">${action}</td>
+                </tr>`;
+            }).join("");
 
             const flightRows = (data.in_flight || []).map(r => `
                 <tr>
