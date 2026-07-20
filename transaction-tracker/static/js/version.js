@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.126.1";
+window.TGF_VERSION = "2.126.2";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.126.2",
+    date: "2026-07-20",
+    changes: [
+      "Course seeder made ALIAS-AWARE: the boot 'Seed courses' step (the original source of the name-only stubs) re-created every deleted stub under a fresh course_id on the next boot, because it only deduped against exact courses.name. It now skips any items/events course name that already resolves through course_aliases.",
+      "Rule-based alias-shadow sweep in the registry migration: a courses row whose name matches an alias of a DIFFERENT course, with zero rounds and zero tees, merges into the alias target automatically — heals the one boot's worth of re-created stubs (ids 44298+) and permanently closes this drift class. Orphan facilities left by merged rows are cleaned up; courses-audit's missing-names check now also consults aliases.",
+    ],
+  },
   {
     version: "2.126.1",
     date: "2026-07-20",
