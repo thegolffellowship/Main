@@ -5563,7 +5563,13 @@ def api_gg_rsvp_credit_info(rsvp_id):
             if card:
                 customer = card["customer"]
 
-        credits = get_player_credits(customer)
+        # Pass the RSVP's email so get_player_credits can resolve
+        # customer_id when the name lookup misses — a GG-format name
+        # ("McCRARY, Justin") with no matching items row previously
+        # 404'd even though the player had a live rain-out credit
+        # (Kerry 2026-07-20, McCrary applying his s9.18 credit to s9.19).
+        credits = get_player_credits(customer,
+                                     player_email=player_email or None)
         if not credits:
             return jsonify({"error": "No credits on file for this player"}), 404
 
