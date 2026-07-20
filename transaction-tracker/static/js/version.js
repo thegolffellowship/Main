@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.129.26";
+window.TGF_VERSION = "2.129.27";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.129.27",
+    date: "2026-07-20",
+    changes: [
+      "PAYOUTS page work surface centered in a 1080px max-width column (Kerry 2026-07-20: 'It definitely doesn't need that wide of a window for desktop... it's just all too spread out'), with the admin-density standard applied page-wide: Player Pot Summary and all payout tables at 5px row padding / 0.84rem text, event sidebar rows halved in height and the rail narrowed to 250px, main padding tightened. The whole page — tabs, sidebar, tables — reads as one compact centered console.",
+    ],
+  },
   {
     version: "2.129.26",
     date: "2026-07-20",
