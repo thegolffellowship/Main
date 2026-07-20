@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.128.0";
+window.TGF_VERSION = "2.128.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.128.1",
+    date: "2026-07-20",
+    changes: [
+      "Uniform match-play allowance encoded as a config DIAL (Kerry-ratified 2026-07-20: 'Stored as a setting is our standard for everything — ultimate control to turn the dials without getting a developer'). cmp_encode_uniform_allowance authors a match_play config version carrying handicap_allowance = {basis: off_lowest, value: 0.75, adjustable: true} + the historical GG-era per-chapter facts (SA 75 / Austin 100) for the record. 2026 season snapshots are NOT re-pinned (past frozen); future seasons snapshot the new current version. Bridge: scoring-mp-encode-allowance[:<value>][|apply].",
+    ],
+  },
   {
     version: "2.128.0",
     date: "2026-07-20",

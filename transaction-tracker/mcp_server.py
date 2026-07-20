@@ -1528,6 +1528,14 @@ def _scoring_dispatch(url: str, extract: str):
             return json.dumps(db.import_event_scorecards_by_code(
                 url, code.strip(), only_round=(rkey.strip() or None),
                 refresh_players=refresh), indent=2, default=str)
+        if cmd == "scoring-mp-encode-allowance":
+            # Author the uniform allowance config version (Kerry-ratified
+            # 2026-07-20). arg: "[<value>][|apply]" — default 0.75, dry-run.
+            _p = [x.strip() for x in (arg or "").split("|")]
+            _v = float(_p[0]) if _p and _p[0] else 0.75
+            return json.dumps(db.cmp_encode_uniform_allowance(
+                _v, apply=("apply" in [x.lower() for x in _p])),
+                indent=2, default=str)
         if cmd == "scoring-hio-pot":
             # READ-ONLY: running Hole-In-One pot (per-event matrix
             # contributions minus recorded HIO payouts).

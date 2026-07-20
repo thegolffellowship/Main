@@ -27532,6 +27532,49 @@ def cmp_repin_2026_to_dmp_register(by: str | None = None, db_path=None) -> dict:
                 "tie_policy": cfg["tie_policy"]}}
 
 
+def cmp_encode_uniform_allowance(value: float = 0.75, by: str | None = None,
+                                 apply: bool = False, db_path=None) -> dict:
+    """Encode the FUTURE uniform match-play handicap allowance as config
+    data (Kerry-ratified 2026-07-20: 'Stored as a setting is our standard
+    for everything. I want ultimate control to turn the dials').
+
+    Authors a new match_play config version carrying
+    `handicap_allowance = {basis: off_lowest, value: <v>, adjustable:
+    true}` plus the historical GG-era per-chapter facts for the record
+    (SA 75% / Austin 100% — the reconcilers keep using those for
+    GG-originated events; past frozen). Does NOT re-pin 2026 — its
+    snapshots stay on their pinned version; seasons created after this
+    snapshot the new current version. Default DRY-RUN."""
+    base = sct_get_active_config("match_play", db_path=db_path)
+    if not base:
+        return {"error": "No match_play template/config found"}
+    if not (0 < float(value) <= 1):
+        return {"error": f"allowance must be in (0, 1]: {value}"}
+    cfg = dict(base["config"])
+    cfg["handicap_allowance"] = {
+        "basis": "off_lowest",       # lower plays scratch (D-MP-10)
+        "value": float(value),       # ONE dial for ALL chapters
+        "adjustable": True,
+        "historical_gg_by_chapter": {"San Antonio": 0.75, "Austin": 1.0},
+        "ratified": "Kerry 2026-07-20 (design 2026-07-17, D-MP-10)",
+    }
+    out = {"apply": apply, "base_version_no": base["version_no"],
+           "handicap_allowance": cfg["handicap_allowance"]}
+    if not apply:
+        out["note"] = "dry-run — pass apply to author the config version"
+        return out
+    saved = sct_save_version(
+        "match_play", cfg,
+        saved_by=by or "tracker-claude (allowance encode)",
+        notes="D-MP-10 uniform allowance dial: one adjustable off-lowest "
+              "allowance for all chapters (default 75%). Kerry-ratified "
+              "2026-07-20. 2026 snapshots NOT re-pinned (past frozen).",
+        db_path=db_path)
+    out.update({"version_id": saved["version_id"],
+                "version_no": saved["version_no"], "pinned": "unchanged"})
+    return out
+
+
 # ---------------------------------------------------------------------------
 # City Match Play — config-driven operations (auto-assign, seeding, payouts)
 # ---------------------------------------------------------------------------
