@@ -403,6 +403,22 @@
             .tgf-sidebar { width: 100%; min-width: 100%; max-height: 200px; border-right: none; border-bottom: 1px solid var(--border); }
             .tgf-main { padding: 1rem; }
             .detail-grid { grid-template-columns: 1fr 1fr; }
+            /* No event selected (Kerry 2026-07-20 mobile): give the event
+               list the screen and shrink the placeholder to a slim bottom
+               bar — "uncover many more events". Once an event is picked the
+               200px-list + detail split above applies as before. */
+            #section-events:not(.has-selection) .tgf-sidebar {
+                max-height: calc(100vh - 220px); border-bottom: none;
+            }
+            #section-events:not(.has-selection) .tgf-main { padding: 0; }
+            #section-events:not(.has-selection) .empty-state {
+                padding: 10px 14px; border-top: 1px solid var(--border);
+                background: #fff;
+            }
+            #section-events:not(.has-selection) .empty-state h3 {
+                font-size: 0.85rem; margin: 0;
+            }
+            #section-events:not(.has-selection) .empty-state p { display: none; }
         }
     </style>
 </head>
@@ -1161,10 +1177,13 @@
 
         function renderEventMain() {
             const main = $("#events-main");
+            const section = document.getElementById("section-events");
             if (selectedEventIdx < 0 || selectedEventIdx >= DATA.events.length) {
+                if (section) section.classList.remove("has-selection");
                 main.innerHTML = '<div class="empty-state"><h3>Select an event</h3><p>Choose an event from the sidebar</p></div>';
                 return;
             }
+            if (section) section.classList.add("has-selection");
             const ev = DATA.events[selectedEventIdx];
 
             const golferList = golferGroupsForEvent(ev).sort((a, b) => b.total - a.total);

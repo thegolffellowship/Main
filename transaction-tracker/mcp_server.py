@@ -1552,10 +1552,16 @@ def _scoring_dispatch(url: str, extract: str):
         if cmd == "scoring-payouts-restore":
             # Repair: rebuild deleted tgf_payouts rows from their surviving
             # bulk-confirm ledger mirrors — "<tgf_events code>[|apply]".
-            _ev, _, _mode = arg.partition("|")
+            # rpartition + mode check: event codes themselves contain pipes
+            # ("s18.3 SAN ANTONIO KICKOFF | Cedar Creek"), so only a LAST
+            # segment that literally reads "apply" is treated as the mode.
+            _ev, _sep, _mode = arg.rpartition("|")
+            if _mode.strip().lower() == "apply" and _sep:
+                _apply = True
+            else:
+                _ev, _apply = arg, False
             return json.dumps(db.restore_tgf_payouts_from_ledger(
-                _ev.strip(), apply=(_mode.strip().lower() == "apply")),
-                indent=2, default=str)
+                _ev.strip(), apply=_apply), indent=2, default=str)
         if cmd == "scoring-rainout-audit":
             # READ-ONLY: unlabeled shut-down candidates (active status,
             # >=50% credited registrations) + already-labeled events.

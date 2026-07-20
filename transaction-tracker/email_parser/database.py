@@ -37384,12 +37384,32 @@ def clear_event_auto_payouts(event_name: str, include_manual: bool = False,
                         kept_matched += 1
                 conn.execute("DELETE FROM tgf_payouts WHERE id = ?", (r["id"],))
                 removed += 1
+        # Kerry-directed full clears also drop the now-empty tgf_events
+        # shell row: the Payouts sidebar shows tgf_events.total_purse (a
+        # stored column from screenshot import), NOT the payout-row sum —
+        # the Cedar Creek "$229" was a shell row with ZERO payout rows
+        # that every row-only sweep necessarily reported as "removed: 0".
+        shells_deleted = []
+        if include_manual:
+            for trow in trows:
+                left = conn.execute(
+                    "SELECT COUNT(*) AS n FROM tgf_payouts WHERE event_id = ?",
+                    (trow["id"],)).fetchone()["n"]
+                if left == 0:
+                    purse = conn.execute(
+                        "SELECT total_purse FROM tgf_events WHERE id = ?",
+                        (trow["id"],)).fetchone()["total_purse"]
+                    conn.execute("DELETE FROM tgf_events WHERE id = ?",
+                                 (trow["id"],))
+                    shells_deleted.append(
+                        {"code": trow["code"], "total_purse": purse})
         conn.commit()
     return {"event": full, "tgf_event_rows": len(trows),
             "tgf_event_codes": [t["code"] for t in trows],
             "include_manual": include_manual, "removed": removed,
             "pending_ledger_deleted": pending_deleted,
-            "matched_venmo_kept": kept_matched}
+            "matched_venmo_kept": kept_matched,
+            "empty_event_rows_deleted": shells_deleted}
 
 
 def restore_tgf_payouts_from_ledger(event_code: str, apply: bool = False,
