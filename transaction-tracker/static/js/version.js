@@ -5,6 +5,7 @@ window.TGF_CHANGELOG = [
     date: "2026-07-20",
     changes: [
       "Rain-out labeling sweep (Kerry 2026-07-20: 'We had other rain outs. They need to be labeled as such'): new bridge scoring-rainout-audit lists every past event's shutdown signals (status/badge, credited-registration ratio, recorded payout rows) and flags ACTIVE-status events with >=50% credited registrations as unlabeled-washout candidates for Kerry's review; scoring-rainout-label:<event>[|<badge>][|apply] stamps the confirmed ones with the cancelled status + badge — the authoritative signal the payout and Hole-In-One-pot guards read.",
+      "clear-auto row matching hardened: duplicate tgf_events code variants (case/stray whitespace — 's9.18 CEDAR CREEK ') hid the Cedar Creek manual rows from the sweep; matching now TRIMs and adds a code-prefix pattern, and the response lists the matched codes.",
     ],
   },
   {
