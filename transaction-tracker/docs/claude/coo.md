@@ -109,11 +109,16 @@ Kerry 2026-07-20: "My daily briefing is honestly overwhelming" (200 action
 items rendered as full cards). The email now leads with an overview and
 rolls the backlog up:
 
-1. **Administrative Overview — Last 24 Hours**: stat chips (new-24h /
-   open backlog / high urgency / expiring memberships) + a Claude-written
-   3-6 bullet prioritized summary of the last 24h (one call, model
-   claude-sonnet-4-5; on any failure the email still sends without it).
-2. **Quick Wins**: 0-4 AI-suggested sub-5-minute actions (same call).
+1. **Administrative Overview — Last 24 Hours**: stat chips row 1
+   (new-24h / open backlog / high urgency / expiring memberships) + row 2
+   MONEY chips (outstanding payouts $ + golfer count, outstanding refunds,
+   open credits — v2.129.19, Kerry) + a Claude-written 3-6 bullet
+   prioritized summary of the last 24h (one call, model claude-sonnet-4-5;
+   on any failure the email still sends without it).
+2. **Quick Wins**: overdue payouts render DETERMINISTICALLY first (past
+   the payout SLA — dial `payout_sla_hours`, default 24h, Kerry: "payouts
+   should go out within 24 hours of event"), then 0-4 AI-suggested
+   sub-5-minute actions.
 3. **Memberships**: expiring-soon + just-lapsed (personal-outreach
    lists, names shown), renewed and first-time members in the recent
    window. From customer_memberships (latest term per customer).
