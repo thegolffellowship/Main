@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.130.12";
+window.TGF_VERSION = "2.130.13";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.130.13",
+    date: "2026-07-20",
+    changes: [
+      "HIO pot field size derives from scoring data: each event's field is MAX(registrations, distinct players on its banked scorecards) — golfers staged as GG individuals outside pairings (the Hill Country Matches case) get counted the moment the event's cards are imported. The override dial remains as a stopgap for events whose cards aren't banked yet.",
+    ],
+  },
   {
     version: "2.130.12",
     date: "2026-07-20",
