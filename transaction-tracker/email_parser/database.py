@@ -37317,9 +37317,15 @@ def clear_event_auto_payouts(event_name: str, include_manual: bool = False,
         full = ev["item_name"].strip()
         m = _GG_EVENT_CODE_COMPOUND_RE.match(full)
         bare = m.group(1).lower() if m else full.lower()
+        # TRIM + prefix pattern: duplicate tgf_events rows exist with code
+        # variants (case, stray whitespace) — "s9.18 %" catches every
+        # "<bare> <anything>" spelling without colliding with other codes
+        # (s9.1 stays distinct from s9.18: the pattern requires the full
+        # bare code then a space).
         trows = conn.execute(
-            "SELECT id FROM tgf_events WHERE LOWER(code) IN (?, ?)",
-            (full.lower(), bare)).fetchall()
+            "SELECT id, code FROM tgf_events WHERE LOWER(TRIM(code)) IN (?, ?) "
+            "OR LOWER(TRIM(code)) LIKE ?",
+            (full.lower(), bare, bare + " %")).fetchall()
         if not trows:
             return {"event": full, "removed": 0,
                     "note": "no tgf_events row — nothing recorded"}
@@ -37345,6 +37351,7 @@ def clear_event_auto_payouts(event_name: str, include_manual: bool = False,
                 removed += 1
         conn.commit()
     return {"event": full, "tgf_event_rows": len(trows),
+            "tgf_event_codes": [t["code"] for t in trows],
             "include_manual": include_manual, "removed": removed,
             "pending_ledger_deleted": pending_deleted,
             "matched_venmo_kept": kept_matched}
