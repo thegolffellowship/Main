@@ -13558,10 +13558,37 @@ def _merge_course_into(conn, loser_id: int, winner_id: int,
     if version_note:
         m = re.search(r"(\d{4}-\d{2}-\d{2})", version_note)
         valid_to = m.group(1) if m else None
-    conn.execute(
-        "UPDATE course_tees SET course_id = ?, version_label = COALESCE(?, "
-        "version_label), valid_to = COALESCE(?, valid_to) WHERE course_id = ?",
-        (winner_id, version_note, valid_to, loser_id))
+    # Per-tee move: course_tees has UNIQUE(course_id, tee_name, slope,
+    # rating), and GG sometimes archived a course version with a tee whose
+    # spec didn't actually change — a bulk UPDATE hits the constraint and
+    # aborts (this killed the first live run at Cedar Creek). An
+    # identical-spec tee COLLAPSES into the winner's row instead: rounds
+    # re-pin to the surviving tee_id (same ratings, nothing moves
+    # numerically), its holes fill any gaps, and the duplicate is deleted.
+    for t in conn.execute("SELECT * FROM course_tees WHERE course_id = ?",
+                          (loser_id,)).fetchall():
+        dup = conn.execute(
+            """SELECT tee_id FROM course_tees WHERE course_id = ?
+               AND tee_name IS ? AND slope IS ? AND rating IS ?""",
+            (winner_id, t["tee_name"], t["slope"], t["rating"])).fetchone()
+        if dup:
+            conn.execute("UPDATE scoring_rounds SET tee_id = ? WHERE tee_id = ?",
+                         (dup["tee_id"], t["tee_id"]))
+            conn.execute(
+                "INSERT OR IGNORE INTO course_tee_holes (tee_id, hole_number,"
+                " par, yardage, stroke_index) SELECT ?, hole_number, par,"
+                " yardage, stroke_index FROM course_tee_holes WHERE tee_id = ?",
+                (dup["tee_id"], t["tee_id"]))
+            conn.execute("DELETE FROM course_tee_holes WHERE tee_id = ?",
+                         (t["tee_id"],))
+            conn.execute("DELETE FROM course_tees WHERE tee_id = ?",
+                         (t["tee_id"],))
+        else:
+            conn.execute(
+                "UPDATE course_tees SET course_id = ?, version_label = "
+                "COALESCE(?, version_label), valid_to = COALESCE(?, valid_to) "
+                "WHERE tee_id = ?",
+                (winner_id, version_note, valid_to, t["tee_id"]))
     for table, col in (("scoring_rounds", "course_id"), ("items", "course_id"),
                        ("events", "course_id")):
         try:
@@ -13653,10 +13680,13 @@ def _migrate_course_registry_v1(conn: sqlite3.Connection) -> None:
         (22369, 18,    "archived 2026-05-13"),   # Willow Springs (OLD)
     )
     for loser, winner, note in merges:
-        row = conn.execute("SELECT name FROM courses WHERE course_id = ?",
-                           (loser,)).fetchone()
-        if row and re.search(r"\(OLD\)|Archived", row["name"] or "", re.I):
-            _merge_course_into(conn, loser, winner, version_note=note)
+        try:
+            row = conn.execute("SELECT name FROM courses WHERE course_id = ?",
+                               (loser,)).fetchone()
+            if row and re.search(r"\(OLD\)|Archived", row["name"] or "", re.I):
+                _merge_course_into(conn, loser, winner, version_note=note)
+        except Exception:
+            logger.exception("Course registry: merge %s→%s failed", loser, winner)
 
     # ── zero-round stubs / misspelled duplicates → delete, alias name to
     # the survivor (Riverside stays separated BY CITY: the ATX row 22377
@@ -13671,12 +13701,15 @@ def _migrate_course_registry_v1(conn: sqlite3.Connection) -> None:
         (25398, 25406), (42585, 42584),
     )
     for stub, survivor in stub_deletes:
-        n = conn.execute("SELECT COUNT(*) AS n FROM scoring_rounds "
-                         "WHERE course_id = ?", (stub,)).fetchone()["n"]
-        if n == 0 and conn.execute(
-                "SELECT 1 FROM courses WHERE course_id = ?",
-                (survivor,)).fetchone():
-            _merge_course_into(conn, stub, survivor)
+        try:
+            n = conn.execute("SELECT COUNT(*) AS n FROM scoring_rounds "
+                             "WHERE course_id = ?", (stub,)).fetchone()["n"]
+            if n == 0 and conn.execute(
+                    "SELECT 1 FROM courses WHERE course_id = ?",
+                    (survivor,)).fetchone():
+                _merge_course_into(conn, stub, survivor)
+        except Exception:
+            logger.exception("Course registry: stub %s→%s failed", stub, survivor)
 
     # ── facilities: explicit multi-course prefixes, then 1:1 for the rest ──
     prefix_groups = (("cypresswood", "Cypresswood Golf Club"),
