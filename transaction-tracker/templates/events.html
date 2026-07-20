@@ -11217,10 +11217,6 @@
 
             body.innerHTML = `
             <div style="padding:1rem;">
-                <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.75rem;">
-                    <h3 style="margin:0;font-size:1rem;">Apply Credit</h3>
-                    <button id="apply-credit-close" class="modal-close">&times;</button>
-                </div>
                 <div style="font-size:0.88rem;color:#374151;margin-bottom:0.5rem;">
                     Player: <strong>${escapeHtml(displayName(resolvedCustomer))}</strong> &bull; Event: <strong>${escapeHtml(eventName)}</strong>
                 </div>
@@ -11252,8 +11248,6 @@
                 <div id="credit-excess-section" style="margin-top:0.75rem;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:6px;padding:0.6rem 0.75rem;display:none;"></div>
                 <div id="credit-balance-note" style="display:none;margin-top:0.5rem;font-size:0.82rem;color:#92400e;background:#fef3c7;border:1px solid #fde68a;border-radius:6px;padding:0.5rem 0.75rem;"></div>
             </div>`;
-
-            document.getElementById('apply-credit-close').addEventListener('click', closeApplyCreditModal);
 
             // ── Interactive selections + live price recalc ──────────────────
             function _activateCrdChip(group, val) {
@@ -11471,6 +11465,11 @@
         applyCreditState = {};
     }
 
+    // Header X is wired ONCE at setup — it previously got bound only in
+    // the success path (and the body injected a duplicate #apply-credit-close
+    // header), so on a load failure no X worked and the only way out was
+    // tapping outside the box (Kerry 2026-07-20).
+    document.getElementById('apply-credit-close').addEventListener('click', closeApplyCreditModal);
     document.getElementById('apply-credit-overlay').addEventListener('click', e => {
         if (e.target === document.getElementById('apply-credit-overlay')) closeApplyCreditModal();
     });

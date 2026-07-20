@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.129.15";
+window.TGF_VERSION = "2.129.16";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.129.16",
+    date: "2026-07-20",
+    changes: [
+      "Apply Credit modal X works in every state (Kerry 2026-07-20: the failure popup's X was dead — only tapping outside closed it): the header X is wired once at page setup instead of only after a successful load, and the modal body no longer injects a duplicate 'Apply Credit' header with a second #apply-credit-close id (which also made the popup show its title twice).",
+    ],
+  },
   {
     version: "2.129.15",
     date: "2026-07-20",
