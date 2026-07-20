@@ -1185,3 +1185,25 @@ deep-links to `/customers?cid=<id>`, where the existing red Refund modal
 duplicated into the console. Inline actions are the next increment.
 Tests: `test_refunds_overview.py` (12 checks). Read-only; no schema
 change.
+
+## Hole-In-One pot (v2.130.x, Kerry-ratified 2026-07-20)
+
+HIO is the one game pot that ACCRUES across events instead of paying per
+event. `get_hio_pot()` (database.py): every played, non-rained-out event
+contributes its games-matrix holeInOne amount ($1/player 9-hole,
+$2/player 18-hole); events count only once their date has passed. The pot
+drains ONLY via `tgf_payouts` rows with `category = 'hio'`.
+
+- **Carry-in dial**: `hio_pot_carry_in` = **1822.00** (app_settings, set
+  2026-07-20; provenance in `hio_pot_carry_in_note`). Reconstruction:
+  pot was $2,300 at the 2025 TGF Championship → Julius Jenkins was paid
+  HALF ($1,150) for his ace (Aug 2025) → $1,150 remained + $672 added
+  through fall 2025 play (verified by counting the ALL Gross leaderboards
+  on the live tgf-sa2025/tgf-austin2025 GG portals — the
+  `scoring-hio-gross:<subdomain>|<start>|<end>[|budget]` bridge; the
+  archive's per-game result rows are winners-only and MUST NOT be used
+  for field sizes).
+- **Ace watch**: `import_gg_scorecards` raises a HIGH `scoring` action
+  item ("HOLE-IN-ONE: <player> — hole N") whenever an imported card has
+  strokes = 1 on any hole. The fix path is: verify on GG, pay the player,
+  record the payout with category 'hio'.
