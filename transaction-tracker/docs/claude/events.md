@@ -1203,7 +1203,9 @@ MAX(registrations, distinct players on the event's banked scorecards)
 case: 32 played, 29 registrations) are counted automatically once the
 event's cards are imported; the override dial is only for events whose
 cards aren't banked yet. Scheduled (future) events are INCLUDED as soon as
-they have registrations (Kerry 2026-07-20: the HIO dollars are collected
+they have registrations, but only when NEXT IN LINE — a future event's
+sign-ups don't count until every earlier-dated event has completed
+(Kerry 2026-07-20); events dated today always count (Kerry 2026-07-20: the HIO dollars are collected
 at registration, like the event's own pots in its payouts); the
 contribution self-corrects as the field grows since the pot recomputes
 live. The pot drains ONLY via `tgf_payouts` rows with `category = 'hio'`.

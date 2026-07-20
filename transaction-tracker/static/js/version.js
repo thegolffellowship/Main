@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.130.13";
+window.TGF_VERSION = "2.130.14";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.130.14",
+    date: "2026-07-20",
+    changes: [
+      "HIO pot: future events join only when NEXT IN LINE (Kerry: 'you can't count those until the prior event is completed') — events dated through today always count; among later dates only the earliest upcoming date's sign-ups count, and events behind it wait until the one before them completes.",
+    ],
+  },
   {
     version: "2.130.13",
     date: "2026-07-20",
