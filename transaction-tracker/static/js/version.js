@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.124.4";
+window.TGF_VERSION = "2.125.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.125.0",
+    date: "2026-07-20",
+    changes: [
+      "Match Play reconcilers now walk holes in PLAY ORDER (Kerry 2026-07-20: a 9-hole match starting on 4 plays 4..9 then wraps to 1..3 — it never goes to 10). Both read-only reconcilers previously walked holes in ascending number order, which made close-out margins (X&Y counts holes remaining IN PLAY ORDER) wrong for every shotgun/staggered start — that was the source of the margin 'mismatches' reported against stored results, which were correct all along. Play order comes from GG's own match card snapshot (explicit per-hole order, else wrap from the start hole).",
+      "Result hardening: cmp_matches gains result_locked_at/result_locked_note. New cmp_lock_verified_results (bridge: scoring-mp-lock:<season>|<chapter>[|apply]) stamps a lock on every match whose stored result matches GG's own card exactly, or where GG shows AS and we recorded the extra-holes/putt-off outcome. Locked results refuse winner/margin changes and deletion in cmp_save_match (409 from the API), cmp_relabel_margins (locked_skip), and cmp_clear_match, unless force=True is passed deliberately. GG-card conflicts and matches with no GG card are reported, never auto-locked.",
+    ],
+  },
   {
     version: "2.124.4",
     date: "2026-07-20",

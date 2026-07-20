@@ -3356,6 +3356,13 @@ def init_db(db_path: str | Path | None = None) -> None:
             # scorecard in play order from the start hole. Never overrides the
             # frozen winner_name/margin — a mismatch is surfaced, not applied.
             ("gg_match_detail",    "TEXT"),
+            # Result hardening (Kerry 2026-07-20): once a stored result is
+            # verified against GG's own match card, stamp it locked. Locked
+            # rows refuse winner/margin changes and deletion in every write
+            # path (cmp_save_match / cmp_relabel_margins / cmp_clear_match)
+            # unless force=True is passed deliberately.
+            ("result_locked_at",   "TEXT"),
+            ("result_locked_note", "TEXT"),
         ]:
             try:
                 conn.execute(f"ALTER TABLE cmp_matches ADD COLUMN {_col} {_def}")
@@ -25374,13 +25381,62 @@ def _cmp_holes_for(conn, event_id, customer_id):
     return holes
 
 
-def _cmp_derive_match(a_holes: dict, b_holes: dict) -> dict:
+def _cmp_play_order(holes, start_hole):
+    """Sequence a set of hole numbers in PLAY order for a shotgun/staggered
+    start: begin at start_hole, ascend, and WRAP within the holes actually
+    played (Kerry 2026-07-20: a 9-hole match starting on 4 plays 4..9 then
+    1..3 — it never goes to 10). Falls back to ascending when start_hole is
+    unknown or not among the played holes."""
+    base = sorted(holes)
+    if start_hole is None or start_hole not in base:
+        return base
+    i = base.index(start_hole)
+    return base[i:] + base[:i]
+
+
+def _cmp_gg_play_order(m) -> tuple:
+    """(play_order list | None, start_hole | None) from a cmp_matches row's
+    gg_match_detail snapshot. Prefers GG's own explicit per-hole `order`
+    sequence; falls back to wrapping from start_hole."""
+    raw = m.get("gg_match_detail") if isinstance(m, dict) else None
+    if not raw:
+        return None, None
+    try:
+        gg = json.loads(raw) if isinstance(raw, str) else raw
+    except Exception:
+        return None, None
+    start = gg.get("start_hole")
+    hs = gg.get("holes") or []
+    if hs and all(h.get("order") is not None for h in hs):
+        seq = [h["hole"] for h in sorted(hs, key=lambda h: h["order"])
+               if h.get("hole") is not None]
+        if seq:
+            return seq, start
+    if start is not None and hs:
+        return _cmp_play_order([h["hole"] for h in hs
+                                if h.get("hole") is not None], start), start
+    return None, start
+
+
+def _cmp_derive_match(a_holes: dict, b_holes: dict,
+                      play_order: list | None = None) -> dict:
     """Net match-play result from per-hole scores. a_holes/b_holes:
     {hole: (gross, pops)}. Net = gross − pops; lower net wins the hole.
     Returns {holes:[{h,winner:'A'|'B'|'H',a_net,b_net}], leader:'A'|'B'|None,
     margin, thru, closed_at, n_holes} using standard close-out semantics
-    (X&Y = X up with Y to play). None if not enough data."""
-    common = sorted(set(a_holes) & set(b_holes))
+    (X&Y = X up with Y to play). None if not enough data.
+
+    `play_order` (hole numbers in the sequence actually played) matters for a
+    shotgun start: close-out margins count holes REMAINING IN PLAY ORDER, so
+    walking 1..9 for a match that started on 5 produces wrong X&Y margins even
+    though the final winner is order-independent. Ascending order is only the
+    fallback when the true sequence is unknown."""
+    pool = set(a_holes) & set(b_holes)
+    if play_order:
+        common = [h for h in play_order if h in pool] + \
+                 sorted(pool - set(play_order))
+    else:
+        common = sorted(pool)
     common = [h for h in common
               if a_holes[h][0] is not None and b_holes[h][0] is not None]
     if len(common) < 1:
@@ -25476,7 +25532,9 @@ def cmp_reconcile_hole_results(season: str | None = None,
                     {**tag, "reason": "no_hole_scores_imported",
                      "missing": miss})
                 continue
-            d = _cmp_derive_match(a_holes, b_holes)
+            play_order, start_hole = _cmp_gg_play_order(m)
+            tag["start_hole"] = start_hole
+            d = _cmp_derive_match(a_holes, b_holes, play_order)
             if not d:
                 out["uncheckable"].append({**tag, "reason": "insufficient_holes"})
                 continue
@@ -25681,7 +25739,9 @@ def cmp_reconcile_match_play_75(season: str | None = None,
             a_pops, b_pops, meta = _cmp_match_pops(ra, rb, si_map, m_allow)
             a_holes = {h: (ra["gross"].get(h), a_pops.get(h, 0)) for h in ra["gross"]}
             b_holes = {h: (rb["gross"].get(h), b_pops.get(h, 0)) for h in rb["gross"]}
-            d = _cmp_derive_match(a_holes, b_holes)
+            play_order, start_hole = _cmp_gg_play_order(m)
+            tag["start_hole"] = start_hole
+            d = _cmp_derive_match(a_holes, b_holes, play_order)
             if not d:
                 out["uncheckable"].append({**tag, "reason": "insufficient_holes"})
                 continue
@@ -25952,7 +26012,8 @@ def cmp_relabel_margins(updates: list, chapter: str | None = None,
     with _connect(db_path) as conn:
         rows = [dict(r) for r in conn.execute(
             """SELECT m.id, m.player1_name, m.player2_name, m.winner_name,
-                      m.margin, e.item_name AS event, p.chapter
+                      m.margin, m.result_locked_at, e.item_name AS event,
+                      p.chapter
                  FROM cmp_matches m
                  JOIN cmp_pools p ON p.id = m.pool_id
                  LEFT JOIN events e ON e.id = m.event_id
@@ -25975,6 +26036,10 @@ def cmp_relabel_margins(updates: list, chapter: str | None = None,
             rec.update({"id": m["id"], "event": m["event"],
                         "before_margin": m["margin"],
                         "winner": m["winner_name"]})
+            if m.get("result_locked_at"):
+                rec["status"] = "locked_skip"
+                rec["locked_at"] = m["result_locked_at"]
+                out["results"].append(rec); continue
             ok = True
             if u.get("expect_margin") is not None and \
                _cmp_norm_margin(m["margin"]) != _cmp_norm_margin(u["expect_margin"]):
@@ -25996,9 +26061,106 @@ def cmp_relabel_margins(updates: list, chapter: str | None = None,
     return out
 
 
-def cmp_clear_match(pool_id: int, player1: str, player2: str, db_path=None) -> None:
+def cmp_lock_verified_results(season: str | None = None,
+                              chapter: str | None = None,
+                              apply: bool = False, db_path=None) -> dict:
+    """Harden GG-verified pool results (Kerry 2026-07-20: 'once we get these
+    verified we need to harden these in the database so they don't change
+    again'). For every PLAYED match, compare the stored winner/margin against
+    the gg_match_detail snapshot (GG's own match card):
+
+      * exact       — GG winner + margin equal stored → lock.
+      * as_extra    — GG says AS (all square) and we store a winner with an
+                      extra-holes label (Putt Off / 10H / ...) → lock; the
+                      hole data can't show a putt-off, the adjudication is
+                      Kerry's recorded outcome.
+      * no_gg_card  — no snapshot (e.g. a makeup GG never published) → NOT
+                      locked automatically; listed for manual review.
+      * conflict    — GG's card disagrees with the stored result → NOT
+                      locked; listed for Kerry to adjudicate.
+
+    Locking stamps result_locked_at/result_locked_note; already-locked rows
+    are left untouched (idempotent). Default is DRY-RUN — apply=True writes."""
+    where, params = ["m.played_at IS NOT NULL OR m.winner_name IS NOT NULL"], []
+    where = [f"({where[0]})"]
+    if season:
+        where.append("p.season = ?"); params.append(season)
+    if chapter:
+        where.append("p.chapter = ?"); params.append(chapter)
+    out = {"season": season, "chapter": chapter, "apply": apply,
+           "locked": [], "already_locked": 0, "no_gg_card": [],
+           "conflicts": []}
+    with _connect(db_path) as conn:
+        rows = [dict(r) for r in conn.execute(
+            f"""SELECT m.*, p.season AS p_season, p.chapter AS p_chapter,
+                       p.pool_name, e.item_name AS event_name
+                  FROM cmp_matches m
+                  JOIN cmp_pools p ON p.id = m.pool_id
+                  LEFT JOIN events e ON e.id = m.event_id
+                 WHERE {' AND '.join(where)}""", params).fetchall()]
+        for m in rows:
+            if not m.get("winner_name") and m.get("player1_stableford") is None:
+                continue                      # scheduled, no result yet
+            label = f"{m['player1_name']} vs {m['player2_name']}"
+            tag = {"id": m["id"], "match": label, "event": m.get("event_name"),
+                   "pool": m.get("pool_name"), "chapter": m.get("p_chapter"),
+                   "stored_winner": m.get("winner_name"),
+                   "stored_margin": m.get("margin")}
+            if m.get("result_locked_at"):
+                out["already_locked"] += 1
+                continue
+            raw = m.get("gg_match_detail")
+            gg = None
+            if raw:
+                try:
+                    gg = json.loads(raw) if isinstance(raw, str) else raw
+                except Exception:
+                    gg = None
+            if not gg:
+                out["no_gg_card"].append(tag)
+                continue
+            gg_margin = _cmp_norm_margin(gg.get("gg_margin"))
+            gg_winner = gg.get("gg_winner_name")
+            stored_m = _cmp_norm_margin(m.get("margin"))
+            stored_w = (m.get("winner_name") or "").strip()
+            note = None
+            if gg_margin == "AS" and stored_w:
+                note = (f"gg-verified 2026: GG card AS after regulation; "
+                        f"stored '{m.get('margin')}' is the recorded "
+                        f"extra-holes/putt-off outcome")
+            elif (stored_m == gg_margin and stored_w and gg_winner and
+                  _cmp_person_key(stored_w) == _cmp_person_key(gg_winner)):
+                note = "gg-verified 2026: matches GG's own match card exactly"
+            else:
+                out["conflicts"].append(
+                    {**tag, "gg_winner": gg_winner, "gg_margin": gg_margin})
+                continue
+            if apply:
+                conn.execute(
+                    "UPDATE cmp_matches SET result_locked_at = datetime('now'),"
+                    " result_locked_note = ? WHERE id = ?", (note, m["id"]))
+            out["locked"].append({**tag, "note": note})
+        if apply:
+            conn.commit()
+    out["locked_count"] = len(out["locked"])
+    out["no_gg_card_count"] = len(out["no_gg_card"])
+    out["conflict_count"] = len(out["conflicts"])
+    return out
+
+
+def cmp_clear_match(pool_id: int, player1: str, player2: str,
+                    force: bool = False, db_path=None) -> None:
     p1, p2 = sorted([player1, player2])
     with _connect(db_path) as conn:
+        if not force:
+            row = conn.execute(
+                "SELECT result_locked_at FROM cmp_matches WHERE pool_id = ? "
+                "AND player1_name = ? AND player2_name = ?",
+                (pool_id, p1, p2)).fetchone()
+            if row and row["result_locked_at"]:
+                raise ValueError(
+                    f"match {p1} vs {p2} is result-locked "
+                    f"({row['result_locked_at']}); pass force=True to delete")
         conn.execute(
             "DELETE FROM cmp_matches WHERE pool_id = ? AND player1_name = ? AND player2_name = ?",
             (pool_id, p1, p2),
@@ -26013,6 +26175,7 @@ def cmp_save_match(pool_id: int, player1: str, player2: str,
                    p2_stableford: float | None = None,
                    match_date: str | None = None, notes: str | None = None,
                    event_id: int | None = None,
+                   force: bool = False,
                    db_path=None) -> dict:
     """Upsert a pool match result. Canonical key is (pool_id, sorted player names).
 
@@ -26022,6 +26185,11 @@ def cmp_save_match(pool_id: int, player1: str, player2: str,
                    loser may outscore winner. Stored per player1_name / player2_name
                    (alphabetical canonical order).
     event_id     — FK to events.id; links the match to a TGF event.
+
+    A row whose result is LOCKED (result_locked_at, GG-verified) refuses any
+    change to winner_name/margin: the save is rejected with
+    {"blocked": "result_locked"} unless the incoming values equal the stored
+    ones (idempotent re-save) or force=True is passed deliberately.
     """
     # Always store names in alphabetical order so UNIQUE constraint is stable
     if player1 > player2:
@@ -26034,6 +26202,23 @@ def cmp_save_match(pool_id: int, player1: str, player2: str,
         else "NULL"
     )
     with _connect(db_path) as conn:
+        if not force:
+            ex = conn.execute(
+                """SELECT winner_name, margin, result_locked_at
+                     FROM cmp_matches WHERE pool_id = ?
+                      AND player1_name = ? AND player2_name = ?""",
+                (pool_id, player1, player2)).fetchone()
+            if ex and ex["result_locked_at"]:
+                same_w = _cmp_person_key(winner_name or "") == \
+                    _cmp_person_key(ex["winner_name"] or "")
+                same_m = _cmp_norm_margin(margin) == _cmp_norm_margin(ex["margin"])
+                if not (same_w and same_m):
+                    return {"blocked": "result_locked",
+                            "locked_at": ex["result_locked_at"],
+                            "stored_winner": ex["winner_name"],
+                            "stored_margin": ex["margin"],
+                            "attempted_winner": winner_name,
+                            "attempted_margin": margin}
         conn.execute(
             f"""INSERT INTO cmp_matches
                (pool_id, player1_name, player2_name,
