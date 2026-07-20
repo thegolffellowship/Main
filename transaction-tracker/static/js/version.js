@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.130.5";
+window.TGF_VERSION = "2.130.6";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.130.6",
+    date: "2026-07-20",
+    changes: [
+      "scoring-hio-gross bridge — EXACT per-event field sizes counted off the LIVE 2025 GG portals' ALL Gross leaderboards (the archive's result rows are winners-only for many fall events, so counting them under- or over-shoots the real field). Walks the proven tournament_results round-selector route, fetch-only, budget-aware.",
+      "scoring-south-ledger-repair — removes the double-booked $74 Daniel South ledger entry (mistaken 7/16 repair + today's receipt promotion) and records his real 7/16 payment: $18.59 excess credit from s9.18 Cedar Creek, whose receipt was misparsed.",
+    ],
+  },
   {
     version: "2.130.5",
     date: "2026-07-20",

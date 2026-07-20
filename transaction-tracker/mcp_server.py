@@ -1597,6 +1597,46 @@ def _scoring_dispatch(url: str, extract: str):
                 int(_p[0]), method=_p[1] if len(_p) > 1 else "Venmo",
                 refund_date=_p[2] if len(_p) > 2 else "",
                 note=_p[3] if len(_p) > 3 else ""), indent=2, default=str)
+        if cmd == "scoring-hio-gross":
+            # "<subdomain>[|<start>][|<end>][|<budget_s>]" — EXACT field
+            # sizes counted off the live GG ALL Gross boards (2025 HIO
+            # pot reconstruction). Fetch-only, resumable.
+            from email_parser import gg_history as _ggh
+            _p = [x.strip() for x in arg.split("|")]
+            return json.dumps(_ggh.hio_gross_field_counts(
+                _p[0],
+                start_date=_p[1] if len(_p) > 1 and _p[1] else "2025-08-11",
+                end_date=_p[2] if len(_p) > 2 and _p[2] else "2025-12-31",
+                budget_seconds=int(_p[3]) if len(_p) > 3 and _p[3] else 150),
+                indent=2, default=str)
+        if cmd == "scoring-south-ledger-repair":
+            # One-off (2026-07-20): my mistaken 7/16 payout_credit on item
+            # 2270 double-booked $74 next to the receipt-promoted entry,
+            # and Daniel's real 7/16 payment ($18.59 excess credit) has no
+            # ledger entry (its receipt #1626 was misparsed). Idempotent.
+            with db._connect(None) as _c:
+                _del = _c.execute(
+                    "DELETE FROM acct_transactions "
+                    "WHERE source_ref = 'credit-payout-2270'").rowcount
+                _dup = _c.execute(
+                    "SELECT id FROM acct_transactions "
+                    "WHERE source_ref = 'south-excess-20260716'").fetchone()
+                if not _dup:
+                    db._write_acct_entry(
+                        _c, item_id=2270, event_name="s9.18 CEDAR CREEK",
+                        customer="Daniel South", customer_id=24,
+                        order_id="R882685638",
+                        entry_type="expense", category="refund",
+                        source="venmo", amount=18.59,
+                        description=("Excess credit refund (Venmo): Daniel "
+                                     "South — s9.18 CEDAR CREEK (paid "
+                                     "2026-07-16; receipt #1626 misparsed)"),
+                        account="Venmo",
+                        source_ref="south-excess-20260716",
+                        date="2026-07-16")
+                _c.commit()
+            return json.dumps({"deleted_duplicate_74_entries": _del,
+                               "added_18_59_entry": not _dup})
         if cmd == "scoring-credit-stamp":
             # "<item_id>|<method>|<date>|<note>" — stamp refunded WITHOUT
             # a ledger write (receipt already promoted to acct_transactions;
