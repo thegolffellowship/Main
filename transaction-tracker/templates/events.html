@@ -11355,6 +11355,20 @@
                             <label style="display:block;font-size:0.82rem;margin-bottom:0.3rem;"><input type="radio" name="excess-action" value="keep" checked style="margin-right:0.3rem;">Keep as credit in player's account</label>
                             <label style="display:block;font-size:0.82rem;"><input type="radio" name="excess-action" value="venmo" style="margin-right:0.3rem;">${venmoLine}</label>`;
                         excessEl.style.display = '';
+                        // Button label mirrors the excess choice (Kerry
+                        // 2026-07-20): picking "Venmo back" makes the
+                        // action three-fold, so say so on the button.
+                        const _syncSubmitLabel = () => {
+                            const btn = document.getElementById('apply-credit-submit');
+                            if (!btn) return;
+                            const sel = document.querySelector('input[name="excess-action"]:checked');
+                            btn.textContent = (sel && sel.value === 'venmo')
+                                ? 'Apply Credit, Register & Refund'
+                                : 'Apply Credit & Register';
+                        };
+                        excessEl.querySelectorAll('input[name="excess-action"]')
+                            .forEach(rb => rb.addEventListener('change', _syncSubmitLabel));
+                        _syncSubmitLabel();
                         // Wire the inline Venmo handle entry (only present when no handle).
                         const addBtn = document.getElementById('credit-venmo-add-btn');
                         if (addBtn) {

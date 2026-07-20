@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.129.10";
+window.TGF_VERSION = "2.129.11";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.129.11",
+    date: "2026-07-20",
+    changes: [
+      "Apply Credit modal: selecting 'Venmo back' for the excess flips the submit button to 'Apply Credit, Register & Refund' (Kerry 2026-07-20) — the label now states all three actions the tap performs; switching back to 'Keep as credit' restores 'Apply Credit & Register'.",
+    ],
+  },
   {
     version: "2.129.10",
     date: "2026-07-20",
