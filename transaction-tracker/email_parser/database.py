@@ -37326,15 +37326,26 @@ def clear_event_auto_payouts(event_name: str, include_manual: bool = False,
         full = ev["item_name"].strip()
         m = _GG_EVENT_CODE_COMPOUND_RE.match(full)
         bare = m.group(1).lower() if m else full.lower()
-        # TRIM + prefix pattern: duplicate tgf_events rows exist with code
-        # variants (case, stray whitespace) — "s9.18 %" catches every
-        # "<bare> <anything>" spelling without colliding with other codes
-        # (s9.1 stays distinct from s9.18: the pattern requires the full
-        # bare code then a space).
-        trows = conn.execute(
-            "SELECT id, code FROM tgf_events WHERE LOWER(TRIM(code)) IN (?, ?) "
-            "OR LOWER(TRIM(code)) LIKE ?",
-            (full.lower(), bare, bare + " %")).fetchall()
+        # Whitespace-collapse normalization: duplicate tgf_events rows carry
+        # code variants like "s9. 18 CEDAR CREEK" (memo-style space after the
+        # period) that TRIM/LIKE prefixing can't reach. Normalize both sides
+        # by stripping ALL whitespace, then match on the bare code as a
+        # prefix (next char must be non-digit so s9.1 never swallows s9.18)
+        # or on the course-name token when the code dropped the number.
+        def _norm(s):
+            return re.sub(r"\s+", "", (s or "").lower())
+        full_n, bare_n = _norm(full), _norm(bare)
+        name_n = _norm(full[len(bare):]) if full.lower().startswith(bare) \
+            else ""
+        trows = []
+        for t in conn.execute("SELECT id, code FROM tgf_events").fetchall():
+            cn = _norm(t["code"])
+            if cn == full_n or cn == bare_n:
+                trows.append(t)
+            elif cn.startswith(bare_n) and not cn[len(bare_n):][:1].isdigit():
+                trows.append(t)
+            elif len(name_n) >= 8 and name_n in cn:
+                trows.append(t)
         if not trows:
             return {"event": full, "removed": 0,
                     "note": "no tgf_events row — nothing recorded"}

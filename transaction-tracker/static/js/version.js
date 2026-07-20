@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.129.2";
+window.TGF_VERSION = "2.129.3";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.129.3",
+    date: "2026-07-20",
+    changes: [
+      "clear-auto matching rebuilt on whitespace-collapse normalization: the Cedar Creek $229 sat on a tgf_events code variant the TRIM+LIKE prefix still couldn't reach (memo-style 's9. 18 CEDAR CREEK' spacing). Codes are now compared with ALL whitespace stripped; the bare event code matches as a prefix with a non-digit guard (s9.1 can never swallow s9.18 rows), and a course-name-token fallback (>=8 chars) catches rows that dropped the number entirely. The response still lists every matched code for the audit trail.",
+    ],
+  },
   {
     version: "2.129.2",
     date: "2026-07-20",
