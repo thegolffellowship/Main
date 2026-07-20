@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.127.4";
+window.TGF_VERSION = "2.128.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.128.0",
+    date: "2026-07-20",
+    changes: [
+      "TGF MVP single-event-day pot rule (Kerry ruling 2026-07-20, the a9.18 $26 shortfall): when the linked chapter's same-day event produced no City MVP (rained out), there is still no cross-chapter TGF MVP HONOR — but this event's players funded its TGF MVP contribution, and money follows collection: the day's sole determined City MVP takes this event's own tgfMVP pot. GG left the $26 unallocated; we now pay it (Kelly Barna, a9.18).",
+      "Running Hole-In-One pot (Kerry 2026-07-20): new get_hio_pot sums every past non-rained-out event's GAMES-matrix holeInOne contribution (by player count and 9/18 matrix) minus recorded HIO payouts. GET /api/hio-pot (manager) + bridge scoring-hio-pot.",
+      "Prize Fund Reconciliation itemizes the Hole-In-One accrual as its own line (it accrues to the running pot rather than paying out per event, so it never reads as an unexplained difference), computes the difference net of HIO, and shows the running cross-event pot total inline.",
+    ],
+  },
   {
     version: "2.127.4",
     date: "2026-07-20",

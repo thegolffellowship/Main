@@ -1528,6 +1528,10 @@ def _scoring_dispatch(url: str, extract: str):
             return json.dumps(db.import_event_scorecards_by_code(
                 url, code.strip(), only_round=(rkey.strip() or None),
                 refresh_players=refresh), indent=2, default=str)
+        if cmd == "scoring-hio-pot":
+            # READ-ONLY: running Hole-In-One pot (per-event matrix
+            # contributions minus recorded HIO payouts).
+            return json.dumps(db.get_hio_pot(), indent=2, default=str)
         if cmd == "scoring-payouts-clear-auto":
             # Remove an event's auto-recorded payout rows + their PENDING
             # ledger entries (matched Venmo never touched). For wrongly

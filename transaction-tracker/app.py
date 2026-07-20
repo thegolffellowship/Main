@@ -6600,6 +6600,16 @@ def api_list_refund_watches():
     return jsonify(get_open_refund_watches())
 
 
+@app.route("/api/hio-pot", methods=["GET"])
+@require_role("manager")
+def api_hio_pot():
+    """Running Hole-In-One pot: per-event matrix contributions accrued
+    across all past (non-rained-out) events, minus recorded HIO payouts
+    (Kerry 2026-07-20)."""
+    from email_parser.database import get_hio_pot
+    return jsonify(get_hio_pot())
+
+
 @app.route("/api/refunds/overview", methods=["GET"])
 @require_role("admin")
 def api_refunds_overview():
