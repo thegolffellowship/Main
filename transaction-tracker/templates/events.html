@@ -11115,7 +11115,17 @@
                 ? `/api/rsvps/gg/${rsvpId}/credit-info`
                 : `/api/rsvps/${itemId}/credit-info`;
             const resp = await fetch(infoUrl);
-            if (!resp.ok) { body.innerHTML = '<div style="color:#dc2626;padding:1rem;">Failed to load credit info.</div>'; return; }
+            if (!resp.ok) {
+                // Surface the server's actual reason ("No credits on file
+                // for this player") — the generic text made a no-credit
+                // 404 indistinguishable from a deploy-rollover 502
+                // (Kerry 2026-07-20, McCrary at s9.19).
+                let msg = 'Failed to load credit info.';
+                try { const e = await resp.json(); if (e && e.error) msg = e.error; } catch (_) {}
+                if (resp.status >= 500) msg += ' (server may be restarting — try again in a minute)';
+                body.innerHTML = `<div style="color:#dc2626;padding:1rem;">${msg}</div>`;
+                return;
+            }
             const info = await resp.json();
 
             const resolvedCustomer = info.customer || customer;

@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.129.8";
+window.TGF_VERSION = "2.129.9";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.129.9",
+    date: "2026-07-20",
+    changes: [
+      "Apply Credit modal surfaces the server's actual error ('No credits on file for this player') instead of the generic 'Failed to load credit info.' — a no-credit 404 was indistinguishable from a deploy-rollover 502 (Kerry 2026-07-20, McCrary at s9.19). 5xx responses add a 'server may be restarting — try again in a minute' hint.",
+    ],
+  },
   {
     version: "2.129.8",
     date: "2026-07-20",
