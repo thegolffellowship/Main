@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.127.1";
+window.TGF_VERSION = "2.127.2";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.127.2",
+    date: "2026-07-20",
+    changes: [
+      "Rain-out guard fix: the registration query referenced items.status, which doesn't exist (that column lives on acct_transactions) — every payout assembly errored with 'no such column'. Guard now counts credited/WD registrations without the phantom filter.",
+    ],
+  },
   {
     version: "2.127.1",
     date: "2026-07-20",

@@ -37032,8 +37032,7 @@ def _event_looks_rained_out(conn, event_name: str) -> dict | None:
                            IN ('wd','credited','refunded') THEN 1 ELSE 0 END)
                       AS credited
              FROM items
-            WHERE item_name = ? COLLATE NOCASE
-              AND COALESCE(status,'active') = 'active'""",
+            WHERE item_name = ? COLLATE NOCASE""",
         (event_name,)).fetchone()
     total, credited = row["total"] or 0, row["credited"] or 0
     if total >= 4 and credited >= 0.75 * total:
