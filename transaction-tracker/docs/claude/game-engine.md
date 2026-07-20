@@ -361,6 +361,13 @@ below wherever they conflict.
     margin must be computed in PLAY ORDER from the starting hole ("X up with Y
     to play"), and the member scorecard + dots must render from the starting
     hole, wrapping (5→9→1→4). GG marks it (`starting_hole_mark`); we read it.
+    **DONE in the reconcilers as of v2.125.0** (Kerry 2026-07-20: "a match
+    that starts on 4 goes to 1 after 9 — it doesn't go to 10"): both read-only
+    reconcilers previously walked holes in ascending number order, producing
+    wrong X&Y margins for every shotgun start — the source of the false
+    margin-mismatch reports; stored results were correct. `_cmp_derive_match`
+    now takes a play order from `_cmp_gg_play_order` (GG snapshot's explicit
+    per-hole `order`, else `_cmp_play_order` wrap from `start_hole`).
   - **NET matches.** net = gross − off-lowest strokes; per-hole handicap stroke
     dots must be recorded and shown.
   - **Extra holes / sudden death (GAP — not modeled).** A match all-square after
@@ -393,6 +400,18 @@ below wherever they conflict.
     records, knockout qualifiers, and seeding are frozen; reconciliation reads
     GG's computed match (concessions/gimmes included) to align DISPLAY detail
     to the recorded winner — never to change it.
+  - **Result hardening (v2.125.0, Kerry 2026-07-20: "once we get these
+    verified we need to harden these in the database so they don't change
+    again").** `cmp_matches.result_locked_at`/`result_locked_note`;
+    `cmp_lock_verified_results` (bridge `scoring-mp-lock:<season>|<chapter>
+    [|apply]`, dry-run default) locks every played match whose stored result
+    matches GG's own card exactly, or where GG shows AS and we recorded the
+    extra-holes/putt-off outcome. Conflicts and no-GG-card matches are
+    reported, never auto-locked. Locked rows refuse winner/margin changes and
+    deletion in `cmp_save_match` (API returns 409), `cmp_relabel_margins`
+    (`locked_skip`), and `cmp_clear_match` — `force=True` overrides
+    deliberately. The GG snapshot refresh (`gg_match_detail`) stays allowed:
+    it is display detail, not the result.
   - **Registration / eligibility (front of the lifecycle, for CA).** Signup
     timing + prerequisites. Notably an **established-handicap gate**: a player
     without an established handicap is held out of Match Play until they have
