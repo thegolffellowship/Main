@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.130.14";
+window.TGF_VERSION = "2.130.15";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.130.15",
+    date: "2026-07-20",
+    changes: [
+      "scoring-hio-pot audit bridge: returns the live pot with its full line-item breakdown (carry-in, per-event player counts and contributions, paid out, total) for verification against the GAMES tab display.",
+    ],
+  },
   {
     version: "2.130.14",
     date: "2026-07-20",
