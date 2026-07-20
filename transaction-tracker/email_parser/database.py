@@ -1642,9 +1642,20 @@ def _migrate_create_dim_tables(conn: sqlite3.Connection) -> None:
         else:
             course_chapter[canonical] = None
 
-    # Insert courses
+    # Insert courses — ALIAS-AWARE (v2.126.2): a name that already resolves
+    # through course_aliases must NOT be re-seeded as a new row. The course
+    # registry cleanup deletes name-only stubs ("The Quarry") and aliases
+    # them to the canonical row ("The Quarry Golf Club"); without this check
+    # every boot re-created the deleted stubs under fresh course_ids.
+    try:
+        known_aliases = {r["alias_name"].strip().lower() for r in
+                         conn.execute("SELECT alias_name FROM course_aliases")}
+    except Exception:
+        known_aliases = set()
     courses_added = 0
     for canonical in sorted(canonical_courses.keys()):
+        if canonical.strip().lower() in known_aliases:
+            continue
         try:
             conn.execute(
                 "INSERT OR IGNORE INTO courses (name, chapter_id) VALUES (?, ?)",
@@ -12588,6 +12599,11 @@ def audit_courses(db_path: str | Path | None = None) -> dict:
                                 for c in rows2]})
         dup_clusters.sort(key=lambda d: -d["total_scoring_rounds"])
         have = {c["name"].strip().lower() for c in courses}
+        try:
+            have |= {r["alias_name"].strip().lower() for r in conn.execute(
+                "SELECT alias_name FROM course_aliases")}
+        except Exception:
+            pass
         have_keys = {_course_dedup_key(c["name"]) for c in courses}
         missing = []
         for r in conn.execute(
@@ -13711,6 +13727,34 @@ def _migrate_course_registry_v1(conn: sqlite3.Connection) -> None:
         except Exception:
             logger.exception("Course registry: stub %s→%s failed", stub, survivor)
 
+    # ── alias-shadow sweep (rule-based, every boot): a courses row whose
+    # NAME matches an alias of a DIFFERENT course, with no rounds and no
+    # tees, is a re-created duplicate of a cleaned-up row (the boot seeder
+    # used to re-insert deleted stub names from items/events course strings
+    # — fixed to be alias-aware, but this sweep also heals rows created
+    # while the seeder wasn't, and any future drift of the same class) ──
+    try:
+        shadows = conn.execute(
+            """SELECT c.course_id AS stub, ca.course_id AS survivor
+                 FROM courses c
+                 JOIN course_aliases ca
+                   ON LOWER(ca.alias_name) = LOWER(c.name)
+                  AND ca.course_id != c.course_id
+                WHERE NOT EXISTS (SELECT 1 FROM scoring_rounds sr
+                                   WHERE sr.course_id = c.course_id)
+                  AND NOT EXISTS (SELECT 1 FROM course_tees t
+                                   WHERE t.course_id = c.course_id)""").fetchall()
+        for row in shadows:
+            try:
+                if conn.execute("SELECT 1 FROM courses WHERE course_id = ?",
+                                (row["survivor"],)).fetchone():
+                    _merge_course_into(conn, row["stub"], row["survivor"])
+            except Exception:
+                logger.exception("Course registry: shadow %s→%s failed",
+                                 row["stub"], row["survivor"])
+    except Exception:
+        logger.exception("Course registry: alias-shadow sweep failed")
+
     # ── facilities: explicit multi-course prefixes, then 1:1 for the rest ──
     prefix_groups = (("cypresswood", "Cypresswood Golf Club"),
                      ("comanche", "The Club at Comanche Trace"),
@@ -13728,6 +13772,10 @@ def _migrate_course_registry_v1(conn: sqlite3.Connection) -> None:
                            (fac_name,)).fetchone()["facility_id"]
         conn.execute("UPDATE courses SET facility_id = ? WHERE course_id = ?",
                      (fid, c["course_id"]))
+    # orphan facilities left behind by merged/deleted course rows
+    conn.execute("""DELETE FROM facilities WHERE NOT EXISTS
+                    (SELECT 1 FROM courses c
+                      WHERE c.facility_id = facilities.facility_id)""")
     conn.commit()
 
 
