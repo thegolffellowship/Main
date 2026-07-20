@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.130.2";
+window.TGF_VERSION = "2.130.3";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.130.3",
+    date: "2026-07-20",
+    changes: [
+      "Accounting sub-tab bar audit (Kerry 2026-07-20): Reconcile and Cash Flow rendered in a different font and alignment because they are links while the other tabs are buttons — the shared tab style now pins font, line-height, vertical alignment, and no-wrap for both element kinds, and the bar scrolls sideways instead of wrapping 'Cash Flow' onto two lines in the 1080px column.",
+      "The Reconcile and Cash Flow pages' sub-tab bars now include ALL TEN accounting tabs (they listed only six, with a stale 'Transactions' label for Ledger), and /accounting now honors #hash deep links — Dashboard/Ledger/Accounts/Categories/Reports/Liabilities/Contractors/Rules links from those pages land on the named tab instead of always dumping onto Ledger. Switching tabs also stamps the hash in the URL so refresh keeps your tab.",
+    ],
+  },
   {
     version: "2.130.2",
     date: "2026-07-20",

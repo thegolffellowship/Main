@@ -2131,10 +2131,18 @@ div.mobile-card.row-rsvp-only {
 .acct-subtabs {
     display: flex; gap: 0; background: var(--surface); border-bottom: 2px solid var(--border);
     padding: 0 1rem; position: sticky; z-index: 97;
+    flex-wrap: nowrap; overflow-x: auto;
 }
+/* One look for BOTH <button> tabs and <a> tabs: buttons don't inherit
+   font-family and anchors don't get button metrics, so without the
+   explicit font/line-height/flex alignment the two render differently
+   in the same bar (Kerry 2026-07-20, Reconcile/Cash Flow mismatch). */
 .acct-subtab {
-    padding: 0.65rem 1.25rem; border: none; background: none; cursor: pointer;
-    font-size: 0.875rem; font-weight: 500; color: var(--text-muted);
+    padding: 0.65rem 0.9rem; border: none; background: none; cursor: pointer;
+    font-family: inherit; font-size: 0.875rem; font-weight: 500;
+    line-height: 1.2; color: var(--text-muted);
+    display: inline-flex; align-items: center; white-space: nowrap;
+    text-decoration: none;
     border-bottom: 2px solid transparent; margin-bottom: -2px; transition: all 0.15s;
 }
 .acct-subtab:hover { color: var(--text); }
