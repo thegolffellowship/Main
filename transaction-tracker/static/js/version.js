@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.129.22";
+window.TGF_VERSION = "2.129.23";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.129.23",
+    date: "2026-07-20",
+    changes: [
+      "ONE credit-value function everywhere (_item_credit_value — no fees, minus partial carve-outs, floored at $0): the REFUNDS console still computed its own amounts and would have shown/paid John White $122 + $15.65 = $137.65 against $122 actually held. get_player_credits, payout_credit (the money actually sent), the REFUNDS console, and the watchless-completion matcher now all read the same helper — display, modal, and payment can no longer disagree. Same lesson as the badge-vs-modal split earlier today: duplicated money math WILL drift.",
+    ],
+  },
   {
     version: "2.129.22",
     date: "2026-07-20",
