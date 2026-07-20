@@ -5062,6 +5062,7 @@ def init_db(db_path: str | Path | None = None) -> None:
         except Exception:
             logger.exception("Non-fatal: _dedup_customer_aliases failed")
         _backfill_customer_id_on_season_contests(conn)
+        _backfill_customer_id_on_cmp_pool_members(conn)
         _backfill_customer_id_on_handicap_rounds(conn)
         _backfill_customer_id_on_gd_splits(conn)
         _backfill_customer_id_on_parse_warnings(conn)
@@ -13442,6 +13443,54 @@ def _backfill_customer_id_on_season_contests(conn: sqlite3.Connection) -> int:
     conn.commit()
     if updated:
         logger.info("Backfilled customer_id for %d season_contests rows", updated)
+    return updated
+
+
+def _backfill_customer_id_on_cmp_pool_members(conn: sqlite3.Connection) -> int:
+    """Populate customer_id on cmp_pool_members rows that lack it, plus the
+    player1_id/player2_id/winner_id columns on cmp_matches. These tables
+    predate their write paths reliably resolving ids, and a NULL id here made
+    both match-play reconcilers report imported scorecards as missing (the
+    2026-07-20 Austin 'missing 11'). Name→id via the canonical resolver;
+    unresolvable names are left NULL (the reconcilers' person-key name
+    fallback still covers them)."""
+    updated = 0
+
+    def _cid(name):
+        # per-row guard: one unresolvable/odd name must not abort the sweep
+        try:
+            return _lookup_customer_id(conn, name, None)
+        except Exception:
+            return None
+
+    try:
+        for row in conn.execute(
+                "SELECT id, customer_name FROM cmp_pool_members "
+                "WHERE customer_id IS NULL").fetchall():
+            cid = _cid(row["customer_name"])
+            if cid is not None:
+                updated += conn.execute(
+                    "UPDATE cmp_pool_members SET customer_id = ? "
+                    "WHERE id = ? AND customer_id IS NULL",
+                    (cid, row["id"])).rowcount
+        for name_col, id_col in (("player1_name", "player1_id"),
+                                 ("player2_name", "player2_id"),
+                                 ("winner_name", "winner_id")):
+            for row in conn.execute(
+                    f"SELECT id, {name_col} AS nm FROM cmp_matches "
+                    f"WHERE {id_col} IS NULL AND {name_col} IS NOT NULL "
+                    f"AND {name_col} != ''").fetchall():
+                cid = _cid(row["nm"])
+                if cid is not None:
+                    updated += conn.execute(
+                        f"UPDATE cmp_matches SET {id_col} = ? "
+                        f"WHERE id = ? AND {id_col} IS NULL",
+                        (cid, row["id"])).rowcount
+    except sqlite3.OperationalError:
+        return 0    # tables not created yet on this DB
+    conn.commit()
+    if updated:
+        logger.info("Backfilled customer ids on %d match-play rows", updated)
     return updated
 
 
@@ -25203,12 +25252,15 @@ def cmp_gg_detail_dump(chapter: str, player_a: str, player_b: str,
             "players": [player_a, player_b]}
 
 
-def cmp_pools_audit(db_path=None) -> list[dict]:
+def cmp_pools_audit(db_path=None) -> dict:
     """READ-ONLY: distinct (chapter, season) in cmp_pools with pool + match
     counts. Diagnoses why a chapter/season combo returns no pools (e.g. SA
-    pools stored under a different season label than the selector sends)."""
+    pools stored under a different season label than the selector sends).
+    Also lists pool-member rows with no customer_id link (the class that
+    made reconcilers report imported scorecards as missing) — the boot
+    backfill should keep this empty."""
     with _connect(db_path) as conn:
-        return [dict(r) for r in conn.execute(
+        return {"pools": [dict(r) for r in conn.execute(
             """SELECT p.chapter, p.season,
                       COUNT(DISTINCT p.id) AS pools,
                       COUNT(DISTINCT pm.id) AS members,
@@ -25217,7 +25269,14 @@ def cmp_pools_audit(db_path=None) -> list[dict]:
                  LEFT JOIN cmp_pool_members pm ON pm.pool_id = p.id
                  LEFT JOIN cmp_matches m ON m.pool_id = p.id
                 GROUP BY p.chapter, p.season
-                ORDER BY p.season DESC, p.chapter""")]
+                ORDER BY p.season DESC, p.chapter""")],
+            "unlinked_members": [dict(r) for r in conn.execute(
+            """SELECT pm.id, pm.customer_name, p.chapter, p.season,
+                      p.pool_name
+                 FROM cmp_pool_members pm
+                 JOIN cmp_pools p ON p.id = pm.pool_id
+                WHERE pm.customer_id IS NULL
+                ORDER BY p.season DESC, p.chapter, pm.customer_name""")]}
 
 
 _CMP_MP_WIDGETS = {
@@ -25443,16 +25502,41 @@ def cmp_get_matches(pool_id: int, db_path=None) -> list[dict]:
         return [dict(r) for r in rows]
 
 
-def _cmp_holes_for(conn, event_id, customer_id):
+def _cmp_round_row_for(conn, event_id, customer_id, player_name=None):
+    """The scoring_rounds row (id, playing_handicap, tee_id) for a player at
+    an event: by customer_id when linked, else by nickname-robust person-key
+    against the event's imported cards. The name fallback exists because a
+    cmp_pool_members row with a NULL/wrong customer_id used to make BOTH
+    reconcilers report 'no_hole_scores_imported' for cards that were in fact
+    imported (the 2026-07-20 Austin 'missing 11' — Barna/Marques/Cloer/Hogue
+    all had cards under valid customer_ids)."""
+    if not event_id:
+        return None
+    if customer_id:
+        r = conn.execute(
+            """SELECT id, playing_handicap, tee_id FROM scoring_rounds
+               WHERE event_id = ? AND customer_id = ?
+               ORDER BY holes_played DESC, id DESC LIMIT 1""",
+            (event_id, customer_id)).fetchone()
+        if r:
+            return r
+    if player_name:
+        want = _cmp_person_key(player_name)
+        cands = [r for r in conn.execute(
+            """SELECT id, playing_handicap, tee_id, player_name
+                 FROM scoring_rounds WHERE event_id = ?
+                ORDER BY holes_played DESC, id DESC""",
+            (event_id,)).fetchall()
+            if _cmp_person_key(r["player_name"]) == want]
+        if cands:
+            return cands[0]
+    return None
+
+
+def _cmp_holes_for(conn, event_id, customer_id, player_name=None):
     """Per-hole (strokes, strokes_received) for a player at an event, from
     the imported GG scorecard. Returns {hole_number: (gross, pops)} or {}."""
-    if not event_id or not customer_id:
-        return {}
-    row = conn.execute(
-        """SELECT id FROM scoring_rounds
-           WHERE event_id = ? AND customer_id = ?
-           ORDER BY holes_played DESC, id DESC LIMIT 1""",
-        (event_id, customer_id)).fetchone()
+    row = _cmp_round_row_for(conn, event_id, customer_id, player_name)
     if not row:
         return {}
     holes = {}
@@ -25604,8 +25688,8 @@ def cmp_reconcile_hole_results(season: str | None = None,
             if not m.get("event_id"):
                 out["uncheckable"].append({**tag, "reason": "no_event_assigned"})
                 continue
-            a_holes = _cmp_holes_for(conn, m["event_id"], a_id)
-            b_holes = _cmp_holes_for(conn, m["event_id"], b_id)
+            a_holes = _cmp_holes_for(conn, m["event_id"], a_id, p1)
+            b_holes = _cmp_holes_for(conn, m["event_id"], b_id, p2)
             if not a_holes or not b_holes:
                 miss = []
                 if not a_holes: miss.append(p1)
@@ -25647,20 +25731,14 @@ def cmp_reconcile_hole_results(season: str | None = None,
         return out
 
 
-def _cmp_match_round(conn, event_id, customer_id):
+def _cmp_match_round(conn, event_id, customer_id, player_name=None):
     """A player's match-play round row: (playing_handicap, tee_id,
     {hole: gross}, [holes_played]) from the imported GG scorecard, or None.
 
     Unlike _cmp_holes_for this returns the FULL 18/9-hole playing handicap
     and the tee so the caller can re-allocate match-play pops (75% off the
     lowest), NOT the stroke-play strokes_received baked into the import."""
-    if not event_id or not customer_id:
-        return None
-    r = conn.execute(
-        """SELECT id, playing_handicap, tee_id FROM scoring_rounds
-           WHERE event_id = ? AND customer_id = ?
-           ORDER BY holes_played DESC, id DESC LIMIT 1""",
-        (event_id, customer_id)).fetchone()
+    r = _cmp_round_row_for(conn, event_id, customer_id, player_name)
     if not r:
         return None
     gross, si_sum = {}, 0
@@ -25807,8 +25885,8 @@ def cmp_reconcile_match_play_75(season: str | None = None,
             if not m.get("event_id"):
                 out["uncheckable"].append({**tag, "reason": "no_event_assigned"})
                 continue
-            ra = _cmp_match_round(conn, m["event_id"], a_id)
-            rb = _cmp_match_round(conn, m["event_id"], b_id)
+            ra = _cmp_match_round(conn, m["event_id"], a_id, p1)
+            rb = _cmp_match_round(conn, m["event_id"], b_id, p2)
             if not ra or not rb:
                 miss = []
                 if not ra: miss.append(p1)

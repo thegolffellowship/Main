@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.125.3";
+window.TGF_VERSION = "2.125.4";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.125.4",
+    date: "2026-07-20",
+    changes: [
+      "The Austin 'missing 11' hole-data diagnosis: the reconcilers' no_hole_scores_imported reports were (at least partly) an identity gap, not a data gap — cmp_pool_members rows with a NULL customer_id made both reconcilers report players' imported cards as missing (Barna's a9.17 card exists with full back-nine hole detail, yet every Barna/Marques/Cloer/Hogue match read as uncheckable). Two-part fix: (1) boot backfill _backfill_customer_id_on_cmp_pool_members resolves customer_id on unlinked cmp_pool_members rows AND player1_id/player2_id/winner_id on cmp_matches via the canonical resolver (registered in the standard backfill chain per CLAUDE.md rule 6); (2) _cmp_round_row_for gives both reconcilers a nickname-robust person-key NAME fallback against the event's imported cards when the id path misses.",
+      "scoring-mp-pools-audit now also lists cmp_pool_members rows with no customer_id link ('unlinked_members') so this class is visible from the bridge; the boot backfill should keep it empty.",
+    ],
+  },
   {
     version: "2.125.3",
     date: "2026-07-20",
