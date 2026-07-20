@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.129.6";
+window.TGF_VERSION = "2.129.7";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.129.7",
+    date: "2026-07-20",
+    changes: [
+      "Docs: events.md now records that the Payouts sidebar total is tgf_events.total_purse (not the payout-row sum), the full payout repair-bridge set (clear-auto |all with shell-row sweep, restore-from-ledger-mirrors, unlink, rainout-label incl. |clear), and the removed course-name matching fallback with the incident that killed it.",
+    ],
+  },
   {
     version: "2.129.6",
     date: "2026-07-20",
