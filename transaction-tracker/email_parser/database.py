@@ -20663,6 +20663,65 @@ def auto_match_refund_watches(expense_ids: list[int] | None = None,
             conn.commit()
         summary["verified"] += 1
         summary["recorded"] += recorded
+
+    # ── Watchless pass (Kerry 2026-07-20, the Jeff Rideout case) ──
+    # Kerry often pays a credit refund straight from the Venmo app with
+    # no in-app Refund tap, so no watch exists and the credited item sat
+    # OUTSTANDING forever (his receipt even arrived under the alias
+    # 'Paul Rideout' — but the memo resolved customer_id). A payout
+    # receipt whose memo reads like a credit refund and that matches
+    # exactly ONE open credited/wd item by customer_id + exact amount
+    # completes that item the same way a verified watch would.
+    summary["watchless_recorded"] = 0
+    try:
+        with _connect(db_path) as conn:
+            open_credits = [dict(r) for r in conn.execute(
+                "SELECT id, customer_id, item_name, item_price, "
+                "credit_amount, transaction_status, created_at FROM items "
+                "WHERE LOWER(COALESCE(transaction_status,'')) "
+                "IN ('credited','wd')").fetchall()]
+        for exp in expenses:
+            if exp["id"] in used or exp["id"] in payout_backed:
+                continue
+            notes = (exp.get("notes") or "").lower()
+            if not any(k in notes for k in ("credit", "refund")):
+                continue
+            if not exp.get("customer_id"):
+                continue
+            try:
+                amt = round(float(exp.get("amount") or 0), 2)
+            except (TypeError, ValueError):
+                continue
+            cands = []
+            for it in open_credits:
+                if it["customer_id"] != exp["customer_id"]:
+                    continue
+                val = _parse_dollar(
+                    it.get("credit_amount") if (it.get("transaction_status")
+                                                or "").lower() == "wd"
+                    else it.get("item_price"))
+                if abs(round(val, 2) - amt) <= 0.009 and \
+                        (exp.get("created_at") or "") >= (it.get("created_at") or ""):
+                    cands.append(it)
+            if len(cands) != 1:
+                continue
+            it = cands[0]
+            try:
+                res = payout_credit(
+                    it["id"], method="Venmo",
+                    note=(f"Auto-verified via Venmo receipt "
+                          f"(expense #{exp['id']}, no watch)"),
+                    refund_date=(exp.get("transaction_date") or "")[:10],
+                    db_path=db_path)
+                if res.get("ok"):
+                    used.add(exp["id"])
+                    open_credits.remove(it)
+                    summary["watchless_recorded"] += 1
+            except Exception:
+                logger.exception("watchless refund complete failed for "
+                                 "item %s / expense %s", it["id"], exp["id"])
+    except Exception:
+        logger.exception("watchless refund pass failed")
         summary["matches"].append({
             "watch_id": w["id"], "item_id": w["item_id"],
             "expense_id": cand["id"], "amount": w["amount"],
