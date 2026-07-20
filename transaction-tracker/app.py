@@ -5547,121 +5547,57 @@ def api_trigger_credit_alerts():
 @app.route("/api/rsvps/gg/<int:rsvp_id>/credit-info", methods=["GET"])
 @require_role("manager")
 def api_gg_rsvp_credit_info(rsvp_id):
-    """Return full credit analysis for a GG RSVP (by rsvps.id, not items.id)."""
-    from email_parser.database import _connect, _calc_event_pricing_breakdown
+    """Full credit analysis for a GG RSVP (by rsvps.id, not items.id).
+
+    Delegates to get_rsvp_credit_info — the SAME code path that renders
+    the roster CREDIT badge and sends the credit-alert emails — instead
+    of a hand-rolled duplicate of its resolution/pricing logic. The
+    duplicate drifted twice in one day (email-only resolution, then a
+    partial customer_id fix) while the DB function worked the whole time
+    (Kerry 2026-07-20: Anthis's badge + alert email fine, modal 404).
+    """
+    from email_parser.database import _connect, get_rsvp_credit_info
+    info = get_rsvp_credit_info(rsvp_id)
+    if not info:
+        return jsonify({"error": "No credits on file for this player "
+                                 "(or the RSVP isn't matched to an event)"}), 404
+
+    # Venmo handle for the excess-refund deep link
+    venmo_username = None
     with _connect() as conn:
-        rsvp = conn.execute("SELECT * FROM rsvps WHERE id = ?", (rsvp_id,)).fetchone()
-        if not rsvp:
-            return jsonify({"error": "RSVP not found"}), 404
-        rsvp = dict(rsvp)
-
-        event_name = rsvp.get("matched_event") or ""
-        player_email = (rsvp.get("player_email") or "").strip().lower()
-        player_name = rsvp.get("player_name") or ""
-
-        # Resolve the player the same way get_rsvp_credit_info (the
-        # roster CREDIT badge) does — rsvps.customer_id is authoritative
-        # (rule 6), then the canonical customers name, then the email
-        # fallback inside get_player_credits. The old email-only items
-        # lookup left an email-less GG-format name ("Anthis, Larry")
-        # unresolvable and 404'd while the badge showed a live credit
-        # (Kerry 2026-07-20 mobile).
-        customer = player_name
-        cust_id = rsvp.get("customer_id")
-        if cust_id:
-            crow = conn.execute(
-                "SELECT TRIM(first_name || ' ' || last_name) AS n "
-                "FROM customers WHERE customer_id = ?", (cust_id,)).fetchone()
-            if crow and (crow["n"] or "").strip():
-                customer = crow["n"].strip()
-        elif player_email:
-            card = conn.execute(
-                """SELECT customer FROM items WHERE LOWER(customer_email) = ?
-                   AND customer IS NOT NULL AND customer != ''
-                   ORDER BY order_date DESC LIMIT 1""",
-                (player_email,),
-            ).fetchone()
-            if card:
-                customer = card["customer"]
-
-        credits = get_player_credits(customer, customer_id=cust_id,
-                                     player_email=player_email or None)
-        if not credits:
-            return jsonify({"error": "No credits on file for this player"}), 404
-
-        total_credit = sum(c["credit_amount"] for c in credits)
-
-        event_row = conn.execute(
-            "SELECT * FROM events WHERE item_name = ? COLLATE NOCASE", (event_name,)
-        ).fetchone()
-        event = dict(event_row) if event_row else {}
-
-        most_recent = credits[0]
-        # Force holes to match event format on non-combo events (same as the
-        # by-item endpoint). See that function's comment for the why.
-        _evt_fmt = (event.get("format") or "")
-        if _evt_fmt == "18 Holes":
-            _holes = "18"
-        elif _evt_fmt == "9 Holes":
-            _holes = "9"
-        else:
-            _holes = most_recent.get("holes") or "9"
-        prev = {
-            "user_status": most_recent.get("user_status") or "MEMBER",
-            "holes": _holes,
-            "side_games": most_recent.get("side_games") or "NONE",
-            "tee_choice": most_recent.get("tee_choice") or "",
-        }
-
-        breakdown = _calc_event_pricing_breakdown(
-            event, prev["user_status"], prev["holes"], prev["side_games"]
-        )
-        event_price = breakdown["total"] if breakdown else None
-        event_subtotal = breakdown["subtotal"] if breakdown else None
-        amount_owed = round((event_subtotal or 0.0) - total_credit, 2) if event_subtotal is not None else None
-
-        venmo_username = None
         row = conn.execute(
             """SELECT venmo_username FROM customers
                WHERE TRIM(first_name||' '||last_name) = ? COLLATE NOCASE
                AND venmo_username IS NOT NULL AND venmo_username != ''
                LIMIT 1""",
-            (customer,),
+            (info.get("player_name") or "",),
         ).fetchone()
         if row:
             venmo_username = row["venmo_username"]
-        if not venmo_username and player_email:
+        if not venmo_username and info.get("player_email"):
             row = conn.execute(
                 """SELECT c.venmo_username FROM customers c
                    JOIN customer_emails ce ON ce.customer_id = c.customer_id
                    WHERE LOWER(ce.email) = ?
                    AND c.venmo_username IS NOT NULL AND c.venmo_username != ''
                    LIMIT 1""",
-                (player_email,),
+                ((info.get("player_email") or "").strip().lower(),),
             ).fetchone()
             if row:
                 venmo_username = row["venmo_username"]
 
     return jsonify({
         "rsvp_id": rsvp_id,
-        "customer": customer,
+        "customer": info.get("player_name"),
         "credits": [
-            {
-                "id": c["id"],
-                "item_name": c.get("item_name") or "",
-                "event_name": c.get("item_name") or "",
-                "origin_event": c.get("origin_event") or c.get("item_name") or "",
-                "item_price": f"${c.get('credit_amount', 0):.2f}",
-                "credit_amount": round(c.get("credit_amount") or 0, 2),
-                "order_date": c.get("order_date") or "",
-            }
-            for c in credits
+            {**c, "item_price": f"${(c.get('credit_amount') or 0):.2f}"}
+            for c in info.get("credits", [])
         ],
-        "total_credit": total_credit,
-        "event_price": event_price,
-        "event_subtotal": event_subtotal,
-        "amount_owed": amount_owed,
-        "previous_selections": prev,
+        "total_credit": info.get("total_credit"),
+        "event_price": info.get("new_event_price"),
+        "event_subtotal": info.get("new_event_subtotal"),
+        "amount_owed": info.get("amount_owed"),
+        "previous_selections": info.get("selections"),
         "venmo_username": venmo_username,
     })
 
