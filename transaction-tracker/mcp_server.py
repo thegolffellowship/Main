@@ -1597,6 +1597,15 @@ def _scoring_dispatch(url: str, extract: str):
                 int(_p[0]), method=_p[1] if len(_p) > 1 else "Venmo",
                 refund_date=_p[2] if len(_p) > 2 else "",
                 note=_p[3] if len(_p) > 3 else ""), indent=2, default=str)
+        if cmd == "scoring-credit-stamp":
+            # "<item_id>|<method>|<date>|<note>" — stamp refunded WITHOUT
+            # a ledger write (receipt already promoted to acct_transactions;
+            # payout_credit here would double-book).
+            _p = [x.strip() for x in arg.split("|")]
+            return json.dumps(db.stamp_credit_refunded(
+                int(_p[0]), method=_p[1] if len(_p) > 1 else "Venmo",
+                refund_date=_p[2] if len(_p) > 2 else "",
+                note=_p[3] if len(_p) > 3 else ""), indent=2, default=str)
         if cmd == "scoring-hio-archive":
             # "<subdomain>[,<subdomain>...]" — per-event field sizes +
             # games-matrix HIO contributions from the GG History archive

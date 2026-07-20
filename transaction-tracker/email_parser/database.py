@@ -17438,6 +17438,47 @@ def payout_credit(
 payout_wd_credit = payout_credit
 
 
+def stamp_credit_refunded(
+    item_id: int,
+    method: str = "Venmo",
+    refund_date: str = "",
+    note: str = "",
+    db_path: str | Path | None = None,
+) -> dict:
+    """Mark an outstanding credit refunded WITHOUT writing a ledger entry.
+
+    For payments whose Venmo receipt ALREADY reached acct_transactions
+    via expense promotion — payout_credit would double-book the ledger
+    (one entry from it + one from the promoted receipt). Stamps items
+    exactly like payout_credit does; touches nothing else."""
+    with _connect(db_path) as conn:
+        row = conn.execute(
+            "SELECT * FROM items WHERE id = ?", (item_id,)).fetchone()
+        if not row:
+            return {"ok": False, "error": "Item not found"}
+        item = dict(row)
+        status = (item.get("transaction_status") or "").lower()
+        if status not in ("wd", "credited"):
+            return {"ok": False,
+                    "error": "Item is not in WD or credited status"}
+        amount = _item_credit_value(conn, item)
+        date_str = (refund_date or "").strip() or today_central_str()
+        stamp = f"Refunded ${amount:.2f} via {method or 'manual'} on {date_str}"
+        if note:
+            stamp += f" — {note}"
+        if status == "wd":
+            conn.execute(
+                "UPDATE items SET credit_amount = NULL, credit_note = ? "
+                "WHERE id = ?", (stamp, item_id))
+        else:
+            conn.execute(
+                "UPDATE items SET transaction_status = 'refunded', "
+                "credit_note = ? WHERE id = ?", (stamp, item_id))
+        conn.commit()
+        return {"ok": True, "amount": amount, "date": date_str,
+                "ledger": "skipped (receipt already promoted)"}
+
+
 def wd_item(
     item_id: int,
     note: str = "",
