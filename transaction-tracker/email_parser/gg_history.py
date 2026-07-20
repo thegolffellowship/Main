@@ -2083,6 +2083,112 @@ def search_customers_for_link(q: str, limit: int = 10, db_path=None) -> list:
         return [dict(r) for r in rows]
 
 
+def hio_gross_field_counts(subdomain: str, start_date: str = "2025-08-11",
+                           end_date: str = "2025-12-31",
+                           budget_seconds: int = 150,
+                           db_path=None) -> dict:
+    """EXACT per-event field sizes from the LIVE 2025 GG portals, counted
+    off the ALL GROSS leaderboards (Kerry 2026-07-20: the archive's
+    result rows are winners-only for many events; 'Reference ALL Gross
+    in each one of those to verify').
+
+    Reuses the proven widget-route recipe: tournament_results round
+    selector -> &round=<rid> page -> 'ALL Gross*' board links ->
+    board tables -> distinct player names. Budget-aware and resumable:
+    call again with the same window; already-returned events just
+    recount (fetch-only, no writes)."""
+    from email_parser.database import _connect, DB_PATH
+    from golf_genius_sync import fetch_public_page, parse_page_structure
+
+    t0 = time.time()
+    base = f"https://{subdomain}.golfgenius.com"
+    out = {"subdomain": subdomain, "window": [start_date, end_date],
+           "events": [], "skipped": [], "pending": []}
+
+    with _connect(db_path or DB_PATH) as conn:
+        ensure_gg_history_tables(conn)
+        portal = conn.execute(
+            "SELECT * FROM gg_history_portals WHERE subdomain = ?",
+            (subdomain,)).fetchone()
+        if portal is None:
+            return {"error": f"unknown portal {subdomain!r}"}
+        league_id = portal["league_id"]
+        if not league_id:
+            return {"error": "league_id missing — run Phase A ingest first"}
+        targets = [dict(r) for r in conn.execute(
+            """SELECT gg_round_id, event_date, event_label
+                 FROM gg_history_events
+                WHERE portal_id = ? AND gg_round_id IS NOT NULL
+                  AND event_date >= ? AND event_date <= ?
+                ORDER BY event_date""",
+            (portal["id"], start_date, end_date))]
+
+    def _board_names(board_url: str) -> set:
+        pg = fetch_public_page(board_url)
+        if pg["status_code"] != 200:
+            return set()
+        struct = parse_page_structure(pg["html"], board_url)
+        names = set()
+        _skip = {"player", "players", "pos", "position", "total", "gross",
+                 "net", "purse", "points", "thru", "score", "team", "rank"}
+        for tbl in (struct.get("tables") or []):
+            rows = tbl.get("rows") if isinstance(tbl, dict) else tbl
+            if not rows or len(rows) < 2:
+                continue
+            header = [str(c).strip().lower() for c in rows[0]]
+            name_col = next((i for i, h in enumerate(header)
+                             if "player" in h or "name" in h or "team" in h),
+                            1 if len(header) > 1 else 0)
+            for row in rows[1:]:
+                if name_col >= len(row):
+                    continue
+                cell = " ".join(str(row[name_col]).split())
+                low = cell.lower()
+                if (not cell or low in _skip
+                        or not re.search(r"[a-zA-Z]{2}", cell)
+                        or re.fullmatch(r"[\d\s.$,+-]+", cell)):
+                    continue
+                names.add(cell)
+        return names
+
+    for ev in targets:
+        if time.time() - t0 > budget_seconds:
+            out["pending"].append(ev["event_label"])
+            continue
+        rid = str(ev["gg_round_id"])
+        round_url = (f"{base}/leagues/{league_id}/widgets/"
+                     f"tournament_results?shared=false&round={rid}")
+        pg = fetch_public_page(round_url)
+        if pg["status_code"] != 200:
+            out["skipped"].append({"event": ev["event_label"],
+                                   "why": f"http_{pg['status_code']}"})
+            continue
+        links = (parse_page_structure(pg["html"], round_url)
+                 .get("links") or [])
+        v2t = [l for l in links
+               if "/v2tournaments/" in (l.get("href") or "")
+               and "total_purse" not in l["href"]]
+        gross = [l for l in v2t if (l.get("text") or "")
+                 .strip().lower().startswith("all gross")]
+        if not gross:
+            out["skipped"].append(
+                {"event": ev["event_label"], "why": "no ALL Gross board",
+                 "boards": [(l.get("text") or "").strip()
+                            for l in v2t][:10]})
+            continue
+        field = set()
+        for l in gross:
+            href = l["href"]
+            if href.startswith("/"):
+                href = base + href
+            field |= _board_names(href)
+        out["events"].append({
+            "event": ev["event_label"], "date": ev["event_date"],
+            "players": len(field),
+            "boards": [(l.get("text") or "").strip() for l in gross]})
+    return out
+
+
 def hio_archive_events(subdomains: list, db_path=None) -> dict:
     """Per-event field sizes + games-matrix HIO contributions from the GG
     HISTORY archive — for reconstructing the 2025 HIO pot carry-in
