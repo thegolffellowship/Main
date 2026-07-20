@@ -1573,6 +1573,60 @@ def _scoring_dispatch(url: str, extract: str):
                 _rows, _apply2 = json.loads(arg), False
             return json.dumps(db.restore_tgf_payouts_explicit(
                 _rows, apply=_apply2), indent=2, default=str)
+        if cmd == "scoring-credit-payout":
+            # Record an already-sent credit refund — "<item_id>|<method>|
+            # <date>|<note>". Delegates to db.payout_credit (same stamp +
+            # ledger entry as the in-app Refund flow). Kerry 2026-07-20:
+            # the Jeff Rideout $19.15 was Venmo'd under his alias 'Paul
+            # Rideout', so the console never saw it complete.
+            _p = [x.strip() for x in arg.split("|")]
+            return json.dumps(db.payout_credit(
+                int(_p[0]), method=_p[1] if len(_p) > 1 else "Venmo",
+                refund_date=_p[2] if len(_p) > 2 else "",
+                note=_p[3] if len(_p) > 3 else ""), indent=2, default=str)
+        if cmd == "scoring-alias-add":
+            # "<customer canonical name>|<alias name>" — records a NAME
+            # alias (e.g. the Venmo account name a member pays under).
+            _canon, _, _alias = arg.partition("|")
+            with db._connect(None) as _c:
+                _dup = _c.execute(
+                    "SELECT id FROM customer_aliases WHERE customer_name = ? "
+                    "AND alias_type = 'name' AND alias_value = ? COLLATE NOCASE",
+                    (_canon.strip(), _alias.strip())).fetchone()
+                if not _dup:
+                    _c.execute(
+                        "INSERT INTO customer_aliases (customer_name, "
+                        "alias_type, alias_value) VALUES (?, 'name', ?)",
+                        (_canon.strip(), _alias.strip()))
+                    _c.commit()
+            return json.dumps({"customer": _canon.strip(),
+                               "alias": _alias.strip(),
+                               "added": not bool(_dup)}, indent=2)
+        if cmd == "scoring-refund-watch-cancel":
+            # Cancel an open (unverified) refund watch — "<name>|<amount>
+            # [|apply]". Kerry 2026-07-20: an In-Flight row for a Venmo
+            # he never actually sent needed clearing; watches had no
+            # cancel path.
+            _parts = [x.strip() for x in arg.split("|")]
+            _nm = _parts[0] if _parts else ""
+            _amt = float(_parts[1]) if len(_parts) > 1 and _parts[1] else None
+            _apply3 = len(_parts) > 2 and _parts[2].lower() == "apply"
+            with db._connect(None) as _c:
+                db._ensure_refund_watch_table(_c)
+                _q = ("SELECT id, customer_name, amount, method, handle, "
+                      "initiated_at FROM refund_watches "
+                      "WHERE verified_at IS NULL")
+                _ws = [dict(w) for w in _c.execute(_q).fetchall()
+                       if _nm.lower() in (w["customer_name"] or "").lower()
+                       and (_amt is None
+                            or abs(float(w["amount"]) - _amt) < 0.005)]
+                if _apply3:
+                    for w in _ws:
+                        _c.execute("DELETE FROM refund_watches WHERE id = ?",
+                                   (w["id"],))
+                    _c.commit()
+            return json.dumps({"matched": _ws, "cancelled": _apply3},
+                              indent=2, default=str)
         if cmd == "scoring-credit-info":
             # Debug: run the SAME credit analysis the Apply Credit modal
             # uses for a GG RSVP — "<rsvp_id>". Returns the payload or

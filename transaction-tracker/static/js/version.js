@@ -1,5 +1,15 @@
-window.TGF_VERSION = "2.129.20";
+window.TGF_VERSION = "2.129.21";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.129.21",
+    date: "2026-07-20",
+    changes: [
+      "FEES ARE NEVER CREDITED (Kerry-ratified 2026-07-20: 'We don't refund fees' — the rule existed in practice but was written nowhere and the credit code had included transaction fees since it was built): get_player_credits now uses the entry price only. John White's Cedar Creek credit corrects from $126.27 to $122.00 total ($106.35 entry + $15.65 downgrade carve-out); Larry Anthis from $116.08 to $106.00. Rule recorded in docs/claude/events.md.",
+      "Daily Briefing deep links (Kerry): membership outreach rows link straight to the player's page, and the money chips link to their queues (payouts/refunds → TGF page, credits → Transactions).",
+      "scoring-refund-watch-cancel:<name>[|<amount>][|apply] bridge — cancels an open In-Flight refund watch that was initiated but never actually sent (no cancel path existed).",
+      "scoring-credit-payout:<item_id>|<method>|<date>|<note> bridge records an already-sent credit refund via db.payout_credit (the Jeff Rideout $19.15 was Venmo'd under his alias 'Paul Rideout' so the console never saw it complete), and scoring-alias-add:<canonical>|<alias> records the Venmo-account name alias for future matching.",
+    ],
+  },
   {
     version: "2.129.20",
     date: "2026-07-20",

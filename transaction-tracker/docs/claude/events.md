@@ -58,6 +58,17 @@ same defaults.
    filter + NET | GROSS | NONE. (v2.49.0, Kerry: PLAYERS renamed ROSTER; FINANCIAL moved
    to the end after PAYOUTS.)
 2. **Registrations table** — only active/rsvp players (compact rows)
+**CREDIT MATH (Kerry-ratified 2026-07-20):** a player's credit is the
+ENTRY PRICE only — transaction fees are NEVER refunded or credited ("We
+don't refund fees"; the fee covered card processing that already
+happened). Partial carve-out children (Partial Credit / Partial Refund /
+Refund(<method>) rows from event downgrades or dropped side games)
+subtract from the parent's credit so the same dollars never count twice
+— parent + carve-out lines always sum to the money actually held.
+Implemented in `get_player_credits` (v2.129.20-21); flows to the Apply
+Credit modal, roster credit badges, credit-alert emails, and balance-due
+math.
+
 3. **Inactive section** — credited/refunded/transferred/WD players in a gray box with Reverse buttons. Names link to `/customers?name=...` (clickable). WD rows with a `credit_amount` and standalone `credited` rows expose an additional **Refund** button (see `Payout Credit / Refund` below).
 4. **Not Playing section** — GG RSVP players marked as not playing (red box). Names render as full "Last, First" (resolved via `rsvps.customer_id` FK → `customers` master record), link to `/customers?name=...`, and surnames render UPPERCASE for elevated-role players. No email rendered on the row.
    - **Suppression rule (v2.13.0):** if a player who RSVPd "not playing" later registers and has an active transaction for the event, their GG RSVP is filtered out of this section automatically. Daniel Stich-style: he RSVPd not-playing then paid; he no longer shows up under NOT PLAYING.
