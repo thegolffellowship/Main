@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.124.2";
+window.TGF_VERSION = "2.124.3";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.124.3",
+    date: "2026-07-19",
+    changes: [
+      "Pts rows restored on POOL match cards (Kerry: pool play shows points, knockouts don't — v2.123.0 removed them from the shared renderer, which wrongly killed them on pool cards too). Pool scorecards again show the per-hole points rows with totals; knockout cards stay clean. Post-decision holes already render in gray on pool cards when Golf Genius has the scores — a pool card missing trailing holes (e.g. Hamilton/Campos 6/02) means GG has no strokes recorded for those holes, not that the card is hiding them.",
+    ],
+  },
   {
     version: "2.124.2",
     date: "2026-07-19",
