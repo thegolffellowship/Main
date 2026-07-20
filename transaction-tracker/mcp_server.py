@@ -1573,6 +1573,19 @@ def _scoring_dispatch(url: str, extract: str):
                 _rows, _apply2 = json.loads(arg), False
             return json.dumps(db.restore_tgf_payouts_explicit(
                 _rows, apply=_apply2), indent=2, default=str)
+        if cmd == "scoring-item-note":
+            # Repair: set an item's credit_note — "<item_id>|<note>".
+            # Built for stamping 'balance_due:X.XX' on credit-transfer
+            # rows whose apply ran under the fee-inclusive math bug
+            # (John White s9.20: server said owed $0, truth $17).
+            _iid, _, _note = arg.partition("|")
+            with db._connect(None) as _c:
+                _n2 = _c.execute(
+                    "UPDATE items SET credit_note = ? WHERE id = ?",
+                    (_note.strip(), int(_iid.strip()))).rowcount
+                _c.commit()
+            return json.dumps({"item_id": int(_iid.strip()),
+                               "updated": _n2}, indent=2)
         if cmd == "scoring-credit-payout":
             # Record an already-sent credit refund — "<item_id>|<method>|
             # <date>|<note>". Delegates to db.payout_credit (same stamp +

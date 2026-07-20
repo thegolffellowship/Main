@@ -11479,6 +11479,13 @@
     document.getElementById('apply-credit-submit').addEventListener('click', async () => {
         const { itemId, rsvpId, customer, eventName, info } = applyCreditState;
         if ((!itemId && !rsvpId) || !info) return;
+        // Double-click guard (Kerry 2026-07-20): a second tap while the
+        // first apply was in flight consumed the credits and errored
+        // "No valid credited items found" over a SUCCESSFUL apply.
+        const _btn = document.getElementById('apply-credit-submit');
+        if (_btn.disabled) return;
+        _btn.disabled = true;
+        _btn.textContent = 'Applying…';
 
         const excessRadio = document.querySelector('input[name="excess-action"]:checked');
         const excessAction = excessRadio ? excessRadio.value : 'keep';
