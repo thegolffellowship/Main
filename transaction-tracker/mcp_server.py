@@ -1544,8 +1544,12 @@ def _scoring_dispatch(url: str, extract: str):
             # Remove an event's auto-recorded payout rows + their PENDING
             # ledger entries (matched Venmo never touched). For wrongly
             # auto-recorded events, e.g. the s9.18 Cedar Creek rain-out.
-            return json.dumps(db.clear_event_auto_payouts(arg.strip()),
-                              indent=2, default=str)
+            # "<event>|all" ALSO removes manual/screenshot rows
+            # (Kerry-directed only).
+            _ev, _, _mode = arg.partition("|")
+            return json.dumps(db.clear_event_auto_payouts(
+                _ev.strip(), include_manual=(_mode.strip().lower() == "all")),
+                indent=2, default=str)
         if cmd == "scoring-refunds-overview":
             # READ-ONLY: the REFUNDS console payload (outstanding / in-flight
             # / completed) — incl. season-contest removal refunds.

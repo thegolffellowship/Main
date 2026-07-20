@@ -3934,6 +3934,13 @@
             const winData = Object.values(tgfPayoutData.winnings).find(w => w.id === g.golfer_id);
             const venmo = winData ? winData.venmo_username : "";
             const alreadyPaid = g.payment_status === "paid";
+            // Partial payments (Kerry 2026-07-20, the Barna a9.18 $26): when
+            // some rows are already paid, the Pay button carries ONLY the
+            // unpaid remainder, with a PAID/DUE subline under the total.
+            const dueTotal = g.items.filter(p => p.payment_status !== "paid")
+                .reduce((s, p) => s + p.amount, 0);
+            const paidSoFar = g.total - dueTotal;
+            const isPartial = paidSoFar > 0.005 && dueTotal > 0.005;
             // ONE action/status control per row (Kerry 2026-07-13): a pay
             // link, OR a "+ Add Payment" chooser, OR the PAID badge — never a
             // pay link AND a PENDING badge together. The redundant second pill
@@ -3944,7 +3951,7 @@
             if (alreadyPaid) {
                 actionCell = PAYOUT_STATUS_BADGE.paid;
             } else {
-                const pa = payoutPayLink(winData, g.total, ev.item_name, g.name);
+                const pa = payoutPayLink(winData, isPartial ? dueTotal : g.total, ev.item_name, g.name);
                 if (pa && pa.href) {
                     actionCell = `<a href="${pa.href}" target="_blank" rel="noopener" style="display:inline-flex;align-items:center;gap:3px;padding:2px 8px;border-radius:99px;font-size:0.72rem;font-weight:600;background:#008CFF;color:#fff;text-decoration:none;" onclick="event.stopPropagation(); scheduleVenmoCheckEv();"><svg viewBox="0 0 24 24" fill="currentColor" style="width:12px;height:12px;"><path d="M19.5 3c.9 1.5 1.3 3 1.3 5 0 5.5-4.7 12.7-8.5 17H5.2L3 3.5l6-.6 1.2 9.6c1.2-2 2.7-5.2 2.7-7.3 0-1.9-.3-3.2-.8-4.2L19.5 3z"/></svg>${pa.label || 'Pay'}</a>`;
                 } else if (pa && pa.badge && g.golfer_id) {
@@ -3968,7 +3975,7 @@
             html += `<td style="padding:0.5rem;font-weight:600;font-size:0.88rem;">${escapeHtml(g.name)}</td>`;
             html += `<td class="payout-hide-mobile" style="padding:0.5rem;text-align:center;">${regIcon}</td>`;
             html += `<td class="payout-hide-mobile" style="padding:0.5rem;text-align:right;font-size:0.85rem;">${g.items.length}</td>`;
-            html += `<td style="padding:0.5rem;text-align:right;font-weight:700;color:#059669;font-variant-numeric:tabular-nums;">$${g.total.toFixed(2)}</td>`;
+            html += `<td style="padding:0.5rem;text-align:right;font-weight:700;color:#059669;font-variant-numeric:tabular-nums;">$${g.total.toFixed(2)}${isPartial ? `<div style="font-size:0.68rem;font-weight:600;color:var(--text-muted);">PAID $${paidSoFar.toFixed(2)} &middot; DUE $${dueTotal.toFixed(2)}</div>` : ""}</td>`;
             html += `<td style="padding:0.5rem;text-align:right;white-space:normal;">${actionCell}</td>`;
             html += `</tr>`;
 
@@ -4862,9 +4869,19 @@
             ? ` <button class="record-payouts-btn" data-event="${escapeHtml(ev.item_name)}" style="float:right;font-size:0.72rem;padding:2px 10px;border-radius:99px;background:#0ea5e9;color:#fff;border:none;cursor:pointer;font-weight:600;" title="Record the determined winners below into the PAYOUTS tab with prepared payment links">&#x1F4B8; Record Payouts</button>` : '';
         html += `<div class="games-panel-header">${holes}-HOLE GAMES &mdash; ${totalPC} Total, ${netPC} Net, ${grossPC} Gross${recordBtn}</div>`;
 
-        // Hole-in-One pot — standalone display above the games table, not included in event totals
+        // Hole-in-One pot — standalone display above the games table, not
+        // included in event totals. Shows this event's contribution AND the
+        // running cross-event pot THROUGH this event (Kerry 2026-07-20);
+        // carry-in from 2025 rides the /api/hio-pot payload once set.
         if (gEvent && gEvent.holeInOne && gEvent.holeInOne !== "NO_EVENT" && gEvent.holeInOne !== "NO_GAME") {
-            html += `<div class="hole-in-one-banner">Hole-in-One Pot: ${fmt$(gEvent.holeInOne)} <span class="gg-det" data-event="${escapeHtml(ev.item_name)}" data-game="hio"></span></div>`;
+            html += `<div class="hole-in-one-banner">Hole-in-One Pot: ${fmt$(gEvent.holeInOne)} <span class="gg-det" data-event="${escapeHtml(ev.item_name)}" data-game="hio"></span> <span id="hio-running-inline" style="margin-left:0.5rem;"></span></div>`;
+            fetch("/api/hio-pot").then(r => r.ok ? r.json() : null).then(d => {
+                const el = document.getElementById("hio-running-inline");
+                if (!el || !d) return;
+                const row = (d.events || []).find(e => e.event === ev.item_name);
+                const thru = row && row.running != null ? row.running : d.pot;
+                el.innerHTML = `&middot; Running pot thru ${escapeHtml(ev.item_name.split(" ")[0])}: <strong>$${Number(thru).toFixed(2)}</strong>`;
+            }).catch(() => {});
         }
 
         html += '<table class="games-table">';

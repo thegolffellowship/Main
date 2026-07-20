@@ -20832,6 +20832,46 @@ def auto_match_venmo_payouts_to_tgf(
                     elif len(close) > 1:
                         summary["ambiguous"] += 1
                         continue
+                # PARTIAL/SUBSET pass (Kerry 2026-07-20, the Barna a9.18
+                # case): a re-record can grow a group AFTER its receipt was
+                # sent ($146.83 paid, then a $26 TGF MVP row added → group
+                # totals $172.83 and nothing matches). When no group total
+                # matches, look for a SUBSET of one candidate group's unpaid
+                # rows summing exactly to the receipt — mark just those rows
+                # paid, leaving the remainder due (the UI then offers a Pay
+                # button for the difference).
+                partial_rows = None
+                if pick is None:
+                    from itertools import combinations
+                    for g in cands[:3]:
+                        rws = conn.execute(
+                            """SELECT p.id, p.amount, p.acct_transaction_id,
+                                      t.source AS txn_source
+                               FROM tgf_payouts p
+                               LEFT JOIN acct_transactions t
+                                      ON t.id = p.acct_transaction_id
+                               WHERE p.customer_id = ? AND p.event_id = ?
+                                 AND (p.acct_transaction_id IS NULL
+                                      OR (t.source = 'pending'
+                                          AND COALESCE(t.status,'active') = 'active'))
+                               ORDER BY p.id""",
+                            (cid, g["tgf_event_id"])).fetchall()
+                        if not (2 <= len(rws) <= 16):
+                            continue
+                        cents = [round(float(r["amount"]) * 100) for r in rws]
+                        target = round(amt * 100)
+                        found = None
+                        for k in range(len(rws) - 1, 0, -1):
+                            for combo in combinations(range(len(rws)), k):
+                                if sum(cents[i] for i in combo) == target:
+                                    found = combo
+                                    break
+                            if found:
+                                break
+                        if found:
+                            pick = g
+                            partial_rows = [rws[i] for i in found]
+                            break
                 if pick is None:
                     summary["no_candidate"] += 1
                     continue
@@ -20854,7 +20894,7 @@ def auto_match_venmo_payouts_to_tgf(
                 if not re.match(r"^\d{4}-\d{2}-\d{2}", paid_date):
                     paid_date = today_central_str()
 
-                rows = conn.execute(
+                rows = partial_rows if partial_rows is not None else conn.execute(
                     """SELECT p.id, p.acct_transaction_id, t.source AS txn_source
                        FROM tgf_payouts p
                        LEFT JOIN acct_transactions t ON t.id = p.acct_transaction_id
@@ -20877,6 +20917,7 @@ def auto_match_venmo_payouts_to_tgf(
                     "recipient": exp.get("merchant"),
                     "tgf_event_id": pick["tgf_event_id"], "amount": amt,
                     "payout_rows": len(rows), "acct_transaction_id": acct_id,
+                    "partial": partial_rows is not None,
                 })
                 logger.info("venmo payout matched: exp %s %s $%.2f -> tgf_event %s (%d rows)",
                             exp["id"], exp.get("merchant"), amt,
@@ -37100,9 +37141,20 @@ def get_hio_pot(db_path=None) -> dict:
     amount (by that event's player count and 9/18 matrix), and the pot
     only drains when a hole-in-one is actually hit (a recorded 'hio'
     payout). Shut-down events (rain-outs — badge or credited-registration
-    backstop) contributed nothing: their fees were credited back."""
+    backstop) contributed nothing: their fees were credited back.
+
+    Carry-in: app_settings 'hio_pot_carry_in' (a DIAL — the end-of-2025
+    balance Kerry recalls near $2000; set it once found, with
+    'hio_pot_carry_in_note' for provenance). Each event row carries
+    `running` = carry-in + contributions through that event."""
     from email_parser.timezone_utils import today_central_str
     m9, m18 = _load_games_matrix(db_path=db_path)
+    try:
+        carry_in = float(get_app_setting("hio_pot_carry_in", db_path=db_path)
+                         or 0)
+    except (TypeError, ValueError):
+        carry_in = 0.0
+    carry_note = get_app_setting("hio_pot_carry_in_note", db_path=db_path)
     events_out, total = [], 0.0
     with _connect(db_path) as conn:
         rows = [dict(r) for r in conn.execute(
@@ -37120,18 +37172,20 @@ def get_hio_pot(db_path=None) -> dict:
             g = matrix.get(str(counts["players"])) or {}
             hio = _matrix_num(g.get("holeInOne"))
             if hio > 0:
+                total += hio
                 events_out.append({"event": ev["item_name"],
                                    "date": ev["event_date"],
                                    "players": counts["players"],
-                                   "hio": round(hio, 2)})
-                total += hio
+                                   "hio": round(hio, 2),
+                                   "running": round(carry_in + total, 2)})
         paid = conn.execute(
             "SELECT COALESCE(SUM(amount), 0) AS s FROM tgf_payouts "
             "WHERE category = 'hio'").fetchone()["s"] or 0
-    return {"events": events_out, "events_counted": len(events_out),
+    return {"carry_in": round(carry_in, 2), "carry_in_note": carry_note,
+            "events": events_out, "events_counted": len(events_out),
             "total_contributed": round(total, 2),
             "paid_out": round(float(paid), 2),
-            "pot": round(total - float(paid), 2)}
+            "pot": round(carry_in + total - float(paid), 2)}
 
 
 def _event_looks_rained_out(conn, event_name: str) -> dict | None:
@@ -37165,11 +37219,16 @@ def _event_looks_rained_out(conn, event_name: str) -> dict | None:
     return None
 
 
-def clear_event_auto_payouts(event_name: str, db_path=None) -> dict:
+def clear_event_auto_payouts(event_name: str, include_manual: bool = False,
+                             db_path=None) -> dict:
     """Remove an event's auto-recorded payout rows (description 'auto:…')
     and their PENDING ledger entries — never a matched real Venmo
-    transaction. Built for wrongly auto-recorded events (the s9.18 rain-out);
-    manual/screenshot rows are untouched."""
+    transaction. Built for wrongly auto-recorded events (the s9.18
+    rain-out). include_manual=True ALSO removes manual/screenshot-imported
+    rows (Kerry-directed only — e.g. a rained-out event whose sheet was
+    imported before the wash was recorded), and the sweep covers EVERY
+    tgf_events row matching the event code (duplicate code rows exist for
+    some events)."""
     with _connect(db_path) as conn:
         ev = conn.execute(
             "SELECT item_name FROM events WHERE item_name = ? COLLATE NOCASE",
@@ -37179,31 +37238,35 @@ def clear_event_auto_payouts(event_name: str, db_path=None) -> dict:
         full = ev["item_name"].strip()
         m = _GG_EVENT_CODE_COMPOUND_RE.match(full)
         bare = m.group(1).lower() if m else full.lower()
-        trow = conn.execute(
+        trows = conn.execute(
             "SELECT id FROM tgf_events WHERE LOWER(code) IN (?, ?)",
-            (full.lower(), bare)).fetchone()
-        if not trow:
+            (full.lower(), bare)).fetchall()
+        if not trows:
             return {"event": full, "removed": 0,
                     "note": "no tgf_events row — nothing recorded"}
         removed = pending_deleted = kept_matched = 0
-        for r in conn.execute(
-                "SELECT id, acct_transaction_id FROM tgf_payouts "
-                "WHERE event_id = ? AND description LIKE 'auto:%'",
-                (trow["id"],)).fetchall():
-            if r["acct_transaction_id"]:
-                txn = conn.execute(
-                    "SELECT id, source FROM acct_transactions WHERE id = ?",
-                    (r["acct_transaction_id"],)).fetchone()
-                if txn and txn["source"] == "pending":
-                    conn.execute("DELETE FROM acct_transactions WHERE id = ?",
-                                 (txn["id"],))
-                    pending_deleted += 1
-                elif txn:
-                    kept_matched += 1
-            conn.execute("DELETE FROM tgf_payouts WHERE id = ?", (r["id"],))
-            removed += 1
+        desc_filter = "" if include_manual else "AND description LIKE 'auto:%'"
+        for trow in trows:
+            for r in conn.execute(
+                    f"SELECT id, acct_transaction_id FROM tgf_payouts "
+                    f"WHERE event_id = ? {desc_filter}",
+                    (trow["id"],)).fetchall():
+                if r["acct_transaction_id"]:
+                    txn = conn.execute(
+                        "SELECT id, source FROM acct_transactions WHERE id = ?",
+                        (r["acct_transaction_id"],)).fetchone()
+                    if txn and txn["source"] == "pending":
+                        conn.execute(
+                            "DELETE FROM acct_transactions WHERE id = ?",
+                            (txn["id"],))
+                        pending_deleted += 1
+                    elif txn:
+                        kept_matched += 1
+                conn.execute("DELETE FROM tgf_payouts WHERE id = ?", (r["id"],))
+                removed += 1
         conn.commit()
-    return {"event": full, "removed": removed,
+    return {"event": full, "tgf_event_rows": len(trows),
+            "include_manual": include_manual, "removed": removed,
             "pending_ledger_deleted": pending_deleted,
             "matched_venmo_kept": kept_matched}
 
