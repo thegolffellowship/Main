@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.127.2";
+window.TGF_VERSION = "2.127.3";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.127.3",
+    date: "2026-07-20",
+    changes: [
+      "Team/Cart Net tie-with-duplicate correction (Kerry ruling 2026-07-20, superseding the keep-your-real-slot tie-break): when TIED teams share a duplicated player (real slot on one, blind on the other), the tied teams stop being separate pots — the COMBINED pool splits evenly among ALL unique players across the tied teams (two tied foursomes with one shared player → pool / 7, everyone equal; s18.8-style $192 → $27.43 each). A tie with no duplicate keeps the per-team split (matches GG's $96/$96). The higher-share rule remains for a player duplicated across DIFFERENTLY-placed teams (1st and 2nd).",
+    ],
+  },
   {
     version: "2.127.2",
     date: "2026-07-20",

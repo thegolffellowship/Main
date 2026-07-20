@@ -37171,12 +37171,41 @@ def assemble_event_game_payouts(event_name: str, db_path=None) -> dict:
             pool = sum(place_cents[pos - 1: pos - 1 + len(grp)])
             if pool <= 0:
                 continue
-            team_shares = split_cents(pool, len(grp))
             suffix = {1: "1st", 2: "2nd", 3: "3rd"}.get(pos, f"{pos}th")
-            for t, tc in zip(grp, team_shares):
-                members = [_member(mname.strip())
-                           for mname in t["player_name"].split("+")
-                           if mname.strip()]
+            grp_members = [[_member(mname.strip())
+                            for mname in t["player_name"].split("+")
+                            if mname.strip()] for t in grp]
+            # TIED teams sharing a duplicate player (real slot on one,
+            # blind on the other) stop being separate pots (Kerry ruling
+            # 2026-07-20): the COMBINED pool splits evenly among ALL
+            # unique players across the tied teams — two tied foursomes
+            # with one shared player → pool ÷ 7, everyone equal.
+            if len(grp) > 1:
+                seen_keys: set = set()
+                uniq: list = []
+                slots = 0
+                for members in grp_members:
+                    for m in members:
+                        slots += 1
+                        k = _cmp_person_key(m["name"])
+                        if k not in seen_keys:
+                            seen_keys.add(k)
+                            if not m["blind"]:
+                                m = dict(m)
+                            uniq.append(m)
+                        elif not m["blind"]:
+                            for u in uniq:
+                                if _cmp_person_key(u["name"]) == k:
+                                    u["blind"] = False
+                if uniq and len(uniq) < slots:
+                    paid_teams.append({
+                        "cents": pool, "members": uniq,
+                        "desc": f"{g_event.get('teamType') or 'Team Net'} "
+                                f"{suffix} (T) (split among "
+                                f"{len(uniq)} unique players)"})
+                    continue
+            team_shares = split_cents(pool, len(grp))
+            for t, members, tc in zip(grp, grp_members, team_shares):
                 if not members or tc <= 0:
                     continue
                 paid_teams.append({
@@ -37184,13 +37213,11 @@ def assemble_event_game_payouts(event_name: str, db_path=None) -> dict:
                     "desc": f"{g_event.get('teamType') or 'Team Net'} "
                             f"{suffix}{' (T)' if len(grp) > 1 else ''} "
                             f"(team split)"})
-        # Kerry ruling 2026-07-20: Team/Cart Net splits evenly among UNIQUE
-        # players. A player on TWO paid teams (real slot on one, blind on
-        # the other) receives only the HIGHER per-player share; the lower
-        # team's pot then splits among its REMAINING members (the pot
-        # amount itself doesn't shrink). When the shares are EQUAL (a tie
-        # for 1st), the player keeps their REAL slot and vacates the blind
-        # one — the blind slot is the artificial seat.
+        # Cross-PLACE duplicate (Kerry ruling 2026-07-20): a player on two
+        # DIFFERENTLY-placed paid teams (1st and 2nd) receives only the
+        # HIGHER per-player share; the lower team's pot then splits among
+        # its REMAINING members (the pot amount itself doesn't shrink).
+        # Same-place ties were already pooled above.
         deduping = True
         while deduping:
             deduping = False
