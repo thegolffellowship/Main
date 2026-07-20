@@ -37346,21 +37346,20 @@ def clear_event_auto_payouts(event_name: str, include_manual: bool = False,
         # code variants like "s9. 18 CEDAR CREEK" (memo-style space after the
         # period) that TRIM/LIKE prefixing can't reach. Normalize both sides
         # by stripping ALL whitespace, then match on the bare code as a
-        # prefix (next char must be non-digit so s9.1 never swallows s9.18)
-        # or on the course-name token when the code dropped the number.
+        # prefix (next char must be non-digit so s9.1 never swallows s9.18).
+        # NO course-name-only fallback: same-course DIFFERENT events (s18.1
+        # CEDAR CREEK vs s9.18 Cedar Creek) share the name token, and a
+        # name-based match once swept 36 legitimate paid rows from two other
+        # events (2026-07-20). The event CODE is the only safe key.
         def _norm(s):
             return re.sub(r"\s+", "", (s or "").lower())
         full_n, bare_n = _norm(full), _norm(bare)
-        name_n = _norm(full[len(bare):]) if full.lower().startswith(bare) \
-            else ""
         trows = []
         for t in conn.execute("SELECT id, code FROM tgf_events").fetchall():
             cn = _norm(t["code"])
             if cn == full_n or cn == bare_n:
                 trows.append(t)
             elif cn.startswith(bare_n) and not cn[len(bare_n):][:1].isdigit():
-                trows.append(t)
-            elif len(name_n) >= 8 and name_n in cn:
                 trows.append(t)
         if not trows:
             return {"event": full, "removed": 0,
@@ -37391,6 +37390,62 @@ def clear_event_auto_payouts(event_name: str, include_manual: bool = False,
             "include_manual": include_manual, "removed": removed,
             "pending_ledger_deleted": pending_deleted,
             "matched_venmo_kept": kept_matched}
+
+
+def restore_tgf_payouts_from_ledger(event_code: str, apply: bool = False,
+                                    db_path=None) -> dict:
+    """Re-create deleted tgf_payouts rows from their surviving ledger
+    mirrors (repair for the 2026-07-20 clear-auto over-match that swept
+    36 paid rows from s18.1 / s18.3). Bulk-confirm placeholder ledger
+    rows carry the full original row: source_ref 'payout-<original id>',
+    description 'Payout: <category> — <event> (...)', customer_id and
+    amount. tgf_payouts.id is AUTOINCREMENT so the original ids are
+    still free; rows already present are skipped (idempotent). Rows that
+    were linked to REAL grouped Venmo receipts have no per-row mirror —
+    they're reported as a remaining gap for Kerry, not guessed at."""
+    with _connect(db_path) as conn:
+        trow = conn.execute(
+            "SELECT id, code FROM tgf_events WHERE TRIM(code) = ? "
+            "COLLATE NOCASE", (event_code.strip(),)).fetchone()
+        if not trow:
+            return {"error": f"tgf_events code not found: {event_code}"}
+        mirrors = conn.execute(
+            "SELECT id, source_ref, description, customer, customer_id, "
+            "amount, date FROM acct_transactions "
+            "WHERE LOWER(TRIM(event_name)) = ? AND category = 'prize_payout' "
+            "AND source_ref LIKE 'payout-%' "
+            "AND COALESCE(status,'active') = 'active'",
+            (trow["code"].strip().lower(),)).fetchall()
+        restored, already, skipped = [], 0, []
+        for r in mirrors:
+            try:
+                pid = int(r["source_ref"].split("-", 1)[1])
+            except (IndexError, ValueError):
+                skipped.append(r["source_ref"])
+                continue
+            if conn.execute("SELECT 1 FROM tgf_payouts WHERE id = ?",
+                            (pid,)).fetchone():
+                already += 1
+                continue
+            m = re.match(r"Payout:\s*(\S+)", r["description"] or "")
+            cat = m.group(1) if m else "unknown"
+            if apply:
+                conn.execute(
+                    "INSERT INTO tgf_payouts (id, event_id, customer_id, "
+                    "category, amount, description, acct_transaction_id, "
+                    "paid_at) VALUES (?,?,?,?,?,?,?,?)",
+                    (pid, trow["id"], r["customer_id"], cat,
+                     abs(r["amount"]),
+                     "restored 2026-07-20: rebuilt from ledger mirror "
+                     f"acct#{r['id']} after clear-auto over-match",
+                     r["id"], r["date"]))
+            restored.append({"payout_id": pid, "name": r["customer"],
+                             "category": cat, "amount": abs(r["amount"])})
+        if apply:
+            conn.commit()
+    return {"tgf_event": trow["code"], "apply": apply,
+            "mirrors_found": len(mirrors), "restored": restored,
+            "already_present": already, "unparsable": skipped}
 
 
 def assemble_event_game_payouts(event_name: str, db_path=None) -> dict:

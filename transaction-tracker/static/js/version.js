@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.129.4";
+window.TGF_VERSION = "2.129.5";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.129.5",
+    date: "2026-07-20",
+    changes: [
+      "INCIDENT + repair: the v2.129.3 clear-auto course-name-token fallback over-matched — clearing 's9.18 Cedar Creek' also swept s18.1 CEDAR CREEK and s18.3 SAN ANTONIO KICKOFF (same course, DIFFERENT events), deleting 36 legitimately-paid payout rows. The name fallback is REMOVED (event CODE is the only safe key; whitespace-collapse prefix matching stays). New repair bridge scoring-payouts-restore:<tgf code>[|apply] rebuilds deleted rows from their surviving bulk-confirm ledger mirrors (source_ref payout-<id> carries the original id, category, customer, amount, paid link) — idempotent, ids re-inserted exactly; rows that were linked to grouped real Venmo receipts have no per-row mirror and are reported as a remaining gap instead of guessed at.",
+      "Hole-in-One banner renders as two stacked rows (Kerry 2026-07-20 mobile screenshot: the single line wrapped mid-sentence) — line 1 this event's contribution, line 2 the running pot thru the event.",
+    ],
+  },
   {
     version: "2.129.4",
     date: "2026-07-20",
