@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.126.3";
+window.TGF_VERSION = "2.126.4";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.126.4",
+    date: "2026-07-20",
+    changes: [
+      "Team payout member names: strip the portal decoration a cross-chapter team string leaves on its last member ('SHARITZ, Don TGF Austin,' / '... TGF Austin, Guest') — the importer's end-anchored chapter regex only removes the final tag. Payout rows now resolve to the clean player name.",
+    ],
+  },
   {
     version: "2.126.3",
     date: "2026-07-20",
