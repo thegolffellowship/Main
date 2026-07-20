@@ -26882,6 +26882,35 @@ def cmp_save_match(pool_id: int, player1: str, player2: str,
         return dict(row) if row else {}
 
 
+def _cmp_apply_wd_sort(standings: list[dict]) -> list[dict]:
+    """WD display rule (Kerry ruling 2026-07-20): withdrawn players who
+    PLAYED matches sort to the bottom of their pool (tag + played record
+    kept — Campos stays visible with WD · INJ); withdrawn players with NO
+    played matches disappear from standings entirely (a clean removal +
+    refund). Ranks renumber in display order; nothing about points,
+    records, or advancement computation changes."""
+    out: list[dict] = []
+    by_pool: dict = {}
+    for row in standings:
+        by_pool.setdefault(row.get("pool_id"), []).append(row)
+    for pool_rows in by_pool.values():
+        kept = []
+        for r in pool_rows:
+            played = r.get("played")
+            if played is None:
+                played = (r.get("wins", 0) + r.get("losses", 0)
+                          + r.get("draws", 0))
+            if r.get("withdrawn") and not played:
+                continue
+            kept.append(r)
+        kept.sort(key=lambda r: (1 if r.get("withdrawn") else 0,
+                                 r.get("rank") or 0))
+        for i, r in enumerate(kept, 1):
+            r["rank"] = i
+        out.extend(kept)
+    return out
+
+
 def cmp_get_standings(season: str, chapter: str, db_path=None,
                       advance_per_pool: int = 2) -> list[dict]:
     """Return pool standings for a chapter/season.
@@ -26942,7 +26971,7 @@ def cmp_get_standings(season: str, chapter: str, db_path=None,
                     "withdrawn": r["player_name"] in wd_by_pool[pool["id"]],
                     "withdrawn_reason": wd_by_pool[pool["id"]].get(r["player_name"]),
                 })
-        return standings
+        return _cmp_apply_wd_sort(standings)
 
     with _connect(db_path) as conn:
         pools = conn.execute(
@@ -27016,7 +27045,7 @@ def cmp_get_standings(season: str, chapter: str, db_path=None,
                     "withdrawn": name in wd_names,
                     "withdrawn_reason": wd_names.get(name),
                 })
-        return standings
+        return _cmp_apply_wd_sort(standings)
 
 
 def cmp_get_bracket(season: str, chapter: str, db_path=None) -> list[dict]:

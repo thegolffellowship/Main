@@ -390,7 +390,13 @@ below wherever they conflict.
     Putt Offs). The future untethered app PRESENTS the directional choice
     to players on an AS knockout match (Putt-Off vs Extra Holes, with
     practical constraints surfaced) and the pick drives recordation +
-    label — see the tie-resolution decision flow below.
+    label — see the tie-resolution decision flow below. **NH is a COUNT,
+    not a fixed label (Kerry 2026-07-20):** `10H` means a 9-hole match won
+    on the FIRST extra hole; a second extra hole makes it `11H`, and an
+    18-hole match won on the first extra hole is `19H`. The app provides
+    leaderboard score ENTRY for each extra hole (as many as needed, pops
+    continuing off-lowest by stroke index) and the final label reflects
+    the actual holes played.
   - **Tie-resolution decision flow (ultimate-app).** At end of regulation on an
     All Square match the app presents STAGE-AWARE options (rules-derived): a
     **pool** round (tie-allowed stage) offers "End in a tie / Halved" (½ each
@@ -403,6 +409,16 @@ below wherever they conflict.
     than its home/pool event (Hogue/Kirksey is on a9.12 in our data, a9.17 in
     GG). Recordation must not tie a match to one event; alignment is by pool
     PAIR, not event.
+  - **2026 season rulings (Kerry 2026-07-20):** NO 3rd-place consolation
+    matches this season — semifinal losers SPLIT the combined 3rd/4th
+    money (the D-MP-08 `split_combined_places` fallback; the payout sheet
+    already does this when no consolation match is recorded, and the
+    manager-only consolation recording stays hidden). **WD standings
+    display**: a withdrawn player who PLAYED matches sorts to the bottom
+    of the pool standings keeping the WD tag + record (Campos); a
+    withdrawn player with NO played matches is a clean removal + refund
+    and disappears from standings (`_cmp_apply_wd_sort`, both rank
+    paths).
   - **GG is the audit source; frozen results never move.** Winners, W-L-T
     records, knockout qualifiers, and seeding are frozen; reconciliation reads
     GG's computed match (concessions/gimmes included) to align DISPLAY detail
