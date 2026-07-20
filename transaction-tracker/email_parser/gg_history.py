@@ -2116,10 +2116,18 @@ def hio_gross_field_counts(subdomain: str, start_date: str = "2025-08-11",
         if not league_id:
             return {"error": "league_id missing — run Phase A ingest first"}
         season = portal["season"] or "2025"
+        archive_events = [(r["event_label"], r["event_date"])
+                          for r in conn.execute(
+            """SELECT event_label, event_date FROM gg_history_events
+                WHERE portal_id = ? AND event_date IS NOT NULL""",
+            (portal["id"],))]
 
     # The widget's round SELECTOR is the only valid round-id space — the
     # event export's gg_round_id is a different id family, and GG answers
     # &round=<unknown> with the default page (no boards; v2.130.6 lesson).
+    # Selector labels are TRUNCATED by GG ('a9.24 STAR RANCH front (Tu…'),
+    # so dates come from prefix-matching the archive's full event labels,
+    # with label-embedded dates as fallback for untruncated ones.
     widget_url = (f"{base}/leagues/{league_id}/widgets/"
                   f"tournament_results?shared=false")
     w = fetch_public_page(widget_url)
@@ -2130,10 +2138,18 @@ def hio_gross_field_counts(subdomain: str, start_date: str = "2025-08-11",
     targets = []
     for rid, lbl in options:
         label = " ".join(re.sub(r"<[^>]+>", " ", lbl).split())
-        d = _export_date(label, season)
+        core = label.split(" (")[0].rstrip(".").rstrip("…").strip()
+        dates = sorted({d for el, d in archive_events
+                        if core and el and el.startswith(core)})
+        d = dates[0] if len(dates) == 1 else _export_date(label, season)
         if d and start_date <= d <= end_date:
             targets.append({"gg_round_id": rid, "event_date": d,
-                            "event_label": label})
+                            "event_label": core or label})
+        elif d is None and core:
+            out["skipped"].append({"event": label,
+                                   "why": ("ambiguous archive match"
+                                           if len(dates) > 1
+                                           else "no date resolvable")})
     targets.sort(key=lambda t: t["event_date"])
     if not targets:
         return {**out, "error": "no selector rounds in window",
