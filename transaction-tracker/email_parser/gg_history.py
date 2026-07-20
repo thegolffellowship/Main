@@ -1893,6 +1893,7 @@ def review_queue(db_path=None, limit: int = 300) -> dict:
                FROM gg_history_name_links l
                LEFT JOIN gg_history_portals p ON p.id = l.portal_id
                WHERE l.matched_by = 'pending' AND l.reviewed = 0
+                 AND l.raw_name NOT LIKE 'Bl[%'
                ORDER BY (standings_rows + result_rows + hole_rounds) DESC,
                         l.raw_name
                LIMIT ?""", (limit,)).fetchall()
@@ -1902,20 +1903,31 @@ def review_queue(db_path=None, limit: int = 300) -> dict:
             first, last = _handle_to_names(r["raw_name"])
             cands = []
             if last:
+                # customer_name carries the display suffix (Jr/III) that
+                # first/last don't — required to tell the Ariases apart.
                 cands = [dict(c) for c in conn.execute(
-                    """SELECT customer_id, first_name, last_name, chapter,
-                              current_player_status
+                    """SELECT customer_id, first_name, last_name,
+                              customer_name, chapter, current_player_status
                        FROM customers WHERE LOWER(last_name) = LOWER(?)
                        ORDER BY customer_id LIMIT 6""", (last,))]
             d["candidates"] = cands
             out.append(d)
         total = conn.execute(
             "SELECT COUNT(*) FROM gg_history_name_links "
-            "WHERE matched_by='pending' AND reviewed=0").fetchone()[0]
+            "WHERE matched_by='pending' AND reviewed=0 "
+            "AND raw_name NOT LIKE 'Bl[%'").fetchone()[0]
+        # Blind-draw entries ("Bl[NAME, First]") are set aside, not shown
+        # and not dismissed (Kerry 2026-07-20): they stay pending in the
+        # table so their rows survive, but the queue skips them.
+        blinds = conn.execute(
+            "SELECT COUNT(*) FROM gg_history_name_links "
+            "WHERE matched_by='pending' AND reviewed=0 "
+            "AND raw_name LIKE 'Bl[%'").fetchone()[0]
         reviewed = conn.execute(
             """SELECT matched_by, COUNT(*) AS n FROM gg_history_name_links
                WHERE reviewed=1 GROUP BY matched_by""").fetchall()
         return {"pending_total": total, "shown": len(out), "names": out,
+                "blind_set_aside": blinds,
                 "reviewed_counts": {r["matched_by"]: r["n"]
                                     for r in reviewed}}
 
@@ -2027,14 +2039,14 @@ def search_customers_for_link(q: str, limit: int = 10, db_path=None) -> list:
     with _connect(db_path or DB_PATH) as conn:
         if q.isdigit():
             rows = conn.execute(
-                """SELECT customer_id, first_name, last_name, chapter,
-                          current_player_status
+                """SELECT customer_id, first_name, last_name, customer_name,
+                          chapter, current_player_status
                    FROM customers WHERE customer_id = ?""", (int(q),))
             return [dict(r) for r in rows]
         like = f"%{q}%"
         rows = conn.execute(
             """SELECT DISTINCT c.customer_id, c.first_name, c.last_name,
-                      c.chapter, c.current_player_status
+                      c.customer_name, c.chapter, c.current_player_status
                FROM customers c
                LEFT JOIN customer_aliases a
                  ON a.alias_type = 'name'

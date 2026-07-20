@@ -1,5 +1,16 @@
-window.TGF_VERSION = "2.130.0";
+window.TGF_VERSION = "2.130.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.130.1",
+    date: "2026-07-20",
+    changes: [
+      "Accounting Ledger now fits the 1080px column: long descriptions wrap instead of pushing the table off the right edge (the global nowrap rule was forcing a page-wide horizontal scrollbar), the ledger list contains any residual overflow with its own scroll, and the acct tables adopt the ratified density (4px/5px cell padding).",
+      "Courses page fits the 1080px column: the page-local 1200px wrapper and its double padding are gone, the fixed side-column widths were slimmed so the COURSE name + tee list column gets real room (min 220px) instead of wrapping word-by-word.",
+      "GG History review: the 'search name to link' box now autofills from the customer database (Kerry 2026-07-20) — focusing the empty box immediately searches the GG surname and shows tappable Link chips, no typing needed; live search while typing is unchanged.",
+      "GG History review: candidate and search chips show the customer's full display name with generational suffix (customers.customer_name — 'Victor Arias Jr' vs 'Victor Arias III') instead of the suffix-less first+last, so same-named family members are tellable apart before linking.",
+      "GG History review: blind-draw entries (raw names like 'Bl[BOOKER, Raimond]') no longer clutter the pending queue — they are SET ASIDE, not dismissed (Kerry: 'shouldn't show up here, but don't necessarily want to dismiss them either'): rows stay pending in the table with all their data, the queue just skips them and the header counts them as 'blinds set aside N'.",
+    ],
+  },
   {
     version: "2.130.0",
     date: "2026-07-20",

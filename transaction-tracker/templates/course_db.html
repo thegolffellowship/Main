@@ -12,7 +12,9 @@
     <link rel="icon" href="/static/icon.svg" type="image/svg+xml">
     <link rel="apple-touch-icon" href="/static/icon-180.png">
     <style>
-        .crs-wrap { padding: 1rem 1.5rem 2.5rem; max-width: 1200px; margin: 0 auto; }
+        /* main (dashboard.css) already provides the 1080px centered column
+           and padding — no page-local width/padding on top of it. */
+        .crs-wrap { padding: 0 0 1.5rem; }
         .crs-tools { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin: 0.75rem 0 1rem; }
         .crs-tools input[type="search"] {
             flex: 1; min-width: 200px; height: 40px; padding: 0 12px;
@@ -30,7 +32,7 @@
             padding: 7px 8px; border-bottom: 1px solid #F3F2EF; font-size: 13.5px;
             vertical-align: middle; white-space: normal;
         }
-        .crs-table td.crs-name { font-weight: 600; }
+        .crs-table td.crs-name { font-weight: 600; min-width: 220px; }
         .crs-table td.crs-num { text-align: right; font-variant-numeric: tabular-nums; color: var(--text-muted); }
         .crs-table input, .crs-table select {
             width: 100%; box-sizing: border-box; height: 32px; padding: 0 8px;
@@ -42,7 +44,7 @@
             outline: none; border-color: var(--primary); background: #fff;
             box-shadow: 0 0 0 2px rgba(232,124,62,.25);
         }
-        .crs-table td.crs-state input { width: 52px; text-transform: uppercase; }
+        .crs-table td.crs-state input { width: 44px; text-transform: uppercase; }
         tr.crs-dirty { background: #FDF6F0; }
         .crs-save {
             height: 30px; padding: 0 14px; border-radius: 9999px; border: none;
@@ -106,13 +108,13 @@
                 <table class="crs-table">
                     <thead><tr>
                         <th>Course</th>
-                        <th style="width:190px;">Short Name</th>
-                        <th style="width:130px;">Chapter</th>
-                        <th style="width:130px;" class="crs-hide-mobile">City</th>
-                        <th style="width:60px;" class="crs-hide-mobile">State</th>
-                        <th style="width:100px;">Status</th>
-                        <th style="width:60px;text-align:right;" class="crs-hide-mobile">Tees</th>
-                        <th style="width:70px;text-align:right;" class="crs-hide-mobile">Rounds</th>
+                        <th style="width:150px;">Short Name</th>
+                        <th style="width:110px;">Chapter</th>
+                        <th style="width:105px;" class="crs-hide-mobile">City</th>
+                        <th style="width:48px;" class="crs-hide-mobile">State</th>
+                        <th style="width:90px;">Status</th>
+                        <th style="width:44px;text-align:right;" class="crs-hide-mobile">Tees</th>
+                        <th style="width:56px;text-align:right;" class="crs-hide-mobile">Rounds</th>
                         <th style="width:90px;"></th>
                     </tr></thead>
                     <tbody id="crs-tbody">
