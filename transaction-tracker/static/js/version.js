@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.129.23";
+window.TGF_VERSION = "2.129.24";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.129.24",
+    date: "2026-07-20",
+    changes: [
+      "Admin work queues go UTILITARIAN (Kerry 2026-07-20: 'Functional, not all this beautiful white space'): the Unpaid Payouts queue and REFUNDS console render dense single-line rows — golfer + event·date on one line, 4px row padding, tables capped at 860px so amounts and buttons sit next to the names instead of across the screen.",
+    ],
+  },
   {
     version: "2.129.23",
     date: "2026-07-20",

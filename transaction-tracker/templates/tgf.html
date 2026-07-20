@@ -374,6 +374,15 @@
             font-size: 11.5px; font-weight: 600; color: #1B1B1B;
             text-align: right; font-variant-numeric: tabular-nums;
         }
+        /* Admin work queues are UTILITARIAN (Kerry 2026-07-20:
+           "Functional, not all this beautiful white space") — dense
+           single-line rows, tight padding, constrained width. */
+        #unpaid-main .payout-table td, #unpaid-main .payout-table th,
+        #refunds-main table td, #refunds-main table th {
+            padding: 4px 10px; font-size: 0.82rem;
+        }
+        #refunds-main .tgf-scroll, #refunds-main table { max-width: 860px; }
+        #unpaid-main h2, #refunds-main h2 { font-size: 1rem; }
         .ledger-back { display: none; }
         @media (max-width: 768px) {
             .ledger { flex-direction: column; min-height: 0; }
@@ -951,8 +960,8 @@
             list.forEach(({ev, g}) => {
                 rows += `
                     <tr>
-                        <td><div style="font-weight:600;">${g.name}</div>
-                            <div style="font-size:0.72rem;color:var(--text-muted);">${ev.code}${ev.event_date ? " · " + fmtDate(ev.event_date) : ""}</div></td>
+                        <td style="white-space:nowrap;"><span style="font-weight:600;">${g.name}</span>
+                            <span style="font-size:0.72rem;color:var(--text-muted);margin-left:0.4rem;">${ev.code}${ev.event_date ? " · " + fmtDate(ev.event_date) : ""}</span></td>
                         <td class="right total-amount" style="white-space:nowrap;">${fmt(g.total)}</td>
                         <td class="right" style="white-space:nowrap;">${payCellHtml(ev, g)}</td>
                     </tr>`;
@@ -963,7 +972,7 @@
                     <span style="font-size:0.95rem;font-weight:700;color:#dc2626;">${fmt(totalDue)}</span>
                     <span style="font-size:0.8rem;color:var(--text-muted);">${list.length} golfer/account group${list.length !== 1 ? "s" : ""}</span>
                 </div>
-                <div class="tgf-scroll">
+                <div class="tgf-scroll" style="max-width:860px;">
                 <table class="payout-table">
                     <thead><tr>
                         <th>Golfer / Account</th>
@@ -999,7 +1008,7 @@
             const label = cid
                 ? `<a href="/customers?cid=${cid}" style="color:var(--link);text-decoration:none;font-weight:600;">${nm}</a>`
                 : `<span style="font-weight:600;">${nm}</span>`;
-            return `<div>${label}</div>${sub ? `<div style="font-size:0.72rem;color:var(--text-muted);">${escR(sub)}</div>` : ""}`;
+            return `${label}${sub ? `<span style="font-size:0.72rem;color:var(--text-muted);margin-left:0.4rem;">${escR(sub)}</span>` : ""}`;
         }
         async function loadRefunds() {
             const el = $("#refunds-main");
