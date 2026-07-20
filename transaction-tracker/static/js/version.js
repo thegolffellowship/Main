@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.129.3";
+window.TGF_VERSION = "2.129.4";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.129.4",
+    date: "2026-07-20",
+    changes: [
+      "scoring-rainout-label:<event>|clear|apply removes a mislabeled RAINED OUT badge (Kerry 2026-07-20: on the 4/21 Tuesday only the Austin event was a rain out — s9.6 The Quarry's cancellation was something else). Status is untouched, so the cancelled-status payout/HIO-pot guards stay in force; only the display badge clears.",
+    ],
+  },
   {
     version: "2.129.3",
     date: "2026-07-20",

@@ -37204,6 +37204,22 @@ def label_event_rainout(event_name: str, badge: str = "RAINED OUT",
     out = {"event": ev["item_name"], "current_status": ev["status"],
            "current_badge": ev["status_badge"], "badge": badge,
            "apply": apply}
+    if badge.strip().lower() in ("clear", "none"):
+        # Un-badge a mislabeled event (Kerry 2026-07-20: on 4/21 only the
+        # Austin event was a rain out — s9.6's cancellation was something
+        # else). Status is kept; only the badge is removed, so the
+        # status-based payout/HIO guards stay in force.
+        if apply:
+            with _connect(db_path) as conn:
+                conn.execute(
+                    "UPDATE events SET status_badge = NULL WHERE id = ?",
+                    (ev["id"],))
+                conn.commit()
+            out["applied"] = True
+            out["badge"] = None
+        else:
+            out["note"] = "dry-run — pass apply to clear the badge"
+        return out
     if ev["status"] != "active" and ev["status_badge"]:
         out["note"] = "already labeled"
         return out
