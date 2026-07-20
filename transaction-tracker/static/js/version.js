@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.129.12";
+window.TGF_VERSION = "2.129.13";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.129.13",
+    date: "2026-07-20",
+    changes: [
+      "External links open in a new window APP-WIDE (Kerry-ratified 2026-07-20: 'Any link that sends to an outside website outside of a Tracker URL should be brought up in a separate window'). One capture-phase click handler in auth.js stamps target=_blank + rel=noopener on any off-origin http(s) anchor — covers every dynamically-rendered link on every page without per-call-site target attributes. Protocol handoffs (venmo://, mailto:, tel:) are untouched.",
+    ],
+  },
   {
     version: "2.129.12",
     date: "2026-07-20",
