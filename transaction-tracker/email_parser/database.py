@@ -37489,23 +37489,36 @@ def get_hio_pot(db_path=None) -> dict:
                     (get_app_setting("hio_27h_event_patterns",
                                      db_path=db_path)
                      or "HILL COUNTRY MATCHES").split(",") if p.strip()]
+        # Field-size overrides for days where the tracker's registration
+        # count lags the true field (Kerry: 2026 Matches was 32 players,
+        # tracker holds 29 registrations). Dial format:
+        # "NAME PATTERN=COUNT,NAME PATTERN=COUNT".
+        overrides = {}
+        for part in (get_app_setting("hio_player_count_overrides",
+                                     db_path=db_path) or "").split(","):
+            pat, _, num = part.partition("=")
+            if pat.strip() and num.strip().isdigit():
+                overrides[pat.strip().upper()] = int(num.strip())
         for ev in rows:
             if ev["status"] != "active" or \
                     _event_looks_rained_out(conn, ev["item_name"]):
                 continue
             counts = _event_player_counts(conn, ev["item_name"])
-            if any(p in ev["item_name"].upper() for p in pats_27h):
-                hio = float(counts["players"] or 0) * 3.0
+            name_u = ev["item_name"].upper()
+            players = next((n for pat, n in overrides.items()
+                            if pat in name_u), counts["players"])
+            if any(p in name_u for p in pats_27h):
+                hio = float(players or 0) * 3.0
             else:
                 holes = _event_holes_type(ev["item_name"], None)
                 matrix = m9 if holes == 9 else m18
-                g = matrix.get(str(counts["players"])) or {}
+                g = matrix.get(str(players)) or {}
                 hio = _matrix_num(g.get("holeInOne"))
             if hio > 0:
                 total += hio
                 events_out.append({"event": ev["item_name"],
                                    "date": ev["event_date"],
-                                   "players": counts["players"],
+                                   "players": players,
                                    "hio": round(hio, 2),
                                    "running": round(carry_in + total, 2)})
         paid = conn.execute(

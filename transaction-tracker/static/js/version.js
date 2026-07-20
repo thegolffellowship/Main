@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.130.11";
+window.TGF_VERSION = "2.130.12";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.130.12",
+    date: "2026-07-20",
+    changes: [
+      "HIO pot field-size overrides: the hio_player_count_overrides dial (NAME PATTERN=COUNT) covers days where tracker registrations lag the true field — set to HILL COUNTRY MATCHES=32 (Kerry: 32 played on 5/17, tracker holds 29 registrations), making the Matches contribution 32 × $3 = $96.",
+    ],
+  },
   {
     version: "2.130.11",
     date: "2026-07-20",
