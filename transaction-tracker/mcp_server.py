@@ -1597,6 +1597,14 @@ def _scoring_dispatch(url: str, extract: str):
                 int(_p[0]), method=_p[1] if len(_p) > 1 else "Venmo",
                 refund_date=_p[2] if len(_p) > 2 else "",
                 note=_p[3] if len(_p) > 3 else ""), indent=2, default=str)
+        if cmd == "scoring-hio-archive":
+            # "<subdomain>[,<subdomain>...]" — per-event field sizes +
+            # games-matrix HIO contributions from the GG History archive
+            # (2025 pot carry-in reconstruction, Kerry 2026-07-20).
+            from email_parser import gg_history as _ggh
+            _subs = [s.strip() for s in arg.split(",") if s.strip()]
+            return json.dumps(_ggh.hio_archive_events(_subs),
+                              indent=2, default=str)
         if cmd == "scoring-alias-add":
             # "<customer canonical name>|<alias name>" — records a NAME
             # alias (e.g. the Venmo account name a member pays under).
