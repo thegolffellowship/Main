@@ -2089,7 +2089,14 @@ def hio_archive_events(subdomains: list, db_path=None) -> dict:
     (Kerry 2026-07-20: how much did fall 2025 play add in Austin + SA
     after the Julius Jenkins payout?).
 
-    players = distinct names on the event's result leaderboards.
+    players = distinct names on the event's ALL GROSS leaderboard —
+              Kerry 2026-07-20: distinct names across every game
+              leaderboard runs WAY over the real field (team labels,
+              blinds, per-game artifacts); "Reference ALL Gross in each
+              one of those to verify." Falls back to any gross-labeled
+              game, then to all-games distinct (flagged) when the event
+              has no gross leaderboard.
+    players_all = the all-games distinct count, kept for reference.
     holes   = holes_played from banked hole-by-hole rounds when the
               event's gg_round_id was imported, else None (caller
               decides 9 vs 18).
@@ -2114,13 +2121,27 @@ def hio_archive_events(subdomains: list, db_path=None) -> dict:
                        e.chapter, e.season, e.gg_round_id, p.subdomain,
                        (SELECT COUNT(DISTINCT r.player_name)
                           FROM gg_history_results r
-                         WHERE r.gg_event_id = e.id) AS players
+                         WHERE r.gg_event_id = e.id) AS players_all,
+                       (SELECT COUNT(DISTINCT r.player_name)
+                          FROM gg_history_results r
+                         WHERE r.gg_event_id = e.id
+                           AND r.game_label LIKE '%all gross%') AS players_allgross,
+                       (SELECT COUNT(DISTINCT r.player_name)
+                          FROM gg_history_results r
+                         WHERE r.gg_event_id = e.id
+                           AND r.game_label LIKE '%gross%'
+                           AND r.game_label NOT LIKE '%net%') AS players_gross
                 FROM gg_history_events e
                 JOIN gg_history_portals p ON p.id = e.portal_id
                 WHERE p.subdomain IN ({marks})
                 ORDER BY p.subdomain, e.event_date, e.id""",
             list(subdomains)).fetchall()
         for r in rows:
+            players = r["players_allgross"] or r["players_gross"] or 0
+            basis = ("all_gross" if r["players_allgross"]
+                     else "gross" if r["players_gross"] else "all_games")
+            if not players:
+                players = r["players_all"] or 0
             holes = None
             if r["gg_round_id"]:
                 h = conn.execute(
@@ -2131,11 +2152,12 @@ def hio_archive_events(subdomains: list, db_path=None) -> dict:
                     (str(r["gg_round_id"]),)).fetchone()
                 if h:
                     holes = h["holes_played"]
-            n = str(r["players"] or 0)
+            n = str(players)
             out.append({
                 "subdomain": r["subdomain"], "event": r["event_label"],
                 "date": r["event_date"], "course": r["course"],
-                "season": r["season"], "players": r["players"],
+                "season": r["season"], "players": players,
+                "players_all": r["players_all"], "count_basis": basis,
                 "holes": holes,
                 "hio9": round(_num((m9.get(n) or {}).get("holeInOne")), 2),
                 "hio18": round(_num((m18.get(n) or {}).get("holeInOne")), 2),

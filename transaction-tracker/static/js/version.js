@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.130.4";
+window.TGF_VERSION = "2.130.5";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.130.5",
+    date: "2026-07-20",
+    changes: [
+      "scoring-hio-archive counts fields from the ALL GROSS leaderboard only (Kerry: distinct names across every game leaderboard ran WAY over the real field — a9.16 Avery Ranch showed 40 vs actual 24); falls back to any gross-labeled game, and reports the count basis per event.",
+      "stamp_credit_refunded + scoring-credit-stamp bridge: mark an outstanding credit refunded WITHOUT writing a ledger entry, for payments whose Venmo receipt already reached the ledger via expense promotion (payout_credit would double-book those).",
+    ],
+  },
   {
     version: "2.130.4",
     date: "2026-07-20",
