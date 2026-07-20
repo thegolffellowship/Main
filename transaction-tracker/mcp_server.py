@@ -1549,6 +1549,13 @@ def _scoring_dispatch(url: str, extract: str):
                 _c.commit()
             return json.dumps({"acct_transaction_id": _aid,
                                "payout_rows_unlinked": _n}, indent=2)
+        if cmd == "scoring-payouts-restore":
+            # Repair: rebuild deleted tgf_payouts rows from their surviving
+            # bulk-confirm ledger mirrors — "<tgf_events code>[|apply]".
+            _ev, _, _mode = arg.partition("|")
+            return json.dumps(db.restore_tgf_payouts_from_ledger(
+                _ev.strip(), apply=(_mode.strip().lower() == "apply")),
+                indent=2, default=str)
         if cmd == "scoring-rainout-audit":
             # READ-ONLY: unlabeled shut-down candidates (active status,
             # >=50% credited registrations) + already-labeled events.

@@ -4874,13 +4874,13 @@
         // running cross-event pot THROUGH this event (Kerry 2026-07-20);
         // carry-in from 2025 rides the /api/hio-pot payload once set.
         if (gEvent && gEvent.holeInOne && gEvent.holeInOne !== "NO_EVENT" && gEvent.holeInOne !== "NO_GAME") {
-            html += `<div class="hole-in-one-banner">Hole-in-One Pot: ${fmt$(gEvent.holeInOne)} <span class="gg-det" data-event="${escapeHtml(ev.item_name)}" data-game="hio"></span> <span id="hio-running-inline" style="margin-left:0.5rem;"></span></div>`;
+            html += `<div class="hole-in-one-banner"><div class="hio-line">Hole-in-One Pot: ${fmt$(gEvent.holeInOne)} <span class="gg-det" data-event="${escapeHtml(ev.item_name)}" data-game="hio"></span></div><div class="hio-line" id="hio-running-inline"></div></div>`;
             fetch("/api/hio-pot").then(r => r.ok ? r.json() : null).then(d => {
                 const el = document.getElementById("hio-running-inline");
                 if (!el || !d) return;
                 const row = (d.events || []).find(e => e.event === ev.item_name);
                 const thru = row && row.running != null ? row.running : d.pot;
-                el.innerHTML = `&middot; Running pot thru ${escapeHtml(ev.item_name.split(" ")[0])}: <strong>$${Number(thru).toFixed(2)}</strong>`;
+                el.innerHTML = `Running pot thru ${escapeHtml(ev.item_name.split(" ")[0])}: <strong>$${Number(thru).toFixed(2)}</strong>`;
             }).catch(() => {});
         }
 
