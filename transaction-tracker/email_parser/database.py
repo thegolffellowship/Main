@@ -37481,15 +37481,26 @@ def get_hio_pot(db_path=None) -> dict:
                  FROM events
                 WHERE event_date IS NOT NULL
                 ORDER BY event_date""").fetchall()]
+        # 27-hole days contribute $3/player — $1 per 9 holes played
+        # (Kerry 2026-07-20: "Hill country matches would be $3 / player
+        # because we played 27"). Which events are 27-hole lives in a
+        # dial, not code.
+        pats_27h = [p.strip().upper() for p in
+                    (get_app_setting("hio_27h_event_patterns",
+                                     db_path=db_path)
+                     or "HILL COUNTRY MATCHES").split(",") if p.strip()]
         for ev in rows:
             if ev["status"] != "active" or \
                     _event_looks_rained_out(conn, ev["item_name"]):
                 continue
             counts = _event_player_counts(conn, ev["item_name"])
-            holes = _event_holes_type(ev["item_name"], None)
-            matrix = m9 if holes == 9 else m18
-            g = matrix.get(str(counts["players"])) or {}
-            hio = _matrix_num(g.get("holeInOne"))
+            if any(p in ev["item_name"].upper() for p in pats_27h):
+                hio = float(counts["players"] or 0) * 3.0
+            else:
+                holes = _event_holes_type(ev["item_name"], None)
+                matrix = m9 if holes == 9 else m18
+                g = matrix.get(str(counts["players"])) or {}
+                hio = _matrix_num(g.get("holeInOne"))
             if hio > 0:
                 total += hio
                 events_out.append({"event": ev["item_name"],

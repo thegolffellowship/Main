@@ -1191,7 +1191,9 @@ change.
 HIO is the one game pot that ACCRUES across events instead of paying per
 event. `get_hio_pot()` (database.py): every played, non-rained-out event
 contributes its games-matrix holeInOne amount ($1/player 9-hole,
-$2/player 18-hole). Scheduled (future) events are INCLUDED as soon as
+$2/player 18-hole; 27-hole days like HILL COUNTRY MATCHES are $3/player
+— $1 per 9 holes — via the `hio_27h_event_patterns` dial, default
+'HILL COUNTRY MATCHES'). Scheduled (future) events are INCLUDED as soon as
 they have registrations (Kerry 2026-07-20: the HIO dollars are collected
 at registration, like the event's own pots in its payouts); the
 contribution self-corrects as the field grows since the pot recomputes

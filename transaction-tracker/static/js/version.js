@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.130.10";
+window.TGF_VERSION = "2.130.11";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.130.11",
+    date: "2026-07-20",
+    changes: [
+      "HIO pot: 27-hole days contribute $3/player — $1 per 9 holes played (Kerry: 'Hill country matches would be $3 / player because we played 27'). Which events count as 27-hole lives in the hio_27h_event_patterns dial (default 'HILL COUNTRY MATCHES'); this season's Comanche Trace Matches day was being counted at 18-hole rates.",
+    ],
+  },
   {
     version: "2.130.10",
     date: "2026-07-20",
