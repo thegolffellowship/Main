@@ -1562,6 +1562,17 @@ def _scoring_dispatch(url: str, extract: str):
                 _ev, _apply = arg, False
             return json.dumps(db.restore_tgf_payouts_from_ledger(
                 _ev.strip(), apply=_apply), indent=2, default=str)
+        if cmd == "scoring-payouts-restore-explicit":
+            # Stage-2 repair for rows with no ledger mirror: arg is a JSON
+            # list of {id, event_code, customer_id, customer_name,
+            # category, amount, date} optionally followed by "|apply".
+            _payload, _sep, _mode = arg.rpartition("|")
+            if _mode.strip().lower() == "apply" and _sep:
+                _rows, _apply2 = json.loads(_payload), True
+            else:
+                _rows, _apply2 = json.loads(arg), False
+            return json.dumps(db.restore_tgf_payouts_explicit(
+                _rows, apply=_apply2), indent=2, default=str)
         if cmd == "scoring-rainout-audit":
             # READ-ONLY: unlabeled shut-down candidates (active status,
             # >=50% credited registrations) + already-labeled events.
