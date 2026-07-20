@@ -900,6 +900,38 @@ event showed default amounts ($8/$7) in Withdraw Player / Partial Refund.
   flow into Customers → Winnings automatically via /api/customers/winnings.
 - **Data** from `tgf_events` and `tgf_payouts` tables; golfer identity is the `customers` table (tgf_golfers was eliminated)
 - **API:** `GET /api/tgf` returns `{customers, events, winnings}` where customers is the list of payout recipients
+- **Sidebar totals are `tgf_events.total_purse`** (a stored column set at
+  screenshot-import/record time), NOT `SUM(tgf_payouts.amount)`. A
+  tgf_events row with zero payout rows still shows its stored purse — the
+  2026-07-20 "Cedar Creek $229" was exactly this shell-row class, and
+  row-only sweeps truthfully report `removed: 0` against it.
+- **Payout repair bridges (v2.129.x, 2026-07-20):**
+  - `scoring-payouts-clear-auto:<event>[|all]` — removes an event's
+    auto-recorded (`auto:%` description) payout rows + their PENDING
+    ledger rows; `|all` (Kerry-directed only) also removes manual/
+    screenshot rows AND deletes matched tgf_events rows left with zero
+    payout rows (reported as `empty_event_rows_deleted` with the stored
+    purse). Event matching is whitespace-collapse-normalized CODE
+    matching only (bare code as prefix, non-digit guard). A course-NAME
+    fallback was tried and REMOVED same-day: same-course different
+    events (s18.1 CEDAR CREEK vs s9.18 Cedar Creek) share the name
+    token, and it swept 36 legitimately-paid rows from two other events.
+  - `scoring-payouts-restore:<tgf code>[|apply]` — rebuilds deleted
+    tgf_payouts rows from surviving bulk-confirm ledger mirrors
+    (`source_ref 'payout-<original id>'` carries id/category/customer/
+    amount/paid link; ids re-insert exactly — tgf_payouts is
+    AUTOINCREMENT so deleted ids are never reused). Rows that were paid
+    via grouped REAL Venmo receipts have no per-row mirror and are
+    reported as a remaining gap, not guessed at. Arg parsing is
+    pipe-safe (codes like "s18.3 SAN ANTONIO KICKOFF | Cedar Creek").
+  - `scoring-payouts-unlink:<acct_transaction_id>` — clears the paid
+    link from tgf_payouts rows wrongly matched to a receipt (rows revert
+    to unpaid; the ledger row is untouched).
+  - `scoring-rainout-label:<event>|<badge>|apply` stamps a shut-down
+    event's cancelled status + badge; `|clear|apply` removes a
+    mislabeled badge (status untouched). The Venmo subset-matcher pass
+    (partial payments) only runs for memo-resolved events against that
+    event's own payout group.
 
 ## Events Tab
 - Sidebar lists events by date with total purse amounts
