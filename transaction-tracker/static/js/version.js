@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.129.21";
+window.TGF_VERSION = "2.129.22";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.129.22",
+    date: "2026-07-20",
+    changes: [
+      "Watchless refund completion (Kerry 2026-07-20, the Jeff Rideout case): Kerry often pays a credit refund straight from the Venmo app with no in-app Refund tap, so no watch existed and the credited item sat OUTSTANDING forever — even though the receipt arrived (under his alias 'Paul Rideout') with a memo naming Jeff. The refund-watch sweep now has a second pass: an unclaimed payout receipt whose memo reads like a credit refund and matches exactly ONE open credited/WD item by customer_id + exact amount completes that item the same way a verified watch would.",
+    ],
+  },
   {
     version: "2.129.21",
     date: "2026-07-20",
