@@ -20841,9 +20841,15 @@ def auto_match_venmo_payouts_to_tgf(
                 # paid, leaving the remainder due (the UI then offers a Pay
                 # button for the difference).
                 partial_rows = None
-                if pick is None:
+                # STRONG-EVIDENCE GATE (v2.129.2): subset matching only when
+                # the MEMO names this exact event — without it, an old
+                # receipt whose amount happens to equal one row of ANY
+                # pending group false-positives (an April $32 receipt
+                # subset-matched a July s18.8 row on the first live run).
+                if pick is None and memo_resolved and tgf_event_id is not None:
                     from itertools import combinations
-                    for g in cands[:3]:
+                    for g in [c for c in cands
+                              if c["tgf_event_id"] == tgf_event_id][:1]:
                         rws = conn.execute(
                             """SELECT p.id, p.amount, p.acct_transaction_id,
                                       t.source AS txn_source
@@ -37198,11 +37204,14 @@ def label_event_rainout(event_name: str, badge: str = "RAINED OUT",
     out = {"event": ev["item_name"], "current_status": ev["status"],
            "current_badge": ev["status_badge"], "badge": badge,
            "apply": apply}
-    if ev["status"] != "active":
+    if ev["status"] != "active" and ev["status_badge"]:
         out["note"] = "already labeled"
         return out
     if apply:
-        ok = set_event_status(ev["id"], "cancelled",
+        # active → cancel + badge; already cancelled but badge-less
+        # (the a9.6/s9.6/s9.11 class) → re-stamp keeping the status.
+        status = ev["status"] if ev["status"] != "active" else "cancelled"
+        ok = set_event_status(ev["id"], status,
                               reason=f"{badge} — labeled via rain-out audit",
                               badge=badge, db_path=db_path)
         out["applied"] = bool(ok)

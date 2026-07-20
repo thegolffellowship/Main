@@ -1536,6 +1536,19 @@ def _scoring_dispatch(url: str, extract: str):
             return json.dumps(db.cmp_encode_uniform_allowance(
                 _v, apply=("apply" in [x.lower() for x in _p])),
                 indent=2, default=str)
+        if cmd == "scoring-payouts-unlink":
+            # Repair: unlink a wrongly-matched receipt from payout rows —
+            # "<acct_transaction_id>". Rows revert to unpaid; the ledger
+            # row itself is untouched.
+            _aid = int(arg.strip())
+            with db._connect(None) as _c:
+                _n = _c.execute(
+                    "UPDATE tgf_payouts SET acct_transaction_id = NULL, "
+                    "paid_at = NULL WHERE acct_transaction_id = ?",
+                    (_aid,)).rowcount
+                _c.commit()
+            return json.dumps({"acct_transaction_id": _aid,
+                               "payout_rows_unlinked": _n}, indent=2)
         if cmd == "scoring-rainout-audit":
             # READ-ONLY: unlabeled shut-down candidates (active status,
             # >=50% credited registrations) + already-labeled events.

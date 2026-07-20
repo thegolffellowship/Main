@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.129.1";
+window.TGF_VERSION = "2.129.2";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.129.2",
+    date: "2026-07-20",
+    changes: [
+      "Subset receipt-matcher gated to memo-resolved events only: the first live run subset-matched an April $32 expense receipt (no event memo) onto a July s18.8 payout row because $32 happened to equal one unpaid row. The subset pass now runs ONLY when the receipt's memo resolves to a specific event and only against that event's payout group — the Barna partial-payment case (memo'd to a9.18) still matches; memo-less receipts never subset-match.",
+      "scoring-payouts-unlink:<acct_transaction_id> repair bridge — clears acct_transaction_id + paid_at from tgf_payouts rows wrongly linked to a receipt (returns them to unpaid), used to undo the false positive above without touching the receipt itself.",
+      "scoring-rainout-label now also badge-fills events that are already cancelled but badge-less (the 4/21 ShadowGlen + Quarry and 5/26 Quarry cancellations predate the badge convention): status is kept as-is, only the badge is stamped so the payout/HIO-pot guards and the UI read the shutdown uniformly.",
+    ],
+  },
   {
     version: "2.129.1",
     date: "2026-07-20",
