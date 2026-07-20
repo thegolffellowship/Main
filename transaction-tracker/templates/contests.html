@@ -3270,6 +3270,14 @@
             ? mine.map(m => mpMatchCardFromMatch(m, player)).join('')
             : '<div class="mp-expand-empty">No completed matches yet.</div>';
         exp.style.display = '';
+        // Bring the clicked name to the top of the window (under the sticky
+        // header stack) so the expanded match cards are what fills the screen.
+        const sticky = ['header', '.tab-nav'].reduce((sum, sel) => {
+            const el = document.querySelector(sel);
+            return sum + (el && getComputedStyle(el).position === 'sticky' ? el.offsetHeight : 0);
+        }, 0);
+        window.scrollTo({ top: row.getBoundingClientRect().top + window.scrollY - sticky - 6,
+                          behavior: 'smooth' });
     }
 
     // Toggle a pool's completed-matches panel. The WHOLE pool head is the target
