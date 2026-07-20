@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.129.16";
+window.TGF_VERSION = "2.129.17";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.129.17",
+    date: "2026-07-20",
+    changes: [
+      "Daily Briefing restructured (Kerry 2026-07-20: 'honestly overwhelming' — 200 action items as full cards): the email now opens with an ADMINISTRATIVE OVERVIEW of the last 24 hours (stat chips + an AI-written prioritized 3-6 bullet summary), then QUICK WINS (sub-5-minute actions), then a MEMBERSHIPS section (expiring-soon and just-lapsed lists for personal outreach, plus renewed/new members this week). Action Required shows full cards ONLY for new-in-24h + high-urgency items (capped); the standing backlog rolls up to one row per category with count, oldest date, and a dashboard link — every item's detail stays one click away.",
+      "All briefing thresholds are dials in app_settings: daily_briefing_detail_cap (10), daily_briefing_expiry_window (30 days), daily_briefing_recent_window (7 days). Subject now reads 'N new · M open' instead of the raw item count.",
+    ],
+  },
   {
     version: "2.129.16",
     date: "2026-07-20",

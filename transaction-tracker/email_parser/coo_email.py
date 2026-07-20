@@ -18,6 +18,7 @@ import anthropic as _anthropic
 
 from email_parser.database import (
     get_action_items,
+    get_app_setting,
     get_coo_financial_snapshot,
     get_pending_review_count,
     get_all_events,
@@ -78,9 +79,24 @@ def build_coo_email_html() -> tuple[str, str]:
     except Exception:
         new_warnings, total_warnings = 0, 0
 
+    # Split the open items into NEW (last 24h) vs standing backlog \u2014 the
+    # briefing leads with what changed, not the whole pile (Kerry
+    # 2026-07-20: "honestly overwhelming... produce a summary of
+    # everything from last 24 hours to start out, with an allowance to
+    # see each of these in detail").
+    cutoff = (datetime.utcnow() - timedelta(hours=24)).strftime("%Y-%m-%d %H:%M:%S")
+    new_items = [a for a in action_items if (a.get("created_at") or "") >= cutoff]
+    backlog = [a for a in action_items if (a.get("created_at") or "") < cutoff]
+    high_backlog = [a for a in backlog if a.get("urgency") == "high"]
+    try:
+        detail_cap = int(get_app_setting("daily_briefing_detail_cap") or 10)
+    except Exception:
+        detail_cap = 10
+
     # Subject
     action_count = len(action_items)
-    subject = f"TGF Daily Briefing \u2014 {day_str} | {action_count} Action Item{'s' if action_count != 1 else ''}"
+    subject = (f"TGF Daily Briefing \u2014 {day_str} | "
+               f"{len(new_items)} new \u00b7 {action_count} open")
     if new_warnings > 0:
         subject = f"\u26a0\ufe0f {subject} ({new_warnings} new parse warning{'s' if new_warnings != 1 else ''})"
 
@@ -101,12 +117,79 @@ def build_coo_email_html() -> tuple[str, str]:
 <tr><td>
 """
 
-    # ── Section 1: Action Required ──
-    html += _section_header("\U0001f534 Action Required")
+    # ── Section 0: Administrative Overview (last 24 hours) ──
+    html += _section_header("\U0001f4cb Administrative Overview — Last 24 Hours")
+    _high_total = len(high_backlog) + sum(
+        1 for a in new_items if a.get("urgency") == "high")
+    mem = _get_membership_summary()
+    html += f"""
+<table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:10px;">
+<tr>
+  <td style="padding:8px 10px;background:#fff;border:1px solid #e5e7eb;border-radius:8px;text-align:center;">
+    <div style="font-size:10px;color:{_GRAY};text-transform:uppercase;">New (24h)</div>
+    <div style="font-size:18px;font-weight:700;color:{_RED if new_items else _GREEN};">{len(new_items)}</div>
+  </td>
+  <td style="width:6px;"></td>
+  <td style="padding:8px 10px;background:#fff;border:1px solid #e5e7eb;border-radius:8px;text-align:center;">
+    <div style="font-size:10px;color:{_GRAY};text-transform:uppercase;">Open backlog</div>
+    <div style="font-size:18px;font-weight:700;">{len(backlog)}</div>
+  </td>
+  <td style="width:6px;"></td>
+  <td style="padding:8px 10px;background:#fff;border:1px solid #e5e7eb;border-radius:8px;text-align:center;">
+    <div style="font-size:10px;color:{_GRAY};text-transform:uppercase;">High urgency</div>
+    <div style="font-size:18px;font-weight:700;color:{_RED if _high_total else _GRAY};">{_high_total}</div>
+  </td>
+  <td style="width:6px;"></td>
+  <td style="padding:8px 10px;background:#fff;border:1px solid #e5e7eb;border-radius:8px;text-align:center;">
+    <div style="font-size:10px;color:{_GRAY};text-transform:uppercase;">Expiring mbrs</div>
+    <div style="font-size:18px;font-weight:700;color:{_AMBER if mem["expiring"] else _GREEN};">{len(mem["expiring"])}</div>
+  </td>
+</tr>
+</table>"""
+    ai = _get_admin_overview(new_items, backlog, snapshot, upcoming, mem)
+    for line in ai.get("summary", []):
+        html += f"""<div style="padding:8px 14px;margin-bottom:6px;background:#fff;border:1px solid #e5e7eb;border-left:4px solid {_NAVY};border-radius:6px;font-size:13px;line-height:1.5;">{line}</div>"""
+    html += _section_end()
+
+    # ── Section 0b: Quick Wins ──
+    if ai.get("quick_wins"):
+        html += _section_header("\u26a1 Quick Wins")
+        for line in ai["quick_wins"]:
+            html += f"""<div style="padding:8px 14px;margin-bottom:6px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:6px;font-size:13px;line-height:1.5;">{line}</div>"""
+        html += _section_end()
+
+    # ── Section 0c: Memberships ──
+    html += _section_header("\U0001f465 Memberships")
+    def _mem_rows(rows, color, label):
+        out = ""
+        if rows:
+            out += f"""<div style="margin-top:6px;font-size:12px;color:{_GRAY};font-weight:600;text-transform:uppercase;">{label} ({len(rows)})</div>"""
+            for r in rows[:12]:
+                out += f"""<div style="padding:6px 12px;margin-top:4px;background:#fff;border:1px solid #e5e7eb;border-left:4px solid {color};border-radius:6px;font-size:13px;">{r["name"]} <span style="color:{_GRAY};font-size:12px;">— {r["detail"]}</span></div>"""
+            if len(rows) > 12:
+                out += f"""<div style="font-size:12px;color:{_GRAY};margin-top:4px;">+{len(rows) - 12} more</div>"""
+        return out
+    mem_html = (_mem_rows(mem["expiring"], _AMBER, "Expiring soon — personal outreach")
+                + _mem_rows(mem["lapsed"], _RED, "Just lapsed — personal outreach")
+                + _mem_rows(mem["renewed"], _GREEN, "Renewed (last 7 days)")
+                + _mem_rows(mem["new"], _NAVY, "New members (last 7 days)"))
+    html += mem_html if mem_html else _info_box("\u2705 No membership movement — nothing expiring within the window")
+    html += _section_end()
+
+    # ── Section 1: Action Required — NEW + high urgency in full,
+    # standing backlog rolled up by category (detail is one click away).
+    detail_items = sorted(
+        new_items + high_backlog,
+        key=lambda x: {"high": 0, "medium": 1, "low": 2}.get(x.get("urgency", "low"), 2))
+    overflow = max(0, len(detail_items) - detail_cap)
+    detail_items = detail_items[:detail_cap]
+    html += _section_header("\U0001f534 Action Required (new + high urgency)")
     if not action_items:
         html += _info_box("\u2705 No open action items")
+    elif not detail_items:
+        html += _info_box(f"Nothing new in the last 24 hours — {len(backlog)} standing items rolled up below.")
     else:
-        for item in sorted(action_items, key=lambda x: {"high": 0, "medium": 1, "low": 2}.get(x.get("urgency", "low"), 2)):
+        for item in detail_items:
             emoji = _urgency_emoji(item.get("urgency"))
             cat = item.get("category", "other")
             from_name = item.get("from_name", "")
@@ -121,6 +204,23 @@ def build_coo_email_html() -> tuple[str, str]:
   </div>
   <div style="font-size:14px;line-height:1.5;">{summary}</div>
   <div style="margin-top:6px;"><a href="{link}" style="font-size:12px;color:#2563eb;text-decoration:none;">View in COO Dashboard &rarr;</a></div>
+</div>"""
+        if overflow:
+            html += _info_box(f"+{overflow} more new/high-urgency items — see the COO Dashboard.")
+    plain_backlog = [a for a in backlog if a.get("urgency") != "high"]
+    if plain_backlog:
+        by_cat = {}
+        for a in plain_backlog:
+            c = (a.get("category") or "other").upper()
+            by_cat.setdefault(c, []).append(a)
+        html += f"""<div style="margin-top:10px;font-size:12px;color:{_GRAY};font-weight:600;text-transform:uppercase;">Standing backlog ({len(plain_backlog)})</div>"""
+        for c, rows in sorted(by_cat.items(), key=lambda kv: -len(kv[1])):
+            oldest = min((r.get("email_date") or r.get("created_at") or "")[:10] for r in rows)
+            html += f"""
+<div style="padding:8px 14px;margin-top:6px;background:#fff;border:1px solid #e5e7eb;border-radius:6px;font-size:13px;">
+  <span style="background:#eff6ff;color:#1e40af;padding:1px 6px;border-radius:4px;font-size:11px;font-weight:600;">{c}</span>
+  &nbsp;<strong>{len(rows)}</strong> open <span style="color:{_GRAY};">(oldest {oldest})</span>
+  &nbsp;<a href="{_BASE_URL}/coo" style="font-size:12px;color:#2563eb;text-decoration:none;">Review &rarr;</a>
 </div>"""
     html += _section_end()
 
@@ -266,6 +366,117 @@ def _section_end() -> str:
 
 def _info_box(text: str) -> str:
     return f"""<div style="padding:12px 16px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:6px;font-size:13px;color:{_GREEN};">{text}</div>"""
+
+
+def _get_membership_summary() -> dict:
+    """Membership movement for the briefing (Kerry 2026-07-20: "Who's
+    about to expire, vs who's renewed or new. Need to know who I can
+    reach out to personally"). Windows are dials:
+    app_settings daily_briefing_expiry_window (days ahead, default 30)
+    and daily_briefing_recent_window (days back, default 7)."""
+    try:
+        ahead = int(get_app_setting("daily_briefing_expiry_window") or 30)
+    except Exception:
+        ahead = 30
+    try:
+        back = int(get_app_setting("daily_briefing_recent_window") or 7)
+    except Exception:
+        back = 7
+    today = now_central().strftime("%Y-%m-%d")
+    ahead_str = (now_central() + timedelta(days=ahead)).strftime("%Y-%m-%d")
+    back_str = (now_central() - timedelta(days=back)).strftime("%Y-%m-%d")
+    out = {"expiring": [], "lapsed": [], "renewed": [], "new": []}
+    try:
+        with _connect() as conn:
+            # Latest term per customer
+            latest = conn.execute("""
+                SELECT m.customer_id,
+                       TRIM(c.first_name || ' ' || c.last_name) AS name,
+                       MAX(m.expires_at) AS expires_at
+                  FROM customer_memberships m
+                  JOIN customers c ON c.customer_id = m.customer_id
+                 GROUP BY m.customer_id""").fetchall()
+            for r in latest:
+                exp = (r["expires_at"] or "")[:10]
+                if today <= exp <= ahead_str:
+                    out["expiring"].append(
+                        {"name": r["name"], "detail": f"expires {exp}"})
+                elif back_str <= exp < today:
+                    out["lapsed"].append(
+                        {"name": r["name"], "detail": f"expired {exp}"})
+            out["expiring"].sort(key=lambda x: x["detail"])
+            out["lapsed"].sort(key=lambda x: x["detail"])
+            # Renewals + first-time members in the recent window
+            recent = conn.execute("""
+                SELECT m.customer_id, m.started_at, m.source,
+                       TRIM(c.first_name || ' ' || c.last_name) AS name,
+                       (SELECT COUNT(*) FROM customer_memberships m2
+                         WHERE m2.customer_id = m.customer_id) AS terms
+                  FROM customer_memberships m
+                  JOIN customers c ON c.customer_id = m.customer_id
+                 WHERE m.created_at >= ?""", (back_str,)).fetchall()
+            for r in recent:
+                row = {"name": r["name"],
+                       "detail": f"term started {(r['started_at'] or '')[:10]}"}
+                (out["new"] if r["terms"] <= 1 else out["renewed"]).append(row)
+    except Exception:
+        logger.exception("briefing membership summary failed")
+    return out
+
+
+def _get_admin_overview(new_items, backlog, snapshot, upcoming, mem) -> dict:
+    """One Claude call producing the prioritized 24h summary + quick
+    wins for the top of the briefing. Returns {"summary": [...],
+    "quick_wins": [...]} — empty lists on any failure so the email
+    still sends."""
+    api_key = os.getenv("ANTHROPIC_API_KEY")
+    if not api_key:
+        return {"summary": [], "quick_wins": []}
+    context = {
+        "new_action_items_24h": [
+            {"category": a.get("category"), "urgency": a.get("urgency"),
+             "from": a.get("from_name"),
+             "summary": (a.get("summary") or "")[:200]}
+            for a in new_items[:25]],
+        "backlog_count": len(backlog),
+        "backlog_categories": {},
+        "memberships": {
+            "expiring_soon": [m["name"] for m in mem["expiring"][:15]],
+            "just_lapsed": [m["name"] for m in mem["lapsed"][:15]],
+            "renewed_recent": len(mem["renewed"]),
+            "new_recent": len(mem["new"])},
+        "available_to_spend": snapshot["obligations"]["available_to_spend"],
+        "upcoming_events": [e.get("item_name") for e in upcoming[:6]],
+    }
+    for a in backlog:
+        c = (a.get("category") or "other")
+        context["backlog_categories"][c] = context["backlog_categories"].get(c, 0) + 1
+
+    prompt = f"""You are the TGF COO Agent writing the morning administrative overview.
+From the state below, produce:
+- "summary": 3-6 bullets organizing the LAST 24 HOURS by priority — what happened, what needs Kerry today, grouped logically (events/courses first, then money, then members). Plain sentences, no headers.
+- "quick_wins": 0-4 bullets, each a single small action Kerry could clear in under 5 minutes right now (a reply, a tap, a confirmation). Only include genuinely quick items; omit if none.
+
+State:
+{json.dumps(context, indent=1)}
+
+Return ONLY JSON: {{"summary": ["..."], "quick_wins": ["..."]}}"""
+    try:
+        client = _anthropic.Anthropic(api_key=api_key)
+        resp = client.messages.create(
+            model="claude-sonnet-4-5-20250929",
+            max_tokens=800,
+            messages=[{"role": "user", "content": prompt}])
+        text = resp.content[0].text.strip()
+        import re
+        match = re.search(r"\{.*\}", text, re.DOTALL)
+        if match:
+            data = json.loads(match.group())
+            return {"summary": list(data.get("summary") or []),
+                    "quick_wins": list(data.get("quick_wins") or [])}
+    except Exception as e:
+        logger.warning("admin overview AI failed: %s", e)
+    return {"summary": [], "quick_wins": []}
 
 
 def _get_ai_observations(action_items, snapshot, upcoming, review) -> list[str]:
