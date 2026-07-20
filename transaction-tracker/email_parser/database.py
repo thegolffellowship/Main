@@ -10185,6 +10185,88 @@ def auto_gg_results_sync(db_path: str | Path = DB_PATH,
     return out
 
 
+def import_event_scorecards_by_code(widget_url: str, event_code: str,
+                                    only_round: str | None = None,
+                                    time_budget: float = 45.0,
+                                    db_path: str | Path = DB_PATH) -> dict:
+    """Targeted scorecard import for ONE past event: walk the portal
+    widget's round selector, find the round whose tournament links carry
+    `event_code`, and import that round's ALL Net then ALL Gross boards
+    (net first so handicaps land — same recipe as the auto-sync). Built
+    for backfilling events older than the auto-sync's newest-N window
+    (the 2026-07-20 Austin match-play hole-data gap). only_round skips
+    the scan and imports that GG round id directly. Read-only on GG;
+    idempotent on our side (import_gg_scorecards replaces existing)."""
+    from time import monotonic
+    from urllib.parse import urlparse
+    from golf_genius_sync import fetch_public_page, parse_page_structure
+
+    started = monotonic()
+    host = urlparse(widget_url).netloc
+    code = (event_code or "").strip().lower()
+    out: dict = {"event_code": code, "host": host, "boards": []}
+
+    def fetch(url):
+        page = fetch_public_page(url, xhr=False)
+        if page["status_code"] != 200:
+            raise RuntimeError(f"GG returned HTTP {page['status_code']} for {url}")
+        return page["html"]
+
+    if only_round:
+        options = [(str(only_round), "")]
+    else:
+        html = fetch(widget_url)
+        sel = re.search(r'<select[^>]*name="round"[^>]*>(.*?)</select>',
+                        html, re.S)
+        options = re.findall(r'<option[^>]*value="(\d+)"[^>]*>(.*?)</option>',
+                             sel.group(1) if sel else "", re.S)
+        if not options:
+            return {**out, "error": "no round selector on widget page"}
+
+    scanned = 0
+    for rid, _lbl in options:
+        if monotonic() - started > time_budget:
+            out["error"] = (f"time budget exhausted after {scanned} rounds — "
+                            f"re-run, or pass @<round_id>")
+            return out
+        round_url = f"{widget_url}&round={rid}"
+        try:
+            struct = parse_page_structure(fetch(round_url), round_url)
+        except Exception as e:
+            out.setdefault("round_errors", []).append({"round": rid, "error": str(e)})
+            continue
+        scanned += 1
+        links = struct.get("links") or []
+        blob = " ".join(l.get("text") or "" for l in links)
+        m = re.search(r"\b([sa]\d+(?:\.\d+)?)\b", blob)
+        if not only_round and (not m or m.group(1).lower() != code):
+            continue
+        out["round"] = rid
+        for want in ("ALL Net", "ALL Gross"):   # net FIRST (handicaps)
+            board_links = [l for l in links
+                           if (l.get("text") or "").strip().lower()
+                           .startswith(want.lower())]
+            for link in board_links:
+                label = (link.get("text") or "").strip() or want
+                href = link.get("href") or ""
+                if href.startswith("/"):
+                    href = f"https://{host}{href}"
+                try:
+                    res = import_gg_scorecards(href, event_code=code,
+                                               db_path=db_path)
+                    out["boards"].append({
+                        "board": label,
+                        **{k: v for k, v in (res or {}).items()
+                           if isinstance(v, (int, float, str))}})
+                except Exception as e:
+                    out["boards"].append({"board": label, "error": str(e)})
+        if not out["boards"]:
+            out["note"] = "round found but no ALL Net/ALL Gross board links"
+        return out
+    out["error"] = f"no round matching '{code}' found ({scanned} rounds scanned)"
+    return out
+
+
 def get_gg_game_results(event_name: str, db_path: str | Path = DB_PATH) -> dict:
     """GG-recorded winners (CTP/LP/HIO/TEAM Net) for one event."""
     with _connect(db_path) as conn:
@@ -26160,6 +26242,60 @@ def cmp_lock_verified_results(season: str | None = None,
     out["locked_count"] = len(out["locked"])
     out["no_gg_card_count"] = len(out["no_gg_card"])
     out["conflict_count"] = len(out["conflicts"])
+    return out
+
+
+def cmp_lock_match_manual(chapter: str, player_a: str, player_b: str,
+                          apply: bool = False, note: str | None = None,
+                          db_path=None) -> dict:
+    """Manually lock ONE played match that cmp_lock_verified_results cannot
+    auto-lock because GG never published a match card (no_gg_card class) —
+    the result is confirmed by Kerry instead of by GG. Stamps
+    result_locked_at + a note recording the Kerry confirmation. Refuses to
+    lock a resultless (unplayed) match; already-locked rows are reported,
+    not restamped. Default is DRY-RUN — apply=True writes."""
+    from .timezone_utils import today_central_str
+    out = {"chapter": chapter, "players": [player_a, player_b], "apply": apply}
+    sig = frozenset([_cmp_person_key(player_a), _cmp_person_key(player_b)])
+    with _connect(db_path) as conn:
+        rows = [dict(r) for r in conn.execute(
+            """SELECT m.*, p.chapter AS p_chapter, p.pool_name,
+                      e.item_name AS event_name
+                 FROM cmp_matches m
+                 JOIN cmp_pools p ON p.id = m.pool_id
+                 LEFT JOIN events e ON e.id = m.event_id
+                WHERE p.chapter = ?""", (chapter,)).fetchall()]
+        cands = [m for m in rows if frozenset(
+            [_cmp_person_key(m["player1_name"]),
+             _cmp_person_key(m["player2_name"])]) == sig]
+        if len(cands) != 1:
+            out["status"] = "no_match" if not cands else "ambiguous"
+            out["matched"] = len(cands)
+            return out
+        m = cands[0]
+        out.update({"id": m["id"], "event": m.get("event_name"),
+                    "pool": m.get("pool_name"),
+                    "stored_winner": m.get("winner_name"),
+                    "stored_margin": m.get("margin")})
+        if not m.get("winner_name") and m.get("player1_stableford") is None:
+            out["status"] = "no_result"
+            return out
+        if m.get("result_locked_at"):
+            out["status"] = "already_locked"
+            out["locked_at"] = m["result_locked_at"]
+            return out
+        stamp_note = note or (
+            f"Kerry-confirmed {today_central_str()}, no GG card — stored "
+            f"result {m.get('winner_name')} {m.get('margin') or ''} stands")
+        out["note"] = stamp_note
+        if apply:
+            conn.execute(
+                "UPDATE cmp_matches SET result_locked_at = datetime('now'),"
+                " result_locked_note = ? WHERE id = ?", (stamp_note, m["id"]))
+            conn.commit()
+            out["status"] = "locked"
+        else:
+            out["status"] = "would_lock"
     return out
 
 

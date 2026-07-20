@@ -1369,6 +1369,11 @@ def _scoring_dispatch(url: str, extract: str):
       scoring-hcp-import:<event>[|apply]  self-derive handicap rounds (WHS NDB)
       scoring-mp-reconcile75[:<season>|<chapter>|<allow>]  match-play reconcile
                                    with off-lowest per-chapter allowance
+      scoring-mp-lock-one:<chapter>|<A>|<B>[|apply]  manually lock one
+                                   Kerry-confirmed match with no GG card
+      scoring-import-event:<event_code>[@<round_id>]  targeted scorecard
+                                   backfill for one past event (ALL Net →
+                                   ALL Gross); url = the portal widget
       scoring-mp-import-gg[:<round>|verify[:<round>]]  snapshot GG's own
                                    match-play detail (start hole + NET per-hole
                                    winner/strokes) onto cmp_matches; url = the
@@ -1490,6 +1495,28 @@ def _scoring_dispatch(url: str, extract: str):
             _apply = len(_p) > 2 and _p[2].lower() == "apply"
             return json.dumps(db.cmp_lock_verified_results(
                 _season, _chapter, apply=_apply), indent=2, default=str)
+        if cmd == "scoring-mp-lock-one":
+            # Manual lock for a played match GG never published a card for
+            # (no_gg_card class) — the result is Kerry-confirmed, not
+            # GG-verified (Kerry 2026-07-20, the last 2 of 30). arg:
+            # "<chapter>|<playerA>|<playerB>[|apply]" — default dry-run.
+            _p = [x.strip() for x in (arg or "").split("|")]
+            if len(_p) < 3:
+                return json.dumps({"error": "need <chapter>|<A>|<B>[|apply]"})
+            return json.dumps(db.cmp_lock_match_manual(
+                _p[0], _p[1], _p[2],
+                apply=(len(_p) > 3 and _p[3].lower() == "apply")),
+                indent=2, default=str)
+        if cmd == "scoring-import-event":
+            # Targeted scorecard backfill for ONE past event (older than the
+            # auto-sync's newest-N window): find the event's round on the
+            # widget's round selector and import ALL Net → ALL Gross.
+            # arg: "<event_code>[@<gg_round_id>]"; url = the portal's
+            # tournament_results widget.
+            code, _, rkey = arg.partition("@")
+            return json.dumps(db.import_event_scorecards_by_code(
+                url, code.strip(), only_round=(rkey.strip() or None)),
+                indent=2, default=str)
         if cmd == "scoring-mp-pools-audit":
             # READ-ONLY: distinct (chapter, season) in cmp_pools + counts.
             return json.dumps(db.cmp_pools_audit(), indent=2, default=str)

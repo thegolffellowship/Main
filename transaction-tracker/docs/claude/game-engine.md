@@ -411,7 +411,12 @@ below wherever they conflict.
     deletion in `cmp_save_match` (API returns 409), `cmp_relabel_margins`
     (`locked_skip`), and `cmp_clear_match` — `force=True` overrides
     deliberately. The GG snapshot refresh (`gg_match_detail`) stays allowed:
-    it is display detail, not the result.
+    it is display detail, not the result. **Manual lock path (v2.125.3):**
+    the two played matches GG never carded (Hamilton/Wade s9.17,
+    Straiton/Cloer a18.3) lock via `cmp_lock_match_manual` (bridge
+    `scoring-mp-lock-one:<chapter>|<A>|<B>[|apply]`), stamping a
+    "Kerry-confirmed <date>, no GG card" note — run only on Kerry's
+    explicit per-match confirmation.
   - **Registration / eligibility (front of the lifecycle, for CA).** Signup
     timing + prerequisites. Notably an **established-handicap gate**: a player
     without an established handicap is held out of Match Play until they have

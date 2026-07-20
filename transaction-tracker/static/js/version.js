@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.125.2";
+window.TGF_VERSION = "2.125.3";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.125.3",
+    date: "2026-07-20",
+    changes: [
+      "Manual result-lock path for the two played matches GG never published a match card for (Hamilton/Wade s9.17, Straiton/Cloer a18.3 — the auto-locker's no_gg_card class). New cmp_lock_match_manual + bridge scoring-mp-lock-one:<chapter>|<A>|<B>[|apply] stamps result_locked_at with a 'Kerry-confirmed <date>, no GG card' note; dry-run by default, refuses unplayed matches, and reports (never restamps) already-locked rows. Runs only on Kerry's explicit confirmation of each result — 30/30 locked is the finish line.",
+      "Targeted GG scorecard backfill for ONE past event: import_event_scorecards_by_code + bridge scoring-import-event:<event_code>[@<round_id>] (url = the portal's tournament_results widget) walks the round selector to the event's round and imports its ALL Net then ALL Gross boards (net first so handicaps land — same recipe as the auto-sync, which only covers the newest rounds). Built to backfill the 11 Austin pool matches whose hole scores were never imported (a9.11, a9.12, a9.13, a9.14, a9.17, a18.3).",
+    ],
+  },
   {
     version: "2.125.2",
     date: "2026-07-20",
