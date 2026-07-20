@@ -51,6 +51,9 @@
         /* Fade out matched rows */
         .acct-txn-row.lmq-matched,.acct-mobile-card.lmq-matched{opacity:.3;transition:opacity .4s;}
         @media(max-width:900px){ #ledger-split.split-on{grid-template-columns:1fr;} #ledger-deposits-pane{max-height:45vh;} }
+        /* Contain any residual table overflow inside the 1080px column —
+           scroll the list, never the whole page. */
+        #txn-list{overflow-x:auto;}
         /* Ledger column visibility — toggled via class on the table */
         .acct-table-full.acct-hide-customer .col-customer{display:none;}
         .acct-table-full.acct-hide-splits .col-splits{display:none;}

@@ -2194,8 +2194,12 @@ div.mobile-card.row-rsvp-only {
 
 /* ---- Tables ---- */
 .acct-table { width: 100%; border-collapse: collapse; background: var(--surface); border-radius: var(--radius); overflow: hidden; box-shadow: var(--shadow); }
-.acct-table th { text-align: left; padding: 0.6rem 0.75rem; font-size: 0.75rem; text-transform: uppercase; color: var(--text-muted); border-bottom: 2px solid var(--border); }
-.acct-table td { padding: 0.6rem 0.75rem; border-bottom: 1px solid var(--border); font-size: 0.85rem; }
+.acct-table th { text-align: left; padding: 4px 10px; font-size: 0.72rem; text-transform: uppercase; color: var(--text-muted); border-bottom: 2px solid var(--border); }
+/* white-space normal overrides the global tbody-td nowrap: long ledger
+   descriptions must wrap inside the 1080px column instead of pushing the
+   table past <main> and forcing a page-wide horizontal scrollbar. */
+.acct-table td { padding: 5px 10px; border-bottom: 1px solid var(--border); font-size: 0.82rem; white-space: normal; }
+.acct-table td.text-right { white-space: nowrap; }
 .acct-table-full { margin-top: 0.5rem; }
 .acct-table .text-right { text-align: right; }
 .acct-txn-row { cursor: pointer; transition: background 0.1s; }

@@ -197,13 +197,14 @@
             const rc = d.reviewed_counts || {};
             const head = `<p class="ggh-note" style="margin:0 0 0.75rem;">
                 <b>${d.pending_total}</b> pending · reviewed so far:
-                ${["manual", "guest", "not_a_person"].map(k => `${k.replace(/_/g, " ")} ${rc[k] || 0}`).join(" · ")}</p>`;
+                ${["manual", "guest", "not_a_person"].map(k => `${k.replace(/_/g, " ")} ${rc[k] || 0}`).join(" · ")}
+                ${d.blind_set_aside ? ` · <span title="Blind-draw entries (Bl[…]) are set aside — kept, not dismissed, just not reviewed here.">blinds set aside ${d.blind_set_aside}</span>` : ""}</p>`;
             $("ggh-queue").innerHTML = head + ((d.names || []).map(n => {
                 const rows = (n.standings_rows || 0) + (n.result_rows || 0) + (n.hole_rounds || 0);
                 const cands = (n.candidates || []).map(c =>
                     `<span class="ggh-cand" data-id="${n.id}" data-cid="${c.customer_id}"
                         title="${esc(c.current_player_status || "")}">
-                        ${esc(c.first_name + " " + c.last_name)}
+                        ${esc(c.customer_name || (c.first_name + " " + c.last_name))}
                         <span class="cid">#${c.customer_id}${c.chapter ? " · " + esc(c.chapter) : ""}</span></span>`).join(" ");
                 return `<div class="ggh-name-card" id="nc-${n.id}">
                     <div class="ggh-name-head">
@@ -215,7 +216,7 @@
                         ${n.hole_rounds || 0} hole rounds${rows === 0 ? " (no data rows — likely an artifact)" : ""}</div>
                     <div class="ggh-actions">
                         ${cands}
-                        <input type="search" placeholder="search name to link…" autocomplete="off" style="width:170px;border:1px solid var(--border);border-radius:8px;padding:5px 8px;font-size:12px;" id="cid-${n.id}">
+                        <input type="search" placeholder="search name to link…" autocomplete="off" style="width:170px;border:1px solid var(--border);border-radius:8px;padding:5px 8px;font-size:12px;" id="cid-${n.id}" data-seed="${esc((n.raw_name || "").split(",")[0].trim())}">
                         <button class="ggh-btn" data-act="guest" data-id="${n.id}">Guest</button>
                         <button class="ggh-btn" data-act="not_a_person" data-id="${n.id}">Not a person</button>
                     </div>
@@ -232,23 +233,32 @@
             $("ggh-queue").querySelectorAll("input[type=search]").forEach(inp => {
                 const id = inp.id.slice(4);
                 let timer = null;
+                const run = async (q) => {
+                    const res = await fetch("/api/gg-history/customer-search?q=" + encodeURIComponent(q));
+                    if (!res.ok) return;
+                    const hits = await res.json();
+                    $("sr-" + id).innerHTML = hits.map(c =>
+                        `<span class="ggh-cand" data-id="${id}" data-cid="${c.customer_id}"
+                            title="${esc(c.current_player_status || "")}">Link:
+                            ${esc(c.customer_name || ((c.first_name || "") + " " + (c.last_name || "")))}
+                            <span class="cid">#${c.customer_id}${c.chapter ? " · " + esc(c.chapter) : ""}</span></span>`).join(" ")
+                        || '<span class="ggh-muted" style="font-size:12px;">No matching customers.</span>';
+                    $("sr-" + id).querySelectorAll(".ggh-cand").forEach(el =>
+                        el.addEventListener("click", () => resolve(el.dataset.id, "link", el.dataset.cid)));
+                };
+                // Autofill on focus (Kerry 2026-07-20): before any typing,
+                // search the customer DB with the GG surname so likely
+                // matches appear as tappable Link chips immediately.
+                inp.addEventListener("focus", () => {
+                    if (inp.value.trim()) return;
+                    const seed = (inp.dataset.seed || "").trim();
+                    if (seed.length >= 2) run(seed);
+                });
                 inp.addEventListener("input", () => {
                     clearTimeout(timer);
                     const q = inp.value.trim();
                     if (q.length < 2) { $("sr-" + id).innerHTML = ""; return; }
-                    timer = setTimeout(async () => {
-                        const res = await fetch("/api/gg-history/customer-search?q=" + encodeURIComponent(q));
-                        if (!res.ok) return;
-                        const hits = await res.json();
-                        $("sr-" + id).innerHTML = hits.map(c =>
-                            `<span class="ggh-cand" data-id="${id}" data-cid="${c.customer_id}"
-                                title="${esc(c.current_player_status || "")}">Link:
-                                ${esc((c.first_name || "") + " " + (c.last_name || ""))}
-                                <span class="cid">#${c.customer_id}${c.chapter ? " · " + esc(c.chapter) : ""}</span></span>`).join(" ")
-                            || '<span class="ggh-muted" style="font-size:12px;">No matching customers.</span>';
-                        $("sr-" + id).querySelectorAll(".ggh-cand").forEach(el =>
-                            el.addEventListener("click", () => resolve(el.dataset.id, "link", el.dataset.cid)));
-                    }, 300);
+                    timer = setTimeout(() => run(q), 300);
                 });
             });
         }
