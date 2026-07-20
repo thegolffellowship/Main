@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.129.9";
+window.TGF_VERSION = "2.129.10";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.129.10",
+    date: "2026-07-20",
+    changes: [
+      "GG-RSVP credit-info endpoint passes the RSVP's email into get_player_credits (it already had an email-fallback resolver that was never used here): a GG-format name ('McCRARY, Justin') that matched no items row 404'd 'No credits on file' even when the player held a live rain-out credit — McCrary's $106 s9.18 Cedar Creek credit applying to s9.19 The Quarry is the trigger case.",
+    ],
+  },
   {
     version: "2.129.9",
     date: "2026-07-20",
