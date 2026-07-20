@@ -37048,6 +37048,49 @@ def _rows_from_place_ladder(ranking: list, amounts: list, category: str,
     return rows
 
 
+def get_hio_pot(db_path=None) -> dict:
+    """Running Hole-In-One pot (Kerry 2026-07-20: 'I need a running
+    Hole-In-One pot amount. Can you add up from all events?').
+
+    HIO is the one game pot that ACCRUES across events instead of paying
+    out per event: each past event contributes its GAMES-matrix holeInOne
+    amount (by that event's player count and 9/18 matrix), and the pot
+    only drains when a hole-in-one is actually hit (a recorded 'hio'
+    payout). Shut-down events (rain-outs — badge or credited-registration
+    backstop) contributed nothing: their fees were credited back."""
+    from email_parser.timezone_utils import today_central_str
+    m9, m18 = _load_games_matrix(db_path=db_path)
+    events_out, total = [], 0.0
+    with _connect(db_path) as conn:
+        rows = [dict(r) for r in conn.execute(
+            """SELECT item_name, event_date, COALESCE(status,'active') AS status
+                 FROM events
+                WHERE event_date IS NOT NULL AND event_date <= ?
+                ORDER BY event_date""", (today_central_str(),)).fetchall()]
+        for ev in rows:
+            if ev["status"] != "active" or \
+                    _event_looks_rained_out(conn, ev["item_name"]):
+                continue
+            counts = _event_player_counts(conn, ev["item_name"])
+            holes = _event_holes_type(ev["item_name"], None)
+            matrix = m9 if holes == 9 else m18
+            g = matrix.get(str(counts["players"])) or {}
+            hio = _matrix_num(g.get("holeInOne"))
+            if hio > 0:
+                events_out.append({"event": ev["item_name"],
+                                   "date": ev["event_date"],
+                                   "players": counts["players"],
+                                   "hio": round(hio, 2)})
+                total += hio
+        paid = conn.execute(
+            "SELECT COALESCE(SUM(amount), 0) AS s FROM tgf_payouts "
+            "WHERE category = 'hio'").fetchone()["s"] or 0
+    return {"events": events_out, "events_counted": len(events_out),
+            "total_contributed": round(total, 2),
+            "paid_out": round(float(paid), 2),
+            "pot": round(total - float(paid), 2)}
+
+
 def _event_looks_rained_out(conn, event_name: str) -> dict | None:
     """No payouts for a shut-down event (Kerry 2026-07-20, s9.18 Cedar
     Creek: 'It was a RAIN OUT. We have a badge on it. That means
@@ -37343,6 +37386,21 @@ def assemble_event_game_payouts(event_name: str, db_path=None) -> dict:
                                      "the linked event skips it")
             elif t.get("status") == "awaiting_results":
                 notes.append("TGF MVP: awaiting linked-event results — skipped")
+            elif t.get("status") == "single_event_day":
+                # Kerry ruling 2026-07-20 (a9.18 + the rained-out s9.18):
+                # when the linked chapter's event washed out, there's no
+                # cross-chapter TGF MVP HONOR — but THIS event's players
+                # still funded its TGF MVP contribution, and money follows
+                # collection: the day's sole determined City MVP takes this
+                # event's own tgfMVP pot. (GG left it unallocated — the
+                # source of the a9.18 $26 shortfall.)
+                if cm and cm.get("status") == "determined" and \
+                        cm.get("winners") and tgf_val > 0:
+                    _money_split(tgf_val, [w["player"] for w in cm["winners"]],
+                                 "tgf_mvp", "TGF MVP pot (single-event day)"
+                                 + (" (split)" if cm.get("split") else ""))
+                    notes.append("TGF MVP pot paid to the sole City MVP "
+                                 "(linked event produced no MVP)")
 
     # ── Individual Net (per-flight ladders, tie splits) ──
     net_flights = int(_matrix_num(g_net.get("netFlights")) or 1)

@@ -3992,15 +3992,26 @@
         const gamePots = computeGamePotTotals(ev, registrants);
         const totalPrizeFund = gamePots.hio + gamePots.included + gamePots.net + gamePots.gross;
         if (totalPrizeFund > 0) {
-            const diff = totalPrizeFund - tgfEvent.total_purse;
+            // HIO is the one pot that ACCRUES to the running cross-event
+            // pot instead of paying out here — itemize it so it never
+            // reads as an unexplained difference (Kerry 2026-07-20).
+            const diff = totalPrizeFund - gamePots.hio - tgfEvent.total_purse;
             const diffColor = Math.abs(diff) < 0.01 ? '#059669' : (diff > 0 ? '#d97706' : '#dc2626');
             html += `<div style="margin-top:1rem;padding:0.75rem;background:#f8fafc;border:1px solid var(--border);border-radius:8px;">`;
             html += `<h4 style="font-size:0.78rem;font-weight:700;color:var(--text-muted);text-transform:uppercase;margin:0 0 0.5rem;">Prize Fund Reconciliation</h4>`;
             html += `<div style="display:flex;gap:1rem;flex-wrap:wrap;font-size:0.85rem;">`;
             html += `<div><span style="color:var(--text-muted);">GAMES Matrix Prize Fund:</span> <strong>$${totalPrizeFund.toFixed(2)}</strong></div>`;
+            if (gamePots.hio > 0) {
+                html += `<div><span style="color:var(--text-muted);">Hole-In-One → running pot:</span> <strong>$${gamePots.hio.toFixed(2)}</strong></div>`;
+            }
             html += `<div><span style="color:var(--text-muted);">Actual Payouts:</span> <strong>$${tgfEvent.total_purse.toFixed(2)}</strong></div>`;
             html += `<div><span style="color:var(--text-muted);">Difference:</span> <strong style="color:${diffColor};">$${diff.toFixed(2)}</strong></div>`;
+            html += `<div id="hio-pot-running" style="color:var(--text-muted);"></div>`;
             html += `</div></div>`;
+            fetch("/api/hio-pot").then(r => r.ok ? r.json() : null).then(d => {
+                const el = document.getElementById("hio-pot-running");
+                if (el && d) el.innerHTML = `Running Hole-In-One pot: <strong>$${d.pot.toFixed(2)}</strong> <span style="font-size:0.78rem;">(${d.events_counted} events)</span>`;
+            }).catch(() => {});
         }
 
         html += '</div>';
