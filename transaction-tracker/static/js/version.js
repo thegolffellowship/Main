@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.130.1";
+window.TGF_VERSION = "2.130.2";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.130.2",
+    date: "2026-07-20",
+    changes: [
+      "Hotfix: v2.130.1 broke the GG History pending-names queue by selecting customers.customer_name — that column doesn't exist; the suffixed display name ('Victor Arias Jr') lives on customer_aliases.customer_name. Queue + search now derive the display name from the longest name-alias, falling back to first + last + customers.suffix. Verified against a live-shaped schema fixture: both Ariases render with suffixes, blinds stay set aside.",
+      "Bonus fix surfaced by the same dig: the customer-search endpoint's alias join was ALSO on the nonexistent customers.customer_name, meaning the 'search name to link' box has been silently erroring since it shipped — the join is now by customer_id, so typed search works for the first time (and the new focus-autofill with it).",
+    ],
+  },
   {
     version: "2.130.1",
     date: "2026-07-20",

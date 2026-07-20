@@ -1906,10 +1906,12 @@ def review_queue(db_path=None, limit: int = 300) -> dict:
                 # customer_name carries the display suffix (Jr/III) that
                 # first/last don't — required to tell the Ariases apart.
                 cands = [dict(c) for c in conn.execute(
-                    """SELECT customer_id, first_name, last_name,
-                              customer_name, chapter, current_player_status
-                       FROM customers WHERE LOWER(last_name) = LOWER(?)
-                       ORDER BY customer_id LIMIT 6""", (last,))]
+                    f"""SELECT c.customer_id, c.first_name, c.last_name,
+                               c.chapter, c.current_player_status,
+                               {_DISPLAY_NAME_SQL}
+                        FROM customers c
+                        WHERE LOWER(c.last_name) = LOWER(?)
+                        ORDER BY c.customer_id LIMIT 6""", (last,))]
             d["candidates"] = cands
             out.append(d)
         total = conn.execute(
@@ -2027,6 +2029,24 @@ def resolve_name_link(link_id: int, action: str,
         return out
 
 
+# Display name with generational suffix, for telling same-named customers
+# apart (the Ariases). customers has no customer_name column: the suffixed
+# label lives on customer_aliases.customer_name (parse-time snapshot);
+# fall back to first + last + customers.suffix when no alias exists.
+# Expects the customers table aliased as `c` in the enclosing query.
+_DISPLAY_NAME_SQL = """
+    COALESCE(
+        (SELECT a2.customer_name FROM customer_aliases a2
+          WHERE a2.customer_id = c.customer_id
+            AND a2.alias_type = 'name'
+            AND TRIM(COALESCE(a2.customer_name, '')) != ''
+          ORDER BY LENGTH(a2.customer_name) DESC LIMIT 1),
+        TRIM(c.first_name || ' ' || c.last_name
+             || COALESCE(' ' || NULLIF(TRIM(c.suffix), ''), ''))
+    ) AS customer_name
+"""
+
+
 def search_customers_for_link(q: str, limit: int = 10, db_path=None) -> list:
     """Name search behind the review UI's Link box (Kerry types letters,
     not customer numbers). Matches first/last/full name and name-type
@@ -2039,23 +2059,26 @@ def search_customers_for_link(q: str, limit: int = 10, db_path=None) -> list:
     with _connect(db_path or DB_PATH) as conn:
         if q.isdigit():
             rows = conn.execute(
-                """SELECT customer_id, first_name, last_name, customer_name,
-                          chapter, current_player_status
-                   FROM customers WHERE customer_id = ?""", (int(q),))
+                f"""SELECT customer_id, first_name, last_name, chapter,
+                           current_player_status, {_DISPLAY_NAME_SQL}
+                    FROM customers c WHERE customer_id = ?""", (int(q),))
             return [dict(r) for r in rows]
         like = f"%{q}%"
+        # NB: the alias join is by customer_id — customers has NO
+        # customer_name column (joining on it 500'd this search).
         rows = conn.execute(
-            """SELECT DISTINCT c.customer_id, c.first_name, c.last_name,
-                      c.customer_name, c.chapter, c.current_player_status
-               FROM customers c
-               LEFT JOIN customer_aliases a
-                 ON a.alias_type = 'name'
-                AND a.customer_name = c.customer_name
-               WHERE c.first_name LIKE ? OR c.last_name LIKE ?
-                  OR (c.first_name || ' ' || c.last_name) LIKE ?
-                  OR (c.last_name || ', ' || c.first_name) LIKE ?
-                  OR a.alias_value LIKE ?
-               ORDER BY c.last_name, c.first_name LIMIT ?""",
+            f"""SELECT DISTINCT c.customer_id, c.first_name, c.last_name,
+                       c.chapter, c.current_player_status,
+                       {_DISPLAY_NAME_SQL}
+                FROM customers c
+                LEFT JOIN customer_aliases a
+                  ON a.alias_type = 'name'
+                 AND a.customer_id = c.customer_id
+                WHERE c.first_name LIKE ? OR c.last_name LIKE ?
+                   OR (c.first_name || ' ' || c.last_name) LIKE ?
+                   OR (c.last_name || ', ' || c.first_name) LIKE ?
+                   OR a.alias_value LIKE ?
+                ORDER BY c.last_name, c.first_name LIMIT ?""",
             (like, like, like, like, like, limit)).fetchall()
         return [dict(r) for r in rows]
 
