@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.129.11";
+window.TGF_VERSION = "2.129.12";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.129.12",
+    date: "2026-07-20",
+    changes: [
+      "REFUNDS console Venmo memo reformatted (Kerry 2026-07-20): '[Player] - [Reason] Refund for [Contest]' — e.g. 'Rolando Campos - Removal Refund for Match Play 2026'. The 'City' prefix, chapter parenthetical, and trailing 'removal refund' are dropped; a short removals.reason is title-cased into the memo, long free-text reasons fall back to 'Removal'. Memo is built server-side in get_refunds_overview (single source of truth) and carried on the row as 'memo'.",
+      "The console's desktop Venmo button opens in a NEW window (target=_blank) instead of navigating the Tracker tab away.",
+    ],
+  },
   {
     version: "2.129.11",
     date: "2026-07-20",
