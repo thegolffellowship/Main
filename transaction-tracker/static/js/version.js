@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.129.0";
+window.TGF_VERSION = "2.129.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.129.1",
+    date: "2026-07-20",
+    changes: [
+      "Rain-out labeling sweep (Kerry 2026-07-20: 'We had other rain outs. They need to be labeled as such'): new bridge scoring-rainout-audit lists every past event's shutdown signals (status/badge, credited-registration ratio, recorded payout rows) and flags ACTIVE-status events with >=50% credited registrations as unlabeled-washout candidates for Kerry's review; scoring-rainout-label:<event>[|<badge>][|apply] stamps the confirmed ones with the cancelled status + badge — the authoritative signal the payout and Hole-In-One-pot guards read.",
+    ],
+  },
   {
     version: "2.129.0",
     date: "2026-07-20",

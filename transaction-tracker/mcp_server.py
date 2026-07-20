@@ -1536,6 +1536,20 @@ def _scoring_dispatch(url: str, extract: str):
             return json.dumps(db.cmp_encode_uniform_allowance(
                 _v, apply=("apply" in [x.lower() for x in _p])),
                 indent=2, default=str)
+        if cmd == "scoring-rainout-audit":
+            # READ-ONLY: unlabeled shut-down candidates (active status,
+            # >=50% credited registrations) + already-labeled events.
+            return json.dumps(db.rainout_audit(), indent=2, default=str)
+        if cmd == "scoring-rainout-label":
+            # Stamp a washout: "<event>[|<badge>][|apply]" (badge default
+            # RAINED OUT; dry-run default).
+            _p = [x.strip() for x in arg.split("|")]
+            _badge = _p[1] if len(_p) > 1 and _p[1].lower() != "apply" \
+                else "RAINED OUT"
+            return json.dumps(db.label_event_rainout(
+                _p[0], badge=_badge,
+                apply=("apply" in [x.lower() for x in _p])),
+                indent=2, default=str)
         if cmd == "scoring-hio-pot":
             # READ-ONLY: running Hole-In-One pot (per-event matrix
             # contributions minus recorded HIO payouts).
