@@ -26036,7 +26036,7 @@ def cmp_relabel_margins(updates: list, chapter: str | None = None,
             rec.update({"id": m["id"], "event": m["event"],
                         "before_margin": m["margin"],
                         "winner": m["winner_name"]})
-            if m.get("result_locked_at"):
+            if m.get("result_locked_at") and not u.get("force"):
                 rec["status"] = "locked_skip"
                 rec["locked_at"] = m["result_locked_at"]
                 out["results"].append(rec); continue
@@ -26052,6 +26052,16 @@ def cmp_relabel_margins(updates: list, chapter: str | None = None,
             if apply:
                 conn.execute("UPDATE cmp_matches SET margin = ? WHERE id = ?",
                              (u["to"], m["id"]))
+                if m.get("result_locked_at") and u.get("force"):
+                    # forced relabel of a locked row (Kerry-directed): keep the
+                    # lock, refresh its note so it documents the final label.
+                    conn.execute(
+                        "UPDATE cmp_matches SET result_locked_note = ? "
+                        "WHERE id = ?",
+                        (f"gg-verified 2026: GG card AS after regulation; "
+                         f"stored '{u['to']}' is the recorded extra-holes/"
+                         f"putt-off outcome (relabeled from "
+                         f"'{m['margin']}' per Kerry)", m["id"]))
                 rec["status"] = "applied"
             else:
                 rec["status"] = "would_apply"

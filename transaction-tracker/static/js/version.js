@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.125.1";
+window.TGF_VERSION = "2.125.2";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.125.2",
+    date: "2026-07-20",
+    changes: [
+      "scoring-mp-relabel-extrahole gains a general one-match form (<chapter>|<A>|<B>|<to>|<expect_margin>[|apply][|force]) and cmp_relabel_margins accepts per-update force to relabel a result-locked row, refreshing the lock note to document the final label. Built for Kerry's ruling that Ellis d. McCrary s9.14 was won via putt-off — margin relabeled '1Up' -> 'Putt Off' to match the Niester/Wade and Chandler/Peterson convention.",
+    ],
+  },
   {
     version: "2.125.1",
     date: "2026-07-20",

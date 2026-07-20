@@ -1437,7 +1437,24 @@ def _scoring_dispatch(url: str, extract: str):
             # Kerry 2026-07-17: relabel the two a9.17 extra-hole margins stored
             # as '1 UP' → '10H' (Ryder Cup: holes played + H). Winner/records/
             # seeding untouched. arg "apply" writes; anything else is dry-run.
-            _apply = (arg or "").strip().lower() == "apply"
+            # GENERAL FORM (v2.125.2): a "|"-separated arg relabels ONE match:
+            #   <chapter>|<playerA>|<playerB>|<to>|<expect_margin>[|apply][|force]
+            # ("force" relabels even a result-locked row and refreshes its lock
+            # note — for Kerry-directed label corrections like 1Up → Putt Off).
+            a2 = (arg or "").strip()
+            if "|" in a2:
+                _p = [x.strip() for x in a2.split("|")]
+                if len(_p) < 5:
+                    return json.dumps({"error": "need <chapter>|<A>|<B>|<to>|"
+                                       "<expect_margin>[|apply][|force]"})
+                flags = [f.lower() for f in _p[5:]]
+                _upd = [{"players": [_p[1], _p[2]], "to": _p[3],
+                         "expect_margin": _p[4] or None,
+                         "force": "force" in flags}]
+                return json.dumps(db.cmp_relabel_margins(
+                    _upd, chapter=_p[0] or None,
+                    apply="apply" in flags), indent=2, default=str)
+            _apply = a2.lower() == "apply"
             _upd = [
                 {"players": ["Luke Youngs", "Mike Marques"], "to": "10H",
                  "expect_margin": "1 UP", "expect_winner": "Luke Youngs"},
