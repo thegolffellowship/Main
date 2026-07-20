@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.126.2";
+window.TGF_VERSION = "2.126.3";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.126.3",
+    date: "2026-07-20",
+    changes: [
+      "GG games importer gains REPLACE semantics per tournament: rows a previous walk stored that are NOT in the current winner set are deleted. A walk during a live round captures transient standings (every team 'T1 - $0'); the later re-walk upserted the real winners but left the stale rows behind — the source of the phantom Team Net 'ties' at a9.18 (GG really had ONE clear winner at -5) and s18.8 (a real 2-way tie, not 5). An explicitly requested round (&round=<id> on the widget URL) now always re-walks, so stale captures can be healed on demand.",
+      "Team/Cart Net payout rule encoded (Kerry ruling 2026-07-20): the pot splits evenly among UNIQUE players. A player on TWO paid teams (real slot on one, blind on the other) receives only the HIGHER per-player share; the lower team's pot then splits among its remaining members — one other player in Cart Net, three in Team Net. Blind slots remain paid (s9.17 precedent).",
+    ],
+  },
   {
     version: "2.126.2",
     date: "2026-07-20",
