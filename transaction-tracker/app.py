@@ -9769,6 +9769,10 @@ def api_cmp_save_match():
         match_date=data.get("match_date"), notes=data.get("notes"),
         event_id=event_id,
     )
+    if match.get("blocked") == "result_locked":
+        return jsonify({"error": "This result is locked (verified against "
+                        "Golf Genius) and can't be changed from here.",
+                        **match}), 409
     return jsonify(match)
 
 
@@ -9782,7 +9786,10 @@ def api_cmp_clear_match():
     if not pool_id or not player1 or not player2:
         return jsonify({"error": "pool_id, player1_name, player2_name required"}), 400
     from email_parser.database import cmp_clear_match
-    cmp_clear_match(pool_id, player1, player2)
+    try:
+        cmp_clear_match(pool_id, player1, player2)
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 409
     return jsonify({"ok": True})
 
 

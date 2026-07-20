@@ -1461,6 +1461,18 @@ def _scoring_dispatch(url: str, extract: str):
                 return json.dumps({"error": "need <chapter>|<A>|<B>"})
             return json.dumps(db.cmp_gg_detail_dump(_p[0], _p[1], _p[2]),
                               indent=2, default=str)
+        if cmd == "scoring-mp-lock":
+            # Harden GG-verified results (Kerry 2026-07-20). arg:
+            # "<season>|<chapter>[|apply]" — default dry-run; "apply" writes
+            # result_locked_at/note on every match whose stored result matches
+            # GG's own card (or is the recorded extra-holes outcome of a GG
+            # AS). Conflicts/no-card rows are reported, never locked.
+            _p = [x.strip() for x in (arg or "").split("|")]
+            _season = _p[0] if len(_p) > 0 and _p[0] else None
+            _chapter = _p[1] if len(_p) > 1 and _p[1] else None
+            _apply = len(_p) > 2 and _p[2].lower() == "apply"
+            return json.dumps(db.cmp_lock_verified_results(
+                _season, _chapter, apply=_apply), indent=2, default=str)
         if cmd == "scoring-mp-pools-audit":
             # READ-ONLY: distinct (chapter, season) in cmp_pools + counts.
             return json.dumps(db.cmp_pools_audit(), indent=2, default=str)
