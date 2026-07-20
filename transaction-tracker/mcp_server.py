@@ -1637,6 +1637,10 @@ def _scoring_dispatch(url: str, extract: str):
                 _c.commit()
             return json.dumps({"deleted_duplicate_74_entries": _del,
                                "added_18_59_entry": not _dup})
+        if cmd == "scoring-hio-pot":
+            # Live pot audit: full get_hio_pot payload (carry-in, per-event
+            # lines with player counts, paid out, total).
+            return json.dumps(db.get_hio_pot(), indent=2, default=str)
         if cmd == "scoring-setting-set":
             # "<key>|<value>" — write an app_settings dial ("stored as a
             # setting is our standard for everything" — Kerry).
