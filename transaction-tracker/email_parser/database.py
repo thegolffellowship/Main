@@ -37013,6 +37013,12 @@ def assemble_event_game_payouts(event_name: str, db_path=None) -> dict:
         # each). Unwrap the GG 'Bl[LAST, First]' wrapper to the real name
         # so the payout resolves to that customer.
         def _unwrap_blind(nm):
+            # Also strip portal decoration riding on the last member of a
+            # cross-chapter team string ("SHARITZ, Don TGF Austin," /
+            # "MYSTERY, Noah TGF Austin, Guest") — the importer's
+            # end-anchored chapter regex only strips the final tag, so
+            # anything from " TGF " on is not part of the name.
+            nm = re.sub(r"\s+TGF\s+.*$", "", nm).strip().rstrip(",")
             bm = re.match(r"^Bl\[(.+)\]$", nm)
             return bm.group(1).strip() if bm else nm
 
