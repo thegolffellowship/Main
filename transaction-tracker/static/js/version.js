@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.127.3";
+window.TGF_VERSION = "2.127.4";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.127.4",
+    date: "2026-07-20",
+    changes: [
+      "Match Play WD standings rule (Kerry ruling 2026-07-20): a withdrawn player who PLAYED matches sorts to the bottom of the pool standings, keeping the WD tag and played record (Campos, SA Pool A); a withdrawn player with NO played matches is a clean removal + refund and disappears from standings entirely. Applied in both ranking paths (dmp09 + legacy); ranks renumber in display order; points/records/advancement math untouched.",
+      "2026 season ruling documented: NO 3rd-place consolation matches — semifinal losers split the combined 3rd/4th money (the D-MP-08 split_combined_places fallback the payout sheet already applies when no consolation match is recorded); the manager-only consolation recording stays hidden. NH notation clarified in the D-MP-11 register: the number is a COUNT of holes actually played (9-hole match won on the 2nd extra hole = 11H; 18-hole match won on the 1st extra hole = 19H) — the future app records each extra hole's scores on the leaderboard and the label reflects the count.",
+    ],
+  },
   {
     version: "2.127.3",
     date: "2026-07-20",
