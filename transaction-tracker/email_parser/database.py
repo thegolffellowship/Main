@@ -5070,6 +5070,18 @@ def init_db(db_path: str | Path | None = None) -> None:
         _backfill_customer_id_on_rsvp_email_overrides(conn)
         _backfill_customer_id_on_action_items(conn)
 
+        # Course registry v1 + gender (Kerry-ratified 2026-07-20): facility
+        # layer, OLD-course merges w/ tee version tags, stub dedup, gender
+        # backfill from (L)-marked tees. Both idempotent.
+        try:
+            _migrate_course_registry_v1(conn)
+        except Exception:
+            logger.exception("Non-fatal: _migrate_course_registry_v1 failed")
+        try:
+            _migrate_gender_v1(conn)
+        except Exception:
+            logger.exception("Non-fatal: _migrate_gender_v1 failed")
+
         # Re-point FK rows orphaned by pre-v2.16.13 merges (which deleted the
         # source customers row without moving memberships/statuses/roles/...),
         # then log a census of anything still referencing a deleted id.
@@ -10188,6 +10200,7 @@ def auto_gg_results_sync(db_path: str | Path = DB_PATH,
 
 def import_event_scorecards_by_code(widget_url: str, event_code: str,
                                     only_round: str | None = None,
+                                    refresh_players: list | None = None,
                                     time_budget: float = 45.0,
                                     db_path: str | Path = DB_PATH) -> dict:
     """Targeted scorecard import for ONE past event: walk the portal
@@ -10197,7 +10210,15 @@ def import_event_scorecards_by_code(widget_url: str, event_code: str,
     for backfilling events older than the auto-sync's newest-N window
     (the 2026-07-20 Austin match-play hole-data gap). only_round skips
     the scan and imports that GG round id directly. Read-only on GG;
-    idempotent on our side (import_gg_scorecards replaces existing)."""
+    idempotent on our side (import_gg_scorecards replaces existing).
+
+    refresh_players: names whose STALE stored cards should be force-replaced
+    from GG's current board — GG score corrections made after our import
+    can't self-heal because the cross-tournament dedup treats the existing
+    row as owned (the s18.8 Wilson case: GG edited his front nine post-
+    import, 97 → 91). For each named player the stored scoring_rounds row,
+    its holes, AND its bridged handicap_rounds are deleted first, so the
+    board import brings the current card in fresh and re-bridges."""
     from time import monotonic
     from urllib.parse import urlparse
     from golf_genius_sync import fetch_public_page, parse_page_structure
@@ -10206,6 +10227,28 @@ def import_event_scorecards_by_code(widget_url: str, event_code: str,
     host = urlparse(widget_url).netloc
     code = (event_code or "").strip().lower()
     out: dict = {"event_code": code, "host": host, "boards": []}
+
+    if refresh_players:
+        keys = {_cmp_person_key(p) for p in refresh_players if p and p.strip()}
+        with _connect(db_path) as conn:
+            ev = conn.execute(
+                "SELECT id FROM events WHERE item_name LIKE ? ORDER BY id "
+                "LIMIT 1", (code + " %",)).fetchone()
+            dropped = []
+            if ev:
+                for r in conn.execute(
+                        "SELECT id, player_name FROM scoring_rounds "
+                        "WHERE event_id = ?", (ev["id"],)).fetchall():
+                    if _cmp_person_key(r["player_name"]) in keys:
+                        conn.execute("DELETE FROM handicap_rounds "
+                                     "WHERE scoring_round_id = ?", (r["id"],))
+                        conn.execute("DELETE FROM scoring_holes "
+                                     "WHERE scoring_round_id = ?", (r["id"],))
+                        conn.execute("DELETE FROM scoring_rounds WHERE id = ?",
+                                     (r["id"],))
+                        dropped.append(r["player_name"])
+                conn.commit()
+            out["refreshed_players_dropped"] = dropped
 
     def fetch(url):
         page = fetch_public_page(url, xhr=False)
@@ -13492,6 +13535,202 @@ def _backfill_customer_id_on_cmp_pool_members(conn: sqlite3.Connection) -> int:
     if updated:
         logger.info("Backfilled customer ids on %d match-play rows", updated)
     return updated
+
+
+# ── Course registry v1 (Kerry-ratified 2026-07-20): one course_id per real
+# course per city; facilities layer; tee version tags; gender field ─────────
+
+def _merge_course_into(conn, loser_id: int, winner_id: int,
+                       version_note: str | None = None) -> bool:
+    """Fold one courses row into another: re-point every FK (tees, rounds,
+    items, events, aliases), alias the old names to the winner so name-based
+    lookups keep resolving, then delete the loser. Tees that come across
+    from an archived version get the version tag + valid_to stamped — the
+    tee rows stay SEPARATE, so historical rounds keep their frozen
+    period ratings (rounds pin tee_id). Returns True if a merge happened."""
+    lrow = conn.execute("SELECT * FROM courses WHERE course_id = ?",
+                        (loser_id,)).fetchone()
+    wrow = conn.execute("SELECT * FROM courses WHERE course_id = ?",
+                        (winner_id,)).fetchone()
+    if not lrow or not wrow:
+        return False
+    valid_to = None
+    if version_note:
+        m = re.search(r"(\d{4}-\d{2}-\d{2})", version_note)
+        valid_to = m.group(1) if m else None
+    conn.execute(
+        "UPDATE course_tees SET course_id = ?, version_label = COALESCE(?, "
+        "version_label), valid_to = COALESCE(?, valid_to) WHERE course_id = ?",
+        (winner_id, version_note, valid_to, loser_id))
+    for table, col in (("scoring_rounds", "course_id"), ("items", "course_id"),
+                       ("events", "course_id")):
+        try:
+            conn.execute(f"UPDATE {table} SET {col} = ? WHERE {col} = ?",
+                         (winner_id, loser_id))
+        except sqlite3.OperationalError:
+            pass
+    conn.execute("UPDATE OR IGNORE course_aliases SET course_id = ? "
+                 "WHERE course_id = ?", (winner_id, loser_id))
+    conn.execute("DELETE FROM course_aliases WHERE course_id = ?", (loser_id,))
+    for alias in {lrow["name"], lrow["short_name"]}:
+        if alias and alias.strip().lower() != (wrow["name"] or "").strip().lower():
+            conn.execute("INSERT OR IGNORE INTO course_aliases "
+                         "(course_id, alias_name) VALUES (?, ?)",
+                         (winner_id, alias.strip()))
+    conn.execute("DELETE FROM courses WHERE course_id = ?", (loser_id,))
+    logger.info("Course registry: merged course %s (%r) into %s (%r)%s",
+                loser_id, lrow["name"], winner_id, wrow["name"],
+                f" [{version_note}]" if version_note else "")
+    return True
+
+
+def _migrate_course_registry_v1(conn: sqlite3.Connection) -> None:
+    """Kerry-ratified course-table restructure (2026-07-20 session):
+
+    1. facilities table — every course belongs to one facility (1:1
+       auto-created for single-course properties; explicit prefix groups
+       for multi-course properties like Cypresswood / Comanche Trace /
+       Hyatt / TPC SA / Bear Creek).
+    2. course_combos (+ combo tees) — the named 18-hole pairings of nines
+       at 27-hole facilities, carrying the OFFICIAL combo 18-hole ratings
+       (rule: 18-hole event on a combo → course handicap off the combo's
+       18-hole tee data; differentials always post per-nine).
+    3. Tee version tags (version_label / valid_from / valid_to) — one
+       course_id per real course per city forever; GG's "(OLD) - Archived
+       on <date>" duplicate course rows merge into the canonical row with
+       their tees carried over as dated versions (period ratings frozen —
+       rounds pin tee_id).
+    4. Zero-round seed stubs and misspelled duplicates deleted (verified
+       0 scoring rounds in the 2026-07-19 audit; re-verified at run time),
+       with their names aliased to the survivor so name-based lookups and
+       the items/events course_id backfills keep resolving.
+
+    Explicit live-DB ids (same pattern as the attribution repairs); every
+    step re-checks its precondition so the migration is idempotent and a
+    no-op on fresh databases."""
+    _ensure_scoring_tables(conn)
+    conn.execute("""CREATE TABLE IF NOT EXISTS facilities (
+        facility_id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name        TEXT NOT NULL UNIQUE,
+        city        VARCHAR(100),
+        state       VARCHAR(2),
+        address     TEXT,
+        notes       TEXT,
+        created_at  TEXT DEFAULT (datetime('now')))""")
+    conn.execute("""CREATE TABLE IF NOT EXISTS course_combos (
+        combo_id         INTEGER PRIMARY KEY AUTOINCREMENT,
+        facility_id      INTEGER NOT NULL REFERENCES facilities(facility_id),
+        name             TEXT NOT NULL,
+        nine1_course_id  INTEGER NOT NULL REFERENCES courses(course_id),
+        nine2_course_id  INTEGER NOT NULL REFERENCES courses(course_id),
+        created_at       TEXT DEFAULT (datetime('now')),
+        UNIQUE (facility_id, name))""")
+    conn.execute("""CREATE TABLE IF NOT EXISTS course_combo_tees (
+        combo_tee_id  INTEGER PRIMARY KEY AUTOINCREMENT,
+        combo_id      INTEGER NOT NULL REFERENCES course_combos(combo_id),
+        tee_name      TEXT,
+        slope         INTEGER,
+        rating        REAL,
+        yardage_total INTEGER,
+        UNIQUE (combo_id, tee_name))""")
+    for ddl in ("ALTER TABLE courses ADD COLUMN facility_id INTEGER "
+                "REFERENCES facilities(facility_id)",
+                "ALTER TABLE course_tees ADD COLUMN version_label TEXT",
+                "ALTER TABLE course_tees ADD COLUMN valid_from TEXT",
+                "ALTER TABLE course_tees ADD COLUMN valid_to TEXT"):
+        try:
+            conn.execute(ddl)
+        except sqlite3.OperationalError:
+            pass
+
+    # ── OLD/archived version rows merge into the canonical course ──
+    merges = (
+        (29388, 22361, "archived 2025-04-01"),   # The Quarry (OLD)
+        (22373, 35670, "archived 2026-03-24"),   # Cedar Creek (OLD, 144 rds)
+        (29258, 35670, "archived 2025-03-14"),   # Cedar Creek (OLD, 14 rds)
+        (29387, 22374, "archived 2026-07-11"),   # La Cantera | Resort
+        (29389, 25403, "archived 2026-01-02"),   # The Golf Club of Texas
+        (22369, 18,    "archived 2026-05-13"),   # Willow Springs (OLD)
+    )
+    for loser, winner, note in merges:
+        row = conn.execute("SELECT name FROM courses WHERE course_id = ?",
+                           (loser,)).fetchone()
+        if row and re.search(r"\(OLD\)|Archived", row["name"] or "", re.I):
+            _merge_course_into(conn, loser, winner, version_note=note)
+
+    # ── zero-round stubs / misspelled duplicates → delete, alias name to
+    # the survivor (Riverside stays separated BY CITY: the ATX row 22377
+    # survives untouched; these five zero-data rows are all Riverside SA) ──
+    stub_deletes = (
+        (16, 22361), (14, 22375), (3, 22370), (4, 35670), (15, 22364),
+        (1, 22363), (2, 22371), (6, 29522), (12, 22365), (7, 22362),
+        (22088, 29390), (11, 29391), (8, 22374), (9, 22372), (22066, 22805),
+        (21657, 22376), (21658, 22367), (21666, 22377), (10, 22378),
+        (13, 25399),
+        (21600, 25415), (25413, 25415), (25405, 25415), (25416, 25415),
+        (25398, 25406), (42585, 42584),
+    )
+    for stub, survivor in stub_deletes:
+        n = conn.execute("SELECT COUNT(*) AS n FROM scoring_rounds "
+                         "WHERE course_id = ?", (stub,)).fetchone()["n"]
+        if n == 0 and conn.execute(
+                "SELECT 1 FROM courses WHERE course_id = ?",
+                (survivor,)).fetchone():
+            _merge_course_into(conn, stub, survivor)
+
+    # ── facilities: explicit multi-course prefixes, then 1:1 for the rest ──
+    prefix_groups = (("cypresswood", "Cypresswood Golf Club"),
+                     ("comanche", "The Club at Comanche Trace"),
+                     ("hyatt", "Hyatt Hill Country"),
+                     ("tpc", "TPC San Antonio"),
+                     ("bear creek", "Bear Creek Golf Club"))
+    for c in conn.execute("SELECT course_id, name, short_name, city, state "
+                          "FROM courses WHERE facility_id IS NULL").fetchall():
+        nm = (c["name"] or "").strip().lower()
+        fac_name = next((fac for pref, fac in prefix_groups
+                         if nm.startswith(pref)), None) or c["name"].strip()
+        conn.execute("INSERT OR IGNORE INTO facilities (name, city, state) "
+                     "VALUES (?, ?, ?)", (fac_name, c["city"], c["state"]))
+        fid = conn.execute("SELECT facility_id FROM facilities WHERE name = ?",
+                           (fac_name,)).fetchone()["facility_id"]
+        conn.execute("UPDATE courses SET facility_id = ? WHERE course_id = ?",
+                     (fid, c["course_id"]))
+    conn.commit()
+
+
+def _migrate_gender_v1(conn: sqlite3.Connection) -> None:
+    """customers.gender (Kerry-ratified 2026-07-20) + ladies-tee marking.
+
+    Tees whose name carries the (L) marker (e.g. "4 - Red (L) Tee") are
+    flagged is_ladies. Gender backfill from tees actually played: any round
+    on a ladies tee → F; rounds only on non-ladies tees → M; no scoring
+    rounds → left NULL for manual entry. Only NULL genders are ever filled —
+    a manual correction is never overwritten. Idempotent."""
+    for ddl in ("ALTER TABLE customers ADD COLUMN gender TEXT",
+                "ALTER TABLE course_tees ADD COLUMN is_ladies INTEGER DEFAULT 0"):
+        try:
+            conn.execute(ddl)
+        except sqlite3.OperationalError:
+            pass
+    try:
+        conn.execute(r"UPDATE course_tees SET is_ladies = 1 "
+                     r"WHERE tee_name LIKE '%(L)%' AND is_ladies != 1")
+        filled = conn.execute("""
+            UPDATE customers SET gender = (
+                SELECT CASE WHEN SUM(ct.is_ladies) > 0 THEN 'F' ELSE 'M' END
+                  FROM scoring_rounds sr
+                  JOIN course_tees ct ON ct.tee_id = sr.tee_id
+                 WHERE sr.customer_id = customers.customer_id)
+             WHERE gender IS NULL AND EXISTS (
+                SELECT 1 FROM scoring_rounds sr2
+                 WHERE sr2.customer_id = customers.customer_id
+                   AND sr2.tee_id IS NOT NULL)""").rowcount
+        if filled:
+            logger.info("Gender backfill: %d customers set from played tees",
+                        filled)
+    except sqlite3.OperationalError:
+        pass
+    conn.commit()
 
 
 def _backfill_customer_id_on_handicap_rounds(conn: sqlite3.Connection) -> int:

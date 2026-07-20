@@ -1,5 +1,16 @@
-window.TGF_VERSION = "2.125.4";
+window.TGF_VERSION = "2.126.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.126.0",
+    date: "2026-07-20",
+    changes: [
+      "Course registry v1 (Kerry-ratified): one course_id per real course per city, forever. New facilities layer — every course carries a facility_id (1:1 auto-created for single-course properties; Cypresswood/Comanche Trace/Hyatt/TPC SA/Bear Creek group by prefix) so property info has one home. New course_combos (+ combo tees) for the named 18-hole pairings of nines at 27-hole facilities, carrying the OFFICIAL combo 18-hole ratings. course_tees gain version tags (version_label/valid_from/valid_to): GG's '(OLD) - Archived on <date>' duplicate course rows merged into their canonical course with tees carried over as dated versions — period ratings frozen because every historical round pins its tee_id. 26 duplicate clusters resolved: 6 archived versions merged (Quarry, Cedar Creek x2, La Cantera, GC of Texas, Willow Springs), 26 zero-round stubs/misspellings deleted with names aliased to the survivor (Riverside kept separated by city: ATX row untouched, the five SA zero-rows collapsed to one). Boot migration, idempotent.",
+      "Handicap rule ratified (Kerry): PLAY OFF THE 18, POST BY THE 9. An 18-hole event's course handicap comes from the tee's (or combo's) 18-hole rating/slope; post-round differentials always post per nine against each nine's own 9-hole data (TGF is a 9-hole-index league). 27-hole facilities: single-nine day → that nine's data; 18-hole event → the combo's official 18-hole tee data; 27-hole match-play day (Hill Country Matches) → three separate 9-hole matches, each off its nine. Selection derives from event structure — never asked.",
+      "customers.gender (Kerry-ratified) + ladies-tee marking: tees named with the (L) marker are flagged is_ladies; gender backfills from tees actually played (any ladies-tee round -> F, rounds only on other tees -> M, no rounds -> blank for manual entry). Only NULL genders are ever filled — manual corrections stick.",
+      "Stale-scorecard repair: scoring-import-event gains |refresh=<player>[,...] to force-replace a player's stored card from GG's current board — GG score corrections made after our import couldn't self-heal (the cross-tournament dedup treats the existing row as owned). Deletes the player's round + holes + bridged handicap rows, then re-imports fresh. Found via s18.8 Vaaler: GG edited Wilson's front nine post-import (97 -> 91), which also explains the one-skin HIGH-flight delta vs GG ($18/skin x8 vs our $20.57 x7).",
+      "New read bridge scoring-facilities: facility count + any facility with more or fewer than one course, for registry verification.",
+    ],
+  },
   {
     version: "2.125.4",
     date: "2026-07-20",

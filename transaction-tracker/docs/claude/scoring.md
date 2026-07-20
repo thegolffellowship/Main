@@ -575,3 +575,51 @@ backfills join on them; renames need an alias-aware flow. API:
 short_name/city/state/status/chapter), `PATCH /api/course-db/<id>`
 (`update_course`, whitelisted fields). NOTE: `/api/courses` was already
 taken by the scoring API — the editor uses `/api/course-db`.
+
+## Course registry v1 (v2.126.0, Kerry-ratified 2026-07-20)
+
+**One course_id per real course per city, forever.** The boot migration
+`_migrate_course_registry_v1` (idempotent, explicit live-DB ids like the
+attribution repairs) resolved the 26 duplicate clusters from the 7/19
+audit: 6 GG "(OLD) - Archived on <date>" version rows merged into their
+canonical course, 26 zero-round stubs/misspellings deleted. Every merged
+or deleted row's name becomes a `course_aliases` entry on the survivor so
+name-based lookups (handicap course names, items/events dim backfills)
+keep resolving. Riverside stays separated **by city** (ATX row untouched;
+the five zero-data SA spellings collapsed to one).
+
+- **Facilities layer.** `facilities(facility_id, name, city, state,
+  address, notes)`; every course row carries `facility_id` — 1:1
+  auto-created for single-course properties, prefix-grouped for
+  multi-course ones (Cypresswood, Comanche Trace, Hyatt, TPC SA, Bear
+  Creek). Property info (address etc.) lives on the facility only.
+- **Tee versioning.** `course_tees` gain `version_label` / `valid_from` /
+  `valid_to`. Ratings/slopes live per-tee and every historical round pins
+  its `tee_id`, so merging an archived course row moves its tees across
+  as dated versions and **past rounds keep their frozen period ratings**.
+  Archive dates parse from GG's "(OLD) - Archived on <date>" names.
+- **27-hole facilities: the NINE is the course row** (Comanche Creeks/
+  Hills/Valley, Hyatt's nines). `course_combos(facility_id, name,
+  nine1_course_id, nine2_course_id)` + `course_combo_tees` carry the
+  OFFICIAL 18-hole ratings for the named combos (A/B, B/C, C/A).
+- **Handicap rule (Kerry): PLAY OFF THE 18, POST BY THE 9.** Course
+  handicap for an 18-hole event comes from the tee's (or combo's) 18-hole
+  rating/slope; differentials always post per nine against each nine's
+  own 9-hole data (TGF is a 9-hole-index league — Vaaler two-posting
+  precedent). 27-hole facilities by application: single-nine day → that
+  nine's data; 18-hole event → the combo's official 18-hole tee data;
+  27-hole match-play day (Hill Country Matches) → three separate 9-hole
+  matches, each off its nine. Derived from event structure, never asked.
+- **Gender** (`_migrate_gender_v1`): `customers.gender`; tees named with
+  the (L) marker are `course_tees.is_ladies`; backfill from tees actually
+  played (ladies-tee round → F, only other tees → M, no rounds → NULL for
+  manual entry). Only NULL genders are filled — manual edits stick.
+- **Stale-card repair**: `scoring-import-event:<code>[@<round>]
+  |refresh=<A>[,<B>]` force-replaces named players' stored cards from
+  GG's current board (deletes round + holes + bridged handicap rows
+  first). Exists because GG score corrections made after our import can't
+  self-heal — the cross-tournament dedup treats the stored row as owned
+  (s18.8 Wilson: GG edited his front nine post-import, 97 → 91).
+- Verification reads: `scoring-facilities` (facility census — any
+  facility with ≠1 course), `scoring-courses-audit` (should show the
+  clusters gone).
