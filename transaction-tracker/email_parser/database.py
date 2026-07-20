@@ -20360,6 +20360,7 @@ def get_refunds_overview(db_path: str | Path | None = None,
 
         # OUTSTANDING — held credits not yet in flight / paid
         outstanding = []
+        completed_removals: list = []
         for r in conn.execute(
             """SELECT it.id, it.customer, it.customer_id, it.item_name,
                       it.item_price, it.credit_amount, it.transaction_status,
@@ -20384,6 +20385,66 @@ def get_refunds_overview(db_path: str | Path | None = None,
                 "age_days": _age(anchor),
                 "note": r.get("credit_note") or "",
             })
+
+        # Season-contest removal refunds (Kerry 2026-07-20: "is it in overall
+        # PAYOUTS where it should be, so I don't miss it?"). A removal
+        # recorded with a refund amount is a promise to pay that previously
+        # lived ONLY on the Enrollment tab's removals list — the Campos $40
+        # sat invisible here. OUTSTANDING until a matching outbound Venmo
+        # receipt lands (same person, same amount, on/after the removal
+        # date — the expense inbox ingests those within ~2 min of sending);
+        # then it shows COMPLETED. Rules-based, no new schema.
+        try:
+            venmo_out = [dict(v) for v in conn.execute(
+                """SELECT date, description, customer, amount
+                     FROM acct_transactions
+                    WHERE source = 'venmo'
+                      AND entry_type IN ('expense', 'contra')
+                      AND COALESCE(status, 'active') = 'active'""").fetchall()]
+            for rm in conn.execute(
+                """SELECT r.*, c.venmo_username
+                     FROM season_contest_removals r
+                     LEFT JOIN customers c ON c.customer_id = r.customer_id
+                    WHERE COALESCE(r.refund_amount, 0) > 0""").fetchall():
+                rm = dict(rm)
+                rm_day = (rm.get("removed_at") or "")[:10]
+                pk = _cmp_person_key(rm.get("customer_name") or "")
+                paid = next(
+                    (v for v in venmo_out
+                     if abs(float(v.get("amount") or 0)
+                            - float(rm["refund_amount"])) < 0.005
+                     and (v.get("date") or "") >= rm_day
+                     and pk in (_cmp_person_key(v.get("customer") or ""),
+                                _cmp_person_key(v.get("description") or ""))),
+                    None)
+                label = (f"{rm.get('contest_type')} {rm.get('season')} "
+                         f"({rm.get('chapter')}) — removal refund")
+                if paid:
+                    age = _age(paid["date"])
+                    if age is None or age <= completed_days:
+                        completed_removals.append({
+                            "removal_id": rm["id"],
+                            "customer": rm.get("customer_name"),
+                            "customer_id": rm.get("customer_id"),
+                            "event": label,
+                            "amount": round(float(rm["refund_amount"]), 2),
+                            "method": rm.get("refund_method") or "Venmo",
+                            "date": paid["date"], "via_watch": False,
+                            "kind": "contest_refund"})
+                else:
+                    outstanding.append({
+                        "removal_id": rm["id"],
+                        "customer": rm.get("customer_name"),
+                        "customer_id": rm.get("customer_id"),
+                        "event": label,
+                        "amount": round(float(rm["refund_amount"]), 2),
+                        "kind": "contest_refund",
+                        "order_date": rm_day, "age_days": _age(rm_day),
+                        "venmo_handle": rm.get("venmo_username"),
+                        "note": rm.get("note") or ""})
+        except Exception:
+            logger.exception("refunds overview: removal-refund merge failed")
+
         outstanding.sort(key=lambda x: (x["age_days"] is None, -(x["age_days"] or 0)))
 
         # IN FLIGHT — open watches
@@ -20430,6 +20491,7 @@ def get_refunds_overview(db_path: str | Path | None = None,
                 "method": m.group(2).strip(), "date": date,
                 "via_watch": r["id"] in verified_ids,
             })
+        completed.extend(completed_removals)
         completed.sort(key=lambda x: x["date"], reverse=True)
 
     def _sum(rows):
@@ -37010,17 +37072,15 @@ def assemble_event_game_payouts(event_name: str, db_path=None) -> dict:
         # Blind-draw partners ARE paid their team share (Kerry 2026-07-13,
         # verified vs GG's Player Purse Summary on s9.17 Silverhorn: GG
         # splits $54 across all 4 slots incl. Bl[HAMILTON, Doug] → $13.50
-        # each). Unwrap the GG 'Bl[LAST, First]' wrapper to the real name
-        # so the payout resolves to that customer.
-        def _unwrap_blind(nm):
-            # Also strip portal decoration riding on the last member of a
-            # cross-chapter team string ("SHARITZ, Don TGF Austin," /
-            # "MYSTERY, Noah TGF Austin, Guest") — the importer's
-            # end-anchored chapter regex only strips the final tag, so
-            # anything from " TGF " on is not part of the name.
+        # each). Unwrap the GG 'Bl[LAST, First]' wrapper (keeping the blind
+        # flag for the dedup tie-break below) and strip the portal
+        # decoration a cross-chapter team string leaves on its last member
+        # ("SHARITZ, Don TGF Austin," / "... TGF Austin, Guest").
+        def _member(nm):
             nm = re.sub(r"\s+TGF\s+.*$", "", nm).strip().rstrip(",")
             bm = re.match(r"^Bl\[(.+)\]$", nm)
-            return bm.group(1).strip() if bm else nm
+            return ({"name": bm.group(1).strip(), "blind": True} if bm
+                    else {"name": nm, "blind": False})
 
         paid_teams: list = []
         for pos in sorted(team_pos_groups):
@@ -37031,7 +37091,7 @@ def assemble_event_game_payouts(event_name: str, db_path=None) -> dict:
             team_shares = split_cents(pool, len(grp))
             suffix = {1: "1st", 2: "2nd", 3: "3rd"}.get(pos, f"{pos}th")
             for t, tc in zip(grp, team_shares):
-                members = [_unwrap_blind(mname.strip())
+                members = [_member(mname.strip())
                            for mname in t["player_name"].split("+")
                            if mname.strip()]
                 if not members or tc <= 0:
@@ -37045,22 +37105,34 @@ def assemble_event_game_payouts(event_name: str, db_path=None) -> dict:
         # players. A player on TWO paid teams (real slot on one, blind on
         # the other) receives only the HIGHER per-player share; the lower
         # team's pot then splits among its REMAINING members (the pot
-        # amount itself doesn't shrink).
+        # amount itself doesn't shrink). When the shares are EQUAL (a tie
+        # for 1st), the player keeps their REAL slot and vacates the blind
+        # one — the blind slot is the artificial seat.
         deduping = True
         while deduping:
             deduping = False
             seen: dict = {}
             for ti, team in enumerate(paid_teams):
-                for nm in team["members"]:
-                    k = _cmp_person_key(nm)
+                for m in team["members"]:
+                    k = _cmp_person_key(m["name"])
                     if k in seen and seen[k] != ti:
+                        oti = seen[k]
+
                         def _share(t):
                             return t["cents"] // max(1, len(t["members"]))
-                        drop = ti if _share(paid_teams[ti]) <= \
-                            _share(paid_teams[seen[k]]) else seen[k]
+
+                        if _share(paid_teams[ti]) != _share(paid_teams[oti]):
+                            drop = ti if _share(paid_teams[ti]) < \
+                                _share(paid_teams[oti]) else oti
+                        else:
+                            other = next(x for x in paid_teams[oti]["members"]
+                                         if _cmp_person_key(x["name"]) == k)
+                            drop = ti if m["blind"] and not other["blind"] \
+                                else (oti if other["blind"] and not m["blind"]
+                                      else ti)
                         paid_teams[drop]["members"] = [
-                            m for m in paid_teams[drop]["members"]
-                            if _cmp_person_key(m) != k]
+                            x for x in paid_teams[drop]["members"]
+                            if _cmp_person_key(x["name"]) != k]
                         deduping = True
                         break
                     seen[k] = ti
@@ -37068,7 +37140,8 @@ def assemble_event_game_payouts(event_name: str, db_path=None) -> dict:
                     break
         for team in paid_teams:
             if team["members"]:
-                _money_split(team["cents"] / 100.0, team["members"],
+                _money_split(team["cents"] / 100.0,
+                             [m["name"] for m in team["members"]],
                              "team_net", team["desc"])
     proxies = ([r for r in gg_rows if r["game"] == "ctp"]
                + [r for r in gg_rows if r["game"] == "longest_putt"])
