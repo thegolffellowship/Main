@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.127.0";
+window.TGF_VERSION = "2.127.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.127.1",
+    date: "2026-07-20",
+    changes: [
+      "Rain-out guard on game payouts (Kerry 2026-07-20, s9.18 Cedar Creek: 'It was a RAIN OUT. There were no winners... all amounts were credited'): the hourly auto-recorder had assembled $229 of 'winners' from the partial game data — it had no idea the event washed out. assemble_event_game_payouts now refuses any event whose registrations are >=75% credited/WD/refunded (threshold high enough that ordinary per-player WDs never trip it) — rules-derived from the ledger, no flag to set. The auto-recorder skips such events with the rain-out reason.",
+      "New bridge scoring-payouts-clear-auto:<event>: removes an event's auto-recorded payout rows and their PENDING ledger entries (a matched real Venmo transaction is never touched; manual/screenshot rows untouched) — used to clear Cedar Creek's phantom $229.",
+    ],
+  },
   {
     version: "2.127.0",
     date: "2026-07-20",
