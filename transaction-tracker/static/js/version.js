@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.129.13";
+window.TGF_VERSION = "2.129.14";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.129.14",
+    date: "2026-07-20",
+    changes: [
+      "GG-RSVP credit-info endpoint now resolves the player EXACTLY like the roster CREDIT badge does — rsvps.customer_id first (rule 6), canonical customers name, then email fallback. The old email-only lookup left an email-less GG-format name ('Anthis, Larry') unresolvable: the roster badge showed his live $116.08 credit while Apply Credit 404'd (Kerry 2026-07-20 mobile).",
+      "HTML pages are no-store too (was /api/* only): the iOS PWA kept serving a cached /events page whose old inline JS failed long after fixes deployed — the modal was even showing pre-fix error text. Pages always fetch fresh now; /static assets keep normal caching.",
+    ],
+  },
   {
     version: "2.129.13",
     date: "2026-07-20",

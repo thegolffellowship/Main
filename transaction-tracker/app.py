@@ -386,6 +386,14 @@ def _no_store_api_responses(resp):
     defaults."""
     if request.path.startswith("/api/") and "Cache-Control" not in resp.headers:
         resp.headers["Cache-Control"] = "no-store"
+    # HTML pages too (Kerry 2026-07-20 mobile): the iOS PWA served a
+    # cached /events page whose OLD inline JS kept failing long after the
+    # fix deployed — the modal even showed pre-fix error text. Pages must
+    # always be fetched fresh; /static assets keep their defaults.
+    elif (not request.path.startswith("/static/")
+          and "Cache-Control" not in resp.headers
+          and resp.mimetype == "text/html"):
+        resp.headers["Cache-Control"] = "no-store"
     return resp
 
 
@@ -5551,9 +5559,22 @@ def api_gg_rsvp_credit_info(rsvp_id):
         player_email = (rsvp.get("player_email") or "").strip().lower()
         player_name = rsvp.get("player_name") or ""
 
-        # Resolve canonical customer name via email
+        # Resolve the player the same way get_rsvp_credit_info (the
+        # roster CREDIT badge) does — rsvps.customer_id is authoritative
+        # (rule 6), then the canonical customers name, then the email
+        # fallback inside get_player_credits. The old email-only items
+        # lookup left an email-less GG-format name ("Anthis, Larry")
+        # unresolvable and 404'd while the badge showed a live credit
+        # (Kerry 2026-07-20 mobile).
         customer = player_name
-        if player_email:
+        cust_id = rsvp.get("customer_id")
+        if cust_id:
+            crow = conn.execute(
+                "SELECT TRIM(first_name || ' ' || last_name) AS n "
+                "FROM customers WHERE customer_id = ?", (cust_id,)).fetchone()
+            if crow and (crow["n"] or "").strip():
+                customer = crow["n"].strip()
+        elif player_email:
             card = conn.execute(
                 """SELECT customer FROM items WHERE LOWER(customer_email) = ?
                    AND customer IS NOT NULL AND customer != ''
@@ -5563,12 +5584,7 @@ def api_gg_rsvp_credit_info(rsvp_id):
             if card:
                 customer = card["customer"]
 
-        # Pass the RSVP's email so get_player_credits can resolve
-        # customer_id when the name lookup misses — a GG-format name
-        # ("McCRARY, Justin") with no matching items row previously
-        # 404'd even though the player had a live rain-out credit
-        # (Kerry 2026-07-20, McCrary applying his s9.18 credit to s9.19).
-        credits = get_player_credits(customer,
+        credits = get_player_credits(customer, customer_id=cust_id,
                                      player_email=player_email or None)
         if not credits:
             return jsonify({"error": "No credits on file for this player"}), 404
