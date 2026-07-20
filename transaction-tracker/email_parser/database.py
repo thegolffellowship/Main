@@ -19694,14 +19694,18 @@ def apply_credit_to_rsvp(
                 continue
             d = dict(row)
             status = d.get("transaction_status")
-            if status == "credited":
-                amt = _parse_dollar(d.get("item_price")) + _parse_dollar(d.get("transaction_fees") or "0")
-                d["_is_wd_credit"] = False
-            elif status == "wd" and d.get("credit_amount"):
-                amt = _parse_dollar(d.get("credit_amount"))
-                d["_is_wd_credit"] = True
-            else:
+            if status not in ("credited", "wd"):
                 continue
+            # Single source of truth (Kerry 2026-07-20): _item_credit_value
+            # — no fees, minus partial carve-outs. The old inline formula
+            # here still counted fees, so the SERVER applied $141.92 of
+            # John White's $122 credit (owed $17 became owed $0, no
+            # balance email) and armed Larry's excess watch at $14.08
+            # when the true excess was $4.00.
+            amt = _item_credit_value(conn, d)
+            if amt <= 0:
+                continue
+            d["_is_wd_credit"] = (status == "wd")
             d["_credit_amt"] = amt
             total_credit += amt
             credited_items.append(d)
@@ -20400,6 +20404,28 @@ def get_refunds_overview(db_path: str | Path | None = None,
             if amt <= 0 or r["id"] in open_watch_ids:
                 continue
             anchor = _credit_anchor(r)
+            # Inline Venmo refund (Kerry 2026-07-20: "Open up Venmo right
+            # there... to allow me to refund"): handle + a memo in his
+            # ratified shape, naming the ORIGIN event of the credit even
+            # when it was applied elsewhere.
+            _vh = None
+            if r.get("customer_id"):
+                _vrow = conn.execute(
+                    "SELECT venmo_username FROM customers WHERE customer_id = ? "
+                    "AND venmo_username IS NOT NULL AND venmo_username != ''",
+                    (r["customer_id"],)).fetchone()
+                if _vrow:
+                    _vh = _vrow["venmo_username"]
+            try:
+                _full = dict(conn.execute(
+                    "SELECT * FROM items WHERE id = ?", (r["id"],)).fetchone())
+                _origin = _credit_origin_event(conn, _full) or r.get("item_name")
+            except Exception:
+                _origin = r.get("item_name")
+            _kindword = ("Excess credit" if (r.get("item_name") or "")
+                         .lower().startswith("excess credit")
+                         else ("WD credit" if status == "wd" else "Credit"))
+            _memo = f"{r.get('customer')} - {_kindword} from {_origin}"
             outstanding.append({
                 "item_id": r["id"], "customer": r.get("customer"),
                 "customer_id": r.get("customer_id"), "event": r.get("item_name"),
@@ -20407,6 +20433,7 @@ def get_refunds_overview(db_path: str | Path | None = None,
                 "order_date": r.get("order_date"),
                 "age_days": _age(anchor),
                 "note": r.get("credit_note") or "",
+                "venmo_handle": _vh, "memo": _memo,
             })
 
         # Season-contest removal refunds (Kerry 2026-07-20: "is it in overall

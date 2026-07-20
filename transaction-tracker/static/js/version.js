@@ -1,5 +1,16 @@
-window.TGF_VERSION = "2.129.25";
+window.TGF_VERSION = "2.129.26";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.129.26",
+    date: "2026-07-20",
+    changes: [
+      "apply_credit_to_rsvp joins the single credit-value source (_item_credit_value): its inline formula still counted transaction fees, so the SERVER applied John White's $122 credit as $141.92 (owed $17 became owed $0 — no balance email, phantom excess) and armed Larry Anthis's excess watch at $14.08 when the modal correctly showed $4.00. Every credit read/write path now shares one function.",
+      "Apply Credit double-click guard: a second tap while the first apply was in flight consumed the credits and threw 'No valid credited items found' over a SUCCESSFUL apply — the button now locks on first tap.",
+      "REFUNDS console: every Outstanding row with a Venmo handle gets a small inline Venmo button (opens in a new window, amount + Kerry-format memo naming the credit's ORIGIN event prefilled) — no more detour through the customer page; 'more…' keeps the profile link. Buttons shrunk to match the utilitarian standard.",
+      "PAYOUTS sub-nav: UNPAID/REFUNDS pills left-align right after GOLFERS and the bar caps at 900px (Kerry: 'they don't need to be spread out').",
+      "scoring-item-note:<item_id>|<note> repair bridge for stamping balance_due tags on rows applied under the old math.",
+    ],
+  },
   {
     version: "2.129.25",
     date: "2026-07-20",
