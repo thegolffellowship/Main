@@ -20419,6 +20419,17 @@ def get_refunds_overview(db_path: str | Path | None = None,
                     None)
                 label = (f"{rm.get('contest_type')} {rm.get('season')} "
                          f"({rm.get('chapter')}) — removal refund")
+                # Venmo memo format (Kerry 2026-07-20): "[Player] -
+                # [Reason] Refund for [Contest]" — no "City" prefix, no
+                # chapter, no trailing "removal refund". A long free-text
+                # reason falls back to the generic word.
+                _contest = re.sub(r"^City\s+", "",
+                                  rm.get("contest_type") or "", flags=re.I)
+                _reason = (rm.get("reason") or "").strip()
+                _reason = (_reason.title()
+                           if _reason and len(_reason) <= 20 else "Removal")
+                memo = (f"{rm.get('customer_name')} - {_reason} Refund "
+                        f"for {_contest} {rm.get('season')}").strip()
                 if paid:
                     age = _age(paid["date"])
                     if age is None or age <= completed_days:
@@ -20438,7 +20449,7 @@ def get_refunds_overview(db_path: str | Path | None = None,
                         "customer_id": rm.get("customer_id"),
                         "event": label,
                         "amount": round(float(rm["refund_amount"]), 2),
-                        "kind": "contest_refund",
+                        "kind": "contest_refund", "memo": memo,
                         "order_date": rm_day, "age_days": _age(rm_day),
                         "venmo_handle": rm.get("venmo_username"),
                         "note": rm.get("note") or ""})
