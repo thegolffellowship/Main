@@ -2115,13 +2115,30 @@ def hio_gross_field_counts(subdomain: str, start_date: str = "2025-08-11",
         league_id = portal["league_id"]
         if not league_id:
             return {"error": "league_id missing — run Phase A ingest first"}
-        targets = [dict(r) for r in conn.execute(
-            """SELECT gg_round_id, event_date, event_label
-                 FROM gg_history_events
-                WHERE portal_id = ? AND gg_round_id IS NOT NULL
-                  AND event_date >= ? AND event_date <= ?
-                ORDER BY event_date""",
-            (portal["id"], start_date, end_date))]
+        season = portal["season"] or "2025"
+
+    # The widget's round SELECTOR is the only valid round-id space — the
+    # event export's gg_round_id is a different id family, and GG answers
+    # &round=<unknown> with the default page (no boards; v2.130.6 lesson).
+    widget_url = (f"{base}/leagues/{league_id}/widgets/"
+                  f"tournament_results?shared=false")
+    w = fetch_public_page(widget_url)
+    if w["status_code"] != 200:
+        return {"error": f"tournament_results widget HTTP {w['status_code']}"}
+    sel = _ROUND_SELECT_RE.search(w["html"])
+    options = _ROUND_OPTION_RE.findall(sel.group(1) if sel else "")
+    targets = []
+    for rid, lbl in options:
+        label = " ".join(re.sub(r"<[^>]+>", " ", lbl).split())
+        d = _export_date(label, season)
+        if d and start_date <= d <= end_date:
+            targets.append({"gg_round_id": rid, "event_date": d,
+                            "event_label": label})
+    targets.sort(key=lambda t: t["event_date"])
+    if not targets:
+        return {**out, "error": "no selector rounds in window",
+                "selector_labels": [" ".join(l.split()) for _, l in
+                                    options][:20]}
 
     def _board_names(board_url: str) -> set:
         pg = fetch_public_page(board_url)

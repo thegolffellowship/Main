@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.130.6";
+window.TGF_VERSION = "2.130.7";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.130.7",
+    date: "2026-07-20",
+    changes: [
+      "scoring-hio-gross walks the widget's round SELECTOR instead of the event export's gg_round_id — those are different id families, and GG answers an unknown &round= with the default page (every event came back 'no ALL Gross board'). Round dates parse from the selector labels.",
+    ],
+  },
   {
     version: "2.130.6",
     date: "2026-07-20",
