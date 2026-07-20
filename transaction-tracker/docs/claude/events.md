@@ -1191,8 +1191,11 @@ change.
 HIO is the one game pot that ACCRUES across events instead of paying per
 event. `get_hio_pot()` (database.py): every played, non-rained-out event
 contributes its games-matrix holeInOne amount ($1/player 9-hole,
-$2/player 18-hole); events count only once their date has passed. The pot
-drains ONLY via `tgf_payouts` rows with `category = 'hio'`.
+$2/player 18-hole). Scheduled (future) events are INCLUDED as soon as
+they have registrations (Kerry 2026-07-20: the HIO dollars are collected
+at registration, like the event's own pots in its payouts); the
+contribution self-corrects as the field grows since the pot recomputes
+live. The pot drains ONLY via `tgf_payouts` rows with `category = 'hio'`.
 
 - **Carry-in dial**: `hio_pot_carry_in` = **1822.00** (app_settings, set
   2026-07-20; provenance in `hio_pot_carry_in_note`). Reconstruction:
