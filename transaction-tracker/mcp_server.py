@@ -1371,9 +1371,12 @@ def _scoring_dispatch(url: str, extract: str):
                                    with off-lowest per-chapter allowance
       scoring-mp-lock-one:<chapter>|<A>|<B>[|apply]  manually lock one
                                    Kerry-confirmed match with no GG card
-      scoring-import-event:<event_code>[@<round_id>]  targeted scorecard
-                                   backfill for one past event (ALL Net →
-                                   ALL Gross); url = the portal widget
+      scoring-import-event:<event_code>[@<round_id>][|refresh=<A>[,<B>]]
+                                   targeted scorecard backfill for one past
+                                   event (ALL Net → ALL Gross); refresh=
+                                   force-replaces named players' stale cards;
+                                   url = the portal widget
+      scoring-facilities           facility census (course registry v1)
       scoring-mp-import-gg[:<round>|verify[:<round>]]  snapshot GG's own
                                    match-play detail (start hole + NET per-hole
                                    winner/strokes) onto cmp_matches; url = the
@@ -1511,12 +1514,36 @@ def _scoring_dispatch(url: str, extract: str):
             # Targeted scorecard backfill for ONE past event (older than the
             # auto-sync's newest-N window): find the event's round on the
             # widget's round selector and import ALL Net → ALL Gross.
-            # arg: "<event_code>[@<gg_round_id>]"; url = the portal's
-            # tournament_results widget.
-            code, _, rkey = arg.partition("@")
+            # arg: "<event_code>[@<gg_round_id>][|refresh=<A>[,<B>...]]";
+            # refresh= force-replaces the named players' STALE stored cards
+            # (GG post-import score corrections — deletes their round +
+            # holes + bridged handicap rows first, then re-imports fresh).
+            # url = the portal's tournament_results widget.
+            a1, _, rest = arg.partition("|")
+            code, _, rkey = a1.partition("@")
+            refresh = None
+            if rest.strip().lower().startswith("refresh="):
+                refresh = [p.strip() for p in
+                           rest.strip()[8:].split(",") if p.strip()]
             return json.dumps(db.import_event_scorecards_by_code(
-                url, code.strip(), only_round=(rkey.strip() or None)),
-                indent=2, default=str)
+                url, code.strip(), only_round=(rkey.strip() or None),
+                refresh_players=refresh), indent=2, default=str)
+        if cmd == "scoring-facilities":
+            # READ-ONLY: facilities + their courses (course registry v1).
+            with db._connect(None) as _c:
+                _rows = [dict(r) for r in _c.execute(
+                    """SELECT f.facility_id, f.name AS facility, f.city,
+                              f.state, COUNT(c.course_id) AS courses,
+                              GROUP_CONCAT(c.name, ' | ') AS course_names
+                         FROM facilities f
+                         LEFT JOIN courses c ON c.facility_id = f.facility_id
+                        GROUP BY f.facility_id
+                        HAVING COUNT(c.course_id) != 1
+                        ORDER BY courses DESC, f.name""").fetchall()]
+                _tot = _c.execute("SELECT COUNT(*) n FROM facilities").fetchone()["n"]
+            return json.dumps({"total_facilities": _tot,
+                               "non_1to1_facilities": _rows}, indent=2,
+                              default=str)
         if cmd == "scoring-mp-pools-audit":
             # READ-ONLY: distinct (chapter, season) in cmp_pools + counts.
             return json.dumps(db.cmp_pools_audit(), indent=2, default=str)
