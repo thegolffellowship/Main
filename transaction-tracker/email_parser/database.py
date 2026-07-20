@@ -18774,7 +18774,11 @@ def get_player_credits(
                 # WD rows store the outstanding credit directly in the credit_amount column
                 d["credit_amount"] = _parse_dollar(d.get("credit_amount") or "0")
             else:
-                d["credit_amount"] = _parse_dollar(d.get("item_price")) + _parse_dollar(d.get("transaction_fees") or "0")
+                # Entry price ONLY — transaction fees are never refunded
+                # or credited (Kerry-ratified 2026-07-20: "We don't
+                # refund fees"; the John White $4.27 case. The fee
+                # covered card processing that already happened).
+                d["credit_amount"] = _parse_dollar(d.get("item_price"))
             # Partial carve-outs (Kerry 2026-07-20, the John White case):
             # item_price still reflects the ORIGINAL bundle, but a partial
             # refund/credit child (event downgrade 18→9, dropped side

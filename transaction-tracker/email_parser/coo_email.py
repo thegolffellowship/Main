@@ -150,19 +150,19 @@ def build_coo_email_html() -> tuple[str, str]:
 <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:10px;">
 <tr>
   <td style="padding:8px 10px;background:#fff;border:1px solid #e5e7eb;border-radius:8px;text-align:center;">
-    <div style="font-size:10px;color:{_GRAY};text-transform:uppercase;">Outstanding payouts</div>
+    <div style="font-size:10px;color:{_GRAY};text-transform:uppercase;"><a href="{_BASE_URL}/tgf" style="color:{_GRAY};text-decoration:none;">Outstanding payouts &rarr;</a></div>
     <div style="font-size:16px;font-weight:700;color:{_RED if money["payout_total"] else _GREEN};">{_fmt(money["payout_total"])}</div>
     <div style="font-size:10px;color:{_GRAY};">{money["payout_groups"]} golfer{"s" if money["payout_groups"] != 1 else ""}</div>
   </td>
   <td style="width:6px;"></td>
   <td style="padding:8px 10px;background:#fff;border:1px solid #e5e7eb;border-radius:8px;text-align:center;">
-    <div style="font-size:10px;color:{_GRAY};text-transform:uppercase;">Outstanding refunds</div>
+    <div style="font-size:10px;color:{_GRAY};text-transform:uppercase;"><a href="{_BASE_URL}/tgf" style="color:{_GRAY};text-decoration:none;">Outstanding refunds &rarr;</a></div>
     <div style="font-size:16px;font-weight:700;color:{_RED if money["refund_total"] else _GREEN};">{_fmt(money["refund_total"])}</div>
     <div style="font-size:10px;color:{_GRAY};">{money["refund_count"]} item{"s" if money["refund_count"] != 1 else ""}</div>
   </td>
   <td style="width:6px;"></td>
   <td style="padding:8px 10px;background:#fff;border:1px solid #e5e7eb;border-radius:8px;text-align:center;">
-    <div style="font-size:10px;color:{_GRAY};text-transform:uppercase;">Open credits</div>
+    <div style="font-size:10px;color:{_GRAY};text-transform:uppercase;"><a href="{_BASE_URL}/transactions" style="color:{_GRAY};text-decoration:none;">Open credits &rarr;</a></div>
     <div style="font-size:16px;font-weight:700;color:{_AMBER if money["credit_total"] else _GREEN};">{_fmt(money["credit_total"])}</div>
     <div style="font-size:10px;color:{_GRAY};">{money["credit_count"]} item{"s" if money["credit_count"] != 1 else ""}</div>
   </td>
@@ -195,7 +195,11 @@ def build_coo_email_html() -> tuple[str, str]:
         if rows:
             out += f"""<div style="margin-top:6px;font-size:12px;color:{_GRAY};font-weight:600;text-transform:uppercase;">{label} ({len(rows)})</div>"""
             for r in rows[:12]:
-                out += f"""<div style="padding:6px 12px;margin-top:4px;background:#fff;border:1px solid #e5e7eb;border-left:4px solid {color};border-radius:6px;font-size:13px;">{r["name"]} <span style="color:{_GRAY};font-size:12px;">— {r["detail"]}</span></div>"""
+                _lnk = ((' &nbsp;<a href="' + _BASE_URL
+                         + '/customers?cid=' + str(r["cid"])
+                         + '" style="font-size:12px;color:#2563eb;text-decoration:none;">Open &rarr;</a>')
+                        if r.get("cid") else "")
+                out += f"""<div style="padding:6px 12px;margin-top:4px;background:#fff;border:1px solid #e5e7eb;border-left:4px solid {color};border-radius:6px;font-size:13px;">{r["name"]} <span style="color:{_GRAY};font-size:12px;">— {r["detail"]}</span>{_lnk}</div>"""
             if len(rows) > 12:
                 out += f"""<div style="font-size:12px;color:{_GRAY};margin-top:4px;">+{len(rows) - 12} more</div>"""
         return out
@@ -492,10 +496,12 @@ def _get_membership_summary() -> dict:
                 exp = (r["expires_at"] or "")[:10]
                 if today <= exp <= ahead_str:
                     out["expiring"].append(
-                        {"name": r["name"], "detail": f"expires {exp}"})
+                        {"name": r["name"], "detail": f"expires {exp}",
+                         "cid": r["customer_id"]})
                 elif back_str <= exp < today:
                     out["lapsed"].append(
-                        {"name": r["name"], "detail": f"expired {exp}"})
+                        {"name": r["name"], "detail": f"expired {exp}",
+                         "cid": r["customer_id"]})
             out["expiring"].sort(key=lambda x: x["detail"])
             out["lapsed"].sort(key=lambda x: x["detail"])
             # Renewals + first-time members in the recent window
@@ -508,7 +514,7 @@ def _get_membership_summary() -> dict:
                   JOIN customers c ON c.customer_id = m.customer_id
                  WHERE m.created_at >= ?""", (back_str,)).fetchall()
             for r in recent:
-                row = {"name": r["name"],
+                row = {"name": r["name"], "cid": r["customer_id"],
                        "detail": f"term started {(r['started_at'] or '')[:10]}"}
                 (out["new"] if r["terms"] <= 1 else out["renewed"]).append(row)
     except Exception:
