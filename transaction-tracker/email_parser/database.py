@@ -17376,16 +17376,17 @@ def payout_credit(
             return {"ok": False, "error": "Item not found"}
         item = dict(row)
         status = (item.get("transaction_status") or "").lower()
-        if status == "wd":
-            amount = _parse_dollar(item.get("credit_amount"))
-            if amount <= 0:
-                return {"ok": False, "error": "WD row has no outstanding credit to pay out"}
-        elif status == "credited":
-            amount = _parse_dollar(item.get("item_price"))
-            if amount <= 0:
-                return {"ok": False, "error": "Credit row has no balance to pay out"}
-        else:
+        if status not in ("wd", "credited"):
             return {"ok": False, "error": "Item is not in WD or credited status"}
+        # Single source of truth for the payable amount (no fees, minus
+        # partial carve-outs) — the console display, Apply Credit, and
+        # the money actually sent must all agree (Kerry 2026-07-20).
+        amount = _item_credit_value(conn, item)
+        if amount <= 0:
+            return {"ok": False,
+                    "error": ("WD row has no outstanding credit to pay out"
+                              if status == "wd"
+                              else "Credit row has no balance to pay out")}
 
         date_str = (refund_date or "").strip() or today_central_str()
 
@@ -18713,6 +18714,30 @@ def _credit_origin_event(conn, credit, _depth: int = 0) -> str:
     return name
 
 
+def _item_credit_value(conn, item: dict) -> float:
+    """THE credit value of a credited/WD items row — single source of
+    truth (Kerry 2026-07-20). Entry price only (fees are never
+    credited), minus any partial carve-out children (Partial Credit /
+    Partial Refund / Refund(<method>) rows from event downgrades or
+    dropped side games), floored at $0. Used by get_player_credits,
+    payout_credit, and get_refunds_overview so the Apply Credit modal,
+    the REFUNDS console, and the money actually paid can never
+    disagree."""
+    status = (item.get("transaction_status") or "").lower()
+    if status == "wd":
+        return max(0.0, round(_parse_dollar(item.get("credit_amount") or "0"), 2))
+    val = _parse_dollar(item.get("item_price"))
+    for k in conn.execute(
+            "SELECT item_price FROM items "
+            "WHERE CAST(parent_item_id AS INTEGER) = ? "
+            "AND (merchant = 'Partial Credit' "
+            "     OR merchant = 'Partial Refund' "
+            "     OR merchant LIKE 'Refund (%')",
+            (item["id"],)).fetchall():
+        val -= abs(_parse_dollar(k["item_price"]))
+    return max(0.0, round(val, 2))
+
+
 def get_player_credits(
     customer_name: str,
     db_path: str | Path | None = None,
@@ -18770,33 +18795,7 @@ def get_player_credits(
     with _connect(db_path) as conn:
         for r in rows:
             d = dict(r)
-            if d.get("transaction_status") == "wd":
-                # WD rows store the outstanding credit directly in the credit_amount column
-                d["credit_amount"] = _parse_dollar(d.get("credit_amount") or "0")
-            else:
-                # Entry price ONLY — transaction fees are never refunded
-                # or credited (Kerry-ratified 2026-07-20: "We don't
-                # refund fees"; the John White $4.27 case. The fee
-                # covered card processing that already happened).
-                d["credit_amount"] = _parse_dollar(d.get("item_price"))
-            # Partial carve-outs (Kerry 2026-07-20, the John White case):
-            # item_price still reflects the ORIGINAL bundle, but a partial
-            # refund/credit child (event downgrade 18→9, dropped side
-            # game) already took part of that money out of this row —
-            # either as a separate credited child (which surfaces as its
-            # own credit line) or as a real outbound refund. Either way
-            # the parent's credit must shrink by the carved-out amount or
-            # the same $15.65 counts twice / stays claimable after being
-            # refunded.
-            for k in conn.execute(
-                    "SELECT item_price FROM items "
-                    "WHERE CAST(parent_item_id AS INTEGER) = ? "
-                    "AND (merchant = 'Partial Credit' "
-                    "     OR merchant = 'Partial Refund' "
-                    "     OR merchant LIKE 'Refund (%')",
-                    (d["id"],)).fetchall():
-                d["credit_amount"] -= abs(_parse_dollar(k["item_price"]))
-            d["credit_amount"] = max(0.0, round(d["credit_amount"], 2))
+            d["credit_amount"] = _item_credit_value(conn, d)
             # Original event this credit traces back to — for refund memos.
             d["origin_event"] = _credit_origin_event(conn, d)
             result.append(d)
@@ -20397,8 +20396,7 @@ def get_refunds_overview(db_path: str | Path | None = None,
         ).fetchall():
             r = dict(r)
             status = (r.get("transaction_status") or "").lower()
-            amt = _parse_dollar(r.get("credit_amount") if status == "wd"
-                                else r.get("item_price"))
+            amt = _item_credit_value(conn, r)
             if amt <= 0 or r["id"] in open_watch_ids:
                 continue
             anchor = _credit_anchor(r)
@@ -20693,16 +20691,14 @@ def auto_match_refund_watches(expense_ids: list[int] | None = None,
             except (TypeError, ValueError):
                 continue
             cands = []
-            for it in open_credits:
-                if it["customer_id"] != exp["customer_id"]:
-                    continue
-                val = _parse_dollar(
-                    it.get("credit_amount") if (it.get("transaction_status")
-                                                or "").lower() == "wd"
-                    else it.get("item_price"))
-                if abs(round(val, 2) - amt) <= 0.009 and \
-                        (exp.get("created_at") or "") >= (it.get("created_at") or ""):
-                    cands.append(it)
+            with _connect(db_path) as _vc:
+                for it in open_credits:
+                    if it["customer_id"] != exp["customer_id"]:
+                        continue
+                    val = _item_credit_value(_vc, it)
+                    if abs(val - amt) <= 0.009 and \
+                            (exp.get("created_at") or "") >= (it.get("created_at") or ""):
+                        cands.append(it)
             if len(cands) != 1:
                 continue
             it = cands[0]
