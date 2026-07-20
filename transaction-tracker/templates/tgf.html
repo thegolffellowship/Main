@@ -270,11 +270,9 @@
         .top-tab.top-tab-pill:hover, .top-tab.top-tab-pill.active { background: #D06B2E; color: #fff; }
         @media (max-width: 768px) { .top-tabs { gap: 16px; padding: 0 14px; } }
 
-        /* Centered admin work column (Kerry 2026-07-20: "It definitely
-           doesn't need that wide of a window for desktop... It's just
-           all too spread out"). Everything inside <main> lives in one
-           1080px column, centered. */
-        main { max-width: 1080px; margin: 0 auto; }
+        /* The 1080px centered work column now comes from the global
+           main rule in dashboard.css (Kerry-ratified app-wide standard,
+           2026-07-20) — no page-local override needed. */
         .top-tabs { max-width: none; }
 
         .section-hidden { display: none !important; }

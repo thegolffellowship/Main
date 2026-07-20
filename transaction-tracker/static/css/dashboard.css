@@ -176,11 +176,15 @@ header h1 {
     font-size: 0.82rem;
 }
 
-/* ---- Main ---- */
+/* ---- Main ----
+   1080px is the ratified desktop content width for ALL pages — admin,
+   manager, and member (Kerry, 2026-07-20: "It all just displays too
+   wide"). The dark nav header stays full width; only the work column
+   is capped and centered. Don't widen per-page. */
 main {
-    max-width: 1600px;
+    max-width: 1080px;
     margin: 0 auto;
-    padding: 1.5rem 2rem 3rem;
+    padding: 1.1rem 1.5rem 2.5rem;
 }
 
 /* ---- Stats row ---- */
@@ -263,7 +267,9 @@ table {
 }
 thead th {
     background: #f9fafb;
-    padding: 0.6rem 0.65rem;
+    /* Kerry-ratified admin density (2026-07-20, from the TGF payouts
+       console): th 4px / td 5px vertical, 10px horizontal. */
+    padding: 4px 10px;
     text-align: left;
     font-size: 0.72rem;
     text-transform: uppercase;
@@ -279,7 +285,7 @@ th[draggable] { cursor: grab; }
 th.col-dragging { opacity: 0.4; }
 th.col-drag-over { border-left: 3px solid var(--primary); }
 tbody td {
-    padding: 0.5rem 0.65rem;
+    padding: 5px 10px;
     border-bottom: 1px solid var(--border);
     font-size: 0.82rem;
     vertical-align: top;

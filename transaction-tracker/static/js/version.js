@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.129.27";
+window.TGF_VERSION = "2.130.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.130.0",
+    date: "2026-07-20",
+    changes: [
+      "1080px is now the ratified desktop content width for the WHOLE app — Admin, Manager, and Member pages alike (Kerry 2026-07-20: 'let's do 1080px as standard width for desktop on ALL pages... It all just displays too wide'). The global main rule in dashboard.css caps and centers every page's work column (was 1600px); the dark nav header stays full width. The PAYOUTS page's page-local 1080px rule is removed in favor of the global one.",
+      "Admin table density is now the app-wide default: the global table rules adopt the Kerry-ratified TGF-console density (header cells 4px, body cells 5px vertical padding, 10px horizontal) and the main content padding tightens to match — 'functional, not all this beautiful white space'. Pages with their own table CSS (Contests leaderboard, points drill-downs) are unaffected.",
+    ],
+  },
   {
     version: "2.129.27",
     date: "2026-07-20",

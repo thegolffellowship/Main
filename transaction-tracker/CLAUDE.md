@@ -417,6 +417,19 @@ starting inside a drawer/sheet/dialog (`SKIP` selector, `.no-ptr` /
 `[data-ptr-skip]` opt-out) are ignored. The Contests/Handicaps CONTENT redesign
 is the next design-claude handoff, built into this fixed shell.
 
+## Desktop width + density standard (v2.130.0 — Kerry-ratified 2026-07-20)
+
+**1080px is the desktop content width for ALL pages — Admin, Manager, and
+Member.** The global `main` rule in `dashboard.css` caps and centers every
+page's work column (`max-width: 1080px; margin: 0 auto`); the dark nav
+header/shell stays full width. Do NOT add page-local `main` width overrides
+(wider or narrower) — `/me` (720px personal page) and the print sheets
+(cart signs, starter sheet, which don't load dashboard.css) are the only
+exceptions. **Admin table density is the app-wide default**: global
+`thead th` 4px / `tbody td` 5px vertical padding, 10px horizontal — the
+ratified TGF-console density ("functional, not all this beautiful white
+space"). Pages with their own table CSS keep their local values.
+
 ## Standard color palette (v2.49.0)
 
 Kerry's ratified brand palette lives as CSS vars in `static/css/dashboard.css`
