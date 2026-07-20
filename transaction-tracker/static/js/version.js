@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.129.17";
+window.TGF_VERSION = "2.129.18";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.129.18",
+    date: "2026-07-20",
+    changes: [
+      "GG-RSVP Apply Credit endpoint now DELEGATES to get_rsvp_credit_info — the same proven code path behind the roster CREDIT badge and the credit-alert emails — instead of maintaining a hand-rolled duplicate of its resolution/pricing logic (the duplicate drifted twice in one day while the shared function worked throughout; Anthis's badge and alert email were fine while his modal failed). One code path now serves badge, alert, and modal.",
+      "New debug bridge scoring-credit-info:<rsvp_id> runs the same analysis server-side and returns the payload or full traceback — player-specific Apply Credit failures are now diagnosable without a phone.",
+    ],
+  },
   {
     version: "2.129.17",
     date: "2026-07-20",

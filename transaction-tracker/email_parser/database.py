@@ -19114,9 +19114,12 @@ def get_rsvp_credit_info(rsvp_id: int, db_path: str | Path | None = None) -> dic
             "credits": [
                 {
                     "item_id": c["id"],
+                    "id": c["id"],
                     "event_name": c["item_name"],
+                    "item_name": c["item_name"],
                     "origin_event": c.get("origin_event") or c["item_name"],
                     "credit_amount": c["credit_amount"],
+                    "order_date": c.get("order_date") or "",
                     "user_status": c.get("user_status") or "",
                     "holes": c.get("holes") or "",
                     "side_games": c.get("side_games") or "",

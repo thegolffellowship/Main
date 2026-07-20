@@ -1573,6 +1573,19 @@ def _scoring_dispatch(url: str, extract: str):
                 _rows, _apply2 = json.loads(arg), False
             return json.dumps(db.restore_tgf_payouts_explicit(
                 _rows, apply=_apply2), indent=2, default=str)
+        if cmd == "scoring-credit-info":
+            # Debug: run the SAME credit analysis the Apply Credit modal
+            # uses for a GG RSVP — "<rsvp_id>". Returns the payload or
+            # the traceback, so player-specific failures are diagnosable
+            # without the phone.
+            import traceback as _tb
+            try:
+                _res = db.get_rsvp_credit_info(int(arg.strip()))
+                return json.dumps({"rsvp_id": int(arg.strip()),
+                                   "result": _res}, indent=2, default=str)
+            except Exception:
+                return json.dumps({"rsvp_id": arg.strip(),
+                                   "traceback": _tb.format_exc()}, indent=2)
         if cmd == "scoring-rainout-audit":
             # READ-ONLY: unlabeled shut-down candidates (active status,
             # >=50% credited registrations) + already-labeled events.
