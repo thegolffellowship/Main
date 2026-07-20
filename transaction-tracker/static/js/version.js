@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.129.19";
+window.TGF_VERSION = "2.129.20";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.129.20",
+    date: "2026-07-20",
+    changes: [
+      "Credit math accounts for partial carve-outs (Kerry 2026-07-20, the John White case): a credited entry's item_price still reflects the ORIGINAL bundle, so when a partial refund/credit child existed (his 18→9 downgrade held $15.65 as separate credit before the rain-out credited the whole entry at full 18-hole price) the same money counted twice — Apply Credit offered $141.92 when the house holds $126.27. get_player_credits now subtracts Partial Credit / Partial Refund / Refund(<method>) children from the parent's credit (floored at $0), so parent + carve-out lines always sum to the money actually held. Applies everywhere credits surface: Apply Credit modal, roster badges, credit-alert emails, balance-due emails.",
+    ],
+  },
   {
     version: "2.129.19",
     date: "2026-07-20",
