@@ -421,6 +421,38 @@ def main():
               and (pos["Gil Seventh"][1] <= 2) == (pos["Ed Fifth"][1] <= 2))
     db.set_partner_request_match(606, "Gil Seventh", None, db_path=tmp)
 
+    # ── Holes derived from event format at insert (Kerry 2026-07-21) ─
+    # Blank holes breaks the side-games player buckets; on single-format
+    # events the format is authoritative — blank AND wrong parses get
+    # stamped at insert. Non-event rows (memberships) stay untouched.
+    db.save_items([
+        {"email_uid": "manual-test-holes-1", "item_index": 0,
+         "merchant": "The Golf Fellowship", "customer": "Holes Blank",
+         "order_date": "2026-07-21",
+         "item_name": "s9.98 Teetimes", "holes": None,
+         "transaction_status": "active"},
+        {"email_uid": "manual-test-holes-2", "item_index": 0,
+         "merchant": "The Golf Fellowship", "customer": "Holes Wrong",
+         "order_date": "2026-07-21",
+         "item_name": "s9.98 Teetimes", "holes": "18",
+         "transaction_status": "active"},
+        {"email_uid": "manual-test-holes-3", "item_index": 0,
+         "merchant": "The Golf Fellowship", "customer": "Holes Member",
+         "order_date": "2026-07-21",
+         "item_name": "TGF MEMBERSHIP", "holes": None,
+         "transaction_status": "active"},
+    ], db_path=tmp)
+    with db._connect(tmp) as conn:
+        hv = {r["email_uid"]: r["holes"] for r in conn.execute(
+            "SELECT email_uid, holes FROM items "
+            "WHERE email_uid LIKE 'manual-test-holes-%'").fetchall()}
+    check("blank holes derived from event format",
+          hv.get("manual-test-holes-1") == "9")
+    check("wrong holes corrected at insert",
+          hv.get("manual-test-holes-2") == "9")
+    check("non-event rows untouched",
+          hv.get("manual-test-holes-3") is None)
+
     # Rules are data: disabling staging restores legacy behavior and
     # drops the ordering guarantee (no crash, groups still complete).
     db.set_app_setting("pairing_staging_rules",

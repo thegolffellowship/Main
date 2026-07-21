@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.135.2";
+window.TGF_VERSION = "2.135.3";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.135.3",
+    date: "2026-07-21",
+    changes: [
+      "Holes derived at insert (Kerry): blank or mis-parsed items.holes on a single-format event now gets stamped from the event's format the moment the row is saved — blank holes was undercounting the side-games player buckets, and the boot-time heal only caught it at the next deploy (today's Estes re-import and two live parses sat blank until manually patched). Combo events are untouched (holes is the player's 9/18 choice there), as are non-event rows (memberships, contests). heal_item_holes_from_event stays as the boot backstop and is now alias-aware.",
+    ],
+  },
   {
     version: "2.135.2",
     date: "2026-07-21",

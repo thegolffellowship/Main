@@ -8948,6 +8948,32 @@ def _event_holes_type(item_name: str, fmt: str) -> int:
     return 9
 
 
+def _canon_holes_for_item(conn: sqlite3.Connection,
+                          item_name: str) -> str | None:
+    """Authoritative holes value ('9'/'18') for an item on a single-format
+    EVENT, alias-aware. None when no event matches, when the event is a
+    9/18 Combo (holes is the player's choice there), or when the event
+    declares no format (pseudo-events like SEASON CONTESTS). Kerry
+    2026-07-21: blank holes undercounts the side-games player buckets,
+    so event rows must never sit blank waiting for the boot heal."""
+    name = (item_name or "").strip()
+    if not name:
+        return None
+    row = conn.execute(
+        """SELECT e.item_name AS ev_name, e.format AS fmt
+           FROM events e
+           LEFT JOIN event_aliases ea ON ea.canonical_event_name = e.item_name
+           WHERE e.item_name = ? COLLATE NOCASE
+              OR ea.alias_name = ? COLLATE NOCASE
+           LIMIT 1""", (name, name)).fetchone()
+    if not row:
+        return None
+    fmt = (row["fmt"] or "").strip()
+    if not fmt or "combo" in fmt.lower():
+        return None
+    return str(_event_holes_type(row["ev_name"], fmt))
+
+
 def heal_item_holes_from_event(db_path=None, conn=None) -> dict:
     """Force items.holes to the EVENT's hole count on single-format events.
 
@@ -8970,7 +8996,10 @@ def heal_item_holes_from_event(db_path=None, conn=None) -> dict:
             FROM items i
             JOIN events e
               ON (e.id = i.event_id
-                  OR e.item_name = i.item_name COLLATE NOCASE)
+                  OR e.item_name = i.item_name COLLATE NOCASE
+                  OR EXISTS (SELECT 1 FROM event_aliases ea
+                             WHERE ea.canonical_event_name = e.item_name
+                               AND ea.alias_name = i.item_name COLLATE NOCASE))
             WHERE COALESCE(i.transaction_status, 'active') = 'active'
               AND COALESCE(LOWER(e.format), '') NOT LIKE '%combo%'
         """).fetchall()
@@ -14312,6 +14341,16 @@ def save_items(rows: list[dict], db_path: str | Path | None = None,
                     order_id=row.get("order_id"),
                     item_name=row.get("item_name"),
                 )
+
+            # ── Holes derivation at insert (Kerry 2026-07-21) ──
+            # Blank or mis-parsed holes on a single-format event breaks
+            # the side-games player buckets. The event's format is
+            # authoritative — stamp it here so fresh rows are right
+            # immediately instead of waiting for the boot heal
+            # (heal_item_holes_from_event remains the backstop).
+            _canon_h = _canon_holes_for_item(conn, row.get("item_name"))
+            if _canon_h and (str(row.get("holes") or "").strip() != _canon_h):
+                row["holes"] = _canon_h
 
             # ── Identity-drift guard ──
             # If the order's customer_email/phone differs from what the
