@@ -921,7 +921,12 @@
         .mpv2 table.mp-sc .mp-sc-rowlabel { text-align: left; font-weight: 700; padding-right: 0.2rem; width: 2rem; }
         .mpv2 table.mp-sc .mp-sc-tot { font-weight: 700; color: var(--text); border-left: 1px solid var(--border); width: 2.1rem; }
         .mpv2 table.mp-sc tr.mp-sc-hole th, .mpv2 table.mp-sc tr.mp-sc-hole td {
-            font: 700 0.58rem/1 'Bitter', Georgia, serif; letter-spacing: 0.03em;
+            /* Optical compensation (Kerry 2026-07-21): Bitter's digits
+               read ~1px smaller than system sans at equal px, and this
+               header row sat BELOW the 0.66rem par/data rows in real
+               size too. 0.68rem Bitter ≈ 0.66rem sans optically, so the
+               Hole row leads the hierarchy again. */
+            font: 700 0.68rem/1 'Bitter', Georgia, serif; letter-spacing: 0.03em;
             color: var(--text-placeholder, #9CA3AF); text-transform: uppercase;
             border-bottom: 1px solid var(--border);
         }

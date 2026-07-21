@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.137.2";
+window.TGF_VERSION = "2.137.3";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.137.3",
+    date: "2026-07-21",
+    changes: [
+      "Scorecard type hierarchy (Kerry): the Hole header row (Bitter) sat visually BELOW the par/data digits — it was set at 0.58rem against the sans rows' 0.66rem, and Bitter's digits already read ~1px smaller than system sans at equal size. Bumped the Hole row to 0.68rem Bitter (optical parity with 0.66rem sans, plus bold/caps/letterspacing to lead) rather than shrinking the par digits, which are data already near the mobile legibility floor. Rule of thumb going forward: Bitter labels next to sans data get ~1px of optical compensation.",
+    ],
+  },
   {
     version: "2.137.2",
     date: "2026-07-21",
