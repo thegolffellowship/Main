@@ -40786,14 +40786,16 @@ PAIRING_STAGING_DEFAULTS = {
 def _stage_shotgun_smalls_lead(groups: list, slots: list,
                                pace_fn) -> list:
     """Order settled groups over the filled shotgun slots per Kerry's
-    2026-07-21 clarification: short groups take the furthest-out
-    loaded hole's A slot first, then its B slot, then the A slot of
-    the hole behind, and so on — (hole DESC, A before B) over the
-    slots actually filled. The fastest/smallest short group goes
-    furthest forward. Foursomes fill the remaining slots slowest
-    first, so the fastest foursome sits just behind the short groups.
-    Slots without hole labels (tee-count 0 → 'Group N') fall back to
-    later-slot-equals-further-forward."""
+    2026-07-21 rulings. TRUE play order front-to-back is (hole DESC,
+    A before B) — on a shared hole the A group tees off AHEAD of the
+    B group, so 12A leads 12B (Kerry's 12A/12B catch: sheet-index
+    order gets same-hole pairs backwards). Short groups take the
+    front of the train (furthest hole's A, then its B, then the A one
+    hole back), fastest/smallest first; foursomes fill the remaining
+    slots in the same front-to-back order FASTEST FIRST — higher
+    average pace goes first, slowest ends up at the back (lowest
+    hole's B). Slots without hole labels (tee-count 0 → 'Group N')
+    fall back to later-slot-equals-further-forward."""
     n = len(groups)
     filled = [slots[i] if i < len(slots) else f"Group {i + 1}"
               for i in range(n)]
@@ -40806,13 +40808,11 @@ def _stage_shotgun_smalls_lead(groups: list, slots: list,
 
     smalls = sorted((g for g in groups if len(g) < 4),
                     key=lambda g: (-pace_fn(g), len(g)))
-    fours = sorted((g for g in groups if len(g) >= 4), key=pace_fn)
+    fours = sorted((g for g in groups if len(g) >= 4),
+                   key=lambda g: -pace_fn(g))
     pref = sorted(range(n), key=slot_rank)
     out: list = [None] * n
-    for g, i in zip(smalls, pref[:len(smalls)]):
-        out[i] = g
-    four_slots = [i for i in range(n) if out[i] is None]
-    for g, i in zip(fours, four_slots):
+    for g, i in zip(smalls + fours, pref):
         out[i] = g
     return out
 

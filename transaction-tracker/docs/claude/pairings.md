@@ -397,8 +397,11 @@ Tee times: short groups take the EARLIEST times. Shotgun: short
 groups take the furthest-out loaded hole's **A** slot, then its **B**
 slot, then the **A** slot one hole back (4A → 4B → 3A — Kerry's
 clarified order; `_stage_shotgun_smalls_lead`), fastest/smallest
-short group furthest forward; foursomes fill the remaining slots
-slowest-first so the fastest foursome sits just behind them. And
+short group furthest forward; foursomes fill the remaining slots in
+the SAME true play order (hole DESC, **A before B** — the A group
+tees off ahead of the B group on a shared hole; v2.135.2 fixed the
+sheet-order fill that put a fast foursome at 12B behind a slower
+12A) fastest-first, slowest at the back (lowest hole's B). And
 never more than three 3-somes within a 9-hole or 18-hole grouping —
 `_make_group_sizes` guarantees it (worst case n ≡ 1 mod 4 →
 [4, …, 3, 3, 3]). Rules-as-data: `smalls_lead: true` in

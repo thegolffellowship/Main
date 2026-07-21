@@ -171,6 +171,19 @@ def paces(groups):
     return [g["group_pace"] for g in groups]
 
 
+def train_paces(groups):
+    """Group paces in TRUE shotgun play order, front of the train
+    first: hole DESC, A before B (the A group tees off ahead of the B
+    group on a shared hole — Kerry's 12A/12B ruling)."""
+    import re
+
+    def rank(g):
+        m = re.match(r"^(\d+)([AB])$", g["slot_label"])
+        return (-int(m.group(1)), 0 if m.group(2) == "A" else 1)
+
+    return [g["group_pace"] for g in sorted(groups, key=rank)]
+
+
 def main():
     tmp = Path(tempfile.mkdtemp()) / "test.db"
     build_db(tmp)
@@ -181,11 +194,12 @@ def main():
         pt = paces(res_t["9"])
         check(f"tee times fastest-first {pt}",
               all(pt[i] >= pt[i + 1] for i in range(len(pt) - 1)))
-        # Shotgun: fastest LAST (front of the hole train)
+        # Shotgun: fastest at the FRONT of the train — higher average
+        # goes first in true play order (hole DESC, A before B).
         res_s = db.generate_event_pairings(601, db_path=tmp)
-        ps = paces(res_s["9"])
-        check(f"shotgun fastest-last {ps}",
-              all(ps[i] <= ps[i + 1] for i in range(len(ps) - 1)))
+        ps = train_paces(res_s["9"])
+        check(f"shotgun fastest-first in play order {ps}",
+              all(ps[i] >= ps[i + 1] for i in range(len(ps) - 1)))
         # group_pace present on every group
         check("group_pace on all groups",
               all(g["group_pace"] is not None for g in res_t["9"] + res_s["9"]))

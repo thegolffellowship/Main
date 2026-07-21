@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.135.1";
+window.TGF_VERSION = "2.135.2";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.135.2",
+    date: "2026-07-21",
+    changes: [
+      "Shotgun staging fix (Kerry's 12A/12B catch): on a shared hole the A group tees off AHEAD of the B group, but foursome staging was filling slots in sheet order — which put the fastest foursome at 12B behind a slower 12A. Foursomes now fill the remaining slots in TRUE play order (hole descending, A before B) fastest first, so higher pace averages go first and the slowest foursome sits at the back of the train (lowest hole's B). Short groups already used play order and are unchanged.",
+    ],
+  },
   {
     version: "2.135.1",
     date: "2026-07-21",
