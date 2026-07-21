@@ -392,18 +392,23 @@ average member rating (unrated = 2; lookup joins customers via
 items.customer_id — rule 6, suffix-proof). Sequential tee times: fast
 groups FIRST. Shotgun: fast groups at the FRONT of the hole train =
 HIGHER hole numbers = later sheet slots (slowest at 1A). **AMENDED
-(Kerry 2026-07-21, The Quarry, v2.131.0): on shotguns, group SIZE is
-primary — threesomes (and any short group) always LEAD the train**
-(the last sheet slots, e.g. 4A/4B), whatever their pace; pace orders
-the train within each size class, and among the short groups the
-smallest goes furthest forward. Rules-as-data:
-`shotgun_smalls_lead: true` in `PAIRING_STAGING_DEFAULTS` /
-`pairing_staging_rules` (set false to restore pure pace ordering).
+(Kerry 2026-07-21, The Quarry, v2.131.0–.1): group SIZE beats pace.**
+Tee times: short groups take the EARLIEST times. Shotgun: short
+groups take the furthest-out loaded hole's **A** slot, then its **B**
+slot, then the **A** slot one hole back (4A → 4B → 3A — Kerry's
+clarified order; `_stage_shotgun_smalls_lead`), fastest/smallest
+short group furthest forward; foursomes fill the remaining slots
+slowest-first so the fastest foursome sits just behind them. And
+never more than three 3-somes within a 9-hole or 18-hole grouping —
+`_make_group_sizes` guarantees it (worst case n ≡ 1 mod 4 →
+[4, …, 3, 3, 3]). Rules-as-data: `smalls_lead: true` in
+`PAIRING_STAGING_DEFAULTS` / `pairing_staging_rules` (set false to
+restore pure pace ordering).
 Seeded groups stay where the manager put them (rule 5). Composition
-is NEVER affected — proven by test_pace_staging.py (37 checks). The
+is NEVER affected — proven by test_pace_staging.py (46 checks). The
 rule is data: `PAIRING_STAGING_DEFAULTS` overridable via the
 `pairing_staging_rules` app_settings JSON (enabled / shotgun /
-tee_times / aggregate / default_rating / shotgun_smalls_lead). Each
+tee_times / aggregate / default_rating / smalls_lead). Each
 generated group carries `group_pace`, rendered as a ⏱ chip on the
 PAIRINGS group headers.
 
@@ -413,8 +418,10 @@ Next (pace v2, parked): derive ratings from GPS/score-entry timing.
 
 Three Quarry-night rulings, all built:
 
-1. **Threesomes lead the shotgun train** — see the staging amendment
-   above (`shotgun_smalls_lead`).
+1. **Short groups beat pace in staging** — see the staging amendment
+   above (`smalls_lead`): earliest tee times / furthest-out hole
+   A → B → next hole back A on shotguns; max three 3-somes per
+   grouping.
 2. **Same-tee cart mates unless requests supersede.** After foursomes
    are decided, EVERY group runs the exact seat arranger
    (`_arrange_group_seats`, ≤24 permutations): Match Play opponents in

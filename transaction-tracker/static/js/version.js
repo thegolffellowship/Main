@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.131.0";
+window.TGF_VERSION = "2.131.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.131.1",
+    date: "2026-07-21",
+    changes: [
+      "Smalls staging clarified (Kerry): on TEE-TIME events short groups take the EARLIEST times; on shotguns they stage in the exact order furthest-out loaded hole's A slot → its B slot → the A slot one hole back (4A → 4B → 3A), with foursomes filling the remaining slots slowest-first so the fastest foursome sits just behind them. Rule key renamed shotgun_smalls_lead → smalls_lead (it now governs both start types).",
+      "Max three 3-somes per 9-hole or 18-hole grouping: documented and test-asserted — _make_group_sizes' splits already guarantee it (worst case is [4, …, 3, 3, 3] when the field is 1 over a multiple of 4).",
+    ],
+  },
   {
     version: "2.131.0",
     date: "2026-07-21",

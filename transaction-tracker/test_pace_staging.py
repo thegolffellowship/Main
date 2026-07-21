@@ -87,6 +87,35 @@ def build_db(tmp: Path):
                 "INSERT INTO customers (customer_id, first_name, last_name,"
                 " pace_rating, pace_rating_source) VALUES (?, 'Player', ?,"
                 " ?, 'manager')", (cid, f"Seven{cid - 100}", r))
+        # Same 7 players on a TEE-TIME event: the threesome must take
+        # the EARLIEST time (Kerry 2026-07-21 clarification).
+        conn.execute(
+            "INSERT INTO events (id, item_name, event_date, chapter, format,"
+            " start_type, start_time, tee_time_count, tee_time_interval)"
+            " VALUES (604, 's9.94 SmallsFirst', '2026-08-18', 'San Antonio',"
+            " '9 Holes', 'Tee Times', '17:30', 4, 10)")
+        for j in range(1, 8):
+            conn.execute(
+                "INSERT INTO items (email_uid, merchant, order_date,"
+                " item_name, customer, customer_id, holes, event_id,"
+                " transaction_status) VALUES (?, 'GoDaddy', '2026-07-10',"
+                " 's9.94 SmallsFirst', ?, ?, '9', 604, 'active')",
+                (f"manual-test-604-{j}", f"Player Seven{j}", 100 + j))
+        # 13-player shotgun ([4,3,3,3] — the max three 3-somes case) on
+        # 4 slots (1A,1B,2A,2B): smalls must stage 2A → 2B → 1A, with
+        # the foursome behind them at 1B.
+        conn.execute(
+            "INSERT INTO events (id, item_name, event_date, chapter, format,"
+            " start_type, start_time, tee_time_count, tee_time_interval)"
+            " VALUES (605, 's9.93 ThreeSmalls', '2026-08-25', 'San Antonio',"
+            " '9 Holes', 'Shotgun', '17:30', 4, 10)")
+        for j in range(1, 14):
+            conn.execute(
+                "INSERT INTO items (email_uid, merchant, order_date,"
+                " item_name, customer, customer_id, holes, event_id,"
+                " transaction_status) VALUES (?, 'GoDaddy', '2026-07-10',"
+                " 's9.93 ThreeSmalls', ?, ?, '9', 605, 'active')",
+                (f"manual-test-605-{j}", f"Player Thirteen{j}", 300 + j))
         # 4-player tee-cart event: two Combo + two White tees interleaved
         # alphabetically — same-tee players must end up cart mates.
         conn.execute(
@@ -142,14 +171,33 @@ def main():
           sorted(names) == sorted(set(names)) and len(names) == 8)
 
     # ── Threesomes lead the shotgun train (Kerry 2026-07-21) ─────────
-    # 7 players split [4, 3]; whatever the (random) composition and its
-    # pace mix, the short group takes the LAST filled slot — the front
-    # of the hole train — and the foursome the first.
+    # 7 players split [4, 3]; only hole 10 is loaded (2 groups), so the
+    # threesome takes its A slot (10A — the hole's lead-off group) and
+    # the foursome follows at 10B, whatever the pace mix.
     for _ in range(5):
         res_b = db.generate_event_pairings(602, db_path=tmp)
-        sizes = [len(g["players"]) for g in res_b["9"]]
-        check(f"threesome leads the train {sizes}",
-              sizes[0] == 4 and sizes[-1] == 3)
+        by_size = {len(g["players"]): g["slot_label"] for g in res_b["9"]}
+        check(f"threesome leads the train {by_size}",
+              by_size.get(3) == "10A" and by_size.get(4) == "10B")
+
+    # ── Tee times: threesome takes the EARLIEST time ─────────────────
+    for _ in range(5):
+        res_e = db.generate_event_pairings(604, db_path=tmp)
+        sizes = [len(g["players"]) for g in res_e["9"]]
+        check(f"tee times smalls first {sizes}", sizes == [3, 4])
+
+    # ── Three 3-somes stage 2A → 2B → 1A (max-three-smalls case) ─────
+    # 13 players = [4,3,3,3] over slots 1A,1B,2A,2B: furthest loaded
+    # hole's A, then its B, then the A one hole back; the foursome
+    # slots in behind them at 1B. _make_group_sizes never produces
+    # more than three 3-somes in a grouping.
+    for _ in range(3):
+        res_m = db.generate_event_pairings(605, db_path=tmp)
+        by_label = {g["slot_label"]: len(g["players"]) for g in res_m["9"]}
+        check(f"three smalls at 2A/2B/1A {by_label}",
+              by_label == {"2A": 3, "2B": 3, "1A": 3, "1B": 4})
+    check("group sizes never exceed three 3-somes",
+          all(db._make_group_sizes(n).count(3) <= 3 for n in range(1, 80)))
 
     # ── Back-nine side: shotgun labels start at hole 10 ──────────────
     res_b = db.generate_event_pairings(602, db_path=tmp)

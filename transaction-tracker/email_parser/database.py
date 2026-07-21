@@ -40546,11 +40546,47 @@ PAIRING_STAGING_DEFAULTS = {
     "tee_times": "fast_first",  # fast → earliest tee times
     "aggregate": "avg",         # group pace = average member rating
     "default_rating": 2,        # NULL pace_rating reads as 2 (Kerry)
-    # Kerry 2026-07-21 (The Quarry): threesomes/short groups are ALWAYS
-    # the shotgun train's leading groups (the last sheet slots, e.g.
-    # 4A/4B) — size beats pace; pace orders within each size class.
-    "shotgun_smalls_lead": True,
+    # Kerry 2026-07-21 (The Quarry, clarified same day): short groups
+    # (threesomes/twosomes) beat pace. Tee times: they take the
+    # EARLIEST times. Shotgun: they take the furthest-out loaded
+    # hole's A slot, then its B slot, then the A slot one hole back
+    # (4A → 4B → 3A). Pace orders within each size class.
+    "smalls_lead": True,
 }
+
+
+def _stage_shotgun_smalls_lead(groups: list, slots: list,
+                               pace_fn) -> list:
+    """Order settled groups over the filled shotgun slots per Kerry's
+    2026-07-21 clarification: short groups take the furthest-out
+    loaded hole's A slot first, then its B slot, then the A slot of
+    the hole behind, and so on — (hole DESC, A before B) over the
+    slots actually filled. The fastest/smallest short group goes
+    furthest forward. Foursomes fill the remaining slots slowest
+    first, so the fastest foursome sits just behind the short groups.
+    Slots without hole labels (tee-count 0 → 'Group N') fall back to
+    later-slot-equals-further-forward."""
+    n = len(groups)
+    filled = [slots[i] if i < len(slots) else f"Group {i + 1}"
+              for i in range(n)]
+
+    def slot_rank(i: int):
+        m = _SHOTGUN_LABEL_RE.match((filled[i] or "").strip())
+        if m:
+            return (-int(m.group(1)), 0 if m.group(2) == "A" else 1)
+        return (-i, 0)
+
+    smalls = sorted((g for g in groups if len(g) < 4),
+                    key=lambda g: (-pace_fn(g), len(g)))
+    fours = sorted((g for g in groups if len(g) >= 4), key=pace_fn)
+    pref = sorted(range(n), key=slot_rank)
+    out: list = [None] * n
+    for g, i in zip(smalls, pref[:len(smalls)]):
+        out[i] = g
+    four_slots = [i for i in range(n) if out[i] is None]
+    for g, i in zip(fours, four_slots):
+        out[i] = g
+    return out
 
 
 def get_pairing_staging_rules(db_path=None) -> dict:
@@ -41093,15 +41129,20 @@ def generate_event_pairings(
         staging_applied = bool(staging_rules.get("enabled", True)
                                and groups_players)
         if staging_applied:
-            if is_shotgun and staging_rules.get("shotgun_smalls_lead", True):
-                # Short groups (threesomes/twosomes) ALWAYS lead the hole
-                # train — they take the last sheet slots (highest holes,
-                # e.g. 4A/4B), regardless of pace (Kerry 2026-07-21).
-                # Within each size class pace still orders the train:
-                # slowest at 1A, fastest closest to the front; among the
-                # short groups the smallest ends up furthest forward.
+            smalls_lead = staging_rules.get("smalls_lead", True)
+            if is_shotgun and smalls_lead:
+                # Short groups lead the hole train: furthest-out loaded
+                # hole's A slot, then its B slot, then the A slot one
+                # hole back (Kerry 2026-07-21 clarification). Foursomes
+                # fill the rest slowest-first.
+                groups_players = _stage_shotgun_smalls_lead(
+                    groups_players, slots, _group_pace)
+            elif smalls_lead:
+                # Tee times: short groups take the EARLIEST times
+                # (Kerry 2026-07-21 clarification); fastest first
+                # within each size class, smaller first on pace ties.
                 groups_players.sort(
-                    key=lambda g: (len(g) < 4, _group_pace(g), -len(g)))
+                    key=lambda g: (len(g) >= 4, -_group_pace(g), len(g)))
             else:
                 groups_players.sort(key=lambda g: (-_group_pace(g), len(g)),
                                     reverse=bool(is_shotgun))
@@ -41234,7 +41275,12 @@ def generate_event_pairings(
 
 
 def _make_group_sizes(n: int) -> list[int]:
-    """Return group sizes summing to n with max 4 per group and no onesomes."""
+    """Return group sizes summing to n with max 4 per group and no onesomes.
+
+    Kerry 2026-07-21: never more than three 3-somes within a grouping
+    (9-hole or 18-hole bucket). The splits below guarantee it — the
+    worst case is n ≡ 1 (mod 4), which resolves to [4, …, 3, 3, 3];
+    every other remainder needs two or fewer short groups."""
     if n <= 0:
         return []
     if n <= 4:
