@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.133.0";
+window.TGF_VERSION = "2.134.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.134.0",
+    date: "2026-07-21",
+    changes: [
+      "Signup-order request priority (Kerry): partner requests are now honored FIRST-COME instead of alphabetically. The generator processes the roster in signup order (order date → ingest time → row id), so in a 3/4-person cross-request the earliest request wins — once a player is claimed in either direction, later requests touching them (including that player's own later request) are dropped. One request per player, both players locked once paired (rule 1 + 11), manager suppression of the earlier request is the override that promotes the next one in line.",
+      "Requests panel upgrades: rows list in signup order with a #priority number and signup date; requests that lose the first-come race show a red OUTRANKED badge whose tooltip names the player already locked and points at the override (suppress the earlier request). The Requests chip count now excludes outranked requests, so it reads as exactly what Generate will enforce.",
+      "Manual request matching (Kerry): a 'no roster match' row is now a picker — signup text that doesn't resolve to a rostered player ('Dave Decareaux' vs roster 'David Decareaux') can be bound to the intended player. The generator substitutes the bound roster name, the row shows a purple ✎ manual badge (click to clear), and the binding persists per event in the new pairing_request_matches table (customer ids captured per rule 6). POST /api/events/<id>/pairings/requests/match.",
+    ],
+  },
   {
     version: "2.133.0",
     date: "2026-07-21",

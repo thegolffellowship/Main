@@ -39318,6 +39318,24 @@ def _ensure_pairing_tables(conn: sqlite3.Connection) -> None:
         )
         """
     )
+    # Manager-fixed request matches (Kerry 2026-07-21): when the signup
+    # text doesn't resolve to a rostered player ('Dave' vs 'David
+    # Decareaux'), the manager binds the request to the intended player.
+    # The generator substitutes this exact roster name for the raw text.
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS pairing_request_matches (
+            id                    INTEGER PRIMARY KEY AUTOINCREMENT,
+            event_id              INTEGER NOT NULL REFERENCES events(id) ON DELETE CASCADE,
+            requester_name        TEXT NOT NULL,
+            requester_customer_id INTEGER REFERENCES customers(customer_id),
+            partner_name          TEXT NOT NULL,
+            partner_customer_id   INTEGER REFERENCES customers(customer_id),
+            created_at            TEXT DEFAULT (datetime('now')),
+            UNIQUE(event_id, requester_name)
+        )
+        """
+    )
     conn.commit()
 
 
@@ -39537,6 +39555,16 @@ def switch_event_pairings_side(event_id: int, db_path=None) -> dict:
         return {"nine_side": new_side, "relabeled": relabeled}
 
 
+def _request_time_key(item: dict):
+    """Chronological key for signup-order request priority (Kerry
+    2026-07-21): business order date first, then ingest timestamp, then
+    row id (autoincrement ≈ arrival order) as the tiebreak. Missing
+    values sort LAST so a dated signup always outranks an undated one."""
+    return ((item.get("order_date") or "9999-99-99"),
+            (item.get("created_at") or "9999"),
+            item.get("id") or float("inf"))
+
+
 def get_event_partner_requests(event_id: int, db_path=None) -> dict:
     """Who requested whom on this event's roster (Kerry 2026-07-21).
 
@@ -39555,7 +39583,8 @@ def get_event_partner_requests(event_id: int, db_path=None) -> dict:
         rows = conn.execute(
             f"""
             SELECT DISTINCT i.customer, i.customer_id, i.holes,
-                            i.partner_request
+                            i.partner_request, i.id, i.order_date,
+                            i.created_at
             FROM events e
             LEFT JOIN event_aliases ea ON ea.canonical_event_name = e.item_name
             JOIN items i ON (
@@ -39573,24 +39602,110 @@ def get_event_partner_requests(event_id: int, db_path=None) -> dict:
         suppressed = {_pair_key_name(r["requester_name"]) for r in conn.execute(
             "SELECT requester_name FROM pairing_request_suppressions "
             "WHERE event_id = ?", (event_id,)).fetchall()}
+        manual_matches = {_pair_key_name(r["requester_name"]): r["partner_name"]
+                          for r in conn.execute(
+            "SELECT requester_name, partner_name FROM pairing_request_matches "
+            "WHERE event_id = ?", (event_id,)).fetchall()}
 
-    all_names = [r["customer"] for r in rows if r["customer"]]
-    requests = []
+    # Earliest signup row per player, in signup order — the SAME
+    # ordering + dedup the generator uses, so this list's priority
+    # simulation matches what Generate will actually do.
+    rows = sorted((dict(r) for r in rows), key=_request_time_key)
+    seen: set = set()
+    roster: list[dict] = []
     for r in rows:
-        req_text = (r["partner_request"] or "").strip()
-        if not r["customer"] or not req_text:
+        k = _pair_key_name(r.get("customer") or "")
+        if not k or k in seen:
             continue
-        partner = _find_partner_name(req_text, all_names, r["customer"])
-        requests.append({
+        seen.add(k)
+        roster.append(r)
+
+    all_names = [r["customer"] for r in roster]
+    requests = []
+    locked: set = set()
+    for r in roster:
+        req_text = (r["partner_request"] or "").strip()
+        if not req_text:
+            continue
+        # Manager's manual match wins over the automatic text match —
+        # but only while the bound player is still on the roster.
+        manual_name = manual_matches.get(_pair_key_name(r["customer"]))
+        partner = None
+        if manual_name:
+            partner = next((n for n in all_names
+                            if _pair_key_name(n) == _pair_key_name(manual_name)),
+                           None)
+        is_manual = bool(partner)
+        if not partner:
+            partner = _find_partner_name(req_text, all_names, r["customer"])
+        entry = {
             "requester": r["customer"],
             "requester_customer_id": r["customer_id"],
             "holes": r["holes"],
+            "order_date": r.get("order_date"),
             "request_text": req_text,
             "partner": partner,
             "matched": bool(partner),
+            "manual": is_manual,
             "suppressed": _pair_key_name(r["customer"]) in suppressed,
-        })
+            "locked_out": False,
+            "locked_reason": None,
+        }
+        # First-come lock simulation (rule 11 + Kerry 2026-07-21):
+        # once a player is claimed in EITHER direction, later requests
+        # touching them lose. Suppressed requests never claim anyone.
+        if entry["matched"] and not entry["suppressed"]:
+            rk, pk = _pair_key_name(r["customer"]), _pair_key_name(partner)
+            taken = [n for n, key in ((r["customer"], rk), (partner, pk))
+                     if key in locked]
+            if taken:
+                entry["locked_out"] = True
+                entry["locked_reason"] = (
+                    " & ".join(taken) + " already locked by an earlier "
+                    "request — suppress that request to override.")
+            else:
+                locked.update((rk, pk))
+        requests.append(entry)
     return {"event_id": event_id, "requests": requests}
+
+
+def set_partner_request_match(event_id: int, requester_name: str,
+                              partner_name: str | None,
+                              db_path=None) -> dict:
+    """Manually bind a player's partner request to a rostered player
+    (Kerry 2026-07-21 — 'Dave Decareaux' vs roster 'David Decareaux').
+    partner_name must be on the event roster; None/empty clears the
+    manual match. Returns the refreshed request list."""
+    requester_name = (requester_name or "").strip()
+    if not requester_name:
+        raise ValueError("requester_name required")
+    partner_name = (partner_name or "").strip()
+    with _connect(db_path) as conn:
+        _ensure_pairing_tables(conn)
+        if not partner_name:
+            conn.execute(
+                "DELETE FROM pairing_request_matches "
+                "WHERE event_id = ? AND requester_name = ? COLLATE NOCASE",
+                (event_id, requester_name))
+        else:
+            roster = {_pair_key_name(r["name"]): r
+                      for r in _event_roster_players(conn, event_id)}
+            partner = roster.get(_pair_key_name(partner_name))
+            if not partner:
+                raise ValueError(f"'{partner_name}' is not on this "
+                                 "event's roster")
+            if _pair_key_name(partner["name"]) == _pair_key_name(requester_name):
+                raise ValueError("A player can't be matched to themselves")
+            requester = roster.get(_pair_key_name(requester_name))
+            conn.execute(
+                "INSERT OR REPLACE INTO pairing_request_matches "
+                "(event_id, requester_name, requester_customer_id, "
+                " partner_name, partner_customer_id) VALUES (?, ?, ?, ?, ?)",
+                (event_id, requester_name,
+                 requester.get("customer_id") if requester else None,
+                 partner["name"], partner.get("customer_id")))
+        conn.commit()
+    return get_event_partner_requests(event_id, db_path=db_path)
 
 
 def set_partner_request_suppression(event_id: int, requester_name: str,
@@ -40920,7 +41035,9 @@ def generate_event_pairings(
         ph = ",".join("?" * len(INACTIVE))
         items = conn.execute(
             f"""
-            SELECT DISTINCT i.customer, i.holes, i.tee_choice, i.partner_request
+            SELECT DISTINCT i.customer, i.holes, i.tee_choice,
+                            i.partner_request, i.id, i.order_date,
+                            i.created_at
             FROM events e
             LEFT JOIN event_aliases ea ON ea.canonical_event_name = e.item_name
             JOIN items i ON (
@@ -40937,17 +41054,44 @@ def generate_event_pairings(
         ).fetchall()
         items = [dict(r) for r in items]
 
-        # ── Manager-suppressed partner requests (Kerry 2026-07-21) ────
-        # Blank them before any pairing logic sees them; the request
-        # stays listed on the PAIRINGS tab badged SUPPRESSED.
+        # ── Signup-order priority (Kerry 2026-07-21) ──────────────────
+        # Requests are honored FIRST-COME: sort the roster by when each
+        # player's signup landed (order_date, then ingest time, then row
+        # id) and keep the earliest row per player. Every downstream
+        # consumer of partner_map iterates in this insertion order, so
+        # the earliest request wins any 3/4-person cross-request — once
+        # a player is claimed (either direction), later requests
+        # touching them are dropped.
+        items.sort(key=_request_time_key)
+        _seen_players: set = set()
+        _deduped: list = []
+        for it in items:
+            k = _pair_key_name(it.get("customer") or "")
+            if not k or k in _seen_players:
+                continue
+            _seen_players.add(k)
+            _deduped.append(it)
+        items = _deduped
+
+        # ── Manager request overrides (Kerry 2026-07-21) ──────────────
+        # Manual matches first: substitute the bound roster name for
+        # signup text that didn't auto-resolve ('Dave' vs 'David
+        # Decareaux'). Then suppressions: blank the request entirely —
+        # it stays listed on the PAIRINGS tab badged SUPPRESSED.
         _ensure_pairing_tables(conn)
+        _matches = {_pair_key_name(r["requester_name"]): r["partner_name"]
+                    for r in conn.execute(
+            "SELECT requester_name, partner_name FROM pairing_request_matches "
+            "WHERE event_id = ?", (event_id,)).fetchall()}
         _suppressed = {_pair_key_name(r["requester_name"]) for r in conn.execute(
             "SELECT requester_name FROM pairing_request_suppressions "
             "WHERE event_id = ?", (event_id,)).fetchall()}
-        if _suppressed:
-            for it in items:
-                if _pair_key_name(it.get("customer") or "") in _suppressed:
-                    it["partner_request"] = None
+        for it in items:
+            k = _pair_key_name(it.get("customer") or "")
+            if k in _matches and (it.get("partner_request") or "").strip():
+                it["partner_request"] = _matches[k]
+            if k in _suppressed:
+                it["partner_request"] = None
 
         # ── Handicap index map ────────────────────────────────────────
         hcp_rows = conn.execute(

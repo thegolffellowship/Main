@@ -436,7 +436,35 @@ The Quarry-night rulings, all built:
    case/whitespace-normalized. The old sort-by-tee path for
    unconstrained groups (`_order_group_by_tee`) is retired — it could
    split a tee pair across carts whenever a third tee was present.
-3. **Request visibility + manager suppression (v2.132.0, same day).**
+3a. **Signup-order request priority (v2.134.0, Kerry same day).**
+   Rules 1 + 11 sharpened: requests are honored FIRST-COME. The
+   generator sorts the roster by `_request_time_key` (order_date →
+   created_at → item id) before building `partner_map`, and every
+   consumer of that dict iterates insertion order — so the earliest
+   request wins any 3/4-person cross-request, and once a player is
+   claimed in EITHER direction all later requests touching them
+   (including their own later request) drop. The requests list runs
+   the same simulation: entries return in signup order with
+   `order_date`, `locked_out`, and `locked_reason`; the panel shows
+   #priority numbers and a red OUTRANKED badge. The override is
+   manager suppression of the earlier request, which promotes the
+   next request in line. (Caveat of record: the list simulates locks
+   across the whole roster while the generator matches within a
+   holes bucket — on 9/18 combo events a cross-bucket request shows
+   as matched here but is unenforceable in the generator.)
+3a'. **Manual request matching (v2.134.0, Kerry same day).** Signup
+   text that doesn't auto-resolve ('Dave Decareaux' vs roster 'David
+   Decareaux') is fixable: the requests panel's 'no roster match'
+   chip is a roster picker; the binding lands in
+   `pairing_request_matches` (event_id + requester/partner names +
+   customer ids, UNIQUE per requester, lazy-created). The generator
+   substitutes the bound EXACT roster name for the raw text before
+   pairing logic runs (`set_partner_request_match` /
+   POST `…/pairings/requests/match`; partner=null clears). A manual
+   match only holds while the bound player is still rostered — if
+   they withdraw, the row falls back to unmatched. Rows show a
+   ✎ manual badge (click to clear).
+3b. **Request visibility + manager suppression (v2.132.0, same day).**
    The PAIRINGS controls bar's Requests chip opens the full request
    list — who asked for whom (`get_event_partner_requests`, same
    `_find_partner_name` matching the generator uses; unmatched raw

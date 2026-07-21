@@ -4901,6 +4901,27 @@ def api_pairings_request_suppress(event_id):
         return jsonify({"error": str(e)}), 500
 
 
+@app.route("/api/events/<int:event_id>/pairings/requests/match", methods=["POST"])
+@require_role("manager")
+def api_pairings_request_match(event_id):
+    """Manually bind a partner request to a rostered player (signup
+    text that didn't auto-resolve, e.g. a nickname). partner = null
+    clears the manual match."""
+    data = request.get_json(silent=True) or {}
+    requester = (data.get("requester") or "").strip()
+    if not requester:
+        return jsonify({"error": "requester required"}), 400
+    try:
+        from email_parser.database import set_partner_request_match
+        return jsonify(set_partner_request_match(
+            event_id, requester, data.get("partner")))
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+    except Exception as e:
+        logger.exception("Request match failed for event %d", event_id)
+        return jsonify({"error": str(e)}), 500
+
+
 @app.route("/api/events/<int:event_id>/pairings/switch-side", methods=["POST"])
 @require_role("manager")
 def api_pairings_switch_side(event_id):

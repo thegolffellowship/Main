@@ -116,6 +116,31 @@ def build_db(tmp: Path):
                 " transaction_status) VALUES (?, 'GoDaddy', '2026-07-10',"
                 " 's9.93 ThreeSmalls', ?, ?, '9', 605, 'active')",
                 (f"manual-test-605-{j}", f"Player Thirteen{j}", 300 + j))
+        # Cross-request event (Kerry 2026-07-21, signup-order priority):
+        # Zed signed up FIRST (but sorts alphabetically LAST) requesting
+        # Ben; Amy requested Ben a day later; Ben himself requested Dan
+        # later still. First-come wins: Zed+Ben pair, Amy and Ben's own
+        # request are outranked.
+        conn.execute(
+            "INSERT INTO events (id, item_name, event_date, chapter, format,"
+            " start_type, start_time, tee_time_count, tee_time_interval)"
+            " VALUES (606, 's9.92 CrossReq', '2026-09-01', 'San Antonio',"
+            " '9 Holes', 'Shotgun', '17:30', 2, 10)")
+        cross = [("Amy Late", "2026-07-02", "Ben Target"),
+                 ("Ben Target", "2026-07-03", "Dan Other"),
+                 ("Dan Other", "2026-07-04", None),
+                 ("Ed Fifth", "2026-07-05", None),
+                 ("Zed Early", "2026-07-01", "Ben Target"),
+                 # Typo request — 'Danny' won't auto-match 'Dan Other';
+                 # the manager binds it manually (Kerry 2026-07-21).
+                 ("Fay Sixth", "2026-07-06", "Danny Other")]
+        for j, (name, od, req) in enumerate(cross, start=1):
+            conn.execute(
+                "INSERT INTO items (email_uid, merchant, order_date,"
+                " item_name, customer, customer_id, holes, partner_request,"
+                " event_id, transaction_status) VALUES (?, 'GoDaddy', ?,"
+                " 's9.92 CrossReq', ?, ?, '9', ?, 606, 'active')",
+                (f"manual-test-606-{j}", od, name, 400 + j, req))
         # 4-player tee-cart event: two Combo + two White tees interleaved
         # alphabetically — same-tee players must end up cart mates.
         conn.execute(
@@ -287,6 +312,74 @@ def main():
         conn.execute("UPDATE items SET partner_request = NULL "
                      "WHERE event_id = 603")
         conn.commit()
+
+    # ── Signup-order request priority (Kerry 2026-07-21) ─────────────
+    # List comes back in signup order with the first-come lock
+    # simulated: Zed (signed up first, sorts last alphabetically) wins
+    # Ben; Amy's later request for Ben and Ben's own later request for
+    # Dan are OUTRANKED.
+    reqs = db.get_event_partner_requests(606, db_path=tmp)["requests"]
+    check("requests in signup order",
+          [r["requester"] for r in reqs] == ["Zed Early", "Amy Late",
+                                             "Ben Target", "Fay Sixth"])
+    check("first request active, later ones outranked",
+          [r["locked_out"] for r in reqs] == [False, True, True, False])
+    check("typo request unmatched until fixed",
+          not reqs[3]["matched"] and reqs[3]["request_text"] == "Danny Other")
+    check("outranked reason names the lock",
+          "Ben Target" in (reqs[1]["locked_reason"] or ""))
+    for _ in range(3):
+        res_c = db.generate_event_pairings(606, db_path=tmp)
+        pos = {p["name"]: (g["group_num"], p["cart_pos"])
+               for g in res_c["9"] for p in g["players"]}
+        same_group = pos["Zed Early"][0] == pos["Ben Target"][0]
+        same_cart = (pos["Zed Early"][1] <= 2) == (pos["Ben Target"][1] <= 2)
+        check(f"earliest request wins the pair {pos}", same_group and same_cart)
+
+    # Overriding the earlier lock (suppress Zed) promotes Amy's request;
+    # Ben's own request stays outranked (Ben is claimed by Amy now).
+    out = db.set_partner_request_suppression(606, "Zed Early", True,
+                                             db_path=tmp)
+    by_req = {r["requester"]: r for r in out["requests"]}
+    check("override promotes the next request",
+          not by_req["Amy Late"]["locked_out"]
+          and by_req["Ben Target"]["locked_out"])
+    res_c = db.generate_event_pairings(606, db_path=tmp)
+    pos = {p["name"]: (g["group_num"], p["cart_pos"])
+           for g in res_c["9"] for p in g["players"]}
+    check(f"promoted request honored {pos}",
+          pos["Amy Late"][0] == pos["Ben Target"][0]
+          and (pos["Amy Late"][1] <= 2) == (pos["Ben Target"][1] <= 2))
+    db.set_partner_request_suppression(606, "Zed Early", False, db_path=tmp)
+
+    # ── Manual match for unresolved request text (Kerry 2026-07-21) ──
+    # Bind Fay's 'Danny Other' to roster player Dan Other: the list
+    # flags it manual, the lock simulation counts it, and the generator
+    # honors it. Clearing restores the unmatched state.
+    out = db.set_partner_request_match(606, "Fay Sixth", "Dan Other",
+                                       db_path=tmp)
+    fay = next(r for r in out["requests"] if r["requester"] == "Fay Sixth")
+    check("manual match binds the request",
+          fay["matched"] and fay["manual"] and fay["partner"] == "Dan Other"
+          and not fay["locked_out"])
+    for _ in range(3):
+        res_c = db.generate_event_pairings(606, db_path=tmp)
+        pos = {p["name"]: (g["group_num"], p["cart_pos"])
+               for g in res_c["9"] for p in g["players"]}
+        ok = (pos["Fay Sixth"][0] == pos["Dan Other"][0]
+              and (pos["Fay Sixth"][1] <= 2) == (pos["Dan Other"][1] <= 2)
+              and pos["Zed Early"][0] == pos["Ben Target"][0])
+        check(f"manual match honored alongside first-come pair {pos}", ok)
+    try:
+        db.set_partner_request_match(606, "Fay Sixth", "Nobody Real",
+                                     db_path=tmp)
+        check("off-roster manual match rejected", False)
+    except ValueError:
+        check("off-roster manual match rejected", True)
+    out = db.set_partner_request_match(606, "Fay Sixth", None, db_path=tmp)
+    fay = next(r for r in out["requests"] if r["requester"] == "Fay Sixth")
+    check("cleared manual match returns to unmatched",
+          not fay["matched"] and not fay["manual"])
 
     # Rules are data: disabling staging restores legacy behavior and
     # drops the ordering guarantee (no crash, groups still complete).
