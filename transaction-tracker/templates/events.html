@@ -4485,7 +4485,7 @@
         // the row stays here badged SUPPRESSED until restored.
         if (state.showRequests) {
             html += '<div class="pairings-seeds-panel">';
-            html += '<div style="font-size:0.8rem;color:var(--text-muted);margin-bottom:0.5rem;">Partner requests in <strong>signup order</strong> &mdash; earlier requests win: once a player is claimed (either direction) later requests touching them are <strong>outranked</strong>. <strong>Remove</strong> suppresses a request (it stays listed); suppressing an earlier request is how you override a lock.</div>';
+            html += '<div style="font-size:0.8rem;color:var(--text-muted);margin-bottom:0.5rem;">Partner requests in <strong>signup order</strong> &mdash; earlier requests win: once a player is claimed (either direction) later requests touching them are <strong>outranked</strong>. <strong>Remove</strong> suppresses a request (it stays listed); suppressing an earlier request is how you override a lock. One partner per player is honored &mdash; on multi-name requests <strong>link one</strong>; honor extras with manual moves after Generate.</div>';
             if (!state.requests.length) {
                 html += '<div style="font-size:0.82rem;color:var(--text-muted);">No partner requests on this roster.</div>';
             }
@@ -4511,7 +4511,14 @@
                         ${rosterNames.map(n => `<option value="${escapeHtml(n)}">${escapeHtml(n)}</option>`).join('')}
                     </select>`;
                 } else if (r.manual) {
-                    html += `<button class="pairings-action-btn" data-ev-id="${ev.id}" data-request-match-clear="1" data-requester="${escapeHtml(r.requester)}" title="Manually matched by manager (signup text: &quot;${escapeHtml(r.request_text)}&quot;) — click to clear" style="font-size:0.72rem;padding:0 0.4rem;color:#6d28d9;border:1px solid #6d28d9;border-radius:9px;">&#x270E; manual &#x2715;</button>`;
+                    html += `<button class="pairings-action-btn" data-ev-id="${ev.id}" data-request-match-clear="1" data-requester="${escapeHtml(r.requester)}" title="Manually linked by manager (signup text: &quot;${escapeHtml(r.request_text)}&quot;) — click to clear" style="font-size:0.72rem;padding:0 0.4rem;color:#6d28d9;border:1px solid #6d28d9;border-radius:9px;">&#x270E; manual &#x2715;</button>`;
+                } else if (r.multi) {
+                    // Signup text names 2+ rostered players — only ONE
+                    // is honored. Amber picker links the intended one.
+                    html += `<select class="request-match-select" data-ev-id="${ev.id}" data-requester="${escapeHtml(r.requester)}" title="Request names ${r.candidates.length} rostered players (&quot;${escapeHtml(r.request_text)}&quot;) — only one partner is honored. Link the intended one; honor the extras with manual moves after Generate." style="font-size:0.72rem;padding:0.1rem 0.2rem;max-width:10rem;border:1px solid #f59e0b;border-radius:9px;color:#b45309;font-weight:700;">
+                        <option value="">${r.candidates.length} names &mdash; link one&hellip;</option>
+                        ${r.candidates.map(n => `<option value="${escapeHtml(n)}">${escapeHtml(n)}${n === r.partner ? ' (current)' : ''}</option>`).join('')}
+                    </select>`;
                 }
                 if (out) {
                     html += `<span style="font-size:0.72rem;font-weight:700;color:#b91c1c;border:1px solid #ef4444;border-radius:9px;padding:0 0.4rem;" title="${escapeHtml(r.locked_reason || '')}">OUTRANKED</span>`;

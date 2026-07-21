@@ -39638,6 +39638,15 @@ def get_event_partner_requests(event_id: int, db_path=None) -> dict:
         is_manual = bool(partner)
         if not partner:
             partner = _find_partner_name(req_text, all_names, r["customer"])
+        # Multi-name texts ("Dan Other or Ed Fifth"): people request
+        # more than one, but only ONE partner is honored (rule 1). The
+        # auto-match takes the first hit; candidates>1 flags the row so
+        # the manager can link the intended one — extras get honored by
+        # manual moves after Generate (Kerry 2026-07-21).
+        req_l = req_text.lower()
+        candidates = [n for n in all_names
+                      if n.lower() != (r["customer"] or "").lower()
+                      and (n.lower() in req_l or req_l in n.lower())]
         entry = {
             "requester": r["customer"],
             "requester_customer_id": r["customer_id"],
@@ -39647,6 +39656,8 @@ def get_event_partner_requests(event_id: int, db_path=None) -> dict:
             "partner": partner,
             "matched": bool(partner),
             "manual": is_manual,
+            "multi": len(candidates) > 1,
+            "candidates": candidates if len(candidates) > 1 else [],
             "suppressed": _pair_key_name(r["customer"]) in suppressed,
             "locked_out": False,
             "locked_reason": None,

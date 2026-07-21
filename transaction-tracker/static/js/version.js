@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.134.0";
+window.TGF_VERSION = "2.135.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.135.0",
+    date: "2026-07-21",
+    changes: [
+      "Multi-name requests (Kerry): signup text naming 2+ rostered players ('Dan Other or Ed Fifth') gets an amber 'N names — link one…' picker on the requests panel — only ONE partner is honored (rule 1), the manager links which; the auto-match's first hit stands until then, and the extras are honored by manual moves after Generate. The panel hint spells out the one-partner rule.",
+    ],
+  },
   {
     version: "2.134.0",
     date: "2026-07-21",

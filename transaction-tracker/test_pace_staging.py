@@ -133,7 +133,10 @@ def build_db(tmp: Path):
                  ("Zed Early", "2026-07-01", "Ben Target"),
                  # Typo request — 'Danny' won't auto-match 'Dan Other';
                  # the manager binds it manually (Kerry 2026-07-21).
-                 ("Fay Sixth", "2026-07-06", "Danny Other")]
+                 ("Fay Sixth", "2026-07-06", "Danny Other"),
+                 # Multi-name request — two rostered names in one text;
+                 # only ONE partner is honored, manager links which.
+                 ("Gil Seventh", "2026-07-07", "Dan Other or Ed Fifth")]
         for j, (name, od, req) in enumerate(cross, start=1):
             conn.execute(
                 "INSERT INTO items (email_uid, merchant, order_date,"
@@ -321,11 +324,17 @@ def main():
     reqs = db.get_event_partner_requests(606, db_path=tmp)["requests"]
     check("requests in signup order",
           [r["requester"] for r in reqs] == ["Zed Early", "Amy Late",
-                                             "Ben Target", "Fay Sixth"])
+                                             "Ben Target", "Fay Sixth",
+                                             "Gil Seventh"])
     check("first request active, later ones outranked",
-          [r["locked_out"] for r in reqs] == [False, True, True, False])
+          [r["locked_out"] for r in reqs] == [False, True, True, False,
+                                              False])
     check("typo request unmatched until fixed",
           not reqs[3]["matched"] and reqs[3]["request_text"] == "Danny Other")
+    check("multi-name request flagged with candidates",
+          reqs[4]["multi"]
+          and reqs[4]["candidates"] == ["Dan Other", "Ed Fifth"]
+          and reqs[4]["partner"] == "Dan Other")
     check("outranked reason names the lock",
           "Ben Target" in (reqs[1]["locked_reason"] or ""))
     for _ in range(3):
@@ -380,6 +389,23 @@ def main():
     fay = next(r for r in out["requests"] if r["requester"] == "Fay Sixth")
     check("cleared manual match returns to unmatched",
           not fay["matched"] and not fay["manual"])
+
+    # ── Multi-name request: manager links ONE (Kerry 2026-07-21) ─────
+    # Gil's text names Dan AND Ed; auto-match took Dan. Linking Ed
+    # overrides — the generator pairs Gil with Ed, and Dan is free.
+    out = db.set_partner_request_match(606, "Gil Seventh", "Ed Fifth",
+                                       db_path=tmp)
+    gil = next(r for r in out["requests"] if r["requester"] == "Gil Seventh")
+    check("linked one of the multi-name candidates",
+          gil["partner"] == "Ed Fifth" and gil["manual"] and gil["multi"])
+    for _ in range(3):
+        res_c = db.generate_event_pairings(606, db_path=tmp)
+        pos = {p["name"]: (g["group_num"], p["cart_pos"])
+               for g in res_c["9"] for p in g["players"]}
+        check(f"linked multi-name partner honored {pos}",
+              pos["Gil Seventh"][0] == pos["Ed Fifth"][0]
+              and (pos["Gil Seventh"][1] <= 2) == (pos["Ed Fifth"][1] <= 2))
+    db.set_partner_request_match(606, "Gil Seventh", None, db_path=tmp)
 
     # Rules are data: disabling staging restores legacy behavior and
     # drops the ordering guarantee (no crash, groups still complete).

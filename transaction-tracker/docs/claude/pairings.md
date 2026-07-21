@@ -463,7 +463,13 @@ The Quarry-night rulings, all built:
    POST `…/pairings/requests/match`; partner=null clears). A manual
    match only holds while the bound player is still rostered — if
    they withdraw, the row falls back to unmatched. Rows show a
-   ✎ manual badge (click to clear).
+   ✎ manual badge (click to clear). **Multi-name texts (v2.135.0):**
+   when the request text contains 2+ rostered names, the row carries
+   `multi: true` + `candidates` and the panel shows an amber
+   "N names — link one…" picker — one partner honored (rule 1), the
+   manager links which; auto-match's first hit stands until then;
+   extras are honored via manual moves after Generate (Kerry's
+   ruling).
 3b. **Request visibility + manager suppression (v2.132.0, same day).**
    The PAIRINGS controls bar's Requests chip opens the full request
    list — who asked for whom (`get_event_partner_requests`, same
