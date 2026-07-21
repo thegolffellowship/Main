@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.132.0";
+window.TGF_VERSION = "2.133.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.133.0",
+    date: "2026-07-21",
+    changes: [
+      "Per-player pace badges on the PAIRINGS tab (Kerry): every seated and unassigned player line shows a ⏱1/2/3 chip next to the name — green 3 (fast), gray 2, amber 1 (slow); unrated players show a dimmed ⏱2 (the implied default). GET /pairings event_players now carries pace_rating to feed it.",
+      "Live group-pace chip: the ⏱ average on each group header is now computed in the browser from the group's CURRENT members, so player swaps, cart-pair swaps, group swaps, and moves update it instantly — no regenerate needed. Saved pairings views get the chip too (it was generator-output-only before).",
+    ],
+  },
   {
     version: "2.132.0",
     date: "2026-07-21",

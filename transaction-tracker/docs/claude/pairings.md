@@ -410,7 +410,13 @@ rule is data: `PAIRING_STAGING_DEFAULTS` overridable via the
 `pairing_staging_rules` app_settings JSON (enabled / shotgun /
 tee_times / aggregate / default_rating / smalls_lead). Each
 generated group carries `group_pace`, rendered as a ⏱ chip on the
-PAIRINGS group headers.
+PAIRINGS group headers. **v2.133.0 (Kerry 2026-07-21):** every player
+line (seated + unassigned) carries a per-player ⏱1/2/3 badge (green
+3 / gray 2 / amber 1; unrated = dimmed implied 2), fed by
+`pace_rating` on GET /pairings `event_players`; and the group chip is
+computed CLIENT-side from current membership (`groupPaceOf`), so
+swaps/moves update it live and saved-pairings views show it too
+(`group_pace` from the generator is now just the fallback).
 
 Next (pace v2, parked): derive ratings from GPS/score-entry timing.
 

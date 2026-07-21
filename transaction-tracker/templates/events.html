@@ -4335,6 +4335,44 @@
         return `${hole}${m[2]}`;
     }
 
+    // Pace lookup for badges + live group averages. Map built lazily
+    // from event_players (GET /pairings carries pace_rating); undefined
+    // = unrated, which reads as 2 everywhere (Kerry's rule).
+    function paceRatingOf(state, name) {
+        const norm = s => (s || '').trim().replace(/\s+/g, ' ').toLowerCase();
+        if (!state._paceMap) {
+            state._paceMap = {};
+            (state.event_players || []).forEach(p => {
+                if (p.name && p.pace_rating != null) state._paceMap[norm(p.name)] = p.pace_rating;
+            });
+        }
+        return state._paceMap[norm(name)];
+    }
+
+    // Group pace computed from CURRENT membership, so player/cart/group
+    // swaps and moves update the ⏱ chip on the next render without a
+    // server round trip (Kerry 2026-07-21). Falls back to the
+    // generator's stored value when the pace map hasn't loaded.
+    function groupPaceOf(state, grp) {
+        const seated = (grp.players || []).filter(p => p.name);
+        if (!seated.length) return grp.group_pace != null ? grp.group_pace : null;
+        const sum = seated.reduce((s, p) => {
+            const r = paceRatingOf(state, p.name);
+            return s + (r != null ? r : 2);
+        }, 0);
+        return Math.round((sum / seated.length) * 100) / 100;
+    }
+
+    function paceBadge(state, name) {
+        const r = paceRatingOf(state, name);
+        const shown = r != null ? r : 2;
+        const color = shown >= 3 ? '#15803d' : (shown <= 1 ? '#b45309' : 'var(--text-muted)');
+        const title = r != null
+            ? `Pace rating ${r} (1 slow → 3 fast)`
+            : 'Unrated — reads as pace 2 (1 slow → 3 fast)';
+        return `<span class="pairing-pace-badge" title="${title}" style="font-size:0.68rem;font-weight:700;color:${color};border:1px solid currentColor;border-radius:8px;padding:0 0.3rem;margin-left:0.25rem;opacity:${r != null ? '1' : '0.55'};">&#x23F1;${shown}</span>`;
+    }
+
     function renderPairingsPanel(ev, registrants) {
         const state = getPairingsState(ev.id);
         const fmt = (ev.format || '').trim();
@@ -4595,8 +4633,9 @@
             const isDropTarget = isMoveTarget && grp.players.length < 4 &&
                 !(state.selection.holes === holes && state.selection.group_num === grp.group_num);
             html += `<div class="pairing-group-card${isSelected ? ' pairings-selected' : ''}${isDropTarget ? ' pairings-move-target' : ''}" data-ev-id="${ev.id}" data-holes="${holes}" data-group-num="${grp.group_num}">`;
-            const paceChip = grp.group_pace != null
-                ? `<span style="float:right;font-weight:600;opacity:0.9;" title="Group pace — average member rating, 1 slow &rarr; 3 fast (staging only)">&#x23F1; ${grp.group_pace}</span>`
+            const livePace = groupPaceOf(state, grp);
+            const paceChip = livePace != null
+                ? `<span style="float:right;font-weight:600;opacity:0.9;" title="Group pace — average member rating, 1 slow &rarr; 3 fast (staging only). Recomputes as you swap/move players.">&#x23F1; ${livePace}</span>`
                 : '';
             html += `<div class="pairing-group-header" data-slot-edit data-ev-id="${ev.id}" data-holes="${holes}" data-group-num="${grp.group_num}" title="Click to change this group's hole assignment">${escapeHtml(grp.slot_label)}${paceChip}</div>`;
 
@@ -4633,6 +4672,9 @@
                     data-ev-id="${ev.id}" data-holes="${holes}" data-group-num="${grp.group_num}" data-cart-pos="${player.cart_pos}">`;
                 html += `<span class="pairing-cart-dot" style="background:${cartDot};"></span>`;
                 html += `<span class="pairing-player-name">${escapeHtml(player.name || '—')}</span>`;
+                if (player.name) {
+                    html += paceBadge(state, player.name);
+                }
                 const mpOpp = mpOpponentInGroup(state, grp, player);
                 if (mpOpp) {
                     html += `<span class="pairing-mp-badge" title="Match Play vs ${escapeHtml(mpOpp)}">&#x2694;&#xFE0F; MP</span>`;
@@ -4658,6 +4700,7 @@
             state.groups_9 = (data.pairings && data.pairings['9']) ? data.pairings['9'] : [];
             state.groups_18 = (data.pairings && data.pairings['18']) ? data.pairings['18'] : [];
             state.event_players = data.event_players || [];
+            state._paceMap = null;  // rebuild pace lookup from fresh roster
             state.mpMatches = data.mp_matches || [];
             state.requests = data.partner_requests || [];
             state.isDirty = false;
@@ -7004,6 +7047,9 @@
                 data-ev-id="${ev.id}" data-unassigned-name="${escapeHtml(player.name)}">`;
             html += `<span class="pairing-cart-dot" style="background:#f59e0b;"></span>`;
             html += `<span class="pairing-player-name">${escapeHtml(player.name || '—')}</span>`;
+            if (player.name) {
+                html += paceBadge(state, player.name);
+            }
             html += `<span class="pairing-hcp">${hcp}</span>`;
             html += `<span class="pairing-tee">${escapeHtml(player.tee_choice || '—')}</span>`;
             html += '</div>';

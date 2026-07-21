@@ -4749,7 +4749,8 @@ def api_get_pairings(event_id):
         _pconn = get_connection()
         try:
             player_rows = _pconn.execute(f"""
-                SELECT DISTINCT i.customer AS name, i.holes, i.tee_choice
+                SELECT DISTINCT i.customer AS name, i.holes, i.tee_choice,
+                                c.pace_rating
                 FROM events e
                 LEFT JOIN event_aliases ea ON ea.canonical_event_name = e.item_name
                 JOIN items i ON (
@@ -4757,6 +4758,7 @@ def api_get_pairings(event_id):
                     OR i.item_name = ea.alias_name COLLATE NOCASE
                     OR i.event_id = e.id
                 )
+                LEFT JOIN customers c ON c.customer_id = i.customer_id
                 WHERE e.id = ?
                   AND COALESCE(i.transaction_status,'active') NOT IN ({ph})
                   AND i.parent_item_id IS NULL
