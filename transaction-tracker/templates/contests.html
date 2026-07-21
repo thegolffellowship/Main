@@ -1848,7 +1848,12 @@
             if (top === "enrollment") enrAutoLoad();
             if (top === "lone-star-cup") lscLoad();
             try {
-                if (top === "match-play") history.replaceState(null, "", "#tab=mp");
+                if (top === "match-play") {
+                    // Keep the active Match Play sub-panel in the link
+                    // (Kerry 2026-07-21: every sub-tab is addressable)
+                    const mpSub = (document.querySelector(".mp-subtab.active") || {}).dataset?.mpPanel;
+                    history.replaceState(null, "", "#tab=mp" + (mpSub && mpSub !== "pools" ? "&mp=" + mpSub : ""));
+                }
                 else if (top === "enrollment") history.replaceState(null, "", "#tab=enr");
                 else if (top === "lone-star-cup") history.replaceState(null, "", "#tab=lsc");
                 else {
@@ -3329,14 +3334,25 @@
 
     // One-time wiring: pill sub-tabs + delegated pool clicks + card expanders.
     if (MATCHPLAY_V2) {
-        document.querySelectorAll('.mp-subtab').forEach(btn => {
-            btn.addEventListener('click', () => {
-                document.querySelectorAll('.mp-subtab').forEach(b => b.classList.toggle('active', b === btn));
-                const p = btn.dataset.mpPanel;
-                ['pools','knockout','payouts'].forEach(k => {
-                    const el = $('mp-panel-' + k); if (el) el.style.display = (k === p) ? '' : 'none';
-                });
+        // Each Match Play sub-tab is URL-addressable (Kerry 2026-07-21):
+        // clicking writes #tab=mp&mp=<panel>, so Pools / Knockout /
+        // Payouts each have a shareable sub-link and a reload lands on
+        // the same panel. mpShowPanel is also the restore entry point.
+        const mpShowPanel = (p, updateHash) => {
+            document.querySelectorAll('.mp-subtab').forEach(b =>
+                b.classList.toggle('active', b.dataset.mpPanel === p));
+            ['pools','knockout','payouts'].forEach(k => {
+                const el = $('mp-panel-' + k); if (el) el.style.display = (k === p) ? '' : 'none';
             });
+            if (updateHash) {
+                try {
+                    history.replaceState(null, "", "#tab=mp" + (p !== "pools" ? "&mp=" + p : ""));
+                } catch (e) { /* ignore */ }
+            }
+        };
+        window._mpShowPanel = mpShowPanel;
+        document.querySelectorAll('.mp-subtab').forEach(btn => {
+            btn.addEventListener('click', () => mpShowPanel(btn.dataset.mpPanel, true));
         });
         const pc = $("cmp-pools-container");
         if (pc) {
@@ -5832,6 +5848,12 @@
                 $("section-" + k).classList.toggle("section-hidden", k !== top));
             if (top === "enrollment") enrAutoLoad();
             if (top === "lone-star-cup") lscLoad();
+            // Match Play sub-panel deep link (Kerry 2026-07-21):
+            // #tab=mp&mp=knockout|payouts lands directly on that panel.
+            const mpSub = hash.match(/mp=(pools|knockout|payouts)/);
+            if (top === "match-play" && mpSub && window._mpShowPanel) {
+                window._mpShowPanel(mpSub[1], false);
+            }
         }
         // Points Races is the landing tab — load it immediately; Match Play
         // still warms in the background so switching to it stays instant

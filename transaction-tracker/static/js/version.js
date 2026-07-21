@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.135.3";
+window.TGF_VERSION = "2.136.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.136.0",
+    date: "2026-07-21",
+    changes: [
+      "Match Play sub-links (Kerry): each Match Play sub-tab — Pools, Knockout, Payouts — is now URL-addressable. Clicking a sub-tab writes #tab=mp&mp=<panel> into the address bar, reloads land back on the same panel, and links can point straight at a panel (e.g. /contests#tab=mp&mp=knockout, or /member/contests#tab=mp&mp=knockout for members). Switching back to the Match Play top tab keeps the active sub-panel in the link.",
+    ],
+  },
   {
     version: "2.135.3",
     date: "2026-07-21",
