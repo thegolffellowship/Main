@@ -391,17 +391,51 @@ composition is settled): groups are ordered by aggregate pace =
 average member rating (unrated = 2; lookup joins customers via
 items.customer_id — rule 6, suffix-proof). Sequential tee times: fast
 groups FIRST. Shotgun: fast groups at the FRONT of the hole train =
-HIGHER hole numbers = later sheet slots (slowest at 1A). Group size
-breaks pace ties (smaller plays faster), which preserves the legacy
-threesomes-to-the-front shotgun push when everyone is a 2. Seeded
-groups stay where the manager put them (rule 5). Composition is NEVER
-affected — proven by test_pace_staging.py (19 checks). The rule is
-data: `PAIRING_STAGING_DEFAULTS` overridable via the
+HIGHER hole numbers = later sheet slots (slowest at 1A). **AMENDED
+(Kerry 2026-07-21, The Quarry, v2.131.0): on shotguns, group SIZE is
+primary — threesomes (and any short group) always LEAD the train**
+(the last sheet slots, e.g. 4A/4B), whatever their pace; pace orders
+the train within each size class, and among the short groups the
+smallest goes furthest forward. Rules-as-data:
+`shotgun_smalls_lead: true` in `PAIRING_STAGING_DEFAULTS` /
+`pairing_staging_rules` (set false to restore pure pace ordering).
+Seeded groups stay where the manager put them (rule 5). Composition
+is NEVER affected — proven by test_pace_staging.py (37 checks). The
+rule is data: `PAIRING_STAGING_DEFAULTS` overridable via the
 `pairing_staging_rules` app_settings JSON (enabled / shotgun /
-tee_times / aggregate / default_rating). Each generated group carries
-`group_pace`, rendered as a ⏱ chip on the PAIRINGS group headers.
+tee_times / aggregate / default_rating / shotgun_smalls_lead). Each
+generated group carries `group_pace`, rendered as a ⏱ chip on the
+PAIRINGS group headers.
 
 Next (pace v2, parked): derive ratings from GPS/score-entry timing.
+
+## Cart seating + Front/Back nine (Kerry 2026-07-21, v2.131.0)
+
+Three Quarry-night rulings, all built:
+
+1. **Threesomes lead the shotgun train** — see the staging amendment
+   above (`shotgun_smalls_lead`).
+2. **Same-tee cart mates unless requests supersede.** After foursomes
+   are decided, EVERY group runs the exact seat arranger
+   (`_arrange_group_seats`, ≤24 permutations): Match Play opponents in
+   OPPOSITE carts (weight 1000) > partner-request pairs in the SAME
+   cart (100) > same-tee players share a cart (1). Tee comparison is
+   case/whitespace-normalized. The old sort-by-tee path for
+   unconstrained groups (`_order_group_by_tee`) is retired — it could
+   split a tee pair across carts whenever a third tee was present.
+3. **Front/Back 9 side.** `events.nine_side` ('Front' default |
+   'Back') says which nine the 9-hole leg plays. Shotgun slot labels
+   follow (`_pairing_time_slots`: Back → 10A/10B…). Event setup (add +
+   edit modals) has a "9-Hole Side" segmented control, shown whenever
+   the format has a 9-hole leg; the PAIRINGS tab controls bar has a
+   ⛳ Front 9 / Back 9 toggle → `POST /api/events/<id>/pairings/
+   switch-side` (`switch_event_pairings_side`), which flips the
+   setting AND shifts any SAVED 9-hole shotgun labels (1A ↔ 10A …) so
+   the tab and the printables (starter sheet / cart signs read saved
+   labels) follow without a regenerate; unsaved client-side groups are
+   remapped in the browser with the same rule. `nine_side` is also
+   settable via PATCH /api/events, POST /api/events (create), and the
+   `update_existing_event` MCP tool.
 
 ## Engine notes (design, not yet built)
 

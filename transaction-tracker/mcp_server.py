@@ -722,7 +722,9 @@ def update_existing_event(event_id: int, fields: dict) -> str:
         event_id: The event ID to update
         fields: Dict of fields to update. Allowed: item_name, event_date, course, chapter,
                 event_type, course_cost, tgf_markup (Member rate), side_game_fee (Inc. Games),
-                transaction_fee_pct. For combo events also: course_cost_9, course_cost_18,
+                transaction_fee_pct, nine_side ('Front'|'Back' — which nine the 9-hole leg
+                plays; shotgun pairing labels follow, Back = 10A/10B...).
+                For combo events also: course_cost_9, course_cost_18,
                 tgf_markup_9, tgf_markup_18, side_game_fee_9, side_game_fee_18.
     """
     ok = update_event(event_id, fields)

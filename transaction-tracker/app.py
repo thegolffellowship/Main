@@ -4786,6 +4786,7 @@ def api_get_pairings(event_id):
                 "start_type_18": ev.get("start_type_18"),
                 "tee_time_count": ev.get("tee_time_count"),
                 "tee_time_count_18": ev.get("tee_time_count_18"),
+                "nine_side": ev.get("nine_side") or "Front",
             },
         })
     except Exception as e:
@@ -4851,6 +4852,22 @@ def api_save_pairings(event_id):
         return jsonify({"status": "ok"})
     except Exception as e:
         logger.exception("Failed to save pairings for event %d", event_id)
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/events/<int:event_id>/pairings/switch-side", methods=["POST"])
+@require_role("manager")
+def api_pairings_switch_side(event_id):
+    """Flip the event's 9-hole side (Front ↔ Back nine). Shotgun events
+    also get their SAVED 9-hole slot labels shifted (1A ↔ 10A, …) so
+    the sheet and printables follow without a regenerate."""
+    try:
+        from email_parser.database import switch_event_pairings_side
+        return jsonify(switch_event_pairings_side(event_id))
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 404
+    except Exception as e:
+        logger.exception("Side switch failed for event %d", event_id)
         return jsonify({"error": str(e)}), 500
 
 
@@ -6119,6 +6136,7 @@ def api_create_event():
         tee_time_count_18=data.get("tee_time_count_18"),
         tee_direction=data.get("tee_direction"),
         tee_direction_18=data.get("tee_direction_18"),
+        nine_side=data.get("nine_side"),
         course_cost=data.get("course_cost"),
         tgf_markup=data.get("tgf_markup"),
         side_game_fee=data.get("side_game_fee"),

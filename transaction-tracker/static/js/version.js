@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.130.15";
+window.TGF_VERSION = "2.131.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.131.0",
+    date: "2026-07-21",
+    changes: [
+      "Shotgun staging: threesomes (and any short group) ALWAYS lead the hole train — they take the last sheet slots (the highest holes, e.g. 4A/4B) regardless of pace; pace still orders the train within each size class (Kerry, The Quarry 2026-07-21). Rules-as-data: the shotgun_smalls_lead key in pairing_staging_rules turns it off.",
+      "Cart seating: every settled group now runs the exact seat arranger, so same-tee players share a cart whenever pairing requests don't supersede — priority Match Play opposite carts > partner request same cart > same-tee cart mates. Tee comparison is case/whitespace-insensitive so label drift can't split a tee pair. (Foursome composition is untouched — this only decides who rides together.)",
+      "Front/Back 9 side: new events.nine_side setting ('Front' default) in event setup — a back-9 night labels its shotgun train 10A/10B… instead of 1A/1B…. The PAIRINGS tab gains a ⛳ Front 9 / Back 9 toggle that flips the setting and shifts any SAVED shotgun labels with it (1A ↔ 10A), so the sheet and printables follow without a regenerate. Also settable via PATCH /api/events and the update_existing_event MCP tool.",
+    ],
+  },
   {
     version: "2.130.15",
     date: "2026-07-20",

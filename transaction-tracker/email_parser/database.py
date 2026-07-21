@@ -2922,6 +2922,11 @@ def init_db(db_path: str | Path | None = None) -> None:
             # `format` (9-hole vs 18-hole). Once stamped, never auto-updated:
             # editing a template after the event was created has no effect on it.
             ("payout_template_version_id", "INTEGER REFERENCES payout_template_versions(id)"),
+            # Which nine the 9-hole leg plays (Kerry 2026-07-21, The Quarry
+            # back-9 night): 'Front' | 'Back'. NULL reads as Front. Drives
+            # shotgun hole labels (Back → 10A/10B…) on the PAIRINGS tab
+            # and printables.
+            ("nine_side", "TEXT"),
         ]:
             try:
                 conn.execute(f"ALTER TABLE events ADD COLUMN {col} {col_type}")
@@ -15276,6 +15281,7 @@ def update_event(event_id: int, fields: dict, db_path: str | Path | None = None)
     allowed = {"item_name", "event_date", "course", "chapter", "format", "start_type", "start_time",
                 "tee_time_count", "tee_time_interval", "start_time_18", "start_type_18",
                 "tee_time_count_18", "event_type", "tee_direction", "tee_direction_18",
+                "nine_side",
                 "course_cost", "tgf_markup", "side_game_fee", "transaction_fee_pct",
                 "course_cost_9", "course_cost_18", "tgf_markup_9", "tgf_markup_18",
                 "side_game_fee_9", "side_game_fee_18",
@@ -18058,6 +18064,7 @@ def create_event(item_name: str, event_date: str = None, course: str = None,
                  tee_time_interval: int = None, start_time_18: str = None,
                  start_type_18: str = None, tee_time_count_18: int = None,
                  tee_direction: str = None, tee_direction_18: str = None,
+                 nine_side: str = None,
                  course_cost: float = None, tgf_markup: float = None,
                  side_game_fee: float = None, transaction_fee_pct: float = None,
                  course_cost_9: float = None, course_cost_18: float = None,
@@ -18080,8 +18087,8 @@ def create_event(item_name: str, event_date: str = None, course: str = None,
             return None
         try:
             cursor = conn.execute(
-                "INSERT INTO events (item_name, event_date, course, chapter, format, start_type, start_time, tee_time_count, tee_time_interval, start_time_18, start_type_18, tee_time_count_18, tee_direction, tee_direction_18, course_cost, tgf_markup, side_game_fee, transaction_fee_pct, course_cost_9, course_cost_18, tgf_markup_9, tgf_markup_18, side_game_fee_9, side_game_fee_18, tgf_markup_final, tgf_markup_final_9, tgf_markup_final_18, course_surcharge, course_cost_breakdown, course_cost_breakdown_9, course_cost_breakdown_18, per_game_addon, event_type) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'event')",
-                (item_name, event_date, course, chapter, format, start_type, start_time, tee_time_count, tee_time_interval, start_time_18, start_type_18, tee_time_count_18, tee_direction, tee_direction_18, course_cost, tgf_markup, side_game_fee, transaction_fee_pct, course_cost_9, course_cost_18, tgf_markup_9, tgf_markup_18, side_game_fee_9, side_game_fee_18, tgf_markup_final, tgf_markup_final_9, tgf_markup_final_18, course_surcharge, course_cost_breakdown, course_cost_breakdown_9, course_cost_breakdown_18, per_game_addon),
+                "INSERT INTO events (item_name, event_date, course, chapter, format, start_type, start_time, tee_time_count, tee_time_interval, start_time_18, start_type_18, tee_time_count_18, tee_direction, tee_direction_18, nine_side, course_cost, tgf_markup, side_game_fee, transaction_fee_pct, course_cost_9, course_cost_18, tgf_markup_9, tgf_markup_18, side_game_fee_9, side_game_fee_18, tgf_markup_final, tgf_markup_final_9, tgf_markup_final_18, course_surcharge, course_cost_breakdown, course_cost_breakdown_9, course_cost_breakdown_18, per_game_addon, event_type) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'event')",
+                (item_name, event_date, course, chapter, format, start_type, start_time, tee_time_count, tee_time_interval, start_time_18, start_type_18, tee_time_count_18, tee_direction, tee_direction_18, nine_side, course_cost, tgf_markup, side_game_fee, transaction_fee_pct, course_cost_9, course_cost_18, tgf_markup_9, tgf_markup_18, side_game_fee_9, side_game_fee_18, tgf_markup_final, tgf_markup_final_9, tgf_markup_final_18, course_surcharge, course_cost_breakdown, course_cost_breakdown_9, course_cost_breakdown_18, per_game_addon),
             )
             conn.commit()
             new_id = cursor.lastrowid
@@ -39188,6 +39195,12 @@ def batch_approve_expenses(items: list[dict],
 # Pairings
 # ─────────────────────────────────────────────────────────────────────────────
 
+def _nine_side(event: dict) -> str:
+    """Which nine the 9-hole leg plays: 'Front' (default) or 'Back'."""
+    side = str(event.get("nine_side") or "Front").strip().title()
+    return "Back" if side == "Back" else "Front"
+
+
 def _pairing_time_slots(event: dict, holes: str) -> list[str]:
     """Compute ordered slot labels for a given holes type (9 or 18).
 
@@ -39212,7 +39225,14 @@ def _pairing_time_slots(event: dict, holes: str) -> list[str]:
         return []
 
     if start_type == "Shotgun":
-        return [f"{(i // 2) + 1}{'A' if i % 2 == 0 else 'B'}" for i in range(count)]
+        # The 9-hole leg can play the BACK nine (events.nine_side = 'Back',
+        # Kerry 2026-07-21): hole labels start at 10. 18-hole legs use all
+        # 18 holes, so the side setting doesn't apply there.
+        base_hole = 1
+        if holes == "9" and _nine_side(event) == "Back":
+            base_hole = 10
+        return [f"{(i // 2) + base_hole}{'A' if i % 2 == 0 else 'B'}"
+                for i in range(count)]
 
     if not start_time:
         return [f"Group {i + 1}" for i in range(count)]
@@ -39457,6 +39477,48 @@ def delete_event_pairings(event_id: int, db_path=None) -> None:
         conn.execute("DELETE FROM event_pairings WHERE event_id = ?", (event_id,))
         conn.execute("DELETE FROM pairing_history WHERE event_id = ?", (event_id,))
         conn.commit()
+
+
+_SHOTGUN_LABEL_RE = re.compile(r"^(\d{1,2})([AB])$")
+
+
+def switch_event_pairings_side(event_id: int, db_path=None) -> dict:
+    """Flip the event's 9-hole side (Front ↔ Back) and shift any SAVED
+    9-hole shotgun slot labels with it (1A ↔ 10A, 3B ↔ 12B, …) so the
+    PAIRINGS tab and printables stay consistent without a regenerate
+    (Kerry 2026-07-21: back-9 nights at The Quarry). Non-shotgun events
+    just flip the setting — tee-time labels carry no hole number.
+    """
+    with _connect(db_path) as conn:
+        ev = conn.execute("SELECT * FROM events WHERE id = ?",
+                          (event_id,)).fetchone()
+        if not ev:
+            raise ValueError(f"Event {event_id} not found")
+        ev = dict(ev)
+        new_side = "Front" if _nine_side(ev) == "Back" else "Back"
+        conn.execute("UPDATE events SET nine_side = ? WHERE id = ?",
+                     (new_side, event_id))
+
+        relabeled = 0
+        if (ev.get("start_type") or "") == "Shotgun":
+            _ensure_pairing_tables(conn)
+            shift = 9 if new_side == "Back" else -9
+            rows = conn.execute(
+                "SELECT id, slot_label FROM event_pairings "
+                "WHERE event_id = ? AND holes = '9'", (event_id,)).fetchall()
+            for r in rows:
+                m = _SHOTGUN_LABEL_RE.match((r["slot_label"] or "").strip())
+                if not m:
+                    continue
+                hole = int(m.group(1)) + shift
+                if not 1 <= hole <= 18:
+                    continue  # label already on the target side — leave it
+                conn.execute(
+                    "UPDATE event_pairings SET slot_label = ? WHERE id = ?",
+                    (f"{hole}{m.group(2)}", r["id"]))
+                relabeled += 1
+        conn.commit()
+        return {"nine_side": new_side, "relabeled": relabeled}
 
 
 def _pair_key_name(name: str) -> str:
@@ -40484,6 +40546,10 @@ PAIRING_STAGING_DEFAULTS = {
     "tee_times": "fast_first",  # fast → earliest tee times
     "aggregate": "avg",         # group pace = average member rating
     "default_rating": 2,        # NULL pace_rating reads as 2 (Kerry)
+    # Kerry 2026-07-21 (The Quarry): threesomes/short groups are ALWAYS
+    # the shotgun train's leading groups (the last sheet slots, e.g.
+    # 4A/4B) — size beats pace; pace orders within each size class.
+    "shotgun_smalls_lead": True,
 }
 
 
@@ -40994,20 +41060,17 @@ def generate_event_pairings(
                     break
             groups_players = best_groups or []
 
-        # Seat order within a settled group: groups carrying a constraint
-        # pair get the exact seater — MP opponents in OPPOSITE carts
-        # (seats 1/2 vs 3/4), partner pairs in the SAME cart (they ride
-        # together — plain adjacency could straddle seats 2/3, i.e. two
-        # carts), same-tee cart-mates as the tiebreak. Unconstrained
-        # groups keep the tee-adjacency ordering.
+        # Seat order within a settled group (foursomes already decided —
+        # this only decides who RIDES with whom): every group runs the
+        # exact seater. Priority when they conflict (Kerry 2026-07-21):
+        # MP opponents in OPPOSITE carts (seats 1/2 vs 3/4) > partner-
+        # request pairs in the SAME cart (requests supersede tees) >
+        # same-tee players share a cart. The old sort-by-tee ordering
+        # for unconstrained groups could split a tee pair across carts
+        # when a third tee was present — the seater can't.
         def _seat(names: list[str]) -> list[str]:
-            keys = {_pair_key_name(n) for n in names}
-            constrained = (any(p <= keys for p in mp_opponents)
-                           or any(p <= keys for p in partner_adj))
-            if constrained:
-                return _arrange_group_seats(names, mp_opponents,
-                                            partner_adj, tee_map)
-            return _order_group_by_tee(names, tee_map, locked_names)
+            return _arrange_group_seats(names, mp_opponents,
+                                        partner_adj, tee_map)
 
         is_shotgun = (ev.get("start_type" if holes == "9" else "start_type_18") == "Shotgun")
 
@@ -41030,8 +41093,18 @@ def generate_event_pairings(
         staging_applied = bool(staging_rules.get("enabled", True)
                                and groups_players)
         if staging_applied:
-            groups_players.sort(key=lambda g: (-_group_pace(g), len(g)),
-                                reverse=bool(is_shotgun))
+            if is_shotgun and staging_rules.get("shotgun_smalls_lead", True):
+                # Short groups (threesomes/twosomes) ALWAYS lead the hole
+                # train — they take the last sheet slots (highest holes,
+                # e.g. 4A/4B), regardless of pace (Kerry 2026-07-21).
+                # Within each size class pace still orders the train:
+                # slowest at 1A, fastest closest to the front; among the
+                # short groups the smallest ends up furthest forward.
+                groups_players.sort(
+                    key=lambda g: (len(g) < 4, _group_pace(g), -len(g)))
+            else:
+                groups_players.sort(key=lambda g: (-_group_pace(g), len(g)),
+                                    reverse=bool(is_shotgun))
 
         # ── Build final group list with slot labels ───────────────────
 
@@ -41179,37 +41252,19 @@ def _make_group_sizes(n: int) -> list[int]:
         return [4] * q + [3]              # e.g. 7→[4,3], 11→[4,4,3]
 
 
-def _order_group_by_tee(names: list[str], tee_map: dict,
-                        locked: set) -> list[str]:
-    """Kerry's tee-grouping pace rule (2026-07-14): once a group is
-    settled, seat same-tee players together — adjacent seats share a
-    cart AND a tee box, so the group doesn't leapfrog between tees.
-    Partner-request pairs stay adjacent (they ride together); a locked
-    pair sorts by its first member's tee."""
-    units: list[list[str]] = []
-    i = 0
-    while i < len(names):
-        a = names[i]
-        if (a in locked and i + 1 < len(names) and names[i + 1] in locked):
-            units.append([a, names[i + 1]])
-            i += 2
-        else:
-            units.append([a])
-            i += 1
-    units.sort(key=lambda u: str(tee_map.get(u[0]) or "~"))
-    return [n for u in units for n in u]
-
-
 def _arrange_group_seats(names: list[str], mp_opponents: set,
                          partner_adj: set, tee_map: dict) -> list[str]:
-    """Seat order for a group containing Match Play opponents (rule 8
-    amendment). Carts are seats 1&2 and 3&4 (Kerry's cart-pair ruling).
+    """Seat order for a settled group — foursomes are already decided;
+    this only decides who RIDES with whom. Carts are seats 1&2 and 3&4
+    (Kerry's cart-pair ruling).
 
-    Hard-to-soft priority (weighted, best permutation wins):
+    Hard-to-soft priority (weighted, best permutation wins — Kerry
+    2026-07-21: requests supersede, then similar tees share a cart):
     - Match Play opponents ride in OPPOSITE carts (weight 1000). This is
       distinct from partner locking, which keeps a pair TOGETHER.
     - Partner-request pairs share a cart (weight 100).
-    - Same-tee cart-mates (weight 1) — the tee-grouping pace rule.
+    - Same-tee cart-mates (weight 1) — tee compare is case/whitespace-
+      insensitive so label drift can't split a tee pair.
 
     Groups are ≤ 4 players (24 permutations), so brute force is exact.
     """
@@ -41217,6 +41272,9 @@ def _arrange_group_seats(names: list[str], mp_opponents: set,
 
     def _cart(idx: int) -> int:
         return 0 if idx < 2 else 1
+
+    def _tee(name: str) -> str:
+        return str(tee_map.get(name) or "").strip().lower()
 
     keys = {n: _pair_key_name(n) for n in names}
     best, best_cost = list(names), None
@@ -41232,7 +41290,7 @@ def _arrange_group_seats(names: list[str], mp_opponents: set,
                     cost += 100
         for i, j in ((0, 1), (2, 3)):
             if j < len(perm):
-                ta, tb = tee_map.get(perm[i]), tee_map.get(perm[j])
+                ta, tb = _tee(perm[i]), _tee(perm[j])
                 if ta and tb and ta != tb:
                     cost += 1
         if best_cost is None or cost < best_cost:
