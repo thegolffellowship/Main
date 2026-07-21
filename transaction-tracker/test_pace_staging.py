@@ -64,6 +64,78 @@ def build_db(tmp: Path):
                     (f"manual-test-{ev}-{i}",
                      "s9.98 Teetimes" if ev == 600 else "s9.97 Shotgun",
                      name, i, ev))
+        # 7-player BACK-nine shotgun (Kerry 2026-07-21): sizes split
+        # [4, 3] — the threesome must LEAD the train whatever its pace.
+        conn.execute(
+            "INSERT INTO events (id, item_name, event_date, chapter, format,"
+            " start_type, start_time, tee_time_count, tee_time_interval,"
+            " nine_side)"
+            " VALUES (602, 's9.96 BackNine', '2026-08-04', 'San Antonio',"
+            " '9 Holes', 'Shotgun', '17:30', 4, 10, 'Back')")
+        for j in range(1, 8):
+            conn.execute(
+                "INSERT INTO items (email_uid, merchant, order_date,"
+                " item_name, customer, customer_id, holes, event_id,"
+                " transaction_status) VALUES (?, 'GoDaddy', '2026-07-10',"
+                " 's9.96 BackNine', ?, ?, '9', 602, 'active')",
+                (f"manual-test-602-{j}", f"Player Seven{j}", 100 + j))
+        # Adversarial ratings: 1s and 3s scattered so pace-primary
+        # ordering would often pull a slow threesome off the front.
+        for cid, r in ((101, 1), (102, 3), (103, 1), (104, 3), (105, 1),
+                       (106, 3), (107, 1)):
+            conn.execute(
+                "INSERT INTO customers (customer_id, first_name, last_name,"
+                " pace_rating, pace_rating_source) VALUES (?, 'Player', ?,"
+                " ?, 'manager')", (cid, f"Seven{cid - 100}", r))
+        # Same 7 players on a TEE-TIME event: the threesome must take
+        # the EARLIEST time (Kerry 2026-07-21 clarification).
+        conn.execute(
+            "INSERT INTO events (id, item_name, event_date, chapter, format,"
+            " start_type, start_time, tee_time_count, tee_time_interval)"
+            " VALUES (604, 's9.94 SmallsFirst', '2026-08-18', 'San Antonio',"
+            " '9 Holes', 'Tee Times', '17:30', 4, 10)")
+        for j in range(1, 8):
+            conn.execute(
+                "INSERT INTO items (email_uid, merchant, order_date,"
+                " item_name, customer, customer_id, holes, event_id,"
+                " transaction_status) VALUES (?, 'GoDaddy', '2026-07-10',"
+                " 's9.94 SmallsFirst', ?, ?, '9', 604, 'active')",
+                (f"manual-test-604-{j}", f"Player Seven{j}", 100 + j))
+        # 13-player shotgun ([4,3,3,3] — the max three 3-somes case) on
+        # 4 slots (1A,1B,2A,2B): smalls must stage 2A → 2B → 1A, with
+        # the foursome behind them at 1B.
+        conn.execute(
+            "INSERT INTO events (id, item_name, event_date, chapter, format,"
+            " start_type, start_time, tee_time_count, tee_time_interval)"
+            " VALUES (605, 's9.93 ThreeSmalls', '2026-08-25', 'San Antonio',"
+            " '9 Holes', 'Shotgun', '17:30', 4, 10)")
+        for j in range(1, 14):
+            conn.execute(
+                "INSERT INTO items (email_uid, merchant, order_date,"
+                " item_name, customer, customer_id, holes, event_id,"
+                " transaction_status) VALUES (?, 'GoDaddy', '2026-07-10',"
+                " 's9.93 ThreeSmalls', ?, ?, '9', 605, 'active')",
+                (f"manual-test-605-{j}", f"Player Thirteen{j}", 300 + j))
+        # 4-player tee-cart event: two Combo + two White tees interleaved
+        # alphabetically — same-tee players must end up cart mates.
+        conn.execute(
+            "INSERT INTO events (id, item_name, event_date, chapter, format,"
+            " start_type, start_time, tee_time_count, tee_time_interval)"
+            " VALUES (603, 's9.95 Tees', '2026-08-11', 'San Antonio',"
+            " '9 Holes', 'Shotgun', '17:30', 1, 10)")
+        for j, (name, tee) in enumerate([("Al Tee", "Combo"),
+                                         ("Bo Tee", "white "),
+                                         ("Cy Tee", "combo"),
+                                         ("Dan Tee", "White")], start=1):
+            conn.execute(
+                "INSERT INTO items (email_uid, merchant, order_date,"
+                " item_name, customer, customer_id, holes, tee_choice,"
+                " event_id, transaction_status) VALUES (?, 'GoDaddy',"
+                " '2026-07-10', 's9.95 Tees', ?, ?, '9', ?, 603, 'active')",
+                (f"manual-test-603-{j}", name, 200 + j, tee))
+            conn.execute(
+                "INSERT INTO customers (customer_id, first_name, last_name)"
+                " VALUES (?, ?, ?)", (200 + j, *name.split()))
         conn.commit()
 
 
@@ -97,6 +169,86 @@ def main():
     names = [p["name"] for g in res["9"] for p in g["players"]]
     check("every player staged exactly once",
           sorted(names) == sorted(set(names)) and len(names) == 8)
+
+    # ── Threesomes lead the shotgun train (Kerry 2026-07-21) ─────────
+    # 7 players split [4, 3]; only hole 10 is loaded (2 groups), so the
+    # threesome takes its A slot (10A — the hole's lead-off group) and
+    # the foursome follows at 10B, whatever the pace mix.
+    for _ in range(5):
+        res_b = db.generate_event_pairings(602, db_path=tmp)
+        by_size = {len(g["players"]): g["slot_label"] for g in res_b["9"]}
+        check(f"threesome leads the train {by_size}",
+              by_size.get(3) == "10A" and by_size.get(4) == "10B")
+
+    # ── Tee times: threesome takes the EARLIEST time ─────────────────
+    for _ in range(5):
+        res_e = db.generate_event_pairings(604, db_path=tmp)
+        sizes = [len(g["players"]) for g in res_e["9"]]
+        check(f"tee times smalls first {sizes}", sizes == [3, 4])
+
+    # ── Three 3-somes stage 2A → 2B → 1A (max-three-smalls case) ─────
+    # 13 players = [4,3,3,3] over slots 1A,1B,2A,2B: furthest loaded
+    # hole's A, then its B, then the A one hole back; the foursome
+    # slots in behind them at 1B. _make_group_sizes never produces
+    # more than three 3-somes in a grouping.
+    for _ in range(3):
+        res_m = db.generate_event_pairings(605, db_path=tmp)
+        by_label = {g["slot_label"]: len(g["players"]) for g in res_m["9"]}
+        check(f"three smalls at 2A/2B/1A {by_label}",
+              by_label == {"2A": 3, "2B": 3, "1A": 3, "1B": 4})
+    check("group sizes never exceed three 3-somes",
+          all(db._make_group_sizes(n).count(3) <= 3 for n in range(1, 80)))
+
+    # ── Back-nine side: shotgun labels start at hole 10 ──────────────
+    res_b = db.generate_event_pairings(602, db_path=tmp)
+    check("back-9 slots", res_b["slots_9"] == ["10A", "10B", "11A", "11B"])
+    labels = [g["slot_label"] for g in res_b["9"]]
+    check(f"back-9 group labels {labels}",
+          all(l in res_b["slots_9"] for l in labels))
+
+    # ── Switch sides: saved labels shift with the setting ────────────
+    db.save_event_pairings(602, {"9": res_b["9"]}, db_path=tmp)
+    out = db.switch_event_pairings_side(602, db_path=tmp)
+    check("switch flips to Front", out["nine_side"] == "Front")
+    saved = db.get_event_pairings(602, db_path=tmp)
+    front_labels = {g["slot_label"] for g in saved["9"]}
+    check(f"saved labels shifted to front {sorted(front_labels)}",
+          front_labels <= {"1A", "1B", "2A", "2B"})
+    out2 = db.switch_event_pairings_side(602, db_path=tmp)
+    saved2 = db.get_event_pairings(602, db_path=tmp)
+    back_labels = {g["slot_label"] for g in saved2["9"]}
+    check("switch back to Back restores labels",
+          out2["nine_side"] == "Back"
+          and back_labels <= {"10A", "10B", "11A", "11B"})
+
+    # ── Same-tee cart mates (Kerry 2026-07-21) ───────────────────────
+    # Two Combo + two White tees (case/whitespace drift included): each
+    # cart (seats 1&2 / 3&4) must hold one tee, not a split.
+    for _ in range(5):
+        res_t = db.generate_event_pairings(603, db_path=tmp)
+        grp = res_t["9"][0]["players"]
+        by_pos = {p["cart_pos"]: (p.get("tee_choice") or "").strip().lower()
+                  for p in grp}
+        check(f"tee pairs share carts {by_pos}",
+              by_pos[1] == by_pos[2] and by_pos[3] == by_pos[4])
+
+    # Partner request supersedes tee matching: Al (Combo) requests Bo
+    # (White) — they ride together; the leftover pair shares the other
+    # cart even though tees now can't match.
+    with db._connect(tmp) as conn:
+        conn.execute("UPDATE items SET partner_request = 'Bo Tee' "
+                     "WHERE event_id = 603 AND customer = 'Al Tee'")
+        conn.commit()
+    for _ in range(3):
+        res_t = db.generate_event_pairings(603, db_path=tmp)
+        grp = res_t["9"][0]["players"]
+        pos = {p["name"]: p["cart_pos"] for p in grp}
+        same_cart = ((pos["Al Tee"] <= 2) == (pos["Bo Tee"] <= 2))
+        check(f"request beats tee {pos}", same_cart)
+    with db._connect(tmp) as conn:
+        conn.execute("UPDATE items SET partner_request = NULL "
+                     "WHERE event_id = 603")
+        conn.commit()
 
     # Rules are data: disabling staging restores legacy behavior and
     # drops the ordering guarantee (no crash, groups still complete).

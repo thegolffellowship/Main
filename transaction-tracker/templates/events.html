@@ -732,6 +732,14 @@
                         </div>
                     </div>
                 </div>
+                <!-- 9-Hole Side — which nine the 9-hole leg plays (shotgun hole labels follow: Back = 10A/10B…) -->
+                <div id="edit-nine-side" style="margin-top:0.75rem;">
+                    <label style="font-weight:600; font-size:0.82rem; display:block; margin-bottom:0.3rem;">9-Hole Side</label>
+                    <div class="segmented-control">
+                        <label class="seg-option"><input type="radio" name="edit-event-nine_side" value="Front" checked> Front 9</label>
+                        <label class="seg-option"><input type="radio" name="edit-event-nine_side" value="Back"> Back 9</label>
+                    </div>
+                </div>
                 <!-- Start Time (single — shown for 9 Holes, 18 Holes, or no format) -->
                 <div id="edit-start-time-single" style="margin-top:0.75rem;">
                     <label style="font-weight:600; font-size:0.82rem;">Start Time
@@ -1472,6 +1480,14 @@
                                 <label class="seg-option"><input type="radio" name="add-event-tee_direction_18" value="Last Tee"> Last Tee</label>
                             </div>
                         </div>
+                    </div>
+                </div>
+                <!-- 9-Hole Side — which nine the 9-hole leg plays (shotgun hole labels follow: Back = 10A/10B…) -->
+                <div id="add-nine-side" style="margin-top:0.75rem;">
+                    <label style="font-weight:600; font-size:0.82rem; display:block; margin-bottom:0.3rem;">9-Hole Side</label>
+                    <div class="segmented-control">
+                        <label class="seg-option"><input type="radio" name="add-event-nine_side" value="Front" checked> Front 9</label>
+                        <label class="seg-option"><input type="radio" name="add-event-nine_side" value="Back"> Back 9</label>
                     </div>
                 </div>
                 <!-- Start Time (single — shown for 9 Holes, 18 Holes, or no format) -->
@@ -4304,6 +4320,17 @@
         return pairingsData[evId];
     }
 
+    // Shift a shotgun hole label across nines: 1A ↔ 10A, 3B ↔ 12B.
+    // Tee-time labels (and labels already on the target side) pass
+    // through unchanged.
+    function shiftShotgunLabel(label, toBack) {
+        const m = /^(\d{1,2})([AB])$/.exec((label || '').trim());
+        if (!m) return label;
+        const hole = parseInt(m[1], 10) + (toBack ? 9 : -9);
+        if (hole < 1 || hole > 18) return label;
+        return `${hole}${m[2]}`;
+    }
+
     function renderPairingsPanel(ev, registrants) {
         const state = getPairingsState(ev.id);
         const fmt = (ev.format || '').trim();
@@ -4336,6 +4363,14 @@
 
         // Seed/lock toggle
         html += `<button class="pairings-seed-toggle" data-ev-id="${ev.id}" title="Pre-assign players to specific slots before generating">${state.showSeeds ? '&#x25B2; Locks' : '&#x25BC; Locks'}</button>`;
+
+        // Side toggle — which nine the 9-hole groups play (Kerry
+        // 2026-07-21, back-9 nights). Click flips Front ↔ Back; shotgun
+        // hole labels follow (1A… ↔ 10A…), saved labels included.
+        if (isCombo || !is18Only) {
+            const side = ev.nine_side === 'Back' ? 'Back' : 'Front';
+            html += `<button class="pairings-seed-toggle" data-ev-id="${ev.id}" data-pairings-action="switch-side" title="Switch which nine the 9-hole groups play — shotgun hole labels follow (Front = 1A…, Back = 10A…)">&#x26F3; ${side} 9</button>`;
+        }
 
         // Match Play chip — matches detected from the season state
         // (rule 8 amendment). Click reopens the confirm/decline panel.
@@ -6616,6 +6651,30 @@
                     return;
                 }
 
+                if (action === 'switch-side') {
+                    btn.disabled = true;
+                    try {
+                        const res = await fetch(`/api/events/${ev.id}/pairings/switch-side`, {method: 'POST'});
+                        const data = await res.json();
+                        if (!res.ok) { alert(data.error || 'Side switch failed'); return; }
+                        ev.nine_side = data.nine_side;
+                        const master = allEvents.find(e => e.id === ev.id);
+                        if (master) master.nine_side = data.nine_side;
+                        // Saved labels were remapped server-side; mirror the
+                        // shift on whatever is loaded client-side (including
+                        // unsaved generated groups) so the sheet stays true.
+                        const toBack = data.nine_side === 'Back';
+                        state.slots_9 = state.slots_9.map(l => shiftShotgunLabel(l, toBack));
+                        state.groups_9.forEach(g => { g.slot_label = shiftShotgunLabel(g.slot_label, toBack); });
+                    } catch (err) {
+                        alert('Side switch failed.');
+                    } finally {
+                        btn.disabled = false;
+                    }
+                    rerenderDetail(container, ev);
+                    return;
+                }
+
                 if (action === 'add-seed') {
                     const selEl = container.querySelector(`#new-seed-slot-${ev.id}`);
                     const slotIdx = selEl ? parseInt(selEl.value) : 0;
@@ -8607,6 +8666,8 @@
         document.querySelectorAll('input[name="add-event-tee_direction"]').forEach(r => r.checked = (r.value === "First Tee"));
         document.querySelectorAll('input[name="add-event-tee_direction_9"]').forEach(r => r.checked = (r.value === "First Tee"));
         document.querySelectorAll('input[name="add-event-tee_direction_18"]').forEach(r => r.checked = (r.value === "First Tee"));
+        // Reset 9-hole side to Front (default)
+        document.querySelectorAll('input[name="add-event-nine_side"]').forEach(r => r.checked = (r.value === "Front"));
         document.getElementById("add-start-type-single").style.display = "";
         document.getElementById("add-start-type-combo").style.display = "none";
         document.getElementById("add-tee-count").value = "";
@@ -8712,6 +8773,9 @@
                 const tdEl = document.querySelector('input[name="add-event-tee_direction"]:checked');
                 payload.tee_direction = tdEl ? tdEl.value : "First Tee";
             }
+            // 9-hole side (shared control, applies to any 9-hole leg)
+            const addNsEl = document.querySelector('input[name="add-event-nine_side"]:checked');
+            payload.nine_side = addNsEl ? addNsEl.value : "Front";
             // Pricing fields
             if (isCombo) {
                 // Combo pricing from calculators
@@ -9268,6 +9332,10 @@
         document.querySelectorAll('input[name="edit-event-tee_direction_18"]').forEach(r => {
             r.checked = (r.value === (ev.tee_direction_18 || "First Tee"));
         });
+        // 9-hole side (Front default)
+        document.querySelectorAll('input[name="edit-event-nine_side"]').forEach(r => {
+            r.checked = (r.value === (ev.nine_side || "Front"));
+        });
 
         // Pricing fields — single format
         document.getElementById("edit-event-tgf_markup").value = ev.tgf_markup != null ? ev.tgf_markup : "";
@@ -9400,6 +9468,11 @@
             // Clear combo direction when not in combo mode
             if (ev.tee_direction_18) changes.tee_direction_18 = null;
         }
+
+        // 9-hole side (shared control, applies to any 9-hole leg)
+        const nsEl = document.querySelector('input[name="edit-event-nine_side"]:checked');
+        const nsVal = nsEl ? nsEl.value : "Front";
+        if (nsVal !== (ev.nine_side || "Front")) changes.nine_side = nsVal;
 
         // Pricing fields — depends on format
         if (isCombo) {
@@ -9994,6 +10067,13 @@
             // Show single tee direction only when Tee Times selected
             document.getElementById(`${prefix}-tee-direction-single`).style.display = isTee ? "" : "none";
             document.getElementById(`${prefix}-tee-direction-combo`).style.display = "none";
+        }
+
+        // 9-Hole Side applies whenever the event has a 9-hole leg
+        const nineSideEl = document.getElementById(`${prefix}-nine-side`);
+        if (nineSideEl) {
+            const fmtVal = formatEl ? formatEl.value : "";
+            nineSideEl.style.display = (isCombo || fmtVal === "9 Holes" || fmtVal === "") ? "" : "none";
         }
     }
 
