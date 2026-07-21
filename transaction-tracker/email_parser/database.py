@@ -26199,6 +26199,30 @@ def cmp_remove_member(pool_id: int, customer_name: str, db_path=None) -> None:
         conn.commit()
 
 
+def _cmp_hole_pars_for_event(conn, event_id, _cache: dict | None = None) -> dict:
+    """{hole_number: par} for an event, via its imported scoring rounds'
+    tees → course_tee_holes (Kerry 2026-07-21: the expanded match
+    scorecard shows a Par row so scores read against par). Par rarely
+    differs across tees; the first tee with data wins per hole. {} when
+    the event has no banked cards / tee pars."""
+    if not event_id:
+        return {}
+    if _cache is not None and event_id in _cache:
+        return _cache[event_id]
+    pars: dict = {}
+    for r in conn.execute(
+            """SELECT cth.hole_number, cth.par
+                 FROM (SELECT DISTINCT tee_id FROM scoring_rounds
+                        WHERE event_id = ? AND tee_id IS NOT NULL) t
+                 JOIN course_tee_holes cth ON cth.tee_id = t.tee_id
+                WHERE cth.par IS NOT NULL
+                ORDER BY cth.hole_number""", (event_id,)):
+        pars.setdefault(r["hole_number"], r["par"])
+    if _cache is not None:
+        _cache[event_id] = pars
+    return pars
+
+
 def cmp_get_matches(pool_id: int, db_path=None) -> list[dict]:
     with _connect(db_path) as conn:
         rows = conn.execute(
@@ -26208,7 +26232,12 @@ def cmp_get_matches(pool_id: int, db_path=None) -> list[dict]:
                WHERE m.pool_id = ? ORDER BY m.id""",
             (pool_id,),
         ).fetchall()
-        return [dict(r) for r in rows]
+        out = [dict(r) for r in rows]
+        # Par row feed for the expanded scorecards (Kerry 2026-07-21)
+        _pc: dict = {}
+        for m in out:
+            m["hole_pars"] = _cmp_hole_pars_for_event(conn, m.get("event_id"), _pc)
+        return out
 
 
 def _cmp_round_row_for(conn, event_id, customer_id, player_name=None):
@@ -27366,7 +27395,13 @@ def cmp_get_bracket(season: str, chapter: str, db_path=None) -> list[dict]:
                ORDER BY b.round, b.slot""",
             (season, chapter),
         ).fetchall()
-        return [dict(r) for r in rows]
+        out = [dict(r) for r in rows]
+        # Par row feed for the expanded knockout scorecards (Kerry
+        # 2026-07-21) — same per-event map the pool matches carry.
+        _pc: dict = {}
+        for b in out:
+            b["hole_pars"] = _cmp_hole_pars_for_event(conn, b.get("event_id"), _pc)
+        return out
 
 
 def cmp_standings_diff_dmp09(db_path=None, advance_per_pool: int = 2) -> dict:

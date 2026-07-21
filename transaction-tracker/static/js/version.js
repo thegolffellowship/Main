@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.136.1";
+window.TGF_VERSION = "2.137.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.137.0",
+    date: "2026-07-21",
+    changes: [
+      "Par row on Match Play scorecards (Kerry): the expanded hole-by-hole card — pool matches AND knockout — now shows a Par row above the players' scores, so every score reads against par at a glance. Par comes from the match event's imported tee data (scoring_rounds → course_tee_holes): the pools/bracket APIs attach a per-event hole_pars map, a client-side registry keyed by event name serves it to every render path (including the 60s live re-render), and the row appears whenever par data exists — holes without banked tee pars stay blank rather than misaligning the grid. Illustrative placeholder cards keep their existing Par row unchanged.",
+    ],
+  },
   {
     version: "2.136.1",
     date: "2026-07-21",

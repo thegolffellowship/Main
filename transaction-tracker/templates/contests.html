@@ -2687,6 +2687,20 @@
         return null;
     }
 
+    // Per-event hole-par registry (Kerry 2026-07-21): pools/bracket API
+    // rows carry hole_pars ({hole_number: par} from the event's imported
+    // tees). Registered by event NAME so the live re-render path — which
+    // only knows the card's data-live-event string — can find it too.
+    const mpEventPars = {};
+    function mpRegisterPars(eventName, pars) {
+        if (!eventName || !pars || !Object.keys(pars).length) return;
+        mpEventPars[String(eventName).trim().toLowerCase()] = pars;
+    }
+    function mpParsFor(eventName) {
+        if (!eventName) return null;
+        return mpEventPars[String(eventName).trim().toLowerCase()] || null;
+    }
+
     function mpHolesFromGG(gg, o) {
         // Show the FULL match scorecard — every hole they'll play (9 or 18),
         // not just the holes posted so far: played holes fill in, the rest
@@ -2728,9 +2742,17 @@
                 else if (wnr === 'B') { ptsA = 1; ptsB = 2; }
                 else if (wnr === 'H') { ptsA = 2; ptsB = 2; }
             }
+            // Par from the event's tee data when we have it (Par row on
+            // the expanded card — Kerry 2026-07-21). Keys may be int or
+            // string depending on the JSON round trip.
+            const pmap = mpParsFor(o.eventName);
+            const par = (pmap && h.hole != null)
+                ? (pmap[h.hole] != null ? pmap[h.hole]
+                   : (pmap[String(h.hole)] != null ? pmap[String(h.hole)] : null))
+                : null;
             return {
                 winner: (played && !dead) ? wnr : null, played, dead,
-                holeNo: h.hole, par: null, parA: grossA, parB: grossB,
+                holeNo: h.hole, par, parA: grossA, parB: grossB,
                 ptsA, ptsB,
                 srA: (strA || 0) > 0, srB: (strB || 0) > 0
             };
@@ -2788,7 +2810,7 @@
         function block(start, len) {
             const hs = [], pars = [], aS = [], bS = [], aP = [], bP = [];
             let parTot = 0, aStr = 0, bStr = 0, aPts = 0, bPts = 0;
-            let firstNo = null, lastNo = null;
+            let firstNo = null, lastNo = null, anyPar = false;
             for (let i = start; i < start + len; i++) {
                 const h = gen.holes[i]; if (!h) continue;
                 // dead (post-decision) holes grey out like unplayed ones
@@ -2796,7 +2818,10 @@
                 const no = h.holeNo != null ? h.holeNo : (i + 1);
                 if (firstNo == null) firstNo = no; lastNo = no;
                 hs.push(`<td>${no}</td>`);
-                if (h.par != null) { pars.push(`<td>${h.par}</td>`); parTot += h.par; }
+                // Always one par cell per hole so the row stays aligned;
+                // blank when a hole's par is unknown.
+                if (h.par != null) { pars.push(`<td>${h.par}</td>`); parTot += h.par; anyPar = true; }
+                else { pars.push('<td></td>'); }
                 const aMk = h.winner === 'A' ? `<span class="mp-sc-mk won-a">${h.parA}</span>` : (h.parA == null ? '' : h.parA);
                 const bMk = h.winner === 'B' ? `<span class="mp-sc-mk won-b">${h.parB}</span>` : (h.parB == null ? '' : h.parB);
                 aS.push(`<td class="${'strk' + dim}">${aMk}${popDots(h.srA, 'a')}</td>`);
@@ -2813,7 +2838,9 @@
             const label = isGG
                 ? ''
                 : (start === 0 && gen.count === 18 ? 'Front 9' : (gen.count === 18 ? 'Back 9' : (gen.nine === 'back' ? 'Back 9' : 'Front 9')));
-            const parRow = (!isGG) ? `<tr class="mp-sc-par"><th class="mp-sc-rowlabel">Par</th>${pars.join('')}<th class="mp-sc-tot">${parTot}</th></tr>` : '';
+            // Par row renders whenever par data exists — GG cards included
+            // (Kerry 2026-07-21: see scores against par at a glance).
+            const parRow = anyPar ? `<tr class="mp-sc-par"><th class="mp-sc-rowlabel">Par</th>${pars.join('')}<th class="mp-sc-tot">${parTot}</th></tr>` : '';
             const aPtsRow = showPts ? `<tr class="mp-sc-pts"><th class="mp-sc-rowlabel">Pts</th>${aP.join('')}<th class="mp-sc-tot">${aPts}</th></tr>` : '';
             const bPtsRow = showPts ? `<tr class="mp-sc-pts"><th class="mp-sc-rowlabel">Pts</th>${bP.join('')}<th class="mp-sc-tot">${bPts}</th></tr>` : '';
             return `
@@ -2923,8 +2950,10 @@
             try { gg = typeof m.gg_match_detail === 'string' ? JSON.parse(m.gg_match_detail) : m.gg_match_detail; }
             catch (e) { gg = null; }
         }
+        mpRegisterPars(m.event_name, m.hole_pars);
         const o = {
             aName: p1, bName: p2, aWin, bWin, tie, margin: m.margin, gg,
+            eventName: m.event_name || null,
             seedKey: [p1, p2, m.event_name || '', m.event_date_val || m.match_date || ''].join('|'),
             holesHint: (m.event_name || '') + ' ' + (m.notes || '')
         };
@@ -2992,6 +3021,7 @@
             // the frozen result keeps GG's real hole-by-hole (scores + pops), not
             // a fabricated placeholder. `live` only gates the running-margin UI.
             gg: liveGG || null, live, liveLead: lead,
+            eventName: eventName || null,
             seedKey: [s1.player_name || '', s2.player_name || '', roundKey, eventName || ''].join('|'),
             holesHint: (eventName || '') + ' ' + roundLabel
         };
@@ -4386,6 +4416,9 @@
     function cmpRenderBracket() {
         const container = $("cmp-bracket-container");
         const bracket = cmpState.bracket || [];
+        // Feed the par registry so knockout scorecards (including live
+        // re-renders that only know the event name) can show a Par row.
+        bracket.forEach(r => mpRegisterPars(r.event_name, r.hole_pars));
 
         if (!cmpState.pools.length) {
             container.innerHTML = '<p style="color:var(--text-muted);font-size:0.85rem;">Create pools first.</p>';
