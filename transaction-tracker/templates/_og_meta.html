@@ -1,0 +1,20 @@
+{# Link-preview metadata (Kerry 2026-07-21): texted/shared links get a
+   meaningful card in iMessage/WhatsApp/Slack instead of a bare domain.
+   Usage: {% set og_title = "…" %}{% set og_desc = "…" %} then include
+   this right after <title>. og:image must be ABSOLUTE — message apps
+   won't resolve relative paths. Previews are fetched anonymously, so
+   they only work on pages that serve HTML without a server-side
+   redirect (all shell pages qualify — auth is the client-side PIN
+   modal). Hash fragments (#tab=mp&mp=knockout) never reach the server,
+   so all sub-links of a page share that page's card. #}
+{% set _og_root = (request.url_root.rstrip('/') if request is defined and request else '') %}
+<meta property="og:site_name" content="The Golf Fellowship">
+<meta property="og:type" content="website">
+<meta property="og:title" content="{{ og_title|default('The Golf Fellowship') }}">
+<meta property="og:description" content="{{ og_desc|default('Golf, fellowship, and friendly competition — San Antonio & Austin.') }}">
+<meta property="og:image" content="{{ _og_root }}/static/icon-512.png">
+{% if request is defined and request %}<meta property="og:url" content="{{ request.base_url }}">{% endif %}
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="{{ og_title|default('The Golf Fellowship') }}">
+<meta name="twitter:description" content="{{ og_desc|default('Golf, fellowship, and friendly competition — San Antonio & Austin.') }}">
+<meta name="twitter:image" content="{{ _og_root }}/static/icon-512.png">

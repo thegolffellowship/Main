@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.136.0";
+window.TGF_VERSION = "2.136.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.136.1",
+    date: "2026-07-21",
+    changes: [
+      "Link previews (Kerry): texted/shared links now unfurl with a meaningful card — page-specific Open Graph + Twitter metadata (title, description, TGF icon) via the new templates/_og_meta.html include, added to Contests/Leaderboards, Player Spotlight, Handicaps, and Events (member and admin variants alike). Example: /member/contests previews as 'TGF Leaderboards & Match Play — Season standings, points races, Match Play pools and knockout bracket…'. Note: hash sub-links (#tab=mp&mp=knockout) share their page's card — fragments never reach the server.",
+    ],
+  },
   {
     version: "2.136.0",
     date: "2026-07-21",
