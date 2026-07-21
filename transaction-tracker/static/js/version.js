@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.137.1";
+window.TGF_VERSION = "2.137.2";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.137.2",
+    date: "2026-07-21",
+    changes: [
+      "Austin knockout par fix (Kerry): the Barna/Hogue semifinals showed no Par row because their bracket matches never had an EVENT linked — no event, no course, no tee pars (SA's semi worked because Vaaler Creek was linked). cmp_get_bracket now self-heals at read time: when a bracket match has no event_id but its hardened GG detail carries the round's event code ('a9.18'), the event resolves by code — feeding the Par row AND the card header's course · date — without touching the stored row. Manually linking the event via the manager dropdown still works instantly and remains the proper data fix.",
+    ],
+  },
   {
     version: "2.137.1",
     date: "2026-07-21",

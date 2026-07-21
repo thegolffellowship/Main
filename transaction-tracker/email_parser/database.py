@@ -27457,9 +27457,38 @@ def cmp_get_bracket(season: str, chapter: str, db_path=None) -> list[dict]:
         out = [dict(r) for r in rows]
         # Par row feed for the expanded knockout scorecards (Kerry
         # 2026-07-21) — same per-event map the pool matches carry.
+        # Self-healing event link (Kerry's Austin catch, same day): when
+        # the manager never linked an event to a bracket match, the
+        # hardened GG detail still knows the round's event CODE
+        # ("a9.18") — resolve it to the Tracker event so par + the
+        # course·date header work without manual linking. Read-time
+        # only; the row's stored event_id is untouched.
         _pc: dict = {}
         for b in out:
-            b["hole_pars"] = _cmp_hole_pars_for_event(conn, b.get("event_id"), _pc)
+            ev_id = b.get("event_id")
+            if not ev_id and b.get("gg_match_detail"):
+                try:
+                    _det = json.loads(b["gg_match_detail"]) \
+                        if isinstance(b["gg_match_detail"], str) \
+                        else (b["gg_match_detail"] or {})
+                    _code = (_det.get("gg_event") or "").strip()
+                except Exception:
+                    _code = ""
+                if _code:
+                    _ev = conn.execute(
+                        "SELECT id, item_name, course, event_date FROM events "
+                        "WHERE item_name LIKE ? COLLATE NOCASE "
+                        "ORDER BY event_date DESC LIMIT 1",
+                        (_code + " %",)).fetchone()
+                    if _ev:
+                        ev_id = _ev["id"]
+                        if not b.get("event_name"):
+                            b["event_name"] = _ev["item_name"]
+                        if not b.get("event_course"):
+                            b["event_course"] = _ev["course"]
+                        if not b.get("event_date"):
+                            b["event_date"] = _ev["event_date"]
+            b["hole_pars"] = _cmp_hole_pars_for_event(conn, ev_id, _pc)
         return out
 
 
