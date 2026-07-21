@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.131.1";
+window.TGF_VERSION = "2.132.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.132.0",
+    date: "2026-07-21",
+    changes: [
+      "Partner-request console (Kerry): the PAIRINGS controls bar gains a Requests chip (active/total count) that opens a list of every request on the roster — who asked for whom, plus raw text that didn't match a rostered player. Remove suppresses a request BEFORE generating: the generator ignores it on the next run, but the row stays listed with a SUPPRESSED badge and a Restore button. Suppression persists per event in the new pairing_request_suppressions table (requester customer_id captured per rule 6); API: GET /api/events/<id>/pairings/requests + POST .../requests/suppress, and the request list rides along on GET /pairings.",
+    ],
+  },
   {
     version: "2.131.1",
     date: "2026-07-21",

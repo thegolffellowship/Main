@@ -4315,6 +4315,10 @@
                 // views); mpNotes = generator's dropped-constraint notes.
                 mpDetected: null, mpConfirm: {}, mpPanelOpen: false,
                 mpMatches: [], mpNotes: [],
+                // Partner-request visibility + manager suppression
+                // (Kerry 2026-07-21): requests = resolved list from
+                // GET /pairings; suppressed entries stay listed.
+                requests: [], showRequests: false,
             };
         }
         return pairingsData[evId];
@@ -4363,6 +4367,14 @@
 
         // Seed/lock toggle
         html += `<button class="pairings-seed-toggle" data-ev-id="${ev.id}" title="Pre-assign players to specific slots before generating">${state.showSeeds ? '&#x25B2; Locks' : '&#x25BC; Locks'}</button>`;
+
+        // Requests chip — who requested whom, with per-request
+        // suppression (Kerry 2026-07-21). Count = requests the
+        // generator would act on (matched + not suppressed).
+        if (state.requests && state.requests.length) {
+            const activeReqs = state.requests.filter(r => r.matched && !r.suppressed).length;
+            html += `<button class="pairings-seed-toggle" data-ev-id="${ev.id}" data-pairings-action="requests-toggle" title="Partner requests on this roster — remove one to keep the generator from honoring it">${state.showRequests ? '&#x25B2;' : '&#x25BC;'} Requests: ${activeReqs}${activeReqs < state.requests.length ? `/${state.requests.length}` : ''}</button>`;
+        }
 
         // Side toggle — which nine the 9-hole groups play (Kerry
         // 2026-07-21, back-9 nights). Click flips Front ↔ Back; shotgun
@@ -4425,6 +4437,35 @@
             html += '<div style="margin:0.3rem 0 0.5rem;">';
             state.mpNotes.forEach(n => {
                 html += `<div class="mp-note">&#x26A0;&#xFE0F; ${escapeHtml(n)}</div>`;
+            });
+            html += '</div>';
+        }
+
+        // ── Partner requests panel (Kerry 2026-07-21) ────────────────────────
+        // Every request on the roster, visible in one place. Remove =
+        // suppress: the generator ignores it on the next Generate, but
+        // the row stays here badged SUPPRESSED until restored.
+        if (state.showRequests) {
+            html += '<div class="pairings-seeds-panel">';
+            html += '<div style="font-size:0.8rem;color:var(--text-muted);margin-bottom:0.5rem;">Partner requests from signup. <strong>Remove</strong> keeps the generator from honoring a request on the next Generate &mdash; it stays listed here as suppressed until restored.</div>';
+            if (!state.requests.length) {
+                html += '<div style="font-size:0.82rem;color:var(--text-muted);">No partner requests on this roster.</div>';
+            }
+            state.requests.forEach(r => {
+                const sup = r.suppressed;
+                html += `<div style="display:flex;align-items:center;gap:0.6rem;padding:0.3rem 0;border-bottom:1px solid var(--border);${sup ? 'opacity:0.55;' : ''}">`;
+                html += `<span style="font-size:0.85rem;${sup ? 'text-decoration:line-through;' : ''}"><strong>${escapeHtml(r.requester)}</strong> &rarr; ${r.matched ? escapeHtml(r.partner) : `<em>${escapeHtml(r.request_text)}</em>`}</span>`;
+                if (!r.matched) {
+                    html += '<span style="font-size:0.72rem;color:var(--text-muted);border:1px solid var(--border);border-radius:9px;padding:0 0.4rem;">no roster match</span>';
+                }
+                if (sup) {
+                    html += '<span style="font-size:0.72rem;font-weight:700;color:#b45309;border:1px solid #f59e0b;border-radius:9px;padding:0 0.4rem;">SUPPRESSED</span>';
+                }
+                html += '<div style="flex:1;"></div>';
+                if (r.matched || sup) {
+                    html += `<button class="pairings-action-btn" data-ev-id="${ev.id}" data-request-suppress="${sup ? '0' : '1'}" data-requester="${escapeHtml(r.requester)}" style="font-size:0.78rem;padding:0.15rem 0.5rem;${sup ? '' : 'color:var(--red);'}">${sup ? '&#x21BA; Restore' : '&#x2715; Remove'}</button>`;
+                }
+                html += '</div>';
             });
             html += '</div>';
         }
@@ -4618,6 +4659,7 @@
             state.groups_18 = (data.pairings && data.pairings['18']) ? data.pairings['18'] : [];
             state.event_players = data.event_players || [];
             state.mpMatches = data.mp_matches || [];
+            state.requests = data.partner_requests || [];
             state.isDirty = false;
             state.loaded = true;
         } catch (e) {
@@ -6651,6 +6693,12 @@
                     return;
                 }
 
+                if (action === 'requests-toggle') {
+                    state.showRequests = !state.showRequests;
+                    rerenderDetail(container, ev);
+                    return;
+                }
+
                 if (action === 'switch-side') {
                     btn.disabled = true;
                     try {
@@ -6694,6 +6742,30 @@
                     rerenderDetail(container, ev);
                     return;
                 }
+            });
+        });
+
+        // Partner-request suppress/restore (Kerry 2026-07-21)
+        container.querySelectorAll('[data-request-suppress]').forEach(btn => {
+            btn.addEventListener('click', async e => {
+                e.stopPropagation();
+                const suppress = btn.dataset.requestSuppress === '1';
+                btn.disabled = true;
+                try {
+                    const res = await fetch(`/api/events/${ev.id}/pairings/requests/suppress`, {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({requester: btn.dataset.requester, suppressed: suppress}),
+                    });
+                    const data = await res.json();
+                    if (!res.ok) { alert(data.error || 'Request update failed'); return; }
+                    state.requests = data.requests || [];
+                } catch (err) {
+                    alert('Request update failed.');
+                } finally {
+                    btn.disabled = false;
+                }
+                rerenderDetail(container, ev);
             });
         });
 

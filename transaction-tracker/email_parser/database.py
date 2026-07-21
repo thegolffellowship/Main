@@ -39302,6 +39302,22 @@ def _ensure_pairing_tables(conn: sqlite3.Connection) -> None:
             conn.execute(f"ALTER TABLE pairing_history ADD COLUMN {col} {decl}")
         except sqlite3.OperationalError:
             pass  # already added
+    # Manager-suppressed partner requests (Kerry 2026-07-21): a row here
+    # means the generator ignores that requester's partner_request for
+    # this event. The request stays visible in the PAIRINGS requests
+    # list, badged SUPPRESSED, until the row is removed (restore).
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS pairing_request_suppressions (
+            id                    INTEGER PRIMARY KEY AUTOINCREMENT,
+            event_id              INTEGER NOT NULL REFERENCES events(id) ON DELETE CASCADE,
+            requester_name        TEXT NOT NULL,
+            requester_customer_id INTEGER REFERENCES customers(customer_id),
+            created_at            TEXT DEFAULT (datetime('now')),
+            UNIQUE(event_id, requester_name)
+        )
+        """
+    )
     conn.commit()
 
 
@@ -39519,6 +39535,92 @@ def switch_event_pairings_side(event_id: int, db_path=None) -> dict:
                 relabeled += 1
         conn.commit()
         return {"nine_side": new_side, "relabeled": relabeled}
+
+
+def get_event_partner_requests(event_id: int, db_path=None) -> dict:
+    """Who requested whom on this event's roster (Kerry 2026-07-21).
+
+    One entry per rostered player carrying a partner_request: the raw
+    request text, the rostered player it resolved to (same matching rule
+    the generator uses — _find_partner_name), and whether the manager
+    SUPPRESSED it. Suppressed requests stay in the list (visibility) but
+    the generator ignores them on the next run. Unmatched text is shown
+    too (matched=false) so the manager can see intent the generator
+    can't act on.
+    """
+    INACTIVE = ("credited", "refunded", "transferred", "wd")
+    ph = ",".join("?" * len(INACTIVE))
+    with _connect(db_path) as conn:
+        _ensure_pairing_tables(conn)
+        rows = conn.execute(
+            f"""
+            SELECT DISTINCT i.customer, i.customer_id, i.holes,
+                            i.partner_request
+            FROM events e
+            LEFT JOIN event_aliases ea ON ea.canonical_event_name = e.item_name
+            JOIN items i ON (
+                i.item_name = e.item_name COLLATE NOCASE
+                OR i.item_name = ea.alias_name COLLATE NOCASE
+                OR i.event_id = e.id
+            )
+            WHERE e.id = ?
+              AND COALESCE(i.transaction_status, 'active') NOT IN ({ph})
+              AND i.parent_item_id IS NULL
+            ORDER BY i.customer COLLATE NOCASE
+            """,
+            (event_id, *INACTIVE),
+        ).fetchall()
+        suppressed = {_pair_key_name(r["requester_name"]) for r in conn.execute(
+            "SELECT requester_name FROM pairing_request_suppressions "
+            "WHERE event_id = ?", (event_id,)).fetchall()}
+
+    all_names = [r["customer"] for r in rows if r["customer"]]
+    requests = []
+    for r in rows:
+        req_text = (r["partner_request"] or "").strip()
+        if not r["customer"] or not req_text:
+            continue
+        partner = _find_partner_name(req_text, all_names, r["customer"])
+        requests.append({
+            "requester": r["customer"],
+            "requester_customer_id": r["customer_id"],
+            "holes": r["holes"],
+            "request_text": req_text,
+            "partner": partner,
+            "matched": bool(partner),
+            "suppressed": _pair_key_name(r["customer"]) in suppressed,
+        })
+    return {"event_id": event_id, "requests": requests}
+
+
+def set_partner_request_suppression(event_id: int, requester_name: str,
+                                    suppressed: bool, db_path=None) -> dict:
+    """Suppress (or restore) one player's partner request for one event.
+    Suppression is per REQUESTER row — if two players requested each
+    other, each direction is its own toggle."""
+    requester_name = (requester_name or "").strip()
+    if not requester_name:
+        raise ValueError("requester_name required")
+    with _connect(db_path) as conn:
+        _ensure_pairing_tables(conn)
+        if suppressed:
+            cid_row = conn.execute(
+                "SELECT customer_id FROM items WHERE customer = ? "
+                "COLLATE NOCASE AND customer_id IS NOT NULL LIMIT 1",
+                (requester_name,)).fetchone()
+            conn.execute(
+                "INSERT OR IGNORE INTO pairing_request_suppressions "
+                "(event_id, requester_name, requester_customer_id) "
+                "VALUES (?, ?, ?)",
+                (event_id, requester_name,
+                 cid_row["customer_id"] if cid_row else None))
+        else:
+            conn.execute(
+                "DELETE FROM pairing_request_suppressions "
+                "WHERE event_id = ? AND requester_name = ? COLLATE NOCASE",
+                (event_id, requester_name))
+        conn.commit()
+    return get_event_partner_requests(event_id, db_path=db_path)
 
 
 def _pair_key_name(name: str) -> str:
@@ -40834,6 +40936,18 @@ def generate_event_pairings(
             (event_id, *INACTIVE),
         ).fetchall()
         items = [dict(r) for r in items]
+
+        # ── Manager-suppressed partner requests (Kerry 2026-07-21) ────
+        # Blank them before any pairing logic sees them; the request
+        # stays listed on the PAIRINGS tab badged SUPPRESSED.
+        _ensure_pairing_tables(conn)
+        _suppressed = {_pair_key_name(r["requester_name"]) for r in conn.execute(
+            "SELECT requester_name FROM pairing_request_suppressions "
+            "WHERE event_id = ?", (event_id,)).fetchall()}
+        if _suppressed:
+            for it in items:
+                if _pair_key_name(it.get("customer") or "") in _suppressed:
+                    it["partner_request"] = None
 
         # ── Handicap index map ────────────────────────────────────────
         hcp_rows = conn.execute(

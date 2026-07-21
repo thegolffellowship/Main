@@ -245,6 +245,44 @@ def main():
         pos = {p["name"]: p["cart_pos"] for p in grp}
         same_cart = ((pos["Al Tee"] <= 2) == (pos["Bo Tee"] <= 2))
         check(f"request beats tee {pos}", same_cart)
+    # ── Request list + manager suppression (Kerry 2026-07-21) ────────
+    # The request stays visible when suppressed, but the generator
+    # ignores it: with Al→Bo suppressed the tee rule wins the carts
+    # again; restore brings the request back.
+    with db._connect(tmp) as conn:
+        conn.execute("UPDATE items SET partner_request = 'Zzz Nobody' "
+                     "WHERE event_id = 603 AND customer = 'Cy Tee'")
+        conn.commit()
+    reqs = db.get_event_partner_requests(603, db_path=tmp)["requests"]
+    by_requester = {r["requester"]: r for r in reqs}
+    check("request list shows both requests", len(reqs) == 2)
+    check("Al→Bo matched & active",
+          by_requester["Al Tee"]["partner"] == "Bo Tee"
+          and by_requester["Al Tee"]["matched"]
+          and not by_requester["Al Tee"]["suppressed"])
+    check("unmatched request flagged",
+          not by_requester["Cy Tee"]["matched"]
+          and by_requester["Cy Tee"]["request_text"] == "Zzz Nobody")
+
+    out = db.set_partner_request_suppression(603, "Al Tee", True, db_path=tmp)
+    sup_row = next(r for r in out["requests"] if r["requester"] == "Al Tee")
+    check("suppressed request still listed", sup_row["suppressed"])
+    for _ in range(3):
+        res_t = db.generate_event_pairings(603, db_path=tmp)
+        grp = res_t["9"][0]["players"]
+        by_pos = {p["cart_pos"]: (p.get("tee_choice") or "").strip().lower()
+                  for p in grp}
+        check(f"suppressed request ignored — tees pair carts {by_pos}",
+              by_pos[1] == by_pos[2] and by_pos[3] == by_pos[4])
+
+    out = db.set_partner_request_suppression(603, "Al Tee", False, db_path=tmp)
+    check("restore clears the badge",
+          not next(r for r in out["requests"]
+                   if r["requester"] == "Al Tee")["suppressed"])
+    res_t = db.generate_event_pairings(603, db_path=tmp)
+    pos = {p["name"]: p["cart_pos"] for p in res_t["9"][0]["players"]}
+    check(f"restored request honored {pos}",
+          (pos["Al Tee"] <= 2) == (pos["Bo Tee"] <= 2))
     with db._connect(tmp) as conn:
         conn.execute("UPDATE items SET partner_request = NULL "
                      "WHERE event_id = 603")

@@ -4774,12 +4774,22 @@ def api_get_pairings(event_id):
             mp_matches = detect_match_play_pairings(event_id).get("matches", [])
         except Exception:
             logger.exception("MP detection failed for event %d (non-fatal)", event_id)
+        # Partner-request list (who asked for whom + suppression state)
+        # so the PAIRINGS tab can show its Requests chip without a
+        # second round trip.
+        partner_requests = []
+        try:
+            from email_parser.database import get_event_partner_requests
+            partner_requests = get_event_partner_requests(event_id).get("requests", [])
+        except Exception:
+            logger.exception("Partner-request list failed for event %d (non-fatal)", event_id)
         return jsonify({
             "pairings": pairings,
             "slots_9": slots_9,
             "slots_18": slots_18,
             "event_players": event_players,
             "mp_matches": mp_matches,
+            "partner_requests": partner_requests,
             "event": {
                 "format": ev.get("format"),
                 "start_type": ev.get("start_type"),
@@ -4852,6 +4862,40 @@ def api_save_pairings(event_id):
         return jsonify({"status": "ok"})
     except Exception as e:
         logger.exception("Failed to save pairings for event %d", event_id)
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/events/<int:event_id>/pairings/requests", methods=["GET"])
+@require_role("manager")
+def api_pairings_requests(event_id):
+    """Partner requests on this event's roster: who asked for whom,
+    whether the text matched a rostered player, and suppression state."""
+    try:
+        from email_parser.database import get_event_partner_requests
+        return jsonify(get_event_partner_requests(event_id))
+    except Exception as e:
+        logger.exception("Partner-request list failed for event %d", event_id)
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/events/<int:event_id>/pairings/requests/suppress", methods=["POST"])
+@require_role("manager")
+def api_pairings_request_suppress(event_id):
+    """Suppress or restore one player's partner request for this event.
+    Suppressed requests stay listed (badged SUPPRESSED) but the
+    generator ignores them on the next run."""
+    data = request.get_json(silent=True) or {}
+    requester = (data.get("requester") or "").strip()
+    if not requester:
+        return jsonify({"error": "requester required"}), 400
+    try:
+        from email_parser.database import set_partner_request_suppression
+        return jsonify(set_partner_request_suppression(
+            event_id, requester, bool(data.get("suppressed", True))))
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+    except Exception as e:
+        logger.exception("Request suppression failed for event %d", event_id)
         return jsonify({"error": str(e)}), 500
 
 

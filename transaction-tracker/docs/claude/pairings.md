@@ -416,7 +416,7 @@ Next (pace v2, parked): derive ratings from GPS/score-entry timing.
 
 ## Cart seating + Front/Back nine (Kerry 2026-07-21, v2.131.0)
 
-Three Quarry-night rulings, all built:
+The Quarry-night rulings, all built:
 
 1. **Short groups beat pace in staging** — see the staging amendment
    above (`smalls_lead`): earliest tee times / furthest-out hole
@@ -430,7 +430,22 @@ Three Quarry-night rulings, all built:
    case/whitespace-normalized. The old sort-by-tee path for
    unconstrained groups (`_order_group_by_tee`) is retired — it could
    split a tee pair across carts whenever a third tee was present.
-3. **Front/Back 9 side.** `events.nine_side` ('Front' default |
+3. **Request visibility + manager suppression (v2.132.0, same day).**
+   The PAIRINGS controls bar's Requests chip opens the full request
+   list — who asked for whom (`get_event_partner_requests`, same
+   `_find_partner_name` matching the generator uses; unmatched raw
+   text shown too). **Remove suppresses the request before Generate**:
+   a `pairing_request_suppressions` row (event_id + requester_name +
+   requester_customer_id, created lazily in
+   `_ensure_pairing_tables`) makes `generate_event_pairings` blank
+   that requester's partner_request before any pairing logic runs.
+   The row stays listed, badged SUPPRESSED, until restored
+   (`set_partner_request_suppression`). Suppression is per REQUESTER —
+   mutual requests are two rows, two toggles. API: GET
+   `/api/events/<id>/pairings/requests`, POST `…/requests/suppress`
+   {requester, suppressed}; the list also rides on GET `/pairings`
+   so the chip needs no extra round trip.
+4. **Front/Back 9 side.** `events.nine_side` ('Front' default |
    'Back') says which nine the 9-hole leg plays. Shotgun slot labels
    follow (`_pairing_time_slots`: Back → 10A/10B…). Event setup (add +
    edit modals) has a "9-Hole Side" segmented control, shown whenever
