@@ -4524,11 +4524,13 @@
                     html += `<span style="font-size:0.72rem;font-weight:700;color:#b91c1c;border:1px solid #ef4444;border-radius:9px;padding:0 0.4rem;" title="${escapeHtml(r.locked_reason || '')}">OUTRANKED</span>`;
                 }
                 if (sup) {
-                    html += '<span style="font-size:0.72rem;font-weight:700;color:#b45309;border:1px solid #f59e0b;border-radius:9px;padding:0 0.4rem;">SUPPRESSED</span>';
+                    // The badge IS the restore control (Kerry
+                    // 2026-07-21): tap SUPPRESSED to reverse.
+                    html += `<button data-ev-id="${ev.id}" data-request-suppress="0" data-requester="${escapeHtml(r.requester)}" title="Suppressed — tap to restore this request" style="font-size:0.72rem;font-weight:700;color:#b45309;border:1px solid #f59e0b;border-radius:9px;padding:0 0.4rem;background:none;cursor:pointer;">SUPPRESSED &#x21BA;</button>`;
                 }
                 html += '<div style="flex:1;"></div>';
-                if (r.matched || sup) {
-                    html += `<button class="pairings-action-btn" data-ev-id="${ev.id}" data-request-suppress="${sup ? '0' : '1'}" data-requester="${escapeHtml(r.requester)}" style="font-size:0.78rem;padding:0.15rem 0.5rem;${sup ? '' : 'color:var(--red);'}">${sup ? '&#x21BA; Restore' : '&#x2715; Remove'}</button>`;
+                if (r.matched && !sup) {
+                    html += `<button class="pairings-action-btn" data-ev-id="${ev.id}" data-request-suppress="1" data-requester="${escapeHtml(r.requester)}" style="font-size:0.78rem;padding:0.15rem 0.5rem;color:var(--red);">&#x2715; Remove</button>`;
                 }
                 html += '</div>';
             });

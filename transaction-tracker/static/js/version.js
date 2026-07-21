@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.135.0";
+window.TGF_VERSION = "2.135.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.135.1",
+    date: "2026-07-21",
+    changes: [
+      "Requests panel: the SUPPRESSED badge is now itself the restore control (Kerry) — tap it to unsuppress. The separate Restore button is gone; Remove stays on active rows.",
+    ],
+  },
   {
     version: "2.135.0",
     date: "2026-07-21",
