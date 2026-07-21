@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.137.0";
+window.TGF_VERSION = "2.137.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.137.1",
+    date: "2026-07-21",
+    changes: [
+      "Completed knockout matches paint their hole dots INSTANTLY (Kerry's Chandler v Moreno catch): bracket matchups had no stored hole detail — unlike pool matches — so every page load re-walked Golf Genius through the 60-second live poller before the dots appeared, even for a long-finished semifinal. cmp_fetch_live_match now hardens a FINISHED match's detail onto the bracket row (cmp_bracket.gg_match_detail; mid-match snapshots are never persisted so a partial card can't freeze), the bracket API serves it, and the first render draws the full scorecard with zero GG traffic. Live matches still poll every 60s as before; the first viewer after a match completes triggers the one fetch that hardens it for everyone after.",
+    ],
+  },
   {
     version: "2.137.0",
     date: "2026-07-21",

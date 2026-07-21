@@ -3414,6 +3414,15 @@ def init_db(db_path: str | Path | None = None) -> None:
             ("event_id",            "INTEGER REFERENCES events(id)"),
             ("player_seed",         "INTEGER"),
             ("is_wildcard",         "INTEGER"),
+            # Hardened GG hole detail for KNOCKOUT matches (Kerry
+            # 2026-07-21): pool matches snapshot theirs onto
+            # cmp_matches.gg_match_detail, but bracket matchups had no
+            # storage — every page load re-walked GG through the live
+            # poller, so a completed semifinal's hole dots arrived
+            # seconds late. cmp_fetch_live_match persists a FINISHED
+            # match's detail onto the pair's even-slot row; the bracket
+            # then paints dots instantly with no GG walk.
+            ("gg_match_detail",     "TEXT"),
         ]:
             try:
                 conn.execute(f"ALTER TABLE cmp_bracket ADD COLUMN {_col} {_def}")
@@ -26073,7 +26082,57 @@ def cmp_fetch_live_match(chapter: str, player_a: str, player_b: str,
     out = result or {"error": "match not found on GG",
                      "chapter": chapter, "players": [player_a, player_b]}
     _CMP_LIVE_CACHE[ck] = (now, out)
+    if result:
+        # Harden FINISHED detail onto the bracket row (Kerry 2026-07-21)
+        # so completed knockout cards paint their hole dots instantly on
+        # future loads instead of waiting for a fresh GG walk. Mid-match
+        # detail is never persisted — a partial snapshot would freeze the
+        # card, since the poller stops once dots render on a recorded
+        # match. Best-effort: a persist failure never breaks the live path.
+        try:
+            _cmp_persist_bracket_detail(chapter, player_a, player_b, result,
+                                        db_path=db_path)
+        except Exception:
+            logger.exception("bracket detail persist failed (non-fatal)")
     return out
+
+
+def _cmp_persist_bracket_detail(chapter: str, player_a: str, player_b: str,
+                                detail: dict, db_path=None) -> bool:
+    """Store a FINISHED match's GG hole detail on the matching cmp_bracket
+    pair (even slot). Finished = played to the end (thru >= n_holes) or a
+    decisive closeout margin ('3&2'). Returns True when a row was written."""
+    thru = detail.get("thru") or 0
+    n_holes = detail.get("n_holes") or 0
+    margin = str(detail.get("gg_margin") or "")
+    finished = (n_holes and thru >= n_holes) or \
+               (detail.get("gg_winner_idx") and "&" in margin)
+    if not finished:
+        return False
+    pk = frozenset([_cmp_person_key(player_a), _cmp_person_key(player_b)])
+    payload = json.dumps(detail)
+    with _connect(db_path) as conn:
+        rows = conn.execute(
+            "SELECT id, season, round, slot, player_name FROM cmp_bracket "
+            "WHERE chapter = ? ORDER BY season DESC, round, slot",
+            ((chapter or "").strip(),)).fetchall()
+        pairs: dict = {}
+        for r in rows:
+            pairs.setdefault((r["season"], r["round"], r["slot"] // 2),
+                             []).append(r)
+        for pair in pairs.values():
+            if len(pair) != 2:
+                continue
+            names = frozenset(_cmp_person_key(r["player_name"] or "")
+                              for r in pair)
+            if names == pk:
+                even = min(pair, key=lambda r: r["slot"])
+                conn.execute(
+                    "UPDATE cmp_bracket SET gg_match_detail = ? WHERE id = ?",
+                    (payload, even["id"]))
+                conn.commit()
+                return True
+    return False
 
 
 def cmp_get_pools(season: str, chapter: str, db_path=None) -> list[dict]:

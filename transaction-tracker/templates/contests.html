@@ -4469,10 +4469,21 @@
                 const eventCourse = s1.event_course || s2.event_course || '';
                 const eventDate = s1.event_date || s2.event_date || (eventObj ? eventObj.event_date : '') || '';
 
+                // Hardened GG detail for a completed match (Kerry
+                // 2026-07-21): the bracket row carries the persisted
+                // snapshot, so the hole dots paint on FIRST render — no
+                // waiting on the live poller's GG walk. Live/in-progress
+                // matches still poll for freshness.
+                let storedGG = null;
+                const rawDet = s1.gg_match_detail || s2.gg_match_detail;
+                if (rawDet) {
+                    try { storedGG = typeof rawDet === 'string' ? JSON.parse(rawDet) : rawDet; }
+                    catch (_) { storedGG = null; }
+                }
                 // Slate & Clay arrow scoreboard strip when the flag is on;
                 // original slot pills otherwise.
                 const slotsHtml = MATCHPLAY_V2
-                    ? mpMatchCardFromSlots(s1, s2, round.key, eventDisplay, eventDate, null, mi, round.matchCount, eventCourse)
+                    ? mpMatchCardFromSlots(s1, s2, round.key, eventDisplay, eventDate, storedGG, mi, round.matchCount, eventCourse)
                     : `<div class="bracket-slot${slot1Win ? ' winner' : ''}">
                         ${seedChips(s1)}<span class="bracket-slot-name">${escapeHtml(s1.player_name || '—')}</span>
                     </div>
