@@ -2313,6 +2313,15 @@ def _scoring_dispatch(url: str, extract: str):
             # Every non-paid payout group + the customer's recent Venmo
             # payout receipts (linked flag + amounts) for match diagnosis
             return json.dumps(db.get_unpaid_payout_groups(), indent=2)
+        if cmd == "scoring-payouts-inspect":
+            # READ-ONLY (v2.139.1, Kerry: "Tracker says Paul Reed is
+            # already paid — track why"): every tgf_payouts row for one
+            # event with the FULL acct link (source/ref/date/status), so
+            # a wrong paid state is traceable to the exact ledger row.
+            # "<event-or-code>[|<player substring>]"
+            _ev, _, _pl = arg.partition("|")
+            return json.dumps(db.inspect_event_payouts(
+                _ev.strip(), player=_pl.strip() or None), indent=2, default=str)
         if cmd == "scoring-payouts-venmo-match":
             # Sweep outbound Venmo payout receipts (expense inbox) against
             # pending tgf_payouts and mark matches PAID (v2.50.0)

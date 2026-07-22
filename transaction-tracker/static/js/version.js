@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.139.0";
+window.TGF_VERSION = "2.139.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.139.1",
+    date: "2026-07-22",
+    changes: [
+      "New read-only payout-state tracer (Kerry: 'Tracker says Paul Reed is already paid out. I didn't do that. Track why'): inspect_event_payouts / bridge scoring-payouts-inspect:<event>[|<player>] lists every payout row for an event with the FULL linked ledger row inlined (source, source_ref, date, amount, status) and a computed state — PAID / PENDING / UNLINKED / DANGLING. A payout renders paid whenever its acct link is non-pending, so tracing a wrong paid state requires seeing exactly which ledger row claims it; until now that required raw DB access.",
+    ],
+  },
   {
     version: "2.139.0",
     date: "2026-07-22",

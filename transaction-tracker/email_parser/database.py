@@ -20442,6 +20442,50 @@ def bulk_mark_payouts_paid(before_date: str, db_path=None) -> dict:
     return summary
 
 
+def inspect_event_payouts(event_query: str, player: str | None = None,
+                          db_path=None) -> dict:
+    """READ-ONLY payout-state tracer (v2.139.1): every tgf_payouts row for
+    one tgf event (code/name substring), with the linked acct_transactions
+    row's source / source_ref / date / amount / status inlined. A payout
+    linked to a non-pending ledger row renders PAID in the UI — this shows
+    exactly WHICH ledger row claims it, so a wrong paid state is traceable
+    (Kerry 2026-07-22: Reed showed paid with no receipt anywhere)."""
+    with _connect(db_path) as conn:
+        evs = [dict(r) for r in conn.execute(
+            "SELECT id, code FROM tgf_events WHERE LOWER(code) LIKE LOWER(?) "
+            "ORDER BY id", (f"%{event_query.strip()}%",)).fetchall()]
+        if not evs:
+            return {"error": f"no tgf_events match: {event_query}"}
+        out = {"events": [], "query": event_query}
+        for ev in evs:
+            rows = [dict(r) for r in conn.execute(
+                """SELECT p.id, p.customer_id,
+                          TRIM(COALESCE(c.first_name,'') || ' ' ||
+                               COALESCE(c.last_name,'')) AS player,
+                          p.category, p.amount, p.description, p.paid_at,
+                          p.acct_transaction_id,
+                          t.source AS acct_source, t.source_ref AS acct_ref,
+                          t.date AS acct_date, t.amount AS acct_amount,
+                          t.status AS acct_status,
+                          t.description AS acct_description
+                   FROM tgf_payouts p
+                   LEFT JOIN customers c ON c.customer_id = p.customer_id
+                   LEFT JOIN acct_transactions t ON t.id = p.acct_transaction_id
+                   WHERE p.event_id = ?
+                   ORDER BY player, p.category""", (ev["id"],)).fetchall()]
+            if player:
+                pl = player.lower()
+                rows = [r for r in rows if pl in (r["player"] or "").lower()]
+            for r in rows:
+                r["state"] = ("UNLINKED" if not r["acct_transaction_id"]
+                              else "DANGLING" if r["acct_source"] is None
+                              else "PENDING" if r["acct_source"] == "pending"
+                              else "PAID")
+            out["events"].append({"tgf_event_id": ev["id"], "code": ev["code"],
+                                  "rows": rows})
+        return out
+
+
 def get_unpaid_payout_groups(db_path=None) -> dict:
     """Every non-paid payout group (customer+account) with that customer's
     recent Venmo payout receipts alongside — the data behind the /tgf
