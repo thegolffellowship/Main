@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.139.1";
+window.TGF_VERSION = "2.139.2";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.139.2",
+    date: "2026-07-22",
+    changes: [
+      "Payout matcher causality guard (the Paul Reed case): a payment receipt can never be matched to winnings for an event played AFTER the payment date. Reed's a9.19 rows ($25.50 + $39.00) were stamped paid by an unconsumed April 7 Venmo receipt that happened to total exactly $64.50 — the matcher's amount-only fallback saw exact cents and linked it, dating his July winnings paid 2026-04-07. Candidate groups are now filtered to event_date <= payment date (+1 day slack); date-less pseudo-events (monthly points) stay eligible. Verified: the April receipt no longer claims the July group, and a genuine event-night receipt still matches.",
+      "Reed's a9.19 payout rows unlinked back to unpaid ($64.50 due, in the Unpaid queue). The stray April receipt remains in the ledger as a real payment awaiting its true home — surfaced to Kerry for disposition.",
+    ],
+  },
   {
     version: "2.139.1",
     date: "2026-07-22",

@@ -21160,12 +21160,24 @@ def auto_match_venmo_payouts_to_tgf(
                     """SELECT p.event_id AS tgf_event_id,
                               ROUND(SUM(p.amount), 2) AS total
                        FROM tgf_payouts p
+                       JOIN tgf_events e ON e.id = p.event_id
                        LEFT JOIN acct_transactions t ON t.id = p.acct_transaction_id
                        WHERE p.customer_id = ?
                          AND (p.acct_transaction_id IS NULL
                               OR (t.source = 'pending'
                                   AND COALESCE(t.status, 'active') = 'active'))
-                       GROUP BY p.event_id""", (cid,)).fetchall()]
+                         -- Causality guard (v2.139.2, the Reed case): a
+                         -- payment can never cover winnings for an event
+                         -- played AFTER it. An unconsumed April receipt
+                         -- exact-cents-matched a July group ($64.50 both)
+                         -- and stamped it paid months before it existed.
+                         -- +1 day slack for date fuzz; date-less pseudo
+                         -- accounts (monthly points) stay eligible.
+                         AND (e.event_date IS NULL
+                              OR e.event_date <= DATE(?, '+1 day'))
+                       GROUP BY p.event_id""",
+                    (cid, exp.get("transaction_date")
+                     or exp.get("created_at") or "9999-12-31")).fetchall()]
                 if not groups:
                     summary["no_candidate"] += 1
                     continue
