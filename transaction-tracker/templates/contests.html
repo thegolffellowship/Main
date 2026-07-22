@@ -927,7 +927,10 @@
                size too. 0.68rem Bitter ≈ 0.66rem sans optically, so the
                Hole row leads the hierarchy again. */
             font: 700 0.68rem/1 'Bitter', Georgia, serif; letter-spacing: 0.03em;
-            color: var(--text-placeholder, #9CA3AF); text-transform: uppercase;
+            /* Darker than the par row's placeholder gray so the header
+               leads by tone as well as size (Kerry 2026-07-21); still
+               below the black score digits. */
+            color: var(--text-body, #4B5563); text-transform: uppercase;
             border-bottom: 1px solid var(--border);
         }
         .mpv2 table.mp-sc tr.mp-sc-par td, .mpv2 table.mp-sc tr.mp-sc-par th { color: var(--text-placeholder, #9CA3AF); }

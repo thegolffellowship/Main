@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.137.4";
+window.TGF_VERSION = "2.137.5";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.137.5",
+    date: "2026-07-21",
+    changes: [
+      "Scorecard Hole row darkened (Kerry): after the size bump it still shared the par row's light placeholder gray, so the header wasn't leading by tone. Now --text-body (#4B5563) — Hole row > Par row in both size and darkness, with the black score digits still on top of the ladder.",
+    ],
+  },
   {
     version: "2.137.4",
     date: "2026-07-21",
