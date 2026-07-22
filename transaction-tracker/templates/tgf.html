@@ -391,6 +391,23 @@
         }
         #refunds-main .tgf-scroll, #refunds-main table { max-width: 860px; }
         #unpaid-main h2, #refunds-main h2 { font-size: 1rem; }
+        /* Event/context line UNDER the name (Kerry 2026-07-22) — keeps the
+           first column narrow enough that the queue fits a phone. */
+        .queue-sub { font-size: 0.72rem; color: var(--text-muted); margin-top: 1px; white-space: nowrap; }
+        @media (max-width: 640px) {
+            #unpaid-main .payout-table td, #unpaid-main .payout-table th,
+            #refunds-main table td, #refunds-main table th {
+                padding: 4px 6px; font-size: 0.78rem;
+            }
+            /* let the long event line wrap rather than widen the column */
+            .queue-sub { white-space: normal; }
+            /* action cell: buttons stack instead of pushing the table
+               past the viewport (global tbody td nowrap must yield) */
+            #unpaid-main .queue-act, #refunds-main td:last-child {
+                white-space: normal; max-width: 128px;
+            }
+            #unpaid-main .queue-act .mark-paid-btn { margin-left: 0 !important; margin-top: 3px; }
+        }
         .ledger-back { display: none; }
         @media (max-width: 768px) {
             .ledger { flex-direction: column; min-height: 0; }
@@ -965,13 +982,16 @@
             }
             const totalDue = list.reduce((sum, x) => sum + x.g.total, 0);
             let rows = "";
+            // Event info stacks UNDER the name (Kerry 2026-07-22) so the
+            // row fits a phone: name column stays narrow and the action
+            // cell wraps instead of pushing the table off-screen.
             list.forEach(({ev, g}) => {
                 rows += `
                     <tr>
-                        <td style="white-space:nowrap;"><span style="font-weight:600;">${g.name}</span>
-                            <span style="font-size:0.72rem;color:var(--text-muted);margin-left:0.4rem;">${ev.code}${ev.event_date ? " · " + fmtDate(ev.event_date) : ""}</span></td>
+                        <td><div style="font-weight:600;">${g.name}</div>
+                            <div class="queue-sub">${ev.code}${ev.event_date ? " · " + fmtDate(ev.event_date) : ""}</div></td>
                         <td class="right total-amount" style="white-space:nowrap;">${fmt(g.total)}</td>
-                        <td class="right" style="white-space:nowrap;">${payCellHtml(ev, g)}</td>
+                        <td class="right queue-act">${payCellHtml(ev, g)}</td>
                     </tr>`;
             });
             el.innerHTML = `
@@ -985,7 +1005,7 @@
                     <thead><tr>
                         <th>Golfer / Account</th>
                         <th class="right">Amount</th>
-                        <th class="right" style="width:200px;"></th>
+                        <th class="right"></th>
                     </tr></thead>
                     <tbody>${rows}</tbody>
                 </table>
@@ -1016,7 +1036,9 @@
             const label = cid
                 ? `<a href="/customers?cid=${cid}" style="color:var(--link);text-decoration:none;font-weight:600;">${nm}</a>`
                 : `<span style="font-weight:600;">${nm}</span>`;
-            return `${label}${sub ? `<span style="font-size:0.72rem;color:var(--text-muted);margin-left:0.4rem;">${escR(sub)}</span>` : ""}`;
+            // event/context stacks UNDER the name (Kerry 2026-07-22 —
+            // same mobile-fit treatment as the Unpaid queue)
+            return `<div>${label}</div>${sub ? `<div class="queue-sub">${escR(sub)}</div>` : ""}`;
         }
         async function loadRefunds() {
             const el = $("#refunds-main");

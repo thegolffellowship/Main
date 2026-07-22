@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.139.2";
+window.TGF_VERSION = "2.139.3";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.139.3",
+    date: "2026-07-22",
+    changes: [
+      "Unpaid queue + Refunds console fit on a phone (Kerry): the event/date info now stacks UNDER the player's name instead of running inline beside it, so the first column stays narrow. Below 640px the action cell wraps (Venmo pill above Mark Paid) and the event line wraps too, instead of pushing the Amount and Pay controls off the right edge of the screen. Same stacked treatment in both queues via the shared .queue-sub style; desktop layout unchanged apart from the actions column no longer reserving a fixed 200px.",
+    ],
+  },
   {
     version: "2.139.2",
     date: "2026-07-22",
