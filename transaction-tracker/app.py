@@ -5950,6 +5950,27 @@ def api_balance_due_email_preview(item_id):
     return jsonify(result)
 
 
+def _send_credit_entry_confirmation(item_id, result):
+    """Auto-send the entry-confirmation email when the applied credit covered
+    the WHOLE fee (amount_owed <= 0). Delegates to the shared db helper. Never
+    raises — a mail failure must not break the apply-credit response. Kill
+    switch: AUTO_CREDIT_ENTRY_EMAIL=0.
+
+    RESTORED v2.139.4: v2.129.25's edit dropped this def while keeping both
+    call sites, so every Apply Credit since 2026-07-20 hit a NameError AFTER
+    the DB write — the credit applied but the modal showed 'Internal server
+    error' and the balance-due auto-email never ran (the Fieber case)."""
+    try:
+        if (os.getenv("AUTO_CREDIT_ENTRY_EMAIL", "1") or "1").strip().lower() \
+                not in ("1", "true", "yes", "on"):
+            return
+        from email_parser.database import send_entry_confirmation_email
+        send_entry_confirmation_email(item_id, result)
+    except Exception:
+        logger.warning("credit-entry confirmation email failed for item %s",
+                       item_id, exc_info=True)
+
+
 def _maybe_auto_send_balance_email(item_id: int, result: dict,
                                    data: dict) -> dict | None:
     """Auto-send the standard balance-due Venmo email after Apply Credit

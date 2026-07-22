@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.139.3";
+window.TGF_VERSION = "2.139.4";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.139.4",
+    date: "2026-07-22",
+    changes: [
+      "Apply Credit 'Internal server error' fixed (Kerry, the Fieber case): v2.129.25's edit accidentally deleted the _send_credit_entry_confirmation helper while keeping both call sites, so every Apply Credit since the evening of 7/20 hit a NameError AFTER the database work — the credit genuinely applied (Fieber's $54.79 is on the Championship with balance_due:112.21) but the modal showed an error and the balance-due auto-email never sent. The helper is restored verbatim from the pre-merge commit, with a call-site/def consistency check run over all apply-credit helpers.",
+      "If you applied any credits since 7/20 evening and saw this error: the application itself succeeded every time — but no balance-due or entry-confirmation emails went out for those applications. Fieber still needs his $112.21 balance-due email (send it from his registration row).",
+    ],
+  },
   {
     version: "2.139.3",
     date: "2026-07-22",
