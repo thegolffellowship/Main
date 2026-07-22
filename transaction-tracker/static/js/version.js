@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.140.3";
+window.TGF_VERSION = "2.141.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.141.0",
+    date: "2026-07-22",
+    changes: [
+      "Overpayment tracking (Kerry — the a9.19 Teravista CTP mix-up: both CTPs were entered for Jay Hogue and paid out $98.50 before GG re-awarded one to Paul Reed): when a results correction SHRINKS a golfer's group after its receipt was sent, the payout matcher now links the whole group PAID and records the overage in the new tgf_overpayments table instead of dead-ending. The Unpaid queue gets an amber 'Overpaid — Request Back' section with a one-tap Venmo REQUEST button (a charge, not a payment) prefilled with the difference and the memo 'Overpaid winnings for <event> — please return $X'.",
+      "The loop closes itself: when the player pays the request, the inbound Venmo receipt carries that memo, and the new recovery scan matches it to the open overpayment (customer + event + exact amount), marks it RECOVERED, and books the returned money as ledger income. Manual closes (cash back / waived) via the scoring-overpay-resolve bridge; scoring-overpayments lists the ledger. The underpaid mirror case (a correction GROWS a group, e.g. Paul's added $17 CTP) already worked via the subset pass — the remainder shows as due with the normal Pay button.",
+      "Fixed inbound receipt promotions writing entry_type='expense': _sync_expense_ledger_entry compared the mapped type ('income') against 'received', which can never match, so every promoted inbound P2P payment was classified as an expense in reconciliation/P&L. Inbound promotions now book as income (forward-only; historical rows untouched).",
+    ],
+  },
   {
     version: "2.140.3",
     date: "2026-07-22",

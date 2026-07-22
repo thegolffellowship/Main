@@ -822,6 +822,16 @@ def check_expense_inbox(force=False, days_back=None):
                         except Exception:
                             logger.warning("inbound balance-due auto-match failed for exp %s",
                                            saved.get("id"), exc_info=True)
+                        # Overpayment returns ride the same inbound receipt —
+                        # "Overpaid winnings for <code>" memos close the open
+                        # tgf_overpayments row the REQUEST button created
+                        # (v2.141.0, the Hogue a9.19 CTP correction)
+                        try:
+                            from email_parser.database import recover_tgf_overpayments
+                            recover_tgf_overpayments([saved["id"]])
+                        except Exception:
+                            logger.warning("overpayment recovery failed for exp %s",
+                                           saved.get("id"), exc_info=True)
                     # Auto-confirm outbound winnings payments against pending
                     # tgf_payouts (Kerry, 2026-07-08 — PAYOUTS tab flips to
                     # PAID as soon as the receipt email lands; now Venmo,

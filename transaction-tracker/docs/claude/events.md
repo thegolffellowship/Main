@@ -1102,6 +1102,30 @@ v2.139.1) lists every payout row with its full acct link + a computed
 PAID/PENDING/UNLINKED/DANGLING state; `scoring-payouts-unlink:<acct_id>`
 reverts a bad link.
 
+**Overpayment tracking (v2.141.0 — the Hogue a9.19 CTP case, Kerry
+2026-07-22):** when a results correction SHRINKS a group AFTER its
+receipt was sent (both CTPs entered for Jay, $98.50 paid, one CTP
+re-awarded to Paul Reed → recorded due $81.50), the matcher's OVERPAY
+pass (same strong-evidence gate as the subset pass: memo must name the
+event) links the whole group PAID and records the overage in
+`tgf_overpayments` (customer_id, event_id, receipt acct/expense ids,
+amount, status open|recovered|waived). The Unpaid queue renders an
+amber "Overpaid — Request Back" section with a Venmo REQUEST button
+(`txn=charge`) whose memo is `Overpaid winnings for <code> — please
+return $X`; when the player pays the request, the inbound receipt
+carries that memo and `recover_tgf_overpayments` (hooked on every
+'received' expense save) matches customer + event code + exact amount,
+marks the row RECOVERED, and promotes the receipt as ledger INCOME.
+Bridge: `scoring-overpayments` (recovery scan + list),
+`scoring-overpay-resolve:<id>|<status>|<method>|<date>|<note>` (manual
+close: cash back / waived / reopen). The mirror case — a correction
+GROWS a group (Paul's added $17 CTP vs his $64.50 receipt) — was
+already handled by the subset pass: the receipt links its exact subset
+and the remainder shows as due with the normal Pay button. Also fixed
+here: `_sync_expense_ledger_entry` classified ALL inbound P2P
+promotions as entry_type='expense' (it compared the mapped type
+against 'received'); inbound now books as income, forward-only.
+
 ## Category types
 `team_net`, `individual_net`, `individual_gross`, `skins`, `closest_to_pin`,
 `hole_in_one`, `mvp`, `other`

@@ -21333,6 +21333,159 @@ def auto_match_refund_watches(expense_ids: list[int] | None= None,
     return summary
 
 
+def _ensure_tgf_overpayments(conn) -> None:
+    """Overpaid winnings ledger (v2.141.0, Kerry — the Hogue a9.19 case:
+    Robert awarded Jay both CTPs, Kerry paid $98.50, GG then re-awarded one
+    CTP to Paul Reed → $17 owed BACK). One row per receipt that exceeds the
+    recorded group after a results correction; the console offers a Venmo
+    REQUEST for the difference and the inbound receipt scan closes the loop."""
+    conn.execute(
+        """CREATE TABLE IF NOT EXISTS tgf_overpayments (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            customer_id INTEGER REFERENCES customers(customer_id),
+            event_id INTEGER,
+            acct_transaction_id INTEGER,
+            expense_id INTEGER,
+            amount REAL NOT NULL,
+            status TEXT NOT NULL DEFAULT 'open',
+            note TEXT,
+            created_at TEXT DEFAULT (datetime('now')),
+            resolved_at TEXT,
+            method TEXT,
+            recovered_acct_id INTEGER
+        )"""
+    )
+
+
+# The REQUEST button writes this memo on the Venmo charge; when the player
+# pays it, the incoming receipt carries the same text and the recovery scan
+# extracts the event code from it.
+_OVERPAY_MEMO_RE = re.compile(
+    r"overpaid\s+winnings\s+for\s+([a-z]+\d+(?:\.\s*\d+)?)", re.I)
+
+
+def recover_tgf_overpayments(expense_ids: list[int] | None = None,
+                             db_path: str | Path | None = None) -> dict:
+    """Close open tgf_overpayments from INBOUND P2P receipts.
+
+    A 'received' expense whose memo reads "Overpaid winnings for <code> …"
+    is a player returning money the app requested. Match on the payer's
+    customer + the memo's event + the exact overpayment amount (±$0.01),
+    mark the overpayment recovered, and promote the receipt to the ledger
+    as income so the books show the money coming back.
+    """
+    out = {"recovered": 0, "no_match": 0, "errors": 0}
+    with _connect(db_path) as conn:
+        _ensure_tgf_overpayments(conn)
+        params: list = []
+        sql = ("SELECT * FROM expense_transactions "
+               "WHERE source_type IN ('venmo', 'paypal', 'cashapp', 'zelle') "
+               "AND transaction_type = 'received' AND notes IS NOT NULL")
+        if expense_ids:
+            sql += " AND id IN (%s)" % ",".join(["?"] * len(expense_ids))
+            params.extend(expense_ids)
+        for exp in [dict(r) for r in conn.execute(sql, params).fetchall()]:
+            try:
+                m = _OVERPAY_MEMO_RE.search(exp.get("notes") or "")
+                if not m:
+                    continue
+                already = conn.execute(
+                    "SELECT 1 FROM tgf_overpayments WHERE recovered_acct_id = ? "
+                    "OR (expense_id IS NOT NULL AND status = 'recovered' AND note LIKE ?)",
+                    (exp.get("acct_transaction_id") or -1,
+                     f"%recovered-exp-{exp['id']}%")).fetchone()
+                if already:
+                    continue
+                cid = exp.get("customer_id") or _lookup_customer_id(
+                    conn, (exp.get("merchant") or "").strip(), None)
+                code = m.group(1).replace(" ", "")
+                amt = round(float(exp.get("amount") or 0), 2)
+                cand = conn.execute(
+                    """SELECT o.* FROM tgf_overpayments o
+                       JOIN tgf_events e ON e.id = o.event_id
+                       WHERE o.status = 'open'
+                         AND (? IS NULL OR o.customer_id = ?)
+                         AND LOWER(e.code) LIKE LOWER(?)
+                         AND ABS(o.amount - ?) <= 0.01""",
+                    (cid, cid, code + "%", amt)).fetchall()
+                if len(cand) != 1:
+                    out["no_match"] += 1
+                    continue
+                acct_id = exp.get("acct_transaction_id")
+                if not acct_id:
+                    acct_id = _sync_expense_ledger_entry(conn, exp)
+                    if acct_id:
+                        conn.execute(
+                            """UPDATE expense_transactions
+                               SET acct_transaction_id = ?,
+                                   review_status = CASE WHEN review_status = 'pending'
+                                                        THEN 'approved' ELSE review_status END
+                               WHERE id = ?""", (acct_id, exp["id"]))
+                paid_date = str(exp.get("transaction_date") or "")
+                if not re.match(r"^\d{4}-\d{2}-\d{2}", paid_date):
+                    paid_date = today_central_str()
+                conn.execute(
+                    """UPDATE tgf_overpayments
+                       SET status = 'recovered', resolved_at = ?, method = ?,
+                           recovered_acct_id = ?,
+                           note = COALESCE(note || ' · ', '') || ?
+                       WHERE id = ?""",
+                    (paid_date, exp.get("source_type"), acct_id,
+                     f"recovered-exp-{exp['id']}", cand[0]["id"]))
+                out["recovered"] += 1
+                logger.info("overpayment %s recovered: %s $%.2f (exp %s)",
+                            cand[0]["id"], exp.get("merchant"), amt, exp["id"])
+            except Exception:
+                logger.exception("overpayment recovery failed for exp %s", exp.get("id"))
+                out["errors"] += 1
+        conn.commit()
+    return out
+
+
+def resolve_tgf_overpayment(overpay_id: int, status: str = "recovered",
+                            method: str | None = None, date: str | None = None,
+                            note: str | None = None,
+                            db_path: str | Path | None = None) -> dict:
+    """Manually close an overpayment (cash handed back, or Kerry waives it)."""
+    if status not in ("recovered", "waived", "open"):
+        raise ValueError("status must be recovered, waived, or open")
+    with _connect(db_path) as conn:
+        _ensure_tgf_overpayments(conn)
+        row = conn.execute("SELECT * FROM tgf_overpayments WHERE id = ?",
+                           (overpay_id,)).fetchone()
+        if not row:
+            return {"error": f"overpayment {overpay_id} not found"}
+        conn.execute(
+            """UPDATE tgf_overpayments
+               SET status = ?, method = COALESCE(?, method),
+                   resolved_at = CASE WHEN ? = 'open' THEN NULL
+                                      ELSE COALESCE(?, resolved_at, date('now')) END,
+                   note = CASE WHEN ? IS NULL THEN note
+                               ELSE COALESCE(note || ' · ', '') || ? END
+               WHERE id = ?""",
+            (status, method, status, date, note, note, overpay_id))
+        conn.commit()
+        return dict(conn.execute("SELECT * FROM tgf_overpayments WHERE id = ?",
+                                 (overpay_id,)).fetchone())
+
+
+def get_tgf_overpayments(db_path: str | Path | None = None) -> list[dict]:
+    """Open + recently resolved overpayments with player/event context."""
+    with _connect(db_path) as conn:
+        _ensure_tgf_overpayments(conn)
+        return [dict(r) for r in conn.execute(
+            """SELECT o.*, e.code AS event_code, e.name AS event_name,
+                      e.event_date,
+                      TRIM(c.first_name || ' ' || c.last_name) AS customer_name,
+                      c.venmo_username
+               FROM tgf_overpayments o
+               LEFT JOIN tgf_events e ON e.id = o.event_id
+               LEFT JOIN customers c ON c.customer_id = o.customer_id
+               WHERE o.status = 'open'
+                  OR COALESCE(o.resolved_at, '') >= date('now', '-30 days')
+               ORDER BY (o.status = 'open') DESC, o.created_at DESC""").fetchall()]
+
+
 def auto_match_venmo_payouts_to_tgf(
     expense_ids: list[int] | None = None,
     db_path: str | Path | None = None,
@@ -21600,6 +21753,20 @@ def auto_match_venmo_payouts_to_tgf(
                             pick = g
                             partial_rows = [rws[i] for i in found]
                             break
+                # OVERPAY pass (Kerry 2026-07-22, the Hogue a9.19 case): a
+                # results correction can SHRINK a group after its receipt
+                # was sent — Robert awarded Jay both CTPs, Kerry paid
+                # $98.50, GG re-awarded one CTP to Paul Reed → recorded due
+                # is now $81.50. Same strong-evidence gate as the subset
+                # pass (memo must name this exact event): link the whole
+                # group PAID and record the overage in tgf_overpayments so
+                # the console can REQUEST the difference back.
+                overpay_delta = None
+                if pick is None and memo_resolved and tgf_event_id is not None:
+                    evg = [c for c in cands if c["tgf_event_id"] == tgf_event_id]
+                    if evg and evg[0]["total"] > 0 and amt > evg[0]["total"] + 0.01:
+                        pick = evg[0]
+                        overpay_delta = round(amt - evg[0]["total"], 2)
                 if pick is None:
                     summary["no_candidate"] += 1
                     continue
@@ -21639,6 +21806,24 @@ def auto_match_venmo_payouts_to_tgf(
                     conn.execute(
                         "UPDATE tgf_payouts SET acct_transaction_id = ?, paid_at = ? WHERE id = ?",
                         (acct_id, paid_date, r["id"]))
+                if overpay_delta:
+                    _ensure_tgf_overpayments(conn)
+                    dup = conn.execute(
+                        "SELECT 1 FROM tgf_overpayments WHERE expense_id = ?",
+                        (exp["id"],)).fetchone()
+                    if not dup:
+                        conn.execute(
+                            """INSERT INTO tgf_overpayments
+                               (customer_id, event_id, acct_transaction_id,
+                                expense_id, amount, note)
+                               VALUES (?, ?, ?, ?, ?, ?)""",
+                            (cid, pick["tgf_event_id"], acct_id, exp["id"],
+                             overpay_delta,
+                             f"receipt ${amt:.2f} vs recorded ${pick['total']:.2f}"))
+                        logger.info(
+                            "overpayment recorded: %s $%.2f over on tgf_event %s (exp %s)",
+                            exp.get("merchant"), overpay_delta,
+                            pick["tgf_event_id"], exp["id"])
                 summary["matched"] += 1
                 summary["matches"].append({
                     "expense_id": exp["id"], "customer_id": cid,
@@ -21646,6 +21831,7 @@ def auto_match_venmo_payouts_to_tgf(
                     "tgf_event_id": pick["tgf_event_id"], "amount": amt,
                     "payout_rows": len(rows), "acct_transaction_id": acct_id,
                     "partial": partial_rows is not None,
+                    "overpaid": overpay_delta,
                 })
                 logger.info("venmo payout matched: exp %s %s $%.2f -> tgf_event %s (%d rows)",
                             exp["id"], exp.get("merchant"), amt,
@@ -34026,8 +34212,11 @@ def _sync_expense_ledger_entry(conn, exp: dict) -> int | None:
 
     # entry_type drives reconciliation matching and P&L classification.
     # Venmo "received" rows are inbound payments (income); everything else
-    # (expense / payout / transfer) is an outflow.
-    entry_type = "income" if txn_type == "received" else "expense"
+    # (payout / expense / transfer) is an outflow. Compare the RAW type —
+    # _type_map already rewrote 'received' to 'income', so matching on the
+    # mapped value classified every inbound promotion as an expense
+    # (v2.141.0 fix, surfaced by the overpayment-return receipts).
+    entry_type = "income" if raw_txn_type == "received" else "expense"
 
     if existing_id:
         conn.execute(
@@ -37916,7 +38105,26 @@ def get_tgf_data(db_path=None):
         ).fetchall():
             winnings[row["id"]] = dict(row)
 
-        return {"customers": customers, "events": events, "winnings": winnings}
+        # Overpaid winnings needing a REQUEST back (v2.141.0) — rendered as
+        # its own section on the Unpaid work queue.
+        try:
+            _ensure_tgf_overpayments(conn)
+            overpayments = [dict(r) for r in conn.execute(
+                """SELECT o.*, e.code AS event_code, e.name AS event_name,
+                          e.event_date,
+                          TRIM(c.first_name || ' ' || c.last_name) AS customer_name,
+                          c.venmo_username
+                   FROM tgf_overpayments o
+                   LEFT JOIN tgf_events e ON e.id = o.event_id
+                   LEFT JOIN customers c ON c.customer_id = o.customer_id
+                   WHERE o.status = 'open'
+                   ORDER BY o.created_at DESC""").fetchall()]
+        except Exception:
+            logger.exception("overpayments fetch failed")
+            overpayments = []
+
+        return {"customers": customers, "events": events, "winnings": winnings,
+                "overpayments": overpayments}
 
 
 def add_tgf_event(data: dict, db_path=None) -> dict:

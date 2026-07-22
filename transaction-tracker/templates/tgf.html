@@ -966,6 +966,53 @@
         // ── UNPAID work queue (Kerry, 2026-07-09): every non-paid golfer
         // group across ALL accounts (events + season contests), newest
         // first, with Pay / Mark Paid inline so it can be worked through.
+        // OVERPAID section (v2.141.0, Kerry — the Hogue a9.19 CTP case):
+        // a results correction shrank a group AFTER its receipt was sent,
+        // so the player owes the difference back. The REQUEST button opens
+        // a Venmo charge with the memo the inbound-receipt scanner listens
+        // for — when the player pays it, the row closes on its own.
+        function overpaidSectionHtml() {
+            const ops = DATA.overpayments || [];
+            if (!ops.length) return "";
+            const isMobileUA = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+            const totalOver = ops.reduce((s, o) => s + (o.amount || 0), 0);
+            const rows = ops.map(o => {
+                const amt = Number(o.amount || 0).toFixed(2);
+                let action = `<span style="font-size:0.7rem;color:#b45309;">no Venmo handle</span>`;
+                if (o.venmo_username) {
+                    const h = o.venmo_username.replace(/^@/, "");
+                    const memo = encodeURIComponent(
+                        `Overpaid winnings for ${o.event_code || ""} — please return $${amt}`);
+                    const href = isMobileUA
+                        ? `venmo://paycharge?txn=charge&recipients=${encodeURIComponent(h)}&amount=${amt}&note=${memo}`
+                        : `https://venmo.com/${encodeURIComponent(h)}?txn=charge&amount=${amt}&note=${memo}`;
+                    action = `<a href="${href}" target="_blank" rel="noopener"
+                        style="display:inline-block;text-decoration:none;background:#b45309;color:#fff;font-size:0.72rem;font-weight:600;padding:2px 9px;border-radius:12px;">Request ${fmt(o.amount)}</a>`;
+                }
+                return `
+                    <tr>
+                        <td><div style="font-weight:600;">${o.customer_name || "—"}</div>
+                            <div class="queue-sub">${o.event_code || ""}${o.event_date ? " · " + fmtDate(o.event_date) : ""}${o.note ? " · " + o.note : ""}</div></td>
+                        <td class="right total-amount" style="white-space:nowrap;color:#b45309;">${fmt(o.amount)}</td>
+                        <td class="right queue-act">${action}</td>
+                    </tr>`;
+            }).join("");
+            return `
+                <div style="margin-bottom:1.25rem;">
+                    <div style="display:flex;align-items:baseline;gap:0.75rem;margin-bottom:0.5rem;flex-wrap:wrap;">
+                        <h2 style="font-size:1.05rem;margin:0;">Overpaid — Request Back</h2>
+                        <span style="font-size:0.9rem;font-weight:700;color:#b45309;">${fmt(totalOver)}</span>
+                        <span style="font-size:0.78rem;color:var(--text-muted);">${ops.length} player${ops.length !== 1 ? "s" : ""} · results corrected after payout</span>
+                    </div>
+                    <div class="tgf-scroll" style="max-width:860px;">
+                    <table class="payout-table">
+                        <thead><tr><th>Golfer / Event</th><th class="right">Owed back</th><th class="right"></th></tr></thead>
+                        <tbody>${rows}</tbody>
+                    </table>
+                    </div>
+                </div>`;
+        }
+
         function renderUnpaidList() {
             const el = $("#unpaid-main");
             const list = [];
@@ -977,7 +1024,8 @@
             list.sort((a, b) => ((b.ev.event_date || "").localeCompare(a.ev.event_date || ""))
                 || (b.g.total - a.g.total));
             if (!list.length) {
-                el.innerHTML = '<div class="empty-state"><h3>All caught up</h3><p>No unpaid payouts &#127881;</p></div>';
+                el.innerHTML = overpaidSectionHtml()
+                    + '<div class="empty-state"><h3>All caught up</h3><p>No unpaid payouts &#127881;</p></div>';
                 return;
             }
             const totalDue = list.reduce((sum, x) => sum + x.g.total, 0);
@@ -994,7 +1042,7 @@
                         <td class="right queue-act">${payCellHtml(ev, g)}</td>
                     </tr>`;
             });
-            el.innerHTML = `
+            el.innerHTML = overpaidSectionHtml() + `
                 <div style="display:flex;align-items:baseline;gap:0.75rem;margin-bottom:0.75rem;flex-wrap:wrap;">
                     <h2 style="font-size:1.15rem;margin:0;">Unpaid Payouts</h2>
                     <span style="font-size:0.95rem;font-weight:700;color:#dc2626;">${fmt(totalDue)}</span>
