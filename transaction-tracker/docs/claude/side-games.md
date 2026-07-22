@@ -559,6 +559,15 @@ from our imported scorecards, mirroring the MVP wiring (v2.33.0):
   scoring-games-import bridge URL. Origin case: s9.19 The Quarry's two
   CTPs (Kulawik #12, Mary Wade #16, $26 each) were entered in GG after
   the round was walked and sat invisible to the Tracker.
+- **Ind Gross flight pots follow each flight's buy-ins (v2.140.1,
+  Kerry 2026-07-22 — s18.8 Vaaler Creek):** gross flights are handicap
+  BANDS with uneven headcounts, so the matrix's flat `grossLow1st`
+  (individualGross ÷ grossFlights, an even-split assumption) is only
+  the display seed — the assembler apportions `individualGross` across
+  the determined flights by headcount (exact cents, largest remainder;
+  per-player rate × flight size, GG's model) and splits places within a
+  flight by the ladder's proportions. s18.8: 16 buyers × $8 cut 4/5/7 →
+  $32/$40/$56, not $32 flat.
 - **Record Payouts (v2.38.0, Kerry directive)** — the Games tab's
   "💸 Record Payouts" button (ADMIN-only as of v2.45.0; was manager) assembles every DETERMINED
   winner into PAYOUTS-tab rows: City MVP (+TGF MVP once, from the

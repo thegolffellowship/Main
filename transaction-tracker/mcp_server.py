@@ -1757,6 +1757,12 @@ def _scoring_dispatch(url: str, extract: str):
             sync = db.sync_referral_fees()
             return json.dumps({"sync": sync, **db.get_referral_fees()},
                               indent=2, default=str)
+        if cmd == "scoring-referral-link":
+            # "<fee_id>|<customer_id>" — set the referrer on a fee whose
+            # coupon token was ambiguous ('jesse' → which Jesse).
+            _p = [x.strip() for x in arg.split("|")]
+            return json.dumps(db.link_referral_fee_referrer(
+                int(_p[0]), int(_p[1])), indent=2)
         if cmd == "scoring-referral-paid":
             # "<fee_id>|<method>|<date>|<note>" — manual completion for a
             # fee paid outside the receipt flow (cash / unreadable memo).

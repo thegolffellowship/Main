@@ -21059,6 +21059,28 @@ def get_referral_fees(db_path: str | Path | None = None) -> dict:
             "paid_total": round(sum(r["amount"] or 0 for r in paid), 2)}
 
 
+def link_referral_fee_referrer(fee_id: int, customer_id: int,
+                               db_path: str | Path | None = None) -> dict:
+    """Set the referrer on a fee whose coupon token didn't resolve
+    (e.g. 'tgf-referral-jesse' — which Jesse? Kerry says)."""
+    with _connect(db_path) as conn:
+        _ensure_referral_tables(conn)
+        row = conn.execute(
+            """SELECT TRIM(COALESCE(first_name,'') || ' ' ||
+                           COALESCE(last_name,'')) AS n
+               FROM customers WHERE customer_id = ?""",
+            (customer_id,)).fetchone()
+        if not row or not (row["n"] or "").strip():
+            return {"ok": False, "error": f"customer {customer_id} not found"}
+        n = conn.execute(
+            """UPDATE referral_fees
+               SET referrer_customer_id = ?, referrer_name = ?, note = NULL
+               WHERE id = ?""",
+            (customer_id, row["n"], fee_id)).rowcount
+        conn.commit()
+    return {"ok": n > 0, "referrer": row["n"], "customer_id": customer_id}
+
+
 def mark_referral_fee_paid(fee_id: int, method: str = "Venmo",
                            paid_date: str | None = None, note: str = "",
                            db_path: str | Path | None = None) -> dict:
@@ -38729,9 +38751,38 @@ def assemble_event_game_payouts(event_name: str, db_path=None) -> dict:
         d = determine_event_game_results(ev["item_name"], "individual_gross",
                                          flights=g_flights, db_path=db_path)
         if d.get("status") == "determined":
-            amts = [a for a in (g_gross.get("grossLow1st"), g_gross.get("grossLow2nd"))
-                    if _matrix_num(a) > 0]
-            for fl in d.get("flights") or []:
+            # Each flight's pot is its OWN players' buy-ins (Kerry
+            # 2026-07-22, s18.8 Vaaler Creek): gross flights are handicap
+            # BANDS with uneven headcounts, so the matrix's flat
+            # grossLow1st (total ÷ flights — an even-split assumption)
+            # under/overpays. GG's model: per-player rate × flight
+            # headcount ($8 × 4/5/7 = $32/$40/$56 on a 16-buyer $128
+            # pot). Apportion individualGross by headcount, exact cents
+            # (largest remainder); the matrix ladder's proportions split
+            # within each flight (grossLow2nd where defined).
+            gross_total_cents = round(
+                _matrix_num(g_gross.get("individualGross")) * 100)
+            fls = d.get("flights") or []
+            n_scored = sum(int(fl.get("players") or 0) for fl in fls) or 1
+            ladder = [a for a in (_matrix_num(g_gross.get("grossLow1st")),
+                                  _matrix_num(g_gross.get("grossLow2nd")))
+                      if a > 0]
+            lsum = sum(ladder) or 1
+            floors = [(fl,
+                       gross_total_cents * int(fl.get("players") or 0) // n_scored,
+                       (gross_total_cents * int(fl.get("players") or 0)) % n_scored)
+                      for fl in fls]
+            short = gross_total_cents - sum(f[1] for f in floors)
+            order = sorted(range(len(floors)), key=lambda i: (-floors[i][2], i))
+            bump = set(order[:short])
+            for i, (fl, cents, _r) in enumerate(floors):
+                pot = (cents + (1 if i in bump else 0)) / 100.0
+                if pot <= 0:
+                    continue
+                amts = ([round(pot * a / lsum, 2) for a in ladder] or [pot])
+                drift = round(pot - sum(amts), 2)
+                if abs(drift) >= 0.01:
+                    amts[0] = round(amts[0] + drift, 2)
                 rows.extend(_rows_from_place_ladder(
                     fl.get("ranking") or [], amts,
                     "individual_gross", f"Ind Gross {fl['flight']}"))

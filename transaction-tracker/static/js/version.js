@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.140.0";
+window.TGF_VERSION = "2.140.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.140.1",
+    date: "2026-07-22",
+    changes: [
+      "Individual Gross flight pots now follow each flight's own buy-ins (Kerry, s18.8 Vaaler Creek): gross flights are handicap BANDS with uneven headcounts (4/5/7 on a 16-buyer field), but the engine paid the matrix's flat grossLow1st ($32 = total ÷ flights, an even-split assumption) to every flight — $96 paid out of a $128 pot. The pot now apportions by flight headcount with exact cents (per-player rate × players: $32/$40/$56), matching GG's model to the penny; the matrix ladder's proportions still split places within a flight, and ties still split (Horton/Niester $16 each was coincidentally right and is unchanged).",
+      "s18.8 corrections on re-record: Neal Cloer's Ind Gross $32 → $40, Fernando Romero's $32 → $56 (both still unpaid, so their groups simply update to $103 and $205 due). Also: scoring-referral-link bridge to resolve an ambiguous referral coupon token to a specific customer — 'tgf-referral-jesse' is Jesse Saldana per Kerry.",
+    ],
+  },
   {
     version: "2.140.0",
     date: "2026-07-22",
