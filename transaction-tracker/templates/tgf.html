@@ -1118,6 +1118,45 @@
                 ? `<div class="tgf-scroll"><table class="payout-table"><thead><tr>${head}</tr></thead><tbody>${rows}</tbody></table></div>`
                 : `<div style="font-size:0.85rem;color:var(--text-muted);padding:0.25rem 0;">${empty}</div>`;
 
+            // ── Referral fees (v2.140.0, Kerry 2026-07-22) — owed derives
+            // from tgf-referral-* signup coupons; paid auto-completes from
+            // "Referral fee for <person>" P2P receipts.
+            const ref = data.referrals || {owed: [], paid: []};
+            const isMobileUA = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+            const refOwedRows = (ref.owed || []).map(r => {
+                let action = "";
+                if (r.referrer_venmo) {
+                    const memo = encodeURIComponent(`Referral fee for ${r.referred_name || ""}`);
+                    const amt = Number(r.amount || 0).toFixed(2);
+                    const h = (r.referrer_venmo || "").replace(/^@/, "");
+                    const href = isMobileUA
+                        ? `venmo://paycharge?txn=pay&recipients=${encodeURIComponent(h)}&amount=${amt}&note=${memo}`
+                        : `https://venmo.com/${encodeURIComponent(h)}?txn=pay&amount=${amt}&note=${memo}`;
+                    action = `<a href="${href}" target="_blank" rel="noopener"
+                        style="display:inline-block;text-decoration:none;background:#008CFF;color:#fff;font-size:0.72rem;font-weight:600;padding:2px 9px;border-radius:12px;">Venmo ${fmt(r.amount)}</a>`;
+                } else if (r.referrer_customer_id) {
+                    action = `<a href="/customers?cid=${r.referrer_customer_id}"
+                        style="display:inline-block;text-decoration:none;background:#E87C3E;color:#fff;font-size:0.72rem;font-weight:600;padding:2px 9px;border-radius:12px;">Pay…</a>`;
+                } else {
+                    action = `<span style="font-size:0.7rem;color:#b45309;">referrer unresolved</span>`;
+                }
+                return `
+                <tr>
+                    <td>${playerCell(r.referrer_name, r.referrer_customer_id,
+                        `referred ${r.referred_name || "?"}${r.coupon_code ? " · " + r.coupon_code : ""}`)}</td>
+                    <td class="right total-amount" style="white-space:nowrap;">${fmt(r.amount)}</td>
+                    <td class="right queue-act">${action}</td>
+                </tr>`;
+            }).join("");
+            const refPaidRows = (ref.paid || []).map(r => `
+                <tr>
+                    <td>${playerCell(r.referrer_name, r.referrer_customer_id,
+                        `referred ${r.referred_name || "?"}`)}</td>
+                    <td style="font-size:0.78rem;color:var(--text-muted);white-space:nowrap;">${escR(r.method || "")}${r.paid_at ? " · " + fmtDate(r.paid_at) : ""}</td>
+                    <td class="right total-amount" style="white-space:nowrap;">${fmt(r.amount)}</td>
+                    <td class="right"><span style="font-size:0.7rem;font-weight:600;background:#dcfce7;color:#166534;padding:2px 8px;border-radius:10px;white-space:nowrap;">${r.acct_transaction_id ? "VERIFIED" : "PAID"}</span></td>
+                </tr>`).join("");
+
             el.innerHTML = `
                 <div style="display:flex;align-items:baseline;gap:0.75rem;margin-bottom:1rem;flex-wrap:wrap;">
                     <h1 style="font-size:1.25rem;margin:0;">Refunds</h1>
@@ -1129,6 +1168,10 @@
                 ${section("In Flight", t.in_flight_count || 0, t.in_flight_amount || 0, "#1e40af",
                     tbl(`<th>Player / Event</th><th>Method</th><th class="right">Age</th><th class="right">Amount</th><th class="right" style="width:90px;"></th>`,
                         flightRows, "No refunds currently being verified."))}
+                ${section("Referral Fees", (ref.owed || []).length, ref.owed_total || 0, "#7c3aed",
+                    tbl(`<th>Referrer / Referred</th><th class="right">Fee</th><th class="right" style="width:110px;"></th>`,
+                        refOwedRows, "No referral fees owed.")
+                    + ((ref.paid || []).length ? tbl(`<th>Referrer / Referred</th><th>Method</th><th class="right">Fee</th><th class="right" style="width:90px;"></th>`, refPaidRows, "") : ""))}
                 ${section("Completed", t.completed_count || 0, t.completed_amount || 0, "#166534",
                     tbl(`<th>Player / Event</th><th>Method</th><th class="right">Amount</th><th class="right" style="width:90px;"></th>`,
                         doneRows, `No refunds recorded in the last ${data.completed_days || 120} days.`))}`;

@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.139.4";
+window.TGF_VERSION = "2.140.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.140.0",
+    date: "2026-07-22",
+    changes: [
+      "Referral fee tracking (Kerry: 'I would like to add referral fee tracking'). New REFERRAL FEES section in the Refunds console: OWED derives automatically from tgf-referral-<name> signup coupons (the referred member's order names the referrer in the coupon the parser already extracts), and PAID auto-completes from P2P receipts whose memo reads 'Referral fee for <person>' — the same receipt-verifies-payment philosophy as refund watches. Fee amount is rules-as-data: app_setting referral_fee_amount, default $25.",
+      "Owed rows carry a one-tap Venmo pay link prefilled with the referrer's handle, the fee, and the exact memo the scanner listens for — pay from the console and the receipt closes the loop on its own. referral_fees table keys both sides by customer_id per the identity rule; bridge commands scoring-referrals (sync + read) and scoring-referral-paid:<id> (manual completion for cash) round it out.",
+      "Backfill: the receipt scan retro-records Bob Atkinson's two paid referral fees (Hector Aguilera 07/21, David Decareaux 07/22 — the latter lands as soon as its Venmo receipt arrives). Bob's second $58 credit (s9.19) also stamped COMPLETED against today's payment.",
+    ],
+  },
   {
     version: "2.139.4",
     date: "2026-07-22",

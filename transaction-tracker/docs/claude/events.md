@@ -1200,6 +1200,31 @@ duplicated into the console. Inline actions are the next increment.
 Tests: `test_refunds_overview.py` (12 checks). Read-only; no schema
 change.
 
+
+### Referral fee tracking (v2.140.0, Kerry 2026-07-22)
+
+A REFERRAL FEES section inside the Refunds console. Data trail: a
+referred member's signup carries coupon code `tgf-referral-<referrer>`
+(parser extracts coupon_code/coupon_amount), and Kerry pays the REFERRER
+a flat fee via P2P with memo "Referral fee for <referred person>".
+
+- Table `referral_fees` (lazy `_ensure_referral_tables`): both sides
+  keyed by customer_id; source = coupon | receipt | manual;
+  acct_transaction_id links the promoted receipt.
+- `sync_referral_fees()` (idempotent, runs on every console load +
+  scoring-referrals bridge): coupon scan => OWED rows (referrer resolved
+  from the code token, unresolved flagged in note); receipt scan =>
+  marks the matching OWED row PAID, or creates a paid row outright (the
+  pre-tracking backfill: Atkinson/Aguilera, Atkinson/Decareaux).
+- Fee amount is rules-as-data: app_setting `referral_fee_amount`
+  (default 25).
+- Owed rows render a Venmo deep link prefilled with the referrer's
+  handle + the exact memo the scanner listens for, so paying from the
+  console self-completes when the receipt arrives.
+- Manual completion (cash / unreadable memo):
+  `scoring-referral-paid:<id>|<method>|<date>|<note>` bridge or
+  `mark_referral_fee_paid()`.
+
 ## Hole-In-One pot (v2.130.x, Kerry-ratified 2026-07-20)
 
 HIO is the one game pot that ACCRUES across events instead of paying per

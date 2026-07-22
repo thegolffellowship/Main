@@ -1751,6 +1751,20 @@ def _scoring_dispatch(url: str, extract: str):
             return json.dumps(db.clear_event_auto_payouts(
                 _ev.strip(), include_manual=(_mode.strip().lower() == "all")),
                 indent=2, default=str)
+        if cmd == "scoring-referrals":
+            # Referral fee tracking (v2.140.0): sync (coupon scan => owed,
+            # receipt scan => paid) then return the console payload.
+            sync = db.sync_referral_fees()
+            return json.dumps({"sync": sync, **db.get_referral_fees()},
+                              indent=2, default=str)
+        if cmd == "scoring-referral-paid":
+            # "<fee_id>|<method>|<date>|<note>" — manual completion for a
+            # fee paid outside the receipt flow (cash / unreadable memo).
+            _p = [x.strip() for x in arg.split("|")]
+            return json.dumps(db.mark_referral_fee_paid(
+                int(_p[0]), method=_p[1] if len(_p) > 1 and _p[1] else "Venmo",
+                paid_date=_p[2] if len(_p) > 2 and _p[2] else None,
+                note=_p[3] if len(_p) > 3 else ""), indent=2)
         if cmd == "scoring-refunds-overview":
             # READ-ONLY: the REFUNDS console payload (outstanding / in-flight
             # / completed) — incl. season-contest removal refunds.

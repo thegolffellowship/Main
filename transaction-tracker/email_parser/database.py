@@ -20855,8 +20855,19 @@ def get_refunds_overview(db_path: str | Path | None = None,
     def _sum(rows):
         return round(sum(x["amount"] for x in rows), 2)
 
+    # Referral fees ride along in the same console payload (Kerry
+    # 2026-07-22: "I would like to add referral fee tracking") — best
+    # effort so a referral-sync failure can never break the refunds view.
+    referrals = None
+    try:
+        sync_referral_fees(db_path=db_path)
+        referrals = get_referral_fees(db_path=db_path)
+    except Exception:
+        logger.warning("referral fee sync/read failed (non-fatal)", exc_info=True)
+
     return {
         "outstanding": outstanding, "in_flight": in_flight, "completed": completed,
+        "referrals": referrals,
         "totals": {
             "outstanding_count": len(outstanding),
             "outstanding_amount": _sum(outstanding),
@@ -20869,7 +20880,203 @@ def get_refunds_overview(db_path: str | Path | None = None,
     }
 
 
-def auto_match_refund_watches(expense_ids: list[int] | None = None,
+# ── Referral fee tracking (v2.140.0, Kerry 2026-07-22) ────────────────
+# The referral program's data trail: a referred signup carries a coupon
+# code "tgf-referral-<referrer>" (parser extracts coupon_code/amount),
+# and Kerry pays the REFERRER a flat fee via P2P with the memo
+# "Referral fee for <referred person>". Tracking derives both sides:
+# coupon scan => fee OWED to the referrer; receipt scan => fee PAID
+# (auto-completes, same philosophy as the refund watches). Fee amount is
+# rules-as-data: app_setting 'referral_fee_amount' (default 25).
+
+_REFERRAL_COUPON_RE = re.compile(r"^tgf-?referr?al-?(.+)$", re.I)
+_REFERRAL_MEMO_RE = re.compile(r"referr?al\s+fee\s+for\s+(.+?)\s*$", re.I)
+
+
+def _ensure_referral_tables(conn: sqlite3.Connection) -> None:
+    conn.execute("""CREATE TABLE IF NOT EXISTS referral_fees (
+        id                    INTEGER PRIMARY KEY AUTOINCREMENT,
+        referrer_customer_id  INTEGER REFERENCES customers(customer_id),
+        referrer_name         TEXT,
+        referred_customer_id  INTEGER REFERENCES customers(customer_id),
+        referred_name         TEXT COLLATE NOCASE,
+        source                TEXT,      -- coupon | receipt | manual
+        source_item_id        INTEGER REFERENCES items(id),
+        coupon_code           TEXT,
+        amount                REAL,
+        status                TEXT DEFAULT 'owed',   -- owed | paid
+        paid_at               TEXT,
+        method                TEXT,
+        acct_transaction_id   INTEGER REFERENCES acct_transactions(id),
+        note                  TEXT,
+        created_at            TEXT DEFAULT (datetime('now')))""")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_referral_fees_status "
+                 "ON referral_fees(status)")
+
+
+def _referral_fee_amount(conn) -> float:
+    try:
+        row = conn.execute(
+            "SELECT value FROM app_settings WHERE key = 'referral_fee_amount'"
+        ).fetchone()
+        return float(row["value"]) if row and row["value"] else 25.0
+    except Exception:
+        return 25.0
+
+
+def sync_referral_fees(db_path: str | Path | None = None) -> dict:
+    """Idempotent two-way sync of the referral_fees table.
+
+    1. COUPON scan: items whose coupon_code matches tgf-referral-<name>
+       create an OWED row (referrer resolved from the code token; the
+       referred person is the item's customer). One fee per referred
+       person — the same coupon on later orders doesn't stack.
+    2. RECEIPT scan: P2P payout receipts whose memo reads "Referral fee
+       for <person>" mark the matching row PAID (or create a paid row
+       when we never saw a coupon — the pre-tracking backfill case:
+       Atkinson/Aguilera 07-21, Atkinson/Decareaux 07-22).
+    """
+    out = {"owed_added": 0, "paid_recorded": 0, "notes": []}
+    with _connect(db_path) as conn:
+        _ensure_referral_tables(conn)
+        fee = _referral_fee_amount(conn)
+
+        # 1. coupon scan — one row per referred person
+        for it in conn.execute(
+                """SELECT id, customer, customer_id, coupon_code, order_date
+                   FROM items
+                   WHERE coupon_code IS NOT NULL AND coupon_code != ''
+                     AND transaction_status NOT IN ('rsvp_only')
+                   ORDER BY order_date, id""").fetchall():
+            m = _REFERRAL_COUPON_RE.match((it["coupon_code"] or "").strip())
+            if not m:
+                continue
+            referred_name = (it["customer"] or "").strip()
+            if not referred_name:
+                continue
+            dup = conn.execute(
+                """SELECT 1 FROM referral_fees
+                   WHERE referred_name = ? OR
+                         (referred_customer_id IS NOT NULL
+                          AND referred_customer_id = ?)""",
+                (referred_name, it["customer_id"])).fetchone()
+            if dup:
+                continue
+            token = m.group(1).strip().replace("-", " ")
+            ref_cid = _lookup_customer_id(conn, token, None)
+            ref_name = None
+            if ref_cid:
+                row = conn.execute(
+                    """SELECT TRIM(COALESCE(first_name,'') || ' ' ||
+                                   COALESCE(last_name,'')) AS n
+                       FROM customers WHERE customer_id = ?""",
+                    (ref_cid,)).fetchone()
+                ref_name = row["n"] if row else None
+            conn.execute(
+                """INSERT INTO referral_fees
+                       (referrer_customer_id, referrer_name,
+                        referred_customer_id, referred_name,
+                        source, source_item_id, coupon_code, amount, status,
+                        note)
+                   VALUES (?, ?, ?, ?, 'coupon', ?, ?, ?, 'owed', ?)""",
+                (ref_cid, ref_name or token.title(), it["customer_id"],
+                 referred_name, it["id"], it["coupon_code"], fee,
+                 None if ref_cid else
+                 f"referrer '{token}' not resolved to a customer"))
+            out["owed_added"] += 1
+
+        # 2. receipt scan — paid referral fees auto-complete
+        for exp in conn.execute(
+                """SELECT id, merchant, amount, transaction_date, customer_id,
+                          notes, source_type, acct_transaction_id
+                   FROM expense_transactions
+                   WHERE transaction_type = 'payout'
+                     AND source_type IN ('venmo','paypal','cashapp','zelle')
+                     AND notes IS NOT NULL""").fetchall():
+            m = _REFERRAL_MEMO_RE.search(exp["notes"] or "")
+            if not m:
+                continue
+            referred_name = m.group(1).strip().rstrip(".")
+            already = conn.execute(
+                "SELECT 1 FROM referral_fees WHERE acct_transaction_id = ?",
+                (exp["acct_transaction_id"],)).fetchone() \
+                if exp["acct_transaction_id"] else None
+            if already:
+                continue
+            open_row = conn.execute(
+                """SELECT id FROM referral_fees
+                   WHERE status = 'owed' AND referred_name = ?
+                   ORDER BY id LIMIT 1""", (referred_name,)).fetchone()
+            vals = (exp["transaction_date"], exp["source_type"],
+                    exp["acct_transaction_id"], round(float(exp["amount"] or 0), 2))
+            if open_row:
+                conn.execute(
+                    """UPDATE referral_fees
+                       SET status = 'paid', paid_at = ?, method = ?,
+                           acct_transaction_id = ?, amount = ?
+                       WHERE id = ?""", (*vals, open_row["id"]))
+            else:
+                ref_cid = exp["customer_id"] or _lookup_customer_id(
+                    conn, (exp["merchant"] or "").strip(), None)
+                ref_name = (exp["merchant"] or "").strip()
+                if ref_cid:
+                    row = conn.execute(
+                        """SELECT TRIM(COALESCE(first_name,'') || ' ' ||
+                                       COALESCE(last_name,'')) AS n
+                           FROM customers WHERE customer_id = ?""",
+                        (ref_cid,)).fetchone()
+                    if row and row["n"]:
+                        ref_name = row["n"]
+                referred_cid = _lookup_customer_id(conn, referred_name, None)
+                conn.execute(
+                    """INSERT INTO referral_fees
+                           (referrer_customer_id, referrer_name,
+                            referred_customer_id, referred_name,
+                            source, amount, status, paid_at, method,
+                            acct_transaction_id)
+                       VALUES (?, ?, ?, ?, 'receipt', ?, 'paid', ?, ?, ?)""",
+                    (ref_cid, ref_name, referred_cid, referred_name,
+                     vals[3], vals[0], vals[1], vals[2]))
+            out["paid_recorded"] += 1
+        conn.commit()
+    return out
+
+
+def get_referral_fees(db_path: str | Path | None = None) -> dict:
+    """Referral fees for the console: owed (with the referrer's Venmo
+    handle for a prefilled pay link) + paid, newest first."""
+    with _connect(db_path) as conn:
+        _ensure_referral_tables(conn)
+        rows = [dict(r) for r in conn.execute(
+            """SELECT rf.*, c.venmo_username AS referrer_venmo
+               FROM referral_fees rf
+               LEFT JOIN customers c ON c.customer_id = rf.referrer_customer_id
+               ORDER BY rf.status DESC, rf.paid_at DESC, rf.id DESC""").fetchall()]
+    owed = [r for r in rows if r["status"] == "owed"]
+    paid = [r for r in rows if r["status"] == "paid"]
+    return {"owed": owed, "paid": paid,
+            "owed_total": round(sum(r["amount"] or 0 for r in owed), 2),
+            "paid_total": round(sum(r["amount"] or 0 for r in paid), 2)}
+
+
+def mark_referral_fee_paid(fee_id: int, method: str = "Venmo",
+                           paid_date: str | None = None, note: str = "",
+                           db_path: str | Path | None = None) -> dict:
+    """Manual completion for a referral fee paid outside the receipt flow
+    (cash, or a memo the scanner can't read)."""
+    with _connect(db_path) as conn:
+        _ensure_referral_tables(conn)
+        n = conn.execute(
+            """UPDATE referral_fees
+               SET status = 'paid', paid_at = COALESCE(?, DATE('now')),
+                   method = ?, note = COALESCE(NULLIF(?, ''), note)
+               WHERE id = ? AND status != 'paid'""",
+            (paid_date, method, note, fee_id)).rowcount
+        conn.commit()
+    return {"ok": n > 0, "updated": n}
+
+
+def auto_match_refund_watches(expense_ids: list[int] | None= None,
                               db_path: str | Path | None = None) -> dict:
     """Verify open refund watches against outbound P2P payment receipts
     and record the payout.
