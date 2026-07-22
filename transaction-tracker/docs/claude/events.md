@@ -1088,6 +1088,20 @@ it requires `acct_transactions.category='prize_payout'` + a `customer`
 name, which the expense-promotion path doesn't set; the new matcher
 works from expense_transactions directly.
 
+**Causality guard (v2.139.2 — the Paul Reed case, Kerry 2026-07-22):**
+candidate pending groups are filtered to `event_date <= payment date
+(+1 day)` — a receipt can never pay winnings for an event played AFTER
+it. Without this, an unconsumed 2026-04-07 receipt ("Winnings for s9.4
+AVERY RANCH" — a chapter-letter memo typo for a9.4, so it never found
+its true event) sat hunting for 3.5 months until Reed's July a9.19
+group appeared at the exact same $64.50 and the cross-chapter
+exact-cents fallback claimed it, stamping July winnings paid in April.
+Date-less pseudo-events (monthly points accounts) stay eligible.
+Diagnosis tool: `scoring-payouts-inspect:<event>[|<player>]` (bridge,
+v2.139.1) lists every payout row with its full acct link + a computed
+PAID/PENDING/UNLINKED/DANGLING state; `scoring-payouts-unlink:<acct_id>`
+reverts a bad link.
+
 ## Category types
 `team_net`, `individual_net`, `individual_gross`, `skins`, `closest_to_pin`,
 `hole_in_one`, `mvp`, `other`
