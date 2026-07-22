@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.140.1";
+window.TGF_VERSION = "2.140.2";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.140.2",
+    date: "2026-07-22",
+    changes: [
+      "Gross flight-pot rule is now a LEVER, not code (Kerry: 'there's times where we may do it for a number of players in the flight or straight split — we need to finalize the levers'): app_setting gross_flight_pot_mode = 'buyins' (default — each flight's pot is its own players' buy-ins, the GG-parity rule that just corrected s18.8) or 'even' (straight split of the pot across flights). No behavior change until the setting is flipped; editable via the scoring-setting-set bridge or a future Matrix UI control. The final policy (which mode applies when, within-flight ladder proportions, and whether flighted skins gets the same question) is logged as an OPEN FLAG in the side-games spec pending Kerry's ratification.",
+    ],
+  },
   {
     version: "2.140.1",
     date: "2026-07-22",

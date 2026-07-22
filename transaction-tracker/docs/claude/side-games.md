@@ -560,7 +560,7 @@ from our imported scorecards, mirroring the MVP wiring (v2.33.0):
   CTPs (Kulawik #12, Mary Wade #16, $26 each) were entered in GG after
   the round was walked and sat invisible to the Tracker.
 - **Ind Gross flight pots follow each flight's buy-ins (v2.140.1,
-  Kerry 2026-07-22 — s18.8 Vaaler Creek):** gross flights are handicap
+  INTERIM — final rule pending Kerry ratification, see Open flags):** gross flights are handicap
   BANDS with uneven headcounts, so the matrix's flat `grossLow1st`
   (individualGross ÷ grossFlights, an even-split assumption) is only
   the display seed — the assembler apportions `individualGross` across
@@ -624,6 +624,18 @@ from our imported scorecards, mirroring the MVP wiring (v2.33.0):
   Austin events never got scorecards from the sync (a9.17
   Falconhead). Every matching board imports (future "ALL Net 18"
   combo days included).
+- **OPEN — gross flight-pot levers (Kerry 2026-07-22, previously
+  flagged):** the by-headcount rule shipped in v2.140.1 is the INTERIM
+  setting — it matches GG and cleared s18.8, but Kerry wants the final
+  policy designed: sometimes pots should follow the players in the
+  flight (buy-ins), sometimes a straight split across flights. The
+  lever exists as app_setting `gross_flight_pot_mode` ('buyins' default
+  | 'even', v2.140.2, editable via scoring-setting-set). Decision
+  points to finalize with Kerry: (a) when does each mode apply — per
+  hole-count, per flight-cut style (handicap bands vs even cuts), or
+  per event? (b) within-flight ladder — winner-take-all vs 1st/2nd
+  proportions at which flight sizes? (c) does the same question apply
+  to flighted SKINS pots (currently straight split)?
 - Still manual: Skins ½ Net at <8 gross buyers on 9h (half-pop
   allocation rule unratified — the row shows "manual — ½-net rule
   pending").

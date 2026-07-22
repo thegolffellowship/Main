@@ -38751,27 +38751,32 @@ def assemble_event_game_payouts(event_name: str, db_path=None) -> dict:
         d = determine_event_game_results(ev["item_name"], "individual_gross",
                                          flights=g_flights, db_path=db_path)
         if d.get("status") == "determined":
-            # Each flight's pot is its OWN players' buy-ins (Kerry
-            # 2026-07-22, s18.8 Vaaler Creek): gross flights are handicap
-            # BANDS with uneven headcounts, so the matrix's flat
-            # grossLow1st (total ÷ flights — an even-split assumption)
-            # under/overpays. GG's model: per-player rate × flight
-            # headcount ($8 × 4/5/7 = $32/$40/$56 on a 16-buyer $128
-            # pot). Apportion individualGross by headcount, exact cents
-            # (largest remainder); the matrix ladder's proportions split
-            # within each flight (grossLow2nd where defined).
+            # Flight-pot LEVER (Kerry 2026-07-22 — INTERIM, final rule
+            # pending his ratification): app_setting
+            # 'gross_flight_pot_mode' = 'buyins' (default; each flight's
+            # pot is its own players' buy-ins — GG's model, right for
+            # handicap-BAND flights with uneven headcounts: $8 × 4/5/7 =
+            # $32/$40/$56 on s18.8's 16-buyer $128 pot) or 'even'
+            # (straight split: total ÷ flights, for cuts meant to pay
+            # flights equally). Editable via scoring-setting-set; the
+            # matrix ladder's proportions split places within a flight
+            # either way. Exact cents (largest remainder).
+            _mode = (get_app_setting("gross_flight_pot_mode",
+                                     db_path=db_path) or "buyins").strip().lower()
             gross_total_cents = round(
                 _matrix_num(g_gross.get("individualGross")) * 100)
             fls = d.get("flights") or []
-            n_scored = sum(int(fl.get("players") or 0) for fl in fls) or 1
+            weights = [1 if _mode == "even" else int(fl.get("players") or 0)
+                       for fl in fls]
+            n_scored = sum(weights) or 1
             ladder = [a for a in (_matrix_num(g_gross.get("grossLow1st")),
                                   _matrix_num(g_gross.get("grossLow2nd")))
                       if a > 0]
             lsum = sum(ladder) or 1
             floors = [(fl,
-                       gross_total_cents * int(fl.get("players") or 0) // n_scored,
-                       (gross_total_cents * int(fl.get("players") or 0)) % n_scored)
-                      for fl in fls]
+                       gross_total_cents * w // n_scored,
+                       (gross_total_cents * w) % n_scored)
+                      for fl, w in zip(fls, weights)]
             short = gross_total_cents - sum(f[1] for f in floors)
             order = sorted(range(len(floors)), key=lambda i: (-floors[i][2], i))
             bump = set(order[:short])
