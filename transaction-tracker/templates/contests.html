@@ -2748,9 +2748,13 @@
                 else if (wnr === 'H') { ptsA = 2; ptsB = 2; }
             }
             // Par from the event's tee data when we have it (Par row on
-            // the expanded card — Kerry 2026-07-21). Keys may be int or
+            // the expanded card — Kerry 2026-07-21). The registry (fed
+            // by pools/bracket rows) is first choice; the GG detail's
+            // own embedded hole_pars (live payloads + hardened
+            // snapshots resolve them by event code) covers cards whose
+            // bracket row has no event linked. Keys may be int or
             // string depending on the JSON round trip.
-            const pmap = mpParsFor(o.eventName);
+            const pmap = mpParsFor(o.eventName) || (gg && gg.hole_pars) || null;
             const par = (pmap && h.hole != null)
                 ? (pmap[h.hole] != null ? pmap[h.hole]
                    : (pmap[String(h.hole)] != null ? pmap[String(h.hole)] : null))

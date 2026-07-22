@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.137.3";
+window.TGF_VERSION = "2.137.4";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.137.4",
+    date: "2026-07-21",
+    changes: [
+      "Par row, two more sources (Kerry's Barna/Hogue catch): the semifinal WAS linked — to the Falconhead City Champ practice round, an event with zero imported scorecards, and the par lookup only ran through an event's imported rounds. (1) Course-name fallback: an event with no banked cards now resolves pars from the course DB directly ('Falconhead' → 'Falconhead Golf Club' tee pars). (2) Live matches: the live payload now embeds hole_pars resolved from GG's own event code, so a live card (e.g. a semifinal at tonight's event before anyone links it) shows par mid-round — and the hardened snapshot carries the pars forever. Client falls back to the detail's embedded pars when the bracket row has no event.",
+    ],
+  },
   {
     version: "2.137.3",
     date: "2026-07-21",

@@ -26079,6 +26079,27 @@ def cmp_fetch_live_match(chapter: str, player_a: str, player_b: str,
         return {"error": str(e), "chapter": chapter,
                 "players": [player_a, player_b]}
 
+    if result and not result.get("hole_pars"):
+        # Carry the hole pars in the live payload (Kerry 2026-07-21):
+        # a LIVE match's bracket row often has no event linked yet, so
+        # the card can't resolve pars any other way. GG's round label
+        # gives us the event code — resolve it and embed the map. The
+        # hardened snapshot then carries pars forever too.
+        try:
+            _code = (result.get("gg_event") or "").strip()
+            if _code:
+                with _connect(db_path) as _pconn:
+                    _ev = _pconn.execute(
+                        "SELECT id FROM events WHERE item_name LIKE ? "
+                        "COLLATE NOCASE ORDER BY event_date DESC LIMIT 1",
+                        (_code + " %",)).fetchone()
+                    if _ev:
+                        _pars = _cmp_hole_pars_for_event(_pconn, _ev["id"])
+                        if _pars:
+                            result["hole_pars"] = _pars
+        except Exception:
+            logger.exception("live hole-pars resolve failed (non-fatal)")
+
     out = result or {"error": "match not found on GG",
                      "chapter": chapter, "players": [player_a, player_b]}
     _CMP_LIVE_CACHE[ck] = (now, out)
@@ -26277,6 +26298,27 @@ def _cmp_hole_pars_for_event(conn, event_id, _cache: dict | None = None) -> dict
                 WHERE cth.par IS NOT NULL
                 ORDER BY cth.hole_number""", (event_id,)):
         pars.setdefault(r["hole_number"], r["par"])
+    if not pars:
+        # Course-name fallback (Kerry 2026-07-21, the Falconhead
+        # practice-round semifinal): the linked event has NO imported
+        # cards (0-registration practice event), but the course's tee
+        # pars are already banked from other events. Match the event's
+        # course text against the course DB by containment
+        # ("Falconhead" → "Falconhead Golf Club").
+        ev = conn.execute("SELECT course FROM events WHERE id = ?",
+                          (event_id,)).fetchone()
+        cname = (ev["course"] or "").strip() if ev else ""
+        if cname:
+            for r in conn.execute(
+                    """SELECT cth.hole_number, cth.par
+                         FROM courses c
+                         JOIN course_tees ct ON ct.course_id = c.course_id
+                         JOIN course_tee_holes cth ON cth.tee_id = ct.tee_id
+                        WHERE c.name LIKE '%' || ? || '%' COLLATE NOCASE
+                          AND cth.par IS NOT NULL
+                        ORDER BY c.course_id, ct.tee_id, cth.hole_number""",
+                    (cname,)):
+                pars.setdefault(r["hole_number"], r["par"])
     if _cache is not None:
         _cache[event_id] = pars
     return pars
