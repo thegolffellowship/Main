@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.140.2";
+window.TGF_VERSION = "2.140.3";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.140.3",
+    date: "2026-07-22",
+    changes: [
+      "Expense dedup no longer swallows twin payments (found via Kerry's Bob Atkinson receipts screenshot): the Graph re-key guard treats any second email with the same payee + amount + date as a re-key of the first, so Bob's four 7/21 Venmo payments (two $58 credit refunds, two $25 referral fees) collapsed to two rows — $83 silently missing from the ledger. Both dedup paths now compare the payment platform's transaction_id from the receipt (Venmo/PayPal ids are globally unique): different ids = two real payments, never folded. Same id or no id keeps the re-key protection intact.",
+      "Boot heal recreates the two folded receipts — the $58 s9.19 THE QUARRY credit and the $25 David Decareaux referral fee — as approved venmo expense rows promoted to the ledger, and the referral receipt scan then files the Decareaux fee PAID from the recovered memo. The healed rows carry no transaction_id, so if the original emails ever re-deliver they adopt these rows instead of duplicating them.",
+    ],
+  },
   {
     version: "2.140.2",
     date: "2026-07-22",

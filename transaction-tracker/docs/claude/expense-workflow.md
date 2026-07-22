@@ -43,6 +43,15 @@ decoupled from cost — running every 5 minutes costs the same as once a day.
   with the same `(source_type, merchant, amount, transaction_date)` under a
   different `email_uid` instead of double-inserting when Graph re-keys an
   already-seen email. NULL amount/date falls through to the normal insert.
+  **Twin-payment veto (v2.140.3):** before adopting (both the re-key path and
+  the no-uid content match), the platform `transaction_id` from each row's
+  `raw_extract` is compared — different ids mean two REAL payments that
+  coincide on payee/amount/date, and the new receipt inserts as its own row.
+  Discovered via Bob Atkinson 7/21: two $58 credit refunds + two $25 referral
+  fees each folded into one row, dropping $83 from the ledger (healed by boot
+  repair `_repair_atkinson_folded_receipts`; the recreated rows deliberately
+  carry no transaction_id so a late re-delivery of the original emails adopts
+  them instead of duplicating).
 - **Persistence:** the dedup table lives in SQLite. Without a Railway
   persistent volume + `DATABASE_PATH`, every redeploy wipes it and re-bills
   the full backfill window. `start_scheduler()` logs a loud WARNING if

@@ -3756,6 +3756,16 @@ def init_db(db_path: str | Path | None = None) -> None:
         except Exception as e:
             logger.warning("Match detail close-out heal failed: %s", e)
 
+        # One-off heal: recreate the two Bob Atkinson 7/21 Venmo receipts
+        # ($58 s9.19 credit + $25 Decareaux referral) the expense re-key
+        # guard folded into their same-amount twins (v2.140.3)
+        try:
+            _fr = _repair_atkinson_folded_receipts(conn)
+            if _fr:
+                logger.info("Folded-receipt heal: recovered %d Atkinson receipt(s)", _fr)
+        except Exception as e:
+            logger.warning("Folded-receipt heal failed: %s", e)
+
         # Always-run repair: merge duplicate Kyle Franz profile 316 into 315
         try:
             _repair_franz_attribution(conn, db_path)
@@ -20924,6 +20934,62 @@ def _referral_fee_amount(conn) -> float:
         return 25.0
 
 
+def _repair_atkinson_folded_receipts(conn) -> int:
+    """One-off heal (v2.140.3): Kerry paid Bob Atkinson (customer 219) four
+    times on 2026-07-21 — $58 credit refunds for s9.15 and s9.19 THE QUARRY
+    plus $25 referral fees for Hector Aguilera and David Decareaux. The
+    expense re-key guard folded each same-amount pair into one row (same
+    payee/amount/date reads as a Graph re-key), dropping the s9.19 $58 and
+    the Decareaux $25 from the ledger. Recreate the missing receipt +
+    ledger rows; the referral receipt scan then files the Decareaux fee
+    from the recovered memo. raw_extract deliberately carries NO
+    transaction_id so a late-arriving real receipt adopts these rows
+    instead of duplicating them.
+    """
+    # Fresh DBs create expense tables later in init — nothing to heal there.
+    if not conn.execute(
+            "SELECT 1 FROM sqlite_master WHERE type='table' AND name='expense_transactions'"
+    ).fetchone():
+        return 0
+    heals = [
+        (58.0, "Bob Atkinson - Credit from s9.19 THE QUARRY",
+         "%credit from s9.19 the quarry%"),
+        (25.0, "Robert Atkinson - Referral fee for David Decareaux",
+         "%referral fee for david decareaux%"),
+    ]
+    fixed = 0
+    for amount, memo, needle in heals:
+        have = conn.execute(
+            """SELECT 1 FROM expense_transactions
+               WHERE customer_id = 219 AND amount = ?
+                 AND LOWER(COALESCE(notes, '')) LIKE ?""",
+            (amount, needle),
+        ).fetchone()
+        if have:
+            continue
+        cur = conn.execute(
+            """INSERT INTO expense_transactions
+               (source_type, merchant, amount, transaction_date,
+                transaction_type, entity, customer_id, confidence,
+                review_status, notes, raw_extract)
+               VALUES ('venmo', 'Robert Atkinson', ?, '2026-07-21',
+                       'payout', 'TGF', 219, 95, 'approved', ?, ?)""",
+            (amount, memo, json.dumps({
+                "recipient_name": "Robert Atkinson", "amount": amount,
+                "memo": memo, "sent_from_account": "@tgf-payments",
+                "transaction_date": "2026-07-21",
+                "transaction_type": "payout",
+                "note": "recovered from folded receipt (v2.140.3 heal)",
+            })),
+        )
+        exp = dict(conn.execute(
+            "SELECT * FROM expense_transactions WHERE id = ?",
+            (cur.lastrowid,)).fetchone())
+        _sync_expense_ledger_entry(conn, exp)
+        fixed += 1
+    return fixed
+
+
 def sync_referral_fees(db_path: str | Path | None = None) -> dict:
     """Idempotent two-way sync of the referral_fees table.
 
@@ -33673,6 +33739,22 @@ def block_merchant(merchant: str, db_path: str | Path | None = None) -> list[str
     return blocked
 
 
+def _expense_platform_txn_id(raw_extract) -> str | None:
+    """Pull the payment platform's transaction id out of a raw_extract blob.
+
+    Venmo/PayPal/CashApp receipts carry a globally unique transaction_id —
+    it is the only reliable way to tell two same-day payments of the same
+    amount to the same person apart from a Graph re-key of one email.
+    """
+    if not raw_extract:
+        return None
+    try:
+        tid = json.loads(raw_extract).get("transaction_id")
+        return str(tid).strip() or None if tid is not None else None
+    except Exception:
+        return None
+
+
 def save_expense_transaction(data: dict, db_path: str | Path | None = None) -> dict:
     """Insert or update an expense transaction. Returns the saved record.
 
@@ -33681,6 +33763,12 @@ def save_expense_transaction(data: dict, db_path: str | Path | None = None) -> d
     2. Content match — (source_type, merchant, amount, transaction_date) already exists
        → update existing row so the same real-world transaction never appears twice
     3. Insert new row
+
+    Content/re-key matches are VETOED when both rows carry a platform
+    transaction_id and the ids differ: same payee + amount + date is then a
+    coincidence of two real payments, not a duplicate email (Bob Atkinson
+    7/21: two $58 credits + two $25 referral fees — the second of each pair
+    was silently folded into the first, dropping $83 from the ledger).
     """
     # Auto-ignore blocked merchants so they never surface as pending
     merchant_name = (data.get("merchant") or "").strip().lower()
@@ -33701,7 +33789,7 @@ def save_expense_transaction(data: dict, db_path: str | Path | None = None) -> d
             # Note: amount/transaction_date NULL → equality is never true, so
             # this conservatively falls through to the normal path.
             rekey = conn.execute(
-                """SELECT id FROM expense_transactions
+                """SELECT id, raw_extract FROM expense_transactions
                    WHERE source_type = ?
                      AND LOWER(COALESCE(merchant, '')) = LOWER(COALESCE(?, ''))
                      AND amount = ?
@@ -33711,6 +33799,13 @@ def save_expense_transaction(data: dict, db_path: str | Path | None = None) -> d
                 (data.get("source_type"), data.get("merchant"),
                  data.get("amount"), data.get("transaction_date"), email_uid),
             ).fetchone()
+            if rekey:
+                # Distinct platform transaction ids = two real payments that
+                # happen to share payee/amount/date — never fold them.
+                _old_tid = _expense_platform_txn_id(rekey["raw_extract"])
+                _new_tid = _expense_platform_txn_id(data.get("raw_extract"))
+                if _old_tid and _new_tid and _old_tid != _new_tid:
+                    rekey = None
             if rekey:
                 conn.execute(
                     """UPDATE expense_transactions SET
@@ -33776,7 +33871,7 @@ def save_expense_transaction(data: dict, db_path: str | Path | None = None) -> d
 
         # No email_uid — check content-based dedup before inserting
         existing = conn.execute(
-            """SELECT id FROM expense_transactions
+            """SELECT id, raw_extract FROM expense_transactions
                WHERE source_type = ?
                  AND LOWER(COALESCE(merchant, '')) = LOWER(COALESCE(?, ''))
                  AND amount = ?
@@ -33785,6 +33880,12 @@ def save_expense_transaction(data: dict, db_path: str | Path | None = None) -> d
             (data.get("source_type"), data.get("merchant"),
              data.get("amount"), data.get("transaction_date")),
         ).fetchone()
+
+        if existing:
+            _old_tid = _expense_platform_txn_id(existing["raw_extract"])
+            _new_tid = _expense_platform_txn_id(data.get("raw_extract"))
+            if _old_tid and _new_tid and _old_tid != _new_tid:
+                existing = None
 
         if existing:
             conn.execute(
