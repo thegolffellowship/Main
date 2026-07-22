@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.137.5";
+window.TGF_VERSION = "2.137.6";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.137.6",
+    date: "2026-07-21",
+    changes: [
+      "Dropped the 'Shown in play order…' caption from real (GG) match scorecards (Kerry): the circle/dot language is self-evident and 'Started on hole N' on the card head already covers play order. The caption remains only on illustrative placeholder cards, where disclosing that the hole detail is generated is load-bearing.",
+    ],
+  },
   {
     version: "2.137.5",
     date: "2026-07-21",

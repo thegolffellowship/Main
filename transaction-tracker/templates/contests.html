@@ -2887,10 +2887,13 @@
         // shows the winner + margin, so a second "Hogue 6&5" pill is redundant
         // (Kerry 2026-07-19). Only the live running margin stays.
         const prog = gen.inProgress ? ` &middot; in progress, thru ${gen.played}` : '';
-        // The card head already carries "Started on hole N" — don't restate it
-        // here (Kerry 2026-07-19).
+        // Real (GG) cards carry NO caption (Kerry 2026-07-21: the circle/
+        // dot language is self-evident and "Started on hole N" already
+        // covers play order). The placeholder caption stays — it
+        // discloses that the hole detail is generated, which is
+        // load-bearing.
         const caption = isGG
-            ? `${gen.startHole ? 'Shown in play order. ' : ''}Circles mark the hole winner (net); colored dots mark handicap strokes.`
+            ? ''
             : `Illustrative hole detail — generated from the match result${prog}; live hole-by-hole scoring wires in from Golf Genius. Strokes: hole winner takes par, loser par+1.`;
         // Strokes off the low man — total pops each player gets in the match.
         const aLast = escapeHtml(mpFirstLast(o.aName).last);
@@ -2904,7 +2907,7 @@
             : '';
         return `${strokeBar}<div class="mp-sc-nines">${nines}</div>
             <div>${result}</div>
-            <div class="mp-sc-caption">${caption}</div>`;
+            ${caption ? `<div class="mp-sc-caption">${caption}</div>` : ''}`;
     }
 
     // Shared match card: clickable head (meta + strip + hole-dots + caption) and
