@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.138.1";
+window.TGF_VERSION = "2.139.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.139.0",
+    date: "2026-07-22",
+    changes: [
+      "GG games import learns to check back for late winners (Kerry: 'CTPs are almost inherently later because they're not live'). A round whose game board exists but has no winners entered is no longer marked done — it goes on a recheck list (gg_game_recheck) and re-walks on every import pass until the winners appear, giving up after 14 days. Previously one walk froze the round forever, which is how s9.19's two CTPs (Kulawik #12, Mary Wade #16, $26 each) sat in GG invisible to the Tracker.",
+      "Late winners flow all the way through: the import now reports which events' winner sets actually changed (real set comparison, so routine re-walk upserts don't trigger it), and the auto-sync force-re-records those events' auto payouts even when the event is older than the recent-days window. The sweep's no-event-today skip also yields when rechecks are outstanding, so an off-day CTP entry still lands within the hour.",
+      "Tonight's discrepancy sweep (Tracker vs GG): a9.19 Teravista matched exactly ($525 both sides). s9.19 The Quarry reconciled to the penny — $52 missing CTPs (now imported + payouts re-recorded, $539 → $591/21 rows), $4 GG Team Net purse configured at the 27-player matrix value for a 26-player field ($104 is correct), and $0.02 GG rounding up a 4-way tie split our exact-cents rule doesn't overpay.",
+    ],
+  },
   {
     version: "2.138.1",
     date: "2026-07-22",

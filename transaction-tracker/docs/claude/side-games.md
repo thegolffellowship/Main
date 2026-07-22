@@ -542,6 +542,23 @@ from our imported scorecards, mirroring the MVP wiring (v2.33.0):
   the Games tab hydrates 🏆 chips on the Team Net/CTP rows and the HIO
   banner (Longest Putt winners ride on the CTP rows). For the future
   untethering, manager or in-round player entry replaces this pull.
+  **Check-back-later (v2.139.0, Kerry 2026-07-22 — "CTPs are almost
+  inherently later because they're not live"):** a round whose game
+  board exists but carries NO winners yet is NOT marked done — it
+  lands in `gg_game_recheck` (round, host, event_id, awaiting labels)
+  and re-walks on every import pass until winners appear or the event
+  is `recheck_days` (14) old, then gives up and marks done. The
+  import's `events_updated` return lists events whose winner set
+  actually changed (set-compared per tournament, so the routine
+  rewalk_recent upserts don't count); `import_all_gg_side_data` feeds
+  those into `record_all_event_game_payouts(force_events=…)` so a late
+  CTP re-records that event's auto payouts even outside the
+  recent_force_days window, and its no-event-today gate also runs when
+  any recheck is outstanding (off-day sweeps until the CTPs land).
+  The manual heal for a stale round remains `&round=<id>` on the
+  scoring-games-import bridge URL. Origin case: s9.19 The Quarry's two
+  CTPs (Kulawik #12, Mary Wade #16, $26 each) were entered in GG after
+  the round was walked and sat invisible to the Tracker.
 - **Record Payouts (v2.38.0, Kerry directive)** — the Games tab's
   "💸 Record Payouts" button (ADMIN-only as of v2.45.0; was manager) assembles every DETERMINED
   winner into PAYOUTS-tab rows: City MVP (+TGF MVP once, from the

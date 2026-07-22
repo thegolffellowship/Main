@@ -9683,6 +9683,17 @@ def _ensure_gg_game_results_tables(conn: sqlite3.Connection) -> None:
         host         TEXT NOT NULL,
         imported_at  TEXT DEFAULT (datetime('now')),
         PRIMARY KEY (gg_round_id, host))""")
+    # Rounds whose game boards exist but carry NO winners yet (CTPs are
+    # inherently entered after the round — Kerry 2026-07-22: "check back
+    # later"). A round listed here is NOT marked done; every import pass
+    # re-walks it until winners land or the recheck window lapses.
+    conn.execute("""CREATE TABLE IF NOT EXISTS gg_game_recheck (
+        gg_round_id  TEXT NOT NULL,
+        host         TEXT NOT NULL,
+        event_id     INTEGER REFERENCES events(id),
+        awaiting     TEXT,
+        first_seen   TEXT DEFAULT (datetime('now')),
+        PRIMARY KEY (gg_round_id, host))""")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_gg_game_results_event "
                  "ON gg_game_results(event_id, game)")
 
@@ -9738,7 +9749,8 @@ def _game_winners_from_table(table: list) -> list[dict]:
 
 def import_gg_game_results(widget_url: str, db_path: str | Path = DB_PATH,
                            time_budget: float = 42.0,
-                           rewalk_recent: int = 0) -> dict:
+                           rewalk_recent: int = 0,
+                           recheck_days: int = 14) -> dict:
     """Walk a portal's Event Results rounds and record CTP / Longest
     Putt / Hole-in-One / TEAM Net winners as GG-recorded truth.
 
@@ -9746,10 +9758,21 @@ def import_gg_game_results(widget_url: str, db_path: str | Path = DB_PATH,
     tournament_results widget (optionally &round=<id>); already-walked
     rounds are skipped via gg_game_results_rounds; stops at time_budget
     seconds — call repeatedly until rounds_left == 0.
+
+    Check-back-later (Kerry-ratified 2026-07-22): CTPs (and any manually
+    entered game) are inherently recorded AFTER the round, so a round
+    whose game board exists but carries no winners yet is NOT marked
+    done — it lands in gg_game_recheck and re-walks on every pass until
+    winners appear or the event is `recheck_days` old (then give up and
+    mark done). The result's `events_updated` lists events whose winner
+    set actually CHANGED this pass, so the caller can refresh their
+    recorded payouts (a late CTP flows through to the Payouts tab).
     """
     from time import monotonic
+    from datetime import date as _date, timedelta as _timedelta
     from urllib.parse import urlparse, parse_qs, urlencode, urlunparse
     from golf_genius_sync import fetch_public_page, parse_page_structure
+    from .timezone_utils import today_central
 
     started = monotonic()
     parts = urlparse(widget_url)
@@ -9782,15 +9805,23 @@ def import_gg_game_results(widget_url: str, db_path: str | Path = DB_PATH,
         # A live round gets marked done before its results are entered —
         # always re-walk the newest N rounds (upserts make it safe).
         done -= {rid for rid, _ in options[:rewalk_recent]}
+        # Rounds awaiting late-entered winners (gg_game_recheck) re-walk
+        # on every pass regardless of the done marker.
+        done -= {r["gg_round_id"] for r in conn.execute(
+            "SELECT gg_round_id FROM gg_game_recheck WHERE host = ?",
+            (host,)).fetchall()}
         # An EXPLICITLY requested round (&round=<id> on the widget URL)
         # always re-walks — that's how a stale capture is healed on demand.
         if only_round:
             done.discard(only_round)
         code_map = {}
-        for r in conn.execute("SELECT id, item_name FROM events").fetchall():
+        for r in conn.execute(
+                "SELECT id, item_name, event_date FROM events").fetchall():
             m = _GG_EVENT_CODE_COMPOUND_RE.match((r["item_name"] or "").strip())
             if m:
-                code_map.setdefault(m.group(1).lower(), (r["id"], r["item_name"]))
+                code_map.setdefault(m.group(1).lower(),
+                                    (r["id"], r["item_name"], r["event_date"]))
+        _today = today_central()
 
         pending = [(rid, lbl) for rid, lbl in options if rid not in done]
         for rid, _lbl in pending:
@@ -9808,6 +9839,8 @@ def import_gg_game_results(widget_url: str, db_path: str | Path = DB_PATH,
             elif "kickoff" in names_blob.lower() and "austin" in host:
                 ev_code = "a18.2"
                 ev_id = code_map.get("a18.2", (None,))[0]
+            awaiting = []       # game boards present but no winners entered yet
+            round_changed = False   # any tournament's winner set changed
             for l in links:
                 text = (l.get("text") or "").strip()
                 if "POINTS" in text.upper() or re.search(r"\bMVP\b", text, re.I):
@@ -9827,6 +9860,19 @@ def import_gg_game_results(widget_url: str, db_path: str | Path = DB_PATH,
                 fresh: list = []
                 for table in tstruct.get("tables") or []:
                     fresh.extend(_game_winners_from_table(table))
+                if not fresh:
+                    # Board exists but no winners entered yet (CTPs are
+                    # inherently recorded after the round) — check back
+                    # later instead of marking the round done.
+                    awaiting.append(text)
+                    continue
+                prior = {(r["player_name"], round(float(r["purse"] or 0), 2))
+                         for r in conn.execute(
+                             "SELECT player_name, purse FROM gg_game_results "
+                             "WHERE gg_tournament_id = ?", (tid,)).fetchall()}
+                if {(w["player"], round(float(w["purse"] or 0), 2))
+                        for w in fresh} != prior:
+                    round_changed = True
                 for w in fresh:
                     cid = None
                     if not w["is_team"]:
@@ -9866,9 +9912,37 @@ def import_gg_game_results(widget_url: str, db_path: str | Path = DB_PATH,
                     if stale:
                         result.setdefault("stale_rows_dropped", 0)
                         result["stale_rows_dropped"] += stale
-            conn.execute(
-                "INSERT OR IGNORE INTO gg_game_results_rounds (gg_round_id, host) VALUES (?, ?)",
-                (rid, host))
+            # A round with empty game boards stays PENDING (re-walked every
+            # pass) until winners land or the event ages past recheck_days.
+            ev_date = code_map[ev_code][2] if ev_code and ev_code in code_map else None
+            recheck = False
+            if awaiting and ev_id:
+                try:
+                    age = (_today - _date.fromisoformat(ev_date)).days if ev_date else 0
+                except Exception:
+                    age = 0
+                recheck = age <= recheck_days
+            if recheck:
+                conn.execute(
+                    """INSERT INTO gg_game_recheck (gg_round_id, host, event_id, awaiting)
+                       VALUES (?, ?, ?, ?)
+                       ON CONFLICT (gg_round_id, host)
+                       DO UPDATE SET awaiting = excluded.awaiting""",
+                    (rid, host, ev_id, " | ".join(awaiting)))
+                result.setdefault("rechecks", []).append(
+                    {"round": rid, "event": ev_code, "awaiting": awaiting})
+            else:
+                conn.execute(
+                    "INSERT OR IGNORE INTO gg_game_results_rounds (gg_round_id, host) VALUES (?, ?)",
+                    (rid, host))
+                conn.execute(
+                    "DELETE FROM gg_game_recheck WHERE gg_round_id = ? AND host = ?",
+                    (rid, host))
+            if round_changed and ev_code and ev_code in code_map:
+                result.setdefault("events_updated", [])
+                _iname = code_map[ev_code][1]
+                if _iname not in result["events_updated"]:
+                    result["events_updated"].append(_iname)
             conn.commit()
             result["rounds_done"] += 1
         result["rounds_skipped"] = len(options) - len(pending)
@@ -10195,9 +10269,20 @@ def auto_gg_results_sync(db_path: str | Path = DB_PATH,
         _hit = _conn.execute(
             "SELECT 1 FROM events WHERE event_date IN (?, ?) LIMIT 1",
             tuple(sorted(_days))).fetchone()
+        if not _hit:
+            # Late-entered winners (CTPs land days after the round —
+            # Kerry 2026-07-22): outstanding rechecks keep the sweep
+            # alive on off days until the winners appear or the recheck
+            # window lapses inside import_gg_game_results.
+            try:
+                _hit = _conn.execute(
+                    "SELECT 1 FROM gg_game_recheck LIMIT 1").fetchone()
+            except sqlite3.OperationalError:
+                _hit = None
     if not _hit:
-        return {"skipped": "no event today/yesterday — GG results only "
-                           "change after events", "portals": []}
+        return {"skipped": "no event today/yesterday and no rounds awaiting "
+                           "late winners — GG results only change after events",
+                "portals": []}
 
     out: dict = {"portals": []}
     for widget in _GG_RESULT_PORTALS:
@@ -10278,10 +10363,18 @@ def auto_gg_results_sync(db_path: str | Path = DB_PATH,
         except Exception as e:
             p["flights"] = {"error": str(e)}
         out["portals"].append(p)
+    # Events whose GG winner set CHANGED this pass (late CTP finally
+    # entered) force a payout re-record even outside recent_force_days.
+    changed_events: list = []
+    for p in out["portals"]:
+        for name in (p.get("games") or {}).get("events_updated") or []:
+            if name not in changed_events:
+                changed_events.append(name)
     try:
         out["payouts"] = record_all_event_game_payouts(
             db_path=db_path, time_budget=60,
-            recent_force_days=recent_force_days)
+            recent_force_days=recent_force_days,
+            force_events=changed_events)
     except Exception as e:
         out["payouts"] = {"error": str(e)}
     return out
@@ -38390,13 +38483,19 @@ def assemble_event_game_payouts(event_name: str, db_path=None) -> dict:
 
 def record_all_event_game_payouts(db_path=None, time_budget: float = 42.0,
                                   force: bool = False,
-                                  recent_force_days: int = 0) -> dict:
+                                  recent_force_days: int = 0,
+                                  force_events: list | None = None) -> dict:
     """Bulk populate: assemble + record payouts for every PAST event.
 
     Skips events that already have payout rows (auto rows are only
     replaced when force=True; events with MANUAL/screenshot-imported
     rows are always skipped — never mix). Time-budgeted like the
     portal walks; call repeatedly until events_left == 0.
+
+    force_events: item_names whose auto rows re-record regardless of
+    recent_force_days — the games import reports events whose GG winner
+    set changed (a late-entered CTP), and those must flow through to the
+    Payouts tab even when the event is older than the recent window.
     """
     from time import monotonic
     from email_parser.timezone_utils import today_central_str
@@ -38411,6 +38510,7 @@ def record_all_event_game_payouts(db_path=None, time_budget: float = 42.0,
     if recent_force_days:
         recent_cutoff = (date.fromisoformat(today_central_str())
                          - timedelta(days=recent_force_days)).isoformat()
+    force_set = {str(n).strip().lower() for n in (force_events or [])}
     out = {"recorded": [], "skipped": [], "events_left": 0}
     for i, ev in enumerate(events):
         if monotonic() - started > time_budget:
@@ -38428,8 +38528,9 @@ def record_all_event_game_payouts(db_path=None, time_budget: float = 42.0,
                     "SELECT SUM(CASE WHEN description LIKE 'auto:%' THEN 1 ELSE 0 END) a, "
                     "       SUM(CASE WHEN description LIKE 'auto:%' THEN 0 ELSE 1 END) m "
                     "FROM tgf_payouts WHERE event_id = ?", (trow["id"],)).fetchone()
-                ev_force = force or (recent_cutoff is not None
-                                     and (ev.get("event_date") or "") >= recent_cutoff)
+                ev_force = force or name.strip().lower() in force_set \
+                    or (recent_cutoff is not None
+                        and (ev.get("event_date") or "") >= recent_cutoff)
                 if (kinds["m"] or 0) > 0:
                     out["skipped"].append({"event": name, "reason": "manual payouts exist"})
                     continue
