@@ -733,7 +733,6 @@
             font-size: 0.82rem; color: var(--text-muted); margin-top: 0.3rem;
             font-variant-numeric: tabular-nums;
         }
-        .mpv2 .mp-header-admin { display: flex; gap: 0.4rem; margin-top: 0.6rem; flex-wrap: wrap; }
         .mpv2 .mp-header-warn {
             margin-top: 0.5rem; font-size: 0.78rem; color: var(--mp-wc-text);
             background: var(--mp-wc-bg); border-radius: 8px; padding: 0.5rem 0.65rem;
@@ -751,6 +750,30 @@
             padding: 0.5rem 1.1rem; border-radius: 9999px;
         }
         .mpv2 .mp-subtab.active { color: #fff; background: #1B1B1B; }
+        /* Admin-only SETUP pill — telltale admin orange (Kerry 2026-07-22) */
+        .mpv2 .mp-subtab-setup { color: #fff; background: var(--primary, #E87C3E); }
+        .mpv2 .mp-subtab-setup.active { color: #fff; background: var(--primary-hover, #D06B2E); }
+
+        /* ── SETUP panel (admin) ── */
+        .mpv2 .mp-setup-warn {
+            font-size: 0.78rem; color: #7C3A12; background: #FDF0E7;
+            border: 1px solid #F3CDB2; border-radius: 10px;
+            padding: 0.55rem 0.7rem; margin-bottom: 0.8rem;
+        }
+        .mpv2 .mp-setup-card {
+            background: #fff; border: 1px solid var(--border, #E5E7EB);
+            border-radius: 12px; padding: 0.8rem 0.95rem; margin-bottom: 0.8rem;
+        }
+        .mpv2 .mp-setup-card h4 {
+            font: 700 0.8rem/1.2 'Bitter', Georgia, serif;
+            text-transform: uppercase; letter-spacing: 0.05em;
+            margin: 0 0 0.3rem;
+        }
+        .mpv2 .mp-setup-card p {
+            font-size: 0.78rem; color: var(--text-muted); margin: 0 0 0.6rem;
+        }
+        .mpv2 .mp-setup-row { display: flex; gap: 0.5rem; flex-wrap: wrap; }
+        .mpv2 .mp-setup-row .btn { font-size: 0.75rem; }
 
         /* ── Pool card + standings list ── */
         .mpv2 .mp-pool { margin-bottom: 1.5rem; }
@@ -1396,7 +1419,7 @@
                             <option value="2025"></option>
                         </datalist>
                     </div>
-                    <button class="btn manager-only" id="cmp-add-pool-btn" style="display:none;">+ Add Pool</button>
+                    <!-- + Add Pool moved to the admin SETUP sub-tab (Kerry 2026-07-22) -->
                 </div>
             </div>
             {% else %}
@@ -1432,11 +1455,12 @@
                 </div>
                 <!-- Header card (filled by cmpRenderBanner mpv2 branch) -->
                 <div id="cmp-structure-banner"></div>
-                <!-- Three pill sub-tabs -->
+                <!-- Pill sub-tabs (+ admin-only orange SETUP, Kerry 2026-07-22) -->
                 <div class="mp-subtabs" role="tablist">
                     <button class="mp-subtab active" data-mp-panel="pools" role="tab">Pools</button>
                     <button class="mp-subtab" data-mp-panel="knockout" role="tab">Knockout</button>
                     <button class="mp-subtab" data-mp-panel="payouts" role="tab">Payouts</button>
+                    <button class="mp-subtab mp-subtab-setup admin-only" data-mp-panel="setup" role="tab" style="display:none;">Setup</button>
                 </div>
                 <!-- POOLS panel -->
                 <div class="mp-panel" id="mp-panel-pools">
@@ -1449,14 +1473,6 @@
                 <!-- KNOCKOUT panel -->
                 <div class="mp-panel" id="mp-panel-knockout" style="display:none;">
                     <div id="cmp-bracket-section" style="display:none;">
-                        <div class="bracket-controls">
-                            <button class="btn manager-only" id="cmp-seed-bracket-btn" style="display:none;">
-                                &#8635; Seed Knockout
-                            </button>
-                            <button class="btn btn-danger manager-only" id="cmp-clear-bracket-btn" style="display:none;">
-                                &#215; Clear Bracket
-                            </button>
-                        </div>
                         <div id="cmp-bracket-container">
                             <p style="color:var(--text-muted);font-size:0.85rem;">
                                 Once pool play is complete the knockout is seeded from the pool
@@ -1471,6 +1487,38 @@
                     <div id="cmp-payouts-section" style="display:none;">
                         <div id="cmp-payouts-container">
                             <p style="color:var(--text-muted);font-size:0.85rem;">Loading…</p>
+                        </div>
+                    </div>
+                </div>
+                <!-- SETUP panel (admin-only, Kerry 2026-07-22): every control
+                     that can restructure or destroy a live contest lives here,
+                     off the member/manager-facing panels — a mis-tap on POOLS
+                     or KNOCKOUT can no longer wreck an in-progress bracket. -->
+                <div class="mp-panel" id="mp-panel-setup" style="display:none;">
+                    <div class="mp-setup admin-only" style="display:none;">
+                        <div class="mp-setup-warn">Admin setup &mdash; these controls change the contest structure. Confirmations still apply, but treat everything here as live ammunition once play has started.</div>
+                        <div class="mp-setup-card">
+                            <h4>Pools</h4>
+                            <p>Create pools and randomly assign the enrolled field. Re-assigning after pool matches are recorded destroys those results.</p>
+                            <div class="mp-setup-row">
+                                <button class="btn" id="cmp-add-pool-btn">+ Add Pool</button>
+                                <button class="btn" id="cmp-auto-assign-btn">&#9861; Auto-Assign Pools</button>
+                            </div>
+                        </div>
+                        <div class="mp-setup-card">
+                            <h4>Knockout</h4>
+                            <p>Seed the bracket from final pool standings. Clearing removes every recorded knockout result and cannot be undone.</p>
+                            <div class="mp-setup-row">
+                                <button class="btn" id="cmp-seed-bracket-btn">&#8635; Seed Knockout</button>
+                                <button class="btn btn-danger" id="cmp-clear-bracket-btn">&#215; Clear Bracket</button>
+                            </div>
+                        </div>
+                        <div class="mp-setup-card">
+                            <h4>Config</h4>
+                            <p>Versioned Match Play config (pool matrix, byes, payout ladder). A season pins to its config version on first Auto-Assign / Seed.</p>
+                            <div class="mp-setup-row">
+                                <button class="btn" id="cmp-config-btn">&#9881; Config</button>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -2382,8 +2430,6 @@
         const el = $("cmp-structure-banner");
         if (!el) return;
         const meta = cmpState.configMeta, s = cmpState.structure;
-        const isManager = userRole === "admin" || userRole === "manager";
-        const isAdmin = userRole === "admin";
         let sub = '', warn = '';
         if (s) {
             const entry = s.n ? Math.round(s.pot / s.n) : 40;
@@ -2393,18 +2439,13 @@
         } else {
             sub = 'Select a chapter and season above.';
         }
-        const adminRow = isManager ? `<div class="mp-header-admin">
-            <button class="btn manager-only" id="cmp-auto-assign-btn" style="font-size:0.72rem;">&#9861; Auto-Assign Pools</button>
-            ${isAdmin ? `<button class="btn admin-only" id="cmp-config-btn" style="font-size:0.72rem;">&#9881; Config</button>` : ''}
-        </div>` : '';
+        // Auto-Assign / Config moved to the admin SETUP sub-tab (Kerry
+        // 2026-07-22) — the header card is now purely informational.
         el.innerHTML = `<div class="mp-header-card">
             <h2 class="mp-header-title">City Match Play &mdash; ${escapeHtml(cmpState.chapter)} ${escapeHtml(cmpState.season)}</h2>
             ${sub ? `<div class="mp-header-sub">${escapeHtml(sub)}</div>` : ''}
             ${warn}
-            ${adminRow}
         </div>`;
-        const aab = $("cmp-auto-assign-btn"); if (aab) aab.addEventListener("click", cmpAutoAssignPools);
-        const cfg = $("cmp-config-btn"); if (cfg) cfg.addEventListener("click", openCfgModal);
     }
 
     // ── POOLS panel: per-pool standings list + note + (manager) editor ──
@@ -2414,7 +2455,7 @@
         Object.keys(mpMatchCache).forEach(k => delete mpMatchCache[k]);
         const isManager = userRole === "admin" || userRole === "manager";
         if (!cmpState.pools.length) {
-            container.innerHTML = `<div class="empty-state"><h3>No pools yet for ${escapeHtml(cmpState.chapter)} ${escapeHtml(cmpState.season)}</h3>${isManager ? '<p>Use the “+ Add Pool” control to create the first pool.</p>' : '<p>Pools appear here once the draw is set.</p>'}</div>`;
+            container.innerHTML = `<div class="empty-state"><h3>No pools yet for ${escapeHtml(cmpState.chapter)} ${escapeHtml(cmpState.season)}</h3>${userRole === "admin" ? '<p>Create the first pool from the SETUP tab.</p>' : '<p>Pools appear here once the draw is set.</p>'}</div>`;
             $("cmp-bracket-section").style.display = "none";
             return;
         }
@@ -3384,12 +3425,15 @@
     if (MATCHPLAY_V2) {
         // Each Match Play sub-tab is URL-addressable (Kerry 2026-07-21):
         // clicking writes #tab=mp&mp=<panel>, so Pools / Knockout /
-        // Payouts each have a shareable sub-link and a reload lands on
-        // the same panel. mpShowPanel is also the restore entry point.
+        // Payouts / Setup each have a shareable sub-link and a reload
+        // lands on the same panel. mpShowPanel is also the restore entry
+        // point. (Setup's CONTENT is admin-only-gated, so the deep link
+        // shows non-admins an empty panel; every action is role-checked
+        // server-side regardless.)
         const mpShowPanel = (p, updateHash) => {
             document.querySelectorAll('.mp-subtab').forEach(b =>
                 b.classList.toggle('active', b.dataset.mpPanel === p));
-            ['pools','knockout','payouts'].forEach(k => {
+            ['pools','knockout','payouts','setup'].forEach(k => {
                 const el = $('mp-panel-' + k); if (el) el.style.display = (k === p) ? '' : 'none';
             });
             if (updateHash) {
@@ -3464,6 +3508,10 @@
 
     $("cmp-add-pool-btn").addEventListener("click", cmpAddPool);
     $("cmp-seed-bracket-btn").addEventListener("click", cmpSeedBracket);
+    // v2: Auto-Assign / Config are static buttons on the admin SETUP
+    // sub-tab (legacy mode still injects + wires them in cmpRenderBanner).
+    { const b = $("cmp-auto-assign-btn"); if (b) b.addEventListener("click", cmpAutoAssignPools); }
+    { const b = $("cmp-config-btn"); if (b) b.addEventListener("click", openCfgModal); }
     $("cmp-clear-bracket-btn").addEventListener("click", async () => {
         const { season, chapter } = cmpState;
         if (!confirm(`Clear the entire knockout bracket for ${chapter} ${season}? This cannot be undone.`)) return;
@@ -5912,7 +5960,7 @@
             if (top === "lone-star-cup") lscLoad();
             // Match Play sub-panel deep link (Kerry 2026-07-21):
             // #tab=mp&mp=knockout|payouts lands directly on that panel.
-            const mpSub = hash.match(/mp=(pools|knockout|payouts)/);
+            const mpSub = hash.match(/mp=(pools|knockout|payouts|setup)/);
             if (top === "match-play" && mpSub && window._mpShowPanel) {
                 window._mpShowPanel(mpSub[1], false);
             }

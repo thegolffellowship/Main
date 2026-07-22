@@ -542,6 +542,19 @@ after the standings diff reports, on Kerry's go.
   statuses), admin Config editor modal (version history, JSON edit,
   computed-matrix preview via ?version_id, save-as-new-version,
   pin-season-to-version).
+- **Admin SETUP sub-tab (v2.138.0, Kerry 2026-07-22):** in the v2
+  (MATCHPLAY_V2) view the pill row is POOLS | KNOCKOUT | PAYOUTS |
+  SETUP, with SETUP an admin-only orange pill. All structural controls
+  — + Add Pool, Auto-Assign Pools, Seed Knockout, Clear Bracket, Config
+  editor — live ONLY on that panel (`#mp-panel-setup`, static buttons
+  keeping their historical ids so the one-time wiring near
+  `cmpAddPool`/`cmpSeedBracket` is unchanged). The header card is
+  informational-only and the Knockout panel has no bracket-controls
+  row. These controls are now **admin-only** (previously
+  manager-visible) per Kerry's call — the whole `.mp-setup` wrapper is
+  `.admin-only`-gated, and `#tab=mp&mp=setup` deep links show
+  non-admins an empty panel (server-side role checks unchanged). The
+  legacy non-v2 view keeps the old button placement.
 
 Open-questions thread (mailbox topic **match-play-implementation**, id
 21) is now **CLOSED** — every item ratified in the D-MP register above:

@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.137.6";
+window.TGF_VERSION = "2.138.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.138.0",
+    date: "2026-07-22",
+    changes: [
+      "Match Play admin SETUP sub-tab (Kerry): the pill row is now POOLS | KNOCKOUT | PAYOUTS | SETUP, with SETUP as an admin-only tab in the telltale admin orange. Every control that can restructure or destroy a live contest — + Add Pool, Auto-Assign Pools, Seed Knockout, Clear Bracket, and the versioned Config editor — moved off the member-facing panels into SETUP, grouped as Pools / Knockout / Config cards with plain-language blast-radius notes. Auto-Assign Pools no longer sits one mis-tap from a contest that's already under way.",
+      "The Match Play header card is now purely informational (title + structure line), the Knockout panel opens straight into the bracket, and the chapter/season selector row lost its + Add Pool button. SETUP is deep-linkable like the other sub-tabs (#tab=mp&mp=setup); its content is role-gated so non-admins following the link see an empty panel, and every action remains role-checked server-side.",
+      "Access note: these five controls were previously visible to chapter managers; per Kerry's call they are now admin-only. The legacy (pre-v2) Match Play view is unchanged.",
+    ],
+  },
   {
     version: "2.137.6",
     date: "2026-07-21",
