@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.138.0";
+window.TGF_VERSION = "2.138.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.138.1",
+    date: "2026-07-22",
+    changes: [
+      "Match Play close-out fix (Kerry, Youngs v Jenkins): the clinch walk now counts holes remaining IN THE MATCH, not holes GG has posted flags for. The old walk closed the 2&1 semifinal at hole 7 — but 2 up with two to play is dormie, and the match was decided ON hole 8 by a net halve (Youngs' stroke made his gross 6 a net 5 vs Jenkins' 5). Hole 8 now renders as a played, halved hole (gray dot, full-color scores with the stroke dot) instead of being greyed as post-clinch; only hole 9 shows unplayed.",
+      "Boot-time heal rewrites any stored gg_match_detail snapshot (cmp_bracket + cmp_matches) whose close-out summary was frozen by the old walk — closed_at_order/thru/margin recompute from the per-hole flags; hole data and the manually recorded winner/margin are untouched. The live GG fetch also re-derives with the true match length from the TGF event code before hardening a snapshot, so a mid-round '2&1-looking' state can no longer persist prematurely.",
+      "Same length-aware fix applied to the raw-score reconciler (_cmp_derive_match), which had the identical one-hole-early clinch on truncated rounds. Note on presentation: match cards show GROSS scores with a stroke dot on stroked holes (GG's own convention); the hole winner/halve verdicts are NET — GG's per-hole flags — so the card was already scoring net, it just buried the deciding hole.",
+    ],
+  },
   {
     version: "2.138.0",
     date: "2026-07-22",

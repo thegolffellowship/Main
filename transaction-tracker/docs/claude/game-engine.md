@@ -489,6 +489,22 @@ that reuses the existing Save path (records + auto-advances) and stays
 editable afterward. The stored `gg_match_detail` snapshot remains the frozen
 display source once recorded.
 
+**Close-out walk is match-length-aware (v2.138.1, Kerry 2026-07-22):**
+the clinch test in `gg_match_play._close_out_walk` (and the raw-score
+derive `_cmp_derive_match`) counts holes remaining **in the match**
+(`match_len − play-order position`), never "flags GG has posted so far."
+The old flag-count walk clinched one hole early whenever the deciding
+hole HALVED and the post-clinch holes were never posted — Youngs v
+Jenkins (a9.19, 2&1) was dormie through 7 and decided ON hole 8 by a net
+halve (Youngs' stroke), but the stored snapshot said `closed_at_order:
+7`, greying the deciding hole on the card. `rederive_close_out(detail,
+match_len=None)` recomputes a stored summary in place;
+`cmp_fetch_live_match` re-derives with the TGF-code length (`a9.x`→9)
+before persisting, and the boot heal `_repair_cmp_detail_close_out`
+rewrites any frozen `cmp_bracket`/`cmp_matches` snapshot whose summary
+changes (per-hole data and the row's frozen winner/margin untouched).
+Regression tests: `test_gg_match_play.py` (halve-clinch + rederive).
+
 **Implementation status (2026-07-17):** config **v2** authored + both
 2026 snapshots **pinned** (`cmp_repin_2026_to_dmp_register`, #223);
 **D-MP-09 pool rank LIVE** (`cmp_get_standings` honors

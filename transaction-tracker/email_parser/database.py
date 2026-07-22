@@ -3744,6 +3744,18 @@ def init_db(db_path: str | Path | None = None) -> None:
         except Exception as e:
             logger.warning("Holes heal failed: %s", e)
 
+        # Always-run heal: recompute the close-out on stored GG match-play
+        # detail snapshots with the match-length-aware walk (v2.138.1 —
+        # the old flag-count walk clinched one hole early when the deciding
+        # hole halved and the post-clinch holes were never posted, greying
+        # a hole that decided the match: Youngs v Jenkins 2&1).
+        try:
+            _cd = _repair_cmp_detail_close_out(conn)
+            if _cd:
+                logger.info("Match detail close-out heal: fixed %d snapshot(s)", _cd)
+        except Exception as e:
+            logger.warning("Match detail close-out heal failed: %s", e)
+
         # Always-run repair: merge duplicate Kyle Franz profile 316 into 315
         try:
             _repair_franz_attribution(conn, db_path)
@@ -26079,6 +26091,20 @@ def cmp_fetch_live_match(chapter: str, player_a: str, player_b: str,
         return {"error": str(e), "chapter": chapter,
                 "players": [player_a, player_b]}
 
+    if result:
+        # Re-derive the close-out with the TRUE match length from the TGF
+        # event code (a9.19 → 9 holes): the parser's column count is the
+        # right default, but the flag-count walk it replaces left frozen
+        # snapshots wrong, and an 18-column card for a 9-hole match would
+        # under-close. Defensive + idempotent (v2.138.1).
+        try:
+            from email_parser.gg_match_play import rederive_close_out
+            _cm = _re.search(r"\b[as](\d{1,2})\.\d", result.get("gg_event") or "")
+            _mlen = (18 if int(_cm.group(1)) >= 10 else 9) if _cm else None
+            rederive_close_out(result, _mlen)
+        except Exception:
+            logger.exception("close-out rederive failed (non-fatal)")
+
     if result and not result.get("hole_pars"):
         # Carry the hole pars in the live payload (Kerry 2026-07-21):
         # a LIVE match's bracket row often has no event linked yet, so
@@ -26154,6 +26180,41 @@ def _cmp_persist_bracket_detail(chapter: str, player_a: str, player_b: str,
                 conn.commit()
                 return True
     return False
+
+
+def _repair_cmp_detail_close_out(conn) -> int:
+    """Boot heal (v2.138.1): re-derive closed_at_order / thru / gg_margin /
+    gg_winner_* on every stored gg_match_detail snapshot with the
+    match-length-aware close-out walk (see gg_match_play._close_out_walk).
+    Snapshots frozen by the old flag-count walk marked the real deciding
+    hole dead whenever it halved and the post-clinch holes were never
+    posted. Idempotent — rewrites only snapshots whose summary changes.
+    The per-hole data and the frozen winner_name/margin on the row itself
+    are untouched."""
+    from email_parser.gg_match_play import rederive_close_out
+    fixed = 0
+    for table in ("cmp_bracket", "cmp_matches"):
+        try:
+            rows = conn.execute(
+                f"SELECT id, gg_match_detail FROM {table} "
+                "WHERE gg_match_detail IS NOT NULL").fetchall()
+        except sqlite3.OperationalError:
+            continue        # table/column not created yet on this DB
+        for r in rows:
+            try:
+                d = json.loads(r["gg_match_detail"])
+            except Exception:
+                continue
+            if not isinstance(d, dict) or not d.get("holes"):
+                continue
+            if rederive_close_out(d):
+                conn.execute(
+                    f"UPDATE {table} SET gg_match_detail = ? WHERE id = ?",
+                    (json.dumps(d), r["id"]))
+                fixed += 1
+    if fixed:
+        conn.commit()
+    return fixed
 
 
 def cmp_get_pools(season: str, chapter: str, db_path=None) -> list[dict]:
@@ -26446,6 +26507,11 @@ def _cmp_derive_match(a_holes: dict, b_holes: dict,
               if a_holes[h][0] is not None and b_holes[h][0] is not None]
     if len(common) < 1:
         return None
+    # Close-out counts holes remaining IN THE MATCH — the full play_order
+    # length when known — not holes with scores posted. Scoring only the
+    # posted holes clinches one hole early when the deciding hole is a
+    # halve and the post-clinch holes were never played/posted (v2.138.1).
+    total = len(play_order) if play_order else len(common)
     seq, up, closed_at, up_at_close = [], 0, None, None
     for i, h in enumerate(common):
         anet = a_holes[h][0] - (a_holes[h][1] or 0)
@@ -26453,12 +26519,12 @@ def _cmp_derive_match(a_holes: dict, b_holes: dict,
         w = "A" if anet < bnet else ("B" if bnet < anet else "H")
         up += 1 if w == "A" else (-1 if w == "B" else 0)
         seq.append({"h": h, "winner": w, "a_net": anet, "b_net": bnet})
-        remaining = len(common) - (i + 1)
+        remaining = max(0, total - (i + 1))
         if closed_at is None and abs(up) > remaining:
             closed_at, up_at_close = i + 1, up
     if closed_at is not None:
         leader = "A" if up_at_close > 0 else "B"
-        lead, to_play = abs(up_at_close), len(common) - closed_at
+        lead, to_play = abs(up_at_close), total - closed_at
         margin = f"{lead}&{to_play}" if to_play > 0 else f"{lead} UP"
         thru = closed_at
     else:

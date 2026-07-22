@@ -71,6 +71,66 @@ def _hole_no(cls: str):
     return int(m.group(1)) if m else None
 
 
+def _close_out_walk(holes_out: list, match_len: int):
+    """Find the close-out from per-hole winner flags in play order.
+
+    `remaining` must count holes left IN THE MATCH (match_len − play-order
+    position), NOT flags GG has posted so far. Counting posted flags
+    clinched one hole early whenever the deciding hole was a halve and the
+    post-clinch holes were never posted: Youngs v Jenkins (9 holes, 2&1)
+    was genuinely alive through hole 8 — 2 up with two to play is dormie,
+    not a win — and only closed when hole 8 halved on a net stroke. With
+    hole 9 unposted the old flag-count walk saw "2 up, 1 flag left" after
+    hole 7 and marked hole 8 dead.
+
+    Returns (lead, closed_at, thru, margin, winner_idx); closed_at and thru
+    are play-order positions."""
+    lead = 0            # + => p1 ahead, - => p2 ahead
+    closed_at = None
+    played = [h for h in holes_out if h["winner"] is not None]
+    for i, h in enumerate(played):
+        if h["winner"] == 1:
+            lead += 1
+        elif h["winner"] == 2:
+            lead -= 1
+        order = h.get("order") or (i + 1)
+        remaining = max(0, match_len - order)
+        if abs(lead) > remaining:
+            closed_at = order
+            break
+    if closed_at is not None:
+        to_play = match_len - closed_at
+        margin = f"{abs(lead)}&{to_play}" if to_play > 0 else f"{abs(lead)} UP"
+        thru = closed_at
+    else:
+        margin = "AS" if lead == 0 else f"{abs(lead)} UP"
+        thru = len(played)
+    winner_idx = 1 if lead > 0 else (2 if lead < 0 else None)
+    return lead, closed_at, thru, margin, winner_idx
+
+
+def rederive_close_out(detail: dict, match_len: int | None = None) -> bool:
+    """Recompute closed_at_order / thru / gg_margin / gg_winner_* on a parsed
+    detail dict IN PLACE with the match-length-aware walk. `match_len`
+    overrides the stored n_holes when the caller knows the true match length
+    (e.g. from the TGF event code). Used by the boot repair to heal snapshots
+    frozen with the old flag-count walk. Returns True when anything changed."""
+    holes = detail.get("holes") or []
+    if not holes:
+        return False
+    mlen = match_len or detail.get("n_holes") or len(holes)
+    lead, closed_at, thru, margin, winner_idx = _close_out_walk(holes, mlen)
+    players = detail.get("players") or []
+    winner_name = None
+    if winner_idx and len(players) >= winner_idx:
+        winner_name = players[winner_idx - 1].get("name")
+    new = {"closed_at_order": closed_at, "thru": thru, "gg_margin": margin,
+           "gg_winner_idx": winner_idx, "gg_winner_name": winner_name}
+    changed = any(detail.get(k) != v for k, v in new.items())
+    detail.update(new)
+    return changed
+
+
 def parse_match_play_detail(fragment: str) -> dict | None:
     """Parse one GG match-play detail fragment. Returns:
       {
@@ -197,27 +257,8 @@ def parse_match_play_detail(fragment: str) -> dict | None:
         })
 
     # derive GG winner + margin by walking the winner flags in play order
-    lead = 0            # + => p1 ahead, - => p2 ahead
-    closed_at = None
-    played = [h for h in holes_out if h["winner"] is not None]
-    n_played = len(played)
-    for i, h in enumerate(played):
-        if h["winner"] == 1:
-            lead += 1
-        elif h["winner"] == 2:
-            lead -= 1
-        remaining = n_played - (i + 1)
-        if closed_at is None and abs(lead) > remaining:
-            closed_at = i + 1
-            break
-    if closed_at is not None:
-        to_play = n_played - closed_at
-        margin = f"{abs(lead)}&{to_play}" if to_play > 0 else f"{abs(lead)} UP"
-        thru = closed_at
-    else:
-        margin = "AS" if lead == 0 else f"{abs(lead)} UP"
-        thru = n_played
-    gg_winner_idx = 1 if lead > 0 else (2 if lead < 0 else None)
+    lead, closed_at, thru, margin, gg_winner_idx = _close_out_walk(
+        holes_out, len(all_holes))
     gg_winner_name = (players[0]["name"] if gg_winner_idx == 1
                       else players[1]["name"] if gg_winner_idx == 2 else None)
 
