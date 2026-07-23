@@ -257,6 +257,43 @@ Each row represents one player's cost allocation for one event:
 - `acct_transaction_id` INTEGER — FK to `acct_transactions.id` (links allocation to accounting entry)
 - `order_id` uses synthetic prefixes for non-GoDaddy items: `EXT-`, `XFER-`, `MANUAL-PAY-`, `COMP-`
 
+## Monthly Money Flow report (v2.143.0 — mailbox #242, Kerry-approved)
+
+Admin page `/accounting/money-flow` (Accounting sub-tab strip) +
+`GET /api/accounting/money-flow?month=YYYY-MM[&debug=1]` + bridge cmd
+`scoring-money-flow:<YYYY-MM>[|debug]` → `get_monthly_money_flow()`.
+The pass-through vs TGF-keep waterfall: course fees → courses, prize
+pools → winners, GoDaddy fee → processor, TGF markup + TGF retained fee
+= TGF gross margin, reconciling to total collected, with per-event
+expand on the course/prize/markup lines and a "TGF keeps X%" stat.
+
+- **Basis:** order date. **Exclusions** mirror the sales-tax engine:
+  comps, wd, credit-transfer destinations (XFER-/payment_method
+  credit_transfer), negative amounts.
+- **Coverage finding (important):** `acct_allocations` rows are created
+  LAZILY — only external/transfer/add-on items got rows automatically;
+  plain GoDaddy orders had none until `calculate_order_allocation` was
+  invoked. The report fills a queried month's gaps through that same
+  allocator (idempotent upserts from the ratified pricing tables)
+  before summing, so first query of a month writes its allocations
+  (June 2026 backfilled 235 orders on first run).
+- **Fee lines** come from `godaddy_order_splits` at raw grain joined to
+  active acct_transactions in the month: `transaction_fee` rows = fee
+  collected from customers, `merchant_fee` rows = GoDaddy's ACTUAL cut
+  (stored signed — use ABS). TGF retained = collected − actual. The
+  actual cut runs ~2.9%+30¢, not the 2.7%+30¢ formula (June:
+  $959 actual vs $888 modeled).
+- **June 2026 validation** vs platform-claude's item_price-residual
+  proof (#242): course $17,416 vs $17,318; prizes $6,978 vs $7,666;
+  margin $5,319 vs $5,114; total $30,673 vs $30,987. Deltas trace to
+  the actual-vs-modeled fees, the ~$241 of Venmo balance-due lines
+  their proof flagged, and the OPEN GAP below.
+- **OPEN GAP:** SEASON CONTESTS items decompose to $0 in
+  `_calc_event_allocation` (no contest pricing branch) — season-contest
+  prize pools don't roll into the prizes line yet. Flagged to
+  platform-claude; needs a ratified contest decomposition (pool vs
+  admin split) before building.
+
 ## Accounting categories (TGF-scoped, seeded by `_seed_unified_financial_categories`)
 - **Income:** "Credit Transfer In", "External Payment", "Event Revenue", "Membership Fees"
 - **Expense:** "Credit Transfer Out", "Player Refunds", "Golf Course Fees / Green Fees"

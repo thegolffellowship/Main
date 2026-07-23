@@ -314,6 +314,9 @@ No Python or local install needed — Claude Desktop connects directly to Railwa
 - `templates/accounting.html` — Accounting: multi-entity tracking, bank reconciliation, month-end close
 - `templates/reconcile.html` — Bank reconciliation: account dashboard, match queue, monthly summary
 - `templates/cashflow.html` — Cash flow: 90-day rolling weekly view with warning indicators
+- `templates/moneyflow.html` — Monthly Money Flow (admin): pass-through vs
+  TGF-keep waterfall per month over the allocations layer (v2.143.0,
+  mailbox #242; see `docs/claude/unified-financial-model.md`)
 - `templates/coo.html` — COO Dashboard: action items, financial snapshot, review queue, AI chat
 - `templates/tgf.html` — TGF Payouts: events, golfers, screenshot import,
   Unpaid work queue, and the **REFUNDS console** (admin, v2.108.0 —
