@@ -148,7 +148,6 @@
            low-value columns, h-scroll tables */
         .tgf-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
         @media (max-width: 768px) {
-            .tab-full { display: none; }
             .tgf-hide-mobile { display: none; }
         }
         .cat-other           { background: #f1f5f9; color: #475569; }
@@ -241,39 +240,72 @@
         }
         .empty-state h3 { font-size: 1.1rem; margin-bottom: 0.5rem; }
 
-        /* Sub-tab bar (TGF DS): Bitter uppercase text tabs, orange active
-           underline; UNPAID renders as a solid orange pill pushed right —
-           the standard treatment for an admin-only nav item */
-        .top-tabs {
-            display: flex; gap: 32px; align-items: center; margin-bottom: 0;
-            border-bottom: 1px solid var(--border); padding: 0 28px;
-            background: #fff;
+        /* ── Payouts admin landing v2 (v2.142.0, platform-claude #241) ──
+           Sticky band: stat tiles + segmented view control + filter chips.
+           top offset set by JS from the sticky header's height. */
+        #payouts-sticky {
+            position: sticky; z-index: 60; background: #fff;
+            border-bottom: 1px solid var(--border);
         }
-        .top-tab {
-            padding: 14px 0; cursor: pointer;
-            font: 700 12px/1 'Bitter', serif; letter-spacing: 1.5px;
-            color: #6B7280; border-bottom: 2px solid transparent;
-            margin-bottom: -1px; transition: color 0.15s, border-color 0.15s, background 0.15s;
-            background: none; border-top: none; border-left: none; border-right: none;
-            text-transform: uppercase;
+        .pay-stats {
+            display: flex; gap: 10px; padding: 10px 16px 2px;
         }
-        .top-tab:hover { color: #E87C3E; }
-        .top-tab.active { color: #E87C3E; border-bottom-color: #E87C3E; }
-        .top-tab.top-tab-pill {
-            /* Kerry 2026-07-20: pills left-align after GOLFERS — no more
-               full-width spread; the whole bar stays compact. */
-            margin-left: 10px; margin-bottom: 0; background: #E87C3E; color: #fff;
-            border-radius: 9999px; padding: 4px 12px; font-size: 11px;
-            border-bottom: none;
+        .pay-stat {
+            flex: 1; min-width: 0; background: #F8F8F8;
+            border: 1px solid var(--border); border-radius: 10px;
+            padding: 7px 10px;
         }
-        .top-tabs { max-width: 900px; }
-        .top-tab.top-tab-pill:hover, .top-tab.top-tab-pill.active { background: #D06B2E; color: #fff; }
-        @media (max-width: 768px) { .top-tabs { gap: 16px; padding: 0 14px; } }
-
-        /* The 1080px centered work column now comes from the global
-           main rule in dashboard.css (Kerry-ratified app-wide standard,
-           2026-07-20) — no page-local override needed. */
-        .top-tabs { max-width: none; }
+        .pay-stat .v {
+            font: 700 1.05rem/1.2 'Bitter', serif; color: #1B1B1B;
+            font-variant-numeric: tabular-nums; white-space: nowrap;
+        }
+        .pay-stat.warn .v { color: #b45309; }
+        .pay-stat .l {
+            font-size: 0.62rem; font-weight: 600; letter-spacing: 0.4px;
+            text-transform: uppercase; color: var(--text-muted);
+            white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+        }
+        .pay-controls { padding: 8px 16px 10px; }
+        .seg-control {
+            display: flex; background: #F1F2F4; border-radius: 10px;
+            padding: 3px; max-width: 420px;
+        }
+        .seg-btn {
+            flex: 1; border: none; background: none; cursor: pointer;
+            font: 700 11px/1 'Bitter', serif; letter-spacing: 1px;
+            text-transform: uppercase; color: #6B7280;
+            padding: 8px 0; border-radius: 8px;
+            transition: background 0.15s, color 0.15s;
+        }
+        .seg-btn.active { background: #fff; color: #E87C3E; box-shadow: 0 1px 2px rgba(0,0,0,0.08); }
+        .filter-chips { display: flex; gap: 8px; margin-top: 8px; }
+        .filter-chip {
+            border: 1px solid var(--border); background: #fff; cursor: pointer;
+            font-size: 0.74rem; font-weight: 600; color: #4B5563;
+            padding: 4px 14px; border-radius: 9999px;
+            transition: background 0.15s, color 0.15s, border-color 0.15s;
+        }
+        .filter-chip.active { background: #E87C3E; border-color: #E87C3E; color: #fff; }
+        /* Event rows: status pill + progress so the list is actionable
+           without drilling in; label the green number ("Pot"). */
+        .ev-pill {
+            display: inline-block; font-size: 0.62rem; font-weight: 700;
+            letter-spacing: 0.4px; text-transform: uppercase;
+            padding: 1px 8px; border-radius: 9999px; vertical-align: 1px;
+        }
+        .ev-pill-unpaid { background: #E87C3E; color: #fff; }
+        .ev-pill-paid { background: #E5E7EB; color: #6B7280; }
+        .ev-prog { font-size: 0.68rem; color: var(--text-muted); margin-left: 6px; white-space: nowrap; }
+        .pot-label {
+            font-size: 0.6rem; font-weight: 600; letter-spacing: 0.4px;
+            text-transform: uppercase; color: var(--text-muted); text-align: right;
+        }
+        @media (max-width: 640px) {
+            .pay-stats { padding: 8px 10px 2px; gap: 6px; }
+            .pay-stat { padding: 6px 8px; }
+            .pay-stat .v { font-size: 0.92rem; }
+            .pay-controls { padding: 8px 10px 8px; }
+        }
 
         .section-hidden { display: none !important; }
 
@@ -484,14 +516,26 @@
     {% endif %}
 
     <main>
-        <!-- Sub-tab bar (TGF DS): text tabs left, admin-only UNPAID as an
-             orange pill pushed right — the render standard for a gated tab -->
-        <div class="top-tabs">
-            <button class="top-tab active" data-top="events">Events</button>
-            <button class="top-tab" data-top="contests">Season<span class="tab-full"> Contests</span></button>
-            <button class="top-tab" data-top="golfers">Golfers</button>
-            <button class="top-tab top-tab-pill" data-top="unpaid">Unpaid</button>
-            <button class="top-tab top-tab-pill" data-top="refunds">Refunds</button>
+        <!-- Payouts admin landing (v2.142.0 — platform-claude #241, Kerry
+             approved): sticky band = stat tiles (the day's work at a
+             glance) + two control axes. Primary = 3-segment view control
+             (Events · Season · Golfers); secondary = filter chips
+             (All · Unpaid · Refunds) on their own line so nothing runs
+             off-screen on a phone. -->
+        <div id="payouts-sticky">
+            <div id="payouts-summary" class="pay-stats" style="display:none;"></div>
+            <div class="pay-controls">
+                <div class="seg-control" id="seg-view" role="tablist">
+                    <button class="seg-btn active" data-view="events">Events</button>
+                    <button class="seg-btn" data-view="contests">Season</button>
+                    <button class="seg-btn" data-view="golfers">Golfers</button>
+                </div>
+                <div class="filter-chips" id="filter-chips">
+                    <button class="filter-chip active" data-filter="all">All</button>
+                    <button class="filter-chip" data-filter="unpaid">Unpaid</button>
+                    <button class="filter-chip" data-filter="refunds">Refunds</button>
+                </div>
+            </div>
         </div>
 
         <!-- ═══════════ EVENTS SECTION ═══════════ -->
@@ -502,12 +546,7 @@
                     <div class="empty-state"><p>Loading...</p></div>
                 </div>
             </div>
-            <div class="tgf-main" id="events-main">
-                <div class="empty-state" id="events-empty">
-                    <h3>Select an event</h3>
-                    <p>Choose an event from the sidebar to view payouts</p>
-                </div>
-            </div>
+            <div class="tgf-main" id="events-main"></div>
         </div>
 
         <!-- ═══════════ UNPAID SECTION (admin work queue) ═══════════ -->
@@ -1230,6 +1269,7 @@
             try {
                 const resp = await fetch("/api/tgf");
                 DATA = await resp.json();
+                renderPayoutsSummary();
                 renderEventsSidebar();
                 renderGolfersSidebar();
             } catch (e) {
@@ -1237,43 +1277,100 @@
             }
         }
 
-        // ── Top tabs ─────────────────────────────────────────────
+        // ── View + filter controls (v2.142.0, platform-claude #241) ──
+        // Two axes: segmented view control (Events · Season · Golfers)
+        // + filter chips (All · Unpaid · Refunds). A filter chip other
+        // than All shows its work-queue section regardless of view;
+        // tapping a view segment snaps the filter back to All.
         // SEASON CONTESTS (v2.51.0, Kerry) reuses the events layout but
         // filtered to contest accounts (monthly points months etc.) —
         // each month is its own payout account like each event.
         let eventsView = "events";
+        let payFilter = "all";
         function isContestAccount(ev) {
             const c = (ev.code || "").trim();
             return /^(january|february|march|april|may|june|july|august|september|october|november|december)\s+points/i.test(c)
                 || /^(fellowship\s+cup|match\s+play)/i.test(c);
         }
-        $$(".top-tab").forEach(btn => {
+        function applyPayView() {
+            $$("#seg-view .seg-btn").forEach(b =>
+                b.classList.toggle("active", b.dataset.view === eventsView));
+            $$("#filter-chips .filter-chip").forEach(b =>
+                b.classList.toggle("active", b.dataset.filter === payFilter));
+            const queue = payFilter !== "all";
+            $("#section-events").classList.toggle("section-hidden",
+                queue || eventsView === "golfers");
+            $("#section-golfers").classList.toggle("section-hidden",
+                queue || eventsView !== "golfers");
+            $("#section-unpaid").classList.toggle("section-hidden", payFilter !== "unpaid");
+            $("#section-refunds").classList.toggle("section-hidden", payFilter !== "refunds");
+            if (payFilter === "unpaid") { renderUnpaidList(); return; }
+            if (payFilter === "refunds") { loadRefunds(); return; }
+            if (eventsView !== "golfers") {
+                const title = $("#events-sidebar .sidebar-title");
+                if (title) title.textContent = eventsView === "contests" ? "Season Contests" : "Events";
+                renderEventsSidebar();
+                renderEventMain();
+            }
+        }
+        $$("#seg-view .seg-btn").forEach(btn => {
             btn.addEventListener("click", () => {
-                $$(".top-tab").forEach(b => b.classList.remove("active"));
-                btn.classList.add("active");
-                const target = btn.dataset.top;
-                $("#section-events").classList.toggle("section-hidden", target === "golfers" || target === "unpaid" || target === "refunds");
-                $("#section-golfers").classList.toggle("section-hidden", target !== "golfers");
-                $("#section-unpaid").classList.toggle("section-hidden", target !== "unpaid");
-                $("#section-refunds").classList.toggle("section-hidden", target !== "refunds");
-                if (target === "unpaid") {
-                    renderUnpaidList();
-                    return;
-                }
-                if (target === "refunds") {
-                    loadRefunds();
-                    return;
-                }
-                if (target !== "golfers") {
-                    eventsView = target;
-                    selectedEventIdx = -1;
-                    const title = $("#events-sidebar .sidebar-title");
-                    if (title) title.textContent = target === "contests" ? "Season Contests" : "Events";
-                    renderEventsSidebar();
-                    renderEventMain();
-                }
+                if (eventsView !== btn.dataset.view) selectedEventIdx = -1;
+                eventsView = btn.dataset.view;
+                payFilter = "all";
+                applyPayView();
             });
         });
+        $$("#filter-chips .filter-chip").forEach(btn => {
+            btn.addEventListener("click", () => {
+                payFilter = btn.dataset.filter;
+                applyPayView();
+            });
+        });
+
+        // Sticky offset: the band sits under the sticky page header.
+        function setPayStickyTop() {
+            const el = document.getElementById("payouts-sticky");
+            const h = document.querySelector("header");
+            if (el) el.style.top = (h ? h.offsetHeight : 0) + "px";
+        }
+        window.addEventListener("load", setPayStickyTop);
+        window.addEventListener("resize", setPayStickyTop);
+        setPayStickyTop();
+
+        // ── Summary band: the day's work before any scroll ──────
+        // Outstanding + unpaid-event count use unpaid ROWS (partial
+        // groups count only their remainder); paid-this-month sums rows
+        // whose paid_at falls in the current calendar month.
+        function renderPayoutsSummary() {
+            const el = $("#payouts-summary");
+            if (!el) return;
+            let outstanding = 0, unpaidEvents = 0, paidMonth = 0;
+            const now = new Date();
+            const ym = now.getFullYear() + "-" + String(now.getMonth() + 1).padStart(2, "0");
+            (DATA.events || []).forEach(ev => {
+                let evDue = 0;
+                (ev.payouts || []).forEach(p => {
+                    if (p.payment_status !== "paid") evDue += p.amount;
+                    else if ((p.paid_at || "").slice(0, 7) === ym) paidMonth += p.amount;
+                });
+                if (evDue > 0.005) { outstanding += evDue; unpaidEvents++; }
+            });
+            el.style.display = "";
+            el.innerHTML = `
+                <div class="pay-stat${outstanding > 0.005 ? " warn" : ""}">
+                    <div class="v">${fmt(outstanding)}</div>
+                    <div class="l">Outstanding</div>
+                </div>
+                <div class="pay-stat${unpaidEvents ? " warn" : ""}">
+                    <div class="v">${unpaidEvents}</div>
+                    <div class="l">Unpaid event${unpaidEvents !== 1 ? "s" : ""}</div>
+                </div>
+                <div class="pay-stat">
+                    <div class="v">${fmt(paidMonth)}</div>
+                    <div class="l">Paid this month</div>
+                </div>`;
+        }
 
         // ═══════════ EVENTS TAB ══════════════════════════════════
 
@@ -1287,15 +1384,27 @@
                 el.innerHTML = `<div class="empty-state"><p>No ${eventsView === "contests" ? "season contest payouts" : "events"} yet</p></div>`;
                 return;
             }
-            el.innerHTML = list.map(({ev, i}) => `
+            // Rows carry status (pill + x/y paid) so the landing IS the
+            // summary — drilling in is only for cutting payouts (#241).
+            el.innerHTML = list.map(({ev, i}) => {
+                const gs = golferGroupsForEvent(ev);
+                const paid = gs.filter(g => g.payment_status === "paid").length;
+                const status = !gs.length ? ""
+                    : paid === gs.length
+                        ? '<span class="ev-pill ev-pill-paid">Paid</span>'
+                        : `<span class="ev-pill ev-pill-unpaid">Unpaid</span><span class="ev-prog">${paid}/${gs.length} paid</span>`;
+                return `
                 <div class="sidebar-item${i === selectedEventIdx ? ' active' : ''}" data-eidx="${i}">
                     <div>
                         <div class="name">${ev.code}</div>
-                        <div class="meta">${fmtDate(ev.event_date)}</div>
+                        <div class="meta">${fmtDate(ev.event_date)}${status ? " &nbsp;" + status : ""}</div>
                     </div>
-                    <div class="amount">${fmt(ev.total_purse)}</div>
-                </div>
-            `).join("");
+                    <div>
+                        <div class="amount">${fmt(ev.total_purse)}</div>
+                        <div class="pot-label">Pot</div>
+                    </div>
+                </div>`;
+            }).join("");
 
             el.querySelectorAll(".sidebar-item").forEach(item => {
                 item.addEventListener("click", () => {
@@ -1311,7 +1420,9 @@
             const section = document.getElementById("section-events");
             if (selectedEventIdx < 0 || selectedEventIdx >= DATA.events.length) {
                 if (section) section.classList.remove("has-selection");
-                main.innerHTML = '<div class="empty-state"><h3>Select an event</h3><p>Choose an event from the sidebar</p></div>';
+                // No "Select an event" hint (#241) — rows read as tappable;
+                // the landing list is the summary.
+                main.innerHTML = "";
                 return;
             }
             if (section) section.classList.add("has-selection");

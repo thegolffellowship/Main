@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.141.0";
+window.TGF_VERSION = "2.142.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.142.0",
+    date: "2026-07-23",
+    changes: [
+      "Payouts admin landing rebuilt for mobile (platform-claude directive #241, Kerry approved): a sticky band now tops the page with three stat tiles — Outstanding to pay, Unpaid events, Paid this month — so the day's work shows before any scroll. Outstanding counts unpaid ROWS (a partially-paid group contributes only its remainder), matching what the Pay buttons actually carry.",
+      "The control strip splits into two axes: a segmented Events · Season · Golfers view control plus an All · Unpaid · Refunds filter-chip row beneath it — the old single row mashed both together and Refunds ran off-screen on a phone. Tapping a view segment snaps the filter back to All; Unpaid/Refunds chips show their work queues regardless of view.",
+      "Event rows are now actionable without drilling in: an Unpaid (orange) or Paid (muted) status pill plus a '14/19 paid' progress count sit under each event name, and the green number finally has a label ('Pot' — it's the event's payout pool, which Kerry and platform-claude both had to reverse-engineer). The 'Select an event' placeholder hint is gone; rows read as tappable on their own.",
+    ],
+  },
   {
     version: "2.141.0",
     date: "2026-07-22",
