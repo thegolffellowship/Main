@@ -1775,6 +1775,13 @@ def _scoring_dispatch(url: str, extract: str):
             # READ-ONLY: the REFUNDS console payload (outstanding / in-flight
             # / completed) — incl. season-contest removal refunds.
             return json.dumps(db.get_refunds_overview(), indent=2, default=str)
+        if cmd == "scoring-money-flow":
+            # "<YYYY-MM>[|debug]" — Monthly Money Flow waterfall (mailbox
+            # #242): pass-through vs TGF-keep, allocation-bucket rollup.
+            _m, _, _dbg = arg.partition("|")
+            return json.dumps(db.get_monthly_money_flow(
+                _m.strip(), debug=(_dbg.strip().lower() == "debug")),
+                indent=2, default=str)
         if cmd == "scoring-overpayments":
             # Overpaid-winnings ledger (v2.141.0): runs the inbound-receipt
             # recovery scan, then returns open + recently resolved rows.

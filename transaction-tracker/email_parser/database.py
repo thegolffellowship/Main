@@ -31850,6 +31850,161 @@ def get_acct_allocations(month: str | None = None, event: str | None = None,
     return {"allocations": records, "totals": totals}
 
 
+def get_monthly_money_flow(month: str, debug: bool = False,
+                           db_path: str | Path | None = None) -> dict:
+    """Monthly Money Flow (mailbox #242, Kerry-approved): the pass-through
+    vs TGF-keep waterfall for one month, so "we collected $30K" and "TGF's
+    cut is $5K" stop looking contradictory — ~83% of gross flows through
+    to courses and prize winners.
+
+    Basis: ORDER date (items.order_date; synthetic EXT-/MANUAL- rows fall
+    back to allocation_date). Source of truth: the acct_allocations bucket
+    decomposition per item — never re-derived from item_price.
+
+    Lines:
+      course   = course_payable + course_surcharge  (→ courses)
+      prizes   = prize_pool                          (→ winners)
+      godaddy  = merchant_fee actually kept by the processor
+      markup   = tgf_operating + tax_reserve         (TGF's cut incl. the
+                 sales-tax reserve it holds until remitting)
+      retained = collected transaction fee − processor's cut
+      margin   = markup + retained
+      total    = course + prizes + godaddy + margin  (reconciles to gross)
+
+    Exclusions (mirrors the sales-tax engine so the numbers tie): comp
+    rows, wd/withdrawn items, credit-transfer DESTINATION lines (no new
+    money — the source order already counted it), and negative amounts.
+
+    The processor fee split comes from godaddy_order_splits per item
+    (transaction_fee collected vs merchant_fee actual); allocations whose
+    godaddy_fee column is populated but have no splits fall back to that
+    column with retained 0.
+
+    debug=True adds coverage diagnostics: month items with no allocation
+    row (summed by item class) and per-bucket row counts — the check the
+    directive asked for ("verify each pot rolls in; flag any that don't").
+    """
+    month = (month or "").strip()[:7]
+    if not re.match(r"^\d{4}-\d{2}$", month):
+        raise ValueError("month must be YYYY-MM")
+    z = lambda v: round(float(v or 0), 2)
+    with _connect(db_path) as conn:
+        rows = [dict(r) for r in conn.execute(
+            """SELECT a.*, i.order_date, i.transaction_status, i.item_price,
+                      i.item_name, i.user_status
+               FROM acct_allocations a
+               LEFT JOIN items i ON i.id = a.item_id
+               WHERE substr(COALESCE(i.order_date, a.allocation_date), 1, 7) = ?""",
+            (month,)).fetchall()]
+
+        # Per-item processor fee split (collected vs GoDaddy's actual cut)
+        fee_splits = {r["item_id"]: dict(r) for r in conn.execute(
+            """SELECT s.item_id,
+                      SUM(CASE WHEN s.split_type = 'transaction_fee'
+                               THEN s.amount ELSE 0 END) AS fee_collected,
+                      SUM(CASE WHEN s.split_type = 'merchant_fee'
+                               THEN s.amount ELSE 0 END) AS fee_actual
+               FROM godaddy_order_splits s
+               JOIN items i ON i.id = s.item_id
+               WHERE substr(i.order_date, 1, 7) = ?
+               GROUP BY s.item_id""", (month,)).fetchall() if r["item_id"]}
+
+        out = {"month": month, "course": 0.0, "prizes": 0.0, "godaddy": 0.0,
+               "markup": 0.0, "retained": 0.0, "margin": 0.0, "total": 0.0}
+        by_event: dict[str, dict] = {}
+        excluded = {"comp": 0, "wd": 0, "credit_transfer_dest": 0, "negative": 0}
+        seen_fee_items = set()
+
+        for a in rows:
+            pm = (a.get("payment_method") or "").lower()
+            status = (a.get("transaction_status") or "").lower()
+            if pm == "comp":
+                excluded["comp"] += 1
+                continue
+            if status in ("wd", "withdrawn"):
+                excluded["wd"] += 1
+                continue
+            if pm == "credit_transfer" or str(a.get("order_id") or "").startswith("XFER-"):
+                excluded["credit_transfer_dest"] += 1
+                continue
+            if z(a.get("total_collected")) < 0:
+                excluded["negative"] += 1
+                continue
+            course = z(a.get("course_payable")) + z(a.get("course_surcharge"))
+            prizes = z(a.get("prize_pool"))
+            markup = z(a.get("tgf_operating")) + z(a.get("tax_reserve"))
+            fs = fee_splits.get(a.get("item_id"))
+            if fs:
+                seen_fee_items.add(a.get("item_id"))
+                gd = z(fs.get("fee_actual"))
+                retained = max(0.0, z(fs.get("fee_collected")) - gd)
+            else:
+                gd = z(a.get("godaddy_fee"))
+                retained = 0.0
+            out["course"] += course
+            out["prizes"] += prizes
+            out["godaddy"] += gd
+            out["markup"] += markup
+            out["retained"] += retained
+            ev = a.get("event_name") or a.get("item_name") or "(no event)"
+            b = by_event.setdefault(ev, {"event": ev, "course": 0.0,
+                                         "prizes": 0.0, "markup": 0.0,
+                                         "players": 0})
+            b["course"] += course
+            b["prizes"] += prizes
+            b["markup"] += markup + retained
+            b["players"] += 1
+
+        # Fee splits for month items with NO allocation row still belong in
+        # the waterfall (e.g. membership/contest orders if unallocated) —
+        # count them so godaddy/retained reconcile to the processor's books.
+        orphan_fees = {"count": 0, "godaddy": 0.0, "retained": 0.0}
+        for iid, fs in fee_splits.items():
+            if iid in seen_fee_items:
+                continue
+            orphan_fees["count"] += 1
+            gd = z(fs.get("fee_actual"))
+            orphan_fees["godaddy"] += gd
+            orphan_fees["retained"] += max(0.0, z(fs.get("fee_collected")) - gd)
+
+        for k in ("course", "prizes", "godaddy", "markup", "retained"):
+            out[k] = round(out[k], 2)
+        out["margin"] = round(out["markup"] + out["retained"], 2)
+        out["total"] = round(out["course"] + out["prizes"] + out["godaddy"]
+                             + out["margin"], 2)
+        out["tgf_keeps_pct"] = round(100 * out["margin"] / out["total"], 1) \
+            if out["total"] else 0.0
+        out["by_event"] = sorted(
+            [{k: (round(v, 2) if isinstance(v, float) else v)
+              for k, v in b.items()} for b in by_event.values()],
+            key=lambda b: -(b["course"] + b["prizes"] + b["markup"]))
+        out["excluded"] = excluded
+        out["orphan_fees"] = {k: (round(v, 2) if isinstance(v, float) else v)
+                              for k, v in orphan_fees.items()}
+
+        if debug:
+            # Coverage check: month items with no allocation row at all.
+            uncovered = [dict(r) for r in conn.execute(
+                """SELECT i.item_name, COUNT(*) AS n,
+                          ROUND(SUM(COALESCE(i.item_price, 0)), 2) AS item_price_sum
+                   FROM items i
+                   LEFT JOIN acct_allocations a ON a.item_id = i.id
+                   WHERE substr(i.order_date, 1, 7) = ?
+                     AND a.id IS NULL
+                     AND COALESCE(i.transaction_status, '') NOT IN
+                         ('rsvp_only', 'wd', 'withdrawn')
+                   GROUP BY i.item_name ORDER BY item_price_sum DESC""",
+                (month,)).fetchall()]
+            out["debug"] = {
+                "allocation_rows": len(rows),
+                "fee_split_items": len(fee_splits),
+                "uncovered_items": uncovered,
+                "uncovered_total": round(sum(u["item_price_sum"] or 0
+                                             for u in uncovered), 2),
+            }
+        return out
+
+
 def get_event_financial_summary(event_name: str, db_path: str | Path | None = None) -> dict:
     """Server-side financial summary for one event.
 
