@@ -12151,6 +12151,27 @@ def page_cashflow():
     return render_template("cashflow.html")
 
 
+@app.route("/accounting/money-flow")
+@require_role("admin")
+def page_money_flow():
+    """Monthly Money Flow — pass-through vs TGF-keep waterfall (mailbox
+    #242, Kerry approved). Kills the recurring 'we collected $30K but
+    TGF's cut is only $5K — how?' question."""
+    return render_template("moneyflow.html")
+
+
+@app.route("/api/accounting/money-flow")
+@require_role("admin")
+def api_money_flow():
+    from email_parser.database import get_monthly_money_flow
+    month = (request.args.get("month") or "").strip()
+    debug = request.args.get("debug") in ("1", "true")
+    try:
+        return jsonify(get_monthly_money_flow(month, debug=debug))
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+
+
 @app.route("/api/reconciliation/accounts")
 @require_role("admin")
 def api_recon_accounts():

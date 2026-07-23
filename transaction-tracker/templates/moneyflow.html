@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
+    <title>Money Flow — TGF Tracker</title>
+    <link rel="stylesheet" href="/static/css/dashboard.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Bitter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/css/shell.css">
+    <link rel="manifest" href="/static/manifest.json">
+    <link rel="icon" href="/static/icon.svg" type="image/svg+xml">
+    <link rel="apple-touch-icon" href="/static/icon-180.png">
+    <meta name="theme-color" content="#E87C3E">
+    <style>
+        .toolbar { display:flex; gap:0.75rem; align-items:center; margin:1rem 0; flex-wrap:wrap; }
+        .toolbar input[type=month] { padding:0.35rem 0.5rem; border:1px solid var(--border); border-radius:6px; font-size:0.85rem; }
+        .keep-stat { font: 700 1rem 'Bitter', serif; color:#166534; background:#dcfce7; padding:4px 14px; border-radius:9999px; }
+        .mf-card { background:#fff; border:1px solid var(--border); border-radius:12px; overflow:hidden; max-width:720px; }
+        .mf-line { display:flex; align-items:center; gap:10px; padding:12px 16px; border-bottom:1px solid var(--border); cursor:default; }
+        .mf-line.expandable { cursor:pointer; }
+        .mf-line.expandable:hover { background:#F8F8F8; }
+        .mf-line .chev { width:14px; color:var(--text-muted); font-size:0.7rem; transition:transform 0.15s; }
+        .mf-line.open .chev { transform:rotate(90deg); }
+        .mf-line .lbl { flex:1; min-width:0; }
+        .mf-line .lbl .t { font-weight:600; font-size:0.9rem; }
+        .mf-line .lbl .s { font-size:0.72rem; color:var(--text-muted); }
+        .mf-line .amt { font: 700 1rem 'Bitter', serif; font-variant-numeric:tabular-nums; white-space:nowrap; }
+        .mf-line.pass .amt { color:#6B7280; }
+        .mf-line.keep .amt { color:#166534; }
+        .mf-line.total { background:#1B1B1B; border-bottom:none; }
+        .mf-line.total .lbl .t, .mf-line.total .amt { color:#fff; }
+        .mf-line.margin { background:#F0FDF4; }
+        .mf-sub { display:none; border-bottom:1px solid var(--border); background:#FAFAFA; }
+        .mf-sub.open { display:block; }
+        .mf-sub table { width:100%; border-collapse:collapse; font-size:0.78rem; }
+        .mf-sub td { padding:5px 16px 5px 40px; border-top:1px solid #F1F2F4; white-space:normal; }
+        .mf-sub td.r { text-align:right; font-variant-numeric:tabular-nums; padding-right:16px; white-space:nowrap; }
+        .mf-note { font-size:0.72rem; color:var(--text-muted); max-width:720px; margin-top:0.75rem; line-height:1.5; }
+    </style>
+</head>
+<body>
+    {% if shell_v2 %}
+    {% set SHELL_TITLE = 'Money Flow' %}{% set SHELL_ACTIVE = 'admin' %}
+    {% include '_shell_nav.html' %}
+    {% else %}
+    <header>
+        <div class="header-content">
+            <h1>Money Flow</h1>
+            <p class="subtitle">Pass-through vs what TGF keeps</p>
+        </div>
+        <div class="header-actions">
+            <span id="role-badge" class="role-badge" style="display:none;"></span>
+            <button id="btn-logout" class="btn btn-secondary" title="Log out" style="display:none;">Log Out</button>
+        </div>
+    </header>
+    {% endif %}
+
+    <main>
+        {% if not shell_v2 %}
+        <nav class="tab-nav">
+            <a href="/events">Events</a>
+            <a href="/contests">Season<span class="nav-label-full"> Contests</span></a>
+            <a href="/handicaps">Handicaps</a>
+            <a href="/transactions">Transactions</a>
+            <a href="/customers">Customers</a>
+            <a href="/tgf" class="admin-nav" style="display:none;">Payouts</a>
+            <a href="/accounting" class="admin-nav admin-tab active" style="display:none;">Admin</a>
+        </nav>
+        {% endif %}
+        <nav class="admin-subnav">
+            <a href="/accounting" class="active">Accounting</a>
+            <a href="/coo">COO</a>
+            <a href="/audit">Audit Log</a>
+            <a href="/matrix">Matrix</a>
+            <a href="/courses">Courses</a>
+            <a href="/traffic">Traffic</a>
+            <a href="/spotlight">Spotlight</a>
+            <a href="/admin/gg-history">GG History</a>
+            <a href="/database">Database</a>
+            <a href="/changelog">Changelog</a>
+        </nav>
+
+        <div class="acct-subtabs" style="margin-bottom:0.5rem;">
+            <a href="/accounting#dashboard" class="acct-subtab">Dashboard</a>
+            <a href="/accounting#ledger" class="acct-subtab">Ledger</a>
+            <a href="/accounting#accounts" class="acct-subtab">Accounts</a>
+            <a href="/accounting#categories" class="acct-subtab">Categories</a>
+            <a href="/accounting#reports" class="acct-subtab">Reports</a>
+            <a href="/accounting/reconcile" class="acct-subtab">Reconcile</a>
+            <a href="/accounting/cashflow" class="acct-subtab">Cash Flow</a>
+            <a href="/accounting/money-flow" class="acct-subtab active">Money Flow</a>
+            <a href="/accounting#liabilities" class="acct-subtab">Liabilities</a>
+            <a href="/accounting#contractors" class="acct-subtab">Contractors</a>
+            <a href="/accounting#rules" class="acct-subtab">Rules</a>
+        </div>
+
+        <div class="toolbar">
+            <input type="month" id="mf-month">
+            <span class="keep-stat" id="mf-keep" style="display:none;"></span>
+        </div>
+        <div id="mf-body"><div class="empty-state"><p>Loading…</p></div></div>
+    </main>
+
+    <script src="/static/js/auth.js"></script>
+    <script src="/static/js/version.js"></script>
+    <script>
+    (function() {
+        "use strict";
+        initAuth();
+        const $ = s => document.querySelector(s);
+        const fmt = n => "$" + Number(n || 0).toLocaleString("en-US",
+            {minimumFractionDigits: 2, maximumFractionDigits: 2});
+
+        // default to the previous full month — the one Kerry closes
+        const now = new Date();
+        const prev = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+        const defMonth = prev.getFullYear() + "-" + String(prev.getMonth() + 1).padStart(2, "0");
+        const input = $("#mf-month");
+        input.value = defMonth;
+        input.addEventListener("change", () => input.value && load(input.value));
+
+        function subTable(rows, key) {
+            const body = (rows || [])
+                .filter(b => (b[key] || 0) > 0.005)
+                .sort((a, b) => (b[key] || 0) - (a[key] || 0))
+                .map(b => `<tr><td>${b.event}</td>
+                    <td class="r">${b.players} player${b.players !== 1 ? "s" : ""}</td>
+                    <td class="r">${fmt(b[key])}</td></tr>`).join("");
+            return body ? `<table>${body}</table>`
+                : `<table><tr><td style="color:var(--text-muted);">nothing this month</td></tr></table>`;
+        }
+
+        function line(cls, title, sub, amount, expandKey) {
+            const exp = expandKey ? " expandable" : "";
+            return `
+                <div class="mf-line ${cls}${exp}"${expandKey ? ` data-exp="${expandKey}"` : ""}>
+                    <span class="chev">${expandKey ? "&#9656;" : ""}</span>
+                    <span class="lbl"><span class="t">${title}</span>
+                        ${sub ? `<div class="s">${sub}</div>` : ""}</span>
+                    <span class="amt">${fmt(amount)}</span>
+                </div>
+                ${expandKey ? `<div class="mf-sub" id="sub-${expandKey}"></div>` : ""}`;
+        }
+
+        let LAST = null;
+        async function load(month) {
+            const el = $("#mf-body");
+            el.innerHTML = '<div class="empty-state"><p>Loading…</p></div>';
+            $("#mf-keep").style.display = "none";
+            try {
+                const resp = await fetch("/api/accounting/money-flow?month=" + encodeURIComponent(month));
+                if (!resp.ok) throw new Error("http " + resp.status);
+                const d = await resp.json();
+                LAST = d;
+                render(d);
+            } catch (e) {
+                console.error("money flow load failed", e);
+                el.innerHTML = '<div class="empty-state"><h3>Couldn\'t load</h3><p>Try another month.</p></div>';
+            }
+        }
+
+        function render(d) {
+            const keep = $("#mf-keep");
+            keep.textContent = "TGF keeps " + (d.tgf_keeps_pct || 0) + "%";
+            keep.style.display = "";
+            $("#mf-body").innerHTML = `
+                <div class="mf-card">
+                    ${line("pass", "Course fees", "→ courses (pass-through)", d.course, "course")}
+                    ${line("pass", "Prize pools", "→ winners (pass-through)", d.prizes, "prizes")}
+                    ${line("pass", "GoDaddy fee", "→ processor (their cut)", d.godaddy, null)}
+                    ${line("keep", "TGF markup", "events / memberships / contests", d.markup, "markup")}
+                    ${line("keep", "TGF retained fee", "collected fee − processor's cut", d.retained, null)}
+                    ${line("keep margin", "= TGF gross margin", "what TGF keeps", d.margin, null)}
+                    ${line("total", "Total collected", "reconciles to gross", d.total, null)}
+                </div>
+                <div class="mf-note">
+                    Basis: order date. Excluded (same rules as the sales-tax engine):
+                    comps, withdrawals, credit-transfer destinations, negatives.
+                    ${d.orphan_fees && d.orphan_fees.count
+                        ? `Includes ${fmt((d.orphan_fees.godaddy||0)+(d.orphan_fees.retained||0))} of processor fees on ${d.orphan_fees.count} unallocated order line(s).` : ""}
+                </div>`;
+            document.querySelectorAll(".mf-line.expandable").forEach(ln => {
+                ln.addEventListener("click", () => {
+                    const key = ln.dataset.exp;
+                    const sub = document.getElementById("sub-" + key);
+                    const open = sub.classList.toggle("open");
+                    ln.classList.toggle("open", open);
+                    if (open && !sub.innerHTML) sub.innerHTML = subTable(LAST.by_event, key);
+                });
+            });
+        }
+
+        load(defMonth);
+    })();
+    </script>
+</body>
+</html>

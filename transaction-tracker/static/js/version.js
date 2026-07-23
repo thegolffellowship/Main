@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.142.0";
+window.TGF_VERSION = "2.143.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.143.0",
+    date: "2026-07-23",
+    changes: [
+      "Monthly Money Flow report (platform-claude directive #242, Kerry approved): new admin page at /accounting/money-flow (linked from the Accounting sub-tabs) answering the recurring 'we collected $30K but TGF's cut is only $5K — how?' question. A month picker drives a 7-line waterfall — Course fees → courses, Prize pools → winners, GoDaddy fee → processor, TGF markup, TGF retained fee, = TGF gross margin, Total collected — with a 'TGF keeps X%' stat pill. Course/prize/markup lines tap-expand to per-event totals.",
+      "Engine (get_monthly_money_flow + bridge cmd scoring-money-flow:<YYYY-MM>[|debug]): sums the acct_allocations bucket decomposition on an order-date basis, with the sales-tax engine's exclusions (comps, wd, credit-transfer destinations, negatives) so the numbers tie. Coverage finding flagged per the directive: allocations were created LAZILY, so most GoDaddy orders had no rows — the report now fills a month's gaps through calculate_order_allocation itself (idempotent upserts from the ratified pricing tables) before summing.",
+      "Processor fee lines come from godaddy_order_splits at raw grain (transaction_fee = collected from customers; merchant_fee = GoDaddy's actual signed cut): GoDaddy line = actual cut, TGF retained = collected − cut — the split the directive said to derive if not stored. debug mode reports fee sums, split-row counts, and any still-uncovered items.",
+    ],
+  },
   {
     version: "2.142.0",
     date: "2026-07-23",
