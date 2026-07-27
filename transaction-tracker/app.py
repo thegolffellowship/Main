@@ -12166,8 +12166,11 @@ def api_money_flow():
     from email_parser.database import get_monthly_money_flow
     month = (request.args.get("month") or "").strip()
     debug = request.args.get("debug") in ("1", "true")
+    chapter = (request.args.get("chapter") or "").strip() or None
+    ytd = request.args.get("ytd") in ("1", "true")
     try:
-        return jsonify(get_monthly_money_flow(month, debug=debug))
+        return jsonify(get_monthly_money_flow(month, debug=debug,
+                                              chapter=chapter, ytd=ytd))
     except ValueError as e:
         return jsonify({"error": str(e)}), 400
 

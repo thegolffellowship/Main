@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.143.1";
+window.TGF_VERSION = "2.144.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.144.0",
+    date: "2026-07-23",
+    changes: [
+      "Money Flow gains scope + period toggles (Kerry): a TGF · Austin · San Antonio segmented control filters the whole waterfall to one chapter (allocations by their chapter; processor fees follow the order's items — a transaction counts toward a chapter when any of its items belongs to it), and a Month · YTD toggle rolls January through the selected month. A label under the toolbar states exactly what's on screen ('Jan–Jul 2026 · Austin').",
+      "First YTD query of a year can owe months of allocation backfill, so the gap-fill is now time-budgeted (~40s per request) like the other importers: the page shows 'still filling older months (N orders left)' and auto-refreshes until coverage completes. Bridge syntax grows to scoring-money-flow:<YYYY-MM>[|austin|sa][|ytd][|debug].",
+    ],
+  },
   {
     version: "2.143.1",
     date: "2026-07-23",

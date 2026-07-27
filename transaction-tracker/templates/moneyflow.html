@@ -17,6 +17,14 @@
         .toolbar { display:flex; gap:0.75rem; align-items:center; margin:1rem 0; flex-wrap:wrap; }
         .toolbar input[type=month] { padding:0.35rem 0.5rem; border:1px solid var(--border); border-radius:6px; font-size:0.85rem; }
         .keep-stat { font: 700 1rem 'Bitter', serif; color:#166534; background:#dcfce7; padding:4px 14px; border-radius:9999px; }
+        .seg-mini { display:inline-flex; background:#F1F2F4; border-radius:9999px; padding:3px; }
+        .seg-mini button {
+            border:none; background:none; cursor:pointer; font-size:0.74rem;
+            font-weight:600; color:#6B7280; padding:4px 12px; border-radius:9999px;
+            transition:background 0.15s, color 0.15s; white-space:nowrap;
+        }
+        .seg-mini button.active { background:#fff; color:#E87C3E; box-shadow:0 1px 2px rgba(0,0,0,0.08); }
+        .mf-period-label { font-size:0.78rem; color:var(--text-muted); }
         .mf-card { background:#fff; border:1px solid var(--border); border-radius:12px; overflow:hidden; max-width:720px; }
         .mf-line { display:flex; align-items:center; gap:10px; padding:12px 16px; border-bottom:1px solid var(--border); cursor:default; }
         .mf-line.expandable { cursor:pointer; }
@@ -112,8 +120,18 @@
 
         <div class="toolbar">
             <input type="month" id="mf-month">
+            <div class="seg-mini" id="mf-scope">
+                <button data-ch="" class="active">TGF</button>
+                <button data-ch="Austin">Austin</button>
+                <button data-ch="San Antonio">San Antonio</button>
+            </div>
+            <div class="seg-mini" id="mf-period">
+                <button data-ytd="" class="active">Month</button>
+                <button data-ytd="1">YTD</button>
+            </div>
             <span class="keep-stat" id="mf-keep" style="display:none;"></span>
         </div>
+        <div class="mf-period-label" id="mf-period-label" style="margin:-0.5rem 0 0.75rem;"></div>
         <div id="mf-body"><div class="empty-state"><p>Loading…</p></div></div>
     </main>
 
@@ -133,7 +151,24 @@
         const defMonth = prev.getFullYear() + "-" + String(prev.getMonth() + 1).padStart(2, "0");
         const input = $("#mf-month");
         input.value = defMonth;
-        input.addEventListener("change", () => input.value && load(input.value));
+        let scopeCh = "";      // "" = TGF overall
+        let periodYtd = "";    // "1" = YTD (Jan → selected month)
+        const reload = () => input.value && load(input.value);
+        input.addEventListener("change", reload);
+        document.querySelectorAll("#mf-scope button").forEach(b =>
+            b.addEventListener("click", () => {
+                scopeCh = b.dataset.ch;
+                document.querySelectorAll("#mf-scope button").forEach(x =>
+                    x.classList.toggle("active", x === b));
+                reload();
+            }));
+        document.querySelectorAll("#mf-period button").forEach(b =>
+            b.addEventListener("click", () => {
+                periodYtd = b.dataset.ytd;
+                document.querySelectorAll("#mf-period button").forEach(x =>
+                    x.classList.toggle("active", x === b));
+                reload();
+            }));
 
         const mdDate = d => {
             if (!d) return "—";
@@ -199,21 +234,41 @@
             el.innerHTML = '<div class="empty-state"><p>Loading…</p></div>';
             $("#mf-keep").style.display = "none";
             try {
-                const resp = await fetch("/api/accounting/money-flow?month=" + encodeURIComponent(month));
+                let url = "/api/accounting/money-flow?month=" + encodeURIComponent(month);
+                if (scopeCh) url += "&chapter=" + encodeURIComponent(scopeCh);
+                if (periodYtd) url += "&ytd=1";
+                const resp = await fetch(url);
                 if (!resp.ok) throw new Error("http " + resp.status);
                 const d = await resp.json();
                 LAST = d;
                 render(d);
+                // A first YTD view may still be backfilling allocations for
+                // older months under the time budget — chain until complete.
+                if (d.coverage_pending > 0) setTimeout(reload, 800);
             } catch (e) {
                 console.error("money flow load failed", e);
                 el.innerHTML = '<div class="empty-state"><h3>Couldn\'t load</h3><p>Try another month.</p></div>';
             }
         }
 
+        const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+        function monthName(ym) {
+            const p = (ym || "").split("-");
+            return p.length >= 2 ? MONTHS[(+p[1]) - 1] + " " + p[0] : ym;
+        }
         function render(d) {
             const keep = $("#mf-keep");
             keep.textContent = "TGF keeps " + (d.tgf_keeps_pct || 0) + "%";
             keep.style.display = "";
+            const per = d.period || {};
+            const scope = per.chapter && per.chapter !== "all" ? per.chapter : "TGF overall";
+            const span = per.ytd
+                ? monthName(per.from).split(" ")[0] + "–" + monthName(per.to)
+                : monthName(d.month);
+            $("#mf-period-label").textContent = span + " · " + scope
+                + (d.coverage_pending > 0
+                    ? " · still filling older months (" + d.coverage_pending + " orders left)…"
+                    : "");
             $("#mf-body").innerHTML = `
                 <div class="mf-card">
                     ${line("pass", "Course fees", "→ courses (pass-through)", d.course, "course")}

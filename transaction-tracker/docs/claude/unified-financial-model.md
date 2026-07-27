@@ -260,8 +260,15 @@ Each row represents one player's cost allocation for one event:
 ## Monthly Money Flow report (v2.143.0 — mailbox #242, Kerry-approved)
 
 Admin page `/accounting/money-flow` (Accounting sub-tab strip) +
-`GET /api/accounting/money-flow?month=YYYY-MM[&debug=1]` + bridge cmd
-`scoring-money-flow:<YYYY-MM>[|debug]` → `get_monthly_money_flow()`.
+`GET /api/accounting/money-flow?month=YYYY-MM[&chapter=][&ytd=1][&debug=1]`
++ bridge cmd `scoring-money-flow:<YYYY-MM>[|austin|sa][|ytd][|debug]`
+→ `get_monthly_money_flow()`. Scope toggles (v2.144.0): chapter filter
+(allocations by `a.chapter`; fee lines follow the order's items via
+EXISTS) and YTD (Jan→month). The gap-fill is time-budgeted (~40s/call,
+`coverage_pending` reports the remainder; the page auto-refreshes until
+0). Expand tables (v2.143.1): case-insensitive event grouping keyed to
+the events registry's canonical name + event_date, sortable columns,
+m/d dates, default sort date-ascending.
 The pass-through vs TGF-keep waterfall: course fees → courses, prize
 pools → winners, GoDaddy fee → processor, TGF markup + TGF retained fee
 = TGF gross margin, reconciling to total collected, with per-event

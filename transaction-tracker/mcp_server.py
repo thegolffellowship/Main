@@ -1776,12 +1776,20 @@ def _scoring_dispatch(url: str, extract: str):
             # / completed) — incl. season-contest removal refunds.
             return json.dumps(db.get_refunds_overview(), indent=2, default=str)
         if cmd == "scoring-money-flow":
-            # "<YYYY-MM>[|debug]" — Monthly Money Flow waterfall (mailbox
-            # #242): pass-through vs TGF-keep, allocation-bucket rollup.
-            _m, _, _dbg = arg.partition("|")
+            # "<YYYY-MM>[|austin|sa][|ytd][|debug]" — Monthly Money Flow
+            # waterfall (mailbox #242): pass-through vs TGF-keep,
+            # allocation-bucket rollup, optional chapter scope + YTD.
+            _parts = [p.strip().lower() for p in arg.split("|") if p.strip()]
+            _m = _parts[0] if _parts else ""
+            _dbg = "debug" in _parts[1:]
+            _ytd = "ytd" in _parts[1:]
+            _ch = next((p for p in _parts[1:] if p not in ("debug", "ytd")), None)
+            if _ch in ("sa", "san antonio"):
+                _ch = "San Antonio"
+            elif _ch == "austin":
+                _ch = "Austin"
             return json.dumps(db.get_monthly_money_flow(
-                _m.strip(), debug=(_dbg.strip().lower() == "debug")),
-                indent=2, default=str)
+                _m, debug=_dbg, chapter=_ch, ytd=_ytd), indent=2, default=str)
         if cmd == "scoring-overpayments":
             # Overpaid-winnings ledger (v2.141.0): runs the inbound-receipt
             # recovery scan, then returns open + recently resolved rows.

@@ -31851,6 +31851,7 @@ def get_acct_allocations(month: str | None = None, event: str | None = None,
 
 
 def get_monthly_money_flow(month: str, debug: bool = False,
+                           chapter: str | None = None, ytd: bool = False,
                            db_path: str | Path | None = None) -> dict:
     """Monthly Money Flow (mailbox #242, Kerry-approved): the pass-through
     vs TGF-keep waterfall for one month, so "we collected $30K" and "TGF's
@@ -31888,23 +31889,37 @@ def get_monthly_money_flow(month: str, debug: bool = False,
     if not re.match(r"^\d{4}-\d{2}$", month):
         raise ValueError("month must be YYYY-MM")
     z = lambda v: round(float(v or 0), 2)
+    # Period: single month, or Jan→month when ytd (Kerry 2026-07-23).
+    p_from = month[:4] + "-01" if ytd else month
+    p_to = month
+    chapter = (chapter or "").strip() or None
 
     # ── Phase 0: coverage. Allocations are created LAZILY (the admin
     # allocations screen / external-payment backfill) — most plain GoDaddy
-    # orders have no rows until someone asks. Fill the month's gaps through
-    # the allocator itself (idempotent upserts, ratified pricing tables) so
-    # the bucket sums are complete. Done with its own connection cycle —
-    # calculate_order_allocation opens its own.
+    # orders have no rows until someone asks. Fill the period's gaps
+    # through the allocator itself (idempotent upserts, ratified pricing
+    # tables) so the bucket sums are complete. Done with its own
+    # connection cycle — calculate_order_allocation opens its own. Time-
+    # budgeted: a first YTD query can owe months of backfill; repeated
+    # calls finish the remainder (coverage_pending reports what's left).
+    import time as _t
     with _connect(db_path) as conn:
         missing = [r["order_id"] for r in conn.execute(
             """SELECT DISTINCT i.order_id FROM items i
                LEFT JOIN acct_allocations a ON a.item_id = i.id
-               WHERE substr(i.order_date, 1, 7) = ?
+               WHERE substr(i.order_date, 1, 7) BETWEEN ? AND ?
                  AND COALESCE(i.transaction_status, 'active') = 'active'
                  AND COALESCE(i.order_id, '') != ''
-                 AND a.id IS NULL""", (month,)).fetchall()]
+                 AND a.id IS NULL""", (p_from, p_to)).fetchall()]
     allocated_now = 0
-    for oid in missing:
+    coverage_pending = 0
+    _deadline = _t.monotonic() + 40.0
+    for n, oid in enumerate(missing):
+        if _t.monotonic() > _deadline:
+            coverage_pending = len(missing) - n
+            logger.info("money-flow: gap-fill time budget hit — %d order(s) left",
+                        coverage_pending)
+            break
         try:
             if calculate_order_allocation(oid, db_path=db_path):
                 allocated_now += 1
@@ -31912,14 +31927,16 @@ def get_monthly_money_flow(month: str, debug: bool = False,
             logger.warning("money-flow: allocation failed for order %s",
                            oid, exc_info=True)
 
+    ch_alloc = " AND LOWER(COALESCE(a.chapter, '')) = LOWER(?)" if chapter else ""
     with _connect(db_path) as conn:
         rows = [dict(r) for r in conn.execute(
-            """SELECT a.*, i.order_date, i.transaction_status, i.item_name,
+            f"""SELECT a.*, i.order_date, i.transaction_status, i.item_name,
                       i.user_status
                FROM acct_allocations a
                LEFT JOIN items i ON i.id = a.item_id
-               WHERE substr(COALESCE(i.order_date, a.allocation_date), 1, 7) = ?""",
-            (month,)).fetchall()]
+               WHERE substr(COALESCE(i.order_date, a.allocation_date), 1, 7)
+                     BETWEEN ? AND ?{ch_alloc}""",
+            ([p_from, p_to] + ([chapter] if chapter else []))).fetchall()]
 
         out = {"month": month, "course": 0.0, "prizes": 0.0, "godaddy": 0.0,
                "markup": 0.0, "retained": 0.0, "margin": 0.0, "total": 0.0}
@@ -31968,8 +31985,16 @@ def get_monthly_money_flow(month: str, debug: bool = False,
         # merchant_fee = GoDaddy's actual cut, stored signed). TGF retained
         # fee = collected − processor's cut. Month keyed by the ledger
         # row's date, which for GoDaddy orders is the order date.
+        # Chapter view scopes fees via the order's items — a transaction
+        # belongs to a chapter when any of its items does. Txns with no
+        # order link drop out of a chapter view (they still count in TGF
+        # overall), so chapter fee lines are a near-exact split.
+        ch_fee = (" AND EXISTS (SELECT 1 FROM items i2"
+                  " WHERE i2.order_id = t.order_id"
+                  " AND LOWER(COALESCE(i2.chapter, '')) = LOWER(?))"
+                  if chapter else "")
         fee = conn.execute(
-            """SELECT
+            f"""SELECT
                  ROUND(SUM(CASE WHEN s.split_type = 'transaction_fee'
                                 THEN s.amount ELSE 0 END), 2) AS collected,
                  ROUND(SUM(CASE WHEN s.split_type = 'merchant_fee'
@@ -31978,9 +32003,9 @@ def get_monthly_money_flow(month: str, debug: bool = False,
                  COUNT(DISTINCT s.transaction_id) AS txns
                FROM godaddy_order_splits s
                JOIN acct_transactions t ON t.id = s.transaction_id
-               WHERE substr(t.date, 1, 7) = ?
-                 AND COALESCE(t.status, 'active') = 'active'""",
-            (month,)).fetchone()
+               WHERE substr(t.date, 1, 7) BETWEEN ? AND ?
+                 AND COALESCE(t.status, 'active') = 'active'{ch_fee}""",
+            ([p_from, p_to] + ([chapter] if chapter else []))).fetchone()
         out["godaddy"] = z(fee["actual"])
         out["retained"] = round(max(0.0, z(fee["collected"]) - z(fee["actual"])), 2)
 
@@ -32010,18 +32035,21 @@ def get_monthly_money_flow(month: str, debug: bool = False,
                            -(b["course"] + b["prizes"] + b["markup"])))
         out["excluded"] = excluded
         out["allocated_now"] = allocated_now
+        out["coverage_pending"] = coverage_pending
         out["needs_course_cost"] = needs_course_cost
+        out["period"] = {"from": p_from, "to": p_to, "ytd": bool(ytd),
+                         "chapter": chapter or "all"}
 
         if debug:
             uncovered = [dict(r) for r in conn.execute(
                 """SELECT i.item_name, COUNT(*) AS n
                    FROM items i
                    LEFT JOIN acct_allocations a ON a.item_id = i.id
-                   WHERE substr(i.order_date, 1, 7) = ?
+                   WHERE substr(i.order_date, 1, 7) BETWEEN ? AND ?
                      AND a.id IS NULL
                      AND COALESCE(i.transaction_status, 'active') = 'active'
                    GROUP BY i.item_name ORDER BY n DESC""",
-                (month,)).fetchall()]
+                (p_from, p_to)).fetchall()]
             out["debug"] = {
                 "allocation_rows": len(rows),
                 "fee_collected": z(fee["collected"]),
