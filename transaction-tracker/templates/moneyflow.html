@@ -35,8 +35,22 @@
         .mf-sub { display:none; border-bottom:1px solid var(--border); background:#FAFAFA; }
         .mf-sub.open { display:block; }
         .mf-sub table { width:100%; border-collapse:collapse; font-size:0.78rem; }
-        .mf-sub td { padding:5px 16px 5px 40px; border-top:1px solid #F1F2F4; white-space:normal; }
-        .mf-sub td.r { text-align:right; font-variant-numeric:tabular-nums; padding-right:16px; white-space:nowrap; }
+        .mf-sub th { padding:5px 6px; font-size:0.62rem; font-weight:600; letter-spacing:0.4px;
+            text-transform:uppercase; color:var(--text-muted); text-align:left;
+            cursor:pointer; user-select:none; white-space:nowrap; }
+        .mf-sub th.r { text-align:right; }
+        .mf-sub th:first-child { padding-left:40px; }
+        .mf-sub th.sorted::after { content:" \25B4"; }
+        .mf-sub th.sorted.desc::after { content:" \25BE"; }
+        .mf-sub td { padding:5px 6px; border-top:1px solid #F1F2F4; white-space:normal; }
+        .mf-sub td:first-child { padding-left:40px; }
+        .mf-sub td.r { text-align:right; font-variant-numeric:tabular-nums; white-space:nowrap; }
+        .mf-sub th:last-child, .mf-sub td:last-child { padding-right:16px; }
+        @media (max-width: 640px) {
+            .mf-sub th:first-child, .mf-sub td:first-child { padding-left:16px; }
+            .mf-sub th:last-child, .mf-sub td:last-child { padding-right:10px; }
+            .mf-sub table { font-size:0.74rem; }
+        }
         .mf-note { font-size:0.72rem; color:var(--text-muted); max-width:720px; margin-top:0.75rem; line-height:1.5; }
     </style>
 </head>
@@ -121,15 +135,50 @@
         input.value = defMonth;
         input.addEventListener("change", () => input.value && load(input.value));
 
+        const mdDate = d => {
+            if (!d) return "—";
+            const p = String(d).split("-");
+            return p.length >= 3 ? (+p[1]) + "/" + (+p[2]) : d;
+        };
+        // Sortable expand tables (Kerry 2026-07-23): tap a header to sort;
+        // default = event date, oldest first. State lives per sub-table.
+        const subSort = {};   // key -> {col, dir}
         function subTable(rows, key) {
-            const body = (rows || [])
-                .filter(b => (b[key] || 0) > 0.005)
-                .sort((a, b) => (b[key] || 0) - (a[key] || 0))
-                .map(b => `<tr><td>${b.event}</td>
-                    <td class="r">${b.players} player${b.players !== 1 ? "s" : ""}</td>
-                    <td class="r">${fmt(b[key])}</td></tr>`).join("");
-            return body ? `<table>${body}</table>`
-                : `<table><tr><td style="color:var(--text-muted);">nothing this month</td></tr></table>`;
+            const st = subSort[key] || (subSort[key] = {col: "date", dir: 1});
+            const val = (b, col) => col === "event" ? (b.event || "").toLowerCase()
+                : col === "date" ? (b.event_date || "9999-99-99")
+                : col === "players" ? (b.players || 0)
+                : (b[key] || 0);
+            const list = (rows || []).filter(b => (b[key] || 0) > 0.005)
+                .sort((a, b) => {
+                    const x = val(a, st.col), y = val(b, st.col);
+                    return (x < y ? -1 : x > y ? 1 : 0) * st.dir;
+                });
+            if (!list.length)
+                return `<table><tr><td style="color:var(--text-muted);">nothing this month</td></tr></table>`;
+            const th = (col, label, r) => `<th class="${r ? "r " : ""}${st.col === col ? "sorted" + (st.dir < 0 ? " desc" : "") : ""}" data-col="${col}">${label}</th>`;
+            const body = list.map(b => `<tr>
+                <td>${b.event}</td>
+                <td class="r">${mdDate(b.event_date)}</td>
+                <td class="r">${b.players}</td>
+                <td class="r">${fmt(b[key])}</td></tr>`).join("");
+            return `<table><thead><tr>
+                ${th("event", "Event")}${th("date", "Date", 1)}${th("players", "Players", 1)}${th("amount", "$", 1)}
+                </tr></thead><tbody>${body}</tbody></table>`;
+        }
+        function renderSub(key) {
+            const sub = document.getElementById("sub-" + key);
+            sub.innerHTML = subTable(LAST.by_event, key);
+            sub.querySelectorAll("th").forEach(h => {
+                h.addEventListener("click", e => {
+                    e.stopPropagation();
+                    const st = subSort[key];
+                    const col = h.dataset.col;
+                    if (st.col === col) st.dir = -st.dir;
+                    else { st.col = col; st.dir = col === "amount" || col === "players" ? -1 : 1; }
+                    renderSub(key);
+                });
+            });
         }
 
         function line(cls, title, sub, amount, expandKey) {
@@ -187,7 +236,7 @@
                     const sub = document.getElementById("sub-" + key);
                     const open = sub.classList.toggle("open");
                     ln.classList.toggle("open", open);
-                    if (open && !sub.innerHTML) sub.innerHTML = subTable(LAST.by_event, key);
+                    if (open && !sub.innerHTML) renderSub(key);
                 });
             });
         }

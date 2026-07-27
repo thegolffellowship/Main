@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.143.0";
+window.TGF_VERSION = "2.143.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.143.1",
+    date: "2026-07-23",
+    changes: [
+      "Money Flow expand tables refit for mobile (Kerry: 'getting cut off a bit'): tighter cell padding so the dollar column no longer clips off-screen, a new Date column in simple m/d form, and tappable column headers to sort by Event, Date, Players, or amount — defaulting to event date oldest → newest — on ALL expandable categories (course, prizes, markup).",
+      "Events no longer split into duplicate rows on name casing: transfer-created items carry mixed-case names ('s9.14 Hill Country' vs the order rows' 's9.14 HILL COUNTRY'), so grouping is now case-insensitive with the events registry's canonical name (and its event_date) preferred for display.",
+    ],
+  },
   {
     version: "2.143.0",
     date: "2026-07-23",

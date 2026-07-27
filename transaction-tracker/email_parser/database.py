@@ -31950,10 +31950,14 @@ def get_monthly_money_flow(month: str, debug: bool = False,
             out["course"] += course
             out["prizes"] += prizes
             out["markup"] += markup
-            ev = a.get("event_name") or a.get("item_name") or "(no event)"
-            b = by_event.setdefault(ev, {"event": ev, "course": 0.0,
-                                         "prizes": 0.0, "markup": 0.0,
-                                         "players": 0})
+            ev = (a.get("event_name") or a.get("item_name") or "(no event)").strip()
+            # Group case-insensitively — transfer-created items carry
+            # mixed-case names ('s9.14 Hill Country') that would otherwise
+            # split an event into two rows (Kerry 2026-07-23).
+            key = ev.lower()
+            b = by_event.setdefault(key, {"event": ev, "course": 0.0,
+                                          "prizes": 0.0, "markup": 0.0,
+                                          "players": 0})
             b["course"] += course
             b["prizes"] += prizes
             b["markup"] += markup
@@ -31987,10 +31991,23 @@ def get_monthly_money_flow(month: str, debug: bool = False,
                              + out["margin"], 2)
         out["tgf_keeps_pct"] = round(100 * out["margin"] / out["total"], 1) \
             if out["total"] else 0.0
+        # Attach event dates (m/d display + oldest-first default sort on
+        # the expand tables) and prefer the registry's canonical name.
+        ev_registry = {(r["item_name"] or "").strip().lower():
+                       (r["item_name"], r["event_date"]) for r in conn.execute(
+                       "SELECT item_name, event_date FROM events")}
+        for key, b in by_event.items():
+            canon = ev_registry.get(key)
+            if canon:
+                b["event"] = canon[0]
+                b["event_date"] = canon[1]
+            else:
+                b["event_date"] = None
         out["by_event"] = sorted(
             [{k: (round(v, 2) if isinstance(v, float) else v)
               for k, v in b.items()} for b in by_event.values()],
-            key=lambda b: -(b["course"] + b["prizes"] + b["markup"]))
+            key=lambda b: (b.get("event_date") or "9999-99-99",
+                           -(b["course"] + b["prizes"] + b["markup"])))
         out["excluded"] = excluded
         out["allocated_now"] = allocated_now
         out["needs_course_cost"] = needs_course_cost
