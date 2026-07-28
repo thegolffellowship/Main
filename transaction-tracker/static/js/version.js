@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.146.1";
+window.TGF_VERSION = "2.147.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.147.0",
+    date: "2026-07-28",
+    changes: [
+      "Statement-feed reconciliation (Kerry: 'I really want to just feed things to you and you reconcile … create ledger entries where we don't have something. Full coverage of bookkeeping'): new reconcile_statement_lines engine + bridge cmd scoring-statement-reconcile take actual statement lines (any account — card or bank), match each against the books (expense rows first, then ledger rows, ±$0.01 / ±7 days), and CREATE properly-sourced ledger entries for whatever email extraction missed — source_type 'statement', provenance (statement label + raw line) in raw_extract, promoted to the ledger immediately.",
+      "Card payments book as TRANSFERS, not expenses (moving money checking→card isn't P&L spend), and the synthetic uid stmt-<last4>-<date>-<cents> makes re-feeding the same statement fully idempotent — the second pass matches its own first-pass entries. The report returns matched / created / skipped with dollar totals, so 'what's outstanding to account for' is the direct output of feeding a statement.",
+    ],
+  },
   {
     version: "2.146.1",
     date: "2026-07-28",

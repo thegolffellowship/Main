@@ -57,6 +57,22 @@ decoupled from cost — running every 5 minutes costs the same as once a day.
   the full backfill window. `start_scheduler()` logs a loud WARNING if
   `DATABASE_PATH` is unset. A console.anthropic.com spend cap is the backstop.
 
+## Statement-feed reconciliation (v2.147.0 — Kerry 2026-07-28)
+
+"Feed things to you and you reconcile … create ledger entries where we
+don't have something." `reconcile_statement_lines(account_last4,
+statement, lines, create_missing)` + bridge cmd
+`scoring-statement-reconcile` (JSON: account / statement / lines of
+{date, desc, amount, kind: purchase|payment|credit}). Per line: match an
+expense_transactions row (±$0.01, ±7 days), else an acct_transactions
+row; unmatched lines become expense rows with source_type='statement',
+synthetic uid `stmt-<last4>-<date>-<cents>` (idempotent re-feed),
+statement label + raw line in raw_extract, review 'approved', promoted
+to the ledger immediately. `kind: payment` books transaction_type
+'transfer' (card payments are checking→card moves, not P&L expense).
+Chase alert emails are threshold-y and miss small recurring
+subscriptions — statements are ground truth; this is the fill.
+
 ## Approval → Ledger Promotion
 `_sync_expense_ledger_entry(conn, exp)` — called by `update_expense_transaction()` whenever
 an expense is set to `review_status IN ('approved', 'corrected')`.

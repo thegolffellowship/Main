@@ -1775,6 +1775,17 @@ def _scoring_dispatch(url: str, extract: str):
             # READ-ONLY: the REFUNDS console payload (outstanding / in-flight
             # / completed) — incl. season-contest removal refunds.
             return json.dumps(db.get_refunds_overview(), indent=2, default=str)
+        if cmd == "scoring-statement-reconcile":
+            # JSON payload: {"account": "7680", "statement": "chase 2026-01",
+            #   "create_missing": true, "lines": [{date, desc, amount, kind}]}
+            # Matches actual statement lines against the books; unmatched
+            # lines become ledger entries (idempotent per account+date+amt).
+            _p = json.loads(arg)
+            return json.dumps(db.reconcile_statement_lines(
+                str(_p.get("account") or ""), str(_p.get("statement") or ""),
+                _p.get("lines") or [],
+                create_missing=bool(_p.get("create_missing", True))),
+                indent=2, default=str)
         if cmd == "scoring-money-flow":
             # "<YYYY-MM>[|austin|sa][|ytd][|debug]" — Monthly Money Flow
             # waterfall (mailbox #242): pass-through vs TGF-keep,

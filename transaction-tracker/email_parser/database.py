@@ -31970,6 +31970,112 @@ def get_acct_allocations(month: str | None = None, event: str | None = None,
     return {"allocations": records, "totals": totals}
 
 
+def reconcile_statement_lines(account_last4: str, statement: str,
+                              lines: list[dict], create_missing: bool = True,
+                              db_path: str | Path | None = None) -> dict:
+    """Reconcile actual STATEMENT lines against the email-derived books,
+    creating ledger entries for anything extraction missed (Kerry
+    2026-07-28: "feed things to you and you reconcile … create ledger
+    entries where we don't have something. Full coverage of bookkeeping").
+
+    lines: [{date: 'YYYY-MM-DD', desc: str, amount: float,
+             kind: 'purchase'|'payment'|'credit'}]
+      purchase → outflow (card charge / bank debit)
+      payment  → transfer (card payment from checking — not P&L expense)
+      credit   → refund to the account
+
+    Matching per line, in order: (1) an expense_transactions row with the
+    same amount (±$0.01) within ±7 days; (2) an acct_transactions row with
+    the same amount in the same window. Unmatched lines (when
+    create_missing) become expense_transactions rows keyed by a synthetic
+    email_uid 'stmt-<last4>-<date>-<cents>' — save_expense_transaction's
+    upsert makes re-feeding the same statement idempotent — promoted to
+    the ledger immediately. Every created row carries the statement label
+    in raw_extract so its provenance is auditable.
+    """
+    out = {"account": account_last4, "statement": statement,
+           "matched": [], "created": [], "skipped": [], "errors": 0}
+    for ln in lines:
+        try:
+            date = str(ln.get("date") or "")[:10]
+            amt = round(abs(float(ln.get("amount") or 0)), 2)
+            desc = (ln.get("desc") or "").strip()
+            kind = (ln.get("kind") or "purchase").lower()
+            if not date or amt <= 0 or not desc:
+                out["skipped"].append({"line": ln, "why": "incomplete"})
+                continue
+            with _connect(db_path) as conn:
+                exp = conn.execute(
+                    """SELECT id, merchant, amount, transaction_date,
+                              acct_transaction_id
+                       FROM expense_transactions
+                       WHERE ABS(amount - ?) <= 0.01
+                         AND transaction_date BETWEEN date(?, '-7 day')
+                                                  AND date(?, '+7 day')
+                       ORDER BY ABS(julianday(transaction_date) - julianday(?))
+                       LIMIT 1""", (amt, date, date, date)).fetchone()
+                if exp:
+                    out["matched"].append({
+                        "line": f"{date} {desc} ${amt:.2f}",
+                        "via": "expense", "expense_id": exp["id"],
+                        "books_merchant": exp["merchant"]})
+                    continue
+                acct = conn.execute(
+                    """SELECT id, description, COALESCE(amount, total_amount) AS amt
+                       FROM acct_transactions
+                       WHERE ABS(COALESCE(amount, total_amount) - ?) <= 0.01
+                         AND date BETWEEN date(?, '-7 day') AND date(?, '+7 day')
+                         AND COALESCE(status, 'active') NOT IN ('reversed', 'merged')
+                       LIMIT 1""", (amt, date, date)).fetchone()
+                if acct:
+                    out["matched"].append({
+                        "line": f"{date} {desc} ${amt:.2f}",
+                        "via": "ledger", "acct_id": acct["id"],
+                        "books_desc": acct["description"]})
+                    continue
+            if not create_missing:
+                out["skipped"].append({"line": f"{date} {desc} ${amt:.2f}",
+                                       "why": "no match (create_missing off)"})
+                continue
+            uid = f"stmt-{account_last4}-{date}-{int(round(amt * 100))}"
+            saved = save_expense_transaction({
+                "email_uid": uid, "source_type": "statement",
+                "merchant": desc[:80], "amount": amt,
+                "transaction_date": date,
+                "transaction_type": "transfer" if kind == "payment" else "expense",
+                "account_last4": account_last4,
+                "entity": "TGF", "confidence": 100,
+                "review_status": "approved",
+                "notes": f"from statement {statement}",
+                "raw_extract": json.dumps({
+                    "source": "statement-reconcile", "statement": statement,
+                    "account_last4": account_last4, "line": ln}),
+            }, db_path=db_path)
+            with _connect(db_path) as conn:
+                acct_id = saved.get("acct_transaction_id")
+                if not acct_id:
+                    acct_id = _sync_expense_ledger_entry(conn, saved)
+                    if acct_id:
+                        conn.execute(
+                            "UPDATE expense_transactions SET acct_transaction_id = ? WHERE id = ?",
+                            (acct_id, saved["id"]))
+                    conn.commit()
+            out["created"].append({
+                "line": f"{date} {desc} ${amt:.2f}", "kind": kind,
+                "expense_id": saved.get("id"), "acct_id": acct_id})
+        except Exception:
+            logger.exception("statement reconcile failed for line %s", ln)
+            out["errors"] += 1
+    out["summary"] = {
+        "lines": len(lines), "matched": len(out["matched"]),
+        "created": len(out["created"]), "skipped": len(out["skipped"]),
+        "created_total": round(sum(float(str(c["line"]).rsplit("$", 1)[1])
+                                   for c in out["created"]), 2)
+        if out["created"] else 0.0,
+    }
+    return out
+
+
 def get_monthly_money_flow(month: str, debug: bool = False,
                            chapter: str | None = None, ytd: bool = False,
                            db_path: str | Path | None = None) -> dict:
