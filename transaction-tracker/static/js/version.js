@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.149.17";
+window.TGF_VERSION = "2.149.18";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.149.18",
+    date: "2026-07-28",
+    changes: [
+      "patch_acct_row merge validation accepts 'reconciled' survivors: the bank matcher stamps statement-fed ledger rows reconciled once their Frost CSV debit matches, and the cash-truth winnings resolution (Kerry-ratified option A) merges payouts-console rows into exactly those rows — the active-only check bounced 28 of the first 99 merges.",
+    ],
+  },
   {
     version: "2.149.17",
     date: "2026-07-28",

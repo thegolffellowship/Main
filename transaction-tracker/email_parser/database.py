@@ -32371,13 +32371,18 @@ def patch_acct_row(acct_id: int, fields: dict,
             if new_status == "merged":
                 if not merged_into:
                     return {"error": "status=merged requires merged_into_id"}
+                # Survivor may be 'reconciled' too (v2.149.18): the bank
+                # matcher stamps statement-fed rows reconciled once their
+                # Frost CSV debit is matched — those are the truest rows in
+                # the ledger and the natural merge survivors. Only merged/
+                # reversed rows are refused.
                 surv = conn.execute(
                     "SELECT id FROM acct_transactions WHERE id = ? "
-                    "AND COALESCE(status, 'active') = 'active'",
+                    "AND COALESCE(status, 'active') IN ('active', 'reconciled')",
                     (int(merged_into),)).fetchone()
                 if not surv:
                     return {"error": f"merged_into_id {merged_into} is not "
-                                     "an active acct row"}
+                                     "an active/reconciled acct row"}
                 conn.execute(
                     "UPDATE acct_transactions SET status = 'merged', "
                     "merged_into_id = ? WHERE id = ?",
