@@ -2436,9 +2436,14 @@ def _migrate_dedup_expense_transactions(conn: sqlite3.Connection) -> None:
     (source_type, merchant, amount, transaction_date) group.
     Idempotent — safe to run on every startup.
     """
+    # Statement-sourced rows are EXCLUDED (v2.149.12): identical twins on
+    # one statement are two real charges (two $10 Vaaler Creek swipes, two
+    # $33.22 Vercel bills on one day) with deterministic ordinal uids —
+    # this migration was silently eating one twin on every deploy.
     dupes = conn.execute(
         """SELECT MIN(id) as drop_id
            FROM expense_transactions
+           WHERE COALESCE(source_type, '') != 'statement'
            GROUP BY source_type,
                     LOWER(COALESCE(merchant, '')),
                     amount,
@@ -2454,6 +2459,56 @@ def _migrate_dedup_expense_transactions(conn: sqlite3.Connection) -> None:
     )
     conn.commit()
     logger.info("Removed %d duplicate expense_transactions rows", len(drop_ids))
+
+
+def _heal_orphaned_statement_promotions(conn: sqlite3.Connection) -> int:
+    """Rebuild statement expense rows whose promoted acct_transactions row
+    survived but whose expense row was deleted (the pre-v2.149.12 dedup
+    migration ate one of every identical statement twin on each boot).
+    The acct row carries the original expense id in source_ref
+    ('exp-promoted-N'), plus description/amount/date and split FKs — enough
+    to reconstruct the row under its ORIGINAL id. Idempotent."""
+    orphans = conn.execute(
+        """SELECT a.id AS acct_id, a.source_ref, a.description, a.date,
+                  COALESCE(a.amount, a.total_amount) AS amt, a.account_id,
+                  a.notes,
+                  (SELECT c.name FROM acct_splits s
+                     LEFT JOIN acct_categories c ON c.id = s.category_id
+                    WHERE s.transaction_id = a.id LIMIT 1) AS category_name,
+                  (SELECT en.short_name FROM acct_splits s
+                     LEFT JOIN acct_entities en ON en.id = s.entity_id
+                    WHERE s.transaction_id = a.id LIMIT 1) AS entity_name
+           FROM acct_transactions a
+           WHERE a.source = 'statement'
+             AND a.source_ref LIKE 'exp-promoted-%'
+             AND CAST(SUBSTR(a.source_ref, 14) AS INTEGER) NOT IN
+                 (SELECT id FROM expense_transactions)"""
+    ).fetchall()
+    healed = 0
+    for o in orphans:
+        try:
+            exp_id = int(str(o["source_ref"])[13:])
+        except (TypeError, ValueError):
+            continue
+        # Reconstruct a deterministic statement uid; the surviving twin
+        # holds the ordinal-suffixed variant, so probe for a free one.
+        base_uid = f"stmt-heal-{exp_id}"
+        conn.execute(
+            """INSERT OR IGNORE INTO expense_transactions
+               (id, email_uid, source_type, merchant, amount,
+                transaction_date, transaction_type, category, entity,
+                account_id, confidence, review_status, notes,
+                acct_transaction_id)
+               VALUES (?, ?, 'statement', ?, ?, ?, 'expense', ?, ?, ?, 100,
+                       'approved', ?, ?)""",
+            (exp_id, base_uid, o["description"], o["amt"], o["date"],
+             o["category_name"], o["entity_name"] or "TGF", o["account_id"],
+             "rebuilt from orphaned ledger row (pre-v2.149.12 dedup ate the "
+             "statement twin)", o["acct_id"]))
+        healed += 1
+    if healed:
+        conn.commit()
+    return healed
 
 
 def _migrate_wire_payouts_to_ledger(conn: sqlite3.Connection) -> None:
@@ -3927,6 +3982,15 @@ def init_db(db_path: str | Path | None = None) -> None:
             _migrate_dedup_expense_transactions(conn)
         except Exception as e:
             logger.warning("Expense transaction dedup migration failed: %s", e)
+
+        # Rebuild statement expense rows the old dedup migration deleted
+        # (v2.149.12) — their promoted ledger rows survived as orphans.
+        try:
+            _oh = _heal_orphaned_statement_promotions(conn)
+            if _oh:
+                logger.info("Orphaned-statement heal: rebuilt %d expense row(s)", _oh)
+        except Exception as e:
+            logger.warning("Orphaned-statement heal failed: %s", e)
 
         # Add member_plus to customers.current_player_status CHECK constraint
         try:

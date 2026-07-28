@@ -100,10 +100,14 @@ PayPal debits matched $9.00 Venmo refunds; (2) `source_type='statement'` candida
 match on the EXACT date (statement dates are authoritative, so twins
 days apart can't cross-match); (3) candidates sharing no ≥3-char
 name token with the statement line only match within ±2 days.
-Candidates are scanned nearest-date-first (LIMIT 8). Same-run
+Candidates are scanned nearest-date-first. Same-run
 created/matched rows stay excluded, and repeated (date, amount)
 lines get ordinal-suffixed uids (v2.149.1–2). Statement saves bypass
-the email re-key guard entirely (v2.149.4).
+the email re-key guard entirely (v2.149.4), and the boot-time expense
+dedup migration skips statement-sourced rows (v2.149.12 — identical
+statement twins are real charges; the migration used to eat one twin
+per deploy, and `_heal_orphaned_statement_promotions` rebuilds any
+row it deleted from the surviving ledger row).
 
 ## Approval → Ledger Promotion
 `_sync_expense_ledger_entry(conn, exp)` — called by `update_expense_transaction()` whenever

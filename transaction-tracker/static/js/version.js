@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.149.11";
+window.TGF_VERSION = "2.149.12";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.149.12",
+    date: "2026-07-28",
+    changes: [
+      "The boot-time expense dedup migration no longer touches statement-sourced rows: identical twins on one statement are two REAL charges (two $10 Vaaler Creek swipes, two same-day $33.22 Vercel bills) with deterministic ordinal uids, and the migration was silently deleting one twin on every deploy — discovered when a Vaaler Creek row Kerry asked about had vanished. A new idempotent boot heal rebuilds any statement expense row whose promoted ledger row survived as an orphan (the ledger side was never lost, so account totals were unaffected), restoring it under its original id with category/entity/account FKs recovered from the ledger split.",
+    ],
+  },
   {
     version: "2.149.11",
     date: "2026-07-28",
