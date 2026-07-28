@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.149.13";
+window.TGF_VERSION = "2.149.14";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.149.14",
+    date: "2026-07-28",
+    changes: [
+      "patch_expense_row's review_status validation now accepts 'ignored' — the schema's actual dismissal state — instead of 'rejected', which the table's CHECK constraint would have refused; first use is dismissing the $27,060 Arlington Golf receipt (Joe Warring's money, not TGF's ledger, per Kerry's ruling).",
+      "patch_acct_row can resolve duplicate ledger rows: status 'merged' + merged_into_id soft-deletes a row exactly like Duplicate Detective (aggregates already exclude merged rows), status 'active' reverses. Needed because the February/March Venmo statements exposed inbound member payments booked twice — once by the app's external-payment recorder and again by the Venmo import's venmo-<id> row.",
+    ],
+  },
   {
     version: "2.149.13",
     date: "2026-07-28",

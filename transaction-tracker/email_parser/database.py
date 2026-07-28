@@ -32230,7 +32230,10 @@ def patch_expense_row(expense_id: int, fields: dict,
                "merchant", "entity", "email_uid", "account_id",
                "review_status"}
     if "review_status" in fields and fields["review_status"] not in (
-            "pending", "approved", "corrected", "rejected"):
+            "pending", "approved", "corrected", "ignored"):
+        # 'ignored' is the schema's dismissal state (CHECK constraint on
+        # expense_transactions.review_status) — v2.149.13 shipped with
+        # 'rejected' here, which the table itself would refuse.
         return {"error": f"invalid review_status {fields['review_status']!r}"}
     with _connect(db_path) as conn:
         row = conn.execute("SELECT * FROM expense_transactions WHERE id = ?",
@@ -32274,9 +32277,10 @@ def patch_acct_row(acct_id: int, fields: dict,
     apply-side of Kerry's statement rulings for rows with NO backing
     expense row (e.g. the old card-import rows). Allowed fields: entity
     (name, auto-registered like _sync_expense_ledger_entry), category
-    (acct_categories name), event (events.item_name), append_note.
-    Entity/category/event land on the row's acct_splits (created if the
-    row has none)."""
+    (acct_categories name), event (events.item_name), append_note, and
+    status ('merged' + merged_into_id for duplicate resolution, 'active'
+    to reverse). Entity/category/event land on the row's acct_splits
+    (created if the row has none)."""
     with _connect(db_path) as conn:
         row = conn.execute("SELECT * FROM acct_transactions WHERE id = ?",
                            (acct_id,)).fetchone()
@@ -32354,6 +32358,35 @@ def patch_acct_row(acct_id: int, fields: dict,
                 "UPDATE acct_transactions SET notes = COALESCE(notes || ' · ', '') || ? "
                 "WHERE id = ?", (str(fields["append_note"]), acct_id))
             applied.append("note")
+        # Dedup resolution (v2.149.14): the Venmo statements exposed inbound
+        # payments booked twice (app-recorded external payment + the Venmo
+        # import's venmo-<id> row). Same soft-delete as Duplicate Detective:
+        # loser -> status='merged' + merged_into_id, aggregates exclude it.
+        if fields.get("status"):
+            new_status = str(fields["status"]).strip().lower()
+            if new_status not in ("active", "merged"):
+                return {"error": f"invalid status {new_status!r} "
+                                 "(active|merged only)"}
+            merged_into = fields.get("merged_into_id")
+            if new_status == "merged":
+                if not merged_into:
+                    return {"error": "status=merged requires merged_into_id"}
+                surv = conn.execute(
+                    "SELECT id FROM acct_transactions WHERE id = ? "
+                    "AND COALESCE(status, 'active') = 'active'",
+                    (int(merged_into),)).fetchone()
+                if not surv:
+                    return {"error": f"merged_into_id {merged_into} is not "
+                                     "an active acct row"}
+                conn.execute(
+                    "UPDATE acct_transactions SET status = 'merged', "
+                    "merged_into_id = ? WHERE id = ?",
+                    (int(merged_into), acct_id))
+            else:
+                conn.execute(
+                    "UPDATE acct_transactions SET status = 'active', "
+                    "merged_into_id = NULL WHERE id = ?", (acct_id,))
+            applied.append(f"status:{new_status}")
         conn.commit()
         return {"acct_id": acct_id, "applied": applied,
                 "entity_id": entity_id, "category_id": category_id,

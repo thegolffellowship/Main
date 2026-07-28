@@ -109,6 +109,32 @@ statement twins are real charges; the migration used to eat one twin
 per deploy, and `_heal_orphaned_statement_promotions` rebuilds any
 row it deleted from the surviving ledger row).
 
+**Patch bridges (v2.149.8–14):** `scoring-expense-patch` →
+`patch_expense_row(id, fields)` — allowed fields category /
+transaction_type / event_name / customer_id / merchant / entity /
+email_uid / account_id / review_status (validated to
+pending/approved/corrected/**ignored** — 'ignored' is the schema's
+dismissal state; v2.149.13 briefly said 'rejected', which the CHECK
+constraint would refuse) + append_note; promotes to the ledger only when
+approved/corrected or already promoted. `scoring-acct-patch` →
+`patch_acct_row(id, fields)` — entity/category (auto-registered) /
+event / append_note applied to the row's splits, plus **status 'merged'
++ merged_into_id** (soft-delete, same convention as Duplicate Detective)
+/ 'active' to reverse — added when the Feb/Mar Venmo statements exposed
+inbound payments booked twice (app external-payment row + Venmo-import
+`venmo-<id>` row).
+
+**Venmo statements are NOT fed through `reconcile_statement_lines`**
+(2026-07-28 finding): winnings paid by Venmo already live in the ledger
+as per-game `payout-N` rows (event-dated, different granularity than the
+statement's one-combined-payment-per-player), and the checking feed
+already booked every Frost-funded Venmo debit. Feeding the Venmo CSV
+through the engine would double/triple-book. Venmo statements are
+reconciled by targeted patches instead: checking "VENMO PAYMENT" Prizes
+rows that duplicate payout/refund ledger rows become transfer funding
+legs; inbound doubles are merged; only genuinely missing flows (e.g.
+Venmo-balance-funded payouts that never touched checking) get booked.
+
 ## Approval → Ledger Promotion
 `_sync_expense_ledger_entry(conn, exp)` — called by `update_expense_transaction()` whenever
 an expense is set to `review_status IN ('approved', 'corrected')`.
