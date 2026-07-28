@@ -52,10 +52,18 @@
       font: inherit; padding: 8px 16px; border: 0; border-radius: 999px;
       background: #E87C3E; color: #fff; font-weight: 600; cursor: pointer;
     }
+    /* Installed-PWA escape hatch (Kerry 2026-07-28): the sheet opens
+       same-tab with no browser chrome, so without this there is no way
+       back on mobile. Hidden in print via .noprint on the toolbar. */
+    .toolbar button.back {
+      background: #fff; color: #1B1B1B; border: 2px solid #1B1B1B;
+      margin-right: 8px; padding: 6px 14px;
+    }
   </style>
 </head>
 <body>
   <div class="toolbar noprint">
+    <button class="back" onclick="if (history.length > 1) { history.back(); } else { location.href = '/events'; }">&#8592; Back</button>
     <button onclick="window.print()">Print Starter Sheet</button>
   </div>
   <div class="sheet-head">

@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.149.16";
+window.TGF_VERSION = "2.149.17";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.149.17",
+    date: "2026-07-28",
+    changes: [
+      "Starter Sheet and Cart Signs get a ← Back button (Kerry's live catch: in the installed PWA these print sheets open same-tab with no browser chrome, so on mobile there was no way to exit). The button goes history-back when there is history, else lands on /events; it is hidden in the printed output like the rest of the toolbar.",
+    ],
+  },
   {
     version: "2.149.16",
     date: "2026-07-28",

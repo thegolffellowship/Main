@@ -54,6 +54,8 @@
 </head>
 <body>
   <div class="toolbar noprint">
+    <button style="font:inherit;padding:6px 14px;border:2px solid #1B1B1B;border-radius:999px;background:#fff;color:#1B1B1B;font-weight:600;cursor:pointer;margin-right:8px;"
+            onclick="if (history.length > 1) { history.back(); } else { location.href = '/events'; }">&#8592; Back</button>
     <button onclick="window.print()">Print Cart Signs</button>
     <span style="color:#666;font-size:13px;margin-left:10px;">One card per cart · fold and place on the cart.</span>
   </div>
