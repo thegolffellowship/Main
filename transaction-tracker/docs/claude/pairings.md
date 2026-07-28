@@ -407,6 +407,12 @@ never more than three 3-somes within a 9-hole or 18-hole grouping —
 [4, …, 3, 3, 3]). Rules-as-data: `smalls_lead: true` in
 `PAIRING_STAGING_DEFAULTS` / `pairing_staging_rules` (set false to
 restore pure pace ordering).
+**Pace-tie tiebreak (Kerry 2026-07-28, v2.149.15): groups tied on
+pace average order by LOWER TOTAL handicap index first** — the better
+foursome goes out ahead (applies within each size class, both start
+types; a player with no stored index counts 20.0 so unknowns never
+jump the queue). Rules-as-data: `pace_tie_break: "low_total_hcp"`
+(set `"none"` to disable).
 Seeded groups stay where the manager put them (rule 5). Composition
 is NEVER affected — proven by test_pace_staging.py (46 checks). The
 rule is data: `PAIRING_STAGING_DEFAULTS` overridable via the

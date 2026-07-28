@@ -43190,11 +43190,16 @@ PAIRING_STAGING_DEFAULTS = {
     # hole's A slot, then its B slot, then the A slot one hole back
     # (4A → 4B → 3A). Pace orders within each size class.
     "smalls_lead": True,
+    # Kerry 2026-07-28: when two groups TIE on pace average, the one
+    # with the LOWER TOTAL handicap index goes first (better players
+    # play faster than their pace rating implies). Set to "none" to
+    # fall back to pure pace + size ordering.
+    "pace_tie_break": "low_total_hcp",
 }
 
 
 def _stage_shotgun_smalls_lead(groups: list, slots: list,
-                               pace_fn) -> list:
+                               pace_fn, hcp_fn=lambda g: 0.0) -> list:
     """Order settled groups over the filled shotgun slots per Kerry's
     2026-07-21 rulings. TRUE play order front-to-back is (hole DESC,
     A before B) — on a shared hole the A group tees off AHEAD of the
@@ -43216,10 +43221,12 @@ def _stage_shotgun_smalls_lead(groups: list, slots: list,
             return (-int(m.group(1)), 0 if m.group(2) == "A" else 1)
         return (-i, 0)
 
+    # Pace ties break to the LOWER total handicap (Kerry 2026-07-28):
+    # among equal-pace groups the better foursome tees off first.
     smalls = sorted((g for g in groups if len(g) < 4),
-                    key=lambda g: (-pace_fn(g), len(g)))
+                    key=lambda g: (-pace_fn(g), len(g), hcp_fn(g)))
     fours = sorted((g for g in groups if len(g) >= 4),
-                   key=lambda g: -pace_fn(g))
+                   key=lambda g: (-pace_fn(g), hcp_fn(g)))
     pref = sorted(range(n), key=slot_rank)
     out: list = [None] * n
     for g, i in zip(smalls + fours, pref):
@@ -43805,6 +43812,20 @@ def generate_event_pairings(
                     for n in names if n]
             return (sum(vals) / len(vals)) if vals else float(default_r)
 
+        # Pace-tie tiebreak (Kerry 2026-07-28): equal-pace groups order by
+        # LOWER TOTAL handicap index first — the better foursome goes out
+        # ahead. A player with no stored index counts 20.0 so an unknown
+        # never jumps a known-good group to the front.
+        _tie_break = staging_rules.get("pace_tie_break", "low_total_hcp")
+
+        def _group_hcp(names: list[str]) -> float:
+            if _tie_break != "low_total_hcp":
+                return 0.0
+            return sum(
+                (hcp_map.get((n or "").lower()) if
+                 hcp_map.get((n or "").lower()) is not None else 20.0)
+                for n in names if n)
+
         staging_applied = bool(staging_rules.get("enabled", True)
                                and groups_players)
         if staging_applied:
@@ -43815,13 +43836,15 @@ def generate_event_pairings(
                 # hole back (Kerry 2026-07-21 clarification). Foursomes
                 # fill the rest slowest-first.
                 groups_players = _stage_shotgun_smalls_lead(
-                    groups_players, slots, _group_pace)
+                    groups_players, slots, _group_pace, _group_hcp)
             elif smalls_lead:
                 # Tee times: short groups take the EARLIEST times
                 # (Kerry 2026-07-21 clarification); fastest first
-                # within each size class, smaller first on pace ties.
+                # within each size class, smaller first on pace ties,
+                # then lower total handicap (Kerry 2026-07-28).
                 groups_players.sort(
-                    key=lambda g: (len(g) >= 4, -_group_pace(g), len(g)))
+                    key=lambda g: (len(g) >= 4, -_group_pace(g), len(g),
+                                   _group_hcp(g)))
             else:
                 groups_players.sort(key=lambda g: (-_group_pace(g), len(g)),
                                     reverse=bool(is_shotgun))

@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.149.14";
+window.TGF_VERSION = "2.149.15";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.149.15",
+    date: "2026-07-28",
+    changes: [
+      "Pairings staging: when two groups tie on pace-of-play average, the group with the LOWER total handicap index now goes first (Kerry's ruling from the live Events staging view — better players play faster than their pace rating implies). Applies within each size class on both tee-time and shotgun staging; players with no stored index count 20.0 so an unknown never jumps a known group. Rules-as-data: pace_tie_break in pairing_staging_rules ('none' disables).",
+    ],
+  },
   {
     version: "2.149.14",
     date: "2026-07-28",
