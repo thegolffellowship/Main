@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.149.4";
+window.TGF_VERSION = "2.149.5";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.149.5",
+    date: "2026-07-28",
+    changes: [
+      "Statement-match guards (two false matches caught by the June Sapphire tie-out): (1) P2P payout rows (Venmo/PayPal/CashApp/Zelle) are never match candidates — a member payout can't be the books entry for a card purchase, yet a FACEBK $75 ad charge matched a $75 Venmo payout to a member and mis-patched his row's category/account; (2) statement-sourced rows must match on the EXACT date (their dates are authoritative), stopping a 5/30 $4.00 from matching a different course's 6/6 $4.00; (3) candidates sharing no name token with the statement line only match within ±2 days. Both the expense-match and ledger-fallback paths carry all three guards (the ledger path joins promoted rows back to their expense row for the payout check), candidates are scanned nearest-date-first, and account_id joined the patchable fields for the live repair of the mis-patched payout row.",
+    ],
+  },
   {
     version: "2.149.4",
     date: "2026-07-28",

@@ -32091,7 +32091,7 @@ def patch_expense_row(expense_id: int, fields: dict,
     and split FKs update — the apply-side of Kerry's statement rulings
     (recategorize, link event, fix type). append_note adds to notes."""
     allowed = {"category", "transaction_type", "event_name", "customer_id",
-               "merchant", "entity", "email_uid"}
+               "merchant", "entity", "email_uid", "account_id"}
     with _connect(db_path) as conn:
         row = conn.execute("SELECT * FROM expense_transactions WHERE id = ?",
                            (expense_id,)).fetchone()
@@ -32275,15 +32275,43 @@ def reconcile_statement_lines(account_last4: str, statement: str,
                 if ln.get("customer"):
                     feed_cust_id = _lookup_customer_id(
                         conn, str(ln["customer"]).strip(), None)
+                # Match guards (v2.149.5 — two false matches caught by the
+                # June 6159 tie-out): P2P payout rows never appear on card/
+                # bank statements (a FACEBK $75 wrongly matched a $75 Venmo
+                # payout to a member); statement-source rows carry EXACT
+                # dates so twins days apart can't cross-match (a 5/30 $4
+                # matched a 6/6 $4); and zero-name-overlap candidates only
+                # match within ±2 days.
                 _excl = ",".join(str(i) for i in run_created_ids) or "0"
-                exp = conn.execute(
+                _tokens = {t for t in re.split(r"[^A-Z0-9]+", desc.upper())
+                           if len(t) >= 3}
+                cands = conn.execute(
                     f"""SELECT * FROM expense_transactions
                        WHERE ABS(amount - ?) <= 0.01
                          AND transaction_date BETWEEN date(?, '-7 day')
                                                   AND date(?, '+7 day')
                          AND id NOT IN ({_excl})
+                         AND NOT (transaction_type = 'payout' AND source_type
+                                  IN ('venmo', 'paypal', 'cashapp', 'zelle'))
                        ORDER BY ABS(julianday(transaction_date) - julianday(?))
-                       LIMIT 1""", (amt, date, date, date)).fetchone()
+                       LIMIT 8""", (amt, date, date, date)).fetchall()
+                exp = None
+                for c in cands:
+                    c = dict(c)
+                    daydiff = abs((__import__("datetime").date.fromisoformat(date)
+                                   - __import__("datetime").date.fromisoformat(
+                                       str(c["transaction_date"])[:10])).days) \
+                        if re.match(r"^\d{4}-\d{2}-\d{2}",
+                                    str(c["transaction_date"] or "")) else 99
+                    if c.get("source_type") == "statement" and daydiff != 0:
+                        continue
+                    _ctokens = {t for t in re.split(
+                        r"[^A-Z0-9]+", (c.get("merchant") or "").upper())
+                        if len(t) >= 3}
+                    if not (_tokens & _ctokens) and daydiff > 2:
+                        continue
+                    exp = c
+                    break
                 if exp:
                     exp = dict(exp)
                     run_created_ids.add(exp["id"])  # twins can't share a match
@@ -32316,15 +32344,48 @@ def reconcile_statement_lines(account_last4: str, statement: str,
                         "books_merchant": exp["merchant"],
                         "patched": sorted(patch.keys()) or None})
                     continue
+                # Same guards on the ledger fallback (v2.149.5): promoted
+                # P2P payouts are invisible on card/bank statements,
+                # statement-sourced rows must match on the exact date, and
+                # zero-name-overlap rows only match within ±2 days.
                 _aexcl = ",".join(str(i) for i in run_acct_ids) or "0"
-                acct = conn.execute(
-                    f"""SELECT id, description, COALESCE(amount, total_amount) AS amt
-                       FROM acct_transactions
-                       WHERE ABS(COALESCE(amount, total_amount) - ?) <= 0.01
-                         AND date BETWEEN date(?, '-7 day') AND date(?, '+7 day')
-                         AND COALESCE(status, 'active') NOT IN ('reversed', 'merged')
-                         AND id NOT IN ({_aexcl})
-                       LIMIT 1""", (amt, date, date)).fetchone()
+                acands = conn.execute(
+                    f"""SELECT a.id, a.description, a.date, a.source,
+                              a.source_ref,
+                              COALESCE(a.amount, a.total_amount) AS amt,
+                              e.transaction_type AS exp_txn_type
+                       FROM acct_transactions a
+                       LEFT JOIN expense_transactions e
+                         ON a.source_ref = 'exp-promoted-' || e.id
+                       WHERE ABS(COALESCE(a.amount, a.total_amount) - ?) <= 0.01
+                         AND a.date BETWEEN date(?, '-7 day') AND date(?, '+7 day')
+                         AND COALESCE(a.status, 'active') NOT IN ('reversed', 'merged')
+                         AND a.id NOT IN ({_aexcl})
+                       ORDER BY ABS(julianday(a.date) - julianday(?))
+                       LIMIT 8""", (amt, date, date, date)).fetchall()
+                acct = None
+                for c in acands:
+                    c = dict(c)
+                    if (c.get("exp_txn_type") == "payout"
+                            and str(c.get("source") or "").lower()
+                            in ("venmo", "paypal", "cashapp", "zelle")):
+                        continue
+                    _adaydiff = abs(
+                        (__import__("datetime").date.fromisoformat(date)
+                         - __import__("datetime").date.fromisoformat(
+                             str(c["date"])[:10])).days) \
+                        if re.match(r"^\d{4}-\d{2}-\d{2}",
+                                    str(c["date"] or "")) else 99
+                    if (str(c.get("source") or "").lower() == "statement"
+                            and _adaydiff != 0):
+                        continue
+                    _actokens = {t for t in re.split(
+                        r"[^A-Z0-9]+", (c.get("description") or "").upper())
+                        if len(t) >= 3}
+                    if not (_tokens & _actokens) and _adaydiff > 2:
+                        continue
+                    acct = c
+                    break
                 if acct:
                     run_acct_ids.add(acct["id"])
                     out["matched"].append({
