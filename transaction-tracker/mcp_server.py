@@ -1794,6 +1794,13 @@ def _scoring_dispatch(url: str, extract: str):
             _p = json.loads(arg)
             return json.dumps(db.patch_expense_row(
                 int(_p["id"]), _p.get("fields") or {}), indent=2, default=str)
+        if cmd == "scoring-acct-patch":
+            # JSON: {"id": <acct_transaction_id>, "fields": {entity,
+            #   category, event, append_note}} — connectivity patch for
+            # ledger rows with no backing expense row (old imports).
+            _p = json.loads(arg)
+            return json.dumps(db.patch_acct_row(
+                int(_p["id"]), _p.get("fields") or {}), indent=2, default=str)
         if cmd == "scoring-statement-reconcile":
             # JSON payload: {"account": "7680", "statement": "chase 2026-01",
             #   "create_missing": true, "lines": [{date, desc, amount, kind}]}

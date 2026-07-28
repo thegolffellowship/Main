@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.149.7";
+window.TGF_VERSION = "2.149.8";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.149.8",
+    date: "2026-07-28",
+    changes: [
+      "Statement-match account consistency: a purchase/credit line only matches books rows of the SAME account (payments still cross accounts by design — they pair with the other side of the transfer). Caught live: a $31.61 Chipotle on the personal Sapphire consumed the business 7680's $31.61 Chipotle books row from the old card import, leaving the Sapphire charge unbooked.",
+      "New patch_acct_row + bridge cmd scoring-acct-patch: connectivity patches (entity, category, event, append_note) for acct_transactions rows with NO backing expense row — the old card-import rows matched by statement feeds get their entity/category/event FKs set on their acct_splits (created if absent). Built for the Two Man Tour re-tag of the March DFW contractor-trip rows.",
+    ],
+  },
   {
     version: "2.149.7",
     date: "2026-07-28",

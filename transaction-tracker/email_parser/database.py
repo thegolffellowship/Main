@@ -32122,6 +32122,87 @@ def patch_expense_row(expense_id: int, fields: dict,
                     (expense_id,)).fetchone())}
 
 
+def patch_acct_row(acct_id: int, fields: dict,
+                   db_path: str | Path | None = None) -> dict:
+    """Controlled patch of an acct_transactions row's connectivity — the
+    apply-side of Kerry's statement rulings for rows with NO backing
+    expense row (e.g. the old card-import rows). Allowed fields: entity
+    (name, auto-registered like _sync_expense_ledger_entry), category
+    (acct_categories name), event (events.item_name), append_note.
+    Entity/category/event land on the row's acct_splits (created if the
+    row has none)."""
+    with _connect(db_path) as conn:
+        row = conn.execute("SELECT * FROM acct_transactions WHERE id = ?",
+                           (acct_id,)).fetchone()
+        if not row:
+            return {"error": f"acct transaction {acct_id} not found"}
+        row = dict(row)
+        entity_id = category_id = event_id = None
+        if fields.get("entity"):
+            name = str(fields["entity"]).strip()
+            r = conn.execute(
+                "SELECT id FROM acct_entities WHERE LOWER(short_name) = LOWER(?) "
+                "OR LOWER(name) = LOWER(?) LIMIT 1", (name, name)).fetchone()
+            if not r:
+                conn.execute(
+                    "INSERT OR IGNORE INTO acct_entities (name, short_name) VALUES (?, ?)",
+                    (name, name))
+                r = conn.execute(
+                    "SELECT id FROM acct_entities WHERE LOWER(name) = LOWER(?) LIMIT 1",
+                    (name,)).fetchone()
+            entity_id = r["id"] if r else None
+        if fields.get("category"):
+            r = conn.execute(
+                "SELECT id FROM acct_categories WHERE LOWER(name) = LOWER(?) LIMIT 1",
+                (str(fields["category"]).strip(),)).fetchone()
+            category_id = r["id"] if r else None
+        if fields.get("event"):
+            r = conn.execute(
+                "SELECT id FROM events WHERE LOWER(item_name) = LOWER(?) LIMIT 1",
+                (str(fields["event"]).strip(),)).fetchone()
+            event_id = r["id"] if r else None
+        splits = conn.execute(
+            "SELECT id FROM acct_splits WHERE transaction_id = ?",
+            (acct_id,)).fetchall()
+        applied = []
+        if splits:
+            sets, vals = [], []
+            if entity_id:
+                sets.append("entity_id = ?"); vals.append(entity_id)
+                applied.append("entity")
+            if category_id:
+                sets.append("category_id = ?"); vals.append(category_id)
+                applied.append("category")
+            if event_id:
+                sets.append("event_id = ?"); vals.append(event_id)
+                applied.append("event")
+            if sets:
+                conn.execute(
+                    f"UPDATE acct_splits SET {', '.join(sets)} WHERE transaction_id = ?",
+                    (*vals, acct_id))
+        elif entity_id or category_id or event_id:
+            if not entity_id:  # splits require an entity — default TGF
+                r = conn.execute(
+                    "SELECT id FROM acct_entities WHERE LOWER(short_name) = 'tgf' LIMIT 1"
+                ).fetchone()
+                entity_id = r["id"] if r else 1
+            conn.execute(
+                "INSERT INTO acct_splits (transaction_id, entity_id, category_id, "
+                "amount, memo, event_id) VALUES (?, ?, ?, ?, NULL, ?)",
+                (acct_id, entity_id, category_id,
+                 row.get("total_amount") or 0, event_id))
+            applied.append("split-created")
+        if fields.get("append_note"):
+            conn.execute(
+                "UPDATE acct_transactions SET notes = COALESCE(notes || ' · ', '') || ? "
+                "WHERE id = ?", (str(fields["append_note"]), acct_id))
+            applied.append("note")
+        conn.commit()
+        return {"acct_id": acct_id, "applied": applied,
+                "entity_id": entity_id, "category_id": category_id,
+                "event_id": event_id}
+
+
 def _resolve_statement_account(conn, last4: str, name: str | None = None,
                                account_type: str = "credit_card",
                                institution: str | None = None) -> int | None:
@@ -32307,6 +32388,18 @@ def reconcile_statement_lines(account_last4: str, statement: str,
                     c = dict(c)
                     if (c.get("transaction_type") or "expense") != _want_exp_type:
                         continue
+                    # Account consistency (v2.149.8 — a $31.61 Chipotle on
+                    # the personal Sapphire matched the SAME-day $31.61
+                    # Chipotle row belonging to the business 7680): a
+                    # purchase/credit on card A can never be a books row
+                    # of card B. Payments cross accounts by design.
+                    if kind != "payment":
+                        if (c.get("account_id") and account_id
+                                and c["account_id"] != account_id):
+                            continue
+                        if (c.get("account_last4") and account_last4
+                                and str(c["account_last4"]) != str(account_last4)):
+                            continue
                     daydiff = abs((__import__("datetime").date.fromisoformat(date)
                                    - __import__("datetime").date.fromisoformat(
                                        str(c["transaction_date"])[:10])).days) \
@@ -32360,7 +32453,7 @@ def reconcile_statement_lines(account_last4: str, statement: str,
                 _aexcl = ",".join(str(i) for i in run_acct_ids) or "0"
                 acands = conn.execute(
                     f"""SELECT a.id, a.description, a.date, a.source,
-                              a.source_ref, a.type,
+                              a.source_ref, a.type, a.account_id,
                               COALESCE(a.amount, a.total_amount) AS amt,
                               e.transaction_type AS exp_txn_type
                        FROM acct_transactions a
@@ -32378,6 +32471,9 @@ def reconcile_statement_lines(account_last4: str, statement: str,
                 for c in acands:
                     c = dict(c)
                     if (c.get("type") or "expense") != _want_acct_type:
+                        continue
+                    if (kind != "payment" and c.get("account_id")
+                            and account_id and c["account_id"] != account_id):
                         continue
                     if (c.get("exp_txn_type") == "payout"
                             and str(c.get("source") or "").lower()
