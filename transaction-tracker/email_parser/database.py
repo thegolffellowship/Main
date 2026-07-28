@@ -32481,14 +32481,22 @@ def reconcile_statement_lines(account_last4: str, statement: str,
                            "cashapp": "CASHAPP", "zelle": "ZELLE"}
                 _is_bank = (account_type or "credit_card") != "credit_card"
                 _desc_flat = re.sub(r"[^A-Z]", "", desc.upper())
+                # Rail consistency (v2.149.11 — an inbound Zelle from the
+                # contractor matched a member's same-amount VENMO receipt,
+                # and $9.00 Cash App/PayPal debits matched $9.00 VENMO
+                # refunds): a line naming one P2P rail never consumes a
+                # row sourced from a different rail.
+                _line_rail = next((r for r, kw in _p2p_kw.items()
+                                   if kw in _desc_flat), None)
                 exp = None
                 for c in cands:
                     c = dict(c)
                     _csrc = str(c.get("source_type") or "").lower()
+                    if _csrc in _p2p_kw and _csrc != _line_rail:
+                        continue
                     if (c.get("transaction_type") == "payout"
                             and _csrc in _p2p_kw):
-                        if (kind == "purchase" and _is_bank
-                                and _p2p_kw[_csrc] in _desc_flat):
+                        if kind == "purchase" and _is_bank:
                             exp = c
                             break
                         continue
@@ -32580,6 +32588,17 @@ def reconcile_statement_lines(account_last4: str, statement: str,
                         continue
                     if (kind != "payment" and c.get("account_id")
                             and account_id and c["account_id"] != account_id):
+                        continue
+                    # Rail consistency (v2.149.11): rows sourced from or
+                    # describing a P2P rail only match lines naming the
+                    # SAME rail.
+                    _adesc_flat = re.sub(r"[^A-Z]", "",
+                                         str(c.get("description") or "").upper())
+                    _crail = str(c.get("source") or "").lower()
+                    if _crail not in _p2p_kw:
+                        _crail = next((r for r, kw in _p2p_kw.items()
+                                       if kw in _adesc_flat), None)
+                    if _crail and _crail != _line_rail:
                         continue
                     if (c.get("exp_txn_type") == "payout"
                             and str(c.get("source") or "").lower()

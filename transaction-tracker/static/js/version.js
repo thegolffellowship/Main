@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.149.10";
+window.TGF_VERSION = "2.149.11";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.149.11",
+    date: "2026-07-28",
+    changes: [
+      "P2P rail consistency (three cross-rail false matches in the June checking tie-out): a statement line naming one P2P rail (Venmo/PayPal/Cash App/Zelle) never consumes a books row sourced from — or describing — a different rail, and P2P-sourced rows never match lines that name no rail at all. Caught live: an inbound Zelle from the website contractor matched a member's same-amount Venmo receipt (and took its category), and two same-day $9.00 Cash App/PayPal debits matched $9.00 Venmo refund rows. Both matching paths guarded; the ledger path reads the rail from the row's source or its description marker.",
+    ],
+  },
   {
     version: "2.149.10",
     date: "2026-07-28",
