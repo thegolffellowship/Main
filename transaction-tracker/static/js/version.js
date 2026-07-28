@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.145.0";
+window.TGF_VERSION = "2.146.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.146.0",
+    date: "2026-07-28",
+    changes: [
+      "Statement check on Money Flow (Kerry: 'with actual statements vs your own email extractions'): the report now proves the email-derived books against a source they didn't create — bank_deposits rows imported straight from Chase/Venmo statements, tied to ledger rows via the reconciliation match queue. TGF-overall views show what the statements say actually arrived, how much of the books' expected net is statement-matched (dollars and rows, with a % that colors green ≥85 / amber / red <60), and a one-tap link into the match queue for the remainder.",
+      "Timing honesty: deposits settle days after order dates and cash / Venmo-balance funds never hit a bank feed, so match coverage is presented as the true signal with the raw totals as context (stated on the page). debug=1 adds deposits_by_source.",
+      "Fixed the day-old Ledger check silently shrinking as reconciliation progresses: bank-matched ledger rows get status='reconciled', and the gross query's status='active' filter dropped them (same fix applied to the processor-fee and income-by-category queries).",
+    ],
+  },
   {
     version: "2.145.0",
     date: "2026-07-28",

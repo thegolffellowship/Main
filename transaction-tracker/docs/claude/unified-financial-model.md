@@ -316,6 +316,16 @@ expand on the course/prize/markup lines and a "TGF keeps X%" stat.
   received externally (the rest arrived as credits/direct-pay), so a
   modest positive waterfall-vs-ledger delta is structural, not lost
   money — drill with `debug=1` (`ledger_income_by_category`).
+- **Statement proof (v2.146.0):** TGF-overall views also compare against
+  ACTUAL imported statements (`bank_deposits` + `reconciliation_matches`
+  — independent of the email-derived books): deposits arrived in the
+  period, and how much of the books' expected net income is
+  statement-matched (`is_reconciled` / `status='reconciled'` / a match
+  row). Deposit settlement lags order dates and cash/Venmo-balance funds
+  never bank, so match coverage % is the signal. NOTE: ledger-side
+  status filters in this report must be `NOT IN ('reversed','merged')`
+  — never `= 'active'` — because bank matching stamps rows
+  `status='reconciled'`.
 
 ## Accounting categories (TGF-scoped, seeded by `_seed_unified_financial_categories`)
 - **Income:** "Credit Transfer In", "External Payment", "Event Revenue", "Membership Fees"

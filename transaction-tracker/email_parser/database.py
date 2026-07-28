@@ -32178,7 +32178,7 @@ def get_monthly_money_flow(month: str, debug: bool = False,
                FROM godaddy_order_splits s
                JOIN acct_transactions t ON t.id = s.transaction_id
                WHERE substr(t.date, 1, 7) BETWEEN ? AND ?
-                 AND COALESCE(t.status, 'active') = 'active'{ch_fee}""",
+                 AND COALESCE(t.status, 'active') NOT IN ('reversed', 'merged'){ch_fee}""",
             ([p_from, p_to] + ([chapter] if chapter else []))).fetchone()
         out["godaddy"] = z(fee["actual"])
         out["retained"] = round(max(0.0, z(fee["collected"]) - z(fee["actual"])), 2)
@@ -32223,13 +32223,15 @@ def get_monthly_money_flow(month: str, debug: bool = False,
         # ledger side would be guesswork.
         out["reconcile"] = None
         if not chapter:
+            # NOT IN (reversed, merged): bank-matched rows carry
+            # status='reconciled' and must stay in the gross.
             led = conn.execute(
                 """SELECT ROUND(SUM(COALESCE(t.amount, t.total_amount)
                                     + COALESCE(t.merchant_fee, 0)), 2) AS gross,
                           COUNT(*) AS n
                    FROM acct_transactions t
                    WHERE substr(t.date, 1, 7) BETWEEN ? AND ?
-                     AND COALESCE(t.status, 'active') = 'active'
+                     AND COALESCE(t.status, 'active') NOT IN ('reversed', 'merged')
                      AND COALESCE(t.entry_type, t.type) = 'income'
                      AND COALESCE(t.category, '') NOT IN ('transfer_in')""",
                 (p_from, p_to)).fetchone()
@@ -32249,11 +32251,72 @@ def get_monthly_money_flow(month: str, debug: bool = False,
                                         + COALESCE(t.merchant_fee, 0)), 2) AS gross
                        FROM acct_transactions t
                        WHERE substr(t.date, 1, 7) BETWEEN ? AND ?
-                         AND COALESCE(t.status, 'active') = 'active'
+                         AND COALESCE(t.status, 'active') NOT IN ('reversed', 'merged')
                          AND COALESCE(t.entry_type, t.type) = 'income'
                        GROUP BY t.category ORDER BY gross DESC""",
                     (p_from, p_to)).fetchall()]
                 out["debug"]["ledger_income_by_category"] = by_cat
+
+        # ── Statement proof (Kerry 2026-07-28: "actual statements vs your
+        # own email extractions"): bank_deposits rows are imported straight
+        # from Chase/Venmo statements — a source INDEPENDENT of the
+        # email-derived books — and reconciliation_matches ties them to
+        # ledger rows. Compare what the statements say arrived vs what the
+        # books expect to arrive NET (bank sees net of merchant fees), and
+        # how much of each side is match-verified. Timing caveat: deposits
+        # settle days after the order date, and cash / Venmo-balance funds
+        # never hit a bank feed — match coverage is the true signal, the
+        # raw totals are context.
+        out["statements"] = None
+        if not chapter:
+            dep = conn.execute(
+                """SELECT ROUND(COALESCE(SUM(CASE WHEN amount > 0 THEN amount END), 0), 2) AS deposits,
+                          ROUND(COALESCE(SUM(CASE WHEN amount > 0 AND status != 'unmatched'
+                                        THEN amount END), 0), 2) AS matched,
+                          SUM(CASE WHEN amount > 0 THEN 1 ELSE 0 END) AS n
+                   FROM bank_deposits
+                   WHERE substr(deposit_date, 1, 7) BETWEEN ? AND ?""",
+                (p_from, p_to)).fetchone()
+            books = conn.execute(
+                """SELECT ROUND(COALESCE(SUM(COALESCE(t.amount, t.total_amount)), 0), 2) AS net,
+                          ROUND(COALESCE(SUM(CASE WHEN t.is_reconciled = 1
+                                        OR COALESCE(t.status, '') = 'reconciled'
+                                        OR EXISTS (SELECT 1 FROM reconciliation_matches m
+                                                   WHERE m.acct_transaction_id = t.id)
+                                   THEN COALESCE(t.amount, t.total_amount) END), 0), 2) AS matched,
+                          COUNT(*) AS n,
+                          SUM(CASE WHEN t.is_reconciled = 1
+                                        OR COALESCE(t.status, '') = 'reconciled'
+                                        OR EXISTS (SELECT 1 FROM reconciliation_matches m
+                                                   WHERE m.acct_transaction_id = t.id)
+                              THEN 1 ELSE 0 END) AS n_matched
+                   FROM acct_transactions t
+                   WHERE substr(t.date, 1, 7) BETWEEN ? AND ?
+                     AND COALESCE(t.status, 'active') NOT IN ('reversed', 'merged')
+                     AND COALESCE(t.entry_type, t.type) = 'income'
+                     AND COALESCE(t.category, '') NOT IN ('transfer_in')""",
+                (p_from, p_to)).fetchone()
+            out["statements"] = {
+                "deposits_total": z(dep["deposits"]),
+                "deposits_matched": z(dep["matched"]),
+                "deposit_count": dep["n"] or 0,
+                "books_net": z(books["net"]),
+                "books_matched": z(books["matched"]),
+                "books_rows": books["n"] or 0,
+                "books_rows_matched": books["n_matched"] or 0,
+            }
+            if debug:
+                out.setdefault("debug", {})
+                out["debug"]["deposits_by_source"] = [dict(r) for r in conn.execute(
+                    """SELECT COALESCE(source, '(none)') AS source,
+                              COUNT(*) AS n,
+                              ROUND(SUM(CASE WHEN amount > 0 THEN amount ELSE 0 END), 2) AS deposits,
+                              ROUND(SUM(CASE WHEN amount > 0 AND status != 'unmatched'
+                                        THEN amount ELSE 0 END), 2) AS matched
+                       FROM bank_deposits
+                       WHERE substr(deposit_date, 1, 7) BETWEEN ? AND ?
+                       GROUP BY source ORDER BY deposits DESC""",
+                    (p_from, p_to)).fetchall()]
 
         if debug:
             uncovered = [dict(r) for r in conn.execute(

@@ -289,9 +289,30 @@
                         <span>books show ${fmt(r.ledger_gross)} collected · difference ${fmt(Math.abs(r.delta))}${ok ? " (within fee rounding)" : ""}</span>
                     </div>`;
                 })() : ""}
+                ${d.statements ? (() => {
+                    const s = d.statements;
+                    const pct = s.books_net > 0 ? Math.round(100 * s.books_matched / s.books_net) : 0;
+                    const ok = pct >= 85;
+                    const warn = pct < 60;
+                    const bg = ok ? "#F0FDF4" : warn ? "#FEF2F2" : "#FFFBEB";
+                    const bd = ok ? "#bbf7d0" : warn ? "#fecaca" : "#fde68a";
+                    const fg = ok ? "#166534" : warn ? "#b91c1c" : "#b45309";
+                    return `<div style="max-width:720px;margin-top:0.5rem;display:flex;align-items:flex-start;gap:8px;
+                        font-size:0.8rem;padding:8px 12px;border-radius:10px;background:${bg};border:1px solid ${bd};">
+                        <span style="font-weight:700;color:${fg};white-space:nowrap;">${ok ? "✓" : "△"} Statement check</span>
+                        <span>actual bank/Venmo statements show ${fmt(s.deposits_total)} deposited (${s.deposit_count} lines);
+                        ${fmt(s.books_matched)} of the books' ${fmt(s.books_net)} expected net is statement-matched
+                        (<b>${pct}%</b> · ${s.books_rows_matched}/${s.books_rows} rows).
+                        ${pct < 100 ? `<a href="/accounting/reconcile" style="color:var(--link);">work the match queue…</a>` : ""}</span>
+                    </div>`;
+                })() : ""}
                 <div class="mf-note">
                     Basis: order date. Excluded (same rules as the sales-tax engine):
                     comps, withdrawals, credit-transfer destinations, negatives.
+                    Statement check compares against imported bank/Venmo statement lines —
+                    deposits settle days after the order date, and cash or funds held in
+                    the Venmo balance never appear in a bank feed, so match coverage is
+                    the true signal.
                     ${d.orphan_fees && d.orphan_fees.count
                         ? `Includes ${fmt((d.orphan_fees.godaddy||0)+(d.orphan_fees.retained||0))} of processor fees on ${d.orphan_fees.count} unallocated order line(s).` : ""}
                 </div>`;
