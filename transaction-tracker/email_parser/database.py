@@ -32221,6 +32221,14 @@ def reconcile_statement_lines(account_last4: str, statement: str,
         conn.commit()
     out["account_id"] = account_id
     deposits_touched = False
+    # Twin-line safety (the 2026-02 Frost feed had two identical $54.75
+    # Venmo debits on the same day): rows created in THIS run are never
+    # match candidates for later lines, and repeated (date, amount) lines
+    # get an ordinal-suffixed uid so each twin books its own row while
+    # re-feeds stay idempotent.
+    run_created_ids: set = set()
+    run_acct_ids: set = set()
+    occurrence: dict = {}
     for ln in lines:
         try:
             date = str(ln.get("date") or "")[:10]
@@ -32261,15 +32269,20 @@ def reconcile_statement_lines(account_last4: str, statement: str,
                 if ln.get("customer"):
                     feed_cust_id = _lookup_customer_id(
                         conn, str(ln["customer"]).strip(), None)
+                _excl = ",".join(str(i) for i in run_created_ids) or "0"
                 exp = conn.execute(
-                    """SELECT * FROM expense_transactions
+                    f"""SELECT * FROM expense_transactions
                        WHERE ABS(amount - ?) <= 0.01
                          AND transaction_date BETWEEN date(?, '-7 day')
                                                   AND date(?, '+7 day')
+                         AND id NOT IN ({_excl})
                        ORDER BY ABS(julianday(transaction_date) - julianday(?))
                        LIMIT 1""", (amt, date, date, date)).fetchone()
                 if exp:
                     exp = dict(exp)
+                    run_created_ids.add(exp["id"])  # twins can't share a match
+                    if exp.get("acct_transaction_id"):
+                        run_acct_ids.add(exp["acct_transaction_id"])
                     # Patch missing connectivity onto the matched row from
                     # the feed, then re-promote so the split/FKs update.
                     patch = {}
@@ -32297,14 +32310,17 @@ def reconcile_statement_lines(account_last4: str, statement: str,
                         "books_merchant": exp["merchant"],
                         "patched": sorted(patch.keys()) or None})
                     continue
+                _aexcl = ",".join(str(i) for i in run_acct_ids) or "0"
                 acct = conn.execute(
-                    """SELECT id, description, COALESCE(amount, total_amount) AS amt
+                    f"""SELECT id, description, COALESCE(amount, total_amount) AS amt
                        FROM acct_transactions
                        WHERE ABS(COALESCE(amount, total_amount) - ?) <= 0.01
                          AND date BETWEEN date(?, '-7 day') AND date(?, '+7 day')
                          AND COALESCE(status, 'active') NOT IN ('reversed', 'merged')
+                         AND id NOT IN ({_aexcl})
                        LIMIT 1""", (amt, date, date)).fetchone()
                 if acct:
+                    run_acct_ids.add(acct["id"])
                     out["matched"].append({
                         "line": f"{date} {desc} ${amt:.2f}",
                         "via": "ledger", "acct_id": acct["id"],
@@ -32314,7 +32330,11 @@ def reconcile_statement_lines(account_last4: str, statement: str,
                 out["skipped"].append({"line": f"{date} {desc} ${amt:.2f}",
                                        "why": "no match (create_missing off)"})
                 continue
+            okey = (date, int(round(amt * 100)))
+            occurrence[okey] = occurrence.get(okey, 0) + 1
             uid = f"stmt-{account_last4}-{date}-{int(round(amt * 100))}"
+            if occurrence[okey] > 1:
+                uid += f"-{occurrence[okey]}"
             with _connect(db_path) as conn:
                 # Transfers (card payments) carry no P&L category by
                 # bookkeeping convention; everything else gets one —
@@ -32358,6 +32378,10 @@ def reconcile_statement_lines(account_last4: str, statement: str,
                             "UPDATE expense_transactions SET acct_transaction_id = ? WHERE id = ?",
                             (acct_id, saved["id"]))
                 conn.commit()
+            if saved.get("id"):
+                run_created_ids.add(saved["id"])
+            if acct_id:
+                run_acct_ids.add(acct_id)
             out["created"].append({
                 "line": f"{date} {desc} ${amt:.2f}", "kind": kind,
                 "category": category,

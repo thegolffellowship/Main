@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.149.0";
+window.TGF_VERSION = "2.149.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.149.1",
+    date: "2026-07-28",
+    changes: [
+      "Statement reconcile twin-line fix (caught live by the Feb Frost feed's two identical $54.75 Venmo debits on 2/10, which the created-total vs statement-total tie-out exposed): rows created or matched earlier in the SAME feed run are excluded as match candidates for later lines — on both the expense and ledger fallback paths — and repeated (date, amount) lines get ordinal-suffixed uids, so every twin books its own row while re-feeding the same statement stays fully idempotent.",
+    ],
+  },
   {
     version: "2.149.0",
     date: "2026-07-28",
