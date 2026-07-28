@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.149.3";
+window.TGF_VERSION = "2.149.4";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.149.4",
+    date: "2026-07-28",
+    changes: [
+      "Statement rows are exempt from the email re-key guard (the third and final twin fix): the guard treats same merchant+amount+date under a new uid as a re-keyed EMAIL and adopts the existing row — but on statements, identical twins are normal and rows carry no platform transaction_id to veto with, so the ordinal-uid insert kept being adopted onto its sibling (which had also stolen the sibling's uid). Statement saves now use a plain uid-keyed upsert; their deterministic stmt-<last4>-<date>-<cents>[-ordinal] scheme is the identity, no re-key semantics apply. email_uid added to the patchable fields for the one-time live repair.",
+    ],
+  },
   {
     version: "2.149.3",
     date: "2026-07-28",

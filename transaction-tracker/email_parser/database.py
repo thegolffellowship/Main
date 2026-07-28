@@ -32091,7 +32091,7 @@ def patch_expense_row(expense_id: int, fields: dict,
     and split FKs update — the apply-side of Kerry's statement rulings
     (recategorize, link event, fix type). append_note adds to notes."""
     allowed = {"category", "transaction_type", "event_name", "customer_id",
-               "merchant", "entity"}
+               "merchant", "entity", "email_uid"}
     with _connect(db_path) as conn:
         row = conn.execute("SELECT * FROM expense_transactions WHERE id = ?",
                            (expense_id,)).fetchone()
@@ -34924,6 +34924,37 @@ def save_expense_transaction(data: dict, db_path: str | Path | None = None) -> d
 
         # Try email_uid upsert when uid is present
         if email_uid is not None:
+            # Statement rows NEVER re-key: their uids are deterministic
+            # (stmt-<last4>-<date>-<cents>[-ordinal]) and identical
+            # merchant/amount/date twins are normal on statements — the
+            # Graph re-key adoption below would collapse them (v2.149.4).
+            if (data.get("source_type") == "statement"):
+                conn.execute(
+                    """INSERT INTO expense_transactions
+                       (email_uid, source_type, merchant, amount, transaction_date,
+                        account_last4, account_name, transaction_type, category, entity,
+                        event_name, customer_id, confidence, review_status, notes, raw_extract,
+                        other_party_handle)
+                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                       ON CONFLICT(email_uid) DO UPDATE SET
+                        merchant=excluded.merchant, amount=excluded.amount,
+                        transaction_date=excluded.transaction_date,
+                        category=COALESCE(excluded.category, expense_transactions.category),
+                        notes=excluded.notes, raw_extract=excluded.raw_extract""",
+                    (email_uid, data.get("source_type"), data.get("merchant"),
+                     data.get("amount"), data.get("transaction_date"),
+                     data.get("account_last4"), data.get("account_name"),
+                     data.get("transaction_type", "expense"), data.get("category"),
+                     data.get("entity", "TGF"), data.get("event_name"),
+                     data.get("customer_id"), data.get("confidence", 0),
+                     data.get("review_status", "pending"), data.get("notes"),
+                     data.get("raw_extract"), data.get("other_party_handle")),
+                )
+                conn.commit()
+                row = conn.execute(
+                    "SELECT * FROM expense_transactions WHERE email_uid = ?",
+                    (email_uid,)).fetchone()
+                return dict(row) if row else data
             # Re-key guard: Microsoft Graph occasionally re-keys an
             # already-seen email under a brand-new uid (folder rebuild, mass
             # reply, PWA resync — see CLAUDE.md). A pure ON CONFLICT(email_uid)
