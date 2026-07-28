@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.149.2";
+window.TGF_VERSION = "2.149.3";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.149.3",
+    date: "2026-07-28",
+    changes: [
+      "Statement feed: kind 'credit' now books as INCOME ('received' → entry_type income) instead of falling through to expense, and lines accept an optional entity so personal items on business accounts classify to the Personal entity — surfaced by the January Venmo statements, where the two TGF-checking Venmo debits turned out to be personal payments (wedding gift, groom-honoring food) and a personal $50 receipt landed in the @tgf-payments balance.",
+    ],
+  },
   {
     version: "2.149.2",
     date: "2026-07-28",

@@ -32351,13 +32351,17 @@ def reconcile_statement_lines(account_last4: str, statement: str,
                 "email_uid": uid, "source_type": "statement",
                 "merchant": desc[:80], "amount": amt,
                 "transaction_date": date,
-                "transaction_type": "transfer" if kind == "payment" else "expense",
+                # credits are inbound → income ('received' promotes with
+                # entry_type income); payments are transfers; rest expense
+                "transaction_type": ("transfer" if kind == "payment"
+                                     else "received" if kind == "credit"
+                                     else "expense"),
                 "account_last4": account_last4,
                 "account_id": account_id,
                 "category": category,
                 "event_name": (ln.get("event") or "").strip() or None,
                 "customer_id": feed_cust_id,
-                "entity": "TGF", "confidence": 100,
+                "entity": (ln.get("entity") or "TGF"), "confidence": 100,
                 "review_status": "approved",
                 "notes": f"from statement {statement}",
                 "raw_extract": json.dumps({
