@@ -31189,8 +31189,10 @@ def _create_allocation_for_item(
     prefix = prefix_map.get(payment_method, "MANUAL-PAY")
     synthetic_order_id = f"{prefix}-{item_id}"
 
-    # Calculate bucket breakdown
-    alloc = _calc_event_allocation(item, conn)
+    # Calculate bucket breakdown (dispatches membership / season-contest /
+    # event by item class — v2.145.0)
+    alloc = _calc_item_allocation(item, conn)
+    alloc.pop("_residual", None)
 
     # Determine total collected
     if override_price is not None:
@@ -31334,10 +31336,8 @@ def calculate_order_allocation(order_id: str, db_path: str | Path | None = None)
             item_name = item.get("item_name", "")
             is_membership = "MEMBERSHIP" in item_name.upper()
 
-            if is_membership:
-                alloc = _calc_membership_allocation(item, conn)
-            else:
-                alloc = _calc_event_allocation(item, conn)
+            alloc = _calc_item_allocation(item, conn)
+            was_residual = alloc.pop("_residual", False)
 
             alloc["order_id"] = order_id
             alloc["item_id"] = item["id"]
@@ -31356,6 +31356,10 @@ def calculate_order_allocation(order_id: str, db_path: str | Path | None = None)
             elif alloc.get("_needs_course_cost"):
                 alloc["allocation_status"] = "needs_course_cost"
                 alloc["notes"] = "Event pricing not configured — course_cost is NULL"
+            elif was_residual:
+                alloc["allocation_status"] = "complete"
+                alloc["notes"] = ("course fee residual-derived from collected "
+                                  "price (event pricing unconfigured)")
             else:
                 alloc["allocation_status"] = "complete"
 
@@ -31617,6 +31621,107 @@ def _parse_dollar(val, default: float = 0.0) -> float:
 parse_dollar = _parse_dollar
 
 
+def _residual_event_allocation(item: dict, surcharge: float = 0) -> dict:
+    """Reverse-derive an event allocation from the COLLECTED price when the
+    course fee was never configured (historic / pre-standard events).
+
+    Ratified price formula (TGF Pricing master doc, Section 2):
+      Event Price = Course Fee (tax-in, rounded up) + Included Pots
+                    + Base Markup (+ side-game amounts)
+    Every term except the course fee comes from the ratified tables, so the
+    residual after peeling them off the actual price IS the course fee.
+    This makes frozen past events reconcile instead of decomposing to $0
+    (Kerry 2026-07-28: "I'm wanting you to be able to reconcile
+    everything"). If the price is short (coupon/discounted row), the
+    shortfall reduces TGF's markup take, never the pass-through pots.
+    """
+    price = _parse_dollar(item.get("item_price"))
+    name = (item.get("item_name") or "").lower()
+    holes = str(item.get("holes") or "")
+    is_18 = "18" in holes if holes else not re.search(r"[as]9\.", name)
+    hole_key = "18" if is_18 else "9"
+    status = (item.get("user_status") or "").lower()
+    if "plus" in status:
+        markup = 0.0
+    elif "guest" in status or "former" in status:
+        markup = 25.0 if is_18 else 18.0
+    elif "1st" in status or "first" in status:
+        markup = 0.0 if is_18 else -7.0
+    else:
+        markup = 15.0 if is_18 else 8.0
+    sg = (item.get("side_games") or "NONE").strip().upper()
+    if sg not in ("NET", "GROSS", "BOTH", "NONE"):
+        sg = ("BOTH" if "BOTH" in sg or ("NET" in sg and "GROSS" in sg)
+              else "NET" if "NET" in sg else "GROSS" if "GROSS" in sg else "NONE")
+    side_prize = {"NET": 13, "GROSS": 13, "BOTH": 26, "NONE": 0}[sg] * (2 if is_18 else 1)
+    side_markup = ({"NET": 4, "GROSS": 4, "BOTH": 8, "NONE": 0}[sg] if is_18
+                   else {"NET": 3, "GROSS": 3, "BOTH": 6, "NONE": 0}[sg])
+    base_pots = 14.0 if is_18 else 7.0
+    if price <= 0:
+        # comp / $0 rows carry no money to decompose
+        return {"player_count": 1, "course_payable": 0, "course_surcharge": 0,
+                "prize_pool": 0, "tgf_operating": 0, "_needs_course_cost": True,
+                "_residual": True}
+    tgf_op = markup + side_markup
+    course = round(price - base_pots - side_prize - tgf_op - (surcharge or 0), 2)
+    if course < 0:
+        # discounted below formula — the shortfall comes out of TGF's take
+        tgf_op = round(max(0.0, tgf_op + course), 2)
+        course = 0.0
+    return {"player_count": 1, "course_payable": round(course, 2),
+            "course_surcharge": round(surcharge or 0, 2),
+            "prize_pool": round(base_pots + side_prize, 2),
+            "tgf_operating": round(tgf_op, 2),
+            "_needs_course_cost": False, "_residual": True}
+
+
+def _calc_season_contest_allocation(item: dict, conn: sqlite3.Connection) -> dict:
+    """Season-contest order decomposition (ratified — Pricing master doc
+    Section 4): each contest is $10 TGF markup + its prize pool (NET
+    Points $80, all others $40); Plus members' markup is waived so their
+    prices are pure pool. Solve the price as a combination of contest
+    prices and split accordingly; an unmatched price books conservatively
+    as all prize pool with a warning (never invents taxable markup).
+    """
+    price = _parse_dollar(item.get("item_price"))
+    if price <= 0:
+        return {"player_count": 1, "course_payable": 0, "course_surcharge": 0,
+                "prize_pool": 0, "tgf_operating": 0, "_needs_course_cost": False}
+    for net_price, other_price, per_markup in ((90.0, 50.0, 10.0),
+                                               (80.0, 40.0, 0.0)):
+        for a in (1, 0):  # at most one NET Points entry per person
+            rem = round(price - net_price * a, 2)
+            if rem < -0.001:
+                continue
+            b = rem / other_price
+            if abs(b - round(b)) < 0.001 and round(b) >= 0:
+                n = a + int(round(b))
+                if n == 0:
+                    continue
+                markup = per_markup * n
+                return {"player_count": 1, "course_payable": 0,
+                        "course_surcharge": 0,
+                        "prize_pool": round(price - markup, 2),
+                        "tgf_operating": round(markup, 2),
+                        "_needs_course_cost": False}
+    logger.warning("season-contest price $%.2f (item %s) doesn't match the "
+                   "ratified contest price table — booked as all prize pool",
+                   price, item.get("id"))
+    return {"player_count": 1, "course_payable": 0, "course_surcharge": 0,
+            "prize_pool": round(price, 2), "tgf_operating": 0,
+            "_needs_course_cost": False}
+
+
+def _calc_item_allocation(item: dict, conn: sqlite3.Connection) -> dict:
+    """Dispatch an item to its allocation calculator by class."""
+    name = (item.get("item_name") or "").upper()
+    if "MEMBERSHIP" in name:
+        return _calc_membership_allocation(item, conn)
+    if "SEASON CONTEST" in name:
+        return _calc_season_contest_allocation(item, conn)
+    return _calc_event_allocation(item, conn)
+
+
 def _calc_event_allocation(item: dict, conn: sqlite3.Connection) -> dict:
     """Calculate allocation for an event registration item.
 
@@ -31677,10 +31782,9 @@ def _calc_event_allocation(item: dict, conn: sqlite3.Connection) -> dict:
             ).fetchone()
 
     if not event:
-        return {
-            "player_count": 1, "course_payable": 0, "course_surcharge": 0,
-            "prize_pool": 0, "tgf_operating": 0, "_needs_course_cost": True,
-        }
+        # Not in the registry at all (pre-standard names) — reverse-derive
+        # from the collected price so the money still reconciles.
+        return _residual_event_allocation(item)
 
     event = dict(event)
 
@@ -31729,10 +31833,9 @@ def _calc_event_allocation(item: dict, conn: sqlite3.Connection) -> dict:
         surcharge = event.get("course_surcharge") or 0
 
     if course_cost is None:
-        return {
-            "player_count": 1, "course_payable": 0, "course_surcharge": surcharge,
-            "prize_pool": 0, "tgf_operating": 0, "_needs_course_cost": True,
-        }
+        # Configured event but no course cost — reverse-derive from the
+        # collected price (ratified formula) instead of decomposing to $0.
+        return _residual_event_allocation(item, surcharge=surcharge or 0)
 
     # Lookup side game allocations from tables
     side_prize = _SIDE_PRIZE.get((side_games, hole_key), 0)
@@ -31763,24 +31866,41 @@ def _calc_membership_allocation(item: dict, conn: sqlite3.Connection) -> dict:
     returning_or_new = (item.get("returning_or_new") or "").upper()
     item_price = _parse_dollar(item.get("item_price"))
 
-    # Determine base membership type
-    if "PLUS" in item_name or item_price >= 200:
-        base_tgf = 244.0
-    elif "NEW" in returning_or_new or "1ST" in returning_or_new or "FIRST" in returning_or_new:
-        base_tgf = 44.0
-    else:
-        # Returning / default
-        base_tgf = 69.0
-
-    # Count contests — check for contest-related fields
+    # Contests bundled with the membership — $10 markup each (ratified
+    # Section 4); pools are per-contest: NET Points $80, all others $40
+    # (the old flat $20/contest under-booked the pass-through pool).
     contest_count = 0
-    for field in ("net_points_race", "gross_points_race", "city_match_play"):
+    contest_prize = 0.0
+    _pool_by_field = {"net_points_race": 80.0, "gross_points_race": 40.0,
+                      "city_match_play": 40.0}
+    for field, pool in _pool_by_field.items():
         val = (item.get(field) or "").strip().upper()
         if val and val not in ("", "NO", "NONE", "N/A"):
             contest_count += 1
+            contest_prize += pool
 
-    contest_markup = contest_count * 10.0  # $10 per contest
-    contest_prize = contest_count * 20.0   # contest prize pool portion
+    # Base membership type: prefer what the fields say, but verify against
+    # the collected price — the old `price >= 200 → Plus` heuristic
+    # misread a $215 Returning + 2-contest bundle as a $244 Plus. Pick the
+    # base whose ratified total (base + $6 pool + contest markup + contest
+    # pools; Plus waives contest markup) best matches the price.
+    if "PLUS" in item_name or "PLUS" in returning_or_new:
+        implied = 244.0
+    elif ("NEW" in returning_or_new or "1ST" in returning_or_new
+          or "FIRST" in returning_or_new):
+        implied = 44.0
+    else:
+        implied = 69.0
+    base_tgf = implied
+    if item_price > 0:
+        def _total_for(base):
+            cm = 0.0 if base == 244.0 else contest_count * 10.0
+            return base + 6.0 + cm + contest_prize
+        base_tgf = min((44.0, 69.0, 244.0),
+                       key=lambda b: (abs(_total_for(b) - item_price),
+                                      b != implied))
+
+    contest_markup = 0.0 if base_tgf == 244.0 else contest_count * 10.0
 
     # Monthly Points Race pool contribution
     monthly_prize = 6.0
@@ -31911,12 +32031,34 @@ def get_monthly_money_flow(month: str, debug: bool = False,
                  AND COALESCE(i.transaction_status, 'active') = 'active'
                  AND COALESCE(i.order_id, '') != ''
                  AND a.id IS NULL""", (p_from, p_to)).fetchall()]
+        # Stale zero-decompositions (recorded before the residual/contest
+        # calculators existed) get recomputed so the period reconciles.
+        stale = [r["order_id"] for r in conn.execute(
+            """SELECT DISTINCT a.order_id FROM acct_allocations a
+               LEFT JOIN items i ON i.id = a.item_id
+               WHERE substr(COALESCE(i.order_date, a.allocation_date), 1, 7)
+                     BETWEEN ? AND ?
+                 AND a.allocation_status = 'needs_course_cost'
+                 AND a.order_id NOT LIKE 'EXT-%'
+                 AND a.order_id NOT LIKE 'XFER-%'
+                 AND a.order_id NOT LIKE 'COMP-%'
+                 AND a.order_id NOT LIKE 'MANUAL%'""",
+            (p_from, p_to)).fetchall()]
+        stale_synth = [dict(r) for r in conn.execute(
+            """SELECT a.id AS alloc_id, a.item_id FROM acct_allocations a
+               LEFT JOIN items i ON i.id = a.item_id
+               WHERE substr(COALESCE(i.order_date, a.allocation_date), 1, 7)
+                     BETWEEN ? AND ?
+                 AND a.allocation_status = 'needs_course_cost'
+                 AND a.order_id LIKE 'EXT-%' AND a.item_id IS NOT NULL""",
+            (p_from, p_to)).fetchall()]
     allocated_now = 0
     coverage_pending = 0
     _deadline = _t.monotonic() + 40.0
-    for n, oid in enumerate(missing):
+    worklist = missing + stale
+    for n, oid in enumerate(worklist):
         if _t.monotonic() > _deadline:
-            coverage_pending = len(missing) - n
+            coverage_pending = len(worklist) - n
             logger.info("money-flow: gap-fill time budget hit — %d order(s) left",
                         coverage_pending)
             break
@@ -31929,6 +32071,38 @@ def get_monthly_money_flow(month: str, debug: bool = False,
 
     ch_alloc = " AND LOWER(COALESCE(a.chapter, '')) = LOWER(?)" if chapter else ""
     with _connect(db_path) as conn:
+        # Refresh stale synthetic (EXT-) allocations in place — they were
+        # written by _create_allocation_for_item, so re-derive their buckets
+        # with the current calculators while keeping the txn linkage.
+        for s in stale_synth:
+            try:
+                it = conn.execute("SELECT * FROM items WHERE id = ?",
+                                  (s["item_id"],)).fetchone()
+                if not it:
+                    continue
+                al = _calc_item_allocation(dict(it), conn)
+                was_res = al.pop("_residual", False)
+                needs = al.pop("_needs_course_cost", False)
+                conn.execute(
+                    """UPDATE acct_allocations
+                       SET course_payable = ?, course_surcharge = ?,
+                           prize_pool = ?, tgf_operating = ?, tax_reserve = ?,
+                           allocation_status = ?,
+                           notes = CASE WHEN ? != '' THEN ? ELSE notes END
+                       WHERE id = ?""",
+                    (al.get("course_payable", 0), al.get("course_surcharge", 0),
+                     al.get("prize_pool", 0), al.get("tgf_operating", 0),
+                     round(al.get("tgf_operating", 0) * 0.0825, 2),
+                     "needs_course_cost" if needs else "complete",
+                     "residual" if was_res else "",
+                     "course fee residual-derived from collected price "
+                     "(event pricing unconfigured)",
+                     s["alloc_id"]))
+            except Exception:
+                logger.warning("money-flow: EXT allocation refresh failed for %s",
+                               s.get("alloc_id"), exc_info=True)
+        conn.commit()
+
         rows = [dict(r) for r in conn.execute(
             f"""SELECT a.*, i.order_date, i.transaction_status, i.item_name,
                       i.user_status
@@ -32040,6 +32214,47 @@ def get_monthly_money_flow(month: str, debug: bool = False,
         out["period"] = {"from": p_from, "to": p_to, "ytd": bool(ytd),
                          "chapter": chapter or "all"}
 
+        # ── Ledger proof (Kerry 2026-07-28: "reconcile everything"): the
+        # waterfall must tie to what actually hit the books. Gross income
+        # per ledger = income rows (customer gross = net + merchant fee),
+        # excluding transfer-ins (no new money) — same rules as the
+        # waterfall's own exclusions. TGF-overall scope only: external
+        # income rows carry no order link, so a chapter split of the
+        # ledger side would be guesswork.
+        out["reconcile"] = None
+        if not chapter:
+            led = conn.execute(
+                """SELECT ROUND(SUM(COALESCE(t.amount, t.total_amount)
+                                    + COALESCE(t.merchant_fee, 0)), 2) AS gross,
+                          COUNT(*) AS n
+                   FROM acct_transactions t
+                   WHERE substr(t.date, 1, 7) BETWEEN ? AND ?
+                     AND COALESCE(t.status, 'active') = 'active'
+                     AND COALESCE(t.entry_type, t.type) = 'income'
+                     AND COALESCE(t.category, '') NOT IN ('transfer_in')""",
+                (p_from, p_to)).fetchone()
+            gross = z(led["gross"])
+            out["reconcile"] = {
+                "ledger_gross": gross,
+                "waterfall_total": out["total"],
+                "delta": round(gross - out["total"], 2),
+                "ledger_rows": led["n"],
+            }
+            if debug:
+                out.setdefault("debug", {})
+                by_cat = [dict(r) for r in conn.execute(
+                    """SELECT COALESCE(t.category, '(none)') AS category,
+                              COUNT(*) AS n,
+                              ROUND(SUM(COALESCE(t.amount, t.total_amount)
+                                        + COALESCE(t.merchant_fee, 0)), 2) AS gross
+                       FROM acct_transactions t
+                       WHERE substr(t.date, 1, 7) BETWEEN ? AND ?
+                         AND COALESCE(t.status, 'active') = 'active'
+                         AND COALESCE(t.entry_type, t.type) = 'income'
+                       GROUP BY t.category ORDER BY gross DESC""",
+                    (p_from, p_to)).fetchall()]
+                out["debug"]["ledger_income_by_category"] = by_cat
+
         if debug:
             uncovered = [dict(r) for r in conn.execute(
                 """SELECT i.item_name, COUNT(*) AS n
@@ -32050,14 +32265,15 @@ def get_monthly_money_flow(month: str, debug: bool = False,
                      AND COALESCE(i.transaction_status, 'active') = 'active'
                    GROUP BY i.item_name ORDER BY n DESC""",
                 (p_from, p_to)).fetchall()]
-            out["debug"] = {
+            out.setdefault("debug", {}).update({
                 "allocation_rows": len(rows),
                 "fee_collected": z(fee["collected"]),
                 "fee_actual": z(fee["actual"]),
                 "fee_split_rows": fee["split_rows"],
                 "fee_txns": fee["txns"],
                 "still_uncovered": uncovered,
-            }
+                "stale_refreshed": len(stale) + len(stale_synth),
+            })
         return out
 
 

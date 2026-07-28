@@ -1,5 +1,15 @@
-window.TGF_VERSION = "2.144.0";
+window.TGF_VERSION = "2.145.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.145.0",
+    date: "2026-07-28",
+    changes: [
+      "Full reconciliation pass (Kerry: 'I'm wanting you to be able to reconcile everything'). No more $0 decompositions: events missing from the registry or lacking a configured course cost now REVERSE-derive the course fee from the collected price using the ratified pricing formula (price = course fee + included pots + base markup by player type + side games) — the residual after peeling off every ratified term IS the course fee. Discounted rows absorb the shortfall from TGF's markup, never the pass-through pots. Rows are noted 'residual-derived' so forward-configured events stay distinguishable.",
+      "SEASON CONTESTS orders finally decompose (ratified Section 4): $10 TGF markup per contest with per-contest pools (NET Points $80, all others $40; Plus members' markup waived → pure pool), solved from the collected price; unmatched prices book conservatively as all prize pool with a logged warning. New _calc_item_allocation dispatcher routes membership / contest / event items in both the GoDaddy-order and external-payment allocators.",
+      "Membership bundle fixes: contest prize pools were booked flat $20/contest (vs the ratified $80/$40 per type), and the 'price ≥ $200 → Plus' heuristic misread a $215 Returning + 2-contest bundle as a $244 Plus membership. Base type now best-fits the collected price against ratified totals, preferring what the order's fields say.",
+      "Ledger proof on the Money Flow report: TGF-overall views compare the waterfall total to gross income actually booked in the ledger (net + merchant fees, transfer-ins excluded) and show a '✓ Ledger check' line — green within fee-rounding tolerance, amber with the difference when it drifts. Stale zero-decomposition allocations in the queried period are recomputed automatically under the same time budget as the gap-fill.",
+    ],
+  },
   {
     version: "2.144.0",
     date: "2026-07-23",

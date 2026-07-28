@@ -295,11 +295,27 @@ expand on the course/prize/markup lines and a "TGF keeps X%" stat.
   margin $5,319 vs $5,114; total $30,673 vs $30,987. Deltas trace to
   the actual-vs-modeled fees, the ~$241 of Venmo balance-due lines
   their proof flagged, and the OPEN GAP below.
-- **OPEN GAP:** SEASON CONTESTS items decompose to $0 in
-  `_calc_event_allocation` (no contest pricing branch) — season-contest
-  prize pools don't roll into the prizes line yet. Flagged to
-  platform-claude; needs a ratified contest decomposition (pool vs
-  admin split) before building.
+- **Reconciliation pass (v2.145.0 — Kerry: "reconcile everything"):**
+  the SEASON CONTESTS gap is CLOSED — `_calc_season_contest_allocation`
+  decomposes contest orders per the ratified Pricing master doc
+  Section 4 ($10 markup per contest; pools NET Points $80 / others $40;
+  Plus waived → pure pool), solving the collected price against the
+  contest price table. Unconfigured/pre-standard events no longer
+  decompose to $0: `_residual_event_allocation` reverse-derives the
+  course fee from the collected price via the ratified price formula
+  (rows noted "residual-derived"). `_calc_item_allocation` dispatches
+  membership/contest/event in both allocators. Membership bundles fixed:
+  per-contest pools (was flat $20) and best-fit base selection (the
+  `price ≥ 200 → Plus` heuristic misread $215 bundles). The report
+  recomputes stale `needs_course_cost` rows in the queried period under
+  the gap-fill time budget, and TGF-overall views carry a **ledger
+  proof**: waterfall total vs gross booked income (net + merchant fee,
+  transfer-ins excluded) with the delta shown as a ✓/△ Ledger check
+  line. Known residual noise: external-payment items decompose their
+  FULL item value while the ledger records only the amount actually
+  received externally (the rest arrived as credits/direct-pay), so a
+  modest positive waterfall-vs-ledger delta is structural, not lost
+  money — drill with `debug=1` (`ledger_income_by_category`).
 
 ## Accounting categories (TGF-scoped, seeded by `_seed_unified_financial_categories`)
 - **Income:** "Credit Transfer In", "External Payment", "Event Revenue", "Membership Fees"
