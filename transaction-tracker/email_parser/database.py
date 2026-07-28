@@ -32238,6 +32238,12 @@ def reconcile_statement_lines(account_last4: str, statement: str,
             if not date or amt <= 0 or not desc:
                 out["skipped"].append({"line": ln, "why": "incomplete"})
                 continue
+            # EVERY line consumes an occurrence slot for its (date, amount)
+            # key — matched twins included — so a created twin after a
+            # matched one still gets the ordinal-suffixed uid instead of
+            # upserting onto its sibling's row.
+            okey = (date, int(round(amt * 100)))
+            occurrence[okey] = occurrence.get(okey, 0) + 1
             if kind == "deposit":
                 # Statement credit → bank_deposits (same dedup as the CSV
                 # importers) + the batch auto-matcher ties it to booked
@@ -32330,8 +32336,6 @@ def reconcile_statement_lines(account_last4: str, statement: str,
                 out["skipped"].append({"line": f"{date} {desc} ${amt:.2f}",
                                        "why": "no match (create_missing off)"})
                 continue
-            okey = (date, int(round(amt * 100)))
-            occurrence[okey] = occurrence.get(okey, 0) + 1
             uid = f"stmt-{account_last4}-{date}-{int(round(amt * 100))}"
             if occurrence[okey] > 1:
                 uid += f"-{occurrence[okey]}"

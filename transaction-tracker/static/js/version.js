@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.149.1";
+window.TGF_VERSION = "2.149.2";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.149.2",
+    date: "2026-07-28",
+    changes: [
+      "Second half of the twin-line fix: the occurrence counter only counted CREATED lines, so when twin #1 matched an existing row, twin #2's uid carried no ordinal suffix and the upsert silently overwrote its sibling instead of inserting. Every line now consumes an occurrence slot for its (date, amount) key — matched twins included — verified against the exact live sequence (one pre-existing row, then a two-twin feed → 1 match + 1 create with the -2 uid, and a full re-feed matches both).",
+    ],
+  },
   {
     version: "2.149.1",
     date: "2026-07-28",
