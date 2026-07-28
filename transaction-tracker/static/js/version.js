@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.147.0";
+window.TGF_VERSION = "2.147.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.147.1",
+    date: "2026-07-28",
+    changes: [
+      "Statement-created entries are now fully connected through the database (Kerry: 'everything needs to be categorized and connected via the database with all applicable FKs'): the statement's account resolves to a real acct_accounts row by last_four (created with entity FK, institution, and account_type if it doesn't exist yet — no more defaulting to checking), every created ledger row carries that account_id, and every non-transfer line gets a categorized acct_split — explicit category from the feed, else the admin's own most recent categorization of the same merchant (learned mapping), else Other Business Expense as the floor so nothing lands uncategorized.",
+      "Card-payment transfer lines intentionally carry no P&L category (moving checking→card isn't spend — standard bookkeeping); they still FK to the card account. Bridge payload gains account_name / account_type / institution.",
+    ],
+  },
   {
     version: "2.147.0",
     date: "2026-07-28",

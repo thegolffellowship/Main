@@ -1784,7 +1784,10 @@ def _scoring_dispatch(url: str, extract: str):
             return json.dumps(db.reconcile_statement_lines(
                 str(_p.get("account") or ""), str(_p.get("statement") or ""),
                 _p.get("lines") or [],
-                create_missing=bool(_p.get("create_missing", True))),
+                create_missing=bool(_p.get("create_missing", True)),
+                account_name=_p.get("account_name"),
+                account_type=_p.get("account_type") or "credit_card",
+                institution=_p.get("institution")),
                 indent=2, default=str)
         if cmd == "scoring-money-flow":
             # "<YYYY-MM>[|austin|sa][|ytd][|debug]" — Monthly Money Flow

@@ -31970,8 +31970,63 @@ def get_acct_allocations(month: str | None = None, event: str | None = None,
     return {"allocations": records, "totals": totals}
 
 
+def _resolve_statement_account(conn, last4: str, name: str | None = None,
+                               account_type: str = "credit_card",
+                               institution: str | None = None) -> int | None:
+    """acct_accounts.id for a statement's account — matched by last_four
+    (or name), created if absent so every statement line FKs to the real
+    account instead of defaulting to checking."""
+    last4 = (last4 or "").strip()
+    if not last4:
+        return None
+    row = conn.execute(
+        """SELECT id FROM acct_accounts
+           WHERE last_four = ? OR name LIKE '%' || ? || '%' LIMIT 1""",
+        (last4, last4)).fetchone()
+    if row:
+        return row["id"]
+    ent = conn.execute(
+        "SELECT id FROM acct_entities WHERE LOWER(short_name) = 'tgf' "
+        "OR LOWER(name) LIKE '%golf fellowship%' LIMIT 1").fetchone()
+    cur = conn.execute(
+        """INSERT INTO acct_accounts
+           (entity_id, name, account_type, institution, last_four, is_active)
+           VALUES (?, ?, ?, ?, ?, 1)""",
+        (ent["id"] if ent else None,
+         name or f"Card …{last4}",
+         account_type if account_type in ("checking", "savings", "credit_card",
+                                          "cash", "venmo", "paypal", "other")
+         else "other",
+         institution, last4))
+    logger.info("statement reconcile: created acct_accounts %s (…%s)",
+                cur.lastrowid, last4)
+    return cur.lastrowid
+
+
+def _category_for_statement_line(conn, desc: str, explicit: str | None) -> str | None:
+    """Category name for a created statement entry: explicit wins, then the
+    most recent categorized expense from the same merchant (the admin's own
+    prior categorization = learned mapping), then Other Business Expense so
+    nothing lands uncategorized."""
+    if explicit:
+        return explicit
+    token = re.sub(r"[^A-Za-z]+", " ", desc or "").strip().split(" ")[0]
+    if len(token) >= 4:
+        row = conn.execute(
+            """SELECT category FROM expense_transactions
+               WHERE category IS NOT NULL AND category != ''
+                 AND UPPER(merchant) LIKE '%' || UPPER(?) || '%'
+               ORDER BY id DESC LIMIT 1""", (token,)).fetchone()
+        if row:
+            return row["category"]
+    return "Other Business Expense"
+
+
 def reconcile_statement_lines(account_last4: str, statement: str,
                               lines: list[dict], create_missing: bool = True,
+                              account_name: str | None = None,
+                              account_type: str = "credit_card",
+                              institution: str | None = None,
                               db_path: str | Path | None = None) -> dict:
     """Reconcile actual STATEMENT lines against the email-derived books,
     creating ledger entries for anything extraction missed (Kerry
@@ -31995,6 +32050,12 @@ def reconcile_statement_lines(account_last4: str, statement: str,
     """
     out = {"account": account_last4, "statement": statement,
            "matched": [], "created": [], "skipped": [], "errors": 0}
+    with _connect(db_path) as conn:
+        account_id = _resolve_statement_account(
+            conn, account_last4, name=account_name,
+            account_type=account_type, institution=institution)
+        conn.commit()
+    out["account_id"] = account_id
     for ln in lines:
         try:
             date = str(ln.get("date") or "")[:10]
@@ -32038,12 +32099,22 @@ def reconcile_statement_lines(account_last4: str, statement: str,
                                        "why": "no match (create_missing off)"})
                 continue
             uid = f"stmt-{account_last4}-{date}-{int(round(amt * 100))}"
+            with _connect(db_path) as conn:
+                # Transfers (card payments) carry no P&L category by
+                # bookkeeping convention; everything else gets one —
+                # explicit from the feed, learned from the admin's prior
+                # categorization of the same merchant, or Other Business
+                # Expense as the floor (nothing lands uncategorized).
+                category = None if kind == "payment" else \
+                    _category_for_statement_line(conn, desc, ln.get("category"))
             saved = save_expense_transaction({
                 "email_uid": uid, "source_type": "statement",
                 "merchant": desc[:80], "amount": amt,
                 "transaction_date": date,
                 "transaction_type": "transfer" if kind == "payment" else "expense",
                 "account_last4": account_last4,
+                "account_id": account_id,
+                "category": category,
                 "entity": "TGF", "confidence": 100,
                 "review_status": "approved",
                 "notes": f"from statement {statement}",
@@ -32051,7 +32122,16 @@ def reconcile_statement_lines(account_last4: str, statement: str,
                     "source": "statement-reconcile", "statement": statement,
                     "account_last4": account_last4, "line": ln}),
             }, db_path=db_path)
+            # save_expense_transaction doesn't persist account_id/category
+            # columns it doesn't know — stamp them, then promote with the
+            # full FK set (account, entity, category → acct_splits).
+            saved["account_id"] = account_id
+            saved["category"] = category
             with _connect(db_path) as conn:
+                conn.execute(
+                    """UPDATE expense_transactions
+                       SET account_id = ?, category = ? WHERE id = ?""",
+                    (account_id, category, saved["id"]))
                 acct_id = saved.get("acct_transaction_id")
                 if not acct_id:
                     acct_id = _sync_expense_ledger_entry(conn, saved)
@@ -32059,9 +32139,10 @@ def reconcile_statement_lines(account_last4: str, statement: str,
                         conn.execute(
                             "UPDATE expense_transactions SET acct_transaction_id = ? WHERE id = ?",
                             (acct_id, saved["id"]))
-                    conn.commit()
+                conn.commit()
             out["created"].append({
                 "line": f"{date} {desc} ${amt:.2f}", "kind": kind,
+                "category": category,
                 "expense_id": saved.get("id"), "acct_id": acct_id})
         except Exception:
             logger.exception("statement reconcile failed for line %s", ln)
