@@ -3766,6 +3766,38 @@ def init_db(db_path: str | Path | None = None) -> None:
         except Exception as e:
             logger.warning("Folded-receipt heal failed: %s", e)
 
+        # One-off heal (v2.149.9): patching the PENDING $27,060 Arlington
+        # Golf tournament-flyer receipt (exp 1362) promoted it to a phantom
+        # ledger expense; remove that ledger row + splits and unlink.
+        try:
+            _pr = conn.execute(
+                """SELECT a.id FROM acct_transactions a
+                   JOIN expense_transactions e ON a.source_ref = 'exp-promoted-' || e.id
+                   WHERE e.id = 1362 AND e.review_status NOT IN ('approved', 'corrected')
+                     AND a.total_amount = 27060.0""").fetchone()
+            if _pr:
+                conn.execute("DELETE FROM acct_splits WHERE transaction_id = ?",
+                             (_pr["id"],))
+                conn.execute("DELETE FROM acct_transactions WHERE id = ?",
+                             (_pr["id"],))
+                conn.execute(
+                    "UPDATE expense_transactions SET acct_transaction_id = NULL WHERE id = 1362")
+                conn.commit()
+                logger.info("Phantom-promotion heal: removed acct row %d for pending exp 1362",
+                            _pr["id"])
+        except Exception as e:
+            logger.warning("Phantom-promotion heal failed: %s", e)
+
+        # Idempotent connectivity backfill (v2.149.9): register any expense
+        # category names missing from acct_categories and stamp category_id
+        # onto promoted splits that only carry the category as text.
+        try:
+            _bf = _backfill_split_category_fks(conn)
+            if _bf:
+                logger.info("Split-category FK backfill: %d split(s) connected", _bf)
+        except Exception as e:
+            logger.warning("Split-category FK backfill failed: %s", e)
+
         # Always-run repair: merge duplicate Kyle Franz profile 316 into 315
         try:
             _repair_franz_attribution(conn, db_path)
@@ -20934,6 +20966,46 @@ def _referral_fee_amount(conn) -> float:
         return 25.0
 
 
+def _backfill_split_category_fks(conn) -> int:
+    """Connect category FKs on promoted splits (v2.149.9). For every
+    acct_split with a NULL category_id whose transaction was promoted from
+    an expense row carrying a category name, register the name in
+    acct_categories if absent and stamp the id. Idempotent — shrinks to
+    zero rows once connected."""
+    rows = conn.execute(
+        """SELECT s.id AS sid, e.category AS cname, e.transaction_type AS ttype
+           FROM acct_splits s
+           JOIN acct_transactions a ON a.id = s.transaction_id
+           JOIN expense_transactions e ON a.source_ref = 'exp-promoted-' || e.id
+           WHERE s.category_id IS NULL
+             AND e.category IS NOT NULL AND TRIM(e.category) != ''""").fetchall()
+    if not rows:
+        return 0
+    cache: dict = {}
+    fixed = 0
+    for r in rows:
+        cname = str(r["cname"]).strip()
+        key = cname.lower()
+        if key not in cache:
+            c = conn.execute(
+                "SELECT id FROM acct_categories WHERE LOWER(name) = LOWER(?) LIMIT 1",
+                (cname,)).fetchone()
+            if not c:
+                conn.execute(
+                    "INSERT INTO acct_categories (name, type) VALUES (?, ?)",
+                    (cname, "income" if r["ttype"] == "received" else "expense"))
+                c = conn.execute(
+                    "SELECT id FROM acct_categories WHERE LOWER(name) = LOWER(?) LIMIT 1",
+                    (cname,)).fetchone()
+            cache[key] = c["id"] if c else None
+        if cache[key]:
+            conn.execute("UPDATE acct_splits SET category_id = ? WHERE id = ?",
+                         (cache[key], r["sid"]))
+            fixed += 1
+    conn.commit()
+    return fixed
+
+
 def _repair_atkinson_folded_receipts(conn) -> int:
     """One-off heal (v2.140.3): Kerry paid Bob Atkinson (customer 219) four
     times on 2026-07-21 — $58 credit refunds for s9.15 and s9.19 THE QUARRY
@@ -32112,7 +32184,13 @@ def patch_expense_row(expense_id: int, fields: dict,
             return {"error": "no patchable fields"}
         conn.execute(f"UPDATE expense_transactions SET {', '.join(sets)} WHERE id = ?",
                      (*vals, expense_id))
-        _sync_expense_ledger_entry(conn, exp)
+        # Only promote rows that belong in the ledger (v2.149.9): patching a
+        # PENDING informational receipt must not create a phantom ledger
+        # row — a $27,060 tournament-flyer receipt briefly booked as a real
+        # expense this way.
+        if (exp.get("review_status") in ("approved", "corrected")
+                or exp.get("acct_transaction_id")):
+            _sync_expense_ledger_entry(conn, exp)
         conn.commit()
         return {"patched": sorted(k for k in fields),
                 "expense": dict(conn.execute(
@@ -32152,9 +32230,20 @@ def patch_acct_row(acct_id: int, fields: dict,
                     (name,)).fetchone()
             entity_id = r["id"] if r else None
         if fields.get("category"):
+            cname = str(fields["category"]).strip()
             r = conn.execute(
                 "SELECT id FROM acct_categories WHERE LOWER(name) = LOWER(?) LIMIT 1",
-                (str(fields["category"]).strip(),)).fetchone()
+                (cname,)).fetchone()
+            if not r:
+                # Auto-register like entities (v2.149.9) — the live table
+                # predates several bookkeeping category names; FKs must
+                # connect regardless.
+                conn.execute(
+                    "INSERT INTO acct_categories (name, type) VALUES (?, ?)",
+                    (cname, "income" if row.get("type") == "income" else "expense"))
+                r = conn.execute(
+                    "SELECT id FROM acct_categories WHERE LOWER(name) = LOWER(?) LIMIT 1",
+                    (cname,)).fetchone()
             category_id = r["id"] if r else None
         if fields.get("event"):
             r = conn.execute(
@@ -35343,6 +35432,18 @@ def _sync_expense_ledger_entry(conn, exp: dict) -> int | None:
             "SELECT id FROM acct_categories WHERE LOWER(name) = LOWER(?) LIMIT 1",
             (category_name,),
         ).fetchone()
+        if not row:
+            # Auto-register the category (v2.149.9) so the split carries a
+            # real FK — the live table predates several bookkeeping names
+            # (Business Meals, Travel — Transportation, …) and a text-only
+            # category breaks Kerry's everything-connected-via-FKs rule.
+            conn.execute(
+                "INSERT INTO acct_categories (name, type) VALUES (?, ?)",
+                (category_name,
+                 "income" if txn_type == "income" else "expense"))
+            row = conn.execute(
+                "SELECT id FROM acct_categories WHERE LOWER(name) = LOWER(?) LIMIT 1",
+                (category_name,)).fetchone()
         category_id = row["id"] if row else None
 
     entity_id = None

@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.149.8";
+window.TGF_VERSION = "2.149.9";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.149.9",
+    date: "2026-07-28",
+    changes: [
+      "Categories auto-register like entities: ledger promotion, patch_acct_row, and a new idempotent boot backfill all create missing acct_categories rows and stamp category_id onto splits that only carried the category as text — the live table predated several bookkeeping names (Business Meals, Travel — Transportation, …), silently breaking category FKs on statement-fed rows.",
+      "patch_expense_row no longer promotes PENDING rows to the ledger: patching the $27,060 Arlington Golf tournament-flyer receipt (an informational document, not a paid expense) briefly created a phantom ledger expense. A one-off boot heal removes that phantom row and unlinks the receipt.",
+    ],
+  },
   {
     version: "2.149.8",
     date: "2026-07-28",
