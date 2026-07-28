@@ -1775,6 +1775,25 @@ def _scoring_dispatch(url: str, extract: str):
             # READ-ONLY: the REFUNDS console payload (outstanding / in-flight
             # / completed) — incl. season-contest removal refunds.
             return json.dumps(db.get_refunds_overview(), indent=2, default=str)
+        if cmd == "scoring-recurring":
+            # Recurring payment registry: sync from expense history + list
+            # with overdue/due-soon flags and monthly/annual totals.
+            return json.dumps(db.get_recurring_payments(), indent=2, default=str)
+        if cmd == "scoring-recurring-set":
+            # "<merchant>|<monthly|annual>|<amount>|<category>|<notes>"
+            _p = [x.strip() for x in arg.split("|")]
+            return json.dumps(db.set_recurring_payment(
+                _p[0], _p[1],
+                amount=float(_p[2]) if len(_p) > 2 and _p[2] else None,
+                category=_p[3] if len(_p) > 3 and _p[3] else None,
+                notes=_p[4] if len(_p) > 4 and _p[4] else None),
+                indent=2, default=str)
+        if cmd == "scoring-expense-patch":
+            # JSON: {"id": <expense_id>, "fields": {category, event_name,
+            #   transaction_type, customer_id, merchant, append_note}}
+            _p = json.loads(arg)
+            return json.dumps(db.patch_expense_row(
+                int(_p["id"]), _p.get("fields") or {}), indent=2, default=str)
         if cmd == "scoring-statement-reconcile":
             # JSON payload: {"account": "7680", "statement": "chase 2026-01",
             #   "create_missing": true, "lines": [{date, desc, amount, kind}]}

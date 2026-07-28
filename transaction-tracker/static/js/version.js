@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.148.0";
+window.TGF_VERSION = "2.149.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.149.0",
+    date: "2026-07-28",
+    changes: [
+      "Recurring payments registry (Kerry: 'keep track of recurring payments too — annual and monthly; Aura is annual'): recurring_payments table keyed by merchant token, cadence monthly|annual, auto-refreshed from expense history (latest paid date/amount/account/category) with computed next-due dates and overdue/due-soon flags plus monthly/annual run-rate totals. Bridge: scoring-recurring (sync + list), scoring-recurring-set:<merchant>|<cadence>|<amount>|<category>|<notes>.",
+      "scoring-expense-patch bridge: controlled field patch (category / event_name / transaction_type / customer_id / merchant / append_note) on an expense row with immediate ledger re-promotion so splits and FKs follow — the apply-side of Kerry's statement rulings. First uses: the $1,000 Gus Vasquez Zelle reclassified from the learned-categorizer's 'Prizes' guess to an uncategorized TRANSFER noted as return of investor capital (fall 2025 website/app fundraising — balance-sheet movement, not P&L spend), and the $600 Canyon Springs payment linked to the season's first Canyon Springs event as a deposit-to-hold.",
+    ],
+  },
   {
     version: "2.148.0",
     date: "2026-07-28",

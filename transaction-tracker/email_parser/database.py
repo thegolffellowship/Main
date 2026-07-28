@@ -31970,6 +31970,158 @@ def get_acct_allocations(month: str | None = None, event: str | None = None,
     return {"allocations": records, "totals": totals}
 
 
+def _ensure_recurring_payments(conn) -> None:
+    """Recurring payment registry (Kerry 2026-07-28: 'keep track of
+    recurring payments too — annual and monthly. Aura is annual')."""
+    conn.execute(
+        """CREATE TABLE IF NOT EXISTS recurring_payments (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            merchant_token TEXT NOT NULL UNIQUE COLLATE NOCASE,
+            display_name TEXT,
+            cadence TEXT NOT NULL CHECK(cadence IN ('monthly', 'annual')),
+            expected_amount REAL,
+            account_id INTEGER REFERENCES acct_accounts(id),
+            category TEXT,
+            last_paid_date TEXT,
+            next_due_date TEXT,
+            active INTEGER DEFAULT 1,
+            notes TEXT,
+            created_at TEXT DEFAULT (datetime('now'))
+        )""")
+
+
+def set_recurring_payment(merchant_token: str, cadence: str,
+                          amount: float | None = None,
+                          category: str | None = None,
+                          notes: str | None = None, active: bool = True,
+                          db_path: str | Path | None = None) -> dict:
+    """Register/update a recurring payment by merchant token (substring
+    matched against expense merchants, case-insensitive)."""
+    if cadence not in ("monthly", "annual"):
+        raise ValueError("cadence must be monthly or annual")
+    with _connect(db_path) as conn:
+        _ensure_recurring_payments(conn)
+        conn.execute(
+            """INSERT INTO recurring_payments
+               (merchant_token, display_name, cadence, expected_amount,
+                category, notes, active)
+               VALUES (?, ?, ?, ?, ?, ?, ?)
+               ON CONFLICT(merchant_token) DO UPDATE SET
+                cadence = excluded.cadence,
+                expected_amount = COALESCE(excluded.expected_amount,
+                                           recurring_payments.expected_amount),
+                category = COALESCE(excluded.category, recurring_payments.category),
+                notes = COALESCE(excluded.notes, recurring_payments.notes),
+                active = excluded.active""",
+            (merchant_token.strip(), merchant_token.strip().title(), cadence,
+             amount, category, notes, 1 if active else 0))
+        conn.commit()
+    sync_recurring_payments(db_path=db_path)
+    with _connect(db_path) as conn:
+        return dict(conn.execute(
+            "SELECT * FROM recurring_payments WHERE merchant_token = ? COLLATE NOCASE",
+            (merchant_token.strip(),)).fetchone())
+
+
+def sync_recurring_payments(db_path: str | Path | None = None) -> dict:
+    """Refresh each active recurring payment from expense history (latest
+    payment date/amount/account/category) and compute next_due_date."""
+    out = {"updated": 0}
+    with _connect(db_path) as conn:
+        _ensure_recurring_payments(conn)
+        for rp in [dict(r) for r in conn.execute(
+                "SELECT * FROM recurring_payments WHERE active = 1").fetchall()]:
+            last = conn.execute(
+                """SELECT transaction_date, amount, account_id, category
+                   FROM expense_transactions
+                   WHERE UPPER(merchant) LIKE '%' || UPPER(?) || '%'
+                     AND transaction_date IS NOT NULL
+                   ORDER BY transaction_date DESC LIMIT 1""",
+                (rp["merchant_token"],)).fetchone()
+            if not last:
+                continue
+            step = "+1 month" if rp["cadence"] == "monthly" else "+1 year"
+            conn.execute(
+                """UPDATE recurring_payments
+                   SET last_paid_date = ?, next_due_date = date(?, ?),
+                       expected_amount = COALESCE(?, expected_amount),
+                       account_id = COALESCE(?, account_id),
+                       category = COALESCE(category, ?)
+                   WHERE id = ?""",
+                (last["transaction_date"], last["transaction_date"], step,
+                 last["amount"], last["account_id"], last["category"],
+                 rp["id"]))
+            out["updated"] += 1
+        conn.commit()
+    return out
+
+
+def get_recurring_payments(db_path: str | Path | None = None) -> dict:
+    """Registry + status flags: overdue (past next_due) and due_soon
+    (within 14 days) so upcoming renewals surface before they hit."""
+    sync_recurring_payments(db_path=db_path)
+    with _connect(db_path) as conn:
+        _ensure_recurring_payments(conn)
+        rows = [dict(r) for r in conn.execute(
+            """SELECT rp.*, a.name AS account_name
+               FROM recurring_payments rp
+               LEFT JOIN acct_accounts a ON a.id = rp.account_id
+               ORDER BY rp.active DESC, rp.next_due_date""").fetchall()]
+    today = today_central_str()
+    for r in rows:
+        nd = r.get("next_due_date") or ""
+        r["status"] = ("inactive" if not r.get("active") else
+                       "overdue" if nd and nd < today else
+                       "due_soon" if nd and nd <= str(
+                           __import__("datetime").date.fromisoformat(today)
+                           + __import__("datetime").timedelta(days=14)) else
+                       "ok")
+    return {"recurring": rows,
+            "monthly_total": round(sum(r.get("expected_amount") or 0
+                                       for r in rows
+                                       if r["cadence"] == "monthly" and r["active"]), 2),
+            "annual_total": round(sum(r.get("expected_amount") or 0
+                                      for r in rows
+                                      if r["cadence"] == "annual" and r["active"]), 2)}
+
+
+def patch_expense_row(expense_id: int, fields: dict,
+                      db_path: str | Path | None = None) -> dict:
+    """Controlled patch of an expense row + re-promotion so the ledger row
+    and split FKs update — the apply-side of Kerry's statement rulings
+    (recategorize, link event, fix type). append_note adds to notes."""
+    allowed = {"category", "transaction_type", "event_name", "customer_id",
+               "merchant", "entity"}
+    with _connect(db_path) as conn:
+        row = conn.execute("SELECT * FROM expense_transactions WHERE id = ?",
+                           (expense_id,)).fetchone()
+        if not row:
+            return {"error": f"expense {expense_id} not found"}
+        exp = dict(row)
+        sets, vals = [], []
+        for k, v in fields.items():
+            if k == "append_note":
+                sets.append("notes = COALESCE(notes || ' · ', '') || ?")
+                vals.append(str(v))
+                exp["notes"] = ((exp.get("notes") or "") + " · " + str(v)).strip(" ·")
+            elif k in allowed:
+                sets.append(f"{k} = ?")
+                vals.append(v)
+                exp[k] = v
+        if not sets:
+            return {"error": "no patchable fields"}
+        conn.execute(f"UPDATE expense_transactions SET {', '.join(sets)} WHERE id = ?",
+                     (*vals, expense_id))
+        _sync_expense_ledger_entry(conn, exp)
+        conn.commit()
+        return {"patched": sorted(k for k in fields),
+                "expense": dict(conn.execute(
+                    "SELECT id, merchant, amount, category, transaction_type, "
+                    "event_name, customer_id, notes, acct_transaction_id "
+                    "FROM expense_transactions WHERE id = ?",
+                    (expense_id,)).fetchone())}
+
+
 def _resolve_statement_account(conn, last4: str, name: str | None = None,
                                account_type: str = "credit_card",
                                institution: str | None = None) -> int | None:
