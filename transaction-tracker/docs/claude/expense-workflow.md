@@ -73,8 +73,12 @@ to the ledger immediately. `kind: payment` books transaction_type
 Chase alert emails are threshold-y and miss small recurring
 subscriptions — statements are ground truth; this is the fill.
 
-**Match guards (v2.149.5 — both the expense-match and ledger-fallback
-paths):** (1) P2P payout rows (`transaction_type='payout'` with
+**Match guards (v2.149.5/7 — both the expense-match and ledger-fallback
+paths):** (0) type compatibility — a line only consumes a books row of
+the same money direction (purchase→expense, payment→transfer,
+credit→received/income); without this a card charge for an own-store
+purchase matched the GoDaddy order INCOME row for the same order;
+(1) P2P payout rows (`transaction_type='payout'` with
 source venmo/paypal/cashapp/zelle; the ledger path joins
 `exp-promoted-N` rows back to their expense row for this check) are
 NEVER candidates — a member payout can't be the books entry for a

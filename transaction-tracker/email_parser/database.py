@@ -32295,9 +32295,18 @@ def reconcile_statement_lines(account_last4: str, statement: str,
                                   IN ('venmo', 'paypal', 'cashapp', 'zelle'))
                        ORDER BY ABS(julianday(transaction_date) - julianday(?))
                        LIMIT 8""", (amt, date, date, date)).fetchall()
+                # Type compatibility (v2.149.7 — a $51.75 own-store card
+                # charge matched the GoDaddy ORDER INCOME row for the same
+                # purchase): a statement line may only consume a books row
+                # of the same money direction — purchase→expense,
+                # payment→transfer, credit→received.
+                _want_exp_type = {"purchase": "expense", "payment": "transfer",
+                                  "credit": "received"}.get(kind, "expense")
                 exp = None
                 for c in cands:
                     c = dict(c)
+                    if (c.get("transaction_type") or "expense") != _want_exp_type:
+                        continue
                     daydiff = abs((__import__("datetime").date.fromisoformat(date)
                                    - __import__("datetime").date.fromisoformat(
                                        str(c["transaction_date"])[:10])).days) \
@@ -32351,7 +32360,7 @@ def reconcile_statement_lines(account_last4: str, statement: str,
                 _aexcl = ",".join(str(i) for i in run_acct_ids) or "0"
                 acands = conn.execute(
                     f"""SELECT a.id, a.description, a.date, a.source,
-                              a.source_ref,
+                              a.source_ref, a.type,
                               COALESCE(a.amount, a.total_amount) AS amt,
                               e.transaction_type AS exp_txn_type
                        FROM acct_transactions a
@@ -32363,9 +32372,13 @@ def reconcile_statement_lines(account_last4: str, statement: str,
                          AND a.id NOT IN ({_aexcl})
                        ORDER BY ABS(julianday(a.date) - julianday(?))
                        LIMIT 8""", (amt, date, date, date)).fetchall()
+                _want_acct_type = {"purchase": "expense", "payment": "transfer",
+                                   "credit": "income"}.get(kind, "expense")
                 acct = None
                 for c in acands:
                     c = dict(c)
+                    if (c.get("type") or "expense") != _want_acct_type:
+                        continue
                     if (c.get("exp_txn_type") == "payout"
                             and str(c.get("source") or "").lower()
                             in ("venmo", "paypal", "cashapp", "zelle")):

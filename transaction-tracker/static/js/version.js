@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.149.6";
+window.TGF_VERSION = "2.149.7";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.149.7",
+    date: "2026-07-28",
+    changes: [
+      "Statement-match type compatibility (caught by the March 7680 feed): a $51.75 own-store card charge matched the GoDaddy ORDER INCOME row for the very same membership purchase via the ledger fallback — the charge and the revenue are two different sides of the same money and both belong in the books. A statement line now only consumes a books row of the same money direction: purchase→expense, payment→transfer, credit→received/income, enforced on both the expense-match and ledger-fallback paths.",
+    ],
+  },
   {
     version: "2.149.6",
     date: "2026-07-28",
