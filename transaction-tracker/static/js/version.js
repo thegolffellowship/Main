@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.147.1";
+window.TGF_VERSION = "2.148.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.148.0",
+    date: "2026-07-28",
+    changes: [
+      "Statement reconcile connects the remaining FKs (Kerry: 'course, event, vendor/customer'): feed lines can carry event and customer — event names resolve through the events registry onto the ledger split's event_id (course payments tie to the event they paid for), customer names resolve through the identity engine onto the transaction's customer_id (Zelle/vendor/member lines). MATCHED lines get the same treatment retroactively: a books row missing category/event/customer/account gets patched from the feed and re-promoted, so every statement pass upgrades old rows' connectivity too.",
+      "New kind 'deposit' for bank-statement credit lines: they land in bank_deposits (same dedup as the CSV importers, provenance in raw_data) and run through the GoDaddy subset-sum auto-matcher — batch settlements reconcile against income already booked per order, never create new income (which would double-count). The feed response includes the auto-match result.",
+      "Kerry is the reconciliation interface's user, not its operator ('the reconciliation engine we built is overwhelming and I can't use it effectively'): the working model is statements in → matched/created/patched report out → a short list of judgment calls. The match queue UI remains for drill-down, not as required workflow.",
+    ],
+  },
   {
     version: "2.147.1",
     date: "2026-07-28",

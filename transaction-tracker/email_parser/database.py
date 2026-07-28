@@ -32034,10 +32034,21 @@ def reconcile_statement_lines(account_last4: str, statement: str,
     entries where we don't have something. Full coverage of bookkeeping").
 
     lines: [{date: 'YYYY-MM-DD', desc: str, amount: float,
-             kind: 'purchase'|'payment'|'credit'}]
+             kind: 'purchase'|'payment'|'credit'|'deposit',
+             category?: str, event?: str, customer?: str}]
       purchase → outflow (card charge / bank debit)
-      payment  → transfer (card payment from checking — not P&L expense)
+      payment  → transfer (card payment / Venmo funding — not P&L expense)
       credit   → refund to the account
+      deposit  → statement credit line: goes to bank_deposits (idempotent)
+                 and through run_deposit_auto_match — GoDaddy batches are
+                 LUMPED settlements of orders already booked as income, so
+                 they must reconcile against existing rows, never create
+                 new income (that would double-count).
+      event/customer connect the FKs (Kerry 2026-07-28): event name →
+      events registry → acct_splits.event_id; customer name →
+      customers.customer_id on the ledger row. A MATCHED line whose books
+      row is missing category/event/customer gets patched with the feed's
+      values — the statement pass upgrades old rows' connectivity too.
 
     Matching per line, in order: (1) an expense_transactions row with the
     same amount (±$0.01) within ±7 days; (2) an acct_transactions row with
@@ -32049,13 +32060,15 @@ def reconcile_statement_lines(account_last4: str, statement: str,
     in raw_extract so its provenance is auditable.
     """
     out = {"account": account_last4, "statement": statement,
-           "matched": [], "created": [], "skipped": [], "errors": 0}
+           "matched": [], "created": [], "skipped": [], "errors": 0,
+           "deposits_added": 0, "deposits_already": 0}
     with _connect(db_path) as conn:
         account_id = _resolve_statement_account(
             conn, account_last4, name=account_name,
             account_type=account_type, institution=institution)
         conn.commit()
     out["account_id"] = account_id
+    deposits_touched = False
     for ln in lines:
         try:
             date = str(ln.get("date") or "")[:10]
@@ -32065,21 +32078,72 @@ def reconcile_statement_lines(account_last4: str, statement: str,
             if not date or amt <= 0 or not desc:
                 out["skipped"].append({"line": ln, "why": "incomplete"})
                 continue
+            if kind == "deposit":
+                # Statement credit → bank_deposits (same dedup as the CSV
+                # importers) + the batch auto-matcher ties it to booked
+                # income. Never new income rows here.
+                with _connect(db_path) as conn:
+                    dup = conn.execute(
+                        """SELECT id FROM bank_deposits
+                           WHERE account_id = ? AND deposit_date = ?
+                             AND ABS(amount - ?) < 0.01 AND description = ?""",
+                        (account_id, date, amt, desc)).fetchone()
+                    if dup:
+                        out["deposits_already"] += 1
+                    else:
+                        conn.execute(
+                            """INSERT INTO bank_deposits
+                               (account_id, deposit_date, amount, description,
+                                source, import_batch_id, raw_data)
+                               VALUES (?, ?, ?, ?, ?, ?, ?)""",
+                            (account_id, date, amt, desc,
+                             "godaddy" if "godaddy" in desc.lower() else "other",
+                             f"stmt-{account_last4}-{statement[:24]}",
+                             json.dumps(ln)))
+                        out["deposits_added"] += 1
+                        deposits_touched = True
+                    conn.commit()
+                continue
             with _connect(db_path) as conn:
+                feed_cust_id = None
+                if ln.get("customer"):
+                    feed_cust_id = _lookup_customer_id(
+                        conn, str(ln["customer"]).strip(), None)
                 exp = conn.execute(
-                    """SELECT id, merchant, amount, transaction_date,
-                              acct_transaction_id
-                       FROM expense_transactions
+                    """SELECT * FROM expense_transactions
                        WHERE ABS(amount - ?) <= 0.01
                          AND transaction_date BETWEEN date(?, '-7 day')
                                                   AND date(?, '+7 day')
                        ORDER BY ABS(julianday(transaction_date) - julianday(?))
                        LIMIT 1""", (amt, date, date, date)).fetchone()
                 if exp:
+                    exp = dict(exp)
+                    # Patch missing connectivity onto the matched row from
+                    # the feed, then re-promote so the split/FKs update.
+                    patch = {}
+                    if not exp.get("category") and ln.get("category"):
+                        patch["category"] = ln["category"]
+                    if not exp.get("event_name") and ln.get("event"):
+                        patch["event_name"] = ln["event"]
+                    if not exp.get("customer_id") and feed_cust_id:
+                        patch["customer_id"] = feed_cust_id
+                    if not exp.get("account_id") and account_id:
+                        patch["account_id"] = account_id
+                    if patch:
+                        conn.execute(
+                            "UPDATE expense_transactions SET "
+                            + ", ".join(f"{k} = ?" for k in patch)
+                            + " WHERE id = ?",
+                            (*patch.values(), exp["id"]))
+                        exp.update(patch)
+                        if exp.get("acct_transaction_id"):
+                            _sync_expense_ledger_entry(conn, exp)
+                        conn.commit()
                     out["matched"].append({
                         "line": f"{date} {desc} ${amt:.2f}",
                         "via": "expense", "expense_id": exp["id"],
-                        "books_merchant": exp["merchant"]})
+                        "books_merchant": exp["merchant"],
+                        "patched": sorted(patch.keys()) or None})
                     continue
                 acct = conn.execute(
                     """SELECT id, description, COALESCE(amount, total_amount) AS amt
@@ -32115,6 +32179,8 @@ def reconcile_statement_lines(account_last4: str, statement: str,
                 "account_last4": account_last4,
                 "account_id": account_id,
                 "category": category,
+                "event_name": (ln.get("event") or "").strip() or None,
+                "customer_id": feed_cust_id,
                 "entity": "TGF", "confidence": 100,
                 "review_status": "approved",
                 "notes": f"from statement {statement}",
@@ -32147,9 +32213,17 @@ def reconcile_statement_lines(account_last4: str, statement: str,
         except Exception:
             logger.exception("statement reconcile failed for line %s", ln)
             out["errors"] += 1
+    if deposits_touched:
+        try:
+            out["deposit_auto_match"] = run_deposit_auto_match(
+                account_id=account_id, db_path=db_path)
+        except Exception:
+            logger.exception("statement reconcile: deposit auto-match failed")
+            out["deposit_auto_match"] = {"error": "auto-match failed — run manually"}
     out["summary"] = {
         "lines": len(lines), "matched": len(out["matched"]),
         "created": len(out["created"]), "skipped": len(out["skipped"]),
+        "deposits_added": out["deposits_added"],
         "created_total": round(sum(float(str(c["line"]).rsplit("$", 1)[1])
                                    for c in out["created"]), 2)
         if out["created"] else 0.0,
