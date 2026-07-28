@@ -135,6 +135,23 @@ rows that duplicate payout/refund ledger rows become transfer funding
 legs; inbound doubles are merged; only genuinely missing flows (e.g.
 Venmo-balance-funded payouts that never touched checking) get booked.
 
+**Venmo writer eras (matters for dedup):** Feb–Mar 2026 inbound exists
+only as `venmo-<id>` acct rows (the CSV/import path) — the email parser
+had no Venmo coverage yet, so the only doubles were app-recorded
+external payments/add-ons booked alongside the import row. From
+~April 1 the Venmo EMAIL parser is live: every Venmo receipt becomes an
+expense row promoted to `exp-promoted-N` — so April+ inbound is
+SYSTEMATICALLY double-booked (`venmo-<id>` import row + exp-promoted
+row; triples where the app add-on recorder also wrote one). The
+2026-07-28 reconcile merged all Feb–Apr inbound doubles (~$1.6k income
+de-doubled; survivor = the row with customer/event FKs). OUTBOUND
+winnings remain the open policy question: the payouts console's
+per-game `payout-N` acct rows overlap the per-payment statement/parser
+rows ($2,631.82 across Feb–Mar Venmo-paid winnings; the console covered
+only ~39% of what Venmo actually paid, so neither side alone is
+complete). Kerry to ratify the resolution direction before any
+cross-source merge of winnings rows.
+
 ## Approval → Ledger Promotion
 `_sync_expense_ledger_entry(conn, exp)` — called by `update_expense_transaction()` whenever
 an expense is set to `review_status IN ('approved', 'corrected')`.

@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.149.15";
+window.TGF_VERSION = "2.149.16";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.149.16",
+    date: "2026-07-28",
+    changes: [
+      "Venmo statement reconciliation wave (Feb–Apr 2026, data operation — docs updated in expense-workflow.md): 123 Feb/Mar + 106 April statement lines tied to the penny against the books. 87 Frost-funded winnings/refund rows on TGF Checking enriched with payee, customer FK, event FK, and Venmo trace ids; 2025 Austin Fall Match Play refunds recategorized Refunds & Returns; 21 double-booked inbound payments merged (Venmo import + email parser + app recorder each wrote rows — ~$1.6k of income de-doubled); Joe Warring's contractor payments ($2,757.37) and all Two Man Tour pass-through flows tagged entity Two Man Tour; the $930 balance-funded Waterchase skins payout (never touched checking) booked from the statement. The payouts-console vs cash winnings overlap ($2,631.82) is quantified and awaits Kerry's policy ruling before any cross-source merge.",
+    ],
+  },
   {
     version: "2.149.15",
     date: "2026-07-28",
