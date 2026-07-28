@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.149.9";
+window.TGF_VERSION = "2.149.10";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.149.10",
+    date: "2026-07-28",
+    changes: [
+      "Bank statements may match P2P payout rows again (the v2.149.5 guard was card-specific but blocked everything): a checking 'VENMO PAYMENT' debit IS the funding leg of a Venmo payout, and batch funding posts days after the payout — so on a non-card feed, a debit line naming the P2P rail (VENMO/PAYPAL/CASHAPP/ZELLE) matches that rail's payout rows amount-only across the full ±7-day window. Card feeds keep the hard exclusion, and bank lines NOT naming a P2P rail still refuse payout rows.",
+    ],
+  },
   {
     version: "2.149.9",
     date: "2026-07-28",

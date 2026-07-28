@@ -86,8 +86,12 @@ transfer leg when no pair exists (two-leg convention);
 (1) P2P payout rows (`transaction_type='payout'` with
 source venmo/paypal/cashapp/zelle; the ledger path joins
 `exp-promoted-N` rows back to their expense row for this check) are
-NEVER candidates — a member payout can't be the books entry for a
-card/bank purchase; (2) `source_type='statement'` candidates must
+never candidates on CARD feeds — a member payout can't be a card
+charge. On BANK feeds (account_type != credit_card) a debit line
+naming the P2P rail (VENMO/PAYPAL/CASHAPP/ZELLE in the desc) IS the
+payout's funding leg and matches that rail's payout rows amount-only
+across the full ±7d window (batch funding posts days late); bank
+lines not naming a rail still refuse payout rows (v2.149.10); (2) `source_type='statement'` candidates must
 match on the EXACT date (statement dates are authoritative, so twins
 days apart can't cross-match); (3) candidates sharing no ≥3-char
 name token with the statement line only match within ±2 days.

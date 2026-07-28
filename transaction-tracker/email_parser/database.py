@@ -32461,10 +32461,8 @@ def reconcile_statement_lines(account_last4: str, statement: str,
                          AND transaction_date BETWEEN date(?, '-7 day')
                                                   AND date(?, '+7 day')
                          AND id NOT IN ({_excl})
-                         AND NOT (transaction_type = 'payout' AND source_type
-                                  IN ('venmo', 'paypal', 'cashapp', 'zelle'))
                        ORDER BY ABS(julianday(transaction_date) - julianday(?))
-                       LIMIT 8""", (amt, date, date, date)).fetchall()
+                       LIMIT 12""", (amt, date, date, date)).fetchall()
                 # Type compatibility (v2.149.7 — a $51.75 own-store card
                 # charge matched the GoDaddy ORDER INCOME row for the same
                 # purchase): a statement line may only consume a books row
@@ -32472,9 +32470,28 @@ def reconcile_statement_lines(account_last4: str, statement: str,
                 # payment→transfer, credit→received.
                 _want_exp_type = {"purchase": "expense", "payment": "transfer",
                                   "credit": "received"}.get(kind, "expense")
+                # Bank statements DO carry P2P payout legs (v2.149.10): a
+                # checking "VENMO PAYMENT" debit is the funding side of a
+                # Venmo payout, and batch funding posts days after the
+                # payout — so on a NON-card feed, a debit line naming the
+                # P2P rail may match that rail's payout rows amount-only
+                # across the full ±7d window. Card feeds keep the hard
+                # exclusion (a FACEBK charge once matched a member payout).
+                _p2p_kw = {"venmo": "VENMO", "paypal": "PAYPAL",
+                           "cashapp": "CASHAPP", "zelle": "ZELLE"}
+                _is_bank = (account_type or "credit_card") != "credit_card"
+                _desc_flat = re.sub(r"[^A-Z]", "", desc.upper())
                 exp = None
                 for c in cands:
                     c = dict(c)
+                    _csrc = str(c.get("source_type") or "").lower()
+                    if (c.get("transaction_type") == "payout"
+                            and _csrc in _p2p_kw):
+                        if (kind == "purchase" and _is_bank
+                                and _p2p_kw[_csrc] in _desc_flat):
+                            exp = c
+                            break
+                        continue
                     if (c.get("transaction_type") or "expense") != _want_exp_type:
                         continue
                     # Account consistency (v2.149.8 — a $31.61 Chipotle on
