@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.149.5";
+window.TGF_VERSION = "2.149.6";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.149.6",
+    date: "2026-07-28",
+    changes: [
+      "Ledger promotion auto-registers new entities: when an expense carries an entity name with no acct_entities row (e.g. 'Two Man Tour' — Kerry's contractor work, tracked separately from both TGF and Personal), the entity is created on the spot so the acct_transactions row gets a real entity FK instead of silently dropping to null. Entity names only arrive from controlled admin paths (statement feeds, expense patches), so an unknown name is a deliberate new book.",
+    ],
+  },
   {
     version: "2.149.5",
     date: "2026-07-28",

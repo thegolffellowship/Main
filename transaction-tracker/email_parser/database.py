@@ -35243,6 +35243,20 @@ def _sync_expense_ledger_entry(conn, exp: dict) -> int | None:
             (entity_name, entity_name),
         ).fetchone()
         entity_id = row["id"] if row else None
+        if entity_id is None:
+            # Auto-register an entity the admin explicitly tagged (e.g.
+            # 'Two Man Tour' contractor work, separate from TGF and
+            # Personal — Kerry 2026-07-28). Entity names only arrive from
+            # controlled paths (statement feeds, patch_expense_row, the
+            # expense parser's TGF/Personal), so an unknown name is a
+            # deliberate new book, not noise.
+            conn.execute(
+                "INSERT OR IGNORE INTO acct_entities (name, short_name) VALUES (?, ?)",
+                (entity_name, entity_name))
+            row = conn.execute(
+                "SELECT id FROM acct_entities WHERE LOWER(name) = LOWER(?) LIMIT 1",
+                (entity_name,)).fetchone()
+            entity_id = row["id"] if row else None
 
     event_id = None
     if event_name:
