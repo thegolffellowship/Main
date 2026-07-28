@@ -32227,7 +32227,11 @@ def patch_expense_row(expense_id: int, fields: dict,
     and split FKs update — the apply-side of Kerry's statement rulings
     (recategorize, link event, fix type). append_note adds to notes."""
     allowed = {"category", "transaction_type", "event_name", "customer_id",
-               "merchant", "entity", "email_uid", "account_id"}
+               "merchant", "entity", "email_uid", "account_id",
+               "review_status"}
+    if "review_status" in fields and fields["review_status"] not in (
+            "pending", "approved", "corrected", "rejected"):
+        return {"error": f"invalid review_status {fields['review_status']!r}"}
     with _connect(db_path) as conn:
         row = conn.execute("SELECT * FROM expense_transactions WHERE id = ?",
                            (expense_id,)).fetchone()

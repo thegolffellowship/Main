@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.149.12";
+window.TGF_VERSION = "2.149.13";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.149.13",
+    date: "2026-07-28",
+    changes: [
+      "review_status joins patch_expense_row's allowed fields (validated to pending/approved/corrected/rejected) so Kerry can approve or dismiss review-queue rows through the reconciliation conversation — first use: approving the La Quinta Fort Worth lodging receipt as a Two Man Tour expense. Approving via patch promotes the row to the ledger through the existing guard (pending rows still never promote).",
+    ],
+  },
   {
     version: "2.149.12",
     date: "2026-07-28",
