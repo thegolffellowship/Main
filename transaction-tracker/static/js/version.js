@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.146.0";
+window.TGF_VERSION = "2.146.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.146.1",
+    date: "2026-07-28",
+    changes: [
+      "Transferred money no longer vanishes from the Money Flow waterfall: a credit transfer left the source item inactive (never allocated) AND excluded the destination row as 'no new money' — a double-exclusion that dropped every transferred dollar. Destination rows now count, booking each transferred dollar exactly once (the ledger side already counts it once at the source), and stale zero-bucket XFER allocations refresh like EXT ones.",
+      "The Ledger check's difference is now itemized instead of mysterious: debug adds ledger_without_allocations — income rows whose order has no allocation at all (items later credited/transferred/deactivated while their income persists, plus uncategorized manual income rows), grouped by category with dollar totals. First YTD run after the reconciliation pass: 85 zero-decomposition rows → 5, season contests $1,680 pools / $325 markup now flowing.",
+    ],
+  },
   {
     version: "2.146.0",
     date: "2026-07-28",

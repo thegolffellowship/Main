@@ -32050,7 +32050,8 @@ def get_monthly_money_flow(month: str, debug: bool = False,
                WHERE substr(COALESCE(i.order_date, a.allocation_date), 1, 7)
                      BETWEEN ? AND ?
                  AND a.allocation_status = 'needs_course_cost'
-                 AND a.order_id LIKE 'EXT-%' AND a.item_id IS NOT NULL""",
+                 AND (a.order_id LIKE 'EXT-%' OR a.order_id LIKE 'XFER-%')
+                 AND a.item_id IS NOT NULL""",
             (p_from, p_to)).fetchall()]
     allocated_now = 0
     coverage_pending = 0
@@ -32115,7 +32116,7 @@ def get_monthly_money_flow(month: str, debug: bool = False,
         out = {"month": month, "course": 0.0, "prizes": 0.0, "godaddy": 0.0,
                "markup": 0.0, "retained": 0.0, "margin": 0.0, "total": 0.0}
         by_event: dict[str, dict] = {}
-        excluded = {"comp": 0, "wd": 0, "credit_transfer_dest": 0, "negative": 0}
+        excluded = {"comp": 0, "wd": 0, "negative": 0}
         needs_course_cost = 0
 
         for a in rows:
@@ -32127,9 +32128,11 @@ def get_monthly_money_flow(month: str, debug: bool = False,
             if status in ("wd", "withdrawn"):
                 excluded["wd"] += 1
                 continue
-            if pm == "credit_transfer" or str(a.get("order_id") or "").startswith("XFER-"):
-                excluded["credit_transfer_dest"] += 1
-                continue
+            # Credit-transfer DESTINATION rows are counted (v2.146.1): the
+            # source item goes inactive when transferred so it never gets
+            # an allocation — excluding the destination too made transferred
+            # money vanish from the waterfall entirely. Counting at the
+            # destination books each transferred dollar exactly once.
             if z(a.get("total_collected")) < 0:
                 excluded["negative"] += 1
                 continue
@@ -32256,6 +32259,26 @@ def get_monthly_money_flow(month: str, debug: bool = False,
                        GROUP BY t.category ORDER BY gross DESC""",
                     (p_from, p_to)).fetchall()]
                 out["debug"]["ledger_income_by_category"] = by_cat
+                # Name the ledger-vs-waterfall gap: income rows whose order
+                # has NO allocation at all — items were later credited /
+                # transferred / deactivated (income persists, inactive
+                # items never allocate) or the row is uncategorized manual
+                # income. This is the itemized "why they differ".
+                out["debug"]["ledger_without_allocations"] = [dict(r) for r in conn.execute(
+                    """SELECT COALESCE(t.category, '(none)') AS category,
+                              COUNT(*) AS n,
+                              ROUND(SUM(COALESCE(t.amount, t.total_amount)
+                                        + COALESCE(t.merchant_fee, 0)), 2) AS gross
+                       FROM acct_transactions t
+                       WHERE substr(t.date, 1, 7) BETWEEN ? AND ?
+                         AND COALESCE(t.status, 'active') NOT IN ('reversed', 'merged')
+                         AND COALESCE(t.entry_type, t.type) = 'income'
+                         AND COALESCE(t.category, '') NOT IN ('transfer_in')
+                         AND (COALESCE(t.order_id, '') = ''
+                              OR NOT EXISTS (SELECT 1 FROM acct_allocations a
+                                             WHERE a.order_id = t.order_id))
+                       GROUP BY t.category ORDER BY gross DESC""",
+                    (p_from, p_to)).fetchall()]
 
         # ── Statement proof (Kerry 2026-07-28: "actual statements vs your
         # own email extractions"): bank_deposits rows are imported straight
