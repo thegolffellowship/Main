@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.149.19";
+window.TGF_VERSION = "2.149.20";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.149.20",
+    date: "2026-07-28",
+    changes: [
+      "Docs: Kerry's approved quick-results-text format recorded in events.md — ≤300 characters including the GG results link, news-ticker style with the first five words in all caps then standard case, no emojis, storyline first (name the deciding tiebreaker), then flights/skins/CTPs compressed, ending with the Full results link.",
+    ],
+  },
   {
     version: "2.149.19",
     date: "2026-07-28",

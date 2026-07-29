@@ -1177,6 +1177,23 @@ MCP tool `determine_tgf_mvp`; Events Games tab 🏆 rows — City MVP
 row and TGF MVP block hydrate lazily via hydrateMvpDeterminations()
 (per-event fetch cache `_mvpDetCache`, spans marked data-done).
 
+## Quick results text (Kerry-approved format, 2026-07-28)
+
+When Kerry asks for a "quick results text" for an event, produce ONE
+block ≤300 CHARACTERS including spaces and the GG results link
+(`.../pages/<event-results-page>?round_id=<round>` — Kerry supplies
+it). News-ticker style: the FIRST FIVE WORDS in ALL CAPS, everything
+after in standard sentence case; no emojis. Lead with the storyline
+(who won City/TGF MVP and how — name the deciding tiebreaker, e.g.
+"edges Kulawik on the gross tiebreaker after both fire 5-under net";
+avoid words like "outlasts" that imply holding a lead), then compress
+the rest: Net flight winners, skins counts (×N), CTP winners, ending
+with "Full results: <link>". Reference example:
+"ANTHIS SWEEPS CANYON SPRINGS MVP and TGF MVP with 14 points — edges
+Kulawik on the gross tiebreaker after both fire 5-under net. Baker
+takes Low Flight; Anthis grabs 3 skins, White 2; Marroquin & Ellis
+stick the pins. Full results: <link>"
+
 ## Payouts page — Command Ledger (v2.54.0, TGF DS Phase 1)
 
 /tgf is the Design System reference page (see CLAUDE.md → TGF Design
