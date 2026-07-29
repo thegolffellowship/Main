@@ -21355,8 +21355,12 @@ def auto_match_refund_watches(expense_ids: list[int] | None= None,
         watches = [dict(r) for r in conn.execute(
             "SELECT * FROM refund_watches WHERE verified_at IS NULL "
             "ORDER BY initiated_at").fetchall()]
-        if not watches:
-            return summary
+        # NO early return when there are no open watches (v2.149.22 —
+        # Kerry 2026-07-28 "Refunds don't seem to be clearing"): Kerry
+        # pays credits straight from the Venmo app, so watches are
+        # usually EMPTY and the early return made the watchless pass
+        # below unreachable — four fresh credit-refund receipts sat
+        # parsed while their credits stayed OUTSTANDING.
         params: list = []
         sql = ("SELECT * FROM expense_transactions "
                "WHERE source_type IN ('venmo', 'paypal', 'cashapp', 'zelle') "
@@ -21430,6 +21434,11 @@ def auto_match_refund_watches(expense_ids: list[int] | None= None,
             conn.commit()
         summary["verified"] += 1
         summary["recorded"] += recorded
+        summary["matches"].append({
+            "watch_id": w["id"], "item_id": w["item_id"],
+            "expense_id": cand["id"], "amount": w["amount"],
+            "customer": w.get("customer_name"),
+        })
 
     # ── Watchless pass (Kerry 2026-07-20, the Jeff Rideout case) ──
     # Kerry often pays a credit refund straight from the Venmo app with
@@ -21486,12 +21495,10 @@ def auto_match_refund_watches(expense_ids: list[int] | None= None,
                 logger.exception("watchless refund complete failed for "
                                  "item %s / expense %s", it["id"], exp["id"])
     except Exception:
+        # This append used to live HERE with watch-loop variables (w/cand)
+        # that don't exist on this path — a latent NameError inside the
+        # error handler. It now lives in the watch loop where it belongs.
         logger.exception("watchless refund pass failed")
-        summary["matches"].append({
-            "watch_id": w["id"], "item_id": w["item_id"],
-            "expense_id": cand["id"], "amount": w["amount"],
-            "customer": w.get("customer_name"),
-        })
     return summary
 
 

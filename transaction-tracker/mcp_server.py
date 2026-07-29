@@ -1588,6 +1588,12 @@ def _scoring_dispatch(url: str, extract: str):
                 _c.commit()
             return json.dumps({"item_id": int(_iid.strip()),
                                "updated": _n2}, indent=2)
+        if cmd == "scoring-refund-sweep":
+            # Run the refund auto-matcher on demand over ALL ingested
+            # P2P receipts (watch verification + the watchless pass) —
+            # for receipts that landed while the sweep was unreachable.
+            return json.dumps(db.auto_match_refund_watches(),
+                              indent=2, default=str)
         if cmd == "scoring-credit-payout":
             # Record an already-sent credit refund — "<item_id>|<method>|
             # <date>|<note>". Delegates to db.payout_credit (same stamp +

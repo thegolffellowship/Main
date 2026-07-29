@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.149.21";
+window.TGF_VERSION = "2.149.22";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.149.22",
+    date: "2026-07-28",
+    changes: [
+      "Refunds now clear when Kerry pays straight from the Venmo app (Kerry's catch after the s9.20 night: four credit-refund receipts parsed but the credits sat OUTSTANDING). The auto-matcher bailed out early whenever no in-app refund watch was open — which is always, in Kerry's pay-from-Venmo workflow — so the watchless completion pass (built for the Jeff Rideout case) was unreachable. The early return is gone, a latent NameError in the pass's error handler is fixed, the watch-loop match log actually records matches now, and a scoring-refund-sweep bridge command runs the matcher on demand for receipts that landed while the sweep was dead.",
+    ],
+  },
   {
     version: "2.149.21",
     date: "2026-07-28",
