@@ -9544,6 +9544,227 @@ def api_scorecard(scoring_round_id):
     return (jsonify(card), 200) if card else (jsonify({"error": "not found"}), 404)
 
 
+# ═══════════════════════════════════════════════════════════════════════
+# LIVE SCORING TEST CENTER (admin sandbox)
+#
+# Stage 1 of the untether-from-GG plan (docs/claude/game-engine.md): stand
+# our own leaderboard next to GG's and diff until we reproduce it exactly.
+# Every route here is admin-only and every write lands in ls_test_* tables —
+# nothing on this surface can touch a production scoring row.
+# ═══════════════════════════════════════════════════════════════════════
+
+@app.route("/admin/test-center")
+@require_role("admin")
+def test_center_page():
+    return render_template("test_center.html", SHELL_TITLE="Test Center",
+                           SHELL_ACTIVE="admin")
+
+
+@app.route("/api/test-center/sessions")
+@require_role("admin")
+def api_ls_sessions():
+    from email_parser.database import ls_list_sessions
+    return jsonify(ls_list_sessions())
+
+
+@app.route("/api/test-center/sessions", methods=["POST"])
+@require_role("admin")
+def api_ls_create_session():
+    """Create a sandbox session — synthetic, or seeded from a real event."""
+    from email_parser.database import (ls_create_session,
+                                       ls_seed_session_from_event)
+    body = request.get_json(silent=True) or {}
+    who = session.get("role")
+    event_name = (body.get("seed_from_event") or "").strip()
+    try:
+        if event_name:
+            res = ls_seed_session_from_event(
+                event_name, name=(body.get("name") or "").strip() or None,
+                created_by=who)
+            return (jsonify(res), 400) if "error" in res else (jsonify(res), 201)
+        res = ls_create_session(
+            (body.get("name") or "").strip() or "Untitled test",
+            holes=int(body.get("holes") or 9),
+            course_id=int(body.get("course_id") or 0) or None,
+            tee_id=int(body.get("tee_id") or 0) or None,
+            championship=bool(body.get("championship")),
+            notes=(body.get("notes") or "").strip() or None,
+            created_by=who)
+        return jsonify(res), 201
+    except Exception as e:
+        logger.exception("Test Center session create failed")
+        return jsonify({"error": f"Create failed: {e}"}), 500
+
+
+@app.route("/api/test-center/sessions/<int:session_id>")
+@require_role("admin")
+def api_ls_get_session(session_id):
+    from email_parser.database import ls_get_session
+    data = ls_get_session(session_id)
+    return (jsonify(data), 200) if data else (jsonify({"error": "not found"}), 404)
+
+
+@app.route("/api/test-center/sessions/<int:session_id>", methods=["PATCH"])
+@require_role("admin")
+def api_ls_update_session(session_id):
+    from email_parser.database import ls_update_session
+    return jsonify(ls_update_session(session_id, request.get_json(silent=True) or {}))
+
+
+@app.route("/api/test-center/sessions/<int:session_id>", methods=["DELETE"])
+@require_role("admin")
+def api_ls_delete_session(session_id):
+    from email_parser.database import ls_delete_session
+    return jsonify(ls_delete_session(session_id))
+
+
+@app.route("/api/test-center/sessions/<int:session_id>/players",
+           methods=["POST"])
+@require_role("admin")
+def api_ls_add_player(session_id):
+    from email_parser.database import ls_add_player
+    body = request.get_json(silent=True) or {}
+    ph = body.get("playing_handicap")
+    try:
+        return jsonify(ls_add_player(
+            session_id, (body.get("player_name") or "").strip(),
+            customer_id=int(body.get("customer_id") or 0) or None,
+            playing_handicap=float(ph) if ph not in (None, "") else None,
+            flight=(body.get("flight") or "").strip() or None,
+            team_num=int(body.get("team_num") or 0) or None,
+            buys_net=body.get("buys_net", True),
+            buys_gross=body.get("buys_gross", True),
+            is_member=body.get("is_member", True))), 201
+    except (TypeError, ValueError) as e:
+        return jsonify({"error": f"Bad player payload: {e}"}), 400
+
+
+@app.route("/api/test-center/players/<int:player_id>", methods=["PATCH"])
+@require_role("admin")
+def api_ls_update_player(player_id):
+    from email_parser.database import ls_update_player
+    return jsonify(ls_update_player(player_id, request.get_json(silent=True) or {}))
+
+
+@app.route("/api/test-center/players/<int:player_id>", methods=["DELETE"])
+@require_role("admin")
+def api_ls_delete_player(player_id):
+    from email_parser.database import ls_delete_player
+    return jsonify(ls_delete_player(player_id))
+
+
+@app.route("/api/test-center/sessions/<int:session_id>/score",
+           methods=["POST"])
+@require_role("admin")
+def api_ls_set_score(session_id):
+    """One hole, one player — the Stage-2 write path in miniature."""
+    from email_parser.database import ls_set_score
+    body = request.get_json(silent=True) or {}
+    try:
+        player_id = int(body["player_id"])
+        hole = int(body["hole_number"])
+    except (KeyError, TypeError, ValueError):
+        return jsonify({"error": "player_id and hole_number required"}), 400
+    strokes = body.get("strokes")
+    strokes = int(strokes) if strokes not in (None, "") else None
+    if strokes is not None and not (1 <= strokes <= 20):
+        return jsonify({"error": "strokes must be between 1 and 20"}), 400
+    sr = body.get("strokes_received")
+    return jsonify(ls_set_score(session_id, player_id, hole, strokes,
+                                int(sr) if sr not in (None, "") else None))
+
+
+@app.route("/api/test-center/sessions/<int:session_id>/hole",
+           methods=["POST"])
+@require_role("admin")
+def api_ls_set_course_hole(session_id):
+    from email_parser.database import ls_set_course_hole
+    body = request.get_json(silent=True) or {}
+
+    def _int(key):
+        v = body.get(key)
+        return int(v) if v not in (None, "") else None
+    try:
+        hole = int(body["hole_number"])
+    except (KeyError, TypeError, ValueError):
+        return jsonify({"error": "hole_number required"}), 400
+    return jsonify(ls_set_course_hole(session_id, hole, _int("par"),
+                                      _int("yardage"), _int("stroke_index")))
+
+
+@app.route("/api/test-center/sessions/<int:session_id>/autoplay",
+           methods=["POST"])
+@require_role("admin")
+def api_ls_autoplay(session_id):
+    from email_parser.database import ls_autoplay
+    body = request.get_json(silent=True) or {}
+    return jsonify(ls_autoplay(
+        session_id,
+        through_hole=int(body.get("through_hole") or 0) or None,
+        seed=int(body["seed"]) if str(body.get("seed") or "").strip() else None,
+        overwrite=bool(body.get("overwrite"))))
+
+
+@app.route("/api/test-center/sessions/<int:session_id>/clear-scores",
+           methods=["POST"])
+@require_role("admin")
+def api_ls_clear_scores(session_id):
+    from email_parser.database import ls_clear_scores
+    return jsonify(ls_clear_scores(session_id))
+
+
+@app.route("/api/test-center/sessions/<int:session_id>/contest",
+           methods=["POST"])
+@require_role("admin")
+def api_ls_contest(session_id):
+    """Record a CTP / Longest Putt / HIO winner — measured, never derived."""
+    from email_parser.database import ls_record_contest
+    body = request.get_json(silent=True) or {}
+    pid = body.get("player_id")
+    res = ls_record_contest(session_id, body.get("kind") or "",
+                            int(body.get("hole_number") or 0) or None,
+                            int(pid) if pid not in (None, "") else None,
+                            (body.get("note") or "").strip() or None)
+    return (jsonify(res), 400) if "error" in res else jsonify(res)
+
+
+@app.route("/api/test-center/sessions/<int:session_id>/leaderboard")
+@require_role("admin")
+def api_ls_leaderboard(session_id):
+    from email_parser.database import ls_leaderboard
+    res = ls_leaderboard(session_id)
+    return (jsonify(res), 404) if "error" in res else jsonify(res)
+
+
+@app.route("/api/test-center/sessions/<int:session_id>/parity")
+@require_role("admin")
+def api_ls_parity(session_id):
+    """The Stage-1 confidence gate: our engine vs GG, player by player."""
+    from email_parser.database import ls_parity
+    res = ls_parity(session_id)
+    return (jsonify(res), 400) if "error" in res else jsonify(res)
+
+
+@app.route("/api/test-center/scorable-events")
+@require_role("admin")
+def api_ls_scorable_events():
+    """Events that have imported scorecards — the seedable set."""
+    from email_parser.database import get_connection
+    conn = get_connection()
+    try:
+        rows = conn.execute(
+            """SELECT e.item_name, e.event_date, e.course,
+                      COUNT(sr.id) AS n_rounds
+               FROM events e JOIN scoring_rounds sr ON sr.event_id = e.id
+               GROUP BY e.id
+               HAVING n_rounds > 0
+               ORDER BY e.event_date DESC, e.item_name
+               LIMIT 200""").fetchall()
+        return jsonify([dict(r) for r in rows])
+    finally:
+        conn.close()
+
+
 @app.route("/api/courses/tees")
 @require_role("manager")
 def api_course_tees():

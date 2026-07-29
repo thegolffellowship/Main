@@ -10,6 +10,7 @@ import io
 import json
 import math
 import os
+import random
 import re
 import shutil
 import sqlite3
@@ -12934,6 +12935,665 @@ def verify_scoring_round(scoring_round_id: int,
             "player_name": r["player_name"], "checks": checks,
             "all_ok": all(c["ok"] for c in checks),
             "derived_totals": card["derived_totals"]}
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# LIVE SCORING TEST CENTER (admin sandbox) — Stage 1 of the untether plan
+#
+# Everything below writes ONLY to the ls_test_* tables. No production row
+# is ever created, updated, or deleted by this surface: seeding from a real
+# event COPIES scoring_rounds/scoring_holes into the sandbox and remembers
+# the source round id so the parity harness can diff against it. See
+# docs/claude/live-scoring-test-center.md.
+#
+# Tables are created lazily (the _ensure_pairing_tables pattern) so live
+# deployments self-migrate on first use and init_db's boot path is
+# untouched. Per Guiding Principle 6 every table that references a person
+# carries customer_id as a FK to customers(customer_id).
+# ═══════════════════════════════════════════════════════════════════════
+
+def _ensure_live_scoring_tables(conn: sqlite3.Connection) -> None:
+    conn.execute("""CREATE TABLE IF NOT EXISTS ls_test_sessions (
+        id            INTEGER PRIMARY KEY AUTOINCREMENT,
+        name          TEXT NOT NULL,
+        source_kind   TEXT NOT NULL DEFAULT 'synthetic',
+        event_id      INTEGER REFERENCES events(id),
+        event_name    TEXT,
+        round_date    TEXT,
+        course_id     INTEGER REFERENCES courses(course_id),
+        tee_id        INTEGER REFERENCES course_tees(tee_id),
+        holes         INTEGER NOT NULL DEFAULT 9,
+        championship  INTEGER NOT NULL DEFAULT 0,
+        notes         TEXT,
+        created_by    TEXT,
+        created_at    TEXT DEFAULT (datetime('now')),
+        updated_at    TEXT DEFAULT (datetime('now')))""")
+    conn.execute("""CREATE TABLE IF NOT EXISTS ls_test_players (
+        id               INTEGER PRIMARY KEY AUTOINCREMENT,
+        session_id       INTEGER NOT NULL REFERENCES ls_test_sessions(id)
+                             ON DELETE CASCADE,
+        customer_id      INTEGER REFERENCES customers(customer_id),
+        player_name      TEXT NOT NULL,
+        playing_handicap REAL,
+        handicap_index   REAL,
+        flight           TEXT,
+        team_num         INTEGER,
+        buys_net         INTEGER NOT NULL DEFAULT 1,
+        buys_gross       INTEGER NOT NULL DEFAULT 1,
+        is_member        INTEGER NOT NULL DEFAULT 1,
+        source_round_id  INTEGER REFERENCES scoring_rounds(id),
+        created_at       TEXT DEFAULT (datetime('now')))""")
+    conn.execute("""CREATE TABLE IF NOT EXISTS ls_test_holes (
+        id               INTEGER PRIMARY KEY AUTOINCREMENT,
+        session_id       INTEGER NOT NULL REFERENCES ls_test_sessions(id)
+                             ON DELETE CASCADE,
+        player_id        INTEGER NOT NULL REFERENCES ls_test_players(id)
+                             ON DELETE CASCADE,
+        hole_number      INTEGER NOT NULL,
+        strokes          INTEGER,
+        strokes_received INTEGER,
+        UNIQUE(player_id, hole_number))""")
+    # Per-session course overrides. A synthetic session has no real tee, and
+    # a seeded session may want a what-if par/stroke-index. Rows here WIN
+    # over course_tee_holes; absent, the real tee data is used.
+    conn.execute("""CREATE TABLE IF NOT EXISTS ls_test_course_holes (
+        session_id   INTEGER NOT NULL REFERENCES ls_test_sessions(id)
+                         ON DELETE CASCADE,
+        hole_number  INTEGER NOT NULL,
+        par          INTEGER,
+        yardage      INTEGER,
+        stroke_index INTEGER,
+        PRIMARY KEY (session_id, hole_number))""")
+    # CTP / Longest Putt are measured on course and HIO payouts are
+    # adjudicated — none of the three is derivable from hole scores, so the
+    # sandbox records them by hand exactly as a manager would.
+    conn.execute("""CREATE TABLE IF NOT EXISTS ls_test_contests (
+        id          INTEGER PRIMARY KEY AUTOINCREMENT,
+        session_id  INTEGER NOT NULL REFERENCES ls_test_sessions(id)
+                        ON DELETE CASCADE,
+        kind        TEXT NOT NULL,
+        hole_number INTEGER,
+        player_id   INTEGER REFERENCES ls_test_players(id) ON DELETE CASCADE,
+        customer_id INTEGER REFERENCES customers(customer_id),
+        note        TEXT,
+        created_at  TEXT DEFAULT (datetime('now')),
+        UNIQUE(session_id, kind, hole_number))""")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_ls_players_session "
+                 "ON ls_test_players(session_id)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_ls_holes_session "
+                 "ON ls_test_holes(session_id)")
+
+
+_LS_DEFAULT_NINE = [
+    # A neutral par-36 nine used when a synthetic session names no course:
+    # two par 3s, two par 5s, stroke indexes 1-9. Overridable per session.
+    (1, 4, 380, 3), (2, 3, 155, 9), (3, 5, 520, 1), (4, 4, 400, 5),
+    (5, 4, 365, 7), (6, 3, 190, 8), (7, 4, 430, 2), (8, 4, 375, 6),
+    (9, 5, 505, 4),
+]
+
+
+def _ls_touch(conn: sqlite3.Connection, session_id: int) -> None:
+    conn.execute("UPDATE ls_test_sessions SET updated_at = datetime('now') "
+                 "WHERE id = ?", (session_id,))
+
+
+def ls_list_sessions(db_path: str | Path = DB_PATH) -> list:
+    with _connect(db_path) as conn:
+        _ensure_live_scoring_tables(conn)
+        rows = conn.execute(
+            """SELECT s.*, c.name AS course_name, t.tee_name,
+                      (SELECT COUNT(*) FROM ls_test_players p
+                        WHERE p.session_id = s.id) AS n_players,
+                      (SELECT COUNT(*) FROM ls_test_holes h
+                        WHERE h.session_id = s.id AND h.strokes IS NOT NULL)
+                        AS n_scores
+               FROM ls_test_sessions s
+               LEFT JOIN courses c ON c.course_id = s.course_id
+               LEFT JOIN course_tees t ON t.tee_id = s.tee_id
+               ORDER BY s.updated_at DESC, s.id DESC""").fetchall()
+        return [dict(r) for r in rows]
+
+
+def ls_create_session(name: str, holes: int = 9, event_name: str | None = None,
+                      course_id: int | None = None, tee_id: int | None = None,
+                      championship: bool = False, notes: str | None = None,
+                      created_by: str | None = None,
+                      db_path: str | Path = DB_PATH) -> dict:
+    """Create an empty synthetic sandbox session."""
+    holes = 18 if int(holes or 9) > 9 else 9
+    with _connect(db_path) as conn:
+        _ensure_live_scoring_tables(conn)
+        _ensure_scoring_tables(conn)
+        event_id = None
+        if event_name:
+            ev = conn.execute(
+                "SELECT id FROM events WHERE item_name = ? COLLATE NOCASE",
+                (event_name,)).fetchone()
+            event_id = ev["id"] if ev else None
+        sid = conn.execute(
+            """INSERT INTO ls_test_sessions
+                   (name, source_kind, event_id, event_name, course_id, tee_id,
+                    holes, championship, notes, created_by)
+               VALUES (?, 'synthetic', ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (name.strip() or "Untitled test", event_id, event_name, course_id,
+             tee_id, holes, 1 if championship else 0, notes,
+             created_by)).lastrowid
+        # Seed the course holes: the real tee when one was named, else the
+        # neutral nine (mirrored onto the back for an 18).
+        tee_rows = []
+        if tee_id:
+            tee_rows = [dict(r) for r in conn.execute(
+                """SELECT hole_number, par, yardage, stroke_index
+                   FROM course_tee_holes WHERE tee_id = ?
+                   ORDER BY hole_number""", (tee_id,)).fetchall()]
+        if tee_rows:
+            for r in tee_rows[:holes]:
+                conn.execute(
+                    """INSERT OR REPLACE INTO ls_test_course_holes
+                           (session_id, hole_number, par, yardage, stroke_index)
+                       VALUES (?, ?, ?, ?, ?)""",
+                    (sid, r["hole_number"], r["par"], r["yardage"],
+                     r["stroke_index"]))
+        else:
+            for h, par, yd, si in _LS_DEFAULT_NINE:
+                conn.execute(
+                    """INSERT OR REPLACE INTO ls_test_course_holes
+                           (session_id, hole_number, par, yardage, stroke_index)
+                       VALUES (?, ?, ?, ?, ?)""", (sid, h, par, yd, si))
+                if holes == 18:
+                    conn.execute(
+                        """INSERT OR REPLACE INTO ls_test_course_holes
+                               (session_id, hole_number, par, yardage, stroke_index)
+                           VALUES (?, ?, ?, ?, ?)""",
+                        (sid, h + 9, par, yd, si + 9))
+        conn.commit()
+        return {"session_id": sid, "name": name, "holes": holes}
+
+
+def ls_seed_session_from_event(event_name: str, name: str | None = None,
+                               created_by: str | None = None,
+                               db_path: str | Path = DB_PATH) -> dict:
+    """Clone a real event's imported scorecards into a sandbox session.
+
+    Copies the FACTS only — gross strokes per hole, GG's own handicap dots,
+    the playing handicap — and remembers each player's `source_round_id` so
+    `ls_parity` can diff our engine against what GG recorded. Teams come
+    from the event's saved pairings; NET/GROSS buyer flags come from the
+    same eligibility rules the Games tab uses. Production data is READ, never
+    written.
+    """
+    with _connect(db_path) as conn:
+        _ensure_live_scoring_tables(conn)
+        _ensure_scoring_tables(conn)
+        ev = conn.execute(
+            "SELECT * FROM events WHERE item_name = ? COLLATE NOCASE",
+            (event_name,)).fetchone()
+        if not ev:
+            return {"error": f"event not found: {event_name}"}
+        ev = dict(ev)
+        rounds = [dict(r) for r in conn.execute(
+            """SELECT * FROM scoring_rounds WHERE event_id = ?
+               ORDER BY player_name""", (ev["id"],)).fetchall()]
+        if not rounds:
+            return {"error": f"no imported scorecards for {event_name} — "
+                             f"import the event's ALL Net card first"}
+        # The tee/course the field actually played: most common non-null.
+        def _mode(key):
+            vals = [r[key] for r in rounds if r[key] is not None]
+            return max(set(vals), key=vals.count) if vals else None
+        course_id, tee_id = _mode("course_id"), _mode("tee_id")
+        holes = 18 if max((r["holes_played"] or 0) for r in rounds) > 9 else 9
+
+        sid = conn.execute(
+            """INSERT INTO ls_test_sessions
+                   (name, source_kind, event_id, event_name, round_date,
+                    course_id, tee_id, holes, notes, created_by)
+               VALUES (?, 'seeded', ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (name or f"{ev['item_name']} — shadow",
+             ev["id"], ev["item_name"], _mode("round_date"), course_id, tee_id,
+             holes,
+             "Seeded from imported GG scorecards. Scores are FACTS copied "
+             "from scoring_holes; every game below is recomputed by our own "
+             "engine.", created_by)).lastrowid
+
+        for r in conn.execute(
+                """SELECT hole_number, par, yardage, stroke_index
+                   FROM course_tee_holes WHERE tee_id = ?
+                   ORDER BY hole_number""", (tee_id,)).fetchall():
+            conn.execute(
+                """INSERT OR REPLACE INTO ls_test_course_holes
+                       (session_id, hole_number, par, yardage, stroke_index)
+                   VALUES (?, ?, ?, ?, ?)""",
+                (sid, r["hole_number"], r["par"], r["yardage"],
+                 r["stroke_index"]))
+
+        net_buyers = _event_game_buyers(conn, ev["item_name"], "NET")["buyers"]
+        gross_buyers = _event_game_buyers(conn, ev["item_name"], "GROSS")["buyers"]
+        teams = {}
+        for p in conn.execute(
+                """SELECT group_num, player_name FROM event_pairings
+                   WHERE event_id = ?""", (ev["id"],)).fetchall():
+            teams[(p["player_name"] or "").strip().lower()] = p["group_num"]
+
+        seeded = 0
+        for r in rounds:
+            cid = r["customer_id"]
+            pid = conn.execute(
+                """INSERT INTO ls_test_players
+                       (session_id, customer_id, player_name, playing_handicap,
+                        flight, team_num, buys_net, buys_gross, is_member,
+                        source_round_id)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?)""",
+                (sid, cid, r["player_name"], r["playing_handicap"],
+                 r["flight"], teams.get((r["player_name"] or "").strip().lower()),
+                 1 if (cid and cid in net_buyers) else 0,
+                 1 if (cid and cid in gross_buyers) else 0,
+                 r["id"])).lastrowid
+            for h in conn.execute(
+                    """SELECT hole_number, strokes, strokes_received
+                       FROM scoring_holes WHERE scoring_round_id = ?""",
+                    (r["id"],)).fetchall():
+                conn.execute(
+                    """INSERT OR REPLACE INTO ls_test_holes
+                           (session_id, player_id, hole_number, strokes,
+                            strokes_received)
+                       VALUES (?, ?, ?, ?, ?)""",
+                    (sid, pid, h["hole_number"], h["strokes"],
+                     h["strokes_received"]))
+            seeded += 1
+        conn.commit()
+        return {"session_id": sid, "event": ev["item_name"], "holes": holes,
+                "players_seeded": seeded,
+                "net_buyers": sum(1 for r in rounds
+                                  if r["customer_id"] in net_buyers),
+                "gross_buyers": sum(1 for r in rounds
+                                    if r["customer_id"] in gross_buyers),
+                "teams_from_pairings": bool(teams)}
+
+
+def ls_get_session(session_id: int, db_path: str | Path = DB_PATH) -> dict | None:
+    with _connect(db_path) as conn:
+        _ensure_live_scoring_tables(conn)
+        s = conn.execute(
+            """SELECT s.*, c.name AS course_name, t.tee_name, t.slope, t.rating
+               FROM ls_test_sessions s
+               LEFT JOIN courses c ON c.course_id = s.course_id
+               LEFT JOIN course_tees t ON t.tee_id = s.tee_id
+               WHERE s.id = ?""", (session_id,)).fetchone()
+        if not s:
+            return None
+        holes = [dict(r) for r in conn.execute(
+            """SELECT hole_number, par, yardage, stroke_index
+               FROM ls_test_course_holes WHERE session_id = ?
+               ORDER BY hole_number""", (session_id,)).fetchall()]
+        players = [dict(r) for r in conn.execute(
+            """SELECT * FROM ls_test_players WHERE session_id = ?
+               ORDER BY team_num IS NULL, team_num, player_name""",
+            (session_id,)).fetchall()]
+        scores = {}
+        for r in conn.execute(
+                """SELECT player_id, hole_number, strokes, strokes_received
+                   FROM ls_test_holes WHERE session_id = ?""",
+                (session_id,)).fetchall():
+            scores.setdefault(r["player_id"], {})[r["hole_number"]] = {
+                "strokes": r["strokes"],
+                "strokes_received": r["strokes_received"]}
+        for p in players:
+            p["scores"] = scores.get(p["id"], {})
+        contests = [dict(r) for r in conn.execute(
+            """SELECT * FROM ls_test_contests WHERE session_id = ?
+               ORDER BY kind, hole_number""", (session_id,)).fetchall()]
+        return {"session": dict(s), "holes": holes, "players": players,
+                "contests": contests}
+
+
+def ls_update_session(session_id: int, fields: dict,
+                      db_path: str | Path = DB_PATH) -> dict:
+    allowed = {"name", "notes", "championship", "holes"}
+    sets, vals = [], []
+    for k, v in (fields or {}).items():
+        if k not in allowed:
+            continue
+        if k == "championship":
+            v = 1 if v else 0
+        if k == "holes":
+            v = 18 if int(v or 9) > 9 else 9
+        sets.append(f"{k} = ?")
+        vals.append(v)
+    if not sets:
+        return {"updated": 0}
+    with _connect(db_path) as conn:
+        _ensure_live_scoring_tables(conn)
+        conn.execute(f"UPDATE ls_test_sessions SET {', '.join(sets)}, "
+                     f"updated_at = datetime('now') WHERE id = ?",
+                     vals + [session_id])
+        conn.commit()
+        return {"updated": 1}
+
+
+def ls_delete_session(session_id: int, db_path: str | Path = DB_PATH) -> dict:
+    with _connect(db_path) as conn:
+        _ensure_live_scoring_tables(conn)
+        for tbl in ("ls_test_contests", "ls_test_holes", "ls_test_players",
+                    "ls_test_course_holes"):
+            conn.execute(f"DELETE FROM {tbl} WHERE session_id = ?", (session_id,))
+        conn.execute("DELETE FROM ls_test_sessions WHERE id = ?", (session_id,))
+        conn.commit()
+        return {"deleted": session_id}
+
+
+def ls_set_course_hole(session_id: int, hole_number: int, par: int | None = None,
+                       yardage: int | None = None,
+                       stroke_index: int | None = None,
+                       db_path: str | Path = DB_PATH) -> dict:
+    with _connect(db_path) as conn:
+        _ensure_live_scoring_tables(conn)
+        conn.execute(
+            """INSERT INTO ls_test_course_holes
+                   (session_id, hole_number, par, yardage, stroke_index)
+               VALUES (?, ?, ?, ?, ?)
+               ON CONFLICT(session_id, hole_number) DO UPDATE SET
+                   par = COALESCE(excluded.par, par),
+                   yardage = COALESCE(excluded.yardage, yardage),
+                   stroke_index = COALESCE(excluded.stroke_index, stroke_index)""",
+            (session_id, hole_number, par, yardage, stroke_index))
+        _ls_touch(conn, session_id)
+        conn.commit()
+        return {"session_id": session_id, "hole": hole_number}
+
+
+def ls_add_player(session_id: int, player_name: str,
+                  customer_id: int | None = None,
+                  playing_handicap: float | None = None,
+                  handicap_index: float | None = None,
+                  flight: str | None = None, team_num: int | None = None,
+                  buys_net: bool = True, buys_gross: bool = True,
+                  is_member: bool = True,
+                  db_path: str | Path = DB_PATH) -> dict:
+    """Add one player. When `customer_id` is given the canonical name wins
+    (Principle 6: identity is the id, the name is a display label)."""
+    with _connect(db_path) as conn:
+        _ensure_live_scoring_tables(conn)
+        if customer_id:
+            row = conn.execute(
+                "SELECT customer_name FROM customers WHERE customer_id = ?",
+                (customer_id,)).fetchone()
+            if row and row["customer_name"]:
+                player_name = row["customer_name"]
+        pid = conn.execute(
+            """INSERT INTO ls_test_players
+                   (session_id, customer_id, player_name, playing_handicap,
+                    handicap_index, flight, team_num, buys_net, buys_gross,
+                    is_member)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (session_id, customer_id, (player_name or "").strip() or "Player",
+             playing_handicap, handicap_index, flight, team_num,
+             1 if buys_net else 0, 1 if buys_gross else 0,
+             1 if is_member else 0)).lastrowid
+        _ls_touch(conn, session_id)
+        conn.commit()
+        return {"player_id": pid, "player_name": player_name}
+
+
+def ls_update_player(player_id: int, fields: dict,
+                     db_path: str | Path = DB_PATH) -> dict:
+    allowed = {"player_name", "playing_handicap", "handicap_index", "flight",
+               "team_num", "buys_net", "buys_gross", "is_member"}
+    sets, vals = [], []
+    for k, v in (fields or {}).items():
+        if k not in allowed:
+            continue
+        if k in ("buys_net", "buys_gross", "is_member"):
+            v = 1 if v else 0
+        sets.append(f"{k} = ?")
+        vals.append(v)
+    if not sets:
+        return {"updated": 0}
+    with _connect(db_path) as conn:
+        _ensure_live_scoring_tables(conn)
+        conn.execute(f"UPDATE ls_test_players SET {', '.join(sets)} WHERE id = ?",
+                     vals + [player_id])
+        row = conn.execute("SELECT session_id FROM ls_test_players WHERE id = ?",
+                           (player_id,)).fetchone()
+        if row:
+            _ls_touch(conn, row["session_id"])
+        conn.commit()
+        return {"updated": 1}
+
+
+def ls_delete_player(player_id: int, db_path: str | Path = DB_PATH) -> dict:
+    with _connect(db_path) as conn:
+        _ensure_live_scoring_tables(conn)
+        conn.execute("DELETE FROM ls_test_holes WHERE player_id = ?", (player_id,))
+        conn.execute("DELETE FROM ls_test_contests WHERE player_id = ?", (player_id,))
+        conn.execute("DELETE FROM ls_test_players WHERE id = ?", (player_id,))
+        conn.commit()
+        return {"deleted": player_id}
+
+
+def ls_set_score(session_id: int, player_id: int, hole_number: int,
+                 strokes: int | None,
+                 strokes_received: int | None = None,
+                 db_path: str | Path = DB_PATH) -> dict:
+    """Record (or clear, with strokes=None) one hole for one player.
+
+    This is the Stage-2 write path in miniature: a single hole, entered by a
+    person, with the leaderboard recomputed on read. `strokes_received` is
+    left NULL unless explicitly supplied so the engine derives the dots from
+    the playing handicap — the untethered behaviour.
+    """
+    with _connect(db_path) as conn:
+        _ensure_live_scoring_tables(conn)
+        if strokes is None and strokes_received is None:
+            conn.execute("DELETE FROM ls_test_holes WHERE player_id = ? "
+                         "AND hole_number = ?", (player_id, hole_number))
+        else:
+            conn.execute(
+                """INSERT INTO ls_test_holes
+                       (session_id, player_id, hole_number, strokes,
+                        strokes_received)
+                   VALUES (?, ?, ?, ?, ?)
+                   ON CONFLICT(player_id, hole_number) DO UPDATE SET
+                       strokes = excluded.strokes,
+                       strokes_received = COALESCE(excluded.strokes_received,
+                                                   ls_test_holes.strokes_received)""",
+                (session_id, player_id, hole_number, strokes, strokes_received))
+        _ls_touch(conn, session_id)
+        conn.commit()
+        return {"session_id": session_id, "player_id": player_id,
+                "hole": hole_number, "strokes": strokes}
+
+
+def ls_clear_scores(session_id: int, db_path: str | Path = DB_PATH) -> dict:
+    with _connect(db_path) as conn:
+        _ensure_live_scoring_tables(conn)
+        n = conn.execute("DELETE FROM ls_test_holes WHERE session_id = ?",
+                         (session_id,)).rowcount
+        _ls_touch(conn, session_id)
+        conn.commit()
+        return {"cleared": n}
+
+
+def ls_autoplay(session_id: int, through_hole: int | None = None,
+                seed: int | None = None, overwrite: bool = False,
+                db_path: str | Path = DB_PATH) -> dict:
+    """Fill in simulated scores so the live surface has something to move.
+
+    Plays every player through `through_hole` (default: the whole round).
+    Existing scores are kept unless `overwrite` — so repeatedly advancing
+    the through-hole reproduces a round unfolding in real time, which is the
+    behaviour the live leaderboard needs to be tested against.
+    """
+    from . import live_scoring as _ls
+    rng = random.Random(seed)
+    data = ls_get_session(session_id, db_path=db_path)
+    if not data:
+        return {"error": f"session {session_id} not found"}
+    holes = data["holes"] or []
+    limit = through_hole or (holes[-1]["hole_number"] if holes else 0)
+    written = 0
+    with _connect(db_path) as conn:
+        _ensure_live_scoring_tables(conn)
+        for p in data["players"]:
+            for h in holes:
+                hn = h["hole_number"]
+                if hn > limit:
+                    continue
+                existing = p["scores"].get(hn, {}).get("strokes")
+                if existing is not None and not overwrite:
+                    continue
+                strokes = _ls.simulate_strokes(h["par"] or 4,
+                                               p["playing_handicap"], rng)
+                conn.execute(
+                    """INSERT INTO ls_test_holes
+                           (session_id, player_id, hole_number, strokes)
+                       VALUES (?, ?, ?, ?)
+                       ON CONFLICT(player_id, hole_number) DO UPDATE SET
+                           strokes = excluded.strokes""",
+                    (session_id, p["id"], hn, strokes))
+                written += 1
+        _ls_touch(conn, session_id)
+        conn.commit()
+    return {"session_id": session_id, "through_hole": limit,
+            "scores_written": written}
+
+
+def ls_record_contest(session_id: int, kind: str, hole_number: int | None,
+                      player_id: int | None, note: str | None = None,
+                      db_path: str | Path = DB_PATH) -> dict:
+    """Record a manually-adjudicated contest result (CTP / Longest Putt /
+    HIO claim). `player_id` of None clears the slot."""
+    kind = (kind or "").strip().lower()
+    if kind not in ("ctp", "longest_putt", "hio"):
+        return {"error": f"unknown contest kind: {kind}"}
+    with _connect(db_path) as conn:
+        _ensure_live_scoring_tables(conn)
+        if player_id is None:
+            conn.execute("DELETE FROM ls_test_contests WHERE session_id = ? "
+                         "AND kind = ? AND hole_number IS ?",
+                         (session_id, kind, hole_number))
+            conn.commit()
+            return {"cleared": True, "kind": kind, "hole": hole_number}
+        row = conn.execute("SELECT customer_id FROM ls_test_players WHERE id = ?",
+                           (player_id,)).fetchone()
+        conn.execute(
+            """INSERT INTO ls_test_contests
+                   (session_id, kind, hole_number, player_id, customer_id, note)
+               VALUES (?, ?, ?, ?, ?, ?)
+               ON CONFLICT(session_id, kind, hole_number) DO UPDATE SET
+                   player_id = excluded.player_id,
+                   customer_id = excluded.customer_id,
+                   note = excluded.note""",
+            (session_id, kind, hole_number, player_id,
+             row["customer_id"] if row else None, note))
+        _ls_touch(conn, session_id)
+        conn.commit()
+        return {"kind": kind, "hole": hole_number, "player_id": player_id}
+
+
+def ls_build_state(session_id: int, db_path: str | Path = DB_PATH) -> dict | None:
+    """Sandbox rows -> the engine's plain-data round state."""
+    data = ls_get_session(session_id, db_path=db_path)
+    if not data:
+        return None
+    holes = [{"hole": h["hole_number"], "par": h["par"],
+              "yardage": h["yardage"], "stroke_index": h["stroke_index"]}
+             for h in data["holes"]]
+    players = []
+    for p in data["players"]:
+        scores = {hn: v["strokes"] for hn, v in p["scores"].items()
+                  if v["strokes"] is not None}
+        received = {hn: v["strokes_received"] for hn, v in p["scores"].items()
+                    if v["strokes_received"] is not None}
+        players.append({
+            "key": str(p["id"]), "customer_id": p["customer_id"],
+            "name": p["player_name"], "playing_handicap": p["playing_handicap"],
+            "flight": p["flight"], "team": p["team_num"],
+            "buys_net": bool(p["buys_net"]), "buys_gross": bool(p["buys_gross"]),
+            "is_member": bool(p["is_member"]),
+            "scores": scores, "strokes_received": received})
+    return {"holes": holes, "players": players, "meta": data["session"],
+            "contests": data["contests"]}
+
+
+def ls_leaderboard(session_id: int, db_path: str | Path = DB_PATH) -> dict:
+    """The live leaderboard: every game, computed from raw gross scores."""
+    from . import live_scoring as _ls
+    state = ls_build_state(session_id, db_path=db_path)
+    if not state:
+        return {"error": f"session {session_id} not found"}
+    meta = state["meta"]
+    formulas = (get_championship_formulas(db_path=db_path)
+                if meta.get("championship")
+                else get_scoring_formulas(db_path))
+    board = _ls.compute_leaderboard(state, formulas)
+    board["session"] = meta
+    board["formulas_used"] = ("championship" if meta.get("championship")
+                              else "regular")
+    # Fold the hand-recorded CTP / Longest Putt winners onto the CTP slots.
+    by_slot = {(c["kind"], c["hole_number"]): c for c in state["contests"]}
+    name_by_pid = {str(p["key"]): p["name"] for p in state["players"]}
+    for slot in (board["games"]["ctp"]["slots"]
+                 + board["games"]["ctp"]["spillover"]):
+        rec = by_slot.get((slot["kind"], slot["hole"]))
+        slot["winner"] = (name_by_pid.get(str(rec["player_id"]))
+                          if rec else None)
+        slot["note"] = rec["note"] if rec else None
+    return board
+
+
+def ls_parity(session_id: int, db_path: str | Path = DB_PATH) -> dict:
+    """Diff our engine against Golf Genius, player by player.
+
+    Only meaningful on a SEEDED session: each sandbox player carries the
+    `source_round_id` of the GG scorecard it was cloned from, and that row's
+    stored gross / net / playing handicap — plus the derived Stableford
+    totals from `get_scorecard` — are what we diff against. This is the
+    Stage-1 confidence gate: parity here is what earns the right to stop
+    asking GG.
+    """
+    from . import live_scoring as _ls
+    state = ls_build_state(session_id, db_path=db_path)
+    if not state:
+        return {"error": f"session {session_id} not found"}
+    meta = state["meta"]
+    if meta.get("source_kind") != "seeded":
+        return {"error": "parity needs a session seeded from a real event — "
+                         "a synthetic field has no GG numbers to diff against",
+                "source_kind": meta.get("source_kind")}
+    formulas = (get_championship_formulas(db_path=db_path)
+                if meta.get("championship") else get_scoring_formulas(db_path))
+    cards = _ls.build_cards(state, formulas)
+
+    with _connect(db_path) as conn:
+        _ensure_live_scoring_tables(conn)
+        src = {str(r["id"]): r["source_round_id"] for r in conn.execute(
+            "SELECT id, source_round_id FROM ls_test_players WHERE session_id = ?",
+            (session_id,)).fetchall()}
+    gg_rows = {}
+    for key, round_id in src.items():
+        if not round_id:
+            continue
+        card = get_scorecard(round_id, db_path=db_path)
+        if not card:
+            continue
+        r, totals = card["round"], card["derived_totals"]
+        gg_rows[key] = {
+            "gross": r["gross"], "net": r["net"],
+            "playing_handicap": r["playing_handicap"],
+            # These two are OUR formula layer applied to GG's stored dots —
+            # a mismatch here means the engine read the same card differently,
+            # which is a real defect, not a GG disagreement.
+            "stableford_net": totals["stableford_net"],
+            "stableford_gross": totals["stableford_gross"],
+            "strokes_received": {h["hole_number"]: h["strokes_received"]
+                                 for h in card["holes"]},
+        }
+    out = _ls.parity_diff(cards, gg_rows)
+    out["session"] = meta
+    out["source_rounds"] = len(gg_rows)
+    return out
 
 
 def list_courses(db_path: str | Path = DB_PATH) -> list:

@@ -18,11 +18,33 @@ Tracker prototypes the schema + the shadow leaderboard first.
   formula layer, and `verify_scoring_round` proves per-hole parity
   (strokes, net, GG's circle/square markings). Both points schedules are
   GG-config-validated (see scoring.md).
-- **Stage 1 — NEXT: parallel shadow leaderboard.** Rely on GG for ONLY
-  the raw gross hole scores; compute EVERYTHING ourselves (all games,
-  all races) from those. Stand a live leaderboard next to GG's at a real
-  event and diff, game-by-game and race-by-race, until we reproduce GG
-  exactly. GG stays official; we shadow. This is the confidence gate.
+- **Stage 1 — parallel shadow leaderboard. HARNESS BUILT (v2.150.0),
+  PARITY NOT YET PROVEN ON REAL EVENTS.** Rely on GG for ONLY the raw
+  gross hole scores; compute EVERYTHING ourselves (all games, all races)
+  from those. Stand a live leaderboard next to GG's at a real event and
+  diff, game-by-game and race-by-race, until we reproduce GG exactly. GG
+  stays official; we shadow. This is the confidence gate.
+
+  The **Live Scoring Test Center** (`/admin/test-center`, admin-only) is
+  that leaderboard + diff harness: `email_parser/live_scoring.py` computes
+  Individual Net, Individual Gross, Team Net, Skins, MVP and CTP/HIO from
+  raw gross hole scores plus our own course/tee facts and playing
+  handicaps, and seeding a session from a real event diffs every number
+  against what GG recorded. Rules-as-data throughout
+  (`SEED_LIVE_SCORING_CONFIG`, transcribed from the ratified side-games
+  spec), customer_id-keyed, no DB/Flask in the engine — the portability
+  conditions this doc's Gateways section sets. Full spec:
+  `docs/claude/live-scoring-test-center.md`.
+
+  **What remains before Stage 1 can be called done:** run the harness
+  against real events until the parity report reads clean across a
+  meaningful sample. Known gaps it will surface first — flighting beyond
+  the one observed 9-hole HCP-12.0 split is a fallback equal-size guess;
+  Skins ½ Net (sub-8-buyer nines) is detected but not computed; the blind
+  draw for short Team Net foursomes is warned but not generated; and no
+  game pays out yet (the prize matrix + `season_payouts.py` are the next
+  join). Race-by-race diffing is also still outstanding — the harness is
+  per-round today.
 - **Stage 2 — FINAL: own score entry.** Customers enter raw gross hole
   scores directly in our app (mobile, offline queue, magic-link auth we
   already have from the member portal). Our engine computes the rest; GG
@@ -31,7 +53,10 @@ Tracker prototypes the schema + the shadow leaderboard first.
 
 Everything upstream of "raw gross hole scores" is already ours — so the
 only genuinely new build for Stage 1 is the leaderboard surface + the
-diff harness. Stage 2 adds the score-entry UI + write path.
+diff harness (both now built; see Stage 1 above). Stage 2 adds the
+score-entry UI + write path — the Test Center's score grid is that path
+in miniature (one hole, one player, board recomputed on read) against
+sandbox tables, so the shape is proven before it touches real rounds.
 
 ## Two definition layers (both versioned, append-only, per-event/season frozen)
 

@@ -1,0 +1,382 @@
+"""Integration tests for the Live Scoring Test Center data layer.
+
+Builds a throwaway SQLite database, plants a real-shaped event (course +
+tee + imported GG scorecards + pairings + NET/GROSS purchases), then drives
+the sandbox end to end: seed from the event, score by hand, autoplay,
+recompute the leaderboard, and run the parity diff against GG's numbers.
+
+The load-bearing assertion is the LAST one: seeding from a real event and
+recomputing every game from raw gross scores must reproduce GG exactly.
+That is the Stage-1 confidence gate from docs/claude/game-engine.md.
+
+Run: python3 test_live_scoring_center.py
+"""
+
+import os
+import sqlite3
+import sys
+import tempfile
+
+os.environ.setdefault("DATABASE_PATH", ":memory:")
+
+from email_parser import database as db  # noqa: E402
+
+FAILURES = []
+
+
+def check(label, cond, detail=""):
+    if cond:
+        print(f"  PASS  {label}")
+    else:
+        print(f"  FAIL  {label}  {detail}")
+        FAILURES.append(label)
+
+
+NINE = [(1, 4, 380, 3), (2, 3, 155, 9), (3, 5, 520, 1), (4, 4, 400, 5),
+        (5, 4, 365, 7), (6, 3, 190, 8), (7, 4, 430, 2), (8, 4, 375, 6),
+        (9, 5, 505, 4)]
+PAR = {h: p for h, p, _, _ in NINE}
+PAR_TOTAL = sum(PAR.values())  # 36
+
+# name, playing handicap, gross offset vs par per hole, buys NET, buys GROSS
+FIELD = [
+    ("Kerry Niester", 4, 0, True, True),
+    ("Luke Mazanec", 9, 1, True, True),
+    ("Adam Baker", 14, 1, True, False),
+    ("Chris Best", 0, 0, False, True),
+    ("Stuart Kirksey", 18, 2, True, True),
+    ("Robert Hogue", 7, 1, True, True),
+    ("Texas Terry", -1, 0, False, False),
+    ("Guest Player", 12, 2, False, False),
+]
+
+
+def build_fixture(path):
+    """A minimal but REAL-shaped database: only the tables the sandbox reads."""
+    conn = sqlite3.connect(path)
+    conn.row_factory = sqlite3.Row
+    conn.executescript("""
+        CREATE TABLE customers (customer_id INTEGER PRIMARY KEY,
+                                customer_name TEXT, chapter TEXT);
+        CREATE TABLE events (id INTEGER PRIMARY KEY, item_name TEXT,
+                             event_date TEXT, format TEXT, course TEXT);
+        CREATE TABLE event_aliases (alias_name TEXT, canonical_event_name TEXT);
+        CREATE TABLE items (id INTEGER PRIMARY KEY, parent_item_id INTEGER,
+                            customer_id INTEGER, customer TEXT, item_name TEXT,
+                            side_games TEXT, transaction_status TEXT,
+                            wd_credits TEXT);
+        CREATE TABLE courses (course_id INTEGER PRIMARY KEY, name TEXT,
+                              short_name TEXT, city TEXT, state TEXT,
+                              status TEXT, chapter_id INTEGER);
+        CREATE TABLE course_aliases (alias_name TEXT, course_id INTEGER);
+        CREATE TABLE course_tees (tee_id INTEGER PRIMARY KEY, course_id INTEGER,
+                                  tee_name TEXT, slope REAL, rating REAL,
+                                  yardage_total INTEGER);
+        CREATE TABLE course_tee_holes (tee_id INTEGER, hole_number INTEGER,
+                                       par INTEGER, yardage INTEGER,
+                                       stroke_index INTEGER,
+                                       PRIMARY KEY (tee_id, hole_number));
+        CREATE TABLE scoring_rounds (
+            id INTEGER PRIMARY KEY, customer_id INTEGER, player_name TEXT,
+            event_id INTEGER, gg_aggregate_id TEXT, round_date TEXT,
+            course_id INTEGER, tee_id INTEGER, holes_played INTEGER,
+            playing_handicap REAL, gross REAL, net REAL, flight TEXT,
+            source TEXT);
+        CREATE TABLE scoring_holes (
+            id INTEGER PRIMARY KEY, scoring_round_id INTEGER,
+            hole_number INTEGER, strokes INTEGER,
+            strokes_received INTEGER DEFAULT 0, gg_result TEXT);
+        CREATE TABLE event_pairings (
+            id INTEGER PRIMARY KEY, event_id INTEGER, holes TEXT,
+            group_num INTEGER, slot_label TEXT, player_name TEXT,
+            cart_pos INTEGER, tee_choice TEXT, handicap_index REAL);
+        CREATE TABLE handicap_settings (key TEXT PRIMARY KEY, value TEXT);
+    """)
+    conn.execute("INSERT INTO events (id, item_name, event_date, format, course)"
+                 " VALUES (1, 's9.21 Test Center Open', '2026-07-25', '9 Hole',"
+                 " 'Olympia Hills')")
+    conn.execute("INSERT INTO courses (course_id, name) VALUES (1, 'Olympia Hills')")
+    conn.execute("INSERT INTO course_tees (tee_id, course_id, tee_name, slope,"
+                 " rating, yardage_total) VALUES (1, 1, 'White', 121, 34.6, 3220)")
+    for h, par, yd, si in NINE:
+        conn.execute("INSERT INTO course_tee_holes (tee_id, hole_number, par,"
+                     " yardage, stroke_index) VALUES (1, ?, ?, ?, ?)",
+                     (h, par, yd, si))
+
+    for i, (name, ph, offset, net_buy, gross_buy) in enumerate(FIELD, start=1):
+        conn.execute("INSERT INTO customers (customer_id, customer_name)"
+                     " VALUES (?, ?)", (i, name))
+        sg = ("BOTH" if net_buy and gross_buy else "NET" if net_buy
+              else "GROSS" if gross_buy else "NONE")
+        conn.execute("INSERT INTO items (id, customer_id, customer, item_name,"
+                     " side_games, transaction_status) VALUES (?, ?, ?, ?, ?,"
+                     " 'active')", (i, i, name, 's9.21 Test Center Open', sg))
+        conn.execute("INSERT INTO event_pairings (event_id, holes, group_num,"
+                     " slot_label, player_name, cart_pos) VALUES"
+                     " (1, '9', ?, 'A', ?, ?)",
+                     ((i - 1) // 4 + 1, name, (i - 1) % 4 + 1))
+
+        # GG's own dots, allocated by stroke index exactly as GG would.
+        from email_parser.handicap_calc import allocate_strokes
+        dots = allocate_strokes(int(ph), {h: si for h, _, _, si in NINE})
+        gross = sum(PAR[h] + offset for h in PAR)
+        conn.execute(
+            "INSERT INTO scoring_rounds (id, customer_id, player_name, event_id,"
+            " gg_aggregate_id, round_date, course_id, tee_id, holes_played,"
+            " playing_handicap, gross, net, source) VALUES"
+            " (?, ?, ?, 1, ?, '2026-07-25', 1, 1, 9, ?, ?, ?, 'gg')",
+            (i, i, name, f"agg{i}", ph, gross, gross - ph))
+        for h in sorted(PAR):
+            strokes = PAR[h] + offset
+            net_vs_par = strokes - dots[h] - PAR[h]
+            marking = ("double_circle" if net_vs_par <= -2 else
+                       "simple_circle" if net_vs_par == -1 else
+                       "simple_square" if net_vs_par == 1 else
+                       "double_square" if net_vs_par >= 2 else None)
+            conn.execute(
+                "INSERT INTO scoring_holes (scoring_round_id, hole_number,"
+                " strokes, strokes_received, gg_result) VALUES (?, ?, ?, ?, ?)",
+                (i, h, strokes, dots[h], marking))
+    conn.commit()
+    conn.close()
+
+
+tmp = tempfile.mkdtemp(prefix="tgf-ls-test-")
+DB = os.path.join(tmp, "test.db")
+build_fixture(DB)
+
+# ---------------------------------------------------------------------------
+print("\n== session lifecycle ==")
+
+created = db.ls_create_session("Synthetic nine", holes=9, db_path=DB)
+sid = created["session_id"]
+check("synthetic session created", sid > 0)
+
+got = db.ls_get_session(sid, db_path=DB)
+check("a synthetic session gets a default nine",
+      len(got["holes"]) == 9, f"got {len(got['holes'])}")
+check("default nine is par 36",
+      sum(h["par"] for h in got["holes"]) == 36)
+check("no players yet", got["players"] == [])
+
+sessions = db.ls_list_sessions(db_path=DB)
+check("session appears in the list", any(s["id"] == sid for s in sessions))
+
+db.ls_update_session(sid, {"name": "Renamed", "championship": True}, db_path=DB)
+check("session fields update",
+      db.ls_get_session(sid, db_path=DB)["session"]["name"] == "Renamed")
+
+created18 = db.ls_create_session("Synthetic eighteen", holes=18, db_path=DB)
+got18 = db.ls_get_session(created18["session_id"], db_path=DB)
+check("an 18-hole synthetic session gets 18 holes", len(got18["holes"]) == 18)
+check("the back nine carries distinct stroke indexes",
+      sorted(h["stroke_index"] for h in got18["holes"]) == list(range(1, 19)))
+
+# ---------------------------------------------------------------------------
+print("\n== players, scoring, autoplay ==")
+
+p1 = db.ls_add_player(sid, "Ignored Name", customer_id=1, playing_handicap=4,
+                      team_num=1, db_path=DB)
+check("a linked player takes the CANONICAL name (Principle 6)",
+      p1["player_name"] == "Kerry Niester", p1["player_name"])
+p2 = db.ls_add_player(sid, "Walk On", playing_handicap=12, team_num=1,
+                      is_member=False, db_path=DB)
+check("an unlinked player keeps the typed name", p2["player_name"] == "Walk On")
+
+db.ls_set_score(sid, p1["player_id"], 1, 4, db_path=DB)
+db.ls_set_score(sid, p1["player_id"], 2, 3, db_path=DB)
+state = db.ls_build_state(sid, db_path=DB)
+kerry = next(p for p in state["players"] if p["key"] == str(p1["player_id"]))
+check("hand-entered scores land in the state", kerry["scores"] == {1: 4, 2: 3},
+      str(kerry["scores"]))
+check("no dots stored -> the engine will DERIVE them",
+      kerry["strokes_received"] == {})
+
+db.ls_set_score(sid, p1["player_id"], 2, 5, db_path=DB)
+check("a score can be corrected",
+      db.ls_build_state(sid, db_path=DB)["players"][0]["scores"][2] == 5)
+db.ls_set_score(sid, p1["player_id"], 2, None, db_path=DB)
+check("a score can be cleared",
+      2 not in db.ls_build_state(sid, db_path=DB)["players"][0]["scores"])
+
+auto = db.ls_autoplay(sid, through_hole=5, seed=42, db_path=DB)
+check("autoplay fills the field through the named hole",
+      auto["through_hole"] == 5 and auto["scores_written"] > 0, str(auto))
+st = db.ls_build_state(sid, db_path=DB)
+check("autoplay never scores past the through-hole",
+      all(max(p["scores"]) <= 5 for p in st["players"] if p["scores"]))
+check("autoplay does NOT overwrite a hand-entered score",
+      st["players"][0]["scores"][1] == 4, str(st["players"][0]["scores"]))
+
+before = dict(st["players"][0]["scores"])
+db.ls_autoplay(sid, through_hole=9, seed=42, db_path=DB)
+after = db.ls_build_state(sid, db_path=DB)["players"][0]["scores"]
+check("advancing the through-hole extends the same round",
+      all(after[h] == before[h] for h in before) and len(after) == 9,
+      f"{before} -> {after}")
+
+db.ls_autoplay(sid, through_hole=9, seed=7, overwrite=True, db_path=DB)
+check("overwrite replays the whole round",
+      db.ls_build_state(sid, db_path=DB)["players"][0]["scores"] != after)
+
+lb = db.ls_leaderboard(sid, db_path=DB)
+check("leaderboard computes off the sandbox", lb["players"] == 2)
+check("championship flag selects the championship schedule",
+      lb["formulas_used"] == "championship", lb["formulas_used"])
+
+db.ls_clear_scores(sid, db_path=DB)
+check("scores clear", not any(p["scores"] for p in
+                              db.ls_build_state(sid, db_path=DB)["players"]))
+
+# ---------------------------------------------------------------------------
+print("\n== seeding from a real event ==")
+
+bad = db.ls_seed_session_from_event("no such event", db_path=DB)
+check("seeding an unknown event errors cleanly", "error" in bad)
+
+seed = db.ls_seed_session_from_event("s9.21 Test Center Open", db_path=DB)
+ssid = seed["session_id"]
+check("all eight cards seeded", seed["players_seeded"] == 8, str(seed))
+check("NET buyers detected from purchases", seed["net_buyers"] == 5,
+      f"got {seed['net_buyers']}")
+check("GROSS buyers detected from purchases", seed["gross_buyers"] == 5,
+      f"got {seed['gross_buyers']}")
+check("teams came from the saved pairings", seed["teams_from_pairings"])
+
+sdata = db.ls_get_session(ssid, db_path=DB)
+check("the real tee's holes were copied", len(sdata["holes"]) == 9)
+check("real par came across",
+      sum(h["par"] for h in sdata["holes"]) == PAR_TOTAL)
+check("every seeded player remembers its GG round",
+      all(p["source_round_id"] for p in sdata["players"]))
+check("GG's own dots came across",
+      any(v["strokes_received"] for p in sdata["players"]
+          for v in p["scores"].values()))
+check("playing handicaps came across",
+      sorted(p["playing_handicap"] for p in sdata["players"])
+      == sorted(f[1] for f in FIELD))
+check("pairings became teams",
+      sorted({p["team_num"] for p in sdata["players"]}) == [1, 2])
+
+# Production data must be untouched by any of this.
+conn = sqlite3.connect(DB)
+check("seeding wrote nothing to scoring_rounds",
+      conn.execute("SELECT COUNT(*) FROM scoring_rounds").fetchone()[0] == 8)
+check("seeding wrote nothing to scoring_holes",
+      conn.execute("SELECT COUNT(*) FROM scoring_holes").fetchone()[0] == 72)
+conn.close()
+
+# ---------------------------------------------------------------------------
+print("\n== leaderboard on seeded data ==")
+
+board = db.ls_leaderboard(ssid, db_path=DB)
+check("the whole field is on the board", board["players"] == 8)
+check("regular formulas by default", board["formulas_used"] == "regular")
+check("nine-hole rule set selected", board["holes_key"] == "9")
+
+net = board["games"]["individual_net"]
+check("Individual Net counts only NET buyers", net["buyers"] == 5,
+      f"got {net['buyers']}")
+check("5 net buyers on a nine -> 1 flight", len(net["flights"]) == 1)
+gross = board["games"]["individual_gross"]
+check("Individual Gross is inactive at 5 gross buyers",
+      gross["active"] is False)
+
+team = board["games"]["team_net"]
+check("two foursomes scored", len(team["teams"]) == 2, str(len(team["teams"])))
+check("teams are ranked", team["teams"][0]["place"] == 1)
+
+mvp = board["games"]["mvp"]
+check("MVP is decided on a complete field", mvp["status"] == "determined",
+      mvp["status"])
+# The MVP is decided on POINTS, not the low net score — which is exactly
+# why it needs its own test. Adam Baker plays bogey golf off a 14: that is
+# 2 pops on five holes and 1 on four, so his card reads five net birdies
+# (2 pts) + four net pars (1 pt) = 14. Kerry shoots even par off a 4 for
+# four net birdies + five pars = 13. The higher handicap wins the MVP with
+# the worse gross score, and the engine must not "correct" that.
+check("MVP is the top net-Stableford NET buyer, not the low gross",
+      mvp["winners"][0]["name"] == "Adam Baker"
+      and mvp["winners"][0]["points"] == 14, str(mvp["winners"]))
+check("the MVP field is ranked by points",
+      [f["name"] for f in mvp["field"][:2]] == ["Adam Baker", "Kerry Niester"],
+      str([(f["name"], f["points"]) for f in mvp["field"]]))
+check("a non-NET-buyer cannot be MVP",
+      all(f["name"] not in ("Chris Best", "Texas Terry", "Guest Player")
+          for f in mvp["field"]), str([f["name"] for f in mvp["field"]]))
+
+ctp = board["games"]["ctp"]
+check("both par-3s carry a CTP", len(ctp["slots"]) == 2)
+check("CTP winners start empty", all(s["winner"] is None for s in ctp["slots"]))
+
+pid = sdata["players"][0]["id"]
+db.ls_record_contest(ssid, "ctp", 2, pid, note="6 ft", db_path=DB)
+ctp2 = db.ls_leaderboard(ssid, db_path=DB)["games"]["ctp"]
+check("a recorded CTP winner shows on the slot",
+      next(s for s in ctp2["slots"] if s["hole"] == 2)["winner"] is not None)
+db.ls_record_contest(ssid, "ctp", 2, None, db_path=DB)
+check("a CTP slot can be cleared",
+      next(s for s in db.ls_leaderboard(ssid, db_path=DB)["games"]["ctp"]["slots"]
+           if s["hole"] == 2)["winner"] is None)
+check("an unknown contest kind is rejected",
+      "error" in db.ls_record_contest(ssid, "nearest_the_tree", 2, pid,
+                                      db_path=DB))
+
+# ---------------------------------------------------------------------------
+print("\n== PARITY: our engine vs Golf Genius (the Stage-1 gate) ==")
+
+syn_parity = db.ls_parity(sid, db_path=DB)
+check("parity refuses a synthetic session", "error" in syn_parity)
+
+par_res = db.ls_parity(ssid, db_path=DB)
+check("every seeded player has a GG row to diff against",
+      par_res["source_rounds"] == 8 and par_res["players_without_gg"] == 0,
+      str(par_res.get("source_rounds")))
+check("parity actually checked something", par_res["checked"] > 0)
+check("PARITY: engine reproduces GG exactly on every player",
+      par_res["parity"] is True,
+      "mismatches: " + str([r for r in par_res["rows"]
+                            if r["status"] == "mismatch"]))
+check("all eight players clean", par_res["players_clean"] == 8,
+      f"got {par_res['players_clean']}")
+
+# Break one stored score and confirm the harness catches it — a parity
+# report that cannot fail is worthless.
+conn = sqlite3.connect(DB)
+victim = conn.execute(
+    "SELECT id, player_id FROM ls_test_holes WHERE session_id = ? AND"
+    " hole_number = 1 LIMIT 1", (ssid,)).fetchone()
+conn.execute("UPDATE ls_test_holes SET strokes = strokes + 3 WHERE id = ?",
+             (victim[0],))
+conn.commit()
+conn.close()
+broken = db.ls_parity(ssid, db_path=DB)
+check("a corrupted score BREAKS parity", broken["parity"] is False)
+check("exactly the corrupted player is flagged",
+      broken["players_mismatched"] == 1, str(broken["players_mismatched"]))
+flagged = next(r for r in broken["rows"] if r["status"] == "mismatch")
+check("the diff names the fields that moved",
+      {d["field"] for d in flagged["deltas"]} >= {"gross", "net"},
+      str(flagged["deltas"]))
+
+# ---------------------------------------------------------------------------
+print("\n== deletion ==")
+
+db.ls_delete_player(sdata["players"][0]["id"], db_path=DB)
+check("deleting a player drops their scores",
+      len(db.ls_get_session(ssid, db_path=DB)["players"]) == 7)
+db.ls_delete_session(ssid, db_path=DB)
+check("deleting a session removes it", db.ls_get_session(ssid, db_path=DB) is None)
+conn = sqlite3.connect(DB)
+check("deleting a session leaves no orphan holes",
+      conn.execute("SELECT COUNT(*) FROM ls_test_holes WHERE session_id = ?",
+                   (ssid,)).fetchone()[0] == 0)
+check("production scoring rows survive session deletion",
+      conn.execute("SELECT COUNT(*) FROM scoring_rounds").fetchone()[0] == 8)
+conn.close()
+
+print("\n" + "=" * 60)
+if FAILURES:
+    print(f"{len(FAILURES)} FAILED: {FAILURES}")
+    sys.exit(1)
+print("ALL TEST-CENTER INTEGRATION TESTS PASSED")

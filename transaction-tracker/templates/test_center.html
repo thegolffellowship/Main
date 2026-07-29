@@ -1,0 +1,850 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
+    <title>TGF — Live Scoring Test Center</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Bitter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/css/dashboard.css">
+    <link rel="stylesheet" href="/static/css/shell.css">
+    <link rel="icon" href="/static/icon.svg" type="image/svg+xml">
+    <link rel="apple-touch-icon" href="/static/icon-180.png">
+    <style>
+        /* NOTE: keep whitespace between an opening brace and a following
+           hash — Jinja reads that pair as a comment opener and the render
+           500s. See the "Jinja gotcha in inline CSS" note in CLAUDE.md. */
+        .tc-wrap { padding: 0.75rem 0 2.5rem; }
+        .tc-bar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap;
+                  background: #fff; border: 1px solid var(--border);
+                  border-radius: 12px; padding: 10px 12px; margin-bottom: 12px; }
+        .tc-bar select, .tc-bar input { border: 1px solid var(--border);
+                  border-radius: 8px; padding: 7px 10px; font-size: 13px; }
+        .tc-btn { border-radius: 999px; padding: 6px 14px; font-size: 12px;
+                  font-weight: 600; cursor: pointer; border: 1px solid var(--border);
+                  background: #fff; color: var(--text-body); }
+        .tc-btn:hover { border-color: var(--primary); color: var(--primary); }
+        .tc-btn.primary { background: #1B1B1B; color: #fff; border-color: #1B1B1B; }
+        .tc-btn.primary:hover { background: var(--primary); border-color: var(--primary); color: #fff; }
+        .tc-btn.danger { color: #B91C1C; border-color: #FCA5A5; }
+        .tc-btn.danger:hover { background: #FEE2E2; color: #B91C1C; border-color: #B91C1C; }
+        .tc-btn[disabled] { opacity: .45; cursor: not-allowed; }
+        .tc-spacer { flex: 1 1 auto; }
+
+        .tc-tabs { display: flex; gap: 8px; margin: 0 0 1rem; flex-wrap: wrap; }
+        .tc-tab { border: 1px solid var(--border); background: #fff;
+                  border-radius: 999px; padding: 7px 16px;
+                  font: 600 12px/1 'Bitter', serif; letter-spacing: .5px;
+                  cursor: pointer; color: var(--text-body); }
+        .tc-tab.active { background: #1B1B1B; color: #fff; border-color: #1B1B1B; }
+
+        .tc-card { background: #fff; border: 1px solid var(--border);
+                   border-radius: 12px; padding: 14px 16px; margin-bottom: 12px; }
+        .tc-card h3 { font: 700 13px/1.2 'Bitter', serif; letter-spacing: 1px;
+                      text-transform: uppercase; margin: 0 0 10px; }
+        .tc-card h3 .sub { font: 400 11px/1 -apple-system, sans-serif;
+                           letter-spacing: 0; text-transform: none;
+                           color: var(--text-muted); margin-left: 8px; }
+        .tc-grid2 { display: grid; gap: 12px;
+                    grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); }
+
+        .tc-tbl { width: 100%; border-collapse: collapse; }
+        .tc-tbl th { text-align: left; font: 700 10px/1.3 'Bitter', serif;
+                     letter-spacing: 1px; text-transform: uppercase;
+                     color: #9CA3AF; padding: 6px 8px 5px;
+                     border-bottom: 1px solid var(--border); }
+        .tc-tbl td { padding: 5px 8px; border-bottom: 1px solid #F3F2EF;
+                     font-size: 13px; font-variant-numeric: tabular-nums; }
+        .tc-tbl td.n, .tc-tbl th.n { text-align: right; }
+        .tc-tbl tr.me td { background: #FFF7F1; }
+        .tc-muted { color: var(--text-muted); }
+
+        .tc-pill { display: inline-block; border-radius: 999px; padding: 2px 9px;
+                   font-size: 11px; font-weight: 600; }
+        .tc-pill.live { background: #DCFCE7; color: #15803D; }
+        .tc-pill.prov { background: #FEF3C7; color: #92400E; }
+        .tc-pill.off { background: #E5E7EB; color: #374151; }
+        .tc-pill.ok { background: #DCFCE7; color: #15803D; }
+        .tc-pill.bad { background: #FEE2E2; color: #B91C1C; }
+        .tc-pill.seeded { background: #FDEBDD; color: #B4551A; }
+
+        .tc-warn { background: #FFFBEB; border: 1px solid #FDE68A;
+                   color: #92400E; border-radius: 8px; padding: 8px 11px;
+                   font-size: 12px; margin-top: 8px; }
+        .tc-warn.note { white-space: normal; }
+
+        /* Score-entry grid — the Stage-2 entry surface in miniature. */
+        .tc-scroll { overflow-x: auto; }
+        .tc-sheet { border-collapse: collapse; font-variant-numeric: tabular-nums; }
+        .tc-sheet th, .tc-sheet td { border: 1px solid #E5E7EB; padding: 0;
+                                     text-align: center; font-size: 12px; }
+        .tc-sheet th { background: #F8F8F8; font: 700 10px/1.3 'Bitter', serif;
+                       letter-spacing: .5px; padding: 5px 6px; color: #6B7280; }
+        .tc-sheet th.who { text-align: left; padding-left: 10px; min-width: 150px;
+                           position: sticky; left: 0; z-index: 2; }
+        .tc-sheet td.who { text-align: left; padding: 4px 10px; white-space: nowrap;
+                           background: #fff; position: sticky; left: 0; z-index: 1;
+                           border-right: 2px solid #D1D5DB; }
+        .tc-sheet td.who .hcp { color: var(--text-muted); font-size: 11px; }
+        .tc-sheet input { width: 40px; border: 0; padding: 6px 2px;
+                          text-align: center; font-size: 13px; background: transparent;
+                          font-variant-numeric: tabular-nums; }
+        .tc-sheet input:focus { outline: 2px solid var(--primary); outline-offset: -2px;
+                                background: #FFF7F1; }
+        .tc-sheet td.par3 { background: #FAFAF9; }
+        .tc-sheet td.tot { font-weight: 700; background: #F8F8F8; min-width: 46px; }
+        .tc-sheet .dot { color: var(--primary); font-size: 9px; vertical-align: super; }
+
+        .tc-hole-hd { font-size: 10px; color: #9CA3AF; font-weight: 400; display: block; }
+
+        .tc-empty { text-align: center; color: var(--text-muted);
+                    padding: 2.5rem 1rem; font-size: 13px; }
+        .tc-empty h2 { font: 700 18px/1.3 'Bitter', serif; color: var(--text);
+                       margin: 0 0 8px; }
+
+        .tc-inline { display: flex; gap: 8px; align-items: center; flex-wrap: wrap;
+                     margin-top: 10px; }
+        .tc-inline input, .tc-inline select { border: 1px solid var(--border);
+                     border-radius: 8px; padding: 6px 9px; font-size: 12.5px; }
+        .tc-inline label { font-size: 12px; color: var(--text-body);
+                           display: inline-flex; gap: 4px; align-items: center; }
+
+        .tc-flightlbl { font: 700 11px/1 'Bitter', serif; letter-spacing: 1px;
+                        text-transform: uppercase; color: var(--primary);
+                        margin: 12px 0 6px; }
+        .tc-flightlbl:first-child { margin-top: 0; }
+
+        @media (max-width: 768px) {
+            .tc-wrap { padding: 0.5rem 0 2rem; }
+            .tc-bar { padding: 8px; }
+        }
+    </style>
+</head>
+<body>
+    {% if shell_v2 %}
+    {% set SHELL_TITLE = 'Test Center' %}{% set SHELL_ACTIVE = 'admin' %}
+    {% include '_shell_nav.html' %}
+    {% else %}
+    <header>
+        <div class="header-content">
+            <h1>TGF Transaction Tracker</h1>
+            <p class="subtitle">Live Scoring Test Center</p>
+            <a href="/changelog" class="version-link" id="version-badge" title="View changelog">v2.0.0</a>
+        </div>
+        <div class="header-actions">
+            <span id="role-badge" class="role-badge" style="display:none;"></span>
+            <button id="btn-logout" class="btn btn-secondary" title="Log out" style="display:none;">Log Out</button>
+        </div>
+    </header>
+    {% endif %}
+
+    <main>
+        <nav class="admin-subnav">
+            <a href="/accounting">Accounting</a>
+            <a href="/coo">COO</a>
+            <a href="/audit">Audit Log</a>
+            <a href="/matrix">Matrix</a>
+            <a href="/courses">Courses</a>
+            <a href="/traffic">Traffic</a>
+            <a href="/spotlight">Spotlight</a>
+            <a href="/admin/gg-history">GG History</a>
+            <a href="/admin/test-center" class="active">Test Center</a>
+            <a href="/database">Database</a>
+            <a href="/changelog">Changelog</a>
+        </nav>
+
+        <div class="tc-wrap">
+            <div class="tc-bar">
+                <select id="tc-session"><option value="">— no test sessions yet —</option></select>
+                <span id="tc-session-meta" class="tc-muted" style="font-size:12px;"></span>
+                <span class="tc-spacer"></span>
+                <button class="tc-btn" id="tc-new-synth">+ Synthetic field</button>
+                <button class="tc-btn primary" id="tc-new-seed">+ Shadow a real event</button>
+                <button class="tc-btn danger" id="tc-delete" disabled>Delete</button>
+            </div>
+
+            <div class="tc-tabs">
+                <button class="tc-tab active" data-panel="board">Leaderboard</button>
+                <button class="tc-tab" data-panel="entry">Score Entry</button>
+                <button class="tc-tab" data-panel="field">Field &amp; Course</button>
+                <button class="tc-tab" data-panel="parity">Parity vs GG</button>
+            </div>
+
+            <div id="tc-panels">
+                <div class="tc-empty" id="tc-nothing">
+                    <h2>Live Scoring Test Center</h2>
+                    <p>Stage 1 of the untether-from-Golf-Genius plan: compute every
+                       game from raw gross hole scores alone, and diff the result
+                       against what GG recorded.</p>
+                    <p class="tc-muted" style="margin-top:10px;">
+                       <b>Shadow a real event</b> to clone an imported card set and
+                       run the parity gate, or start a <b>synthetic field</b> to
+                       drive the live leaderboard with simulated scores.</p>
+                </div>
+                <div id="panel-board" class="tc-panel" hidden></div>
+                <div id="panel-entry" class="tc-panel" hidden></div>
+                <div id="panel-field" class="tc-panel" hidden></div>
+                <div id="panel-parity" class="tc-panel" hidden></div>
+            </div>
+        </div>
+    </main>
+
+    <script src="/static/js/version.js"></script>
+    <script src="/static/js/auth.js"></script>
+    <script src="/static/js/shell.js"></script>
+    <script>
+    (function () {
+        "use strict";
+        const $ = id => document.getElementById(id);
+        const esc = s => String(s ?? "").replace(/[&<>"']/g,
+            c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+        const num = v => (v === null || v === undefined || v === "" ? "—" : v);
+
+        let SESSIONS = [], SID = null, DATA = null, BOARD = null;
+        let PANEL = "board", POLL = null, POLLING = false;
+
+        async function api(path, opts) {
+            const r = await fetch(path, Object.assign({
+                headers: { "Content-Type": "application/json" }
+            }, opts || {}));
+            let body = null;
+            try { body = await r.json(); } catch (e) { body = null; }
+            if (!r.ok) throw new Error((body && body.error) || `HTTP ${r.status}`);
+            return body;
+        }
+
+        function flash(msg, bad) {
+            const el = $("tc-session-meta");
+            const prev = el.textContent;
+            el.textContent = msg;
+            el.style.color = bad ? "#B91C1C" : "#15803D";
+            setTimeout(() => { el.style.color = ""; renderMeta(); }, 2600);
+            if (bad) console.warn(msg);
+        }
+
+        // ── sessions ───────────────────────────────────────────────────
+        async function loadSessions(select) {
+            SESSIONS = await api("/api/test-center/sessions");
+            const sel = $("tc-session");
+            if (!SESSIONS.length) {
+                sel.innerHTML = '<option value="">— no test sessions yet —</option>';
+                SID = null; DATA = null; BOARD = null;
+                $("tc-delete").disabled = true;
+                showEmpty();
+                return;
+            }
+            sel.innerHTML = SESSIONS.map(s =>
+                `<option value="${s.id}">${esc(s.name)} · ${s.holes}h · ${s.n_players} players</option>`
+            ).join("");
+            SID = select || (SESSIONS.some(s => s.id === SID) ? SID : SESSIONS[0].id);
+            sel.value = String(SID);
+            $("tc-delete").disabled = false;
+            await loadSession();
+        }
+
+        function showEmpty() {
+            $("tc-nothing").hidden = false;
+            document.querySelectorAll(".tc-panel").forEach(p => { p.hidden = true; });
+        }
+
+        function renderMeta() {
+            const s = DATA && DATA.session;
+            if (!s) { $("tc-session-meta").textContent = ""; return; }
+            const bits = [];
+            bits.push(s.source_kind === "seeded"
+                ? `shadowing ${s.event_name || "an event"}` : "synthetic field");
+            if (s.course_name) bits.push(s.course_name + (s.tee_name ? ` (${s.tee_name})` : ""));
+            if (s.championship) bits.push("championship points");
+            $("tc-session-meta").textContent = bits.join(" · ");
+        }
+
+        async function loadSession() {
+            if (!SID) return;
+            DATA = await api(`/api/test-center/sessions/${SID}`);
+            $("tc-nothing").hidden = true;
+            renderMeta();
+            await refresh();
+        }
+
+        async function refresh() {
+            if (!SID) return;
+            if (PANEL === "parity") { await renderParity(); return; }
+            BOARD = await api(`/api/test-center/sessions/${SID}/leaderboard`);
+            if (PANEL === "board") renderBoard();
+            else if (PANEL === "entry") renderEntry();
+            else if (PANEL === "field") renderField();
+        }
+
+        // ── leaderboard ────────────────────────────────────────────────
+        function provPill(p) {
+            return p ? '<span class="tc-pill prov">PROVISIONAL</span>'
+                     : '<span class="tc-pill ok">FINAL</span>';
+        }
+
+        function renderBoard() {
+            const b = BOARD, g = b.games;
+            const done = b.overall.filter(r => r.complete).length;
+            let h = `<div class="tc-card">
+                <h3>Overall — net Stableford
+                    <span class="sub">${b.players} players · ${b.holes} holes ·
+                    ${done}/${b.players} cards complete ·
+                    ${b.formulas_used} points schedule</span>
+                    <span class="tc-spacer"></span>
+                </h3>
+                <div class="tc-inline" style="margin:-4px 0 10px;">
+                    <label><input type="checkbox" id="tc-poll" ${POLLING ? "checked" : ""}> Live refresh (10s)</label>
+                    <button class="tc-btn" id="tc-refresh">Refresh now</button>
+                    ${POLLING ? '<span class="tc-pill live">LIVE</span>' : ""}
+                </div>
+                <table class="tc-tbl"><thead><tr>
+                    <th class="n">#</th><th>Player</th><th class="n">HCP</th>
+                    <th class="n">Net pts</th><th class="n">Gross pts</th>
+                    <th class="n">Gross</th><th class="n">Net</th>
+                    <th class="n">Thru</th><th>Dots</th>
+                </tr></thead><tbody>`;
+            h += b.overall.map(r => `<tr>
+                    <td class="n">${r.place}</td>
+                    <td>${esc(r.name)}</td>
+                    <td class="n">${num(r.playing_handicap)}</td>
+                    <td class="n"><b>${r.points}</b></td>
+                    <td class="n">${r.gross_points}</td>
+                    <td class="n">${r.gross}</td>
+                    <td class="n">${r.net}</td>
+                    <td class="n">${r.complete ? "F" : r.thru}</td>
+                    <td><span class="tc-pill ${r.allocation_source === "derived" ? "seeded" : "off"}">${r.allocation_source}</span></td>
+                </tr>`).join("") || '<tr><td colspan="9" class="tc-muted">No players yet.</td></tr>';
+            h += `</tbody></table></div><div class="tc-grid2">`;
+
+            h += gameCard("Individual Net", g.individual_net);
+            h += gameCard("Individual Gross", g.individual_gross);
+            h += teamCard(g.team_net);
+            h += skinsCard(g.skins);
+            h += mvpCard(g.mvp);
+            h += contestCard(g.ctp, g.hio);
+            h += `</div>`;
+            $("panel-board").innerHTML = h;
+
+            $("tc-refresh").addEventListener("click", () => refresh());
+            $("tc-poll").addEventListener("change", e => setPolling(e.target.checked));
+        }
+
+        function warnBlock(ws) {
+            return (ws && ws.length)
+                ? ws.map(w => `<div class="tc-warn note">${esc(w)}</div>`).join("") : "";
+        }
+
+        function gameCard(title, g) {
+            let h = `<div class="tc-card"><h3>${title}
+                <span class="sub">${g.buyers} buyers</span></h3>`;
+            if (g.active === false) return h + warnBlock(g.warnings) + `</div>`;
+            h += g.flights.map(f => `
+                <div class="tc-flightlbl">Flight ${esc(f.flight)} · ${f.players} players
+                    ${provPill(f.provisional)}</div>
+                <table class="tc-tbl"><thead><tr>
+                    <th class="n">#</th><th>Player</th><th class="n">HCP</th>
+                    <th class="n">Pts</th><th class="n">Score</th><th class="n">Thru</th>
+                </tr></thead><tbody>${f.rows.map(r => `<tr>
+                    <td class="n">${r.place}</td><td>${esc(r.name)}</td>
+                    <td class="n">${num(r.playing_handicap)}</td>
+                    <td class="n"><b>${r.points}</b></td>
+                    <td class="n">${r.score}</td>
+                    <td class="n">${r.complete ? "F" : r.thru}</td>
+                </tr>`).join("")}</tbody></table>`).join("");
+            return h + warnBlock(g.warnings) + `</div>`;
+        }
+
+        function teamCard(g) {
+            let h = `<div class="tc-card"><h3>Team Net
+                <span class="sub">best net ball per hole vs par</span></h3>`;
+            if (g.teams.length) {
+                h += `<table class="tc-tbl"><thead><tr>
+                    <th class="n">#</th><th>Team</th><th>Players</th>
+                    <th class="n">vs Par</th><th class="n">Thru</th>
+                </tr></thead><tbody>${g.teams.map(t => `<tr>
+                    <td class="n">${t.place}</td><td>${t.team}</td>
+                    <td class="tc-muted" style="white-space:normal;font-size:12px;">${esc(t.members.join(", "))}</td>
+                    <td class="n"><b>${t.vs_par > 0 ? "+" : ""}${t.vs_par}</b></td>
+                    <td class="n">${t.complete ? "F" : t.thru}</td>
+                </tr>`).join("")}</tbody></table>`;
+            }
+            return h + warnBlock(g.warnings) + `</div>`;
+        }
+
+        function skinsCard(g) {
+            let h = `<div class="tc-card"><h3>Skins
+                <span class="sub">${g.buyers} buyers · outright low gross</span></h3>`;
+            h += g.flights.map(f => `
+                <div class="tc-flightlbl">Flight ${esc(f.flight)} · ${f.players} players
+                    · ${f.skins.length} skins · ${f.tied_holes} holes tied</div>
+                ${f.tally.length ? `<table class="tc-tbl"><thead><tr>
+                    <th>Player</th><th class="n">Skins</th><th>Holes</th>
+                </tr></thead><tbody>${f.tally.map(t => `<tr>
+                    <td>${esc(t.name)}</td><td class="n"><b>${t.skins}</b></td>
+                    <td class="tc-muted">${f.skins.filter(s => s.winner === t.name)
+                        .map(s => `${s.hole} (${s.gross})`).join(", ")}</td>
+                </tr>`).join("")}</tbody></table>` :
+                '<div class="tc-muted" style="font-size:12.5px;">No skins won yet.</div>'}
+            `).join("");
+            return h + warnBlock(g.warnings) + `</div>`;
+        }
+
+        function mvpCard(g) {
+            let h = `<div class="tc-card"><h3>MVP
+                <span class="sub">${g.buyers} NET buyers · highest net Stableford</span></h3>`;
+            if (g.status === "determined") {
+                h += `<div style="font:700 17px/1.2 'Bitter',serif;margin-bottom:8px;">
+                        ${esc(g.winners.map(w => w.name).join(" &amp; "))}
+                        <span class="tc-pill ok">${g.winners[0].points} pts</span>
+                        ${g.split ? '<span class="tc-pill prov">SPLIT</span>' : ""}
+                      </div>`;
+            } else {
+                h += `<div class="tc-warn note"><b>${esc(g.status.replace(/_/g, " "))}</b>${
+                    g.note ? " — " + esc(g.note) : ""}</div>`;
+                if (g.incomplete) {
+                    h += `<div class="tc-muted" style="font-size:12px;margin-top:6px;white-space:normal;">
+                          Still out: ${g.incomplete.map(i =>
+                            `${esc(i.name)} (thru ${i.thru}, ${i.points_so_far} pts)`).join(" · ")}</div>`;
+                }
+            }
+            if (g.field && g.field.length) {
+                h += `<table class="tc-tbl"><thead><tr>
+                    <th>Player</th><th class="n">Pts</th><th class="n">Net</th>
+                    <th class="n">Gross</th><th class="n">Thru</th>
+                </tr></thead><tbody>${g.field.map(f => `<tr>
+                    <td>${esc(f.name)}</td><td class="n"><b>${f.points}</b></td>
+                    <td class="n">${f.net}</td><td class="n">${f.gross}</td>
+                    <td class="n">${f.thru}</td>
+                </tr>`).join("")}</tbody></table>`;
+            }
+            return h + `</div>`;
+        }
+
+        function contestCard(ctp, hio) {
+            const players = (DATA && DATA.players) || [];
+            const opts = pid => '<option value="">— none —</option>' + players.map(p =>
+                `<option value="${p.id}" ${String(p.id) === String(pid) ? "selected" : ""}>${esc(p.player_name)}</option>`).join("");
+            let h = `<div class="tc-card"><h3>CTP · Longest Putt · Hole-in-One
+                <span class="sub">measured on course, recorded by hand</span></h3>`;
+            const slots = ctp.slots.concat(ctp.spillover);
+            h += slots.map(s => {
+                const cur = (DATA.contests || []).find(c => c.kind === s.kind && c.hole_number === s.hole);
+                return `<div class="tc-inline">
+                    <b style="font-size:12.5px;min-width:118px;">${s.kind === "ctp" ? "CTP" : "Longest Putt"} · hole ${s.hole}</b>
+                    ${s.yardage ? `<span class="tc-muted" style="font-size:11.5px;">${s.yardage}y par ${s.par}</span>` : ""}
+                    <select data-contest="${s.kind}" data-hole="${s.hole}">${opts(cur && cur.player_id)}</select>
+                </div>`;
+            }).join("") || '<div class="tc-muted" style="font-size:12.5px;">No par-3s on this course.</div>';
+            h += `<div class="tc-warn note" style="margin-top:10px;">${esc(ctp.note)}</div>`;
+            h += `<div class="tc-flightlbl" style="margin-top:14px;">Hole-in-One</div>`;
+            h += hio.aces.length
+                ? hio.aces.map(a => `<div style="font-size:12.5px;">
+                       <b>${esc(a.name)}</b> — hole ${a.hole} (par ${a.par})
+                       ${a.eligible ? '<span class="tc-pill ok">ELIGIBLE</span>'
+                                    : `<span class="tc-pill bad">INELIGIBLE</span>
+                                       <span class="tc-muted">${esc(a.note || "")}</span>`}</div>`).join("")
+                : '<div class="tc-muted" style="font-size:12.5px;">No aces — the pot carries.</div>';
+            return h + `</div>`;
+        }
+
+        // ── score entry ────────────────────────────────────────────────
+        function renderEntry() {
+            const holes = DATA.holes, players = DATA.players;
+            if (!players.length) {
+                $("panel-entry").innerHTML = `<div class="tc-card"><div class="tc-muted">
+                    Add players on the <b>Field &amp; Course</b> tab first.</div></div>`;
+                return;
+            }
+            const byKey = {};
+            BOARD.cards.forEach(c => { byKey[c.key] = c; });
+
+            let h = `<div class="tc-card">
+                <h3>Score entry <span class="sub">type a gross score — the whole board recomputes</span></h3>
+                <div class="tc-inline" style="margin:-2px 0 12px;">
+                    <button class="tc-btn" id="tc-auto">Autoplay through hole</button>
+                    <input id="tc-auto-hole" type="number" min="1" max="18"
+                           value="${holes.length}" style="width:64px;">
+                    <label>seed <input id="tc-auto-seed" type="number" placeholder="random" style="width:82px;"></label>
+                    <label><input type="checkbox" id="tc-auto-over"> replay existing</label>
+                    <span class="tc-spacer"></span>
+                    <button class="tc-btn danger" id="tc-clear">Clear all scores</button>
+                </div>
+                <div class="tc-scroll"><table class="tc-sheet"><thead>
+                    <tr><th class="who">Player</th>${holes.map(x =>
+                        `<th>${x.hole_number}<span class="tc-hole-hd">par ${x.par} · si ${x.stroke_index}</span></th>`
+                    ).join("")}<th>Gross</th><th>Net</th><th>Pts</th></tr>
+                </thead><tbody>`;
+            h += players.map(p => {
+                const card = byKey[String(p.id)] || {};
+                const dots = {};
+                (card.holes || []).forEach(x => { dots[x.hole] = x.strokes_received; });
+                return `<tr>
+                    <td class="who">${esc(p.player_name)}
+                        <span class="hcp">${p.playing_handicap ?? "—"}${p.team_num ? " · T" + p.team_num : ""}</span></td>
+                    ${holes.map(x => {
+                        const v = (p.scores[x.hole_number] || {}).strokes;
+                        const d = dots[x.hole_number] || 0;
+                        const marks = d > 0 ? "•".repeat(Math.min(d, 3)) : (d < 0 ? "+" : "");
+                        return `<td class="${x.par === 3 ? "par3" : ""}">
+                            <input type="number" min="1" max="20" inputmode="numeric"
+                                   value="${v ?? ""}" data-pid="${p.id}" data-hole="${x.hole_number}">
+                            ${marks ? `<span class="dot">${marks}</span>` : ""}</td>`;
+                    }).join("")}
+                    <td class="tot">${card.thru ? card.gross : "—"}</td>
+                    <td class="tot">${card.thru ? card.net : "—"}</td>
+                    <td class="tot">${card.thru ? card.stableford_net : "—"}</td>
+                </tr>`;
+            }).join("");
+            h += `</tbody></table></div>
+                <div class="tc-muted" style="font-size:11.5px;margin-top:8px;white-space:normal;">
+                  Dots (•) are the handicap strokes this engine ALLOCATED from the playing
+                  handicap by stroke index — on a seeded session they are Golf Genius's own
+                  dots instead. Par-3 columns are shaded.</div></div>`;
+            $("panel-entry").innerHTML = h;
+
+            $("panel-entry").querySelectorAll("input[data-pid]").forEach(inp => {
+                inp.addEventListener("change", onScore);
+                inp.addEventListener("keydown", e => {
+                    if (e.key === "Enter") { e.preventDefault(); inp.blur(); }
+                });
+            });
+            $("tc-auto").addEventListener("click", onAutoplay);
+            $("tc-clear").addEventListener("click", onClear);
+        }
+
+        async function onScore(e) {
+            const inp = e.target;
+            const raw = inp.value.trim();
+            const strokes = raw === "" ? null : parseInt(raw, 10);
+            if (strokes !== null && (isNaN(strokes) || strokes < 1 || strokes > 20)) {
+                flash("Strokes must be 1–20", true);
+                inp.value = "";
+                return;
+            }
+            try {
+                await api(`/api/test-center/sessions/${SID}/score`, {
+                    method: "POST",
+                    body: JSON.stringify({ player_id: +inp.dataset.pid,
+                                           hole_number: +inp.dataset.hole,
+                                           strokes: strokes })
+                });
+                const focus = document.activeElement === inp ? null : inp;
+                DATA = await api(`/api/test-center/sessions/${SID}`);
+                await refresh();
+                if (focus) restoreFocus(inp.dataset.pid, inp.dataset.hole);
+            } catch (err) { flash(err.message, true); }
+        }
+
+        function restoreFocus(pid, hole) {
+            const next = document.querySelector(
+                `input[data-pid="${pid}"][data-hole="${hole}"]`);
+            if (next) next.focus();
+        }
+
+        async function onAutoplay() {
+            try {
+                const res = await api(`/api/test-center/sessions/${SID}/autoplay`, {
+                    method: "POST",
+                    body: JSON.stringify({
+                        through_hole: +$("tc-auto-hole").value || null,
+                        seed: $("tc-auto-seed").value || null,
+                        overwrite: $("tc-auto-over").checked })
+                });
+                flash(`${res.scores_written} scores written through hole ${res.through_hole}`);
+                DATA = await api(`/api/test-center/sessions/${SID}`);
+                await refresh();
+            } catch (err) { flash(err.message, true); }
+        }
+
+        async function onClear() {
+            if (!confirm("Clear every score in this test session?")) return;
+            await api(`/api/test-center/sessions/${SID}/clear-scores`, { method: "POST" });
+            DATA = await api(`/api/test-center/sessions/${SID}`);
+            await refresh();
+        }
+
+        // ── field & course ─────────────────────────────────────────────
+        function renderField() {
+            const s = DATA.session;
+            let h = `<div class="tc-card">
+                <h3>Field <span class="sub">${DATA.players.length} players</span></h3>
+                <table class="tc-tbl"><thead><tr>
+                    <th>Player</th><th class="n">HCP</th><th class="n">Team</th>
+                    <th>Flight</th><th class="n">NET</th><th class="n">GROSS</th>
+                    <th class="n">Member</th><th></th>
+                </tr></thead><tbody>`;
+            h += DATA.players.map(p => `<tr>
+                <td>${esc(p.player_name)}${p.customer_id
+                    ? ` <span class="tc-muted" style="font-size:11px;">#${p.customer_id}</span>` : ""}</td>
+                <td class="n"><input type="number" step="1" value="${p.playing_handicap ?? ""}"
+                    data-edit="playing_handicap" data-pid="${p.id}" style="width:56px;"></td>
+                <td class="n"><input type="number" value="${p.team_num ?? ""}"
+                    data-edit="team_num" data-pid="${p.id}" style="width:48px;"></td>
+                <td><input value="${esc(p.flight ?? "")}" data-edit="flight"
+                    data-pid="${p.id}" style="width:60px;" placeholder="auto"></td>
+                <td class="n"><input type="checkbox" data-edit="buys_net" data-pid="${p.id}"
+                    ${p.buys_net ? "checked" : ""}></td>
+                <td class="n"><input type="checkbox" data-edit="buys_gross" data-pid="${p.id}"
+                    ${p.buys_gross ? "checked" : ""}></td>
+                <td class="n"><input type="checkbox" data-edit="is_member" data-pid="${p.id}"
+                    ${p.is_member ? "checked" : ""}></td>
+                <td class="n"><button class="tc-btn danger" data-del="${p.id}">×</button></td>
+            </tr>`).join("") || '<tr><td colspan="8" class="tc-muted">No players yet.</td></tr>';
+            h += `</tbody></table>
+                <div class="tc-inline">
+                    <input id="tc-np-name" placeholder="Player name" style="width:180px;">
+                    <input id="tc-np-hcp" type="number" placeholder="HCP" style="width:74px;">
+                    <input id="tc-np-team" type="number" placeholder="Team" style="width:74px;">
+                    <label><input type="checkbox" id="tc-np-net" checked> NET</label>
+                    <label><input type="checkbox" id="tc-np-gross" checked> GROSS</label>
+                    <label><input type="checkbox" id="tc-np-member" checked> Member</label>
+                    <button class="tc-btn primary" id="tc-np-add">Add player</button>
+                    <button class="tc-btn" id="tc-np-eight">Add 8 test players</button>
+                </div>
+                ${s.source_kind === "seeded" ? `<div class="tc-warn note" style="margin-top:10px;">
+                    This field was cloned from <b>${esc(s.event_name || "")}</b> — buyer flags came
+                    from real purchases and teams from the saved pairings. Editing here changes the
+                    SANDBOX only, but it will also change what the parity diff compares.</div>` : ""}
+                </div>`;
+
+            h += `<div class="tc-card"><h3>Course
+                <span class="sub">${esc(s.course_name || "synthetic")}${
+                    s.tee_name ? " · " + esc(s.tee_name) : ""}</span></h3>
+                <div class="tc-scroll"><table class="tc-sheet"><thead>
+                <tr><th class="who">Hole</th>${DATA.holes.map(x =>
+                    `<th>${x.hole_number}</th>`).join("")}<th>Total</th></tr>
+                </thead><tbody>
+                <tr><td class="who">Par</td>${DATA.holes.map(x =>
+                    `<td><input type="number" min="3" max="6" value="${x.par ?? ""}"
+                        data-hole-edit="par" data-hole="${x.hole_number}"></td>`).join("")}
+                    <td class="tot">${DATA.holes.reduce((a, x) => a + (x.par || 0), 0)}</td></tr>
+                <tr><td class="who">Yards</td>${DATA.holes.map(x =>
+                    `<td><input type="number" value="${x.yardage ?? ""}"
+                        data-hole-edit="yardage" data-hole="${x.hole_number}"></td>`).join("")}
+                    <td class="tot">${DATA.holes.reduce((a, x) => a + (x.yardage || 0), 0)}</td></tr>
+                <tr><td class="who">Stroke index</td>${DATA.holes.map(x =>
+                    `<td><input type="number" min="1" max="18" value="${x.stroke_index ?? ""}"
+                        data-hole-edit="stroke_index" data-hole="${x.hole_number}"></td>`).join("")}
+                    <td class="tot">—</td></tr>
+                </tbody></table></div>
+                <div class="tc-inline">
+                    <label><input type="checkbox" id="tc-champ" ${s.championship ? "checked" : ""}>
+                        Championship points schedule (+1 per net category)</label>
+                </div>
+                <div class="tc-muted" style="font-size:11.5px;margin-top:6px;white-space:normal;">
+                    Stroke index decides where handicap dots land — 1 is the hardest hole.
+                    Changing par or stroke index here re-derives every net score on the board.</div>
+                </div>`;
+            $("panel-field").innerHTML = h;
+
+            $("panel-field").querySelectorAll("[data-edit]").forEach(el => {
+                el.addEventListener("change", async () => {
+                    const val = el.type === "checkbox" ? el.checked
+                              : (el.value === "" ? null : el.value);
+                    try {
+                        await api(`/api/test-center/players/${el.dataset.pid}`, {
+                            method: "PATCH",
+                            body: JSON.stringify({ [el.dataset.edit]: val })
+                        });
+                        await loadSession();
+                    } catch (err) { flash(err.message, true); }
+                });
+            });
+            $("panel-field").querySelectorAll("[data-del]").forEach(b => {
+                b.addEventListener("click", async () => {
+                    await api(`/api/test-center/players/${b.dataset.del}`, { method: "DELETE" });
+                    await loadSession();
+                });
+            });
+            $("panel-field").querySelectorAll("[data-hole-edit]").forEach(el => {
+                el.addEventListener("change", async () => {
+                    try {
+                        await api(`/api/test-center/sessions/${SID}/hole`, {
+                            method: "POST",
+                            body: JSON.stringify({ hole_number: +el.dataset.hole,
+                                                   [el.dataset.holeEdit]: el.value || null })
+                        });
+                        await loadSession();
+                    } catch (err) { flash(err.message, true); }
+                });
+            });
+            $("tc-champ").addEventListener("change", async e => {
+                await api(`/api/test-center/sessions/${SID}`, {
+                    method: "PATCH",
+                    body: JSON.stringify({ championship: e.target.checked })
+                });
+                await loadSession();
+            });
+            $("tc-np-add").addEventListener("click", () => addPlayer());
+            $("tc-np-eight").addEventListener("click", addEight);
+        }
+
+        async function addPlayer(p) {
+            const body = p || {
+                player_name: $("tc-np-name").value.trim(),
+                playing_handicap: $("tc-np-hcp").value || null,
+                team_num: $("tc-np-team").value || null,
+                buys_net: $("tc-np-net").checked,
+                buys_gross: $("tc-np-gross").checked,
+                is_member: $("tc-np-member").checked
+            };
+            if (!body.player_name) { flash("Name required", true); return; }
+            try {
+                await api(`/api/test-center/sessions/${SID}/players`, {
+                    method: "POST", body: JSON.stringify(body) });
+                if (!p) { $("tc-np-name").value = ""; $("tc-np-hcp").value = ""; }
+                await loadSession();
+            } catch (err) { flash(err.message, true); }
+        }
+
+        async function addEight() {
+            const hcps = [0, 4, 7, 9, 12, 14, 18, 22];
+            for (let i = 0; i < 8; i++) {
+                await addPlayer({
+                    player_name: `Test Player ${i + 1}`, playing_handicap: hcps[i],
+                    team_num: Math.floor(i / 4) + 1, buys_net: true,
+                    buys_gross: true, is_member: true });
+            }
+            flash("8 test players added — two foursomes");
+        }
+
+        // ── parity ─────────────────────────────────────────────────────
+        async function renderParity() {
+            let res;
+            try {
+                res = await api(`/api/test-center/sessions/${SID}/parity`);
+            } catch (err) {
+                $("panel-parity").innerHTML = `<div class="tc-card">
+                    <h3>Parity vs Golf Genius</h3>
+                    <div class="tc-warn note">${esc(err.message)}</div>
+                    <div class="tc-muted" style="font-size:12.5px;margin-top:10px;white-space:normal;">
+                        Create a session with <b>Shadow a real event</b> to run the gate:
+                        it clones an event's imported cards, recomputes every number from the
+                        raw gross scores, and diffs the result against what GG recorded.</div>
+                    </div>`;
+                return;
+            }
+            const clean = res.parity;
+            let h = `<div class="tc-card">
+                <h3>Parity vs Golf Genius
+                    <span class="sub">${res.source_rounds} GG cards · ${res.checked} values checked</span></h3>
+                <div style="font:700 22px/1.2 'Bitter',serif;margin-bottom:6px;">
+                    ${clean ? '<span class="tc-pill ok">PARITY</span> Our engine reproduces GG exactly'
+                            : `<span class="tc-pill bad">${res.mismatched} MISMATCHES</span> Not yet at parity`}
+                </div>
+                <div class="tc-muted" style="font-size:12.5px;white-space:normal;">
+                    ${res.matched} of ${res.checked} values match ·
+                    ${res.players_clean} players clean ·
+                    ${res.players_mismatched} with deltas ·
+                    ${res.players_without_gg} with no GG card.
+                    This is the Stage-1 confidence gate — GG stays official until this reads PARITY
+                    across real events.
+                </div>`;
+            const bad = res.rows.filter(r => r.status !== "match");
+            h += `<table class="tc-tbl" style="margin-top:12px;"><thead><tr>
+                <th>Player</th><th>Status</th><th>Deltas (ours vs GG)</th>
+            </tr></thead><tbody>`;
+            h += (bad.length ? bad : res.rows).map(r => `<tr>
+                <td>${esc(r.name)}</td>
+                <td><span class="tc-pill ${r.status === "match" ? "ok" :
+                    r.status === "no_gg_row" ? "off" : "bad"}">${r.status.replace(/_/g, " ")}</span></td>
+                <td style="white-space:normal;font-size:12px;">${r.deltas.map(d =>
+                    `<b>${esc(d.field)}</b> ${d.ours} vs ${d.gg}
+                     <span class="tc-muted">(${d.delta > 0 ? "+" : ""}${d.delta})</span>`).join(" · ")
+                     || '<span class="tc-muted">—</span>'}</td>
+            </tr>`).join("");
+            h += `</tbody></table>`;
+            if (bad.length && bad.length < res.rows.length) {
+                h += `<div class="tc-muted" style="font-size:12px;margin-top:8px;">
+                      Showing the ${bad.length} players with deltas; the other
+                      ${res.rows.length - bad.length} match.</div>`;
+            }
+            $("panel-parity").innerHTML = h + `</div>`;
+        }
+
+        // ── polling ────────────────────────────────────────────────────
+        function setPolling(on) {
+            POLLING = on;
+            if (POLL) { clearInterval(POLL); POLL = null; }
+            if (on) POLL = setInterval(() => { if (!document.hidden) refresh(); }, 10000);
+            if (PANEL === "board") renderBoard();
+        }
+
+        // ── shell ──────────────────────────────────────────────────────
+        function showPanel(name) {
+            PANEL = name;
+            document.querySelectorAll(".tc-tab").forEach(t =>
+                t.classList.toggle("active", t.dataset.panel === name));
+            document.querySelectorAll(".tc-panel").forEach(p => { p.hidden = true; });
+            if (!SID) { showEmpty(); return; }
+            $("tc-nothing").hidden = true;
+            $("panel-" + name).hidden = false;
+            refresh();
+        }
+
+        document.querySelectorAll(".tc-tab").forEach(t =>
+            t.addEventListener("click", () => showPanel(t.dataset.panel)));
+
+        $("tc-session").addEventListener("change", e => {
+            SID = +e.target.value || null;
+            loadSession();
+        });
+
+        $("tc-new-synth").addEventListener("click", async () => {
+            const name = prompt("Name this test session:", "Synthetic nine");
+            if (name === null) return;
+            const holes = confirm("18 holes?  (Cancel = 9 holes)") ? 18 : 9;
+            try {
+                const res = await api("/api/test-center/sessions", {
+                    method: "POST",
+                    body: JSON.stringify({ name: name, holes: holes }) });
+                await loadSessions(res.session_id);
+                showPanel("field");
+            } catch (err) { flash(err.message, true); }
+        });
+
+        $("tc-new-seed").addEventListener("click", async () => {
+            let events;
+            try { events = await api("/api/test-center/scorable-events"); }
+            catch (err) { flash(err.message, true); return; }
+            if (!events.length) {
+                alert("No events have imported scorecards yet. Import an event's "
+                    + "ALL Net card first (Scoring import), then shadow it here.");
+                return;
+            }
+            const list = events.slice(0, 40).map((e, i) =>
+                `${i + 1}. ${e.item_name} — ${e.event_date || "?"} (${e.n_rounds} cards)`).join("\n");
+            const pick = prompt("Shadow which event?\n\n" + list + "\n\nEnter a number:", "1");
+            if (pick === null) return;
+            const idx = parseInt(pick, 10) - 1;
+            if (isNaN(idx) || idx < 0 || idx >= Math.min(events.length, 40)) {
+                flash("Not a valid choice", true); return;
+            }
+            try {
+                const res = await api("/api/test-center/sessions", {
+                    method: "POST",
+                    body: JSON.stringify({ seed_from_event: events[idx].item_name }) });
+                await loadSessions(res.session_id);
+                flash(`Seeded ${res.players_seeded} cards from ${res.event}`);
+                showPanel("parity");
+            } catch (err) { flash(err.message, true); }
+        });
+
+        $("tc-delete").addEventListener("click", async () => {
+            if (!SID) return;
+            const s = SESSIONS.find(x => x.id === SID);
+            if (!confirm(`Delete test session "${s ? s.name : SID}"? This removes only `
+                       + `sandbox data — no real scoring record is touched.`)) return;
+            await api(`/api/test-center/sessions/${SID}`, { method: "DELETE" });
+            SID = null;
+            await loadSessions();
+        });
+
+        document.addEventListener("DOMContentLoaded", () => {
+            if (typeof initAuth === "function") initAuth();
+            loadSessions().catch(err => flash(err.message, true));
+        });
+    })();
+    </script>
+</body>
+</html>

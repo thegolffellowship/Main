@@ -1,5 +1,15 @@
-window.TGF_VERSION = "2.149.27";
+window.TGF_VERSION = "2.150.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.150.0",
+    date: "2026-07-29",
+    changes: [
+      "LIVE SCORING TEST CENTER (admin, /admin/test-center) — the Stage-1 build from docs/claude/game-engine.md: 'rely on GG for ONLY the raw gross hole scores; compute EVERYTHING ourselves.' New pure engine email_parser/live_scoring.py computes Individual Net, Individual Gross, Team Net, Skins, MVP, CTP/Longest Putt and Hole-in-One from nothing but gross hole scores plus our own course/tee facts and playing handicaps. Every threshold is rules-as-data in SEED_LIVE_SCORING_CONFIG transcribed from the ratified side-games spec v1.0 (net flights 1 to 11 buyers then 2 at 12+ splitting at HCP 12.0; Individual Gross activating at 16 buyers on a nine / 12 on an eighteen; skins flights at 8+; CTP max 2 per nine choosing the SHORTEST par-3s with the leftover becoming a Longest Putt on the last hole). The engine reuses the existing formula layer (compute_hole_derivations) and WHS allocation (handicap_calc.allocate_strokes) rather than reimplementing either — duplicating that math would defeat the parity harness it exists to feed.",
+      "SHADOW A REAL EVENT + PARITY GATE — seeding a test session from an event with imported scorecards clones the FACTS (gross strokes, GG's own handicap dots, playing handicaps) into sandbox tables, pulls buyer flags from real purchases and teams from saved pairings, and remembers each player's source scoring_round_id. The Parity tab then diffs our engine against GG player by player across gross, net, playing handicap, both Stableford totals, and (where we derived the dots ourselves) the per-hole stroke allocation. Reads PARITY only when every checked value matches; a GG row of all-nulls checks nothing and explicitly does NOT claim parity. This is the confidence gate — GG stays official until it reads clean across real events.",
+      "LIVE SCORE ENTRY + SIMULATION — a scorecard grid where a gross score typed into any cell recomputes the entire board (the Stage-2 write path in miniature), with handicap dots shown per hole, par-3 columns shaded, and a 10-second live-refresh toggle. Autoplay fills the field through a chosen hole from an optional seed and never overwrites a hand-entered score, so repeatedly advancing the through-hole reproduces a round unfolding in real time. Field & Course tab edits handicaps, teams, flights, buyer flags, member status, par, yardage and stroke index, plus a championship toggle that swaps in the +1-per-net-category schedule.",
+      "SANDBOX ISOLATION — all writes land in new lazily-created ls_test_* tables (sessions, players, holes, course holes, contests); seeding READS production scoring rows and never writes them, and deleting a session touches nothing outside the sandbox. Every table referencing a person carries customer_id as an FK per Guiding Principle 6, and a player linked to a customer takes the canonical name. All routes are admin-only. Covered by test_live_scoring.py (63 engine assertions) and test_live_scoring_center.py (57 integration assertions including the parity gate and a deliberately corrupted score proving the gate can actually fail).",
+    ],
+  },
   {
     version: "2.149.27",
     date: "2026-07-29",

@@ -17,6 +17,7 @@ Before working on a specific area, Read the relevant sub-doc:
 - `docs/claude/state-of-the-tracker.md` (Platform-facing brief for the claude.ai Golf Fellowship Project — refresh after major build waves)
 - `docs/claude/side-games.md` (side-games RATIFIED SPEC v1.0 — buy-ins, game rules, prize-matrix derivation; open flags at bottom)
 - `docs/claude/game-engine.md` (Game Creator engine + untether-from-GG staging — versioned game/season-contest definitions; design of record)
+- `docs/claude/live-scoring-test-center.md` (admin sandbox at `/admin/test-center` — the Stage-1 shadow leaderboard + GG parity gate; pure engine in `email_parser/live_scoring.py`)
 - `docs/claude/gg-history.md` (GG archive coverage map: 29 portals SA 2016–2025 / Austin 2019–2025 / DFW 2020–2024 / Houston 2021–2024 / one-offs, the proven widget-route ingest recipe, and the proposed gg_history_* schema — schema pending Kerry rule-3b ratification)
 - `docs/claude/pairings.md` (TGF Pairing Standards — Kerry's ruleset of record for the pairings engine, 2026-07-12; CA docs merge + pairing_history amendment pending)
 - `docs/claude/handicap-projection.md` (Task #16 — self-computed playing handicap from index + selected tee; SHADOW/parity-validated 100% vs GG allocation, awaiting Kerry+CA ratification; `handicap_calc.py`)
@@ -300,6 +301,7 @@ No Python or local install needed — Claude Desktop connects directly to Railwa
 - `email_parser/database.py` — schema, CRUD, audit queries, customer matching, COO context, bank reconciliation (~12000+ lines)
 - `email_parser/memberships.py` — `customer_memberships` schema/backfill, renewal detection, reminder email templates, daily scheduler job, signed roster opt-in/out tokens
 - `email_parser/match_play.py` — pure Match Play engine (versioned-config evaluation: structure, seeded bracket w/ byes, exact-cents payout ladders); seed = the ratified 29-column matrix; tests in `test_match_play.py`; see `docs/claude/game-engine.md`
+- `email_parser/live_scoring.py` — pure live-scoring engine (Individual Net/Gross, Team Net, Skins, MVP, CTP/HIO) computed from RAW GROSS HOLE SCORES alone; rules-as-data in `SEED_LIVE_SCORING_CONFIG` from the ratified side-games spec; reuses `compute_hole_derivations` + `handicap_calc.allocate_strokes` rather than reimplementing them. Powers the admin Test Center; tests in `test_live_scoring.py` / `test_live_scoring_center.py`; see `docs/claude/live-scoring-test-center.md`
 - `email_parser/fetcher.py` — Microsoft Graph email fetching
 - `email_parser/report.py` — Daily digest email builder + sender
 - `email_parser/rsvp_parser.py` — Golf Genius RSVP email parser (regex, no AI)
@@ -330,6 +332,12 @@ No Python or local install needed — Claude Desktop connects directly to Railwa
   typeahead → per-player overview (handicap, stats, standings in every race,
   projected LSC seat, winnings). PII-free payloads, member-tier-destined —
   see `docs/claude/member-portal.md`
+- `templates/test_center.html` — Live Scoring Test Center (admin): the
+  Stage-1 shadow leaderboard, live score entry + simulation, and the GG
+  parity gate. Routes under `# LIVE SCORING TEST CENTER` in `app.py`
+  (`/admin/test-center`, `/api/test-center/*`), data layer under the
+  matching banner in `database.py` (`ls_*`, `ls_test_*` tables). Writes
+  ONLY to sandbox tables — see `docs/claude/live-scoring-test-center.md`
 - `templates/gg_history.html` — GG History review (admin): pending-names
   identity queue (Link/Guest/Not-a-person), per-portal archive coverage,
   standings browser; backend in `email_parser/gg_history.py` (see
