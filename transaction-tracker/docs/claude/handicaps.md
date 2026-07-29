@@ -399,6 +399,23 @@ player_name variant (freshest record wins — the export-dedup rule) so
 a self-derived round extends the record instead of forking it; new
 players get a handicap_player_links row on apply.
 
+**Manager recap email (v2.149.27, Kerry 2026-07-29: "auto send manager
+handicap reports for each chapter after each posting"):** every `|apply`
+that writes rounds auto-emails a per-chapter recap — header (event /
+course / date / standard), biggest index movers (|Δ| ≥ 0.4, green
+down / amber up), then the full per-player table (gross, NDB-adjusted,
+differential, index before → after, † capped-hole marker; brand-new
+players show "new"). Non-fatal: a mail failure never rolls back the
+posting (result carries `recap_email`). Recipients are rules-as-data:
+app_setting `hcp_recap_email_<chapter_slug>` (`hcp_recap_email_austin`,
+`hcp_recap_email_san_antonio`), then `hcp_recap_email_default`, then
+env `COO_EMAIL_TO` → `EMAIL_ADDRESS` (Kerry's inbox) — so recaps flow
+to Kerry until per-chapter manager addresses are configured. Manual
+(re)send for an already-posted event: bridge `scoring-hcp-recap:<event>`
+(`send_handicap_recap_for_event` rebuilds before/after from the preview,
+whose pool excludes each card's own bridged round, so post-hoc numbers
+stay correct).
+
 **First live run (v2.89.1, Kerry 'apply'):** s9.17 Silverhorn (27) +
 a9.17 Falconhead (15) written export-free, after verifying all 42
 self-derived adjusted values byte-identical to GG's own "Adjusted

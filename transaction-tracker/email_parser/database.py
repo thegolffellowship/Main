@@ -11840,16 +11840,209 @@ def derive_handicap_rounds_from_scoring(event_query: str, dry_run: bool = True,
         except Exception:
             logger.exception("Non-fatal: persist_handicap_round_nines after derive failed")
 
+    # Manager recap email per posting (Kerry 2026-07-29: "auto send manager
+    # handicap reports for each chapter after each posting"). Non-fatal —
+    # a mail hiccup must never roll back or mask a successful posting.
+    recap = None
+    if not dry_run and plan:
+        try:
+            recap = send_handicap_recap_email(
+                (preview["events_matched"] or [event_query])[0],
+                plan, db_path=db_path)
+        except Exception:
+            logger.exception("Non-fatal: handicap recap email failed")
+            recap = {"ok": False, "error": "exception (see logs)"}
+
     return {"event_query": event_query,
             "events_matched": preview["events_matched"],
             "dry_run": dry_run,
             "would_write" if dry_run else "written": plan,
             "skipped": skipped,
+            "recap_email": recap,
             "summary": {"planned": len(plan), "skipped": len(skipped),
                         "cap_changes_differential":
                             preview["summary"]["cap_changes_differential"]},
             "standard": "WHS net double bogey adjusted gross "
                         "(Kerry-ratified 2026-07-14)"}
+
+
+def _handicap_recap_recipient(conn, chapter: str) -> str | None:
+    """Recipient for a chapter's handicap recap — rules-as-data:
+    app_setting 'hcp_recap_email_<slug>' (hcp_recap_email_austin /
+    hcp_recap_email_san_antonio), then 'hcp_recap_email_default', then
+    env COO_EMAIL_TO, then EMAIL_ADDRESS (the owner's inbox). Values may
+    be comma-separated lists (send_mail_graph splits them)."""
+    import os as _os
+    slug = re.sub(r"[^a-z0-9]+", "_", (chapter or "").strip().lower()).strip("_")
+    keys = ([f"hcp_recap_email_{slug}"] if slug else []) + ["hcp_recap_email_default"]
+    for key in keys:
+        try:
+            row = conn.execute(
+                "SELECT value FROM app_settings WHERE key = ?", (key,)).fetchone()
+            if row and (row["value"] or "").strip():
+                return row["value"].strip()
+        except Exception:
+            pass
+    return ((_os.getenv("COO_EMAIL_TO") or "").strip()
+            or (_os.getenv("EMAIL_ADDRESS") or "").strip() or None)
+
+
+def send_handicap_recap_email(event_label: str, written: list,
+                              db_path: str | Path | None = None) -> dict:
+    """Email the chapter manager a recap of one handicap posting — the
+    same shape as the chat recap Kerry approved 2026-07-29: header
+    (event / course / date / standard), biggest index movers up top,
+    then the full per-player table (gross, NDB-adjusted, differential,
+    index before -> after). Fired automatically by
+    derive_handicap_rounds_from_scoring(apply); safe to call manually.
+    Returns {ok, sent_to, chapter, players} without ever raising."""
+    import os as _os
+    from email_parser.fetcher import send_mail_graph
+    if not written:
+        return {"ok": False, "error": "nothing written — no recap to send"}
+    with _connect(db_path) as conn:
+        chapter = None
+        row = conn.execute(
+            """SELECT e.chapter FROM scoring_rounds sr
+               JOIN events e ON e.id = sr.event_id
+               WHERE sr.id = ? LIMIT 1""",
+            (written[0]["scoring_round_id"],)).fetchone()
+        if row:
+            chapter = (row["chapter"] or "").strip() or None
+        to_address = _handicap_recap_recipient(conn, chapter or "")
+    if not to_address:
+        return {"ok": False, "error": "no recipient configured", "chapter": chapter}
+    tenant_id = _os.getenv("AZURE_TENANT_ID")
+    client_id = _os.getenv("AZURE_CLIENT_ID")
+    client_secret = _os.getenv("AZURE_CLIENT_SECRET")
+    from_address = _os.getenv("EMAIL_ADDRESS")
+    if not all([tenant_id, client_id, client_secret, from_address]):
+        return {"ok": False, "error": "email not configured on server"}
+
+    course = written[0].get("course_name") or ""
+    rdate = written[0].get("round_date") or ""
+
+    def _fi(v):
+        # A brand-new player has no prior index (None) — show a dash.
+        return f"{v:.1f}" if v is not None else "&mdash;"
+
+    def _delta(p):
+        if p.get("index_after") is None or p.get("index_now") is None:
+            return None
+        return round(p["index_after"] - p["index_now"], 1)
+
+    rows = sorted(written, key=lambda p: (_delta(p) if _delta(p) is not None
+                                          else 99.0, p["player_name"]))
+    movers_dn = [p for p in rows if (_delta(p) or 0) <= -0.4]
+    movers_up = [p for p in rows if (_delta(p) or 0) >= 0.4]
+    capped_n = sum(1 for p in rows if p.get("capped_holes"))
+
+    def _mover_line(players):
+        return ", ".join(
+            f"{p['player_name']} {_fi(p['index_now'])} &rarr; "
+            f"<b>{_fi(p['index_after'])}</b>" for p in players)
+
+    trs = []
+    for p in rows:
+        delta = _delta(p)
+        if delta is None:
+            arrow = '<span style="color:#9CA3AF;">new</span>'
+        elif delta < 0:
+            arrow = f'<span style="color:#15803D;">&#9660; {abs(delta):.1f}</span>'
+        elif delta > 0:
+            arrow = f'<span style="color:#B45309;">&#9650; {delta:.1f}</span>'
+        else:
+            arrow = '<span style="color:#9CA3AF;">&mdash;</span>'
+        cap = " &dagger;" if p.get("capped_holes") else ""
+        diff = p.get("differential")
+        trs.append(
+            f'<tr>'
+            f'<td style="padding:4px 10px;border-bottom:1px solid #E5E7EB;">{p["player_name"]}{cap}</td>'
+            f'<td style="padding:4px 10px;border-bottom:1px solid #E5E7EB;text-align:right;">{p["gross"]}</td>'
+            f'<td style="padding:4px 10px;border-bottom:1px solid #E5E7EB;text-align:right;">{p["adjusted_score"]}</td>'
+            f'<td style="padding:4px 10px;border-bottom:1px solid #E5E7EB;text-align:right;">{_fi(diff)}</td>'
+            f'<td style="padding:4px 10px;border-bottom:1px solid #E5E7EB;text-align:right;white-space:nowrap;">'
+            f'{_fi(p["index_now"])} &rarr; <b>{_fi(p["index_after"])}</b></td>'
+            f'<td style="padding:4px 10px;border-bottom:1px solid #E5E7EB;text-align:right;">{arrow}</td>'
+            f'</tr>')
+
+    movers_html = ""
+    if movers_dn:
+        movers_html += (f'<p style="margin:4px 0;"><b style="color:#15803D;">'
+                        f'Down:</b> {_mover_line(movers_dn)}</p>')
+    if movers_up:
+        movers_html += (f'<p style="margin:4px 0;"><b style="color:#B45309;">'
+                        f'Up:</b> {_mover_line(movers_up)}</p>')
+    if not movers_html:
+        movers_html = '<p style="margin:4px 0;">No index moved more than 0.3.</p>'
+
+    chapter_label = chapter or "TGF"
+    subject = (f"TGF Handicap Update — {event_label}"
+               f" ({chapter_label}) — {len(rows)} rounds posted")
+    html = f"""
+    <div style="font-family:-apple-system,'Helvetica Neue',Arial,sans-serif;color:#1B1B1B;max-width:640px;">
+      <h2 style="margin:0 0 2px;">Handicap Update — {event_label}</h2>
+      <p style="margin:0 0 12px;color:#6B7280;">{course} &middot; {rdate} &middot; {chapter_label}
+         &middot; {len(rows)} rounds posted</p>
+      <h3 style="margin:12px 0 4px;">Biggest movers</h3>
+      {movers_html}
+      <h3 style="margin:16px 0 4px;">All rounds</h3>
+      <table style="border-collapse:collapse;font-size:13px;width:100%;">
+        <thead><tr style="text-align:right;color:#6B7280;">
+          <th style="text-align:left;padding:4px 10px;">Player</th>
+          <th style="padding:4px 10px;">Gross</th>
+          <th style="padding:4px 10px;">Adj</th>
+          <th style="padding:4px 10px;">Diff</th>
+          <th style="padding:4px 10px;">Index</th>
+          <th style="padding:4px 10px;">&Delta;</th>
+        </tr></thead>
+        <tbody>{''.join(trs)}</tbody>
+      </table>
+      <p style="margin:14px 0 0;color:#6B7280;font-size:12px;">
+        Standard: WHS net double bogey adjusted gross (ratified 2026-07-14).
+        {f'&dagger; {capped_n} round{"s" if capped_n != 1 else ""} had a hole capped to net double bogey.' if capped_n else ''}
+        New differentials are live — next event's playing handicaps project off these.
+      </p>
+    </div>"""
+
+    ok = send_mail_graph(tenant_id=tenant_id, client_id=client_id,
+                         client_secret=client_secret,
+                         from_address=from_address, to_address=to_address,
+                         subject=subject, html_body=html)
+    logger.info("Handicap recap for %r (%s) -> %s: %s", event_label,
+                chapter_label, to_address, "sent" if ok else "FAILED")
+    return {"ok": bool(ok), "sent_to": to_address, "chapter": chapter_label,
+            "players": len(rows)}
+
+
+def send_handicap_recap_for_event(event_query: str,
+                                  db_path: str | Path | None = None) -> dict:
+    """Manual (re)send of the manager recap for an ALREADY-POSTED event.
+    Rebuilds the posting rows from the preview — whose differential pool
+    excludes each card's own bridged round, so index before/after stay
+    correct even after the rounds are in — and sends the same email the
+    apply path fires automatically. Recaps a posting, not a plan: only
+    rounds already bridged to a handicap round are included."""
+    preview = get_scoring_handicap_preview(event_query, db_path=db_path)
+    if preview.get("error"):
+        return preview
+    written = [{
+        "player_name": r["player_name"], "customer_id": r["customer_id"],
+        "scoring_round_id": r["scoring_round_id"],
+        "round_date": r["round_date"], "course_name": r["course_name"],
+        "tee_name": r["tee_name"], "adjusted_score": r["adjusted_ndb"],
+        "gross": r["gross"], "capped_holes": r["capped_holes"],
+        "rating": r["rating"], "slope": r["slope"],
+        "differential": r["differential_ndb"],
+        "index_now": r["index_now"], "index_after": r["index_after_ndb"],
+    } for r in preview["rounds"] if r["already_imported"]]
+    if not written:
+        return {"ok": False,
+                "error": f"no posted handicap rounds for {event_query!r} yet "
+                         "— run scoring-hcp-import:<event>|apply first"}
+    return send_handicap_recap_email(
+        (preview["events_matched"] or [event_query])[0], written,
+        db_path=db_path)
 
 
 # Per-nine (front/back) course ratings are NOT in course_tees (which stores

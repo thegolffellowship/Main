@@ -1369,6 +1369,8 @@ def _scoring_dispatch(url: str, extract: str):
       scoring-gg-results:<event>   GG-recorded winners for one event
       scoring-hcp-preview:<event>  read-only self-derived handicap preview
       scoring-hcp-import:<event>[|apply]  self-derive handicap rounds (WHS NDB)
+                                   |apply also auto-emails the chapter recap
+      scoring-hcp-recap:<event>    (re)send the chapter-manager recap email
       scoring-mp-reconcile75[:<season>|<chapter>|<allow>]  match-play reconcile
                                    with off-lowest per-chapter allowance
       scoring-mp-lock-one:<chapter>|<A>|<B>[|apply]  manually lock one
@@ -2118,11 +2120,17 @@ def _scoring_dispatch(url: str, extract: str):
         if cmd == "scoring-hcp-import":
             # Self-derive handicap rounds from our scorecards for one event
             # (WHS NDB adjusted gross — Kerry-ratified 2026-07-14).
-            # "<event>" dry-runs the plan; "<event>|apply" writes it.
+            # "<event>" dry-runs the plan; "<event>|apply" writes it and
+            # auto-emails the chapter manager recap (Kerry 2026-07-29).
             ev_arg, _, mode = arg.partition("|")
             return json.dumps(db.derive_handicap_rounds_from_scoring(
                 ev_arg.strip(), dry_run=(mode.strip().lower() != "apply")),
                 indent=2, default=str)
+        if cmd == "scoring-hcp-recap":
+            # Manual (re)send of the chapter-manager recap email for one
+            # ALREADY-POSTED event (the apply path sends it automatically).
+            return json.dumps(db.send_handicap_recap_for_event(arg.strip()),
+                              indent=2, default=str)
         if cmd == "scoring-courses-audit":
             # READ-ONLY: duplicate clusters in `courses` + handicap course
             # names with no courses row (Kerry 2026-07-19).

@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.149.26";
+window.TGF_VERSION = "2.149.27";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.149.27",
+    date: "2026-07-29",
+    changes: [
+      "Handicap postings now auto-email a chapter-manager recap (Kerry: 'auto send manager handicap reports for each chapter after each posting to give a recap just like you did here'). Every scoring-hcp-import |apply that writes rounds sends an HTML report — event/course/date header, biggest index movers first (green down / amber up), then the full per-player table with gross, NDB-adjusted score, differential, and index before → after (capped-hole dagger, 'new' for first-ever rounds). Recipients are rules-as-data via app_settings (hcp_recap_email_austin / hcp_recap_email_san_antonio / hcp_recap_email_default) falling back to the owner's inbox until manager addresses are configured; a mail failure never blocks the posting. New scoring-hcp-recap:<event> bridge (re)sends the recap for an already-posted event — the preview's differential pool excludes each card's own bridged round, so before/after numbers stay correct post-hoc.",
+    ],
+  },
   {
     version: "2.149.26",
     date: "2026-07-28",
