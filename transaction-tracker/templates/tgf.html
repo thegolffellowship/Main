@@ -1139,6 +1139,28 @@
                 el.innerHTML = '<div class="empty-state"><h3>Couldn\'t load refunds</h3><p>Try again.</p></div>';
             }
         }
+        // Register the refund watch the moment a Venmo pill is tapped —
+        // fire-and-forget with keepalive so the request survives the page
+        // backgrounding when the Venmo app takes over. Navigation is NOT
+        // prevented; the deep link proceeds either way.
+        document.addEventListener("click", (e) => {
+            const a = e.target.closest && e.target.closest(".refund-venmo-pill");
+            if (!a || !a.dataset.item) return;
+            try {
+                fetch(`/api/items/${a.dataset.item}/refund-watch`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    keepalive: true,
+                    body: JSON.stringify({
+                        method: "Venmo",
+                        amount: parseFloat(a.dataset.amount || "0"),
+                        memo: a.dataset.memo || "",
+                        handle: a.dataset.handle || "",
+                    }),
+                }).catch(() => {});
+            } catch (_) { /* never block the pay link */ }
+        }, true);
+
         function renderRefunds(data) {
             const el = $("#refunds-main");
             const t = data.totals || {};
@@ -1157,7 +1179,16 @@
                     const href = isMobile
                         ? `venmo://paycharge?txn=pay&recipients=${encodeURIComponent(h)}&amount=${amt}&note=${memo}`
                         : `https://venmo.com/${encodeURIComponent(h)}?txn=pay&amount=${amt}&note=${memo}`;
-                    action = `<a href="${href}" target="_blank" rel="noopener"
+                    // Tapping the pill must REGISTER THE WATCH (Kerry
+                    // 2026-07-28: he initiated four refunds right here and
+                    // In Flight stayed empty — the pill was a bare deep
+                    // link). Credit rows carry item_id; season-contest
+                    // removal refunds don't (they complete via the receipt
+                    // scan by design) and keep the bare link.
+                    const watchAttrs = r.item_id
+                        ? ` class="refund-venmo-pill" data-item="${r.item_id}" data-amount="${amt}" data-handle="${escR(h)}" data-memo="${escR(r.memo || "")}"`
+                        : "";
+                    action = `<a href="${href}" target="_blank" rel="noopener"${watchAttrs}
                            style="display:inline-block;text-decoration:none;background:#008CFF;color:#fff;font-size:0.72rem;font-weight:600;padding:2px 9px;border-radius:12px;">Venmo ${fmt(r.amount)}</a>
                         <a href="/customers?cid=${r.customer_id || ""}" style="font-size:0.7rem;color:var(--link);text-decoration:none;margin-left:4px;">more…</a>`;
                 } else {

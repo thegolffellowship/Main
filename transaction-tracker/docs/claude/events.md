@@ -1248,6 +1248,18 @@ Backend `get_refunds_overview(db_path, completed_days=120)` in
   schema addition pending Kerry's ruling** — today it's age-sort only.
 - **IN FLIGHT** — open `refund_watches` (a P2P pay link was tapped,
   awaiting the provider's receipt); shows method/handle + "watching…".
+  **The console's Venmo pill registers the watch on tap (v2.149.23)** —
+  it was a bare deep link before, so Kerry's from-the-console payments
+  created no watch and In Flight stayed empty. A capture-phase listener
+  fires a keepalive POST to `/api/items/<id>/refund-watch` (which also
+  schedules the ~75s/~180s quick receipt sweeps) without blocking the
+  deep-link navigation; season-contest removal refunds (`removal_id`
+  rows, no `item_id`) intentionally keep the bare link and complete via
+  the receipt scan. Backstop either way: `auto_match_refund_watches`'s
+  watchless pass runs even with ZERO open watches (v2.149.22 removed an
+  early return that made it unreachable — Kerry's normal workflow never
+  had open watches, so paid refunds sat OUTSTANDING with their receipts
+  parsed; `scoring-refund-sweep` bridge cmd runs the matcher on demand).
 - **COMPLETED** — payouts recorded in the last `completed_days` days
   (status `refunded`, or WD rows stamped `Refunded …`), newest first,
   parsed from the `credit_note` payout stamp; badge **VERIFIED** when a

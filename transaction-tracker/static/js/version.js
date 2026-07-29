@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.149.22";
+window.TGF_VERSION = "2.149.23";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.149.23",
+    date: "2026-07-28",
+    changes: [
+      "The Refunds console's Venmo pill now registers the refund watch when tapped (Kerry: 'I did initiate each of those directly from the payouts page' — but the pill was a bare deep link, so In Flight stayed empty and nothing was watching for the receipts). Tapping now fires a keepalive POST to the existing refund-watch endpoint (which also schedules the ~75s/~180s quick receipt sweeps) before the Venmo app opens; season-contest removal refunds keep the bare link by design (they complete via the receipt scan). Together with v2.149.22's always-on watchless pass, refunds clear whether or not the tap registers.",
+    ],
+  },
   {
     version: "2.149.22",
     date: "2026-07-28",
