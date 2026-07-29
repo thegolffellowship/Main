@@ -39582,6 +39582,30 @@ def get_tgf_data(db_path=None):
         ).fetchall():
             winnings[row["id"]] = dict(row)
 
+        # Total events PLAYED per golfer (Kerry 2026-07-28: show overall
+        # participation next to the paying-events average). Counted from
+        # registrations: distinct real golf events (event_type='event',
+        # not cancelled) whose date has passed, where the golfer holds a
+        # live registration (active or rsvp_only — credited/refunded/
+        # transferred rows mean they withdrew).
+        played = {r["cid"]: r["n"] for r in conn.execute(
+            """SELECT i.customer_id AS cid, COUNT(DISTINCT i.event_id) AS n
+               FROM items i
+               JOIN events e ON e.id = i.event_id
+               WHERE i.customer_id IS NOT NULL
+                 AND COALESCE(i.archived, 0) = 0
+                 AND COALESCE(i.transaction_status, 'active') IN ('active', 'rsvp_only')
+                 AND COALESCE(e.event_type, 'event') = 'event'
+                 AND COALESCE(e.status, 'active') = 'active'
+                 AND e.event_date IS NOT NULL AND e.event_date <= ?
+               GROUP BY i.customer_id""",
+            (today_central_str(),)).fetchall()}
+        for w in winnings.values():
+            # A golfer can hold payouts for more events than registrations
+            # cover (pre-tracker history) — never report played < paying.
+            w["events_entered"] = max(played.get(w["id"], 0),
+                                      w["events_played"] or 0)
+
         # Overpaid winnings needing a REQUEST back (v2.141.0) — rendered as
         # its own section on the Unpaid work queue.
         try:

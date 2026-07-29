@@ -1697,6 +1697,11 @@
             golferEvents.sort((a, b) => (b.event.event_date || "").localeCompare(a.event.event_date || ""));
 
             const avg = g.events_played ? g.total_winnings / g.events_played : 0;
+            // Overall participation line (Kerry 2026-07-28): total events
+            // PLAYED (from registrations) with winnings averaged over ALL
+            // of them, under the paying-events average.
+            const playedN = g.events_entered || g.events_played || 0;
+            const avgAll = playedN ? g.total_winnings / playedN : 0;
             main.innerHTML = `
                 <button class="ledger-back" id="ledger-back">&lsaquo; Golfers</button>
                 <div class="ledger-head">
@@ -1707,6 +1712,7 @@
                         </div>
                         <div class="ledger-name">${g.name}</div>
                         <div class="ledger-meta">${g.events_played} event${g.events_played !== 1 ? 's' : ''} &middot; ${fmt(avg)} avg / event</div>
+                        <div class="ledger-meta">${playedN} played overall &middot; ${fmt(avgAll)} avg / event</div>
                     </div>
                     <div class="ledger-stat">
                         <div class="ledger-stat-label">${seasonYear()} Winnings</div>

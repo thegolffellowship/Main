@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.149.25";
+window.TGF_VERSION = "2.149.26";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.149.26",
+    date: "2026-07-28",
+    changes: [
+      "Golfer winnings detail gains a second meta line under the paying-events average: total events PLAYED overall (counted from live registrations — active/rsvp_only items on real, non-cancelled golf events whose date has passed) with winnings averaged across all of them (Kerry: 'add total events played with average winnings per overall events in a row below the 13 - event average $'). The /api/tgf winnings payload now carries events_entered per golfer, floored at the paying-events count so pre-tracker payout history can never read as played < paid.",
+    ],
+  },
   {
     version: "2.149.25",
     date: "2026-07-28",
