@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.149.20";
+window.TGF_VERSION = "2.149.21";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.149.21",
+    date: "2026-07-28",
+    changes: [
+      "Quick-results-text format refined per Kerry: write like a top-end news reporter — lead with what's sensational, editorial judgment over checklist completeness (skins were the first cut for space), next-event teaser as its own punchy line, FULL RESULTS link last. Kerry's final Canyon Springs text recorded in events.md as the reference example.",
+    ],
+  },
   {
     version: "2.149.20",
     date: "2026-07-28",

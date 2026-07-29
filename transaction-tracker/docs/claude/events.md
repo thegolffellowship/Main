@@ -1179,20 +1179,31 @@ row and TGF MVP block hydrate lazily via hydrateMvpDeterminations()
 
 ## Quick results text (Kerry-approved format, 2026-07-28)
 
-When Kerry asks for a "quick results text" for an event, produce ONE
-block ≤300 CHARACTERS including spaces and the GG results link
-(`.../pages/<event-results-page>?round_id=<round>` — Kerry supplies
-it). News-ticker style: the FIRST FIVE WORDS in ALL CAPS, everything
-after in standard sentence case; no emojis. Lead with the storyline
-(who won City/TGF MVP and how — name the deciding tiebreaker, e.g.
-"edges Kulawik on the gross tiebreaker after both fire 5-under net";
-avoid words like "outlasts" that imply holding a lead), then compress
-the rest: Net flight winners, skins counts (×N), CTP winners, ending
-with "Full results: <link>". Reference example:
+When Kerry asks for a "quick results text" for an event: write like a
+TOP-END NEWS REPORTER putting out headlines — lead with whatever is
+SENSATIONAL about the night (a tiebreaker duel, a sweep, a monster
+round), not a checklist of every game. Kerry's explicit correction:
+"Don't be so hard lined … highlight what's sensational." Editorial
+judgment beats completeness — drop lower-drama detail (skins counts
+were the first cut) to make room for the story and stay near the
+~300-character budget including the GG results link (Kerry supplies
+`.../pages/<page>?round_id=<round>`).
+
+Style rules: first five words ALL CAPS then standard sentence case;
+no emojis; name HOW it was decided precisely (e.g. "edges Kulawik on
+the gross tiebreaker after both fire 5-under net" — never "outlasts",
+which implies holding a lead). Structure: headline block → blank line
+→ optional next-event teaser as its own punchy line ("SA City Champ
+Saturday!") → blank line → "FULL RESULTS: <link>". Kerry's final
+reference example:
+
 "ANTHIS SWEEPS CANYON SPRINGS MVP and TGF MVP with 14 points — edges
 Kulawik on the gross tiebreaker after both fire 5-under net. Baker
-takes Low Flight; Anthis grabs 3 skins, White 2; Marroquin & Ellis
-stick the pins. Full results: <link>"
+takes Low Flight; Marroquin & Ellis win CTPs.
+
+SA City Champ Saturday!
+
+FULL RESULTS: <link>"
 
 ## Payouts page — Command Ledger (v2.54.0, TGF DS Phase 1)
 
