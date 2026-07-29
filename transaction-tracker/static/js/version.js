@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.149.23";
+window.TGF_VERSION = "2.149.24";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.149.24",
+    date: "2026-07-28",
+    changes: [
+      "Coupon-sourced referrals no longer sit as owed $25 fees (Kerry: a redeemed tgf-referral-* coupon 'denotes that they already used a coupon that I issued them. So I don't need to be notified to issue another referral fee'). The coupon scan now records the referral as COMPED — the coupon WAS the compensation — with a coupon method stamp and the order date; the pre-rule Jesse Saldana → Craig Bourquin row migrates the same way on the next console load. Comped referrals show in the settled referral table with a purple COUPON badge (no dollar amount) so the referral history stays visible; the cash-fee path (receipt scan + scoring-referral-paid) remains for word-of-mouth referrals with no coupon.",
+    ],
+  },
   {
     version: "2.149.23",
     date: "2026-07-28",

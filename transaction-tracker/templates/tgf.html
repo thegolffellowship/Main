@@ -1236,10 +1236,12 @@
                 ? `<div class="tgf-scroll"><table class="payout-table"><thead><tr>${head}</tr></thead><tbody>${rows}</tbody></table></div>`
                 : `<div style="font-size:0.85rem;color:var(--text-muted);padding:0.25rem 0;">${empty}</div>`;
 
-            // ── Referral fees (v2.140.0, Kerry 2026-07-22) — owed derives
-            // from tgf-referral-* signup coupons; paid auto-completes from
-            // "Referral fee for <person>" P2P receipts.
-            const ref = data.referrals || {owed: [], paid: []};
+            // ── Referral fees (v2.140.0, Kerry 2026-07-22) — paid
+            // auto-completes from "Referral fee for <person>" P2P receipts.
+            // Coupon-sourced referrals arrive already COMPED (v2.149.24,
+            // Kerry 2026-07-28): a redeemed tgf-referral-* coupon IS the
+            // referrer's compensation, so they never appear as owed.
+            const ref = data.referrals || {owed: [], paid: [], comped: []};
             const isMobileUA = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
             const refOwedRows = (ref.owed || []).map(r => {
                 let action = "";
@@ -1266,14 +1268,20 @@
                     <td class="right queue-act">${action}</td>
                 </tr>`;
             }).join("");
-            const refPaidRows = (ref.paid || []).map(r => `
+            const refPaidRows = [...(ref.paid || []), ...(ref.comped || [])].map(r => {
+                const comped = r.status === "comped";
+                const badge = comped
+                    ? `<span style="font-size:0.7rem;font-weight:600;background:#ede9fe;color:#5b21b6;padding:2px 8px;border-radius:10px;white-space:nowrap;" title="Redeemed referral coupon was the compensation — no fee owed">COUPON</span>`
+                    : `<span style="font-size:0.7rem;font-weight:600;background:#dcfce7;color:#166534;padding:2px 8px;border-radius:10px;white-space:nowrap;">${r.acct_transaction_id ? "VERIFIED" : "PAID"}</span>`;
+                return `
                 <tr>
                     <td>${playerCell(r.referrer_name, r.referrer_customer_id,
-                        `referred ${r.referred_name || "?"}`)}</td>
+                        `referred ${r.referred_name || "?"}${comped && r.coupon_code ? " · " + r.coupon_code : ""}`)}</td>
                     <td style="font-size:0.78rem;color:var(--text-muted);white-space:nowrap;">${escR(r.method || "")}${r.paid_at ? " · " + fmtDate(r.paid_at) : ""}</td>
-                    <td class="right total-amount" style="white-space:nowrap;">${fmt(r.amount)}</td>
-                    <td class="right"><span style="font-size:0.7rem;font-weight:600;background:#dcfce7;color:#166534;padding:2px 8px;border-radius:10px;white-space:nowrap;">${r.acct_transaction_id ? "VERIFIED" : "PAID"}</span></td>
-                </tr>`).join("");
+                    <td class="right total-amount" style="white-space:nowrap;">${comped ? "—" : fmt(r.amount)}</td>
+                    <td class="right">${badge}</td>
+                </tr>`;
+            }).join("");
 
             el.innerHTML = `
                 <div style="display:flex;align-items:baseline;gap:0.75rem;margin-bottom:1rem;flex-wrap:wrap;">
@@ -1289,7 +1297,7 @@
                 ${section("Referral Fees", (ref.owed || []).length, ref.owed_total || 0, "#7c3aed",
                     tbl(`<th>Referrer / Referred</th><th class="right">Fee</th><th class="right" style="width:110px;"></th>`,
                         refOwedRows, "No referral fees owed.")
-                    + ((ref.paid || []).length ? tbl(`<th>Referrer / Referred</th><th>Method</th><th class="right">Fee</th><th class="right" style="width:90px;"></th>`, refPaidRows, "") : ""))}
+                    + (((ref.paid || []).length + (ref.comped || []).length) ? tbl(`<th>Referrer / Referred</th><th>Method</th><th class="right">Fee</th><th class="right" style="width:90px;"></th>`, refPaidRows, "") : ""))}
                 ${section("Completed", t.completed_count || 0, t.completed_amount || 0, "#166534",
                     tbl(`<th>Player / Event</th><th>Method</th><th class="right">Amount</th><th class="right" style="width:90px;"></th>`,
                         doneRows, `No refunds recorded in the last ${data.completed_days || 120} days.`))}`;

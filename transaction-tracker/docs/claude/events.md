@@ -1284,16 +1284,28 @@ a flat fee via P2P with memo "Referral fee for <referred person>".
 - Table `referral_fees` (lazy `_ensure_referral_tables`): both sides
   keyed by customer_id; source = coupon | receipt | manual;
   acct_transaction_id links the promoted receipt.
+- **A redeemed coupon IS the compensation (Kerry 2026-07-28,
+  v2.149.24):** "When a coupon is picked up … this denotes that they
+  already used a coupon that I issued them. So I don't need to be
+  notified to issue another referral fee." Coupon-sourced referrals are
+  therefore recorded as **COMPED** (status `comped`, method `coupon`,
+  paid_at = order date) — never OWED, never in the pay queue. Cash $25
+  fees only arise for word-of-mouth referrals with no coupon (receipt
+  scan or manual entry).
 - `sync_referral_fees()` (idempotent, runs on every console load +
-  scoring-referrals bridge): coupon scan => OWED rows (referrer resolved
-  from the code token, unresolved flagged in note); receipt scan =>
-  marks the matching OWED row PAID, or creates a paid row outright (the
+  scoring-referrals bridge): step 0 migrates any pre-rule coupon rows
+  still OWED to comped (the Jesse Saldana → Craig Bourquin row was the
+  live case); coupon scan => COMPED rows (referrer resolved from the
+  code token, unresolved flagged in note); receipt scan => marks a
+  matching OWED row PAID, or creates a paid row outright (the
   pre-tracking backfill: Atkinson/Aguilera, Atkinson/Decareaux).
 - Fee amount is rules-as-data: app_setting `referral_fee_amount`
   (default 25).
 - Owed rows render a Venmo deep link prefilled with the referrer's
   handle + the exact memo the scanner listens for, so paying from the
-  console self-completes when the receipt arrives.
+  console self-completes when the receipt arrives. Comped rows render in
+  the settled table with a purple COUPON badge and no dollar amount —
+  the referral history stays visible without implying cash moved.
 - Manual completion (cash / unreadable memo):
   `scoring-referral-paid:<id>|<method>|<date>|<note>` bridge or
   `mark_referral_fee_paid()`.

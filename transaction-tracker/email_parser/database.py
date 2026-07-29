@@ -21014,12 +21014,14 @@ def get_refunds_overview(db_path: str | Path | None = None,
 
 # ── Referral fee tracking (v2.140.0, Kerry 2026-07-22) ────────────────
 # The referral program's data trail: a referred signup carries a coupon
-# code "tgf-referral-<referrer>" (parser extracts coupon_code/amount),
-# and Kerry pays the REFERRER a flat fee via P2P with the memo
-# "Referral fee for <referred person>". Tracking derives both sides:
-# coupon scan => fee OWED to the referrer; receipt scan => fee PAID
-# (auto-completes, same philosophy as the refund watches). Fee amount is
-# rules-as-data: app_setting 'referral_fee_amount' (default 25).
+# code "tgf-referral-<referrer>" (parser extracts coupon_code/amount).
+# A redeemed coupon IS the referrer's compensation (Kerry 2026-07-28),
+# so the coupon scan records the referral as COMPED — no cash fee owed.
+# For word-of-mouth referrals with no coupon, Kerry pays the REFERRER a
+# flat fee via P2P with the memo "Referral fee for <referred person>";
+# the receipt scan records those PAID (auto-completes, same philosophy
+# as the refund watches). Fee amount is rules-as-data: app_setting
+# 'referral_fee_amount' (default 25).
 
 _REFERRAL_COUPON_RE = re.compile(r"^tgf-?referr?al-?(.+)$", re.I)
 _REFERRAL_MEMO_RE = re.compile(r"referr?al\s+fee\s+for\s+(.+?)\s*$", re.I)
@@ -21156,18 +21158,38 @@ def sync_referral_fees(db_path: str | Path | None = None) -> dict:
     """Idempotent two-way sync of the referral_fees table.
 
     1. COUPON scan: items whose coupon_code matches tgf-referral-<name>
-       create an OWED row (referrer resolved from the code token; the
-       referred person is the item's customer). One fee per referred
-       person — the same coupon on later orders doesn't stack.
+       create a COMPED row (referrer resolved from the code token; the
+       referred person is the item's customer). A redeemed referral
+       coupon IS the referrer's compensation — no cash fee is owed on
+       top of it (Kerry 2026-07-28: "this denotes that they already
+       used a coupon that I issued them. So I don't need to be notified
+       to issue another referral fee"). One row per referred person —
+       the same coupon on later orders doesn't stack.
     2. RECEIPT scan: P2P payout receipts whose memo reads "Referral fee
-       for <person>" mark the matching row PAID (or create a paid row
-       when we never saw a coupon — the pre-tracking backfill case:
-       Atkinson/Aguilera 07-21, Atkinson/Decareaux 07-22).
+       for <person>" mark the matching OWED row PAID (or create a paid
+       row when we never saw a coupon — the word-of-mouth referral Kerry
+       compensates in cash/Venmo: Atkinson/Aguilera 07-21,
+       Atkinson/Decareaux 07-22). Cash fees only ever arise from that
+       receipt path or manual entry now that coupon rows are comped.
     """
-    out = {"owed_added": 0, "paid_recorded": 0, "notes": []}
+    out = {"coupon_comped": 0, "paid_recorded": 0, "comped_migrated": 0,
+           "notes": []}
     with _connect(db_path) as conn:
         _ensure_referral_tables(conn)
         fee = _referral_fee_amount(conn)
+
+        # 0. migrate pre-rule coupon rows still sitting as OWED — the
+        #    coupon was the compensation, so no fee is pending. Runs on
+        #    every sync; shrinks to zero rows once flipped.
+        out["comped_migrated"] = conn.execute(
+            """UPDATE referral_fees
+               SET status = 'comped', method = 'coupon',
+                   paid_at = COALESCE(paid_at, DATE('now')),
+                   note = CASE WHEN COALESCE(note, '') = ''
+                          THEN 'coupon was the compensation - no fee owed (Kerry 2026-07-28)'
+                          ELSE note || '; coupon was the compensation - no fee owed (Kerry 2026-07-28)'
+                          END
+               WHERE source = 'coupon' AND status = 'owed'""").rowcount
 
         # 1. coupon scan — one row per referred person
         for it in conn.execute(
@@ -21200,18 +21222,22 @@ def sync_referral_fees(db_path: str | Path | None = None) -> dict:
                        FROM customers WHERE customer_id = ?""",
                     (ref_cid,)).fetchone()
                 ref_name = row["n"] if row else None
+            base_note = ("coupon was the compensation - no fee owed "
+                         "(Kerry 2026-07-28)")
             conn.execute(
                 """INSERT INTO referral_fees
                        (referrer_customer_id, referrer_name,
                         referred_customer_id, referred_name,
                         source, source_item_id, coupon_code, amount, status,
-                        note)
-                   VALUES (?, ?, ?, ?, 'coupon', ?, ?, ?, 'owed', ?)""",
+                        method, paid_at, note)
+                   VALUES (?, ?, ?, ?, 'coupon', ?, ?, ?, 'comped',
+                           'coupon', ?, ?)""",
                 (ref_cid, ref_name or token.title(), it["customer_id"],
                  referred_name, it["id"], it["coupon_code"], fee,
-                 None if ref_cid else
-                 f"referrer '{token}' not resolved to a customer"))
-            out["owed_added"] += 1
+                 it["order_date"] or None,
+                 base_note if ref_cid else
+                 f"referrer '{token}' not resolved to a customer; {base_note}"))
+            out["coupon_comped"] += 1
 
         # 2. receipt scan — paid referral fees auto-complete
         for exp in conn.execute(
@@ -21272,7 +21298,8 @@ def sync_referral_fees(db_path: str | Path | None = None) -> dict:
 
 def get_referral_fees(db_path: str | Path | None = None) -> dict:
     """Referral fees for the console: owed (with the referrer's Venmo
-    handle for a prefilled pay link) + paid, newest first."""
+    handle for a prefilled pay link) + paid + comped (coupon-compensated
+    — recorded for the referral history, no cash owed), newest first."""
     with _connect(db_path) as conn:
         _ensure_referral_tables(conn)
         rows = [dict(r) for r in conn.execute(
@@ -21282,7 +21309,8 @@ def get_referral_fees(db_path: str | Path | None = None) -> dict:
                ORDER BY rf.status DESC, rf.paid_at DESC, rf.id DESC""").fetchall()]
     owed = [r for r in rows if r["status"] == "owed"]
     paid = [r for r in rows if r["status"] == "paid"]
-    return {"owed": owed, "paid": paid,
+    comped = [r for r in rows if r["status"] == "comped"]
+    return {"owed": owed, "paid": paid, "comped": comped,
             "owed_total": round(sum(r["amount"] or 0 for r in owed), 2),
             "paid_total": round(sum(r["amount"] or 0 for r in paid), 2)}
 

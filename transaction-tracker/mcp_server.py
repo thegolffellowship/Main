@@ -1758,7 +1758,8 @@ def _scoring_dispatch(url: str, extract: str):
                 _ev.strip(), include_manual=(_mode.strip().lower() == "all")),
                 indent=2, default=str)
         if cmd == "scoring-referrals":
-            # Referral fee tracking (v2.140.0): sync (coupon scan => owed,
+            # Referral fee tracking (v2.140.0): sync (coupon scan => comped
+            # — the redeemed coupon IS the compensation, Kerry 2026-07-28;
             # receipt scan => paid) then return the console payload.
             sync = db.sync_referral_fees()
             return json.dumps({"sync": sync, **db.get_referral_fees()},
