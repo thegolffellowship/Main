@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.149.24";
+window.TGF_VERSION = "2.149.25";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.149.25",
+    date: "2026-07-28",
+    changes: [
+      "Golfer winnings detail: removed the chapter text chip (SAN ANTONIO / AUSTIN / TGF) from the event bands — Kerry: 'No need to put SAN ANTONIO badge on payout detail. City color is fine.' The band's chapter background color carries the signal alone, and event rows no longer wrap to two lines on mobile.",
+    ],
+  },
   {
     version: "2.149.24",
     date: "2026-07-28",

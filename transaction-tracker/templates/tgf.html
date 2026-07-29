@@ -396,10 +396,6 @@
         .ev-code { font: 700 10px/1 'Bitter', serif; }
         .ev-name { font: 700 13px/1.2 'Bitter', serif; }
         .ev-date { font-size: 11px; }
-        .ev-chip {
-            font: 700 9px/1 'Bitter', serif; letter-spacing: 1px; text-transform: uppercase;
-            padding: 3px 7px; border-radius: 9999px; white-space: nowrap;
-        }
         .ev-subtotal { font: 700 13px/1 'Bitter', serif; font-variant-numeric: tabular-nums; white-space: nowrap; }
         .pay-line {
             display: grid; grid-template-columns: 5px 140px 1fr 110px;
@@ -1611,11 +1607,13 @@
 
         // ═══════════ GOLFERS TAB — Command Ledger (TGF DS 2a/2b/2c) ═══════
 
-        // Chapter color layer (contrast-corrected pairings from the handoff)
+        // Chapter color layer (contrast-corrected pairings from the handoff).
+        // Band color alone signals the chapter — no text chip on the event
+        // bands (Kerry 2026-07-28: "City color is fine").
         const CHAPTER_STYLES = {
-            "austin":      { bg: "#BF5700", title: "#FFFFFF", meta: "rgba(255,255,255,.72)", chipBg: "rgba(255,255,255,.16)", chipTx: "#FFFFFF", label: "AUSTIN" },
-            "san antonio": { bg: "#D3DDE4", title: "#1B1B1B", meta: "#4B5563", chipBg: "rgba(27,27,27,.10)", chipTx: "#1B1B1B", label: "SAN ANTONIO" },
-            "_tgf":        { bg: "#374151", title: "#FFFFFF", meta: "rgba(255,255,255,.72)", chipBg: "rgba(255,255,255,.16)", chipTx: "#FFFFFF", label: "TGF" },
+            "austin":      { bg: "#BF5700", title: "#FFFFFF", meta: "rgba(255,255,255,.72)" },
+            "san antonio": { bg: "#D3DDE4", title: "#1B1B1B", meta: "#4B5563" },
+            "_tgf":        { bg: "#374151", title: "#FFFFFF", meta: "rgba(255,255,255,.72)" },
         };
         function chapterStyle(ev) {
             const key = (ev.chapter || "").trim().toLowerCase();
@@ -1769,7 +1767,6 @@
                             <span class="ev-code" style="color:${ch.meta};">${ev.code}</span>
                             ${ev.name && ev.name !== ev.code ? `<span class="ev-name" style="color:${ch.title};">${ev.name}</span>` : ""}
                             <span class="ev-date" style="color:${ch.meta};">${fmtDate(ev.event_date)}</span>
-                            <span class="ev-chip" style="background:${ch.chipBg};color:${ch.chipTx};">${ch.label}</span>
                         </div>
                         <span class="ev-subtotal" style="color:${ch.title};">${fmt(ge.total)}</span>
                     </div>`;
