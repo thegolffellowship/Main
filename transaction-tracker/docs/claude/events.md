@@ -1160,8 +1160,17 @@ highest points, tiebreakers Individual Net stroke score → Gross →
 split; TGF MVP = City MVP with higher day points (summed across the
 day's linked events), tie splits. States: single_event_day (all MVP
 money to City MVP), awaiting_results (lists which events lack
-imported rounds), no_net_buyers. Output includes the top-5 field per
-event and GG-recorded event_mvps names for cross-check.
+imported rounds), no_net_buyers, and **incomplete_cards (v2.149.19 —
+Kerry's s9.20 catch)**: a mid-live-scoring import left a contender
+with 8 of 9 holes, his Stableford summed one hole short, and the
+wrong player was crowned without the tie ever firing. Any entrant
+whose card is not a full 9/18 AND who could still catch the leader
+(≤ 9 pts × missing holes behind) makes the event provisional — no
+winner is determined or stamped until the cards are re-imported
+(`scoring-import-event:<code>|refresh=<names>` with the
+tournament_results widget URL, then `scoring-mvp-recompute`). Output
+includes the top-5 field per event and GG-recorded event_mvps names
+for cross-check.
 
 Surfaces: `GET /api/events/tgf-mvp?event=<item_name>` (manager);
 MCP tool `determine_tgf_mvp`; Events Games tab 🏆 rows — City MVP

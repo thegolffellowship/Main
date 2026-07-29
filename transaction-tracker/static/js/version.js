@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.149.18";
+window.TGF_VERSION = "2.149.19";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.149.19",
+    date: "2026-07-28",
+    changes: [
+      "City MVP incomplete-card guard (Kerry's s9.20 Canyon Springs catch): the scorecard import ran mid-live-scoring and stored Larry Anthis with 8 of 9 holes, so his Stableford summed one hole short (13 vs his real 14) and Steve Kulawik was crowned City MVP without the tiebreak ever firing — with full cards they tie at 14 points and tie on net 31, and Anthis wins the gross tiebreaker (40 vs 44). The live data is fixed (cards re-imported, Anthis stamped City MVP + TGF MVP), and determine_tgf_mvp now refuses to determine a winner while any entrant's card is short of a full 9/18 and within catching distance of the leader (9 pts per missing hole) — status 'incomplete_cards' lists the affected players, nothing is stamped, and the TGF MVP roll-up waits with it.",
+    ],
+  },
   {
     version: "2.149.18",
     date: "2026-07-28",

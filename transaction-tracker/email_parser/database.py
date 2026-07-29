@@ -9245,7 +9245,7 @@ def determine_tgf_mvp(event_name: str, db_path: str | Path = DB_PATH) -> dict:
         round_map = {}
         for r in conn.execute(
                 f"SELECT id, event_id, customer_id, player_name, gross, net, "
-                f"       playing_handicap FROM scoring_rounds "
+                f"       playing_handicap, holes_played FROM scoring_rounds "
                 f"WHERE event_id IN ({ph}) AND customer_id IS NOT NULL "
                 f"ORDER BY id", event_ids).fetchall():
             round_map[(r["event_id"], r["customer_id"])] = dict(r)  # latest wins
@@ -9277,7 +9277,8 @@ def determine_tgf_mvp(event_name: str, db_path: str | Path = DB_PATH) -> dict:
             if sc["points"] is None:
                 continue
             entrants.append({"customer_id": cid,
-                             "player": rd["player_name"] or name, **sc})
+                             "player": rd["player_name"] or name,
+                             "holes_played": rd.get("holes_played"), **sc})
         entry = {"event_name": d["item_name"], "course": d.get("course"),
                  "net_buyers": len(binfo["buyers"]),
                  "buyers_without_customer_id": binfo["no_customer_id"],
@@ -9292,14 +9293,38 @@ def determine_tgf_mvp(event_name: str, db_path: str | Path = DB_PATH) -> dict:
                 e["net"] if e["net"] is not None else float("inf"),
                 e["gross"] if e["gross"] is not None else float("inf")))
             top = entrants[0]
-            winners = [e for e in entrants if
-                       e["points"] == top["points"] and e["net"] == top["net"]
-                       and e["gross"] == top["gross"]]
-            entry["city_mvp"] = {"status": "determined", "winners": winners,
-                                 "split": len(winners) > 1,
-                                 "field": entrants[:5]}
-            for w in winners:
-                all_city_mvps.append({**w, "event_name": d["item_name"]})
+            # Incomplete-card guard (Kerry's s9.20 catch, 2026-07-28): a
+            # mid-live-scoring import left ANTHIS with 8 of 9 holes, so his
+            # Stableford summed one hole short and KULAWIK was crowned City
+            # MVP without the tie ever firing. A card that isn't a full 9
+            # or 18 makes the result provisional whenever its player could
+            # still catch the leader (max 9 pts/hole — adjusted-scale ace).
+            _MAX_PTS_PER_HOLE = 9
+            unsettled = []
+            for e in entrants:
+                hp = e.get("holes_played") or 0
+                expected = 18 if hp > 9 else 9
+                missing = expected - hp
+                if missing > 0 and (top["points"] - e["points"]
+                                    <= missing * _MAX_PTS_PER_HOLE):
+                    unsettled.append({"player": e["player"],
+                                      "holes_played": hp,
+                                      "points_so_far": e["points"]})
+            if unsettled:
+                entry["city_mvp"] = {
+                    "status": "incomplete_cards", "winners": [],
+                    "incomplete": unsettled,
+                    "note": "cards missing holes could still change the "
+                            "winner — re-import the event and recompute"}
+            else:
+                winners = [e for e in entrants if
+                           e["points"] == top["points"] and e["net"] == top["net"]
+                           and e["gross"] == top["gross"]]
+                entry["city_mvp"] = {"status": "determined", "winners": winners,
+                                     "split": len(winners) > 1,
+                                     "field": entrants[:5]}
+                for w in winners:
+                    all_city_mvps.append({**w, "event_name": d["item_name"]})
         with _connect(db_path) as conn2:
             entry["gg_recorded_mvp"] = [
                 r["player_name"] for r in conn2.execute(
@@ -9315,7 +9340,8 @@ def determine_tgf_mvp(event_name: str, db_path: str | Path = DB_PATH) -> dict:
                           "note": "all MVP money to City MVP — no TGF MVP"}
         return out
     waiting = [e["event_name"] for e in per_event
-               if e["city_mvp"]["status"] == "awaiting_results"]
+               if e["city_mvp"]["status"] in ("awaiting_results",
+                                              "incomplete_cards")]
     if waiting:
         out["tgf_mvp"] = {"status": "awaiting_results", "waiting_on": waiting}
         return out
