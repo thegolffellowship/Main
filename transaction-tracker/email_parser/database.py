@@ -13145,14 +13145,19 @@ def ls_seed_session_from_event(event_name: str, name: str | None = None,
         course_id, tee_id = _mode("course_id"), _mode("tee_id")
         holes = 18 if max((r["holes_played"] or 0) for r in rounds) > 9 else 9
 
+        # A City/TGF Championship scores on the +1-per-net-category schedule
+        # (get_championship_formulas). Deriving it from the event name beats
+        # asking — Principle 1 — and the Field tab can still override.
+        championship = 1 if "championship" in ev["item_name"].lower() else 0
+
         sid = conn.execute(
             """INSERT INTO ls_test_sessions
                    (name, source_kind, event_id, event_name, round_date,
-                    course_id, tee_id, holes, notes, created_by)
-               VALUES (?, 'seeded', ?, ?, ?, ?, ?, ?, ?, ?)""",
+                    course_id, tee_id, holes, championship, notes, created_by)
+               VALUES (?, 'seeded', ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (name or f"{ev['item_name']} — shadow",
              ev["id"], ev["item_name"], _mode("round_date"), course_id, tee_id,
-             holes,
+             holes, championship,
              "Seeded from imported GG scorecards. Scores are FACTS copied "
              "from scoring_holes; every game below is recomputed by our own "
              "engine.", created_by)).lastrowid
@@ -13204,12 +13209,167 @@ def ls_seed_session_from_event(event_name: str, name: str | None = None,
             seeded += 1
         conn.commit()
         return {"session_id": sid, "event": ev["item_name"], "holes": holes,
-                "players_seeded": seeded,
+                "players_seeded": seeded, "championship": bool(championship),
                 "net_buyers": sum(1 for r in rounds
                                   if r["customer_id"] in net_buyers),
                 "gross_buyers": sum(1 for r in rounds
                                     if r["customer_id"] in gross_buyers),
                 "teams_from_pairings": bool(teams)}
+
+
+def ls_refresh_session_from_gg(session_id: int,
+                               tournament_url: str | None = None,
+                               db_path: str | Path = DB_PATH) -> dict:
+    """Re-pull a seeded session's scores from GG, IN PLACE — the live path.
+
+    Seeding is a snapshot; this is what makes the board move during a round.
+    Pass `tournament_url` to fetch fresh cards from Golf Genius first (the
+    normal live use: GG re-keys aggregate ids as a round progresses, and
+    `import_gg_scorecards`'s completeness rule replaces a partial card with
+    a more complete one). Omit it to re-sync from whatever is already in
+    `scoring_rounds` — useful when the import ran from another surface.
+
+    Refresh semantics, chosen so a mid-round refresh never destroys manager
+    work: SCORES, handicap dots, and playing handicaps come from GG every
+    time. Everything the manager may have adjusted by hand — teams, flight
+    overrides, buyer flags, member status, the championship toggle, recorded
+    CTP/Longest Putt/HIO winners — is PRESERVED. Players who appear in GG
+    for the first time are added; players who vanish from GG are kept (a
+    card pulled mid-round can disappear when GG re-keys, and silently
+    dropping a player mid-event would be worse than a stale row).
+    """
+    data = ls_get_session(session_id, db_path=db_path)
+    if not data:
+        return {"error": f"session {session_id} not found"}
+    meta = data["session"]
+    if meta.get("source_kind") != "seeded" or not meta.get("event_name"):
+        return {"error": "refresh needs a session seeded from a real event"}
+
+    imported = None
+    if tournament_url:
+        code = (meta["event_name"] or "").split()[0] if meta["event_name"] else None
+        try:
+            imported = import_gg_scorecards(tournament_url, event_code=code,
+                                            db_path=db_path)
+        except Exception as e:  # a GG hiccup must not blank the board
+            logger.exception("Test Center GG refresh failed")
+            return {"error": f"GG import failed: {e}",
+                    "hint": "the board still shows the last good pull"}
+
+    with _connect(db_path) as conn:
+        _ensure_live_scoring_tables(conn)
+        _ensure_scoring_tables(conn)
+        ev = conn.execute("SELECT id, item_name FROM events WHERE id = ?",
+                          (meta["event_id"],)).fetchone()
+        if not ev:
+            return {"error": "the seeded event no longer exists"}
+        rounds = [dict(r) for r in conn.execute(
+            "SELECT * FROM scoring_rounds WHERE event_id = ? ORDER BY player_name",
+            (ev["id"],)).fetchall()]
+
+        # Existing sandbox players, keyed both ways: a refresh must re-find a
+        # player whose GG aggregate id changed mid-round (id-first, then name).
+        existing = [dict(r) for r in conn.execute(
+            "SELECT * FROM ls_test_players WHERE session_id = ?",
+            (session_id,)).fetchall()]
+        by_cid = {p["customer_id"]: p for p in existing if p["customer_id"]}
+        by_name = {(p["player_name"] or "").strip().lower(): p for p in existing}
+
+        net_buyers = _event_game_buyers(conn, ev["item_name"], "NET")["buyers"]
+        gross_buyers = _event_game_buyers(conn, ev["item_name"], "GROSS")["buyers"]
+        teams = {}
+        for p in conn.execute(
+                "SELECT group_num, player_name FROM event_pairings WHERE event_id = ?",
+                (ev["id"],)).fetchall():
+            teams[(p["player_name"] or "").strip().lower()] = p["group_num"]
+
+        added, updated, holes_written = 0, 0, 0
+        for r in rounds:
+            key = (r["player_name"] or "").strip().lower()
+            row = by_cid.get(r["customer_id"]) if r["customer_id"] else None
+            row = row or by_name.get(key)
+            if row:
+                # GG owns the handicap and the source card; the manager owns
+                # everything else, so only these two columns are rewritten.
+                conn.execute(
+                    """UPDATE ls_test_players
+                       SET playing_handicap = ?, source_round_id = ?,
+                           customer_id = COALESCE(?, customer_id)
+                       WHERE id = ?""",
+                    (r["playing_handicap"], r["id"], r["customer_id"], row["id"]))
+                pid = row["id"]
+                updated += 1
+            else:
+                cid = r["customer_id"]
+                pid = conn.execute(
+                    """INSERT INTO ls_test_players
+                           (session_id, customer_id, player_name,
+                            playing_handicap, flight, team_num, buys_net,
+                            buys_gross, is_member, source_round_id)
+                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?)""",
+                    (session_id, cid, r["player_name"], r["playing_handicap"],
+                     r["flight"], teams.get(key),
+                     1 if (cid and cid in net_buyers) else 0,
+                     1 if (cid and cid in gross_buyers) else 0,
+                     r["id"])).lastrowid
+                added += 1
+            # Scores are replaced wholesale from GG — a hole GG no longer
+            # carries is cleared rather than left stale.
+            conn.execute("DELETE FROM ls_test_holes WHERE player_id = ?", (pid,))
+            for h in conn.execute(
+                    """SELECT hole_number, strokes, strokes_received
+                       FROM scoring_holes WHERE scoring_round_id = ?""",
+                    (r["id"],)).fetchall():
+                conn.execute(
+                    """INSERT OR REPLACE INTO ls_test_holes
+                           (session_id, player_id, hole_number, strokes,
+                            strokes_received)
+                       VALUES (?, ?, ?, ?, ?)""",
+                    (session_id, pid, h["hole_number"], h["strokes"],
+                     h["strokes_received"]))
+                holes_written += 1
+
+        # Re-accrete the course: an 18-hole tee block published mid-event
+        # fills holes the session was seeded without (the Quarry front-nine
+        # case). Existing rows are only overwritten where we now know more.
+        tee_id = meta.get("tee_id")
+        newest_tee = None
+        tee_vals = [r["tee_id"] for r in rounds if r["tee_id"]]
+        if tee_vals:
+            newest_tee = max(set(tee_vals), key=tee_vals.count)
+        for src_tee in {t for t in (tee_id, newest_tee) if t}:
+            for r in conn.execute(
+                    """SELECT hole_number, par, yardage, stroke_index
+                       FROM course_tee_holes WHERE tee_id = ?""",
+                    (src_tee,)).fetchall():
+                conn.execute(
+                    """INSERT INTO ls_test_course_holes
+                           (session_id, hole_number, par, yardage, stroke_index)
+                       VALUES (?, ?, ?, ?, ?)
+                       ON CONFLICT(session_id, hole_number) DO UPDATE SET
+                           par = COALESCE(ls_test_course_holes.par, excluded.par),
+                           yardage = COALESCE(ls_test_course_holes.yardage,
+                                              excluded.yardage),
+                           stroke_index = COALESCE(
+                               ls_test_course_holes.stroke_index,
+                               excluded.stroke_index)""",
+                    (session_id, r["hole_number"], r["par"], r["yardage"],
+                     r["stroke_index"]))
+        if newest_tee and newest_tee != tee_id:
+            conn.execute("UPDATE ls_test_sessions SET tee_id = ? WHERE id = ?",
+                         (newest_tee, session_id))
+        _ls_touch(conn, session_id)
+        conn.commit()
+
+    out = {"session_id": session_id, "event": ev["item_name"],
+           "gg_cards": len(rounds), "players_added": added,
+           "players_updated": updated, "hole_scores": holes_written}
+    if imported is not None:
+        out["import"] = {k: imported.get(k) for k in
+                         ("imported", "updated", "upgraded_with_handicap",
+                          "skipped_other_tournament", "skipped_empty_cards",
+                          "verified_ok", "discrepancies") if k in imported}
+    return out
 
 
 def ls_get_session(session_id: int, db_path: str | Path = DB_PATH) -> dict | None:
@@ -13517,6 +13677,50 @@ def ls_build_state(session_id: int, db_path: str | Path = DB_PATH) -> dict | Non
             "contests": data["contests"]}
 
 
+def _ls_course_coverage(state: dict) -> dict:
+    """Which holes can actually be SCORED, and which are silently dead.
+
+    A hole with no par derives nothing — no vs-par, no Stableford, no net —
+    so it contributes zero to every game while looking perfectly normal on
+    the board. That is the single most dangerous failure mode of this
+    surface, because a half-scored leaderboard is indistinguishable from a
+    low-scoring one. The Quarry is the live example: TGF has only ever
+    played its BACK nine, so holes 1-9 carry no par or stroke index and an
+    18-hole round there would silently score nine holes.
+
+    Stroke index is called out separately: it is not needed for gross, but
+    without it handicap dots cannot be allocated, so every NET game is wrong
+    rather than merely incomplete.
+    """
+    holes = state.get("holes") or []
+    scored = {h for p in (state.get("players") or [])
+              for h, v in (p.get("scores") or {}).items() if v is not None}
+    no_par = sorted(h["hole"] for h in holes if h.get("par") is None)
+    no_si = sorted(h["hole"] for h in holes if h.get("stroke_index") is None)
+    # Only holes people are actually playing make this urgent.
+    blind = sorted(h for h in no_par if h in scored)
+    out = {"holes": len(holes), "missing_par": no_par,
+           "missing_stroke_index": no_si, "scored_but_no_par": blind,
+           "ok": not no_par and not no_si, "warnings": []}
+    if blind:
+        out["warnings"].append(
+            f"{len(blind)} hole(s) have SCORES but NO PAR "
+            f"({', '.join(str(h) for h in blind)}) — they score ZERO in every "
+            f"game and the board is silently short. Import the event's tee "
+            f"block from GG (or fill par on the Field & Course tab) before "
+            f"trusting any number here.")
+    elif no_par:
+        out["warnings"].append(
+            f"Holes {', '.join(str(h) for h in no_par)} have no par yet — "
+            f"they will score zero the moment anyone posts a score on them.")
+    if no_si:
+        out["warnings"].append(
+            f"Holes {', '.join(str(h) for h in no_si)} have no stroke index — "
+            f"handicap strokes cannot be allocated there, so every NET game "
+            f"is wrong, not just incomplete.")
+    return out
+
+
 def ls_leaderboard(session_id: int, db_path: str | Path = DB_PATH) -> dict:
     """The live leaderboard: every game, computed from raw gross scores."""
     from . import live_scoring as _ls
@@ -13531,6 +13735,7 @@ def ls_leaderboard(session_id: int, db_path: str | Path = DB_PATH) -> dict:
     board["session"] = meta
     board["formulas_used"] = ("championship" if meta.get("championship")
                               else "regular")
+    board["course_coverage"] = _ls_course_coverage(state)
     # Fold the hand-recorded CTP / Longest Putt winners onto the CTP slots.
     by_slot = {(c["kind"], c["hole_number"]): c for c in state["contests"]}
     name_by_pid = {str(p["key"]): p["name"] for p in state["players"]}

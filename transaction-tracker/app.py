@@ -9728,6 +9728,23 @@ def api_ls_contest(session_id):
     return (jsonify(res), 400) if "error" in res else jsonify(res)
 
 
+@app.route("/api/test-center/sessions/<int:session_id>/refresh",
+           methods=["POST"])
+@require_role("admin")
+def api_ls_refresh(session_id):
+    """Re-pull a seeded session's scores from GG in place — the live path.
+
+    Body may carry `tournament_url` to fetch fresh cards from Golf Genius
+    first; without it the session re-syncs from whatever `scoring_rounds`
+    already holds.
+    """
+    from email_parser.database import ls_refresh_session_from_gg
+    body = request.get_json(silent=True) or {}
+    res = ls_refresh_session_from_gg(
+        session_id, (body.get("tournament_url") or "").strip() or None)
+    return (jsonify(res), 400) if "error" in res else jsonify(res)
+
+
 @app.route("/api/test-center/sessions/<int:session_id>/leaderboard")
 @require_role("admin")
 def api_ls_leaderboard(session_id):

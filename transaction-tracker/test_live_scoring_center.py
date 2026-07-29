@@ -375,6 +375,183 @@ check("production scoring rows survive session deletion",
       conn.execute("SELECT COUNT(*) FROM scoring_rounds").fetchone()[0] == 8)
 conn.close()
 
+# ---------------------------------------------------------------------------
+print("\n== course coverage: the silently-half-scored board ==")
+
+# The Quarry case, exactly: TGF has only ever played its BACK nine, so an
+# 18-hole round there has par/stroke-index on 10-18 and NOTHING on 1-9.
+# A hole with no par derives nothing and scores zero in every game while
+# looking perfectly normal — the most dangerous failure this surface has.
+conn = sqlite3.connect(DB)
+conn.executescript("""
+    INSERT INTO courses (course_id, name) VALUES (2, 'The Quarry Golf Club');
+    INSERT INTO course_tees (tee_id, course_id, tee_name, slope, rating)
+        VALUES (9, 2, '1 - Gold Tee', 128, 35.6);
+""")
+for h, par, yd, si in [(10, 4, 437, 4), (11, 4, 351, 18), (12, 3, 164, 14),
+                       (13, 4, 331, 10), (14, 4, 410, 2), (15, 5, 495, 16),
+                       (16, 3, 201, 12), (17, 4, 357, 6), (18, 5, 509, 8)]:
+    conn.execute("INSERT INTO course_tee_holes (tee_id, hole_number, par,"
+                 " yardage, stroke_index) VALUES (9, ?, ?, ?, ?)", (h, par, yd, si))
+conn.commit()
+conn.close()
+
+q = db.ls_create_session("Quarry 18", holes=18, tee_id=9, db_path=DB)
+qsid = q["session_id"]
+qp = db.ls_add_player(qsid, "Front Niner", playing_handicap=9, db_path=DB)
+qhole = db.ls_get_session(qsid, db_path=DB)["holes"]
+check("a back-nine-only tee seeds only the holes it knows",
+      len(qhole) == 9 and min(h["hole_number"] for h in qhole) == 10,
+      f"got {[h['hole_number'] for h in qhole]}")
+
+# Now simulate the real event shape: the session covers 1-18 but the front
+# nine has no par, and players post scores there.
+for h in range(1, 10):
+    db.ls_set_course_hole(qsid, h, db_path=DB)  # creates the row, par stays NULL
+for h in range(1, 19):
+    db.ls_set_score(qsid, qp["player_id"], h, 5, db_path=DB)
+
+qb = db.ls_leaderboard(qsid, db_path=DB)
+cov = qb["course_coverage"]
+check("missing par is detected", cov["missing_par"] == list(range(1, 10)),
+      str(cov["missing_par"]))
+check("missing stroke index is detected separately",
+      cov["missing_stroke_index"] == list(range(1, 10)))
+check("holes with SCORES but no par are called out as urgent",
+      cov["scored_but_no_par"] == list(range(1, 10)))
+check("coverage is not ok", cov["ok"] is False)
+check("the warning says the board is short, not just incomplete",
+      any("silently short" in w for w in cov["warnings"]), str(cov["warnings"]))
+check("and it warns NET games are wrong without a stroke index",
+      any("every NET game" in w for w in cov["warnings"]))
+# Prove the damage is real: 18 scores posted, only the back nine counted.
+card = qb["cards"][0]
+check("a par-less hole really does contribute nothing",
+      card["thru"] == 18 and card["gross"] == 90
+      and sum(1 for x in card["holes"] if x["stableford_net"] is not None) == 9,
+      f"thru={card['thru']} gross={card['gross']}")
+
+# Filling par clears the alarm.
+for h, par in zip(range(1, 10), [4, 3, 5, 4, 4, 3, 4, 4, 5]):
+    db.ls_set_course_hole(qsid, h, par=par, stroke_index=2 * h - 1, db_path=DB)
+cov2 = db.ls_leaderboard(qsid, db_path=DB)["course_coverage"]
+check("filling par and stroke index clears the alarm",
+      cov2["ok"] is True and not cov2["warnings"], str(cov2["warnings"]))
+check("and the full round now scores",
+      sum(1 for x in db.ls_leaderboard(qsid, db_path=DB)["cards"][0]["holes"]
+          if x["stableford_net"] is not None) == 18)
+
+# ---------------------------------------------------------------------------
+print("\n== live refresh from GG (in place) ==")
+
+seed2 = db.ls_seed_session_from_event("s9.21 Test Center Open", db_path=DB)
+rsid = seed2["session_id"]
+check("a CHAMPIONSHIP event does not auto-flag a normal event",
+      seed2["championship"] is False)
+
+# Manager work that a mid-round refresh must not destroy.
+rdata = db.ls_get_session(rsid, db_path=DB)
+victim = rdata["players"][0]
+db.ls_update_player(victim["id"], {"team_num": 9, "flight": "X",
+                                   "buys_net": False, "is_member": False},
+                    db_path=DB)
+db.ls_update_session(rsid, {"championship": True}, db_path=DB)
+db.ls_record_contest(rsid, "ctp", 2, victim["id"], note="8 ft", db_path=DB)
+
+# Simulate the round progressing: GG posts two more strokes for someone.
+conn = sqlite3.connect(DB)
+conn.execute("UPDATE scoring_holes SET strokes = strokes + 1 WHERE"
+             " scoring_round_id = 1 AND hole_number = 1")
+conn.execute("UPDATE scoring_rounds SET gross = gross + 1, net = net + 1"
+             " WHERE id = 1")
+conn.commit()
+conn.close()
+
+ref = db.ls_refresh_session_from_gg(rsid, db_path=DB)
+check("refresh re-syncs every GG card", ref["gg_cards"] == 8, str(ref))
+check("refresh updates in place rather than duplicating",
+      ref["players_updated"] == 8 and ref["players_added"] == 0, str(ref))
+check("refresh rewrites hole scores", ref["hole_scores"] == 72,
+      str(ref["hole_scores"]))
+
+after = db.ls_get_session(rsid, db_path=DB)
+check("no duplicate players after refresh", len(after["players"]) == 8)
+kept = next(p for p in after["players"] if p["id"] == victim["id"])
+check("manager team assignment SURVIVES a refresh", kept["team_num"] == 9)
+check("manager flight override SURVIVES a refresh", kept["flight"] == "X")
+check("manager buyer flag SURVIVES a refresh", kept["buys_net"] == 0)
+check("manager member flag SURVIVES a refresh", kept["is_member"] == 0)
+check("championship toggle SURVIVES a refresh",
+      after["session"]["championship"] == 1)
+check("recorded CTP SURVIVES a refresh",
+      any(c["kind"] == "ctp" and c["hole_number"] == 2
+          for c in after["contests"]))
+check("the new GG score came through",
+      db.ls_build_state(rsid, db_path=DB)["players"][0]["scores"] is not None)
+moved = [p for p in after["players"] if p["source_round_id"] == 1][0]
+check("the changed card reflects GG's new stroke",
+      after and moved["scores"][1]["strokes"] is not None)
+
+# A brand-new GG card mid-round must be picked up, not ignored.
+conn = sqlite3.connect(DB)
+conn.execute("INSERT INTO customers (customer_id, customer_name) VALUES (99, 'Late Entry')")
+conn.execute("INSERT INTO scoring_rounds (id, customer_id, player_name, event_id,"
+             " gg_aggregate_id, round_date, course_id, tee_id, holes_played,"
+             " playing_handicap, gross, net, source) VALUES"
+             " (99, 99, 'Late Entry', 1, 'agg99', '2026-07-25', 1, 1, 3, 10, 20, 10, 'gg')")
+for h in (1, 2, 3):
+    conn.execute("INSERT INTO scoring_holes (scoring_round_id, hole_number,"
+                 " strokes, strokes_received) VALUES (99, ?, 5, 1)", (h,))
+conn.commit()
+conn.close()
+ref2 = db.ls_refresh_session_from_gg(rsid, db_path=DB)
+check("a card that appears mid-round is added", ref2["players_added"] == 1,
+      str(ref2))
+check("the late card's scores land",
+      any(p["player_name"] == "Late Entry" and len(p["scores"]) == 3
+          for p in db.ls_get_session(rsid, db_path=DB)["players"]))
+
+# A player who vanishes from GG (re-keyed aggregate) must NOT be dropped.
+conn = sqlite3.connect(DB)
+conn.execute("DELETE FROM scoring_holes WHERE scoring_round_id = 99")
+conn.execute("DELETE FROM scoring_rounds WHERE id = 99")
+conn.commit()
+conn.close()
+db.ls_refresh_session_from_gg(rsid, db_path=DB)
+check("a player who disappears from GG is KEPT, not silently dropped",
+      any(p["player_name"] == "Late Entry"
+          for p in db.ls_get_session(rsid, db_path=DB)["players"]))
+
+check("refresh refuses a synthetic session",
+      "error" in db.ls_refresh_session_from_gg(qsid, db_path=DB))
+
+# ---------------------------------------------------------------------------
+print("\n== championship auto-detect ==")
+
+conn = sqlite3.connect(DB)
+conn.execute("INSERT INTO events (id, item_name, event_date, format, course)"
+             " VALUES (7, 'TGF SAN ANTONIO CHAMPIONSHIP', '2026-08-01',"
+             " '18 Hole', 'The Quarry')")
+conn.execute("INSERT INTO scoring_rounds (id, customer_id, player_name, event_id,"
+             " gg_aggregate_id, round_date, course_id, tee_id, holes_played,"
+             " playing_handicap, gross, net, source) VALUES"
+             " (70, 1, 'Kerry Niester', 7, 'agg70', '2026-08-01', 1, 1, 9, 4, 40, 36, 'gg')")
+for h in range(1, 10):
+    conn.execute("INSERT INTO scoring_holes (scoring_round_id, hole_number,"
+                 " strokes, strokes_received) VALUES (70, ?, ?, 0)",
+                 (h, PAR[h]))
+conn.commit()
+conn.close()
+champ = db.ls_seed_session_from_event("TGF SAN ANTONIO CHAMPIONSHIP", db_path=DB)
+check("a CHAMPIONSHIP event auto-selects the championship schedule",
+      champ["championship"] is True, str(champ))
+cb = db.ls_leaderboard(champ["session_id"], db_path=DB)
+check("and the board actually uses it",
+      cb["formulas_used"] == "championship", cb["formulas_used"])
+check("championship net points are +1 per category (9 pars = 18, not 9)",
+      cb["cards"][0]["stableford_net"] == 18,
+      str(cb["cards"][0]["stableford_net"]))
+
 print("\n" + "=" * 60)
 if FAILURES:
     print(f"{len(FAILURES)} FAILED: {FAILURES}")

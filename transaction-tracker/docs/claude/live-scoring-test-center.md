@@ -110,6 +110,57 @@ Two properties make the report trustworthy:
 Parity is refused outright on a synthetic session — there are no GG numbers
 to diff against.
 
+## Live use at a real event (v2.150.1)
+
+Seeding is a **snapshot**. `ls_refresh_session_from_gg(session_id,
+tournament_url)` is what makes the board move during a round: it re-imports
+from GG (reusing `import_gg_scorecards`, whose completeness rule replaces a
+partial card with a fuller one when GG re-keys aggregate ids mid-round) and
+re-syncs the session **in place**.
+
+Refresh semantics are chosen so a mid-round pull can never destroy manager
+work:
+
+| From GG, every pull | Preserved across pulls |
+|---|---|
+| Hole scores (replaced wholesale) | Team assignments |
+| Handicap dots | Flight overrides |
+| Playing handicaps | Buyer flags, member status |
+| `source_round_id` | Championship toggle |
+| New players who appear | Recorded CTP / Longest Putt / HIO |
+
+A player who **disappears** from GG is kept, not dropped — a card pulled
+mid-round can vanish when GG re-keys, and silently removing a player
+mid-event is worse than a stale row. A GG fetch failure returns an error and
+leaves the last good board standing.
+
+Refresh also re-accretes the course: an 18-hole tee block published
+mid-event fills holes the session was seeded without, and only fills gaps
+(`COALESCE`) so hand-typed par is never overwritten.
+
+### Course coverage — the silently-half-scored board
+
+`course_coverage` on the leaderboard payload is the guard against this
+surface's most dangerous failure. **A hole with no par derives nothing** —
+no vs-par, no Stableford, no net — so it scores zero in every game while
+looking completely normal. A half-scored leaderboard is indistinguishable
+from a low-scoring one.
+
+The live example is **The Quarry**: TGF has only ever played its BACK nine,
+so holes 1–9 carry no par or stroke index on any Quarry tee. An 18-hole
+round there would silently score nine holes.
+
+Coverage reports three things, escalating:
+
+- `missing_par` — holes that will score zero the moment anyone posts there.
+- `scored_but_no_par` — holes that **already have scores** and are
+  contributing nothing. Renders as a red "the board is WRONG" banner.
+- `missing_stroke_index` — dots cannot be allocated, so every NET game is
+  *wrong*, not merely incomplete.
+
+Championship events auto-select the +1-per-net-category schedule from the
+event name (Principle 1: derive, don't ask); the Field tab still overrides.
+
 ## Data model (sandbox only)
 
 Lazily created by `_ensure_live_scoring_tables` (the `_ensure_pairing_tables`
@@ -153,6 +204,7 @@ cycle.
 | `POST /api/test-center/sessions/<id>/hole` | Edit par / yardage / stroke index |
 | `POST /api/test-center/sessions/<id>/autoplay` | Simulate through a hole |
 | `POST /api/test-center/sessions/<id>/clear-scores` | Wipe scores |
+| `POST /api/test-center/sessions/<id>/refresh` | Re-pull from GG in place (live) |
 | `POST /api/test-center/sessions/<id>/contest` | Record CTP / Longest Putt / HIO |
 | `GET /api/test-center/sessions/<id>/leaderboard` | Every game |
 | `GET /api/test-center/sessions/<id>/parity` | The gate |

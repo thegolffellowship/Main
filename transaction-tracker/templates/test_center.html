@@ -202,7 +202,7 @@
         const num = v => (v === null || v === undefined || v === "" ? "—" : v);
 
         let SESSIONS = [], SID = null, DATA = null, BOARD = null;
-        let PANEL = "board", POLL = null, POLLING = false;
+        let PANEL = "board", POLL = null, POLLING = false, GG_URL = "";
 
         async function api(path, opts) {
             const r = await fetch(path, Object.assign({
@@ -262,6 +262,8 @@
         async function loadSession() {
             if (!SID) return;
             DATA = await api(`/api/test-center/sessions/${SID}`);
+            try { GG_URL = localStorage.getItem("tc-gg-url-" + SID) || ""; }
+            catch (e) { GG_URL = ""; }
             $("tc-nothing").hidden = true;
             renderMeta();
             await refresh();
@@ -282,10 +284,29 @@
                      : '<span class="tc-pill ok">FINAL</span>';
         }
 
+        function coverageBanner(cov) {
+            if (!cov || !cov.warnings.length) return "";
+            const bad = cov.scored_but_no_par.length > 0;
+            return `<div class="tc-card" style="border-color:${bad ? "#B91C1C" : "#FDE68A"};
+                        background:${bad ? "#FEF2F2" : "#FFFBEB"};">
+                <h3 style="color:${bad ? "#B91C1C" : "#92400E"};">
+                    ${bad ? "&#9888; Course data incomplete — the board is WRONG"
+                          : "&#9888; Course data incomplete"}</h3>
+                ${cov.warnings.map(w =>
+                    `<div style="font-size:12.5px;white-space:normal;margin-bottom:6px;">${esc(w)}</div>`
+                ).join("")}
+                <div class="tc-muted" style="font-size:11.5px;white-space:normal;">
+                    Fix by importing the event's tee block from Golf Genius
+                    (Refresh from GG, with the tournament URL) or by typing par and
+                    stroke index on the <b>Field &amp; Course</b> tab.</div>
+            </div>`;
+        }
+
         function renderBoard() {
             const b = BOARD, g = b.games;
             const done = b.overall.filter(r => r.complete).length;
-            let h = `<div class="tc-card">
+            let h = coverageBanner(b.course_coverage);
+            h += `<div class="tc-card">
                 <h3>Overall — net Stableford
                     <span class="sub">${b.players} players · ${b.holes} holes ·
                     ${done}/${b.players} cards complete ·
@@ -296,6 +317,11 @@
                     <label><input type="checkbox" id="tc-poll" ${POLLING ? "checked" : ""}> Live refresh (10s)</label>
                     <button class="tc-btn" id="tc-refresh">Refresh now</button>
                     ${POLLING ? '<span class="tc-pill live">LIVE</span>' : ""}
+                    ${b.session.source_kind === "seeded" ? `
+                    <span class="tc-spacer"></span>
+                    <input id="tc-gg-url" placeholder="GG tournament URL (optional)"
+                           value="${esc(GG_URL)}" style="width:230px;">
+                    <button class="tc-btn primary" id="tc-gg-pull">Pull from GG</button>` : ""}
                 </div>
                 <table class="tc-tbl"><thead><tr>
                     <th class="n">#</th><th>Player</th><th class="n">HCP</th>
@@ -327,6 +353,38 @@
 
             $("tc-refresh").addEventListener("click", () => refresh());
             $("tc-poll").addEventListener("change", e => setPolling(e.target.checked));
+            if ($("tc-gg-pull")) $("tc-gg-pull").addEventListener("click", pullFromGG);
+        }
+
+        // Re-pull a seeded session's scores from GG in place. This is what
+        // makes the board move during a live round — seeding alone is a
+        // snapshot. Manager edits (teams, flights, buyer flags, recorded
+        // CTPs) survive; only scores and handicaps come back from GG.
+        async function pullFromGG() {
+            const btn = $("tc-gg-pull");
+            GG_URL = ($("tc-gg-url").value || "").trim();
+            try { localStorage.setItem("tc-gg-url-" + SID, GG_URL); } catch (e) {}
+            btn.disabled = true;
+            btn.textContent = "Pulling…";
+            try {
+                const res = await api(`/api/test-center/sessions/${SID}/refresh`, {
+                    method: "POST",
+                    body: JSON.stringify({ tournament_url: GG_URL || null }) });
+                const imp = res.import || {};
+                flash(`${res.gg_cards} GG cards · ${res.hole_scores} hole scores`
+                    + (res.players_added ? ` · +${res.players_added} new` : "")
+                    + (imp.discrepancies && imp.discrepancies.length
+                        ? ` · ${imp.discrepancies.length} GG discrepancies` : ""));
+                DATA = await api(`/api/test-center/sessions/${SID}`);
+                await refresh();
+            } catch (err) {
+                flash(err.message, true);
+            } finally {
+                if ($("tc-gg-pull")) {
+                    $("tc-gg-pull").disabled = false;
+                    $("tc-gg-pull").textContent = "Pull from GG";
+                }
+            }
         }
 
         function warnBlock(ws) {

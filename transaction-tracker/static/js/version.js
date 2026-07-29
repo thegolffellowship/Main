@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.150.0";
+window.TGF_VERSION = "2.150.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.150.1",
+    date: "2026-07-29",
+    changes: [
+      "TEST CENTER GOES LIVE-CAPABLE, for shadowing the SA CHAMPIONSHIP at The Quarry on 2026-08-01. Seeding a session was a one-time snapshot; new Pull from GG (ls_refresh_session_from_gg → POST /api/test-center/sessions/<id>/refresh) re-imports from Golf Genius and re-syncs the session IN PLACE so the board moves during a round. Refresh semantics protect manager work: hole scores, handicap dots and playing handicaps come from GG every pull, while teams, flight overrides, buyer flags, member status, the championship toggle and recorded CTP/Longest Putt/HIO winners are all preserved. Cards that appear mid-round are added; a player who DISAPPEARS from GG is kept rather than dropped (GG re-keys aggregate ids mid-round, and silently removing a player mid-event is worse than a stale row). A GG fetch failure leaves the last good board standing. The tournament URL is remembered per session.",
+      "COURSE COVERAGE GUARD — a hole with no par derives nothing, so it scores ZERO in every game while looking completely normal, making a half-scored leaderboard indistinguishable from a low-scoring one. The leaderboard payload now carries course_coverage, and the page shows a red 'the board is WRONG' banner for holes that already have scores but no par, an amber warning for par not yet known, and a separate warning that a missing stroke index makes every NET game wrong rather than merely incomplete. This is not hypothetical: TGF has only ever played The Quarry's BACK nine, so holes 1-9 have no par or stroke index on any Quarry tee and Saturday's 18-hole championship there would otherwise have silently scored nine holes. Refresh also re-accretes course holes from a newly-published 18-hole tee block, filling gaps only (COALESCE) so hand-typed par is never overwritten.",
+      "Championship events auto-select the +1-per-net-category points schedule from the event name when seeded (Principle 1 — derive, don't ask); the Field & Course tab still overrides. New docs/claude/runbook-sa-championship-2026-08-01.md carries the event's pre-flight, the Quarry front-nine fix, the buyer counts that decide which games activate (15 NET → 2 flights, 13 GROSS → Individual Gross ACTIVE at 3 flights, Skins 2 flights), and the disagreements worth recording on the day. Test coverage for this wave: 33 new integration assertions including the exact Quarry half-scored-board failure and proof that every class of manager edit survives a refresh.",
+    ],
+  },
   {
     version: "2.150.0",
     date: "2026-07-29",
