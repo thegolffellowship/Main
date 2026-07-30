@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.151.0";
+window.TGF_VERSION = "2.151.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.151.1",
+    date: "2026-07-29",
+    changes: [
+      "Mobile customer transaction cards condensed to tight two-line rows (Kerry: 'could be much more condensed and succinct'). All badge pills are gone from the collapsed card — line 1 is the event name (single line, ellipsized) with the amount right-aligned; line 2 is one small plain-text meta line: date · payment rail · games · tee · status word (Credit amber / Transferred purple / Refunded-WD red / 'Via credit' blue). Padding and fonts tightened so roughly twice as many transactions fit per screen; tap-to-expand for actions is unchanged.",
+    ],
+  },
   {
     version: "2.151.0",
     date: "2026-07-29",

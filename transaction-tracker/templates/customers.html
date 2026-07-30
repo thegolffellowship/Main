@@ -1110,20 +1110,10 @@
         return sorted.map(item => {
             const txStatus = item.transaction_status || "active";
             const statusClass = txStatus !== "active" ? ` row-${txStatus}` : (item.transferred_from_id ? ' row-from-transfer' : '');
-            let tag = '';
-            if (txStatus === "credited") tag = '<span class="status-tag status-tag-credited">Credit</span>';
-            else if (txStatus === "transferred") tag = '<span class="status-tag status-tag-transferred">Transferred</span>';
-            else if (txStatus === "wd") tag = `<span class="status-tag status-tag-wd">WD</span>${item.credit_amount ? ` <span style="font-size:0.65rem; color:#991b1b;">${escapeHtml(item.credit_amount)}</span>` : ''}`;
-            else if (item.transferred_from_id) tag = '<span class="status-tag status-tag-from-transfer">From Transfer</span>';
-            const sideGameLabel = classifyGameType(item.side_games);
-            const tee = (item.tee_choice || "").trim();
-            const topTags = `<span class="mc-type">${escapeHtml(sideGameLabel)}</span>${tee ? `<span class="mc-type mc-tee">${escapeHtml(tee)}</span>` : ''}`;
-
-            // Money + payment context visible WITHOUT expanding (Kerry
-            // 2026-07-29: "more descriptive with actual money amounts…
-            // functional and visible"). Amount on the card's right edge;
-            // date + payment rail on a second line; add-on rows show
-            // their note (e.g. "NET Games — paid via player credit").
+            // Condensed two-line row (Kerry 2026-07-29: "could be much more
+            // condensed and succinct"): line 1 = event name + amount, line 2
+            // = small plain-text meta (date · rail · games · tee · status) —
+            // no badge pills, no wrapping. Tap still expands for actions.
             const rawPrice = stripPriceSuffix(item.item_price) || "";
             const amtLabel = rawPrice || item.credit_amount || "";
             const isNeg = /^\s*[-(]/.test(rawPrice);
@@ -1135,15 +1125,26 @@
             else if ((mm = merch.match(/manual entry \((.+)\)/i))) payVia = mm[1];
             else if ((mm = merch.match(/paid separately \((.+)\)/i))) payVia = mm[1];
             else if (/golf fellowship/i.test(merch)) payVia = "GoDaddy";
-            const subBits = [item.order_date || "", payVia].filter(Boolean).join(" &middot; ");
+            const sideGameLabel = classifyGameType(item.side_games);
+            const tee = (item.tee_choice || "").trim();
+            let statusWord = "";
+            if (txStatus === "credited") statusWord = '<span style="color:#b45309;">Credit</span>';
+            else if (txStatus === "transferred") statusWord = '<span style="color:#6b21a8;">Transferred</span>';
+            else if (txStatus === "refunded") statusWord = '<span style="color:#dc2626;">Refunded</span>';
+            else if (txStatus === "wd") statusWord = `<span style="color:#dc2626;">WD${item.credit_amount ? " " + escapeHtml(item.credit_amount) : ""}</span>`;
+            else if (item.transferred_from_id) statusWord = '<span style="color:#1e40af;">Via credit</span>';
+            const metaBits = [
+                item.order_date || "",
+                payVia,
+                sideGameLabel !== "NO GAMES" && sideGameLabel !== "NONE" ? escapeHtml(sideGameLabel) : "",
+                tee ? escapeHtml(tee) : "",
+                statusWord,
+            ].filter(Boolean).join(" &middot; ");
             const noteLine = item.parent_item_id && (item.notes || "").trim()
-                ? `<div style="font-size:0.72rem;color:var(--text-muted);margin-top:1px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(item.notes)}</div>`
-                : "";
-            const subLine = subBits
-                ? `<div style="font-size:0.72rem;color:var(--text-muted);margin-top:2px;">${subBits}</div>`
+                ? `<div style="font-size:0.68rem;color:var(--text-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(item.notes)}</div>`
                 : "";
             const amtHtml = amtLabel
-                ? `<span class="mc-amount" style="margin-left:auto;font-weight:600;font-variant-numeric:tabular-nums;white-space:nowrap;color:${amtColor};">${escapeHtml(amtLabel)}</span>`
+                ? `<span class="mc-amount" style="margin-left:auto;font-weight:600;font-size:0.85rem;font-variant-numeric:tabular-nums;white-space:nowrap;color:${amtColor};">${escapeHtml(amtLabel)}</span>`
                 : "";
 
             let actionBtn = '';
@@ -1163,12 +1164,12 @@
             ];
 
             return `
-            <div class="mobile-card${statusClass}" data-id="${item.id}">
-                <div class="mobile-card-top" onclick="event.stopPropagation(); this.parentElement.classList.toggle('expanded')">
+            <div class="mobile-card${statusClass}" data-id="${item.id}" style="margin-bottom:5px;">
+                <div class="mobile-card-top" onclick="event.stopPropagation(); this.parentElement.classList.toggle('expanded')" style="padding:0.45rem 0.7rem;gap:8px;">
                     <div class="mc-primary" style="min-width:0;">
-                        <span class="mc-customer"><a class="cell-link" href="/events?item=${encodeURIComponent(item.item_name || "")}" onclick="event.stopPropagation()">${escapeHtml(item.item_name || "\u2014")}</a></span>
-                        ${topTags} ${tag}
-                        ${subLine}${noteLine}
+                        <div style="font-size:0.82rem;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"><a class="cell-link" href="/events?item=${encodeURIComponent(item.item_name || "")}" onclick="event.stopPropagation()">${escapeHtml(item.item_name || "\u2014")}</a></div>
+                        <div style="font-size:0.7rem;font-weight:400;color:var(--text-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${metaBits}</div>
+                        ${noteLine}
                     </div>
                     ${amtHtml}
                     <span class="mc-chevron">&#9656;</span>
