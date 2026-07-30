@@ -451,3 +451,160 @@ if FAILURES:
     print(f"{len(FAILURES)} FAILED: {FAILURES}")
     sys.exit(1)
 print("ALL LIVE-SCORING TESTS PASSED")
+
+
+# ---------------------------------------------------------------------------
+print("\n== flighting rule (Kerry, 2026-07-29) ==")
+
+FAILURES2 = FAILURES
+
+
+def fp(idxs, count, game="individual_net", mode=None, **over):
+    cfg = dict(ls.SEED_FLIGHT_CONFIG)
+    cfg.update(over)
+    players = [{"key": str(i), "name": f"P{i:02d}", "index": v}
+               for i, v in enumerate(idxs)]
+    return ls.flight_plan(players, count, game=game, config=cfg, mode=mode)
+
+
+def sizes(plan):
+    return [f["players"] for f in plan["flights"]]
+
+
+# --- fixed bands: 12.0 goes UP, 11.9 is the ceiling, no shared break -------
+plan = fp([5.0, 11.8, 11.9, 12.0, 12.1, 20.0], 2, mode="fixed_bands",
+          min_flight_size=1)
+lo = plan["flights"][0]
+check("fixed bands: 11.9 is the top of the low flight",
+      lo["max_index"] == 11.9, str(lo["max_index"]))
+check("fixed bands: 12.0 goes UP into the higher flight",
+      plan["flights"][1]["min_index"] == 12.0,
+      str(plan["flights"][1]["min_index"]))
+check("fixed bands: no value is claimed by two flights",
+      lo["max_index"] < plan["flights"][1]["min_index"])
+check("fixed bands split 3/3 here", sizes(plan) == [3, 3], str(sizes(plan)))
+
+# 4-flight ladder = the Players Cup brackets
+plan4 = fp([2.0, 5.9, 6.0, 11.9, 12.0, 17.9, 18.0, 30.0], 4,
+           game="individual_gross", mode="fixed_bands", min_flight_size=1)
+check("Players Cup ladder <6 / 6-11.9 / 12-17.9 / 18+ splits 2/2/2/2",
+      sizes(plan4) == [2, 2, 2, 2], str(sizes(plan4)))
+check("...and 6.0 lands in the SECOND flight, not the first",
+      plan4["flights"][1]["min_index"] == 6.0)
+
+# --- equal size: never splits equal indexes -------------------------------
+tied = [1.0, 2.0, 3.0, 9.2, 9.2, 9.2, 9.2, 9.2, 9.2, 20.0]
+plan = fp(tied, 2, mode="equal_size", min_flight_size=1,
+          low_flight_ceiling={})
+allidx = [[m["index"] for m in f["members"]] for f in plan["flights"]]
+check("equal size never splits a shared index across flights",
+      not (9.2 in allidx[0] and 9.2 in allidx[1]), str(allidx))
+check("...and the tie slide is explained in the notes",
+      any("stay together" in nsg for nsg in plan["notes"]), str(plan["notes"]))
+check("...landing 3/7 rather than cutting the tie group",
+      sizes(plan) == [3, 7], str(sizes(plan)))
+
+# Dead-heat tie slide goes UP (consistent with 12.0-goes-up).
+plan = fp([1.0, 5.5, 5.5, 9.0], 2, mode="equal_size", min_flight_size=1,
+          low_flight_ceiling={})
+check("a dead-heat tie slide sends the group UP", sizes(plan) == [1, 3],
+      str(sizes(plan)))
+
+# Clean field with no ties splits evenly.
+plan = fp([1, 2, 3, 4, 5, 6, 7, 8], 2, mode="equal_size", min_flight_size=1,
+          low_flight_ceiling={})
+check("equal size with no ties splits 4/4", sizes(plan) == [4, 4],
+      str(sizes(plan)))
+
+# --- the 11.9 ceiling on Individual Net's low flight ----------------------
+# A field where the even split would put the low flight well past 11.9.
+high = [10.0, 11.0, 12.5, 13.0, 14.0, 15.0, 16.0, 20.0]
+plan = fp(high, 2, game="individual_net", mode="equal_size", min_flight_size=1)
+check("low flight never runs past 11.9 even when the midpoint would",
+      plan["flights"][0]["max_index"] <= 11.9,
+      str(plan["flights"][0]["max_index"]))
+check("...the ceiling move is explained", any("ceiling" in nsg for nsg in plan["notes"]))
+check("...so the split goes 2/6, not 4/4", sizes(plan) == [2, 6], str(sizes(plan)))
+
+# The ceiling is Net-only — gross bands harder and has no such rule.
+plan = fp(high, 2, game="individual_gross", mode="equal_size", min_flight_size=1)
+check("the 11.9 ceiling does NOT apply to gross", sizes(plan) == [4, 4],
+      str(sizes(plan)))
+
+# --- minimum flight size / the "3 flights down to 2" behaviour ------------
+# Kerry: "There have been times I have skewed down number of flights due to
+# more concentrated handicaps. Like from 3 to 2." A field bunched in the
+# middle leaves the top band with one straggler — which merges, and the
+# 3-flight event becomes a 2-flight event with no judgment call required.
+conc = [2.0, 3.0, 4.0, 8.0, 9.0, 10.0, 11.0, 11.5, 19.0]
+plan = fp(conc, 3, game="individual_gross", mode="fixed_bands",
+          min_flight_size=3)
+check("a concentrated field collapses 3 flights to 2 on its own",
+      plan["effective_count"] == 2, str(sizes(plan)))
+check("...and says so, naming the merge",
+      plan["merges"] and any("merged" in nsg for nsg in plan["notes"]),
+      str(plan["notes"]))
+check("...with every player still placed",
+      sum(sizes(plan)) == 9, str(sizes(plan)))
+check("...the straggler merged DOWN into the band below it",
+      plan["merges"][0]["from"] == 3 and plan["merges"][0]["into"] == 2,
+      str(plan["merges"]))
+
+# The minimum is the only dial: drop it and all three stand.
+check("min_flight_size=1 keeps all three flights",
+      fp(conc, 3, game="individual_gross", mode="fixed_bands",
+         min_flight_size=1)["effective_count"] == 3)
+check("a big minimum collapses to a single flight",
+      fp(conc, 3, game="individual_gross", mode="fixed_bands",
+         min_flight_size=8)["effective_count"] == 1)
+
+# An EMPTY band is not a merge — it just doesn't exist. A 3-flight ladder on
+# a field with nobody above 11.9 is a 2-flight event before any minimum
+# applies, which is the other way concentration reduces the count.
+empty_top = [2.0, 3.0, 4.0, 8.0, 9.0, 10.0, 11.0]
+check("an empty band silently drops rather than appearing as an empty flight",
+      fp(empty_top, 3, game="individual_gross", mode="fixed_bands",
+         min_flight_size=1)["effective_count"] == 2,
+      str(sizes(fp(empty_top, 3, game="individual_gross",
+                   mode="fixed_bands", min_flight_size=1))))
+
+# --- players with no index ------------------------------------------------
+noidx = [{"key": "a", "name": "Known", "index": 5.0},
+         {"key": "b", "name": "No Index", "index": None}]
+plan = ls.flight_plan(noidx, 2, config=ls.SEED_FLIGHT_CONFIG)
+check("a player with no index is held out, not guessed into a flight",
+      len(plan["unflighted"]) == 1
+      and plan["unflighted"][0]["name"] == "No Index")
+check("...and is named in the notes",
+      any("no handicap index" in nsg for nsg in plan["notes"]))
+
+# --- every player lands exactly once, always ------------------------------
+import random as _rnd
+_r = _rnd.Random(11)
+for trial in range(300):
+    field = [round(_r.uniform(-2, 30), 1) for _ in range(_r.randint(1, 40))]
+    for m in ("equal_size", "fixed_bands"):
+        for c in (1, 2, 3, 4):
+            p = fp(field, c, mode=m, min_flight_size=_r.choice([1, 2, 3]))
+            placed = [x["index"] for f in p["flights"] for x in f["members"]]
+            if sorted(placed) != sorted(field):
+                check(f"partition invariant ({m}, {c} flights)", False,
+                      f"field={field}")
+                break
+        else:
+            continue
+        break
+else:
+    check("every player lands in exactly one flight across 300 random fields",
+          True)
+
+# Flights are always ordered low index to high, and never overlap.
+for trial in range(200):
+    field = [round(_r.uniform(0, 30), 1) for _ in range(_r.randint(4, 30))]
+    p = fp(field, _r.choice([2, 3, 4]), mode=_r.choice(["equal_size", "fixed_bands"]))
+    fl = p["flights"]
+    if any(fl[i]["max_index"] > fl[i + 1]["min_index"] for i in range(len(fl) - 1)):
+        check("flights never overlap on index", False, str(field))
+        break
+else:
+    check("flights are ordered by index and never overlap", True)

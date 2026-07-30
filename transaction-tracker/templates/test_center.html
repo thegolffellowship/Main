@@ -168,6 +168,7 @@
                 <button class="tc-tab active" data-panel="board">Leaderboard</button>
                 <button class="tc-tab" data-panel="entry">Score Entry</button>
                 <button class="tc-tab" data-panel="field">Field &amp; Course</button>
+                <button class="tc-tab" data-panel="flights">Flighting Lab</button>
                 <button class="tc-tab" data-panel="parity">Parity vs GG</button>
             </div>
 
@@ -185,6 +186,7 @@
                 <div id="panel-board" class="tc-panel" hidden></div>
                 <div id="panel-entry" class="tc-panel" hidden></div>
                 <div id="panel-field" class="tc-panel" hidden></div>
+                <div id="panel-flights" class="tc-panel" hidden></div>
                 <div id="panel-parity" class="tc-panel" hidden></div>
             </div>
         </div>
@@ -272,6 +274,7 @@
         async function refresh() {
             if (!SID) return;
             if (PANEL === "parity") { await renderParity(); return; }
+            if (PANEL === "flights") { await renderFlights(); return; }
             BOARD = await api(`/api/test-center/sessions/${SID}/leaderboard`);
             if (PANEL === "board") renderBoard();
             else if (PANEL === "entry") renderEntry();
@@ -764,6 +767,109 @@
                     buys_gross: true, is_member: true });
             }
             flash("8 test players added — two foursomes");
+        }
+
+        // ── flighting lab ──────────────────────────────────────────────
+        // Both modes on the SAME real field, side by side. Where GG's own
+        // per-game flights were captured (gg_game_flights) each mode is
+        // graded against them — that's how the rule gets derived from what
+        // was actually done, instead of from memory.
+        let FL_EVENTS = null;
+        const FL = { event: "", game: "individual_net", min: 3,
+                     scale: "9", tie: "even" };
+
+        async function renderFlights() {
+            if (!FL_EVENTS) {
+                try { FL_EVENTS = await api("/api/test-center/flightable-events"); }
+                catch (err) { FL_EVENTS = []; flash(err.message, true); }
+            }
+            if (!FL.event) {
+                const s = DATA && DATA.session;
+                FL.event = (s && s.event_name)
+                    || (FL_EVENTS[0] && FL_EVENTS[0].item_name) || "";
+            }
+            let h = `<div class="tc-card">
+                <h3>Flighting Lab
+                    <span class="sub">both modes, same field — react to the numbers</span></h3>
+                <div class="tc-inline" style="margin-bottom:10px;">
+                    <select id="fl-event" style="min-width:250px;">${FL_EVENTS.map(e =>
+                        `<option value="${esc(e.item_name)}" ${e.item_name === FL.event ? "selected" : ""}>${esc(e.item_name)}${
+                            e.gg_flights ? ` · ${e.gg_flights} GG flights` : ""}</option>`).join("")}</select>
+                    <select id="fl-game">
+                        ${["individual_net", "individual_gross", "skins"].map(g =>
+                          `<option value="${g}" ${g === FL.game ? "selected" : ""}>${g.replace(/_/g, " ")}</option>`).join("")}
+                    </select>
+                    <label>min flight <input id="fl-min" type="number" min="1" max="12"
+                        value="${FL.min}" style="width:56px;"></label>
+                    <label>index <select id="fl-scale">
+                        <option value="9" ${FL.scale === "9" ? "selected" : ""}>9-hole</option>
+                        <option value="18" ${FL.scale === "18" ? "selected" : ""}>18-hole</option>
+                    </select></label>
+                    <label>ties <select id="fl-tie">
+                        ${["even", "up", "down"].map(t =>
+                          `<option value="${t}" ${t === FL.tie ? "selected" : ""}>${t}</option>`).join("")}
+                    </select></label>
+                    <button class="tc-btn primary" id="fl-run">Run</button>
+                </div>
+                <div id="fl-out" class="tc-muted" style="font-size:12.5px;">Loading…</div>
+            </div>`;
+            $("panel-flights").innerHTML = h;
+            ["fl-event", "fl-game", "fl-min", "fl-scale", "fl-tie"].forEach(id =>
+                $(id).addEventListener("change", () => {
+                    FL.event = $("fl-event").value; FL.game = $("fl-game").value;
+                    FL.min = +$("fl-min").value || 1;
+                    FL.scale = $("fl-scale").value; FL.tie = $("fl-tie").value;
+                    runFlightLab();
+                }));
+            $("fl-run").addEventListener("click", runFlightLab);
+            runFlightLab();
+        }
+
+        async function runFlightLab() {
+            const out = $("fl-out");
+            out.innerHTML = "Running…";
+            let r;
+            try {
+                r = await api("/api/test-center/flight-lab?event="
+                    + encodeURIComponent(FL.event) + "&game=" + FL.game
+                    + "&min_flight_size=" + FL.min + "&index_scale=" + FL.scale
+                    + "&tie_direction=" + FL.tie);
+            } catch (err) { out.innerHTML = `<div class="tc-warn note">${esc(err.message)}</div>`; return; }
+
+            const noIdx = r.field.filter(p => p.index === null);
+            let h = `<div style="font-size:13px;margin-bottom:10px;">
+                <b>${r.buyers}</b> ${r.kind} buyers · ${r.holes}-hole ·
+                matrix says <b>${r.matrix_flights}</b> flight(s) ·
+                ${r.gg_flights_captured
+                    ? `<span class="tc-pill seeded">${r.gg_flights_captured} GG flights captured</span>`
+                    : '<span class="tc-pill off">no GG flights captured</span>'}
+                ${r.inactive ? `<div class="tc-warn note">${esc(r.inactive)}</div>` : ""}
+                ${noIdx.length ? `<div class="tc-warn note">${noIdx.length} buyer(s) have no handicap index and cannot be flighted: ${
+                    esc(noIdx.map(p => p.name).join(", "))}</div>` : ""}
+            </div><div class="tc-grid2">`;
+
+            for (const mode of ["equal_size", "fixed_bands"]) {
+                const m = r.modes[mode];
+                const g = m.vs_gg;
+                h += `<div class="tc-card" style="margin:0;">
+                    <h3>${mode.replace("_", " ")}
+                        <span class="sub">${m.effective_count} flight(s)${
+                            m.effective_count !== m.requested_count
+                            ? ` (asked for ${m.requested_count})` : ""}</span></h3>
+                    ${g ? `<div style="margin-bottom:8px;">${g.match
+                        ? '<span class="tc-pill ok">MATCHES GG</span>'
+                        : `<span class="tc-pill bad">${g.disagree} of ${g.graded} differ</span>`}</div>` : ""}
+                    ${m.flights.map(f => `
+                        <div class="tc-flightlbl">Flight ${f.flight} · ${f.players} players
+                            · ${f.min_index} to ${f.max_index}</div>
+                        <div style="font-size:12px;white-space:normal;" class="tc-muted">${
+                            f.members.map(x => `${esc(x.name)} <b>${x.index}</b>`).join(" · ")}</div>
+                    `).join("")}
+                    ${m.notes.map(nsg => `<div class="tc-warn note">${esc(nsg)}</div>`).join("")}
+                </div>`;
+            }
+            h += `</div>`;
+            out.innerHTML = h;
         }
 
         // ── parity ─────────────────────────────────────────────────────

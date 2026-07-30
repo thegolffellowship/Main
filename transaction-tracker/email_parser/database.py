@@ -13719,6 +13719,115 @@ def ls_build_state(session_id: int, db_path: str | Path = DB_PATH) -> dict | Non
             "contests": data["contests"]}
 
 
+def ls_flight_lab(event_name: str, game: str = "individual_net",
+                  overrides: dict | None = None,
+                  db_path: str | Path = DB_PATH) -> dict:
+    """Run one event's real field through BOTH flighting modes, side by side.
+
+    The flighting rule is the last piece of event scoring we do not own —
+    `determine_event_game_results` takes GG's labels and refuses to guess
+    (`flights_unknown`) when they are missing. This computes what each mode
+    WOULD produce from raw handicap indexes, and where GG's own captured
+    flights exist (`gg_game_flights`, per game, from the game's own
+    leaderboard) it grades both modes against them.
+
+    That grading is the point: it derives the rule from what was actually
+    done across past events instead of from recollection. Read-only.
+    """
+    from . import live_scoring as _ls
+    cfg = dict(_ls.SEED_FLIGHT_CONFIG)
+    for k, v in (overrides or {}).items():
+        if k in ("min_flight_size", "tie_direction", "index_scale",
+                 "bands", "low_flight_ceiling") and v not in (None, ""):
+            cfg[k] = v
+    kind = "GROSS" if game in ("individual_gross", "skins") else "NET"
+
+    with _connect(db_path) as conn:
+        _ensure_scoring_tables(conn)
+        _ensure_gg_game_flights_tables(conn)
+        ev = conn.execute(
+            "SELECT * FROM events WHERE item_name = ? COLLATE NOCASE",
+            (event_name,)).fetchone()
+        if not ev:
+            return {"error": f"event not found: {event_name}"}
+        ev = dict(ev)
+        buyers = _event_game_buyers(conn, ev["item_name"], kind)["buyers"]
+        gg_labels = {}
+        for r in conn.execute(
+                "SELECT customer_id, player_name, flight_label FROM "
+                "gg_game_flights WHERE event_id = ? AND game = ?",
+                (ev["id"], game)).fetchall():
+            if r["customer_id"]:
+                gg_labels[r["customer_id"]] = r["flight_label"]
+
+    # Current index per player. get_all_handicap_players keys by name, so
+    # resolve through customer_name (canonical) with a player_name fallback.
+    idx_by_name = {}
+    for p in get_all_handicap_players(db_path):
+        for nm in (p.get("customer_name"), p.get("player_name")):
+            if nm:
+                idx_by_name.setdefault(nm.strip().lower(), p)
+    scale = str(cfg.get("index_scale") or "9")
+    field = []
+    for cid, name in buyers.items():
+        rec = idx_by_name.get((name or "").strip().lower())
+        idx = None
+        if rec:
+            idx = (rec.get("handicap_index_18") if scale == "18"
+                   else rec.get("handicap_index"))
+        field.append({"key": str(cid), "customer_id": cid, "name": name,
+                      "index": idx, "gg_flight": gg_labels.get(cid)})
+
+    n = len(field)
+    holes_key = "18" if _event_holes_type(ev["item_name"], ev.get("format")) == 18 else "9"
+    gcfg = (_ls.SEED_LIVE_SCORING_CONFIG["games"].get(game) or {})
+    count = _ls._bands_lookup((gcfg.get("flight_bands") or {}).get(holes_key), n, 1)
+    min_buyers = (gcfg.get("min_buyers") or {}).get(holes_key)
+
+    out = {"event": ev["item_name"], "game": game, "kind": kind,
+           "holes": holes_key, "buyers": n, "matrix_flights": count,
+           "index_scale": scale, "config": cfg,
+           "gg_flights_captured": len(gg_labels),
+           "field": sorted(field, key=lambda p: (
+               p["index"] if p["index"] is not None else 999, p["name"] or "")),
+           "modes": {}}
+    if min_buyers is not None and n < min_buyers:
+        out["inactive"] = (f"{game} activates at {min_buyers} buyers on an "
+                           f"{holes_key}-hole event; {n} bought in.")
+
+    for mode in ("equal_size", "fixed_bands"):
+        plan = _ls.flight_plan(field, count, game=game, config=cfg, mode=mode)
+        if gg_labels:
+            # Grade against GG: same PARTITION, not the same labels — GG may
+            # name flights differently while cutting in the same places.
+            ours = {}
+            for f in plan["flights"]:
+                for m in f["members"]:
+                    ours[m["key"]] = f["flight"]
+            agree = disagree = 0
+            mapping: dict = {}
+            for p in field:
+                if p["gg_flight"] is None or p["key"] not in ours:
+                    continue
+                mapping.setdefault(ours[p["key"]], {}).setdefault(
+                    p["gg_flight"], 0)
+                mapping[ours[p["key"]]][p["gg_flight"]] += 1
+            best = {k: max(v, key=v.get) for k, v in mapping.items()}
+            for p in field:
+                if p["gg_flight"] is None or p["key"] not in ours:
+                    continue
+                if best.get(ours[p["key"]]) == p["gg_flight"]:
+                    agree += 1
+                else:
+                    disagree += 1
+            plan["vs_gg"] = {"agree": agree, "disagree": disagree,
+                             "graded": agree + disagree,
+                             "match": disagree == 0 and agree > 0,
+                             "our_flight_to_gg": best}
+        out["modes"][mode] = plan
+    return out
+
+
 def _ls_course_coverage(state: dict) -> dict:
     """Which holes can actually be SCORED, and which are silently dead.
 

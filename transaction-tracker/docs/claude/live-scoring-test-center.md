@@ -254,3 +254,71 @@ Two items still want Kerry's explicit sign-off before they travel further:
 2. **Any move from shadow to official.** Stage 2 (own score entry, GG out of
    the loop) is a member-facing and money-affecting change and must not be
    taken on a green parity report alone.
+
+## Flighting Lab + the flight rule as data (v2.151.0)
+
+Flighting was the last tethered piece. Everything else — Stableford, dots,
+skins, MVP, team net — already reproduces GG from raw scores;
+`determine_event_game_results` computes all of it and then takes **GG's
+flight labels only**, returning `status: "flights_unknown"` rather than
+guessing (Kerry, 2026-07-07). Honest, and exactly the gap to close.
+
+### Kerry's ruleset (2026-07-29) → `SEED_FLIGHT_CONFIG`
+
+- Flight on the **raw TGF handicap index**, not the playing handicap.
+- **Two legitimate modes**: equal-size groups (traditional) and fixed bands
+  (the recent trend). The ideal is fixed bands that also come out even; real
+  fields do not cooperate, so both ship and the mode is per game.
+- **Breaks are floors for the upper flight** — 12.0 goes UP, 11.9 tops the
+  flight below, no value claimed by two flights.
+- **Individual Net** splits near the middle, but its low flight never runs
+  past **11.9** — a ceiling on the break, not the break itself.
+- **Gross** bands harder (a high index has little chance in a low flight) and
+  runs a **minimum of three flights** whenever active, for entry incentive.
+- **Equal indexes never split across flights.** Two players on the same index
+  in different flights is the one outcome that cannot be defended, so a cut
+  landing inside a tie group slides to the edge leaving counts evener; a dead
+  heat goes UP.
+- **Thin flights merge** into their neighbour. This is also where "skewed
+  down from 3 flights to 2 because the handicaps were concentrated" comes
+  from — the merge reproduces that judgment call, so no separate
+  concentration test is needed.
+- Empty bands simply do not appear (the other way concentration reduces the
+  count).
+
+Every decision returns a note — boundaries, tie slides, ceiling moves,
+merges — so the reasoning is visible instead of implied.
+
+### The Lab
+
+`ls_flight_lab(event, game, overrides)` → `GET /api/test-center/flight-lab`
+runs one event's **real field** through both modes side by side, with
+min-flight-size, index scale and tie direction as live controls. Where GG's
+per-game flights were captured it **grades both modes against them by
+partition** — not by label, since GG may name flights differently while
+cutting in the same places. That is how the rule gets derived from what was
+actually done across past events rather than from recollection.
+
+### Where GG's flights actually live
+
+`gg_game_flights` (+ `import_gg_game_flights`, bridge
+`scoring-flights-import`) walks each flighted game's own GG leaderboard —
+Individual Net / Individual Gross via detail fragments, Skins via the
+Expand-All membership view — and stores per-game flight membership.
+`scoring_rounds.flight` is NULL everywhere because it is the **legacy
+single-label fallback**: flights differ per game, so one label per round
+cannot be right. Read the per-game table, never the column.
+
+### UNRATIFIED — defaults, not decisions
+
+- **Index scale.** Whether "raw TGF handicap index" means the 9-hole number
+  (`handicap_index`) or the 18-hole one (`handicap_index_18`, just ×2) is not
+  confirmed. Getting it wrong silently mis-flights the entire field by a
+  factor of two, so it is an explicit `index_scale` setting and a control in
+  the Lab. **Needs Kerry.**
+- **Minimum flight size** (default 3).
+- **The 3- and 4-flight band ladders.** Only the 2-flight Net line (≤11.9 /
+  12.0+) is ratified; the 4-flight ladder is borrowed from the Players Cup
+  (`<6` / `6–11.9` / `12–17.9` / `18+`) and the 3-flight one is inferred.
+- **Late add/WD scenarios** — the flights-freeze-money-floats matrix is drafted
+  in the runbook but only partly ruled on.

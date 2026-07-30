@@ -9762,6 +9762,60 @@ def api_ls_parity(session_id):
     return (jsonify(res), 400) if "error" in res else jsonify(res)
 
 
+@app.route("/api/test-center/flight-lab")
+@require_role("admin")
+def api_ls_flight_lab():
+    """Run one event's real field through BOTH flighting modes, side by side.
+
+    ?event=&game=&min_flight_size=&index_scale=&tie_direction=
+    Read-only. Where GG's own per-game flights were captured, both modes are
+    graded against them — that is how the rule gets derived from history
+    rather than recollection.
+    """
+    from email_parser.database import ls_flight_lab
+    event = (request.args.get("event") or "").strip()
+    if not event:
+        return jsonify({"error": "event required"}), 400
+    over = {}
+    if request.args.get("min_flight_size"):
+        over["min_flight_size"] = int(request.args["min_flight_size"])
+    for k in ("index_scale", "tie_direction"):
+        if request.args.get(k):
+            over[k] = request.args[k].strip()
+    res = ls_flight_lab(event, (request.args.get("game")
+                                or "individual_net").strip(), over)
+    return (jsonify(res), 404) if "error" in res else jsonify(res)
+
+
+@app.route("/api/test-center/flightable-events")
+@require_role("admin")
+def api_ls_flightable_events():
+    """Events worth running through the lab: anything with registrations."""
+    from email_parser.database import (get_connection,
+                                       _ensure_gg_game_flights_tables)
+    conn = get_connection()
+    try:
+        # Lazily created elsewhere — a DB that has never run a flight import
+        # would otherwise 500 on the subquery below.
+        _ensure_gg_game_flights_tables(conn)
+        rows = conn.execute(
+            """SELECT e.item_name, e.event_date, e.course,
+                      COUNT(i.id) AS n_items,
+                      (SELECT COUNT(*) FROM gg_game_flights g
+                        WHERE g.event_id = e.id) AS gg_flights
+               FROM events e
+               JOIN items i ON LOWER(i.item_name) = LOWER(e.item_name)
+                           AND COALESCE(i.transaction_status,'active') = 'active'
+               GROUP BY e.id HAVING n_items > 0
+               ORDER BY e.event_date DESC LIMIT 120""").fetchall()
+        return jsonify([dict(r) for r in rows])
+    except Exception as e:
+        logger.exception("flightable-events failed")
+        return jsonify({"error": str(e)}), 500
+    finally:
+        conn.close()
+
+
 @app.route("/api/test-center/scorable-events")
 @require_role("admin")
 def api_ls_scorable_events():

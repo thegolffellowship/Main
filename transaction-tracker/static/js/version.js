@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.150.2";
+window.TGF_VERSION = "2.151.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.151.0",
+    date: "2026-07-29",
+    changes: [
+      "FLIGHTING LAB (Test Center tab) + the flight rule as DATA. Flighting was the last tethered piece of event scoring: determine_event_game_results deliberately refuses to guess it (GG labels only, else status 'flights_unknown'), so everything else reproduced GG while flights still came FROM GG. New flight_plan() in live_scoring.py encodes Kerry's ruleset (2026-07-29) as SEED_FLIGHT_CONFIG — flight on the RAW TGF handicap index, not the playing handicap; two legitimate modes (equal-size groups and fixed bands); breaks are floors for the upper flight so 12.0 goes UP and 11.9 tops the flight below with no shared value; Individual Net splits near the middle but its low flight never runs past 11.9; gross bands harder and runs a minimum of three flights; equal indexes NEVER split across flights (the cut slides to the edge that leaves counts evener, dead heat goes up). Flights under a minimum size merge into their neighbour, which is also where 'skewed down from 3 flights to 2 because the handicaps were concentrated' comes from — no separate concentration test needed. Every decision is returned as a note so the reasoning is visible rather than implied.",
+      "The Lab runs one event's REAL field through BOTH modes side by side (GET /api/test-center/flight-lab), with min-flight-size, index scale and tie direction as live controls, so the unratified parameters can be dialled and reacted to instead of specified in the abstract. Where GG's own per-game flights were captured it GRADES both modes against them by partition (not by label, since GG may name flights differently while cutting in the same places) — deriving the rule from what was actually done across past events rather than from recollection.",
+      "CORRECTION to v2.150.1's claim that the importer does not capture flights: it does. gg_game_flights + import_gg_game_flights walk each flighted game's own GG leaderboard (Ind Net / Ind Gross via detail fragments, Skins via Expand-All) and store per-game flight membership. The earlier check looked at scoring_rounds.flight, which is NULL everywhere because it is the LEGACY single-label fallback — flights differ per game, so the per-game table is the real source. Also flagged: whether the index is the 9-hole or 18-hole number is NOT confirmed, and getting it wrong is a silent factor-of-two mis-flight, so index_scale is an explicit setting rather than an assumption. Minimum flight size and the 3- and 4-flight band ladders remain UNRATIFIED defaults.",
+    ],
+  },
   {
     version: "2.150.2",
     date: "2026-07-29",

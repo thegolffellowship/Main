@@ -278,6 +278,205 @@ def assign_flights(cards: list[dict], game_cfg: dict, holes_key: str) -> dict:
     return out
 
 
+# ---------------------------------------------------------------------------
+# Flighting rule (Kerry, 2026-07-29) — the last tethered piece
+#
+# Everything else in this engine already reproduces GG from raw scores.
+# Flighting is the one rule we did not own, and `determine_event_game_results`
+# deliberately refuses to guess it (GG labels only, else "flights_unknown").
+# This is the rule as DATA so we can generate flights ourselves.
+#
+# Kerry's ruleset so far:
+#   - Flight on the RAW TGF HANDICAP INDEX (not the playing handicap).
+#   - Two modes, both legitimate: equal-size groups (traditional) and fixed
+#     bands (the recent trend). Ideal is fixed bands that also come out even;
+#     real fields do not cooperate.
+#   - Individual Net splits near the middle, but the LOW flight never goes
+#     above 11.9 — 11.9 is a ceiling on the break, not the break itself.
+#   - Gross bands harder (a high index has little chance in a low flight) and
+#     runs a MINIMUM of three flights whenever it is active, for entry
+#     incentive.
+#   - Breaks are floors for the upper flight: 12.0 goes UP, 11.9 is the top of
+#     the flight below. No value is claimed by two flights.
+#   - Flight count may be skewed DOWN when the field's indexes are
+#     concentrated (3 -> 2). That falls out of the min-flight merge below
+#     rather than needing its own test.
+#
+# STILL UNRATIFIED (do not treat the defaults as decisions):
+#   - minimum flight size (default 3 here)
+#   - the band ladders at 3 and 4 flights
+#   - whether the index is the 9-hole or 18-hole number (see INDEX_SCALE)
+# ---------------------------------------------------------------------------
+
+SEED_FLIGHT_CONFIG: dict = {
+    # Kerry: "We flight on raw TGF Handicap Index." TGF keeps a NINE-hole
+    # index natively (`handicap_index`; `handicap_index_18` is just x2), and
+    # the ratified numbers that exist — the 11.9 Net ceiling and the Players
+    # Cup ladder — are on the same scale as each other. Which scale that is
+    # has NOT been confirmed, and getting it wrong is a factor-of-two error
+    # that silently mis-flights everyone, so it is an explicit setting.
+    "index_scale": "9",              # "9" | "18"
+    "min_flight_size": 3,            # UNRATIFIED
+    "tie_direction": "even",         # "even" | "up" | "down"
+    "modes": {
+        "individual_net": "equal_size",
+        "individual_gross": "fixed_bands",
+        "skins": "fixed_bands",
+    },
+    # Upper bounds per flight; the final flight takes everything above.
+    # 2-flight Net is the one directly ratified line (<=11.9 / 12.0+).
+    "bands": {
+        "2": [11.9],
+        "3": [5.9, 11.9],
+        "4": [5.9, 11.9, 17.9],      # the Players Cup ladder
+    },
+    # Individual Net splits near the middle, but never lets the low flight
+    # run past this. Applies to equal_size mode.
+    "low_flight_ceiling": {"individual_net": 11.9},
+}
+
+
+def _tie_safe_cut(ranked: list[dict], target: int, total: int,
+                  tie_direction: str) -> int:
+    """Move a count-based cut off a tie group without splitting equal indexes.
+
+    Two players on the same index must never land in different flights —
+    identical players competing for different pots is the one outcome that
+    cannot be defended. So a cut landing inside a run of equal indexes slides
+    to one edge of that run.
+    """
+    if target <= 0 or target >= total:
+        return max(0, min(target, total))
+    idx = lambda p: p["index"]
+    if idx(ranked[target - 1]) != idx(ranked[target]):
+        return target                      # clean break already
+    val = idx(ranked[target])
+    lo = target
+    while lo > 0 and idx(ranked[lo - 1]) == val:
+        lo -= 1                            # whole group moves UP a flight
+    hi = target
+    while hi < total and idx(ranked[hi]) == val:
+        hi += 1                            # whole group stays DOWN
+    if tie_direction == "up":
+        return lo
+    if tie_direction == "down":
+        return hi
+    # "even": whichever edge leaves the two sides closer in size; a dead heat
+    # goes UP, consistent with 12.0-goes-up.
+    return lo if abs(lo - target) <= abs(hi - target) else hi
+
+
+def flight_plan(players: list[dict], count: int, game: str = "individual_net",
+                config: dict | None = None, mode: str | None = None) -> dict:
+    """Assign a field to flights by raw handicap index. Rules-as-data.
+
+    players: [{"key", "name", "index"}] — index is the RAW TGF index.
+    Returns the flights plus a trace of every decision (boundaries, merges,
+    tie slides) so the reasoning is visible instead of implied.
+    """
+    cfg = config or SEED_FLIGHT_CONFIG
+    mode = mode or (cfg.get("modes") or {}).get(game, "fixed_bands")
+    notes, merges = [], []
+    known = [p for p in players if p.get("index") is not None]
+    unknown = [p for p in players if p.get("index") is None]
+    if unknown:
+        notes.append(
+            f"{len(unknown)} player(s) have no handicap index and cannot be "
+            f"flighted: {', '.join(sorted(p['name'] for p in unknown))}.")
+    ranked = sorted(known, key=lambda p: (p["index"], p["name"] or ""))
+    n = len(ranked)
+    count = max(1, int(count or 1))
+    if n == 0:
+        return {"mode": mode, "requested_count": count, "effective_count": 0,
+                "flights": [], "unflighted": unknown, "merges": [],
+                "notes": notes}
+
+    groups: list[list[dict]] = []
+    if mode == "fixed_bands" or count == 1:
+        bands = list((cfg.get("bands") or {}).get(str(count)) or [])
+        if count == 1:
+            groups = [ranked]
+        elif not bands:
+            notes.append(f"No band ladder configured for {count} flights — "
+                         f"fell back to equal-size groups.")
+            mode = "equal_size"
+        else:
+            edges = bands + [float("inf")]
+            groups = [[] for _ in edges]
+            for p in ranked:
+                for i, hi in enumerate(edges):
+                    if p["index"] <= hi:
+                        groups[i].append(p)
+                        break
+            notes.append("Bands (upper bound per flight, inclusive): "
+                         + " / ".join(f"<={b}" for b in bands) + " / rest.")
+    if mode == "equal_size" and count > 1:
+        base, rem = divmod(n, count)
+        cuts, acc = [], 0
+        for f in range(count - 1):
+            acc += base + (1 if f < rem else 0)
+            cut = _tie_safe_cut(ranked, acc, n, cfg.get("tie_direction", "even"))
+            if cut != acc:
+                notes.append(
+                    f"Cut {f + 1} moved {acc} -> {cut} so players sharing "
+                    f"index {ranked[min(acc, n - 1)]['index']} stay together.")
+            cuts.append(cut)
+            acc = cut
+        bounds = [0] + cuts + [n]
+        groups = [ranked[bounds[i]:bounds[i + 1]] for i in range(count)]
+        ceiling = (cfg.get("low_flight_ceiling") or {}).get(game)
+        if ceiling is not None and groups and groups[0]:
+            over = [p for p in groups[0] if p["index"] > ceiling]
+            if over:
+                groups[0] = [p for p in groups[0] if p["index"] <= ceiling]
+                groups[1] = over + groups[1]
+                notes.append(
+                    f"Low-flight ceiling {ceiling}: moved {len(over)} player(s) "
+                    f"up so flight 1 never runs past {ceiling}.")
+
+    # Thin flights merge into their nearest neighbour. This is also where
+    # "3 flights down to 2 because the handicaps were concentrated" comes
+    # from — no separate concentration test needed.
+    min_size = int(cfg.get("min_flight_size") or 0)
+    if min_size > 1:
+        changed = True
+        while changed and len([g for g in groups if g]) > 1:
+            changed = False
+            for i, g in enumerate(groups):
+                if g and len(g) < min_size:
+                    j = i + 1 if i == 0 else i - 1
+                    while 0 <= j < len(groups) and not groups[j]:
+                        j = j + 1 if j > i else j - 1
+                    if not (0 <= j < len(groups)):
+                        break
+                    merges.append({"from": i + 1, "into": j + 1,
+                                   "players": len(g),
+                                   "why": f"fewer than {min_size} players"})
+                    groups[j] = sorted(groups[j] + g,
+                                       key=lambda p: (p["index"], p["name"] or ""))
+                    groups[i] = []
+                    changed = True
+                    break
+
+    flights, label = [], 0
+    for g in groups:
+        if not g:
+            continue
+        label += 1
+        flights.append({
+            "flight": str(label), "players": len(g),
+            "min_index": g[0]["index"], "max_index": g[-1]["index"],
+            "members": [{"key": p["key"], "name": p["name"],
+                         "index": p["index"]} for p in g]})
+    if merges:
+        notes.append(f"{len(merges)} flight(s) merged for being under the "
+                     f"{min_size}-player minimum — effective count "
+                     f"{len(flights)}, not {count}.")
+    return {"mode": mode, "requested_count": count,
+            "effective_count": len(flights), "flights": flights,
+            "unflighted": unknown, "merges": merges, "notes": notes}
+
+
 def _eligible(cards: list[dict], eligibility: str) -> list[dict]:
     if eligibility == "net_buyers":
         return [c for c in cards if c["buys_net"]]
