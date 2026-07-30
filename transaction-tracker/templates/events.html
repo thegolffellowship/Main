@@ -2294,6 +2294,9 @@
     function renderRegistrantsMobile(registrants, ev) {
         const overrides = allRsvpOverrides[ev.item_name] || {};
         const emailOverrides = allRsvpEmailOverrides[ev.item_name] || {};
+        // Full event list INCLUDING child +PAY rows — the callers pass a
+        // parent-only filtered list, but effective-games needs the children.
+        const fullRegs = getRegistrants(ev.item_name);
         // HCP display rule: 9-only or mixed → show 9-hole net; 18-only → show 18-hole.
         const evCount9 = registrants.filter(rr => rr.holes === "9").length;
         const evCount18 = registrants.filter(rr => rr.holes === "18").length;
@@ -2386,7 +2389,9 @@
             const circleClass = circleState !== "none" ? ` rsvp-circle-${circleState.replace("_", "-")}` : "";
             const circleTitle = circleState === "playing" ? "Playing (GG)" : circleState === "not_playing" ? `Not Playing (${circleSource === "auto" ? "GG" : "manual"})` : circleState === "manual_green" ? "RSVP (manual)" : "No RSVP";
             const circleHtml = `<span class="rsvp-circle${circleClass}" data-item-id="${r.id}" data-event-name="${escapeHtml(ev.item_name)}" data-rsvp-state="${circleState}" data-circle-source="${circleSource}" data-player-email="${escapeHtml(r.customer_email || '')}" title="${circleTitle}"></span>`;
-            const sideGame = classifyGameType(r.side_games);
+            // Effective games = parent + game add-on children (same as the
+            // desktop cell) — a NET add-on on a GROSS registration reads BOTH.
+            const sideGame = getEffectiveGameType(r, fullRegs);
             const sideGameLabel = sideGame === "NO GAMES" ? "NONE" : sideGame;
             const tee = (r.tee_choice || "").trim();
             const holes = (r.holes || "").trim();

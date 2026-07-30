@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.150.3";
+window.TGF_VERSION = "2.150.4";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.150.4",
+    date: "2026-07-29",
+    changes: [
+      "Mobile roster games badge now merges game add-ons (Kerry: Mazanec's NET add-on via credit 'didn't update his games badge to BOTH'). The mobile player cards classified the parent row's side_games alone while the desktop table already used getEffectiveGameType (parent + child +PAY game rows combined) — mobile now uses the same effective type, so a GROSS registration with a NET add-on reads BOTH everywhere.",
+      "Mobile customer transaction history shows the money without expanding (Kerry: 'more descriptive with actual money amounts… functional and visible'). Each card now carries the dollar amount on its right edge (red for negative refund rows, amber for held credits), a second line with the order date and payment rail (GoDaddy / Venmo / Credit transfer / etc., derived from the merchant label), and add-on child rows surface their note line (e.g. 'NET Games — paid via player credit'). No styling flourish — plain functional text per Kerry's ask.",
+    ],
+  },
   {
     version: "2.150.3",
     date: "2026-07-29",

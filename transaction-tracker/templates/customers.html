@@ -1119,6 +1119,33 @@
             const tee = (item.tee_choice || "").trim();
             const topTags = `<span class="mc-type">${escapeHtml(sideGameLabel)}</span>${tee ? `<span class="mc-type mc-tee">${escapeHtml(tee)}</span>` : ''}`;
 
+            // Money + payment context visible WITHOUT expanding (Kerry
+            // 2026-07-29: "more descriptive with actual money amounts…
+            // functional and visible"). Amount on the card's right edge;
+            // date + payment rail on a second line; add-on rows show
+            // their note (e.g. "NET Games — paid via player credit").
+            const rawPrice = stripPriceSuffix(item.item_price) || "";
+            const amtLabel = rawPrice || item.credit_amount || "";
+            const isNeg = /^\s*[-(]/.test(rawPrice);
+            const amtColor = isNeg ? "#dc2626" : (txStatus === "credited" ? "#b45309" : "#1B1B1B");
+            const merch = item.merchant || "";
+            let payVia = "";
+            let mm;
+            if (/credit transfer/i.test(merch)) payVia = "Credit transfer";
+            else if ((mm = merch.match(/manual entry \((.+)\)/i))) payVia = mm[1];
+            else if ((mm = merch.match(/paid separately \((.+)\)/i))) payVia = mm[1];
+            else if (/golf fellowship/i.test(merch)) payVia = "GoDaddy";
+            const subBits = [item.order_date || "", payVia].filter(Boolean).join(" &middot; ");
+            const noteLine = item.parent_item_id && (item.notes || "").trim()
+                ? `<div style="font-size:0.72rem;color:var(--text-muted);margin-top:1px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(item.notes)}</div>`
+                : "";
+            const subLine = subBits
+                ? `<div style="font-size:0.72rem;color:var(--text-muted);margin-top:2px;">${subBits}</div>`
+                : "";
+            const amtHtml = amtLabel
+                ? `<span class="mc-amount" style="margin-left:auto;font-weight:600;font-variant-numeric:tabular-nums;white-space:nowrap;color:${amtColor};">${escapeHtml(amtLabel)}</span>`
+                : "";
+
             let actionBtn = '';
             if (txStatus === "active" && !item.transferred_from_id) {
                 actionBtn = `<button class="btn btn-credit" data-cust-credit-id="${item.id}">Credit</button>`;
@@ -1138,10 +1165,12 @@
             return `
             <div class="mobile-card${statusClass}" data-id="${item.id}">
                 <div class="mobile-card-top" onclick="event.stopPropagation(); this.parentElement.classList.toggle('expanded')">
-                    <div class="mc-primary">
+                    <div class="mc-primary" style="min-width:0;">
                         <span class="mc-customer"><a class="cell-link" href="/events?item=${encodeURIComponent(item.item_name || "")}" onclick="event.stopPropagation()">${escapeHtml(item.item_name || "\u2014")}</a></span>
                         ${topTags} ${tag}
+                        ${subLine}${noteLine}
                     </div>
+                    ${amtHtml}
                     <span class="mc-chevron">&#9656;</span>
                 </div>
                 <div class="mobile-card-details">
