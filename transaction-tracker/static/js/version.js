@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.150.2";
+window.TGF_VERSION = "2.150.3";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.150.3",
+    date: "2026-07-29",
+    changes: [
+      "Add Payment modal now prices itself and can pay from held credit (Kerry, the Mazanec TGF Championship case). Picking a player fetches a pricing quote from the event's own setup: NET/GROSS auto-fill at the event's per-game addon ($16 nine/combo, $30 standalone 18 by the player's holes, 27-hole per-event override), BOTH at 2x, Event Upgrade at the 9-to-18 subtotal difference for the player's status — the amount stays editable and a manual entry is never overwritten. When the player holds credit, Payment Source gains 'Apply Credit — $X available' with a banner listing where each credit came from; submitting consumes credits oldest-first using the same bookkeeping as the Apply Credit entry flow (source items flip to transferred, partial use leaves a credit-excess remainder row, ledger gets transfer_out/transfer_in instead of a new-cash addon entry). The server refuses amounts above the available credit before writing anything.",
+    ],
+  },
   {
     version: "2.150.2",
     date: "2026-07-29",

@@ -1296,6 +1296,7 @@
                         </select>
                     </label>
                 </div>
+                <div id="add-payment-credit-info" class="ap-field-section" style="display:none;font-size:0.85rem;color:#92400e;background:#fef3c7;border-radius:8px;padding:6px 10px;"></div>
                 <div class="ap-field-section">
                     <label>Note (optional)
                         <input type="text" id="add-payment-note" class="modal-input" placeholder="e.g. Paid $16 for gross games via Venmo">
@@ -9210,6 +9211,70 @@
 
     // ---- Add Payment modal ----
     let addPaymentEventName = null;
+    // Pricing quote + credit for the selected player (Kerry 2026-07-29:
+    // auto-price games from the event setup; offer Apply Credit when the
+    // player holds credit). apLastAuto tracks the last auto-filled amount
+    // so a manager's manual edit is never clobbered.
+    let apQuote = null;
+    let apLastAuto = null;
+
+    async function apFetchQuote() {
+        apQuote = null;
+        apRenderCredit();
+        const customer = document.getElementById("add-payment-player").value;
+        if (!customer || !addPaymentEventName) return;
+        try {
+            const res = await fetch(`/api/events/add-payment/quote?event_name=${encodeURIComponent(addPaymentEventName)}&customer=${encodeURIComponent(customer)}`);
+            if (!res.ok) return;
+            apQuote = await res.json();
+        } catch (_) { return; }
+        apRenderCredit();
+        apAutofillAmount();
+    }
+
+    function apRenderCredit() {
+        const sel = document.getElementById("add-payment-source");
+        const old = sel.querySelector('option[value="Credit"]');
+        const total = apQuote && apQuote.credit ? (apQuote.credit.total || 0) : 0;
+        if (total > 0) {
+            if (!old) {
+                const opt = document.createElement("option");
+                opt.value = "Credit";
+                sel.appendChild(opt);
+            }
+            sel.querySelector('option[value="Credit"]').textContent =
+                `Apply Credit — $${total.toFixed(2)} available`;
+        } else if (old) {
+            if (sel.value === "Credit") sel.value = "";
+            old.remove();
+        }
+        const info = document.getElementById("add-payment-credit-info");
+        if (info) {
+            if (total > 0) {
+                const from = (apQuote.credit.items || [])
+                    .map(c => `$${Number(c.amount || 0).toFixed(2)} from ${c.event || "?"}`).join(", ");
+                info.style.display = "";
+                info.innerHTML = `Credit on file: <strong>$${total.toFixed(2)}</strong>${from ? " (" + escapeHtml(from) + ")" : ""}`;
+            } else {
+                info.style.display = "none";
+                info.innerHTML = "";
+            }
+        }
+    }
+
+    function apAutofillAmount() {
+        const itemType = document.getElementById("add-payment-item").value;
+        const amtEl = document.getElementById("add-payment-amount");
+        if (!apQuote || !apQuote.amounts) return;
+        const suggested = apQuote.amounts[itemType];
+        if (suggested === null || suggested === undefined) return;
+        const current = amtEl.value.trim();
+        // Only overwrite an empty field or our own previous auto-fill.
+        if (current === "" || current === apLastAuto) {
+            apLastAuto = Number(suggested).toFixed(2);
+            amtEl.value = apLastAuto;
+        }
+    }
 
     function openAddPaymentModal(eventName) {
         addPaymentEventName = eventName;
@@ -9235,7 +9300,12 @@
         document.getElementById("add-payment-note").value = "";
         document.getElementById("add-payment-other-desc").value = "";
         document.getElementById("add-payment-other-field").style.display = "none";
+        apQuote = null;
+        apLastAuto = null;
+        apRenderCredit();
         document.getElementById("add-payment-overlay").style.display = "flex";
+        // Single registrant pre-selected? Quote them right away.
+        if (document.getElementById("add-payment-player").value) apFetchQuote();
     }
 
     function closeAddPaymentModal() {
@@ -9265,6 +9335,13 @@
 
         const num = parseFloat(rawAmount);
         if (isNaN(num) || num <= 0) { alert("Please enter a valid dollar amount."); return; }
+        if (source === "Credit") {
+            const avail = apQuote && apQuote.credit ? (apQuote.credit.total || 0) : 0;
+            if (num > avail + 0.005) {
+                alert(`Player credit ($${avail.toFixed(2)}) doesn't cover $${num.toFixed(2)}.`);
+                return;
+            }
+        }
 
         const now = new Date();
         const localDate = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0') + '-' + String(now.getDate()).padStart(2, '0');
@@ -10672,7 +10749,9 @@
         });
         document.getElementById("add-payment-item").addEventListener("change", function() {
             document.getElementById("add-payment-other-field").style.display = this.value === "Other" ? "" : "none";
+            apAutofillAmount();
         });
+        document.getElementById("add-payment-player").addEventListener("change", apFetchQuote);
 
         // Show email/phone fields for new players + auto-fill status
         document.getElementById("add-player-name").addEventListener("input", function() {

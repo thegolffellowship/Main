@@ -46,6 +46,7 @@ from email_parser.database import (
     seed_events,
     add_player_to_event,
     add_payment_to_event,
+    get_add_payment_quote,
     upgrade_rsvp_to_paid,
     autofix_side_games,
     autofix_all,
@@ -6942,11 +6943,29 @@ def api_add_payment():
             note=data.get("note", ""),
             order_date=data.get("order_date", ""),
         )
+        if isinstance(item, dict) and item.get("error"):
+            return jsonify({"error": item["error"]}), 400
         if item:
             return jsonify({"status": "ok", "item": item}), 201
         return jsonify({"error": "Failed to add payment."}), 500
     except Exception as e:
         logger.exception("Error adding payment: %s", e)
+        return jsonify({"error": f"Server error: {e}"}), 500
+
+
+@app.route("/api/events/add-payment/quote", methods=["GET"])
+@require_role("manager")
+def api_add_payment_quote():
+    """Suggested amounts (from the event's pricing setup) + the player's
+    available credit for the Add Payment modal (Kerry 2026-07-29)."""
+    event_name = (request.args.get("event_name") or "").strip()
+    customer = (request.args.get("customer") or "").strip()
+    if not event_name or not customer:
+        return jsonify({"error": "event_name and customer are required."}), 400
+    try:
+        return jsonify(get_add_payment_quote(event_name, customer))
+    except Exception as e:
+        logger.exception("Error building add-payment quote: %s", e)
         return jsonify({"error": f"Server error: {e}"}), 500
 
 

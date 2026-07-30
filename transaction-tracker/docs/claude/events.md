@@ -198,6 +198,28 @@ per-player selected-tee slope/rating/par and is a fast follow-up).
 - Supports event aliases (course changes) for parent lookup
 - **Unified financial model:** creates `acct_allocations` row + `acct_transactions` entry
   for each add-on payment (allocation uses synthetic `order_id = MANUAL-PAY-{item_id}`)
+- **Auto-priced + Apply Credit (v2.150.3, Kerry 2026-07-29: "add a Apply
+  Credit (if there is any credit)… it should automatically calculate the
+  cost of the games based on the event setup"):**
+  - `GET /api/events/add-payment/quote?event_name=&customer=`
+    (`get_add_payment_quote`) returns suggested amounts from the EVENT's
+    own pricing — NET/GROSS = the per-game addon ($16 nine/combo, $30
+    standalone 18 by the player's holes, 27-hole `per_game_addon`
+    override), BOTH = 2×, Event Upgrade = the 9→18 subtotal difference
+    for the player's status (combo only) — plus the player's unredeemed
+    credits (`get_player_credits`). The modal fetches it on player
+    select, auto-fills Amount on Item change (only over an empty field
+    or its own previous auto-fill — a manual edit is never clobbered),
+    and shows a "Credit on file: $X" banner.
+  - Payment Source gains **"Apply Credit — $X available"** when credit
+    exists. Submitting with source=Credit consumes the player's credits
+    oldest-first with apply_credit_to_rsvp's exact bookkeeping: source
+    items flip to `transferred` (`transferred_to_id` → the +PAY child;
+    WD rows just decrement `credit_amount`), a partially-used credit's
+    remainder becomes a `credit-excess-…` credited row, and the ledger
+    gets `transfer_out`/`transfer_in` entries INSTEAD of the new-cash
+    addon income entry (no new money arrived). Server rejects amounts
+    above the available credit before writing anything.
 
 ## Clickable game switching
 - GAMES column is clickable for active registrations with NET or GROSS games

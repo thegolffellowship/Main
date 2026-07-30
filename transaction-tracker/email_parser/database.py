@@ -19677,6 +19677,90 @@ def add_player_to_event(event_name: str, customer: str, mode: str = "comp",
         return new_values
 
 
+def get_add_payment_quote(event_name: str, customer: str,
+                          db_path: str | Path | None = None) -> dict:
+    """Everything the Add Payment modal needs to price itself (Kerry
+    2026-07-29: "it should automatically calculate the cost of the games
+    based on the event setup" + "add a Apply Credit (if there is any
+    credit)"). Returns:
+      amounts   — suggested price per Item choice, from the EVENT's own
+                  pricing setup: NET/GROSS = the event's per-game addon
+                  ($16 nine/combo, $30 standalone 18, 27-hole override),
+                  BOTH = 2x, Event Upgrade = the 9->18 subtotal
+                  difference for this player's status on combo events.
+      credit    — the player's unredeemed credits (get_player_credits)
+                  with total, so the modal can offer Apply Credit.
+    Read-only; amounts stay editable in the modal."""
+    with _connect(db_path) as conn:
+        event_row = conn.execute(
+            "SELECT * FROM events WHERE item_name = ? COLLATE NOCASE",
+            (event_name,)).fetchone()
+        event = dict(event_row) if event_row else {}
+        alias_names = [r[0] for r in conn.execute(
+            "SELECT alias_name FROM event_aliases WHERE canonical_event_name = ? COLLATE NOCASE",
+            (event_name,)).fetchall()]
+        all_names = [event_name] + alias_names
+        qmarks = ",".join(["?"] * len(all_names))
+        parent = conn.execute(
+            f"""SELECT * FROM items WHERE item_name COLLATE NOCASE IN ({qmarks})
+                AND customer = ? COLLATE NOCASE
+                AND COALESCE(transaction_status, 'active') = 'active'
+                AND parent_item_id IS NULL
+                ORDER BY id DESC LIMIT 1""",
+            all_names + [customer]).fetchone()
+        parent = dict(parent) if parent else {}
+
+    status = parent.get("user_status") or "MEMBER"
+    fmt_raw = (event.get("format") or "")
+    fmt = fmt_raw.lower()
+    is_combo = "combo" in fmt or "9/18" in fmt
+    is_27 = fmt_raw.strip() == "27 Holes"
+    holes = str(parent.get("holes") or ("18" if "18" in fmt_raw and not is_combo else "9"))
+
+    # Per-game addon — same branching as _calc_event_pricing_breakdown
+    # (holes-based, so an 18-hole special event prices at $30 even when
+    # its format label isn't the literal "18 Holes").
+    if is_27:
+        try:
+            per_game = float(event.get("per_game_addon") or _PER_GAME_ADDON_27)
+        except (TypeError, ValueError):
+            per_game = _PER_GAME_ADDON_27
+    elif holes == "18" and not is_combo:
+        per_game = _PER_GAME_ADDON_18
+    else:
+        per_game = _PER_GAME_ADDON
+
+    upgrade = None
+    if is_combo:
+        b9 = _calc_event_pricing_breakdown(event, status, "9", "NONE")
+        b18 = _calc_event_pricing_breakdown(event, status, "18", "NONE")
+        if b9 and b18:
+            upgrade = round(b18["subtotal"] - b9["subtotal"], 2)
+
+    credits = get_player_credits(customer, db_path=db_path,
+                                 customer_id=parent.get("customer_id"))
+    return {
+        "event_name": event.get("item_name") or event_name,
+        "player": customer,
+        "user_status": status, "holes": holes,
+        "per_game": per_game,
+        "amounts": {
+            "NET Games": per_game,
+            "GROSS Games": per_game,
+            "BOTH Games": round(per_game * 2, 2),
+            "Event Upgrade": upgrade,
+        },
+        "credit": {
+            "total": round(sum((c.get("credit_amount") or 0) for c in credits
+                               if (c.get("credit_amount") or 0) > 0), 2),
+            "items": [{"id": c["id"],
+                       "event": c.get("origin_event") or c.get("item_name"),
+                       "amount": c.get("credit_amount")} for c in credits
+                      if (c.get("credit_amount") or 0) > 0],
+        },
+    }
+
+
 def add_payment_to_event(event_name: str, customer: str,
                          payment_item: str = "", payment_amount: str = "",
                          payment_source: str = "", note: str = "",
@@ -19688,8 +19772,19 @@ def add_payment_to_event(event_name: str, customer: str,
     registration. Child payments only carry payment-related fields (games,
     price, order_date) — not holes, tee, status. They are excluded from
     player counts and shown as indented sub-rows under the parent.
+
+    payment_source == "Credit" (Kerry 2026-07-29) pays the add-on from the
+    player's held credits instead of new money: consumes the player's
+    unredeemed credited items oldest-first (same bookkeeping as
+    apply_credit_to_rsvp — source flips to 'transferred' with transfer_out/
+    transfer_in acct entries, no new-cash addon entry), and a partially-used
+    credit keeps its remainder as a credit-excess row. Returns
+    {"error": ...} when the player's credit doesn't cover the amount.
     """
     import time as _time
+    import datetime as _dt
+
+    is_credit = (payment_source or "").strip().lower() == "credit"
 
     with _connect(db_path) as conn:
         event = conn.execute(
@@ -19720,6 +19815,38 @@ def add_payment_to_event(event_name: str, customer: str,
             return None
         parent = dict(parent)
         parent_id = parent["id"]
+
+        # Apply Credit: gather the player's unredeemed credits up front so
+        # an insufficient balance fails BEFORE anything is written.
+        credit_sources: list[dict] = []
+        pay_amount_credit = _parse_dollar(payment_amount)
+        if is_credit:
+            parent_cid = conn.execute(
+                "SELECT customer_id FROM items WHERE id = ?",
+                (parent_id,)).fetchone()
+            parent_cid = parent_cid["customer_id"] if parent_cid else None
+            where = ("i.customer_id = ?" if parent_cid
+                     else "i.customer = ? COLLATE NOCASE")
+            rows = conn.execute(
+                f"""SELECT i.* FROM items i
+                    WHERE {where}
+                      AND (i.transaction_status = 'credited'
+                           OR (i.transaction_status = 'wd'
+                               AND COALESCE(i.credit_amount, '') != ''))
+                    ORDER BY i.order_date, i.id""",
+                (parent_cid if parent_cid else customer,)).fetchall()
+            for r in rows:
+                d = dict(r)
+                amt = _item_credit_value(conn, d)
+                if amt > 0:
+                    d["_credit_amt"] = amt
+                    credit_sources.append(d)
+            total_credit = round(sum(c["_credit_amt"] for c in credit_sources), 2)
+            if pay_amount_credit <= 0:
+                return {"error": "A positive amount is required to apply credit."}
+            if total_credit + 0.005 < pay_amount_credit:
+                return {"error": f"Player credit (${total_credit:.2f}) doesn't "
+                                 f"cover ${pay_amount_credit:.2f}."}
 
         uid = f"manual-payment-{int(_time.time() * 1000)}"
 
@@ -19783,50 +19910,131 @@ def add_payment_to_event(event_name: str, customer: str,
         new_id = cursor.lastrowid
 
         # ── Unified Financial Model: create allocation for add-on payment ──
-        try:
-            pay_amount = _parse_dollar(payment_amount)
-            if pay_amount > 0:
-                item_for_alloc = dict(new_values)
-                item_for_alloc["id"] = new_id
-                pay_method = (payment_source or "external").lower().replace(" ", "_")
-                if pay_method not in ("venmo", "cash", "zelle", "check", "godaddy"):
-                    pay_method = "cash"
-                _create_allocation_for_item(
-                    item_for_alloc, conn,
-                    payment_method=pay_method,
-                    create_txn=True,
-                    txn_description=f"Add-on payment ({payment_item}): {customer} — {event_name}",
-                    txn_source="add_payment",
-                    txn_category_name="External Payment" if pay_method != "godaddy" else "Event Revenue",
-                )
-        except Exception:
-            logger.warning("Failed to create allocation for add-payment item %d", new_id, exc_info=True)
+        # Credit-funded add-ons bring NO new cash — they get transfer
+        # entries below instead of an income allocation/addon entry.
+        if not is_credit:
+            try:
+                pay_amount = _parse_dollar(payment_amount)
+                if pay_amount > 0:
+                    item_for_alloc = dict(new_values)
+                    item_for_alloc["id"] = new_id
+                    pay_method = (payment_source or "external").lower().replace(" ", "_")
+                    if pay_method not in ("venmo", "cash", "zelle", "check", "godaddy"):
+                        pay_method = "cash"
+                    _create_allocation_for_item(
+                        item_for_alloc, conn,
+                        payment_method=pay_method,
+                        create_txn=True,
+                        txn_description=f"Add-on payment ({payment_item}): {customer} — {event_name}",
+                        txn_source="add_payment",
+                        txn_category_name="External Payment" if pay_method != "godaddy" else "Event Revenue",
+                    )
+            except Exception:
+                logger.warning("Failed to create allocation for add-payment item %d", new_id, exc_info=True)
 
         # ── Accounting: flat acct_transactions entry for add-on ──
-        try:
-            pay_amount = _parse_dollar(payment_amount)
-            if pay_amount > 0:
-                pay_method = (payment_source or "external").lower().replace(" ", "_")
-                if pay_method not in ("venmo", "cash", "zelle", "check", "godaddy"):
-                    pay_method = "cash"
-                acct = "Venmo" if pay_method == "venmo" else "TGF Checking"
-                alloc_date = new_values.get("order_date") or ""
+        if not is_credit:
+            try:
+                pay_amount = _parse_dollar(payment_amount)
+                if pay_amount > 0:
+                    pay_method = (payment_source or "external").lower().replace(" ", "_")
+                    if pay_method not in ("venmo", "cash", "zelle", "check", "godaddy"):
+                        pay_method = "cash"
+                    acct = "Venmo" if pay_method == "venmo" else "TGF Checking"
+                    alloc_date = new_values.get("order_date") or ""
+                    _write_acct_entry(
+                        conn,
+                        item_id=new_id,
+                        event_name=event_name,
+                        customer=customer,
+                        entry_type="income",
+                        category="addon",
+                        source=pay_method,
+                        amount=pay_amount,
+                        description=f"Add-on payment ({payment_item}): {customer} — {event_name}",
+                        account=acct,
+                        source_ref=f"addon-{new_id}",
+                        date=alloc_date,
+                    )
+            except Exception:
+                logger.warning("Failed to create acct_transactions entry for add-payment %d", new_id, exc_info=True)
+
+        # ── Apply Credit: consume the player's credits oldest-first, same
+        # bookkeeping as apply_credit_to_rsvp (Kerry 2026-07-29) ──
+        if is_credit:
+            now_str = _dt.datetime.utcnow().isoformat()
+            remaining = pay_amount_credit
+            consumed_ids = []
+            for ci in credit_sources:
+                if remaining <= 0.005:
+                    break
+                take = min(ci["_credit_amt"], remaining)
+                remaining = round(remaining - take, 2)
+                consumed_ids.append(ci["id"])
+                leftover = round(ci["_credit_amt"] - take, 2)
+                if ci.get("transaction_status") == "wd":
+                    # WD rows keep their status; the credit_amount column
+                    # carries what's left (cleared when fully used).
+                    conn.execute(
+                        """UPDATE items SET credit_amount = ?,
+                               transferred_to_id = ?, credit_note = ?
+                           WHERE id = ?""",
+                        (f"${leftover:.2f}" if leftover > 0 else None, new_id,
+                         f"WD credit applied to {event_name} add-on "
+                         f"({payment_item}) on {now_str[:10]}", ci["id"]))
+                else:
+                    conn.execute(
+                        """UPDATE items SET transaction_status = 'transferred',
+                               credit_note = ?, transferred_to_id = ?
+                           WHERE id = ?""",
+                        (f"Applied to {event_name} add-on ({payment_item}) "
+                         f"on {now_str[:10]}", new_id, ci["id"]))
+                    if leftover > 0:
+                        # Same excess-credit convention as apply_credit_to_rsvp
+                        # so the remainder stays visible/refundable.
+                        conn.execute(
+                            """INSERT INTO items
+                               (email_uid, merchant, customer, customer_email,
+                                item_name, item_price, transaction_status,
+                                credit_note, order_date, chapter, customer_id)
+                               VALUES (?, 'Manual Entry', ?, ?, ?, ?, 'credited',
+                                       ?, date('now'), ?, ?)""",
+                            (f"credit-excess-{new_id}-{int(_time.time() * 1000)}",
+                             ci.get("customer"), ci.get("customer_email"),
+                             f"Excess credit — {ci.get('item_name') or ''}".strip(" —"),
+                             f"${leftover:.2f}",
+                             f"Excess credit from add-on transfer — ${leftover:.2f} remaining",
+                             ci.get("chapter") or "", ci.get("customer_id")))
+                try:
+                    _write_acct_entry(
+                        conn, item_id=ci["id"], event_name=ci.get("item_name", ""),
+                        customer=ci.get("customer", ""),
+                        order_id=ci.get("order_id", ""),
+                        entry_type="contra", category="transfer_out",
+                        source="manual", amount=take,
+                        description=f"Credit transfer out → {event_name} add-on ({payment_item})",
+                        account="TGF Checking",
+                        source_ref=f"xfer-flat-{ci['id']}-out-{new_id}",
+                        date=now_str[:10])
+                except Exception:
+                    logger.warning("Failed transfer_out for credit %s", ci["id"], exc_info=True)
+            try:
                 _write_acct_entry(
-                    conn,
-                    item_id=new_id,
-                    event_name=event_name,
-                    customer=customer,
-                    entry_type="income",
-                    category="addon",
-                    source=pay_method,
-                    amount=pay_amount,
-                    description=f"Add-on payment ({payment_item}): {customer} — {event_name}",
-                    account=acct,
-                    source_ref=f"addon-{new_id}",
-                    date=alloc_date,
-                )
-        except Exception:
-            logger.warning("Failed to create acct_transactions entry for add-payment %d", new_id, exc_info=True)
+                    conn, item_id=new_id, event_name=event_name,
+                    customer=customer, entry_type="income",
+                    category="transfer_in", source="credit_transfer",
+                    amount=pay_amount_credit,
+                    description=f"Credit transfer in — add-on ({payment_item})",
+                    account="TGF Checking",
+                    source_ref=f"xfer-flat-{new_id}-in", date=now_str[:10])
+            except Exception:
+                logger.warning("Failed transfer_in for add-payment %d", new_id, exc_info=True)
+            conn.execute(
+                "UPDATE items SET transferred_from_id = ?, notes = ? WHERE id = ?",
+                (consumed_ids[0] if consumed_ids else None,
+                 (note or f"{payment_item} — {payment_amount}").strip()
+                 + f" — paid via player credit (items {consumed_ids})",
+                 new_id))
 
         conn.commit()
 
