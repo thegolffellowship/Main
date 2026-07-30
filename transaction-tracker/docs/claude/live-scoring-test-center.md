@@ -146,9 +146,18 @@ no vs-par, no Stableford, no net — so it scores zero in every game while
 looking completely normal. A half-scored leaderboard is indistinguishable
 from a low-scoring one.
 
-The live example is **The Quarry**: TGF has only ever played its BACK nine,
-so holes 1–9 carry no par or stroke index on any Quarry tee. An 18-hole
-round there would silently score nine holes.
+**Per-nine tee ratings (`_ls_tee_holes`).** TGF plays nines and GG rates each
+nine separately, so one physical tee becomes several `course_tees` rows, each
+holding only its own nine's holes. The Quarry's "1 - Gold Tee" is the front
+nine (117 / 34.2, holes 1–9, the ODD stroke indexes) and the back nine
+(128 / 35.6, holes 10–18, the EVENS). Reading a single `tee_id` returns half a
+golf course and would silently score nine holes of an 18. Sessions therefore
+merge holes across every tee row sharing the same course and tee name,
+preferring the requested tee then the newest rating — which also yields the
+correct 1–18 index for TGF's rule that **course/playing handicaps come off the
+18-hole rating and apply across all 18 holes**. (Handicap *differentials* use
+the 9-hole ratings; that is the `handicap_rounds` posting path and nothing
+here touches it.)
 
 Coverage reports three things, escalating:
 
@@ -221,12 +230,16 @@ Deliberate gaps, each surfaced in the UI rather than silently wrong:
 - **Blind draw** for short teams (`Bl[Name]`) — warned, not generated.
 - **Match Play** — already live on its own surface (`MATCHPLAY_V2`,
   `cmp_fetch_live_match`) and deliberately not duplicated here.
-- **Flighting parity is itself an open question.** The 9-hole 2-flight break
-  at HCP 12.0 is the one directly observed GG split; every other band falls
-  back to equal-size splitting. Explicit per-player flights override both,
-  which is how a known-good GG flighting gets pinned so the scoring diff
-  isolates cleanly. Discovering GG's real rule at other counts is one of the
-  things this harness is for.
+- **GG flight capture at import time (next build, Kerry 2026-07-29).** GG's
+  flights are LIVE DATA — readable off the GG Leaderboard by expanding the
+  flight groups once an event is live — so they should be READ, not inferred.
+  `scoring_rounds.flight` exists but is NULL on every imported round to date
+  (checked across 100 Quarry rounds and the s18.8 field): the importer does
+  not parse the leaderboard's flight groupings yet. Until it does, the engine
+  falls back to equal-size handicap bands (the 9-hole HCP-12.0 break is the
+  only directly observed split), and explicit per-player flights typed on the
+  Field tab override the fallback. Capturing flight from the leaderboard
+  widget is the highest-value follow-up.
 - **Season-race points** — the leaderboard is per-round; race accumulation
   (best-10 + City Championship) still runs off the existing points-race path.
 

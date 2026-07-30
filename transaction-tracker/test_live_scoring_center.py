@@ -396,7 +396,7 @@ for h, par, yd, si in [(10, 4, 437, 4), (11, 4, 351, 18), (12, 3, 164, 14),
 conn.commit()
 conn.close()
 
-q = db.ls_create_session("Quarry 18", holes=18, tee_id=9, db_path=DB)
+q = db.ls_create_session("Quarry back only", holes=18, tee_id=9, db_path=DB)
 qsid = q["session_id"]
 qp = db.ls_add_player(qsid, "Front Niner", playing_handicap=9, db_path=DB)
 qhole = db.ls_get_session(qsid, db_path=DB)["holes"]
@@ -440,6 +440,85 @@ check("filling par and stroke index clears the alarm",
 check("and the full round now scores",
       sum(1 for x in db.ls_leaderboard(qsid, db_path=DB)["cards"][0]["holes"]
           if x["stableford_net"] is not None) == 18)
+
+# ---------------------------------------------------------------------------
+print("\n== per-nine tee ratings merge into one 18-hole course ==")
+
+# The REAL Quarry shape. TGF plays nines and GG rates each nine separately,
+# so one physical tee is several course_tees rows each holding only its own
+# nine. "1 - Gold Tee" is the front (slope 117 / rating 34.2, holes 1-9 with
+# the ODD stroke indexes) and the back (128 / 35.6, holes 10-18 with the
+# EVENS). Reading one tee_id returns half a golf course.
+conn = sqlite3.connect(DB)
+conn.execute("INSERT INTO course_tees (tee_id, course_id, tee_name, slope,"
+             " rating) VALUES (20, 2, '1 - Gold Tee', 117, 34.2)")   # front nine
+conn.execute("INSERT INTO course_tees (tee_id, course_id, tee_name, slope,"
+             " rating) VALUES (21, 2, '1 - Gold Tee', 128, 35.6)")   # back nine
+conn.execute("INSERT INTO course_tees (tee_id, course_id, tee_name, slope,"
+             " rating) VALUES (22, 2, '2 - Blue Tee', 115, 34.2)")   # other tee
+for h, par, yd, si in [(1, 4, 361, 9), (2, 4, 423, 3), (3, 3, 136, 15),
+                       (4, 4, 292, 17), (5, 5, 514, 1), (6, 4, 324, 11),
+                       (7, 4, 374, 7), (8, 3, 142, 13), (9, 4, 307, 5)]:
+    conn.execute("INSERT INTO course_tee_holes (tee_id, hole_number, par,"
+                 " yardage, stroke_index) VALUES (20, ?, ?, ?, ?)", (h, par, yd, si))
+for h, par, yd, si in [(10, 4, 437, 4), (11, 4, 351, 18), (12, 3, 164, 14),
+                       (13, 4, 331, 10), (14, 4, 410, 2), (15, 5, 495, 16),
+                       (16, 3, 201, 12), (17, 4, 357, 6), (18, 5, 509, 8)]:
+    conn.execute("INSERT INTO course_tee_holes (tee_id, hole_number, par,"
+                 " yardage, stroke_index) VALUES (21, ?, ?, ?, ?)", (h, par, yd, si))
+# A different tee name must NOT leak in.
+conn.execute("INSERT INTO course_tee_holes (tee_id, hole_number, par, yardage,"
+             " stroke_index) VALUES (22, 1, 9, 99, 99)")
+conn.commit()
+conn.close()
+
+# Seeding off EITHER nine's tee row must yield all 18 holes.
+for tee, label in ((21, "back-nine row"), (20, "front-nine row")):
+    s = db.ls_create_session(f"Quarry via {label}", holes=18, tee_id=tee, db_path=DB)
+    hs = db.ls_get_session(s["session_id"], db_path=DB)["holes"]
+    check(f"seeding off the {label} still gets all 18 holes",
+          [h["hole_number"] for h in hs] == list(range(1, 19)),
+          f"got {[h['hole_number'] for h in hs]}")
+    check(f"...with par on every hole ({label})",
+          all(h["par"] is not None for h in hs))
+    check(f"...and a complete 1-18 stroke index ({label})",
+          sorted(h["stroke_index"] for h in hs) == list(range(1, 19)),
+          str(sorted(h["stroke_index"] for h in hs)))
+    check(f"...par totals 71 ({label})",
+          sum(h["par"] for h in hs) == 71, str(sum(h["par"] for h in hs)))
+    check(f"...and no other tee's data leaked in ({label})",
+          next(h for h in hs if h["hole_number"] == 1)["par"] == 4,
+          str(next(h for h in hs if h["hole_number"] == 1)))
+    lb = db.ls_leaderboard(s["session_id"], db_path=DB)
+    check(f"...coverage reports clean ({label})",
+          lb["course_coverage"]["ok"] is True,
+          str(lb["course_coverage"]["warnings"]))
+
+# The front nine carries the ODD stroke indexes and the back the EVENS — the
+# merged set is what makes an 18-hole handicap allocation correct.
+s18 = db.ls_create_session("Quarry SI check", holes=18, tee_id=21, db_path=DB)
+hs = db.ls_get_session(s18["session_id"], db_path=DB)["holes"]
+front_si = sorted(h["stroke_index"] for h in hs if h["hole_number"] <= 9)
+back_si = sorted(h["stroke_index"] for h in hs if h["hole_number"] > 9)
+check("front nine holds the odd stroke indexes",
+      front_si == [1, 3, 5, 7, 9, 11, 13, 15, 17], str(front_si))
+check("back nine holds the even stroke indexes",
+      back_si == [2, 4, 6, 8, 10, 12, 14, 16, 18], str(back_si))
+
+# An 18 handicap over 18 holes = one stroke per hole; a 9 = the nine hardest,
+# which must straddle both nines rather than landing all on one side.
+p18 = db.ls_add_player(s18["session_id"], "Eighteen", playing_handicap=18, db_path=DB)
+p9 = db.ls_add_player(s18["session_id"], "Niner", playing_handicap=9, db_path=DB)
+for h in range(1, 19):
+    db.ls_set_score(s18["session_id"], p18["player_id"], h, 5, db_path=DB)
+    db.ls_set_score(s18["session_id"], p9["player_id"], h, 5, db_path=DB)
+cards = {c["name"]: c for c in db.ls_leaderboard(s18["session_id"], db_path=DB)["cards"]}
+check("an 18 handicap gets one stroke on all 18 holes",
+      all(x["strokes_received"] == 1 for x in cards["Eighteen"]["holes"]))
+nine_dots = {x["hole"] for x in cards["Niner"]["holes"] if x["strokes_received"]}
+check("a 9 handicap's strokes land on stroke index 1-9, straddling both nines",
+      len(nine_dots) == 9 and any(h <= 9 for h in nine_dots)
+      and any(h > 9 for h in nine_dots), str(sorted(nine_dots)))
 
 # ---------------------------------------------------------------------------
 print("\n== live refresh from GG (in place) ==")

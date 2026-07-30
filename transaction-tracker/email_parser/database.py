@@ -13033,6 +13033,57 @@ _LS_DEFAULT_NINE = [
 ]
 
 
+def _ls_tee_holes(conn: sqlite3.Connection, tee_id: int | None) -> list[dict]:
+    """Course holes for a tee, MERGED across the tee's per-nine ratings.
+
+    TGF plays nines, and Golf Genius rates each nine separately — so one
+    physical tee becomes several `course_tees` rows, each holding only its
+    own nine's holes. The Quarry's "1 - Gold Tee" is three rows: the front
+    nine (slope 117 / rating 34.2, holes 1-9) and the back nine (128 / 35.6,
+    holes 10-18), plus a re-rating of the front. Reading a single tee_id
+    therefore returns HALF a golf course, which on an 18-hole event silently
+    scores nine holes.
+
+    So: collect holes from every tee row sharing this tee's course AND tee
+    name, preferring the requested tee_id and then the most recent rating
+    when a hole appears in more than one row (par / yardage / stroke index
+    agree between re-ratings, so the tie-break is cosmetic).
+
+    Stroke indexes stored on these rows are already 18-hole-scoped (the
+    Quarry's front nine carries the odds 1-17, the back the evens 2-18), so
+    the merged set is the correct basis for allocating handicap strokes
+    across all 18 holes — TGF's rule: course/playing handicaps come off the
+    18-hole rating and apply across all 18. (Handicap DIFFERENTIALS are a
+    separate path keyed to the 9-hole ratings; nothing here touches them.)
+    """
+    if not tee_id:
+        return []
+    row = conn.execute(
+        "SELECT course_id, tee_name FROM course_tees WHERE tee_id = ?",
+        (tee_id,)).fetchone()
+    if not row:
+        return []
+    siblings = [r["tee_id"] for r in conn.execute(
+        """SELECT tee_id FROM course_tees
+           WHERE course_id = ? AND tee_name IS ?
+           ORDER BY tee_id DESC""",
+        (row["course_id"], row["tee_name"])).fetchall()]
+    # Requested tee wins, then newest rating.
+    order = [tee_id] + [t for t in siblings if t != tee_id]
+    merged: dict = {}
+    for t in order:
+        for h in conn.execute(
+                """SELECT hole_number, par, yardage, stroke_index
+                   FROM course_tee_holes WHERE tee_id = ?""", (t,)).fetchall():
+            cur = merged.setdefault(h["hole_number"], {
+                "hole_number": h["hole_number"], "par": None,
+                "yardage": None, "stroke_index": None, "from_tee": t})
+            for col in ("par", "yardage", "stroke_index"):
+                if cur[col] is None and h[col] is not None:
+                    cur[col] = h[col]
+    return [merged[k] for k in sorted(merged)]
+
+
 def _ls_touch(conn: sqlite3.Connection, session_id: int) -> None:
     conn.execute("UPDATE ls_test_sessions SET updated_at = datetime('now') "
                  "WHERE id = ?", (session_id,))
@@ -13081,12 +13132,7 @@ def ls_create_session(name: str, holes: int = 9, event_name: str | None = None,
              created_by)).lastrowid
         # Seed the course holes: the real tee when one was named, else the
         # neutral nine (mirrored onto the back for an 18).
-        tee_rows = []
-        if tee_id:
-            tee_rows = [dict(r) for r in conn.execute(
-                """SELECT hole_number, par, yardage, stroke_index
-                   FROM course_tee_holes WHERE tee_id = ?
-                   ORDER BY hole_number""", (tee_id,)).fetchall()]
+        tee_rows = _ls_tee_holes(conn, tee_id)
         if tee_rows:
             for r in tee_rows[:holes]:
                 conn.execute(
@@ -13162,10 +13208,9 @@ def ls_seed_session_from_event(event_name: str, name: str | None = None,
              "from scoring_holes; every game below is recomputed by our own "
              "engine.", created_by)).lastrowid
 
-        for r in conn.execute(
-                """SELECT hole_number, par, yardage, stroke_index
-                   FROM course_tee_holes WHERE tee_id = ?
-                   ORDER BY hole_number""", (tee_id,)).fetchall():
+        # Merged across the tee's per-nine ratings — an 18-hole round needs
+        # the front-nine row AND the back-nine row (see _ls_tee_holes).
+        for r in _ls_tee_holes(conn, tee_id):
             conn.execute(
                 """INSERT OR REPLACE INTO ls_test_course_holes
                        (session_id, hole_number, par, yardage, stroke_index)
@@ -13338,10 +13383,7 @@ def ls_refresh_session_from_gg(session_id: int,
         if tee_vals:
             newest_tee = max(set(tee_vals), key=tee_vals.count)
         for src_tee in {t for t in (tee_id, newest_tee) if t}:
-            for r in conn.execute(
-                    """SELECT hole_number, par, yardage, stroke_index
-                       FROM course_tee_holes WHERE tee_id = ?""",
-                    (src_tee,)).fetchall():
+            for r in _ls_tee_holes(conn, src_tee):
                 conn.execute(
                     """INSERT INTO ls_test_course_holes
                            (session_id, hole_number, par, yardage, stroke_index)

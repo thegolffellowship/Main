@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.150.1";
+window.TGF_VERSION = "2.150.2";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.150.2",
+    date: "2026-07-29",
+    changes: [
+      "PER-NINE TEE RATINGS NOW MERGE INTO ONE 18-HOLE COURSE (_ls_tee_holes), correcting a wrong conclusion in v2.150.1. TGF plays nines and Golf Genius rates each nine separately, so one physical tee becomes SEVERAL course_tees rows each holding only its own nine's holes: The Quarry's '1 - Gold Tee' is the front nine (slope 117 / rating 34.2, holes 1-9, the ODD stroke indexes 1-17) AND the back nine (128 / 35.6, holes 10-18, the EVENS 2-18). Reading a single tee_id returns half a golf course — which is why the previous release reported The Quarry's front nine as missing when it was sitting on tee 109 all along (from s9.15, 2026-06-23). Test Center sessions now collect holes from every tee row sharing the same course AND tee name, preferring the requested tee then the newest rating, so seeding off either nine's row yields all 18 holes with a valid 1-18 stroke index. Regression-tested in both directions, including that a different tee name cannot leak in and that a 9 handicap's strokes straddle both nines. The course_coverage banner stays as the backstop for courses where a nine genuinely has not been imported.",
+      "Documented TGF's handicap scoping (Kerry): course/playing handicaps come off the 18-HOLE rating and slope and apply across all 18 holes — which the merged 1-18 index above is exactly what's needed for — while handicap DIFFERENTIALS are computed from the 9-HOLE ratings, a separate posting path the Test Center does not touch. Also recorded that GG FLIGHTS ARE LIVE DATA readable off the GG Leaderboard once an event is live, so they should be read rather than inferred; scoring_rounds.flight is currently NULL on every imported round (verified across 100 Quarry rounds and the s18.8 field), so leaderboard flight capture at import time is the next build and typing flights on the Field tab is the Saturday workaround.",
+      "SA CHAMPIONSHIP runbook refreshed against live registration: 26 entries (up from 19 the same morning), 18 NET buyers and 16 GROSS. That crossed a threshold — Individual Gross moves from 3 flights to 4 at 16+ buyers on an 18 — so the runbook now warns to read buyer counts off the page on the day rather than trusting written numbers, and notes gross activation sits near its 12-buyer floor where withdrawals can switch the game off. Field spans four tees (<50, 50-64, 65+, Forward), so the modal-tee limitation is called out for CTP yardage and any tee whose stroke index differs.",
+    ],
+  },
   {
     version: "2.150.1",
     date: "2026-07-29",

@@ -12,63 +12,86 @@ Nothing on this page changes a score, a payout, or a member-facing surface.
 | Date | Saturday 2026-08-01 |
 | Course | The Quarry Golf Club (course_id 22361) |
 | Holes | **18** (every registration carries `holes = 18`) |
-| Field | 19 registered as of Wed 7/29 |
+| Field | **26** registered as of Wed 7/29 ~4pm (was 19 that morning) |
 | Points | Championship schedule — auto-selected from the event name |
 
-Buyer split as registered (drives which games activate):
+Buyer split at 26 registrations (drives which games activate):
 
-- **NET buyers: 15** (NET or BOTH) — Wolin, Sharitz, Hamilton, Vasquez,
-  Horton, Rideout, McCrary, Niester, Rohrmann, Wade, Youngs, Palacios,
-  Callaway, Marroquin, Fieber
-- **GROSS buyers: 13** (GROSS or BOTH) — Fehlis, Sharitz, Hamilton, Horton,
-  McCrary, Niester, Rohrmann, Mazanec, Wade, Griffin, Youngs, Palacios,
-  Marroquin
-- No side games: South
+- **NET buyers: 18** (NET or BOTH)
+- **GROSS buyers: 16** (GROSS or BOTH)
+- No side games: 3 (South, Thompson, Bricco)
+- Tee choice: `<50` ×7 · `50-64` ×14 · `65+` ×4 · `Forward` ×1
 
 Which means, on the ratified 18-hole matrix:
 
 - **Individual Net → 2 flights** (18h: 1 flight to 13 buyers, 2 at 14–33)
-- **Individual Gross → ACTIVE, 3 flights** (activates at 12 on an 18; the
-  12–15 band is 3 flights)
-- **Skins → 2 flights** (18h: 2 flights from 8 buyers)
+- **Individual Gross → ACTIVE, 4 flights** (activates at 12 on an 18;
+  12–15 → 3 flights, **16+ → 4**)
+- **Skins → 2 flights** (18h: 2 flights 8–31)
 
-Counts move with late entries and withdrawals — the board recomputes from
-whoever is actually in `items` at refresh time, so re-check the buyer counts
-on the day rather than trusting this list.
+**These counts move and they cross thresholds.** At 19 registrations that
+morning it was 13 GROSS buyers → 3 flights; seven entries later it is 16 → 4.
+Gross activation also sits close to its floor: it needs 12 buyers on an 18,
+so withdrawals can switch the game off entirely. The board always recomputes
+from whoever is actually in `items`, so **read the counts off the page on the
+day** rather than trusting any number written here.
 
-## ⚠ The one real blocker: The Quarry's front nine
+## The Quarry course data — RESOLVED (was a false alarm)
 
-**TGF has only ever played the BACK nine at The Quarry.** Every Quarry tee
-in our course DB carries par / yardage / stroke index for holes **10–18
-only**; holes 1–9 are NULL. Verified on round 3119 (McCrary, s9.19, tee 592
-"1 - Gold Tee") — holes 1–9 come back with `par: null`.
+We hold **all 18 holes** of The Quarry. An earlier read of this concluded the
+front nine was missing; that was wrong, and the reason is worth recording
+because it will recur at every course TGF plays as nines.
 
-A hole with no par derives nothing. Scores post, the card looks normal, and
-those holes contribute **zero** to every game. An 18-hole round at The
-Quarry would silently score nine holes.
+TGF plays nines and **Golf Genius rates each nine separately**, so one
+physical tee becomes several `course_tees` rows, each holding only its own
+nine's holes:
 
-This normally self-heals: GG's tee block for an 18-hole event carries all 18
-holes, and `import_gg_scorecards` accretes `course_tee_holes` automatically.
-But it only heals **on import**, so it must be proven before Saturday, not
-discovered at the turn.
+| Tee row | Rating | Holes | Stroke indexes |
+|---|---|---|---|
+| 109 — 1 - Gold Tee | 117 / 34.2 | 1–9 (`s9.15`, 2026-06-23) | 9,3,15,17,1,11,7,13,5 — **odd** |
+| 592 — 1 - Gold Tee | 128 / 35.6 | 10–18 (`s9.4`, `s9.19`) | 4,18,14,10,2,16,12,6,8 — **even** |
 
-### Pre-flight (do this once GG publishes the event — Thu/Fri)
+Together that is a complete 18-hole stroke index 1–18. Same pattern on Blue
+(112 front / 594 back), Red (L) (111 / 615) and Red (116 / 627).
+
+Reading a **single** `tee_id` therefore returns half a golf course. The
+Test Center now merges `course_tee_holes` across every tee row sharing the
+same course and tee name (`_ls_tee_holes`), so seeding off either nine's row
+yields all 18 holes with a valid 1–18 index. Regression-tested both
+directions, including that a different tee name cannot leak in.
+
+The `course_coverage` banner remains as the backstop — it is still correct
+that a par-less hole scores zero in every game, and it will fire at any
+course where a nine genuinely has not been imported yet.
+
+## TGF handicap scoping (Kerry, ratified in conversation 2026-07-29)
+
+Two rules that pull in different directions, both true:
+
+1. **Course / playing handicaps come off the 18-HOLE rating and slope, and
+   apply across all 18 holes.** So a shotgun 18 at The Quarry allocates
+   strokes over the merged 1–18 stroke index — which is exactly what the
+   merge above produces.
+2. **Handicap DIFFERENTIALS are computed from the 9-HOLE ratings and
+   indexes.** That is the posting path (`handicap_rounds`,
+   `docs/claude/handicaps.md`) and the Test Center does not touch it — it is
+   a scoring and leaderboard surface, so rule 2 is context here, not work.
+
+Consequence for the derived path: we do **not** yet hold a true 18-hole
+rating/slope row for The Quarry (both existing rows are nine-rated). On a
+GG-seeded session that is moot — GG hands us each player's playing handicap
+and its own dots, so rule 1 is satisfied by construction. It only matters
+for fully untethered Stage-2 scoring, where we would compute the playing
+handicap ourselves and need the 18-hole tee row. GG publishes that with the
+event, and the import accretes it.
+
+## Pre-flight (once GG publishes the event — Thu/Fri)
 
 1. Import the event from its GG tournament page (Scoring import, or the
-   `scoring-import:<event_code>` bridge). Scores need not exist yet — the
-   tee block is what matters.
+   `scoring-import:<event_code>` bridge). Scores need not exist yet.
 2. Open `/admin/test-center` → **Shadow a real event** → the championship.
-3. Look at the top of the Leaderboard tab. **A red "Course data incomplete —
-   the board is WRONG" banner means the front nine is still missing.**
-4. If it is still missing, fill par + stroke index for holes 1–9 on the
-   **Field & Course** tab from the Quarry scorecard. It is 18 numbers and it
-   takes two minutes. Stroke index matters as much as par: without it,
-   handicap dots cannot be allocated and every NET game is wrong.
-5. Banner clear = ready.
-
-Note The Quarry's back nine holds all the EVEN stroke indexes (10→4, 11→18,
-12→14, 13→10, 14→2, 15→16, 16→12, 17→6, 18→8), so the front nine should
-carry the ODD ones, 1–17.
+3. Confirm no coverage banner, 18 holes, par 71, championship schedule on.
+4. Check the flights match GG's (see below).
 
 ## Saturday
 
@@ -91,18 +114,30 @@ carry the ODD ones, 1–17.
 
 Expect these, and record rather than "fix" them on the day:
 
-- **Flighting.** The only GG split we have directly observed is the 9-hole
-  two-flight break at HCP 12.0. An 18-hole 2-flight Net and a 3-flight Gross
-  are **both unobserved** — our engine falls back to equal-size bands. This
-  is the single most likely source of disagreement, and pinning GG's real
-  18-hole rule is the most valuable thing to come out of Saturday. If GG's
-  flights are visible, type them into the Flight column and the scoring diff
-  isolates cleanly from the flighting diff.
-- **Per-player tees.** Players choose `<50` / `50-64` / `65+` / `Forward`,
-  and a session carries ONE set of course holes (the field's modal tee).
-  Par is usually identical across tees, and a seeded session uses GG's own
-  dots, so this should not bite on Saturday — but it is a real gap for the
-  untethered Stage-2 path, where we allocate dots ourselves.
+- **Flighting — read it from GG, don't infer it (Kerry, 2026-07-29).** GG's
+  flights are LIVE DATA once the event is live: they come off the GG
+  Leaderboard by expanding the flight groups. That is the source of truth and
+  it retires the guessing entirely.
+
+  Current state: `scoring_rounds.flight` exists but is **NULL on every
+  imported round** (checked across 100 Quarry rounds and the s18.8 field), so
+  the importer is not capturing it yet — the leaderboard flight groupings are
+  a parse target we have not built. Until it is, the engine falls back to
+  equal-size handicap bands, which is a guess.
+
+  **Saturday workaround:** expand GG's leaderboard, read the flights, and
+  type them into the **Flight** column on the Field & Course tab. Explicit
+  flights always win over the fallback, so this pins GG's real flighting and
+  isolates the scoring diff from the flighting diff. Capturing flight from
+  the leaderboard widget at import time is the follow-up build.
+- **Per-player tees.** The field spans **four** tees (`<50`, `50-64`, `65+`,
+  `Forward`) and a session carries ONE set of course holes — the field's modal
+  tee, which here is `50-64` at 14 of 26. Par is normally identical across
+  tees and a seeded session uses GG's own dots, so net scoring should be
+  right on Saturday. Two places it can still show: **yardage** (so CTP's
+  shortest-par-3 selection uses the modal tee's numbers) and any tee whose
+  stroke index differs — Forward often does, and Mary Wade is on it. Real gap
+  for untethered Stage-2 scoring, where we allocate dots ourselves.
 - **No payouts.** The board ranks; it does not pay. Do not use it for money.
 - **Team Net** needs pairings saved for the event, or it warns instead of
   scoring. Short foursomes warn that the ratified blind draw isn't generated.
