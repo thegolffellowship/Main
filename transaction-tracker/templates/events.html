@@ -326,6 +326,14 @@
         }
         .pairing-points.is-none { color: var(--text-placeholder); font-weight: 500; }
         .pairing-hcp { font-size: 0.75rem; color: var(--text-muted); width: 2.3rem; text-align: center; flex-shrink: 0; font-variant-numeric: tabular-nums; }
+        /* Click-the-dash to set a starting handicap, same affordance the
+           ROSTER uses — sized down to fit the pairing card's column. */
+        .pairing-hcp-set {
+            background: #fff7ed; border: 1px dashed #fb923c; color: #c2410c;
+            border-radius: 5px; padding: 0 5px; font-size: 0.72rem;
+            font-weight: 700; cursor: pointer; line-height: 1.4;
+        }
+        .pairing-hcp-set:hover { background: #ffedd5; border-style: solid; }
         .pairing-tee { font-size: 0.72rem; color: var(--text-muted); width: 2.6rem; text-align: center; flex-shrink: 0; }
         /* Drag-and-drop: a player can be dragged onto any group, and the
            rail that appears says what releasing does — including adding a
@@ -4561,11 +4569,17 @@
         firsttimer:{bg: '#fdba74', dot: '#9a3412', label: '1ST TIMER'},
     };
 
+    function rosterEntry(state, name) {
+        if (!name) return null;
+        const k = String(name).trim().replace(/\s+/g, ' ').toLowerCase();
+        return (state.event_players || []).find(
+            x => String(x.name || '').trim().replace(/\s+/g, ' ').toLowerCase() === k) || null;
+    }
+
     function standingsBand(state, name) {
         if (!name) return null;
         const k = String(name).trim().replace(/\s+/g, ' ').toLowerCase();
-        const p = (state.event_players || []).find(
-            x => String(x.name || '').trim().replace(/\s+/g, ' ').toLowerCase() === k);
+        const p = rosterEntry(state, name);
         // Unknown tier is treated as MEMBER, matching the server's
         // fallback — never badge someone a non-member on missing data.
         const tier = (p && p.member_status) || 'member';
@@ -5088,7 +5102,21 @@
                     state.selection.holes === holes && state.selection.group_num === grp.group_num &&
                     (player.cart_pos <= 2) === (state.selection.cart_pos <= 2);
 
-                const hcp = player.handicap_index != null ? Number(player.handicap_index).toFixed(1) : '—';
+                // NO HANDICAP ON RECORD — same affordance as the ROSTER
+                // (Kerry 2026-07-31): click the dash to stamp a STARTING
+                // handicap. Only where there is none; a real index is
+                // computed from rounds and must never be typed over. Needs
+                // a customer_id, because the placeholder lives on the
+                // customer record.
+                const _rEnt = player.name ? rosterEntry(state, player.name) : null;
+                const _rCid = _rEnt && _rEnt.customer_id;
+                const hcp = player.handicap_index != null
+                    ? Number(player.handicap_index).toFixed(1)
+                    : (_rCid
+                        ? `<button class="btn-set-hcp pairing-hcp-set" data-customer-id="${_rCid}"`
+                          + ` data-player="${escapeHtml(player.name || '')}"`
+                          + ` title="No handicap on record — click to set a starting handicap">&mdash;</button>`
+                        : '—');
 
                 let bandCls = '', bandTitle = '';
                 if (showBands && player.name) {
@@ -6943,6 +6971,29 @@
                     });
                     const data = await res.json().catch(() => ({}));
                     if (!res.ok) { alert(data.error || "Could not save the handicap."); return; }
+                    // The PAIRINGS cards hold their own copy of each
+                    // player's index (it rides on the generated/saved
+                    // groups), so refreshing items+events alone would
+                    // leave the dash sitting there. Patch every group and
+                    // roster entry that names this player.
+                    const _newHcp = (data && data.starting_handicap_18 != null)
+                        ? Number(data.starting_handicap_18) : val;
+                    const _k = String(who).trim().replace(/\s+/g, ' ').toLowerCase();
+                    const _same = n => String(n || '').trim().replace(/\s+/g, ' ').toLowerCase() === _k;
+                    Object.values(pairingsData || {}).forEach(st => {
+                        ['groups_9', 'groups_18'].forEach(gk => {
+                            (st[gk] || []).forEach(g => (g.players || []).forEach(pl => {
+                                if (_same(pl.name) && pl.handicap_index == null) {
+                                    pl.handicap_index = _newHcp;
+                                }
+                            }));
+                        });
+                        (st.event_players || []).forEach(pl => {
+                            if (_same(pl.name) && pl.handicap_index == null) {
+                                pl.handicap_index = _newHcp;
+                            }
+                        });
+                    });
                     await fetchHandicapIndexMap();
                     await fetchItems();
                     await fetchEvents();

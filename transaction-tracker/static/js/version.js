@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.162.0";
+window.TGF_VERSION = "2.163.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.163.0",
+    date: "2026-07-31",
+    changes: [
+      "SET A STARTING HANDICAP FROM THE PAIRING CARDS (Kerry 2026-07-31). The dash in a player's handicap column is now clickable on the PAIRINGS tab exactly as it already was on the ROSTER — tap it, type an 18-hole starting number, and it lands on that player's customer record as a placeholder until enough rounds establish their real TGF Handicap. Same endpoint, same rules: offered ONLY where there is no handicap on record (a real index is computed from rounds and must never be typed over), and only where the registration is linked to a customer_id, since the placeholder lives on the customer record and an unlinked row has nowhere to put it.",
+      "The card updates immediately instead of sitting on the dash until a reload. Pairing groups carry their own copy of each player's index — it rides on the generated or saved groups — so refreshing the items and events lists alone would have left the old dash on screen; the save now patches every group and roster entry naming that player with the value the server returned.",
+    ],
+  },
   {
     version: "2.162.0",
     date: "2026-07-31",
