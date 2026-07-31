@@ -241,12 +241,13 @@
         .pairings-move-target:hover { background: #fffbeb !important; }
         .pairings-groups-grid {
             display: grid; gap: 0.75rem;
-            /* Wide enough for a FULL name plus the badges beside it —
-               220px truncated almost every name to "Kerry Nie…" (Kerry
-               2026-07-31, "I'd like to see the full names"). auto-fit
-               then lays out only as many columns as actually fit, so a
-               narrow window drops to 2 or 1 instead of squeezing. */
-            grid-template-columns: repeat(auto-fit, minmax(330px, 1fr));
+            /* auto-fit lays out only as many columns as actually fit, so
+               the sheet reflows with the window (Kerry 2026-07-31). The
+               minimum is tuned so the 1080px content width gives THREE
+               columns with full names — 330px only fit two, and 220px
+               (the original) truncated almost every name to "Kerry Nie…".
+               A long name wraps to a second line rather than being cut. */
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
             margin-top: 0.25rem;
         }
         @media (max-width: 720px) {
@@ -274,11 +275,20 @@
         }
         .pairing-empty-slot:hover { background: #fff3ec; color: #E87C3E; }
         .pairing-player-row {
-            display: flex; align-items: center; gap: 0.4rem;
-            padding: 0.3rem 0.6rem; font-size: 0.82rem; cursor: default;
+            display: flex; align-items: center; gap: 0.3rem;
+            padding: 0.3rem 0.45rem; font-size: 0.82rem; cursor: default;
             transition: background 0.12s;
         }
         .pairing-player-row:hover { background: var(--bg-hover); }
+        /* STANDINGS in/out bands — same convention as Player Rankings
+           (Kerry 2026-07-31). Class-based, not inline, so :hover still
+           gives feedback on a coloured row. */
+        .pairing-player-row.pair-band-in { background: #bbf7d0; }
+        .pairing-player-row.pair-band-in:hover { background: #a7efc0; }
+        .pairing-player-row.pair-band-notin { background: #fef3c7; }
+        .pairing-player-row.pair-band-notin:hover { background: #fde9a9; }
+        .pairing-player-row.pair-band-guest { background: #e5e7eb; }
+        .pairing-player-row.pair-band-guest:hover { background: #d7dade; }
         .pairing-player-row.pairings-selected { background: rgba(99,102,241,0.12); }
         .pairing-cart-dot {
             width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0;
@@ -291,12 +301,12 @@
         }
         .pairing-points {
             font-size: 0.72rem; font-weight: 700; color: #0f766e;
-            min-width: 2.6rem; text-align: right; flex-shrink: 0;
+            min-width: 2.2rem; text-align: right; flex-shrink: 0;
             font-variant-numeric: tabular-nums;
         }
         .pairing-points.is-none { color: var(--text-placeholder); font-weight: 500; }
-        .pairing-hcp { font-size: 0.75rem; color: var(--text-muted); min-width: 2.5rem; text-align: right; }
-        .pairing-tee { font-size: 0.72rem; color: var(--text-muted); min-width: 2.2rem; text-align: right; }
+        .pairing-hcp { font-size: 0.75rem; color: var(--text-muted); min-width: 2.1rem; text-align: right; flex-shrink: 0; }
+        .pairing-tee { font-size: 0.72rem; color: var(--text-muted); min-width: 2rem; text-align: right; flex-shrink: 0; }
         .pairing-cart-divider {
             height: 1px; background: var(--border); margin: 0 0.6rem;
         }
@@ -4393,6 +4403,7 @@
                 // {normalized name -> season points} for the STANDINGS
                 // points column (Kerry 2026-07-31).
                 standingsPoints: {},
+                standingsEnrolled: {},
             };
         }
         return pairingsData[evId];
@@ -4423,6 +4434,29 @@
         const n = Number(v);
         if (!isFinite(n)) return null;
         return Number.isInteger(n) ? String(n) : n.toFixed(1);
+    }
+
+    // Three bands on a STANDINGS sheet, mirroring the Player Rankings
+    // in/out convention (Kerry 2026-07-31). Membership comes from the
+    // ROSTER, never the order label; "in" means bought into the race
+    // being paired off, which is what puts a player on the board.
+    const PAIR_BANDS = {
+        in:     {bg: '#bbf7d0', label: 'In the race',   dot: '#15803d'},
+        notin:  {bg: '#fef3c7', label: 'Member, not in', dot: '#b45309'},
+        guest:  {bg: '#e5e7eb', label: 'Non-member',    dot: '#4b5563'},
+    };
+
+    function standingsBand(state, name) {
+        if (!name) return null;
+        const k = String(name).trim().replace(/\s+/g, ' ').toLowerCase();
+        const p = (state.event_players || []).find(
+            x => String(x.name || '').trim().replace(/\s+/g, ' ').toLowerCase() === k);
+        // Unknown membership is treated as MEMBER, matching the server's
+        // _ls_is_member fallback — never badge someone a non-member on
+        // missing data.
+        const isMember = p ? p.is_member !== false : true;
+        if (!isMember) return 'guest';
+        return (state.standingsEnrolled && state.standingsEnrolled[k]) ? 'in' : 'notin';
     }
 
     function paceRatingOf(state, name) {
@@ -4835,11 +4869,30 @@
 
         // POINTS COLUMN — only in STANDINGS mode, where the number is
         // what built the order (Kerry 2026-07-31).
-        const showPoints = state.mode === 'standings'
-            && state.standingsPoints && Object.keys(state.standingsPoints).length > 0;
+        // Shown whenever the standings data is present — NOT gated on the
+        // current mode. The mode resets to Random when the panel reopens,
+        // which made the column disappear from a saved standings sheet
+        // (Kerry 2026-07-31, "I don't see the points"); and knowing who is
+        // in the race is useful on a Random sheet too.
+        const showPoints = state.standingsPoints
+            && Object.keys(state.standingsPoints).length > 0;
+        const showBands = (state.standingsEnrolled
+            && Object.keys(state.standingsEnrolled).length > 0) || showPoints;
         const _raceOpt = (state.raceOptions || []).find(
             o => o.race_key === (state.raceKey || (o.is_default ? o.race_key : null)));
         const raceLabel = (_raceOpt && _raceOpt.label) || 'points race';
+
+        if (showBands) {
+            const legend = [
+                ['in', `Bought into ${raceLabel}`],
+                ['notin', `Member, not bought in`],
+                ['guest', 'Non-member'],
+            ].map(([k, txt]) =>
+                `<span style="display:inline-flex;align-items:center;gap:0.3rem;">
+                    <span style="width:11px;height:11px;border-radius:3px;background:${PAIR_BANDS[k].bg};border:1px solid ${PAIR_BANDS[k].dot};"></span>
+                    ${escapeHtml(txt)}</span>`).join('');
+            html += `<div style="display:flex;gap:0.9rem;flex-wrap:wrap;align-items:center;font-size:0.72rem;color:var(--text-muted);padding:0.15rem 0 0.35rem;">${legend}</div>`;
+        }
 
         html += '<div class="pairings-groups-grid">';
         const isMoveTarget = state.swapMode === 'move' && state.selection;
@@ -4884,7 +4937,20 @@
 
                 const hcp = player.handicap_index != null ? Number(player.handicap_index).toFixed(1) : '—';
 
-                html += `<div class="pairing-player-row${isSelectedPlayer || isSelectedPair ? ' pairings-selected' : ''}"
+                let bandCls = '', bandTitle = '';
+                if (showBands && player.name) {
+                    const b = standingsBand(state, player.name);
+                    if (b) {
+                        bandCls = ` pair-band-${b}`;
+                        bandTitle = b === 'in'
+                            ? `Bought into ${raceLabel}`
+                            : (b === 'notin'
+                                ? `Member, but NOT bought into ${raceLabel}`
+                                : 'Non-member');
+                    }
+                }
+                html += `<div class="pairing-player-row${bandCls}${isSelectedPlayer || isSelectedPair ? ' pairings-selected' : ''}"
+                    ${bandTitle ? ` title="${escapeHtml(bandTitle)}"` : ''}
                     data-ev-id="${ev.id}" data-holes="${holes}" data-group-num="${grp.group_num}" data-cart-pos="${player.cart_pos}">`;
                 html += `<span class="pairing-cart-dot" style="background:${cartDot};"></span>`;
                 html += `<span class="pairing-player-name">${escapeHtml(player.name || '—')}</span>`;
@@ -4926,6 +4992,7 @@
             state.mpMatches = data.mp_matches || [];
             state.requests = data.partner_requests || [];
             state.standingsPoints = data.standings_points || {};
+            state.standingsEnrolled = data.standings_enrolled || {};
             state.isDirty = false;
             state.loaded = true;
         } catch (e) {
@@ -6991,6 +7058,7 @@
             state.slots_18 = data.slots_18 || [];
             state.mpNotes = data.mp_notes || [];
             if (data.standings_points) state.standingsPoints = data.standings_points;
+            if (data.standings_enrolled) state.standingsEnrolled = data.standings_enrolled;
             state.isDirty = true;
             state.swapMode = null; state.selection = null;
             state.loaded = true;

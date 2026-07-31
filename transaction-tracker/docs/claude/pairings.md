@@ -619,6 +619,15 @@ The Quarry-night rulings, all built:
      `max_age_hours` so opening the panel never triggers a GG fetch) so
      a SAVED sheet shows points as well. The 3-tuple return is unchanged
      for every existing caller.
+   - **In/out colour bands (v2.158.0).** `_standings_rank_map(_with_meta
+     =True)` returns `{"points": {...}, "enrolled": {...}}` keyed by
+     customer_id AND name forms. The pairing card shades each row GREEN
+     (member, bought into the race), AMBER (member, not bought in) or
+     GREY (non-member) — the Player Rankings convention. Membership is
+     `_ls_is_member` off the roster (`event_players[].is_member` on GET
+     /pairings), never the order label; unknown reads as member.
+     Rendered whenever the standings data is present, NOT gated on the
+     current mode — the mode resets to Random when the panel reopens.
    - **The sheet fills from the BACK (v2.154.1).** Units are sorted
      leader-first and placed into the LAST group first, so "leaders go
      off last" is exact. The old forward cursor never revisited a group

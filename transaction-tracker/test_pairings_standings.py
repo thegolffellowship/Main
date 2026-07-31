@@ -511,15 +511,20 @@ check("...and the same field is five foursomes when fivesomes are off",
 
 print("\n== the POINTS column data (Kerry 2026-07-31) ==")
 PTSGG = {"standings": [
-    {"player_name": "NIESTER, Kerry", "customer_id": 5, "rank": "1",  "total_points": 412.5},
-    {"player_name": "BAKER, Adam",    "customer_id": 6, "rank": "T2", "total_points": 300},
-    {"player_name": "NOCID, Sam",     "customer_id": None, "rank": "4", "total_points": 88},
-    {"player_name": "NOPTS, Pat",     "customer_id": 9, "rank": "5",  "total_points": None},
+    {"player_name": "NIESTER, Kerry", "customer_id": 5, "rank": "1",
+     "total_points": 412.5, "enrolled": True},
+    {"player_name": "BAKER, Adam",    "customer_id": 6, "rank": "T2",
+     "total_points": 300, "enrolled": False},
+    {"player_name": "NOCID, Sam",     "customer_id": None, "rank": "4",
+     "total_points": 88, "enrolled": True},
+    {"player_name": "NOPTS, Pat",     "customer_id": 9, "rank": "5",
+     "total_points": None, "enrolled": False},
 ], "fetched_at": "t", "gg_error": None}
 _rp3 = db.get_points_race_standings
 db.get_points_race_standings = lambda k, **kw: PTSGG
 try:
-    _rm, _key, _nt, PTS = db._standings_rank_map("San Antonio", _with_points=True)
+    _rm, _key, _nt, _META = db._standings_rank_map("San Antonio", _with_meta=True)
+    PTS, ENR = _META["points"], _META["enrolled"]
 finally:
     db.get_points_race_standings = _rp3
 
@@ -537,6 +542,15 @@ check("a player with NO points is absent rather than zero",
 check("a tie keeps both players' own points",
       PTS.get("adam baker") == 300 and PTS.get(6) == 300, str(PTS))
 
+# Buy-in status drives the three colour bands on the pairing cards
+# (Kerry 2026-07-31), keyed exactly like the points.
+check("enrolment is keyed by customer_id and by name",
+      ENR.get(5) is True and ENR.get("kerry niester") is True, str(ENR))
+check("a ranked-but-not-bought-in player is False, not missing",
+      ENR.get("adam baker") is False and ENR.get(6) is False, str(ENR))
+check("a player with no points still carries enrolment",
+      ENR.get("pat nopts") is False, str(ENR.get("pat nopts")))
+
 # The 3-tuple contract the older callers use must be untouched.
 db.get_points_race_standings = lambda k, **kw: PTSGG
 try:
@@ -544,10 +558,11 @@ try:
 finally:
     db.get_points_race_standings = _rp3
 check("the default return is still a 3-tuple", len(_three) == 3, str(len(_three)))
-check("...and asking for points makes it a 4-tuple",
-      len((db._standings_rank_map("Houston", _with_points=True))) == 4)
-check("an unknown chapter returns empty points, not a crash",
-      db._standings_rank_map("Houston", _with_points=True)[3] == {})
+check("...and asking for meta makes it a 4-tuple",
+      len((db._standings_rank_map("Houston", _with_meta=True))) == 4)
+check("an unknown chapter returns empty meta, not a crash",
+      db._standings_rank_map("Houston", _with_meta=True)[3]
+      == {"points": {}, "enrolled": {}})
 
 print("\n" + "=" * 60)
 if FAILURES:

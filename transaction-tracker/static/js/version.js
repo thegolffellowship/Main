@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.157.0";
+window.TGF_VERSION = "2.158.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.158.0",
+    date: "2026-07-31",
+    changes: [
+      "IN / NOT-IN / NON-MEMBER COLOUR BANDS ON THE PAIRING CARDS (Kerry 2026-07-31). Each player row is now shaded by where they stand with the race being paired off, using the same convention Player Rankings uses for who's bought in: GREEN for a member who is IN the City Net race, AMBER for a member who is NOT bought in, GREY for a non-member. A legend sits above the groups and every row carries a tooltip naming the race. Membership comes from the ROSTER via _ls_is_member, never from the order label — the field is full of '1ST TIMER' rows that are members and '1ST TIMER' rows that aren't — and unknown membership is treated as member, so nobody is badged a non-member on missing data.",
+      "FIXED: the points column vanished on a saved sheet. It was gated on the pairings mode being STANDINGS, but the mode resets to Random whenever the panel reopens, so reloading a standings sheet lost the column. Points and colour bands now show whenever the standings data is present, in any mode — knowing who is in the race is useful on a Random sheet too.",
+      "FIXED: three columns, not two. The card minimum was set to 330px, which fit only two columns at the 1080px content width; it is now 300px and the non-name cells are tightened, so a standard desktop lays out THREE groups across with full names intact. The grid still uses auto-fit, so it reflows to two and then one as the window narrows rather than squeezing.",
+    ],
+  },
   {
     version: "2.157.0",
     date: "2026-07-31",

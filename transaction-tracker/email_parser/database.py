@@ -46302,6 +46302,7 @@ def generate_event_pairings(
     # so the PAIRINGS tab can show the number the order was built from
     # (Kerry 2026-07-31). Empty unless standings mode ran.
     standings_points: dict = {}
+    standings_enrolled: dict = {}
 
     for holes, player_items, slots in [("9", nines, slots_9), ("18", eighteens, slots_18)]:
         if not player_items and not seed_map[holes]:
@@ -46463,10 +46464,11 @@ def generate_event_pairings(
         if mode == "abcd":
             groups_players = _abcd_groups(free_players, hcp_map, max_group)
         elif mode == "standings":
-            _rank_map, _race_used, _rnotes, _pts_map = _standings_rank_map(
+            _rank_map, _race_used, _rnotes, _meta = _standings_rank_map(
                 ev_chapter, race_key, event_name=ev.get("item_name"),
-                db_path=db_path, _with_points=True)   # refreshes if stale
-            standings_points = _pts_map
+                db_path=db_path, _with_meta=True)   # refreshes if stale
+            standings_points = _meta["points"]
+            standings_enrolled = _meta["enrolled"]
             mp_notes.extend(_rnotes)
             if _rank_map:
                 groups_players, _snotes = _standings_groups(
@@ -46715,10 +46717,12 @@ def generate_event_pairings(
     result["slots_18"] = slots_18
     if mp_pairs or mp_notes:
         result["mp_notes"] = mp_notes
-    if standings_points:
+    if standings_points or standings_enrolled:
         # Name-keyed only for the wire — the UI matches on display name.
         result["standings_points"] = {
             k: v for k, v in standings_points.items() if isinstance(k, str)}
+        result["standings_enrolled"] = {
+            k: v for k, v in standings_enrolled.items() if isinstance(k, str)}
     return result
 
 
@@ -47097,7 +47101,7 @@ def _standings_rank_map(chapter: str | None, race_key: str | None = None,
                         max_age_hours: float = _STANDINGS_PAIRING_MAX_AGE_HOURS,
                         event_name: str | None = None,
                         db_path=None,
-                        _with_points: bool = False) -> tuple:
+                        _with_meta: bool = False) -> tuple:
     """{lowercase player name: finishing position} for a chapter's points race.
 
     Position 1 is the LEADER. Returns (rank_map, race_key_used, notes).
@@ -47113,7 +47117,8 @@ def _standings_rank_map(chapter: str | None, race_key: str | None = None,
     if not key:
         notes.append(f"No points race found for chapter '{chapter}' — "
                      f"pairings fell back to random order.")
-        return ({}, None, notes, {}) if _with_points else ({}, None, notes)
+        return (({}, None, notes, {"points": {}, "enrolled": {}})
+                if _with_meta else ({}, None, notes))
     try:
         if key == FELLOWSHIP_CUP_RACE_KEY:
             # TGF-wide combined reset standings — the TGF Championship is
@@ -47126,7 +47131,8 @@ def _standings_rank_map(chapter: str | None, race_key: str | None = None,
     except Exception as e:
         notes.append(f"Could not read the {key} standings ({e}) — "
                      f"pairings fell back to random order.")
-        return ({}, key, notes, {}) if _with_points else ({}, key, notes)
+        return (({}, key, notes, {"points": {}, "enrolled": {}})
+                if _with_meta else ({}, key, notes))
     # KEYED BY customer_id FIRST (guiding principle 6). Standings rows come
     # from the GG portal, where names are "LAST, First" — a plain lowercased
     # name key matched ZERO of the 32 SA Championship players (Kerry
@@ -47135,16 +47141,21 @@ def _standings_rank_map(chapter: str | None, race_key: str | None = None,
     # customer_id, and so does the roster; the name keys below are only a
     # fallback for a standings row that never resolved to a profile.
     rank_map: dict = {}
-    # Points ride alongside the positions, keyed the same way, so the
-    # PAIRINGS tab can show WHY a player is where they are (Kerry
-    # 2026-07-31: "add a column for those points").
+    # Points and buy-in status ride alongside the positions, keyed the
+    # same way, so the PAIRINGS tab can show WHY a player is where they
+    # are and whether they are actually IN the race (Kerry 2026-07-31:
+    # "add a column for those points" / colour-code who's in and who's
+    # not, the same way Player Rankings does).
     points_map: dict = {}
+    enrolled_map: dict = {}
     for i, r in enumerate(data.get("standings") or []):
         pos = _parse_gg_rank(r.get("position") or r.get("rank")) or (i + 1)
         pts = r.get("total_points")
+        enr = bool(r.get("enrolled"))
         cid = r.get("customer_id")
         if cid:
             rank_map.setdefault(int(cid), pos)
+            enrolled_map.setdefault(int(cid), enr)
             if pts is not None:
                 points_map.setdefault(int(cid), pts)
         raw = r.get("player_name") or ""
@@ -47154,6 +47165,7 @@ def _standings_rank_map(chapter: str | None, race_key: str | None = None,
             k = _pair_key_name(nm)
             if k:
                 rank_map.setdefault(k, pos)
+                enrolled_map.setdefault(k, enr)
                 if pts is not None:
                     points_map.setdefault(k, pts)
     if not rank_map:
@@ -47170,8 +47182,9 @@ def _standings_rank_map(chapter: str | None, race_key: str | None = None,
             + ". Check them before saving these pairings.")
     elif data.get("fetched_at"):
         notes.append(f"Standings as of {data['fetched_at']}.")
-    if _with_points:
-        return rank_map, key, notes, points_map
+    if _with_meta:
+        return rank_map, key, notes, {"points": points_map,
+                                      "enrolled": enrolled_map}
     return rank_map, key, notes
 
 

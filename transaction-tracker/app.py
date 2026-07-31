@@ -4819,7 +4819,8 @@ def api_get_pairings(event_id):
         try:
             player_rows = _pconn.execute(f"""
                 SELECT DISTINCT i.customer AS name, i.holes, i.tee_choice,
-                                c.pace_rating
+                                c.pace_rating, c.current_player_status,
+                                i.user_status
                 FROM events e
                 LEFT JOIN event_aliases ea ON ea.canonical_event_name = e.item_name
                 JOIN items i ON (
@@ -4835,7 +4836,16 @@ def api_get_pairings(event_id):
             """, (event_id, *INACTIVE)).fetchall()
         finally:
             _pconn.close()
-        event_players = [dict(r) for r in player_rows]
+        # is_member decided by the ROSTER, never by the order label — a
+        # "1ST TIMER" can be either (Kerry 2026-07-30). Drives the
+        # non-member colour band on the STANDINGS pairing cards.
+        from email_parser.database import _ls_is_member as _isM
+        event_players = []
+        for r in player_rows:
+            d = dict(r)
+            d["is_member"] = bool(_isM(d.pop("current_player_status", None),
+                                       d.pop("user_status", None)))
+            event_players.append(d)
         # Match Play matches still pending among this roster — lets the
         # PAIRINGS tab badge opponents on SAVED pairings too (rule 8's
         # visual denotation), not just on a fresh generate.
@@ -4859,15 +4869,17 @@ def api_get_pairings(event_id):
         # (Kerry 2026-07-31). Read-only: a big max_age never triggers a GG
         # fetch on a plain GET — the point-of-use refresh belongs to
         # Generate, and this endpoint is hit on every panel open.
-        standings_points = {}
+        standings_points, standings_enrolled = {}, {}
         try:
             from email_parser.database import _standings_rank_map
             _rk = (request.args.get("race_key") or "").strip() or None
-            _, _, _, standings_points = _standings_rank_map(
+            _, _, _, _meta = _standings_rank_map(
                 ev.get("chapter"), _rk, max_age_hours=10 ** 6,
-                event_name=ev.get("item_name"), _with_points=True)
-            standings_points = {k: v for k, v in standings_points.items()
+                event_name=ev.get("item_name"), _with_meta=True)
+            standings_points = {k: v for k, v in _meta["points"].items()
                                 if isinstance(k, str)}
+            standings_enrolled = {k: v for k, v in _meta["enrolled"].items()
+                                  if isinstance(k, str)}
         except Exception:
             logger.exception("Standings points lookup failed for event %d "
                              "(non-fatal)", event_id)
@@ -4879,6 +4891,7 @@ def api_get_pairings(event_id):
             "mp_matches": mp_matches,
             "partner_requests": partner_requests,
             "standings_points": standings_points,
+            "standings_enrolled": standings_enrolled,
             "event": {
                 "format": ev.get("format"),
                 "start_type": ev.get("start_type"),
