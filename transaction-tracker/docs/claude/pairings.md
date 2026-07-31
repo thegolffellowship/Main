@@ -773,6 +773,81 @@ The Quarry-night rulings, all built:
    settable via PATCH /api/events, POST /api/events (create), and the
    `update_existing_event` MCP tool.
 
+## Per-event GG pairings pull (v2.166.0, Kerry 2026-07-31)
+
+> "TGF AUSTIN CHAMPIONSHIP already has pairings on GG, because Robert
+> didn't use our generator. Can you set up a one event button for that
+> next to the Generate button?"
+
+**GG SHEET** button on the PAIRINGS tab, beside GENERATE.
+
+- `GET  /api/events/<id>/pairings/gg-rounds` → ranked round list +
+  `best_round_id` (`gg_teesheet_round_options`).
+- `POST /api/events/<id>/pairings/import-gg` `{round_id?, holes?, apply}`
+  → `import_gg_pairings_for_event`.
+
+**Why a second round listing exists.** `gg_pairings_rounds` reads
+`<select name="round">` with plain numeric values — that is the
+*tournament_results* widget's shape. The tee-sheet widget uses
+`widget_round_panel_selector` and puts a whole widget URL in each
+option value, with the round id as a query param. `gg_teesheet_rounds`
+parses that one, and it is the ONLY listing that includes GG's
+"Upcoming Rounds" optgroup — which is what makes a pre-event pull
+possible at all. The nightly `import_gg_teesheets_all` still walks
+played rounds off `gg_teamnet_rounds`; both paths converge on
+`import_gg_teesheet_round`.
+
+**Round matching** (`_score_teesheet_round_label`): event code on both
+sides is decisive (1000), a *disagreeing* code is a hard reject (-100)
+rather than a weak match. Otherwise name + course word overlap (10
+each) with a date bonus/penalty (±40). Our names often carry no code
+("TGF AUSTIN CHAMPIONSHIP" vs GG's "a18.4 AUSTIN CHAMPIONSHIP |
+Falconhead") and **GG truncates labels at ~50 chars**, so the date is
+frequently absent — never match on the tail of a label. `best_round_id`
+is set only on a clear win; otherwise the UI makes the manager pick.
+
+**Parsing.** `_parse_teesheet_groups_html` reads the `by_tee_times_table`
+markup structurally — one entry per `players_portrait` div, in GG's seat
+order — and `_parse_teesheet_groups` prefers it, falling back to the old
+flattened-text split. The text split required "SURNAME, First" and
+**dropped any plain-name player** (common for guests / 1st timers),
+which shifts every later seat and corrupts the cart pairs. Also handles
+fivesomes, shotgun sheets (all groups share one time → slot labels
+become "Hole N"), and GG's duplicate `visible-xs` mobile rows.
+
+**Leg scoping.** `_write_event_pairings_from_groups(..., holes=)` deletes
+and rewrites ONE leg when given an explicit `holes`; without it the old
+whole-event replace stands (what the nightly grab wants). The UI infers
+the leg from which slot list is populated and asks on a 9/18 combo.
+
+**Reconciliation is the deliverable.** The response carries
+`unresolved_names` (GG names with no customer profile — placed by name
+only) and `registered_not_on_sheet` (registered here, absent from GG,
+computed through `customer_id`). The UI surfaces both. Apply REPLACES
+the event's `pairing_history` and its pairings for the leg, same
+semantics as an app-side save.
+
+## Preliminary handicaps on the pairing cards (v2.166.0)
+
+Kerry: *"Jacob Williams not filling HCP on pairings, probably because I
+did it in ROSTER before we added feature on PAIRINGS. Also add P to
+preliminary handicaps on PAIRINGS as well, AND allow us to edit them."*
+
+The card's `player.handicap_index` comes from the generator's server-side
+`hcp_map`, which is built from `handicap_rounds` only — so a player
+carrying only a STARTING handicap showed a dash on PAIRINGS while the
+ROSTER showed `16.0P`. The card now falls back to `handicapIndexMap`
+(`/api/handicaps/index-map`, which carries `source: "starting"`) and
+renders the placeholder with a `P`, in placeholder styling, clickable to
+edit. A computed index is never editable here. The fallback is
+consulted ONLY when `handicap_index` is null, so no already-displayed
+number changes.
+
+**Still open:** that same server-side `hcp_map` excludes starting
+handicaps, so ABCD banding and the pace tie-break do not see them —
+which works against Kerry's stated purpose for starting handicaps ("it
+lets them be flighted"). Not changed here; flagged for ratification.
+
 ## Engine notes (design, not yet built)
 
 - Season-coverage objective (rule 3) is the optimizer's primary term;

@@ -1,5 +1,18 @@
-window.TGF_VERSION = "2.165.0";
+window.TGF_VERSION = "2.166.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.166.0",
+    date: "2026-07-31",
+    changes: [
+      "PULL AN EVENT'S PAIRINGS STRAIGHT OFF GOLF GENIUS (Kerry 2026-07-31: 'TGF AUSTIN CHAMPIONSHIP already has pairings on GG, because Robert didn't use our generator'). A GG SHEET button now sits beside GENERATE on the PAIRINGS tab. It finds this event's round on its chapter's Golf Genius tee sheet, reads the groups in GG's own seat order, and writes them into the tab — so an event someone else paired lands here intact instead of being retyped or regenerated into something different. Seats 1 and 2 ride together and 3 and 4 ride together, the same cart rule our own saves follow, so the rode-with history stays true.",
+      "It works on events that have NOT been played yet, which is the whole point of a per-event button. The nightly history grab walks played rounds only, off the results widget; this reads the tee-sheet widget's own round selector, and that selector is the one place upcoming rounds are listed. The AUSTIN CHAMPIONSHIP sheet was sitting there today.",
+      "The round is matched, not guessed. An event code on both sides settles it outright, and a code that disagrees is a hard no rather than a near miss. Where our name carries no code — 'TGF AUSTIN CHAMPIONSHIP' against Golf Genius's 'a18.4 AUSTIN CHAMPIONSHIP | Falconhead' — the name and course words decide, with the date breaking ties when GG has not truncated it off the end of the label. If no round wins clearly, you are asked to pick from the list; you are never handed the wrong sheet quietly.",
+      "The import then says what did NOT line up: GG names with no matching customer profile, and players registered here who are missing from the GG sheet. That reconciliation is most of the value of importing someone else's pairings, and it is the part you cannot see by looking at the finished grid.",
+      "The tee-sheet parser now reads Golf Genius's markup structurally rather than splitting the flattened text on surnames. A player GG prints as a plain name instead of 'SURNAME, First' — which is common for guests and 1st timers — used to be dropped, and dropping one name shifts every seat behind it and silently corrupts the cart pairs. Fivesomes are read in full, shotgun sheets label by hole instead of by the one repeated time, and Golf Genius's duplicate mobile rows are ignored.",
+      "Importing one leg of a 9/18 combo event no longer wipes the other leg.",
+      "PRELIMINARY HANDICAPS SHOW AND EDIT ON THE PAIRINGS CARDS (Kerry: 'Jacob Williams not filling HCP on pairings... Also add P to preliminary handicaps on PAIRINGS as well, AND allow us to edit them'). A starting handicap set on the ROSTER left the pairing card showing a dash, because the card only ever saw indexes computed from rounds. The card now falls back to the live handicap map and renders a starting handicap the way the roster does — the number with a P beside it, in the placeholder styling — so it never reads as an established TGF Handicap. Clicking it opens an edit with the current value filled in; a computed index stays uneditable, as it must.",
+    ],
+  },
   {
     version: "2.165.0",
     date: "2026-07-31",

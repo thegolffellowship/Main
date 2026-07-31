@@ -4997,6 +4997,48 @@ def api_save_pairings(event_id):
         return jsonify({"error": str(e)}), 500
 
 
+@app.route("/api/events/<int:event_id>/pairings/gg-rounds")
+@require_role("manager")
+def api_pairings_gg_rounds(event_id):
+    """Rounds on this event's chapter GG tee sheet, ranked by how well
+    each matches the event. Backs the PAIRINGS tab's GG SHEET button when
+    the auto-match is not confident enough to act on alone."""
+    from email_parser.database import gg_teesheet_round_options
+    try:
+        res = gg_teesheet_round_options(event_id)
+        if res.get("error"):
+            return jsonify(res), 404
+        return jsonify(res)
+    except Exception as e:
+        logger.exception("GG round listing failed for event %d", event_id)
+        return jsonify({"error": str(e)}), 502
+
+
+@app.route("/api/events/<int:event_id>/pairings/import-gg", methods=["POST"])
+@require_role("manager")
+def api_pairings_import_gg(event_id):
+    """Pull this event's pairings from Golf Genius (Kerry 2026-07-31) —
+    for events whose sheet was built in GG instead of by our generator.
+    REPLACES the event's saved pairings for the chosen leg."""
+    from email_parser.database import import_gg_pairings_for_event
+    data = request.get_json(silent=True) or {}
+    holes = str(data.get("holes") or "").strip() or None
+    if holes not in (None, "9", "18"):
+        return jsonify({"error": "holes must be 9 or 18"}), 400
+    try:
+        res = import_gg_pairings_for_event(
+            event_id,
+            round_id=data.get("round_id"),
+            holes=holes,
+            apply=bool(data.get("apply", True)))
+        if res.get("error"):
+            return jsonify(res), 409
+        return jsonify(res)
+    except Exception as e:
+        logger.exception("GG pairings import failed for event %d", event_id)
+        return jsonify({"error": str(e)}), 502
+
+
 @app.route("/api/events/<int:event_id>/pairings/race-options")
 @require_role("manager")
 def api_pairing_race_options(event_id):

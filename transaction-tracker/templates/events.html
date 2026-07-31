@@ -334,6 +334,15 @@
             font-weight: 700; cursor: pointer; line-height: 1.4;
         }
         .pairing-hcp-set:hover { background: #ffedd5; border-style: solid; }
+        /* A PLACEHOLDER carries its number plus a P — it must never read
+           like an established index (Golf Genius flights unhandicapped
+           players silently; showing a stand-in identically would be the
+           same mistake in our own UI). Editable, unlike a real index. */
+        .pairing-hcp-set.is-prelim {
+            border-style: solid; border-color: #fdba74; background: #fff7ed;
+            color: #c2410c; font-weight: 700; padding: 0 3px;
+        }
+        .pairing-hcp-p { font-size: 0.62rem; margin-left: 1px; font-weight: 800; }
         .pairing-tee { font-size: 0.72rem; color: var(--text-muted); width: 2.6rem; text-align: center; flex-shrink: 0; }
         /* Drag-and-drop: a player can be dragged onto any group, and the
            rail that appears says what releasing does — including adding a
@@ -4840,6 +4849,10 @@
                 + `${rOK ? '' : ' style="opacity:0.4;cursor:default;"'}>&#x21B7; Redo</button>`;
         }
         html += `<button class="pairings-action-btn generate-btn" data-ev-id="${ev.id}" data-pairings-action="generate">&#x21BB; Generate</button>`;
+        // Pull the sheet GG already has (Kerry 2026-07-31: the AUSTIN
+        // CHAMPIONSHIP was paired in GG, not by us). Replaces this leg.
+        html += `<button class="pairings-action-btn" data-ev-id="${ev.id}" data-pairings-action="gg-import"`
+            + ` title="Pull this event's pairings from the Golf Genius tee sheet (replaces the pairings shown here)">&#x2913; GG Sheet</button>`;
         if (state.groups_9.length || state.groups_18.length) {
             html += `<button class="pairings-action-btn clear-btn" data-ev-id="${ev.id}" data-pairings-action="clear" style="color:var(--red);">&#x2715; Clear</button>`;
             if (state.isDirty) {
@@ -5212,26 +5225,55 @@
                     state.selection.holes === holes && state.selection.group_num === grp.group_num &&
                     (player.cart_pos <= 2) === (state.selection.cart_pos <= 2);
 
-                // NO HANDICAP ON RECORD — same affordance as the ROSTER
-                // (Kerry 2026-07-31): click the dash to stamp a STARTING
-                // handicap. Only where there is none; a real index is
-                // computed from rounds and must never be typed over. Needs
-                // a customer_id, because the placeholder lives on the
-                // customer record.
+                // HANDICAP CELL. Three states, and the ROSTER already has
+                // all three — the pairing card was only ever told about
+                // COMPUTED indexes, so a player carrying a STARTING
+                // handicap showed an empty dash here while the roster
+                // showed "16.0 P" (Kerry 2026-07-31, Jacob Williams).
+                //   * computed index  → plain number, NOT editable (it is
+                //     derived from rounds and must not be typed over)
+                //   * starting/placeholder → number + P, editable
+                //   * nothing on record   → clickable dash
+                // handicapIndexMap is the same feed the roster reads and
+                // carries source='starting'; it is consulted ONLY as a
+                // fallback so no existing displayed number changes.
                 const _rEnt = player.name ? rosterEntry(state, player.name) : null;
+                const _liveH = player.name
+                    ? handicapIndexMap[(player.name || '').toLowerCase()]
+                    : undefined;
+                const _prelimVal = (player.handicap_index != null)
+                    ? null
+                    : (player.prelim_handicap_18 != null
+                        ? Number(player.prelim_handicap_18)
+                        : ((_liveH && _liveH.source === 'starting' && _liveH.index_18 != null)
+                            ? Number(_liveH.index_18) : null));
+                const _isPlaceholder = _prelimVal != null;
                 // customer_id can come from EITHER source: event_players
                 // (GET /pairings) or the registrations already loaded for
                 // this event. Relying on the newer payload field alone
                 // meant a cached response left the dash un-clickable.
                 const _rCid = (_rEnt && _rEnt.customer_id)
                     || (player.name ? _cidByName[_nk(player.name)] : null);
-                const hcp = player.handicap_index != null
-                    ? Number(player.handicap_index).toFixed(1)
-                    : (_rCid
+                let hcp;
+                if (player.handicap_index != null) {
+                    hcp = Number(player.handicap_index).toFixed(1);
+                } else if (_isPlaceholder) {
+                    const pv = _prelimVal.toFixed(1);
+                    // A placeholder IS editable — that is what it is for —
+                    // and must never read like an established index.
+                    hcp = _rCid
+                        ? `<button class="btn-set-hcp pairing-hcp-set is-prelim" data-customer-id="${_rCid}"`
+                          + ` data-player="${escapeHtml(player.name || '')}" data-current="${pv}"`
+                          + ` title="STARTING handicap — a placeholder until rounds establish a real TGF Handicap. Click to change it.">`
+                          + `${pv}<span class="pairing-hcp-p">P</span></button>`
+                        : `<span style="font-weight:700;color:#c2410c;" title="STARTING handicap — placeholder">${pv}<span class="pairing-hcp-p">P</span></span>`;
+                } else {
+                    hcp = _rCid
                         ? `<button class="btn-set-hcp pairing-hcp-set" data-customer-id="${_rCid}"`
                           + ` data-player="${escapeHtml(player.name || '')}"`
                           + ` title="No handicap on record — click to set a starting handicap">&mdash;</button>`
-                        : '—');
+                        : '—';
+                }
 
                 let bandCls = '', bandTitle = '';
                 if (showBands && player.name) {
@@ -7084,12 +7126,22 @@
                 e.stopPropagation();
                 const cid = btn.dataset.customerId;
                 const who = btn.dataset.player || "this player";
-                const raw = prompt(
-                    `${who} has no handicap on record.\n\n` +
-                    `Enter a STARTING handicap (18-hole). It is a placeholder: it lets ` +
-                    `them be flighted and shows on their record, and is replaced ` +
-                    `automatically once enough rounds establish their real TGF Handicap. ` +
-                    `It never counts as a round.\n\nLeave blank to cancel.`);
+                // A player who already carries a STARTING handicap gets EDIT
+                // copy with the current value pre-filled (Kerry 2026-07-31).
+                const cur = (btn.dataset.current || "").trim();
+                const raw = cur
+                    ? prompt(
+                        `${who} has a STARTING handicap of ${cur} (marked P).\n\n` +
+                        `It is a placeholder — it lets them be flighted and shows on ` +
+                        `their record, and is replaced automatically once enough rounds ` +
+                        `establish their real TGF Handicap. It never counts as a round.\n\n` +
+                        `Enter a new 18-hole value, or leave blank to cancel.`, cur)
+                    : prompt(
+                        `${who} has no handicap on record.\n\n` +
+                        `Enter a STARTING handicap (18-hole). It is a placeholder: it lets ` +
+                        `them be flighted and shows on their record, and is replaced ` +
+                        `automatically once enough rounds establish their real TGF Handicap. ` +
+                        `It never counts as a round.\n\nLeave blank to cancel.`);
                 if (raw === null || !raw.trim()) return;
                 const val = parseFloat(raw.trim());
                 if (isNaN(val)) { alert("That is not a number."); return; }
@@ -7106,7 +7158,10 @@
                     // player's index (it rides on the generated/saved
                     // groups), so refreshing items+events alone would
                     // leave the dash sitting there. Patch every group and
-                    // roster entry that names this player.
+                    // roster entry that names this player — into
+                    // `prelim_handicap_18`, NOT `handicap_index`, so the card
+                    // keeps rendering it as an editable P placeholder rather
+                    // than promoting it to an established TGF Handicap.
                     const _newHcp = (data && data.starting_handicap_18 != null)
                         ? Number(data.starting_handicap_18) : val;
                     const _k = String(who).trim().replace(/\s+/g, ' ').toLowerCase();
@@ -7115,19 +7170,22 @@
                         ['groups_9', 'groups_18'].forEach(gk => {
                             (st[gk] || []).forEach(g => (g.players || []).forEach(pl => {
                                 if (_same(pl.name) && pl.handicap_index == null) {
-                                    pl.handicap_index = _newHcp;
+                                    pl.prelim_handicap_18 = _newHcp;
                                 }
                             }));
                         });
                         (st.event_players || []).forEach(pl => {
                             if (_same(pl.name) && pl.handicap_index == null) {
-                                pl.handicap_index = _newHcp;
+                                pl.prelim_handicap_18 = _newHcp;
                             }
                         });
                     });
                     await fetchHandicapIndexMap();
                     await fetchItems();
                     await fetchEvents();
+                    if (typeof window._tgfRerenderPairings === 'function') {
+                        window._tgfRerenderPairings(ev.id);
+                    }
                 } catch (err) { alert("Could not save the handicap."); }
             });
         });
@@ -7427,6 +7485,108 @@
         rerenderDetail(container, ev);
     }
 
+    // Pull the pairings Golf Genius already holds for this event (Kerry
+    // 2026-07-31). Unlike Generate, this WRITES straight to the saved
+    // pairings — it is an import, not a proposal — so the panel reloads
+    // from the server afterwards and comes back clean.
+    async function doImportGgPairings(container, ev, state, btn) {
+        const label0 = btn ? btn.innerHTML : '';
+        const restore = () => { if (btn) { btn.innerHTML = label0; btn.disabled = false; } };
+        if (btn) { btn.textContent = 'Checking GG…'; btn.disabled = true; }
+
+        // Which leg the sheet covers. Only a combo event is ambiguous.
+        const has9 = (state.slots_9 || []).length > 0;
+        const has18 = (state.slots_18 || []).length > 0;
+        let holes = null;
+        if (has9 && has18) {
+            holes = confirm('This event has both legs.\n\n'
+                + 'OK = the GG sheet is the 18-hole leg\n'
+                + 'Cancel = it is the 9-hole leg') ? '18' : '9';
+        } else if (has18) {
+            holes = '18';
+        } else if (has9) {
+            holes = '9';
+        }
+
+        let opts;
+        try {
+            const res = await fetch(`/api/events/${ev.id}/pairings/gg-rounds`);
+            opts = await res.json().catch(() => ({}));
+            if (!res.ok) {
+                alert(opts.error || 'Could not reach the Golf Genius tee sheet.');
+                restore(); return;
+            }
+        } catch (err) {
+            alert('Could not reach the Golf Genius tee sheet.');
+            restore(); return;
+        }
+
+        const rounds = opts.rounds || [];
+        if (!rounds.length) {
+            alert('The Golf Genius tee sheet listed no rounds for this chapter.');
+            restore(); return;
+        }
+        let roundId = opts.best_round_id;
+        let picked = rounds.find(r => r.round_id === roundId);
+        if (!picked) {
+            // No confident match — never guess a sheet onto an event.
+            const menu = rounds.slice(0, 25)
+                .map((r, i) => `${i + 1}. ${r.label}`).join('\n');
+            const ans = prompt(
+                'Could not tell which Golf Genius round is this event.\n\n'
+                + 'Enter the number of the round to pull:\n\n' + menu);
+            if (ans === null || !ans.trim()) { restore(); return; }
+            picked = rounds[parseInt(ans.trim(), 10) - 1];
+            if (!picked) { alert('That is not one of the listed rounds.'); restore(); return; }
+            roundId = picked.round_id;
+        } else if (!confirm(
+                `Pull pairings from Golf Genius?\n\n`
+                + `GG round: ${picked.label}\n\n`
+                + `This REPLACES the ${holes ? holes + '-hole ' : ''}pairings `
+                + `for this event.`)) {
+            restore(); return;
+        }
+
+        if (btn) btn.textContent = 'Pulling…';
+        let data;
+        try {
+            const res = await fetch(`/api/events/${ev.id}/pairings/import-gg`, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({round_id: roundId, holes: holes, apply: true}),
+            });
+            data = await res.json().catch(() => ({}));
+            if (!res.ok) {
+                alert(data.error || 'The Golf Genius pull failed.');
+                restore(); return;
+            }
+        } catch (err) {
+            alert('The Golf Genius pull failed.');
+            restore(); return;
+        }
+
+        await loadPairings(ev.id);
+        state.swapMode = null; state.selection = null;
+        rerenderDetail(container, ev);
+
+        // Say plainly what did NOT line up — that is the whole value of
+        // importing someone else's sheet.
+        const notes = [];
+        notes.push(`Pulled ${data.group_sizes ? data.group_sizes.length : 0} groups `
+                   + `from "${data.matched_label || picked.label}".`);
+        const unres = data.unresolved_names || [];
+        if (unres.length) {
+            notes.push('\nGG names with no matching customer profile '
+                       + '(placed by name only):\n  • ' + unres.join('\n  • '));
+        }
+        const missing = data.registered_not_on_sheet || [];
+        if (missing.length) {
+            notes.push('\nRegistered here but NOT on the GG sheet:\n  • '
+                       + missing.join('\n  • '));
+        }
+        alert(notes.join('\n'));
+    }
+
     // ── Pairings interaction handlers ─────────────────────────────────────────
     // Ctrl/Cmd+Z and Ctrl/Cmd+Shift+Z on the OPEN pairings panel. Bound
     // once at module level, not per render, so re-rendering can't stack
@@ -7602,6 +7762,11 @@
                 if (action === 'mp-close') {
                     state.mpPanelOpen = false;
                     rerenderDetail(container, ev);
+                    return;
+                }
+
+                if (action === 'gg-import') {
+                    await doImportGgPairings(container, ev, state, btn);
                     return;
                 }
 

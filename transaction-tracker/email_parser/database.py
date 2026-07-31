@@ -44892,12 +44892,264 @@ def gg_pairings_rounds(portal: str) -> dict:
                        for rid, lbl in options]}
 
 
+# The tee-sheet widget's OWN round selector. `gg_pairings_rounds` above
+# looks for `<select name="round">` with plain numeric values — that is
+# the tournament_results widget's shape, not this one. The tee-sheet
+# widget uses `widget_round_panel_selector` and puts a whole widget URL in
+# each option value, with the round id as a query param. It is the only
+# listing that includes UPCOMING rounds, which is exactly what the
+# per-event pull needs: the sheet exists in GG before the event is played.
+_TEESHEET_SELECT_RE = re.compile(
+    r"<select[^>]*\bwidget_round_panel_selector\b[^>]*>(.*?)</select>",
+    re.S | re.I)
+_TEESHEET_OPTION_RE = re.compile(
+    r"<optgroup[^>]*label=[\"']([^\"']*)[\"']|"
+    r"<option[^>]*value=[\"']([^\"']*)[\"'][^>]*>(.*?)</option>", re.S | re.I)
+
+
+def gg_teesheet_rounds(portal: str) -> dict:
+    """Every round the chapter's tee-sheet widget lists, PLAYED and
+    UPCOMING, as [{round_id, label, upcoming}]. Labels are GG's own and
+    are truncated by GG at ~50 chars ('… (Sat, Au…') — match on the event
+    code / name words, never on the tail of the label."""
+    import html as _html
+    from golf_genius_sync import fetch_public_page
+    widget = _gg_teesheet_widget(portal)
+    page = fetch_public_page(widget, xhr=False)
+    sel = _TEESHEET_SELECT_RE.search(page["html"] or "")
+    rounds: list = []
+    group_label = ""
+    for m in _TEESHEET_OPTION_RE.finditer(sel.group(1) if sel else ""):
+        if m.group(1) is not None:
+            group_label = _html.unescape(m.group(1)).strip()
+            continue
+        value = _html.unescape(m.group(2) or "")
+        rid = re.search(r"round_id=(\d+)", value)
+        if not rid:
+            continue
+        label = re.sub(r"<[^>]+>", " ", m.group(3) or "")
+        label = re.sub(r"\s+", " ", _html.unescape(label)).strip()
+        rounds.append({"round_id": rid.group(1), "label": label,
+                       "upcoming": "upcoming" in group_label.lower()})
+    return {"widget": widget, "rounds": rounds}
+
+
+def _score_teesheet_round_label(label: str, item_name: str, course: str,
+                                event_date: str | None) -> int:
+    """How well a GG round label identifies one Tracker event. Event code
+    is decisive when both sides carry one; otherwise this leans on name +
+    course words, because our names often carry no code at all ('TGF
+    AUSTIN CHAMPIONSHIP' vs GG's 'a18.4 AUSTIN CHAMPIONSHIP | Falconhead')
+    and GG truncates the date off the end of long labels."""
+    lbl = (label or "").lower()
+    ours = _GG_EVENT_CODE_RE.match((item_name or "").strip())
+    theirs = _EVENT_CODE_RE.search(lbl)
+    if ours and theirs:
+        if ours.group(1).lower() == theirs.group(1).lower():
+            return 1000
+        return -100        # both coded and they disagree — not this event
+    stop = {"tgf", "the", "golf", "club", "course", "round", "league"}
+    lbl_words = set(re.findall(r"[a-z]{3,}", lbl)) - stop
+    ours_words = (set(re.findall(r"[a-z]{3,}", (item_name or "").lower()))
+                  | set(re.findall(r"[a-z]{3,}", (course or "").lower()))) - stop
+    score = 10 * len(lbl_words & ours_words)
+    # A date that survived GG's truncation is worth a lot.
+    if event_date:
+        md = re.search(
+            r"\(?\w{3},?\s+(january|february|march|april|may|june|july|"
+            r"august|september|october|november|december)\.?\s+(\d{1,2})", lbl)
+        if md:
+            months = {m.lower(): i + 1 for i, m in enumerate(
+                ["January", "February", "March", "April", "May", "June",
+                 "July", "August", "September", "October", "November",
+                 "December"])}
+            try:
+                _y, _m, _d = str(event_date).split("-")
+                if (months[md.group(1)] == int(_m)
+                        and int(md.group(2)) == int(_d)):
+                    score += 40
+                else:
+                    score -= 40
+            except Exception:
+                pass
+    return score
+
+
+def gg_teesheet_round_options(event_id: int,
+                              db_path: str | Path = DB_PATH) -> dict:
+    """Rank this event's chapter tee-sheet rounds by how well each matches
+    it, best first, for the PAIRINGS tab's 'pull from GG' button. `best`
+    is set only when one round wins clearly, so the manager is asked to
+    pick rather than handed a wrong sheet."""
+    with _connect(db_path) as conn:
+        ev = conn.execute(
+            "SELECT id, item_name, course, chapter, event_date FROM events "
+            "WHERE id = ?", (int(event_id),)).fetchone()
+    if not ev:
+        return {"error": f"no event {event_id}"}
+    chapter = (ev["chapter"] or "").strip().lower()
+    portal = "austin" if chapter.startswith("austin") else "sa"
+    listing = gg_teesheet_rounds(portal)
+    scored = []
+    for r in listing["rounds"]:
+        scored.append({**r, "score": _score_teesheet_round_label(
+            r["label"], ev["item_name"], ev["course"], ev["event_date"])})
+    scored.sort(key=lambda r: (-r["score"], r["label"]))
+    best = None
+    if scored and scored[0]["score"] >= 20 and (
+            len(scored) == 1 or scored[0]["score"] > scored[1]["score"]):
+        best = scored[0]["round_id"]
+    return {"event": {"id": ev["id"], "name": ev["item_name"],
+                      "date": ev["event_date"], "course": ev["course"]},
+            "portal": portal, "widget": listing["widget"],
+            "best_round_id": best, "rounds": scored}
+
+
+def import_gg_pairings_for_event(event_id: int, round_id: str | None = None,
+                                 holes: str | None = None,
+                                 apply: bool = True,
+                                 db_path: str | Path = DB_PATH) -> dict:
+    """Pull ONE event's pairings straight off Golf Genius (Kerry
+    2026-07-31: "TGF AUSTIN CHAMPIONSHIP already has pairings on GG,
+    because Robert didn't use our generator").
+
+    Same machinery as the nightly history grab, aimed at a single event
+    and usable BEFORE the event is played — the tee-sheet widget's round
+    selector lists upcoming rounds too. `round_id` omitted means auto-match
+    on the event's name/code/course/date. Replaces this event's pairings
+    for the chosen leg; reports which GG names did not land on a
+    registered player and which registered players the sheet omits, so
+    the manager can see what to fix before printing."""
+    opts = gg_teesheet_round_options(event_id, db_path=db_path)
+    if opts.get("error"):
+        return opts
+    rid = str(round_id or "").strip() or opts.get("best_round_id")
+    if not rid:
+        return {**opts, "error": "could not tell which GG round is this "
+                                 "event — pick one"}
+    label = next((r["label"] for r in opts["rounds"]
+                  if r["round_id"] == str(rid)), "")
+    res = import_gg_teesheet_round(opts["portal"], str(rid), apply=apply,
+                                   label=label, event_override=str(event_id),
+                                   holes=holes, db_path=db_path)
+    res["portal"] = opts["portal"]
+    res["matched_label"] = label
+    res["auto_matched"] = not round_id
+    # Roster reconciliation — the manager's real question is "did everyone
+    # land?", and that is a customer_id question, not a name question.
+    try:
+        _INACTIVE = ("credited", "refunded", "transferred", "wd")
+        _ph = ",".join("?" * len(_INACTIVE))
+        with _connect(db_path) as conn:
+            reg = conn.execute(
+                f"""SELECT DISTINCT i.customer, i.customer_id
+                    FROM events e
+                    LEFT JOIN event_aliases ea
+                           ON ea.canonical_event_name = e.item_name
+                    JOIN items i ON (
+                        i.item_name = e.item_name COLLATE NOCASE
+                        OR i.item_name = ea.alias_name COLLATE NOCASE
+                        OR i.event_id = e.id)
+                    WHERE e.id = ?
+                      AND COALESCE(i.transaction_status,'active') NOT IN ({_ph})
+                      AND i.parent_item_id IS NULL""",
+                (int(event_id), *_INACTIVE)).fetchall()
+            placed = {(r["player_name"] or "").strip().lower()
+                      for r in conn.execute(
+                          "SELECT player_name FROM event_pairings "
+                          "WHERE event_id = ?", (int(event_id),)).fetchall()}
+            missing = []
+            for r in reg:
+                canon = (r["customer"] or "").strip()
+                if r["customer_id"]:
+                    c = conn.execute(
+                        """SELECT TRIM(COALESCE(first_name,'') || ' ' ||
+                                  COALESCE(last_name,'')) AS nm
+                           FROM customers WHERE customer_id = ?""",
+                        (r["customer_id"],)).fetchone()
+                    canon = ((c["nm"] or "").strip() if c else "") or canon
+                if canon and canon.lower() not in placed:
+                    missing.append(canon)
+            res["registered_not_on_sheet"] = sorted(set(missing))
+    except Exception as e:
+        res["roster_check_error"] = str(e)
+    return res
+
+
 def _split_teesheet_names(cell: str) -> list:
     """Split a tee-sheet players cell ('MELCHOR, Eduardo MOORE, Dion
     STRAITON, Robert') into ordered names: break before each token that
     starts the next 'Surname,' unit."""
     parts = re.split(r"\s+(?=\S+,)", (cell or "").strip())
     return [p.strip() for p in parts if "," in p and len(p.strip()) > 4]
+
+
+_TT_TABLE_RE = re.compile(
+    r"<table[^>]*by_tee_times_table[^>]*>(.*?)</table>", re.S | re.I)
+_TT_ROW_RE = re.compile(r"<tr\b([^>]*)>(.*?)</tr>", re.S | re.I)
+_TT_CELL_RE = re.compile(r"<t[dh]\b[^>]*>(.*?)</t[dh]>", re.S | re.I)
+# A portrait div's player name is the text before its first nested tag
+# (the tee abbreviation span / division-and-flight div).
+_TT_PORTRAIT_RE = re.compile(
+    r"<div[^>]*\bplayers_portrait\b[^>]*>(.*?)(?:<span|<div|</div>)",
+    re.S | re.I)
+_TT_TIME_RE = re.compile(r"^\d{1,2}:\d{2}\s*(AM|PM)?$", re.I)
+
+
+def _tt_text(fragment: str) -> str:
+    import html as _html
+    return re.sub(r"\s+", " ",
+                  _html.unescape(re.sub(r"<[^>]+>", " ", fragment or ""))).strip()
+
+
+def _parse_teesheet_groups_html(html_text: str) -> list:
+    """Structural parse of the 'By Tee Times' table — one entry per
+    `players_portrait` div, in GG's seat order.
+
+    This is the primary path because the flattened-text parse below has
+    to guess where one name ends and the next begins, and gets it wrong
+    for any player GG does NOT print as 'SURNAME, First' (guests and
+    1st timers often show as plain 'Matt Larson'). Dropping one name
+    silently shifts every later seat, which corrupts the cart pairs.
+    Rows marked `visible-xs` are GG's single-column mobile duplicates.
+    """
+    groups: list = []
+    for tbl in _TT_TABLE_RE.findall(html_text or ""):
+        for attrs, body in _TT_ROW_RE.findall(tbl):
+            if "visible-xs" in attrs:
+                continue
+            cells = _TT_CELL_RE.findall(body)
+            plain = [_tt_text(c) for c in cells]
+            i = 0
+            while i < len(cells):
+                if not _TT_TIME_RE.match(plain[i]):
+                    i += 1
+                    continue
+                j, hole, names = i + 1, None, None
+                while j < len(cells) and j <= i + 2:
+                    if "players_portrait" in cells[j]:
+                        names = [n for n in
+                                 (_tt_text(p) for p in
+                                  _TT_PORTRAIT_RE.findall(cells[j])) if n]
+                        break
+                    if re.match(r"^\d{1,2}[AB]?$", plain[j], re.I):
+                        hole = plain[j]
+                        j += 1
+                        continue
+                    break
+                if names:
+                    groups.append({"slot": plain[i], "hole": hole,
+                                   "players": names})
+                    i = j + 1
+                else:
+                    i += 1
+    # Shotgun sheets repeat one time across every group — the hole is the
+    # slot that means anything there.
+    if groups and len({g["slot"] for g in groups}) == 1:
+        for g in groups:
+            if g.get("hole"):
+                g["slot"] = f"Hole {g['hole']}"
+    return [{"slot": g["slot"], "players": g["players"]} for g in groups]
 
 
 def _parse_teesheet_groups(html_text: str) -> dict:
@@ -44913,6 +45165,11 @@ def _parse_teesheet_groups(html_text: str) -> dict:
     struct = parse_page_structure(html_text, "")
     tables = struct.get("tables", [])
     _time_re = re.compile(r"^\d{1,2}:\d{2}\s*(AM|PM)?$", re.I)
+
+    structural = _parse_teesheet_groups_html(html_text)
+    if structural:
+        return {"groups": structural, "n_tables": len(tables),
+                "parser": "html", "debug_tables": []}
 
     groups: list = []
     seen: set = set()
@@ -44999,6 +45256,7 @@ def _match_event_for_round_label(conn, label: str, portal: str):
 def import_gg_teesheet_round(portal: str, round_id: str, apply: bool = False,
                              label: str | None = None,
                              event_override: str | None = None,
+                             holes: str | None = None,
                              db_path: str | Path = DB_PATH) -> dict:
     """Parse one FINAL tee-sheet round (Kerry's route: SCHEDULE calendar →
     per-round Tee Sheet page; the next_round widget serves the historical
@@ -45087,7 +45345,7 @@ def import_gg_teesheet_round(portal: str, round_id: str, apply: bool = False,
                              1 if frozenset((a["name"], b["name"])) in rode_pairs else 0))
                         n_pairs += 1
             out["event_pairings_rows"] = _write_event_pairings_from_groups(
-                conn, ev["id"], resolved_groups)
+                conn, ev["id"], resolved_groups, holes=holes)
             conn.commit()
             out["applied"] = True
             out["pairs_written"] = n_pairs
@@ -45599,27 +45857,36 @@ def clear_gg_teamnet_pairings(event_id: int,
 
 
 def _write_event_pairings_from_groups(conn: sqlite3.Connection,
-                                      event_id: int, groups: list) -> int:
+                                      event_id: int, groups: list,
+                                      holes: str | None = None) -> int:
     """Mirror ingested ACTUAL groups into event_pairings so the EVENTS
     page PAIRINGS tab shows played pairings on past events (Kerry
     2026-07-14). groups: [{'slot': str|None, 'players': [seat|None,…]}]
     where a seat is {'name': …} — None seats (blind fills) keep cart
     alignment but aren't written. holes inferred from event format /
-    code; combo events' 18-hole groups may label as '9' (cosmetic)."""
-    ev = conn.execute(
-        "SELECT format, item_name FROM events WHERE id = ?",
-        (int(event_id),)).fetchone()
-    fmt = (ev["format"] or "") if ev else ""
-    nm = (ev["item_name"] or "") if ev else ""
-    holes = "18" if ("18" in fmt and "9/18" not in fmt) or \
-        re.match(r"^[a-z]18\b", nm, re.I) or "MATCHES" in nm.upper() else "9"
-    conn.execute("DELETE FROM event_pairings WHERE event_id = ?",
-                 (int(event_id),))
+    code; combo events' 18-hole groups may label as '9' (cosmetic).
+    Pass `holes` explicitly to target one leg of a combo event — the
+    delete is then scoped to that leg so the other one survives."""
+    if holes not in ("9", "18"):
+        ev = conn.execute(
+            "SELECT format, item_name FROM events WHERE id = ?",
+            (int(event_id),)).fetchone()
+        fmt = (ev["format"] or "") if ev else ""
+        nm = (ev["item_name"] or "") if ev else ""
+        holes = "18" if ("18" in fmt and "9/18" not in fmt) or \
+            re.match(r"^[a-z]18\b", nm, re.I) or "MATCHES" in nm.upper() else "9"
+        conn.execute("DELETE FROM event_pairings WHERE event_id = ?",
+                     (int(event_id),))
+    else:
+        conn.execute("DELETE FROM event_pairings WHERE event_id = ? "
+                     "AND holes = ?", (int(event_id), holes))
     n = 0
     for gi, g in enumerate(groups, start=1):
         seats = g["players"]
         slot = g.get("slot") or f"Group {gi}"
-        for idx, p in enumerate(seats[:4]):
+        # Fivesomes are legal since Kerry's 2026-07-31 ruling, and GG
+        # sheets carry them — the old [:4] silently dropped the 5th.
+        for idx, p in enumerate(seats[:5]):
             if not p:
                 continue
             conn.execute(
