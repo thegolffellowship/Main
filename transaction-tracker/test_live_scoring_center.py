@@ -56,8 +56,9 @@ def build_fixture(path):
     conn = sqlite3.connect(path)
     conn.row_factory = sqlite3.Row
     conn.executescript("""
+        -- Mirrors the REAL schema: first_name/last_name, NO customer_name.
         CREATE TABLE customers (customer_id INTEGER PRIMARY KEY,
-                                customer_name TEXT, chapter TEXT);
+                                first_name TEXT, last_name TEXT, chapter TEXT);
         CREATE TABLE events (id INTEGER PRIMARY KEY, item_name TEXT,
                              event_date TEXT, format TEXT, course TEXT);
         CREATE TABLE event_aliases (alias_name TEXT, canonical_event_name TEXT);
@@ -104,8 +105,9 @@ def build_fixture(path):
                      (h, par, yd, si))
 
     for i, (name, ph, offset, net_buy, gross_buy) in enumerate(FIELD, start=1):
-        conn.execute("INSERT INTO customers (customer_id, customer_name)"
-                     " VALUES (?, ?)", (i, name))
+        _fn, _ln = name.split(" ", 1)
+        conn.execute("INSERT INTO customers (customer_id, first_name, last_name)"
+                     " VALUES (?, ?, ?)", (i, _fn, _ln))
         sg = ("BOTH" if net_buy and gross_buy else "NET" if net_buy
               else "GROSS" if gross_buy else "NONE")
         conn.execute("INSERT INTO items (id, customer_id, customer, item_name,"
@@ -573,7 +575,8 @@ check("the changed card reflects GG's new stroke",
 
 # A brand-new GG card mid-round must be picked up, not ignored.
 conn = sqlite3.connect(DB)
-conn.execute("INSERT INTO customers (customer_id, customer_name) VALUES (99, 'Late Entry')")
+conn.execute("INSERT INTO customers (customer_id, first_name, last_name)"
+             " VALUES (99, 'Late', 'Entry')")
 conn.execute("INSERT INTO scoring_rounds (id, customer_id, player_name, event_id,"
              " gg_aggregate_id, round_date, course_id, tee_id, holes_played,"
              " playing_handicap, gross, net, source) VALUES"
@@ -647,14 +650,16 @@ for i, (nm, sg, status) in enumerate([
         ("Charlie Player", "GROSS", "MEMBER"), ("Delta Player", "NONE", "MEMBER"),
         ("Echo Guest", "BOTH", "GUEST"), ("Foxtrot Player", "NET", "MEMBER")],
         start=200):
-    conn.execute("INSERT INTO customers (customer_id, customer_name) VALUES (?, ?)",
-                 (i, nm))
+    _fn, _ln = nm.split(" ", 1)
+    conn.execute("INSERT INTO customers (customer_id, first_name, last_name)"
+                 " VALUES (?, ?, ?)", (i, _fn, _ln))
     conn.execute("INSERT INTO items (id, customer_id, customer, item_name,"
                  " side_games, transaction_status, holes, user_status) VALUES"
                  " (?, ?, ?, 'TGF UPCOMING CHAMPIONSHIP', ?, 'active', '18', ?)",
                  (i, i, nm, sg, status))
 # One credited registration must NOT be seeded.
-conn.execute("INSERT INTO customers (customer_id, customer_name) VALUES (299, 'Gone Player')")
+conn.execute("INSERT INTO customers (customer_id, first_name, last_name)"
+             " VALUES (299, 'Gone', 'Player')")
 conn.execute("INSERT INTO items (id, customer_id, customer, item_name, side_games,"
              " transaction_status, holes, user_status) VALUES"
              " (299, 299, 'Gone Player', 'TGF UPCOMING CHAMPIONSHIP', 'BOTH',"

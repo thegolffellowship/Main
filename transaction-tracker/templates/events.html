@@ -6362,22 +6362,78 @@
             });
         });
 
+        // ── Guest details prompt (name + optional STARTING handicap) ──────
+        // Replaces three separate prompt() calls. A guest / first timer has
+        // no TGF rounds, so no index, so they read "—" on the roster and
+        // cannot be flighted at all; the starting handicap is a placeholder
+        // that stands in until real rounds establish their own index.
+        // Entered on the 18-HOLE scale — the number TGF quotes and the one
+        // this very roster column displays.
+        function askGuestDetails(title, buyerName) {
+            return new Promise(resolve => {
+                const scrim = document.createElement("div");
+                scrim.style.cssText = "position:fixed;inset:0;background:rgba(27,27,27,.45);"
+                    + "display:flex;align-items:center;justify-content:center;z-index:9999;padding:16px;";
+                const box = document.createElement("div");
+                box.style.cssText = "background:#fff;border-radius:14px;max-width:440px;width:100%;"
+                    + "padding:18px 20px;box-shadow:0 18px 48px rgba(0,0,0,.28);";
+                box.innerHTML = `
+                  <div style="font:700 14px/1.3 'Bitter',serif;margin-bottom:6px;">${escapeHtml(title)}</div>
+                  <div style="font-size:12.5px;color:#6B7280;margin-bottom:14px;">
+                    Currently under &ldquo;${escapeHtml(buyerName || "")}&rdquo;.</div>
+                  <label style="display:block;font-size:12px;font-weight:600;margin-bottom:4px;">
+                    Guest player's full name</label>
+                  <input id="gd-name" style="width:100%;padding:9px 11px;border:1px solid #E5E7EB;
+                    border-radius:8px;font-size:14px;margin-bottom:14px;" autocomplete="off">
+                  <label style="display:block;font-size:12px;font-weight:600;margin-bottom:4px;">
+                    Starting handicap <span style="font-weight:400;color:#6B7280;">— 18-hole, optional</span></label>
+                  <input id="gd-hcp" type="number" step="0.1" placeholder="e.g. 14.0"
+                    style="width:130px;padding:9px 11px;border:1px solid #E5E7EB;border-radius:8px;font-size:14px;">
+                  <div style="font-size:11.5px;color:#6B7280;margin-top:8px;line-height:1.45;">
+                    Placeholder only. It shows on their record and lets them be flighted,
+                    and is replaced automatically once enough rounds establish their
+                    real TGF Handicap. It never counts as a round.</div>
+                  <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:18px;">
+                    <button id="gd-cancel" style="border:1px solid #E5E7EB;background:#fff;border-radius:999px;
+                      padding:7px 16px;font-size:13px;cursor:pointer;">Cancel</button>
+                    <button id="gd-ok" style="border:1px solid #1B1B1B;background:#1B1B1B;color:#fff;
+                      border-radius:999px;padding:7px 18px;font-size:13px;font-weight:600;cursor:pointer;">Save</button>
+                  </div>`;
+                scrim.appendChild(box);
+                document.body.appendChild(scrim);
+                const close = v => { scrim.remove(); document.removeEventListener("keydown", onKey); resolve(v); };
+                const submit = () => {
+                    const name = box.querySelector("#gd-name").value.trim();
+                    if (!name) { box.querySelector("#gd-name").focus(); return; }
+                    const raw = box.querySelector("#gd-hcp").value.trim();
+                    close({ name: name, hcp: raw === "" ? null : parseFloat(raw) });
+                };
+                const onKey = e => {
+                    if (e.key === "Escape") close(null);
+                    if (e.key === "Enter") { e.preventDefault(); submit(); }
+                };
+                document.addEventListener("keydown", onKey);
+                scrim.addEventListener("click", e => { if (e.target === scrim) close(null); });
+                box.querySelector("#gd-cancel").addEventListener("click", () => close(null));
+                box.querySelector("#gd-ok").addEventListener("click", submit);
+                setTimeout(() => box.querySelector("#gd-name").focus(), 30);
+            });
+        }
+
         // Assign Guest name — "Guest?" tag click
         container.querySelectorAll(".btn-assign-guest").forEach(btn => {
             btn.addEventListener("click", async (e) => {
                 e.stopPropagation();
                 const itemId = parseInt(btn.dataset.itemId);
                 const buyerName = btn.dataset.buyerName || "";
-                const guestName = prompt(
-                    `This GUEST registration is under "${buyerName}".\n\n` +
-                    `Enter the actual guest player's name:`
-                );
-                if (!guestName || !guestName.trim()) return;
+                const gd = await askGuestDetails("Assign guest player", buyerName);
+                if (!gd) return;
                 try {
                     const res = await fetch(`/api/items/${itemId}/assign-guest`, {
                         method: "POST",
                         headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify({ guest_name: guestName.trim() }),
+                        body: JSON.stringify({ guest_name: gd.name,
+                                               starting_handicap_18: gd.hcp }),
                     });
                     if (!res.ok) {
                         const data = await res.json().catch(() => ({}));
@@ -6395,16 +6451,14 @@
                 e.stopPropagation();
                 const itemId = parseInt(btn.dataset.itemId);
                 const buyerName = btn.dataset.buyerName || "";
-                const guestName = prompt(
-                    `Assign a guest name to this registration (currently under "${buyerName}").\n\n` +
-                    `Enter the guest player's full name:`
-                );
-                if (!guestName || !guestName.trim()) return;
+                const gd = await askGuestDetails("Assign guest player", buyerName);
+                if (!gd) return;
                 try {
                     const res = await fetch(`/api/items/${itemId}/assign-guest`, {
                         method: "POST",
                         headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify({ guest_name: guestName.trim() }),
+                        body: JSON.stringify({ guest_name: gd.name,
+                                               starting_handicap_18: gd.hcp }),
                     });
                     if (!res.ok) {
                         const data = await res.json().catch(() => ({}));
@@ -9913,13 +9967,14 @@
             btn.addEventListener("click", async () => {
                 const itemId = btn.dataset.pwAssignGuest;
                 const buyer = btn.dataset.buyerName || "";
-                const name = prompt(`This GUEST registration is under "${buyer}".\n\nEnter the actual guest player's name:`);
-                if (!name || !name.trim()) return;
+                const gd = await askGuestDetails("Assign guest player", buyer);
+                if (!gd) return;
                 try {
                     const res = await fetch(`/api/items/${itemId}/assign-guest`, {
                         method: "POST",
                         headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify({ guest_name: name.trim() }),
+                        body: JSON.stringify({ guest_name: gd.name,
+                                               starting_handicap_18: gd.hcp }),
                     });
                     if (!res.ok) { const d = await res.json().catch(() => ({})); alert(d.error || "Failed."); return; }
                     parseWarnings = parseWarnings.filter(w => w.id !== `guest-${itemId}`);

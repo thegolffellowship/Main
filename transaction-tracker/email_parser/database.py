@@ -8683,6 +8683,28 @@ def _ensure_scoring_tables(conn: sqlite3.Connection) -> None:
                      "INTEGER NOT NULL DEFAULT 1")
     except sqlite3.OperationalError:
         pass
+    # STARTING (placeholder) handicap — Kerry 2026-07-30. A guest or first
+    # timer has no TGF rounds, so no index, so they cannot be flighted and
+    # show "—" on every roster. A manager can stamp a starting handicap that
+    # stands in until real rounds establish the player's own index.
+    #
+    # Scale is in the COLUMN NAME on purpose: TGF quotes 18-hole handicaps
+    # (= 2 x the 9-hole index) and the roster displays them, but the
+    # canonical stored index is the 9-hole one. Naming the scale is the
+    # cheapest possible guard against the factor-of-two class of error.
+    #
+    # This is NEVER a handicap round: it creates no differential, it never
+    # feeds compute_handicap_index, and a real computed index always wins
+    # over it. It is a display/flighting stand-in with an audit stamp.
+    for col, ddl in (
+            ("starting_handicap_18", "REAL"),
+            ("starting_handicap_set_at", "TEXT"),
+            ("starting_handicap_set_by", "TEXT"),
+            ("starting_handicap_note", "TEXT")):
+        try:
+            conn.execute(f"ALTER TABLE customers ADD COLUMN {col} {ddl}")
+        except sqlite3.OperationalError:
+            pass
 
 
 # Admin-controllable scoring formulas (defaults = current TGF models; the
@@ -13242,10 +13264,10 @@ def _ls_seed_from_registrations(conn: sqlite3.Connection, ev: dict,
         nm = it["customer"] or ""
         if cid:
             c = conn.execute(
-                "SELECT customer_name FROM customers WHERE customer_id = ?",
+                "SELECT TRIM(COALESCE(first_name,'') || ' ' || COALESCE(last_name,'')) AS customer_name FROM customers WHERE customer_id = ?",
                 (cid,)).fetchone()
-            if c and c["customer_name"]:
-                nm = c["customer_name"]
+            if c and (c["customer_name"] or "").strip():
+                nm = c["customer_name"].strip()
         conn.execute(
             """INSERT INTO ls_test_players
                    (session_id, customer_id, player_name, playing_handicap,
@@ -13635,10 +13657,10 @@ def ls_add_player(session_id: int, player_name: str,
         _ensure_live_scoring_tables(conn)
         if customer_id:
             row = conn.execute(
-                "SELECT customer_name FROM customers WHERE customer_id = ?",
+                "SELECT TRIM(COALESCE(first_name,'') || ' ' || COALESCE(last_name,'')) AS customer_name FROM customers WHERE customer_id = ?",
                 (customer_id,)).fetchone()
-            if row and row["customer_name"]:
-                player_name = row["customer_name"]
+            if row and (row["customer_name"] or "").strip():
+                player_name = row["customer_name"].strip()
         pid = conn.execute(
             """INSERT INTO ls_test_players
                    (session_id, customer_id, player_name, playing_handicap,
@@ -26588,6 +26610,76 @@ def derive_course_short_name(name: str) -> str:
     return out or s
 
 
+def set_starting_handicap(customer_id: int, index_18: float | None,
+                          set_by: str | None = None, note: str | None = None,
+                          db_path: str | Path | None = None) -> dict:
+    """Stamp (or clear, with index_18=None) a placeholder handicap.
+
+    Stands in for a guest / first timer who has no TGF rounds yet, so they
+    can be flighted and shown on a roster instead of reading "—". It is NOT
+    a handicap round: no differential, never feeds the index calculation,
+    and the moment real rounds establish a computed index that index wins.
+    The value stays on the record afterwards as history.
+
+    `index_18` is the 18-HOLE TGF handicap — the number TGF quotes and the
+    roster displays. Stored as given; the 9-hole equivalent is half of it.
+    """
+    if index_18 is not None:
+        try:
+            index_18 = round(float(index_18), 1)
+        except (TypeError, ValueError):
+            return {"error": "starting handicap must be a number"}
+        # Wide enough for a plus handicap and a genuine beginner, tight
+        # enough to catch a 9-hole number typed into an 18-hole field only
+        # by accident of magnitude — so it is a sanity bound, not a rule.
+        if not (-10.0 <= index_18 <= 60.0):
+            return {"error": f"starting handicap {index_18} is out of range "
+                             f"(-10 to 60, on the 18-hole scale)"}
+    with _connect(db_path) as conn:
+        row = conn.execute(
+            "SELECT TRIM(COALESCE(first_name,'') || ' ' || COALESCE(last_name,'')) AS customer_name FROM customers WHERE customer_id = ?",
+            (customer_id,)).fetchone()
+        if not row:
+            return {"error": f"customer {customer_id} not found"}
+        conn.execute(
+            """UPDATE customers SET starting_handicap_18 = ?,
+                   starting_handicap_set_at = CASE WHEN ? IS NULL THEN NULL
+                                                   ELSE datetime('now') END,
+                   starting_handicap_set_by = ?, starting_handicap_note = ?
+               WHERE customer_id = ?""",
+            (index_18, index_18, set_by if index_18 is not None else None,
+             note if index_18 is not None else None, customer_id))
+        conn.commit()
+    return {"customer_id": customer_id, "customer_name": row["customer_name"],
+            "starting_handicap_18": index_18,
+            "starting_handicap_9": round(index_18 / 2, 1)
+            if index_18 is not None else None,
+            "cleared": index_18 is None}
+
+
+def get_starting_handicaps(db_path: str | Path | None = None) -> dict:
+    """{customer_id: {"index_18", "index_9", "set_at", "set_by", "note"}}."""
+    with _connect(db_path) as conn:
+        try:
+            rows = conn.execute(
+                """SELECT customer_id,
+                          TRIM(COALESCE(first_name,'') || ' ' || COALESCE(last_name,'')) AS customer_name,
+                          starting_handicap_18,
+                          starting_handicap_set_at, starting_handicap_set_by,
+                          starting_handicap_note
+                   FROM customers WHERE starting_handicap_18 IS NOT NULL"""
+            ).fetchall()
+        except sqlite3.OperationalError:
+            return {}          # columns not migrated yet
+    return {r["customer_id"]: {
+        "customer_name": r["customer_name"],
+        "index_18": r["starting_handicap_18"],
+        "index_9": round(r["starting_handicap_18"] / 2, 1),
+        "set_at": r["starting_handicap_set_at"],
+        "set_by": r["starting_handicap_set_by"],
+        "note": r["starting_handicap_note"]} for r in rows}
+
+
 def get_all_handicap_players(db_path: str | Path | None = None) -> list[dict]:
     """Return one record per player with current handicap index and round stats.
 
@@ -26680,6 +26772,58 @@ def get_all_handicap_players(db_path: str | Path | None = None) -> list[dict]:
             "avg_differential": round(row["avg_differential"], 2) if row["avg_differential"] is not None else None,
         })
 
+    # STARTING (placeholder) handicaps — Kerry 2026-07-30. A computed index
+    # ALWAYS wins; the placeholder only fills a gap. Players who have a
+    # placeholder and no rounds at all are appended so they stop reading "—"
+    # on rosters and become flightable. `handicap_source` says which is
+    # which, so nothing downstream can mistake a stand-in for a real index.
+    starting = get_starting_handicaps(db_path)
+    seen_cids = set()
+    for p in players:
+        p.setdefault("handicap_source",
+                     "computed" if p.get("handicap_index") is not None else None)
+    if starting:
+        by_name = {}
+        with _connect(db_path) as conn:
+            for r in conn.execute(
+                    """SELECT l.player_name, l.customer_id FROM
+                       handicap_player_links l WHERE l.customer_id IS NOT NULL"""
+            ).fetchall():
+                by_name.setdefault((r["player_name"] or "").strip().lower(),
+                                   r["customer_id"])
+        for p in players:
+            cid = by_name.get((p["player_name"] or "").strip().lower())
+            if cid is None:
+                for s_cid, s in starting.items():
+                    if (s["customer_name"] or "").strip().lower() == \
+                            (p["player_name"] or "").strip().lower():
+                        cid = s_cid
+                        break
+            if cid is None or cid not in starting:
+                continue
+            seen_cids.add(cid)
+            p["starting_handicap_18"] = starting[cid]["index_18"]
+            if p.get("handicap_index") is None:
+                p["handicap_index"] = starting[cid]["index_9"]
+                p["handicap_index_18"] = starting[cid]["index_18"]
+                p["handicap_source"] = "starting"
+        for cid, s in starting.items():
+            if cid in seen_cids:
+                continue
+            players.append({
+                "player_name": s["customer_name"],
+                "customer_name": s["customer_name"],
+                "customer_id": cid,
+                "chapter": None, "player_status": None,
+                "handicap_index": s["index_9"],
+                "handicap_index_18": s["index_18"],
+                "starting_handicap_18": s["index_18"],
+                "handicap_source": "starting",
+                "handicap_trend": None,
+                "total_rounds": 0, "active_rounds": 0,
+                "latest_round_date": None,
+                "best_differential": None, "avg_differential": None,
+            })
     return players
 
 

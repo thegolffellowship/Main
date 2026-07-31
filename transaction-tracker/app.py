@@ -1912,9 +1912,46 @@ def api_assign_guest(item_id):
         }
         update_item(item_id, changes)
 
-        return jsonify({"status": "ok", "customer": normalized, "buyer": buyer})
+        out = {"status": "ok", "customer": normalized, "buyer": buyer}
+
+        # Optional STARTING handicap (Kerry 2026-07-30): a guest has no TGF
+        # rounds, so no index, so they cannot be flighted and read "—" on
+        # every roster. Stamping one here is the natural moment. Never a
+        # handicap round — a real computed index always supersedes it.
+        sh = (data or {}).get("starting_handicap_18")
+        if sh not in (None, "") and guest_cid:
+            from email_parser.database import set_starting_handicap
+            res = set_starting_handicap(
+                guest_cid, sh, set_by=f"assign-guest:{session.get('role')}",
+                note=f"Guest of {buyer}" if buyer else "Guest registration")
+            if "error" in res:
+                # The name assignment already succeeded — report the handicap
+                # problem without pretending the whole action failed.
+                out["starting_handicap_error"] = res["error"]
+            else:
+                out["starting_handicap_18"] = res["starting_handicap_18"]
+        return jsonify(out)
     finally:
         conn.close()
+
+
+@app.route("/api/customers/<int:customer_id>/starting-handicap",
+           methods=["POST"])
+@require_role("manager")
+def api_set_starting_handicap(customer_id):
+    """Set or clear a player's placeholder handicap.
+
+    For anyone with no established TGF index — guests, but first timers too
+    (a MEMBER first timer has the same gap). Body: `starting_handicap_18`
+    (null clears), optional `note`. Never creates a handicap round.
+    """
+    from email_parser.database import set_starting_handicap
+    body = request.get_json(silent=True) or {}
+    res = set_starting_handicap(
+        customer_id, body.get("starting_handicap_18"),
+        set_by=f"manual:{session.get('role')}",
+        note=(body.get("note") or "").strip() or None)
+    return (jsonify(res), 400) if "error" in res else jsonify(res)
 
 
 @app.route("/api/items/<int:item_id>/assign-member", methods=["POST"])

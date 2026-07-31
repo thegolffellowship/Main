@@ -1,5 +1,15 @@
-window.TGF_VERSION = "2.151.6";
+window.TGF_VERSION = "2.152.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.152.0",
+    date: "2026-07-30",
+    changes: [
+      "STARTING (placeholder) HANDICAP (Kerry 2026-07-30). A guest or first timer has no TGF rounds, so no index, so they read '—' on every roster AND cannot be flighted at all. Assign Guest now takes an optional starting handicap alongside the name, stamped onto the player's record as a placeholder until real rounds establish their own TGF Handicap. New customers columns starting_handicap_18 / _set_at / _set_by / _note, POST /api/customers/<id>/starting-handicap to set or clear it for anyone (first timers have the same gap even as members), and get_all_handicap_players now surfaces placeholder-only players with handicap_source='starting' so nothing downstream can mistake a stand-in for a real index. It is NEVER a handicap round: no differential, never feeds compute_handicap_index, and a computed index always supersedes it while the placeholder stays on the record as history.",
+      "The scale is in the COLUMN NAME on purpose — starting_handicap_18 — and the input is labelled 18-hole, matching the number TGF quotes and the roster column already displays. After a full exchange spent resolving a 9-vs-18 ambiguity in flighting, naming the scale is the cheapest possible guard against repeating it.",
+      "Assign Guest's three prompt() call sites are replaced by one shared modal taking name + starting handicap, with Enter/Escape handling and an explanation of what the placeholder does.",
+      "BUG FIXED, found by this work: four queries did SELECT customer_name FROM customers, but the real customers table has first_name/last_name and NO customer_name column — the two Test Center sites (ls_add_player, _ls_seed_from_registrations) would have thrown in production. They passed tests only because the test fixture invented a customer_name column. Both fixtures now mirror the real schema so this class of error cannot hide behind green tests again.",
+    ],
+  },
   {
     version: "2.151.6",
     date: "2026-07-30",
