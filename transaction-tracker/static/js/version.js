@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.158.0";
+window.TGF_VERSION = "2.159.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.159.0",
+    date: "2026-07-31",
+    changes: [
+      "THE PAIRING METHOD NOW STICKS TO THE EVENT (Kerry 2026-07-31: 'Whatever method (Random | ABCD | STANDINGS) was selected should persist when the event is reopened'). The choice lived only in the open page's memory, so every reopen — or reload, or a different manager on a different device — reset it to Random. It is now a property of the EVENT (events.pairing_mode), saved the moment a mode button is tapped, alongside the season contest a STANDINGS event pairs off (events.pairing_race_key). Reopening the event comes back exactly as it was left. Saving is fire-and-forget so a slow network never blocks the click, and the in-memory event object is updated in step so the buttons don't snap back on the next re-render.",
+      "An event reopened in STANDINGS mode now loads its race list without waiting for a click — previously the pulldown would have sat on 'Loading races…' forever, since the fetch was wired only to the mode button.",
+      "This also fixes the points column and the in/out colour bands disappearing on reopen for good: they were following the mode, and the mode was resetting.",
+    ],
+  },
   {
     version: "2.158.0",
     date: "2026-07-31",

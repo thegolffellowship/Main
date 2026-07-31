@@ -4395,7 +4395,7 @@
                 // views); mpNotes = generator's dropped-constraint notes.
                 mpDetected: null, mpConfirm: {}, mpPanelOpen: false,
                 mpMatches: [], mpNotes: [],
-                raceOptions: [], raceKey: null,
+                raceOptions: [], raceKey: null, _raceFetch: false,
                 // Partner-request visibility + manager suppression
                 // (Kerry 2026-07-21): requests = resolved list from
                 // GET /pairings; suppressed entries stay listed.
@@ -4426,6 +4426,29 @@
     // Season points for the STANDINGS points column. The server keys the
     // map the same way it keys the rank map — whitespace-collapsed
     // lowercase — so a display name matches without a second lookup.
+    // Remember the pairing METHOD (and the race it pairs off) on the
+    // EVENT, so reopening it — in any browser, by any manager — comes
+    // back the way it was left (Kerry 2026-07-31). Fire-and-forget: a
+    // failed save must never block the manager's click.
+    function savePairingMode(ev, state) {
+        const body = {pairing_mode: state.mode || 'random'};
+        if (state.mode === 'standings') body.pairing_race_key = state.raceKey || null;
+        // Keep the in-memory event object in step so a re-render (which
+        // reseeds from ev) doesn't snap the buttons back.
+        ev.pairing_mode = body.pairing_mode;
+        if ('pairing_race_key' in body) ev.pairing_race_key = body.pairing_race_key;
+        const master = (allEvents || []).find(x => x.id === ev.id);
+        if (master) {
+            master.pairing_mode = body.pairing_mode;
+            if ('pairing_race_key' in body) master.pairing_race_key = body.pairing_race_key;
+        }
+        fetch(`/api/events/${ev.id}`, {
+            method: 'PATCH',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(body),
+        }).catch(() => {});
+    }
+
     function pointsFor(state, name) {
         if (!name || !state.standingsPoints) return null;
         const k = String(name).trim().replace(/\s+/g, ' ').toLowerCase();
@@ -4497,6 +4520,19 @@
     function renderPairingsPanel(ev, registrants) {
         const state = getPairingsState(ev.id);
         state.maxGroupSize = Number(ev.allow_fivesomes) ? 5 : 4;
+        // The pairing METHOD is a property of the event, not of this page
+        // view (Kerry 2026-07-31: "Whatever method was selected should
+        // persist when the event is reopened"). Seed from the saved value
+        // once per panel open; after that the in-session choice wins so a
+        // click isn't undone by the next re-render.
+        if (!state._modeSeeded) {
+            const saved = (ev.pairing_mode || '').trim();
+            if (saved === 'random' || saved === 'abcd' || saved === 'standings') {
+                state.mode = saved;
+            }
+            if (ev.pairing_race_key) state.raceKey = ev.pairing_race_key;
+            state._modeSeeded = true;
+        }
         const fmt = (ev.format || '').trim();
         const isCombo = fmt === '9/18 Combo';
         // 27 Holes is a single-day, 18-hole-style pairing layout
@@ -7085,15 +7121,39 @@
         container.querySelectorAll('.pairings-race-select').forEach(sel => {
             sel.addEventListener('change', () => {
                 const st = pairingsState[sel.dataset.evId];
-                if (st) st.raceKey = sel.value || null;
+                if (st) {
+                    st.raceKey = sel.value || null;
+                    savePairingMode(ev, st);
+                }
             });
         });
+
+        // Reopening an event that was left in STANDINGS mode needs the
+        // race list without a click, or the pulldown sits on "Loading
+        // races…" forever (Kerry 2026-07-31, persisted mode).
+        if (state.mode === 'standings' && !(state.raceOptions || []).length
+            && !state._raceFetch) {
+            state._raceFetch = true;
+            fetch(`/api/events/${ev.id}/pairings/race-options`)
+                .then(r => r.json())
+                .then(d => {
+                    state.raceOptions = d.options || [];
+                    if (!state.raceKey) {
+                        const def = state.raceOptions.find(o => o.is_default);
+                        state.raceKey = def ? def.race_key : null;
+                    }
+                    state._raceFetch = false;
+                    rerenderDetail(container, ev);
+                })
+                .catch(() => { state._raceFetch = false; });
+        }
 
         container.querySelectorAll('[data-pairings-mode]').forEach(btn => {
             btn.addEventListener('click', async e => {
                 e.stopPropagation();
                 state.mode = btn.dataset.pairingsMode;
                 state.swapMode = null; state.selection = null;
+                savePairingMode(ev, state);
                 rerenderDetail(container, ev);
                 // Load the race list the first time STANDINGS is chosen and
                 // preselect the chapter's default, so Generate is correct
@@ -7106,6 +7166,7 @@
                         if (!state.raceKey) {
                             const def = state.raceOptions.find(o => o.is_default);
                             state.raceKey = def ? def.race_key : null;
+                            if (state.raceKey) savePairingMode(ev, state);
                         }
                         rerenderDetail(container, ev);
                     } catch (err) {

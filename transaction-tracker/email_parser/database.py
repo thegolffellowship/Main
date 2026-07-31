@@ -2984,6 +2984,8 @@ def init_db(db_path: str | Path | None = None) -> None:
             # and printables.
             ("nine_side", "TEXT"),
             ("allow_fivesomes", "INTEGER"),
+            ("pairing_mode", "TEXT"),
+            ("pairing_race_key", "TEXT"),
         ]:
             try:
                 conn.execute(f"ALTER TABLE events ADD COLUMN {col} {col_type}")
@@ -17056,6 +17058,7 @@ def update_event(event_id: int, fields: dict, db_path: str | Path | None = None)
                 "tee_time_count", "tee_time_interval", "start_time_18", "start_type_18",
                 "tee_time_count_18", "event_type", "tee_direction", "tee_direction_18",
                 "nine_side", "allow_fivesomes",
+                "pairing_mode", "pairing_race_key",
                 "course_cost", "tgf_markup", "side_game_fee", "transaction_fee_pct",
                 "course_cost_9", "course_cost_18", "tgf_markup_9", "tgf_markup_18",
                 "side_game_fee_9", "side_game_fee_18",

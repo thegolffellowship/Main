@@ -619,6 +619,14 @@ The Quarry-night rulings, all built:
      `max_age_hours` so opening the panel never triggers a GG fetch) so
      a SAVED sheet shows points as well. The 3-tuple return is unchanged
      for every existing caller.
+   - **The MODE persists on the event (v2.159.0, Kerry 2026-07-31).**
+     `events.pairing_mode` ('random'|'abcd'|'standings') and
+     `events.pairing_race_key` are written by a fire-and-forget PATCH the
+     moment a mode button or the race pulldown changes, and reseeded into
+     the panel state once per open. Previously the choice lived only in
+     page memory, so any reopen reset it to Random — which is also what
+     made the points column and colour bands vanish. A reopen in
+     STANDINGS mode fetches the race list without waiting for a click.
    - **In/out colour bands (v2.158.0).** `_standings_rank_map(_with_meta
      =True)` returns `{"points": {...}, "enrolled": {...}}` keyed by
      customer_id AND name forms. The pairing card shades each row GREEN
