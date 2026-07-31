@@ -58,7 +58,8 @@ def build_fixture(path):
     conn.executescript("""
         -- Mirrors the REAL schema: first_name/last_name, NO customer_name.
         CREATE TABLE customers (customer_id INTEGER PRIMARY KEY,
-                                first_name TEXT, last_name TEXT, chapter TEXT);
+                                first_name TEXT, last_name TEXT, chapter TEXT,
+                                current_player_status TEXT);
         CREATE TABLE events (id INTEGER PRIMARY KEY, item_name TEXT,
                              event_date TEXT, format TEXT, course TEXT);
         CREATE TABLE event_aliases (alias_name TEXT, canonical_event_name TEXT);
@@ -106,8 +107,10 @@ def build_fixture(path):
 
     for i, (name, ph, offset, net_buy, gross_buy) in enumerate(FIELD, start=1):
         _fn, _ln = name.split(" ", 1)
-        conn.execute("INSERT INTO customers (customer_id, first_name, last_name)"
-                     " VALUES (?, ?, ?)", (i, _fn, _ln))
+        conn.execute("INSERT INTO customers (customer_id, first_name, last_name,"
+                     " current_player_status) VALUES (?, ?, ?, ?)",
+                     (i, _fn, _ln,
+                      "active_guest" if name == "Guest Player" else "active_member"))
         sg = ("BOTH" if net_buy and gross_buy else "NET" if net_buy
               else "GROSS" if gross_buy else "NONE")
         conn.execute("INSERT INTO items (id, customer_id, customer, item_name,"

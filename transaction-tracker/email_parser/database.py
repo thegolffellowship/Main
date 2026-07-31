@@ -8700,7 +8700,20 @@ def _ensure_scoring_tables(conn: sqlite3.Connection) -> None:
             ("starting_handicap_18", "REAL"),
             ("starting_handicap_set_at", "TEXT"),
             ("starting_handicap_set_by", "TEXT"),
-            ("starting_handicap_note", "TEXT")):
+            ("starting_handicap_note", "TEXT"),
+            # WHO BROUGHT THIS PLAYER (Kerry 2026-07-30). A guest assigned
+            # off a member's purchase was referred by that member, and the
+            # buyer is already known at that moment — so derive it, never
+            # ask (Principle 1). Stored as the referrer's customer_id per
+            # Principle 6; the display name resolves on read.
+            #
+            # NOT a referral FEE. Fees live in referral_fees and, per the
+            # ratified rules, arise only from a redeemed coupon (comped) or
+            # a payout receipt (paid). Recording a relationship must never
+            # mint a liability.
+            ("referred_by_customer_id",
+             "INTEGER REFERENCES customers(customer_id)"),
+            ("referred_at", "TEXT")):
         try:
             conn.execute(f"ALTER TABLE customers ADD COLUMN {col} {ddl}")
         except sqlite3.OperationalError:
@@ -13179,6 +13192,32 @@ def ls_create_session(name: str, holes: int = 9, event_name: str | None = None,
         return {"session_id": sid, "name": name, "holes": holes}
 
 
+def _ls_is_member(current_player_status: str | None,
+                  item_user_status: str | None) -> int:
+    """1 when the player is a MEMBER, by the roster — not by the label.
+
+    Kerry 2026-07-30: "1st Timer is what throws you because with our current
+    system a 1st timer could be either a guest or a member. But if you match
+    it against the current roster, you'll see that they aren't members yet."
+
+    So `customers.current_player_status` decides it whenever we have a
+    customer record. `items.user_status` is a per-order SNAPSHOT (the
+    identity-drift class in CLAUDE.md) and is only a fallback for a
+    registration with no linked customer — and then only to rule someone
+    OUT, never in.
+
+    This gates hole-in-one eligibility: guests and first timers pay in but
+    cannot win. Getting it wrong is a money error, so the ambiguous label
+    never decides on its own.
+    """
+    st = (current_player_status or "").strip().lower()
+    if st:
+        return 1 if st in _MEMBER_PLAYER_STATUSES else 0
+    label = (item_user_status or "").strip().upper()
+    return 0 if label in ("GUEST", "1ST TIMER", "FIRST TIMER",
+                          "1ST-TIMER", "FIRSTTIMER") else 1
+
+
 def _ls_seed_from_registrations(conn: sqlite3.Connection, ev: dict,
                                 name: str | None,
                                 created_by: str | None) -> dict:
@@ -13250,12 +13289,20 @@ def _ls_seed_from_registrations(conn: sqlite3.Connection, ev: dict,
         teams[(p["player_name"] or "").strip().lower()] = p["group_num"]
 
     seen, seeded = set(), 0
+    # MEMBERSHIP comes from the customer's CURRENT status, not the item's
+    # user_status label (Kerry 2026-07-30). "1st TIMER" is ambiguous — a
+    # first timer can be a guest OR a member — so the label cannot decide
+    # it; the roster does. is_member gates HIO eligibility (guests pay in
+    # but cannot win), so guessing here would be a money error.
     for it in conn.execute(
-            """SELECT customer_id, customer, user_status FROM items
-               WHERE LOWER(item_name) = LOWER(?)
-                 AND COALESCE(transaction_status,'active') NOT IN
+            """SELECT i.customer_id, i.customer, i.user_status,
+                      c.current_player_status
+               FROM items i
+               LEFT JOIN customers c ON c.customer_id = i.customer_id
+               WHERE LOWER(i.item_name) = LOWER(?)
+                 AND COALESCE(i.transaction_status,'active') NOT IN
                      ('credited','refunded','transferred','rsvp_only')
-               ORDER BY customer""", (ev["item_name"],)).fetchall():
+               ORDER BY i.customer""", (ev["item_name"],)).fetchall():
         cid = it["customer_id"]
         key = cid or (it["customer"] or "").strip().lower()
         if not key or key in seen:
@@ -13276,8 +13323,7 @@ def _ls_seed_from_registrations(conn: sqlite3.Connection, ev: dict,
             (sid, cid, nm, teams.get(nm.strip().lower()),
              1 if (cid and cid in net_buyers) else 0,
              1 if (cid and cid in gross_buyers) else 0,
-             0 if (it["user_status"] or "").strip().upper() in
-             ("GUEST", "1ST TIMER", "FIRST TIMER") else 1))
+             _ls_is_member(it["current_player_status"], it["user_status"])))
         seeded += 1
     conn.commit()
     return {"session_id": sid, "event": ev["item_name"], "holes": holes,
@@ -26655,6 +26701,51 @@ def set_starting_handicap(customer_id: int, index_18: float | None,
             "starting_handicap_9": round(index_18 / 2, 1)
             if index_18 is not None else None,
             "cleared": index_18 is None}
+
+
+def set_referred_by(customer_id: int, referrer_customer_id: int | None,
+                    db_path: str | Path | None = None) -> dict:
+    """Record who brought a player in. Relationship only — never a fee.
+
+    Referral FEES live in `referral_fees` and, per the ratified rules, arise
+    only from a redeemed coupon (comped) or a payout receipt (paid). Writing
+    a relationship here must never mint a liability, so nothing is inserted
+    there. `acquisition_source` is stamped only when it is still blank, so a
+    known source is never overwritten by an inference.
+    """
+    if referrer_customer_id is not None and referrer_customer_id == customer_id:
+        return {"error": "a player cannot refer themselves"}
+    _NAME = ("TRIM(COALESCE(first_name,'') || ' ' || COALESCE(last_name,'')) "
+             "AS customer_name")
+    with _connect(db_path) as conn:
+        row = conn.execute(f"SELECT {_NAME} FROM customers WHERE customer_id = ?",
+                           (customer_id,)).fetchone()
+        if not row:
+            return {"error": f"customer {customer_id} not found"}
+        ref_name = None
+        if referrer_customer_id is not None:
+            r = conn.execute(f"SELECT {_NAME} FROM customers WHERE customer_id = ?",
+                             (referrer_customer_id,)).fetchone()
+            if not r:
+                return {"error": f"referrer {referrer_customer_id} not found"}
+            ref_name = (r["customer_name"] or "").strip() or None
+        conn.execute(
+            """UPDATE customers
+               SET referred_by_customer_id = ?,
+                   referred_at = CASE WHEN ? IS NULL THEN NULL
+                                      ELSE COALESCE(referred_at, datetime('now')) END,
+                   acquisition_source = CASE
+                       WHEN ? IS NOT NULL AND COALESCE(TRIM(acquisition_source),'') = ''
+                       THEN 'referral' ELSE acquisition_source END
+               WHERE customer_id = ?""",
+            (referrer_customer_id, referrer_customer_id, referrer_customer_id,
+             customer_id))
+        conn.commit()
+    return {"customer_id": customer_id,
+            "customer_name": (row["customer_name"] or "").strip(),
+            "referred_by_customer_id": referrer_customer_id,
+            "referred_by_name": ref_name,
+            "cleared": referrer_customer_id is None}
 
 
 def get_starting_handicaps(db_path: str | Path | None = None) -> dict:

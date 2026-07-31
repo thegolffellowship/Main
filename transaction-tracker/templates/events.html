@@ -6362,6 +6362,18 @@
             });
         });
 
+        // Say what actually happened. A NULL customer_id leaves the
+        // registration invisible to every cid-keyed feature, so it must
+        // never pass silently as success.
+        function reportGuestAssigned(res) {
+            if (!res || res.status !== "ok") return;
+            if (res.warning) { alert("\u26a0 " + res.warning); return; }
+            if (res.starting_handicap_error) {
+                alert("Name assigned, but the starting handicap was not saved: "
+                      + res.starting_handicap_error);
+            }
+        }
+
         // ── Guest details prompt (name + optional STARTING handicap) ──────
         // Replaces three separate prompt() calls. A guest / first timer has
         // no TGF rounds, so no index, so they read "—" on the roster and
@@ -6389,10 +6401,30 @@
                     Starting handicap <span style="font-weight:400;color:#6B7280;">— 18-hole, optional</span></label>
                   <input id="gd-hcp" type="number" step="0.1" placeholder="e.g. 14.0"
                     style="width:130px;padding:9px 11px;border:1px solid #E5E7EB;border-radius:8px;font-size:14px;">
-                  <div style="font-size:11.5px;color:#6B7280;margin-top:8px;line-height:1.45;">
+                  <div style="font-size:11.5px;color:#6B7280;margin:8px 0 14px;line-height:1.45;">
                     Placeholder only. It shows on their record and lets them be flighted,
                     and is replaced automatically once enough rounds establish their
                     real TGF Handicap. It never counts as a round.</div>
+                  <div style="display:flex;gap:10px;">
+                    <div style="flex:1 1 0;">
+                      <label style="display:block;font-size:12px;font-weight:600;margin-bottom:4px;">
+                        Email <span style="font-weight:400;color:#6B7280;">— optional</span></label>
+                      <input id="gd-email" type="email" autocomplete="off"
+                        style="width:100%;box-sizing:border-box;padding:9px 11px;border:1px solid #E5E7EB;
+                        border-radius:8px;font-size:14px;">
+                    </div>
+                    <div style="flex:1 1 0;">
+                      <label style="display:block;font-size:12px;font-weight:600;margin-bottom:4px;">
+                        Phone <span style="font-weight:400;color:#6B7280;">— optional</span></label>
+                      <input id="gd-phone" type="tel" autocomplete="off"
+                        style="width:100%;box-sizing:border-box;padding:9px 11px;border:1px solid #E5E7EB;
+                        border-radius:8px;font-size:14px;">
+                    </div>
+                  </div>
+                  <div style="font-size:11.5px;color:#6B7280;margin-top:10px;line-height:1.45;">
+                    Saving creates a real customer record for this player and records
+                    <b>${escapeHtml(buyerName || "the buyer")}</b> as who brought them.
+                    Contact details can be added later.</div>
                   <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:18px;">
                     <button id="gd-cancel" style="border:1px solid #E5E7EB;background:#fff;border-radius:999px;
                       padding:7px 16px;font-size:13px;cursor:pointer;">Cancel</button>
@@ -6406,7 +6438,10 @@
                     const name = box.querySelector("#gd-name").value.trim();
                     if (!name) { box.querySelector("#gd-name").focus(); return; }
                     const raw = box.querySelector("#gd-hcp").value.trim();
-                    close({ name: name, hcp: raw === "" ? null : parseFloat(raw) });
+                    close({ name: name,
+                            hcp: raw === "" ? null : parseFloat(raw),
+                            email: box.querySelector("#gd-email").value.trim() || null,
+                            phone: box.querySelector("#gd-phone").value.trim() || null });
                 };
                 const onKey = e => {
                     if (e.key === "Escape") close(null);
@@ -6433,13 +6468,16 @@
                         method: "POST",
                         headers: { "Content-Type": "application/json" },
                         body: JSON.stringify({ guest_name: gd.name,
-                                               starting_handicap_18: gd.hcp }),
+                                               starting_handicap_18: gd.hcp,
+                                               guest_email: gd.email,
+                                               guest_phone: gd.phone }),
                     });
                     if (!res.ok) {
                         const data = await res.json().catch(() => ({}));
                         alert(data.error || "Failed to assign guest name.");
                         return;
                     }
+                    reportGuestAssigned(await res.json().catch(() => ({})));
                     await fetchItems();
                     await fetchEvents();
                 } catch (err) { alert("Failed to assign guest name."); }
@@ -6458,13 +6496,16 @@
                         method: "POST",
                         headers: { "Content-Type": "application/json" },
                         body: JSON.stringify({ guest_name: gd.name,
-                                               starting_handicap_18: gd.hcp }),
+                                               starting_handicap_18: gd.hcp,
+                                               guest_email: gd.email,
+                                               guest_phone: gd.phone }),
                     });
                     if (!res.ok) {
                         const data = await res.json().catch(() => ({}));
                         alert(data.error || "Failed to assign guest name.");
                         return;
                     }
+                    reportGuestAssigned(await res.json().catch(() => ({})));
                     await fetchItems();
                     await fetchEvents();
                 } catch (err) { alert("Failed to assign guest name."); }
@@ -9974,9 +10015,12 @@
                         method: "POST",
                         headers: { "Content-Type": "application/json" },
                         body: JSON.stringify({ guest_name: gd.name,
-                                               starting_handicap_18: gd.hcp }),
+                                               starting_handicap_18: gd.hcp,
+                                               guest_email: gd.email,
+                                               guest_phone: gd.phone }),
                     });
                     if (!res.ok) { const d = await res.json().catch(() => ({})); alert(d.error || "Failed."); return; }
+                    reportGuestAssigned(await res.json().catch(() => ({})));
                     parseWarnings = parseWarnings.filter(w => w.id !== `guest-${itemId}`);
                     renderParseWarningBanner();
                     await fetchItems();

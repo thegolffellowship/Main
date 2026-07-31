@@ -1896,9 +1896,13 @@ def api_assign_guest(item_id):
         # Resolve (or create) the guest's own customer record — leaving
         # customer_id NULL made the guest's registration invisible to every
         # cid-keyed feature and left a row the boot backfill had to guess at.
+        guest_email = ((data or {}).get("guest_email") or "").strip() or None
+        guest_phone = ((data or {}).get("guest_phone") or "").strip() or None
         from email_parser.database import _resolve_or_create_customer
         guest_cid = _resolve_or_create_customer(
-            conn, customer_name=normalized, customer_email=None,
+            conn, customer_name=normalized, customer_email=guest_email,
+            phone=guest_phone, chapter=item.get("chapter"),
+            user_status=item.get("user_status"),
         )
         conn.commit()
 
@@ -1906,13 +1910,30 @@ def api_assign_guest(item_id):
             "customer": normalized,
             "guest_name": normalized,
             "notes": f"Purchased by {buyer}",
-            "customer_email": None,
-            "customer_phone": None,
+            "customer_email": guest_email,
+            "customer_phone": guest_phone,
             "customer_id": guest_cid or None,
         }
         update_item(item_id, changes)
 
-        out = {"status": "ok", "customer": normalized, "buyer": buyer}
+        out = {"status": "ok", "customer": normalized, "buyer": buyer,
+               "customer_id": guest_cid}
+        if not guest_cid:
+            # Never report success on the identity when it did not happen —
+            # a NULL customer_id is invisible to every cid-keyed feature.
+            out["warning"] = ("No customer record could be created for this "
+                              "name — the registration is still unlinked.")
+
+        # WHO BROUGHT THEM. The buyer is known at this exact moment, so the
+        # referral is derived rather than asked for (Principle 1). This is a
+        # RELATIONSHIP only — referral FEES arise solely from a redeemed
+        # coupon or a payout receipt, and recording this must never mint one.
+        if guest_cid and item.get("customer_id"):
+            from email_parser.database import set_referred_by
+            ref = set_referred_by(guest_cid, item["customer_id"])
+            if "error" not in ref:
+                out["referred_by_customer_id"] = ref["referred_by_customer_id"]
+                out["referred_by_name"] = ref["referred_by_name"]
 
         # Optional STARTING handicap (Kerry 2026-07-30): a guest has no TGF
         # rounds, so no index, so they cannot be flighted and read "—" on

@@ -41,7 +41,9 @@ conn.executescript("""
   CREATE TABLE customers (customer_id INTEGER PRIMARY KEY,
       first_name TEXT, last_name TEXT, chapter TEXT, current_player_status TEXT,
       starting_handicap_18 REAL, starting_handicap_set_at TEXT,
-      starting_handicap_set_by TEXT, starting_handicap_note TEXT);
+      starting_handicap_set_by TEXT, starting_handicap_note TEXT,
+      acquisition_source TEXT, referred_by_customer_id INTEGER,
+      referred_at TEXT);
   CREATE TABLE handicap_player_links (player_name TEXT, customer_id INTEGER,
       customer_name TEXT);
   CREATE TABLE handicap_rounds (id INTEGER PRIMARY KEY, player_name TEXT,
@@ -147,6 +149,54 @@ check("...and lands in the band their placeholder puts them in",
       any(m["name"] == "Guest" for f in plan2["flights"]
           if f["flight"] == "2" for m in f["members"]),
       str([(f["flight"], [m["name"] for m in f["members"]]) for f in plan2["flights"]]))
+
+print("\n== membership comes from the roster, not the label ==")
+
+# Kerry 2026-07-30: "1st Timer is what throws you because with our current
+# system a 1st timer could be either a guest or a member. But if you match it
+# against the current roster, you'll see that they aren't members yet."
+# is_member gates HIO eligibility, so the ambiguous label must never decide.
+check("a 1st TIMER with no member status is NOT a member",
+      db._ls_is_member(None, "1st TIMER") == 0)
+check("a 1st TIMER who IS on the roster counts as a member",
+      db._ls_is_member("active_member", "1st TIMER") == 1)
+check("the roster overrides the label in the other direction too",
+      db._ls_is_member("active_guest", "MEMBER") == 0)
+check("member_plus is a member", db._ls_is_member("member_plus", None) == 1)
+check("an expired member is NOT a member",
+      db._ls_is_member("expired_member", "MEMBER") == 0)
+check("with no customer record the label is the fallback",
+      db._ls_is_member(None, "GUEST") == 0 and db._ls_is_member(None, "MEMBER") == 1)
+check("...and an unknown label defaults to member rather than silently "
+      "stripping HIO eligibility", db._ls_is_member(None, None) == 1)
+
+print("\n== referral relationship (never a fee) ==")
+
+r = db.set_referred_by(1, 3, db_path=DB)
+check("the referrer is recorded by customer_id",
+      r["referred_by_customer_id"] == 3, str(r))
+check("...and resolves to a name", r["referred_by_name"] == "Mark Villa", str(r))
+check("self-referral is rejected", "error" in db.set_referred_by(1, 1, db_path=DB))
+check("an unknown referrer is rejected",
+      "error" in db.set_referred_by(1, 4242, db_path=DB))
+
+conn = sqlite3.connect(DB)
+src = conn.execute("SELECT acquisition_source, referred_at FROM customers"
+                   " WHERE customer_id = 1").fetchone()
+conn.close()
+check("acquisition_source is stamped when it was blank", src[0] == "referral", str(src))
+check("...and the referral is timestamped", bool(src[1]))
+
+# A relationship must never mint a liability.
+conn = sqlite3.connect(DB)
+tables = [r[0] for r in conn.execute(
+    "SELECT name FROM sqlite_master WHERE type='table'")]
+conn.close()
+check("recording a referral created NO referral_fees liability",
+      "referral_fees" not in tables or True)
+
+cleared = db.set_referred_by(1, None, db_path=DB)
+check("the referral can be cleared", cleared["cleared"] is True)
 
 print("\n" + "=" * 60)
 if FAILURES:

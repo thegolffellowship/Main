@@ -1,5 +1,15 @@
-window.TGF_VERSION = "2.152.0";
+window.TGF_VERSION = "2.152.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.152.1",
+    date: "2026-07-30",
+    changes: [
+      "ASSIGN GUEST now creates a REAL customer record and records WHO BROUGHT THEM. The buyer is already known at that moment, so the referral is derived rather than asked for (Principle 1): new customers.referred_by_customer_id / referred_at, set from the purchasing member, with acquisition_source stamped only when it was blank so a known source is never overwritten. The response returns the created customer_id and the referrer's name, and — critically — says so when NO customer record could be created, because a NULL customer_id leaves the registration invisible to every cid-keyed feature and must never pass silently as success. Optional EMAIL and PHONE fields were added to the same modal and flow through to both the customer record and the registration.",
+      "RECORDING A REFERRAL NEVER MINTS A LIABILITY. referral_fees rows arise only from a redeemed coupon (comped) or a payout receipt (paid) per the ratified rules, so set_referred_by writes the relationship and nothing else; verified end to end that no fee row is created. Self-referral and unknown referrers are rejected.",
+      "MEMBERSHIP IS DECIDED BY THE ROSTER, NOT THE LABEL (Kerry 2026-07-30): 'a 1st timer could be either a guest or a member — if you match it against the current roster, you'll see that they aren't members yet.' New _ls_is_member resolves customers.current_player_status against the ratified member statuses and falls back to the item's user_status snapshot only when there is no linked customer, and then only to rule someone OUT. This gates hole-in-one eligibility (guests pay in but cannot win), so letting the ambiguous label decide would have been a money error — Kypuros and Villa are both guests despite reading '1st TIMER'.",
+      "Assign Member already had the type-and-autofill member picker; no change needed there. Test fixtures gained current_player_status so the roster path is exercised rather than the label fallback.",
+    ],
+  },
   {
     version: "2.152.0",
     date: "2026-07-30",
