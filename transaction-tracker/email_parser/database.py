@@ -45398,12 +45398,16 @@ def generate_event_pairings(
     protect_partner_requests: bool = True,
     seeds: list | None = None,
     mp_pairs: list | None = None,
+    race_key: str | None = None,
     db_path=None,
 ) -> dict:
     """Generate pairings for an event and return (but do NOT save) the result.
 
-    mode: 'random' | 'abcd'
-    protect_partner_requests: honor partner_request field (random mode only)
+    mode: 'random' | 'abcd' | 'standings'
+        'standings' orders by the chapter's points race with the LEADERS
+        GOING OFF LAST (PGA order), honoring partner requests first — see
+        _standings_groups. race_key overrides the chapter's default race.
+    protect_partner_requests: honor partner_request field
     seeds: list of pre-assigned player locks:
         [{"holes": "9"|"18", "slot_index": int (0-based), "players": [{"name", "cart_pos"}]}]
     mp_pairs: manager-CONFIRMED Match Play matches, [[name1, name2], ...]
@@ -45436,6 +45440,7 @@ def generate_event_pairings(
         if not ev:
             raise ValueError(f"Event {event_id} not found")
         ev = dict(ev)
+        ev_chapter = ev.get("chapter")
 
         fmt = (ev.get("format") or "").strip()
         is_combo = fmt == "9/18 Combo"
@@ -45743,6 +45748,20 @@ def generate_event_pairings(
 
         if mode == "abcd":
             groups_players = _abcd_groups(free_players, hcp_map)
+        elif mode == "standings":
+            _rank_map, _race_used, _rnotes = _standings_rank_map(
+                ev_chapter, race_key, db_path=db_path)
+            mp_notes.extend(_rnotes)
+            if _rank_map:
+                groups_players, _snotes = _standings_groups(
+                    free_players, _rank_map, partner_map,
+                    protect_partner_requests)
+                mp_notes.extend(_snotes)
+            else:
+                # No usable standings — say so and fall back rather than
+                # silently producing an order that looks intentional.
+                groups_players = _abcd_groups(free_players, hcp_map)
+                mp_notes.append("Standings unavailable — used ABCD instead.")
         else:
             # Best-of-K restarts + swap hill-climb. The greedy alone has a
             # structural attractor: it fills groups in order, so the most-
@@ -46179,6 +46198,118 @@ def _random_groups(
             groups.append(leftover)
 
     return groups
+
+
+def _standings_rank_map(chapter: str | None, race_key: str | None = None,
+                        db_path=None) -> tuple[dict, str | None, list]:
+    """{lowercase player name: finishing position} for a chapter's points race.
+
+    Position 1 is the LEADER. Returns (rank_map, race_key_used, notes).
+    A stale snapshot is fine here — pairings are set before the round, so
+    the standings that matter are the ones going in.
+    """
+    notes = []
+    key = race_key
+    if not key:
+        ch = (chapter or "").strip().lower()
+        for k, cfg in _GG_POINTS_RACES.items():
+            if (cfg.get("contest_type") or "").upper().startswith("NET") and \
+                    (cfg.get("chapter") or "").strip().lower() == ch:
+                key = k
+                break
+    if not key:
+        notes.append(f"No points race found for chapter '{chapter}' — "
+                     f"pairings fell back to random order.")
+        return {}, None, notes
+    try:
+        data = get_points_race_standings(key, db_path=db_path)
+    except Exception as e:
+        notes.append(f"Could not read the {key} standings ({e}) — "
+                     f"pairings fell back to random order.")
+        return {}, key, notes
+    rank_map = {}
+    for i, r in enumerate(data.get("standings") or []):
+        nm = (r.get("player_name") or "").strip().lower()
+        if not nm:
+            continue
+        pos = r.get("position")
+        rank_map.setdefault(nm, int(pos) if pos else i + 1)
+    if not rank_map:
+        notes.append(f"The {key} standings are empty — pairings fell back "
+                     f"to random order.")
+    return rank_map, key, notes
+
+
+def _standings_groups(players: list[str], rank_map: dict, partner_map: dict,
+                      protect_partner_requests: bool) -> tuple[list, list]:
+    """Group by points-race standing with the LEADERS GOING OFF LAST (PGA
+    order), while still honoring partner requests.
+
+    Kerry 2026-07-30: "I want the leaders paired last just like in the PGA.
+    However, I still want to honor Player Requests for this one. Order
+    should just pick up after their requests are accounted for."
+
+    So requests are resolved FIRST into units, then units are ordered by
+    their BEST-ranked member. A unit takes the position of its strongest
+    player, which is what keeps a leader in the last group even when their
+    requested partner is unranked — ordering by the weaker member would
+    quietly drag the leader to an early tee time.
+
+    Unranked players (no standing: guests, first timers, non-enrolled) go
+    off EARLIEST, since "leaders last" makes the front of the field the
+    place for everyone outside the race.
+    """
+    notes = []
+    if not players:
+        return [], notes
+
+    # 1. Units — a partner request binds two players into one unit.
+    placed, units = set(), []
+    if protect_partner_requests:
+        for requester, req_text in partner_map.items():
+            if requester not in players or requester in placed:
+                continue
+            partner = _find_partner_name(req_text, players, requester)
+            if partner and partner not in placed:
+                units.append([requester, partner])
+                placed.add(requester)
+                placed.add(partner)
+    units.extend([p] for p in players if p not in placed)
+
+    # 2. Order units by their BEST rank; leaders last, unranked first.
+    UNRANKED = 10 ** 6
+
+    def best_rank(unit):
+        return min((rank_map.get(n.lower(), UNRANKED) for n in unit),
+                   default=UNRANKED)
+
+    # Descending rank number = worst first, leader (position 1) last.
+    units.sort(key=lambda u: (-best_rank(u), (u[0] or "").lower()))
+
+    # 3. Fill groups sequentially. Short groups go EARLIEST so the leaders
+    #    land in a full foursome at the back, as they would on tour.
+    n = len(players)
+    sizes = sorted(_make_group_sizes(n))
+    groups, gi = [[] for _ in sizes], 0
+    for unit in units:
+        while gi < len(sizes) and len(groups[gi]) + len(unit) > sizes[gi]:
+            gi += 1
+        if gi >= len(sizes):
+            # A unit that fits nowhere left — drop it into the smallest
+            # group with room rather than losing the player.
+            target = min(range(len(groups)), key=lambda i: len(groups[i]))
+            groups[target].extend(unit)
+            notes.append(f"{' + '.join(unit)}: no slot matched the standings "
+                         f"order — placed in the smallest available group.")
+            continue
+        groups[gi].extend(unit)
+    groups = [g for g in groups if g]
+
+    ranked = sum(1 for p in players if p.lower() in rank_map)
+    notes.append(f"Ordered by points-race standing — leaders go off LAST. "
+                 f"{ranked} of {len(players)} players are in the standings; "
+                 f"the rest tee off earliest.")
+    return groups, notes
 
 
 def _abcd_groups(players: list[str], hcp_map: dict) -> list[list[str]]:

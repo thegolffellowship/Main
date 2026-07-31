@@ -4402,10 +4402,17 @@
         html += '<div class="pairings-control-group">';
         html += `<button class="pairings-mode-btn${state.mode === 'random' ? ' active' : ''}" data-ev-id="${ev.id}" data-pairings-mode="random">Random</button>`;
         html += `<button class="pairings-mode-btn${state.mode === 'abcd' ? ' active' : ''}" data-ev-id="${ev.id}" data-pairings-mode="abcd">ABCD</button>`;
+        // STANDINGS — order by the chapter's points race with the LEADERS
+        // GOING OFF LAST (PGA order). Partner requests are still honored;
+        // the standings order picks up around them (Kerry 2026-07-30).
+        html += `<button class="pairings-mode-btn${state.mode === 'standings' ? ' active' : ''}" data-ev-id="${ev.id}" data-pairings-mode="standings" title="Order by ${escapeHtml(ev.chapter || 'chapter')} points race — leaders tee off LAST, partner requests still honored">STANDINGS</button>`;
         html += '</div>';
 
-        // Partner requests toggle (random mode only)
-        if (state.mode === 'random') {
+        // Partner requests toggle. Shown for RANDOM and STANDINGS — Kerry
+        // 2026-07-30 wants requests honored in standings mode too, with the
+        // standings order picking up around them. ABCD has no use for it:
+        // its whole point is one player per handicap tier per group.
+        if (state.mode === 'random' || state.mode === 'standings') {
             html += `<label class="pairings-toggle-label" style="cursor:pointer;display:flex;align-items:center;gap:0.35rem;font-size:0.82rem;">
                 <input type="checkbox" data-ev-id="${ev.id}" data-pairings-partners="${ev.id}" ${state.protectPartners ? 'checked' : ''} style="cursor:pointer;">
                 Partner Requests

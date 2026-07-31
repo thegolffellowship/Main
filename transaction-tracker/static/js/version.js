@@ -1,5 +1,15 @@
-window.TGF_VERSION = "2.152.2";
+window.TGF_VERSION = "2.152.3";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.152.3",
+    date: "2026-07-30",
+    changes: [
+      "PAIRINGS BY POINTS-RACE STANDINGS, LEADERS OFF LAST (Kerry 2026-07-30): 'I want the leaders paired last just like in the PGA. However, I still want to honor Player Requests for this one. Order should just pick up after their requests are accounted for.' New STANDINGS mode alongside Random and ABCD, resolving the chapter's NET points race automatically (San Antonio / Austin) with an optional race_key override.",
+      "Partner requests are resolved into UNITS FIRST, then units are ordered by their BEST-ranked member. That detail is load-bearing: a leader who requests an unranked partner would otherwise be dragged to an early tee time by their partner's position. Unranked players (guests, first timers, anyone not enrolled) tee off EARLIEST, since leaders-last makes the front of the field the place for everyone outside the race. Short groups are placed earliest too, so the leaders land in a full foursome at the back as they would on tour.",
+      "The Partner Requests toggle now shows in STANDINGS mode as well as Random (ABCD has no use for it — its whole point is one player per handicap tier per group). When the standings are missing or empty the generator says so in its notes and falls back to ABCD rather than silently producing an order that looks intentional.",
+      "Covered by test_pairings_standings.py: leaders always last, unranked earliest, requested pairs kept together, the leader-with-unranked-partner case, and every field size from 2 to 24 placing all players with no group over four.",
+    ],
+  },
   {
     version: "2.152.2",
     date: "2026-07-30",

@@ -4900,8 +4900,9 @@ def api_generate_pairings(event_id):
     protect = bool(data.get("protect_partner_requests", True))
     seeds = data.get("seeds", [])
     mp_pairs = data.get("mp_pairs", [])
-    if mode not in ("random", "abcd"):
-        return jsonify({"error": "mode must be 'random' or 'abcd'"}), 400
+    if mode not in ("random", "abcd", "standings"):
+        return jsonify({"error": "mode must be 'random', 'abcd' or "
+                                 "'standings'"}), 400
     if not isinstance(mp_pairs, list):
         return jsonify({"error": "mp_pairs must be a list of [name, name] pairs"}), 400
     try:
@@ -4911,6 +4912,7 @@ def api_generate_pairings(event_id):
             protect_partner_requests=protect,
             seeds=seeds,
             mp_pairs=mp_pairs,
+            race_key=(data.get("race_key") or "").strip() or None,
         )
         return jsonify(result)
     except ValueError as e:
