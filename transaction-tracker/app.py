@@ -9838,19 +9838,31 @@ def api_ls_flightable_events():
 @app.route("/api/test-center/scorable-events")
 @require_role("admin")
 def api_ls_scorable_events():
-    """Events that have imported scorecards — the seedable set."""
+    """Events a session can be seeded from.
+
+    Includes UPCOMING events that have registrations but no cards yet — a
+    session for those seeds from the field so the pre-flight can happen
+    days before the round, with scores arriving later via Pull from GG.
+    Restricting this to events with scorecards made the pre-flight
+    impossible: the only events you could shadow were ones already played.
+    """
     from email_parser.database import get_connection
     conn = get_connection()
     try:
         rows = conn.execute(
-            """SELECT e.item_name, e.event_date, e.course,
-                      COUNT(sr.id) AS n_rounds
-               FROM events e JOIN scoring_rounds sr ON sr.event_id = e.id
-               GROUP BY e.id
-               HAVING n_rounds > 0
-               ORDER BY e.event_date DESC, e.item_name
-               LIMIT 200""").fetchall()
-        return jsonify([dict(r) for r in rows])
+            """SELECT e.item_name, e.event_date, e.course, e.chapter,
+                      (SELECT COUNT(*) FROM scoring_rounds sr
+                        WHERE sr.event_id = e.id) AS n_rounds,
+                      (SELECT COUNT(*) FROM items i
+                        WHERE LOWER(i.item_name) = LOWER(e.item_name)
+                          AND COALESCE(i.transaction_status,'active') NOT IN
+                              ('credited','refunded','transferred','rsvp_only')
+                      ) AS n_registered
+               FROM events e
+               ORDER BY e.event_date DESC, e.item_name""").fetchall()
+        out = [dict(r) for r in rows
+               if (r["n_rounds"] or 0) > 0 or (r["n_registered"] or 0) > 0]
+        return jsonify(out[:250])
     finally:
         conn.close()
 

@@ -13157,6 +13157,117 @@ def ls_create_session(name: str, holes: int = 9, event_name: str | None = None,
         return {"session_id": sid, "name": name, "holes": holes}
 
 
+def _ls_seed_from_registrations(conn: sqlite3.Connection, ev: dict,
+                                name: str | None,
+                                created_by: str | None) -> dict:
+    """Seed a session for an event that has NOT been played yet.
+
+    The field comes from active registrations rather than scorecards: buyer
+    flags from what each player actually bought, teams from the pairings if
+    they exist, the course from the event, and NO scores. That makes the
+    pre-flight possible — confirm course coverage, buyer counts and flights
+    days before the round — and on the day `ls_refresh_session_from_gg`
+    fills in the scores and playing handicaps.
+    """
+    holes = 9
+    row = conn.execute(
+        """SELECT holes, COUNT(*) c FROM items
+           WHERE LOWER(item_name) = LOWER(?) AND holes IS NOT NULL
+             AND COALESCE(transaction_status,'active') = 'active'
+           GROUP BY holes ORDER BY c DESC LIMIT 1""",
+        (ev["item_name"],)).fetchone()
+    if row and str(row["holes"]).strip() == "18":
+        holes = 18
+    elif _event_holes_type(ev["item_name"], ev.get("format")) == 18:
+        holes = 18
+
+    # Course + the tee the field usually plays there. _ls_tee_holes then
+    # merges that tee's per-nine ratings into a full 18 where needed.
+    course_id = ev.get("course_id")
+    if not course_id and ev.get("course"):
+        c = conn.execute(
+            """SELECT course_id FROM courses WHERE LOWER(name) = LOWER(?)
+               UNION SELECT course_id FROM course_aliases
+               WHERE LOWER(alias_name) = LOWER(?) LIMIT 1""",
+            (ev["course"], ev["course"])).fetchone()
+        course_id = c["course_id"] if c else None
+    tee_id = None
+    if course_id:
+        t = conn.execute(
+            """SELECT sr.tee_id, COUNT(*) c FROM scoring_rounds sr
+               WHERE sr.course_id = ? AND sr.tee_id IS NOT NULL
+               GROUP BY sr.tee_id ORDER BY c DESC LIMIT 1""",
+            (course_id,)).fetchone()
+        tee_id = t["tee_id"] if t else None
+
+    championship = 1 if "championship" in ev["item_name"].lower() else 0
+    sid = conn.execute(
+        """INSERT INTO ls_test_sessions
+               (name, source_kind, event_id, event_name, round_date,
+                course_id, tee_id, holes, championship, notes, created_by)
+           VALUES (?, 'seeded', ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+        (name or f"{ev['item_name']} — shadow", ev["id"], ev["item_name"],
+         ev.get("event_date"), course_id, tee_id, holes, championship,
+         "Seeded from REGISTRATIONS — this event has no scorecards yet. "
+         "Use Pull from GG on the day to bring in scores and handicaps.",
+         created_by)).lastrowid
+
+    for r in _ls_tee_holes(conn, tee_id):
+        conn.execute(
+            """INSERT OR REPLACE INTO ls_test_course_holes
+                   (session_id, hole_number, par, yardage, stroke_index)
+               VALUES (?, ?, ?, ?, ?)""",
+            (sid, r["hole_number"], r["par"], r["yardage"], r["stroke_index"]))
+
+    net_buyers = _event_game_buyers(conn, ev["item_name"], "NET")["buyers"]
+    gross_buyers = _event_game_buyers(conn, ev["item_name"], "GROSS")["buyers"]
+    teams = {}
+    for p in conn.execute(
+            "SELECT group_num, player_name FROM event_pairings WHERE event_id = ?",
+            (ev["id"],)).fetchall():
+        teams[(p["player_name"] or "").strip().lower()] = p["group_num"]
+
+    seen, seeded = set(), 0
+    for it in conn.execute(
+            """SELECT customer_id, customer, user_status FROM items
+               WHERE LOWER(item_name) = LOWER(?)
+                 AND COALESCE(transaction_status,'active') NOT IN
+                     ('credited','refunded','transferred','rsvp_only')
+               ORDER BY customer""", (ev["item_name"],)).fetchall():
+        cid = it["customer_id"]
+        key = cid or (it["customer"] or "").strip().lower()
+        if not key or key in seen:
+            continue
+        seen.add(key)
+        nm = it["customer"] or ""
+        if cid:
+            c = conn.execute(
+                "SELECT customer_name FROM customers WHERE customer_id = ?",
+                (cid,)).fetchone()
+            if c and c["customer_name"]:
+                nm = c["customer_name"]
+        conn.execute(
+            """INSERT INTO ls_test_players
+                   (session_id, customer_id, player_name, playing_handicap,
+                    flight, team_num, buys_net, buys_gross, is_member)
+               VALUES (?, ?, ?, NULL, NULL, ?, ?, ?, ?)""",
+            (sid, cid, nm, teams.get(nm.strip().lower()),
+             1 if (cid and cid in net_buyers) else 0,
+             1 if (cid and cid in gross_buyers) else 0,
+             0 if (it["user_status"] or "").strip().upper() in
+             ("GUEST", "1ST TIMER", "FIRST TIMER") else 1))
+        seeded += 1
+    conn.commit()
+    return {"session_id": sid, "event": ev["item_name"], "holes": holes,
+            "players_seeded": seeded, "championship": bool(championship),
+            "source": "registrations",
+            "net_buyers": sum(1 for c in net_buyers),
+            "gross_buyers": sum(1 for c in gross_buyers),
+            "teams_from_pairings": bool(teams),
+            "note": "No scorecards yet — seeded from registrations. Scores "
+                    "and playing handicaps arrive with Pull from GG."}
+
+
 def ls_seed_session_from_event(event_name: str, name: str | None = None,
                                created_by: str | None = None,
                                db_path: str | Path = DB_PATH) -> dict:
@@ -13182,8 +13293,13 @@ def ls_seed_session_from_event(event_name: str, name: str | None = None,
             """SELECT * FROM scoring_rounds WHERE event_id = ?
                ORDER BY player_name""", (ev["id"],)).fetchall()]
         if not rounds:
-            return {"error": f"no imported scorecards for {event_name} — "
-                             f"import the event's ALL Net card first"}
+            # UPCOMING event — no cards yet. Seed the FIELD from the
+            # registrations so the session can be set up and checked before
+            # the round (course coverage, buyer counts, flights), then "Pull
+            # from GG" fills the scores on the day. Without this the
+            # pre-flight is impossible: the only events you could shadow
+            # were ones already played.
+            return _ls_seed_from_registrations(conn, ev, name, created_by)
         # The tee/course the field actually played: most common non-null.
         def _mode(key):
             vals = [r[key] for r in rounds if r[key] is not None]

@@ -98,6 +98,34 @@
 
         .tc-hole-hd { font-size: 10px; color: #9CA3AF; font-weight: 400; display: block; }
 
+        /* Event picker */
+        .tc-scrim { position: fixed; inset: 0; background: rgba(27,27,27,.45);
+                    display: flex; align-items: center; justify-content: center;
+                    z-index: 400; padding: 16px; }
+        .tc-picker { background: #fff; border-radius: 14px; width: 100%;
+                     max-width: 560px; max-height: 80vh; display: flex;
+                     flex-direction: column; overflow: hidden;
+                     box-shadow: 0 18px 48px rgba(0,0,0,.28); }
+        .tc-picker h3 { font: 700 13px/1.2 'Bitter', serif; letter-spacing: 1px;
+                        text-transform: uppercase; margin: 0; padding: 14px 16px 10px; }
+        .tc-picker #tc-pick-q { margin: 0 16px 10px; padding: 9px 11px;
+                        border: 1px solid var(--border); border-radius: 8px;
+                        font-size: 13px; }
+        .tc-picker #tc-pick-q:focus { outline: 2px solid var(--primary);
+                        outline-offset: -1px; }
+        .tc-pick-list { overflow-y: auto; flex: 1; border-top: 1px solid #F3F2EF; }
+        .tc-pick-row { display: flex; align-items: center; gap: 10px; width: 100%;
+                       text-align: left; background: #fff; border: 0;
+                       border-bottom: 1px solid #F3F2EF; padding: 10px 16px;
+                       cursor: pointer; font-size: 13px; }
+        .tc-pick-row:hover { background: #FFF7F1; }
+        .tc-pick-row .nm { font-weight: 600; flex: 1 1 auto; }
+        .tc-pick-row .meta { color: var(--text-muted); font-size: 11.5px;
+                             white-space: nowrap; }
+        .tc-pick-foot { display: flex; align-items: center; gap: 10px;
+                        justify-content: space-between; padding: 10px 16px;
+                        border-top: 1px solid var(--border); }
+
         .tc-empty { text-align: center; color: var(--text-muted);
                     padding: 2.5rem 1rem; font-size: 13px; }
         .tc-empty h2 { font: 700 18px/1.3 'Bitter', serif; color: var(--text);
@@ -967,30 +995,80 @@
             } catch (err) { flash(err.message, true); }
         });
 
+        // Clickable event picker. (Was a prompt() asking for a row number —
+        // fine for a smoke test, hostile as an actual control.)
+        function pickEvent(events) {
+            return new Promise(resolve => {
+                const scrim = document.createElement("div");
+                scrim.className = "tc-scrim";
+                const box = document.createElement("div");
+                box.className = "tc-picker";
+                box.innerHTML = `
+                    <h3>Shadow an event</h3>
+                    <input id="tc-pick-q" placeholder="Filter by name, course or date…"
+                           autocomplete="off">
+                    <div class="tc-pick-list" id="tc-pick-list"></div>
+                    <div class="tc-pick-foot">
+                        <span class="tc-muted" style="font-size:11.5px;">
+                          Events with no cards yet seed from the registered field —
+                          scores arrive later via Pull from GG.</span>
+                        <button class="tc-btn" id="tc-pick-cancel">Cancel</button>
+                    </div>`;
+                scrim.appendChild(box);
+                document.body.appendChild(scrim);
+
+                const listEl = box.querySelector("#tc-pick-list");
+                const draw = q => {
+                    const t = (q || "").trim().toLowerCase();
+                    const hits = events.filter(e => !t
+                        || (e.item_name || "").toLowerCase().includes(t)
+                        || (e.course || "").toLowerCase().includes(t)
+                        || (e.event_date || "").includes(t));
+                    listEl.innerHTML = hits.slice(0, 200).map(e => `
+                        <button class="tc-pick-row" data-name="${esc(e.item_name)}">
+                          <span class="nm">${esc(e.item_name)}</span>
+                          <span class="meta">${esc(e.event_date || "—")}${
+                              e.course ? " · " + esc(e.course) : ""}</span>
+                          <span class="tc-pill ${e.n_rounds ? "ok" : "seeded"}">${
+                              e.n_rounds ? e.n_rounds + " cards"
+                                         : (e.n_registered || 0) + " registered"}</span>
+                        </button>`).join("")
+                        || '<div class="tc-muted" style="padding:14px;">No match.</div>';
+                    listEl.querySelectorAll("[data-name]").forEach(b =>
+                        b.addEventListener("click", () => { close(); resolve(b.dataset.name); }));
+                };
+                const close = () => { scrim.remove(); document.removeEventListener("keydown", onKey); };
+                const onKey = e => { if (e.key === "Escape") { close(); resolve(null); } };
+                document.addEventListener("keydown", onKey);
+                scrim.addEventListener("click", e => {
+                    if (e.target === scrim) { close(); resolve(null); } });
+                box.querySelector("#tc-pick-cancel").addEventListener("click",
+                    () => { close(); resolve(null); });
+                box.querySelector("#tc-pick-q").addEventListener("input",
+                    e => draw(e.target.value));
+                draw("");
+                setTimeout(() => box.querySelector("#tc-pick-q").focus(), 30);
+            });
+        }
+
         $("tc-new-seed").addEventListener("click", async () => {
             let events;
             try { events = await api("/api/test-center/scorable-events"); }
             catch (err) { flash(err.message, true); return; }
             if (!events.length) {
-                alert("No events have imported scorecards yet. Import an event's "
-                    + "ALL Net card first (Scoring import), then shadow it here.");
+                alert("No events found with registrations or scorecards.");
                 return;
             }
-            const list = events.slice(0, 40).map((e, i) =>
-                `${i + 1}. ${e.item_name} — ${e.event_date || "?"} (${e.n_rounds} cards)`).join("\n");
-            const pick = prompt("Shadow which event?\n\n" + list + "\n\nEnter a number:", "1");
-            if (pick === null) return;
-            const idx = parseInt(pick, 10) - 1;
-            if (isNaN(idx) || idx < 0 || idx >= Math.min(events.length, 40)) {
-                flash("Not a valid choice", true); return;
-            }
+            const name = await pickEvent(events);
+            if (!name) return;
             try {
                 const res = await api("/api/test-center/sessions", {
-                    method: "POST",
-                    body: JSON.stringify({ seed_from_event: events[idx].item_name }) });
+                    method: "POST", body: JSON.stringify({ seed_from_event: name }) });
                 await loadSessions(res.session_id);
-                flash(`Seeded ${res.players_seeded} cards from ${res.event}`);
-                showPanel("parity");
+                flash(res.source === "registrations"
+                    ? `Seeded ${res.players_seeded} registered players from ${res.event} — no cards yet`
+                    : `Seeded ${res.players_seeded} cards from ${res.event}`);
+                showPanel(res.source === "registrations" ? "field" : "parity");
             } catch (err) { flash(err.message, true); }
         });
 

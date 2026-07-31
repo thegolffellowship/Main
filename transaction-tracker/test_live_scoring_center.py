@@ -64,7 +64,7 @@ def build_fixture(path):
         CREATE TABLE items (id INTEGER PRIMARY KEY, parent_item_id INTEGER,
                             customer_id INTEGER, customer TEXT, item_name TEXT,
                             side_games TEXT, transaction_status TEXT,
-                            wd_credits TEXT);
+                            wd_credits TEXT, holes TEXT, user_status TEXT);
         CREATE TABLE courses (course_id INTEGER PRIMARY KEY, name TEXT,
                               short_name TEXT, city TEXT, state TEXT,
                               status TEXT, chapter_id INTEGER);
@@ -630,6 +630,70 @@ check("and the board actually uses it",
 check("championship net points are +1 per category (9 pars = 18, not 9)",
       cb["cards"][0]["stableford_net"] == 18,
       str(cb["cards"][0]["stableford_net"]))
+
+# ---------------------------------------------------------------------------
+print("\n== seeding an UPCOMING event from registrations ==")
+
+# The pre-flight case, which was impossible before: an event with a full
+# field of registrations but no scorecards, days before it is played. The
+# old code errored with "no imported scorecards", so the only events you
+# could shadow were ones already finished.
+conn = sqlite3.connect(DB)
+conn.execute("INSERT INTO events (id, item_name, event_date, format, course)"
+             " VALUES (9, 'TGF UPCOMING CHAMPIONSHIP', '2026-08-01', '18 Hole',"
+             " 'Olympia Hills')")
+for i, (nm, sg, status) in enumerate([
+        ("Alpha Player", "BOTH", "MEMBER"), ("Bravo Player", "NET", "MEMBER"),
+        ("Charlie Player", "GROSS", "MEMBER"), ("Delta Player", "NONE", "MEMBER"),
+        ("Echo Guest", "BOTH", "GUEST"), ("Foxtrot Player", "NET", "MEMBER")],
+        start=200):
+    conn.execute("INSERT INTO customers (customer_id, customer_name) VALUES (?, ?)",
+                 (i, nm))
+    conn.execute("INSERT INTO items (id, customer_id, customer, item_name,"
+                 " side_games, transaction_status, holes, user_status) VALUES"
+                 " (?, ?, ?, 'TGF UPCOMING CHAMPIONSHIP', ?, 'active', '18', ?)",
+                 (i, i, nm, sg, status))
+# One credited registration must NOT be seeded.
+conn.execute("INSERT INTO customers (customer_id, customer_name) VALUES (299, 'Gone Player')")
+conn.execute("INSERT INTO items (id, customer_id, customer, item_name, side_games,"
+             " transaction_status, holes, user_status) VALUES"
+             " (299, 299, 'Gone Player', 'TGF UPCOMING CHAMPIONSHIP', 'BOTH',"
+             " 'credited', '18', 'MEMBER')")
+conn.commit(); conn.close()
+
+up = db.ls_seed_session_from_event("TGF UPCOMING CHAMPIONSHIP", db_path=DB)
+check("an upcoming event seeds instead of erroring",
+      "error" not in up and up.get("source") == "registrations", str(up))
+check("the whole active field is seeded", up["players_seeded"] == 6,
+      str(up["players_seeded"]))
+check("18 holes derived from the registrations", up["holes"] == 18)
+check("championship auto-detected on an upcoming event",
+      up["championship"] is True)
+
+updata = db.ls_get_session(up["session_id"], db_path=DB)
+names = {p["player_name"] for p in updata["players"]}
+check("a credited registration is NOT seeded", "Gone Player" not in names,
+      str(sorted(names)))
+check("buyer flags come from what each player bought",
+      {p["player_name"]: (p["buys_net"], p["buys_gross"]) for p in updata["players"]}
+      == {"Alpha Player": (1, 1), "Bravo Player": (1, 0),
+          "Charlie Player": (0, 1), "Delta Player": (0, 0),
+          "Echo Guest": (1, 1), "Foxtrot Player": (1, 0)},
+      str({p["player_name"]: (p["buys_net"], p["buys_gross"]) for p in updata["players"]}))
+check("a GUEST is flagged not-a-member (cannot win HIO)",
+      next(p for p in updata["players"] if p["player_name"] == "Echo Guest")["is_member"] == 0)
+check("no scores yet", all(not p["scores"] for p in updata["players"]))
+check("no playing handicaps yet — those arrive with Pull from GG",
+      all(p["playing_handicap"] is None for p in updata["players"]))
+
+lb = db.ls_leaderboard(up["session_id"], db_path=DB)
+check("the board renders on a field with no scores", lb["players"] == 6)
+check("...and MVP correctly says it is awaiting results",
+      lb["games"]["mvp"]["status"] == "awaiting_results",
+      lb["games"]["mvp"]["status"])
+check("...and the session is refreshable from GG (it is seeded)",
+      "error" not in db.ls_refresh_session_from_gg(up["session_id"], db_path=DB))
+
 
 print("\n" + "=" * 60)
 if FAILURES:
