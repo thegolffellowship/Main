@@ -43977,7 +43977,7 @@ def get_event_partner_requests(event_id: int, db_path=None) -> dict:
             f"""
             SELECT DISTINCT i.customer, i.customer_id, i.holes,
                             i.partner_request, i.id, i.order_date,
-                            i.created_at
+                            i.created_at, i.notes
             FROM events e
             LEFT JOIN event_aliases ea ON ea.canonical_event_name = e.item_name
             JOIN items i ON (
@@ -44014,8 +44014,68 @@ def get_event_partner_requests(event_id: int, db_path=None) -> dict:
         roster.append(r)
 
     all_names = [r["customer"] for r in roster]
+    # The roster rows already carry the authoritative identity key, so
+    # partner matching resolves id-to-id instead of string-to-string
+    # (guiding principle 6 / Kerry 2026-07-30).
+    roster_ids = {r["customer"]: r["customer_id"] for r in roster
+                  if r.get("customer_id")}
+
+    # WHO PAID FOR WHOM (Kerry 2026-07-30). Assign Guest stamps the item
+    # "Purchased by <buyer>", so a guest's host is already on the record.
+    # Two rules follow:
+    #   * a bought-for player is ASSUMED to want to play with their host —
+    #     no request text needed;
+    #   * "A member can bring as many guests as they want and play with up
+    #     to 3", so a host plus three guests is a legitimate FOURSOME, not
+    #     three competing pair requests where the last two lose.
+    HOST_GROUP_MAX = 4
+    host_of: dict = {}
+    for r in roster:
+        m = re.match(r"\s*Purchased by\s+(.+?)\s*$", (r.get("notes") or ""),
+                     re.I)
+        if not m:
+            continue
+        host = _find_partner_name(m.group(1), all_names, r["customer"],
+                                  roster_ids=roster_ids)
+        if host:
+            host_of[_pair_key_name(r["customer"])] = _pair_key_name(host)
+    host_names = {}
+    for r in roster:
+        host_names[_pair_key_name(r["customer"])] = r["customer"]
+
+    def _host_group(key):
+        """The host-and-guests set `key` belongs to, or None."""
+        h = host_of.get(key, key if key in host_of.values() else None)
+        if h is None:
+            return None
+        members = {h} | {g for g, hh in host_of.items() if hh == h}
+        return members if len(members) > 1 else None
+
     requests = []
     locked: set = set()
+    locked_pair: dict = {}          # player key -> the pair that claimed them
+    group_size: dict = {}           # host key -> how many are grouped so far
+
+    # Implied guest->host requests, inserted at the guest's signup position
+    # so priority still runs in signup order.
+    for r in roster:
+        rk = _pair_key_name(r["customer"])
+        if rk in host_of and not (r["partner_request"] or "").strip():
+            r["partner_request"] = host_names.get(host_of[rk], "")
+            r["_implied_host_request"] = True
+
+    # MANAGER-ADDED requests (Kerry 2026-07-30: "I also need the ability to
+    # add a Playing Partner Request in the requests drop down"). A manual
+    # match on a player who wrote no request text IS the request — someone
+    # asked at the course, or by text. It enters the list at that player's
+    # signup position, so it takes its honest place in the priority order
+    # rather than jumping the queue for being entered late.
+    for r in roster:
+        added = manual_matches.get(_pair_key_name(r["customer"]))
+        if added and not (r["partner_request"] or "").strip():
+            r["partner_request"] = added
+            r["_added_by_manager"] = True
+
     for r in roster:
         req_text = (r["partner_request"] or "").strip()
         if not req_text:
@@ -44030,7 +44090,8 @@ def get_event_partner_requests(event_id: int, db_path=None) -> dict:
                            None)
         is_manual = bool(partner)
         if not partner:
-            partner = _find_partner_name(req_text, all_names, r["customer"])
+            partner = _find_partner_name(req_text, all_names, r["customer"],
+                                         roster_ids=roster_ids)
         # Multi-name texts ("Dan Other or Ed Fifth"): people request
         # more than one, but only ONE partner is honored (rule 1). The
         # auto-match takes the first hit; candidates>1 flags the row so
@@ -44054,21 +44115,70 @@ def get_event_partner_requests(event_id: int, db_path=None) -> dict:
             "suppressed": _pair_key_name(r["customer"]) in suppressed,
             "locked_out": False,
             "locked_reason": None,
+            # "active" (first claim) | "confirmed" (already paired — a
+            # reciprocal request or a same-host group) | "outranked".
+            "status": "active",
+            "implied": bool(r.get("_implied_host_request")),
+            "added": bool(r.get("_added_by_manager")),
+            "host_group": False,
         }
         # First-come lock simulation (rule 11 + Kerry 2026-07-21):
         # once a player is claimed in EITHER direction, later requests
         # touching them lose. Suppressed requests never claim anyone.
         if entry["matched"] and not entry["suppressed"]:
             rk, pk = _pair_key_name(r["customer"]), _pair_key_name(partner)
+            pair = frozenset((rk, pk))
+
+            # RECIPROCAL — "Chuck Fehlis -> Gus Vasquez" after "Gus Vasquez
+            # -> Chuck Fehlis" is the SAME pairing restated, not a loser
+            # (Kerry 2026-07-30). Badge it CONFIRMED; outranking it reads
+            # as though the request were being denied.
+            if locked_pair.get(rk) == pair or locked_pair.get(pk) == pair:
+                entry["status"] = "confirmed"
+                entry["locked_reason"] = (
+                    f"Already paired with {partner} by an earlier request — "
+                    f"this confirms it.")
+                requests.append(entry)
+                continue
+
+            # SAME HOST GROUP — a host and up to three guests they paid for
+            # all play together. These are not competing requests.
+            grp = _host_group(rk)
+            if grp and pk in grp:
+                host_key = host_of.get(rk, rk if rk in host_of.values() else pk)
+                host_key = host_of.get(pk, host_key)
+                size = group_size.get(host_key) or 1
+                if size < HOST_GROUP_MAX:
+                    group_size[host_key] = size + 1
+                    locked.update((rk, pk))
+                    locked_pair[rk] = locked_pair[pk] = pair
+                    entry["status"] = "confirmed"
+                    entry["host_group"] = True
+                    entry["locked_reason"] = (
+                        f"Playing with {partner}, who paid for their spot."
+                        if entry["implied"] or host_of.get(rk) == pk else
+                        f"Same host group as {partner}.")
+                else:
+                    entry["locked_out"] = True
+                    entry["status"] = "outranked"
+                    entry["locked_reason"] = (
+                        f"{host_names.get(host_key, 'The host')} already has "
+                        f"{HOST_GROUP_MAX - 1} guests in the group — a "
+                        f"foursome is full.")
+                requests.append(entry)
+                continue
+
             taken = [n for n, key in ((r["customer"], rk), (partner, pk))
                      if key in locked]
             if taken:
                 entry["locked_out"] = True
+                entry["status"] = "outranked"
                 entry["locked_reason"] = (
                     " & ".join(taken) + " already locked by an earlier "
                     "request — suppress that request to override.")
             else:
                 locked.update((rk, pk))
+                locked_pair[rk] = locked_pair[pk] = pair
         requests.append(entry)
     return {"event_id": event_id, "requests": requests}
 
@@ -44101,6 +44211,12 @@ def set_partner_request_match(event_id: int, requester_name: str,
             if _pair_key_name(partner["name"]) == _pair_key_name(requester_name):
                 raise ValueError("A player can't be matched to themselves")
             requester = roster.get(_pair_key_name(requester_name))
+            # Adding a request for someone who isn't playing would create a
+            # row the generator can never act on (Kerry 2026-07-30 — the
+            # Add-a-request control writes through here).
+            if not requester:
+                raise ValueError(f"'{requester_name}' is not on this "
+                                 "event's roster")
             conn.execute(
                 "INSERT OR REPLACE INTO pairing_request_matches "
                 "(event_id, requester_name, requester_customer_id, "
@@ -45137,38 +45253,73 @@ def _group_score(players: list[str], pair_counts: dict) -> int:
     return total
 
 
-# Name aliases for partner-request matching, cached per process. Aliases
-# change rarely (a manager adds one), and this is consulted inside grouping
-# loops, so re-querying per call would be wasteful.
-_PARTNER_ALIAS_CACHE: dict = {"at": 0.0, "map": {}}
-_PARTNER_ALIAS_TTL = 300.0
+# Name → customer_id index for partner-request matching, cached per
+# process. Built from the customer_id PROFILES (canonical names + every
+# alias row that carries a customer_id) rather than from name strings —
+# Kerry 2026-07-30: "why not just reference actual aliases in customer_id
+# profiles?" Guiding principle 6: two names are the same person because
+# they resolve to the same customer_id, never because the strings look
+# alike. Cached because this is consulted inside grouping loops and
+# profiles change rarely.
+_PARTNER_IDENTITY_CACHE: dict = {"at": 0.0, "map": {}}
+_PARTNER_IDENTITY_TTL = 300.0
 
 
-def _partner_alias_map(db_path=None) -> dict:
-    """{lowercased alias -> canonical customer name} from customer_aliases."""
+def _partner_name_key(name: str | None) -> str:
+    """Whitespace/case-normalized name, the key used by the identity map."""
+    return " ".join((name or "").split()).strip().lower()
+
+
+def _partner_identity_map(db_path=None) -> dict:
+    """{normalized name -> customer_id}, covering canonical + alias names.
+
+    A name is ambiguous when two different customers answer to it (two
+    real "Chris Martin"s). Those keys are dropped rather than pointed at
+    an arbitrary winner — the same refuse-to-guess stance
+    `_lookup_customer_id` takes on duplicate names.
+    """
     import time as _time
     now = _time.time()
-    if (now - _PARTNER_ALIAS_CACHE["at"]) < _PARTNER_ALIAS_TTL and \
-            _PARTNER_ALIAS_CACHE["map"]:
-        return _PARTNER_ALIAS_CACHE["map"]
-    out: dict = {}
+    if (now - _PARTNER_IDENTITY_CACHE["at"]) < _PARTNER_IDENTITY_TTL and \
+            _PARTNER_IDENTITY_CACHE["map"]:
+        return _PARTNER_IDENTITY_CACHE["map"]
+    claims: dict = {}
+
+    def _claim(name, cid):
+        k = _partner_name_key(name)
+        if not k or not cid:
+            return
+        claims.setdefault(k, set()).add(int(cid))
+
     try:
         with _connect(db_path) as conn:
             for r in conn.execute(
-                    """SELECT customer_name, alias_value FROM customer_aliases
-                       WHERE alias_type = 'name'""").fetchall():
-                a = (r["alias_value"] or "").strip().lower()
-                c = (r["customer_name"] or "").strip()
-                if a and c:
-                    out.setdefault(a, c)
+                    """SELECT customer_id, first_name, last_name, company_name
+                       FROM customers
+                       WHERE COALESCE(account_status,'active') != 'banned'"""
+            ).fetchall():
+                _claim(f"{r['first_name'] or ''} {r['last_name'] or ''}",
+                       r["customer_id"])
+                _claim(r["company_name"], r["customer_id"])
+            # Alias rows: the alias VALUE and the profile name it was
+            # captured under both point at the same customer_id.
+            for r in conn.execute(
+                    """SELECT customer_id, customer_name, alias_value
+                       FROM customer_aliases
+                       WHERE alias_type = 'name'
+                         AND customer_id IS NOT NULL""").fetchall():
+                _claim(r["alias_value"], r["customer_id"])
+                _claim(r["customer_name"], r["customer_id"])
     except Exception:
-        return _PARTNER_ALIAS_CACHE["map"] or {}
-    _PARTNER_ALIAS_CACHE.update({"at": now, "map": out})
+        return _PARTNER_IDENTITY_CACHE["map"] or {}
+    out = {k: next(iter(v)) for k, v in claims.items() if len(v) == 1}
+    _PARTNER_IDENTITY_CACHE.update({"at": now, "map": out})
     return out
 
 
 def _find_partner_name(request_text: str, all_names: list[str], requester: str,
-                       db_path=None) -> str | None:
+                       db_path=None, roster_ids: dict | None = None
+                       ) -> str | None:
     """Resolve a partner_request string to a rostered player name.
 
     A ladder, safest rung first. EVERY rung requires a UNIQUE match — an
@@ -45177,17 +45328,24 @@ def _find_partner_name(request_text: str, all_names: list[str], requester: str,
     the wrong two people.
 
     1. Exact full name (case/space-insensitive).
-    2. customer_aliases — the curated name-variant table.
-    3. Nickname-robust person key: surname + first initial. This is what
-       makes "Dan South" find "Daniel South" (Kerry 2026-07-30), and the
-       same for Matt/Matthew, Rob/Robert, Chris/Christopher.
+    2. **customer_id identity** — resolve the request text to a customer_id
+       through the profile's canonical name and its `customer_aliases`
+       rows, then find the roster player carrying that same id. "Dan South"
+       and "Daniel South" match because they are the same PERSON, not
+       because the strings resemble each other (Kerry 2026-07-30; guiding
+       principle 6). `roster_ids` (name -> customer_id, straight off the
+       roster rows) is authoritative for the roster side when the caller
+       has it; otherwise roster names are resolved through the same map.
+    3. Nickname-robust person key: surname + first initial. Covers the
+       Matt/Matthew, Rob/Robert, Chris/Christopher class for people who
+       have no alias on file yet.
     4. Substring, the original behaviour — now also uniqueness-checked, so
        a bare "Dan" against two Dans no longer resolves to whichever sorted
        first.
     """
     if not request_text:
         return None
-    req = " ".join(request_text.split()).strip().lower()
+    req = _partner_name_key(request_text)
     if not req:
         return None
     others = [n for n in all_names if (n or "").strip().lower() != (requester or "").strip().lower()]
@@ -45197,23 +45355,23 @@ def _find_partner_name(request_text: str, all_names: list[str], requester: str,
         return uniq[0] if len(uniq) == 1 else None
 
     # 1. exact
-    hit = _uniq([n for n in others if " ".join((n or "").split()).lower() == req])
+    hit = _uniq([n for n in others if _partner_name_key(n) == req])
     if hit:
         return hit
 
-    # 2. curated aliases — both directions (the request may BE the alias, or
-    #    a roster name may be stored as one).
-    aliases = _partner_alias_map(db_path)
-    canon = aliases.get(req)
-    if canon:
-        hit = _uniq([n for n in others
-                     if " ".join((n or "").split()).lower() == canon.strip().lower()])
+    # 2. same customer_id = same person
+    ident = _partner_identity_map(db_path)
+    req_cid = ident.get(req)
+    if req_cid:
+        by_key = {_partner_name_key(k): v
+                  for k, v in (roster_ids or {}).items() if v}
+
+        def _cid(n):
+            return by_key.get(_partner_name_key(n)) or ident.get(_partner_name_key(n))
+
+        hit = _uniq([n for n in others if _cid(n) == req_cid])
         if hit:
             return hit
-    hit = _uniq([n for n in others
-                 if aliases.get(" ".join((n or "").split()).lower(), "").strip().lower() == req])
-    if hit:
-        return hit
 
     # 3. nickname-robust person key (surname + first initial)
     try:
@@ -45845,7 +46003,8 @@ def generate_event_pairings(
             groups_players = _abcd_groups(free_players, hcp_map)
         elif mode == "standings":
             _rank_map, _race_used, _rnotes = _standings_rank_map(
-                ev_chapter, race_key, db_path=db_path)   # refreshes if stale
+                ev_chapter, race_key, event_name=ev.get("item_name"),
+                db_path=db_path)   # refreshes if stale
             mp_notes.extend(_rnotes)
             if _rank_map:
                 groups_players, _snotes = _standings_groups(
@@ -46298,31 +46457,38 @@ def _random_groups(
 FELLOWSHIP_CUP_RACE_KEY = "fellowship_cup"
 
 
-def _default_pairing_race(chapter: str | None) -> str | None:
-    """The race a chapter's pairings order by unless told otherwise.
+def _default_pairing_race(chapter: str | None,
+                          event_name: str | None = None) -> str | None:
+    """The race an event's pairings order by unless told otherwise.
 
-    A CHAPTER event defaults to that chapter's own City NET race. Matching
+    A chapter event defaults to that chapter's own City NET race. Matching
     on chapter alone would be wrong: players_cup_gross is also tagged
     "San Antonio", so the NET check is what stops an SA field being paired
     off the GROSS Players Cup.
 
-    A TGF-wide event has no City race, and the TGF Championship is paired
-    off THE FELLOWSHIP CUP (Kerry 2026-07-30) — the combined reset
-    standings both City NET races convert into.
+    ONLY THE TGF CHAMPIONSHIP defaults to THE FELLOWSHIP CUP (Kerry
+    2026-07-30) — the combined reset standings both City NET races convert
+    into. A TGF-chapter event that is NOT the championship gets no default
+    at all rather than a guess; the manager picks from the pulldown.
+
+    Note the city championships ("TGF SAN ANTONIO CHAMPIONSHIP") carry a
+    CHAPTER, so the chapter rule catches them first and they correctly stay
+    on their own City NET race — the name containing both "TGF" and
+    "CHAMPIONSHIP" never reaches the Fellowship Cup branch.
     """
     ch = (chapter or "").strip().lower()
-    if not ch:
-        return None
-    if ch in ("tgf", "national", "tgf-wide"):
-        return FELLOWSHIP_CUP_RACE_KEY
     for k, cfg in _GG_POINTS_RACES.items():
         if (cfg.get("contest_type") or "").upper().startswith("NET") and \
-                (cfg.get("chapter") or "").strip().lower() == ch:
+                (cfg.get("chapter") or "").strip().lower() == ch and ch:
             return k
+    if ch in ("tgf", "national", "tgf-wide") and \
+            "champ" in (event_name or "").lower():
+        return FELLOWSHIP_CUP_RACE_KEY
     return None
 
 
-def pairing_race_options(chapter: str | None = None) -> list:
+def pairing_race_options(chapter: str | None = None,
+                         event_name: str | None = None) -> list:
     """Season-contest standings a manager can order pairings by.
 
     Every configured race plus THE FELLOWSHIP CUP, with the chapter's
@@ -46330,7 +46496,7 @@ def pairing_race_options(chapter: str | None = None) -> list:
     right race is not always the chapter's own — the TGF Championship uses
     the Fellowship Cup.
     """
-    default = _default_pairing_race(chapter)
+    default = _default_pairing_race(chapter, event_name)
     out = []
     for k, cfg in _GG_POINTS_RACES.items():
         out.append({
@@ -46365,6 +46531,7 @@ _STANDINGS_PAIRING_MAX_AGE_HOURS = 0.25
 
 def _standings_rank_map(chapter: str | None, race_key: str | None = None,
                         max_age_hours: float = _STANDINGS_PAIRING_MAX_AGE_HOURS,
+                        event_name: str | None = None,
                         db_path=None) -> tuple[dict, str | None, list]:
     """{lowercase player name: finishing position} for a chapter's points race.
 
@@ -46377,7 +46544,7 @@ def _standings_rank_map(chapter: str | None, race_key: str | None = None,
     exactly the failure this refresh exists to prevent.
     """
     notes = []
-    key = race_key or _default_pairing_race(chapter)
+    key = race_key or _default_pairing_race(chapter, event_name)
     if not key:
         notes.append(f"No points race found for chapter '{chapter}' — "
                      f"pairings fell back to random order.")

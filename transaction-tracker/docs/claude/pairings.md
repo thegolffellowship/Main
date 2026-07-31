@@ -494,6 +494,53 @@ The Quarry-night rulings, all built:
    `/api/events/<id>/pairings/requests`, POST `…/requests/suppress`
    {requester, suppressed}; the list also rides on GET `/pairings`
    so the chip needs no extra round trip.
+3c. **Request-name resolution runs on customer_id (v2.153.0, Kerry
+   2026-07-30: "why not just reference actual aliases in customer_id
+   profiles?").** `_find_partner_name` is a ladder, safest rung first:
+   (1) exact full name; (2) **customer_id identity** — the request text
+   AND each rostered player are resolved to a customer_id via
+   `_partner_identity_map` (canonical profile name + every
+   `customer_aliases` name row carrying that id, cached 300s), and a
+   match means the SAME id; (3) nickname person key (surname + first
+   initial — the Dan/Daniel, Matt/Matthew class, for players with no
+   alias on file); (4) substring. Every rung requires a UNIQUE hit, so
+   ambiguity yields "no roster match — fix" and a dropdown rather than
+   a wrong pairing. `get_event_partner_requests` passes the roster's
+   own `customer_id`s (`roster_ids=`), which are authoritative for the
+   roster side — an alias pointing at a different id BLOCKS the match
+   instead of making it. Names two real customers answer to are dropped
+   from the index rather than pointed at a guess (same stance as
+   `_lookup_customer_id`). Guiding principle 6: two names are the same
+   person because they resolve to the same `customer_id`, never because
+   the strings look alike. Exception, deliberate: initial-CHANGING
+   nicknames (Dick/Richard, Bill/William) do not auto-resolve — a
+   profile alias is the mechanism for that class.
+3d. **Three request rules from the SA Championship field (v2.152.7 /
+   v2.153.0, Kerry 2026-07-30):**
+   - **Reciprocal = CONFIRMED, not OUTRANKED.** "Chuck Fehlis → Gus
+     Vasquez" landing after "Gus Vasquez → Chuck Fehlis" is the same
+     pairing restated. `locked_pair` tracks which pair claimed each
+     player; a later request whose pair matches gets `status:
+     "confirmed"` and a green badge. Badging it a loser read as a
+     denial.
+   - **Paying for someone implies the pairing.** Assign Guest stamps
+     the item `"Purchased by <buyer>"`, so a bought-for player gets an
+     IMPLIED request pointed at their host even when they wrote none
+     (`implied: true`, PAID FOR badge). It enters at the guest's signup
+     position, so priority order is unchanged.
+   - **A host plus up to three guests is one approved foursome.** "A
+     member can bring as many guests as they want and play with up to
+     3" — same-host-group requests are CONFIRMED until the group hits
+     `HOST_GROUP_MAX = 4`; the fourth guest is outranked with "a
+     foursome is full", not silently dropped.
+3e. **Managers can ADD a request (v2.153.0, Kerry 2026-07-30).**
+   Requests arrive by text and at the first tee. The requests panel's
+   "Add a request" row offers players with no existing request and
+   writes through the same `set_partner_request_match` path; the entry
+   surfaces at that player's SIGNUP position (`added: true`, ADDED
+   badge) so it takes its honest place in the priority order rather
+   than jumping the queue for being entered late. A requester who
+   isn't on the roster is refused.
 4. **Front/Back 9 side.** `events.nine_side` ('Front' default |
    'Back') says which nine the 9-hole leg plays. Shotgun slot labels
    follow (`_pairing_time_slots`: Back → 10A/10B…). Event setup (add +

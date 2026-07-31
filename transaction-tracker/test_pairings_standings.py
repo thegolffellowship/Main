@@ -248,9 +248,23 @@ print("\n== race is CHOSEN, with a sensible default (Kerry 2026-07-30) ==")
 check("a chapter event defaults to its own City NET race",
       db._default_pairing_race("San Antonio") == "san_antonio_net")
 check("Austin likewise", db._default_pairing_race("Austin") == "austin_net")
-check("a TGF-wide event defaults to THE FELLOWSHIP CUP",
-      db._default_pairing_race("TGF") == db.FELLOWSHIP_CUP_RACE_KEY,
-      str(db._default_pairing_race("TGF")))
+# Kerry 2026-07-30 (correction): ONLY the TGF Championship defaults to the
+# Fellowship Cup. A TGF-chapter event that is not the championship gets no
+# default rather than a guess.
+check("the TGF Championship defaults to THE FELLOWSHIP CUP",
+      db._default_pairing_race("TGF", "2026 TGF CHAMPIONSHIP")
+      == db.FELLOWSHIP_CUP_RACE_KEY,
+      str(db._default_pairing_race("TGF", "2026 TGF CHAMPIONSHIP")))
+check("a non-championship TGF event gets NO default, not the Cup",
+      db._default_pairing_race("TGF", "TGF Fall Outing") is None,
+      str(db._default_pairing_race("TGF", "TGF Fall Outing")))
+# The city championships contain both "TGF" and "CHAMPIONSHIP" in their
+# names but carry a CHAPTER, so the chapter rule must catch them first.
+check("the SA City Championship stays on the SA City NET race",
+      db._default_pairing_race("San Antonio", "TGF SAN ANTONIO CHAMPIONSHIP")
+      == "san_antonio_net")
+check("the Austin City Championship stays on the Austin race",
+      db._default_pairing_race("Austin", "TGF AUSTIN CHAMPIONSHIP") == "austin_net")
 check("an unknown chapter has no default rather than a wrong one",
       db._default_pairing_race("Houston") is None)
 
@@ -267,10 +281,13 @@ check("the GROSS Players Cup is selectable but NOT the default",
       any(o["race_key"] == "players_cup_gross" and not o["is_default"]
           for o in opts))
 
-tgf_opts = db.pairing_race_options("TGF")
-check("for TGF the Fellowship Cup is default and listed first",
+tgf_opts = db.pairing_race_options("TGF", "2026 TGF CHAMPIONSHIP")
+check("for the TGF Championship the Cup is default and listed first",
       tgf_opts[0]["race_key"] == db.FELLOWSHIP_CUP_RACE_KEY
       and tgf_opts[0]["is_default"], str(tgf_opts[0]))
+plain = db.pairing_race_options("TGF", "TGF Fall Outing")
+check("a non-championship TGF event flags no default",
+      not any(o["is_default"] for o in plain), str(plain[:2]))
 
 # The Fellowship Cup routes to its own projection, not a City race.
 _realp, _realf = db.get_points_race_standings, db.get_fellowship_cup_projection
@@ -280,8 +297,8 @@ db.get_points_race_standings = lambda k, **kw: (seen.append(("city", k)), {
 db.get_fellowship_cup_projection = lambda **kw: (seen.append(("cup", None)), {
     "standings": [{"player_name": "Cup Leader"}], "fetched_at": "t", "gg_error": None})[1]
 try:
-    rm, key, _ = db._standings_rank_map("TGF")
-    check("a TGF event reads the Fellowship Cup projection",
+    rm, key, _ = db._standings_rank_map("TGF", event_name="2026 TGF CHAMPIONSHIP")
+    check("the TGF Championship reads the Fellowship Cup projection",
           seen and seen[-1][0] == "cup", str(seen))
     check("...and its ordering becomes the rank map",
           rm == {"cup leader": 1}, str(rm))

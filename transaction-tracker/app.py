@@ -4951,12 +4951,13 @@ def api_pairing_race_options(event_id):
     from email_parser.database import get_connection, pairing_race_options
     conn = get_connection()
     try:
-        row = conn.execute("SELECT chapter FROM events WHERE id = ?",
+        row = conn.execute("SELECT chapter, item_name FROM events WHERE id = ?",
                            (event_id,)).fetchone()
         if not row:
             return jsonify({"error": "Event not found."}), 404
         return jsonify({"chapter": row["chapter"],
-                        "options": pairing_race_options(row["chapter"])})
+                        "options": pairing_race_options(row["chapter"],
+                                                        row["item_name"])})
     finally:
         conn.close()
 

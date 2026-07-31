@@ -4533,7 +4533,7 @@
         // the row stays here badged SUPPRESSED until restored.
         if (state.showRequests) {
             html += '<div class="pairings-seeds-panel">';
-            html += '<div style="font-size:0.8rem;color:var(--text-muted);margin-bottom:0.5rem;">Partner requests in <strong>signup order</strong> &mdash; earlier requests win: once a player is claimed (either direction) later requests touching them are <strong>outranked</strong>. <strong>Remove</strong> suppresses a request (it stays listed); suppressing an earlier request is how you override a lock. One partner per player is honored &mdash; on multi-name requests <strong>link one</strong>; honor extras with manual moves after Generate.</div>';
+            html += '<div style="font-size:0.8rem;color:var(--text-muted);margin-bottom:0.5rem;">Partner requests in <strong>signup order</strong> &mdash; earlier requests win: once a player is claimed (either direction) later requests touching them are <strong>outranked</strong>. <strong>Remove</strong> suppresses a request (it stays listed); suppressing an earlier request is how you override a lock. One partner per player is honored &mdash; on multi-name requests <strong>link one</strong>; honor extras with manual moves after Generate. Two exceptions are <strong>CONFIRMED</strong>, not outranked: a request that simply restates a pairing already made the other way, and a host playing with the guests they paid for (up to a foursome).</div>';
             if (!state.requests.length) {
                 html += '<div style="font-size:0.82rem;color:var(--text-muted);">No partner requests on this roster.</div>';
             }
@@ -4568,8 +4568,20 @@
                         ${r.candidates.map(n => `<option value="${escapeHtml(n)}">${escapeHtml(n)}${n === r.partner ? ' (current)' : ''}</option>`).join('')}
                     </select>`;
                 }
+                // Where the request CAME from, when it wasn't typed at
+                // signup (Kerry 2026-07-30).
+                if (r.implied) {
+                    html += `<span style="font-size:0.68rem;font-weight:700;color:#1d4ed8;border:1px solid #93c5fd;border-radius:9px;padding:0 0.4rem;" title="No request was written — this player's spot was paid for by their partner, so the pairing is assumed.">PAID FOR</span>`;
+                } else if (r.added) {
+                    html += `<span style="font-size:0.68rem;font-weight:700;color:#6d28d9;border:1px solid #c4b5fd;border-radius:9px;padding:0 0.4rem;" title="Added by a manager — no request came in with the signup.">ADDED</span>`;
+                }
                 if (out) {
                     html += `<span style="font-size:0.72rem;font-weight:700;color:#b91c1c;border:1px solid #ef4444;border-radius:9px;padding:0 0.4rem;" title="${escapeHtml(r.locked_reason || '')}">OUTRANKED</span>`;
+                } else if (r.status === 'confirmed') {
+                    // NOT a loser (Kerry 2026-07-30): a reciprocal request
+                    // or a host-and-guests group is the same pairing
+                    // restated. Badging it OUTRANKED read as a denial.
+                    html += `<span style="font-size:0.72rem;font-weight:700;color:#047857;border:1px solid #10b981;border-radius:9px;padding:0 0.4rem;" title="${escapeHtml(r.locked_reason || '')}">CONFIRMED</span>`;
                 }
                 if (sup) {
                     // The badge IS the restore control (Kerry
@@ -4582,6 +4594,31 @@
                 }
                 html += '</div>';
             });
+
+            // ── Add a request (Kerry 2026-07-30) ─────────────────────────
+            // Requests arrive by text and at the first tee, not just in the
+            // signup form. Only players who don't already have one are
+            // offered — an existing request is edited on its own row.
+            const allPlayerNames = (state.event_players || [])
+                .map(p => p.name).filter(Boolean)
+                .sort((a, b) => a.localeCompare(b));
+            const haveReq = new Set(state.requests.map(r => r.requester));
+            const canAdd = allPlayerNames.filter(n => !haveReq.has(n));
+            if (canAdd.length && allPlayerNames.length > 1) {
+                html += `<div style="display:flex;align-items:center;gap:0.4rem;flex-wrap:wrap;padding:0.55rem 0 0.1rem;margin-top:0.3rem;border-top:1px solid var(--border);">
+                    <span style="font-size:0.78rem;font-weight:600;color:var(--text-muted);">&#x2795; Add a request:</span>
+                    <select data-request-add-requester="${ev.id}" style="font-size:0.78rem;padding:0.15rem 0.25rem;max-width:11rem;border:1px solid var(--border);border-radius:9px;">
+                        <option value="">player&hellip;</option>
+                        ${canAdd.map(n => `<option value="${escapeHtml(n)}">${escapeHtml(n)}</option>`).join('')}
+                    </select>
+                    <span style="font-size:0.85rem;color:var(--text-muted);">&rarr;</span>
+                    <select data-request-add-partner="${ev.id}" style="font-size:0.78rem;padding:0.15rem 0.25rem;max-width:11rem;border:1px solid var(--border);border-radius:9px;">
+                        <option value="">wants to play with&hellip;</option>
+                        ${allPlayerNames.map(n => `<option value="${escapeHtml(n)}">${escapeHtml(n)}</option>`).join('')}
+                    </select>
+                    <button class="pairings-action-btn" data-ev-id="${ev.id}" data-request-add="1" title="Adds the request at this player's signup position — it takes its honest place in the priority order rather than jumping the queue." style="font-size:0.78rem;padding:0.15rem 0.6rem;font-weight:700;">Add</button>
+                </div>`;
+            }
             html += '</div>';
         }
 
@@ -7103,6 +7140,35 @@
                 postRequestMatch(btn.dataset.requester, null);
             });
         });
+
+        // Add a partner request that never came in with the signup
+        // (Kerry 2026-07-30). Writes through the same manual-match path,
+        // so the request lands at the player's signup position.
+        container.querySelectorAll('[data-request-add]').forEach(btn => {
+            btn.addEventListener('click', async e => {
+                e.stopPropagation();
+                const who = container.querySelector(`[data-request-add-requester="${ev.id}"]`);
+                const with_ = container.querySelector(`[data-request-add-partner="${ev.id}"]`);
+                const requester = who && who.value;
+                const partner = with_ && with_.value;
+                if (!requester || !partner) {
+                    alert('Pick both the player and who they want to play with.');
+                    return;
+                }
+                if (requester === partner) {
+                    alert("A player can't request themselves.");
+                    return;
+                }
+                btn.disabled = true;
+                try {
+                    await postRequestMatch(requester, partner);
+                } finally {
+                    btn.disabled = false;
+                }
+            });
+        });
+        container.querySelectorAll('[data-request-add-requester], [data-request-add-partner]')
+            .forEach(sel => sel.addEventListener('click', e => e.stopPropagation()));
 
         // Seed remove
         container.querySelectorAll('[data-seed-remove]').forEach(btn => {
