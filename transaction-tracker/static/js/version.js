@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.160.0";
+window.TGF_VERSION = "2.160.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.160.1",
+    date: "2026-07-31",
+    changes: [
+      "HARDENED THE PAIRING-METHOD PERSISTENCE (Kerry 2026-07-31: 'the STANDINGS button should still be highlighted when I reopen the event'). The server-side save shipped in v2.160.0 and is authoritative — the setting follows the manager to any device — but it could fail quietly in two ways, and both are now covered. A localStorage mirror is written alongside every mode change, so the choice survives even if the PATCH is refused or the events payload hasn't picked up the new column yet. And the seed no longer locks itself in against a stale event object: it waits until the payload actually carries pairing_mode before deciding it has read the saved value, instead of pinning the panel to Random for the rest of the session on the first render that arrived without it.",
+    ],
+  },
   {
     version: "2.160.0",
     date: "2026-07-31",

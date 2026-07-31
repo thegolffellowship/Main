@@ -4434,6 +4434,15 @@
     // EVENT, so reopening it — in any browser, by any manager — comes
     // back the way it was left (Kerry 2026-07-31). Fire-and-forget: a
     // failed save must never block the manager's click.
+    const _PAIR_MODE_LS = 'tgf.pairingMode.';
+
+    function readLocalPairingMode(evId) {
+        try {
+            const raw = localStorage.getItem(_PAIR_MODE_LS + evId);
+            return raw ? (JSON.parse(raw) || {}) : {};
+        } catch (e) { return {}; }
+    }
+
     function savePairingMode(ev, state) {
         const body = {pairing_mode: state.mode || 'random'};
         if (state.mode === 'standings') body.pairing_race_key = state.raceKey || null;
@@ -4446,6 +4455,12 @@
             master.pairing_mode = body.pairing_mode;
             if ('pairing_race_key' in body) master.pairing_race_key = body.pairing_race_key;
         }
+        try {
+            localStorage.setItem(_PAIR_MODE_LS + ev.id, JSON.stringify({
+                mode: body.pairing_mode,
+                raceKey: state.mode === 'standings' ? (state.raceKey || null) : null,
+            }));
+        } catch (e) { /* private mode / quota — the server copy still holds */ }
         fetch(`/api/events/${ev.id}`, {
             method: 'PATCH',
             headers: {'Content-Type': 'application/json'},
@@ -4554,17 +4569,25 @@
         const state = getPairingsState(ev.id);
         state.maxGroupSize = Number(ev.allow_fivesomes) ? 5 : 4;
         // The pairing METHOD is a property of the event, not of this page
-        // view (Kerry 2026-07-31: "Whatever method was selected should
-        // persist when the event is reopened"). Seed from the saved value
-        // once per panel open; after that the in-session choice wins so a
-        // click isn't undone by the next re-render.
+        // view (Kerry 2026-07-31: "Whatever method I used should persist
+        // the next time it's open"). Seed once per panel open; after that
+        // the in-session choice wins so a click isn't undone by the next
+        // re-render. The server value is authoritative — it follows the
+        // manager to any device — with a localStorage mirror so the
+        // setting still survives if the PATCH was refused or the events
+        // payload hasn't picked up the column yet.
         if (!state._modeSeeded) {
-            const saved = (ev.pairing_mode || '').trim();
+            const local = readLocalPairingMode(ev.id);
+            const saved = String(ev.pairing_mode || local.mode || '').trim();
             if (saved === 'random' || saved === 'abcd' || saved === 'standings') {
                 state.mode = saved;
             }
-            if (ev.pairing_race_key) state.raceKey = ev.pairing_race_key;
-            state._modeSeeded = true;
+            const rk = ev.pairing_race_key || local.raceKey;
+            if (rk) state.raceKey = rk;
+            // Only lock the seed in once the payload actually carries the
+            // column — otherwise a stale event object would pin the panel
+            // to Random for the rest of the session.
+            if ('pairing_mode' in ev || local.mode) state._modeSeeded = true;
         }
         const fmt = (ev.format || '').trim();
         const isCombo = fmt === '9/18 Combo';
