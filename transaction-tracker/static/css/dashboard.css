@@ -637,6 +637,7 @@ tr.txn-highlight {
 .cust-row-clickable:hover {
     background: var(--row-hover);
 }
+
 .cust-row-clickable td:first-child {
     position: relative;
     padding-left: 1.5rem;
@@ -742,17 +743,22 @@ tr.cust-row-member { background: #d1fae5; }
 tr.cust-row-member:hover { background: #a7f3d0; }
 tr.cust-row-member-plus { background: #99f6e4; }
 tr.cust-row-member-plus:hover { background: #5eead4; }
-tr.cust-row-first-timer { background: #fde68a; }
-tr.cust-row-first-timer:hover { background: #fcd34d; }
+/* GUEST + 1ST TIMER share ONE palette across the app — the EVENTS
+   roster, the PAIRINGS cards and this list (Kerry 2026-07-31, "extend
+   Guest/1st Timer colors to ROSTER as well and into CUSTOMER list").
+   GUEST is a half-strength 1st-timer orange; the old yellow/white pair
+   read as two unrelated vocabularies for the same two statuses. */
+tr.cust-row-first-timer { background: #fdba74; }
+tr.cust-row-first-timer:hover { background: #fcab5b; }
 tr.cust-row-former { background: #e2e8f0; color: #475569; }
 tr.cust-row-former:hover { background: #cbd5e1; }
-tr.cust-row-guest { background: #ffffff; }
-tr.cust-row-guest:hover { background: #f1f5f9; }
+tr.cust-row-guest { background: #fedcba; }
+tr.cust-row-guest:hover { background: #fdcfa4; }
 .customer-card.cust-row-member { background: #d1fae5; border-left: 4px solid #059669; }
 .customer-card.cust-row-member-plus { background: #99f6e4; border-left: 4px solid #0d9488; }
-.customer-card.cust-row-first-timer { background: #fde68a; border-left: 4px solid #d97706; }
+.customer-card.cust-row-first-timer { background: #fdba74; border-left: 4px solid #9a3412; }
 .customer-card.cust-row-former { background: #e2e8f0; border-left: 4px solid #64748b; opacity: 0.85; }
-.customer-card.cust-row-guest { border-left: 4px solid #cbd5e1; }
+.customer-card.cust-row-guest { background: #fedcba; border-left: 4px solid #9a3412; }
 
 /* View toggle */
 .view-toggle {

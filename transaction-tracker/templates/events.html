@@ -2532,7 +2532,7 @@
                 const u = (_cleanStatus(r.user_status) || '').toUpperCase();
                 if (isRsvpOnly || isGgRsvp) return 'background:#fef3c7;font-style:italic;';
                 if (isComp) return 'background:#dcfce7;';
-                if (u === 'GUEST') return 'background:#fbcfe8;';
+                if (u === 'GUEST') return 'background:#fedcba;';
                 if (u === '1ST TIMER') return 'background:#fdba74;';
                 if (isManual) return 'background:#dbeafe;';
                 return '';
@@ -4501,7 +4501,20 @@
             method: 'PATCH',
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify(body),
-        }).catch(() => {});
+        }).then(async r => {
+            if (r.ok) return;
+            // A 500 does NOT reject a fetch, so this used to vanish
+            // silently and the setting looked like it just "didn't
+            // persist" (Kerry 2026-07-31, four reports). Say it once.
+            if (window._pairModeWarned) return;
+            window._pairModeWarned = true;
+            let why = `HTTP ${r.status}`;
+            try { why = (await r.json()).error || why; } catch (_) {}
+            console.warn('Pairing-mode save failed:', why);
+            alert('The pairing method could not be saved to the event '
+                + `(${why}).\n\nIt will still be remembered in this browser, `
+                + 'but not for other managers or devices.');
+        }).catch(err => { console.warn('Pairing-mode save failed:', err); });
     }
 
     // Tee names have to occupy the same width as the age bands beside
@@ -5038,13 +5051,23 @@
                 : '';
             html += `<div class="pairing-group-header" data-slot-edit data-ev-id="${ev.id}" data-holes="${holes}" data-group-num="${grp.group_num}" title="Click to change this group's hole assignment">${escapeHtml(grp.slot_label)}${paceChip}</div>`;
 
-            // Render all four seats: occupied rows + clickable open slots
+            // Render every seat: occupied rows + clickable open slots
             // (Kerry, 2026-07-08: open spots in short groups must be usable
-            // as Player / Cart Pair / Move targets)
+            // as Player / Cart Pair / Move targets).
+            //
+            // The seat count is NOT fixed at four. A hard 1..4 loop meant a
+            // player dropped into seat 5 vanished from the card entirely —
+            // still in the data, but rendered nowhere (Kerry 2026-07-31,
+            // "when I released Jay HORTON from 9:00a to 9:10am group he
+            // disappeared"). Show a 5th seat when the event allows
+            // fivesomes, or whenever one is actually occupied.
             const byPos = {};
             grp.players.forEach(pl => { byPos[pl.cart_pos] = pl; });
-            for (let pos = 1; pos <= 4; pos++) {
-                if (pos === 3) {
+            const _occupied = grp.players.reduce(
+                (m, pl) => Math.max(m, Number(pl.cart_pos) || 0), 0);
+            const seatCount = Math.min(5, Math.max(4, state.maxGroupSize || 4, _occupied));
+            for (let pos = 1; pos <= seatCount; pos++) {
+                if (pos === 3 || pos === 5) {
                     html += '<div class="pairing-cart-divider"></div>';
                 }
                 const player = byPos[pos];
@@ -5136,12 +5159,14 @@
             // the events-list payload can (Kerry 2026-07-31 — the reason
             // STANDINGS kept reverting to Random on reopen).
             const evb = data.event || {};
-            const savedMode = String(evb.pairing_mode || '').trim();
+            const lsm = readLocalPairingMode(evId);
+            const savedMode = String(evb.pairing_mode || lsm.mode || '').trim();
             if (savedMode === 'random' || savedMode === 'abcd' || savedMode === 'standings') {
                 state.mode = savedMode;
             }
-            if (evb.pairing_race_key) state.raceKey = evb.pairing_race_key;
-            if (evb.pairing_mode !== undefined) state._modeSeeded = true;
+            const savedRace = evb.pairing_race_key || lsm.raceKey;
+            if (savedRace) state.raceKey = savedRace;
+            state._modeSeeded = true;
             state.standingsPoints = data.standings_points || {};
             state.standingsEnrolled = data.standings_enrolled || {};
             state.isDirty = false;
@@ -6004,7 +6029,7 @@
                 const isFirstTimerRow = _ustat === '1ST TIMER';
                 const rowBg = (isRsvpOnly || isGgRsvp) ? 'background-color:#fef3c7;font-style:italic;'
                     : isCompRow ? 'background-color:#dcfce7;'
-                    : isGuestRow ? 'background-color:#fbcfe8;'
+                    : isGuestRow ? 'background-color:#fedcba;'
                     : isFirstTimerRow ? 'background-color:#fdba74;'
                     : isManualRow ? 'background-color:#dbeafe;'
                     : '';

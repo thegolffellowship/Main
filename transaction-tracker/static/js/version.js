@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.161.0";
+window.TGF_VERSION = "2.161.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.161.1",
+    date: "2026-07-31",
+    changes: [
+      "FIXED: A PLAYER DRAGGED INTO A 5TH SEAT VANISHED (Kerry 2026-07-31 — 'when I released Jay Horton from 9:00a to 9:10am group he disappeared'). He was never lost: the move worked, the data was right, and the group card simply refused to draw him. The seat renderer looped a hard 1..4, so anyone landing in seat 5 was rendered nowhere while their old seat correctly showed as open. The card now draws as many seats as it needs — five whenever the event allows fivesomes OR a fifth seat is actually occupied — with a cart divider before the odd rider, since carts hold two.",
+      "THE PAIRING-METHOD SAVE NO LONGER FAILS IN SILENCE. A 500 from the server does not reject a fetch, so a rejected save looked exactly like 'it just didn't persist' — which is how this went four rounds without a diagnosis. The save now inspects the response and, if the event could not be updated, says so once with the server's reason and notes that the choice is still held in this browser. The panel's own reopen path also falls back to the browser copy when the server value is missing, so a save that never reached the database is no longer lost on the very reopen it was meant to survive.",
+      "GUEST AND 1ST TIMER NOW USE ONE PALETTE ACROSS THE APP (Kerry 2026-07-31). The EVENTS roster, the PAIRINGS cards and the CUSTOMERS list all shade those two statuses identically — GUEST in a half-strength 1st-timer orange, 1ST TIMER in the full orange. The roster was still on the old pink, and the customers list had a third vocabulary entirely (yellow for 1st timers, plain white for guests), so the same person changed colour depending on which screen you were looking at.",
+    ],
+  },
   {
     version: "2.161.0",
     date: "2026-07-31",
