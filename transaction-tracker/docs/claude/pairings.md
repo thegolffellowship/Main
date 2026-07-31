@@ -611,6 +611,22 @@ The Quarry-night rulings, all built:
      the panel showed as active (Palacios lost Anthis to the approved
      Anthis→Murphy). Signup order makes the approval JOIN Palacios's
      unit instead, which is what approve means.
+   - **The wire carries customer_id keys (v2.165.0).** `standings_points`
+     / `standings_enrolled` go over the wire keyed by BOTH customer_id
+     (stringified) and name; the UI reads the id first
+     (`pointsFor(state, name, cid)` / `enrolledFor(...)`), name only as a
+     fallback for a standings row that never resolved. Shipping name keys
+     ONLY made Moreno and Murphy show a dash on the card while the
+     Contests board showed their points — GG spells them "MORENO, Robert"
+     / "MURPHY, Mike" against our "Roberto Moreno" / "Michael Murphy".
+   - **GG name resolution + alias capture (v2.165.0).**
+     `_resolve_gg_person(conn, raw_name)` is the standings ingest's
+     resolver: `_gg_name_candidates` → `_lookup_customer_id`, then the
+     `_cmp_person_key` nickname rung (surname + first initial, UNIQUE
+     only). A person-key hit writes a `customer_aliases` row so the match
+     is permanent and reusable. `audit_gg_points_identities()` /
+     `GET|POST /api/admin/gg-points-identity-audit` re-runs it over
+     stored rows and reports whoever is still unmatched.
    - **Points column (v2.157.0).** `_standings_rank_map(_with_points=
      True)` returns a 4th element, `{customer_id | name_key -> points}`,
      built from the same rows as the rank map. `generate_event_pairings`

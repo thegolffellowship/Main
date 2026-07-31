@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.164.1";
+window.TGF_VERSION = "2.165.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.165.0",
+    date: "2026-07-31",
+    changes: [
+      "THE MISSING POINTS WERE A customer_id MISTAKE, AND IT WAS MINE (Kerry 2026-07-31: 'Actually our list is showing their names with points!?!?!'). Moreno and Murphy resolved to their profiles perfectly — the Contests board was showing 51 and 29 points with their handicaps beside them the whole time, which is only possible once customer_id has resolved. The pairing card sent the points map over the wire keyed by NAME ONLY; I filtered the customer_id keys out and left a comment saying the UI matches on display name. Golf Genius spells them 'MORENO, Robert' and 'MURPHY, Mike' where our roster says Roberto Moreno and Michael Murphy, so the name key could never match and the card showed a dash. Both maps now carry customer_id keys alongside the names, and the card reads the id first — guiding principle 6, which is exactly what this session has been about.",
+      "GOLF GENIUS NAMES NOW RESOLVE THROUGH THE NICKNAME RULE, AND THE MATCH IS CAPTURED AS AN ALIAS (Kerry: 'Aliases should be used to capture anyone in GG that can't be matched'). The standings ingest tried the exact-name and alias lookups and gave up; it now also tries the surname + first-initial person key that match play and partner requests already use, so Robert/Roberto and Mike/Michael collapse. A match on that rung WRITES a customer_aliases row, human-cased, so it is permanent, visible on the profile, and reusable by every other GG path — the second pass resolves on the fast path instead of re-deriving. Ambiguity still refuses: Daniel and Danny South share a person key, so 'SOUTH, Dan' resolves to nobody rather than guessing.",
+      "AN AUDIT FOR THE REST OF THE FIELD (Kerry: 'Check rest of points to see if we're missing anyone else'). GET or POST /api/admin/gg-points-identity-audit re-runs the resolver over every stored standings row, links whatever the nickname rung can now match, captures those aliases, and returns per-race counts plus the names still unmatched. An unresolved row still shows on the Contests board — it has a name and a points total — but is invisible to anything that joins on identity: pairings order, the points column, flighting, payouts. This lists exactly who is in that state.",
+    ],
+  },
   {
     version: "2.164.1",
     date: "2026-07-31",

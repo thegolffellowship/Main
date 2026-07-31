@@ -4544,14 +4544,30 @@
         return TEE_ABBREV[raw.toLowerCase()] || raw;
     }
 
-    function pointsFor(state, name) {
-        if (!name || !state.standingsPoints) return null;
-        const k = String(name).trim().replace(/\s+/g, ' ').toLowerCase();
-        const v = state.standingsPoints[k];
+    function pointsFor(state, name, cid) {
+        if (!state.standingsPoints) return null;
+        // customer_id FIRST (guiding principle 6). The name key is only a
+        // fallback for a standings row that never resolved to a profile —
+        // GG's spelling ("MURPHY, Mike") does not match our roster's
+        // ("Michael Murphy"), so a name-only lookup showed a dash for
+        // players whose points were on the board all along.
+        let v = (cid != null) ? state.standingsPoints[String(cid)] : undefined;
+        if (v === undefined && name) {
+            v = state.standingsPoints[String(name).trim().replace(/\s+/g, ' ').toLowerCase()];
+        }
         if (v == null) return null;
         const n = Number(v);
         if (!isFinite(n)) return null;
         return Number.isInteger(n) ? String(n) : n.toFixed(1);
+    }
+
+    // Same id-first rule for "are they in the race?"
+    function enrolledFor(state, name, cid) {
+        const m = state.standingsEnrolled || {};
+        if (cid != null && String(cid) in m) return !!m[String(cid)];
+        if (!name) return undefined;
+        const k = String(name).trim().replace(/\s+/g, ' ').toLowerCase();
+        return (k in m) ? !!m[k] : undefined;
     }
 
     // Three bands on a STANDINGS sheet, mirroring the Player Rankings
@@ -4663,7 +4679,7 @@
             const u = String((p && p.user_status) || '').trim().toUpperCase();
             return (u.includes('1ST') || u.includes('FIRST')) ? 'firsttimer' : 'guest';
         }
-        return (state.standingsEnrolled && state.standingsEnrolled[k]) ? 'in' : 'notin';
+        return enrolledFor(state, name, p && p.customer_id) ? 'in' : 'notin';
     }
 
     function paceRatingOf(state, name) {
@@ -5242,7 +5258,7 @@
                     html += `<span class="pairing-mp-badge" title="Match Play vs ${escapeHtml(mpOpp)}">&#x2694;&#xFE0F; MP</span>`;
                 }
                 if (showPoints) {
-                    const pts = pointsFor(state, player.name);
+                    const pts = pointsFor(state, player.name, _rCid);
                     // A dash has TWO very different causes and the manager
                     // needs to know which (Kerry 2026-07-31, "all points
                     // are not showing up now, like for Murphy & Moreno"):
@@ -5254,9 +5270,7 @@
                     if (pts != null) {
                         ptsTitle = `${raceLabel} points`;
                     } else {
-                        const _pk = String(player.name || '').trim()
-                            .replace(/\s+/g, ' ').toLowerCase();
-                        ptsTitle = (state.standingsEnrolled && _pk in state.standingsEnrolled)
+                        ptsTitle = (enrolledFor(state, player.name, _rCid) !== undefined)
                             ? `On the ${raceLabel} board, but no points total recorded`
                             : `Not in the ${raceLabel} standings at all`;
                     }

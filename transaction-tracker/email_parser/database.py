@@ -6963,6 +6963,130 @@ def _ensure_gg_points_table(conn: sqlite3.Connection) -> None:
         pass
 
 
+def _resolve_gg_person(conn: sqlite3.Connection, raw_name: str,
+                       capture_alias: bool = True) -> tuple:
+    """(customer_id, how) for a Golf Genius display name, or (None, None).
+
+    GG spells people its own way — "MORENO, Robert" for our Roberto
+    Moreno, "MURPHY, Mike" for our Michael Murphy (Kerry 2026-07-31).
+    Those rows carried real points and simply never resolved to a
+    profile, so the player showed a dash on the pairing sheet and counted
+    as unranked in the standings order.
+
+    Ladder:
+      1. the existing candidate lookup (`_gg_name_candidates` →
+         `_lookup_customer_id`, which already consults customer_aliases);
+      2. the nickname-robust person key (surname + first initial) —
+         the same rule match play and partner requests use. Robert/
+         Roberto and Mike/Michael collapse; Dick/Richard deliberately
+         does not, because that changes the initial.
+
+    A rung-2 hit is CAPTURED AS AN ALIAS so the match is permanent,
+    visible in the customer profile, and reusable by every other GG path
+    — "aliases should be used to capture anyone in GG that can't be
+    matched" (Kerry). Ambiguity never resolves: if two customers share a
+    person key, we refuse rather than guess.
+    """
+    cands = _gg_name_candidates(raw_name)
+    for cand in cands:
+        cid = _lookup_customer_id(conn, cand, None)
+        if cid:
+            return cid, "lookup"
+
+    key = _cmp_person_key(raw_name)
+    if not (key[0] and key[1]):
+        return None, None
+    try:
+        rows = conn.execute(
+            """SELECT customer_id, first_name, last_name FROM customers
+               WHERE LOWER(TRIM(last_name)) = ?
+                 AND SUBSTR(LOWER(TRIM(first_name)), 1, 1) = ?
+                 AND COALESCE(account_status, 'active') != 'banned'
+               LIMIT 3""",
+            (key[0], key[1])).fetchall()
+    except sqlite3.OperationalError:
+        return None, None
+    if len(rows) != 1:
+        if len(rows) > 1:
+            logger.info("GG name %r matches %d customers on person key %s "
+                        "— refusing to guess", raw_name, len(rows), key)
+        return None, None
+
+    cid = rows[0]["customer_id"]
+    canonical = f"{(rows[0]['first_name'] or '').strip()} " \
+                f"{(rows[0]['last_name'] or '').strip()}".strip()
+    if capture_alias:
+        for cand in cands:
+            if _pair_key_name(cand) == _pair_key_name(canonical):
+                continue           # not an alias, just the same name
+            # GG shouts the surname ("Robert MORENO"); store it the way a
+            # human would read it in the profile. Lookups are already
+            # case-insensitive, so this is presentation only.
+            pretty = " ".join(w[:1].upper() + w[1:].lower() if w.isalpha() else w
+                              for w in cand.split())
+            try:
+                conn.execute(
+                    """INSERT OR IGNORE INTO customer_aliases
+                           (customer_id, customer_name, alias_type, alias_value)
+                       VALUES (?, ?, 'name', ?)""",
+                    (cid, canonical, pretty))
+                logger.info("GG alias captured: %r -> %s (cid %s)",
+                            pretty, canonical, cid)
+            except Exception:
+                logger.exception("Non-fatal: could not capture GG alias %r", cand)
+    return cid, "person_key"
+
+
+def audit_gg_points_identities(db_path=None) -> dict:
+    """Which stored standings rows never resolved to a customer_id.
+
+    Kerry 2026-07-31: "Check rest of points to see if we're missing
+    anyone else in our own points list extractions due to the same
+    reasons." An unresolved row still shows on the Contests board (it has
+    a name and a points total) but is invisible to anything that joins on
+    identity — pairings order, the points column, flighting, payouts.
+
+    Re-runs the resolver over the stored rows, so it both REPORTS and
+    REPAIRS: anything the nickname rung can now match is linked and its
+    alias captured. Returns per-race counts plus the names still
+    unmatched, which are the ones a human has to look at.
+    """
+    out = {"races": [], "repaired": 0, "still_unmatched": 0}
+    with _connect(db_path) as conn:
+        _ensure_gg_points_table(conn)
+        races = [r["race_key"] for r in conn.execute(
+            "SELECT DISTINCT race_key FROM gg_points_standings").fetchall()]
+        for rk in races:
+            rows = conn.execute(
+                """SELECT id, player_name, total_points FROM gg_points_standings
+                   WHERE race_key = ? AND customer_id IS NULL""", (rk,)).fetchall()
+            fixed, unmatched = [], []
+            for r in rows:
+                cid, how = _resolve_gg_person(conn, r["player_name"])
+                if cid:
+                    conn.execute(
+                        "UPDATE gg_points_standings SET customer_id = ? WHERE id = ?",
+                        (cid, r["id"]))
+                    fixed.append({"player_name": r["player_name"],
+                                  "customer_id": cid, "via": how})
+                else:
+                    unmatched.append({"player_name": r["player_name"],
+                                      "total_points": r["total_points"]})
+            total = conn.execute(
+                "SELECT COUNT(*) AS n FROM gg_points_standings WHERE race_key = ?",
+                (rk,)).fetchone()["n"]
+            out["races"].append({
+                "race_key": rk, "rows": total,
+                "was_unlinked": len(rows), "repaired": len(fixed),
+                "still_unmatched": len(unmatched),
+                "repaired_names": fixed, "unmatched_names": unmatched,
+            })
+            out["repaired"] += len(fixed)
+            out["still_unmatched"] += len(unmatched)
+        conn.commit()
+    return out
+
+
 def refresh_points_race_standings(race_key: str,
                                   db_path: str | Path = DB_PATH) -> int:
     """Fetch a GG points race and replace its persisted snapshot.
@@ -6982,13 +7106,16 @@ def refresh_points_race_standings(race_key: str,
 
     with _connect(db_path) as conn:
         _ensure_gg_points_table(conn)
+        unmatched = []
         for row in standings:
-            cid = None
-            for cand in _gg_name_candidates(row["player_name"]):
-                cid = _lookup_customer_id(conn, cand, None)
-                if cid:
-                    break
+            cid, how = _resolve_gg_person(conn, row["player_name"])
             row["customer_id"] = cid
+            if not cid:
+                unmatched.append(row["player_name"])
+        if unmatched:
+            logger.warning("GG points race %r: %d name(s) did not resolve to a "
+                           "customer: %s", race_key, len(unmatched),
+                           ", ".join(unmatched[:12]))
         conn.execute("DELETE FROM gg_points_standings WHERE race_key = ?",
                      (race_key,))
         conn.executemany(
@@ -46721,11 +46848,17 @@ def generate_event_pairings(
     if mp_pairs or mp_notes:
         result["mp_notes"] = mp_notes
     if standings_points or standings_enrolled:
-        # Name-keyed only for the wire — the UI matches on display name.
-        result["standings_points"] = {
-            k: v for k, v in standings_points.items() if isinstance(k, str)}
-        result["standings_enrolled"] = {
-            k: v for k, v in standings_enrolled.items() if isinstance(k, str)}
+        # BOTH keyings go over the wire. Sending name keys ONLY was a
+        # straight guiding-principle-6 violation and it bit exactly where
+        # you'd expect: GG spells people its own way ("MORENO, Robert" for
+        # our Roberto Moreno, "MURPHY, Mike" for our Michael Murphy), so
+        # the name key never matched the roster name and the pairing card
+        # showed a dash — even though customer_id had resolved perfectly
+        # and the Contests board was showing their points all along
+        # (Kerry 2026-07-31). JSON object keys are strings, so ids arrive
+        # as "1234"; the UI reads the id first and falls back to the name.
+        result["standings_points"] = {str(k): v for k, v in standings_points.items()}
+        result["standings_enrolled"] = {str(k): v for k, v in standings_enrolled.items()}
     return result
 
 

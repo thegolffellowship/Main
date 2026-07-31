@@ -4894,10 +4894,12 @@ def api_get_pairings(event_id):
             _, _, _, _meta = _standings_rank_map(
                 ev.get("chapter"), _rk, max_age_hours=10 ** 6,
                 event_name=ev.get("item_name"), _with_meta=True)
-            standings_points = {k: v for k, v in _meta["points"].items()
-                                if isinstance(k, str)}
-            standings_enrolled = {k: v for k, v in _meta["enrolled"].items()
-                                  if isinstance(k, str)}
+            # Keyed by customer_id AND name — see the note in
+            # generate_event_pairings. Name-only made GG's spelling of a
+            # player ("MURPHY, Mike") fail to match our roster's
+            # ("Michael Murphy") even when the id had resolved.
+            standings_points = {str(k): v for k, v in _meta["points"].items()}
+            standings_enrolled = {str(k): v for k, v in _meta["enrolled"].items()}
         except Exception:
             logger.exception("Standings points lookup failed for event %d "
                              "(non-fatal)", event_id)
@@ -5112,6 +5114,24 @@ def api_pairings_switch_side(event_id):
         return jsonify({"error": str(e)}), 404
     except Exception as e:
         logger.exception("Side switch failed for event %d", event_id)
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/admin/gg-points-identity-audit", methods=["GET", "POST"])
+@require_role("admin")
+def api_gg_points_identity_audit():
+    """Standings rows that never resolved to a customer_id — report + repair.
+
+    An unresolved row still shows on the Contests board but is invisible
+    to anything that joins on identity (pairings order, the points column,
+    flighting, payouts). Re-runs the resolver, links what the nickname
+    rung can now match, captures the alias, and returns whoever is left.
+    """
+    try:
+        from email_parser.database import audit_gg_points_identities
+        return jsonify(audit_gg_points_identities())
+    except Exception as e:
+        logger.exception("GG points identity audit failed")
         return jsonify({"error": str(e)}), 500
 
 

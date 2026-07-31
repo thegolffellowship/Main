@@ -564,6 +564,79 @@ check("an unknown chapter returns empty meta, not a crash",
       db._standings_rank_map("Houston", _with_meta=True)[3]
       == {"points": {}, "enrolled": {}})
 
+print("\n== the points map must be keyed by customer_id (Kerry 2026-07-31) ==")
+# "Actually our list is showing their names with points!?!?!" — the
+# Contests board had Moreno and Murphy with points the whole time. Their
+# customer_id had resolved perfectly; the PAIRING CARD sent name keys ONLY
+# over the wire, and GG's spelling ("MORENO, Robert") never matches the
+# roster's ("Roberto Moreno"). Guiding principle 6, again.
+GGNAMES = {"standings": [
+    {"player_name": "MORENO, Robert", "customer_id": 11, "rank": "T28",
+     "total_points": 51, "enrolled": True},
+    {"player_name": "MURPHY, Mike", "customer_id": 12, "rank": "47",
+     "total_points": 29, "enrolled": True},
+], "fetched_at": "t", "gg_error": None}
+_rp4 = db.get_points_race_standings
+db.get_points_race_standings = lambda k, **kw: GGNAMES
+try:
+    _rm, _k, _n, META2 = db._standings_rank_map("San Antonio", _with_meta=True)
+finally:
+    db.get_points_race_standings = _rp4
+PTS2 = META2["points"]
+
+check("the id key carries the points", PTS2.get(11) == 51 and PTS2.get(12) == 29,
+      str({k: v for k, v in PTS2.items() if isinstance(k, int)}))
+check("GG's own spelling is keyed too", PTS2.get("robert moreno") == 51,
+      str(PTS2.get("robert moreno")))
+# The point of the bug: the ROSTER name is NOT a key, so a name-only
+# lookup finds nothing even though the player resolved fine.
+check("the ROSTER spelling is absent — which is why name-only failed",
+      "roberto moreno" not in PTS2 and "michael murphy" not in PTS2,
+      str([k for k in PTS2 if isinstance(k, str)]))
+check("...so the id is the only thing that can find them",
+      PTS2.get(11) is not None and PTS2.get(12) is not None)
+
+print("\n== GG name resolution captures an alias (Kerry 2026-07-31) ==")
+import sqlite3 as _sq, tempfile as _tf, os as _os
+_fd, _t = _tf.mkstemp(suffix=".db"); _os.close(_fd)
+_c = _sq.connect(_t); _c.row_factory = _sq.Row
+_c.executescript("""
+CREATE TABLE customers (customer_id INTEGER PRIMARY KEY, first_name TEXT,
+  last_name TEXT, company_name TEXT, account_status TEXT, current_player_status TEXT);
+CREATE TABLE customer_emails (customer_id INTEGER, email TEXT, is_primary INT, label TEXT);
+CREATE TABLE customer_aliases (id INTEGER PRIMARY KEY AUTOINCREMENT, customer_id INTEGER,
+  customer_name TEXT, alias_type TEXT, alias_value TEXT);
+CREATE TABLE items (id INTEGER PRIMARY KEY, customer_email TEXT, customer_id INTEGER);
+INSERT INTO customers VALUES
+ (11,'Roberto','Moreno',NULL,'active','active_member'),
+ (12,'Michael','Murphy',NULL,'active','active_member'),
+ (14,'Daniel','South',NULL,'active','active_member'),
+ (15,'Danny','South',NULL,'active','active_member');
+""")
+_c.commit()
+check("'MORENO, Robert' resolves to Roberto Moreno",
+      db._resolve_gg_person(_c, "MORENO, Robert") == (11, "person_key"))
+check("'MURPHY, Mike' resolves to Michael Murphy",
+      db._resolve_gg_person(_c, "MURPHY, Mike") == (12, "person_key"))
+_c.commit()
+_al = {r["alias_value"]: r["customer_name"]
+       for r in _c.execute("SELECT alias_value, customer_name FROM customer_aliases")}
+check("...and both are CAPTURED as aliases, human-cased",
+      _al.get("Robert Moreno") == "Roberto Moreno"
+      and _al.get("Mike Murphy") == "Michael Murphy", str(_al))
+check("the second pass then resolves on the fast alias path",
+      db._resolve_gg_person(_c, "MORENO, Robert")[1] == "lookup")
+_c.commit()
+check("...without duplicating the alias row",
+      _c.execute("SELECT COUNT(*) n FROM customer_aliases").fetchone()["n"] == 2)
+# Ambiguity must still refuse: Daniel and Danny South share (south, d).
+check("an ambiguous person key refuses rather than guessing",
+      db._resolve_gg_person(_c, "SOUTH, Dan") == (None, None),
+      str(db._resolve_gg_person(_c, "SOUTH, Dan")))
+check("a genuine stranger resolves to nothing",
+      db._resolve_gg_person(_c, "NOBODY, Ghost") == (None, None))
+_c.close(); _os.unlink(_t)
+
 print("\n" + "=" * 60)
 if FAILURES:
     print(f"{len(FAILURES)} FAILED: {FAILURES}")
