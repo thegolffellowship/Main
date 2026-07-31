@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.152.3";
+window.TGF_VERSION = "2.152.4";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.152.4",
+    date: "2026-07-30",
+    changes: [
+      "STANDINGS PAIRINGS NOW REFRESH AT THE POINT OF USE (Kerry 2026-07-30). Generating in STANDINGS mode re-pulls the points race from Golf Genius when the saved snapshot is older than 15 minutes, instead of relying on the 12-hour background window. Chosen over a session-start or event-driven refresh on Kerry's own reasoning: pairings lock when an event tees off, so the only moment the numbers must be current is the moment Generate is pressed — including day 2 of a two-day event, where the second day's order comes off day 1's results. That case IS a generate action, so point-of-use covers it and an event-driven refresh adds nothing. A session-start refresh was rejected outright because the standings endpoints sit on the PUBLIC pinless member tier, so it would have let every anonymous visitor to the leaderboard trigger a GG fetch, and would have put a flaky external call on the login path.",
+      "The window is short enough that yesterday's snapshot never survives, long enough that hitting Generate repeatedly to reshuffle reuses one fetch rather than hammering GG.",
+      "STALE STANDINGS ARE NEVER SILENT. When GG cannot be reached the underlying call falls back to the last snapshot; the generator now surfaces that as a WARNING naming the error and the snapshot's timestamp, because pairing a field off yesterday's order while believing it is current is exactly the failure this refresh exists to prevent. On a good pull it states 'Standings as of <time>' instead. The pairings note strip now distinguishes real warnings from routine status rather than badging every line with a warning triangle — if everything is a warning, the one that matters disappears.",
+    ],
+  },
   {
     version: "2.152.3",
     date: "2026-07-30",

@@ -117,6 +117,79 @@ check("an empty rank map still places everyone",
 check("...and says nobody was in the standings",
       any("0 of 3 players are in the standings" in n for n in notes), str(notes))
 
+print("\n== point-of-use refresh (Kerry 2026-07-30) ==")
+
+# Pairings lock when an event tees off, so the only moment the standings
+# must be current is the moment Generate is pressed — including day 2 of a
+# two-day event, where the second day's order comes off day 1's results.
+check("the staleness window is short enough that yesterday never survives",
+      0 < db._STANDINGS_PAIRING_MAX_AGE_HOURS <= 1.0,
+      str(db._STANDINGS_PAIRING_MAX_AGE_HOURS))
+
+calls = []
+_real = db.get_points_race_standings
+
+
+def _fake(race_key, auto_refresh_hours=12, force_refresh=False,
+          db_path=None, **kw):
+    calls.append({"race_key": race_key, "auto_refresh_hours": auto_refresh_hours})
+    return {"standings": [
+        {"player_name": "Leader", "position": 1},
+        {"player_name": "Chaser", "position": 2},
+    ], "fetched_at": "2026-07-30 18:00:00", "gg_error": None}
+
+
+db.get_points_race_standings = _fake
+try:
+    rm, key, notes = db._standings_rank_map("San Antonio")
+    check("the chapter resolves to its NET points race",
+          key == "san_antonio_net", str(key))
+    check("the refresh window is passed down, not the 12-hour default",
+          calls and calls[0]["auto_refresh_hours"] == db._STANDINGS_PAIRING_MAX_AGE_HOURS,
+          str(calls))
+    check("positions are read off the standings",
+          rm == {"leader": 1, "chaser": 2}, str(rm))
+    check("the notes state how current the numbers are",
+          any("Standings as of 2026-07-30 18:00:00" in n for n in notes), str(notes))
+
+    # Austin resolves to its own race, not San Antonio's.
+    calls.clear()
+    _, key2, _ = db._standings_rank_map("Austin")
+    check("Austin resolves to the Austin race", key2 == "austin_net", str(key2))
+
+    # An unknown chapter must not silently borrow another chapter's race.
+    _, key3, notes3 = db._standings_rank_map("Houston")
+    check("an unknown chapter yields no race rather than the wrong one",
+          key3 is None and any("No points race found" in n for n in notes3),
+          f"{key3} {notes3}")
+
+    # GG DOWN — the stale fallback must be announced, never swallowed.
+    def _down(race_key, auto_refresh_hours=12, force_refresh=False,
+              db_path=None, **kw):
+        return {"standings": [{"player_name": "Leader", "position": 1}],
+                "fetched_at": "2026-07-29 06:00:00",
+                "gg_error": "connection timed out"}
+
+    db.get_points_race_standings = _down
+    rm4, _, notes4 = db._standings_rank_map("San Antonio")
+    check("a GG outage still yields usable standings", rm4 == {"leader": 1})
+    check("...but WARNS that they are a stale snapshot",
+          any(n.startswith("WARNING: Golf Genius could not be reached")
+              for n in notes4), str(notes4))
+    check("...and names how old they are",
+          any("2026-07-29 06:00:00" in n for n in notes4), str(notes4))
+
+    # A hard failure must not take the generator down with it.
+    def _boom(*a, **kw):
+        raise RuntimeError("portal exploded")
+
+    db.get_points_race_standings = _boom
+    rm5, _, notes5 = db._standings_rank_map("San Antonio")
+    check("a hard GG failure degrades instead of raising",
+          rm5 == {} and any("portal exploded" in n for n in notes5), str(notes5))
+finally:
+    db.get_points_race_standings = _real
+
 print("\n" + "=" * 60)
 if FAILURES:
     print(f"{len(FAILURES)} FAILED: {FAILURES}")

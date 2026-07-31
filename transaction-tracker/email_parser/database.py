@@ -45750,7 +45750,7 @@ def generate_event_pairings(
             groups_players = _abcd_groups(free_players, hcp_map)
         elif mode == "standings":
             _rank_map, _race_used, _rnotes = _standings_rank_map(
-                ev_chapter, race_key, db_path=db_path)
+                ev_chapter, race_key, db_path=db_path)   # refreshes if stale
             mp_notes.extend(_rnotes)
             if _rank_map:
                 groups_players, _snotes = _standings_groups(
@@ -46200,13 +46200,29 @@ def _random_groups(
     return groups
 
 
+# Standings older than this are re-pulled from GG when pairings are being
+# generated (Kerry 2026-07-30). Point-of-use refresh rather than a
+# session-start or event-driven one: pairings lock when an event tees off,
+# so the ONLY moment the numbers must be current is the moment you press
+# Generate — including day 2 of a two-day event, where the second day's
+# order comes off standings updated by day 1. Short enough that yesterday's
+# snapshot never survives; long enough that hitting Generate repeatedly to
+# reshuffle reuses one fetch instead of hammering GG.
+_STANDINGS_PAIRING_MAX_AGE_HOURS = 0.25
+
+
 def _standings_rank_map(chapter: str | None, race_key: str | None = None,
+                        max_age_hours: float = _STANDINGS_PAIRING_MAX_AGE_HOURS,
                         db_path=None) -> tuple[dict, str | None, list]:
     """{lowercase player name: finishing position} for a chapter's points race.
 
     Position 1 is the LEADER. Returns (rank_map, race_key_used, notes).
-    A stale snapshot is fine here — pairings are set before the round, so
-    the standings that matter are the ones going in.
+
+    Refreshes from GG when the snapshot is older than `max_age_hours`. If GG
+    is unreachable the underlying call falls back to the stale snapshot — and
+    that fact is surfaced in the notes rather than swallowed, because pairing
+    a field off yesterday's standings while believing they are current is
+    exactly the failure this refresh exists to prevent.
     """
     notes = []
     key = race_key
@@ -46222,7 +46238,8 @@ def _standings_rank_map(chapter: str | None, race_key: str | None = None,
                      f"pairings fell back to random order.")
         return {}, None, notes
     try:
-        data = get_points_race_standings(key, db_path=db_path)
+        data = get_points_race_standings(
+            key, auto_refresh_hours=max_age_hours, db_path=db_path)
     except Exception as e:
         notes.append(f"Could not read the {key} standings ({e}) — "
                      f"pairings fell back to random order.")
@@ -46237,6 +46254,17 @@ def _standings_rank_map(chapter: str | None, race_key: str | None = None,
     if not rank_map:
         notes.append(f"The {key} standings are empty — pairings fell back "
                      f"to random order.")
+    # Say how current the numbers actually are. A silent stale-fallback is
+    # the one outcome that would let a manager pair off yesterday's order
+    # believing it was today's.
+    if data.get("gg_error"):
+        notes.append(
+            f"WARNING: Golf Genius could not be reached ({data['gg_error']}) "
+            f"— these standings are the last saved snapshot"
+            + (f" from {data.get('fetched_at')}" if data.get("fetched_at") else "")
+            + ". Check them before saving these pairings.")
+    elif data.get("fetched_at"):
+        notes.append(f"Standings as of {data['fetched_at']}.")
     return rank_map, key, notes
 
 

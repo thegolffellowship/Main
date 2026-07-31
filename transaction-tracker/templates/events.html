@@ -4490,7 +4490,16 @@
         if (state.mpNotes && state.mpNotes.length) {
             html += '<div style="margin:0.3rem 0 0.5rem;">';
             state.mpNotes.forEach(n => {
-                html += `<div class="mp-note">&#x26A0;&#xFE0F; ${escapeHtml(n)}</div>`;
+                // Not every note is a problem. Standings mode emits routine
+                // status ("Standings as of ...", how many players are in the
+                // race) alongside real warnings; badging all of them alike
+                // would make the one that matters — GG unreachable, so these
+                // are yesterday's numbers — blend into the noise.
+                const isWarn = /^WARNING:/i.test(n)
+                    || /dropped|could not|unavailable|fell back|no slot/i.test(n);
+                const icon = isWarn ? '&#x26A0;&#xFE0F; ' : '';
+                const style = isWarn ? '' : ' style="color:var(--text-muted);"';
+                html += `<div class="mp-note"${style}>${icon}${escapeHtml(n)}</div>`;
             });
             html += '</div>';
         }
