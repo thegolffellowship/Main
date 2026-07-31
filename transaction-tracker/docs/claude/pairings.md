@@ -523,16 +523,36 @@ The Quarry-night rulings, all built:
      player; a later request whose pair matches gets `status:
      "confirmed"` and a green badge. Badging it a loser read as a
      denial.
-   - **Paying for someone implies the pairing.** Assign Guest stamps
-     the item `"Purchased by <buyer>"`, so a bought-for player gets an
-     IMPLIED request pointed at their host even when they wrote none
-     (`implied: true`, PAID FOR badge). It enters at the guest's signup
-     position, so priority order is unchanged.
+   - **Paying for someone implies the pairing.** A bought-for player
+     gets an IMPLIED request pointed at their host even when they wrote
+     none (`implied: true`, PAID FOR badge). It enters at the guest's
+     signup position, so priority order is unchanged.
    - **A host plus up to three guests is one approved foursome.** "A
      member can bring as many guests as they want and play with up to
      3" — same-host-group requests are CONFIRMED until the group hits
      `HOST_GROUP_MAX = 4`; the fourth guest is outranked with "a
-     foursome is full", not silently dropped.
+     foursome is full", not silently dropped. The FIRST guest to claim
+     the host is an ordinary first-come win and carries no badge
+     (v2.153.1) — CONFIRMED is only for a request that would otherwise
+     have read as a loser.
+   - **Who paid is derived TWO ways** (`_host_of_map`, v2.153.1). The
+     note-only version shipped broken: on the SA Championship roster
+     only Jacob Williams carried `"Purchased by Daniel South"`, so
+     Villa and Kypuros — same order, same host — stayed OUTRANKED.
+     (a) the `"Purchased by <buyer>"` note wins where present (explicit,
+     and the only signal when the host buys a guest's spot on a
+     SEPARATE order); (b) **same `order_id`** otherwise — one payer per
+     order, buyer identified by `pickBuyerRow`'s rule (kept
+     `customer_email`, no Purchased-by note; read as a buyer MARKER
+     only, never as a contact address). Chains collapse to the ultimate
+     host; a cycle is dropped, not looped.
+   - **The generator builds the same foursome** (`_host_units`,
+     v2.153.1). Host units are placed below Match Play (rule 8 still
+     wins any shared player) and above ordinary partner pairs, in
+     `_random_groups` AND `_standings_groups`, and are added to
+     `_partner_locked_names` so the swap improver can't split them.
+     Panel and generator call the same two functions — a badge that
+     Generate wouldn't honor is the failure mode this closes.
 3e. **Managers can ADD a request (v2.153.0, Kerry 2026-07-30).**
    Requests arrive by text and at the first tee. The requests panel's
    "Add a request" row offers players with no existing request and

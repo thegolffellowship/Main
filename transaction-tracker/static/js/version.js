@@ -1,5 +1,15 @@
-window.TGF_VERSION = "2.153.0";
+window.TGF_VERSION = "2.153.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.153.1",
+    date: "2026-07-31",
+    changes: [
+      "GUESTS ARE NO LONGER OUTRANKED BY THE MAN WHO PAID FOR THEM. The host-group rule shipped in v2.153.0 but did not fire in the field: on the SA Championship roster Jacob Williams was grouped with Daniel South while Mark Villa and Orlando Kypuros — both requesting the same Daniel South, all three on Daniel's order — were still badged OUTRANKED. The cause was that the rule looked ONLY at the 'Purchased by <buyer>' note, which the guests' rows did not carry. Who paid is now derived structurally from the shared order_id: a multi-spot order has exactly one payer, and everyone else on it had their spot bought. The buyer is identified by the same rule the Transactions order-group header uses — the row that kept customer_email and carries no Purchased-by note. The note is still read first where it exists, since it is an explicit statement and it is the only signal when a host buys a guest's spot on a separate order.",
+      "THE GENERATOR NOW BUILDS THE FOURSOME THE PANEL PROMISES. Badging the guests CONFIRMED while the generator still paired them off two-at-a-time would have been worse than no badge — the panel would have been lying. Host-and-guests units are now built inside Generate as well, placed below Match Play ('Match Play is king' still wins any shared player) and above ordinary partner pairs, in Random and STANDINGS modes alike, and locked against the swap improver so a later optimization pass can't split them. Panel and generator compute the group from the same function, so they cannot drift apart.",
+      "THE FIRST CLAIM ON A HOST NO LONGER SHOWS A CONFIRMED BADGE (Kerry 2026-07-31: 'Not sure why Jacob Williams has the CONFIRMED badge'). The earliest guest to claim the host is an ordinary first-come win, identical to any other opening request, so it now renders plain like Gus Vasquez's does. CONFIRMED is reserved for a request that would otherwise have READ as a loser — a reciprocal request, or a guest joining a host already claimed.",
+      "Guest-of-a-guest chains collapse to the ultimate host, and a cycle in the paid-for data is dropped rather than looped over — two people cannot have bought each other's spot, so a cycle means the data is wrong, not that there are two hosts.",
+    ],
+  },
   {
     version: "2.153.0",
     date: "2026-07-31",

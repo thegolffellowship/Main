@@ -43958,6 +43958,115 @@ def _request_time_key(item: dict):
             item.get("id") or float("inf"))
 
 
+HOST_GROUP_MAX = 4
+
+
+def _host_of_map(rows: list[dict], all_names: list[str],
+                 roster_ids: dict | None = None) -> dict:
+    """{guest key -> host key} — who paid for whose spot (Kerry 2026-07-30).
+
+    Two rules hang off this:
+      * a bought-for player is ASSUMED to want to play with their host —
+        no request text needed;
+      * "A member can bring as many guests as they want and play with up
+        to 3", so a host plus three guests is a legitimate FOURSOME, not
+        three competing pair requests where the last two lose.
+
+    Detected two ways, because the note alone proved unreliable in the
+    field (Kerry 2026-07-31: Villa and Kypuros were still OUTRANKED
+    against Daniel South, who had paid for all three):
+      (a) the "Purchased by <buyer>" note — an explicit statement, so it
+          wins where present, and it is the ONLY signal when the host
+          bought the spot on a separate order;
+      (b) SAME order_id — the structural fact the note is only a
+          rendering of. A multi-spot order has exactly one payer;
+          everybody else on it had their spot bought. This survives
+          re-assignment, note edits, and a buyer name that no longer
+          matches the roster spelling.
+
+    `rows` must carry customer / notes / order_id / customer_email.
+    """
+    host_of: dict = {}
+
+    # (a) explicit note
+    for r in rows:
+        m = re.match(r"\s*Purchased by\s+(.+?)\s*$", (r.get("notes") or ""),
+                     re.I)
+        if not m:
+            continue
+        host = _find_partner_name(m.group(1), all_names, r.get("customer"),
+                                  roster_ids=roster_ids)
+        if host:
+            host_of[_pair_key_name(r.get("customer"))] = _pair_key_name(host)
+
+    # (b) same order = same payer. Buyer picked by the same rule the
+    # Transactions order-group header uses (`pickBuyerRow` in
+    # dashboard.js): only the buyer's row keeps customer_email, and the
+    # extras carry the Purchased-by note. customer_email is read here as
+    # a BUYER MARKER only, never as a contact address, so the
+    # identity-drift rule about items.* doesn't bite.
+    def _is_extra(row):
+        return bool(re.match(r"\s*Purchased by\s", (row.get("notes") or ""),
+                             re.I))
+
+    by_order: dict = {}
+    for r in rows:
+        oid = str(r.get("order_id") or "").strip()
+        if oid and not oid.lower().startswith("manual"):
+            by_order.setdefault(oid, []).append(r)
+    for orows in by_order.values():
+        if len(orows) < 2:
+            continue
+        buyer = (next((x for x in orows
+                       if (x.get("customer_email") or "").strip()
+                       and not _is_extra(x)), None)
+                 or next((x for x in orows if not _is_extra(x)), None)
+                 or orows[0])
+        bk = _pair_key_name(buyer.get("customer"))
+        for x in orows:
+            xk = _pair_key_name(x.get("customer"))
+            if xk and bk and xk != bk:
+                host_of.setdefault(xk, bk)
+
+    # Collapse chains (a guest of a guest) to the ultimate host, and drop
+    # any cycle rather than looping — two people can't have bought each
+    # other's spot, so a cycle means the data is wrong, not two hosts.
+    def _ultimate(k):
+        seen_h, cur = {k}, host_of.get(k)
+        while cur is not None and cur in host_of:
+            if cur in seen_h:
+                return None
+            seen_h.add(cur)
+            cur = host_of[cur]
+        return cur
+
+    return {k: h for k, h in ((k, _ultimate(k)) for k in list(host_of))
+            if h and h != k}
+
+
+def _host_units(host_of: dict, players: list[str],
+                max_size: int = HOST_GROUP_MAX) -> list[list[str]]:
+    """Host-and-guests foursomes, as unsplittable units of roster NAMES.
+
+    The generator must build the same groups the requests panel promises
+    — a panel that badges Villa and Kypuros CONFIRMED with their host
+    while the generator still splits them off is worse than no badge.
+    Restricted to `players` (one holes bucket), capped at `max_size`,
+    guests in roster order so the cap is deterministic.
+    """
+    by_key = {_pair_key_name(n): n for n in players if n}
+    units: list[list[str]] = []
+    hosts = [h for h in dict.fromkeys(host_of.values()) if h in by_key]
+    for h in hosts:
+        guests = [g for g in host_of if host_of[g] == h and g in by_key]
+        if not guests:
+            continue
+        unit = [by_key[h]] + [by_key[g] for g in guests]
+        if len(unit) >= 2:
+            units.append(unit[:max_size])
+    return units
+
+
 def get_event_partner_requests(event_id: int, db_path=None) -> dict:
     """Who requested whom on this event's roster (Kerry 2026-07-21).
 
@@ -43977,7 +44086,8 @@ def get_event_partner_requests(event_id: int, db_path=None) -> dict:
             f"""
             SELECT DISTINCT i.customer, i.customer_id, i.holes,
                             i.partner_request, i.id, i.order_date,
-                            i.created_at, i.notes
+                            i.created_at, i.notes, i.order_id,
+                            i.customer_email
             FROM events e
             LEFT JOIN event_aliases ea ON ea.canonical_event_name = e.item_name
             JOIN items i ON (
@@ -44020,28 +44130,8 @@ def get_event_partner_requests(event_id: int, db_path=None) -> dict:
     roster_ids = {r["customer"]: r["customer_id"] for r in roster
                   if r.get("customer_id")}
 
-    # WHO PAID FOR WHOM (Kerry 2026-07-30). Assign Guest stamps the item
-    # "Purchased by <buyer>", so a guest's host is already on the record.
-    # Two rules follow:
-    #   * a bought-for player is ASSUMED to want to play with their host —
-    #     no request text needed;
-    #   * "A member can bring as many guests as they want and play with up
-    #     to 3", so a host plus three guests is a legitimate FOURSOME, not
-    #     three competing pair requests where the last two lose.
-    HOST_GROUP_MAX = 4
-    host_of: dict = {}
-    for r in roster:
-        m = re.match(r"\s*Purchased by\s+(.+?)\s*$", (r.get("notes") or ""),
-                     re.I)
-        if not m:
-            continue
-        host = _find_partner_name(m.group(1), all_names, r["customer"],
-                                  roster_ids=roster_ids)
-        if host:
-            host_of[_pair_key_name(r["customer"])] = _pair_key_name(host)
-    host_names = {}
-    for r in roster:
-        host_names[_pair_key_name(r["customer"])] = r["customer"]
+    host_names = {_pair_key_name(r["customer"]): r["customer"] for r in roster}
+    host_of = _host_of_map(roster, all_names, roster_ids=roster_ids)
 
     def _host_group(key):
         """The host-and-guests set `key` belongs to, or None."""
@@ -44152,7 +44242,13 @@ def get_event_partner_requests(event_id: int, db_path=None) -> dict:
                     group_size[host_key] = size + 1
                     locked.update((rk, pk))
                     locked_pair[rk] = locked_pair[pk] = pair
-                    entry["status"] = "confirmed"
+                    # The FIRST claim on the host isn't confirming
+                    # anything — it's the ordinary first-come win, same as
+                    # any other opening request, so it gets no badge
+                    # (Kerry 2026-07-31: "Not sure why Jacob Williams has
+                    # the CONFIRMED badge"). CONFIRMED is reserved for a
+                    # request that would otherwise have READ as a loser.
+                    entry["status"] = "active" if size == 1 else "confirmed"
                     entry["host_group"] = True
                     entry["locked_reason"] = (
                         f"Playing with {partner}, who paid for their spot."
@@ -45706,7 +45802,8 @@ def generate_event_pairings(
             f"""
             SELECT DISTINCT i.customer, i.holes, i.tee_choice,
                             i.partner_request, i.id, i.order_date,
-                            i.created_at
+                            i.created_at, i.notes, i.order_id,
+                            i.customer_email, i.customer_id
             FROM events e
             LEFT JOIN event_aliases ea ON ea.canonical_event_name = e.item_name
             JOIN items i ON (
@@ -45895,6 +45992,19 @@ def generate_event_pairings(
         # Players available for free assignment (not seeded)
         free_players = [n for n in all_names if n not in seeded_players[holes]]
 
+        # ── Host-and-guests units (Kerry 2026-07-30) ──────────────────
+        # The requests panel promises a host and the guests they paid for
+        # play together; the generator has to actually build that group,
+        # or the badge is a lie. Below Match Play (rule 8: "Match Play is
+        # king"), above ordinary partner pairs. Computed off the same
+        # `_host_of_map` the panel uses so the two can never disagree.
+        _host_ids = {p["customer"]: p.get("customer_id")
+                     for p in player_items
+                     if p.get("customer") and p.get("customer_id")}
+        host_of_all = _host_of_map(player_items, all_names,
+                                   roster_ids=_host_ids)
+        host_units = _host_units(host_of_all, free_players)
+
         # ── Determine groups to fill ──────────────────────────────────
         n_free = len(free_players)
         # Seeded slots may be partially or fully locked
@@ -45996,7 +46106,8 @@ def generate_event_pairings(
 
         locked_names = _partner_locked_names(
             [n for n in free_players if n not in mp_names],
-            partner_map, protect_partner_requests)
+            partner_map, protect_partner_requests,
+            host_units=host_units if protect_partner_requests else None)
         locked_names |= mp_names
 
         if mode == "abcd":
@@ -46009,7 +46120,8 @@ def generate_event_pairings(
             if _rank_map:
                 groups_players, _snotes = _standings_groups(
                     free_players, _rank_map, partner_map,
-                    protect_partner_requests)
+                    protect_partner_requests,
+                    host_units=host_units if protect_partner_requests else None)
                 mp_notes.extend(_snotes)
             else:
                 # No usable standings — say so and fall back rather than
@@ -46028,7 +46140,8 @@ def generate_event_pairings(
             for _ in range(30):
                 cand = _random_groups(
                     free_players, partner_map, pair_counts,
-                    protect_partner_requests, fixed_units=mp_units
+                    protect_partner_requests, fixed_units=mp_units,
+                    host_units=host_units if protect_partner_requests else None
                 )
                 cand = _swap_improve(cand, pair_counts, locked_names)
                 score = sum(_group_score(g, pair_counts) for g in cand)
@@ -46305,12 +46418,18 @@ def _arrange_group_seats(names: list[str], mp_opponents: set,
 
 
 def _partner_locked_names(players: list[str], partner_map: dict,
-                          protect_partner_requests: bool) -> set:
+                          protect_partner_requests: bool,
+                          host_units: list[list[str]] | None = None) -> set:
     """Names bound by a partner request (same unit-building rule as
-    _random_groups) — the swap improver must never split these."""
+    _random_groups) — the swap improver must never split these.
+    Host-and-guests foursomes lock the same way."""
     locked: set = set()
     if not protect_partner_requests:
         return locked
+    for hu in (host_units or []):
+        unit = [n for n in hu if n in players and n not in locked]
+        if len(unit) >= 2:
+            locked.update(unit)
     for requester, req_text in partner_map.items():
         if requester not in players or requester in locked:
             continue
@@ -46358,6 +46477,7 @@ def _random_groups(
     pair_counts: dict,
     protect_partner_requests: bool,
     fixed_units: list[list[str]] | None = None,
+    host_units: list[list[str]] | None = None,
 ) -> list[list[str]]:
     """Form groups using weighted random (history-aware) assignment.
 
@@ -46370,6 +46490,14 @@ def _random_groups(
     carts — a pair placed there could not ride together. Keeping pairs
     out lets both constraints be satisfied instead of sacrificing the
     request at seat time.
+
+    host_units: host-and-guests foursomes (Kerry 2026-07-30 — "a member
+    can bring as many guests as they want and play with up to 3").
+    Placed AFTER match units (a match still wins any member) but BEFORE
+    ordinary partner pairs, because the guests' requests are all aimed
+    at the one host and pairing them off two-at-a-time is exactly what
+    made them outrank each other. They are ordinary multi-person units,
+    not match units — the mp/pair cart exclusion does not apply.
     """
     import random as _random
 
@@ -46383,6 +46511,12 @@ def _random_groups(
             units.append(unit)
             used.update(unit)
             mp_unit_names.update(unit)
+
+    for hu in (host_units or []):
+        unit = [n for n in hu if n in players and n not in used]
+        if len(unit) >= 2:
+            units.append(unit)
+            used.update(unit)
 
     # Build partner pairs first
     if protect_partner_requests:
@@ -46587,7 +46721,9 @@ def _standings_rank_map(chapter: str | None, race_key: str | None = None,
 
 
 def _standings_groups(players: list[str], rank_map: dict, partner_map: dict,
-                      protect_partner_requests: bool) -> tuple[list, list]:
+                      protect_partner_requests: bool,
+                      host_units: list[list[str]] | None = None
+                      ) -> tuple[list, list]:
     """Group by points-race standing with the LEADERS GOING OFF LAST (PGA
     order), while still honoring partner requests.
 
@@ -46610,8 +46746,16 @@ def _standings_groups(players: list[str], rank_map: dict, partner_map: dict,
         return [], notes
 
     # 1. Units — a partner request binds two players into one unit.
+    #    A host-and-guests foursome is built FIRST so the guests aren't
+    #    paired off two-at-a-time (Kerry 2026-07-30); the unit then takes
+    #    the host's standing position, same as any other unit.
     placed, units = set(), []
     if protect_partner_requests:
+        for hu in (host_units or []):
+            unit = [n for n in hu if n in players and n not in placed]
+            if len(unit) >= 2:
+                units.append(unit)
+                placed.update(unit)
         for requester, req_text in partner_map.items():
             if requester not in players or requester in placed:
                 continue

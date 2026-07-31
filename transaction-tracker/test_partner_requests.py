@@ -41,7 +41,7 @@ conn.executescript("""
  CREATE TABLE items (id INTEGER PRIMARY KEY, customer TEXT, customer_id INTEGER,
    item_name TEXT, holes TEXT, partner_request TEXT, order_date TEXT,
    created_at TEXT, notes TEXT, transaction_status TEXT, parent_item_id INTEGER,
-   event_id INTEGER);
+   event_id INTEGER, order_id TEXT, customer_email TEXT);
  CREATE TABLE customers (customer_id INTEGER PRIMARY KEY, first_name TEXT,
    last_name TEXT, company_name TEXT, account_status TEXT);
  CREATE TABLE customer_aliases (id INTEGER PRIMARY KEY, customer_id INTEGER,
@@ -49,24 +49,34 @@ conn.executescript("""
 """)
 conn.execute("INSERT INTO events (id, item_name, chapter) VALUES "
              "(1,'TGF SAN ANTONIO CHAMPIONSHIP','San Antonio')")
-# (customer, request, order_date, purchased-by note)
+# (customer, request, order_date, purchased-by note, order_id, email)
+#
+# Daniel South bought FOUR spots on one order (himself + three guests).
+# Only Jacob Williams's row carries the "Purchased by" note — this is the
+# shape that broke in production (Kerry 2026-07-31: Villa and Kypuros were
+# OUTRANKED against the man who paid for them). Their host must be found
+# from the shared order_id, not from a note they don't have.
+ORD = "R900000001"
 FIELD = [
-    ("Gus Vasquez",     "Chuck Fehlis",   "2026-07-15", None),
-    ("Pat Youngs",      "John White",     "2026-07-24", None),
-    ("Chuck Fehlis",    "Gus Vasquez",    "2026-07-27", None),
-    ("Richard Palacios","Larry Anthis",   "2026-07-28", None),
-    ("Larry Anthis",    "Michael Murphy", "2026-07-29", None),
-    ("Michael Murphy",  None,             "2026-07-29", None),
-    ("Daniel South",    None,             "2026-07-19", None),
-    ("Mark Villa",      "Dan South",      "2026-07-31", "Purchased by Daniel South"),
-    ("Orlando Kypuros", "Dan South",      "2026-07-31", "Purchased by Daniel South"),
-    ("Jacob Williams",  None,             "2026-07-31", "Purchased by Daniel South"),
+    ("Gus Vasquez",     "Chuck Fehlis",   "2026-07-15", None, "R1", "gus@x.com"),
+    ("Pat Youngs",      "John White",     "2026-07-24", None, "R2", "pat@x.com"),
+    ("Chuck Fehlis",    "Gus Vasquez",    "2026-07-27", None, "R3", "chuck@x.com"),
+    ("Richard Palacios","Larry Anthis",   "2026-07-28", None, "R4", "rich@x.com"),
+    ("Larry Anthis",    "Michael Murphy", "2026-07-29", None, "R5", "larry@x.com"),
+    ("Michael Murphy",  None,             "2026-07-29", None, "R6", "mike@x.com"),
+    ("Daniel South",    None,             "2026-07-19", None, ORD, "dan@x.com"),
+    ("Mark Villa",      "Dan South",      "2026-07-31", None, ORD, None),
+    ("Orlando Kypuros", "Dan South",      "2026-07-31", None, ORD, None),
+    ("Jacob Williams",  None,             "2026-07-31", "Purchased by Daniel South",
+     ORD, None),
 ]
-for i, (nm, req, od, note) in enumerate(FIELD, start=1):
+for i, (nm, req, od, note, oid, mail) in enumerate(FIELD, start=1):
     conn.execute("INSERT INTO items (id, customer, customer_id, item_name, holes,"
                  " partner_request, order_date, created_at, notes,"
-                 " transaction_status) VALUES (?,?,?,?,'18',?,?,?,?, 'active')",
-                 (i, nm, i, 'TGF SAN ANTONIO CHAMPIONSHIP', req, od, od, note))
+                 " transaction_status, order_id, customer_email)"
+                 " VALUES (?,?,?,?,'18',?,?,?,?, 'active',?,?)",
+                 (i, nm, i, 'TGF SAN ANTONIO CHAMPIONSHIP', req, od, od, note,
+                  oid, mail))
     parts = nm.split()
     conn.execute("INSERT INTO customers (customer_id, first_name, last_name,"
                  " account_status) VALUES (?,?,?, 'active')",
@@ -104,22 +114,40 @@ check("...resolved to the person who paid",
       str(by.get("Jacob Williams", {}).get("partner")))
 
 print("\n== a host plus three guests all play together ==")
-for g in ("Mark Villa", "Orlando Kypuros", "Jacob Williams"):
-    check(f"{g} is CONFIRMED with Daniel South, not outranked",
-          by[g]["status"] == "confirmed" and not by[g]["locked_out"],
+GUESTS = ("Mark Villa", "Orlando Kypuros", "Jacob Williams")
+for g in GUESTS:
+    check(f"{g} is NOT outranked against the man who paid for him",
+          not by[g]["locked_out"] and by[g]["status"] != "outranked",
           f"{by[g]['status']} / {by[g]['locked_reason']}")
     check(f"...and {g} resolves 'Dan South' to Daniel South",
           by[g]["partner"] == "Daniel South", str(by[g]["partner"]))
 check("all three are flagged as a host group",
-      all(by[g]["host_group"] for g in
-          ("Mark Villa", "Orlando Kypuros", "Jacob Williams")))
+      all(by[g]["host_group"] for g in GUESTS))
+
+# Villa and Kypuros carry NO "Purchased by" note — only the shared
+# order_id says Daniel paid. This is the production shape that broke.
+check("a guest with no Purchased-by note is still found via the order",
+      by["Mark Villa"]["host_group"] and by["Orlando Kypuros"]["host_group"],
+      "note-less guests were not linked to their host")
+
+# Only the FIRST claim on the host is an ordinary first-come win; it has
+# nothing to confirm, so it carries no badge (Kerry 2026-07-31: "Not sure
+# why Jacob Williams has the CONFIRMED badge").
+order = [r["requester"] for r in out if r["requester"] in GUESTS]
+check("the first guest to claim the host is plain ACTIVE, not CONFIRMED",
+      by[order[0]]["status"] == "active",
+      f"{order[0]} -> {by[order[0]]['status']}")
+check("the guests who follow are CONFIRMED",
+      all(by[g]["status"] == "confirmed" for g in order[1:]),
+      str([(g, by[g]["status"]) for g in order[1:]]))
 
 print("\n== the fourth guest does not fit a foursome ==")
 conn = sqlite3.connect(tmp)
 conn.execute("INSERT INTO items (id, customer, customer_id, item_name, holes,"
-             " partner_request, order_date, created_at, notes, transaction_status)"
+             " partner_request, order_date, created_at, notes,"
+             " transaction_status, order_id)"
              " VALUES (99,'Fourth Guest',99,'TGF SAN ANTONIO CHAMPIONSHIP','18',"
-             "'Dan South','2026-08-01','2026-08-01','Purchased by Daniel South','active')")
+             "'Dan South','2026-08-01','2026-08-01',NULL,'active','R900000001')")
 conn.commit(); conn.close()
 by2 = {r["requester"]: r for r in db.get_event_partner_requests(1, db_path=tmp)["requests"]}
 check("a fourth guest IS outranked — a foursome is full",
@@ -128,8 +156,9 @@ check("...with a reason naming the limit",
       "foursome is full" in (by2["Fourth Guest"]["locked_reason"] or ""),
       str(by2["Fourth Guest"]["locked_reason"]))
 check("the first three guests are unaffected",
-      all(by2[g]["status"] == "confirmed" for g in
-          ("Mark Villa", "Orlando Kypuros", "Jacob Williams")))
+      all(by2[g]["status"] in ("active", "confirmed") and not by2[g]["locked_out"]
+          for g in GUESTS),
+      str([(g, by2[g]["status"]) for g in GUESTS]))
 
 print("\n== unmatched text still surfaces for the manager ==")
 check("Pat Youngs -> John White stays unmatched (not on roster)",
@@ -160,6 +189,45 @@ check("clearing it removes the request again",
       "Michael Murphy" not in {
           r["requester"] for r in db.set_partner_request_match(
               1, "Michael Murphy", None, db_path=tmp)["requests"]})
+
+print("\n== the GENERATOR builds the host foursome, not just the panel ==")
+# A panel that badges the guests CONFIRMED while the generator splits them
+# off is worse than no badge at all.
+host_of = db._host_of_map(
+    [dict(customer=nm, notes=note, order_id=oid, customer_email=mail)
+     for nm, req, od, note, oid, mail in FIELD],
+    [f[0] for f in FIELD])
+check("the three guests all resolve to Daniel South as host",
+      {g: host_of.get(db._pair_key_name(g)) for g in GUESTS}
+      == {g: "daniel south" for g in GUESTS}, str(host_of))
+
+roster_names = [f[0] for f in FIELD]
+units = db._host_units(host_of, roster_names)
+check("one host unit is built, capped at a foursome",
+      len(units) == 1 and len(units[0]) == 4, str(units))
+check("...with Daniel South in it", "Daniel South" in units[0], str(units))
+
+pmap = {nm: req for nm, req, od, note, oid, mail in FIELD}
+groups = db._random_groups(roster_names, pmap, {}, True, host_units=units)
+grp = next((g for g in groups if "Daniel South" in g), [])
+check("the generator puts Daniel South and all three guests in ONE group",
+      all(g in grp for g in GUESTS), str(grp))
+check("...and that group is a foursome, not a fivesome",
+      len(grp) == 4, str(grp))
+
+# Match Play still wins a member off the host group (rule 8).
+mp = db._random_groups(roster_names, pmap, {}, True,
+                       fixed_units=[["Mark Villa", "Gus Vasquez"]],
+                       host_units=units)
+mp_grp = next((g for g in mp if "Mark Villa" in g), [])
+check("Match Play still outranks the host group for a shared player",
+      "Gus Vasquez" in mp_grp, str(mp_grp))
+
+# Locked names protect the whole unit from the swap improver.
+locked = db._partner_locked_names(roster_names, pmap, True, host_units=units)
+check("every host-group member is locked against swaps",
+      all(g in locked for g in GUESTS) and "Daniel South" in locked,
+      str(sorted(locked)))
 
 print("\n" + "=" * 60)
 if FAILURES:
