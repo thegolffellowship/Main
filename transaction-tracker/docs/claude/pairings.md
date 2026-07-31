@@ -583,6 +583,14 @@ The Quarry-night rulings, all built:
      wearing a STANDINGS label. A total miss now emits a WARNING saying
      it is not a standings order; a partial miss NAMES the unmatched
      players.
+   - **GG ties (v2.155.0).** The portal spells a tie "T8".
+     `_parse_gg_rank` pulls the digits out (feeding "T8" to `int()` took
+     Generate down outright), and tied players KEEP the shared position
+     rather than being renumbered. **Tiebreak, Kerry 2026-07-31: LOWER
+     HANDICAP is the better position, then alphabetical by LAST name.**
+     `_standings_groups(hcp_map=…)` applies it; an unknown handicap
+     sorts last within a tie (99.0) rather than jumping a known-good
+     player.
    - **The sheet fills from the BACK (v2.154.1).** Units are sorted
      leader-first and placed into the LAST group first, so "leaders go
      off last" is exact. The old forward cursor never revisited a group
@@ -612,6 +620,36 @@ The Quarry-night rulings, all built:
    badge) so it takes its honest place in the priority order rather
    than jumping the queue for being entered late. A requester who
    isn't on the roster is refused.
+3f. **FIVESOMES (v2.155.0, Kerry 2026-07-31).** "Typically we would have
+   at most 1 or 2 fivesomes, not all fivesomes… Definitely would like
+   ability to manually add a 5th to any given group. This should never
+   be allowed unless manager/admin requests it." Two routes, both
+   manager-initiated:
+   - **Manual** — Move/drag a player into a full group and confirm the
+     prompt. Bypasses every ceiling because the confirm IS the request.
+     Six is refused outright. Seat 5 exists; carts stay 1&2 / 3&4, so
+     the fifth rider plays with the group and rides with nobody
+     (`pairing_history` records the played-with pairs, `rode` = 0).
+   - **Event switch** — `events.allow_fivesomes` (checkbox on the
+     add/edit event modals, `update_event` allow-list, `create_event`
+     sets it via a follow-up update). Builds the WHOLE sheet from
+     fivesomes with FOURSOMES as the short groups — "the same
+     relational rules that 3somes play in a 4some setup". Arithmetic:
+     `n = 5q + r`; trade `take = 4 − r` fivesomes for `take + 1`
+     foursomes, which is the fewest fivesomes given up (20 → [5,5,5,5];
+     32 → [5,5,5,5,4,4,4]; 21 → [5,4,4,4,4]). A field too small to tile
+     (6, 7, 11) falls back to the 4-based sheet rather than inventing a
+     shape.
+   - **The ceiling is the EVENT'S ceiling.** `HOST_GROUP_MAX` is
+     replaced by a per-event `group_max` (4, or 5 when the switch is
+     on) in `get_event_partner_requests`, and `max_group` threads
+     through `_make_group_sizes` / `_random_groups` /
+     `_standings_groups` / `_abcd_groups` / `_host_units` /
+     `_merge_name_units`. The "would make five" message counts from it.
+   - **Schema:** `event_pairings.cart_pos` had `CHECK(BETWEEN 1 AND 4)`,
+     which would have refused to SAVE a hand-added 5th. Rebuilt in place
+     to 1–5 by an idempotent migration in `_ensure_pairing_tables`
+     (rows carried over; keyed off the old constraint text).
 4. **Front/Back 9 side.** `events.nine_side` ('Front' default |
    'Back') says which nine the 9-hole leg plays. Shotgun slot labels
    follow (`_pairing_time_slots`: Back → 10A/10B…). Event setup (add +

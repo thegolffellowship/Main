@@ -243,6 +243,16 @@ function _setStickyOffsets() {
         // Shell v2 pages have no .tab-nav — sub-nav sticks under the dark bar
         adminSub.style.top = hdr.offsetHeight + "px";
     }
+    // Page-level sticky rows (e.g. the Events PAIRINGS controls bar, which
+    // has to stay reachable while a long Requests panel is open) opt in
+    // with .sticks-under-nav and get their offset here rather than
+    // hard-coding a header height that changes with role and viewport.
+    if (hdr) {
+        const under = hdr.offsetHeight + (nav ? nav.offsetHeight : 0);
+        document.querySelectorAll(".sticks-under-nav").forEach((el) => {
+            el.style.top = under + "px";
+        });
+    }
 }
 // Run immediately, on DOM ready, on load, and on resize
 _setStickyOffsets();

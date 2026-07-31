@@ -1,5 +1,17 @@
-window.TGF_VERSION = "2.154.1";
+window.TGF_VERSION = "2.155.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.155.0",
+    date: "2026-07-31",
+    changes: [
+      "FIXED: GENERATE CRASHED ON A TIE. Clicking Generate in STANDINGS mode died with 'invalid literal for int() with base 10: T8' — Golf Genius marks a tie with a leading T ('T8' = tied for 8th), and yesterday's rank-map change fed that straight to int(). Introduced in v2.154.1 and fixed here; ranks now parse the digits out of any GG spelling and a tie KEEPS its shared position rather than being silently renumbered.",
+      "TIES BREAK ON HANDICAP, THEN LAST NAME (Kerry 2026-07-31). Tied players used to fall back to whatever order the portal listed them in. The lower handicap is now treated as the better position — so within a tie the better player goes off later, as the leader does — and an exact handicap tie is settled alphabetically by last name. A player with no handicap on file sorts last inside a tie rather than jumping ahead of a known-good one.",
+      "FIVESOMES (Kerry 2026-07-31). Two ways in, both requiring a manager to ask for it. (1) MANUAL: drag or Move any player into a full group and confirm the prompt — 'That group is already a foursome. Add a 5th anyway?' Six is refused outright. (2) EVENT SETUP: a new 'Allow fivesomes' checkbox on the add/edit event modals builds the WHOLE sheet from fivesomes, with FOURSOMES as the short groups — the same relational rule threesomes follow on a 4-based sheet (20 players → four fivesomes; 32 → four fivesomes and three foursomes; 19 → three fivesomes and a foursome). A field too small to tile as fivesomes falls back to the ordinary 4-based sheet rather than inventing a shape. Off by default, so nothing changes for any existing event.",
+      "THE FOURSOME CEILING IS NOW THE EVENT'S CEILING. Host-and-guests groups, guest latitude, and manager approvals all stopped at four; on a fivesome event they stop at five, and the 'honoring this would make five' message counts correctly either way. The manual add-a-5th path bypasses the ceiling entirely, because that IS the manager asking.",
+      "The event_pairings table capped cart_pos at 4 with a CHECK constraint, so a hand-added 5th player could not have been SAVED even once placed. The table is rebuilt in place on first use to allow seat 5 — existing rows are carried over untouched, and the migration is idempotent. Carts remain seats 1&2 and 3&4; the fifth rider is an extra and is recorded as playing with the group but riding with nobody.",
+      "GENERATE STAYS REACHABLE WITH THE REQUESTS PANEL OPEN (Kerry 2026-07-31). The pairings controls bar now sticks below the nav while you scroll a long requests or locks list, and the action buttons live in one group pinned right instead of being pushed around by a flexible spacer that could shove Generate out of view on a crowded row.",
+    ],
+  },
   {
     version: "2.154.1",
     date: "2026-07-31",

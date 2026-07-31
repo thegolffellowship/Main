@@ -418,6 +418,97 @@ for n in (13, 22, 25, 31, 43):
     check(f"n={n}: no group exceeds a foursome",
           all(len(u) <= 4 for u in gg), str([len(u) for u in gg]))
 
+print("\n== GG TIES: 'T8' must not crash, and must break correctly ==")
+# Clicking Generate died with "invalid literal for int() with base 10: 'T8'"
+# — GG marks a tie with a leading T (Kerry 2026-07-31).
+for raw, want in [("T8", 8), ("8", 8), (8, 8), (" T12 ", 12), ("1", 1),
+                  ("", None), (None, None), ("--", None), ("T", None)]:
+    check(f"rank {raw!r} parses to {want}", db._parse_gg_rank(raw) == want,
+          str(db._parse_gg_rank(raw)))
+
+TIED = {"standings": [
+    {"player_name": "LEADER, Ann",  "customer_id": 1, "rank": "1"},
+    {"player_name": "TIEA, Bob",    "customer_id": 2, "rank": "T2"},
+    {"player_name": "TIEB, Carl",   "customer_id": 3, "rank": "T2"},
+    {"player_name": "TIEC, Abe",    "customer_id": 4, "rank": "T2"},
+    {"player_name": "LAST, Dan",    "customer_id": 5, "rank": "5"},
+], "fetched_at": "t", "gg_error": None}
+_rp2 = db.get_points_race_standings
+db.get_points_race_standings = lambda k, **kw: TIED
+try:
+    rmt, _k, _n = db._standings_rank_map("San Antonio")
+finally:
+    db.get_points_race_standings = _rp2
+check("a T-rank does not raise and keeps its position",
+      rmt.get(2) == 2 and rmt.get(3) == 2 and rmt.get(4) == 2, str(rmt))
+check("the tie does NOT get renumbered into 2/3/4",
+      sorted(rmt[c] for c in (1, 2, 3, 4, 5)) == [1, 2, 2, 2, 5], str(rmt))
+
+# Kerry's tiebreak: lower handicap is the better position; last name
+# decides after that. Leaders go off LAST, so the best of a tie is latest.
+TIEROSTER = ["Ann Leader", "Bob Tiea", "Carl Tieb", "Abe Tiec", "Dan Last"]
+TIEIDS = {"Ann Leader": 1, "Bob Tiea": 2, "Carl Tieb": 3, "Abe Tiec": 4,
+          "Dan Last": 5}
+HCP = {"bob tiea": 14.0, "carl tieb": 3.2, "abe tiec": 3.2, "ann leader": 1.0,
+       "dan last": 20.0}
+gT, _nT = db._standings_groups(TIEROSTER, rmt, {}, False, id_map=TIEIDS,
+                               hcp_map=HCP)
+# Groups are the tee-time order (earliest group first); WITHIN a group the
+# placement order runs best-key first, since the sheet fills from the back.
+gidx = {p: i for i, grp in enumerate(gT) for p in grp}
+check("the outright leader is in the LAST group",
+      gidx["Ann Leader"] == len(gT) - 1, str(gT))
+check("the bottom of the standings is in the FIRST group",
+      gidx["Dan Last"] == 0, str(gT))
+check("within the tie, the HIGHER handicap goes off earlier",
+      gidx["Bob Tiea"] < gidx["Carl Tieb"], str(gT))
+_tg = gT[gidx["Carl Tieb"]]
+check("equal handicaps inside a tie break ALPHABETICALLY by last name",
+      gidx["Abe Tiec"] == gidx["Carl Tieb"]
+      and _tg.index("Carl Tieb") < _tg.index("Abe Tiec"),
+      f"Tieb should outrank Tiec: {_tg}")
+
+print("\n== FIVESOMES (Kerry 2026-07-31) ==")
+check("the 4-based sheet is unchanged when fivesomes are off",
+      all(db._make_group_sizes(n) == db._make_group_sizes(n, 4)
+          for n in range(0, 80)))
+for n, want in [(10, [5, 5]), (15, [5, 5, 5]), (20, [5, 5, 5, 5]),
+                (14, [5, 5, 4]), (19, [5, 5, 5, 4]), (18, [5, 5, 4, 4]),
+                (13, [5, 4, 4]), (32, [5, 5, 5, 5, 4, 4, 4])]:
+    got = db._make_group_sizes(n, 5)
+    check(f"{n} players -> {want}", got == want, str(got))
+check("every fivesome sheet sums correctly and has no onesome/twosome",
+      all(sum(db._make_group_sizes(n, 5)) == n
+          and all(3 <= x <= 5 for x in db._make_group_sizes(n, 5))
+          for n in range(8, 81)))
+# A field too small to tile as fivesomes falls back to the ordinary
+# 4-based sheet rather than inventing a shape — you cannot make fives out
+# of six players, and a threesome is a 4-based idea.
+FALLBACK = {6: [3, 3], 7: [4, 3], 11: [4, 4, 3]}
+for n, want in FALLBACK.items():
+    check(f"{n} players is too small for fives -> {want}",
+          db._make_group_sizes(n, 5) == want, str(db._make_group_sizes(n, 5)))
+check("short groups in a REAL 5-sheet are FOURSOMES, never threesomes",
+      all(all(x in (4, 5) for x in db._make_group_sizes(n, 5))
+          for n in range(8, 81) if n not in FALLBACK),
+      str([(n, db._make_group_sizes(n, 5)) for n in range(8, 81)
+           if n not in FALLBACK
+           and any(x not in (4, 5) for x in db._make_group_sizes(n, 5))]))
+check("at most three groups are short of five",
+      all(sum(1 for x in db._make_group_sizes(n, 5) if x < 5) <= 4
+          for n in range(8, 81) if n not in FALLBACK))
+
+# The standings sheet honors the ceiling end to end.
+P20 = [f"Q{i:02d}" for i in range(20)]
+R20 = {p.lower(): i + 1 for i, p in enumerate(P20)}
+g5, _n5 = db._standings_groups(P20, R20, {}, False, max_group=5)
+check("a 20-player standings sheet builds four FIVESOMES",
+      [len(x) for x in g5] == [5, 5, 5, 5], str([len(x) for x in g5]))
+check("...with the leader still going off last", "Q00" in g5[-1], str(g5[-1]))
+g4, _n4 = db._standings_groups(P20, R20, {}, False)
+check("...and the same field is five foursomes when fivesomes are off",
+      [len(x) for x in g4] == [4, 4, 4, 4, 4], str([len(x) for x in g4]))
+
 print("\n" + "=" * 60)
 if FAILURES:
     print(f"{len(FAILURES)} FAILED: {FAILURES}")

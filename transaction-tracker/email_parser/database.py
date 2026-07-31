@@ -2983,6 +2983,7 @@ def init_db(db_path: str | Path | None = None) -> None:
             # shotgun hole labels (Back → 10A/10B…) on the PAIRINGS tab
             # and printables.
             ("nine_side", "TEXT"),
+            ("allow_fivesomes", "INTEGER"),
         ]:
             try:
                 conn.execute(f"ALTER TABLE events ADD COLUMN {col} {col_type}")
@@ -5472,7 +5473,7 @@ def init_db(db_path: str | Path | None = None) -> None:
                 group_num      INTEGER NOT NULL,
                 slot_label     TEXT NOT NULL,
                 player_name    TEXT NOT NULL,
-                cart_pos       INTEGER NOT NULL CHECK(cart_pos BETWEEN 1 AND 4),
+                cart_pos       INTEGER NOT NULL CHECK(cart_pos BETWEEN 1 AND 5),
                 tee_choice     TEXT,
                 handicap_index REAL,
                 created_at     TEXT DEFAULT (datetime('now')),
@@ -17054,7 +17055,7 @@ def update_event(event_id: int, fields: dict, db_path: str | Path | None = None)
     allowed = {"item_name", "event_date", "course", "chapter", "format", "start_type", "start_time",
                 "tee_time_count", "tee_time_interval", "start_time_18", "start_type_18",
                 "tee_time_count_18", "event_type", "tee_direction", "tee_direction_18",
-                "nine_side",
+                "nine_side", "allow_fivesomes",
                 "course_cost", "tgf_markup", "side_game_fee", "transaction_fee_pct",
                 "course_cost_9", "course_cost_18", "tgf_markup_9", "tgf_markup_18",
                 "side_game_fee_9", "side_game_fee_18",
@@ -43654,7 +43655,7 @@ def _ensure_pairing_tables(conn: sqlite3.Connection) -> None:
             group_num      INTEGER NOT NULL,
             slot_label     TEXT NOT NULL,
             player_name    TEXT NOT NULL,
-            cart_pos       INTEGER NOT NULL CHECK(cart_pos BETWEEN 1 AND 4),
+            cart_pos       INTEGER NOT NULL CHECK(cart_pos BETWEEN 1 AND 5),
             tee_choice     TEXT,
             handicap_index REAL,
             created_at     TEXT DEFAULT (datetime('now')),
@@ -43662,6 +43663,48 @@ def _ensure_pairing_tables(conn: sqlite3.Connection) -> None:
         )
         """
     )
+    # FIVESOMES (Kerry 2026-07-31): cart_pos used to be capped at 4 by a
+    # CHECK constraint, so a manually added 5th player could not be SAVED
+    # at all. SQLite can't alter a CHECK in place, so rebuild the table
+    # once on a live DB. Idempotent — the marker is the old constraint
+    # text itself.
+    try:
+        _ep = conn.execute(
+            "SELECT sql FROM sqlite_master WHERE type='table' "
+            "AND name='event_pairings'").fetchone()
+        if _ep and "BETWEEN 1 AND 4" in (_ep["sql"] or ""):
+            conn.execute("ALTER TABLE event_pairings RENAME TO _event_pairings_o")
+            conn.execute(
+                """
+                CREATE TABLE event_pairings (
+                    id             INTEGER PRIMARY KEY AUTOINCREMENT,
+                    event_id       INTEGER NOT NULL REFERENCES events(id) ON DELETE CASCADE,
+                    holes          TEXT NOT NULL CHECK(holes IN ('9', '18')),
+                    group_num      INTEGER NOT NULL,
+                    slot_label     TEXT NOT NULL,
+                    player_name    TEXT NOT NULL,
+                    cart_pos       INTEGER NOT NULL CHECK(cart_pos BETWEEN 1 AND 5),
+                    tee_choice     TEXT,
+                    handicap_index REAL,
+                    created_at     TEXT DEFAULT (datetime('now')),
+                    UNIQUE(event_id, holes, group_num, cart_pos)
+                )
+                """
+            )
+            conn.execute(
+                """INSERT INTO event_pairings
+                       (id, event_id, holes, group_num, slot_label,
+                        player_name, cart_pos, tee_choice, handicap_index,
+                        created_at)
+                   SELECT id, event_id, holes, group_num, slot_label,
+                          player_name, cart_pos, tee_choice, handicap_index,
+                          created_at
+                   FROM _event_pairings_o""")
+            conn.execute("DROP TABLE _event_pairings_o")
+            logger.info("event_pairings: cart_pos ceiling raised 4 -> 5 "
+                        "(fivesome support)")
+    except Exception:
+        logger.exception("Non-fatal: event_pairings cart_pos migration failed")
     conn.execute(
         "CREATE INDEX IF NOT EXISTS idx_event_pairings_event ON event_pairings(event_id)"
     )
@@ -44100,6 +44143,16 @@ def get_event_partner_requests(event_id: int, db_path=None) -> dict:
     ph = ",".join("?" * len(INACTIVE))
     with _connect(db_path) as conn:
         _ensure_pairing_tables(conn)
+        # A very old events table may predate the column; a missing
+        # switch just means no fivesomes, which is the default anyway.
+        try:
+            _evr = conn.execute(
+                "SELECT allow_fivesomes FROM events WHERE id = ?",
+                (event_id,)).fetchone()
+            group_max = 5 if (_evr and int(_evr["allow_fivesomes"] or 0)) else 4
+        except sqlite3.OperationalError:
+            group_max = 4
+        group_word = "fivesome" if group_max == 5 else "foursome"
         rows = conn.execute(
             f"""
             SELECT DISTINCT i.customer, i.customer_id, i.holes,
@@ -44193,8 +44246,9 @@ def get_event_partner_requests(event_id: int, db_path=None) -> dict:
         i = unit_of.get(k)
         return units[i] if i is not None else None
 
-    def _join(a, b, cap=HOST_GROUP_MAX) -> bool:
+    def _join(a, b, cap=None) -> bool:
         """Put a and b in one unit. False if that would exceed `cap`."""
+        cap = cap or group_max
         ia, ib = unit_of.get(a), unit_of.get(b)
         if ia is not None and ia == ib:
             return True
@@ -44356,9 +44410,10 @@ def get_event_partner_requests(event_id: int, db_path=None) -> dict:
                     entry["locked_out"] = True
                     entry["status"] = "outranked"
                     entry["locked_reason"] = (
-                        f"{partner}'s group is already a foursome — honoring "
-                        f"this would make five. Suppress a request in that "
-                        f"group to make room.")
+                        f"{partner}'s group is already a {group_word} — "
+                        f"honoring this would make {group_max + 1}. Suppress "
+                        f"a request in that group to make room, or add them "
+                        f"by hand after Generate.")
                 requests.append(entry)
                 continue
 
@@ -46103,6 +46158,14 @@ def generate_event_pairings(
 
     staging_rules = get_pairing_staging_rules(db_path=db_path)
 
+    # FIVESOMES (Kerry 2026-07-31). Off by default: a fivesome only ever
+    # happens because a manager asked for one. The event-level switch
+    # builds the whole sheet out of fivesomes, with FOURSOMES as the
+    # short groups — "the same relational rules that 3somes play in a
+    # 4some setup". A manager can still drop a 5th into any single group
+    # by hand without turning this on.
+    max_group = 5 if int(ev.get("allow_fivesomes") or 0 or 0) else 4
+
     # ── Normalise holes per player ────────────────────────────────────
     def player_holes(item):
         h = (item.get("holes") or "").strip()
@@ -46194,7 +46257,7 @@ def generate_event_pairings(
                      if p.get("customer") and p.get("customer_id")}
         host_of_all = _host_of_map(player_items, all_names,
                                    roster_ids=_host_ids)
-        bound_units = _host_units(host_of_all, free_players)
+        bound_units = _host_units(host_of_all, free_players, max_group)
 
         # Requests that beat the first-come lock and therefore have to be
         # bound BEFORE ordinary pairing runs, folded in by the same
@@ -46220,7 +46283,8 @@ def generate_event_pairings(
             if _p:
                 _bound_pairs.append((requester, _p))
         if _bound_pairs:
-            bound_units = _merge_name_units(bound_units, _bound_pairs)
+            bound_units = _merge_name_units(bound_units, _bound_pairs,
+                                            max_group)
 
         # ── Determine groups to fill ──────────────────────────────────
         n_free = len(free_players)
@@ -46328,7 +46392,7 @@ def generate_event_pairings(
         locked_names |= mp_names
 
         if mode == "abcd":
-            groups_players = _abcd_groups(free_players, hcp_map)
+            groups_players = _abcd_groups(free_players, hcp_map, max_group)
         elif mode == "standings":
             _rank_map, _race_used, _rnotes = _standings_rank_map(
                 ev_chapter, race_key, event_name=ev.get("item_name"),
@@ -46340,12 +46404,13 @@ def generate_event_pairings(
                     protect_partner_requests,
                     host_units=bound_units if protect_partner_requests else None,
                     id_map={p["customer"]: p.get("customer_id")
-                            for p in player_items if p.get("customer")})
+                            for p in player_items if p.get("customer")},
+                    hcp_map=hcp_map, max_group=max_group)
                 mp_notes.extend(_snotes)
             else:
                 # No usable standings — say so and fall back rather than
                 # silently producing an order that looks intentional.
-                groups_players = _abcd_groups(free_players, hcp_map)
+                groups_players = _abcd_groups(free_players, hcp_map, max_group)
                 mp_notes.append("Standings unavailable — used ABCD instead.")
         else:
             # Best-of-K restarts + swap hill-climb. The greedy alone has a
@@ -46360,7 +46425,8 @@ def generate_event_pairings(
                 cand = _random_groups(
                     free_players, partner_map, pair_counts,
                     protect_partner_requests, fixed_units=mp_units,
-                    host_units=bound_units if protect_partner_requests else None
+                    host_units=bound_units if protect_partner_requests else None,
+                    max_group=max_group
                 )
                 cand = _swap_improve(cand, pair_counts, locked_names)
                 score = sum(_group_score(g, pair_counts) for g in cand)
@@ -46564,15 +46630,44 @@ def generate_event_pairings(
     return result
 
 
-def _make_group_sizes(n: int) -> list[int]:
-    """Return group sizes summing to n with max 4 per group and no onesomes.
+def _make_group_sizes(n: int, max_size: int = 4) -> list[int]:
+    """Return group sizes summing to n with max `max_size` per group and no
+    onesomes.
 
     Kerry 2026-07-21: never more than three 3-somes within a grouping
     (9-hole or 18-hole bucket). The splits below guarantee it — the
     worst case is n ≡ 1 (mod 4), which resolves to [4, …, 3, 3, 3];
-    every other remainder needs two or fewer short groups."""
+    every other remainder needs two or fewer short groups.
+
+    FIVESOMES (Kerry 2026-07-31): when the event allows them, `max_size`
+    is 5 and the sheet is built of fivesomes with FOURSOMES as the short
+    groups — "following the same relational rules that 3somes play in a
+    4some setup", i.e. the remainder is absorbed by at most three groups
+    one player short, never by a group of two. A field too small to
+    tile that way falls back to the ordinary 4-based sheet rather than
+    inventing a shape (you can't make fivesomes out of eleven players
+    without a threesome, and a threesome is a 4-based idea).
+    """
     if n <= 0:
         return []
+    if max_size >= 5:
+        if n <= 5:
+            return _make_group_sizes(n, 4) if n <= 4 else [5]
+        q, r = divmod(n, 5)
+        if r == 0:
+            return [5] * q
+        # Absorb the remainder by trading `take` fivesomes for `take + 1`
+        # foursomes: 5·take + r = 4·(take + 1)  ⇒  take = 4 − r. That is
+        # the fewest fivesomes given up, so the sheet stays as close to
+        # all-fives as the field allows (n=21 → one fivesome and four
+        # foursomes, which is Kerry's "at most 1 or 2 fivesomes" case
+        # falling out of the arithmetic rather than being special-cased).
+        take = 4 - r
+        if q - take >= 0:
+            sizes = [5] * (q - take) + [4] * (take + 1)
+            if sum(sizes) == n and all(s >= 2 for s in sizes):
+                return sizes
+        return _make_group_sizes(n, 4)     # too small to tile as fivesomes
     if n <= 4:
         return [n]
     q, r = divmod(n, 4)
@@ -46697,6 +46792,7 @@ def _random_groups(
     protect_partner_requests: bool,
     fixed_units: list[list[str]] | None = None,
     host_units: list[list[str]] | None = None,
+    max_group: int = 4,
 ) -> list[list[str]]:
     """Form groups using weighted random (history-aware) assignment.
 
@@ -46755,7 +46851,7 @@ def _random_groups(
         units.append([s])
 
     # Determine target group sizes to avoid onesomes
-    target_sizes = _make_group_sizes(len(players))
+    target_sizes = _make_group_sizes(len(players), max_group)
     groups: list[list[str]] = []
     remaining = list(units)
 
@@ -46882,6 +46978,29 @@ def pairing_race_options(chapter: str | None = None,
 _STANDINGS_PAIRING_MAX_AGE_HOURS = 0.25
 
 
+def _parse_gg_rank(value) -> int | None:
+    """'T8' → 8, '8' → 8, 8 → 8; None/blank/junk → None.
+
+    Golf Genius marks TIES with a leading 'T' ("T8" = tied for 8th).
+    Feeding that straight to int() raised ValueError and took the whole
+    Generate down with 'invalid literal for int() with base 10: T8'
+    (Kerry 2026-07-31). Ties are real and common, so the parser keeps the
+    shared position rather than inventing an order — the tiebreak is
+    applied later, where the handicap is known.
+    """
+    if value is None:
+        return None
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, (int, float)):
+        try:
+            return int(value)
+        except (ValueError, TypeError):
+            return None
+    m = re.search(r"\d+", str(value))
+    return int(m.group()) if m else None
+
+
 def _standings_rank_map(chapter: str | None, race_key: str | None = None,
                         max_age_hours: float = _STANDINGS_PAIRING_MAX_AGE_HOURS,
                         event_name: str | None = None,
@@ -46924,8 +47043,7 @@ def _standings_rank_map(chapter: str | None, race_key: str | None = None,
     # fallback for a standings row that never resolved to a profile.
     rank_map: dict = {}
     for i, r in enumerate(data.get("standings") or []):
-        pos = r.get("position") or r.get("rank")
-        pos = int(pos) if pos else i + 1
+        pos = _parse_gg_rank(r.get("position") or r.get("rank")) or (i + 1)
         cid = r.get("customer_id")
         if cid:
             rank_map.setdefault(int(cid), pos)
@@ -46956,7 +47074,9 @@ def _standings_rank_map(chapter: str | None, race_key: str | None = None,
 def _standings_groups(players: list[str], rank_map: dict, partner_map: dict,
                       protect_partner_requests: bool,
                       host_units: list[list[str]] | None = None,
-                      id_map: dict | None = None
+                      id_map: dict | None = None,
+                      hcp_map: dict | None = None,
+                      max_group: int = 4
                       ) -> tuple[list, list]:
     """Group by points-race standing with the LEADERS GOING OFF LAST (PGA
     order), while still honoring partner requests.
@@ -47013,12 +47133,33 @@ def _standings_groups(players: list[str], rank_map: dict, partner_map: dict,
                 return pos
         return rank_map.get(_pair_key_name(n), UNRANKED)
 
+    # TIES (Kerry 2026-07-31). GG shares a position between tied players
+    # ("T8"), so the standing alone can't order them. Tiebreak: LOWER
+    # HANDICAP is treated as the better position, then alphabetical by
+    # LAST name. Unknown handicaps sort last within a tie rather than
+    # jumping ahead of a known-good one.
+    _h = {(k or "").lower(): v for k, v in (hcp_map or {}).items()}
+
+    def _hcp(n):
+        v = _h.get((n or "").lower())
+        return float(v) if v is not None else 99.0
+
+    def _surname(n):
+        parts = (n or "").strip().split()
+        return (parts[-1].lower() if parts else "", (n or "").lower())
+
+    def player_key(n):
+        return (player_rank(n), _hcp(n), _surname(n))
+
     def best_rank(unit):
         return min((player_rank(n) for n in unit), default=UNRANKED)
 
     # LEADER FIRST in unit order, because the sheet is FILLED FROM THE
-    # BACK below. A unit takes the position of its strongest member.
-    units.sort(key=lambda u: (best_rank(u), (u[0] or "").lower()))
+    # BACK below. A unit takes the FULL key of its strongest member, so a
+    # tie inside the standings is broken the same way for a pair as for a
+    # single.
+    units.sort(key=lambda u: min((player_key(n) for n in u),
+                                 default=(UNRANKED, 99.0, ("", ""))))
 
     # 3. Fill from the LAST group backwards. "Leaders go off last" is the
     #    rule, so the leader's unit is placed first, into the final group
@@ -47037,7 +47178,7 @@ def _standings_groups(players: list[str], rank_map: dict, partner_map: dict,
     #    Short groups still sit earliest (sizes ascending), so the
     #    leaders finish in a full foursome as they would on tour.
     n = len(players)
-    sizes = sorted(_make_group_sizes(n))
+    sizes = sorted(_make_group_sizes(n, max_group))
     groups = [[] for _ in sizes]
     gi = len(sizes) - 1
     for unit in units:
@@ -47077,7 +47218,8 @@ def _standings_groups(players: list[str], rank_map: dict, partner_map: dict,
     return groups, notes
 
 
-def _abcd_groups(players: list[str], hcp_map: dict) -> list[list[str]]:
+def _abcd_groups(players: list[str], hcp_map: dict,
+                 max_group: int = 4) -> list[list[str]]:
     """Form ABCD groups: one A/B/C/D tier player per group, sorted by handicap."""
     if not players:
         return []
@@ -47094,7 +47236,7 @@ def _abcd_groups(players: list[str], hcp_map: dict) -> list[list[str]]:
     if n == 0:
         return []
 
-    group_sizes = _make_group_sizes(n)
+    group_sizes = _make_group_sizes(n, max_group)
     num_groups = len(group_sizes)
 
     if num_groups == 0:

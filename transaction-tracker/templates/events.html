@@ -181,9 +181,18 @@
         .pairings-panel { padding: 0.5rem 0; }
         .pairings-controls {
             display: flex; align-items: center; gap: 0.5rem;
-            flex-wrap: wrap; padding: 0.25rem 0 0.6rem;
+            flex-wrap: wrap; padding: 0.35rem 0 0.6rem;
             border-bottom: 1px solid var(--border);
             margin-bottom: 0.6rem;
+            /* Sticky so Generate stays reachable while a long Requests or
+               Locks panel is open (Kerry 2026-07-31). The offset is set at
+               runtime from the app header's height. */
+            position: sticky; top: 0; z-index: 6;
+            background: #fff;
+        }
+        .pairings-actions {
+            display: flex; align-items: center; gap: 0.5rem;
+            flex-wrap: wrap; margin-left: auto;
         }
         .pairings-control-group { display: flex; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
         .pairings-mode-btn {
@@ -741,6 +750,21 @@
                     <div class="segmented-control">
                         <label class="seg-option"><input type="radio" name="edit-event-nine_side" value="Front" checked> Front 9</label>
                         <label class="seg-option"><input type="radio" name="edit-event-nine_side" value="Back"> Back 9</label>
+                    </div>
+                </div>
+                <!-- Allow fivesomes — Kerry 2026-07-31. OFF by default: a
+                     fivesome only ever happens because a manager asked. ON
+                     builds the whole sheet from fivesomes with FOURSOMES as
+                     the short groups, the same way threesomes work on a
+                     4-based sheet. Either way a manager can hand-add a 5th
+                     to any single group from the PAIRINGS tab. -->
+                <div id="edit-allow-fivesomes" style="margin-top:0.75rem;">
+                    <label style="display:flex; align-items:center; gap:0.45rem; font-weight:600; font-size:0.82rem; cursor:pointer;">
+                        <input type="checkbox" id="edit-event-allow_fivesomes" style="cursor:pointer;">
+                        Allow fivesomes
+                    </label>
+                    <div style="font-size:0.75rem; color:var(--text-muted); margin-top:0.2rem;">
+                        Builds groups of 5 (with foursomes as the short groups). Leave off for standard foursomes &mdash; a 5th can still be added by hand to any group.
                     </div>
                 </div>
                 <!-- Start Time (single — shown for 9 Holes, 18 Holes, or no format) -->
@@ -1492,6 +1516,21 @@
                     <div class="segmented-control">
                         <label class="seg-option"><input type="radio" name="add-event-nine_side" value="Front" checked> Front 9</label>
                         <label class="seg-option"><input type="radio" name="add-event-nine_side" value="Back"> Back 9</label>
+                    </div>
+                </div>
+                <!-- Allow fivesomes — Kerry 2026-07-31. OFF by default: a
+                     fivesome only ever happens because a manager asked. ON
+                     builds the whole sheet from fivesomes with FOURSOMES as
+                     the short groups, the same way threesomes work on a
+                     4-based sheet. Either way a manager can hand-add a 5th
+                     to any single group from the PAIRINGS tab. -->
+                <div id="add-allow-fivesomes" style="margin-top:0.75rem;">
+                    <label style="display:flex; align-items:center; gap:0.45rem; font-weight:600; font-size:0.82rem; cursor:pointer;">
+                        <input type="checkbox" id="add-event-allow_fivesomes" style="cursor:pointer;">
+                        Allow fivesomes
+                    </label>
+                    <div style="font-size:0.75rem; color:var(--text-muted); margin-top:0.2rem;">
+                        Builds groups of 5 (with foursomes as the short groups). Leave off for standard foursomes &mdash; a 5th can still be added by hand to any group.
                     </div>
                 </div>
                 <!-- Start Time (single — shown for 9 Holes, 18 Holes, or no format) -->
@@ -4313,6 +4352,9 @@
                 slots_9: [], slots_18: [],
                 isDirty: false, loaded: false,
                 mode: 'random', protectPartners: true,
+                // Group size the GENERATOR builds to. A manager can still
+                // hand-add a 5th past it (Kerry 2026-07-31).
+                maxGroupSize: 4,
                 seeds: [],
                 swapMode: null, selection: null,
                 showSeeds: false,
@@ -4385,6 +4427,7 @@
 
     function renderPairingsPanel(ev, registrants) {
         const state = getPairingsState(ev.id);
+        state.maxGroupSize = Number(ev.allow_fivesomes) ? 5 : 4;
         const fmt = (ev.format || '').trim();
         const isCombo = fmt === '9/18 Combo';
         // 27 Holes is a single-day, 18-hole-style pairing layout
@@ -4397,7 +4440,7 @@
         let html = '<div class="pairings-panel">';
 
         // ── Controls bar ──────────────────────────────────────────────────────
-        html += '<div class="pairings-controls">';
+        html += '<div class="pairings-controls sticks-under-nav">';
 
         // Mode toggle
         html += '<div class="pairings-control-group">';
@@ -4468,10 +4511,12 @@
             html += `<button class="mp-chip" data-ev-id="${ev.id}" data-pairings-action="mp-open" title="Match Play matches constrained into these pairings — click to review">&#x2694;&#xFE0F; Match Play: ${nOn}/${state.mpDetected.length}</button>`;
         }
 
-        // Spacer
-        html += '<div style="flex:1;"></div>';
-
-        // Action buttons
+        // Action buttons live in ONE group pushed right with margin-auto.
+        // The old flex:1 spacer let the buttons wrap away from each other
+        // and, on a crowded row, pushed Generate out of view entirely
+        // (Kerry 2026-07-31: "GENERATE button not available when Requests
+        // is open"). A nested group wraps as a unit and stays together.
+        html += '<div class="pairings-actions">';
         html += `<button class="pairings-action-btn generate-btn" data-ev-id="${ev.id}" data-pairings-action="generate">&#x21BB; Generate</button>`;
         if (state.groups_9.length || state.groups_18.length) {
             html += `<button class="pairings-action-btn clear-btn" data-ev-id="${ev.id}" data-pairings-action="clear" style="color:var(--red);">&#x2715; Clear</button>`;
@@ -4484,6 +4529,7 @@
                 html += `<button class="pairings-action-btn" onclick="window.open('/events/${ev.id}/cart-signs','_blank')" title="Print cart signs">&#x1F5A8; Cart Signs</button>`;
             }
         }
+        html += '</div>'; // .pairings-actions
         html += '</div>'; // .pairings-controls
 
         // ── Match Play confirm panel (rule 8: "Match Play is king") ──────────
@@ -6075,6 +6121,10 @@
             container.innerHTML = renderDetailContent(ev);
             attachDetailHandlers(container, ev);
         }
+        // The PAIRINGS controls bar sticks under the nav; its offset is
+        // computed from the live header height, so recompute after any
+        // re-render that may have changed the header (role chips, ops row).
+        if (typeof _setStickyOffsets === 'function') _setStickyOffsets();
     }
 
     function attachDetailHandlers(container, ev) {
@@ -7458,9 +7508,21 @@
     function _movePlayer(state, src, destHoles, destGroupNum, destCartPos) {
         const destGroup = _findGroup(state, destHoles, destGroupNum);
         if (!destGroup) return;
-        if (destGroup.players.length >= 4) {
-            alert('That group is already a foursome.');
+        // FIVESOMES (Kerry 2026-07-31): "Definitely would like ability to
+        // manually add a 5th to any given group. This should never be
+        // allowed unless manager/admin requests it." The generator never
+        // builds one unless the event allows fivesomes; this confirm IS
+        // the manager's request. Six is not a thing.
+        const maxAuto = state.maxGroupSize || 4;
+        if (destGroup.players.length >= 5) {
+            alert('That group already has five players — a fivesome is the limit.');
             return;
+        }
+        if (destGroup.players.length >= maxAuto) {
+            const word = maxAuto === 5 ? 'fivesome' : 'foursome';
+            if (!confirm(`That group is already a ${word}.\n\nAdd a ${destGroup.players.length + 1}th player anyway?`)) {
+                return;
+            }
         }
         let player;
         if (src.unassigned) {
@@ -7485,7 +7547,9 @@
         const taken = new Set(destGroup.players.map(p => p.cart_pos));
         let seat = (destCartPos && !taken.has(destCartPos)) ? destCartPos : null;
         if (!seat) {
-            for (let pos = 1; pos <= 4; pos++) {
+            // Seat 5 exists only for a fivesome — carts are 1&2 and 3&4,
+            // so the fifth rider is an extra and never pairs off.
+            for (let pos = 1; pos <= 5; pos++) {
                 if (!taken.has(pos)) { seat = pos; break; }
             }
         }
@@ -9183,6 +9247,8 @@
         document.querySelectorAll('input[name="add-event-tee_direction_18"]').forEach(r => r.checked = (r.value === "First Tee"));
         // Reset 9-hole side to Front (default)
         document.querySelectorAll('input[name="add-event-nine_side"]').forEach(r => r.checked = (r.value === "Front"));
+        const addFiveReset = document.getElementById("add-event-allow_fivesomes");
+        if (addFiveReset) addFiveReset.checked = false;
         document.getElementById("add-start-type-single").style.display = "";
         document.getElementById("add-start-type-combo").style.display = "none";
         document.getElementById("add-tee-count").value = "";
@@ -9291,6 +9357,8 @@
             // 9-hole side (shared control, applies to any 9-hole leg)
             const addNsEl = document.querySelector('input[name="add-event-nine_side"]:checked');
             payload.nine_side = addNsEl ? addNsEl.value : "Front";
+            const addFiveEl = document.getElementById("add-event-allow_fivesomes");
+            payload.allow_fivesomes = addFiveEl && addFiveEl.checked ? 1 : 0;
             // Pricing fields
             if (isCombo) {
                 // Combo pricing from calculators
@@ -9927,6 +9995,8 @@
         document.querySelectorAll('input[name="edit-event-nine_side"]').forEach(r => {
             r.checked = (r.value === (ev.nine_side || "Front"));
         });
+        const editFive = document.getElementById("edit-event-allow_fivesomes");
+        if (editFive) editFive.checked = !!Number(ev.allow_fivesomes);
 
         // Pricing fields — single format
         document.getElementById("edit-event-tgf_markup").value = ev.tgf_markup != null ? ev.tgf_markup : "";
@@ -10064,6 +10134,9 @@
         const nsEl = document.querySelector('input[name="edit-event-nine_side"]:checked');
         const nsVal = nsEl ? nsEl.value : "Front";
         if (nsVal !== (ev.nine_side || "Front")) changes.nine_side = nsVal;
+        const fiveEl = document.getElementById("edit-event-allow_fivesomes");
+        const fiveVal = fiveEl && fiveEl.checked ? 1 : 0;
+        if (fiveVal !== (Number(ev.allow_fivesomes) ? 1 : 0)) changes.allow_fivesomes = fiveVal;
 
         // Pricing fields — depends on format
         if (isCombo) {
