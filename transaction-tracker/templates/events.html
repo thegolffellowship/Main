@@ -4324,6 +4324,7 @@
                 // views); mpNotes = generator's dropped-constraint notes.
                 mpDetected: null, mpConfirm: {}, mpPanelOpen: false,
                 mpMatches: [], mpNotes: [],
+                raceOptions: [], raceKey: null,
                 // Partner-request visibility + manager suppression
                 // (Kerry 2026-07-21): requests = resolved list from
                 // GET /pairings; suppressed entries stay listed.
@@ -4407,6 +4408,28 @@
         // the standings order picks up around them (Kerry 2026-07-30).
         html += `<button class="pairings-mode-btn${state.mode === 'standings' ? ' active' : ''}" data-ev-id="${ev.id}" data-pairings-mode="standings" title="Order by ${escapeHtml(ev.chapter || 'chapter')} points race — leaders tee off LAST, partner requests still honored">STANDINGS</button>`;
         html += '</div>';
+
+        // Race selector — STANDINGS only. Defaults to the chapter's City
+        // NET race, but the choice matters: the TGF Championship is paired
+        // off THE FELLOWSHIP CUP, not either chapter's own race (Kerry
+        // 2026-07-30).
+        if (state.mode === 'standings') {
+            const opts = state.raceOptions || [];
+            html += `<select class="pairings-race-select" data-ev-id="${ev.id}"
+                        title="Season contest standings to order by"
+                        style="margin-left:0.4rem;border:1px solid var(--border);
+                               border-radius:8px;padding:4px 8px;font-size:0.78rem;">`;
+            if (!opts.length) {
+                html += '<option>Loading races…</option>';
+            } else {
+                opts.forEach(o => {
+                    const sel = (state.raceKey || (o.is_default ? o.race_key : '')) === o.race_key;
+                    html += `<option value="${escapeHtml(o.race_key)}"${sel ? ' selected' : ''}>${
+                        escapeHtml(o.label)}${o.is_default ? ' (default)' : ''}</option>`;
+                });
+            }
+            html += '</select>';
+        }
 
         // Partner requests toggle. Shown for RANDOM and STANDINGS — Kerry
         // 2026-07-30 wants requests honored in standings mode too, with the
@@ -6807,6 +6830,7 @@
                     protect_partner_requests: state.protectPartners,
                     seeds: state.seeds,
                     mp_pairs: mpPairs,
+                    race_key: state.mode === 'standings' ? state.raceKey : null,
                 }),
             });
             const data = await res.json();
@@ -6838,12 +6862,37 @@
         });
 
         // Mode toggle
+        // Race pulldown: remember the choice for this event.
+        container.querySelectorAll('.pairings-race-select').forEach(sel => {
+            sel.addEventListener('change', () => {
+                const st = pairingsState[sel.dataset.evId];
+                if (st) st.raceKey = sel.value || null;
+            });
+        });
+
         container.querySelectorAll('[data-pairings-mode]').forEach(btn => {
-            btn.addEventListener('click', e => {
+            btn.addEventListener('click', async e => {
                 e.stopPropagation();
                 state.mode = btn.dataset.pairingsMode;
                 state.swapMode = null; state.selection = null;
                 rerenderDetail(container, ev);
+                // Load the race list the first time STANDINGS is chosen and
+                // preselect the chapter's default, so Generate is correct
+                // without the manager touching the pulldown.
+                if (state.mode === 'standings' && !state.raceOptions.length) {
+                    try {
+                        const r = await fetch(`/api/events/${ev.id}/pairings/race-options`);
+                        const d = await r.json();
+                        state.raceOptions = d.options || [];
+                        if (!state.raceKey) {
+                            const def = state.raceOptions.find(o => o.is_default);
+                            state.raceKey = def ? def.race_key : null;
+                        }
+                        rerenderDetail(container, ev);
+                    } catch (err) {
+                        console.error('Failed to load pairing race options:', err);
+                    }
+                }
             });
         });
 

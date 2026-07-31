@@ -131,9 +131,15 @@ def build_db(tmp: Path):
                  ("Dan Other", "2026-07-04", None),
                  ("Ed Fifth", "2026-07-05", None),
                  ("Zed Early", "2026-07-01", "Ben Target"),
-                 # Typo request — 'Danny' won't auto-match 'Dan Other';
+                 # Unresolvable request — no roster surname matches, so it
+                 # stays unmatched until a manager binds it. (Was 'Danny
+                 # Other', which the v2.152.6 nickname-robust matcher now
+                 # correctly resolves to Dan Other — Danny/Dan is exactly
+                 # the class Kerry asked for. Changed the fixture to keep
+                 # testing the UNRESOLVABLE path rather than weaken the
+                 # matcher.)
                  # the manager binds it manually (Kerry 2026-07-21).
-                 ("Fay Sixth", "2026-07-06", "Danny Other"),
+                 ("Fay Sixth", "2026-07-06", "Zzz Nomatch"),
                  # Multi-name request — two rostered names in one text;
                  # only ONE partner is honored, manager links which.
                  ("Gil Seventh", "2026-07-07", "Dan Other or Ed Fifth")]
@@ -344,7 +350,7 @@ def main():
           [r["locked_out"] for r in reqs] == [False, True, True, False,
                                               False])
     check("typo request unmatched until fixed",
-          not reqs[3]["matched"] and reqs[3]["request_text"] == "Danny Other")
+          not reqs[3]["matched"] and reqs[3]["request_text"] == "Zzz Nomatch")
     check("multi-name request flagged with candidates",
           reqs[4]["multi"]
           and reqs[4]["candidates"] == ["Dan Other", "Ed Fifth"]
@@ -376,7 +382,7 @@ def main():
     db.set_partner_request_suppression(606, "Zed Early", False, db_path=tmp)
 
     # ── Manual match for unresolved request text (Kerry 2026-07-21) ──
-    # Bind Fay's 'Danny Other' to roster player Dan Other: the list
+    # Bind Fay's unresolvable request to roster player Dan Other: the list
     # flags it manual, the lock simulation counts it, and the generator
     # honors it. Clearing restores the unmatched state.
     out = db.set_partner_request_match(606, "Fay Sixth", "Dan Other",

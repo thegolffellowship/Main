@@ -4938,6 +4938,29 @@ def api_save_pairings(event_id):
         return jsonify({"error": str(e)}), 500
 
 
+@app.route("/api/events/<int:event_id>/pairings/race-options")
+@require_role("manager")
+def api_pairing_race_options(event_id):
+    """Season-contest standings this event's pairings can be ordered by.
+
+    The chapter's own City NET race is flagged as the default; a TGF-wide
+    event defaults to THE FELLOWSHIP CUP (Kerry 2026-07-30). Offered as a
+    choice rather than inferred, because the right race is not always the
+    chapter's own.
+    """
+    from email_parser.database import get_connection, pairing_race_options
+    conn = get_connection()
+    try:
+        row = conn.execute("SELECT chapter FROM events WHERE id = ?",
+                           (event_id,)).fetchone()
+        if not row:
+            return jsonify({"error": "Event not found."}), 404
+        return jsonify({"chapter": row["chapter"],
+                        "options": pairing_race_options(row["chapter"])})
+    finally:
+        conn.close()
+
+
 @app.route("/api/events/<int:event_id>/pairings/requests", methods=["GET"])
 @require_role("manager")
 def api_pairings_requests(event_id):

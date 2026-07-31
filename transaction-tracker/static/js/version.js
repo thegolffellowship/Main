@@ -1,5 +1,15 @@
-window.TGF_VERSION = "2.152.5";
+window.TGF_VERSION = "2.152.6";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.152.6",
+    date: "2026-07-30",
+    changes: [
+      "PARTNER REQUESTS NOW USE REAL IDENTITY MATCHING. Kerry: 'Dan South should be recognized here as Daniel South. Are aliases at work for the partner requests?' They were not — the matcher did naive substring comparison, and 'dan south' is not a substring of 'daniel south' (nor the reverse), so both Mark Villa's and Orlando Kypuros's requests fell through to 'no roster match'. _find_partner_name is now a ladder: exact full name, then customer_aliases (cached per process), then the nickname-robust person key (surname + first initial) that already serves match play, then substring. All six call sites — including the requests panel — share it, so the panel and the generator can never disagree.",
+      "AMBIGUITY NEVER RESOLVES SILENTLY. Every rung requires a unique match: a bare 'Dan' against two Dans, or two players sharing a surname and initial, now yields 'no roster match — fix' and a dropdown rather than the generator quietly pairing the wrong people. Previously the first name in roster order won. Initial-CHANGING nicknames (Dick/Richard, Bill/William) deliberately do NOT auto-resolve — matching those would mean matching on surname alone, which is how you pair the wrong brother; customer_aliases is the mechanism for that class.",
+      "Multi-name requests keep working and got better: 'Dan Other or Ed Fifth' still returns the first named player with candidates flagged for the manager, but now honors the order the REQUESTER wrote rather than roster order — 'Ed Fifth or Dan Other' means Ed. A pace-staging fixture that relied on 'Danny Other' NOT matching 'Dan Other' was changed to a genuinely unresolvable name, since Danny/Dan is exactly the class this fix is for; the matcher was not weakened to keep an old test green.",
+      "STANDINGS PAIRINGS GAIN A RACE PULLDOWN (Kerry 2026-07-30). Selecting STANDINGS now offers every season contest to order by — both City NET races, THE PLAYERS CUP, and THE FELLOWSHIP CUP — defaulting to the event chapter's own City NET race. A TGF-wide event defaults to THE FELLOWSHIP CUP, since that is what the TGF Championship is paired off. GET /api/events/<id>/pairings/race-options serves the list with the default flagged; the Fellowship Cup routes to get_fellowship_cup_projection rather than a City race.",
+    ],
+  },
   {
     version: "2.152.5",
     date: "2026-07-30",

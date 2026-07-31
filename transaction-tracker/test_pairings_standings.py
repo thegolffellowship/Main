@@ -241,6 +241,61 @@ try:
 finally:
     db.get_points_race_standings = _real2
 
+print("\n== race is CHOSEN, with a sensible default (Kerry 2026-07-30) ==")
+
+# "A pulldown ... should default to the Chapter Net contest. Though we'll be
+# doing the TGF Championship based on The Fellowship Cup standings."
+check("a chapter event defaults to its own City NET race",
+      db._default_pairing_race("San Antonio") == "san_antonio_net")
+check("Austin likewise", db._default_pairing_race("Austin") == "austin_net")
+check("a TGF-wide event defaults to THE FELLOWSHIP CUP",
+      db._default_pairing_race("TGF") == db.FELLOWSHIP_CUP_RACE_KEY,
+      str(db._default_pairing_race("TGF")))
+check("an unknown chapter has no default rather than a wrong one",
+      db._default_pairing_race("Houston") is None)
+
+opts = db.pairing_race_options("San Antonio")
+keys = [o["race_key"] for o in opts]
+check("every configured race is offered", set(keys) >= set(db._GG_POINTS_RACES))
+check("...plus the Fellowship Cup", db.FELLOWSHIP_CUP_RACE_KEY in keys, str(keys))
+check("exactly one option is flagged default",
+      sum(1 for o in opts if o["is_default"]) == 1, str(opts))
+check("the default is listed first",
+      opts[0]["is_default"] and opts[0]["race_key"] == "san_antonio_net",
+      str(opts[0]))
+check("the GROSS Players Cup is selectable but NOT the default",
+      any(o["race_key"] == "players_cup_gross" and not o["is_default"]
+          for o in opts))
+
+tgf_opts = db.pairing_race_options("TGF")
+check("for TGF the Fellowship Cup is default and listed first",
+      tgf_opts[0]["race_key"] == db.FELLOWSHIP_CUP_RACE_KEY
+      and tgf_opts[0]["is_default"], str(tgf_opts[0]))
+
+# The Fellowship Cup routes to its own projection, not a City race.
+_realp, _realf = db.get_points_race_standings, db.get_fellowship_cup_projection
+seen = []
+db.get_points_race_standings = lambda k, **kw: (seen.append(("city", k)), {
+    "standings": [], "fetched_at": None, "gg_error": None})[1]
+db.get_fellowship_cup_projection = lambda **kw: (seen.append(("cup", None)), {
+    "standings": [{"player_name": "Cup Leader"}], "fetched_at": "t", "gg_error": None})[1]
+try:
+    rm, key, _ = db._standings_rank_map("TGF")
+    check("a TGF event reads the Fellowship Cup projection",
+          seen and seen[-1][0] == "cup", str(seen))
+    check("...and its ordering becomes the rank map",
+          rm == {"cup leader": 1}, str(rm))
+    seen.clear()
+    db._standings_rank_map("San Antonio")
+    check("a chapter event still reads its City race",
+          seen and seen[-1] == ("city", "san_antonio_net"), str(seen))
+    seen.clear()
+    db._standings_rank_map("San Antonio", race_key=db.FELLOWSHIP_CUP_RACE_KEY)
+    check("an explicit Fellowship Cup choice overrides the chapter default",
+          seen and seen[-1][0] == "cup", str(seen))
+finally:
+    db.get_points_race_standings, db.get_fellowship_cup_projection = _realp, _realf
+
 print("\n" + "=" * 60)
 if FAILURES:
     print(f"{len(FAILURES)} FAILED: {FAILURES}")

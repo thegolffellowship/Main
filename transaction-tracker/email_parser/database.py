@@ -45137,17 +45137,112 @@ def _group_score(players: list[str], pair_counts: dict) -> int:
     return total
 
 
-def _find_partner_name(request_text: str, all_names: list[str], requester: str) -> str | None:
-    """Fuzzy-match a partner_request string against available player names."""
+# Name aliases for partner-request matching, cached per process. Aliases
+# change rarely (a manager adds one), and this is consulted inside grouping
+# loops, so re-querying per call would be wasteful.
+_PARTNER_ALIAS_CACHE: dict = {"at": 0.0, "map": {}}
+_PARTNER_ALIAS_TTL = 300.0
+
+
+def _partner_alias_map(db_path=None) -> dict:
+    """{lowercased alias -> canonical customer name} from customer_aliases."""
+    import time as _time
+    now = _time.time()
+    if (now - _PARTNER_ALIAS_CACHE["at"]) < _PARTNER_ALIAS_TTL and \
+            _PARTNER_ALIAS_CACHE["map"]:
+        return _PARTNER_ALIAS_CACHE["map"]
+    out: dict = {}
+    try:
+        with _connect(db_path) as conn:
+            for r in conn.execute(
+                    """SELECT customer_name, alias_value FROM customer_aliases
+                       WHERE alias_type = 'name'""").fetchall():
+                a = (r["alias_value"] or "").strip().lower()
+                c = (r["customer_name"] or "").strip()
+                if a and c:
+                    out.setdefault(a, c)
+    except Exception:
+        return _PARTNER_ALIAS_CACHE["map"] or {}
+    _PARTNER_ALIAS_CACHE.update({"at": now, "map": out})
+    return out
+
+
+def _find_partner_name(request_text: str, all_names: list[str], requester: str,
+                       db_path=None) -> str | None:
+    """Resolve a partner_request string to a rostered player name.
+
+    A ladder, safest rung first. EVERY rung requires a UNIQUE match — an
+    ambiguous one returns None so the manager sees "no roster match — fix"
+    and picks from the dropdown, rather than the generator silently pairing
+    the wrong two people.
+
+    1. Exact full name (case/space-insensitive).
+    2. customer_aliases — the curated name-variant table.
+    3. Nickname-robust person key: surname + first initial. This is what
+       makes "Dan South" find "Daniel South" (Kerry 2026-07-30), and the
+       same for Matt/Matthew, Rob/Robert, Chris/Christopher.
+    4. Substring, the original behaviour — now also uniqueness-checked, so
+       a bare "Dan" against two Dans no longer resolves to whichever sorted
+       first.
+    """
     if not request_text:
         return None
-    req = request_text.lower().strip()
-    for name in all_names:
-        if name.lower() == requester.lower():
-            continue
-        if req in name.lower() or name.lower() in req:
-            return name
-    return None
+    req = " ".join(request_text.split()).strip().lower()
+    if not req:
+        return None
+    others = [n for n in all_names if (n or "").strip().lower() != (requester or "").strip().lower()]
+
+    def _uniq(matches):
+        uniq = list(dict.fromkeys(matches))
+        return uniq[0] if len(uniq) == 1 else None
+
+    # 1. exact
+    hit = _uniq([n for n in others if " ".join((n or "").split()).lower() == req])
+    if hit:
+        return hit
+
+    # 2. curated aliases — both directions (the request may BE the alias, or
+    #    a roster name may be stored as one).
+    aliases = _partner_alias_map(db_path)
+    canon = aliases.get(req)
+    if canon:
+        hit = _uniq([n for n in others
+                     if " ".join((n or "").split()).lower() == canon.strip().lower()])
+        if hit:
+            return hit
+    hit = _uniq([n for n in others
+                 if aliases.get(" ".join((n or "").split()).lower(), "").strip().lower() == req])
+    if hit:
+        return hit
+
+    # 3. nickname-robust person key (surname + first initial)
+    try:
+        req_key = _cmp_person_key(request_text)
+        if req_key[0] and req_key[1]:
+            hit = _uniq([n for n in others if _cmp_person_key(n) == req_key])
+            if hit:
+                return hit
+    except Exception:
+        pass
+
+    # 4. substring (legacy). The two directions mean different things and
+    #    must not be treated alike:
+    #
+    #    a) a roster name appears INSIDE the request — "Dan Other or Ed
+    #       Fifth". Several hits is EXPECTED here: people name more than one
+    #       partner. Rule 1 honors only one, so take the first and let the
+    #       caller flag candidates>1 for the manager (Kerry 2026-07-21).
+    contained = [n for n in others if (n or "").lower() in req]
+    if contained:
+        # Honor the order the REQUESTER wrote, not roster order: "Ed Fifth
+        # or Dan Other" means Ed first. Roster order would silently invert
+        # a stated preference.
+        contained.sort(key=lambda n: req.index((n or "").lower()))
+        return contained[0]
+    #    b) the request is a FRAGMENT of a roster name — a bare "Dan"
+    #       against two Dans. Several hits is genuine ambiguity, so match
+    #       nothing and let the manager pick rather than guess a pairing.
+    return _uniq([n for n in others if req in (n or "").lower()])
 
 
 _CMP_ROUND_LABELS = {"r16": "Round of 16", "qf": "Quarterfinal",
@@ -46200,6 +46295,63 @@ def _random_groups(
     return groups
 
 
+FELLOWSHIP_CUP_RACE_KEY = "fellowship_cup"
+
+
+def _default_pairing_race(chapter: str | None) -> str | None:
+    """The race a chapter's pairings order by unless told otherwise.
+
+    A CHAPTER event defaults to that chapter's own City NET race. Matching
+    on chapter alone would be wrong: players_cup_gross is also tagged
+    "San Antonio", so the NET check is what stops an SA field being paired
+    off the GROSS Players Cup.
+
+    A TGF-wide event has no City race, and the TGF Championship is paired
+    off THE FELLOWSHIP CUP (Kerry 2026-07-30) — the combined reset
+    standings both City NET races convert into.
+    """
+    ch = (chapter or "").strip().lower()
+    if not ch:
+        return None
+    if ch in ("tgf", "national", "tgf-wide"):
+        return FELLOWSHIP_CUP_RACE_KEY
+    for k, cfg in _GG_POINTS_RACES.items():
+        if (cfg.get("contest_type") or "").upper().startswith("NET") and \
+                (cfg.get("chapter") or "").strip().lower() == ch:
+            return k
+    return None
+
+
+def pairing_race_options(chapter: str | None = None) -> list:
+    """Season-contest standings a manager can order pairings by.
+
+    Every configured race plus THE FELLOWSHIP CUP, with the chapter's
+    default flagged. Offered as a CHOICE rather than inferred, because the
+    right race is not always the chapter's own — the TGF Championship uses
+    the Fellowship Cup.
+    """
+    default = _default_pairing_race(chapter)
+    out = []
+    for k, cfg in _GG_POINTS_RACES.items():
+        out.append({
+            "race_key": k,
+            "label": cfg.get("label") or k,
+            "chapter": cfg.get("chapter"),
+            "contest_type": cfg.get("contest_type"),
+            "is_default": k == default,
+        })
+    out.append({
+        "race_key": FELLOWSHIP_CUP_RACE_KEY,
+        "label": "THE FELLOWSHIP CUP",
+        "chapter": "TGF",
+        "contest_type": "NET (combined reset)",
+        "is_default": default == FELLOWSHIP_CUP_RACE_KEY,
+    })
+    # Default first, then chapter races, then the rest.
+    out.sort(key=lambda r: (not r["is_default"], r["label"] or ""))
+    return out
+
+
 # Standings older than this are re-pulled from GG when pairings are being
 # generated (Kerry 2026-07-30). Point-of-use refresh rather than a
 # session-start or event-driven one: pairings lock when an event tees off,
@@ -46225,21 +46377,20 @@ def _standings_rank_map(chapter: str | None, race_key: str | None = None,
     exactly the failure this refresh exists to prevent.
     """
     notes = []
-    key = race_key
-    if not key:
-        ch = (chapter or "").strip().lower()
-        for k, cfg in _GG_POINTS_RACES.items():
-            if (cfg.get("contest_type") or "").upper().startswith("NET") and \
-                    (cfg.get("chapter") or "").strip().lower() == ch:
-                key = k
-                break
+    key = race_key or _default_pairing_race(chapter)
     if not key:
         notes.append(f"No points race found for chapter '{chapter}' — "
                      f"pairings fell back to random order.")
         return {}, None, notes
     try:
-        data = get_points_race_standings(
-            key, auto_refresh_hours=max_age_hours, db_path=db_path)
+        if key == FELLOWSHIP_CUP_RACE_KEY:
+            # TGF-wide combined reset standings — the TGF Championship is
+            # paired off this rather than either chapter's City NET race
+            # (Kerry 2026-07-30).
+            data = get_fellowship_cup_projection(db_path=db_path)
+        else:
+            data = get_points_race_standings(
+                key, auto_refresh_hours=max_age_hours, db_path=db_path)
     except Exception as e:
         notes.append(f"Could not read the {key} standings ({e}) — "
                      f"pairings fell back to random order.")
