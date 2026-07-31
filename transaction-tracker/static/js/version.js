@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.155.0";
+window.TGF_VERSION = "2.156.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.156.0",
+    date: "2026-07-31",
+    changes: [
+      "PACE STAGING NO LONGER OVERRIDES THE STANDINGS ORDER — RULED (Kerry 2026-07-31: 'the pace rule kind of becomes obsolete when we do pairings by standings'). The SA Championship sheet said all the right things — 'leaders go off LAST', '28 of 32 players are in the standings' — and then came out in perfect DESCENDING PACE order (2.5, 2.5, 2, 2, 2, 2, 1.75, 1.25), with the four unranked players stranded in the middle instead of teeing off first. Pace staging runs after the groups are settled and re-sorts them, which silently threw the entire standings order away. In STANDINGS mode it is now skipped — for tee times and for shotgun slot ordering alike — and the pairings notes say so instead of leaving the manager to spot it. Group pace is still COMPUTED and shown per group as a read-out; it just doesn't move anybody. Random and ABCD stage by pace exactly as before.",
+      "THE GENERATOR NOW HONORS REQUESTS IN SIGNUP ORDER, LIKE THE PANEL DOES (Kerry 2026-07-31: 'Nor is it honoring requests'). Richard Palacios was split from Larry Anthis even though the requests panel showed that pairing active. The generator built PRIVILEGED units first — guest requests and manager-approved ones — so the later approved 'Larry Anthis → Michael Murphy' claimed Larry before the earlier 'Palacios → Anthis' was ever considered, and Palacios lost a request first-come said he had won. Both sides now walk the same list in the same signup order through one shared builder (_build_bound_units), so Palacios claims Anthis and the approval JOINS that unit as a threesome — which is what approving was defined to mean. A panel badge that Generate won't honor is the failure mode this closes for good.",
+      "Verified end to end on the SA field: the host foursome (Daniel South + Williams + Villa + Kypuros) holds, the reciprocal Gus Vasquez / Chuck Fehlis pair holds, Palacios + Anthis + Murphy become one threesome, nobody lands in two units, and a fifth player still cannot join a full group no matter how privileged the request.",
+    ],
+  },
   {
     version: "2.155.0",
     date: "2026-07-31",

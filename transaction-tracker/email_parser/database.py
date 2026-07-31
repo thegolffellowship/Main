@@ -44549,6 +44549,71 @@ def set_partner_request_approval(event_id: int, requester_name: str,
     return get_event_partner_requests(event_id, db_path=db_path)
 
 
+def _build_bound_units(players: list[str], partner_map: dict,
+                       host_units: list[list[str]],
+                       is_privileged, resolve,
+                       max_size: int = HOST_GROUP_MAX) -> list[list[str]]:
+    """Every honored partner request, as unsplittable units of names.
+
+    This is the GENERATOR's copy of the simulation the requests panel
+    runs, and it must walk requests in the SAME signup order with the
+    SAME join semantics — otherwise the panel promises pairings the tee
+    sheet doesn't deliver. It did exactly that (Kerry 2026-07-31, "Nor is
+    it honoring requests"): the generator built privileged units FIRST,
+    so an approved "Larry Anthis → Michael Murphy" claimed Larry before
+    the earlier "Richard Palacios → Larry Anthis" ever ran, and Palacios
+    lost a request the panel showed as active. Walking in signup order
+    lets Palacios claim Larry first and the approval JOIN that unit —
+    which is what "approve" was defined to mean.
+
+    `partner_map` must already be in signup order (the generator sorts
+    the roster by `_request_time_key` before building it).
+    `is_privileged(name)` marks a requester whose request beats the
+    first-come lock: a guest, or a manager-approved request.
+    `resolve(req_text, requester)` returns the rostered partner or None.
+    """
+    units = [list(dict.fromkeys(u)) for u in (host_units or [])]
+    idx: dict = {}
+    for i, u in enumerate(units):
+        for n in u:
+            idx[n] = i
+
+    def _join(a, b) -> bool:
+        ia, ib = idx.get(a), idx.get(b)
+        if ia is not None and ia == ib:
+            return True
+        if ia is None and ib is None:
+            units.append([a, b])
+            idx[a] = idx[b] = len(units) - 1
+            return True
+        if ia is None or ib is None:
+            base = ib if ia is None else ia
+            newcomer = a if ia is None else b
+            if len(units[base]) >= max_size:
+                return False
+            units[base].append(newcomer)
+            idx[newcomer] = base
+            return True
+        if len(units[ia]) + len(units[ib]) > max_size:
+            return False
+        units[ia].extend(units[ib])
+        for n in units[ib]:
+            idx[n] = ia
+        units[ib] = []
+        return True
+
+    for requester, req_text in partner_map.items():
+        if requester not in players or not (req_text or "").strip():
+            continue
+        partner = resolve(req_text, requester)
+        if not partner or partner not in players:
+            continue
+        both_free = requester not in idx and partner not in idx
+        if both_free or is_privileged(requester):
+            _join(requester, partner)
+    return [u for u in units if len(u) >= 2]
+
+
 def _merge_name_units(seed_units: list[list[str]],
                       pairs: list[tuple[str, str]],
                       max_size: int = HOST_GROUP_MAX) -> list[list[str]]:
@@ -46259,32 +46324,32 @@ def generate_event_pairings(
                                    roster_ids=_host_ids)
         bound_units = _host_units(host_of_all, free_players, max_group)
 
-        # Requests that beat the first-come lock and therefore have to be
-        # bound BEFORE ordinary pairing runs, folded in by the same
-        # join-up-to-a-foursome rule the requests panel simulates — so a
-        # request Generate can't honor is exactly the one the panel still
-        # reports as outranked:
+        # Every honored request, walked in SIGNUP ORDER — the same
+        # simulation the requests panel runs. Two kinds of request beat
+        # the first-come lock and JOIN a group instead of losing to it:
         #   * GUEST requests (Kerry 2026-07-31) — "give all guests the
         #     ability to feel the group out and play with who they want,
         #     but require the members to branch out";
         #   * MANAGER-APPROVED requests (rule 5 override).
+        # Building those FIRST (as this did) let a late approved request
+        # claim a player out from under an EARLIER ordinary request the
+        # panel still showed as active — Palacios lost Anthis to the
+        # approved Anthis→Murphy (Kerry 2026-07-31, "Nor is it honoring
+        # requests"). Signup order fixes it: Palacios claims Anthis, and
+        # the approval joins that unit, which is what approve means.
         _is_member = {p["customer"]: bool(_ls_is_member(
                           p.get("current_player_status"), p.get("user_status")))
                       for p in player_items if p.get("customer")}
-        _bound_pairs: list[tuple[str, str]] = []
-        for requester, req_text in partner_map.items():
-            if requester not in free_players:
-                continue
-            privileged = (_pair_key_name(requester) in _approved
-                          or not _is_member.get(requester, True))
-            if not privileged:
-                continue
-            _p = _find_partner_name(req_text, free_players, requester)
-            if _p:
-                _bound_pairs.append((requester, _p))
-        if _bound_pairs:
-            bound_units = _merge_name_units(bound_units, _bound_pairs,
-                                            max_group)
+
+        def _privileged(nm):
+            return (_pair_key_name(nm) in _approved
+                    or not _is_member.get(nm, True))
+
+        if protect_partner_requests:
+            bound_units = _build_bound_units(
+                free_players, partner_map, bound_units, _privileged,
+                lambda txt, who: _find_partner_name(txt, free_players, who),
+                max_group)
 
         # ── Determine groups to fill ──────────────────────────────────
         n_free = len(free_players)
@@ -46480,8 +46545,26 @@ def generate_event_pairings(
                  hcp_map.get((n or "").lower()) is not None else 20.0)
                 for n in names if n)
 
+        # STANDINGS MODE OWNS THE ORDER — RULED (Kerry 2026-07-31: "the
+        # pace rule kind of becomes obsolete when we do pairings by
+        # standings"). Pace staging decides WHERE a settled group is
+        # staged, but in standings mode the staging order IS the
+        # deliverable. Re-sorting by pace silently threw the whole thing
+        # away: the SA Championship sheet said "leaders go off LAST" and
+        # then came out in perfect descending pace order (2.5, 2.5, 2, 2,
+        # 2, 2, 1.75, 1.25), with the unranked players stranded in the
+        # middle instead of the front. Pace ratings are still COMPUTED and
+        # shown per group as a manager read-out — they just don't move
+        # anybody.
+        _standings_order = (mode == "standings" and groups_players)
         staging_applied = bool(staging_rules.get("enabled", True)
-                               and groups_players)
+                               and groups_players
+                               and not _standings_order)
+        if _standings_order and staging_rules.get("enabled", True):
+            mp_notes.append(
+                "Pace staging does not apply in STANDINGS mode — the "
+                "standings set the tee sheet. Group pace is still shown "
+                "for reference; use Random or ABCD to stage by pace.")
         if staging_applied:
             smalls_lead = staging_rules.get("smalls_lead", True)
             if is_shotgun and smalls_lead:
@@ -46588,7 +46671,7 @@ def generate_event_pairings(
         # For shotgun WITHOUT pace staging: push threesomes to last slots
         # (the legacy ordering — staging subsumes it: at equal pace the
         # size tiebreak already sends smaller groups to the train front).
-        if is_shotgun and slots and not staging_applied:
+        if is_shotgun and slots and not staging_applied and not _standings_order:
             foursomes = [g for g in all_groups if len(g["players"]) >= 4]
             smalls = [g for g in all_groups if len(g["players"]) < 4]
             ordered = foursomes + smalls

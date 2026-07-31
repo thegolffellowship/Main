@@ -310,6 +310,73 @@ u = next((u for u in appr_units if "Larry Anthis" in u), [])
 check("an approved request joins the group that claimed its partner",
       set(u) == {"Richard Palacios", "Larry Anthis", "Michael Murphy"}, str(u))
 
+print("\n== the generator honors requests in SIGNUP ORDER, like the panel ==")
+# Kerry 2026-07-31, "Nor is it honoring requests": the sheet split
+# Richard Palacios from Larry Anthis even though the panel showed that
+# request active. Cause — the generator built PRIVILEGED units (guest /
+# approved) FIRST, so the later approved "Anthis -> Murphy" claimed Larry
+# before the earlier "Palacios -> Anthis" ever ran. Walking signup order
+# lets Palacios claim him and the approval JOIN that unit.
+SIGNUP = {                      # insertion order IS signup order
+    "Gus Vasquez":      "Chuck Fehlis",
+    "Chuck Fehlis":     "Gus Vasquez",
+    "Richard Palacios": "Larry Anthis",
+    "Larry Anthis":     "Michael Murphy",   # approved, and LATER
+    "Mark Villa":       "Daniel South",     # guest
+    "Orlando Kypuros":  "Daniel South",     # guest
+}
+FIELD_NAMES = ["Richard Palacios", "Larry Anthis", "Michael Murphy",
+               "Gus Vasquez", "Chuck Fehlis", "Daniel South", "Mark Villa",
+               "Orlando Kypuros", "Jacob Williams", "Pat Youngs"]
+_APPROVED = {"larry anthis"}
+_GUESTS = {"Mark Villa", "Orlando Kypuros", "Jacob Williams"}
+_HOSTU = [["Daniel South", "Jacob Williams"]]
+
+
+def _priv(n):
+    return db._pair_key_name(n) in _APPROVED or n in _GUESTS
+
+
+UNITS = db._build_bound_units(
+    FIELD_NAMES, SIGNUP, _HOSTU, _priv,
+    lambda t, w: db._find_partner_name(t, FIELD_NAMES, w), 4)
+_anthis = next((u for u in UNITS if "Larry Anthis" in u), [])
+check("the EARLIER request keeps its claim — Palacios stays with Anthis",
+      "Richard Palacios" in _anthis, str(UNITS))
+check("...and the approved later request JOINS rather than displacing",
+      "Michael Murphy" in _anthis, str(_anthis))
+check("...making a threesome, not two broken pairs", len(_anthis) == 3, str(_anthis))
+_south = next((u for u in UNITS if "Daniel South" in u), [])
+check("the host foursome is intact", len(_south) == 4 and
+      all(g in _south for g in ("Jacob Williams", "Mark Villa", "Orlando Kypuros")),
+      str(_south))
+check("the reciprocal pair is intact",
+      "Chuck Fehlis" in next((u for u in UNITS if "Gus Vasquez" in u), []), str(UNITS))
+check("nobody appears in two units",
+      len([n for u in UNITS for n in u]) == len({n for u in UNITS for n in u}),
+      str(UNITS))
+check("a player with no request is left free",
+      not any("Pat Youngs" in u for u in UNITS), str(UNITS))
+
+# A plain MEMBER request onto a claimed player still loses — that is the
+# rule the approval exists to override.
+NOAPPROVE = db._build_bound_units(
+    FIELD_NAMES, SIGNUP, _HOSTU, lambda n: n in _GUESTS,
+    lambda t, w: db._find_partner_name(t, FIELD_NAMES, w), 4)
+_a2 = next((u for u in NOAPPROVE if "Larry Anthis" in u), [])
+check("without the approval, the member's later request is dropped",
+      "Michael Murphy" not in _a2 and "Richard Palacios" in _a2, str(_a2))
+
+# The ceiling still holds when a join would overflow.
+TIGHT = dict(SIGNUP)
+TIGHT["Pat Youngs"] = "Daniel South"
+UNITS5 = db._build_bound_units(
+    FIELD_NAMES, TIGHT, _HOSTU, lambda n: True,
+    lambda t, w: db._find_partner_name(t, FIELD_NAMES, w), 4)
+_s5 = next((u for u in UNITS5 if "Daniel South" in u), [])
+check("a 5th cannot join a full group even when privileged",
+      len(_s5) == 4 and "Pat Youngs" not in _s5, str(_s5))
+
 print("\n" + "=" * 60)
 if FAILURES:
     print(f"{len(FAILURES)} FAILED: {FAILURES}")

@@ -591,6 +591,26 @@ The Quarry-night rulings, all built:
      `_standings_groups(hcp_map=…)` applies it; an unknown handicap
      sorts last within a tie (99.0) rather than jumping a known-good
      player.
+   - **Pace staging does NOT apply in STANDINGS mode — RULED (Kerry
+     2026-07-31: "the pace rule kind of becomes obsolete when we do
+     pairings by standings").** Task #23 staging re-sorts settled groups
+     by aggregate pace; in standings mode that order IS the deliverable,
+     so the re-sort silently discarded it (the SA sheet came out in
+     perfect descending pace order under a "leaders go off LAST" note).
+     `_standings_order` suppresses BOTH the tee-time sort and the
+     shotgun smalls-lead re-slot, and a note says so. Pace is still
+     computed and displayed per group as a read-out. Random/ABCD are
+     unchanged.
+   - **Requests are bound in SIGNUP ORDER on BOTH sides (v2.156.0).**
+     `_build_bound_units` is the generator's copy of the panel's
+     simulation: seed with host units, then walk `partner_map` (already
+     in `_request_time_key` order) and join a pair when BOTH are free or
+     when the requester is privileged (guest / approved). Building
+     privileged units first — the old behavior — let a LATE approved
+     request claim a player out from under an EARLIER ordinary request
+     the panel showed as active (Palacios lost Anthis to the approved
+     Anthis→Murphy). Signup order makes the approval JOIN Palacios's
+     unit instead, which is what approve means.
    - **The sheet fills from the BACK (v2.154.1).** Units are sorted
      leader-first and placed into the LAST group first, so "leaders go
      off last" is exact. The old forward cursor never revisited a group
