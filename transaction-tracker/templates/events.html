@@ -2325,6 +2325,18 @@
     // under EVERY name we can associate with this customer_id rather than
     // trusting one of them — guiding principle 6, worked around at the one
     // place the payload is name-keyed.
+    // The ONE accessor both ROSTER and PAIRINGS use. customer_id first,
+    // name only as a fallback — a name key cannot survive one person being
+    // spelled differently on an order row than on their profile, which is
+    // how an edit made on one screen went missing on the other.
+    function hcpEntryFor(name, customerId) {
+        if (customerId) {
+            const byId = handicapIndexMap[`cid:${customerId}`];
+            if (byId) return byId;
+        }
+        return name ? handicapIndexMap[String(name).trim().toLowerCase()] : undefined;
+    }
+
     function patchLocalHandicapIndex(customerId, extraNames, index18) {
         if (index18 == null) return;
         const cid = String(customerId || '');
@@ -2348,7 +2360,15 @@
             index_9: Math.round((v18 / 2) * 10) / 10,
             source: "starting",
             rounds: 0,
+            customer_id: customerId || null,
         };
+        // The id key is the one that cannot be missed by a spelling.
+        if (cid) {
+            const curById = handicapIndexMap[`cid:${cid}`];
+            if (!(curById && curById.source && curById.source !== "starting")) {
+                handicapIndexMap[`cid:${cid}`] = entry;
+            }
+        }
         names.forEach(n => {
             const k = String(n).trim().toLowerCase();
             // Never paper over an index computed from real rounds.
@@ -5298,9 +5318,12 @@
                 // carries source='starting'; it is consulted ONLY as a
                 // fallback so no existing displayed number changes.
                 const _rEnt = player.name ? rosterEntry(state, player.name) : null;
-                const _liveH = player.name
-                    ? handicapIndexMap[(player.name || '').toLowerCase()]
-                    : undefined;
+                // customer_id can come from EITHER source: event_players
+                // (GET /pairings) or the registrations already loaded for
+                // this event.
+                const _rCid0 = (_rEnt && _rEnt.customer_id)
+                    || (player.name ? _cidByName[_nk(player.name)] : null);
+                const _liveH = hcpEntryFor(player.name, _rCid0);
                 const _prelimVal = (player.handicap_index != null)
                     ? null
                     : (player.prelim_handicap_18 != null
@@ -5308,12 +5331,9 @@
                         : ((_liveH && _liveH.source === 'starting' && _liveH.index_18 != null)
                             ? Number(_liveH.index_18) : null));
                 const _isPlaceholder = _prelimVal != null;
-                // customer_id can come from EITHER source: event_players
-                // (GET /pairings) or the registrations already loaded for
-                // this event. Relying on the newer payload field alone
-                // meant a cached response left the dash un-clickable.
-                const _rCid = (_rEnt && _rEnt.customer_id)
-                    || (player.name ? _cidByName[_nk(player.name)] : null);
+                // Relying on the newer payload field alone meant a cached
+                // response left the dash un-clickable.
+                const _rCid = _rCid0;
                 let hcp;
                 if (player.handicap_index != null) {
                     hcp = Number(player.handicap_index).toFixed(1);
@@ -6385,7 +6405,7 @@
                 } else if (c.key === "handicap") {
                     // Show live handicap index from the handicap system, fall back to item field.
                     // 9-only or mixed events show 9-hole net; 18-only events show 18-hole.
-                    const liveHcp = r.customer ? handicapIndexMap[(r.customer || "").toLowerCase()] : undefined;
+                    const liveHcp = hcpEntryFor(r.customer, r.customer_id);
                     if (liveHcp !== undefined) {
                         // A PLACEHOLDER must never read like an established
                         // index. Golf Genius flights unhandicapped players

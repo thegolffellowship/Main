@@ -8202,7 +8202,7 @@ def api_handicap_index_map():
             idx18 = (p.get("starting_handicap_18")
                      if src == "starting" and p.get("starting_handicap_18") is not None
                      else round(idx9 * 2, 1))
-            index_map[cname.lower()] = {
+            entry = {
                 "index_9": idx9,
                 "index_18": idx18,
                 # 'computed' from real rounds vs 'starting' placeholder.
@@ -8211,7 +8211,16 @@ def api_handicap_index_map():
                 # and that is exactly the behaviour we are not copying.
                 "source": p.get("handicap_source") or "computed",
                 "rounds": p.get("active_rounds") or 0,
+                "customer_id": p.get("customer_id"),
             }
+            index_map[cname.lower()] = entry
+            # ALSO key by customer_id. A name key cannot survive the same
+            # person being spelled differently on an order row than on the
+            # canonical record, and that is precisely how a handicap set on
+            # one screen goes missing on the other (Kerry 2026-07-31). Same
+            # fix as the standings points map — guiding principle 6.
+            if p.get("customer_id"):
+                index_map[f"cid:{p['customer_id']}"] = entry
     return jsonify(index_map)
 
 

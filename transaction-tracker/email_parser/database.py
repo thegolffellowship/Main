@@ -27005,15 +27005,25 @@ def get_all_handicap_players(db_path: str | Path | None = None) -> list[dict]:
     for p in players:
         p.setdefault("handicap_source",
                      "computed" if p.get("handicap_index") is not None else None)
+
+    # Every player carries their customer_id, not just the placeholder-only
+    # ones appended below. Callers that key on NAME alone (the events page's
+    # handicap index map is the live example) cannot survive one person
+    # being spelled two ways — guiding principle 6.
+    by_name = {}
+    with _connect(db_path) as conn:
+        for r in conn.execute(
+                """SELECT l.player_name, l.customer_id FROM
+                   handicap_player_links l WHERE l.customer_id IS NOT NULL"""
+        ).fetchall():
+            by_name.setdefault((r["player_name"] or "").strip().lower(),
+                               r["customer_id"])
+    for p in players:
+        if p.get("customer_id") is None:
+            p["customer_id"] = by_name.get(
+                (p.get("player_name") or "").strip().lower())
+
     if starting:
-        by_name = {}
-        with _connect(db_path) as conn:
-            for r in conn.execute(
-                    """SELECT l.player_name, l.customer_id FROM
-                       handicap_player_links l WHERE l.customer_id IS NOT NULL"""
-            ).fetchall():
-                by_name.setdefault((r["player_name"] or "").strip().lower(),
-                                   r["customer_id"])
         for p in players:
             cid = by_name.get((p["player_name"] or "").strip().lower())
             if cid is None:

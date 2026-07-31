@@ -37,7 +37,7 @@ def index_map_payload(players):
         cname = p.get("customer_name")
         if cname and p.get("handicap_index") is not None:
             idx9 = p["handicap_index"]
-            out[cname.lower()] = {
+            entry = {
                 "index_9": idx9,
                 "index_18": (p.get("starting_handicap_18")
                              if (p.get("handicap_source") == "starting"
@@ -45,7 +45,11 @@ def index_map_payload(players):
                              else round(idx9 * 2, 1)),
                 "source": p.get("handicap_source") or "computed",
                 "rounds": p.get("active_rounds") or 0,
+                "customer_id": p.get("customer_id"),
             }
+            out[cname.lower()] = entry
+            if p.get("customer_id"):
+                out[f"cid:{p['customer_id']}"] = entry
     return out
 
 
@@ -140,6 +144,25 @@ check("a computed player is NOT offered as editable on the roster",
 check("Villa is still in the map after the second player was added",
       payload2.get("mark villa", {}).get("source") == "starting",
       str(payload2.get("mark villa")))
+
+print("\n== the map is keyed by customer_id, not name alone ==")
+
+check("the placeholder-only player has an id key",
+      "cid:692" in payload2, str([k for k in payload2 if k.startswith("cid:")]))
+check("the id key and the name key are the same entry",
+      payload2.get("cid:692") == payload2.get("mark villa"),
+      str(payload2.get("cid:692")))
+check("a player whose index is COMPUTED also gets an id key",
+      "cid:693" in payload2, str([k for k in payload2 if k.startswith("cid:")]))
+check("the computed player's id key still reads computed",
+      payload2.get("cid:693", {}).get("source") == "computed",
+      str(payload2.get("cid:693")))
+# The whole point: a roster row spelled differently from the profile still
+# resolves, because the id is tried first.
+check("an id lookup survives a name the map has never seen",
+      payload2.get("cid:692", {}).get("index_18") == 12.5
+      and "marky villa" not in payload2,
+      str(payload2.get("cid:692")))
 
 os.unlink(path)
 

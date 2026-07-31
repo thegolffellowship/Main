@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.167.0";
+window.TGF_VERSION = "2.168.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.168.0",
+    date: "2026-07-31",
+    changes: [
+      "HANDICAP EDITS NOW FLOW BOTH WAYS BECAUSE THE LOOKUP IS KEYED BY customer_id (Kerry 2026-07-31: 'I added in ROSTER and it showed in PAIRINGS, but when I edited in PAIRINGS, it disappeared in ROSTER'). Both screens read one shared handicap index map, and that map was keyed by NAME only — so the whole arrangement rested on a player being spelled identically on their order row and on their profile. When those differ, an edit made on one screen resolves to a key the other screen never looks up, and the value reads as gone. The map now carries a customer_id key alongside every name key, and both the roster cell and the pairing card resolve the id FIRST. This is the same fix the standings points map needed, for the same reason: guiding principle 6.",
+      "Every player in the handicap list now carries their customer_id, not just the placeholder-only ones. It was being resolved solely to merge starting handicaps in, so a player with real rounds reached the page with no id at all and nothing downstream could key on one.",
+      "Setting a handicap writes the id key into the shared map immediately, so both views repaint off the same entry before the server confirms — the two screens can no longer hold different answers even for a moment.",
+    ],
+  },
   {
     version: "2.167.0",
     date: "2026-07-31",

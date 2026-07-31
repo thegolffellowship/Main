@@ -588,3 +588,27 @@ A rounds-less player reaches the map via `get_starting_handicaps` →
 `get_all_handicap_players`, which APPENDS placeholder-only customers to a
 list that otherwise starts from `handicap_rounds`. Tests:
 `test_starting_handicap_sync.py`.
+
+### The map is keyed by customer_id (v2.168.0)
+
+Kerry, same evening: *"I added in ROSTER and it showed in PAIRINGS, but
+when I edited in PAIRINGS, it disappeared in ROSTER."*
+
+v2.167.0 made both screens read one shared map and patch it on save — but
+that map was still keyed by NAME, so the whole arrangement rested on a
+player being spelled the same on `items.customer` as on
+`customers.first_name || last_name`. Where they differ, an edit resolves
+to a key the other screen never reads, and the value looks gone.
+
+- `api_handicap_index_map` emits `cid:<customer_id>` keys alongside the
+  lowercased-name keys, pointing at the SAME entry object; the entry also
+  carries `customer_id`.
+- `get_all_handicap_players` stamps `customer_id` on EVERY player (it was
+  resolved only to merge starting handicaps in, so computed players
+  arrived with none).
+- `templates/events.html` `hcpEntryFor(name, customerId)` is the one
+  accessor both the roster cell and the pairing card use — id first, name
+  as fallback. `patchLocalHandicapIndex` writes the id key too.
+
+Name keys are retained as a fallback, so nothing that still looks up by
+name breaks.
