@@ -190,6 +190,57 @@ try:
 finally:
     db.get_points_race_standings = _real
 
+print("\n== the race must be the chapter's NET race, not merely its chapter ==")
+
+# THE TRAP: players_cup_gross is tagged chapter = "San Antonio" (it is
+# cross-chapter, enroll_chapter=None, but carries an SA chapter tag). A
+# chapter-only match would therefore pick the GROSS Players Cup for every
+# San Antonio event and pair the field off the wrong race entirely.
+_cfg = db._GG_POINTS_RACES
+_sa_races = [k for k, c in _cfg.items()
+             if (c.get("chapter") or "").strip().lower() == "san antonio"]
+check("more than one configured race is tagged San Antonio — so chapter "
+      "alone cannot identify the race", len(_sa_races) > 1, str(_sa_races))
+check("...and one of them is a GROSS race",
+      any((_cfg[k].get("contest_type") or "").upper().startswith("GROSS")
+          for k in _sa_races), str(_sa_races))
+
+_real2 = db.get_points_race_standings
+db.get_points_race_standings = lambda key, **kw: {
+    "standings": [], "fetched_at": None, "gg_error": None}
+try:
+    _, sa_key, _ = db._standings_rank_map("San Antonio")
+    check("San Antonio resolves to the NET race, NOT the Players Cup",
+          sa_key == "san_antonio_net", str(sa_key))
+    check("...and specifically never to a GROSS race",
+          not (_cfg.get(sa_key, {}).get("contest_type") or "")
+          .upper().startswith("GROSS"), str(sa_key))
+
+    _, au_key, _ = db._standings_rank_map("Austin")
+    check("Austin resolves to its own NET race", au_key == "austin_net", str(au_key))
+    check("...and never borrows San Antonio's", au_key != "san_antonio_net")
+
+    # Chapter matching is case- and whitespace-insensitive.
+    for variant in ["san antonio", "SAN ANTONIO", "  San Antonio  "]:
+        _, k, _ = db._standings_rank_map(variant)
+        check(f"chapter '{variant}' still resolves to san_antonio_net",
+              k == "san_antonio_net", str(k))
+
+    # An explicit race_key overrides the chapter default — that is how the
+    # Players Cup would be used deliberately rather than by accident.
+    _, forced, _ = db._standings_rank_map("San Antonio",
+                                          race_key="players_cup_gross")
+    check("an explicit race_key overrides the chapter default",
+          forced == "players_cup_gross", str(forced))
+
+    # A chapter with no race must yield nothing rather than the nearest match.
+    for ch in ["Houston", "DFW", None, ""]:
+        _, k, _ = db._standings_rank_map(ch)
+        check(f"chapter '{ch}' yields no race rather than a wrong one",
+              k is None, str(k))
+finally:
+    db.get_points_race_standings = _real2
+
 print("\n" + "=" * 60)
 if FAILURES:
     print(f"{len(FAILURES)} FAILED: {FAILURES}")

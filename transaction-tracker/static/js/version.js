@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.152.4";
+window.TGF_VERSION = "2.152.5";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.152.5",
+    date: "2026-07-30",
+    changes: [
+      "Pinned by test that STANDINGS pairings resolve the chapter's NET points race specifically, not merely a race tagged with that chapter. This matters because players_cup_gross carries chapter='San Antonio' (it is cross-chapter, enroll_chapter=None, but keeps an SA tag), so a chapter-only match would have paired every San Antonio field off the GROSS Players Cup instead of the City NET race. The selector requires BOTH chapter and a NET contest_type; verified San Antonio resolves to san_antonio_net and never to a GROSS race, Austin resolves to austin_net and never borrows San Antonio's, chapter matching is case- and whitespace-insensitive, an explicit race_key still overrides the default so the Players Cup can be chosen deliberately, and a chapter with no configured race (Houston, DFW, blank) yields nothing rather than the nearest match.",
+    ],
+  },
   {
     version: "2.152.4",
     date: "2026-07-30",
