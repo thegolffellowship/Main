@@ -9,6 +9,18 @@
 - `transferred` — transferred to another event, shown in **Inactive** section below table. Creates contra-revenue on source event + revenue on target event in `acct_transactions`, plus allocation at target.
 - `wd` — withdrawn, shown in **Inactive** section below table
 
+## RSVP → event matching: multi-round GG events (v2.151.2, Kerry 2026-07-30)
+GG multi-round events name each round separately ("2026 TGF CHAMPIONSHIP
+round 1" / "round 2" / "Practice Round") while the tracker carries ONE
+event row. `match_rsvp_to_event` strips a trailing round qualifier
+(`_RSVP_ROUND_SUFFIX_RE`: "round N" or "practice round", optional dash/
+colon) and retries the direct name + alias match with the base name, so
+every round's RSVPs land on the tracker event. `rematch_rsvps` runs at
+boot, so previously-unmatched round RSVPs self-heal on deploy. A player
+RSVPing to several rounds yields multiple matched RSVP rows on the same
+tracker event (the roster reads them as one player's RSVP state) —
+per-round attendance stays a GG concern.
+
 ## Events list filters (v2.46.0)
 CHAPTER scope pills (ALL | AUSTIN | SAN ANTONIO; ALL is the landing)
 over the app's standard segmented control for time: Upcoming | Past |

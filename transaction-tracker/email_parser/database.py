@@ -20396,6 +20396,14 @@ def get_known_rsvp_uids(db_path: str | Path | None = None) -> set[str]:
         return {r["email_uid"] for r in rows}
 
 
+# Multi-round GG event names append a round qualifier the tracker's single
+# event row doesn't carry (Kerry 2026-07-30, the 2026 TGF CHAMPIONSHIP):
+# "… round 1", "… round 2", "… Practice Round" (optionally after a dash or
+# colon). Strip it before event matching.
+_RSVP_ROUND_SUFFIX_RE = re.compile(
+    r"\s*[-–—:]*\s*(?:PRACTICE\s+ROUND|ROUND\s*\d+)\s*$", re.IGNORECASE)
+
+
 def match_rsvp_to_event(event_identifier: str, event_date: str | None,
                          db_path: str | Path | None = None) -> str | None:
     """Try to match an RSVP event identifier to an events.item_name.
@@ -20420,6 +20428,27 @@ def match_rsvp_to_event(event_identifier: str, event_date: str | None,
         ).fetchall()
         if len(rows) == 1:
             return rows[0]["item_name"]
+
+        # Strategy 1b (Kerry 2026-07-30): multi-round GG events append a
+        # round suffix the tracker's single event doesn't carry — "2026
+        # TGF CHAMPIONSHIP round 1" / "round 2" / "Practice Round" all
+        # belong to "2026 TGF CHAMPIONSHIP". Strip the suffix and retry
+        # the direct match.
+        base_identifier = _RSVP_ROUND_SUFFIX_RE.sub("", identifier_upper).strip(" -:")
+        if base_identifier and base_identifier != identifier_upper:
+            rows = conn.execute(
+                "SELECT item_name FROM events WHERE UPPER(item_name) LIKE ?",
+                (f"%{base_identifier}%",),
+            ).fetchall()
+            if len(rows) == 1:
+                return rows[0]["item_name"]
+            # Round-stripped base against aliases too, same confidence bar.
+            rows = conn.execute(
+                "SELECT canonical_event_name FROM event_aliases WHERE UPPER(alias_name) LIKE ?",
+                (f"%{base_identifier}%",),
+            ).fetchall()
+            if len(rows) == 1:
+                return rows[0]["canonical_event_name"]
 
         # Extract the course name portion from the identifier.
         # GG identifiers look like: "a18.2 PRIME TIME KICKOFF | SHADOWGLEN"

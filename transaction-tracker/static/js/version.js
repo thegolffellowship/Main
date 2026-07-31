@@ -1,5 +1,19 @@
-window.TGF_VERSION = "2.151.0";
+window.TGF_VERSION = "2.151.2";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.151.2",
+    date: "2026-07-30",
+    changes: [
+      "RSVPs from multi-round GG events now match the tracker event (Kerry: 2026 TGF CHAMPIONSHIP round 1 RSVPs weren't populating). GG names each round separately — 'round 1', 'round 2', 'Practice Round' — while the tracker carries one event, and the matcher's direct-substring strategy required the event name to CONTAIN the full GG identifier, so the round suffix broke every match. match_rsvp_to_event now strips a trailing round qualifier (round N / practice round, optional dash or colon) and retries the direct name and alias matches with the base name; ordinary event names ('HILL COUNTRY ROUND ROBIN' included) are untouched. rematch_rsvps runs at boot, so the round-1 RSVPs already received self-heal on this deploy.",
+    ],
+  },
+  {
+    version: "2.151.1",
+    date: "2026-07-29",
+    changes: [
+      "Mobile customer transaction cards condensed to tight two-line rows (Kerry: 'could be much more condensed and succinct'). All badge pills are gone from the collapsed card — line 1 is the event name (single line, ellipsized) with the amount right-aligned; line 2 is one small plain-text meta line: date · payment rail · games · tee · status word (Credit amber / Transferred purple / Refunded-WD red / 'Via credit' blue). Padding and fonts tightened so roughly twice as many transactions fit per screen; tap-to-expand for actions is unchanged.",
+    ],
+  },
   {
     version: "2.151.0",
     date: "2026-07-29",
