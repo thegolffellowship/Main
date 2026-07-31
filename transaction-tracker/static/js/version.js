@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.151.3";
+window.TGF_VERSION = "2.151.4";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.151.4",
+    date: "2026-07-30",
+    changes: [
+      "DOCS: full live-scoring + flighting handoff for CA (docs/claude/live-scoring-spec-for-ca.md, 14 sections) covering the engine, the flighting rule taught by Kerry on 2026-07-29, the pot-split analysis, the flights-freeze/money-floats scenario matrix, the data model and Platform portability, and the test coverage. Deliberately keeps RATIFIED, DERIVED (engine decisions that merely look like rules) and UNKNOWN in separate buckets, because documenting a derived decision as ratified silently skips the ratification step. Posted to the platform mailbox as #251; digest #250 had explicitly not covered this wave.",
+      "The central reframe recorded for the Platform: the scoring was ALREADY untethered from Golf Genius — net/gross Stableford, adjusted gross, the ace rule, WHS allocation, MVP, match play and season payouts all compute from our own tables — but the FLIGHTING was not, since determine_event_game_results takes GG's labels and returns flights_unknown rather than guessing. Flighting is the rule that decides who gets paid, and it is now specified. Blocking unknown flagged throughout: whether the raw TGF handicap index is the 9-hole or 18-hole number, which mis-flights the entire field by a factor of two if wrong while looking perfectly plausible.",
+      "Two generalisable corrections banked: at a nines-playing club, any per-tee lookup assuming one course_tees row per tee is wrong (GG rates each nine separately, so one physical tee is several rows each holding only its own nine), and any per-round flight label is wrong (flights differ per game, so gg_game_flights is the source and scoring_rounds.flight is a legacy fallback). Both are SHAPE errors rather than data errors and both fail silently. state-of-the-tracker.md refreshed per workflow rule 4.",
+    ],
+  },
   {
     version: "2.151.3",
     date: "2026-07-29",

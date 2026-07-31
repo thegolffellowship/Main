@@ -147,10 +147,33 @@ config, the one datum still trapped in GG).
   fetched data is unchanged); step 2 targeted DOM updates; step 3
   SSE/WebSocket push. Serves both website live standings and the
   future app's live feed.
-- **Own live scoring** — assessed viable: scoring math, course data,
-  groups, and magic-link auth all exist; remaining build is the score
-  entry UI, offline queue, and a live write path. Plan: shadow-mode
-  pilots at regular events alongside GG; championships stay on GG.
+- **Own live scoring** — **BUILT as of v2.150–v2.151; Stage-1 gate NOT yet
+  passed.** The shadow leaderboard + diff harness named in `game-engine.md`
+  now exist as the **Live Scoring Test Center** (`/admin/test-center`,
+  admin-only): every event game recomputed from raw gross hole scores, live
+  in-place GG re-pull, a parity gate that diffs us against GG per player and
+  is asserted to be capable of failing, and a Flighting Lab. Full spec for
+  CA: `docs/claude/live-scoring-spec-for-ca.md`.
+
+  The reframe worth carrying to the Platform: **the scoring was already
+  untethered — the FLIGHTING was not.** `determine_event_game_results`
+  computed every game and then took GG's flight labels, returning
+  `flights_unknown` rather than guessing. Flighting is the rule that decides
+  who gets paid, and it now has one (Kerry, 2026-07-29): flight on raw TGF
+  handicap index; two legitimate modes (equal-size and fixed bands); breaks
+  are floors for the upper flight; Individual Net's low flight never past
+  11.9; gross bands harder with a 3-flight minimum; equal indexes never split
+  across flights; thin flights merge — which reproduces "3 flights down to 2
+  on a concentrated field" with no separate rule.
+
+  **Blocking unknown:** whether the index is the 9-hole or 18-hole number —
+  a silent factor-of-two mis-flight if wrong, so it is an explicit setting,
+  never assumed. Also open: minimum flight size, the 3-/4-flight ladders,
+  pot-split confirmation, and the late-add/WD scenario matrix.
+
+  First live shadow: SA Championship, 2026-08-01 at The Quarry. Until parity
+  reads clean across a meaningful sample of real events, GG stays official
+  and none of this drives money. Championships remain on GG regardless.
 
 ## Plan of record: native app + website
 
