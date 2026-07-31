@@ -5133,6 +5133,18 @@
             html += `<div style="display:flex;gap:0.9rem;flex-wrap:wrap;align-items:center;font-size:0.72rem;color:var(--text-muted);padding:0.15rem 0 0.35rem;">${legend}</div>`;
         }
 
+        // name -> customer_id, from BOTH sources, built once. Powers the
+        // click-the-dash starting-handicap control; relying on the newer
+        // /pairings field alone left it dead when that payload was cached.
+        const _cidByName = {};
+        const _nk = n => String(n || '').trim().replace(/\s+/g, ' ').toLowerCase();
+        (getRegistrants(ev.item_name) || []).forEach(r => {
+            if (r.customer && r.customer_id) _cidByName[_nk(r.customer)] = r.customer_id;
+        });
+        (state.event_players || []).forEach(p => {
+            if (p.name && p.customer_id) _cidByName[_nk(p.name)] = p.customer_id;
+        });
+
         html += '<div class="pairings-groups-grid">';
         const isMoveTarget = state.swapMode === 'move' && state.selection;
         groups.forEach(grp => {
@@ -5191,7 +5203,12 @@
                 // a customer_id, because the placeholder lives on the
                 // customer record.
                 const _rEnt = player.name ? rosterEntry(state, player.name) : null;
-                const _rCid = _rEnt && _rEnt.customer_id;
+                // customer_id can come from EITHER source: event_players
+                // (GET /pairings) or the registrations already loaded for
+                // this event. Relying on the newer payload field alone
+                // meant a cached response left the dash un-clickable.
+                const _rCid = (_rEnt && _rEnt.customer_id)
+                    || (player.name ? _cidByName[_nk(player.name)] : null);
                 const hcp = player.handicap_index != null
                     ? Number(player.handicap_index).toFixed(1)
                     : (_rCid
@@ -5226,9 +5243,26 @@
                 }
                 if (showPoints) {
                     const pts = pointsFor(state, player.name);
+                    // A dash has TWO very different causes and the manager
+                    // needs to know which (Kerry 2026-07-31, "all points
+                    // are not showing up now, like for Murphy & Moreno"):
+                    // the player is absent from the standings entirely, or
+                    // they ARE on the board with no points total recorded.
+                    // The first is an enrolment question, the second is a
+                    // data question — same dash, different fix.
+                    let ptsTitle;
+                    if (pts != null) {
+                        ptsTitle = `${raceLabel} points`;
+                    } else {
+                        const _pk = String(player.name || '').trim()
+                            .replace(/\s+/g, ' ').toLowerCase();
+                        ptsTitle = (state.standingsEnrolled && _pk in state.standingsEnrolled)
+                            ? `On the ${raceLabel} board, but no points total recorded`
+                            : `Not in the ${raceLabel} standings at all`;
+                    }
                     html += pts == null
-                        ? `<span class="pairing-points is-none" title="Not in the ${escapeHtml(raceLabel)} standings">&mdash;</span>`
-                        : `<span class="pairing-points" title="${escapeHtml(raceLabel)} points">${pts}</span>`;
+                        ? `<span class="pairing-points is-none" title="${escapeHtml(ptsTitle)}">&mdash;</span>`
+                        : `<span class="pairing-points" title="${escapeHtml(ptsTitle)}">${pts}</span>`;
                 }
                 html += `<span class="pairing-hcp">${hcp}</span>`;
                 html += `<span class="pairing-tee">${escapeHtml(abbrevTee(player.tee_choice))}</span>`;

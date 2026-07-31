@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.164.0";
+window.TGF_VERSION = "2.164.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.164.1",
+    date: "2026-07-31",
+    changes: [
+      "A MISSING POINTS FIGURE NOW SAYS WHY (Kerry 2026-07-31: 'all points are not showing up now, like for Murphy & Moreno'). A dash in the points column has two completely different causes and the same appearance: the player is absent from the race standings altogether, or they ARE on the board and our snapshot holds no points total for them. The first is an enrolment question, the second is a data question — hovering the dash now states which one it is instead of leaving both looking like the same failure. Murphy and Moreno are the second kind: they are ranked (which is why they are seated mid-order rather than teeing off first with the unranked), but their points cell came through the Golf Genius widget non-numeric, so nothing was stored to show. A genuine zero still renders as 0, not a dash.",
+      "The click-the-dash starting-handicap control on the pairing cards no longer depends on one payload field. It reads customer_id from EITHER the pairings roster or the event's registrations, whichever has it — relying only on the newer /pairings field meant a cached response left the dash inert with no hint as to why. To be clear about which column it is: the control is on the HANDICAP dash, never on the points dash, and never on a player who already has an index — a real index is computed from rounds and must not be typed over.",
+    ],
+  },
   {
     version: "2.164.0",
     date: "2026-07-31",
