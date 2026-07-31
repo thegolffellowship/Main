@@ -1,5 +1,16 @@
-window.TGF_VERSION = "2.160.2";
+window.TGF_VERSION = "2.161.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.161.0",
+    date: "2026-07-31",
+    changes: [
+      "THE PAIRING METHOD FINALLY STICKS — ROOT CAUSE FOUND. Two real defects, not one. First, the race-pulldown handler referenced a variable that does not exist (pairingsState instead of pairingsData), so it threw a ReferenceError every time the race changed and the choice was never recorded — that bug predates this week. Second, the mode was being seeded from the EVENTS LIST payload, which can be a cached copy from before the column existed; if that first render arrived without it, the panel locked itself to Random for the session. The saved method now rides on the PAIRINGS fetch itself — GET /pairings returns pairing_mode and pairing_race_key in its event block — which is requested at the moment the panel opens and therefore cannot be stale. The server row remains the source of truth, with the localStorage mirror still behind it.",
+      "GENERATE, CLEAR AND SAVE MOVED TO THEIR OWN ROW, LEFT-ALIGNED (Kerry 2026-07-31), instead of being pushed to the right of a crowded first line where they got squeezed out.",
+      "COLOUR BANDS SETTLED. GUEST is now a half-strength version of the 1st-timer orange rather than pink ('I have never liked GUEST Pink'), and ALUMNI is grey rather than the cream or the violet, both of which were too faint to pick out. Measured rather than eyeballed: every pair of the five bands clears 76 RGB separation, and every band holds at least 6.8:1 text contrast against the row text, so names, points and badges stay readable on all of them.",
+      "POINTS, HANDICAP AND TEE ARE NOW CENTRED, and the points column is ruled on both sides so it reads as its own column down the card — the same treatment the Player Rankings table gives its points.",
+      "DRAG A PLAYER ONTO ANOTHER GROUP TO MOVE THEM — including as a 5th (Kerry 2026-07-31). Pick up any player and every other group grows a rail telling you what releasing will do: '+ DROP HERE (3 of 4)', or '+ ADD AS 5TH — MAKES A FIVESOME' when the group is already full, or a red 'GROUP FULL (5)' where it cannot take another. Dropping onto the fivesome rail does not ask for confirmation, because dragging onto a rail that says FIVESOME already is the manager asking; click-to-Move still confirms. Six is refused, and a player can only be dragged within their own 9-hole or 18-hole sheet.",
+    ],
+  },
   {
     version: "2.160.2",
     date: "2026-07-31",

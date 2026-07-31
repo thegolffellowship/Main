@@ -4917,6 +4917,14 @@ def api_get_pairings(event_id):
                 "tee_time_count": ev.get("tee_time_count"),
                 "tee_time_count_18": ev.get("tee_time_count_18"),
                 "nine_side": ev.get("nine_side") or "Front",
+                # The saved pairing METHOD travels with the panel's own
+                # fetch, not the events-list payload — that list can be
+                # stale or predate the column, which is exactly why the
+                # STANDINGS button kept coming back unselected (Kerry
+                # 2026-07-31, third report).
+                "pairing_mode": ev.get("pairing_mode") or None,
+                "pairing_race_key": ev.get("pairing_race_key") or None,
+                "allow_fivesomes": 1 if ev.get("allow_fivesomes") else 0,
             },
         })
     except Exception as e:

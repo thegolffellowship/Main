@@ -619,7 +619,23 @@ The Quarry-night rulings, all built:
      `max_age_hours` so opening the panel never triggers a GG fetch) so
      a SAVED sheet shows points as well. The 3-tuple return is unchanged
      for every existing caller.
-   - **The MODE persists on the event (v2.159.0, Kerry 2026-07-31).**
+   - **Drag-and-drop + the 5th (v2.161.0).** Player rows are
+     `draggable`; every other group card shows a `.pairing-drop-rail`
+     naming the outcome ("+ DROP HERE (3 of 4)" / "+ ADD AS 5TH —
+     MAKES A FIVESOME" / "GROUP FULL (5)"). Dropping passes
+     `{allowFifth:true}` to `_movePlayer`, which skips the confirm —
+     dragging onto a rail that says FIVESOME IS the manager asking.
+     Click-to-Move keeps its confirm. Five is the hard ceiling and moves
+     are within one holes bucket.
+   - **The MODE persists on the event (v2.159.0, Kerry 2026-07-31;
+     ROOT-CAUSED v2.161.0).** Seeded from GET `/pairings` →
+     `event.pairing_mode` / `event.pairing_race_key`, NOT from the
+     events-list payload — that list can be a cached copy from before
+     the column existed, and a first render without it locked the panel
+     to Random for the session. A second defect: the race-pulldown
+     handler referenced `pairingsState` (no such variable; it is
+     `pairingsData`) and threw on every change, so the race was never
+     recorded — that one predates the persistence work.
      `events.pairing_mode` ('random'|'abcd'|'standings') and
      `events.pairing_race_key` are written by a fire-and-forget PATCH the
      moment a mode button or the race pulldown changes, and reseeded into

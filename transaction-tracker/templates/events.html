@@ -192,7 +192,11 @@
         }
         .pairings-actions {
             display: flex; align-items: center; gap: 0.5rem;
-            flex-wrap: wrap; margin-left: auto;
+            flex-wrap: wrap;
+            /* OWN ROW, LEFT-ALIGNED (Kerry 2026-07-31). flex-basis:100%
+               forces the wrap so Generate/Clear/Save never compete with
+               the mode buttons for space on a crowded first line. */
+            flex-basis: 100%; margin-left: 0; margin-top: 0.35rem;
         }
         .pairings-control-group { display: flex; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
         .pairings-mode-btn {
@@ -287,17 +291,15 @@
         .pairing-player-row.pair-band-in:hover { background: #a7efc0; }
         /* pair-band-notin is deliberately WHITE (Kerry 2026-07-31) — a
            member who hasn't bought in is the ordinary case, not a flag. */
-        /* ALUMNI: indigo. The Player-Rankings REJOIN cream (#fdf3e7) is
-           nearly white against the card and Kerry couldn't pick it out
-           (2026-07-31), and a pale violet sat too close to the guest
-           pink. Indigo-300 carries the same visual weight as the 1st
-           timer orange and is the furthest of any candidate from every
-           other band — 83+ RGB separation from its nearest neighbour,
-           8.6:1 text contrast. */
-        .pairing-player-row.pair-band-alumni { background: #a5b4fc; }
-        .pairing-player-row.pair-band-alumni:hover { background: #93a2f5; }
-        .pairing-player-row.pair-band-guest { background: #fbcfe8; }
-        .pairing-player-row.pair-band-guest:hover { background: #f8bce0; }
+        /* ALUMNI grey, GUEST a half-strength 1st-timer orange (Kerry
+           2026-07-31 — never liked the pink; the cream then the violet
+           were both too faint). Every pair of bands clears 76 RGB
+           separation and every band holds 6.8:1+ text contrast against
+           #1B1B1B, so the badges and numbers stay readable on all five. */
+        .pairing-player-row.pair-band-alumni { background: #9ca3af; }
+        .pairing-player-row.pair-band-alumni:hover { background: #8b929e; }
+        .pairing-player-row.pair-band-guest { background: #fedcba; }
+        .pairing-player-row.pair-band-guest:hover { background: #fdcfa4; }
         .pairing-player-row.pair-band-firsttimer { background: #fdba74; }
         .pairing-player-row.pair-band-firsttimer:hover { background: #fcab5b; }
         .pairing-player-row.pairings-selected { background: rgba(99,102,241,0.12); }
@@ -312,12 +314,39 @@
         }
         .pairing-points {
             font-size: 0.72rem; font-weight: 700; color: #0f766e;
-            width: 2.1rem; text-align: right; flex-shrink: 0;
+            width: 2.5rem; text-align: center; flex-shrink: 0;
             font-variant-numeric: tabular-nums;
+            /* Ruled on both sides so the points read as their own column
+               down the card (Kerry 2026-07-31) — same treatment the
+               Player Rankings table gives its points column. */
+            border-left: 2px solid rgba(0,0,0,0.18);
+            border-right: 2px solid rgba(0,0,0,0.18);
+            padding: 0 0.25rem; margin: 0 0.1rem; align-self: stretch;
+            display: flex; align-items: center; justify-content: center;
         }
         .pairing-points.is-none { color: var(--text-placeholder); font-weight: 500; }
-        .pairing-hcp { font-size: 0.75rem; color: var(--text-muted); width: 1.9rem; text-align: right; flex-shrink: 0; font-variant-numeric: tabular-nums; }
-        .pairing-tee { font-size: 0.72rem; color: var(--text-muted); width: 2.3rem; text-align: right; flex-shrink: 0; }
+        .pairing-hcp { font-size: 0.75rem; color: var(--text-muted); width: 2.3rem; text-align: center; flex-shrink: 0; font-variant-numeric: tabular-nums; }
+        .pairing-tee { font-size: 0.72rem; color: var(--text-muted); width: 2.6rem; text-align: center; flex-shrink: 0; }
+        /* Drag-and-drop: a player can be dragged onto any group, and the
+           rail that appears says what releasing does — including adding a
+           5th, which is the manager-intent gate for an oversized group
+           (Kerry 2026-07-31). */
+        .pairing-player-row[draggable="true"] { cursor: grab; }
+        .pairing-player-row.pair-dragging { opacity: 0.4; cursor: grabbing; }
+        .pairing-drop-rail {
+            display: none; align-items: center; justify-content: center;
+            gap: 0.35rem; padding: 0.32rem 0.45rem; font-size: 0.75rem;
+            font-weight: 700; letter-spacing: 0.03em;
+            border-top: 1px dashed var(--border); color: var(--text-muted);
+        }
+        .pairing-group-card.pair-drop-active .pairing-drop-rail { display: flex; }
+        .pairing-group-card.pair-drop-over { box-shadow: 0 0 0 2px #E87C3E; }
+        .pairing-group-card.pair-drop-active .pairing-drop-rail.is-fifth {
+            background: #fff3ec; color: #9a3412; border-top-color: #E87C3E;
+        }
+        .pairing-group-card.pair-drop-active .pairing-drop-rail.is-full {
+            background: #fef2f2; color: #b91c1c; border-top-color: #ef4444;
+        }
         .pairing-cart-divider {
             height: 1px; background: var(--border); margin: 0 0.6rem;
         }
@@ -4514,8 +4543,8 @@
     const PAIR_BANDS = {
         in:        {bg: '#bbf7d0', dot: '#15803d', label: 'IN'},
         notin:     {bg: '',        dot: '#cbd5e1', label: 'MEMBER, NOT IN'},
-        alumni:    {bg: '#a5b4fc', dot: '#3730a3', label: 'ALUMNI'},
-        guest:     {bg: '#fbcfe8', dot: '#9d174d', label: 'GUEST'},
+        alumni:    {bg: '#9ca3af', dot: '#374151', label: 'ALUMNI'},
+        guest:     {bg: '#fedcba', dot: '#9a3412', label: 'GUEST'},
         firsttimer:{bg: '#fdba74', dot: '#9a3412', label: '1ST TIMER'},
     };
 
@@ -5053,6 +5082,7 @@
                     }
                 }
                 html += `<div class="pairing-player-row${bandCls}${isSelectedPlayer || isSelectedPair ? ' pairings-selected' : ''}"
+                    ${player.name ? 'draggable="true"' : ''}
                     ${bandTitle ? ` title="${escapeHtml(bandTitle)}"` : ''}
                     data-ev-id="${ev.id}" data-holes="${holes}" data-group-num="${grp.group_num}" data-cart-pos="${player.cart_pos}">`;
                 html += `<span class="pairing-cart-dot" style="background:${cartDot};"></span>`;
@@ -5077,6 +5107,11 @@
                 html += '</div>';
             }
 
+            // Drop rail for drag-and-drop (Kerry 2026-07-31). Hidden
+            // until a player is dragged over this card; the label says
+            // exactly what releasing will do, including when it means
+            // making a fivesome.
+            html += `<div class="pairing-drop-rail" data-drop-rail="${holes}:${grp.group_num}"></div>`;
             html += '</div>'; // .pairing-group-card
         });
         html += '</div>'; // .pairings-groups-grid
@@ -5096,6 +5131,17 @@
             state._paceMap = null;  // rebuild pace lookup from fresh roster
             state.mpMatches = data.mp_matches || [];
             state.requests = data.partner_requests || [];
+            // AUTHORITATIVE seed for the pairing method: this response is
+            // fetched when the panel opens, so it can't be stale the way
+            // the events-list payload can (Kerry 2026-07-31 — the reason
+            // STANDINGS kept reverting to Random on reopen).
+            const evb = data.event || {};
+            const savedMode = String(evb.pairing_mode || '').trim();
+            if (savedMode === 'random' || savedMode === 'abcd' || savedMode === 'standings') {
+                state.mode = savedMode;
+            }
+            if (evb.pairing_race_key) state.raceKey = evb.pairing_race_key;
+            if (evb.pairing_mode !== undefined) state._modeSeeded = true;
             state.standingsPoints = data.standings_points || {};
             state.standingsEnrolled = data.standings_enrolled || {};
             state.isDirty = false;
@@ -7189,7 +7235,7 @@
         // Race pulldown: remember the choice for this event.
         container.querySelectorAll('.pairings-race-select').forEach(sel => {
             sel.addEventListener('change', () => {
-                const st = pairingsState[sel.dataset.evId];
+                const st = pairingsData[sel.dataset.evId];
                 if (st) {
                     st.raceKey = sel.value || null;
                     savePairingMode(ev, st);
@@ -7546,6 +7592,98 @@
         });
 
         // Group card click (group-swap or move drop target)
+        // ── Drag a player onto another group (Kerry 2026-07-31) ──────
+        // "What if I was just able to click and drag a player over
+        // another group and a + row would show, allowing me to release
+        // and drop the player as a 5th?" — this is that. The rail names
+        // the outcome before you let go, and dropping a 5th needs no
+        // confirm because the drag itself IS the manager asking.
+        let _drag = null;
+        const MAXG = state.maxGroupSize || 4;
+
+        const railFor = (card) => card.querySelector('.pairing-drop-rail');
+        const clearDrop = () => {
+            container.querySelectorAll('.pairing-group-card').forEach(c => {
+                c.classList.remove('pair-drop-active', 'pair-drop-over');
+                const r = railFor(c);
+                if (r) { r.textContent = ''; r.className = 'pairing-drop-rail'; }
+            });
+        };
+
+        container.querySelectorAll('.pairing-player-row[draggable="true"]').forEach(row => {
+            row.addEventListener('dragstart', e => {
+                _drag = {
+                    holes: row.dataset.holes,
+                    group_num: Number(row.dataset.groupNum),
+                    cart_pos: Number(row.dataset.cartPos),
+                    name: (row.querySelector('.pairing-player-name') || {}).textContent || '',
+                };
+                row.classList.add('pair-dragging');
+                try { e.dataTransfer.effectAllowed = 'move';
+                      e.dataTransfer.setData('text/plain', _drag.name); } catch (_) {}
+                // Arm every OTHER card's rail with the right label.
+                container.querySelectorAll('.pairing-group-card').forEach(c => {
+                    const h = c.dataset.holes, gn = Number(c.dataset.groupNum);
+                    if (h === _drag.holes && gn === _drag.group_num) return;
+                    const grp = _findGroup(state, h, gn);
+                    if (!grp) return;
+                    const n = grp.players.length;
+                    const r = railFor(c);
+                    if (!r) return;
+                    c.classList.add('pair-drop-active');
+                    if (n >= 5) {
+                        r.className = 'pairing-drop-rail is-full';
+                        r.textContent = '\u2715 GROUP FULL (5)';
+                    } else if (n >= MAXG) {
+                        r.className = 'pairing-drop-rail is-fifth';
+                        r.textContent = `\u002B ADD AS ${n + 1}TH \u2014 MAKES A FIVESOME`;
+                    } else {
+                        r.className = 'pairing-drop-rail';
+                        r.textContent = `\u002B DROP HERE (${n + 1} of ${MAXG})`;
+                    }
+                });
+            });
+            row.addEventListener('dragend', () => {
+                row.classList.remove('pair-dragging');
+                _drag = null;
+                clearDrop();
+            });
+        });
+
+        container.querySelectorAll('.pairing-group-card').forEach(card => {
+            card.addEventListener('dragover', e => {
+                if (!_drag) return;
+                const h = card.dataset.holes, gn = Number(card.dataset.groupNum);
+                if (h === _drag.holes && gn === _drag.group_num) return;
+                const grp = _findGroup(state, h, gn);
+                if (!grp || grp.players.length >= 5) return;   // five is the ceiling
+                e.preventDefault();
+                e.dataTransfer.dropEffect = 'move';
+                card.classList.add('pair-drop-over');
+            });
+            card.addEventListener('dragleave', e => {
+                if (!card.contains(e.relatedTarget)) card.classList.remove('pair-drop-over');
+            });
+            card.addEventListener('drop', e => {
+                if (!_drag) return;
+                e.preventDefault();
+                const h = card.dataset.holes, gn = Number(card.dataset.groupNum);
+                const src = _drag;
+                _drag = null;
+                clearDrop();
+                if (h === src.holes && gn === src.group_num) return;
+                // Cross-bucket moves (9 <-> 18) aren't a thing — the two
+                // sheets are separate fields.
+                if (h !== src.holes) {
+                    alert('A player can only move within their own 9-hole or 18-hole sheet.');
+                    return;
+                }
+                _movePlayer(state, src, h, gn, null, {allowFifth: true});
+                state.isDirty = true;
+                rerenderDetail(container, ev);
+            });
+        });
+
         container.querySelectorAll('.pairing-group-card').forEach(card => {
             card.addEventListener('click', e => {
                 const holes = card.dataset.holes;
@@ -7754,7 +7892,7 @@
         return html;
     }
 
-    function _movePlayer(state, src, destHoles, destGroupNum, destCartPos) {
+    function _movePlayer(state, src, destHoles, destGroupNum, destCartPos, opts) {
         const destGroup = _findGroup(state, destHoles, destGroupNum);
         if (!destGroup) return;
         // FIVESOMES (Kerry 2026-07-31): "Definitely would like ability to
@@ -7767,7 +7905,9 @@
             alert('That group already has five players — a fivesome is the limit.');
             return;
         }
-        if (destGroup.players.length >= maxAuto) {
+        if (destGroup.players.length >= maxAuto && !(opts && opts.allowFifth)) {
+            // Click-to-Move still confirms; a DRAG onto the "+ ADD AS 5TH"
+            // rail already stated the intent, so it doesn't ask twice.
             const word = maxAuto === 5 ? 'fivesome' : 'foursome';
             if (!confirm(`That group is already a ${word}.\n\nAdd a ${destGroup.players.length + 1}th player anyway?`)) {
                 return;
