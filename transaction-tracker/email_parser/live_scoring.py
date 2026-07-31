@@ -309,13 +309,18 @@ def assign_flights(cards: list[dict], game_cfg: dict, holes_key: str) -> dict:
 # ---------------------------------------------------------------------------
 
 SEED_FLIGHT_CONFIG: dict = {
-    # Kerry: "We flight on raw TGF Handicap Index." TGF keeps a NINE-hole
-    # index natively (`handicap_index`; `handicap_index_18` is just x2), and
-    # the ratified numbers that exist — the 11.9 Net ceiling and the Players
-    # Cup ladder — are on the same scale as each other. Which scale that is
-    # has NOT been confirmed, and getting it wrong is a factor-of-two error
-    # that silently mis-flights everyone, so it is an explicit setting.
-    "index_scale": "9",              # "9" | "18"
+    # KERRY RULING (2026-07-30, relayed via platform-claude mailbox #253):
+    # "Handicap bands for flighting are all based on 18 hole TGF handicaps,
+    # which is simply 2 times the 9 hole handicap."
+    #
+    # The DEFINITION is load-bearing: 18-hole TGF handicap means exactly
+    # 2 x the 9-hole index — a TGF convention, not a WHS derivation. Verified
+    # across the codebase: every 18-hole index is `round(index_9 * 2, 1)`
+    # (get_all_handicap_players, get_customer_scoring_profile, the /api
+    # handicap map). No 18-hole handicap index is derived from course
+    # ratings anywhere, so the divergence risk raised in #253 does not exist
+    # here — but the setting stays explicit so it can never be assumed again.
+    "index_scale": "18",             # "9" | "18"  — RULED: 18
     "min_flight_size": 3,            # UNRATIFIED
     "tie_direction": "even",         # "even" | "up" | "down"
     "modes": {
@@ -323,16 +328,21 @@ SEED_FLIGHT_CONFIG: dict = {
         "individual_gross": "fixed_bands",
         "skins": "fixed_bands",
     },
-    # Upper bounds per flight; the final flight takes everything above.
-    # 2-flight Net is the one directly ratified line (<=11.9 / 12.0+).
+    # Bands are EXCLUSIVE upper bounds, matching the already-ratified Players
+    # Cup ladder living in _POINTS_RACES["players_cup"]["flights"]
+    # (min_inclusive, max_exclusive): <6.0 / 6.0-12.0 / 12.0-18.0 / 18.0+.
+    # Deliberately the same representation rather than a parallel one that
+    # merely agrees at one decimal place — an inclusive-11.9 form and an
+    # exclusive-12.0 form diverge the moment an index carries more precision,
+    # and "12.0 goes UP" is exactly the boundary Kerry ratified.
     "bands": {
-        "2": [11.9],
-        "3": [5.9, 11.9],
-        "4": [5.9, 11.9, 17.9],      # the Players Cup ladder
+        "2": [12.0],                 # ratified: Net low flight is < 12.0
+        "3": [6.0, 12.0],            # UNRATIFIED — inferred from the ladder
+        "4": [6.0, 12.0, 18.0],      # the ratified Players Cup ladder
     },
-    # Individual Net splits near the middle, but never lets the low flight
-    # run past this. Applies to equal_size mode.
-    "low_flight_ceiling": {"individual_net": 11.9},
+    # Individual Net splits near the middle, but the low flight never
+    # reaches this value. Exclusive, so 12.0 itself goes up. equal_size only.
+    "low_flight_ceiling": {"individual_net": 12.0},
 }
 
 
@@ -405,11 +415,11 @@ def flight_plan(players: list[dict], count: int, game: str = "individual_net",
             groups = [[] for _ in edges]
             for p in ranked:
                 for i, hi in enumerate(edges):
-                    if p["index"] <= hi:
+                    if p["index"] < hi:      # EXCLUSIVE — 12.0 goes UP
                         groups[i].append(p)
                         break
-            notes.append("Bands (upper bound per flight, inclusive): "
-                         + " / ".join(f"<={b}" for b in bands) + " / rest.")
+            notes.append("Bands (upper bound per flight, exclusive): "
+                         + " / ".join(f"<{b}" for b in bands) + " / rest.")
     if mode == "equal_size" and count > 1:
         base, rem = divmod(n, count)
         cuts, acc = [], 0
@@ -426,13 +436,14 @@ def flight_plan(players: list[dict], count: int, game: str = "individual_net",
         groups = [ranked[bounds[i]:bounds[i + 1]] for i in range(count)]
         ceiling = (cfg.get("low_flight_ceiling") or {}).get(game)
         if ceiling is not None and groups and groups[0]:
-            over = [p for p in groups[0] if p["index"] > ceiling]
+            over = [p for p in groups[0] if p["index"] >= ceiling]
             if over:
-                groups[0] = [p for p in groups[0] if p["index"] <= ceiling]
+                groups[0] = [p for p in groups[0] if p["index"] < ceiling]
                 groups[1] = over + groups[1]
                 notes.append(
-                    f"Low-flight ceiling {ceiling}: moved {len(over)} player(s) "
-                    f"up so flight 1 never runs past {ceiling}.")
+                    f"Low-flight ceiling {ceiling} (exclusive): moved "
+                    f"{len(over)} player(s) up so flight 1 stays below "
+                    f"{ceiling}.")
 
     # Thin flights merge into their nearest neighbour. This is also where
     # "3 flights down to 2 because the handicaps were concentrated" comes

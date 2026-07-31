@@ -111,12 +111,16 @@ Every threshold is data in `SEED_LIVE_SCORING_CONFIG`. Nothing is hard-coded
 
 ### RATIFIED
 
-1. **Flight on the raw TGF handicap index**, not the playing handicap.
+1. **Flight on the raw TGF handicap index**, not the playing handicap —
+   on the **18-HOLE** scale, which TGF defines as exactly 2 × the 9-hole
+   index (Kerry, 2026-07-30). A convention, not a WHS derivation.
 2. **Two legitimate modes**: equal-size groups (traditional) and fixed bands
    (the recent trend). Ideal is fixed bands that also come out even; real
    fields do not cooperate. Both ship; mode is per game.
 3. **Breaks are floors for the upper flight.** 12.0 goes UP; 11.9 tops the
    flight below. No value is claimed by two flights ("no shared break").
+   Encoded as EXCLUSIVE upper bounds, matching the ratified Players Cup
+   config — an inclusive-11.9 form agrees only at one decimal place.
 4. **Individual Net** splits near the middle, but the low flight **never runs
    past 11.9** — a ceiling on the break, not the break itself.
 5. **Gross bands harder** (a high index has little chance in a low flight) and
@@ -145,9 +149,9 @@ Every threshold is data in `SEED_LIVE_SCORING_CONFIG`. Nothing is hard-coded
 
 | # | Question | Risk if wrong |
 |---|---|---|
-| 1 | **Is the index the 9-hole or 18-hole number?** We store both (`handicap_index`, `handicap_index_18` = ×2). The 11.9 ceiling and the Players Cup ladder are on the same scale as each other, but which one is unconfirmed | **Factor-of-two mis-flight of the entire field, silently** — the output looks perfectly plausible. Exposed as `index_scale`, never assumed |
+| 1 | ~~Index scale~~ — **RULED 2026-07-30** (Kerry via mailbox #253): bands are on the **18-hole TGF handicap = exactly 2 × the 9-hole index**. Verified: every 18-hole index in the codebase is `round(index_9 * 2, 1)`; no rating-derived 18-hole handicap index exists. Corroborated by the pre-existing ratified Players Cup ladder in `_GG_POINTS_RACES`, whose comment says the same | closed |
 | 2 | **Minimum flight size** (default 3) | Degenerate flights; a flight of 1 is a bye with a prize |
-| 3 | **Band ladders at 3 and 4 flights.** Only the 2-flight Net line (≤11.9 / 12.0+) is ratified; the 4-flight ladder is borrowed from the Players Cup, the 3-flight one inferred | Wrong cut lines → wrong winners |
+| 3 | **3-flight ladder only.** The 4-flight ladder is now confirmed ratified — it is the live `_GG_POINTS_RACES` Players Cup config (`<6.0 / 6.0–12.0 / 12.0–18.0 / 18.0+`, min-inclusive/max-exclusive) and the engine shares that exact representation with a drift test. The **3-flight** ladder (`<6.0 / 6.0–12.0 / 12.0+`) is still inferred | Wrong cut lines → wrong winners |
 | 4 | **Uneven bands + equal pot split.** See §5 | Cross-subsidy between flights |
 | 5 | **Late add / WD scenarios.** See §6 | Money and eligibility disputes on the day |
 

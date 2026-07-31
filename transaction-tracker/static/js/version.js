@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.151.4";
+window.TGF_VERSION = "2.151.5";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.151.5",
+    date: "2026-07-30",
+    changes: [
+      "FLIGHTING INDEX SCALE RULED (Kerry via mailbox #253, 2026-07-30): handicap bands for flighting are on the 18-HOLE TGF handicap, defined as exactly 2x the 9-hole index. index_scale now defaults to 18. platform-claude flagged a risk that a rating-derived 18-hole index might not equal 2x the 9-hole one — verified across the codebase and it does not exist: every 18-hole index is literally round(index_9 * 2, 1) at all three producing sites. The concern rested on a conflation worth recording — the 'merged 1-18 index' from #251 is the per-hole STROKE INDEX (hole difficulty ranking used to allocate handicap dots), not a handicap index. No handicap index is derived from course ratings anywhere.",
+      "BANDS NOW SHARE THE ALREADY-RATIFIED REPRESENTATION. Found a live ratified 4-flight ladder in _GG_POINTS_RACES (Players Cup): (min_inclusive, max_exclusive) = <6.0 / 6.0-12.0 / 12.0-18.0 / 18.0+, whose own comment independently confirms the 18-hole scale. So Kerry's ruling was already encoded in one place and simply had not reached the new engine. Switched SEED_FLIGHT_CONFIG bands and the Individual Net low-flight ceiling from an inclusive-11.9 form to that exclusive-12.0 form: the two agree at one decimal place but diverge the moment an index carries more precision, and '12.0 goes UP' is exactly the boundary that was ratified. New tests assert our 4-flight bands equal the live ratified ladder and that every boundary value lands in the same flight under both — so the two can never silently drift apart.",
+    ],
+  },
   {
     version: "2.151.4",
     date: "2026-07-30",

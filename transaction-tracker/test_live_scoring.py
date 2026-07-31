@@ -608,3 +608,66 @@ for trial in range(200):
         break
 else:
     check("flights are ordered by index and never overlap", True)
+
+
+# ---------------------------------------------------------------------------
+print("\n== index scale + the ratified Players Cup ladder ==")
+
+# KERRY RULING (2026-07-30, mailbox #253): "Handicap bands for flighting are
+# all based on 18 hole TGF handicaps, which is simply 2 times the 9 hole
+# handicap."
+check("flighting reads the 18-hole scale by ruling",
+      ls.SEED_FLIGHT_CONFIG["index_scale"] == "18",
+      ls.SEED_FLIGHT_CONFIG["index_scale"])
+
+# The 18-hole TGF handicap is a CONVENTION (2 x the 9-hole), not a WHS
+# derivation from an 18-hole rating. Every producer in the codebase must
+# agree, or flighting silently mis-bands people near a break.
+from email_parser.database import get_all_handicap_players  # noqa: E402
+import inspect  # noqa: E402
+_src = inspect.getsource(get_all_handicap_players)
+check("the 18-hole index is literally 2x the 9-hole index, not rating-derived",
+      "round(index * 2, 1)" in _src, "producer changed — re-verify the ruling")
+
+# Bands must match the ALREADY-RATIFIED Players Cup ladder living in
+# _POINTS_RACES, so the two representations cannot drift apart.
+from email_parser.database import _GG_POINTS_RACES as _POINTS_RACES  # noqa: E402
+pc = next((r for r in _POINTS_RACES.values()
+           if r.get("flights") and len(r["flights"]) == 4), None)
+check("the live ratified 4-flight ladder is still present", pc is not None)
+if pc:
+    ratified = [hi for _, _lo, hi in pc["flights"] if hi is not None]
+    check("our 4-flight bands equal the ratified Players Cup ladder",
+          ls.SEED_FLIGHT_CONFIG["bands"]["4"] == ratified,
+          f"ours={ls.SEED_FLIGHT_CONFIG['bands']['4']} ratified={ratified}")
+    # Same partition, player for player, across the boundary values.
+    probe = [2.0, 5.9, 5.99, 6.0, 11.9, 11.99, 12.0, 17.9, 17.99, 18.0, 30.0]
+    def ratified_flight(idx):
+        for i, (_lbl, lo, hi) in enumerate(pc["flights"]):
+            if (lo is None or idx >= lo) and (hi is None or idx < hi):
+                return str(i + 1)
+        return None
+    plan = fp(probe, 4, game="individual_gross", mode="fixed_bands",
+              min_flight_size=1)
+    ours = {m["index"]: f["flight"] for f in plan["flights"] for m in f["members"]}
+    mismatch = [(v, ours.get(v), ratified_flight(v)) for v in probe
+                if ours.get(v) != ratified_flight(v)]
+    check("every boundary value lands in the same flight as the ratified config",
+          not mismatch, str(mismatch))
+
+# Exclusive upper bounds: 12.0 goes UP, and the inclusive form would not.
+edge = fp([11.9, 11.99, 12.0], 2, mode="fixed_bands", min_flight_size=1)
+check("11.99 stays in the low flight (< 12.0)",
+      11.99 in [m["index"] for m in edge["flights"][0]["members"]],
+      str(edge["flights"][0]["members"]))
+check("12.0 goes UP even though 11.9 tops the flight below",
+      12.0 in [m["index"] for m in edge["flights"][1]["members"]],
+      str(edge["flights"][1]["members"]))
+
+# The Net ceiling is exclusive too — a 12.0 cannot sit in Net flight 1.
+ceil_field = [8.0, 9.0, 10.0, 11.0, 12.0, 13.0, 14.0, 15.0]
+cplan = fp(ceil_field, 2, game="individual_net", mode="equal_size",
+           min_flight_size=1)
+check("the Net low-flight ceiling is exclusive — 12.0 is pushed up",
+      all(m["index"] < 12.0 for m in cplan["flights"][0]["members"]),
+      str([m["index"] for m in cplan["flights"][0]["members"]]))
