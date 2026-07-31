@@ -13944,6 +13944,101 @@ def ls_flight_lab(event_name: str, game: str = "individual_net",
     return out
 
 
+def ls_flight_audit(overrides: dict | None = None, limit: int = 400,
+                    db_path: str | Path = DB_PATH) -> dict:
+    """Grade BOTH flighting modes against GG's own flights, across history.
+
+    CA's method option C step 2 (mailbox #253): rather than specifying the
+    flighting rule from recollection, derive it from what was actually done.
+    Every event where `gg_game_flights` captured a multi-flight game becomes
+    a graded case; the mode that reproduces GG's partition more often is the
+    evidence.
+
+    **Disagreement is a finding, not a failure.** A split result most likely
+    means the rule changed at some point or differed by chapter, so results
+    are reported per event AND aggregated by chapter and by year — never
+    collapsed to a single score that would hide exactly that.
+    """
+    with _connect(db_path) as conn:
+        _ensure_gg_game_flights_tables(conn)
+        rows = [dict(r) for r in conn.execute(
+            """SELECT g.event_id, g.game, e.item_name, e.event_date, e.chapter,
+                      COUNT(DISTINCT g.flight_label) AS n_flights,
+                      COUNT(*) AS n_players
+               FROM gg_game_flights g
+               JOIN events e ON e.id = g.event_id
+               WHERE g.event_id IS NOT NULL
+               GROUP BY g.event_id, g.game
+               HAVING n_flights > 1
+               ORDER BY e.event_date DESC
+               LIMIT ?""", (limit,)).fetchall()]
+
+    out = {"cases": [], "graded": 0, "skipped": 0,
+           "by_mode": {"equal_size": {"match": 0, "differ": 0},
+                       "fixed_bands": {"match": 0, "differ": 0}},
+           "by_chapter": {}, "by_year": {}, "notes": []}
+    if not rows:
+        out["notes"].append(
+            "No multi-flight events found in gg_game_flights. Run the "
+            "scoring-flights-import walker first — without captured GG "
+            "flights there is nothing to grade against.")
+        return out
+
+    for r in rows:
+        lab = ls_flight_lab(r["item_name"], r["game"], overrides, db_path=db_path)
+        if "error" in lab:
+            out["skipped"] += 1
+            continue
+        case = {"event": r["item_name"], "date": r["event_date"],
+                "chapter": r["chapter"], "game": r["game"],
+                "gg_flights": r["n_flights"], "gg_players": r["n_players"],
+                "our_flight_count": lab.get("matrix_flights"),
+                "buyers": lab.get("buyers"), "modes": {}}
+        any_graded = False
+        for mode, plan in (lab.get("modes") or {}).items():
+            v = plan.get("vs_gg")
+            if not v or not v.get("graded"):
+                continue
+            any_graded = True
+            case["modes"][mode] = {"agree": v["agree"], "disagree": v["disagree"],
+                                   "match": v["match"]}
+            bucket = "match" if v["match"] else "differ"
+            out["by_mode"][mode][bucket] = out["by_mode"][mode].get(bucket, 0) + 1
+            ch = r["chapter"] or "?"
+            yr = (r["event_date"] or "?")[:4]
+            for key, grp in (("by_chapter", ch), ("by_year", yr)):
+                out[key].setdefault(grp, {}).setdefault(
+                    mode, {"match": 0, "differ": 0})
+                out[key][grp][mode][bucket] += 1
+        if any_graded:
+            out["graded"] += 1
+            out["cases"].append(case)
+        else:
+            out["skipped"] += 1
+
+    # Say plainly whether the evidence actually separates the two modes.
+    eq, fb = out["by_mode"]["equal_size"], out["by_mode"]["fixed_bands"]
+    if out["graded"] == 0:
+        out["notes"].append("Nothing gradable — every case lacked buyer/index "
+                            "data on our side.")
+    else:
+        out["verdict"] = {
+            "equal_size_match_rate": round(eq["match"] / out["graded"], 3),
+            "fixed_bands_match_rate": round(fb["match"] / out["graded"], 3)}
+        if eq["match"] == fb["match"]:
+            out["notes"].append(
+                "Both modes score identically — this field set does not "
+                "separate them. Not evidence for either.")
+        if max(eq["match"], fb["match"]) < out["graded"] * 0.6:
+            out["notes"].append(
+                "NEITHER mode reproduces GG on most events. Do not tune "
+                "parameters to close this — it more likely means the rule "
+                "changed over time, differed by chapter, or that flight "
+                "COUNT (not the cut lines) is what disagrees. Read the "
+                "per-chapter and per-year splits before concluding.")
+    return out
+
+
 def _ls_course_coverage(state: dict) -> dict:
     """Which holes can actually be SCORED, and which are silently dead.
 

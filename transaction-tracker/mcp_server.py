@@ -1940,6 +1940,38 @@ def _scoring_dispatch(url: str, extract: str):
             # same widget-url contract + time budget as scoring-mvp-import
             _rw = 2 if arg.strip().lower().startswith("rewalk") else 0
             return json.dumps(db.import_gg_game_results(url, rewalk_recent=_rw), indent=2)
+        if cmd == "scoring-flight-lab":
+            # "scoring-flight-lab:<event>|<game>[|min=<n>][|scale=9|18]"
+            # Both flighting modes on one event's real field, graded against
+            # GG's captured flights where they exist. Read-only.
+            ev, _, rest = arg.partition("|")
+            parts = [p.strip() for p in rest.split("|") if p.strip()]
+            game = parts[0] if parts and "=" not in parts[0] else "individual_net"
+            over = {}
+            for p in parts:
+                if p.startswith("min="):
+                    over["min_flight_size"] = int(p[4:])
+                elif p.startswith("scale="):
+                    over["index_scale"] = p[6:]
+                elif p.startswith("tie="):
+                    over["tie_direction"] = p[4:]
+            return json.dumps(db.ls_flight_lab(ev.strip(), game, over),
+                              indent=2, default=str)
+        if cmd == "scoring-flight-audit":
+            # "scoring-flight-audit[:min=<n>][|scale=9|18][|limit=<n>]"
+            # Grades BOTH modes against gg_game_flights across ALL past
+            # multi-flight events — the empirical derivation of the flighting
+            # rule (CA method option C step 2, mailbox #253). Read-only.
+            over, lim = {}, 400
+            for p in [x.strip() for x in arg.split("|") if x.strip()]:
+                if p.startswith("min="):
+                    over["min_flight_size"] = int(p[4:])
+                elif p.startswith("scale="):
+                    over["index_scale"] = p[6:]
+                elif p.startswith("limit="):
+                    lim = int(p[6:])
+            return json.dumps(db.ls_flight_audit(over, limit=lim),
+                              indent=2, default=str)
         if cmd == "scoring-flights-import":
             # Per-game flight membership from each flighted game's own GG
             # leaderboard (Ind Net / Ind Gross via detail fragments; Skins

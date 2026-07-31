@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.151.5";
+window.TGF_VERSION = "2.151.6";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.151.6",
+    date: "2026-07-30",
+    changes: [
+      "FLIGHT AUDIT — ls_flight_audit grades BOTH flighting modes against Golf Genius's own captured flights across ALL past multi-flight events, which is CA method option C step 2 (mailbox #253): derive the flighting rule from what was actually done rather than specifying it from recollection. Results report per event AND aggregated by chapter and by year, deliberately never collapsed to a single score — a split result most likely means the rule changed over time or differed by chapter, and collapsing would hide exactly that. Where neither mode reproduces GG on most events the output says so and explicitly warns against tuning parameters to close the gap, since the disagreement may be in flight COUNT rather than the cut lines. An empty history reports 'nothing to grade' rather than a vacuous clean score.",
+      "New MCP bridges so the analysis is runnable without a browser session: scoring-flight-lab:<event>|<game>[|min=N][|scale=9|18][|tie=...] for one event, and scoring-flight-audit[:min=N|scale=..|limit=N] for the whole history. Both read-only.",
+    ],
+  },
   {
     version: "2.151.5",
     date: "2026-07-30",
