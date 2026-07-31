@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.159.0";
+window.TGF_VERSION = "2.159.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.159.1",
+    date: "2026-07-31",
+    changes: [
+      "PAIRING-CARD COLOURS SETTLED (Kerry 2026-07-31). Members IN the game keep the Player-Rankings green. Members NOT in the game are now plain WHITE — 'no color like in our standings', where a member who hasn't bought in is the ordinary case rather than something to flag; the amber shipped an hour earlier is gone. Non-members reuse the ROSTER's own colours so the two screens read the same: GUEST pink (#fbcfe8), 1ST TIMER orange (#fdba74). Which of those two a non-member gets comes from the order label, but whether they are a non-member at all still comes from the ROSTER — the label can only pick the shade, never the tier.",
+      "The legend follows, with an outlined white swatch for the not-in-the-game tier so the fourth state still reads at a glance.",
+    ],
+  },
   {
     version: "2.159.0",
     date: "2026-07-31",

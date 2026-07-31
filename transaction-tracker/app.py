@@ -4844,7 +4844,7 @@ def api_get_pairings(event_id):
         for r in player_rows:
             d = dict(r)
             d["is_member"] = bool(_isM(d.pop("current_player_status", None),
-                                       d.pop("user_status", None)))
+                                       d.get("user_status")))
             event_players.append(d)
         # Match Play matches still pending among this roster — lets the
         # PAIRINGS tab badge opponents on SAVED pairings too (rule 8's

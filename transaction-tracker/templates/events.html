@@ -285,10 +285,12 @@
            gives feedback on a coloured row. */
         .pairing-player-row.pair-band-in { background: #bbf7d0; }
         .pairing-player-row.pair-band-in:hover { background: #a7efc0; }
-        .pairing-player-row.pair-band-notin { background: #fef3c7; }
-        .pairing-player-row.pair-band-notin:hover { background: #fde9a9; }
-        .pairing-player-row.pair-band-guest { background: #e5e7eb; }
-        .pairing-player-row.pair-band-guest:hover { background: #d7dade; }
+        /* pair-band-notin is deliberately WHITE (Kerry 2026-07-31) — a
+           member who hasn't bought in is the ordinary case, not a flag. */
+        .pairing-player-row.pair-band-guest { background: #fbcfe8; }
+        .pairing-player-row.pair-band-guest:hover { background: #f8bce0; }
+        .pairing-player-row.pair-band-firsttimer { background: #fdba74; }
+        .pairing-player-row.pair-band-firsttimer:hover { background: #fcab5b; }
         .pairing-player-row.pairings-selected { background: rgba(99,102,241,0.12); }
         .pairing-cart-dot {
             width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0;
@@ -4463,10 +4465,15 @@
     // in/out convention (Kerry 2026-07-31). Membership comes from the
     // ROSTER, never the order label; "in" means bought into the race
     // being paired off, which is what puts a player on the board.
+    // Kerry 2026-07-31, final palette: members IN the game keep the
+    // Player-Rankings green; members NOT in the game are plain white; and
+    // non-members reuse the ROSTER's own colours so the two screens read
+    // the same — GUEST pink, 1ST TIMER orange.
     const PAIR_BANDS = {
-        in:     {bg: '#bbf7d0', label: 'In the race',   dot: '#15803d'},
-        notin:  {bg: '#fef3c7', label: 'Member, not in', dot: '#b45309'},
-        guest:  {bg: '#e5e7eb', label: 'Non-member',    dot: '#4b5563'},
+        in:        {bg: '#bbf7d0', dot: '#15803d', label: 'In the race'},
+        notin:     {bg: '',        dot: '#cbd5e1', label: 'Member, not in'},
+        guest:     {bg: '#fbcfe8', dot: '#9d174d', label: 'Guest'},
+        firsttimer:{bg: '#fdba74', dot: '#9a3412', label: '1st Timer'},
     };
 
     function standingsBand(state, name) {
@@ -4478,7 +4485,12 @@
         // _ls_is_member fallback — never badge someone a non-member on
         // missing data.
         const isMember = p ? p.is_member !== false : true;
-        if (!isMember) return 'guest';
+        if (!isMember) {
+            // The roster LABEL only picks WHICH non-member colour; the
+            // roster decided that they ARE one (Kerry 2026-07-30).
+            const u = String((p && p.user_status) || '').trim().toUpperCase();
+            return (u.includes('1ST') || u.includes('FIRST')) ? 'firsttimer' : 'guest';
+        }
         return (state.standingsEnrolled && state.standingsEnrolled[k]) ? 'in' : 'notin';
     }
 
@@ -4920,12 +4932,13 @@
 
         if (showBands) {
             const legend = [
-                ['in', `Bought into ${raceLabel}`],
-                ['notin', `Member, not bought in`],
-                ['guest', 'Non-member'],
+                ['in', `In ${raceLabel}`],
+                ['notin', 'Member, not in'],
+                ['guest', 'Guest'],
+                ['firsttimer', '1st Timer'],
             ].map(([k, txt]) =>
                 `<span style="display:inline-flex;align-items:center;gap:0.3rem;">
-                    <span style="width:11px;height:11px;border-radius:3px;background:${PAIR_BANDS[k].bg};border:1px solid ${PAIR_BANDS[k].dot};"></span>
+                    <span style="width:11px;height:11px;border-radius:3px;background:${PAIR_BANDS[k].bg || '#fff'};border:1px solid ${PAIR_BANDS[k].dot};"></span>
                     ${escapeHtml(txt)}</span>`).join('');
             html += `<div style="display:flex;gap:0.9rem;flex-wrap:wrap;align-items:center;font-size:0.72rem;color:var(--text-muted);padding:0.15rem 0 0.35rem;">${legend}</div>`;
         }
@@ -4979,10 +4992,10 @@
                     if (b) {
                         bandCls = ` pair-band-${b}`;
                         bandTitle = b === 'in'
-                            ? `Bought into ${raceLabel}`
+                            ? `In ${raceLabel}`
                             : (b === 'notin'
-                                ? `Member, but NOT bought into ${raceLabel}`
-                                : 'Non-member');
+                                ? `Member, not in ${raceLabel}`
+                                : (b === 'firsttimer' ? '1st Timer' : 'Guest'));
                     }
                 }
                 html += `<div class="pairing-player-row${bandCls}${isSelectedPlayer || isSelectedPair ? ' pairings-selected' : ''}"
