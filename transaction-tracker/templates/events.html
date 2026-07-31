@@ -287,8 +287,15 @@
         .pairing-player-row.pair-band-in:hover { background: #a7efc0; }
         /* pair-band-notin is deliberately WHITE (Kerry 2026-07-31) — a
            member who hasn't bought in is the ordinary case, not a flag. */
-        .pairing-player-row.pair-band-alumni { background: #fdf3e7; }
-        .pairing-player-row.pair-band-alumni:hover { background: #f8e7d2; }
+        /* ALUMNI: indigo. The Player-Rankings REJOIN cream (#fdf3e7) is
+           nearly white against the card and Kerry couldn't pick it out
+           (2026-07-31), and a pale violet sat too close to the guest
+           pink. Indigo-300 carries the same visual weight as the 1st
+           timer orange and is the furthest of any candidate from every
+           other band — 83+ RGB separation from its nearest neighbour,
+           8.6:1 text contrast. */
+        .pairing-player-row.pair-band-alumni { background: #a5b4fc; }
+        .pairing-player-row.pair-band-alumni:hover { background: #93a2f5; }
         .pairing-player-row.pair-band-guest { background: #fbcfe8; }
         .pairing-player-row.pair-band-guest:hover { background: #f8bce0; }
         .pairing-player-row.pair-band-firsttimer { background: #fdba74; }
@@ -4507,7 +4514,7 @@
     const PAIR_BANDS = {
         in:        {bg: '#bbf7d0', dot: '#15803d', label: 'IN'},
         notin:     {bg: '',        dot: '#cbd5e1', label: 'MEMBER, NOT IN'},
-        alumni:    {bg: '#fdf3e7', dot: '#b45309', label: 'ALUMNI'},
+        alumni:    {bg: '#a5b4fc', dot: '#3730a3', label: 'ALUMNI'},
         guest:     {bg: '#fbcfe8', dot: '#9d174d', label: 'GUEST'},
         firsttimer:{bg: '#fdba74', dot: '#9a3412', label: '1ST TIMER'},
     };

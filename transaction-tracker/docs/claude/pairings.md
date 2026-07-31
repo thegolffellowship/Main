@@ -631,8 +631,9 @@ The Quarry-night rulings, all built:
      =True)` returns `{"points": {...}, "enrolled": {...}}` keyed by
      customer_id AND name forms. The pairing card shades each row GREEN
      (member, in the race), WHITE (member, not in — "no color like in
-     our standings"), CREAM `#fdf3e7` (ALUMNI — the REJOIN colour Player
-     Rankings uses), or the ROSTER's own non-member colours, GUEST pink
+     our standings"), INDIGO `#a5b4fc` (ALUMNI — Player Rankings' REJOIN cream
+     reads as white across a whole row; indigo is the furthest hue from
+     every other band, Kerry 2026-07-31), or the ROSTER's own non-member colours, GUEST pink
      `#fbcfe8` / 1ST TIMER orange `#fdba74`, so the pairing card and the
      roster read the same (palette RULED Kerry 2026-07-31). The order
      label picks WHICH non-member shade; it never decides the tier. The

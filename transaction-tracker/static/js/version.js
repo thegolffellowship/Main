@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.160.1";
+window.TGF_VERSION = "2.160.2";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.160.2",
+    date: "2026-07-31",
+    changes: [
+      "ALUMNI IS NOW INDIGO (Kerry 2026-07-31: 'that one is hard to see'). The Player-Rankings REJOIN cream reads as nearly white against a pairing card, which is fine for a small pill but not for a whole row. Checked the candidates against the four fixed bands rather than eyeballing it: a pale violet turned out to sit closer to the guest pink than the cream did to white, so it went too. Indigo-300 (#a5b4fc) won — it carries the same visual weight as the 1st-timer orange, clears 83 RGB separation from its nearest neighbour where the cream cleared 38, and still holds 8.6:1 text contrast. Every pair of bands is now clearly distinguishable except white-vs-guest-pink, which is the ratified roster colour and stays as it is.",
+    ],
+  },
   {
     version: "2.160.1",
     date: "2026-07-31",
