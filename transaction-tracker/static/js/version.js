@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.161.1";
+window.TGF_VERSION = "2.162.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.162.0",
+    date: "2026-07-31",
+    changes: [
+      "SEATS CLOSE UP AFTER A MOVE, WITHOUT BREAKING A CART (Kerry 2026-07-31). Pull a player out of seat 1 or 2 while seats 3 and 4 are both filled and that bottom pair now promotes to the top cart together, with the leftover single dropping to seat 3 — so the open spot always ends up at the BOTTOM of the card instead of leaving a hole at the top. It runs the moment a drag is committed, and on click-to-Move too.",
+      "The rule is deliberately not a naive shift-everyone-up. Carts ARE seats 1&2 and 3&4, so sliding each player up one would split the surviving pair and marry two people who were never cart partners — and rode-with history is derived from exactly those seat numbers, so that would be wrong in the saved data, not just on screen. Instead INTACT carts claim the cart slots in order and the leftovers fill what remains, top down. Verified across every shape: pull from 1, from 2, from either bottom seat, fivesomes, already-compact groups (untouched), and the case where both carts are already broken.",
+      "ALUMNI grey lightened to #aab0bb — same slate family, just softer (Kerry: 'Lighter grey for the alumni. I like the type of gray though'). It is the lightest step in that family that still clears 70 RGB separation from every other band; anything lighter starts closing on the in-the-race green.",
+    ],
+  },
   {
     version: "2.161.1",
     date: "2026-07-31",

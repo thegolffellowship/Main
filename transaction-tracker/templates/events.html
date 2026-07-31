@@ -296,8 +296,8 @@
            were both too faint). Every pair of bands clears 76 RGB
            separation and every band holds 6.8:1+ text contrast against
            #1B1B1B, so the badges and numbers stay readable on all five. */
-        .pairing-player-row.pair-band-alumni { background: #9ca3af; }
-        .pairing-player-row.pair-band-alumni:hover { background: #8b929e; }
+        .pairing-player-row.pair-band-alumni { background: #aab0bb; }
+        .pairing-player-row.pair-band-alumni:hover { background: #9ba1ad; }
         .pairing-player-row.pair-band-guest { background: #fedcba; }
         .pairing-player-row.pair-band-guest:hover { background: #fdcfa4; }
         .pairing-player-row.pair-band-firsttimer { background: #fdba74; }
@@ -4556,7 +4556,7 @@
     const PAIR_BANDS = {
         in:        {bg: '#bbf7d0', dot: '#15803d', label: 'IN'},
         notin:     {bg: '',        dot: '#cbd5e1', label: 'MEMBER, NOT IN'},
-        alumni:    {bg: '#9ca3af', dot: '#374151', label: 'ALUMNI'},
+        alumni:    {bg: '#aab0bb', dot: '#374151', label: 'ALUMNI'},
         guest:     {bg: '#fedcba', dot: '#9a3412', label: 'GUEST'},
         firsttimer:{bg: '#fdba74', dot: '#9a3412', label: '1ST TIMER'},
     };
@@ -7939,21 +7939,21 @@
             }
         }
         let player;
+        let srcGroup = null;
         if (src.unassigned) {
             const unassigned = getUnassigned(state);
-            player = unassigned.find(p => p.name === src.name);
-            if (!player) return;
-            // Unassigned players don't live in a real group; just add to dest.
-            // We reconstruct a minimal player object.
-            player = { name: player.name, tee_choice: player.tee_choice || null, handicap_index: player.handicap_index ?? null };
+            const found = unassigned.find(p => p.name === src.name);
+            if (!found) return;
+            // Unassigned players don't live in a real group; just add to
+            // dest. We reconstruct a minimal player object.
+            player = { name: found.name, tee_choice: found.tee_choice || null,
+                       handicap_index: found.handicap_index ?? null };
         } else {
-            const srcGroup = _findGroup(state, src.holes, src.group_num);
+            srcGroup = _findGroup(state, src.holes, src.group_num);
             if (!srcGroup) return;
             const idx = srcGroup.players.findIndex(p => p.cart_pos === src.cart_pos);
             if (idx === -1) return;
             [player] = srcGroup.players.splice(idx, 1);
-            // Do NOT renumber the source group: open seats are first-class
-            // targets now, so remaining players keep their cart positions.
         }
         // Land in the requested seat if it's free, otherwise the lowest
         // open seat. (The old `length + 1` collided with sparse positions,
@@ -7970,6 +7970,38 @@
         player.cart_pos = seat;
         destGroup.players.push(player);
         destGroup.players.sort((a, b) => a.cart_pos - b.cart_pos);
+        // Close the hole the move left behind (Kerry 2026-07-31).
+        _compactGroupSeats(srcGroup);
+        _compactGroupSeats(destGroup);
+    }
+
+    // Pull a group's seats up so the open spots sit at the BOTTOM, WITHOUT
+    // breaking a cart that the generator already paired (Kerry 2026-07-31:
+    // "when we move a player from a 1 or 2 spot, and there's already
+    // players in both 3 and 4 spots, automatically move them to the top
+    // cart, and single to the 3 spot").
+    //
+    // Carts are seats 1&2 and 3&4, so a naive shift-everyone-up would
+    // split the surviving pair and marry two players who were never cart
+    // partners — and rode-with history is derived from exactly those seat
+    // numbers, so it would be wrong in the data too, not just on screen.
+    // Instead: INTACT carts take the cart slots in order, then the
+    // leftovers fill the remaining seats top-down.
+    function _compactGroupSeats(group) {
+        if (!group || !Array.isArray(group.players) || !group.players.length) return;
+        const bySeat = {};
+        group.players.forEach(p => { bySeat[Number(p.cart_pos) || 0] = p; });
+        const carts = [[bySeat[1], bySeat[2]], [bySeat[3], bySeat[4]]];
+        const order = [];
+        const singles = [];
+        carts.forEach(c => {
+            if (c[0] && c[1]) order.push(c[0], c[1]);      // intact cart
+            else { if (c[0]) singles.push(c[0]); if (c[1]) singles.push(c[1]); }
+        });
+        if (bySeat[5]) singles.push(bySeat[5]);            // the odd rider
+        singles.forEach(p => order.push(p));
+        order.forEach((p, i) => { p.cart_pos = i + 1; });
+        group.players = order;
     }
 
     function _swapPlayers(state, a, b) {

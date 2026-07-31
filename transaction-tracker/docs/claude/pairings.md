@@ -619,6 +619,16 @@ The Quarry-night rulings, all built:
      `max_age_hours` so opening the panel never triggers a GG fetch) so
      a SAVED sheet shows points as well. The 3-tuple return is unchanged
      for every existing caller.
+   - **Seat compaction after a move (v2.162.0).** `_compactGroupSeats`
+     runs on BOTH the source and destination group after every move, so
+     open spots settle at the BOTTOM of the card. It is NOT a shift-up:
+     carts are seats 1&2 / 3&4 and `save_event_pairings` derives
+     rode-with from exactly those numbers, so sliding everyone up one
+     would split a surviving pair and record two non-partners as having
+     ridden together. Rule: INTACT carts take the cart slots in order,
+     then singles fill what remains top-down. Kerry's case — pull seat 1
+     with 3&4 full → the 3&4 pair promotes to 1&2, the leftover goes to
+     seat 3.
    - **Drag-and-drop + the 5th (v2.161.0).** Player rows are
      `draggable`; every other group card shows a `.pairing-drop-rail`
      naming the outcome ("+ DROP HERE (3 of 4)" / "+ ADD AS 5TH —
