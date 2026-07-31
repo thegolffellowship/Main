@@ -619,6 +619,18 @@ The Quarry-night rulings, all built:
      `max_age_hours` so opening the panel never triggers a GG fetch) so
      a SAVED sheet shows points as well. The 3-tuple return is unchanged
      for every existing caller.
+   - **Undo / redo (v2.164.0).** `state.hist` is a stack of
+     `{groups_9, groups_18}` JSON snapshots with `histIdx` as the cursor
+     and `savedIdx` marking the position last persisted;
+     `commitPairHistory` runs wherever `isDirty` is set (drag-drop,
+     click-Move, all three swaps, slot relabel, Generate),
+     `seedPairHistory` on load and on Clear. 40 steps; a new edit after an
+     undo truncates the redo branch. Buttons head the action row;
+     Ctrl/Cmd+Z / +Shift+Z bound once at module level and ignored while
+     typing or when more than one pairings panel is open. Groups ONLY —
+     mode, race and the requests panel are deliberately out of scope.
+     This exists because seat compaction makes a drag non-reversible by
+     hand (Kerry: "I can't simply drag him back to his one spot").
    - **Seat compaction after a move (v2.162.0).** `_compactGroupSeats`
      runs on BOTH the source and destination group after every move, so
      open spots settle at the BOTTOM of the card. It is NOT a shift-up:

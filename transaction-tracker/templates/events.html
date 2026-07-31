@@ -4429,6 +4429,10 @@
                 slots_9: [], slots_18: [],
                 isDirty: false, loaded: false,
                 mode: 'random', protectPartners: true,
+                // Undo/redo of GROUP edits (Kerry 2026-07-31). Snapshots of
+                // {groups_9, groups_18} with a cursor; `hist[histIdx]` is
+                // always what is on screen.
+                hist: [], histIdx: -1, savedIdx: 0,
                 // Group size the GENERATOR builds to. A manager can still
                 // hand-add a 5th past it (Kerry 2026-07-31).
                 maxGroupSize: 4,
@@ -4568,6 +4572,75 @@
         guest:     {bg: '#fedcba', dot: '#9a3412', label: 'GUEST'},
         firsttimer:{bg: '#fdba74', dot: '#9a3412', label: '1ST TIMER'},
     };
+
+    // ── Pairings undo / redo (Kerry 2026-07-31) ──────────────────────
+    // "I dragged and dropped Jay, and 9:00a adjusted, so I can't simply
+    // drag him back to his one spot." Seat compaction makes a move
+    // genuinely irreversible by hand — the fix is a real undo, not a
+    // cleverer drag. Snapshots cover the GROUPS only (who is in which
+    // group, in which seat, under which slot label); they deliberately
+    // do NOT capture mode, race, or the request panel, none of which a
+    // manager would expect Undo to rewind.
+    const PAIR_HIST_MAX = 40;
+
+    function _pairSnapshot(state) {
+        return JSON.stringify({
+            g9: state.groups_9 || [], g18: state.groups_18 || [],
+        });
+    }
+
+    function _pairRestore(state, snap) {
+        const o = JSON.parse(snap);
+        state.groups_9 = o.g9 || [];
+        state.groups_18 = o.g18 || [];
+        state.swapMode = null;
+        state.selection = null;
+    }
+
+    // Called once whenever a fresh set of groups arrives (load, generate,
+    // clear) so the stack starts from what is actually on screen.
+    function seedPairHistory(state) {
+        state.hist = [_pairSnapshot(state)];
+        state.histIdx = 0;
+        state.savedIdx = 0;      // position 0 IS what the server holds
+    }
+
+    // Called AFTER a mutation: record the new state as the current one and
+    // drop any redo branch, which is what every editor does when you
+    // change course after undoing.
+    function commitPairHistory(state) {
+        if (!Array.isArray(state.hist) || state.histIdx < 0) {
+            seedPairHistory(state);
+            return;
+        }
+        state.hist = state.hist.slice(0, state.histIdx + 1);
+        state.hist.push(_pairSnapshot(state));
+        if (state.hist.length > PAIR_HIST_MAX) state.hist.shift();
+        state.histIdx = state.hist.length - 1;
+    }
+
+    function canUndoPairings(state) { return (state.histIdx || 0) > 0; }
+    function canRedoPairings(state) {
+        return Array.isArray(state.hist) && state.histIdx < state.hist.length - 1;
+    }
+
+    function undoPairings(state) {
+        if (!canUndoPairings(state)) return false;
+        state.histIdx -= 1;
+        _pairRestore(state, state.hist[state.histIdx]);
+        // Undoing all the way back to the saved position is NOT an unsaved
+        // change — it is the saved sheet again.
+        state.isDirty = state.histIdx !== state.savedIdx;
+        return true;
+    }
+
+    function redoPairings(state) {
+        if (!canRedoPairings(state)) return false;
+        state.histIdx += 1;
+        _pairRestore(state, state.hist[state.histIdx]);
+        state.isDirty = state.histIdx !== state.savedIdx;
+        return true;
+    }
 
     function rosterEntry(state, name) {
         if (!name) return null;
@@ -4741,6 +4814,15 @@
         // (Kerry 2026-07-31: "GENERATE button not available when Requests
         // is open"). A nested group wraps as a unit and stays together.
         html += '<div class="pairings-actions">';
+        if (state.groups_9.length || state.groups_18.length || canUndoPairings(state)) {
+            const uOK = canUndoPairings(state), rOK = canRedoPairings(state);
+            html += `<button class="pairings-action-btn" data-ev-id="${ev.id}" data-pairings-action="undo"`
+                + `${uOK ? '' : ' disabled'} title="Undo the last pairing change (Ctrl/Cmd+Z)"`
+                + `${uOK ? '' : ' style="opacity:0.4;cursor:default;"'}>&#x21B6; Undo</button>`;
+            html += `<button class="pairings-action-btn" data-ev-id="${ev.id}" data-pairings-action="redo"`
+                + `${rOK ? '' : ' disabled'} title="Redo (Ctrl/Cmd+Shift+Z)"`
+                + `${rOK ? '' : ' style="opacity:0.4;cursor:default;"'}>&#x21B7; Redo</button>`;
+        }
         html += `<button class="pairings-action-btn generate-btn" data-ev-id="${ev.id}" data-pairings-action="generate">&#x21BB; Generate</button>`;
         if (state.groups_9.length || state.groups_18.length) {
             html += `<button class="pairings-action-btn clear-btn" data-ev-id="${ev.id}" data-pairings-action="clear" style="color:var(--red);">&#x2715; Clear</button>`;
@@ -5199,6 +5281,7 @@
             state.standingsEnrolled = data.standings_enrolled || {};
             state.isDirty = false;
             state.loaded = true;
+            seedPairHistory(state);   // undo starts from what was saved
         } catch (e) {
             const state = getPairingsState(evId);
             state.loaded = true;
@@ -7289,6 +7372,7 @@
             state.isDirty = true;
             state.swapMode = null; state.selection = null;
             state.loaded = true;
+            commitPairHistory(state);
         } catch (err) {
             alert('Failed to generate pairings.');
         }
@@ -7296,7 +7380,45 @@
     }
 
     // ── Pairings interaction handlers ─────────────────────────────────────────
+    // Ctrl/Cmd+Z and Ctrl/Cmd+Shift+Z on the OPEN pairings panel. Bound
+    // once at module level, not per render, so re-rendering can't stack
+    // duplicate listeners. Ignored while typing so it never eats an undo
+    // the browser owes a text field (Kerry 2026-07-31).
+    let _pairKeysBound = false;
+
+    function bindPairingKeys() {
+        if (_pairKeysBound) return;
+        _pairKeysBound = true;
+        document.addEventListener('keydown', e => {
+            if (!(e.metaKey || e.ctrlKey) || e.altKey) return;
+            if (String(e.key).toLowerCase() !== 'z') return;
+            const t = e.target;
+            const tag = t && t.tagName ? t.tagName.toUpperCase() : '';
+            if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT'
+                || (t && t.isContentEditable)) return;
+            // Only the ONE event whose pairings panel is open.
+            const openIds = Object.keys(pairingsOpenForEvent || {})
+                .filter(id => pairingsOpenForEvent[id]);
+            if (openIds.length !== 1) return;
+            const evId = openIds[0];
+            const st = pairingsData[evId];
+            if (!st) return;
+            const moved = e.shiftKey ? redoPairings(st) : undoPairings(st);
+            if (!moved) return;
+            e.preventDefault();
+            // Re-render through the normal path so every handler rebinds.
+            if (typeof window._tgfRerenderPairings === 'function') {
+                window._tgfRerenderPairings(evId);
+            }
+        });
+    }
+
     function attachPairingsHandlers(container, ev) {
+        // Let the keyboard path re-render this exact panel.
+        window._tgfRerenderPairings = (evId) => {
+            if (String(evId) === String(ev.id)) rerenderDetail(container, ev);
+        };
+        bindPairingKeys();
         const state = getPairingsState(ev.id);
 
         // Match Play confirm/decline checkboxes (rule 8 panel)
@@ -7435,6 +7557,12 @@
                     return;
                 }
 
+                if (action === 'undo' || action === 'redo') {
+                    const moved = action === 'undo' ? undoPairings(state) : redoPairings(state);
+                    if (moved) rerenderDetail(container, ev);
+                    return;
+                }
+
                 if (action === 'clear') {
                     if (!confirm('Clear all pairings for this event?')) return;
                     try {
@@ -7442,6 +7570,10 @@
                     } catch(e) { /* ignore */ }
                     state.groups_9 = []; state.groups_18 = [];
                     state.isDirty = false; state.swapMode = null; state.selection = null;
+                    // Clear wipes the server copy too, so there is nothing
+                    // to undo BACK to — start the stack over rather than
+                    // offering an undo that couldn't be saved.
+                    seedPairHistory(state);
                     rerenderDetail(container, ev);
                     return;
                 }
@@ -7461,6 +7593,7 @@
                         });
                         if (!res.ok) { const d = await res.json(); alert(d.error || 'Save failed'); return; }
                         state.isDirty = false;
+                        state.savedIdx = state.histIdx;   // this is now the saved sheet
                     } catch(err) {
                         alert('Failed to save pairings.');
                     }
@@ -7756,6 +7889,7 @@
                 }
                 _movePlayer(state, src, h, gn, null, {allowFifth: true});
                 state.isDirty = true;
+                commitPairHistory(state);
                 rerenderDetail(container, ev);
             });
         });
@@ -7768,7 +7902,7 @@
                     if (!state.selection) return; // nothing selected; player row click will handle selection
                     e.stopPropagation();
                     _movePlayer(state, state.selection, holes, groupNum);
-                    state.isDirty = true; state.selection = null;
+                    state.isDirty = true; state.selection = null; commitPairHistory(state); commitPairHistory(state);
                     rerenderDetail(container, ev);
                     return;
                 }
@@ -7785,7 +7919,7 @@
                         return;
                     }
                     _swapGroups(state, state.selection.holes, state.selection.group_num, holes, groupNum);
-                    state.isDirty = true; state.selection = null;
+                    state.isDirty = true; state.selection = null; commitPairHistory(state); commitPairHistory(state);
                     rerenderDetail(container, ev);
                 }
             });
@@ -7811,7 +7945,7 @@
                     } else {
                         // Drop into the group this player belongs to
                         _movePlayer(state, state.selection, holes, groupNum);
-                        state.isDirty = true; state.selection = null;
+                        state.isDirty = true; state.selection = null; commitPairHistory(state); commitPairHistory(state); commitPairHistory(state);
                         rerenderDetail(container, ev);
                     }
                     return;
@@ -7831,7 +7965,7 @@
                     } else if (state.swapMode === 'cartpair') {
                         _swapCartPairs(state, state.selection, {holes, group_num: groupNum, cart_pos: cartPos});
                     }
-                    state.isDirty = true; state.selection = null;
+                    state.isDirty = true; state.selection = null; commitPairHistory(state); commitPairHistory(state);
                     rerenderDetail(container, ev);
                 }
             });
@@ -7874,7 +8008,7 @@
                     }
                     _movePlayer(state, state.selection, holes, groupNum, cartPos);
                 }
-                state.isDirty = true; state.selection = null;
+                state.isDirty = true; state.selection = null; commitPairHistory(state);
                 rerenderDetail(container, ev);
             });
         });
@@ -7895,6 +8029,7 @@
                 if (!label || label === cur) return;
                 grp.slot_label = label;
                 state.isDirty = true;
+                commitPairHistory(state);
                 rerenderDetail(container, ev);
             });
         });

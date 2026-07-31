@@ -1,5 +1,15 @@
-window.TGF_VERSION = "2.163.0";
+window.TGF_VERSION = "2.164.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.164.0",
+    date: "2026-07-31",
+    changes: [
+      "UNDO / REDO ON THE PAIRINGS SHEET (Kerry 2026-07-31: 'I dragged and dropped Jay, and 9:00a adjusted, so I can\'t simply drag him back to his one spot. I\'d have to rearrange with the swapping tools.'). Seat compaction is what made a move genuinely irreversible by hand — dragging a player out reshuffles the group behind them, so dragging them back does not restore the original seats. The honest fix is a real undo rather than a cleverer drag. Undo and Redo buttons sit at the head of the action row, greyed when there is nothing to step to, and Ctrl/Cmd+Z and Ctrl/Cmd+Shift+Z do the same.",
+      "Every group edit is a step: drag-and-drop, click-to-Move, player / cart-pair / group swaps, a hole-label change, and Generate itself — so you can undo your way back out of a regenerate you didn't want. Forty steps are kept. Making a fresh change after undoing drops the redo branch, the way any editor behaves.",
+      "Snapshots cover the GROUPS only — who is in which group, in which seat, under which slot label. Undo deliberately does not rewind the pairing mode, the race selection, or the requests panel; none of those are things a manager would expect Undo to touch.",
+      "Undo also tracks WHICH position is the saved one, so stepping back to the sheet you last saved reports Saved again instead of a phantom unsaved change. Clear starts the stack over, since it wipes the server copy and there is nothing left to undo back to.",
+    ],
+  },
   {
     version: "2.163.0",
     date: "2026-07-31",
