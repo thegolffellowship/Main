@@ -1,5 +1,15 @@
-window.TGF_VERSION = "2.152.1";
+window.TGF_VERSION = "2.152.2";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.152.2",
+    date: "2026-07-30",
+    changes: [
+      "CLICK THE HCP DASH TO SET A STARTING HANDICAP (Kerry 2026-07-30). On the event roster a player with no handicap on record now shows the '—' as an orange dashed button; clicking it stamps a starting (placeholder) handicap on the 18-hole scale. Offered ONLY where there is no handicap — a computed index is never editable there, because it is derived from rounds and must not be typed over. A registration with no customer_id shows a plain dash with a tooltip explaining there is nowhere to store it.",
+      "PLACEHOLDERS ARE NOW VISUALLY DISTINCT. /api/handicaps/index-map carries handicap_source and round count, and the roster renders a placeholder in orange with a 'P' marker and a tooltip reading 'STARTING handicap — placeholder, no rounds on record yet'. Golf Genius silently places unhandicapped players into a flight regardless; showing a stand-in identically to an established index would be the same mistake in our own UI.",
+      "MANAGERS CAN NOW PUT MONEY BACK AT EVENTS (Kerry 2026-07-30). Robert could not credit Carlos Zapata when he dropped out of side games he had already bought into: /api/items/<id>/credit was already manager-level, but the SAME credit modal's Refund and Partial Refund buttons were admin-only, so the flow 403'd halfway through. refund / partial-refund / payout-credit / refund-watch are now manager, matching credit and wd. View-only and member remain blocked. NOT chapter-scoped — any manager can act on any event; chapter managers already carry session['chapter'] so scoping is a flagged follow-up rather than a silent assumption.",
+      "acquisition_source is no longer touched when recording a referral (Kerry: godaddy and referral are not alternatives — they answer different questions and a transaction can be both). Who referred a player lives in referred_by_customer_id and nowhere else.",
+    ],
+  },
   {
     version: "2.152.1",
     date: "2026-07-30",

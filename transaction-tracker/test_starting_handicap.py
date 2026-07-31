@@ -181,11 +181,23 @@ check("an unknown referrer is rejected",
       "error" in db.set_referred_by(1, 4242, db_path=DB))
 
 conn = sqlite3.connect(DB)
+conn.execute("UPDATE customers SET acquisition_source = 'godaddy'"
+             " WHERE customer_id = 1")
+conn.commit()
 src = conn.execute("SELECT acquisition_source, referred_at FROM customers"
                    " WHERE customer_id = 1").fetchone()
 conn.close()
-check("acquisition_source is stamped when it was blank", src[0] == "referral", str(src))
-check("...and the referral is timestamped", bool(src[1]))
+# Kerry 2026-07-30: godaddy and referral are not alternatives — they answer
+# different questions and a transaction can be both. The channel someone
+# came through and the person who brought them are independent facts.
+db.set_referred_by(1, 3, db_path=DB)
+conn = sqlite3.connect(DB)
+after = conn.execute("SELECT acquisition_source, referred_at FROM customers"
+                     " WHERE customer_id = 1").fetchone()
+conn.close()
+check("acquisition_source is NOT overwritten by a referral",
+      after[0] == "godaddy", str(after))
+check("...and the referral is timestamped independently", bool(after[1]))
 
 # A relationship must never mint a liability.
 conn = sqlite3.connect(DB)

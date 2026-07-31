@@ -5698,13 +5698,43 @@
                     // 9-only or mixed events show 9-hole net; 18-only events show 18-hole.
                     const liveHcp = r.customer ? handicapIndexMap[(r.customer || "").toLowerCase()] : undefined;
                     if (liveHcp !== undefined) {
+                        // A PLACEHOLDER must never read like an established
+                        // index. Golf Genius flights unhandicapped players
+                        // silently; showing a stand-in identically would be
+                        // the same mistake in our own UI.
+                        const isPlaceholder = liveHcp.source === "starting";
+                        const ph = isPlaceholder
+                            ? ' style="font-weight:700;color:#c2410c;" title="STARTING handicap — placeholder, no rounds on record yet"'
+                            : ' style="font-weight:600;"';
+                        const phMark = isPlaceholder
+                            ? '<span style="font-size:0.68em;color:#c2410c;margin-left:2px;font-weight:700;" title="Placeholder — not an established TGF Handicap">P</span>'
+                            : '';
                         if (showHcp18Only) {
-                            html += `<td style="${style}"><span style="font-weight:600;">${liveHcp.index_18.toFixed(1)}</span></td>`;
+                            html += `<td style="${style}"><span${ph}>${liveHcp.index_18.toFixed(1)}</span>${phMark}</td>`;
                         } else {
-                            html += `<td style="${style}"><span style="font-weight:600;">${liveHcp.index_9.toFixed(1)}</span><span style="font-size:0.72em;color:#94a3b8;margin-left:2px;font-weight:500;">N</span></td>`;
+                            html += `<td style="${style}"><span${ph}>${liveHcp.index_9.toFixed(1)}</span><span style="font-size:0.72em;color:#94a3b8;margin-left:2px;font-weight:500;">N</span>${phMark}</td>`;
                         }
+                    } else if (r.handicap) {
+                        html += `<td style="${style}">${escapeHtml(r.handicap)}</td>`;
                     } else {
-                        html += `<td style="${style}">${escapeHtml(r.handicap || "\u2014")}</td>`;
+                        // NO HANDICAP ON RECORD. Click the dash to stamp a
+                        // STARTING handicap (Kerry 2026-07-30). Only offered
+                        // where there is none — a player with an index is
+                        // never editable here, because a real index is
+                        // computed from rounds and must not be typed over.
+                        // Needs a customer_id: the placeholder lives on the
+                        // customer record, so an unlinked registration has
+                        // nowhere to put it.
+                        html += r.customer_id
+                            ? `<td style="${style}"><button class="btn-set-hcp"
+                                 data-customer-id="${r.customer_id}"
+                                 data-player="${escapeHtml(r.customer || '')}"
+                                 title="No handicap on record — click to set a starting handicap"
+                                 style="background:#fff7ed;border:1px dashed #fb923c;color:#c2410c;
+                                        border-radius:6px;padding:1px 9px;font-size:0.78rem;
+                                        font-weight:700;cursor:pointer;line-height:1.5;"
+                                 >&mdash;</button></td>`
+                            : `<td style="${style}" title="No handicap, and this registration is not linked to a customer record">\u2014</td>`;
                     }
                 } else if (c.key === "side_games") {
                     // Show effective game type (parent + children combined)
@@ -6454,6 +6484,39 @@
                 setTimeout(() => box.querySelector("#gd-name").focus(), 30);
             });
         }
+
+        // Set a STARTING handicap from the roster's HCP dash (Kerry
+        // 2026-07-30). Offered only where there is no handicap on record —
+        // a computed index is never editable here.
+        container.querySelectorAll(".btn-set-hcp").forEach(btn => {
+            btn.addEventListener("click", async (e) => {
+                e.stopPropagation();
+                const cid = btn.dataset.customerId;
+                const who = btn.dataset.player || "this player";
+                const raw = prompt(
+                    `${who} has no handicap on record.\n\n` +
+                    `Enter a STARTING handicap (18-hole). It is a placeholder: it lets ` +
+                    `them be flighted and shows on their record, and is replaced ` +
+                    `automatically once enough rounds establish their real TGF Handicap. ` +
+                    `It never counts as a round.\n\nLeave blank to cancel.`);
+                if (raw === null || !raw.trim()) return;
+                const val = parseFloat(raw.trim());
+                if (isNaN(val)) { alert("That is not a number."); return; }
+                try {
+                    const res = await fetch(`/api/customers/${cid}/starting-handicap`, {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ starting_handicap_18: val,
+                                               note: "Set from event roster" }),
+                    });
+                    const data = await res.json().catch(() => ({}));
+                    if (!res.ok) { alert(data.error || "Could not save the handicap."); return; }
+                    await fetchHandicapIndexMap();
+                    await fetchItems();
+                    await fetchEvents();
+                } catch (err) { alert("Could not save the handicap."); }
+            });
+        });
 
         // Assign Guest name — "Guest?" tag click
         container.querySelectorAll(".btn-assign-guest").forEach(btn => {

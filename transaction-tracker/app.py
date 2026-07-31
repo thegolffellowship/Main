@@ -6670,8 +6670,19 @@ def api_wd_item(item_id):
     return jsonify({"error": "Item not found or already credited/transferred/WD."}), 400
 
 
+# MANAGER-ACCESSIBLE money actions (Kerry 2026-07-30). Chapter managers run
+# the events and must be able to put money back on the spot: Robert could not
+# credit Carlos Zapata when he dropped out of side games he had already bought
+# into. /credit was already manager-level, but the SAME credit modal's Refund
+# and Partial Refund buttons were admin-only, so the flow 403'd halfway
+# through. refund / partial-refund / payout-credit / refund-watch are now
+# manager, matching /credit and /wd.
+#
+# NOT chapter-scoped: any manager can act on any event. Chapter managers
+# already carry session["chapter"], so scoping is a small follow-up — flagged
+# here rather than silently assumed.
 @app.route("/api/items/<int:item_id>/refund", methods=["POST"])
-@require_role("admin")
+@require_role("manager")
 def api_refund_item(item_id):
     """Mark an item as refunded via GoDaddy or Venmo."""
     data = request.get_json(silent=True) or {}
@@ -6685,7 +6696,7 @@ def api_refund_item(item_id):
 
 @app.route("/api/items/<int:item_id>/payout-credit", methods=["POST"])
 @app.route("/api/items/<int:item_id>/payout-wd-credit", methods=["POST"])  # legacy alias
-@require_role("admin")
+@require_role("manager")
 def api_payout_credit(item_id):
     """Record a cash payout of a player credit (WD or standalone credited row).
 
@@ -6710,7 +6721,7 @@ def api_payout_credit(item_id):
 
 
 @app.route("/api/items/<int:item_id>/refund-watch", methods=["POST"])
-@require_role("admin")
+@require_role("manager")
 def api_create_refund_watch(item_id):
     """Register a refund-payment watch when the admin taps a P2P pay link
     (Kerry 2026-07-15). Body: {method, amount, memo, handle?}. Also
@@ -6786,7 +6797,7 @@ def api_refunds_overview():
 
 
 @app.route("/api/items/<int:item_id>/partial-refund", methods=["POST"])
-@require_role("admin")
+@require_role("manager")
 def api_partial_refund_item(item_id):
     """Partially refund specific components (e.g., one side game) while keeping player active.
 
@@ -8006,6 +8017,12 @@ def api_handicap_index_map():
             index_map[cname.lower()] = {
                 "index_9": idx9,
                 "index_18": round(idx9 * 2, 1),
+                # 'computed' from real rounds vs 'starting' placeholder.
+                # The roster must never show a stand-in as if it were an
+                # established index — Golf Genius flights people regardless
+                # and that is exactly the behaviour we are not copying.
+                "source": p.get("handicap_source") or "computed",
+                "rounds": p.get("active_rounds") or 0,
             }
     return jsonify(index_map)
 

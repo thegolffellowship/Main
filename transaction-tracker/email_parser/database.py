@@ -26710,8 +26710,13 @@ def set_referred_by(customer_id: int, referrer_customer_id: int | None,
     Referral FEES live in `referral_fees` and, per the ratified rules, arise
     only from a redeemed coupon (comped) or a payout receipt (paid). Writing
     a relationship here must never mint a liability, so nothing is inserted
-    there. `acquisition_source` is stamped only when it is still blank, so a
-    known source is never overwritten by an inference.
+    there.
+
+    `acquisition_source` is deliberately NOT touched (Kerry 2026-07-30):
+    "godaddy" and "referral" are not alternatives — they answer different
+    questions, and a transaction can be both. The channel someone came
+    through and the person who brought them are independent facts, so who
+    referred them lives here and nowhere else.
     """
     if referrer_customer_id is not None and referrer_customer_id == customer_id:
         return {"error": "a player cannot refer themselves"}
@@ -26733,13 +26738,9 @@ def set_referred_by(customer_id: int, referrer_customer_id: int | None,
             """UPDATE customers
                SET referred_by_customer_id = ?,
                    referred_at = CASE WHEN ? IS NULL THEN NULL
-                                      ELSE COALESCE(referred_at, datetime('now')) END,
-                   acquisition_source = CASE
-                       WHEN ? IS NOT NULL AND COALESCE(TRIM(acquisition_source),'') = ''
-                       THEN 'referral' ELSE acquisition_source END
+                                      ELSE COALESCE(referred_at, datetime('now')) END
                WHERE customer_id = ?""",
-            (referrer_customer_id, referrer_customer_id, referrer_customer_id,
-             customer_id))
+            (referrer_customer_id, referrer_customer_id, customer_id))
         conn.commit()
     return {"customer_id": customer_id,
             "customer_name": (row["customer_name"] or "").strip(),
