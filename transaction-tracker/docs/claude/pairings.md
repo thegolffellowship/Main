@@ -546,13 +546,45 @@ The Quarry-night rulings, all built:
      `customer_email`, no Purchased-by note; read as a buyer MARKER
      only, never as a contact address). Chains collapse to the ultimate
      host; a cycle is dropped, not looped.
+   - **GUEST LATITUDE (v2.154.0, Kerry 2026-07-31).** "It's a system to
+     give all guests the ability to feel the group out and play with who
+     they want, but require the members to branch out, beyond a single
+     player request." So the first-come lock binds **members**. A
+     GUEST's request onto an already-claimed player is honored — the
+     guest JOINS that group (status `guest`, GUEST OK badge) instead of
+     losing to it. Membership is decided by the ROSTER via
+     `_ls_is_member` (`customers.current_player_status` rules;
+     `items.user_status` is a per-order snapshot that can only rule
+     someone OUT) — the SA field carries "1ST TIMER" labels on both
+     members and guests, so the label alone never decides. A manager who
+     wants first-come to stand suppresses the request.
+   - **MANAGER APPROVAL of an outranked request (v2.154.0, rule 5
+     override).** The red OUTRANKED badge is the control: tap to
+     approve, tap the green APPROVED badge to revert. The approved
+     request JOINS the group that claimed its partner — nobody is
+     displaced, so honoring the override costs no one their pairing.
+     Stored per requester per event in `pairing_request_approvals`
+     (event_id + requester_name + requester_customer_id + approved_by,
+     UNIQUE per requester, lazy-created), so it survives a re-generate
+     and a reload. `set_partner_request_approval` / POST
+     `…/pairings/requests/approve` {requester, approved}.
+   - **A FOURSOME IS THE CEILING** for all of it. Host groups, guest
+     latitude, and approvals all resolve by joining, and all stop at
+     `HOST_GROUP_MAX = 4`; the fifth stays outranked with "honoring this
+     would make five". Approval cannot override arithmetic.
+   - **Units, not pairs.** The simulation tracks UNITS
+     (`units`/`unit_of`/`_join` inside `get_event_partner_requests`)
+     because "join the group that already exists" is inexpressible in a
+     pair-only model — it can only say win or lose. The generator uses
+     the same model via `_merge_name_units`.
    - **The generator builds the same foursome** (`_host_units`,
-     v2.153.1). Host units are placed below Match Play (rule 8 still
-     wins any shared player) and above ordinary partner pairs, in
+     v2.153.1). Bound units — host groups, then guest and approved
+     requests merged in — are placed below Match Play (rule 8 still wins
+     any shared player) and above ordinary partner pairs, in
      `_random_groups` AND `_standings_groups`, and are added to
      `_partner_locked_names` so the swap improver can't split them.
-     Panel and generator call the same two functions — a badge that
-     Generate wouldn't honor is the failure mode this closes.
+     Panel and generator call the same functions — a badge that Generate
+     wouldn't honor is the failure mode this closes.
 3e. **Managers can ADD a request (v2.153.0, Kerry 2026-07-30).**
    Requests arrive by text and at the first tee. The requests panel's
    "Add a request" row offers players with no existing request and

@@ -1,5 +1,15 @@
-window.TGF_VERSION = "2.153.1";
+window.TGF_VERSION = "2.154.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.154.0",
+    date: "2026-07-31",
+    changes: [
+      "GUESTS MAY JOIN A GROUP THAT IS ALREADY CLAIMED; MEMBERS BRANCH OUT (Kerry 2026-07-31). Villa and Kypuros bought their OWN 1st-Timer spots on separate orders and both requested Dan South, so no host link existed to save them and first-come outranked them both. Kerry's rule: 'It's a system to give all guests the ability to feel the group out and play with who they want, but require the members to branch out, beyond a single player request.' A guest's request is now honored even when their partner was claimed earlier — the guest JOINS that group rather than losing to it (GUEST OK badge) — while a member's request onto a claimed player stays OUTRANKED, with a reason that says so. Membership is decided by the ROSTER via _ls_is_member, never by the order label: the SA field is full of '1ST TIMER' rows that are members and '1ST TIMER' rows that are guests, and the label alone can only rule someone OUT.",
+      "MANAGERS CAN APPROVE AN OUTRANKED REQUEST. The red OUTRANKED badge is now the override control — tap it to approve, tap the green APPROVED badge to put first-come back. An approved request JOINS the group that claimed its partner instead of displacing whoever got there first, so honoring the override costs nobody their pairing. Stored per requester per event in the new pairing_request_approvals table, so it survives a re-generate and a reload, and it is reversible. POST /api/events/<id>/pairings/requests/approve {requester, approved}, manager tier.",
+      "A FOURSOME IS THE CEILING IN EVERY CASE. Guest latitude, host groups, and manager approval all resolve by joining a group, and all three stop at four — a fifth player stays outranked with 'honoring this would make five. Suppress a request in that group to make room.' Approving cannot override arithmetic.",
+      "The request simulation moved from PAIRS to UNITS internally, which is what made 'join the group that already exists' expressible at all — a pair-only model could only ever say win or lose. The generator was moved to the same model: guest requests and approved requests are folded into the bound units by the identical join-up-to-a-foursome rule the panel simulates, so a request Generate can't honor is exactly the one the panel still shows as outranked.",
+    ],
+  },
   {
     version: "2.153.1",
     date: "2026-07-31",

@@ -43711,6 +43711,24 @@ def _ensure_pairing_tables(conn: sqlite3.Connection) -> None:
         )
         """
     )
+    # Manager APPROVAL of an outranked request (Kerry 2026-07-31).
+    # First-come is the default (rule 11), but the manager is the
+    # override (rule 5) — an approved request is honored even though the
+    # partner was claimed earlier, by JOINING that group rather than
+    # displacing anyone. A foursome is still the hard ceiling.
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS pairing_request_approvals (
+            id                    INTEGER PRIMARY KEY AUTOINCREMENT,
+            event_id              INTEGER NOT NULL REFERENCES events(id) ON DELETE CASCADE,
+            requester_name        TEXT NOT NULL,
+            requester_customer_id INTEGER REFERENCES customers(customer_id),
+            approved_by           TEXT,
+            created_at            TEXT DEFAULT (datetime('now')),
+            UNIQUE(event_id, requester_name)
+        )
+        """
+    )
     # Manager-fixed request matches (Kerry 2026-07-21): when the signup
     # text doesn't resolve to a rostered player ('Dave' vs 'David
     # Decareaux'), the manager binds the request to the intended player.
@@ -44087,7 +44105,8 @@ def get_event_partner_requests(event_id: int, db_path=None) -> dict:
             SELECT DISTINCT i.customer, i.customer_id, i.holes,
                             i.partner_request, i.id, i.order_date,
                             i.created_at, i.notes, i.order_id,
-                            i.customer_email
+                            i.customer_email, i.user_status,
+                            c.current_player_status
             FROM events e
             LEFT JOIN event_aliases ea ON ea.canonical_event_name = e.item_name
             JOIN items i ON (
@@ -44095,6 +44114,7 @@ def get_event_partner_requests(event_id: int, db_path=None) -> dict:
                 OR i.item_name = ea.alias_name COLLATE NOCASE
                 OR i.event_id = e.id
             )
+            LEFT JOIN customers c ON c.customer_id = i.customer_id
             WHERE e.id = ?
               AND COALESCE(i.transaction_status, 'active') NOT IN ({ph})
               AND i.parent_item_id IS NULL
@@ -44108,6 +44128,9 @@ def get_event_partner_requests(event_id: int, db_path=None) -> dict:
         manual_matches = {_pair_key_name(r["requester_name"]): r["partner_name"]
                           for r in conn.execute(
             "SELECT requester_name, partner_name FROM pairing_request_matches "
+            "WHERE event_id = ?", (event_id,)).fetchall()}
+        approvals = {_pair_key_name(r["requester_name"]) for r in conn.execute(
+            "SELECT requester_name FROM pairing_request_approvals "
             "WHERE event_id = ?", (event_id,)).fetchall()}
 
     # Earliest signup row per player, in signup order — the SAME
@@ -44133,6 +44156,23 @@ def get_event_partner_requests(event_id: int, db_path=None) -> dict:
     host_names = {_pair_key_name(r["customer"]): r["customer"] for r in roster}
     host_of = _host_of_map(roster, all_names, roster_ids=roster_ids)
 
+    # GUEST LATITUDE (Kerry 2026-07-31). "It's a system to give all guests
+    # the ability to feel the group out and play with who they want, but
+    # require the members to branch out, beyond a single player request."
+    # So the first-come lock (rule 11) binds MEMBERS. A guest's request is
+    # honored even when their partner was claimed earlier — the guest joins
+    # that group instead of losing to it. A foursome is still the ceiling,
+    # and a manager can still suppress any request.
+    #
+    # Membership is decided by the ROSTER, never by the order label: a "1st
+    # Timer" can be either (Kerry 2026-07-30, Villa/Kypuros), so
+    # `_ls_is_member` lets customers.current_player_status rule and treats
+    # items.user_status as a fallback that can only rule someone OUT.
+    is_member_of = {
+        _pair_key_name(r["customer"]): bool(_ls_is_member(
+            r.get("current_player_status"), r.get("user_status")))
+        for r in roster}
+
     def _host_group(key):
         """The host-and-guests set `key` belongs to, or None."""
         h = host_of.get(key, key if key in host_of.values() else None)
@@ -44142,9 +44182,41 @@ def get_event_partner_requests(event_id: int, db_path=None) -> dict:
         return members if len(members) > 1 else None
 
     requests = []
-    locked: set = set()
-    locked_pair: dict = {}          # player key -> the pair that claimed them
-    group_size: dict = {}           # host key -> how many are grouped so far
+    # Who is grouped with whom, as UNITS rather than pairs. A pair-only
+    # model can't express "join the group that already exists", which is
+    # what both a host-and-guests foursome and a manager APPROVAL of an
+    # outranked request need (Kerry 2026-07-30 / 2026-07-31).
+    units: list[set] = []
+    unit_of: dict = {}              # player key -> index into `units`
+
+    def _unit(k):
+        i = unit_of.get(k)
+        return units[i] if i is not None else None
+
+    def _join(a, b, cap=HOST_GROUP_MAX) -> bool:
+        """Put a and b in one unit. False if that would exceed `cap`."""
+        ia, ib = unit_of.get(a), unit_of.get(b)
+        if ia is not None and ia == ib:
+            return True
+        if ia is None and ib is None:
+            units.append({a, b})
+            unit_of[a] = unit_of[b] = len(units) - 1
+            return True
+        if ia is None or ib is None:
+            base = ib if ia is None else ia
+            newcomer = a if ia is None else b
+            if len(units[base]) + 1 > cap:
+                return False
+            units[base].add(newcomer)
+            unit_of[newcomer] = base
+            return True
+        if len(units[ia]) + len(units[ib]) > cap:
+            return False
+        units[ia] |= units[ib]
+        for m in list(units[ib]):
+            unit_of[m] = ia
+        units[ib] = set()
+        return True
 
     # Implied guest->host requests, inserted at the guest's signup position
     # so priority still runs in signup order.
@@ -44205,25 +44277,28 @@ def get_event_partner_requests(event_id: int, db_path=None) -> dict:
             "suppressed": _pair_key_name(r["customer"]) in suppressed,
             "locked_out": False,
             "locked_reason": None,
-            # "active" (first claim) | "confirmed" (already paired — a
-            # reciprocal request or a same-host group) | "outranked".
+            # "active" (first claim) | "confirmed" (already grouped — a
+            # reciprocal request or a same-host group) | "approved"
+            # (manager overrode the first-come lock) | "outranked".
             "status": "active",
             "implied": bool(r.get("_implied_host_request")),
             "added": bool(r.get("_added_by_manager")),
             "host_group": False,
+            "approved": _pair_key_name(r["customer"]) in approvals,
+            "requester_is_member": is_member_of.get(
+                _pair_key_name(r["customer"]), True),
         }
         # First-come lock simulation (rule 11 + Kerry 2026-07-21):
         # once a player is claimed in EITHER direction, later requests
         # touching them lose. Suppressed requests never claim anyone.
         if entry["matched"] and not entry["suppressed"]:
             rk, pk = _pair_key_name(r["customer"]), _pair_key_name(partner)
-            pair = frozenset((rk, pk))
 
-            # RECIPROCAL — "Chuck Fehlis -> Gus Vasquez" after "Gus Vasquez
-            # -> Chuck Fehlis" is the SAME pairing restated, not a loser
-            # (Kerry 2026-07-30). Badge it CONFIRMED; outranking it reads
-            # as though the request were being denied.
-            if locked_pair.get(rk) == pair or locked_pair.get(pk) == pair:
+            # RECIPROCAL / already together — "Chuck Fehlis -> Gus Vasquez"
+            # after "Gus Vasquez -> Chuck Fehlis" is the SAME pairing
+            # restated, not a loser (Kerry 2026-07-30). Badge it CONFIRMED;
+            # outranking it reads as though the request were being denied.
+            if unit_of.get(rk) is not None and unit_of.get(rk) == unit_of.get(pk):
                 entry["status"] = "confirmed"
                 entry["locked_reason"] = (
                     f"Already paired with {partner} by an earlier request — "
@@ -44234,47 +44309,71 @@ def get_event_partner_requests(event_id: int, db_path=None) -> dict:
             # SAME HOST GROUP — a host and up to three guests they paid for
             # all play together. These are not competing requests.
             grp = _host_group(rk)
-            if grp and pk in grp:
-                host_key = host_of.get(rk, rk if rk in host_of.values() else pk)
-                host_key = host_of.get(pk, host_key)
-                size = group_size.get(host_key) or 1
-                if size < HOST_GROUP_MAX:
-                    group_size[host_key] = size + 1
-                    locked.update((rk, pk))
-                    locked_pair[rk] = locked_pair[pk] = pair
-                    # The FIRST claim on the host isn't confirming
-                    # anything — it's the ordinary first-come win, same as
-                    # any other opening request, so it gets no badge
-                    # (Kerry 2026-07-31: "Not sure why Jacob Williams has
-                    # the CONFIRMED badge"). CONFIRMED is reserved for a
-                    # request that would otherwise have READ as a loser.
-                    entry["status"] = "active" if size == 1 else "confirmed"
-                    entry["host_group"] = True
-                    entry["locked_reason"] = (
-                        f"Playing with {partner}, who paid for their spot."
-                        if entry["implied"] or host_of.get(rk) == pk else
-                        f"Same host group as {partner}.")
+            same_host = bool(grp and pk in grp)
+            # A guest's request is honored on top of an existing claim;
+            # a member's is not (Kerry 2026-07-31 — members branch out).
+            guest_ok = not entry["requester_is_member"]
+            was_claimed = rk in unit_of or pk in unit_of
+
+            # MANAGER APPROVAL (Kerry 2026-07-31, rule 5 "admin and manager
+            # can always override"). An approved request beats the
+            # first-come lock by JOINING the partner's group rather than
+            # displacing whoever claimed them — nobody has to lose for the
+            # override to be honored, up to the foursome ceiling.
+            if same_host or entry["approved"] or guest_ok:
+                if _join(rk, pk):
+                    size = len(_unit(rk) or ())
+                    if not was_claimed and not same_host:
+                        # Nothing to override — this is an ordinary
+                        # first-come win, so it reads like every other one.
+                        entry["status"] = "active"
+                    elif same_host:
+                        entry["host_group"] = True
+                        # The FIRST claim on the host isn't confirming
+                        # anything — it's the ordinary first-come win, same
+                        # as any other opening request, so it gets no badge
+                        # (Kerry 2026-07-31: "Not sure why Jacob Williams
+                        # has the CONFIRMED badge"). CONFIRMED is for a
+                        # request that would otherwise have READ as a loser.
+                        entry["status"] = "active" if size == 2 else "confirmed"
+                        entry["locked_reason"] = (
+                            f"Playing with {partner}, who paid for their spot."
+                            if entry["implied"] or host_of.get(rk) == pk else
+                            f"Same host group as {partner}.")
+                    elif entry["approved"]:
+                        entry["status"] = "approved"
+                        entry["locked_reason"] = (
+                            f"Approved by a manager — grouped with {partner} "
+                            f"even though an earlier request claimed them.")
+                    else:
+                        entry["status"] = "guest"
+                        entry["locked_reason"] = (
+                            f"Guest request — guests may join a group that is "
+                            f"already claimed. {partner} was claimed by an "
+                            f"earlier request; members would be outranked "
+                            f"here and are expected to branch out.")
                 else:
                     entry["locked_out"] = True
                     entry["status"] = "outranked"
                     entry["locked_reason"] = (
-                        f"{host_names.get(host_key, 'The host')} already has "
-                        f"{HOST_GROUP_MAX - 1} guests in the group — a "
-                        f"foursome is full.")
+                        f"{partner}'s group is already a foursome — honoring "
+                        f"this would make five. Suppress a request in that "
+                        f"group to make room.")
                 requests.append(entry)
                 continue
 
             taken = [n for n, key in ((r["customer"], rk), (partner, pk))
-                     if key in locked]
+                     if key in unit_of]
             if taken:
                 entry["locked_out"] = True
                 entry["status"] = "outranked"
                 entry["locked_reason"] = (
                     " & ".join(taken) + " already locked by an earlier "
-                    "request — suppress that request to override.")
+                    "request. Members are held to first-come and expected "
+                    "to branch out — approve this request to group them "
+                    "anyway, or suppress the earlier one.")
             else:
-                locked.update((rk, pk))
-                locked_pair[rk] = locked_pair[pk] = pair
+                _join(rk, pk)
         requests.append(entry)
     return {"event_id": event_id, "requests": requests}
 
@@ -44352,6 +44451,90 @@ def set_partner_request_suppression(event_id: int, requester_name: str,
                 (event_id, requester_name))
         conn.commit()
     return get_event_partner_requests(event_id, db_path=db_path)
+
+
+def set_partner_request_approval(event_id: int, requester_name: str,
+                                 approved: bool, approved_by: str | None = None,
+                                 db_path=None) -> dict:
+    """Approve (or revoke) an OUTRANKED partner request (Kerry 2026-07-31).
+
+    First-come is the default (rule 11); the manager is the override
+    (rule 5). An approved request is honored by JOINING the group that
+    already claimed the partner rather than displacing anyone — so
+    nobody loses a pairing for the override to take effect. A foursome
+    is still the hard ceiling: if the partner's group is already four,
+    the request stays outranked and says why.
+
+    Approval is stored per REQUESTER for one event, so it survives a
+    re-generate and a page reload, and it is reversible.
+    """
+    requester_name = (requester_name or "").strip()
+    if not requester_name:
+        raise ValueError("requester_name required")
+    with _connect(db_path) as conn:
+        _ensure_pairing_tables(conn)
+        if approved:
+            roster = {_pair_key_name(r["name"]): r
+                      for r in _event_roster_players(conn, event_id)}
+            who = roster.get(_pair_key_name(requester_name))
+            if not who:
+                raise ValueError(f"'{requester_name}' is not on this "
+                                 "event's roster")
+            conn.execute(
+                "INSERT OR IGNORE INTO pairing_request_approvals "
+                "(event_id, requester_name, requester_customer_id, approved_by) "
+                "VALUES (?, ?, ?, ?)",
+                (event_id, who["name"], who.get("customer_id"), approved_by))
+        else:
+            conn.execute(
+                "DELETE FROM pairing_request_approvals "
+                "WHERE event_id = ? AND requester_name = ? COLLATE NOCASE",
+                (event_id, requester_name))
+        conn.commit()
+    return get_event_partner_requests(event_id, db_path=db_path)
+
+
+def _merge_name_units(seed_units: list[list[str]],
+                      pairs: list[tuple[str, str]],
+                      max_size: int = HOST_GROUP_MAX) -> list[list[str]]:
+    """Fold extra bound PAIRS into existing units, up to `max_size`.
+
+    Used by the generator to combine host-and-guests foursomes with
+    manager-APPROVED requests: an approved request joins the group that
+    already claimed its partner instead of losing to it, which is the
+    same thing the requests panel shows. A pair that would push a group
+    past `max_size` is dropped here — the panel reports it as still
+    outranked, so the two agree.
+    """
+    unitl = [list(dict.fromkeys(u)) for u in seed_units]
+    idx: dict = {}
+    for i, u in enumerate(unitl):
+        for n in u:
+            idx[n] = i
+    for a, b in pairs:
+        if not a or not b or a == b:
+            continue
+        ia, ib = idx.get(a), idx.get(b)
+        if ia is not None and ia == ib:
+            continue
+        if ia is None and ib is None:
+            unitl.append([a, b])
+            idx[a] = idx[b] = len(unitl) - 1
+        elif ia is None or ib is None:
+            base = ib if ia is None else ia
+            newcomer = a if ia is None else b
+            if len(unitl[base]) >= max_size:
+                continue
+            unitl[base].append(newcomer)
+            idx[newcomer] = base
+        else:
+            if len(unitl[ia]) + len(unitl[ib]) > max_size:
+                continue
+            unitl[ia].extend(unitl[ib])
+            for n in unitl[ib]:
+                idx[n] = ia
+            unitl[ib] = []
+    return [u for u in unitl if len(u) >= 2]
 
 
 def _pair_key_name(name: str) -> str:
@@ -45803,7 +45986,8 @@ def generate_event_pairings(
             SELECT DISTINCT i.customer, i.holes, i.tee_choice,
                             i.partner_request, i.id, i.order_date,
                             i.created_at, i.notes, i.order_id,
-                            i.customer_email, i.customer_id
+                            i.customer_email, i.customer_id,
+                            i.user_status, c.current_player_status
             FROM events e
             LEFT JOIN event_aliases ea ON ea.canonical_event_name = e.item_name
             JOIN items i ON (
@@ -45811,6 +45995,7 @@ def generate_event_pairings(
                 OR i.item_name = ea.alias_name COLLATE NOCASE
                 OR i.event_id = e.id
             )
+            LEFT JOIN customers c ON c.customer_id = i.customer_id
             WHERE e.id = ?
               AND COALESCE(i.transaction_status, 'active') NOT IN ({ph})
               AND i.parent_item_id IS NULL
@@ -45851,6 +46036,12 @@ def generate_event_pairings(
             "WHERE event_id = ?", (event_id,)).fetchall()}
         _suppressed = {_pair_key_name(r["requester_name"]) for r in conn.execute(
             "SELECT requester_name FROM pairing_request_suppressions "
+            "WHERE event_id = ?", (event_id,)).fetchall()}
+        # Manager-approved requests (Kerry 2026-07-31): these beat the
+        # first-come lock by joining the partner's group, so they must be
+        # bound into units before ordinary pairing runs.
+        _approved = {_pair_key_name(r["requester_name"]) for r in conn.execute(
+            "SELECT requester_name FROM pairing_request_approvals "
             "WHERE event_id = ?", (event_id,)).fetchall()}
         for it in items:
             k = _pair_key_name(it.get("customer") or "")
@@ -46003,7 +46194,33 @@ def generate_event_pairings(
                      if p.get("customer") and p.get("customer_id")}
         host_of_all = _host_of_map(player_items, all_names,
                                    roster_ids=_host_ids)
-        host_units = _host_units(host_of_all, free_players)
+        bound_units = _host_units(host_of_all, free_players)
+
+        # Requests that beat the first-come lock and therefore have to be
+        # bound BEFORE ordinary pairing runs, folded in by the same
+        # join-up-to-a-foursome rule the requests panel simulates — so a
+        # request Generate can't honor is exactly the one the panel still
+        # reports as outranked:
+        #   * GUEST requests (Kerry 2026-07-31) — "give all guests the
+        #     ability to feel the group out and play with who they want,
+        #     but require the members to branch out";
+        #   * MANAGER-APPROVED requests (rule 5 override).
+        _is_member = {p["customer"]: bool(_ls_is_member(
+                          p.get("current_player_status"), p.get("user_status")))
+                      for p in player_items if p.get("customer")}
+        _bound_pairs: list[tuple[str, str]] = []
+        for requester, req_text in partner_map.items():
+            if requester not in free_players:
+                continue
+            privileged = (_pair_key_name(requester) in _approved
+                          or not _is_member.get(requester, True))
+            if not privileged:
+                continue
+            _p = _find_partner_name(req_text, free_players, requester)
+            if _p:
+                _bound_pairs.append((requester, _p))
+        if _bound_pairs:
+            bound_units = _merge_name_units(bound_units, _bound_pairs)
 
         # ── Determine groups to fill ──────────────────────────────────
         n_free = len(free_players)
@@ -46107,7 +46324,7 @@ def generate_event_pairings(
         locked_names = _partner_locked_names(
             [n for n in free_players if n not in mp_names],
             partner_map, protect_partner_requests,
-            host_units=host_units if protect_partner_requests else None)
+            host_units=bound_units if protect_partner_requests else None)
         locked_names |= mp_names
 
         if mode == "abcd":
@@ -46121,7 +46338,7 @@ def generate_event_pairings(
                 groups_players, _snotes = _standings_groups(
                     free_players, _rank_map, partner_map,
                     protect_partner_requests,
-                    host_units=host_units if protect_partner_requests else None)
+                    host_units=bound_units if protect_partner_requests else None)
                 mp_notes.extend(_snotes)
             else:
                 # No usable standings — say so and fall back rather than
@@ -46141,7 +46358,7 @@ def generate_event_pairings(
                 cand = _random_groups(
                     free_players, partner_map, pair_counts,
                     protect_partner_requests, fixed_units=mp_units,
-                    host_units=host_units if protect_partner_requests else None
+                    host_units=bound_units if protect_partner_requests else None
                 )
                 cand = _swap_improve(cand, pair_counts, locked_names)
                 score = sum(_group_score(g, pair_counts) for g in cand)

@@ -5017,6 +5017,31 @@ def api_pairings_request_match(event_id):
         return jsonify({"error": str(e)}), 500
 
 
+@app.route("/api/events/<int:event_id>/pairings/requests/approve", methods=["POST"])
+@require_role("manager")
+def api_pairings_request_approve(event_id):
+    """Approve an OUTRANKED partner request, or revoke that approval
+    (Kerry 2026-07-31). First-come is the default; the manager is the
+    override. An approved request JOINS the group that already claimed
+    its partner rather than displacing anyone — a foursome remains the
+    ceiling, and the request stays outranked if honoring it would make
+    five."""
+    data = request.get_json(silent=True) or {}
+    requester = (data.get("requester") or "").strip()
+    if not requester:
+        return jsonify({"error": "requester required"}), 400
+    try:
+        from email_parser.database import set_partner_request_approval
+        return jsonify(set_partner_request_approval(
+            event_id, requester, bool(data.get("approved", True)),
+            approved_by=session.get("role")))
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+    except Exception as e:
+        logger.exception("Request approval failed for event %d", event_id)
+        return jsonify({"error": str(e)}), 500
+
+
 @app.route("/api/events/<int:event_id>/pairings/switch-side", methods=["POST"])
 @require_role("manager")
 def api_pairings_switch_side(event_id):

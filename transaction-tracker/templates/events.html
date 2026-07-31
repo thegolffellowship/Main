@@ -4533,7 +4533,7 @@
         // the row stays here badged SUPPRESSED until restored.
         if (state.showRequests) {
             html += '<div class="pairings-seeds-panel">';
-            html += '<div style="font-size:0.8rem;color:var(--text-muted);margin-bottom:0.5rem;">Partner requests in <strong>signup order</strong> &mdash; earlier requests win: once a player is claimed (either direction) later requests touching them are <strong>outranked</strong>. <strong>Remove</strong> suppresses a request (it stays listed); suppressing an earlier request is how you override a lock. One partner per player is honored &mdash; on multi-name requests <strong>link one</strong>; honor extras with manual moves after Generate. Two exceptions are <strong>CONFIRMED</strong>, not outranked: a request that simply restates a pairing already made the other way, and a host playing with the guests they paid for (up to a foursome).</div>';
+            html += '<div style="font-size:0.8rem;color:var(--text-muted);margin-bottom:0.5rem;">Partner requests in <strong>signup order</strong> &mdash; earlier requests win: once a player is claimed (either direction) later requests touching them are <strong>outranked</strong>. <strong>Remove</strong> suppresses a request (it stays listed); suppressing an earlier request is how you override a lock. One partner per player is honored &mdash; on multi-name requests <strong>link one</strong>; honor extras with manual moves after Generate. Exceptions that are <strong>not</strong> outranked: a request restating a pairing already made the other way (<strong>CONFIRMED</strong>), a host playing with the guests they paid for (<strong>CONFIRMED</strong>), and a <strong>guest</strong> joining a group that is already claimed (<strong>GUEST OK</strong>) &mdash; guests get to feel the group out; members are held to first-come and expected to branch out. Tap a red <strong>OUTRANKED</strong> badge to <strong>approve</strong> it anyway; the request joins that group rather than displacing anyone. A foursome is the ceiling in every case.</div>';
             if (!state.requests.length) {
                 html += '<div style="font-size:0.82rem;color:var(--text-muted);">No partner requests on this roster.</div>';
             }
@@ -4576,7 +4576,20 @@
                     html += `<span style="font-size:0.68rem;font-weight:700;color:#6d28d9;border:1px solid #c4b5fd;border-radius:9px;padding:0 0.4rem;" title="Added by a manager — no request came in with the signup.">ADDED</span>`;
                 }
                 if (out) {
-                    html += `<span style="font-size:0.72rem;font-weight:700;color:#b91c1c;border:1px solid #ef4444;border-radius:9px;padding:0 0.4rem;" title="${escapeHtml(r.locked_reason || '')}">OUTRANKED</span>`;
+                    // The badge IS the override control (Kerry 2026-07-31):
+                    // tap OUTRANKED to approve it. First-come is the
+                    // default, the manager is the override (rule 5) — an
+                    // approved request JOINS the group that claimed its
+                    // partner, so nobody loses a pairing for it.
+                    html += `<button data-ev-id="${ev.id}" data-request-approve="1" data-requester="${escapeHtml(r.requester)}" title="${escapeHtml(r.locked_reason || '')}&#10;&#10;Tap to APPROVE — this request joins that group instead of losing to it (a foursome is the limit)." style="font-size:0.72rem;font-weight:700;color:#b91c1c;border:1px solid #ef4444;border-radius:9px;padding:0 0.4rem;background:none;cursor:pointer;">OUTRANKED &#x2713;</button>`;
+                } else if (r.status === 'approved') {
+                    html += `<button data-ev-id="${ev.id}" data-request-approve="0" data-requester="${escapeHtml(r.requester)}" title="${escapeHtml(r.locked_reason || '')}&#10;&#10;Tap to undo the approval and let first-come stand." style="font-size:0.72rem;font-weight:700;color:#047857;border:1px solid #10b981;border-radius:9px;padding:0 0.4rem;background:none;cursor:pointer;">APPROVED &#x21BA;</button>`;
+                } else if (r.status === 'guest') {
+                    // Kerry 2026-07-31: guests get to feel the group out and
+                    // play with who they want; members are held to first-come
+                    // and expected to branch out. Suppress the request if a
+                    // manager wants first-come to stand here.
+                    html += `<span style="font-size:0.72rem;font-weight:700;color:#0369a1;border:1px solid #38bdf8;border-radius:9px;padding:0 0.4rem;" title="${escapeHtml(r.locked_reason || '')}">GUEST OK</span>`;
                 } else if (r.status === 'confirmed') {
                     // NOT a loser (Kerry 2026-07-30): a reciprocal request
                     // or a host-and-guests group is the same pairing
@@ -7103,6 +7116,32 @@
                     state.requests = data.requests || [];
                 } catch (err) {
                     alert('Request update failed.');
+                } finally {
+                    btn.disabled = false;
+                }
+                rerenderDetail(container, ev);
+            });
+        });
+
+        // Approve / un-approve an OUTRANKED request (Kerry 2026-07-31).
+        // The manager override on first-come: the request joins the group
+        // that claimed its partner instead of losing to it.
+        container.querySelectorAll('[data-request-approve]').forEach(btn => {
+            btn.addEventListener('click', async e => {
+                e.stopPropagation();
+                const approve = btn.dataset.requestApprove === '1';
+                btn.disabled = true;
+                try {
+                    const res = await fetch(`/api/events/${ev.id}/pairings/requests/approve`, {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({requester: btn.dataset.requester, approved: approve}),
+                    });
+                    const data = await res.json();
+                    if (!res.ok) { alert(data.error || 'Approval failed'); return; }
+                    state.requests = data.requests || [];
+                } catch (err) {
+                    alert('Approval failed.');
                 } finally {
                     btn.disabled = false;
                 }
