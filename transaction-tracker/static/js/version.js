@@ -1,5 +1,15 @@
-window.TGF_VERSION = "2.166.0";
+window.TGF_VERSION = "2.167.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.167.0",
+    date: "2026-07-31",
+    changes: [
+      "A STARTING HANDICAP SET ON PAIRINGS NOW LANDS ON THE ROSTER IMMEDIATELY, AND VICE VERSA (Kerry 2026-07-31: 'When I added Mark Villa\'s handicap on PAIRINGS, it did not add it to him in ROSTER. Those need to be immediately synced.'). The value was never lost — Villa's 12.5 saved correctly to his profile. The two screens disagreed because the PAIRINGS card patched its own copy in memory while the ROSTER reads only the shared handicap index map, so the roster kept showing a dash until a reload. The save now writes the new value straight into that shared map — under every name we can tie to that customer_id, because the map is name-keyed and one person can be spelled differently on an order row than on a pairing card — and repaints both views before any network round-trip. The server refresh then confirms it.",
+      "The index-map refetch is no longer served from the browser cache. It is fetched immediately after a handicap is saved, and a heuristically cached copy handed back the very map the save was trying to refresh.",
+      "A PRELIMINARY HANDICAP IS EDITABLE ON THE ROSTER TOO (Kerry: 'They also both need to be editable'). The roster only ever offered the dash — once a placeholder existed it became plain text, so a typo could not be corrected from the screen where it was most likely made. A P value on the roster is now the same clickable control as on the PAIRINGS card, prefilled with the current number. A handicap computed from real rounds stays uneditable in both places, which is the point of the distinction.",
+      "TYPING 12.5 NO LONGER DISPLAYS AS 12.4. A starting handicap is entered as an 18-hole number and halved to get the 9-hole figure; the index map was then re-deriving the 18-hole number from that rounded half, losing a tenth on every odd input. It now reports the number that was actually entered. This affected the roster, the pairing cards, and anything else reading the index map — the stored value was always correct.",
+    ],
+  },
   {
     version: "2.166.0",
     date: "2026-07-31",

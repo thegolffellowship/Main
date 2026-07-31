@@ -550,3 +550,41 @@ now dark (--surface-dark) per view 1a; table headers wear the Bitter
 hairline treatment; stat cards Bitter labels + dark numerals. The
 expanded round-history interior keeps its current functional styling —
 its 1a cosmetic pass rides with the admin-density handoff.
+
+## STARTING handicaps: one shared map, editable from both screens (v2.167.0)
+
+Kerry, 2026-07-31: *"When I added Mark Villa's handicap on PAIRINGS, it did
+not add it to him in ROSTER. Those need to be immediately synced. They also
+both need to be editable."*
+
+**The value was never lost.** Villa (customer_id 692) persisted at 12.5.
+The bug was display-side and worth remembering, because it is the
+name-keyed-payload trap again:
+
+- The ROSTER handicap cell reads **only** `handicapIndexMap`, keyed by
+  lowercased customer name (`/api/handicaps/index-map`).
+- The PAIRINGS card patched its own in-memory copy after a save, so it
+  showed the number while the roster still showed a dash.
+
+Fixes, all in `templates/events.html` unless noted:
+
+- `patchLocalHandicapIndex(customerId, extraNames, index18)` writes the
+  saved value into the SHARED map under every name associable with that
+  `customer_id` (from `allItems` and `state.event_players`), then both
+  views repaint before any round-trip. Never overwrites a `computed` entry.
+- `fetchHandicapIndexMap()` uses `cache: "no-store"` — it is called
+  immediately after a save, and a cached copy defeats the refresh.
+- The roster cell renders a `starting`-source value as the same
+  `.btn-set-hcp` control the pairing card uses (`.roster-hcp-prelim`,
+  `data-current` prefills the prompt). A `computed` index stays
+  uneditable on both screens.
+- **`app.py` `api_handicap_index_map`**: `index_18` now comes from
+  `starting_handicap_18` directly when the source is `starting`. It was
+  being re-derived as `round(index_9 * 2, 1)` from an already-rounded
+  half, so a typed 12.5 displayed as 12.4 (every odd tenth was affected).
+  The stored value was always correct.
+
+A rounds-less player reaches the map via `get_starting_handicaps` →
+`get_all_handicap_players`, which APPENDS placeholder-only customers to a
+list that otherwise starts from `handicap_rounds`. Tests:
+`test_starting_handicap_sync.py`.

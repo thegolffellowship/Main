@@ -343,6 +343,14 @@
             color: #c2410c; font-weight: 700; padding: 0 3px;
         }
         .pairing-hcp-p { font-size: 0.62rem; margin-left: 1px; font-weight: 800; }
+        /* The ROSTER's editable placeholder — same meaning, same affordance
+           as the PAIRINGS one, sized for a table cell. */
+        .roster-hcp-prelim {
+            background: #fff7ed; border: 1px solid #fdba74; color: #c2410c;
+            border-radius: 6px; padding: 1px 7px; font-size: 0.78rem;
+            font-weight: 700; cursor: pointer; line-height: 1.5;
+        }
+        .roster-hcp-prelim:hover { background: #ffedd5; border-color: #fb923c; }
         .pairing-tee { font-size: 0.72rem; color: var(--text-muted); width: 2.6rem; text-align: center; flex-shrink: 0; }
         /* Drag-and-drop: a player can be dragged onto any group, and the
            rail that appears says what releasing does — including adding a
@@ -2291,11 +2299,63 @@
 
     async function fetchHandicapIndexMap() {
         try {
-            const res = await fetch("/api/handicaps/index-map");
+            // no-store: this is re-fetched immediately after a handicap is
+            // set, and a heuristically cached copy would hand back the very
+            // map we are trying to refresh (Kerry 2026-07-31 — a starting
+            // handicap set on PAIRINGS did not appear on ROSTER).
+            const res = await fetch("/api/handicaps/index-map", {cache: "no-store"});
+            if (!res.ok) {
+                console.warn("fetchHandicapIndexMap: non-OK", res.status);
+                return;
+            }
             handicapIndexMap = await res.json();
         } catch (err) {
             console.error("Failed to fetch handicap index map:", err);
         }
+    }
+
+    // ROSTER and PAIRINGS both read handicapIndexMap, so writing the new
+    // value straight into it is what keeps the two screens in step — the
+    // server round-trip then confirms it. Without this the two views can
+    // disagree for as long as the refetch takes (or forever, if the map
+    // comes back stale).
+    //
+    // The map is keyed by NAME, which is the weak part: one customer can be
+    // spelled differently on an items row than on a pairing card. So patch
+    // under EVERY name we can associate with this customer_id rather than
+    // trusting one of them — guiding principle 6, worked around at the one
+    // place the payload is name-keyed.
+    function patchLocalHandicapIndex(customerId, extraNames, index18) {
+        if (index18 == null) return;
+        const cid = String(customerId || '');
+        const names = new Set();
+        (extraNames || []).forEach(n => { if (n) names.add(String(n)); });
+        (allItems || []).forEach(it => {
+            if (cid && String(it.customer_id || '') === cid && it.customer) {
+                names.add(it.customer);
+            }
+        });
+        Object.values(pairingsData || {}).forEach(st => {
+            (st.event_players || []).forEach(pl => {
+                if (cid && String(pl.customer_id || '') === cid && pl.name) {
+                    names.add(pl.name);
+                }
+            });
+        });
+        const v18 = Number(index18);
+        const entry = {
+            index_18: v18,
+            index_9: Math.round((v18 / 2) * 10) / 10,
+            source: "starting",
+            rounds: 0,
+        };
+        names.forEach(n => {
+            const k = String(n).trim().toLowerCase();
+            // Never paper over an index computed from real rounds.
+            const cur = handicapIndexMap[k];
+            if (cur && cur.source && cur.source !== "starting") return;
+            handicapIndexMap[k] = entry;
+        });
     }
 
     async function fetchRsvps(eventName) {
@@ -6338,10 +6398,22 @@
                         const phMark = isPlaceholder
                             ? '<span style="font-size:0.68em;color:#c2410c;margin-left:2px;font-weight:700;" title="Placeholder — not an established TGF Handicap">P</span>'
                             : '';
-                        if (showHcp18Only) {
-                            html += `<td style="${style}"><span${ph}>${liveHcp.index_18.toFixed(1)}</span>${phMark}</td>`;
+                        const shown = showHcp18Only
+                            ? liveHcp.index_18.toFixed(1)
+                            : `${liveHcp.index_9.toFixed(1)}<span style="font-size:0.72em;color:#94a3b8;margin-left:2px;font-weight:500;">N</span>`;
+                        if (isPlaceholder && r.customer_id) {
+                            // A placeholder IS editable — that is what it is
+                            // for (Kerry 2026-07-31: "They also both need to
+                            // be editable"). Same control as the PAIRINGS
+                            // card, so the two screens behave identically.
+                            html += `<td style="${style}"><button class="btn-set-hcp roster-hcp-prelim"
+                                 data-customer-id="${r.customer_id}"
+                                 data-player="${escapeHtml(r.customer || '')}"
+                                 data-current="${liveHcp.index_18.toFixed(1)}"
+                                 title="STARTING handicap — a placeholder until rounds establish a real TGF Handicap. Click to change it."
+                                 >${shown}${phMark}</button></td>`;
                         } else {
-                            html += `<td style="${style}"><span${ph}>${liveHcp.index_9.toFixed(1)}</span><span style="font-size:0.72em;color:#94a3b8;margin-left:2px;font-weight:500;">N</span>${phMark}</td>`;
+                            html += `<td style="${style}"><span${ph}>${shown}</span>${phMark}</td>`;
                         }
                     } else if (r.handicap) {
                         html += `<td style="${style}">${escapeHtml(r.handicap)}</td>`;
@@ -7164,6 +7236,10 @@
                     // than promoting it to an established TGF Handicap.
                     const _newHcp = (data && data.starting_handicap_18 != null)
                         ? Number(data.starting_handicap_18) : val;
+                    // Sync BOTH screens now, off the one authoritative map,
+                    // before any network round-trip (Kerry 2026-07-31:
+                    // "Those need to be immediately synced").
+                    patchLocalHandicapIndex(cid, [who], _newHcp);
                     const _k = String(who).trim().replace(/\s+/g, ' ').toLowerCase();
                     const _same = n => String(n || '').trim().replace(/\s+/g, ' ').toLowerCase() === _k;
                     Object.values(pairingsData || {}).forEach(st => {
@@ -7180,12 +7256,18 @@
                             }
                         });
                     });
+                    // Paint both ROSTER and PAIRINGS off the patched map
+                    // FIRST, so the number lands the moment it is saved and
+                    // does not wait on three round-trips (or get lost if one
+                    // of them fails).
+                    rerenderDetail(container, ev);
                     await fetchHandicapIndexMap();
                     await fetchItems();
+                    // fetchEvents() -> renderEvents() rebuilds the table and
+                    // re-renders the expanded detail itself, so `container`
+                    // is a detached node from here on — do not re-render
+                    // through it.
                     await fetchEvents();
-                    if (typeof window._tgfRerenderPairings === 'function') {
-                        window._tgfRerenderPairings(ev.id);
-                    }
                 } catch (err) { alert("Could not save the handicap."); }
             });
         });

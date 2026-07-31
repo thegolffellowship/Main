@@ -8193,9 +8193,18 @@ def api_handicap_index_map():
         cname = p.get("customer_name")
         if cname and p.get("handicap_index") is not None:
             idx9 = p["handicap_index"]
+            # A STARTING handicap is TYPED as an 18-hole number, and the
+            # 9-hole half is derived from it. Re-deriving 18 from that
+            # rounded half loses a tenth on every odd input — 12.5 came
+            # back as 12.4 on the roster (Kerry 2026-07-31). Report the
+            # number that was actually entered.
+            src = p.get("handicap_source") or "computed"
+            idx18 = (p.get("starting_handicap_18")
+                     if src == "starting" and p.get("starting_handicap_18") is not None
+                     else round(idx9 * 2, 1))
             index_map[cname.lower()] = {
                 "index_9": idx9,
-                "index_18": round(idx9 * 2, 1),
+                "index_18": idx18,
                 # 'computed' from real rounds vs 'starting' placeholder.
                 # The roster must never show a stand-in as if it were an
                 # established index — Golf Genius flights people regardless
