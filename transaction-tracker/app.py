@@ -4820,7 +4820,7 @@ def api_get_pairings(event_id):
             player_rows = _pconn.execute(f"""
                 SELECT DISTINCT i.customer AS name, i.holes, i.tee_choice,
                                 c.pace_rating, c.current_player_status,
-                                i.user_status
+                                i.user_status, i.customer_id
                 FROM events e
                 LEFT JOIN event_aliases ea ON ea.canonical_event_name = e.item_name
                 JOIN items i ON (
@@ -4836,16 +4836,34 @@ def api_get_pairings(event_id):
             """, (event_id, *INACTIVE)).fetchall()
         finally:
             _pconn.close()
-        # is_member decided by the ROSTER, never by the order label — a
-        # "1ST TIMER" can be either (Kerry 2026-07-30). Drives the
-        # non-member colour band on the STANDINGS pairing cards.
-        from email_parser.database import _ls_is_member as _isM
-        event_players = []
-        for r in player_rows:
-            d = dict(r)
-            d["is_member"] = bool(_isM(d.pop("current_player_status", None),
-                                       d.get("user_status")))
-            event_players.append(d)
+        # Player TIER for the pairing-card colour bands: 'member' |
+        # 'alumni' | 'guest', from derive_member_financial_status_bulk —
+        # the same D1 truth Player Rankings chips with, so a FORMER member
+        # reads as ALUMNI instead of being lumped in with guests (Kerry
+        # 2026-07-31, "Why is Wade Amen shown Pink?"). The roster decides
+        # the tier; the order label only splits GUEST from 1ST TIMER.
+        from email_parser.database import (
+            _ls_is_member as _isM, derive_member_financial_status_bulk)
+        event_players = [dict(r) for r in player_rows]
+        _cids = [d["customer_id"] for d in event_players if d.get("customer_id")]
+        _tier = {}
+        if _cids:
+            _tc = get_connection()
+            try:
+                _tier = derive_member_financial_status_bulk(_tc, _cids)
+            except Exception:
+                logger.exception("Member-tier derivation failed (non-fatal)")
+            finally:
+                _tc.close()
+        for d in event_players:
+            cps = d.pop("current_player_status", None)
+            ms = _tier.get(d.get("customer_id"))
+            if not ms:
+                # No membership rows to derive from — fall back to the
+                # roster status, which still separates member from guest.
+                ms = "member" if _isM(cps, d.get("user_status")) else "guest"
+            d["member_status"] = ms
+            d["is_member"] = ms == "member"
         # Match Play matches still pending among this roster — lets the
         # PAIRINGS tab badge opponents on SAVED pairings too (rule 8's
         # visual denotation), not just on a fresh generate.

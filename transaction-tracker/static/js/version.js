@@ -1,5 +1,15 @@
-window.TGF_VERSION = "2.159.1";
+window.TGF_VERSION = "2.160.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.160.0",
+    date: "2026-07-31",
+    changes: [
+      "ALUMNI GET THEIR OWN COLOUR (Kerry 2026-07-31: 'Why is Wade Amen shown Pink? Former members (ALUMNI) need their own color'). The pairing card was deciding member-or-not from a boolean, so a FORMER member fell through to the guest pink. It now reads the player's tier from derive_member_financial_status_bulk — the same D1 financial truth Player Rankings chips with — which returns member / alumni / guest properly. Alumni render in the REJOIN cream (#fdf3e7) that Player Rankings already uses for a lapsed membership, so the two screens agree about who someone is. Five bands now: IN the race (green), MEMBER NOT IN (white), ALUMNI (cream), GUEST (pink), 1ST TIMER (orange) — the last two straight off the ROSTER's palette.",
+      "STATUS VOCABULARY FOLLOWS HOUSE CASING. The legend and row tooltips now use the app's own uppercase status tokens — MEMBER, ALUMNI, GUEST, 1ST TIMER — instead of sentence case, matching how the roster and Player Rankings already write them.",
+      "The pace badge moved to the FAR RIGHT of each player row. It is staging information, not something you read a player by, and sitting beside the name it pushed the whole line out of alignment.",
+      "Tee names are abbreviated so every column lines up: Forward renders FWD (Middle MID, Back BACK, Championship CHMP, Senior SR), which was the one value wide enough to stagger the rows against the age bands beside it. All four right-hand cells — points, handicap, tee, pace — now have fixed widths, so they form true columns down a card and across cards instead of drifting with content.",
+    ],
+  },
   {
     version: "2.159.1",
     date: "2026-07-31",

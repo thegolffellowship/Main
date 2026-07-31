@@ -631,11 +631,16 @@ The Quarry-night rulings, all built:
      =True)` returns `{"points": {...}, "enrolled": {...}}` keyed by
      customer_id AND name forms. The pairing card shades each row GREEN
      (member, in the race), WHITE (member, not in — "no color like in
-     our standings") or the ROSTER's own non-member colours, GUEST pink
+     our standings"), CREAM `#fdf3e7` (ALUMNI — the REJOIN colour Player
+     Rankings uses), or the ROSTER's own non-member colours, GUEST pink
      `#fbcfe8` / 1ST TIMER orange `#fdba74`, so the pairing card and the
      roster read the same (palette RULED Kerry 2026-07-31). The order
-     label picks WHICH non-member shade; it never decides the tier.
-     Membership is
+     label picks WHICH non-member shade; it never decides the tier. The
+     TIER comes from `derive_member_financial_status_bulk`
+     (member|alumni|guest — the D1 truth Player Rankings uses), exposed
+     as `event_players[].member_status`; a boolean is_member lumped
+     alumni in with guests. Legend + tooltips use the house uppercase
+     tokens MEMBER / ALUMNI / GUEST / 1ST TIMER. Membership is
      `_ls_is_member` off the roster (`event_players[].is_member` on GET
      /pairings), never the order label; unknown reads as member.
      Rendered whenever the standings data is present, NOT gated on the
