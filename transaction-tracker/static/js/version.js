@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.156.0";
+window.TGF_VERSION = "2.157.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.157.0",
+    date: "2026-07-31",
+    changes: [
+      "STANDINGS PAIRINGS SHOW THE POINTS (Kerry 2026-07-31). In STANDINGS mode each player now carries their season-points total from the selected race, so the number that built the order is visible on the sheet instead of implied. Keyed off the same map as the rank — customer_id first, name forms as a fallback — so a player who is ranked always shows a figure and one who is not shows a dash with a tooltip naming the race. Points ride on the SAVED sheet too, not just a freshly generated one: GET /pairings returns them read-only (a large max-age, so opening the panel never triggers a Golf Genius fetch — the point-of-use refresh stays with Generate).",
+      "FULL NAMES ON THE PAIRING CARDS. The group grid packed four 220px columns across, which truncated almost every name to 'Kerry Nie…'. Cards are now a 330px minimum and the grid uses auto-fit, so it lays out only as many columns as genuinely fit — three across on a standard desktop, dropping to two and then one as the window narrows — and names render in full instead of being clipped. A single very long name wraps rather than being cut.",
+      "Two smaller corrections in the same pass: the Move drop-target highlight now respects an event's fivesome setting instead of assuming four, and a seeded group being topped up from the free pool fills to the event's group size rather than always to four.",
+    ],
+  },
   {
     version: "2.156.0",
     date: "2026-07-31",

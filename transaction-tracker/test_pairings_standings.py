@@ -509,6 +509,46 @@ g4, _n4 = db._standings_groups(P20, R20, {}, False)
 check("...and the same field is five foursomes when fivesomes are off",
       [len(x) for x in g4] == [4, 4, 4, 4, 4], str([len(x) for x in g4]))
 
+print("\n== the POINTS column data (Kerry 2026-07-31) ==")
+PTSGG = {"standings": [
+    {"player_name": "NIESTER, Kerry", "customer_id": 5, "rank": "1",  "total_points": 412.5},
+    {"player_name": "BAKER, Adam",    "customer_id": 6, "rank": "T2", "total_points": 300},
+    {"player_name": "NOCID, Sam",     "customer_id": None, "rank": "4", "total_points": 88},
+    {"player_name": "NOPTS, Pat",     "customer_id": 9, "rank": "5",  "total_points": None},
+], "fetched_at": "t", "gg_error": None}
+_rp3 = db.get_points_race_standings
+db.get_points_race_standings = lambda k, **kw: PTSGG
+try:
+    _rm, _key, _nt, PTS = db._standings_rank_map("San Antonio", _with_points=True)
+finally:
+    db.get_points_race_standings = _rp3
+
+check("points are keyed by customer_id", PTS.get(5) == 412.5, str(PTS.get(5)))
+# The UI normalizes a display name to collapsed-lowercase and looks it up
+# directly, so the map must carry that exact key for a GG "LAST, First".
+check("...and by the 'First Last' name the roster shows",
+      PTS.get("kerry niester") == 412.5, str(PTS.get("kerry niester")))
+check("...and by the raw portal spelling",
+      PTS.get("niester, kerry") == 412.5, str(PTS.get("niester, kerry")))
+check("a row with no customer_id still contributes name keys",
+      PTS.get("sam nocid") == 88, str(PTS.get("sam nocid")))
+check("a player with NO points is absent rather than zero",
+      "pat nopts" not in PTS and 9 not in PTS, str(PTS))
+check("a tie keeps both players' own points",
+      PTS.get("adam baker") == 300 and PTS.get(6) == 300, str(PTS))
+
+# The 3-tuple contract the older callers use must be untouched.
+db.get_points_race_standings = lambda k, **kw: PTSGG
+try:
+    _three = db._standings_rank_map("San Antonio")
+finally:
+    db.get_points_race_standings = _rp3
+check("the default return is still a 3-tuple", len(_three) == 3, str(len(_three)))
+check("...and asking for points makes it a 4-tuple",
+      len((db._standings_rank_map("Houston", _with_points=True))) == 4)
+check("an unknown chapter returns empty points, not a crash",
+      db._standings_rank_map("Houston", _with_points=True)[3] == {})
+
 print("\n" + "=" * 60)
 if FAILURES:
     print(f"{len(FAILURES)} FAILED: {FAILURES}")

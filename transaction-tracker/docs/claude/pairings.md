@@ -611,6 +611,14 @@ The Quarry-night rulings, all built:
      the panel showed as active (Palacios lost Anthis to the approved
      Anthis→Murphy). Signup order makes the approval JOIN Palacios's
      unit instead, which is what approve means.
+   - **Points column (v2.157.0).** `_standings_rank_map(_with_points=
+     True)` returns a 4th element, `{customer_id | name_key -> points}`,
+     built from the same rows as the rank map. `generate_event_pairings`
+     puts the name-keyed half on the response as `standings_points`, and
+     GET `/api/events/<id>/pairings` returns it too (with a huge
+     `max_age_hours` so opening the panel never triggers a GG fetch) so
+     a SAVED sheet shows points as well. The 3-tuple return is unchanged
+     for every existing caller.
    - **The sheet fills from the BACK (v2.154.1).** Units are sorted
      leader-first and placed into the LAST group first, so "leaders go
      off last" is exact. The old forward cursor never revisited a group

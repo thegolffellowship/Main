@@ -4854,6 +4854,23 @@ def api_get_pairings(event_id):
             partner_requests = get_event_partner_requests(event_id).get("requests", [])
         except Exception:
             logger.exception("Partner-request list failed for event %d (non-fatal)", event_id)
+        # Season points for the STANDINGS view's points column, so a SAVED
+        # sheet shows them too and not only a freshly generated one
+        # (Kerry 2026-07-31). Read-only: a big max_age never triggers a GG
+        # fetch on a plain GET — the point-of-use refresh belongs to
+        # Generate, and this endpoint is hit on every panel open.
+        standings_points = {}
+        try:
+            from email_parser.database import _standings_rank_map
+            _rk = (request.args.get("race_key") or "").strip() or None
+            _, _, _, standings_points = _standings_rank_map(
+                ev.get("chapter"), _rk, max_age_hours=10 ** 6,
+                event_name=ev.get("item_name"), _with_points=True)
+            standings_points = {k: v for k, v in standings_points.items()
+                                if isinstance(k, str)}
+        except Exception:
+            logger.exception("Standings points lookup failed for event %d "
+                             "(non-fatal)", event_id)
         return jsonify({
             "pairings": pairings,
             "slots_9": slots_9,
@@ -4861,6 +4878,7 @@ def api_get_pairings(event_id):
             "event_players": event_players,
             "mp_matches": mp_matches,
             "partner_requests": partner_requests,
+            "standings_points": standings_points,
             "event": {
                 "format": ev.get("format"),
                 "start_type": ev.get("start_type"),
