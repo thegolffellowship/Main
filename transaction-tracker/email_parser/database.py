@@ -9391,6 +9391,13 @@ def determine_tgf_mvp(event_name: str, db_path: str | Path = DB_PATH) -> dict:
             unlinked = {u.lower() for u in get_mvp_unlinked_events(db_path=db_path)}
         except sqlite3.OperationalError:
             unlinked = set()  # table is created by init_db; absent on fresh DBs
+        # SAME FORMAT ONLY (Kerry 2026-07-31: "No mixed format TGF MVPs it's
+        # either nine or 18"). This used to drop every 18-hole event from the
+        # day pool outright, so two 18-hole events on one day could not share
+        # a TGF MVP at all; the day now pools by the anchor event's format, so
+        # a 9-hole and an 18-hole event on the same date are two separate
+        # contests rather than one combined or one suppressed.
+        ev_holes = _event_holes_type(ev["item_name"], ev.get("format"))
         day = []
         if ev["event_date"]:
             for r in conn.execute(
@@ -9399,11 +9406,11 @@ def determine_tgf_mvp(event_name: str, db_path: str | Path = DB_PATH) -> dict:
                 r = dict(r)
                 if r["item_name"].lower() in unlinked:
                     continue
-                if _event_holes_type(r["item_name"], r.get("format")) == 18:
+                if _event_holes_type(r["item_name"], r.get("format")) != ev_holes:
                     continue
                 day.append(r)
         if not any(d["item_name"].lower() == ev["item_name"].lower() for d in day):
-            day.insert(0, ev)  # this event even if unlinked/18h — still gets City MVP
+            day.insert(0, ev)  # this event even if unlinked — still gets City MVP
 
         # per-player rounds for the whole day, keyed (event_id, customer_id)
         event_ids = [d["id"] for d in day]

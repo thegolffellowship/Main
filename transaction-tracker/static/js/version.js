@@ -1,5 +1,16 @@
-window.TGF_VERSION = "2.168.0";
+window.TGF_VERSION = "2.169.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.169.0",
+    date: "2026-07-31",
+    changes: [
+      "TGF MVP NOW RUNS ON 18-HOLE DAYS, NOT JUST 9-HOLE DAYS (Kerry-ratified 2026-07-31, closing an open question from 2026-07-05). Two 18-hole events on the same day now share a combined TGF MVP exactly the way two 9-hole events do — it is the same contest at double the rate. Each city splits its NET-bundle MVP money in half, $4/buyer to its own City MVP and $4/buyer to TGF MVP, and every city's TGF half combines into one pot. Until now the code returned early on any 18-hole event and skipped 18-hole events when scanning the day, so a shared 18-hole TGF MVP was not merely unconfigured — it was unreachable.",
+      "NO CAP ON A MULTI-EVENT 18-HOLE DAY, AND NO RESIDUAL. A single 18-hole event still caps City MVP at $100 with the excess flowing to Individual Net, which is what the matrix rows encode. On a day with a second 18-hole event the cap does not apply, so Individual Net has to give that capped-away money back — otherwise the GAMES tab would show the same dollars in two places. At 22 net buyers: a single-event day is $472 Individual Net + $100 MVP; a two-event day is $396 + $88 City + $88 TGF. Both total the $572 NET pot. The Individual Net row is marked \"(multi-event day)\" when this applies and its place ladder scales by the same factor.",
+      "NO MIXED-FORMAT TGF MVPs. A 9-hole and an 18-hole event on the same date are two separate contests, each pooling only with its own format. This also fixes the determination engine, which pooled the day by DATE ALONE — a 9-hole and an 18-hole event sharing a date would have been combined into one TGF MVP.",
+      "Cross-course comparability is unchanged and deliberate: City MVP is the highest net Stableford points, with no adjustment for course difficulty, so two championship venues are compared on raw points.",
+      "The split is derived from the buyer count rather than added as a new matrix column. The live prize matrix is served from app_settings and overrides the seed file wholesale, so a new seed column would have been missing in production — the matrix's own values still take precedence wherever they exist, which keeps the long-standing 9-hole numbers authoritative.",
+    ],
+  },
   {
     version: "2.168.0",
     date: "2026-07-31",

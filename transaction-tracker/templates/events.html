@@ -4469,36 +4469,58 @@
      * Returns { linked: [{event_name, course, tgfMVP, netPC}], combinedPot, thisEventTgfMVP }
      * or null if no linked events or this event is unlinked.
      */
+    /**
+     * The MVP money split for one event, as {cityMVP, tgfMVP}.
+     *
+     * Kerry 2026-07-31 ratified that 18-hole mirrors 9-hole: the NET
+     * bundle's MVP money splits evenly between City MVP and TGF MVP when
+     * another same-day event of the SAME format exists. 9h = $4/buyer
+     * total ($2 + $2); 18h = $8/buyer total ($4 + $4).
+     *
+     * Derived from the buyer count rather than read from the matrix,
+     * because the LIVE matrix comes from app_settings and overrides the
+     * seed file wholesale — a new seed column would simply be missing in
+     * production. Matrix values still win where they exist, so the
+     * long-standing 9-hole numbers stay authoritative.
+     */
+    const MVP_PER_BUYER = { 9: 4, 18: 8 };
+    function mvpSplitFor(entry, holes, netPC) {
+        const half = ((MVP_PER_BUYER[holes] || 0) * (netPC || 0)) / 2;
+        const fromMatrix = k => (entry && entry[k] && entry[k] !== "NO_GAME")
+            ? numVal(entry[k]) : null;
+        return {
+            cityMVP: fromMatrix("cityMVP") != null ? fromMatrix("cityMVP") : half,
+            tgfMVP: fromMatrix("tgfMVP") != null ? fromMatrix("tgfMVP") : half,
+        };
+    }
+
     function getMvpLinkedEvents(ev) {
         if (!ev.event_date || mvpUnlinks.has(ev.item_name)) return null;
         const holes = extractHolesType(ev.item_name, ev.format);
-        if (holes === 18) return null; // only 9-hole and 9/18 combo
+        if (holes !== 9 && holes !== 18) return null;
 
-        const matrix = window.GAMES_MATRIX_9;
+        const matrix = holes === 9 ? window.GAMES_MATRIX_9 : window.GAMES_MATRIX_18;
         if (!matrix) return null;
 
         // This event's TGF MVP
         const thisRegs = getRegistrants(ev.item_name);
         const thisStats = computeGameStats(thisRegs, ev.item_name);
         const thisNetPC = thisStats.net;
-        const thisEntry = matrix[String(thisNetPC)];
-        const thisEventTgfMVP = (thisEntry && thisEntry.tgfMVP && thisEntry.tgfMVP !== "NO_GAME")
-            ? numVal(thisEntry.tgfMVP) : 0;
+        const thisEventTgfMVP = mvpSplitFor(matrix[String(thisNetPC)], holes, thisNetPC).tgfMVP;
 
-        // Find other same-day events (not unlinked, not this event, with 9-hole or combo format)
+        // Other same-day events, SAME FORMAT ONLY (Kerry 2026-07-31: "No
+        // mixed format TGF MVPs it's either nine or 18"). A 9-hole and an
+        // 18-hole event on one day are two separate TGF MVP contests.
         const linked = [];
         allEvents.forEach(other => {
             if (other.item_name === ev.item_name) return;
             if (other.event_date !== ev.event_date) return;
             if (mvpUnlinks.has(other.item_name)) return;
-            const otherHoles = extractHolesType(other.item_name, other.format);
-            if (otherHoles === 18) return; // skip standalone 18-hole events
+            if (extractHolesType(other.item_name, other.format) !== holes) return;
             const otherRegs = getRegistrants(other.item_name);
             const otherStats = computeGameStats(otherRegs, other.item_name);
             const otherNetPC = otherStats.net;
-            const otherEntry = matrix[String(otherNetPC)];
-            const otherTgfMVP = (otherEntry && otherEntry.tgfMVP && otherEntry.tgfMVP !== "NO_GAME")
-                ? numVal(otherEntry.tgfMVP) : 0;
+            const otherTgfMVP = mvpSplitFor(matrix[String(otherNetPC)], holes, otherNetPC).tgfMVP;
             if (otherTgfMVP > 0) {
                 linked.push({ event_name: other.item_name, course: other.course || other.item_name, tgfMVP: otherTgfMVP, netPC: otherNetPC });
             }
@@ -5791,6 +5813,33 @@
         let netMWP = 0;
         let linkedMvpExtra = 0;  // extra pot from linked same-day TGF MVP events
 
+        // 18-HOLE DAY TYPE (Kerry 2026-07-31). The 18h matrix rows encode the
+        // SINGLE-event day: City MVP = min($8xN, $100) and the money above
+        // the cap has already been folded into Individual Net. On a day with
+        // another 18-hole event there is no cap and no residual — the full
+        // $8xN splits $4 City + $4 TGF — so Individual Net has to give that
+        // residual back before anything is displayed, or the tab shows the
+        // same dollars twice.
+        const _mvpLink = (gNet && netPC >= 2) ? getMvpLinkedEvents(ev) : null;
+        let indNetScale = 1;
+        let indNetMulti = null;
+        if (holes === 18 && gNet && _mvpLink) {
+            const fullMvp = (MVP_PER_BUYER[18] || 0) * netPC;
+            const cappedMvp = (gNet.mvp && gNet.mvp !== "NO_GAME") ? numVal(gNet.mvp) : 0;
+            const storedIndNet = numVal(gNet.individualNet) || 0;
+            const residual = fullMvp - cappedMvp;      // capped-away money
+            if (residual > 0 && storedIndNet > 0) {
+                indNetMulti = Math.round((storedIndNet - residual) * 100) / 100;
+                indNetScale = indNetMulti / storedIndNet;
+            }
+        }
+        // Place values are a fixed percentage ladder off the Individual Net
+        // pot, so scaling them by the same factor preserves every ratio the
+        // matrix encodes. Flagged in the UI as derived, because the matrix
+        // itself has no multi-event 18-hole rows yet.
+        const _scaleP = v => (v == null || v === "NO_GAME" || v === "NO_EVENT")
+            ? v : Math.round(numVal(v) * indNetScale * 100) / 100;
+
         if (gNet && netPC >= 2) {
             const netFlights = gNet.netFlights ? parseInt(gNet.netFlights) : 1;
             const netFlightNames = holes === 18
@@ -5798,10 +5847,10 @@
                 : ["Low Flight", "High Flight"];
             const netFlightData = holes === 18
                 ? [
-                    { f1: gNet.netLow1st, f2: gNet.netLow2nd, f3: gNet.netLow3rd, f4: gNet.netLow4th },
-                    { f1: gNet.netHigh1st, f2: gNet.netHigh2nd, f3: gNet.netHigh3rd, f4: gNet.netHigh4th },
-                    { f1: gNet.netMid1st, f2: gNet.netMid2nd, f3: gNet.netMid3rd, f4: gNet.netMid4th },
-                    { f1: gNet.net4th1st, f2: gNet.net4th2nd, f3: gNet.net4th3rd, f4: gNet.net4th4th },
+                    { f1: _scaleP(gNet.netLow1st), f2: _scaleP(gNet.netLow2nd), f3: _scaleP(gNet.netLow3rd), f4: _scaleP(gNet.netLow4th) },
+                    { f1: _scaleP(gNet.netHigh1st), f2: _scaleP(gNet.netHigh2nd), f3: _scaleP(gNet.netHigh3rd), f4: _scaleP(gNet.netHigh4th) },
+                    { f1: _scaleP(gNet.netMid1st), f2: _scaleP(gNet.netMid2nd), f3: _scaleP(gNet.netMid3rd), f4: _scaleP(gNet.netMid4th) },
+                    { f1: _scaleP(gNet.net4th1st), f2: _scaleP(gNet.net4th2nd), f3: _scaleP(gNet.net4th3rd), f4: _scaleP(gNet.net4th4th) },
                   ]
                 : [
                     { f1: gNet.netLow1st, f2: gNet.netLow2nd, f3: gNet.netLow3rd },
@@ -5818,7 +5867,11 @@
             }
             netMWP += indNetMWP;
 
-            html += `<tr><td><strong>Individual Net</strong></td><td>${fmt$(gNet.individualNet) || "—"}</td><td>${fmt$(indNetMWP) || "—"}</td><td>${netFlights}</td>${empty4}</tr>`;
+            const indNetShown = indNetMulti != null ? indNetMulti : gNet.individualNet;
+            const indNetNote = indNetMulti != null
+                ? ' <span style="font-size:0.8em;color:#6366f1;" title="Multi-event 18-hole day: the full $8/buyer MVP money splits City/TGF, so the capped-away residual is no longer in Individual Net. Places scaled proportionally.">(multi-event day)</span>'
+                : '';
+            html += `<tr><td><strong>Individual Net</strong>${indNetNote}</td><td>${fmt$(indNetShown) || "—"}</td><td>${fmt$(indNetMWP) || "—"}</td><td>${netFlights}</td>${empty4}</tr>`;
 
             for (let i = 0; i < netFlights && i < netFlightData.length; i++) {
                 const fd = netFlightData[i];
@@ -5830,18 +5883,31 @@
                 }
             }
 
-            if (holes === 9) {
-                // Day-type rule (admin, 2026-07-05): TGF MVP only exists when
-                // another same-day TGF event is linked. On single-event days
+            {
+                // Day-type rule (admin, 2026-07-05; extended to 18 holes by
+                // Kerry 2026-07-31). TGF MVP only exists when another same-day
+                // event of the SAME format is linked. On single-event days
                 // (or when all others are unlinked/rained out) the TGF MVP
-                // money folds into City MVP — no phantom TGF MVP game.
-                const tgfVal = (gNet.tgfMVP && gNet.tgfMVP !== "NO_GAME") ? numVal(gNet.tgfMVP) : 0;
-                const mvpInfo = tgfVal ? getMvpLinkedEvents(ev) : null;
-                if (gNet.cityMVP) {
-                    const cityVal = numVal(gNet.cityMVP) + (mvpInfo ? 0 : tgfVal);
+                // money folds into City MVP — no phantom TGF MVP game. At 18
+                // holes the single-event fold is ALSO capped at $100, with the
+                // excess already sitting in Individual Net.
+                const _split = mvpSplitFor(gNet, holes, netPC);
+                const tgfVal = _split.tgfMVP;
+                const mvpInfo = tgfVal ? _mvpLink : null;
+                if (_split.cityMVP) {
+                    const cityVal = mvpInfo
+                        ? _split.cityMVP
+                        : (holes === 18
+                            ? ((gNet.mvp && gNet.mvp !== "NO_GAME")
+                                ? numVal(gNet.mvp)
+                                : Math.min(_split.cityMVP + tgfVal, 100))
+                            : _split.cityMVP + tgfVal);
                     netMWP += cityVal;
                     const foldNote = (!mvpInfo && tgfVal)
-                        ? ' <span style="font-size:0.8em;color:#6366f1;" title="No linked same-day event — TGF MVP money folds into City MVP">(incl. TGF $)</span>' : '';
+                        ? (holes === 18
+                            ? ' <span style="font-size:0.8em;color:#6366f1;" title="No linked same-day 18-hole event — TGF MVP money folds into City MVP, capped at $100; the excess is already in Individual Net">(incl. TGF $, capped)</span>'
+                            : ' <span style="font-size:0.8em;color:#6366f1;" title="No linked same-day event — TGF MVP money folds into City MVP">(incl. TGF $)</span>')
+                        : '';
                     html += `<tr><td><strong>City MVP</strong>${foldNote} <span class="mvp-det" data-event="${ev.item_name}" data-kind="city"></span></td><td>${fmt$(cityVal)}</td><td>${fmt$(cityVal)}</td><td></td>${empty4}</tr>`;
                 }
                 if (tgfVal) {
@@ -5866,7 +5932,7 @@
                                 relinkHtml = ` <span class="mvp-relink-btn" data-event="${ev.item_name}" title="Re-link to combined TGF MVP" style="cursor:pointer;color:#6366f1;font-size:0.8em;">&#x1F517;</span>`;
                             } else {
                                 // Check if any same-day events are unlinked — offer to relink them
-                                const unlinkedSameDay = allEvents.filter(o => o.item_name !== ev.item_name && o.event_date === ev.event_date && mvpUnlinks.has(o.item_name) && extractHolesType(o.item_name, o.format) !== 18);
+                                const unlinkedSameDay = allEvents.filter(o => o.item_name !== ev.item_name && o.event_date === ev.event_date && mvpUnlinks.has(o.item_name) && extractHolesType(o.item_name, o.format) === holes);
                                 if (unlinkedSameDay.length > 0) {
                                     relinkHtml = unlinkedSameDay.map(o => ` <span class="mvp-relink-btn" data-event="${o.item_name}" title="Re-link ${o.course || o.item_name} to combined TGF MVP" style="cursor:pointer;color:#6366f1;font-size:0.8em;">&#x1F517;</span>`).join('');
                                 }
@@ -5877,8 +5943,6 @@
                         }
                     }
                 }
-            } else {
-                if (gNet.mvp) { netMWP += numVal(gNet.mvp); html += `<tr><td>MVP</td><td>${fmt$(gNet.mvp)}</td><td>${fmt$(gNet.mvp)}</td><td></td>${empty4}</tr>`; }
             }
             const netSubtotalPot = numVal(gNet.netTotalPot) + linkedMvpExtra;
             html += `<tr class="games-row-total"><td>Subtotal</td><td>${fmt$(netSubtotalPot)}</td><td>${fmt$(netMWP)}</td><td></td>${empty4}</tr>`;

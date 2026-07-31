@@ -171,16 +171,56 @@ the LIVE copy (source: `app_settings`):
   mvp — the excess above the cap flows to Individual Net automatically.
   Matches admin intent for SINGLE-event days (below).
 
-## 18h MVP day-type rule (admin, 2026-07-05 — understanding to confirm)
+## 18h MVP day-type rule — **RATIFIED (Kerry, 2026-07-31)**
 
-- **Single 18h event that day**: all MVP money to City MVP, capped at
-  $100; MVP-designated money above the cap reroutes to Individual Net
-  payouts. (The matrix encodes exactly this.)
-- **Multiple TGF events that day**: follow the 9-hole model — split
-  evenly, $4/buyer City MVP + $4/buyer TGF MVP, no cap (pending admin
-  confirmation on the no-cap reading). The matrix currently encodes
-  only the single-event variant; day-type awareness is a runtime
-  concern for payout tooling.
+Confirmed verbatim, closing the 2026-07-05 open question:
+
+1. *"For two or more 18 whole days there is no cap just like the nine
+   hole events."*
+2. *"Both cities' MVP totals are $ x N/2 = MVP and TGF MVP pots. Then
+   combine each city…exactly like 9s. It's just a bigger $/player"*
+3. Cross-course comparability: *"Is what it is. No adjustments for
+   difficulty."*
+4. *"No mixed format TGF MVPs it's either nine or 18."*
+5. The GAMES tab on each event must show the totals the way the 9-hole
+   events do.
+6. *"for a single 18 hole event day we would max out at $100 and then
+   put the rest into the individual net game. There will not be any
+   residual for multiple 18 hole events just like the nine hole
+   multiple events."*
+
+**Single 18h event that day**: all MVP money to City MVP, capped at
+$100; the money above the cap reroutes to Individual Net. The matrix
+rows encode exactly this — `mvp = min($8xN, $100)`,
+`individualNet = $26xN - mvp`.
+
+**Two or more 18h events that day**: no cap, no residual. City MVP
+$4/buyer + TGF MVP $4/buyer per city; the TGF halves from every linked
+city COMBINE into one pot. Individual Net becomes the full
+`$26xN - $8xN = $18xN` — it must give the capped-away residual back, or
+the same dollars appear twice on the tab. Worked example at N=22:
+single-event 472 + 100 = 572; multi-event 396 + 88 + 88 = 572.
+
+### How it is implemented (v2.169.0)
+
+- `templates/events.html` `mvpSplitFor(entry, holes, netPC)` — the split
+  is DERIVED from the buyer count ($4/buyer at 9h, $8/buyer at 18h,
+  halved), with matrix `cityMVP`/`tgfMVP` winning where present. Derived
+  rather than seeded because the LIVE matrix comes from `app_settings`
+  and overrides `games-matrix.js` wholesale — a new seed column would
+  simply be absent in production (see the `get_side_games_matrix` note
+  in CLAUDE.md).
+- `getMvpLinkedEvents(ev)` works for BOTH formats and links **same
+  format only**. It previously returned null for any 18-hole event and
+  skipped 18-hole events when scanning the day, so two 18-hole events
+  could never share a TGF MVP.
+- Multi-event 18h days scale Individual Net (and its place ladder,
+  proportionally — the ladder is a fixed percentage structure) and mark
+  the row "(multi-event day)". **The matrix itself still has no
+  multi-event 18-hole rows**; adding them to the generator is the
+  authoritative follow-up.
+- `database.py determine_tgf_mvp` pools the day by the anchor event's
+  format. It used to drop every 18-hole event from the pool outright.
 
 ## GG game SETUP layer (admin-supplied screenshots — versioned
 ## game definitions; first arrived 2026-07-05)
