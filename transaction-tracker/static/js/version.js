@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.169.0";
+window.TGF_VERSION = "2.170.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.170.0",
+    date: "2026-07-31",
+    changes: [
+      "THE 3RD-PLACE MATCH CAN BE CHANGED OR UNDONE (Kerry 2026-07-31, for Robert on the Austin bracket: he 'populated the third place match, but can\'t figure out how to undo it'). He could not, and it was not his fault — the control disappeared the instant a winner was recorded, so a mis-tap was unfixable from the screen even though the API has always treated an empty winner as a clear. The 3rd-place block now keeps its control after a result exists, with the recorded winner pre-selected, an Update button, and a Clear button that reverts the money to the even split between both semifinal losers. Clearing keeps the pairing on the bracket, so the match is still there to play — only the result goes away.",
+      "Winner-takes-all was already how it worked and still is: recording a winner gives that player the whole 3rd-place amount, and the even split is only the fallback for when the match cannot be scheduled. On the three-place ladder (8-10 entrants) the 3rd-place winner takes the full 3rd amount and the loser takes nothing; on the four-place ladder (11+) the match decides 3rd versus 4th and both are still paid. The ladder total is identical either way — the match moves money, it never creates any.",
+    ],
+  },
   {
     version: "2.169.0",
     date: "2026-07-31",

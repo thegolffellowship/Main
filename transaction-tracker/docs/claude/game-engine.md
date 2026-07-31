@@ -705,3 +705,30 @@ captain precedence, no double-seating, pool fill, alternates order,
 small-field exhaustion. Note: synthetic season_contests rows must set
 `manually_enrolled=1` or boot cleanup removes them (no backing
 purchases).
+
+## D-MP-08 consolation: change + clear (v2.170.0, Kerry 2026-07-31)
+
+Robert recorded the Austin 3rd-place result and could not undo it. The
+backend never lacked the capability — `cmp_record_consolation(...,
+winner_name=None)` has always meant CLEAR, and `POST /api/cmp/consolation`
+with an empty `winner_name` reaches it. The gap was purely in
+`templates/contests.html`, which gated the manager control on
+`!(cons && cons.recorded)`, so the select and button vanished the moment a
+winner existed.
+
+The block now renders the control whenever the manager is viewing and both
+semifinal losers are known, with the recorded winner pre-selected,
+"Update 3rd place", and a red **Clear** button (confirm-gated). Clearing
+writes a NULL winner and KEEPS the bracket row, so the pairing stays on the
+bracket and the payout sheet falls back to the even split.
+
+**Semantics worth restating**, because "winner takes all" vs "split" reads
+like a config choice and is not:
+- A RECORDED winner takes the whole 3rd-place amount. On the 8-10 ladder
+  (`[50, 30, 20]`) 4th pays nothing, so the loser gets nothing; on the 11+
+  ladder (`[50, 25, 15, 10]`) the match decides 3rd vs 4th and both are paid.
+- The even split (`tie_policy: split_combined_places`) is the FALLBACK for
+  an unplayable match, not an alternative policy to toggle.
+- The ladder total is invariant across both — the match moves money only.
+
+Tests: `test_cmp_consolation_undo.py`.

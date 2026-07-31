@@ -4663,19 +4663,30 @@
                       mpBracketSlot(sfLosers[1], 'b', consWinner && sfLosers[1].player_name === consWinner)
                     : mpBracketSlot({}, 'a', false) + mpBracketSlot({}, 'b', false);
                 // Manager control → POST /api/cmp/consolation (already live).
+                // The control STAYS after a result is recorded (Kerry
+                // 2026-07-31: Robert "populated the third place match, but
+                // can't figure out how to undo it"). It was hidden the moment
+                // a winner existed, so a mis-tap was unfixable from the UI
+                // even though the API has always accepted an empty winner as
+                // "clear". Now it reopens with the recorded winner selected,
+                // plus a Clear button that reverts to the fallback split.
                 let consControl = '';
-                if (isManager && sfLosers.length === 2 && !(cons && cons.recorded)) {
+                if (isManager && sfLosers.length === 2) {
                     const la = escapeHtml(sfLosers[0].player_name);
                     const lb = escapeHtml(sfLosers[1].player_name);
+                    const recorded = !!(cons && cons.recorded);
+                    const cw = escapeHtml(consWinner || '');
+                    const sel = v => (cw && cw === v) ? ' selected' : '';
                     consControl = `
                         <div class="bracket-match-footer" style="margin-top:0.4rem;border-top:none;background:transparent;padding-left:0;">
                             <select class="cmp-cons-winner bracket-winner-sel"
                                 data-loser-a="${la}" data-loser-b="${lb}">
                                 <option value="">3rd-place winner…</option>
-                                <option value="${la}">${la} wins</option>
-                                <option value="${lb}">${lb} wins</option>
+                                <option value="${la}"${sel(la)}>${la} wins</option>
+                                <option value="${lb}"${sel(lb)}>${lb} wins</option>
                             </select>
-                            <button class="match-save-btn cmp-cons-save" style="flex-shrink:0;">Record 3rd place</button>
+                            <button class="match-save-btn cmp-cons-save" style="flex-shrink:0;">${recorded ? "Update 3rd place" : "Record 3rd place"}</button>
+                            ${recorded ? `<button class="match-save-btn cmp-cons-clear" style="flex-shrink:0;background:transparent;color:var(--red,#dc2626);border:1px solid var(--red,#dc2626);" title="Clear the recorded result — 3rd-place money reverts to the even split between both semifinal losers">Clear</button>` : ''}
                         </div>`;
                 }
                 consolationHtml = `
@@ -4721,15 +4732,16 @@
             // Live-poll any in-progress bracket card against Golf Genius.
             mpStartBracketLive(container);
 
-            // Wire the D-MP-08 consolation record control (manager).
+            // Wire the D-MP-08 consolation record / update / clear controls.
             const consSaveBtn = container.querySelector(".cmp-cons-save");
-            if (consSaveBtn) {
-                consSaveBtn.addEventListener("click", async () => {
-                    const sel = container.querySelector(".cmp-cons-winner");
-                    const winner_name = sel ? sel.value : "";
-                    if (!winner_name) { alert("Pick the 3rd-place winner."); return; }
-                    const { season, chapter } = cmpState;
-                    consSaveBtn.textContent = "Saving…"; consSaveBtn.disabled = true;
+            const consClearBtn = container.querySelector(".cmp-cons-clear");
+            async function postConsolation(winner_name, btn, busyLabel) {
+                const sel = container.querySelector(".cmp-cons-winner");
+                if (!sel) return;
+                const { season, chapter } = cmpState;
+                const restore = btn ? btn.textContent : '';
+                if (btn) { btn.textContent = busyLabel; btn.disabled = true; }
+                try {
                     const resp = await fetch("/api/cmp/consolation", {
                         method: "POST",
                         headers: { "Content-Type": "application/json" },
@@ -4737,16 +4749,39 @@
                             season, chapter,
                             loser_a: sel.dataset.loserA,
                             loser_b: sel.dataset.loserB,
-                            winner_name,
+                            // An empty winner is the documented CLEAR — the
+                            // payout sheet reverts to the even split.
+                            winner_name: winner_name || "",
                         }),
                     });
                     if (!resp.ok) {
                         const e = await resp.json().catch(() => ({}));
-                        alert(e.error || "Could not record 3rd place.");
-                        consSaveBtn.textContent = "Record 3rd place"; consSaveBtn.disabled = false;
+                        alert(e.error || "Could not save the 3rd-place result.");
+                        if (btn) { btn.textContent = restore; btn.disabled = false; }
                         return;
                     }
-                    loadCmpPayouts();
+                } catch (err) {
+                    alert("Could not save the 3rd-place result.");
+                    if (btn) { btn.textContent = restore; btn.disabled = false; }
+                    return;
+                }
+                loadCmpPayouts();
+            }
+            if (consSaveBtn) {
+                consSaveBtn.addEventListener("click", () => {
+                    const sel = container.querySelector(".cmp-cons-winner");
+                    const winner_name = sel ? sel.value : "";
+                    if (!winner_name) { alert("Pick the 3rd-place winner."); return; }
+                    postConsolation(winner_name, consSaveBtn, "Saving…");
+                });
+            }
+            if (consClearBtn) {
+                consClearBtn.addEventListener("click", () => {
+                    if (!confirm("Clear the recorded 3rd-place result?\n\n"
+                        + "The 3rd-place money goes back to being split evenly "
+                        + "between both semifinal losers until a winner is "
+                        + "recorded again.")) return;
+                    postConsolation("", consClearBtn, "Clearing…");
                 });
             }
         }
