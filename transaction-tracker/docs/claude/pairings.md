@@ -572,6 +572,25 @@ The Quarry-night rulings, all built:
      latitude, and approvals all resolve by joining, and all stop at
      `HOST_GROUP_MAX = 4`; the fifth stays outranked with "honoring this
      would make five". Approval cannot override arithmetic.
+   - **STANDINGS order matches on customer_id (v2.154.1).** The rank map
+     from `_standings_rank_map` is keyed by **customer_id first**; name
+     keys (the portal's raw "LAST, First" spelling plus every
+     `_gg_name_candidates` form) are a fallback for standings rows that
+     never resolved to a profile. `_standings_groups(id_map=…)` takes
+     the roster's ids and looks up by id before name. Keying on
+     `name.lower()` alone matched ZERO of the SA Championship's 32
+     players — GG stores "SOUTH, Daniel" — so the sheet was random order
+     wearing a STANDINGS label. A total miss now emits a WARNING saying
+     it is not a standings order; a partial miss NAMES the unmatched
+     players.
+   - **The sheet fills from the BACK (v2.154.1).** Units are sorted
+     leader-first and placed into the LAST group first, so "leaders go
+     off last" is exact. The old forward cursor never revisited a group
+     it skipped, so a pair landing on a group of three left a permanent
+     hole and the tail units "matched no slot" (Wade Fieber, Will
+     Peterson — on 32 players, i.e. 8 clean foursomes). Back-filling
+     puts every hole at the FRONT, among the unranked, where slop is
+     free.
    - **Units, not pairs.** The simulation tracks UNITS
      (`units`/`unit_of`/`_join` inside `get_event_partner_requests`)
      because "join the group that already exists" is inexpressible in a

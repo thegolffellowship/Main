@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.154.0";
+window.TGF_VERSION = "2.154.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.154.1",
+    date: "2026-07-31",
+    changes: [
+      "STANDINGS PAIRINGS WERE NOT IN STANDINGS ORDER AT ALL. The SA Championship sheet said '0 of 32 players are in the standings' and was therefore random order wearing a STANDINGS label (Kerry 2026-07-31). The rank map keyed on a plain lowercased player name, but the Golf Genius portal stores names as 'LAST, First' — so not one of the 32 matched and every player was treated as unranked. The map is now keyed by customer_id FIRST, which both the standings snapshot rows and the event roster already carry, with name keys kept only as a fallback for a standings row that never resolved to a profile. Name keys now include the portal's raw spelling AND the 'First Last' forms _gg_name_candidates derives from it, so even an unlinked row matches. This is the third place this session where name-string matching was silently doing nothing that customer_id matching does correctly — guiding principle 6, again.",
+      "A TOTAL MISS IS NOW LOUD. When none of the field matches, the notes say 'NONE of the field matched the standings, so this is not a standings order at all' rather than a quiet '0 of 32'. On a partial miss the unmatched players are NAMED (up to six, then a count), so the next mismatch is diagnosable instead of a shrug.",
+      "THE TEE SHEET PACKS CLEANLY AGAIN. Two players 'matched no slot' and were dumped into the smallest group on a 32-player field that divides evenly into 8 foursomes. The fill cursor only ever moved FORWARD, so a partner pair arriving at a group of three skipped that group permanently and left a hole nothing could reuse; the units at the tail then had nowhere to go. Groups now fill from the LAST group BACKWARDS with the leader's unit placed first, which also makes 'leaders go off last' exact rather than merely likely — every hole now lands at the FRONT of the sheet, among the unranked players, where the slop costs nothing. Verified across 4,000 randomized fields (5–44 players, random partner pairs): nobody lost or duplicated, no group over a foursome, no split pairs, and the points leader in the final group every time.",
+    ],
+  },
   {
     version: "2.154.0",
     date: "2026-07-31",

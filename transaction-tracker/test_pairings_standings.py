@@ -313,6 +313,111 @@ try:
 finally:
     db.get_points_race_standings, db.get_fellowship_cup_projection = _realp, _realf
 
+print("\n== GG names must match the ROSTER (Kerry 2026-07-31) ==")
+# The SA Championship generated a pairing sheet that said "0 of 32 players
+# are in the standings" and was therefore random order wearing a STANDINGS
+# label. Cause: the rank map keyed on a plain lowercased name, but the GG
+# portal stores "LAST, First". customer_id is on BOTH sides — use it.
+GG = {"standings": [
+    {"player_name": "SOUTH, Daniel",  "customer_id": 7,  "position": 1},
+    {"player_name": "VASQUEZ, Gus",   "customer_id": 2,  "position": 2},
+    {"player_name": "ARIAS, Victor Jr", "customer_id": None, "position": 3},
+    {"player_name": "NOPROFILE, Ann", "customer_id": None, "position": 4},
+], "fetched_at": "2026-07-31 18:00:00", "gg_error": None}
+_rp = db.get_points_race_standings
+db.get_points_race_standings = lambda k, **kw: GG
+try:
+    rm, key, notes = db._standings_rank_map("San Antonio")
+finally:
+    db.get_points_race_standings = _rp
+
+check("the race resolved to the SA City NET race", key == "san_antonio_net", str(key))
+check("customer_id keys are present", rm.get(7) == 1 and rm.get(2) == 2, str(rm))
+check("the raw portal spelling is keyed too",
+      rm.get("south, daniel") == 1, str(rm.get("south, daniel")))
+check("...and so is the 'First Last' form it implies",
+      rm.get("daniel south") == 1, str(rm.get("daniel south")))
+# "ARIAS, Victor Jr" implies "Victor Arias Jr" (and "Victor Jr Arias").
+# A bare "Victor Arias" is deliberately NOT generated — dropping a suffix
+# is how you conflate a Jr with his father; customer_id is the answer for
+# that case, not a looser name rule.
+check("a suffixed GG name resolves as well",
+      rm.get("victor arias jr") == 3, str(rm.get("victor arias jr")))
+check("...but the suffix is not silently dropped",
+      rm.get("victor arias") is None, str(rm.get("victor arias")))
+
+# The whole point: a roster keyed by customer_id now ranks.
+roster = ["Daniel South", "Gus Vasquez", "Victor Arias Jr", "Wade Fieber"]
+ids = {"Daniel South": 7, "Gus Vasquez": 2, "Victor Arias Jr": 44, "Wade Fieber": 55}
+groups, gnotes = db._standings_groups(roster, rm, {}, False, id_map=ids)
+line = next((n for n in gnotes if "in the standings" in n), "")
+check("3 of the 4 rank — not 0 of 4",
+      "3 of 4 players are in the standings" in line, line)
+check("the unranked player is NAMED so a mismatch is diagnosable",
+      any("Wade Fieber" in n for n in gnotes), str(gnotes))
+check("no bogus all-missed warning when matching works",
+      not any("NONE of the field" in n for n in gnotes), str(gnotes))
+
+# LEADERS LAST: Daniel South (position 1) must be in the final group.
+flat_last = groups[-1] if groups else []
+check("the points leader goes off LAST",
+      "Daniel South" in flat_last, str(groups))
+check("the unranked player goes off FIRST",
+      "Wade Fieber" in (groups[0] if groups else []), str(groups))
+
+# A roster row with NO customer_id still matches on the name fallback.
+g2, n2 = db._standings_groups(["Daniel South", "Wade Fieber"], rm, {}, False,
+                              id_map={"Wade Fieber": 55})
+check("a roster row without a customer_id falls back to the name",
+      "2 of 2 players" not in " ".join(n2)
+      and "1 of 2 players are in the standings" in " ".join(n2), str(n2))
+
+# And the failure mode itself is now loud rather than silent.
+_g3, n3 = db._standings_groups(["Nobody One", "Nobody Two"], rm, {}, False,
+                               id_map={})
+check("a total miss is called out as NOT a standings order",
+      any("NONE of the field" in n for n in n3), str(n3))
+
+print("\n== the sheet packs cleanly and the leader really is LAST ==")
+# The SA Championship: 32 players, which is exactly 8 foursomes, yet two
+# players "matched no slot" and were dumped into the smallest group
+# (Kerry 2026-07-31). Cause: the fill cursor only ever moved FORWARD, so a
+# pair arriving at a group of 3 skipped that group permanently and left a
+# hole nothing could reuse.
+FIELD32 = [f"P{i:02d}" for i in range(32)]
+RANK32 = {p.lower(): i + 1 for i, p in enumerate(FIELD32)}   # P00 = leader
+PAIRS32 = {"P00": "P17", "P03": "P22", "P09": "P28", "P14": "P31"}
+g32, n32 = db._standings_groups(FIELD32, RANK32, PAIRS32, True)
+
+check("32 players make exactly 8 foursomes",
+      [len(x) for x in g32] == [4] * 8, str([len(x) for x in g32]))
+check("nobody 'matched no slot'",
+      not any("no slot" in n for n in n32),
+      str([n for n in n32 if "no slot" in n]))
+check("every player is placed exactly once",
+      sorted(x for u in g32 for x in u) == sorted(FIELD32))
+check("the points LEADER is in the last group",
+      "P00" in g32[-1], str(g32[-1]))
+check("the tail of the standings goes off FIRST",
+      "P30" in g32[0] and "P29" in g32[0], str(g32[0]))
+for a, b in PAIRS32.items():
+    check(f"partner pair {a}+{b} is not split",
+          any(a in u and b in u for u in g32), str(g32))
+
+# Uneven fields are where the old cursor lost the leader entirely: a hole
+# left in a late group got backfilled by the leader, pulling them off the
+# final tee time. Filling from the BACK makes leaders-last exact.
+for n in (13, 22, 25, 31, 43):
+    pl = [f"X{i:02d}" for i in range(n)]
+    rk = {p.lower(): i + 1 for i, p in enumerate(pl)}
+    pm = {pl[i]: pl[-(i + 1)] for i in range(0, min(4, n // 4))}
+    gg, _nt = db._standings_groups(pl, rk, pm, True)
+    check(f"n={n}: leader goes off last", "X00" in gg[-1], str(gg[-1]))
+    check(f"n={n}: nobody is lost or duplicated",
+          sorted(x for u in gg for x in u) == sorted(pl))
+    check(f"n={n}: no group exceeds a foursome",
+          all(len(u) <= 4 for u in gg), str([len(u) for u in gg]))
+
 print("\n" + "=" * 60)
 if FAILURES:
     print(f"{len(FAILURES)} FAILED: {FAILURES}")

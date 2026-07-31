@@ -46338,7 +46338,9 @@ def generate_event_pairings(
                 groups_players, _snotes = _standings_groups(
                     free_players, _rank_map, partner_map,
                     protect_partner_requests,
-                    host_units=bound_units if protect_partner_requests else None)
+                    host_units=bound_units if protect_partner_requests else None,
+                    id_map={p["customer"]: p.get("customer_id")
+                            for p in player_items if p.get("customer")})
                 mp_notes.extend(_snotes)
             else:
                 # No usable standings — say so and fall back rather than
@@ -46913,13 +46915,27 @@ def _standings_rank_map(chapter: str | None, race_key: str | None = None,
         notes.append(f"Could not read the {key} standings ({e}) — "
                      f"pairings fell back to random order.")
         return {}, key, notes
-    rank_map = {}
+    # KEYED BY customer_id FIRST (guiding principle 6). Standings rows come
+    # from the GG portal, where names are "LAST, First" — a plain lowercased
+    # name key matched ZERO of the 32 SA Championship players (Kerry
+    # 2026-07-31), so every one of them was treated as unranked and the
+    # field came out in random order. The snapshot rows already carry
+    # customer_id, and so does the roster; the name keys below are only a
+    # fallback for a standings row that never resolved to a profile.
+    rank_map: dict = {}
     for i, r in enumerate(data.get("standings") or []):
-        nm = (r.get("player_name") or "").strip().lower()
-        if not nm:
-            continue
-        pos = r.get("position")
-        rank_map.setdefault(nm, int(pos) if pos else i + 1)
+        pos = r.get("position") or r.get("rank")
+        pos = int(pos) if pos else i + 1
+        cid = r.get("customer_id")
+        if cid:
+            rank_map.setdefault(int(cid), pos)
+        raw = r.get("player_name") or ""
+        # Both the raw portal spelling and the "First Last" candidates it
+        # implies, so a roster row with no customer_id can still match.
+        for nm in [raw, *_gg_name_candidates(raw)]:
+            k = _pair_key_name(nm)
+            if k:
+                rank_map.setdefault(k, pos)
     if not rank_map:
         notes.append(f"The {key} standings are empty — pairings fell back "
                      f"to random order.")
@@ -46939,7 +46955,8 @@ def _standings_rank_map(chapter: str | None, race_key: str | None = None,
 
 def _standings_groups(players: list[str], rank_map: dict, partner_map: dict,
                       protect_partner_requests: bool,
-                      host_units: list[list[str]] | None = None
+                      host_units: list[list[str]] | None = None,
+                      id_map: dict | None = None
                       ) -> tuple[list, list]:
     """Group by points-race standing with the LEADERS GOING OFF LAST (PGA
     order), while still honoring partner requests.
@@ -46985,37 +47002,78 @@ def _standings_groups(players: list[str], rank_map: dict, partner_map: dict,
 
     # 2. Order units by their BEST rank; leaders last, unranked first.
     UNRANKED = 10 ** 6
+    ids = {_pair_key_name(k): v for k, v in (id_map or {}).items() if v}
+
+    def player_rank(n):
+        """customer_id first, name only as a fallback (principle 6)."""
+        cid = ids.get(_pair_key_name(n))
+        if cid is not None:
+            pos = rank_map.get(int(cid))
+            if pos is not None:
+                return pos
+        return rank_map.get(_pair_key_name(n), UNRANKED)
 
     def best_rank(unit):
-        return min((rank_map.get(n.lower(), UNRANKED) for n in unit),
-                   default=UNRANKED)
+        return min((player_rank(n) for n in unit), default=UNRANKED)
 
-    # Descending rank number = worst first, leader (position 1) last.
-    units.sort(key=lambda u: (-best_rank(u), (u[0] or "").lower()))
+    # LEADER FIRST in unit order, because the sheet is FILLED FROM THE
+    # BACK below. A unit takes the position of its strongest member.
+    units.sort(key=lambda u: (best_rank(u), (u[0] or "").lower()))
 
-    # 3. Fill groups sequentially. Short groups go EARLIEST so the leaders
-    #    land in a full foursome at the back, as they would on tour.
+    # 3. Fill from the LAST group backwards. "Leaders go off last" is the
+    #    rule, so the leader's unit is placed first, into the final group
+    #    — that makes leaders-last exact instead of merely likely.
+    #
+    #    Filling forwards (as this did) made two failures possible on the
+    #    SA Championship's 32-player field, which divides evenly into 8
+    #    foursomes: a cursor that advanced whenever a unit didn't fit
+    #    permanently skipped groups that still had room, so tail units
+    #    "matched no slot" and were dumped into the smallest group (Wade
+    #    Fieber and Will Peterson, Kerry 2026-07-31); and backfilling
+    #    those holes then pulled the LEADER forward off the last tee
+    #    time. Filling backwards puts every hole at the FRONT of the
+    #    sheet, among the unranked players, where slop costs nothing.
+    #
+    #    Short groups still sit earliest (sizes ascending), so the
+    #    leaders finish in a full foursome as they would on tour.
     n = len(players)
     sizes = sorted(_make_group_sizes(n))
-    groups, gi = [[] for _ in sizes], 0
+    groups = [[] for _ in sizes]
+    gi = len(sizes) - 1
     for unit in units:
-        while gi < len(sizes) and len(groups[gi]) + len(unit) > sizes[gi]:
-            gi += 1
-        if gi >= len(sizes):
-            # A unit that fits nowhere left — drop it into the smallest
-            # group with room rather than losing the player.
+        while gi >= 0 and len(groups[gi]) >= sizes[gi]:
+            gi -= 1
+        target = next((i for i in range(gi, -1, -1)
+                       if len(groups[i]) + len(unit) <= sizes[i]), None)
+        if target is None:
+            # Genuinely nowhere left — put them in the emptiest group
+            # rather than losing the player, and say so.
             target = min(range(len(groups)), key=lambda i: len(groups[i]))
-            groups[target].extend(unit)
             notes.append(f"{' + '.join(unit)}: no slot matched the standings "
                          f"order — placed in the smallest available group.")
-            continue
-        groups[gi].extend(unit)
+        groups[target].extend(unit)
     groups = [g for g in groups if g]
 
-    ranked = sum(1 for p in players if p.lower() in rank_map)
+    unranked = [p for p in players if player_rank(p) >= UNRANKED]
+    ranked = len(players) - len(unranked)
     notes.append(f"Ordered by points-race standing — leaders go off LAST. "
                  f"{ranked} of {len(players)} players are in the standings; "
                  f"the rest tee off earliest.")
+    # A total miss means the standings and the roster aren't being matched
+    # at all, not that nobody is enrolled — the SA Championship shipped a
+    # 0-of-32 "ordered by standings" that was really random order (Kerry
+    # 2026-07-31). Say so loudly, and name names when it's partial so the
+    # mismatch is diagnosable instead of a silent shrug.
+    if ranked == 0 and players:
+        notes.append("WARNING: NONE of the field matched the standings, so "
+                     "this is not a standings order at all — every player "
+                     "was treated as unranked. Check that the race is the "
+                     "right one and that these players are enrolled in it.")
+    elif unranked:
+        shown = ", ".join(sorted(unranked)[:6])
+        more = f" +{len(unranked) - 6} more" if len(unranked) > 6 else ""
+        notes.append(f"Not in the standings (teeing off earliest): "
+                     f"{shown}{more}.")
     return groups, notes
 
 
