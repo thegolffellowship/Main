@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.151.2";
+window.TGF_VERSION = "2.151.3";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.151.3",
+    date: "2026-07-29",
+    changes: [
+      "SHADOW AN UPCOMING EVENT — the pre-flight is now actually possible. Seeding a Test Center session required imported scorecards, so the only events you could shadow were ones already PLAYED: the SA Championship was correctly absent from the picker, and the pre-flight written into its own runbook could not be performed. An event with no cards yet now seeds from its REGISTRATIONS instead (_ls_seed_from_registrations) — the field from active items with credited/refunded/transferred/rsvp_only rows excluded, buyer flags from what each player actually bought, guests flagged not-a-member so they cannot win the HIO, teams from saved pairings, hole count derived from the registrations, and the course tee taken from what the field usually plays there (merged across per-nine ratings). No scores and no playing handicaps — those arrive on the day via Pull from GG, which the session is immediately ready for. Course coverage, buyer counts and flighting can now all be checked days ahead.",
+      "CLICKABLE EVENT PICKER replacing the prompt() that asked for a row number — a filterable modal listing every event with registrations or cards, each row showing its date, course, and whether it has scorecards or is registrations-only. Escape or a click outside cancels. The event list behind it no longer restricts to events with scorecards.",
+    ],
+  },
   {
     version: "2.151.2",
     date: "2026-07-30",
