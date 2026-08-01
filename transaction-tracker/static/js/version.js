@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.180.1";
+window.TGF_VERSION = "2.180.2";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.180.2",
+    date: "2026-08-01",
+    changes: [
+      "Phone tee times in the THRU column tighten to '10:00a' / '9:50a' (Kerry) — the full '10:00 AM' was kissing the right screen edge. Hole counts, 'F', and the desktop column are untouched.",
+    ],
+  },
   {
     version: "2.180.1",
     date: "2026-08-01",

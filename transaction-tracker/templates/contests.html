@@ -5714,7 +5714,7 @@
             // keeps its inline last-event arrow in the rank cell.
             const midCells = liveMode
                 ? `<td style="${resetStyle}${r.champ_points != null ? "color:#BF5700;font-weight:800;" : "color:var(--text-muted);"}">${r.champ_points != null ? escapeHtml(String(r.champ_points % 1 ? r.champ_points.toFixed(1) : r.champ_points)) : (r.champ_thru ? "" : "—")}</td>
-                   <td style="${thruStyle}white-space:nowrap;${/\d:\d\d/.test(r.champ_thru || "") ? "color:var(--text-muted);" : "font-weight:600;"}">${escapeHtml(r.champ_thru || "—")}</td>`
+                   <td style="${thruStyle}white-space:nowrap;${/\d:\d\d/.test(r.champ_thru || "") ? "color:var(--text-muted);" : "font-weight:600;"}">${escapeHtml(compact ? String(r.champ_thru || "—").replace(/\s*([AaPp])\.?M\.?/, (_, g) => g.toLowerCase()) : (r.champ_thru || "—"))}</td>`
                 : `<td style="${resetStyle}">${prFmtReset(r.points_reset)}</td>
                    ${showRounds ? `<td style="${rndStyle}" class="pr-rnd">${r.tournaments ?? ""}</td>` : ""}`;
             const moveCell = liveMode
