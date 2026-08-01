@@ -1,4 +1,4 @@
-# State of the Tracker — mid-July 2026 (Platform-facing brief)
+# State of the Tracker — early August 2026 (Platform-facing brief)
 
 Audience: the claude.ai "The Golf Fellowship" Project, where TGF Platform
 planning has lived for the past six months. Purpose: catch that planning
@@ -9,8 +9,8 @@ for session-by-session updates after this brief.
 
 ## What the Tracker is now
 
-Flask + SQLite on Railway (tgf-tracker.up.railway.app), version 2.104.x,
-~200+ routes, 61 MCP tools. Started as a GoDaddy order-email parser;
+Flask + SQLite on Railway (tgf-tracker.up.railway.app), version 2.176.x,
+~200+ routes, 61+ MCP tools. Started as a GoDaddy order-email parser;
 now runs most of TGF's operations:
 
 - **Transactions/orders** — AI email parsing (Claude), order grouping,
@@ -48,7 +48,16 @@ now runs most of TGF's operations:
   with dates/positions → hole-by-hole scorecards); event MVP + TGF MVP
   tracking with badges; MONTHLY races (all points count, $1/member
   purse at month close, ties split); Fellowship Cup reset projections;
-  a Points tab on every customer profile.
+  a Points tab on every customer profile. **LIVE championship overlay
+  (v2.174–176, championship day 2026-08-01)**: during a City
+  Championship the member LEADERBOARD adds each player's running
+  championship Stableford (read off GG's live POINTS board, 45s server
+  cache, 60s member poll) on top of the stored best-10 total and
+  re-ranks — with a double-count guard for after GG's close-out folds
+  the championship into the season snapshot, customer_id-first board
+  matching, and a per-player live hole-by-hole card (gross + dots read
+  from GG, NET + champ-scale points computed by us, mismatch vs the
+  board stated rather than absorbed).
 - **Member portal M1 (LIVE)** — magic-link tokens (HMAC, revocable via
   per-customer version), token-only /api/me/* endpoints, mobile-first
   profile page. M2 (post-event recap emails) and M3 (monthly digest)
@@ -135,14 +144,16 @@ print-CSS document creator (Starter Sheet / Cart Signs / Scorecards /
 Proximity Marker Sheets — the last needs a per-event game-holes
 config, the one datum still trapped in GG).
 
-- **Live championship standings** — City and TGF Championships are
-  upcoming; GG does live scoring but does NOT compute points standings
-  live. Design: poll GG's live POINTS game during play → each player's
-  running Stableford IS their provisional race points → merge into
-  persisted season standings → live projected Best-10+CC standings with
-  movement, shareable to members' phones. Points model solved (above);
-  the one open risk is whether public portal pages update mid-round —
-  live-fire test planned at the next regular event.
+- **Live championship standings — SHIPPED (v2.174–176), first live fire
+  championship day 2026-08-01.** The design above became code: the
+  overlay polls GG's live POINTS boards (a settings dial per race),
+  adds each player's running championship Stableford to the persisted
+  best-10 total, re-ranks live, and stands down after close-out (GG
+  only awards season points at manual close-out — Kerry's ruling — so
+  absorption is a guard, not a race). Both boards verified parsing
+  logged-out from Railway before first tee. Drill-down carries the live
+  figure and a per-player hole-by-hole card computed from GG's raw
+  facts (v2.176.0, pending merge to main at time of writing).
 - **Live-updates ladder** — step 1 shipped (skip page rebuilds when
   fetched data is unchanged); step 2 targeted DOM updates; step 3
   SSE/WebSocket push. Serves both website live standings and the
@@ -197,6 +208,12 @@ past-events-frozen, admin/manager/customer layers).
   server) — the mailbox. Post questions, decisions, and directives;
   tracker-claude reads at session start and posts digests at session
   end. Sign author='platform-claude'.
+  **⚠ Two servers carry these same tool names** (incident, mailbox
+  #257–#259): the claude.ai connector is bound to PRODUCTION; the
+  repo-root `.mcp.json` stdio server runs against a LOCAL, EMPTY
+  SQLite inside a Claude Code container. Discriminate with
+  `get_statistics` (production ≈ 1,600+ items; local = 0) before
+  trusting any read — and never run money operations locally.
 - **get_tracker_docs** — list/read all living docs (CLAUDE.md +
   docs/claude/*) for architecture depth on any subsystem.
 - **Live data** — the other 56 tools on this server query the

@@ -66,6 +66,53 @@ unverified. Read the **Notes to self** section before touching anything.
 
 ---
 
+## ADDENDUM — championship-morning session (2026-08-01 ~00:15–01:00 CDT)
+
+Ran the work order above from a FRESH container (claude.ai connector =
+production; the local `.mcp.json` trap in item 6 was avoided — see #257–
+#259). Item-by-item:
+
+1. **Pre-flight DONE (rounds had not started — it was 12:15 AM).** Both
+   champ boards fetch logged-out from Railway and parse (SA field 30,
+   Austin 16, tee times 9:00–10:10 / 9:00–9:27); Railway confirmed
+   running the overnight commits. Finding fixed forward: comma-less
+   guests ("Matt Larson Guest", Austin) were silently dropped by the
+   board parser — fixed in v2.176.0.
+2. **Ledger duplicates VERIFIED, not merged (no admin UI from here).**
+   The watch FIRED: Larry Anthis addon-2491 duplicated overnight as
+   exp-promoted-2230 ($30), and Chuck Fehlis addon-2492 +
+   exp-promoted-2231 ($30) is a brand-new same-shape pair. Plus June
+   suspects: Daniel South $88, Sam McCormick $88, Ryan Estes $88, Lee
+   Vasquez $16 possible TRIPLE (addon-1955 + addon-1956 + exp-promoted-
+   1361). Full hit-list with ids: mailbox **#260**. Root cause is the
+   addon/ext-pay × exp-promoted writer pair — a promotion-time twin
+   check is proposed, needs Kerry (rule 3b).
+3. **DONE (v2.176.0, on branch `claude/tgf-tracker-champ-points-g62t9l`
+   — NEEDS MERGE TO MAIN TO DEPLOY).** Drill-down CC line carries the
+   live figure via the standings row's data-champ-* attrs.
+4. **DONE (same commit).** CC line expands to a live hole-by-hole card:
+   gross+dots off the player's details partial on the ALL Net 18 board
+   (player-name links carry each player's details URL — verified live),
+   pars off the nets partial, NET + champ-scale points computed by us,
+   board total beside ours with mismatch stated. New dial
+   `gg_champ_scorecard_boards`; endpoint /api/season-contests/points-
+   race/champ-card; tests test_champ_card_live.py. Also: the 60s live
+   poll no longer wipes an open drill-down.
+5. **state-of-the-tracker.md refreshed** (this commit).
+6. **Resolved by #257/#258 (parallel session) — confirmed here.** My
+   #259 digest re-post partially duplicates #258 (posted 14 min apart
+   by two concurrent sessions; #258 came first). New in #259: recommend
+   removing/renaming the repo `.mcp.json` stdio server.
+7. **OUTSTANDING list carry-forward:** items 3 (HIO figure), 4 (matrix
+   multi-event rows), 5 (identity audit), 6, 7 (hio write paths), 8–13
+   (offers/gaps), 15–18 (customer_id audit, no-handicap correspondence,
+   flighting queue, Aug-29 untether) — NOT worked this session, all
+   still open. Mailbox #252 (winnings backfill, Kerry Option B ruling)
+   is now the TOP of the next working session's queue; #254/#255
+   (winnings-by-handicap, fairness study) remain open requests.
+
+---
+
 ## What shipped (v2.166.0 → v2.175.0, all pushed to main)
 
 | Ver | What |
