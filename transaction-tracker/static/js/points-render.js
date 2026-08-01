@@ -278,13 +278,31 @@
         const dash = '<span style="color:#9CA3AF;">-</span>';
         const sumOr = (hs, k, fmt) => hs.some(h => h[k] != null)
             ? (fmt || String)(hs.reduce((a, h) => a + (h[k] ?? 0), 0)) : dash;
+        // Classic scorecard marks on the gross score (same language as the
+        // imported cards): red circle birdie, doubled ring eagle+, blue
+        // square bogey, doubled square double+.
+        const spanW = compact ? "1.2em" : "1.5em";
+        const deco = d => {
+            if (d == null) return "";
+            if (d <= -2) return "border:1.5px solid #dc2626;border-radius:50%;box-shadow:0 0 0 2px #fff,0 0 0 3.5px #dc2626;";
+            if (d === -1) return "border:1.5px solid #dc2626;border-radius:50%;";
+            if (d === 1) return "border:1.5px solid #2563eb;";
+            if (d >= 2) return "border:1.5px solid #2563eb;box-shadow:0 0 0 2px #fff,0 0 0 3.5px #2563eb;";
+            return "";
+        };
+        const grossCell = h => {
+            if (h.gross == null) return dash;
+            const vs = h.par != null ? h.gross - h.par : null;
+            return `<span style="display:inline-block;min-width:${spanW};line-height:${spanW};${deco(vs)}">${h.gross}</span>`
+                + (h.dots ? `<sup style="font-size:50%;">` + "&#9679;".repeat(Math.min(h.dots, 3)) + "</sup>" : "");
+        };
         const block = (label, hs, withTot) => {
             const cells = fn => hs.map(fn).join("");
             const totCell = (v, extra) => `<td style="${td}font-weight:800;${extra || ""}">${v}</td>`;
             return `<table style="border-collapse:collapse;font-size:${fs};margin:0 0 0.45rem;">
                 <tr><td style="${lbl}">HOLE</td>${cells(h => `<td style="${td}font-weight:700;background:#f8fafc;">${h.hole}</td>`)}<td style="${td}font-weight:700;background:#f8fafc;">${label}</td>${withTot ? `<td style="${td}font-weight:800;background:#f1f5f9;">TOT</td>` : ""}</tr>
                 <tr><td style="${lbl}">PAR</td>${cells(h => `<td style="${td}color:#6B7280;">${h.par ?? "-"}</td>`)}<td style="${td}font-weight:700;color:#6B7280;">${sumOr(hs, "par")}</td>${withTot ? totCell(sumOr(holes, "par"), "color:#6B7280;") : ""}</tr>
-                <tr><td style="${lbl}">SCORE</td>${cells(h => `<td style="${td}">${h.gross != null ? `${h.gross}${h.dots ? `<sup style="font-size:50%;">` + "&#9679;".repeat(Math.min(h.dots, 3)) + "</sup>" : ""}` : dash}</td>`)}<td style="${td}font-weight:700;">${sumOr(hs, "gross")}</td>${withTot ? totCell(card.gross_total != null ? card.gross_total : sumOr(holes, "gross")) : ""}</tr>
+                <tr><td style="${lbl}">SCORE</td>${cells(h => `<td style="${td}">${grossCell(h)}</td>`)}<td style="${td}font-weight:700;">${sumOr(hs, "gross")}</td>${withTot ? totCell(card.gross_total != null ? card.gross_total : sumOr(holes, "gross")) : ""}</tr>
                 <tr><td style="${lbl}">NET</td>${cells(h => `<td style="${td}color:#475569;">${h.net != null ? h.net : dash}</td>`)}<td style="${td}font-weight:700;color:#475569;">${sumOr(hs, "net")}</td>${withTot ? totCell(sumOr(holes, "net"), "color:#475569;") : ""}</tr>
                 <tr><td style="${lbl}">PTS</td>${cells(h => `<td style="${td}${h.pts != null && h.pts >= 3 ? "color:#BF5700;font-weight:700;" : ""}">${h.pts != null ? h.pts : dash}</td>`)}<td style="${td}font-weight:700;">${sumOr(hs, "pts")}</td>${withTot ? totCell(card.computed_points != null ? card.computed_points : sumOr(holes, "pts"), "color:#BF5700;") : ""}</tr>
             </table>`;

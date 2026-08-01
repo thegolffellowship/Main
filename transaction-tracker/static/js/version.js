@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.180.3";
+window.TGF_VERSION = "2.180.4";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.180.4",
+    date: "2026-08-01",
+    changes: [
+      "Circles and squares on the live card (Kerry): the SCORE row wears the classic marks — red circle for a gross birdie, doubled ring for eagle or better, blue square for bogey, doubled square for double-plus — the same visual language the imported scorecards already use, computed from gross vs par.",
+    ],
+  },
   {
     version: "2.180.3",
     date: "2026-08-01",
