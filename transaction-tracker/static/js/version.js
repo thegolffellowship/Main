@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.183.3";
+window.TGF_VERSION = "2.184.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.184.0",
+    date: "2026-08-01",
+    changes: [
+      "PLUS HANDICAPS COME OFF CHAMPIONSHIP POINTS (Kerry, mid-round): Golf Genius's points game never takes a plus player's give-back strokes, so their board total runs high by exactly their playing handicap — live today that inflated YOUNGS (+4), HORTON (+4) and GRIFFIN (+3) on the SA board. The live overlay now deducts each plus player's playing handicap from their championship points before adding them to the season total. Nobody's name is in code: the plus values are read off the championship SCORECARD board's PlayingHandicap™ column (the same page the hole-by-hole card already walks, cached 120s), so Austin inherits the rule the moment a plus player appears there, and a scorecard-board hiccup falls back to the last good read rather than silently un-adjusting the standings.",
+      "The deduction is visible, never silent: the expanded hole-by-hole card states 'Playing handicap +4: 4 pts deducted from today's total', the per-hole PTS row stays the raw Stableford (the cells must add up) while the headline and parity check use the adjusted figure, the drill-down stat line notes the deduction, and the raw board figure rides along in the payload (points_raw) so the scoring-champ-live diagnostic can always show both. Not-started plus players stay None — the deduction lands with their first posted hole.",
+    ],
+  },
   {
     version: "2.183.3",
     date: "2026-08-01",

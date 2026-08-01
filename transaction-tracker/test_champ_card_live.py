@@ -138,6 +138,112 @@ check("a player not on the board degrades to a clean error",
 check("an unconfigured race degrades quietly",
       db.fetch_champ_player_card("no_such_race", 1, db_path=_bp).get("configured") is False)
 
+print("\n== plus-handicap deduction, board to card (Kerry 2026-08-01) ==")
+# Kerry, mid-round: plus players' playing handicaps come OFF their champ
+# points. The plus values are read from the scorecard board's
+# PlayingHandicap™ column; the deduction lands in fetch_champ_points (so
+# standings/banner/drill-down all inherit it) and the card carries the
+# same adjustment so the two never read as a disagreement.
+CARD_BOARD_HTML2 = """<html><body>
+<a href='https://tgf-sa.golfgenius.com/tournaments2/details/211'>YOUNGS, Pat</a>
+<a href='https://tgf-sa.golfgenius.com/tournaments2/details/111'>MORENO, Robert</a>
+<table>
+<tr><td>Pos.</td><td>Player</td><td>PlayingHandicap™</td><td>TotalGross</td><td>To ParNet</td><td>Thru</td><td>TotalNet</td></tr>
+<tr><td>1</td><td>YOUNGS, Pat TGF San Antonio</td><td>+4</td><td>-</td><td>-1</td><td>7</td><td>- (-/-)</td></tr>
+<tr><td>2</td><td>MORENO, Robert TGF San Antonio</td><td>4</td><td>-</td><td>-3</td><td>6</td><td>- (-/-)</td></tr>
+<tr><td>3</td><td>GRIFFIN, Matt TGF San Antonio</td><td>+3</td><td>-</td><td>-</td><td>1:00 PM</td><td>- (-/-)</td></tr>
+</table></body></html>"""
+POINTS_BOARD_HTML2 = """<html><body><table>
+<tr><td>Pos.</td><td>Player</td><td>Stableford Points</td><td>Thru</td></tr>
+<tr><td>1</td><td>YOUNGS, Pat TGF San Antonio</td><td>17 (0/17)</td><td>7</td></tr>
+<tr><td>2</td><td>MORENO, Robert TGF San Antonio</td><td>15 (0/15)</td><td>6</td></tr>
+<tr><td></td><td>GRIFFIN, Matt TGF San Antonio</td><td>-</td><td>1:00 PM</td></tr>
+</table></body></html>"""
+_details_inner2 = (
+    "<table><tr class='net-line' data-net-name='YOUNGS, Pat'><td>x</td></tr>"
+    "<tr><td><a class='expand-tee-details' href=\"/tournaments2/nets/78?event_id=88\">Gold (+4)</a></td>"
+    "<td class='hole1'><span class='score_box'>4</span></td>"
+    "<td class='hole2'><span class='score_box'>3</span></td>"
+    "</tr></table>")
+DETAILS_PARTIAL2 = "$('#agg').html(" + json.dumps(_details_inner2) + ");"
+
+def fake_fetch2(url, timeout=20, xhr=False):
+    if url == CARD_BOARD_URL:
+        return {"status_code": 200, "final_url": url, "html": CARD_BOARD_HTML2}
+    if url == POINTS_BOARD_URL:
+        return {"status_code": 200, "final_url": url, "html": POINTS_BOARD_HTML2}
+    if "/tournaments2/details/211" in url:
+        return {"status_code": 200, "final_url": url, "html": DETAILS_PARTIAL2}
+    if "/tournaments2/details/111" in url:
+        return {"status_code": 200, "final_url": url, "html": DETAILS_PARTIAL}
+    if "/tournaments2/nets/" in url:
+        return {"status_code": 200, "final_url": url, "html": NETS_PARTIAL}
+    raise AssertionError("unexpected GG fetch: " + url)
+gg.fetch_public_page = fake_fetch2
+db._CHAMP_POINTS_CACHE.clear()
+db._CHAMP_ROSTER_CACHE.clear()
+db._CHAMP_CARD_CACHE.clear()
+with db._connect(_bp) as conn:
+    conn.execute("INSERT INTO customers (first_name, last_name)"
+                 " VALUES ('Pat', 'Youngs')")
+    YCID = conn.execute("SELECT customer_id FROM customers"
+                        " WHERE last_name='Youngs'").fetchone()[0]
+    conn.commit()
+
+live = db.fetch_champ_points("san_antonio_net", db_path=_bp)
+py = {p["name"]: p for p in live.get("players", [])}
+check("Youngs' board 17 reads 13 after the +4 comes off",
+      py["YOUNGS, Pat"]["points"] == 13.0, str(py.get("YOUNGS, Pat")))
+check("the raw board figure + deduction ride along",
+      py["YOUNGS, Pat"].get("points_raw") == 17.0
+      and py["YOUNGS, Pat"].get("plus_adjustment") == 4.0,
+      str(py.get("YOUNGS, Pat")))
+check("an ordinary handicap is untouched",
+      py["MORENO, Robert"]["points"] == 15.0
+      and "plus_adjustment" not in py["MORENO, Robert"],
+      str(py.get("MORENO, Robert")))
+check("a not-started plus player stays None — the deduction waits for "
+      "their first hole",
+      py["GRIFFIN, Matt"]["points"] is None
+      and "plus_adjustment" not in py["GRIFFIN, Matt"],
+      str(py.get("GRIFFIN, Matt")))
+check("scoring count unchanged by the deduction (2 of 3)",
+      live.get("scoring") == 2, str(live.get("scoring")))
+
+ycard = db.fetch_champ_player_card("san_antonio_net", YCID, db_path=_bp)
+check("the card carries the plus adjustment", ycard.get("plus_adjustment") == 4.0,
+      str(ycard.get("plus_adjustment")))
+check("per-hole PTS stay the raw Stableford (2 pars = 4)",
+      ycard.get("computed_points") == 4, str(ycard.get("computed_points")))
+check("adjusted computed total = raw - plus (may floor through zero)",
+      ycard.get("computed_points_adj") == 0,
+      str(ycard.get("computed_points_adj")))
+check("the board figure rides along ALREADY adjusted (17 -> 13)",
+      ycard.get("board_points") == 13.0, str(ycard.get("board_points")))
+check("the details partial's '(+4)' parses NEGATIVE — the fallback source",
+      ycard.get("playing_handicap") == -4.0,
+      str(ycard.get("playing_handicap")))
+
+print("\n== a scorecard-board outage must not un-adjust the standings ==")
+gg.fetch_public_page = lambda url, timeout=20, xhr=False: (
+    {"status_code": 200, "final_url": url, "html": POINTS_BOARD_HTML2}
+    if url == POINTS_BOARD_URL
+    else (_ for _ in ()).throw(RuntimeError("GG down")))
+db._CHAMP_POINTS_CACHE.clear()
+# roster cache is WARM (120s) — the adjustment must serve from it
+live2 = db.fetch_champ_points("san_antonio_net", db_path=_bp)
+py2 = {p["name"]: p for p in live2.get("players", [])}
+check("warm roster cache keeps the deduction through a board hiccup",
+      py2["YOUNGS, Pat"]["points"] == 13.0, str(py2.get("YOUNGS, Pat")))
+# roster cache EXPIRED + GG down -> last good roster still serves the maps
+db._CHAMP_ROSTER_CACHE["san_antonio_net"] = (
+    0.0, db._CHAMP_ROSTER_CACHE["san_antonio_net"][1])
+db._CHAMP_POINTS_CACHE.clear()
+live3 = db.fetch_champ_points("san_antonio_net", db_path=_bp)
+py3 = {p["name"]: p for p in live3.get("players", [])}
+check("an expired roster + GG failure falls back to the last good maps",
+      py3["YOUNGS, Pat"]["points"] == 13.0, str(py3.get("YOUNGS, Pat")))
+
 gg.fetch_public_page = _real_fetch
 os.unlink(_bp)
 

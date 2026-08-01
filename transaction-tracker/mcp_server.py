@@ -1402,6 +1402,7 @@ def _scoring_dispatch(url: str, extract: str):
             try:
                 d = db.get_points_race_live(race)
                 rows = (d.get("standings") or [])[:5]
+                live = db.fetch_champ_points(race)
                 return json.dumps({
                     "race": race,
                     "champ_scoring": d.get("champ_scoring"),
@@ -1413,6 +1414,14 @@ def _scoring_dispatch(url: str, extract: str):
                              ("player_name", "rank", "total_points",
                               "season_points", "champ_points", "champ_thru",
                               "move")} for r in rows],
+                    # plus-handicap deductions in force (Kerry 2026-08-01)
+                    "plus_adjusted": [
+                        {"name": p.get("name"),
+                         "plus": p.get("plus_adjustment"),
+                         "board_raw": p.get("points_raw"),
+                         "points": p.get("points")}
+                        for p in live.get("players", [])
+                        if p.get("plus_adjustment")],
                 }, indent=2, default=str)
             except Exception as e:
                 import traceback

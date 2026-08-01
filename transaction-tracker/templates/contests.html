@@ -5662,6 +5662,9 @@
         const bits = [];
         if (tr.dataset.proj) bits.push(`<span title="${escapeHtml(tr.dataset.projTitle || "")}">Projected <b style="color:#15803d;">${prFmtMoney(+tr.dataset.proj)}</b></span>`);
         if (tr.dataset.reset) bits.push(`Proj. points reset <b>${prFmtReset(+tr.dataset.reset)}</b>`);
+        // Plus-handicap deduction (Kerry, championship day 2026-08-01):
+        // the TODAY figure already carries it — say so where there's room.
+        if (tr.dataset.champPlus) bits.push(`Plus hcp <b>&minus;${escapeHtml(tr.dataset.champPlus)}</b> pts applied`);
         return bits.join(" &middot; ");
     }
 
@@ -5772,6 +5775,8 @@
                 ? ` data-champ-pts="${escapeHtml(String(r.champ_points))}"` : "")
                 + (r.champ_thru
                 ? ` data-champ-thru="${escapeHtml(String(r.champ_thru))}"` : "")
+                + (r.champ_plus
+                ? ` data-champ-plus="${escapeHtml(String(r.champ_plus))}"` : "")
                 + (r._pay ? ` data-proj="${r._pay}" data-proj-title="${escapeHtml(r._payTitle || "")}"` : "")
                 + (r.points_reset != null ? ` data-reset="${escapeHtml(String(r.points_reset))}"` : "");
             // Live: MOVE gets its own column (PGA-style); the season view

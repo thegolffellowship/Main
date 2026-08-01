@@ -828,6 +828,29 @@ start-of-day `season_rank` − live rank, server-computed). The live merge
 carries every board player so the not-started bring tee times with
 points still None; a non-entrant shows neither.
 
+**Plus-handicap deduction (v2.184.0, Kerry mid-round 2026-08-01):** GG's
+points game never takes a plus player's give-back strokes, so their board
+total runs high by exactly their playing handicap (live: YOUNGS +4 /
+HORTON +4 / GRIFFIN +3, SA). `fetch_champ_points` deducts each plus
+player's playing handicap from their board points before anything
+downstream sees them — standings, banner, TODAY column, card ride-along
+all inherit it. The plus values come off the championship SCORECARD
+board's `PlayingHandicap™` column (`_parse_champ_plus_column` →
+`_champ_card_roster`'s `plus_by_cid`/`plus_by_key` maps →
+`_champ_plus_adjustments`, roster cache 120s, stale-on-error so an outage
+never un-adjusts standings). No names in code; Austin inherits
+automatically. `points_raw` + `plus_adjustment` ride the payload;
+not-started players stay None until they post. The `scoring-champ-live`
+diagnostic lists `plus_adjusted` rows. Card parity compares
+`computed_points_adj` (raw per-hole sum − plus) vs the adjusted board so
+plus players never read as a permanent disagreement; the card and the
+drill-down stat line both state the deduction. NOTE: GG's details partial
+marks give-back holes with `+` in `handicap-dots` and renders the name as
+`(+4)` (parsed NEGATIVE by `parse_scorecard_details` — the card's
+fallback source); the per-hole parse counts only `●`, so per-hole NET/PTS
+stay on the same no-give-back basis as GG's points board, and the flat
+deduction reconciles both totals identically.
+
 Tests: `test_champ_points_live.py`.
 
 ## LIVE championship hole-by-hole card (v2.176.0)

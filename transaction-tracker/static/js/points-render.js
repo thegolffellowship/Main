@@ -273,8 +273,16 @@
         const statline = card._statline
             ? `<div style="font-size:0.78rem;color:#4B5563;margin:-0.15rem 0 0.5rem;">${card._statline}</div>`
             : "";
+        // Plus-handicap deduction (Kerry, championship day 2026-08-01): a
+        // plus player's playing handicap comes OFF their points total. The
+        // per-hole PTS row stays the raw Stableford (the cells must add
+        // up); this line is where the smaller headline total is explained.
+        const plusN = Number(card.plus_adjustment || 0);
+        const plusNote = plusN
+            ? `<div style="font-size:0.72rem;color:#9A5B2E;margin:-0.25rem 0 0.5rem;">Playing handicap +${plusN % 1 ? plusN.toFixed(1) : plusN}: ${plusN % 1 ? plusN.toFixed(1) : plusN} pts deducted from today's total (plus handicaps come off championship points).</div>`
+            : "";
         if (!played.length && !havePars) {
-            return head + statline + `<span style="color:var(--text-muted);">No holes posted yet.</span>`;
+            return head + statline + plusNote + `<span style="color:var(--text-muted);">No holes posted yet.</span>`;
         }
         const compact = prIsCompact();
         // Every HOLE column is the SAME fixed width (Kerry 2026-08-01) —
@@ -329,16 +337,23 @@
         const boardThruN = /^\d+$/.test(String(card.board_thru || "").trim())
             ? parseInt(card.board_thru, 10)
             : (String(card.board_thru || "").trim().toUpperCase() === "F" ? 18 : null);
-        const differs = card.computed_points != null && card.board_points != null
-            && Number(card.computed_points) !== Number(card.board_points);
+        // Parity compares like with like: both our total and the board
+        // figure carry the plus-handicap deduction (the board's was applied
+        // server-side in fetch_champ_points), so a plus player doesn't read
+        // as a permanent disagreement of exactly their deduction.
+        const compEff = card.computed_points_adj != null
+            ? card.computed_points_adj
+            : (card.computed_points != null ? card.computed_points - plusN : null);
+        const differs = compEff != null && card.board_points != null
+            && Number(compEff) !== Number(card.board_points);
         const boardLagging = differs && (boardThruN == null || boardThruN < played.length);
         const parity = !differs ? ""
             : boardLagging
                 ? `<div style="color:#9CA3AF;font-size:0.72rem;margin-top:0.2rem;">Scorecard shows ${played.length} hole${played.length === 1 ? "" : "s"}; the points board is still thru ${escapeHtml(String(card.board_thru ?? "—"))} — totals sync on its next refresh.</div>`
-                : `<div style="color:#b45309;font-size:0.72rem;margin-top:0.2rem;">Our per-hole total (${escapeHtml(String(card.computed_points))}) differs from the GG board (${escapeHtml(String(card.board_points))}) — the board is official.</div>`;
+                : `<div style="color:#b45309;font-size:0.72rem;margin-top:0.2rem;">Our per-hole total (${escapeHtml(String(compEff))}) differs from the GG board (${escapeHtml(String(card.board_points))}) — the board is official.</div>`;
         const src = card.stale
             ? `<div style="color:#b45309;font-size:0.72rem;margin-top:0.2rem;">Showing the last good read — Golf Genius did not answer.</div>` : "";
-        return head + statline + html + parity + src;
+        return head + statline + plusNote + html + parity + src;
     }
 
     function prRenderScorecard(card) {

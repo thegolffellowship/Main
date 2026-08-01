@@ -210,6 +210,34 @@ m2 = {r["player_name"]: r for r in merge(
 check("an unlinked player still matches on the name fallback",
       m2["Wade Fieber"]["live_total"] == 75.0, str(m2["Wade Fieber"]))
 
+print("\n== plus handicaps read off the scorecard board (Kerry 2026-08-01) ==")
+# Kerry, mid-round: "I have 3 SA players that have plus handicaps. Horton
+# Griffin Youngs. I need there playing handicaps deducted from there total
+# points in the points race." The plus values come off the companion
+# scorecard board's PlayingHandicap™ column — verbatim live shape below —
+# so nobody's name lives in code.
+tables_ph = [[
+    ["Pos.", "Player", "PlayingHandicap™", "TotalGross",
+     "To ParNet", "Thru", "TotalNet"],
+    ["T2", "YOUNGS, Pat TGF San Antonio", "+4", "-", "-1", "7", "- (-/-)"],
+    [""],
+    ["T12", "HORTON, Jay TGF San Antonio", "+4", "-", "+3", "7", "- (-/-)"],
+    ["T22", "GRIFFIN, Matt TGF San Antonio", "+3", "-", "+4", "7", "- (-/-)"],
+    ["1", "MORENO, Robert TGF San Antonio", "4", "-", "-3", "6", "- (-/-)"],
+    ["T5", "RIDEOUT, Jeff TGF San Antonio", "22", "-", "+1", "7", "- (-/-)"],
+]]
+plus = db._parse_champ_plus_column(tables_ph)
+check("exactly the three plus handicaps are found",
+      plus == {"YOUNGS, Pat": 4.0, "HORTON, Jay": 4.0, "GRIFFIN, Matt": 3.0},
+      str(plus))
+check("an ordinary handicap ('4') deducts nothing", "MORENO, Robert" not in plus)
+check("a big ordinary handicap ('22') is not misread", "RIDEOUT, Jeff" not in plus)
+check("no header row -> nothing parsed (points boards carry no handicap col)",
+      db._parse_champ_plus_column([[["Pos.", "Player", "Stableford Points",
+                                     "Thru"],
+                                    ["1", "YOUNGS, Pat TGF San Antonio",
+                                     "+4", "7"]]]) == {})
+
 print("\n== the board config is a dial, not code ==")
 import tempfile
 fd, _bp = tempfile.mkstemp(suffix=".db"); os.close(fd); db.init_db(_bp)

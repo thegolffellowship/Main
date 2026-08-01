@@ -7274,6 +7274,60 @@ def _parse_champ_points_tables(tables: list, affiliations=None) -> list:
     return out
 
 
+def _parse_champ_plus_column(tables: list, affiliations=None) -> dict:
+    """name -> PLUS playing handicap (as positive points to deduct), read
+    off the championship SCORECARD board's PlayingHandicap™ column.
+
+    Kerry's championship rule (2026-08-01, from the course): a plus
+    player's playing handicap comes OFF their championship points total —
+    GG's points game never takes their give-back strokes, so the board
+    total is inflated by exactly the plus value. Only cells that render
+    with a leading '+' ("+4") are returned; ordinary handicaps ("4",
+    "22") deduct nothing. Verified live: SA board 4779120 carries
+    YOUNGS +4 / HORTON +4 / GRIFFIN +3 and no other plus in the field.
+    """
+    out = {}
+    for t in tables or []:
+        rows = t if isinstance(t, list) else (t.get("rows") or [])
+        hdr = None
+        for row in rows:
+            cells = [re.sub(r"\s+", " ", (c or "")).strip() for c in row]
+            if len(cells) < 3:
+                continue
+            low = [c.lower() for c in cells]
+            if "player" in low and any("handicap" in c for c in low):
+                hdr = {"player": low.index("player"),
+                       "ph": next(i for i, c in enumerate(low)
+                                  if "handicap" in c)}
+                continue
+            if hdr is None:
+                continue
+            name = (_strip_gg_affiliation(cells[hdr["player"]], affiliations)
+                    if hdr["player"] < len(cells) else "")
+            ph = cells[hdr["ph"]] if hdr["ph"] < len(cells) else ""
+            m = re.match(r"\+(\d+(?:\.\d+)?)$", ph)
+            if name and m:
+                out[name] = float(m.group(1))
+    return out
+
+
+def _champ_plus_adjustments(race_key: str,
+                            db_path: str | Path = DB_PATH) -> dict:
+    """{'by_cid', 'by_key'} plus-handicap deductions for one race.
+
+    Sourced from the scorecard-board roster walk (cached 120s there). A
+    roster failure falls back to the last cached roster — the points
+    fetch must never die, and an adjustment must never silently vanish,
+    because the scorecard board hiccuped once."""
+    try:
+        roster = _champ_card_roster(race_key, db_path=db_path)
+    except Exception:
+        hit = _CHAMP_ROSTER_CACHE.get(race_key)
+        roster = hit[1] if hit else {}
+    return {"by_cid": roster.get("plus_by_cid") or {},
+            "by_key": roster.get("plus_by_key") or {}}
+
+
 def fetch_champ_points(race_key: str, max_age: float = 45.0,
                        db_path: str | Path = DB_PATH) -> dict:
     """LIVE championship points for one race, straight off the GG board.
@@ -7321,6 +7375,29 @@ def fetch_champ_points(race_key: str, max_age: float = 45.0,
             except Exception:
                 cid = None
             out["players"].append({**r, "customer_id": cid})
+
+    # PLUS-HANDICAP DEDUCTION (Kerry, championship day 2026-08-01): the
+    # plus values come off the companion scorecard board's
+    # PlayingHandicap™ column, so no player is named in code and Austin
+    # inherits the rule the moment a plus player appears there. The raw
+    # board figure rides along so a diagnostic can always show both.
+    # Not-started players (points None) are untouched — the deduction
+    # lands with their first posted hole.
+    try:
+        adj = _champ_plus_adjustments(race_key, db_path=db_path)
+    except Exception:
+        adj = {"by_cid": {}, "by_key": {}}
+    if adj["by_cid"] or adj["by_key"]:
+        for p in out["players"]:
+            plus = None
+            if p.get("customer_id") and p["customer_id"] in adj["by_cid"]:
+                plus = adj["by_cid"][p["customer_id"]]
+            else:
+                plus = adj["by_key"].get(_cmp_person_key(p["name"]))
+            if plus and p.get("points") is not None:
+                p["points_raw"] = p["points"]
+                p["plus_adjustment"] = plus
+                p["points"] = p["points"] - plus
     out["scoring"] = sum(1 for p in out["players"] if p["points"] is not None)
     out["field"] = len(out["players"])
     _CHAMP_POINTS_CACHE[race_key] = (_t.time(), out)
@@ -7400,6 +7477,10 @@ def get_points_race_live(race_key: str,
         # not entered in the championship — the column can tell the three
         # states apart.
         row["champ_thru"] = hit.get("thru") if hit else None
+        # Plus-handicap deduction already applied to champ_points in
+        # fetch_champ_points; the size rides along so the drill-down can
+        # say so instead of leaving the smaller figure unexplained.
+        row["champ_plus"] = hit.get("plus_adjustment") if hit else None
         row["live_total"] = round(season + (champ or 0.0), 2)
         rows.append(row)
 
@@ -7512,7 +7593,8 @@ def _champ_card_roster(race_key: str, max_age: float = 120.0,
         raise RuntimeError(f"GG returned HTTP {page['status_code']}")
     struct = parse_page_structure(page["html"], board["url"])
     roster = {"configured": True, "url": board["url"],
-              "by_cid": {}, "by_key": {}}
+              "by_cid": {}, "by_key": {}, "plus_by_cid": {}, "plus_by_key": {}}
+    plus_names = _parse_champ_plus_column(struct.get("tables") or [])
     with _connect(db_path) as conn:
         for l in struct.get("links") or []:
             href = l.get("href") or ""
@@ -7529,6 +7611,18 @@ def _champ_card_roster(race_key: str, max_age: float = 120.0,
             k = _cmp_person_key(name)
             if k[0] and k[1]:
                 roster["by_key"].setdefault(k, entry)
+        # Plus-handicap deductions ride the same board walk (Kerry's
+        # championship rule — see _parse_champ_plus_column).
+        for name, plus in plus_names.items():
+            try:
+                cid, _how = _resolve_gg_person(conn, name)
+            except Exception:
+                cid = None
+            if cid:
+                roster["plus_by_cid"].setdefault(cid, plus)
+            k = _cmp_person_key(name)
+            if k[0] and k[1]:
+                roster["plus_by_key"].setdefault(k, plus)
     _CHAMP_ROSTER_CACHE[race_key] = (_t.time(), roster)
     return roster
 
@@ -7636,10 +7730,26 @@ def fetch_champ_player_card(race_key: str, customer_id: int,
         except Exception:
             pass
 
+        # PLUS-HANDICAP DEDUCTION (Kerry 2026-08-01): the flat deduction
+        # the board applies must show on the card too, or the card and the
+        # (already-adjusted) board figure would read as a disagreement.
+        # Primary source is the roster's PlayingHandicap™ column — the
+        # same map fetch_champ_points deducts from; the details partial's
+        # own "(+4)" (parsed NEGATIVE by parse_scorecard_details) is the
+        # fallback so a roster-parse miss can't hide the adjustment.
+        plus_adj = (roster.get("plus_by_cid") or {}).get(int(customer_id))
+        ph = player.get("playing_handicap")
+        if plus_adj is None and ph is not None and ph < 0:
+            plus_adj = -ph
+        computed_adj = (computed - plus_adj
+                        if computed is not None and plus_adj else computed)
+
         out = {"race": race_key, "configured": True,
                "player_name": entry["name"], "customer_id": int(customer_id),
                "playing_handicap": player.get("playing_handicap"),
+               "plus_adjustment": plus_adj,
                "holes": holes, "computed_points": computed,
+               "computed_points_adj": computed_adj,
                "gross_total": player.get("gross"),
                "board_points": board_points, "board_thru": board_thru,
                "stale": False}
