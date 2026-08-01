@@ -5678,7 +5678,10 @@
         // on phones so the Player column gets the width back (Kerry
         // 2026-08-01: the right side was overlapping long name+handicap).
         const todayStyle = `width:${compact ? "28px" : "90px"};text-align:center;border-right:2px solid #cbd5e1;`;
-        const thruStyle = `width:${compact ? "46px" : "90px"};text-align:center;border-right:2px solid #cbd5e1;font-size:${compact ? "0.68rem" : "0.85rem"};`;
+        // font-size stays OFF the shared style — it leaked into the TH and
+        // made the THRU heading bigger than its neighbours (Kerry)
+        const thruStyle = `width:${compact ? "46px" : "90px"};text-align:center;border-right:2px solid #cbd5e1;`;
+        const thruFont = `font-size:${compact ? "0.68rem" : "0.85rem"};`;
 
         const rowHtml = r => {
             const bg = r.enrolled ? "background:#bbf7d0;"
@@ -5718,7 +5721,7 @@
             // keeps its inline last-event arrow in the rank cell.
             const midCells = liveMode
                 ? `<td style="${todayStyle}${r.champ_points != null ? "color:#BF5700;font-weight:800;" : "color:var(--text-muted);"}">${r.champ_points != null ? escapeHtml(String(r.champ_points % 1 ? r.champ_points.toFixed(1) : r.champ_points)) : (r.champ_thru ? "" : "—")}</td>
-                   <td style="${thruStyle}white-space:nowrap;${/\d:\d\d/.test(r.champ_thru || "") ? "color:var(--text-muted);" : "font-weight:600;"}">${escapeHtml(compact ? String(r.champ_thru || "—").replace(/\s*([AaPp])\.?M\.?/, (_, g) => g.toLowerCase()) : (r.champ_thru || "—"))}</td>`
+                   <td style="${thruStyle}${thruFont}white-space:nowrap;${/\d:\d\d/.test(r.champ_thru || "") ? "color:var(--text-muted);" : "font-weight:600;"}">${escapeHtml(compact ? String(r.champ_thru || "—").replace(/\s*([AaPp])\.?M\.?/, (_, g) => g.toLowerCase()) : (r.champ_thru || "—"))}</td>`
                 : `<td style="${resetStyle}">${prFmtReset(r.points_reset)}</td>
                    ${showRounds ? `<td style="${rndStyle}" class="pr-rnd">${r.tournaments ?? ""}</td>` : ""}`;
             const moveCell = liveMode

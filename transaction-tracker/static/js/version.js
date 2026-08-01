@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.180.8";
+window.TGF_VERSION = "2.180.9";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.180.9",
+    date: "2026-08-01",
+    changes: [
+      "THE 'POINTS AREN'T ADDING' REPORT WAS A LAG READING AS AN ERROR — the math was right. Two different Golf Genius surfaces feed the live card: the per-hole scorecard (which had Callaway's holes 1-2, correctly worth 1+2=3) and the points board (which was still showing 1 pt thru 1 — it hadn't posted hole 2 yet). The card's footnote treated every difference as a discrepancy. It now tells the two apart: when the scorecard is simply AHEAD of the board it says so quietly ('totals sync on its next refresh'), and the amber the-board-is-official warning is reserved for a genuine same-holes disagreement.",
+      "THRU heading back to the same size as its neighbours — the column's data font-size override was leaking into the header cell.",
+    ],
+  },
   {
     version: "2.180.8",
     date: "2026-08-01",

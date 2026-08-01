@@ -315,10 +315,22 @@
         const front = holes.filter(h => h.hole <= 9);
         const back = holes.filter(h => h.hole > 9);
         const html = block("OUT", front, false) + block("IN", back, true);
-        const parity = (card.computed_points != null && card.board_points != null
-            && Number(card.computed_points) !== Number(card.board_points))
-            ? `<div style="color:#b45309;font-size:0.72rem;margin-top:0.2rem;">Our per-hole total (${escapeHtml(String(card.computed_points))}) differs from the GG board (${escapeHtml(String(card.board_points))}) — the board is official.</div>`
-            : "";
+        // Two different GG surfaces feed this card: the scorecard partial
+        // (per hole) and the points board (total + thru). The scorecard
+        // often runs a hole AHEAD of the board for a minute — that is a
+        // lag, not a disagreement, and it must not read like an error
+        // (Kerry 2026-08-01: "Points aren't adding correctly" — they were,
+        // the board just hadn't posted hole 2 yet).
+        const boardThruN = /^\d+$/.test(String(card.board_thru || "").trim())
+            ? parseInt(card.board_thru, 10)
+            : (String(card.board_thru || "").trim().toUpperCase() === "F" ? 18 : null);
+        const differs = card.computed_points != null && card.board_points != null
+            && Number(card.computed_points) !== Number(card.board_points);
+        const boardLagging = differs && (boardThruN == null || boardThruN < played.length);
+        const parity = !differs ? ""
+            : boardLagging
+                ? `<div style="color:#9CA3AF;font-size:0.72rem;margin-top:0.2rem;">Scorecard shows ${played.length} hole${played.length === 1 ? "" : "s"}; the points board is still thru ${escapeHtml(String(card.board_thru ?? "—"))} — totals sync on its next refresh.</div>`
+                : `<div style="color:#b45309;font-size:0.72rem;margin-top:0.2rem;">Our per-hole total (${escapeHtml(String(card.computed_points))}) differs from the GG board (${escapeHtml(String(card.board_points))}) — the board is official.</div>`;
         const src = card.stale
             ? `<div style="color:#b45309;font-size:0.72rem;margin-top:0.2rem;">Showing the last good read — Golf Genius did not answer.</div>` : "";
         return head + html + parity + src;
