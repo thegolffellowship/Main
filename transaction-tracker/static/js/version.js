@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.174.0";
+window.TGF_VERSION = "2.175.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.175.0",
+    date: "2026-07-31",
+    changes: [
+      "CITY CHAMPIONSHIP MOVED TO THE TOP OF THE COUNTED LIST, IN ITS OWN COLOUR (Kerry 2026-07-31). It sat at the bottom of the best-10 list where it read like a footnote. It is a REQUIRED, never-droppable addition to the season total, so it now leads the list in burnt orange with rules above and below, distinct from the plain counted rows beneath it. The row can carry a live points figure and a 'thru' marker as the round is played.",
+      "DOUBLE-COUNT GUARD ON THE LIVE OVERLAY (Kerry: Golf Genius 'doesn't actually award season points without us closing it out and adding them after the round is done'). That is exactly why the live overlay is needed — and exactly what would break it later. While the round is in progress the stored season snapshot holds no championship points, so adding the live board is correct. Once the event is closed out and the snapshot refreshes, Golf Genius's own total already includes the championship, and adding the board again would show every player inflated by their championship score. The overlay now stands down when the board has gone final AND the snapshot was refreshed the same day, and serves Golf Genius's figure unchanged.",
+    ],
+  },
   {
     version: "2.174.0",
     date: "2026-07-31",

@@ -7328,6 +7328,34 @@ def get_points_race_live(race_key: str,
     base = get_points_race_standings(race_key, db_path=db_path)
     live = fetch_champ_points(race_key, db_path=db_path)
 
+    # DOUBLE-COUNT GUARD (Kerry 2026-07-31). Golf Genius does not award
+    # season points until the manager closes the event out — so during the
+    # round the stored snapshot has no championship in it and adding the
+    # live board is exactly right. Once it IS closed out and the snapshot
+    # refreshes, GG's own total already contains the championship, and
+    # adding the board again would show every player inflated by their
+    # championship score. When the snapshot's own timestamp is newer than
+    # the moment the board went final, GG has spoken: stand down and serve
+    # the season figure unchanged.
+    _final = bool(live.get("players")) and all(
+        (str(p.get("thru") or "").strip().upper() in ("F", "18")
+         or p.get("points") is None)
+        for p in live.get("players", []))
+    _snap_at = base.get("fetched_at") or ""
+    if _final and _snap_at:
+        try:
+            from .timezone_utils import today_central_str
+            if str(_snap_at)[:10] >= today_central_str():
+                # Snapshot taken today, after a completed board -> GG has
+                # already folded the championship in.
+                out = dict(base)
+                out["champ"] = {k: v for k, v in live.items() if k != "players"}
+                out["champ_scoring"] = 0
+                out["champ_absorbed"] = True
+                return out
+        except Exception:
+            pass
+
     by_cid, by_name = {}, {}
     for p in live.get("players", []):
         if p.get("points") is None:

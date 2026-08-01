@@ -427,10 +427,26 @@
             // CITY CHAMPIONSHIP Total line joins them (blank until played):
             // final = best 10 point totals + City Championship total.
             let counted = true;
-            const ccRow = `<tr style="background:#F6F5F2;">
+            // CITY CHAMPIONSHIP sits at the TOP of the counted list, not the
+            // bottom (Kerry 2026-07-31) — it is a REQUIRED, never-droppable
+            // add-on, so it reads as the headline rather than a footnote, and
+            // it carries a contrasting burnt-orange treatment against the
+            // plain counted rows. opts.champPoints fills it live while the
+            // round is in progress; blank until then.
+            const _cc = (opts.champPoints != null && opts.champPoints !== "")
+                ? String(opts.champPoints) : "";
+            const _ccThru = opts.champThru ? ` <span style="font-weight:400;font-size:0.85em;color:#9A5B2E;">thru ${escapeHtml(String(opts.champThru))}</span>` : "";
+            const ccCells = [];
+            for (let ci = 0; ci < Math.max(0, totalCols - 2); ci++) {
+                // Drop the live points under the PTS column when we know it.
+                ccCells.push((ptsCol > -1 && ci === (ptsCol - 2) && _cc)
+                    ? `<td style="font-weight:800;color:#BF5700;">${escapeHtml(_cc)}</td>`
+                    : "<td></td>");
+            }
+            const ccRow = `<tr style="background:#FDF0E6;border-top:2px solid #BF5700;border-bottom:2px solid #BF5700;">
                 <td></td>
-                <td style="font-weight:700;">CITY CHAMPIONSHIP Total</td>
-                ${Array(Math.max(0, totalCols - 2)).fill("<td></td>").join("")}
+                <td style="font-weight:800;color:#BF5700;">CITY CHAMPIONSHIP Total${_ccThru}</td>
+                ${ccCells.join("")}
             </tr>`;
             // Admin-specced section banners: counted = black bar with white
             // text, not counted = 40% gray with black text (replaces GG's
@@ -438,11 +454,14 @@
             const secHdr = (label, bg, fg) => `<tr><td colspan="${totalCols}" class="pr-wrap" style="background:${bg};color:${fg};font:700 11px/1.5 'Bitter',serif;letter-spacing:1px;text-transform:uppercase;">${label}</td></tr>`;
             const parts = [];
             if (order && !opts.plain) parts.push(secHdr(`${compact ? "COUNTED" : "POINTS COUNTED"} <span style="font-weight:400;text-transform:none;letter-spacing:0;color:#9CA3AF;font-family:'Helvetica Neue',Arial,sans-serif;">(Best 10 + City Championship)</span>`, "#1B1B1B", "#fff"));
+            // Top of the counted list, immediately under the banner.
+            let ccPlaced = false;
+            if (!opts.plain) { parts.push(ccRow); ccPlaced = true; }
             for (const r of body) {
                 if (r.length !== width) {
                     if (opts.plain) continue;
                     if (counted) {
-                        parts.push(ccRow);
+                        if (!ccPlaced) parts.push(ccRow);
                         counted = false;
                         if (order) { parts.push(secHdr(compact ? "Not Counted" : "Points Not Counted", "#B9B7B2", "#1B1B1B")); continue; }
                     }
