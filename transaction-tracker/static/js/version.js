@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.187.2";
+window.TGF_VERSION = "2.187.3";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.187.3",
+    date: "2026-08-01",
+    changes: [
+      "WON badges ride the collapsed rows on phones once a race is FINAL (Kerry: 'Can we show the winnings on the top collapsed level like we were showing the projected amounts before?'). The morning declutter moved money into the expanded view because EVERY enrolled row wore a PROJECTED badge and crushed the name column; final money is different — only the placewinners carry a badge and WON is a shorter label. The all-dashes THRU column also stands down on a final race, giving the badges its width back; TDY (championship points) stays until GG absorbs them.",
+    ],
+  },
   {
     version: "2.187.2",
     date: "2026-08-01",

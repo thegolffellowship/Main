@@ -5736,9 +5736,16 @@
         // 2026-08-01) — the table earns back two columns of thumb room.
         const showBuy = !compact;
         const showRounds = !compact;   // season view only; live swaps it for THRU
+        // Once the race is DECLARED final the THRU column is all dashes —
+        // drop it, and the freed width lets the WON badges ride the
+        // collapsed rows again on phones (Kerry, championship evening:
+        // "Can we show the winnings on the top collapsed level like we
+        // were showing the projected amounts before?").
+        const showThru = liveMode && !prRaceFinal;
         const nCols = (showChapter ? 7 : 6)
             - (showBuy ? 0 : 1)
             - (liveMode || showRounds ? 0 : 1)
+            - (liveMode && !showThru ? 1 : 0)
             + (liveMode ? 1 : 0);      // live adds the MOVE column (PGA-style)
         // Fixed widths on every column but Player so the three race tabs
         // lay out identically regardless of content; phones get narrow
@@ -5804,7 +5811,7 @@
             // keeps its inline last-event arrow in the rank cell.
             const midCells = liveMode
                 ? `<td style="${todayStyle}${r.champ_points != null ? "color:#BF5700;font-weight:800;" : "color:var(--text-muted);"}">${r.champ_points != null ? escapeHtml(String(r.champ_points % 1 ? r.champ_points.toFixed(1) : r.champ_points)) : (r.champ_thru ? "" : "—")}</td>
-                   <td style="${thruStyle}${thruFont}white-space:nowrap;${/\d:\d\d/.test(r.champ_thru || "") ? "color:var(--text-muted);" : "font-weight:600;"}">${escapeHtml(compact ? String(r.champ_thru || "—").replace(/\s*([AaPp])\.?M\.?/, (_, g) => g.toLowerCase()) : (r.champ_thru || "—"))}</td>`
+                   ${showThru ? `<td style="${thruStyle}${thruFont}white-space:nowrap;${/\d:\d\d/.test(r.champ_thru || "") ? "color:var(--text-muted);" : "font-weight:600;"}">${escapeHtml(compact ? String(r.champ_thru || "—").replace(/\s*([AaPp])\.?M\.?/, (_, g) => g.toLowerCase()) : (r.champ_thru || "—"))}</td>` : ""}`
                 : `<td style="${resetStyle}">${prFmtReset(r.points_reset)}</td>
                    ${showRounds ? `<td style="${rndStyle}" class="pr-rnd">${r.tournaments ?? ""}</td>` : ""}`;
             const moveCell = liveMode
@@ -5812,7 +5819,7 @@
             return `<tr style="${bg}${expandable ? 'cursor:pointer;' : ''}"${r.member_card_id ? ` data-card="${r.member_card_id}"` : ''}${r.customer_id ? ` data-cid="${r.customer_id}"` : ''}${champAttrs} data-pname="${escapeHtml(r.player_name || "")}">
                 <td style="${rankStyle}white-space:nowrap;">${escapeHtml(r._flightRank ?? r.rank)}${liveMode ? "" : prRankMove(r.rank, r.prev_rank)}</td>
                 ${moveCell}
-                <td>${nameCell}${hcp}${statusPill}${chevron}${compact ? "" : prPayBadge(r)}</td>
+                <td>${nameCell}${hcp}${statusPill}${chevron}${compact && !prRaceFinal ? "" : prPayBadge(r)}</td>
                 ${showChapter ? `<td style="${chapStyle}" title="${escapeHtml(r.player_chapter || "")}">${escapeHtml(compact ? prAbbrevChapter(r.player_chapter) : (r.player_chapter || ""))}</td>` : ""}
                 <td style="${ptsStyle}">${r.total_points ?? ""}</td>
                 ${midCells}
@@ -5866,7 +5873,7 @@
                     <th style="${ptsStyle}">${compact ? "PTS" : "POINTS"}</th>
                     ${liveMode
                         ? `<th style="${todayStyle}" title="Championship points earned today">${compact ? "TDY" : "TODAY"}</th>
-                           <th style="${thruStyle}" title="Holes completed today — or the tee time if they haven't started">THRU</th>`
+                           ${showThru ? `<th style="${thruStyle}" title="Holes completed today — or the tee time if they haven't started">THRU</th>` : ""}`
                         : `<th style="${resetStyle}"><span class="pr-proj" style="display:block;font-size:${compact ? "0.52rem" : "0.65rem"};font-weight:600;letter-spacing:0.03em;">(${compact ? "proj" : "Projected"})</span>${compact ? "RESET" : "POINTS RESET"}</th>
                            ${showRounds ? `<th style="${rndStyle}" class="pr-rnd" title="Rounds">Rounds</th>` : ""}`}
                     ${showBuy ? `<th style="${buyStyle}" title="Buy-in">Buy-in</th>` : ""}
