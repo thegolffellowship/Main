@@ -10326,6 +10326,28 @@ def api_season_contest_points_race_detail():
     return jsonify(data)
 
 
+@app.route("/api/season-contests/points-race/champ-card")
+@require_role("member")
+def api_season_contest_champ_card():
+    """One player's LIVE championship hole-by-hole card (championship day).
+
+    PII-free: the payload is the same name + scores Golf Genius already
+    shows on its public board, plus OUR computed net/points per hole.
+    Caching (45s per player) lives in the database layer so many viewers
+    polling collapse to one GG walk.
+    """
+    from email_parser.database import fetch_champ_player_card
+    race_key = request.args.get("race", "")
+    cid = (request.args.get("cid") or "").strip()
+    if not cid.isdigit():
+        return jsonify({"error": "cid must be a numeric customer id"}), 400
+    data = fetch_champ_player_card(race_key, int(cid))
+    if data.get("error") and not data.get("holes"):
+        code = 404 if "not on the championship" in data["error"] else 502
+        return jsonify(data), code
+    return jsonify(data)
+
+
 @app.route("/api/season-contests/monthly-points")
 @require_role("member")
 def api_season_contest_monthly_points():

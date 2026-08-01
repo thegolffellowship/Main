@@ -38,6 +38,20 @@ check("that distinction matters: None != 0.0", rows[0]["points"] != 0.0)
 check("a scoring player's points are numeric", rows[2]["points"] == 34.0, str(rows[2]))
 check("thru is carried for the live display", rows[3]["thru"] == "12", str(rows[3]))
 
+print("\n== FIRST LAST guests are kept (seen live, Austin board 2026-08-01) ==")
+tables_g = [[
+    ["Pos.", "Player", "Stableford Points", "Thru"],
+    ["", "Matt Larson Guest", "-", "9:00 AM"],
+    [""],
+    ["", "MCDONNELL, Kaleb TGF Austin", "-", "9:00 AM"],
+    ["", "Total", "44", ""],
+]]
+rows_g = db._parse_champ_points_tables(tables_g)
+check("the comma-less guest row is read, the junk 'Total' row is not",
+      len(rows_g) == 2, str(rows_g))
+check("the guest's name survives the affiliation strip",
+      rows_g[0]["name"] == "Matt Larson", str(rows_g[0]))
+
 print("\n== affiliations are stripped before identity resolution ==")
 for raw, want in [("FIEBER, Wade TGF San Antonio", "FIEBER, Wade"),
                   ("Bricco, Rowdy Guest", "Bricco, Rowdy"),

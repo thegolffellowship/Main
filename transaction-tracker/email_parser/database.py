@@ -7248,8 +7248,16 @@ def _parse_champ_points_tables(tables: list, affiliations=None) -> list:
                 continue
             raw_name = cells[hdr["player"]] if hdr["player"] < len(cells) else ""
             name = _strip_gg_affiliation(raw_name, affiliations)
-            if not name or "," not in name:
+            if not name:
                 continue
+            if "," not in name:
+                # Guests can render FIRST LAST with no comma ("Matt Larson
+                # Guest" -> "Matt Larson", seen live on the Austin champ
+                # board 2026-08-01). Accept a plain multi-word name; any
+                # other comma-less cell (section labels, totals) still
+                # skips.
+                if not re.match(r"^[A-Za-z'.\-]+(?: [A-Za-z'.\-]+)+$", name):
+                    continue
             praw = cells[hdr["points"]] if hdr["points"] < len(cells) else ""
             try:
                 pts = float(str(praw).replace(",", ""))
@@ -7398,6 +7406,219 @@ def get_points_race_live(race_key: str,
             "champ": {k: v for k, v in live.items() if k != "players"},
             "champ_scoring": live.get("scoring", 0),
             "champ_field": live.get("field", 0)}
+
+
+# ── LIVE championship hole-by-hole card (Kerry's ask, built 2026-08-01) ──
+# The champ POINTS board carries totals only; per-hole detail lives on the
+# companion scorecard board ("ALL Net 18" — every championship player has a
+# row). Player-name links on that page point straight at the player's own
+# tournaments2/details partial, so one board fetch + one partial fetch
+# serves a card — no full-roster walk. Held as a DIAL
+# (app_settings 'gg_champ_scorecard_boards') like the points boards.
+_GG_CHAMP_CARD_BOARDS_DEFAULT: dict = {
+    "san_antonio_net": {
+        "label": "ALL Net 18",
+        "url": ("https://tgf-sa.golfgenius.com/v2tournaments/4779120"
+                "?player_stats_for_portal=true&round_index=35"),
+    },
+    "austin_net": {
+        "label": "ALL Net 18",
+        "url": ("https://tgf-austin.golfgenius.com/v2tournaments/4779165"
+                "?player_stats_for_portal=true&round_index=31"),
+    },
+}
+
+_CHAMP_ROSTER_CACHE: dict = {}   # race_key -> (epoch, roster dict)
+_CHAMP_CARD_CACHE: dict = {}     # (race_key, customer_id) -> (epoch, payload)
+_CHAMP_TEE_CACHE: dict = {}      # nets URL -> tee block (pars don't change mid-round)
+
+
+def champ_card_boards(db_path: str | Path = DB_PATH) -> dict:
+    """The configured championship scorecard boards, dial over default."""
+    try:
+        raw = get_app_setting("gg_champ_scorecard_boards", db_path=db_path)
+    except sqlite3.OperationalError:
+        raw = None          # app_settings not created yet — use the defaults
+    if raw:
+        try:
+            got = json.loads(raw)
+            if isinstance(got, dict) and got:
+                return got
+        except (ValueError, TypeError):
+            logger.warning("gg_champ_scorecard_boards is not valid JSON — "
+                           "using the built-in board list")
+    return dict(_GG_CHAMP_CARD_BOARDS_DEFAULT)
+
+
+def _champ_card_roster(race_key: str, max_age: float = 120.0,
+                       db_path: str | Path = DB_PATH) -> dict:
+    """cid/person-key -> details-partial URL, off the scorecard board page.
+
+    The board lists every player as a link to their own
+    tournaments2/details partial (verified live 2026-08-01: link text is
+    the bare 'SURNAME, First', no affiliation). Names resolve to
+    customer_id up front (principle 6) so the card lookup never
+    string-compares."""
+    import time as _t
+    from golf_genius_sync import fetch_public_page, parse_page_structure
+
+    hit = _CHAMP_ROSTER_CACHE.get(race_key)
+    if hit and (_t.time() - hit[0]) < max_age:
+        return hit[1]
+
+    board = champ_card_boards(db_path=db_path).get(race_key)
+    if not board or not board.get("url"):
+        roster = {"configured": False, "by_cid": {}, "by_key": {}}
+        _CHAMP_ROSTER_CACHE[race_key] = (_t.time(), roster)
+        return roster
+    page = fetch_public_page(board["url"], xhr=False)
+    if page["status_code"] != 200:
+        raise RuntimeError(f"GG returned HTTP {page['status_code']}")
+    struct = parse_page_structure(page["html"], board["url"])
+    roster = {"configured": True, "url": board["url"],
+              "by_cid": {}, "by_key": {}}
+    with _connect(db_path) as conn:
+        for l in struct.get("links") or []:
+            href = l.get("href") or ""
+            name = re.sub(r"\s+", " ", (l.get("text") or "")).strip()
+            if not re.search(r"/tournaments2/details/\d+", href) or not name:
+                continue
+            entry = {"name": name, "url": href}
+            try:
+                cid, _how = _resolve_gg_person(conn, name)
+            except Exception:
+                cid = None
+            if cid and cid not in roster["by_cid"]:
+                roster["by_cid"][cid] = entry
+            k = _cmp_person_key(name)
+            if k[0] and k[1]:
+                roster["by_key"].setdefault(k, entry)
+    _CHAMP_ROSTER_CACHE[race_key] = (_t.time(), roster)
+    return roster
+
+
+def _champ_stableford(net_vs_par, gross) -> "int | None":
+    """Championship-scale Stableford for one hole (the ratified chart:
+    triple/double 0, bogey 1, par 2, birdie 3, eagle 4, double eagle 5 —
+    one above the regular scale in every category; a GROSS ace pays 9
+    regardless of net)."""
+    if net_vs_par is None:
+        return None
+    if gross == 1:
+        return 9
+    return max(0, 2 - int(net_vs_par))
+
+
+def fetch_champ_player_card(race_key: str, customer_id: int,
+                            max_age: float = 45.0,
+                            db_path: str | Path = DB_PATH) -> dict:
+    """One player's LIVE championship hole-by-hole card, off GG.
+
+    Per-hole gross + handicap dots come from the player's scorecard
+    partial; pars from the tee (nets) partial; NET and championship-scale
+    Stableford are computed HERE from those facts rather than trusted, and
+    the payload carries the champ board's own total beside ours so a
+    disagreement is visible, never silently absorbed. Cached `max_age`
+    seconds per (race, player); a GG failure re-serves the last good card
+    marked stale, exactly like fetch_champ_points."""
+    import time as _t
+    from urllib.parse import urlparse
+    from golf_genius_sync import (fetch_public_page, parse_scorecard_details,
+                                  parse_tee_block, _unwrap_js_string)
+
+    ck = (race_key, int(customer_id))
+    hit = _CHAMP_CARD_CACHE.get(ck)
+    if hit and (_t.time() - hit[0]) < max_age:
+        return hit[1]
+
+    try:
+        roster = _champ_card_roster(race_key, db_path=db_path)
+        if not roster.get("configured"):
+            return {"race": race_key, "configured": False, "holes": []}
+        entry = roster["by_cid"].get(int(customer_id))
+        if not entry:
+            out = {"race": race_key, "configured": True, "holes": [],
+                   "error": "player not on the championship scorecard board"}
+            _CHAMP_CARD_CACHE[ck] = (_t.time(), out)
+            return out
+
+        resp = fetch_public_page(entry["url"], xhr=True)
+        if resp["status_code"] != 200:
+            raise RuntimeError(f"GG returned HTTP {resp['status_code']}")
+        frag = _unwrap_js_string(resp["html"]) or resp["html"]
+        parsed = parse_scorecard_details(frag)
+        want = _cmp_person_key(entry["name"])
+        player = next((p for p in parsed["players"]
+                       if _cmp_person_key(p.get("player_name") or "") == want),
+                      parsed["players"][0] if parsed["players"] else None)
+        if not player:
+            raise RuntimeError("scorecard partial held no player rows")
+
+        pars = {}
+        if player.get("net_id"):
+            base = "https://" + urlparse(entry["url"]).netloc
+            nurl = (f"{base}/tournaments2/nets/{player['net_id']}"
+                    f"?event_id={player.get('gg_event_id') or ''}")
+            tee = _CHAMP_TEE_CACHE.get(nurl)
+            if tee is None:
+                try:
+                    nresp = fetch_public_page(nurl, xhr=True)
+                    nfrag = _unwrap_js_string(nresp["html"]) or ""
+                    tee = parse_tee_block(nfrag) if nfrag else None
+                except Exception:
+                    tee = None      # pars are additive — the card still renders
+                # only a SUCCESSFUL parse is cached: a one-off GG hiccup at
+                # 9 AM must not cost the card its pars for the whole round
+                if tee:
+                    _CHAMP_TEE_CACHE[nurl] = tee
+            pars = (tee or {}).get("par") or {}
+
+        holes = []
+        computed = None
+        for n in range(1, 19):
+            h = (player.get("holes") or {}).get(n) or {}
+            gross = h.get("strokes")
+            dots = h.get("dots") or 0
+            par = pars.get(n)
+            net = (gross - dots) if gross is not None else None
+            nvp = (net - par) if (net is not None and par is not None) else None
+            pts = _champ_stableford(nvp, gross)
+            if pts is not None:
+                computed = (computed or 0) + pts
+            holes.append({"hole": n, "par": par, "gross": gross,
+                          "dots": dots, "net": net, "pts": pts})
+
+        # The champ board's own figure rides along so the card can say
+        # when the two disagree (the board stays official).
+        board_points = board_thru = None
+        try:
+            live = fetch_champ_points(race_key, db_path=db_path)
+            bp = next((p for p in live.get("players", [])
+                       if p.get("customer_id") == int(customer_id)), None)
+            if bp:
+                board_points, board_thru = bp.get("points"), bp.get("thru")
+        except Exception:
+            pass
+
+        out = {"race": race_key, "configured": True,
+               "player_name": entry["name"], "customer_id": int(customer_id),
+               "playing_handicap": player.get("playing_handicap"),
+               "holes": holes, "computed_points": computed,
+               "gross_total": player.get("gross"),
+               "board_points": board_points, "board_thru": board_thru,
+               "stale": False}
+        _CHAMP_CARD_CACHE[ck] = (_t.time(), out)
+        return out
+    except Exception as e:
+        if hit:
+            stale = dict(hit[1])
+            stale["stale"] = True
+            stale["error"] = str(e)
+            return stale
+        out = {"race": race_key, "configured": True, "holes": [],
+               "error": str(e)}
+        _CHAMP_CARD_CACHE[ck] = (_t.time(), out)
+        return out
 
 
 def get_points_race_standings(race_key: str,

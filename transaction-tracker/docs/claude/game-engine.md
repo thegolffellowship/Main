@@ -805,7 +805,44 @@ PII-free) and `GET|POST /api/season-contests/points-race/champ-boards`
 
 **UI**: `contests.html` `prLoadStandings` prefers the live endpoint when
 `champ_scoring > 0`, shows a LIVE banner, and polls every 60s — pausing
-when the tab is not visible and stopping when the board stops scoring.
-A manual Refresh still forces the season endpoint.
+when the tab is not visible, when a drill-down panel is open (v2.176.0 —
+the re-render was slamming an expanded panel shut mid-read every minute),
+and stopping when the board stops scoring. A manual Refresh still forces
+the season endpoint.
+
+Parser note (v2.176.0): a guest can render in plain `First Last` form with
+no comma (`Matt Larson Guest`, live Austin board 2026-08-01) — multi-word
+comma-less names are accepted; labels/totals rows still skip.
 
 Tests: `test_champ_points_live.py`.
+
+## LIVE championship hole-by-hole card (v2.176.0)
+
+Kerry's ask, built championship morning. The CITY CHAMPIONSHIP line at the
+top of the player drill-down (points-render.js) carries the live figure —
+passed through from the standings row's `data-champ-*` attributes, no
+second fetch — and expands to a per-hole card: PAR / GROSS (with handicap
+dots) / NET / championship-scale PTS, OUT and IN blocks.
+
+**Read GG's facts, compute our own points.** Gross + dots come off the
+player's `tournaments2/details/<id>` partial on the **scorecard board**
+("ALL Net 18" — a second dial, `app_settings.gg_champ_scorecard_boards`,
+defaults `_GG_CHAMP_CARD_BOARDS_DEFAULT`: SA v2tournaments/4779120, Austin
+4779165); pars off the tee (nets) partial. NET = gross − dots; PTS uses
+the championship scale (`_champ_stableford`: triple/double 0, bogey 1, par
+2, birdie 3, eagle 4, double eagle 5, **gross ace 9**). The champ board's
+own total rides beside ours (`board_points`/`board_thru`) and the card
+states a mismatch instead of absorbing it — the board stays official.
+
+**Data path** (database.py): `_champ_card_roster` (player-name links on
+the board page point at each player's own details partial — verified live
+2026-08-01; names resolve to customer_id up front, principle 6, 120s
+cache) → `fetch_champ_player_card(race_key, cid, max_age=45)` (per-player
+45s cache; one board fetch + one partial per player, never a roster walk;
+GG failure re-serves the last good card marked `stale`; successful tee
+parses cached for the day, failures retried). Route: `GET
+/api/season-contests/points-race/champ-card?race=&cid=` (member tier,
+PII-free — the payload is what GG's public board already shows plus our
+computed columns).
+
+Tests: `test_champ_card_live.py`.

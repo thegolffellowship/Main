@@ -5462,6 +5462,11 @@
         _prLiveTimer = setInterval(() => {
             const sec = document.getElementById("section-points-race");
             if (!sec || sec.offsetParent === null) return;   // tab not visible
+            // Someone reading an expanded drill-down keeps it: re-rendering
+            // the table would close the panel mid-read every 60s during the
+            // championship. The refresh resumes on the first quiet tick.
+            const cont = $("pr-table-container");
+            if (cont && cont.querySelector("tr.pr-detail-row, tr.pr-mo-detail")) return;
             prLoadStandings(kind, false);
         }, 60000);
     }
@@ -5623,7 +5628,14 @@
                 : (r.member_status === "alumni"
                     ? ` <span style="display:inline-block;padding:1px 6px;border-radius:9999px;font-size:0.62rem;font-weight:700;letter-spacing:0.04em;background:#FDF3E7;color:#B45309;border:1px solid #F3D9BB;vertical-align:1px;" title="Membership lapsed — rejoin at thegolffellowship.com">REJOIN</span>`
                     : "");
-            return `<tr style="${bg}${expandable ? 'cursor:pointer;' : ''}"${r.member_card_id ? ` data-card="${r.member_card_id}"` : ''}${r.customer_id ? ` data-cid="${r.customer_id}"` : ''}>
+            // Live-overlay rows carry today's championship figures so the
+            // drill-down can paint the CITY CHAMPIONSHIP line without a
+            // second fetch (the season endpoint has neither field).
+            const champAttrs = (r.champ_points != null
+                ? ` data-champ-pts="${escapeHtml(String(r.champ_points))}"` : "")
+                + (r.champ_thru
+                ? ` data-champ-thru="${escapeHtml(String(r.champ_thru))}"` : "");
+            return `<tr style="${bg}${expandable ? 'cursor:pointer;' : ''}"${r.member_card_id ? ` data-card="${r.member_card_id}"` : ''}${r.customer_id ? ` data-cid="${r.customer_id}"` : ''}${champAttrs}>
                 <td style="${rankStyle}">${escapeHtml(r._flightRank ?? r.rank)}${prRankMove(r.rank, r.prev_rank)}</td>
                 <td>${nameCell}${hcp}${statusPill}${chevron}${prPayBadge(r)}</td>
                 ${showChapter ? `<td style="${chapStyle}" title="${escapeHtml(r.player_chapter || "")}">${escapeHtml(compact ? prAbbrevChapter(r.player_chapter) : (r.player_chapter || ""))}</td>` : ""}
@@ -6027,7 +6039,16 @@
             // place; only rounds NOT represented in the points table (guests,
             // no points detail) fall back to the separate SCORECARDS list.
             const claimed = new Set();
-            let html = ptsTables ? prRenderDetailTables(ptsTables, rounds, claimed) : "";
+            // The clicked row carries today's live championship figures
+            // (data-champ-*) whenever the overlay endpoint served the
+            // table; champCid/champRace arm the hole-by-hole expansion on
+            // the CITY CHAMPIONSHIP line.
+            let html = ptsTables ? prRenderDetailTables(ptsTables, rounds, claimed, {
+                champPoints: tr.dataset.champPts != null ? tr.dataset.champPts : null,
+                champThru: tr.dataset.champThru || null,
+                champRace: raceKey,
+                champCid: tr.dataset.cid || null,
+            }) : "";
             // NON-POINTS EVENTS list removed (Kerry 2026-07-12): contests
             // show points events only; rounds still power the in-place
             // scorecard expansion on the points lines above.

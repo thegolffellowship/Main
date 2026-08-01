@@ -215,6 +215,88 @@
                 }
             });
         });
+        // The CITY CHAMPIONSHIP line expands to the LIVE hole-by-hole card
+        // straight off Golf Genius (championship day only). Errors PAINT —
+        // a 500 and a still-loading state must never look identical.
+        root.querySelectorAll("tr[data-champ-race]").forEach(row => {
+            row.addEventListener("click", async ev => {
+                ev.stopPropagation();
+                const chev = row.querySelector(".pr-cc-chev");
+                const next = row.nextElementSibling;
+                if (next && next.classList.contains("pr-cc-detail")) {
+                    next.remove();
+                    if (chev) chev.innerHTML = "&#9656;";
+                    return;
+                }
+                const det = document.createElement("tr");
+                det.className = "pr-cc-detail";
+                det.innerHTML = `<td colspan="${row.children.length}" class="pr-wrap" style="background:#fff;padding:${prIsCompact() ? "0.4rem 0.1rem" : "0.5rem 0.75rem"};"><span style="color:var(--text-muted);">Loading live card…</span></td>`;
+                row.after(det);
+                if (chev) chev.innerHTML = "&#9662;";
+                try {
+                    const res = await fetch(`/api/season-contests/points-race/champ-card?race=${encodeURIComponent(row.dataset.champRace)}&cid=${encodeURIComponent(row.dataset.champCid)}`, {cache: "no-store"});
+                    const data = await res.json();
+                    if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+                    det.firstElementChild.innerHTML = prRenderChampCard(data);
+                } catch (e) {
+                    det.firstElementChild.innerHTML = `<span style="color:#b91c1c;">Live card unavailable: ${escapeHtml(e.message)}</span>`;
+                }
+            });
+        });
+    }
+
+    // The live championship hole-by-hole card: PAR / GROSS / NET / PTS per
+    // hole, OUT and IN blocks, straight off the GG scorecard board. PTS is
+    // OUR championship-scale Stableford (0/0/1/2/3/4/5, gross ace 9)
+    // computed from the same gross + dots GG shows — the card states when
+    // its total and the champ board disagree instead of papering over it.
+    function prRenderChampCard(card) {
+        const holes = card.holes || [];
+        const played = holes.filter(h => h.gross != null);
+        const head = `<div style="font-weight:700;color:#BF5700;margin:0 0 0.3rem;">${escapeHtml(card.player_name || "")}`
+            + (card.board_points != null ? ` &middot; ${escapeHtml(String(card.board_points))} pts` : "")
+            + (card.board_thru ? ` <span style="font-weight:400;color:#9A5B2E;">thru ${escapeHtml(String(card.board_thru))}</span>` : "")
+            + `</div>`;
+        if (!played.length) {
+            return head + `<span style="color:var(--text-muted);">No holes posted yet`
+                + (card.board_thru ? ` — tees off ${escapeHtml(String(card.board_thru))}` : "")
+                + `.</span>`;
+        }
+        const compact = prIsCompact();
+        const td = `padding:${compact ? "1px 1px" : "2px 6px"};text-align:center;border:1px solid #e2e8f0;min-width:${compact ? "1.1em" : "2em"};white-space:nowrap;`;
+        const lbl = `padding:${compact ? "1px 2px" : "2px 8px"};border:1px solid #e2e8f0;font-weight:600;color:#475569;text-align:left;white-space:nowrap;`;
+        const fs = compact ? "0.58rem" : "0.8rem";
+        const blocks = [];
+        const front = holes.filter(h => h.hole <= 9);
+        const back = holes.filter(h => h.hole > 9);
+        if (front.some(h => h.gross != null)) blocks.push(["OUT", front]);
+        if (back.some(h => h.gross != null)) blocks.push(["IN", back]);
+        const sum = (hs, k) => hs.reduce((a, h) => a + (h[k] ?? 0), 0);
+        const html = blocks.map(([label, hs]) => {
+            const row = (name, fn, style) => `<tr><td style="${lbl}">${name}</td>`
+                + hs.map(h => `<td style="${td}${style ? style(h) : ""}">${fn(h)}</td>`).join("")
+                + `<td style="${td}font-weight:700;">${fn({_total: true, holes: hs})}</td></tr>`;
+            const v = (h, k) => h._total ? (sum(h.holes, k) || "") : (h[k] ?? "");
+            // dots ride the gross cell as superscripts — same budget GG
+            // prints on the paper card
+            const grossCell = h => h._total
+                ? String(sum(h.holes, "gross") || "")
+                : (h.gross != null ? `${h.gross}${h.dots ? "<sup>" + "&#9679;".repeat(Math.min(h.dots, 3)) + "</sup>" : ""}` : "");
+            return `<table style="border-collapse:collapse;font-size:${fs};margin:0 0 0.4rem;">
+                <tr><td style="${lbl}">${label}</td>${hs.map(h => `<td style="${td}font-weight:700;background:#f8fafc;">${h.hole}</td>`).join("")}<td style="${td}font-weight:700;background:#f8fafc;">TOT</td></tr>
+                ${row("PAR", h => v(h, "par"))}
+                ${row("GROSS", grossCell)}
+                ${row("NET", h => v(h, "net"))}
+                ${row(compact ? "PTS" : "CHAMP PTS", h => v(h, "pts"), h => (!h._total && h.pts != null && h.pts >= 3) ? "color:#BF5700;font-weight:700;" : "")}
+            </table>`;
+        }).join("");
+        const parity = (card.computed_points != null && card.board_points != null
+            && Number(card.computed_points) !== Number(card.board_points))
+            ? `<div style="color:#b45309;font-size:0.72rem;margin-top:0.2rem;">Our per-hole total (${escapeHtml(String(card.computed_points))}) differs from the GG board (${escapeHtml(String(card.board_points))}) — the board is official.</div>`
+            : "";
+        const src = card.stale
+            ? `<div style="color:#b45309;font-size:0.72rem;margin-top:0.2rem;">Showing the last good read — Golf Genius did not answer.</div>` : "";
+        return head + html + parity + src;
     }
 
     function prRenderScorecard(card) {
@@ -443,9 +525,16 @@
                     ? `<td style="font-weight:800;color:#BF5700;">${escapeHtml(_cc)}</td>`
                     : "<td></td>");
             }
-            const ccRow = `<tr style="background:#FDF0E6;border-top:2px solid #BF5700;border-bottom:2px solid #BF5700;">
+            // With a race + customer the line expands to the LIVE hole-by-
+            // hole card (championship day). Chevron only when expandable so
+            // the off-season row stays inert.
+            const _ccExpandable = !!(opts.champRace && opts.champCid);
+            const _ccChev = _ccExpandable
+                ? ' <span class="pr-cc-chev" style="color:#BF5700;font-size:0.85rem;" title="Live hole-by-hole">&#9656;</span>'
+                : '';
+            const ccRow = `<tr${_ccExpandable ? ` data-champ-race="${escapeHtml(String(opts.champRace))}" data-champ-cid="${escapeHtml(String(opts.champCid))}" style="cursor:pointer;` : ` style="`}background:#FDF0E6;border-top:2px solid #BF5700;border-bottom:2px solid #BF5700;">
                 <td></td>
-                <td style="font-weight:800;color:#BF5700;">CITY CHAMPIONSHIP Total${_ccThru}</td>
+                <td style="font-weight:800;color:#BF5700;">CITY CHAMPIONSHIP Total${_ccThru}${_ccChev}</td>
                 ${ccCells.join("")}
             </tr>`;
             // Admin-specced section banners: counted = black bar with white

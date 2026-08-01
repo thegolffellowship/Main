@@ -1,5 +1,16 @@
-window.TGF_VERSION = "2.175.0";
+window.TGF_VERSION = "2.176.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.176.0",
+    date: "2026-08-01",
+    changes: [
+      "THE PLAYER DRILL-DOWN NOW CARRIES THE LIVE CHAMPIONSHIP FIGURE, AND THE CITY CHAMPIONSHIP LINE EXPANDS TO A LIVE HOLE-BY-HOLE CARD (Kerry's ask, built championship morning before first tee). Expanding a player on the LEADERBOARD during the championship shows today's points and 'thru' on the CITY CHAMPIONSHIP line — the same figures the standings row was already showing, passed straight through instead of re-fetched — and clicking that line opens a per-hole card: PAR, GROSS with the handicap dots, NET, and championship-scale points per hole (0/0/1/2/3/4/5 by category, a gross ace pays 9), OUT and IN blocks, live off Golf Genius.",
+      "The per-hole card is READ, the points are OURS. Gross strokes and handicap dots come off the player's own scorecard partial on the ALL Net 18 board; pars come off the tee block; NET and the championship Stableford are computed here from those facts rather than trusted. The champ board's own total rides beside ours, and when the two disagree the card says so plainly — the board stays official. Board addresses are a stored setting (gg_champ_scorecard_boards) like the points boards, so next season is a settings change, not a deploy.",
+      "One board fetch plus one partial per player, cached 45 seconds per player server-side — the page never walks the whole roster, and a foursome all opening the same card collapses to one Golf Genius fetch. If Golf Genius stops answering mid-round the last good card comes back marked as such instead of a blank panel; a genuine failure paints an error, never silence.",
+      "A GUEST IN PLAIN 'FIRST LAST' FORM NO LONGER FALLS OFF THE LIVE BOARD. The champ-board parser required a 'SURNAME, First' comma and the live Austin board (probed overnight) lists 'Matt Larson Guest' without one — he parsed to nothing and was silently dropped. Multi-word comma-less names now pass; section labels and totals rows still don't.",
+      "THE 60-SECOND LIVE REFRESH NO LONGER SLAMS AN OPEN DRILL-DOWN SHUT. While a championship is scoring the standings re-render every minute, which destroyed whatever panel a member had expanded — mid-read, every minute, on the busiest day of the season. The refresh now waits while a drill-down is open and resumes on the first quiet tick.",
+    ],
+  },
   {
     version: "2.175.0",
     date: "2026-07-31",
