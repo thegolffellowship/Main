@@ -7414,11 +7414,25 @@ def get_points_race_live(race_key: str,
             r["move"] = _was - i if _was else None
         except (TypeError, ValueError):
             r["move"] = None
-        # Overwrite the fields the standings table already renders, so the
+        # Overwrite the field the standings table already renders, so the
         # combined figure shows everywhere with no display surgery — and the
         # season-only numbers stay available beside them.
-        r["rank"] = i
         r["total_points"] = r["live_total"]
+
+    # COMPETITION RANKING on the live total (Kerry 2026-08-01, from the
+    # course: "Rankings aren't accounting for ties"). Three players on 94
+    # are T2/T2/T2 with the next man 5th — a plain enumerate mislabels
+    # every tie. Movement stays positional (the arrows compare positions,
+    # like the Tour app); only the LABEL groups.
+    i = 0
+    while i < len(rows):
+        j = i + 1
+        while j < len(rows) and rows[j]["live_total"] == rows[i]["live_total"]:
+            j += 1
+        label = ("T" if j - i > 1 else "") + str(i + 1)
+        for g in range(i, j):
+            rows[g]["rank"] = label
+        i = j
 
     return {**{k: v for k, v in base.items() if k != "standings"},
             "standings": rows,

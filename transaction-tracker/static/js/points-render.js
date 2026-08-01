@@ -643,4 +643,9 @@
     window.prRenderDetailTables = prRenderDetailTables;
     window.prRenderScorecard = prRenderScorecard;
     window.prBindScorecardToggles = prBindScorecardToggles;
+    // The live expansion in contests.html renders the card directly —
+    // without this export it threw "Can't find variable" on the course
+    // (v2.180.1); the CC-row path never caught it because its binder
+    // lives inside this closure.
+    window.prRenderChampCard = prRenderChampCard;
 })();

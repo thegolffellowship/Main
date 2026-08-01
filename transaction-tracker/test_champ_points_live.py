@@ -115,8 +115,16 @@ def merge(standings, live_players):
             r["move"] = _was - i if _was else None
         except (TypeError, ValueError):
             r["move"] = None
-        r["rank"] = i
         r["total_points"] = r["live_total"]
+    i = 0
+    while i < len(out):
+        j = i + 1
+        while j < len(out) and out[j]["live_total"] == out[i]["live_total"]:
+            j += 1
+        label = ("T" if j - i > 1 else "") + str(i + 1)
+        for g in range(i, j):
+            out[g]["rank"] = label
+        i = j
     return out
 
 standings = [
@@ -141,10 +149,11 @@ check("the season figure stays visible beside the combined one",
 
 print("\n== the board re-ranks LIVE, which is the whole point ==")
 # Murphy starts 3rd on season points and overtakes Fieber mid-round.
+_rk = lambda r: int(str(r["rank"]).lstrip("T"))
 check("Murphy climbs past Fieber on the day's points (29+28=57 vs 45)",
-      m["Michael Murphy"]["rank"] < m["Wade Fieber"]["rank"],
+      _rk(m["Michael Murphy"]) < _rk(m["Wade Fieber"]),
       f'Murphy #{m["Michael Murphy"]["rank"]} vs Fieber #{m["Wade Fieber"]["rank"]}')
-check("Moreno holds the lead", m["Roberto Moreno"]["rank"] == 1)
+check("Moreno holds the lead", m["Roberto Moreno"]["rank"] == "1")
 check("the table's own fields carry the combined figure",
       m["Michael Murphy"]["total_points"] == 57.0, str(m["Michael Murphy"]))
 
@@ -163,6 +172,23 @@ check("a scoring player's thru is the hole count",
       m["Michael Murphy"]["champ_thru"] == "12", str(m["Michael Murphy"].get("champ_thru")))
 check("start-of-day rank is preserved beside the live one",
       m["Wade Fieber"]["season_rank"] == 2, str(m["Wade Fieber"].get("season_rank")))
+
+print("\n== ties label as ties (Kerry, live board 2026-08-01: 94/94/94 read 2,3,4) ==")
+mt = {r["player_name"]: r for r in merge(
+    [{"player_name": "A Lead",  "customer_id": 1, "total_points": 99, "rank": 1},
+     {"player_name": "B South", "customer_id": 2, "total_points": 94, "rank": 2},
+     {"player_name": "C Mazanec", "customer_id": 3, "total_points": 92, "rank": 3},
+     {"player_name": "D Wade",  "customer_id": 4, "total_points": 91, "rank": 4},
+     {"player_name": "E Next",  "customer_id": 5, "total_points": 90, "rank": 5}],
+    [{"name": "MAZANEC, C", "points": 2.0, "thru": "1", "customer_id": 3},
+     {"name": "WADE, D",    "points": 3.0, "thru": "1", "customer_id": 4}])}
+check("three players on 94 all read T2",
+      mt["B South"]["rank"] == "T2" and mt["C Mazanec"]["rank"] == "T2"
+      and mt["D Wade"]["rank"] == "T2",
+      f'{mt["B South"]["rank"]}/{mt["C Mazanec"]["rank"]}/{mt["D Wade"]["rank"]}')
+check("the man behind the tie is 5th, not 4th",
+      mt["E Next"]["rank"] == "5", str(mt["E Next"]["rank"]))
+check("the leader stays a plain 1", mt["A Lead"]["rank"] == "1", str(mt["A Lead"]["rank"]))
 
 print("\n== identity: GG's spelling must not lose a player ==")
 # The exact pair that went missing before: GG says Robert/Mike, we say

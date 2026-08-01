@@ -6159,7 +6159,13 @@
         // to the season expansion unchanged.
         if (cont.dataset.live === "1" && tr.dataset.cid
             && ("champPts" in tr.dataset || tr.dataset.champThru)) {
-            tr.style.scrollMarginTop = "120px";
+            // Pin the row BELOW the sticky stack (dark nav + tab bar +
+            // sub-tabs) — a fixed margin buried the player's name under
+            // the headers on phones (v2.180.1).
+            const _hdr = document.querySelector("header");
+            const _tabs = document.querySelector(".tab-nav");
+            tr.style.scrollMarginTop = ((_hdr ? _hdr.offsetHeight : 0)
+                + (_tabs ? _tabs.offsetHeight : 0) + 84) + "px";
             tr.scrollIntoView({behavior: "smooth", block: "start"});
             try {
                 const res = await fetch(`/api/season-contests/points-race/champ-card?race=${encodeURIComponent(raceKey)}&cid=${encodeURIComponent(tr.dataset.cid)}`, {cache: "no-store"});

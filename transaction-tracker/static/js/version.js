@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.180.0";
+window.TGF_VERSION = "2.180.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.180.1",
+    date: "2026-08-01",
+    changes: [
+      "TWO LIVE-BOARD FIXES FROM THE COURSE. Ties now label as ties: three players on 94 read T2/T2/T2 with the next man 5th — the live re-rank was a plain 1-2-3 count that mislabeled every tie (the movement arrows stay positional, like the Tour app; only the label groups). Pinned by a test using the exact 94/94/94 case off the live board.",
+      "The player expansion works again — v2.179.0's live card renderer was defined inside points-render.js but never exported, so tapping a player on the course threw 'Can't find variable: prRenderChampCard' instead of the card. The internal championship-line path used it from inside the same closure, which is exactly why testing that path never caught this one.",
+      "The pinned name is actually visible now: the expansion scroll used a fixed offset and buried the player's name under the sticky navigation stack on phones — the offset is now computed from the real header heights.",
+    ],
+  },
   {
     version: "2.180.0",
     date: "2026-08-01",
