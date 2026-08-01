@@ -367,6 +367,21 @@ check("a mid-round board (hole counts) does NOT read final",
                      {"points": 15.0, "thru": ""}]) is False)
 os.unlink(_bp3)
 
+print("\n== FINAL is a dial the admin flips (Kerry: 'City Net is final') ==")
+fd4, _bp4 = _tf2.mkstemp(suffix=".db"); os.close(fd4); db.init_db(_bp4)
+check("no dial set -> still projecting",
+      db._points_race_final("san_antonio_net", db_path=_bp4) is False)
+db.set_app_setting("gg_points_race_final",
+                   '{"san_antonio_net": "2026-08-01"}', db_path=_bp4)
+check("declared race reads FINAL",
+      db._points_race_final("san_antonio_net", db_path=_bp4) is True)
+check("an undeclared race keeps projecting",
+      db._points_race_final("austin_net", db_path=_bp4) is False)
+db.set_app_setting("gg_points_race_final", "not json", db_path=_bp4)
+check("garbage in the dial degrades to projecting, never a 500",
+      db._points_race_final("san_antonio_net", db_path=_bp4) is False)
+os.unlink(_bp4)
+
 print("\n== the board config is a dial, not code ==")
 import tempfile
 fd, _bp = tempfile.mkstemp(suffix=".db"); os.close(fd); db.init_db(_bp)

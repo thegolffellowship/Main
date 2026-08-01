@@ -5577,11 +5577,20 @@
         return "$" + (c % 100 ? d.toFixed(2) : d.toLocaleString());
     }
     function prOrdinal(i) { return (i + 1) + (["st", "nd", "rd"][i] || "th"); }
+    // FINAL flag for the race being rendered (Kerry, championship evening
+    // 2026-08-01: "Can you now show winnings for the finishers. City Net
+    // is final"). Set from the payload's race_final (an admin dial) by
+    // every renderer that uses the payout helpers — winnings badges read
+    // WON instead of PROJECTED and the strip carries a FINAL chip.
+    let prRaceFinal = false;
+
     function prRenderPayoutStrip(pp) {
         const el = $("pr-payouts");
         if (!el) return;
         if (!pp || !pp.pot_cents) { el.innerHTML = ""; return; }
-        const chips = [`<span class="pr-pot">Pot ${prFmtMoney(pp.pot_cents)}</span>`];
+        const chips = [(prRaceFinal
+                ? `<span class="pr-pot" style="background:#166534;color:#fff;">&#127937; FINAL &middot; Pot ${prFmtMoney(pp.pot_cents)}</span>`
+                : `<span class="pr-pot">Pot ${prFmtMoney(pp.pot_cents)}</span>`)];
         if (pp.kind === "ladder") {
             pp.amounts_cents.forEach((c, i) =>
                 chips.push(`<span class="pr-place">${prOrdinal(i)} <b>${prFmtMoney(c)}</b></span>`));
@@ -5612,7 +5621,8 @@
                 const r = players[i + g];
                 r._pay = (r._pay || 0) + base + (g < rem ? 1 : 0);
                 const t = (k > 1 ? `${k}-way tie splits ` : "") + what;
-                r._payTitle = r._payTitle ? `${r._payTitle} + ${t}` : `Projected (if the season ended today): ${t}`;
+                r._payTitle = r._payTitle ? `${r._payTitle} + ${t}`
+                    : `${prRaceFinal ? "Final result" : "Projected (if the season ended today)"}: ${t}`;
             }
             place += k;
             i = j;
@@ -5651,7 +5661,7 @@
 
     function prPayBadge(r) {
         return r._pay
-            ? `<span class="pr-pay" title="${escapeHtml(r._payTitle || "")}">PROJECTED: ${prFmtMoney(r._pay)}</span>`
+            ? `<span class="pr-pay" title="${escapeHtml(r._payTitle || "")}">${prRaceFinal ? "WON" : "PROJECTED"}: ${prFmtMoney(r._pay)}</span>`
             : "";
     }
 
@@ -5660,7 +5670,7 @@
     // the projected points reset the live table no longer shows.
     function prExpStatLine(tr) {
         const bits = [];
-        if (tr.dataset.proj) bits.push(`<span title="${escapeHtml(tr.dataset.projTitle || "")}">Projected <b style="color:#15803d;">${prFmtMoney(+tr.dataset.proj)}</b></span>`);
+        if (tr.dataset.proj) bits.push(`<span title="${escapeHtml(tr.dataset.projTitle || "")}">${prRaceFinal ? "Won" : "Projected"} <b style="color:#15803d;">${prFmtMoney(+tr.dataset.proj)}</b></span>`);
         if (tr.dataset.reset) bits.push(`Proj. points reset <b>${prFmtReset(+tr.dataset.reset)}</b>`);
         // Plus-handicap deduction (Kerry, championship day 2026-08-01):
         // the TODAY figure already carries it — say so where there's room.
@@ -5670,6 +5680,7 @@
 
     function renderPointsRace(d) {
         prLastData = d;   // applyRole re-renders so staff get the diagnostics line
+        prRaceFinal = !!d.race_final;   // WON vs PROJECTED (admin dial)
         // just the contest name — big and clean (Kerry, 2026-07-10)
         $("pr-standings-title").textContent = d.label;
         let fetched = "";
@@ -5961,6 +5972,9 @@
     }
 
     function renderFellowshipCup(d) {
+        // The Cup is decided at the TGF Championship, not today — its
+        // money stays PROJECTED even while the city races read FINAL
+        prRaceFinal = false;
         $("pr-standings-title").textContent = "THE FELLOWSHIP CUP";
         let fetched = "";
         if (d.fetched_at) {

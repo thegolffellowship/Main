@@ -1409,6 +1409,7 @@ def _scoring_dispatch(url: str, extract: str):
                     "champ_field": d.get("champ_field"),
                     "champ": d.get("champ"),
                     "champ_absorbed": d.get("champ_absorbed"),
+                    "race_final": d.get("race_final"),
                     "n_standings": len(d.get("standings") or []),
                     "top": [{k: r.get(k) for k in
                              ("player_name", "rank", "total_points",

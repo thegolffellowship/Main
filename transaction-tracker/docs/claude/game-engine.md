@@ -851,6 +851,15 @@ fallback source); the per-hole parse counts only `●`, so per-hole NET/PTS
 stay on the same no-give-back basis as GG's points board, and the flat
 deduction reconciles both totals identically.
 
+**FINAL winnings (v2.186.0, Kerry championship evening):** dial
+`app_settings gg_points_race_final` (JSON `{race_key: "date"}`) →
+`_points_race_final` → payload `race_final`. UI (`prRaceFinal`, set by
+renderPointsRace from the payload, forced false in renderFellowshipCup):
+badges WON vs PROJECTED, strip pot chip goes green "🏁 FINAL", stat line
+Won, hover "Final result". Ladder/tie-split/eligibility unchanged. Set
+via `scoring-setting-set:gg_points_race_final|{...}`; clear the dial to
+return to projecting.
+
 **Double-count guard is CONTENT-based (v2.185.1):** the original guard
 (snapshot "fetched today" + final board ⇒ absorbed) dropped the whole
 championship at the final putt — the morning pre-round snapshot is also

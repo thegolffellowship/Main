@@ -7404,6 +7404,25 @@ def fetch_champ_points(race_key: str, max_age: float = 45.0,
     return out
 
 
+def _points_race_final(race_key: str, db_path: str | Path = DB_PATH) -> bool:
+    """Is this points race DECLARED final? (Kerry, championship evening
+    2026-08-01: "Can you now show winnings for the finishers. City Net is
+    final.") A dial, not a derivation — 'final' is a business call the
+    admin makes once the scores stand, not something the board's display
+    state can prove. app_settings 'gg_points_race_final' holds JSON
+    {race_key: truthy (date string by convention)}; the UI flips the
+    winnings badges from PROJECTED to WON when set. Cleared/absent =
+    still projecting."""
+    try:
+        raw = get_app_setting("gg_points_race_final", db_path=db_path)
+        if not raw:
+            return False
+        fin = json.loads(raw)
+        return bool(isinstance(fin, dict) and fin.get(race_key))
+    except Exception:
+        return False
+
+
 def _champ_absorbed_check(race_key: str, base: dict, live: dict,
                           db_path: str | Path = DB_PATH) -> bool:
     """Has GG folded the (final) championship board into the season
@@ -8109,6 +8128,7 @@ def get_points_race_standings(race_key: str,
         "label": race["label"],
         "contest_type": race["contest_type"],
         "chapter": race["chapter"],
+        "race_final": _points_race_final(race_key, db_path=db_path),
         "standings": out_rows,
         "cross_chapter": race.get("enroll_chapter") is None,
         "n_players": len(out_rows),

@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.185.2";
+window.TGF_VERSION = "2.186.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.186.0",
+    date: "2026-08-01",
+    changes: [
+      "WINNINGS SHOW AS WON, NOT PROJECTED, ONCE A RACE IS FINAL (Kerry, championship evening: 'Can you now show winnings for the finishers. City Net is final'). FINAL is an admin dial (app_settings gg_points_race_final, JSON keyed by race) — a business declaration, not something derived from the board's display state. When set for a race: the payout strip leads with a green 🏁 FINAL chip on the pot, the desktop money badges read WON instead of PROJECTED, the expanded-row stat line reads Won, and the hover explanation says 'Final result' instead of 'if the season ended today'. Tie-splitting and enrolled-only eligibility are unchanged — the same ladder that projected all season is simply declared settled. The Fellowship Cup deliberately keeps PROJECTED (it is decided at the TGF Championship, not today), as does any race not named in the dial. The scoring-champ-live diagnostic reports the flag.",
+    ],
+  },
   {
     version: "2.185.2",
     date: "2026-08-01",
