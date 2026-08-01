@@ -6167,8 +6167,48 @@
                 if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
                 if (tr.dataset.pname) data.player_name = tr.dataset.pname;
                 data._headline = true;
+                // Season history rides UNDER the card, collapsed (Kerry
+                // 2026-08-01) — one tap opens the usual counted/not-counted
+                // detail, lazy-loaded so the live card never waits on it.
                 cell.innerHTML = prRenderChampCard(data)
-                    + `<a class="pr-spt-pill" href="${window.MEMBER_MODE ? "/member/spotlight" : "/spotlight"}?player=${tr.dataset.cid}" style="margin-top:0.5rem;">Full Spotlight &rarr;</a>`;
+                    + `<div style="margin-top:0.55rem;">
+                         <button type="button" class="pr-hist-toggle" style="display:inline-flex;align-items:center;gap:6px;height:26px;padding:0 12px;background:#F3F2EF;color:#4B5563;border:1px solid var(--border);border-radius:9999px;font:700 10.5px/1 'Bitter',serif;letter-spacing:1px;text-transform:uppercase;cursor:pointer;">Season history <span style="color:var(--primary);font-size:0.8rem;">&#9656;</span></button>
+                         <a class="pr-spt-pill" href="${window.MEMBER_MODE ? "/member/spotlight" : "/spotlight"}?player=${tr.dataset.cid}" style="margin-left:6px;">Full Spotlight &rarr;</a>
+                       </div>
+                       <div class="pr-hist-body" style="display:none;margin-top:0.5rem;"></div>`;
+                const hTog = cell.querySelector(".pr-hist-toggle");
+                const hBody = cell.querySelector(".pr-hist-body");
+                hTog.addEventListener("click", async () => {
+                    if (hBody.style.display !== "none") {
+                        hBody.style.display = "none";
+                        hTog.querySelector("span").innerHTML = "&#9656;";
+                        return;
+                    }
+                    hBody.style.display = "block";
+                    hTog.querySelector("span").innerHTML = "&#9662;";
+                    if (hBody.dataset.loaded) return;
+                    hBody.innerHTML = '<span style="color:var(--text-muted);">Loading season history…</span>';
+                    try {
+                        const [ptsTables, rounds] = await Promise.all([
+                            tr.dataset.card
+                                ? fetch(`/api/season-contests/points-race/detail?race=${encodeURIComponent(raceKey)}&card=${encodeURIComponent(tr.dataset.card)}`)
+                                    .then(async r2 => { const d2 = await r2.json(); if (!r2.ok) throw new Error(d2.error || `HTTP ${r2.status}`); return d2.tables; })
+                                : Promise.resolve(null),
+                            fetch(`/api/scoring/rounds?customer_id=${encodeURIComponent(tr.dataset.cid)}&limit=40`)
+                                .then(async r2 => r2.ok ? await r2.json() : [])
+                                .catch(() => []),
+                        ]);
+                        const claimed = new Set();
+                        hBody.innerHTML = (ptsTables ? prRenderDetailTables(ptsTables, rounds, claimed, {
+                            champPoints: tr.dataset.champPts != null ? tr.dataset.champPts : null,
+                            champThru: tr.dataset.champThru || null,
+                        }) : '<span style="color:var(--text-muted);">No season detail for this player yet.</span>');
+                        hBody.dataset.loaded = "1";
+                        prBindScorecardToggles(hBody);
+                    } catch (e2) {
+                        hBody.innerHTML = `<span style="color:#b91c1c;">${escapeHtml(e2.message)}</span>`;
+                    }
+                });
             } catch (e) {
                 cell.innerHTML = `<span style="color:#b91c1c;">Live card unavailable: ${escapeHtml(e.message)}</span>`;
             }

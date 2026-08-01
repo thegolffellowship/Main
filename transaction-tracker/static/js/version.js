@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.179.0";
+window.TGF_VERSION = "2.180.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.180.0",
+    date: "2026-08-01",
+    changes: [
+      "SEASON HISTORY RIDES UNDER THE LIVE EXPANSION, COLLAPSED (Kerry, minutes after v2.179.0 landed). Expanding a player during the championship shows today's 18-hole card with a 'SEASON HISTORY ▸' chip beneath it — one tap opens the familiar counted/not-counted event list right there, lazy-loaded so the live card never waits on it, with the in-place scorecard expansions still working inside. The championship line inside the history deliberately does NOT expand to a second copy of the card that is already sitting directly above it.",
+    ],
+  },
   {
     version: "2.179.0",
     date: "2026-08-01",
