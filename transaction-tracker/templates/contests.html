@@ -5779,7 +5779,7 @@
                     ${showChapter ? `<th style="${chapStyle}">${compact ? "CH" : "Chapter"}</th>` : ""}
                     <th style="${ptsStyle}">${compact ? "PTS" : "POINTS"}</th>
                     ${liveMode
-                        ? `<th style="${todayStyle}" title="Championship points earned today">TODAY</th>
+                        ? `<th style="${todayStyle}" title="Championship points earned today">${compact ? "TDY" : "TODAY"}</th>
                            <th style="${thruStyle}" title="Holes completed today — or the tee time if they haven't started">THRU</th>`
                         : `<th style="${resetStyle}"><span class="pr-proj" style="display:block;font-size:${compact ? "0.52rem" : "0.65rem"};font-weight:600;letter-spacing:0.03em;">(${compact ? "proj" : "Projected"})</span>${compact ? "RESET" : "POINTS RESET"}</th>
                            ${showRounds ? `<th style="${rndStyle}" class="pr-rnd" title="Rounds">Rounds</th>` : ""}`}

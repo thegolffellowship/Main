@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.180.7";
+window.TGF_VERSION = "2.180.8";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.180.8",
+    date: "2026-08-01",
+    changes: [
+      "Phone header for the day column abbreviates to TDY (Kerry) — the full TODAY label was wider than its tightened column and overlapped THRU. Desktop keeps TODAY.",
+      "Austin note, verified live: the whole championship-day treatment (LIVE pill, TDY/THRU columns, movement arrows, tie labels, player cards) is race-generic and Austin's boards carry the identical structure — including the per-player scorecard links the hole-by-hole card walks (probed 2026-08-01, all 16 players). The Austin tab switches to the live view on its own the moment the first Austin score posts to the aChamp POINTS board; until then it correctly shows the season table.",
+    ],
+  },
   {
     version: "2.180.7",
     date: "2026-08-01",
