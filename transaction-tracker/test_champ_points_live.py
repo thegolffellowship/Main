@@ -110,11 +110,6 @@ def merge(standings, live_players):
     out.sort(key=lambda r: (-r["live_total"], -(r["season_points"] or 0),
                             (r.get("player_name") or "").lower()))
     for i, r in enumerate(out, 1):
-        try:
-            _was = int(_re.sub(r"[^0-9]", "", str(r.get("season_rank") or "")))
-            r["move"] = _was - i if _was else None
-        except (TypeError, ValueError):
-            r["move"] = None
         r["total_points"] = r["live_total"]
     i = 0
     while i < len(out):
@@ -124,6 +119,11 @@ def merge(standings, live_players):
         label = ("T" if j - i > 1 else "") + str(i + 1)
         for g in range(i, j):
             out[g]["rank"] = label
+            try:
+                _was = int(_re.sub(r"[^0-9]", "", str(out[g].get("season_rank") or "")))
+                out[g]["move"] = _was - (i + 1) if _was else None
+            except (TypeError, ValueError):
+                out[g]["move"] = None
         i = j
     return out
 
@@ -189,6 +189,12 @@ check("three players on 94 all read T2",
 check("the man behind the tie is 5th, not 4th",
       mt["E Next"]["rank"] == "5", str(mt["E Next"]["rank"]))
 check("the leader stays a plain 1", mt["A Lead"]["rank"] == "1", str(mt["A Lead"]["rank"]))
+check("MOVEMENT compares competition ranks: 4th into a T2 is UP 2 (the Mary case)",
+      mt["D Wade"]["move"] == 2, str(mt["D Wade"].get("move")))
+check("3rd into the same T2 is UP 1",
+      mt["C Mazanec"]["move"] == 1, str(mt["C Mazanec"].get("move")))
+check("2nd into a T2 is NO move — the label caught up, the rank didn't change",
+      not mt["B South"]["move"], str(mt["B South"].get("move")))
 
 print("\n== identity: GG's spelling must not lose a player ==")
 # The exact pair that went missing before: GG says Robert/Mike, we say

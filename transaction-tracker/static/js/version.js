@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.180.5";
+window.TGF_VERSION = "2.180.6";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.180.6",
+    date: "2026-08-01",
+    changes: [
+      "MOVEMENT NOW COMPARES RANKS, NOT ROW POSITIONS (Kerry: 'Shouldn't Mary show movement if she's now in tie for 2nd?'). She should. Mary climbed from 4th into a T2 but her ROW stayed fourth from the top — ties order by season points — so the positional arrow read no-move. The day arrow now compares start-of-day rank against the live COMPETITION rank (T2 counts as 2nd): Mary reads ▲2, the man who was already 2nd and got caught reads no move, and two players tied at the same rank all day stop flickering spurious arrows. Pinned by tests on exactly her case.",
+    ],
+  },
   {
     version: "2.180.5",
     date: "2026-08-01",

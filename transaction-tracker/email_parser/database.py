@@ -7408,12 +7408,6 @@ def get_points_race_live(race_key: str,
                              (r.get("player_name") or "").lower()))
     for i, r in enumerate(rows, start=1):
         r["live_rank"] = i
-        # DAY movement, PGA-style: start-of-day (season) rank vs live rank.
-        try:
-            _was = int(re.sub(r"[^0-9]", "", str(r.get("season_rank") or "")))
-            r["move"] = _was - i if _was else None
-        except (TypeError, ValueError):
-            r["move"] = None
         # Overwrite the field the standings table already renders, so the
         # combined figure shows everywhere with no display surgery — and the
         # season-only numbers stay available beside them.
@@ -7422,8 +7416,11 @@ def get_points_race_live(race_key: str,
     # COMPETITION RANKING on the live total (Kerry 2026-08-01, from the
     # course: "Rankings aren't accounting for ties"). Three players on 94
     # are T2/T2/T2 with the next man 5th — a plain enumerate mislabels
-    # every tie. Movement stays positional (the arrows compare positions,
-    # like the Tour app); only the LABEL groups.
+    # every tie. DAY movement compares COMPETITION ranks too (Kerry again,
+    # minutes later: "Shouldn't Mary show movement if she's now in a tie
+    # for 2nd?") — a player climbing from 4th into a T2 is UP 2 even
+    # though her ROW position, ordered by season points inside the tie,
+    # never moved.
     i = 0
     while i < len(rows):
         j = i + 1
@@ -7432,6 +7429,12 @@ def get_points_race_live(race_key: str,
         label = ("T" if j - i > 1 else "") + str(i + 1)
         for g in range(i, j):
             rows[g]["rank"] = label
+            try:
+                _was = int(re.sub(r"[^0-9]", "",
+                                  str(rows[g].get("season_rank") or "")))
+                rows[g]["move"] = _was - (i + 1) if _was else None
+            except (TypeError, ValueError):
+                rows[g]["move"] = None
         i = j
 
     return {**{k: v for k, v in base.items() if k != "standings"},
