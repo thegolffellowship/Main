@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.180.2";
+window.TGF_VERSION = "2.180.3";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.180.3",
+    date: "2026-08-01",
+    changes: [
+      "NET row is back on the live hole-by-hole card (Kerry: 'that's what the points net is calculated from') — the card now reads HOLE / PAR / SCORE / NET / PTS, so the chain from gross through handicap dots to net to championship points is visible per hole. The handicap dots on the score shrink to half size so they read as marks, not digits.",
+    ],
+  },
   {
     version: "2.180.2",
     date: "2026-08-01",
