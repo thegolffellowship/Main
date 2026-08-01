@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.182.3";
+window.TGF_VERSION = "2.183.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.183.0",
+    date: "2026-08-01",
+    changes: [
+      "NO MORE PULL-TO-REFRESH TO SEE LIVE SCORES (Kerry, mid-round). Two staleness bugs, one root: the live poll STOPPED the moment the board read zero scoring — so a page opened during a quiet moment (test scores just cleared, pre-tee) dropped back to the season view and never woke up when real play started. The poll now keeps ticking as long as the championship board has a FIELD, scoring or not, and the live columns (TDY/THRU with tee times) stay up through quiet moments instead of flickering back to season view. After close-out the absorbed board carries no field and the poll stands down as before.",
+      "Returning to the page refetches immediately: iOS resurrects the PWA/Safari tab on a frozen snapshot, so the app now re-pulls the active race the moment it becomes visible again (app-switch return or back-forward restore) — members land on the latest board, not the one from when they left.",
+      "This also covers the removed-scores case: cleared test scores now disappear from every open phone within a poll cycle instead of freezing in place.",
+    ],
+  },
   {
     version: "2.182.3",
     date: "2026-08-01",

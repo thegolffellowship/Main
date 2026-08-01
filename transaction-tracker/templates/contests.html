@@ -5468,10 +5468,15 @@
                     const lr = await fetch(url, {cache: "no-store"});
                     if (lr.ok) {
                         const ld = await lr.json();
-                        // Only prefer the live view when a championship is
-                        // actually scoring — otherwise it is the season table
-                        // with extra fields and the plain endpoint is fine.
-                        if (ld && !ld.error && (ld.champ_scoring || 0) > 0) data = ld;
+                        // Prefer the live view whenever the champ board has
+                        // a FIELD — championship day — not only once scoring
+                        // starts. A quiet moment (scores cleared, pre-tee)
+                        // used to drop the page back to the season view and
+                        // stop the poll dead, so members who landed then
+                        // never saw play start without pull-to-refresh
+                        // (Kerry 2026-08-01, mid-round).
+                        if (ld && !ld.error
+                            && ((ld.champ_scoring || 0) > 0 || (ld.champ_field || 0) > 0)) data = ld;
                     }
                 } catch (_) { /* fall through to the season endpoint */ }
             }
@@ -5540,7 +5545,11 @@
     }
     function prScheduleLivePoll(kind, data) {
         if (_prLiveTimer) { clearInterval(_prLiveTimer); _prLiveTimer = null; }
-        if (!data || !(data.champ_scoring > 0)) return;
+        // Keep ticking while the board has a FIELD, scoring or not — the
+        // poll stopping at a quiet moment is how members got stuck on a
+        // stale page when play started. Off championship day the live
+        // payload carries no field and the poll still stands down.
+        if (!data || !((data.champ_scoring > 0) || (data.champ_field > 0))) return;
         _prLiveTimer = setInterval(() => {
             const sec = document.getElementById("section-points-race");
             if (!sec || sec.offsetParent === null) return;   // tab not visible
@@ -5687,7 +5696,7 @@
         // (hole count, F, or the tee time before they start). RESET and
         // Rounds step aside for the day — same column count, no layout
         // shift, back on the next quiet load.
-        const liveMode = (d.champ_scoring || 0) > 0;
+        const liveMode = (d.champ_scoring || 0) > 0 || (d.champ_field || 0) > 0;
         const compact = prIsCompact();
         // Phones drop the Buy-in column (the green row already says who is
         // in) and, outside live mode, the Rounds column too (Kerry
@@ -5863,6 +5872,22 @@
             if (ch) ch.innerHTML = open ? "&#9662;" : "&#9656;";
         });
     })();
+
+    // Fresh on return (Kerry 2026-08-01: "make sure people land and see the
+    // latest and don't need to pull down to refresh"). iOS resurrects the
+    // PWA/Safari tab on a stale DOM snapshot and timers may have been
+    // frozen — so the moment the page is visible again, re-pull the active
+    // race. Covers app-switch returns (visibilitychange) and bfcache
+    // restores (pageshow.persisted).
+    function prRefreshActive() {
+        const cur = document.querySelector(".sub-tab[data-pr].active");
+        const sec = document.getElementById("section-points-race");
+        if (cur && sec && sec.offsetParent !== null) prLoadStandings(cur.dataset.pr, false);
+    }
+    document.addEventListener("visibilitychange", () => {
+        if (document.visibilityState === "visible") prRefreshActive();
+    });
+    window.addEventListener("pageshow", e => { if (e.persisted) prRefreshActive(); });
 
     // The fold chip carries the headline numbers so collapsing loses no
     // information a member actually checks: pot and bought-in count.
