@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.182.2";
+window.TGF_VERSION = "2.182.3";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.182.3",
+    date: "2026-08-01",
+    changes: [
+      "MATCH PLAY LANDS ON KNOCKOUT while the bracket is seeded (Kerry: 'that's where we're at') — and reverts to Pools by itself next season when the bracket empties, so nothing needs undoing. A manual sub-tab tap or an explicit #mp= deep link always wins over the auto-landing.",
+      "The phone PTS column widens a touch — a 3-digit total ('102') was crowding its borders now that season+today totals cross 100.",
+    ],
+  },
   {
     version: "2.182.2",
     date: "2026-08-01",

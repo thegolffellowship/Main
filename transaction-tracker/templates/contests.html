@@ -3484,7 +3484,10 @@
         };
         window._mpShowPanel = mpShowPanel;
         document.querySelectorAll('.mp-subtab').forEach(btn => {
-            btn.addEventListener('click', () => mpShowPanel(btn.dataset.mpPanel, true));
+            btn.addEventListener('click', () => {
+                window._mpUserTabbed = true;   // a manual choice beats auto-landing
+                mpShowPanel(btn.dataset.mpPanel, true);
+            });
         });
         const pc = $("cmp-pools-container");
         if (pc) {
@@ -3660,6 +3663,18 @@
         cmpState.bracket = bRes.ok ? await bRes.json() : [];
         cmpRenderBracket();
         loadCmpPayouts();
+        // Land on KNOCKOUT while the bracket is seeded (Kerry 2026-08-01:
+        // "that's where we're at") — pools are history once the knockout
+        // exists, and this reverts to Pools by itself next season when the
+        // bracket is empty again. A manual tab tap or an explicit #mp=
+        // deep link always wins.
+        if (MATCHPLAY_V2 && !window._mpUserTabbed && !window._mpAutoLanded
+            && !/[#&]mp=/.test(location.hash || "")
+            && (cmpState.bracket || []).some(b => b && b.player_name)
+            && window._mpShowPanel) {
+            window._mpAutoLanded = true;
+            window._mpShowPanel('knockout', false);
+        }
     }
 
     // ── Structure banner: everything is driven by the versioned config ──
@@ -5688,7 +5703,7 @@
         // columns + short labels so the whole table fits on screen at once
         const chapStyle = `width:${compact ? "32px" : "130px"};border-left:2px solid #cbd5e1;border-right:2px solid #cbd5e1;`;
         const rankStyle = `width:${compact ? "28px" : "56px"};`;
-        const ptsStyle = `width:${compact ? "34px" : "90px"};text-align:center;font-weight:700;border-left:2px solid #cbd5e1;border-right:2px solid #cbd5e1;`;
+        const ptsStyle = `width:${compact ? "40px" : "90px"};text-align:center;font-weight:700;border-left:2px solid #cbd5e1;border-right:2px solid #cbd5e1;`;
         const resetStyle = `width:${compact ? "44px" : "110px"};text-align:center;border-right:2px solid #cbd5e1;`;
         const rndStyle = `width:${compact ? "30px" : "80px"};text-align:center;border-right:2px solid #cbd5e1;`;
         const buyStyle = compact ? "width:26px;text-align:center;" : "width:110px;";
