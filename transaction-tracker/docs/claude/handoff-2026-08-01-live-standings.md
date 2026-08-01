@@ -39,13 +39,22 @@ unverified. Read the **Notes to self** section before touching anything.
 > 4. **Hole-by-hole expansion on that row** (Kerry's ask, not started) —
 >    see "Where the hole-by-hole data lives" in the handoff.
 > 5. **Refresh `docs/claude/state-of-the-tracker.md`** (overdue after ten
->    releases). The session digest IS already posted — mailbox post #2,
->    2026-08-01 — do not re-post it.
-> 6. **Investigate the mailbox reset**: the live `platform_dialogue` table
->    held ONLY the boot-seeded welcome post (id 1, dated 2026-07-29) before
->    the digest. Docs reference posts #42–#242 that no longer exist —
->    either the table was wiped/recreated on Railway around 2026-07-29 or
->    the volume was remounted. Tell Kerry what you find.
+>    releases). The session digest is posted to PRODUCTION as mailbox
+>    **#258** (2026-08-01 05:33 UTC) — do not re-post. Read production
+>    #257 first: it is platform-claude's incident report on the
+>    two-database mixup and revises the work order.
+> 6. **TWO MCP SERVERS CARRY THE SAME TOOL NAMES — know which you are on
+>    before ANY read or write.** The repo-root `.mcp.json` server
+>    (`python transaction-tracker/mcp_server.py`) runs INSIDE this
+>    container against the LOCAL, EMPTY `transactions.db` (`DATABASE_PATH`
+>    unset). The claude.ai connector is the one bound to production.
+>    Discriminate with `get_statistics`: production ≈ 1,630+ items; local
+>    = 0. `get_tracker_docs` is NOT a discriminator (it reads the
+>    filesystem, so both list the same docs). There was NO mailbox reset —
+>    that conclusion came from reading the empty local store; production
+>    #42–#256 were intact all along. NEVER run money operations (the
+>    ledger duplicates above) or repairs against the local server, and
+>    never "restore" anything based on what the local store shows.
 > 7. Then the rest of the OUTSTANDING list in its written order, and
 >    anything Kerry raises from championship day.
 >
@@ -167,9 +176,24 @@ would hammer the portal if a whole roster opens their card at once.
 
 ## NOTES TO SELF — read before writing any code
 
-**I got two diagnoses wrong tonight. Both times the pattern was the same:
-I found a real defect and declared it the cause without checking whether it
-explained the actual symptom.**
+**I got THREE diagnoses wrong tonight. Every time the pattern was the
+same: a real observation, promoted to a cause without checking whether it
+explained the whole picture.**
+
+0. **"The production mailbox was reset."** It was not. This session had the
+   same MCP tools under TWO servers — the claude.ai connector (production)
+   and the repo `.mcp.json` stdio server (local, empty, `DATABASE_PATH`
+   unset). I read the mailbox through the local one, saw only the boot
+   welcome post, and concluded production history was gone — then wrote an
+   investigation item on top of the error. platform-claude caught it from
+   the decisive pair: my DOCS reached production (git deploy) while my
+   mailbox POST did not — impossible on one database. The tell I missed
+   hours earlier: `get_event_registrations` returning `[]` on that server
+   for an event with a full field. **An empty answer from a tool is data
+   about the TOOL as much as about the world. Cross-check which store
+   answered before concluding anything about production — and had I
+   "repaired" the phantom loss, I would have written reconstructed rows
+   over a healthy production DB.**
 
 1. **HIO pot "not persisting."** I found that `hio_pot_carry_in` had no
    write path anywhere — true, and worth fixing — and shipped v2.172.0
@@ -302,16 +326,17 @@ integrity; the rest are asks, offers Kerry never answered, or hygiene.
 
 ### Process debt
 
-14. ~~Mailbox digest~~ **DONE** — posted 2026-08-01 05:09 UTC as mailbox
-    post #2 (author tracker-claude, topic session-digest). Do NOT re-post.
-    Still owed: the `docs/claude/state-of-the-tracker.md` refresh.
-    **New finding while posting:** the live `platform_dialogue` table
-    contained ONLY the boot-seeded welcome post (id 1, created
-    2026-07-29 23:17 UTC). The docs cite mailbox posts #42–#242 from
-    earlier sessions; none exist in the current table. Either the table
-    was reset/recreated on Railway around 2026-07-29 or the DB volume
-    changed. Investigate and tell Kerry — if the volume was remounted,
-    other tables may have quietly lost history too.
+14. ~~Mailbox digest~~ **DONE — in PRODUCTION as post #258** (2026-08-01
+    05:33 UTC), re-posted after the first attempt landed in the
+    container-local DB as its post "#2". The "mailbox was reset" finding
+    that briefly lived here was WRONG: production #42–#256 were intact the
+    whole time; the empty view was the local `.mcp.json` server's own
+    file. Full incident chain: production posts #257 (platform-claude's
+    diagnosis) and #258 (binding report + digest). Still owed: the
+    `docs/claude/state-of-the-tracker.md` refresh. Secondary check done:
+    `get_side_games_matrix` reads `app_settings` (persistent volume, seed
+    file only as fresh-DB fallback) — redeploy-safe as read, not yet
+    proven across an actual redeploy.
 
 ### Longer-standing, carried in from before this session
 
