@@ -1,5 +1,15 @@
-window.TGF_VERSION = "2.178.0";
+window.TGF_VERSION = "2.179.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.179.0",
+    date: "2026-08-01",
+    changes: [
+      "THE LIVE VIEW NOW READS LIKE THE PGA TOUR APP, TOP TO BOTTOM (Kerry's punch list, sent from the course with the Tour app side-by-side). The three-line LIVE banner on phones is now a slim '🔴 LIVE · 4/32' pill sitting to the right of the collapsed info chip — the leaderboard starts one line lower than the race name. Desktop keeps the full sentence.",
+      "Table changes: DAY MOVEMENT gets its own column (green ▲ / red ▼ / a quiet dash), PGA-style, between the rank and the player instead of cramped inside the rank cell. The '+' is gone from TODAY — the column is orange, it reads as today's points without decoration. THRU is wide enough to show a full tee time ('10:00 AM') instead of truncating at '10:0'.",
+      "EXPANDING A PLAYER DURING THE CHAMPIONSHIP NOW SHOWS TODAY'S ROUND, NOT THE SEASON HISTORY. The row scrolls to the top of the screen, the player's name pins above the card, and the card is the Tour layout: HOLE / PAR / SCORE / PTS across BOTH nines, all 18 holes always visible with a dash on every hole not yet played — exactly how the Tour app shows a 1:50 PM starter at 7 AM. Handicap dots ride the score as superscripts; the IN block carries the TOT column. Season detail stays one tap away (Full Spotlight), the NET row moved to the Spotlight tier, and the season expansion returns on its own once the board goes quiet.",
+      "Players not entered in today's championship keep the season expansion unchanged, live or not.",
+    ],
+  },
   {
     version: "2.178.0",
     date: "2026-08-01",

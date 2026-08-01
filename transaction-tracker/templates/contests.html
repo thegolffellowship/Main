@@ -5470,8 +5470,34 @@
         const cont = $("pr-table-container");
         if (!cont) return;
         let el = document.getElementById("pr-live-banner");
+        let badge = document.getElementById("pr-live-badge");
         const scoring = (data && data.champ_scoring) || 0;
-        if (!scoring) { if (el) el.remove(); return; }
+        if (!scoring) { if (el) el.remove(); if (badge) badge.remove(); return; }
+        const stale = data.champ && data.champ.stale;
+        // Phones: one slim LIVE pill beside the fold chip (Kerry 2026-08-01
+        // — the three-line banner pushed the board below the fold). Desktop
+        // keeps the full sentence.
+        if (prIsCompact()) {
+            if (el) el.remove();
+            const tog = $("pr-preamble-toggle");
+            if (!badge && tog) {
+                badge = document.createElement("span");
+                badge.id = "pr-live-badge";
+                badge.style.cssText = "display:inline-flex;align-items:center;gap:4px;height:26px;"
+                    + "padding:0 10px;margin-left:6px;vertical-align:middle;border-radius:9999px;"
+                    + "background:#fff7ed;border:1px solid #fdba74;color:#c2410c;"
+                    + "font:700 10.5px/1 'Bitter',serif;letter-spacing:1px;";
+                tog.after(badge);
+            }
+            if (badge) {
+                badge.innerHTML = `&#x1F534; LIVE &middot; ${scoring}/${data.champ_field || scoring}`
+                    + (stale ? ' <span title="Last good read — Golf Genius did not answer">&#9888;</span>' : "");
+                badge.title = `${(data.champ && data.champ.label) || "Championship"} counting toward the season total — updates every minute`
+                    + (stale ? " (last good read — Golf Genius did not answer)" : "");
+            }
+            return;
+        }
+        if (badge) badge.remove();
         if (!el) {
             el = document.createElement("div");
             el.id = "pr-live-banner";
@@ -5480,7 +5506,6 @@
             cont.parentNode.insertBefore(el, cont);
         }
         const label = (data.champ && data.champ.label) || "Championship";
-        const stale = data.champ && data.champ.stale;
         el.innerHTML = `&#x1F534; LIVE &middot; ${escapeHtml(label)} counting toward the season total`
             + ` &mdash; ${scoring} of ${data.champ_field || scoring} scoring`
             + (stale ? ' <span style="font-weight:400;">(last good read — Golf Genius did not answer)</span>'
@@ -5634,7 +5659,8 @@
         const showRounds = !compact;   // season view only; live swaps it for THRU
         const nCols = (showChapter ? 7 : 6)
             - (showBuy ? 0 : 1)
-            - (liveMode || showRounds ? 0 : 1);
+            - (liveMode || showRounds ? 0 : 1)
+            + (liveMode ? 1 : 0);      // live adds the MOVE column (PGA-style)
         // Fixed widths on every column but Player so the three race tabs
         // lay out identically regardless of content; phones get narrow
         // columns + short labels so the whole table fits on screen at once
@@ -5644,6 +5670,11 @@
         const resetStyle = `width:${compact ? "44px" : "110px"};text-align:center;border-right:2px solid #cbd5e1;`;
         const rndStyle = `width:${compact ? "30px" : "80px"};text-align:center;border-right:2px solid #cbd5e1;`;
         const buyStyle = compact ? "width:26px;text-align:center;" : "width:110px;";
+        // Live-day columns (PGA-style): MOVE gets its own slim column and
+        // THRU is wide enough for a full tee time ("10:00 AM"), which the
+        // shared Rounds width was truncating.
+        const mvStyle = `width:${compact ? "24px" : "44px"};text-align:center;`;
+        const thruStyle = `width:${compact ? "58px" : "90px"};text-align:center;border-right:2px solid #cbd5e1;font-size:${compact ? "0.72rem" : "0.85rem"};`;
 
         const rowHtml = r => {
             const bg = r.enrolled ? "background:#bbf7d0;"
@@ -5679,15 +5710,18 @@
                 ? ` data-champ-pts="${escapeHtml(String(r.champ_points))}"` : "")
                 + (r.champ_thru
                 ? ` data-champ-thru="${escapeHtml(String(r.champ_thru))}"` : "");
-            // Day movement (live) vs last-event movement (season view)
-            const moveHtml = liveMode ? prDayMove(r.move) : prRankMove(r.rank, r.prev_rank);
+            // Live: MOVE gets its own column (PGA-style); the season view
+            // keeps its inline last-event arrow in the rank cell.
             const midCells = liveMode
-                ? `<td style="${resetStyle}${r.champ_points != null ? "color:#BF5700;font-weight:800;" : "color:var(--text-muted);"}">${r.champ_points != null ? "+" + escapeHtml(String(r.champ_points % 1 ? r.champ_points.toFixed(1) : r.champ_points)) : (r.champ_thru ? "" : "—")}</td>
-                   <td style="${rndStyle}white-space:nowrap;${/\d:\d\d/.test(r.champ_thru || "") ? "color:var(--text-muted);font-size:0.85em;" : "font-weight:600;"}">${escapeHtml(r.champ_thru || "—")}</td>`
+                ? `<td style="${resetStyle}${r.champ_points != null ? "color:#BF5700;font-weight:800;" : "color:var(--text-muted);"}">${r.champ_points != null ? escapeHtml(String(r.champ_points % 1 ? r.champ_points.toFixed(1) : r.champ_points)) : (r.champ_thru ? "" : "—")}</td>
+                   <td style="${thruStyle}white-space:nowrap;${/\d:\d\d/.test(r.champ_thru || "") ? "color:var(--text-muted);" : "font-weight:600;"}">${escapeHtml(r.champ_thru || "—")}</td>`
                 : `<td style="${resetStyle}">${prFmtReset(r.points_reset)}</td>
                    ${showRounds ? `<td style="${rndStyle}" class="pr-rnd">${r.tournaments ?? ""}</td>` : ""}`;
-            return `<tr style="${bg}${expandable ? 'cursor:pointer;' : ''}"${r.member_card_id ? ` data-card="${r.member_card_id}"` : ''}${r.customer_id ? ` data-cid="${r.customer_id}"` : ''}${champAttrs}>
-                <td style="${rankStyle}white-space:nowrap;">${escapeHtml(r._flightRank ?? r.rank)}${moveHtml}</td>
+            const moveCell = liveMode
+                ? `<td style="${mvStyle}">${prDayMove(r.move) || '<span style="color:#cbd5e1;">&ndash;</span>'}</td>` : "";
+            return `<tr style="${bg}${expandable ? 'cursor:pointer;' : ''}"${r.member_card_id ? ` data-card="${r.member_card_id}"` : ''}${r.customer_id ? ` data-cid="${r.customer_id}"` : ''}${champAttrs} data-pname="${escapeHtml(r.player_name || "")}">
+                <td style="${rankStyle}white-space:nowrap;">${escapeHtml(r._flightRank ?? r.rank)}${liveMode ? "" : prRankMove(r.rank, r.prev_rank)}</td>
+                ${moveCell}
                 <td>${nameCell}${hcp}${statusPill}${chevron}${prPayBadge(r)}</td>
                 ${showChapter ? `<td style="${chapStyle}" title="${escapeHtml(r.player_chapter || "")}">${escapeHtml(compact ? prAbbrevChapter(r.player_chapter) : (r.player_chapter || ""))}</td>` : ""}
                 <td style="${ptsStyle}">${r.total_points ?? ""}</td>
@@ -5735,12 +5769,14 @@
         $("pr-table-container").innerHTML = `
             <table class="enrollment-table${compact ? " pr-compact" : ""}">
                 <thead><tr>
-                    <th style="${rankStyle}">${compact ? "#" : "Rank"}</th><th style="width:99%;">Player</th>
+                    <th style="${rankStyle}">${compact ? "#" : "Rank"}</th>
+                    ${liveMode ? `<th style="${mvStyle}" title="Day movement">&#8597;</th>` : ""}
+                    <th style="width:99%;">Player</th>
                     ${showChapter ? `<th style="${chapStyle}">${compact ? "CH" : "Chapter"}</th>` : ""}
                     <th style="${ptsStyle}">${compact ? "PTS" : "POINTS"}</th>
                     ${liveMode
                         ? `<th style="${resetStyle}" title="Championship points earned today">TODAY</th>
-                           <th style="${rndStyle}" title="Holes completed today — or the tee time if they haven't started">THRU</th>`
+                           <th style="${thruStyle}" title="Holes completed today — or the tee time if they haven't started">THRU</th>`
                         : `<th style="${resetStyle}"><span class="pr-proj" style="display:block;font-size:${compact ? "0.52rem" : "0.65rem"};font-weight:600;letter-spacing:0.03em;">(${compact ? "proj" : "Projected"})</span>${compact ? "RESET" : "POINTS RESET"}</th>
                            ${showRounds ? `<th style="${rndStyle}" class="pr-rnd" title="Rounds">Rounds</th>` : ""}`}
                     ${showBuy ? `<th style="${buyStyle}" title="Buy-in">Buy-in</th>` : ""}
@@ -5748,6 +5784,7 @@
                 <tbody>${bodyRows}</tbody>
             </table>${extra}`;
 
+        $("pr-table-container").dataset.live = liveMode ? "1" : "0";
         $("pr-table-container").querySelectorAll("tr[data-card], tr[data-cid]").forEach(tr => {
             tr.addEventListener("click", ev => {
                 if (ev.target.closest("a")) return;   // profile links still navigate
@@ -6112,6 +6149,32 @@
         tr.after(detail);
         if (chev) chev.innerHTML = "&#9662;";
         const cell = detail.firstElementChild;
+
+        // LIVE championship expansion (Kerry 2026-08-01, PGA-style): while
+        // the board is live, a player on it expands to TODAY'S ROUND — the
+        // name pinned to the top of the screen over the full 18-hole card —
+        // not the season history. Season detail stays one tap away via
+        // Full Spotlight, and the season expansion returns on its own once
+        // the board goes quiet. Anyone NOT on today's board falls through
+        // to the season expansion unchanged.
+        if (cont.dataset.live === "1" && tr.dataset.cid
+            && ("champPts" in tr.dataset || tr.dataset.champThru)) {
+            tr.style.scrollMarginTop = "120px";
+            tr.scrollIntoView({behavior: "smooth", block: "start"});
+            try {
+                const res = await fetch(`/api/season-contests/points-race/champ-card?race=${encodeURIComponent(raceKey)}&cid=${encodeURIComponent(tr.dataset.cid)}`, {cache: "no-store"});
+                const data = await res.json();
+                if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+                if (tr.dataset.pname) data.player_name = tr.dataset.pname;
+                data._headline = true;
+                cell.innerHTML = prRenderChampCard(data)
+                    + `<a class="pr-spt-pill" href="${window.MEMBER_MODE ? "/member/spotlight" : "/spotlight"}?player=${tr.dataset.cid}" style="margin-top:0.5rem;">Full Spotlight &rarr;</a>`;
+            } catch (e) {
+                cell.innerHTML = `<span style="color:#b91c1c;">Live card unavailable: ${escapeHtml(e.message)}</span>`;
+            }
+            cell.style.color = "";
+            return;
+        }
         try {
             // Points breakdown (GG) and imported scorecards (tracker DB)
             // load in parallel; scorecards are additive and never fail the panel
