@@ -9798,6 +9798,52 @@ def api_season_contest_points_race():
     return jsonify(data)
 
 
+@app.route("/api/season-contests/points-race/live")
+@require_role("member")
+def api_points_race_live():
+    """Season standings + TODAY'S championship points, added together
+    (Kerry 2026-07-31: "the Championship is in addition to the regular
+    season total ... everything earned tomorrow adds on").
+
+    Member tier, and PII-free like every other points read: names, points
+    and thru only. Polled ~1/min by the member scoreboard; the GG walk is
+    server-side cached so many viewers collapse to one fetch.
+    """
+    from email_parser.database import get_points_race_live
+    race = request.args.get("race", "san_antonio_net")
+    try:
+        return jsonify(get_points_race_live(race))
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+    except Exception as e:
+        logger.exception("Live points race load failed")
+        return jsonify({"error": f"Live points race load failed: {e}"}), 500
+
+
+@app.route("/api/season-contests/points-race/champ-boards", methods=["GET", "POST"])
+@require_role("manager")
+def api_champ_points_boards():
+    """Read (or, as admin, repoint) the championship POINTS boards.
+
+    A DIAL rather than code so next season's Golf Genius tournament ids
+    are a settings change instead of a deploy.
+    """
+    from email_parser.database import champ_points_boards, set_app_setting
+    if request.method == "POST":
+        if session.get("role") != "admin":
+            return jsonify({"error": "Admin only."}), 403
+        boards = (request.get_json(silent=True) or {}).get("boards")
+        if not isinstance(boards, dict) or not boards:
+            return jsonify({"error": "boards must be a non-empty object"}), 400
+        for key, b in boards.items():
+            if not isinstance(b, dict) or not str(b.get("url", "")).startswith("https://"):
+                return jsonify({"error": f"{key}: needs an https url"}), 400
+            if "golfgenius.com" not in b["url"]:
+                return jsonify({"error": f"{key}: must be a golfgenius.com url"}), 400
+        set_app_setting("gg_champ_points_boards", json.dumps(boards))
+    return jsonify({"boards": champ_points_boards()})
+
+
 @app.route("/api/season-contests/points-race/fellowship-cup")
 @require_role("member")
 def api_fellowship_cup_projection():

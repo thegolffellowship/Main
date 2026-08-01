@@ -1,5 +1,17 @@
-window.TGF_VERSION = "2.173.0";
+window.TGF_VERSION = "2.174.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.174.0",
+    date: "2026-07-31",
+    changes: [
+      "CITY POINTS STANDINGS NOW UPDATE LIVE FROM GOLF GENIUS DURING THE CHAMPIONSHIP (Kerry 2026-07-31). The championship is IN ADDITION to the regular season total, so a player's live figure is their stored best-10 season total PLUS whatever they have earned on today's championship board. The member LEADERBOARD reads both, adds them, and re-ranks — so a player can be seen climbing the table as the round goes on, which is the whole point of showing it live.",
+      "The points come straight off the Golf Genius games the admin named: \"sChampionship POINTS Net\" in the San Antonio portal and \"aChamp POINTS\" in Austin. Those board addresses are a stored setting rather than code, so next season's tournament ids are a settings change instead of a deploy.",
+      "It refreshes every minute while a championship is scoring, and stops polling on its own once the board goes quiet, so it does not run all season for nothing. The Golf Genius walk is cached server-side for 45 seconds, so a hundred members watching collapse into one fetch rather than a hundred.",
+      "A player who has not teed off shows NO championship points rather than a zero, and their season total is left exactly as it stands. That distinction matters on a leaderboard: a genuine nought and a not-yet-started must not look the same.",
+      "Matching between the board and the standings is by customer_id first, with the name only as a fallback. Golf Genius spells people its own way — Robert for Roberto Moreno, Mike for Michael Murphy — and that is precisely how points went missing earlier today, so those two are pinned as test cases.",
+      "If Golf Genius stops answering mid-round the last good standings stay on screen, marked as such, instead of the leaderboard emptying out in front of everyone.",
+    ],
+  },
   {
     version: "2.173.0",
     date: "2026-07-31",

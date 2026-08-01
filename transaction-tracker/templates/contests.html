@@ -5398,13 +5398,72 @@
                 + (force ? 'Refreshing from Golf Genius…' : 'Loading standings…') + '</div>';
         }
         try {
-            const res = await fetch(`/api/season-contests/points-race?race=${encodeURIComponent(race)}${force ? "&force=1" : ""}`);
-            const data = await res.json();
-            if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+            // LIVE CHAMPIONSHIP OVERLAY (Kerry 2026-07-31). The championship
+            // is IN ADDITION to the season total, so the live endpoint adds
+            // today's championship Stableford points on top of the stored
+            // best-10 figure and re-ranks. It returns the same shape plus
+            // season_points / champ_points, so the table renders unchanged.
+            const url = `/api/season-contests/points-race/live?race=${encodeURIComponent(race)}`;
+            const base = `/api/season-contests/points-race?race=${encodeURIComponent(race)}${force ? "&force=1" : ""}`;
+            let data = null;
+            if (!force) {
+                try {
+                    const lr = await fetch(url, {cache: "no-store"});
+                    if (lr.ok) {
+                        const ld = await lr.json();
+                        // Only prefer the live view when a championship is
+                        // actually scoring — otherwise it is the season table
+                        // with extra fields and the plain endpoint is fine.
+                        if (ld && !ld.error && (ld.champ_scoring || 0) > 0) data = ld;
+                    }
+                } catch (_) { /* fall through to the season endpoint */ }
+            }
+            if (!data) {
+                const res = await fetch(base);
+                data = await res.json();
+                if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+            }
             renderPointsRace(data);
+            prRenderLiveBanner(data);
+            prScheduleLivePoll(kind, data);
         } catch (e) {
             cont.innerHTML = `<div style="padding:1rem;color:#b91c1c;">${escapeHtml(e.message)}</div>`;
         }
+    }
+
+    // A one-line live banner above the standings, and a 60s refresh while a
+    // championship is in progress (Kerry: "live update from GG every minute").
+    // The poll stops as soon as the board stops scoring, so it does not run
+    // all season.
+    let _prLiveTimer = null;
+    function prRenderLiveBanner(data) {
+        const cont = $("pr-table-container");
+        if (!cont) return;
+        let el = document.getElementById("pr-live-banner");
+        const scoring = (data && data.champ_scoring) || 0;
+        if (!scoring) { if (el) el.remove(); return; }
+        if (!el) {
+            el = document.createElement("div");
+            el.id = "pr-live-banner";
+            el.style.cssText = "margin:0 0 0.6rem;padding:0.45rem 0.7rem;border-radius:8px;"
+                + "background:#fff7ed;border:1px solid #fdba74;color:#c2410c;font-size:0.82rem;font-weight:700;";
+            cont.parentNode.insertBefore(el, cont);
+        }
+        const label = (data.champ && data.champ.label) || "Championship";
+        const stale = data.champ && data.champ.stale;
+        el.innerHTML = `&#x1F534; LIVE &middot; ${escapeHtml(label)} counting toward the season total`
+            + ` &mdash; ${scoring} of ${data.champ_field || scoring} scoring`
+            + (stale ? ' <span style="font-weight:400;">(last good read — Golf Genius did not answer)</span>'
+                     : ' <span style="font-weight:400;">&middot; updates every minute</span>');
+    }
+    function prScheduleLivePoll(kind, data) {
+        if (_prLiveTimer) { clearInterval(_prLiveTimer); _prLiveTimer = null; }
+        if (!data || !(data.champ_scoring > 0)) return;
+        _prLiveTimer = setInterval(() => {
+            const sec = document.getElementById("section-points-race");
+            if (!sec || sec.offsetParent === null) return;   // tab not visible
+            prLoadStandings(kind, false);
+        }, 60000);
     }
 
     // ── Projected payouts (ratified TGF_Season_Contest_Payouts_v1_0) ──

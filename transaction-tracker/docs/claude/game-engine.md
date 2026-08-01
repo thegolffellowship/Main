@@ -763,3 +763,49 @@ Known gap: the consolation has no event selector of its own, so if it is
 ever played at a DIFFERENT event than the final, the header date will be
 wrong (the live lookup still works). Adding `event_id` to
 `cmp_record_consolation` + a dropdown is the follow-up.
+
+## LIVE championship points on the member LEADERBOARD (v2.174.0)
+
+Kerry, 2026-07-31: *"I need them to live update from GG every minute for
+the Points. The difference is that the Championship is in addition to the
+regular season total, so everything earned tomorrow adds on like we have
+setup in the top 10 totals + championship value."*
+
+**Boards** (a dial: `app_settings.gg_champ_points_boards`, JSON keyed by
+race; defaults in `_GG_CHAMP_BOARDS_DEFAULT`):
+
+| Race | GG game | Tournament |
+|---|---|---|
+| `san_antonio_net` | sChampionship POINTS Net | `tgf-sa` v2tournaments/4779202 |
+| `austin_net` | aChamp POINTS | `tgf-austin` v2tournaments/4779168 |
+
+Board shape: `Pos. | Player | Stableford Points | Thru`, with blank
+single-cell spacer rows between players and the name cell carrying the
+affiliation (`FIEBER, Wade TGF San Antonio`, `Villa, Mark Guest`).
+
+**Data path**
+- `_parse_champ_points_tables` — points read `-` until a player starts and
+  become **None**, never 0.0. A genuine nought and a not-yet-started must
+  not look alike on a leaderboard.
+- `_strip_gg_affiliation` — removes a known affiliation suffix, else falls
+  back to the `SURNAME, First` prefix.
+- `fetch_champ_points(race_key, max_age=45)` — 45s in-memory cache so many
+  viewers collapse to one GG walk; on failure returns the LAST GOOD payload
+  marked `stale` rather than nothing.
+- `get_points_race_live(race_key)` — season snapshot + champ points, matched
+  **by customer_id first, name as fallback** (principle 6 — Robert/Roberto
+  and Mike/Michael are the pinned regression cases). Re-ranks on the
+  combined figure and overwrites `rank` / `total_points` so the existing
+  standings table renders it with no display surgery; `season_points`,
+  `champ_points` and `champ_thru` ride alongside.
+
+**Routes**: `GET /api/season-contests/points-race/live?race=` (member tier,
+PII-free) and `GET|POST /api/season-contests/points-race/champ-boards`
+(GET manager, POST admin; validates https + golfgenius.com).
+
+**UI**: `contests.html` `prLoadStandings` prefers the live endpoint when
+`champ_scoring > 0`, shows a LIVE banner, and polls every 60s — pausing
+when the tab is not visible and stopping when the board stops scoring.
+A manual Refresh still forces the season endpoint.
+
+Tests: `test_champ_points_live.py`.

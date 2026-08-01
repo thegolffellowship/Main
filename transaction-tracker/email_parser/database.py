@@ -7160,6 +7160,218 @@ def _points_race_eligible_count(conn: sqlite3.Connection, race_key: str) -> int:
     return n
 
 
+# ── LIVE championship points overlay (Kerry 2026-07-31) ──────────────────
+# "The Championship is in addition to the regular season total, so
+# everything earned tomorrow adds on like we have setup in the top 10
+# totals + championship value."
+#
+# The season standings are a stored snapshot (gg_points_standings, the
+# best-10 totals). The championship is a SEPARATE GG game whose Stableford
+# points are added on top, live, while the round is being played. Boards:
+#   SA     "sChampionship POINTS Net"  v2tournaments/4779202
+#   Austin "aChamp POINTS"             v2tournaments/4779168
+# Held as a DIAL (app_settings 'gg_champ_points_boards', JSON keyed by race)
+# so next season's tournament ids are a settings change, not a deploy.
+_GG_CHAMP_BOARDS_DEFAULT: dict = {
+    "san_antonio_net": {
+        "label": "sChampionship POINTS Net",
+        "url": ("https://tgf-sa.golfgenius.com/v2tournaments/4779202"
+                "?player_stats_for_portal=true&round_index=35"),
+    },
+    "austin_net": {
+        "label": "aChamp POINTS",
+        "url": ("https://tgf-austin.golfgenius.com/v2tournaments/4779168"
+                "?player_stats_for_portal=true&round_index=31"),
+    },
+}
+
+# GG appends the player's affiliation to the name cell ("FIEBER, Wade TGF
+# San Antonio", "Villa, Mark Guest"). Stripped before identity resolution.
+_GG_AFFILIATIONS_DEFAULT = ("TGF San Antonio", "TGF Austin",
+                            "TGF Dallas-Fort Worth", "TGF Houston",
+                            "TGF Dallas", "Guest")
+
+_CHAMP_POINTS_CACHE: dict = {}      # race_key -> (epoch, payload)
+
+
+def champ_points_boards(db_path: str | Path = DB_PATH) -> dict:
+    """The configured championship boards, dial overriding the default."""
+    try:
+        raw = get_app_setting("gg_champ_points_boards", db_path=db_path)
+    except sqlite3.OperationalError:
+        raw = None          # app_settings not created yet — use the defaults
+    if raw:
+        try:
+            got = json.loads(raw)
+            if isinstance(got, dict) and got:
+                return got
+        except (ValueError, TypeError):
+            logger.warning("gg_champ_points_boards is not valid JSON — "
+                           "using the built-in board list")
+    return dict(_GG_CHAMP_BOARDS_DEFAULT)
+
+
+def _strip_gg_affiliation(cell: str, affiliations=None) -> str:
+    """'FIEBER, Wade TGF San Antonio' -> 'FIEBER, Wade'."""
+    nm = re.sub(r"\s+", " ", (cell or "")).strip()
+    for aff in (affiliations or _GG_AFFILIATIONS_DEFAULT):
+        if nm.lower().endswith(" " + aff.lower()):
+            return nm[: -len(aff) - 1].strip()
+    # Unknown affiliation: keep 'SURNAME, First' and drop any trailing tail.
+    m = re.match(r"^([^,]+,\s*\S+)(?:\s+.*)?$", nm)
+    return m.group(1).strip() if m else nm
+
+
+def _parse_champ_points_tables(tables: list, affiliations=None) -> list:
+    """Rows from a GG championship POINTS board.
+
+    Board shape: Pos. | Player | Stableford Points | Thru. Points read '-'
+    until a player starts, and GG interleaves blank single-cell spacer
+    rows. Returns [{name, points, thru}] with points None when not yet
+    scoring, so 'hasn't started' is never confused with a genuine zero.
+    """
+    out = []
+    for t in tables or []:
+        rows = t if isinstance(t, list) else (t.get("rows") or [])
+        hdr = None
+        for row in rows:
+            cells = [re.sub(r"\s+", " ", (c or "")).strip() for c in row]
+            if len(cells) < 3:
+                continue
+            low = [c.lower() for c in cells]
+            if "player" in low and any("point" in c for c in low):
+                hdr = {"player": low.index("player")}
+                hdr["points"] = next(i for i, c in enumerate(low) if "point" in c)
+                hdr["thru"] = low.index("thru") if "thru" in low else None
+                continue
+            if hdr is None:
+                continue
+            raw_name = cells[hdr["player"]] if hdr["player"] < len(cells) else ""
+            name = _strip_gg_affiliation(raw_name, affiliations)
+            if not name or "," not in name:
+                continue
+            praw = cells[hdr["points"]] if hdr["points"] < len(cells) else ""
+            try:
+                pts = float(str(praw).replace(",", ""))
+            except (TypeError, ValueError):
+                pts = None
+            thru = (cells[hdr["thru"]] if hdr["thru"] is not None
+                    and hdr["thru"] < len(cells) else "")
+            out.append({"name": name, "points": pts, "thru": thru})
+    return out
+
+
+def fetch_champ_points(race_key: str, max_age: float = 45.0,
+                       db_path: str | Path = DB_PATH) -> dict:
+    """LIVE championship points for one race, straight off the GG board.
+
+    In-memory cached `max_age` seconds so a minute-polling scoreboard with
+    many viewers collapses to one GG walk. Never writes; a GG failure
+    returns the last good payload (marked stale) rather than nothing, so
+    the leaderboard does not blank out mid-round."""
+    import time as _t
+    from golf_genius_sync import fetch_public_page, parse_page_structure
+
+    boards = champ_points_boards(db_path=db_path)
+    board = boards.get(race_key)
+    if not board or not board.get("url"):
+        return {"race": race_key, "configured": False, "players": []}
+
+    hit = _CHAMP_POINTS_CACHE.get(race_key)
+    if hit and (_t.time() - hit[0]) < max_age:
+        return hit[1]
+
+    out = {"race": race_key, "configured": True,
+           "label": board.get("label") or "Championship Points",
+           "url": board["url"], "players": [], "stale": False}
+    try:
+        page = fetch_public_page(board["url"], xhr=False)
+        if page["status_code"] != 200:
+            raise RuntimeError(f"GG returned HTTP {page['status_code']}")
+        struct = parse_page_structure(page["html"], board["url"])
+        rows = _parse_champ_points_tables(struct.get("tables") or [])
+    except Exception as e:
+        if hit:
+            stale = dict(hit[1])
+            stale["stale"] = True
+            stale["error"] = str(e)
+            return stale
+        out["error"] = str(e)
+        _CHAMP_POINTS_CACHE[race_key] = (_t.time(), out)
+        return out
+
+    with _connect(db_path) as conn:
+        for r in rows:
+            cid = None
+            try:
+                cid, _how = _resolve_gg_person(conn, r["name"])
+            except Exception:
+                cid = None
+            out["players"].append({**r, "customer_id": cid})
+    out["scoring"] = sum(1 for p in out["players"] if p["points"] is not None)
+    out["field"] = len(out["players"])
+    _CHAMP_POINTS_CACHE[race_key] = (_t.time(), out)
+    return out
+
+
+def get_points_race_live(race_key: str,
+                         db_path: str | Path = DB_PATH) -> dict:
+    """Season standings PLUS today's championship points, added together.
+
+    Kerry's rule: the championship is IN ADDITION to the season total, so
+    a player's live figure is their stored best-10 season total plus
+    whatever they have earned on the championship board so far. Matching
+    is by customer_id first and name only as a fallback (principle 6) —
+    Golf Genius spells people its own way, which is exactly how points
+    went missing before.
+    """
+    base = get_points_race_standings(race_key, db_path=db_path)
+    live = fetch_champ_points(race_key, db_path=db_path)
+
+    by_cid, by_name = {}, {}
+    for p in live.get("players", []):
+        if p.get("points") is None:
+            continue
+        if p.get("customer_id"):
+            by_cid[p["customer_id"]] = p
+        for cand in _gg_name_candidates(p["name"]):
+            by_name.setdefault(cand.strip().lower(), p)
+
+    rows = []
+    for r in base.get("standings", []) or []:
+        row = dict(r)
+        season = row.get("total_points")
+        season = float(season) if season is not None else 0.0
+        hit = None
+        if row.get("customer_id") and row["customer_id"] in by_cid:
+            hit = by_cid[row["customer_id"]]
+        elif (row.get("player_name") or "").strip().lower() in by_name:
+            hit = by_name[(row["player_name"] or "").strip().lower()]
+        champ = float(hit["points"]) if hit else None
+        row["season_points"] = round(season, 2)
+        row["champ_points"] = champ
+        row["champ_thru"] = hit.get("thru") if hit else None
+        row["live_total"] = round(season + (champ or 0.0), 2)
+        rows.append(row)
+
+    # Re-rank on the live total; ties keep the season order behind them.
+    rows.sort(key=lambda r: (-r["live_total"], -(r.get("season_points") or 0),
+                             (r.get("player_name") or "").lower()))
+    for i, r in enumerate(rows, start=1):
+        r["live_rank"] = i
+        # Overwrite the fields the standings table already renders, so the
+        # combined figure shows everywhere with no display surgery — and the
+        # season-only numbers stay available beside them.
+        r["rank"] = i
+        r["total_points"] = r["live_total"]
+
+    return {**{k: v for k, v in base.items() if k != "standings"},
+            "standings": rows,
+            "champ": {k: v for k, v in live.items() if k != "players"},
+            "champ_scoring": live.get("scoring", 0),
+            "champ_field": live.get("field", 0)}
+
+
 def get_points_race_standings(race_key: str,
                               auto_refresh_hours: float = 12,
                               force_refresh: bool = False,
