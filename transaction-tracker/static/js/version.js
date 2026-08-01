@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.180.4";
+window.TGF_VERSION = "2.180.5";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.180.5",
+    date: "2026-08-01",
+    changes: [
+      "Live card polish (Kerry): rows alternate white / soft gray (PAR and NET tinted, GROSS and PTS on white) so the five rows read apart at a glance, and the SCORE label now says GROSS — it sits above NET, that is what it is.",
+    ],
+  },
   {
     version: "2.180.4",
     date: "2026-08-01",
