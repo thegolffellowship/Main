@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.170.0";
+window.TGF_VERSION = "2.171.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.171.0",
+    date: "2026-07-31",
+    changes: [
+      "THE 3RD-PLACE MATCH NOW GOES LIVE ALONGSIDE THE FINAL (Kerry 2026-07-31: 'Both the 1st place and 3rd place match will be going at the same time'). It would not have. The live poller only ever looks at bracket cards carrying data-live-* attributes, and the 3rd-place block was built as two static name pills — so tomorrow the Final would have shown running hole dots and a LIVE · thru N status while the 3rd-place match sat dead beside it with nothing but a manual dropdown. It is now rendered through the same card builder as every other match, which gives it those attributes and enrols it in the same 60-second poll automatically.",
+      "The GG lookup needs no event of its own — a live match is found by chapter plus the two player names — so the 3rd-place match resolves the same way the Final does. The event name, date and course shown in its header are inherited from the Final, since the consolation is played at the same event and its own bracket row stores no event.",
+      "The manual Record / Update / Clear control is untouched and remains the authority. GG's auto-fill of a detected winner deliberately does NOT reach the 3rd-place card: that path requires a standard bracket save button, which this block does not use, so a manager still records the 3rd-place result deliberately rather than having it filled in from a match GG may have mis-paired.",
+    ],
+  },
   {
     version: "2.170.0",
     date: "2026-07-31",

@@ -4397,6 +4397,10 @@
         qf:    { label: "Quarterfinals", single: "Quarterfinal", matchCount: 4 },
         sf:    { label: "Semifinals",    single: "Semifinal", matchCount: 2 },
         final: { label: "Final",         single: "Final", matchCount: 1 },
+        // The 3rd-place match is a real match card so it can go LIVE beside
+        // the Final (Kerry 2026-07-31: "Both the 1st place and 3rd place
+        // match will be going at the same time").
+        consolation: { label: "3rd Place", single: "3rd Place", matchCount: 1 },
     };
 
     function buildBracketRounds(bracketSize) {
@@ -4662,6 +4666,32 @@
                     ? mpBracketSlot(sfLosers[0], 'a', consWinner && sfLosers[0].player_name === consWinner) +
                       mpBracketSlot(sfLosers[1], 'b', consWinner && sfLosers[1].player_name === consWinner)
                     : mpBracketSlot({}, 'a', false) + mpBracketSlot({}, 'b', false);
+                // LIVE 3rd place. The block used to be two static pills, so the
+                // poller — which only ever looks at `.mp-match-card[data-live-a]`
+                // — could not see it, and the 3rd-place match would have sat
+                // dead while the Final ran live beside it. Rendering it through
+                // the same card builder gives it the data-live-* attributes and
+                // it joins the same 60s poll for free. cmp_fetch_live_match
+                // finds a match by CHAPTER + the two player names, so it needs
+                // no event id of its own.
+                //
+                // The consolation row carries no event, so the event/date/course
+                // hints are inherited from the FINAL — the 3rd-place match is
+                // played at the same event. Only the header text and the
+                // "Connecting…" note depend on them; the GG lookup does not.
+                const _finA = slotMap['final:0'] || {}, _finB = slotMap['final:1'] || {};
+                const consEventName = _finA.event_name || _finB.event_name || '';
+                const consEventDate = _finA.event_date || _finB.event_date || '';
+                const consEventCourse = _finA.event_course || _finB.event_course || '';
+                const consCard = (MATCHPLAY_V2 && sfLosers.length === 2)
+                    ? mpMatchCardFromSlots(
+                        { player_name: sfLosers[0].player_name,
+                          winner_name: consWinner || null,
+                          margin: (cons && cons.margin) || '' },
+                        { player_name: sfLosers[1].player_name },
+                        'consolation', consEventName, consEventDate,
+                        null, null, 1, consEventCourse)
+                    : `<div class="bracket-match" style="max-width:280px;">${consSlots}</div>`;
                 // Manager control → POST /api/cmp/consolation (already live).
                 // The control STAYS after a result is recorded (Kerry
                 // 2026-07-31: Robert "populated the third place match, but
@@ -4692,7 +4722,7 @@
                 consolationHtml = `
                     <div class="mp-consolation">
                         <div class="mp-consolation-label">3rd place${cons && cons.recorded ? " · recorded" : ""} <span style="font-weight:400;letter-spacing:0;text-transform:none;color:var(--text-placeholder,#9CA3AF);">· hidden from members</span></div>
-                        <div class="bracket-match" style="max-width:280px;">${consSlots}</div>
+                        ${consCard}
                         ${consControl}
                         <div class="mp-cons-note">${consNote}</div>
                     </div>`;

@@ -732,3 +732,34 @@ like a config choice and is not:
 - The ladder total is invariant across both — the match moves money only.
 
 Tests: `test_cmp_consolation_undo.py`.
+
+### The 3rd-place match runs LIVE (v2.171.0, Kerry 2026-07-31)
+
+*"Both the 1st place and 3rd place match will be going at the same time."*
+It would not have. `mpStartBracketLive` polls only
+`.mp-match-card[data-live-a]`, and the consolation block rendered two bare
+`mpBracketSlot` pills inside a plain `.bracket-match` div — no card, no
+`data-live-*`, so the poller could not see it. The Final would have run
+live beside a dead 3rd-place block.
+
+It now renders through `mpMatchCardFromSlots(..., 'consolation', ...)`,
+the same builder every other match uses, so it inherits the live
+attributes and joins the 60s poll with no extra plumbing.
+
+- `ROUND_DEFS.consolation = { label: "3rd Place", matchCount: 1 }`.
+- `cmp_fetch_live_match(chapter, a, b)` resolves a match by CHAPTER + the
+  two player names, so the consolation needs no `event_id` — which is
+  fortunate, because `cmp_record_consolation` does not write one.
+- Event name / date / course in the card header are inherited from the
+  FINAL bracket row (`slotMap['final:0']`), since the consolation is
+  played at the same event. Those only drive the header text and the
+  "Connecting to live scoring…" note; the GG lookup does not use them.
+- **GG auto-fill is deliberately out of reach.** `mpMaybeOfferRecord`
+  requires a `.bracket-save-btn` inside `card.closest('.bracket-match')`;
+  the consolation control uses `.cmp-cons-save`, so the function early-
+  returns. A manager records the 3rd-place result deliberately.
+
+Known gap: the consolation has no event selector of its own, so if it is
+ever played at a DIFFERENT event than the final, the header date will be
+wrong (the live lookup still works). Adding `event_id` to
+`cmp_record_consolation` + a dropdown is the follow-up.
