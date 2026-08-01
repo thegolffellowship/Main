@@ -5545,11 +5545,15 @@
     }
     function prScheduleLivePoll(kind, data) {
         if (_prLiveTimer) { clearInterval(_prLiveTimer); _prLiveTimer = null; }
-        // Keep ticking while the board has a FIELD, scoring or not — the
-        // poll stopping at a quiet moment is how members got stuck on a
-        // stale page when play started. Off championship day the live
-        // payload carries no field and the poll still stands down.
-        if (!data || !((data.champ_scoring > 0) || (data.champ_field > 0))) return;
+        // ALWAYS ticking while the tab is open (Kerry 2026-08-01, third
+        // staleness report of the morning): every conditional version of
+        // this poll found a way to strand someone — one failed or quiet
+        // live fetch at landing meant a season view with no way back. The
+        // tick retries the live endpoint each time, so any single miss
+        // self-heals inside a minute; the server's 45s GG cache keeps
+        // upstream traffic flat, and the tick already skips hidden tabs
+        // and open drill-downs. It costs one lightweight request a minute
+        // per open tab — cheaper than one stale leaderboard.
         _prLiveTimer = setInterval(() => {
             const sec = document.getElementById("section-points-race");
             if (!sec || sec.offsetParent === null) return;   // tab not visible

@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.183.0";
+window.TGF_VERSION = "2.183.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.183.1",
+    date: "2026-08-01",
+    changes: [
+      "THE POINTS-RACE POLL IS NOW UNCONDITIONAL (Kerry, third staleness report of the morning — landed on the season view mid-round again). Every conditional version of the poll found a way to strand someone: this time a single failed or slow live fetch at landing fell back to the season payload, which carries no field, so the field-gate never started the poll. The tab now simply ticks every 60 seconds while it's open and visible, retrying the live endpoint each time — one bad fetch heals within a minute instead of freezing the page. The server's 45-second Golf Genius cache keeps upstream traffic flat; the tick still skips hidden tabs and open drill-downs.",
+    ],
+  },
   {
     version: "2.183.0",
     date: "2026-08-01",
