@@ -12,6 +12,15 @@ window.TGF_CHANGELOG = [
     ],
   },
   {
+    version: "2.175.1",
+    date: "2026-08-01",
+    changes: [
+      "CHAMPIONSHIP-MORNING HOTFIX, SHIPPED BEFORE FIRST TEE: the live overlay was reading every SCORING player as 'not started'. Kerry's pre-round test scores revealed it — Golf Genius renders a scoring player's points cell as '3 (3/0)', total with a front/back split, and the parser ran float() on the whole cell, which fails, so points read as None, the scoring count stayed at zero, the orange LIVE banner never appeared, and no championship points were added. The overlay would have sat silently inert through both City Championships while looking exactly like 'nobody has teed off yet'.",
+      "The fix parses the LEADING number of the points cell ('3 (3/0)' → 3, '22 (13/9)' → 22). A bare '-' still has no leading number and still reads None, so the ratified not-started-is-not-zero rule is untouched. Pinned by tests using the exact rows observed on the live SA board.",
+      "Shipped as a single surgical change under the championship-day change freeze, explicitly authorized ('Push to main'). Everything else — including the v2.176.0 drill-down/hole-by-hole work — remains on its branch, unmerged, per the freeze.",
+    ],
+  },
+  {
     version: "2.175.0",
     date: "2026-07-31",
     changes: [
