@@ -207,4 +207,22 @@
         window.addEventListener("touchend", finish, { passive: true });
         window.addEventListener("touchcancel", reset, { passive: true });
     })();
+
+    // CHAMPIONSHIP DAY ONLY (Kerry 2026-08-01): the ENTER EVENTS &
+    // CONTESTS banner stands down so the live leaderboard sits higher —
+    // nobody is buying in mid-championship. Gated to the one date in the
+    // viewer's local (Texas) clock, so it un-hides itself at midnight
+    // with no follow-up deploy. Delete this block whenever it's next seen.
+    function hideCtaForChampionshipDay() {
+        const d = new Date();
+        if (d.getFullYear() === 2026 && d.getMonth() === 7 && d.getDate() === 1) {
+            document.querySelectorAll(".contest-cta-row")
+                .forEach(el => { el.style.display = "none"; });
+        }
+    }
+    if (document.readyState === "loading") {
+        document.addEventListener("DOMContentLoaded", hideCtaForChampionshipDay);
+    } else {
+        hideCtaForChampionshipDay();
+    }
 })();

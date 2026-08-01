@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.181.0";
+window.TGF_VERSION = "2.181.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.181.1",
+    date: "2026-08-01",
+    changes: [
+      "The ENTER EVENTS & CONTESTS banner stands down for championship day only (Kerry) — nobody is buying in mid-championship and the live leaderboard sits a full banner higher on the phone. Gated to 2026-08-01 on the viewer's own clock, so it returns by itself at midnight with no deploy; covers both member pages (Leaderboard and Spotlight).",
+    ],
+  },
   {
     version: "2.181.0",
     date: "2026-08-01",
