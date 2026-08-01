@@ -29433,22 +29433,33 @@ def cmp_fetch_live_match(chapter: str, player_a: str, player_b: str,
             if _t.monotonic() - started > 20:
                 break
             struct = parse_page_structure(fetch(f"{widget}&round={rid}"), widget)
-            mp = next((l for l in (struct.get("links") or [])
-                       if _re.search(r"match\s*play", l.get("text") or "", _re.I)
-                       and "/v2tournaments/" in (l.get("href") or "")), None)
-            if not mp:
+            # ALL match-play games in the round, not just the first —
+            # championship day carries TWO ("AUSTIN MATCH PLAY CHAMPIONSHIP"
+            # for the Final and "...3RD PLACE PLAYOFF" for the consolation,
+            # verified live 2026-08-01), and next() walked only the first,
+            # so the 3rd-place pair was never found while its players were
+            # visibly scoring (Kerry).
+            mps = [l for l in (struct.get("links") or [])
+                   if _re.search(r"match\s*play", l.get("text") or "", _re.I)
+                   and "/v2tournaments/" in (l.get("href") or "")]
+            if not mps:
                 continue
-            code_m = _re.search(r"\b([as]\d+(?:\.\d+)?)\b", mp.get("text") or "")
-            for agg in parse_tournament_aggregates(fetch(mp["href"])):
+            for mp in mps:
                 if _t.monotonic() - started > 20:
                     break
-                d = parse_match_play_detail(fetch(
-                    f"{base_host}/tournaments2/details/{agg}", xhr=True))
-                if not d or len(d.get("players", [])) < 2:
-                    continue
-                if frozenset(_cmp_person_key(p["name"]) for p in d["players"]) == pairkey:
-                    result = {**d, "gg_event": code_m.group(1) if code_m else None,
-                              "source_url": f"{base_host}/tournaments2/details/{agg}"}
+                code_m = _re.search(r"\b([as]\d+(?:\.\d+)?)\b", mp.get("text") or "")
+                for agg in parse_tournament_aggregates(fetch(mp["href"])):
+                    if _t.monotonic() - started > 20:
+                        break
+                    d = parse_match_play_detail(fetch(
+                        f"{base_host}/tournaments2/details/{agg}", xhr=True))
+                    if not d or len(d.get("players", [])) < 2:
+                        continue
+                    if frozenset(_cmp_person_key(p["name"]) for p in d["players"]) == pairkey:
+                        result = {**d, "gg_event": code_m.group(1) if code_m else None,
+                                  "source_url": f"{base_host}/tournaments2/details/{agg}"}
+                        break
+                if result:
                     break
             if result:
                 break

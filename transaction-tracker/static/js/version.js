@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.182.1";
+window.TGF_VERSION = "2.182.2";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.182.2",
+    date: "2026-08-01",
+    changes: [
+      "THE 3RD-PLACE MATCH GOES LIVE (Kerry: 'Jenkins and Barna are live but nothing is populating their match'). Championship day carries TWO match-play games in the Golf Genius round — 'AUSTIN MATCH PLAY CHAMPIONSHIP' for the Final and 'AUSTIN MATCH PLAY 3RD PLACE PLAYOFF' for the consolation (verified on the live widget) — and the live-match walker only ever looked inside the FIRST game matching 'match play'. Hogue/Youngs live there, so the Final populated; Barna/Jenkins live in the second game, so their card sat silent. The walker now checks every match-play game in the round before moving to older rounds. Same fix serves San Antonio's bracket automatically.",
+    ],
+  },
   {
     version: "2.182.1",
     date: "2026-08-01",
