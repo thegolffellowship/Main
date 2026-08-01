@@ -5610,6 +5610,16 @@
             : "";
     }
 
+    // Phones drop the per-row PROJECTED badge to give names the width back
+    // (Kerry 2026-08-01); the figure moves into the expanded view alongside
+    // the projected points reset the live table no longer shows.
+    function prExpStatLine(tr) {
+        const bits = [];
+        if (tr.dataset.proj) bits.push(`<span title="${escapeHtml(tr.dataset.projTitle || "")}">Projected <b style="color:#15803d;">${prFmtMoney(+tr.dataset.proj)}</b></span>`);
+        if (tr.dataset.reset) bits.push(`Proj. points reset <b>${prFmtReset(+tr.dataset.reset)}</b>`);
+        return bits.join(" &middot; ");
+    }
+
     function renderPointsRace(d) {
         prLastData = d;   // applyRole re-renders so staff get the diagnostics line
         // just the contest name — big and clean (Kerry, 2026-07-10)
@@ -5716,7 +5726,9 @@
             const champAttrs = (r.champ_points != null
                 ? ` data-champ-pts="${escapeHtml(String(r.champ_points))}"` : "")
                 + (r.champ_thru
-                ? ` data-champ-thru="${escapeHtml(String(r.champ_thru))}"` : "");
+                ? ` data-champ-thru="${escapeHtml(String(r.champ_thru))}"` : "")
+                + (r._pay ? ` data-proj="${r._pay}" data-proj-title="${escapeHtml(r._payTitle || "")}"` : "")
+                + (r.points_reset != null ? ` data-reset="${escapeHtml(String(r.points_reset))}"` : "");
             // Live: MOVE gets its own column (PGA-style); the season view
             // keeps its inline last-event arrow in the rank cell.
             const midCells = liveMode
@@ -5729,7 +5741,7 @@
             return `<tr style="${bg}${expandable ? 'cursor:pointer;' : ''}"${r.member_card_id ? ` data-card="${r.member_card_id}"` : ''}${r.customer_id ? ` data-cid="${r.customer_id}"` : ''}${champAttrs} data-pname="${escapeHtml(r.player_name || "")}">
                 <td style="${rankStyle}white-space:nowrap;">${escapeHtml(r._flightRank ?? r.rank)}${liveMode ? "" : prRankMove(r.rank, r.prev_rank)}</td>
                 ${moveCell}
-                <td>${nameCell}${hcp}${statusPill}${chevron}${prPayBadge(r)}</td>
+                <td>${nameCell}${hcp}${statusPill}${chevron}${compact ? "" : prPayBadge(r)}</td>
                 ${showChapter ? `<td style="${chapStyle}" title="${escapeHtml(r.player_chapter || "")}">${escapeHtml(compact ? prAbbrevChapter(r.player_chapter) : (r.player_chapter || ""))}</td>` : ""}
                 <td style="${ptsStyle}">${r.total_points ?? ""}</td>
                 ${midCells}
@@ -6180,6 +6192,7 @@
                 if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
                 if (tr.dataset.pname) data.player_name = tr.dataset.pname;
                 data._headline = true;
+                data._statline = prExpStatLine(tr);
                 // Season history rides UNDER the card, collapsed (Kerry
                 // 2026-08-01) — one tap opens the usual counted/not-counted
                 // detail, lazy-loaded so the live card never waits on it.
@@ -6266,7 +6279,11 @@
             const sptPill = tr.dataset.cid
                 ? `<a class="pr-spt-pill" href="${window.MEMBER_MODE ? "/member/spotlight" : "/spotlight"}?player=${tr.dataset.cid}">Full Spotlight &rarr;</a>`
                 : "";
-            cell.innerHTML = sptPill + (html
+            // Phones carry the projected figures here — the collapsed row
+            // no longer shows them (desktop rows still do).
+            const statL = prIsCompact() ? prExpStatLine(tr) : "";
+            cell.innerHTML = (statL ? `<div style="font-size:0.78rem;color:#4B5563;margin:0 0 0.4rem;">${statL}</div>` : "")
+                + sptPill + (html
                 || '<span style="color:var(--text-muted);">No detail available for this player yet.</span>');
             cell.style.color = "";
             prBindScorecardToggles(cell);

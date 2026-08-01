@@ -268,8 +268,13 @@
             ${card.board_points != null ? `<span style="font-weight:800;color:#1B1B1B;"> &middot; ${escapeHtml(String(card.board_points))} pts</span>` : ""}
             ${thruBit ? ` <span style="font-weight:600;font-size:0.82em;color:#9A5B2E;">${thruBit}</span>` : ""}
         </div>`;
+        // Projected winnings / points reset ride here on phones (Kerry
+        // 2026-08-01 — the collapsed rows give that room back to names)
+        const statline = card._statline
+            ? `<div style="font-size:0.78rem;color:#4B5563;margin:-0.15rem 0 0.5rem;">${card._statline}</div>`
+            : "";
         if (!played.length && !havePars) {
-            return head + `<span style="color:var(--text-muted);">No holes posted yet.</span>`;
+            return head + statline + `<span style="color:var(--text-muted);">No holes posted yet.</span>`;
         }
         const compact = prIsCompact();
         // Every HOLE column is the SAME fixed width (Kerry 2026-08-01) —
@@ -306,10 +311,10 @@
             const totCell = (v, extra) => `<td style="${sumTd}font-weight:800;${extra || ""}">${v}</td>`;
             return `<table style="border-collapse:collapse;font-size:${fs};margin:0 0 0.45rem;">
                 <tr><td style="${lbl}">HOLE</td>${cells(h => `<td style="${td}font-weight:700;background:#f8fafc;">${h.hole}</td>`)}<td style="${sumTd}font-weight:700;background:#f8fafc;">${label}</td>${withTot ? `<td style="${sumTd}font-weight:800;background:#f1f5f9;">TOT</td>` : ""}</tr>
-                <tr><td style="${lbl}background:#f8fafc;">PAR</td>${cells(h => `<td style="${td}background:#f8fafc;color:#6B7280;">${h.par ?? "-"}</td>`)}<td style="${sumTd}background:#f8fafc;font-weight:700;color:#6B7280;">${sumOr(hs, "par")}</td>${withTot ? totCell(sumOr(holes, "par"), "background:#f8fafc;color:#6B7280;") : ""}</tr>
+                <tr><td style="${lbl}background:#eef1f5;">PAR</td>${cells(h => `<td style="${td}background:#eef1f5;color:#6B7280;">${h.par ?? "-"}</td>`)}<td style="${sumTd}background:#eef1f5;font-weight:700;color:#6B7280;">${sumOr(hs, "par")}</td>${withTot ? totCell(sumOr(holes, "par"), "background:#eef1f5;color:#6B7280;") : ""}</tr>
                 <tr><td style="${lbl}">GROSS</td>${cells(h => `<td style="${td}">${grossCell(h)}</td>`)}<td style="${sumTd}font-weight:700;">${sumOr(hs, "gross")}</td>${withTot ? totCell(card.gross_total != null ? card.gross_total : sumOr(holes, "gross")) : ""}</tr>
-                <tr><td style="${lbl}background:#f8fafc;">NET</td>${cells(h => `<td style="${td}background:#f8fafc;color:#475569;">${h.net != null ? h.net : dash}</td>`)}<td style="${sumTd}background:#f8fafc;font-weight:700;color:#475569;">${sumOr(hs, "net")}</td>${withTot ? totCell(sumOr(holes, "net"), "background:#f8fafc;color:#475569;") : ""}</tr>
-                <tr><td style="${lbl}">PTS</td>${cells(h => `<td style="${td}${h.pts != null && h.pts >= 3 ? "color:#BF5700;font-weight:700;" : ""}">${h.pts != null ? h.pts : dash}</td>`)}<td style="${sumTd}font-weight:700;">${sumOr(hs, "pts")}</td>${withTot ? totCell(card.computed_points != null ? card.computed_points : sumOr(holes, "pts"), "color:#BF5700;") : ""}</tr>
+                <tr><td style="${lbl}background:#eef1f5;">NET</td>${cells(h => `<td style="${td}background:#eef1f5;color:#475569;">${h.net != null ? h.net : dash}</td>`)}<td style="${sumTd}background:#eef1f5;font-weight:700;color:#475569;">${sumOr(hs, "net")}</td>${withTot ? totCell(sumOr(holes, "net"), "background:#eef1f5;color:#475569;") : ""}</tr>
+                <tr><td style="${lbl}background:#FDF0E6;color:#BF5700;">PTS</td>${cells(h => `<td style="${td}background:#FDF0E6;color:#BF5700;font-weight:700;">${h.pts != null ? h.pts : dash}</td>`)}<td style="${sumTd}background:#FDF0E6;color:#BF5700;font-weight:800;">${sumOr(hs, "pts")}</td>${withTot ? totCell(card.computed_points != null ? card.computed_points : sumOr(holes, "pts"), "background:#FDF0E6;color:#BF5700;") : ""}</tr>
             </table>`;
         };
         const front = holes.filter(h => h.hole <= 9);
@@ -333,7 +338,7 @@
                 : `<div style="color:#b45309;font-size:0.72rem;margin-top:0.2rem;">Our per-hole total (${escapeHtml(String(card.computed_points))}) differs from the GG board (${escapeHtml(String(card.board_points))}) — the board is official.</div>`;
         const src = card.stale
             ? `<div style="color:#b45309;font-size:0.72rem;margin-top:0.2rem;">Showing the last good read — Golf Genius did not answer.</div>` : "";
-        return head + html + parity + src;
+        return head + statline + html + parity + src;
     }
 
     function prRenderScorecard(card) {

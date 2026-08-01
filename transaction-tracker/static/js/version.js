@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.180.9";
+window.TGF_VERSION = "2.181.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.181.0",
+    date: "2026-08-01",
+    changes: [
+      "THE PTS ROW ON THE LIVE CARD IS NOW THE HEADLINE ROW (Kerry): every points value renders bold burnt-orange on a light-orange band — the whole row, sums and TOT included — instead of only the 3-plus holes lighting up. The zebra contrast also got real: PAR and NET wear a visibly darker gray (the earlier tint was too subtle to read as striping), GROSS stays white for the circles and squares.",
+      "PROJECTED WINNINGS MOVED OFF THE PHONE ROWS AND INTO THE EXPANDED VIEW (Kerry — saves a full line on every green row). Expanding a player now shows 'Projected $294.40 · Proj. points reset 100' under their name — bringing back the points-reset figure the live table's TODAY/THRU columns displaced. Desktop rows keep the inline PROJECTED badge.",
+    ],
+  },
   {
     version: "2.180.9",
     date: "2026-08-01",
