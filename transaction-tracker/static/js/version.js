@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.182.0";
+window.TGF_VERSION = "2.182.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.182.1",
+    date: "2026-08-01",
+    changes: [
+      "THE LIVE FINAL'S OPEN CARD SHOWS ALL 18 HOLES AGAIN (Kerry: 'Matches not showing all holes like it's supposed to and others already do'). The full-card rendering keys off the match length, which is parsed from the TGF event code (a18.x) in the Golf Genius round label — and championship rounds carry no such code, so the live Final's length resolved to nothing and the card collapsed to just the holes played. Two fixes: a round labelled CHAMPIONSHIP reads as 18 holes (City/TGF Championships are 18-hole days), and as a last resort a live card trusts Golf Genius's own column count — GG renders the full card even mid-round. Regular 9-hole matches always carry a parseable code, so nothing changes for them.",
+    ],
+  },
   {
     version: "2.182.0",
     date: "2026-08-01",

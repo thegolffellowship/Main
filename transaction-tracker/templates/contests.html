@@ -2763,6 +2763,11 @@
         const src = String((gg && gg.gg_event) || (o && o.holesHint) || '');
         const m = src.match(/\b[as](\d{1,2})\.\d/i);   // TGF code: letter + holes + ".event"
         if (m) { const n = parseInt(m[1], 10); return n >= 10 ? 18 : 9; }
+        // Championship rounds carry no a18.x/s9.x code in their GG label —
+        // and City/TGF Championships are 18-hole days (Kerry 2026-08-01:
+        // the live Final showed ONE column while regular matches, whose
+        // labels parse, showed the full run).
+        if (/championship/i.test(src)) return 18;
         return null;
     }
 
@@ -2789,7 +2794,12 @@
         // match length can't be determined (older stored details with no event
         // code) fall back to played-holes-only so nothing over-renders.
         const allH = ((gg && gg.holes) || []);
-        const matchLen = mpMatchHoleCount(gg, o);
+        // Last-resort length for a LIVE card whose label parses to nothing:
+        // GG renders the full card (all columns) even mid-round, so its own
+        // column count is the match length. 9-hole matches always carry a
+        // parseable a9.x/s9.x code, so they never reach this fallback.
+        const matchLen = mpMatchHoleCount(gg, o)
+            || ((o && o.live && allH.length >= 9) ? allH.length : null);
         const gh = matchLen ? allH.slice(0, matchLen)
                             : allH.filter(h => h.p1_gross != null || h.p2_gross != null);
         if (!gh.length) return null;
