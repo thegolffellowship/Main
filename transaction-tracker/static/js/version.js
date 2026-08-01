@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.183.1";
+window.TGF_VERSION = "2.183.2";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.183.2",
+    date: "2026-08-01",
+    changes: [
+      "Ops visibility: new read-only MCP diagnostic (scoring-champ-live:<race>) that reports exactly what the live-overlay computation returns inside the production process — scoring/field counts, errors, absorbed state, top rows, or the precise exception. Added mid-championship when member landings kept falling back to the season view and nothing outside the process could say why.",
+    ],
+  },
   {
     version: "2.183.1",
     date: "2026-08-01",

@@ -1392,6 +1392,33 @@ def _scoring_dispatch(url: str, extract: str):
     arg = arg.strip()
     from email_parser import database as db
     try:
+        if cmd == "scoring-champ-live":
+            # Read-only diagnostic: what the live-overlay endpoint computes
+            # RIGHT NOW in this process — champ scoring/field/errors + the
+            # top rows, or the exact exception. Added championship morning
+            # 2026-08-01 when member landings kept falling back to the
+            # season view and nothing outside the process could see why.
+            race = (arg or "san_antonio_net").strip()
+            try:
+                d = db.get_points_race_live(race)
+                rows = (d.get("standings") or [])[:5]
+                return json.dumps({
+                    "race": race,
+                    "champ_scoring": d.get("champ_scoring"),
+                    "champ_field": d.get("champ_field"),
+                    "champ": d.get("champ"),
+                    "champ_absorbed": d.get("champ_absorbed"),
+                    "n_standings": len(d.get("standings") or []),
+                    "top": [{k: r.get(k) for k in
+                             ("player_name", "rank", "total_points",
+                              "season_points", "champ_points", "champ_thru",
+                              "move")} for r in rows],
+                }, indent=2, default=str)
+            except Exception as e:
+                import traceback
+                return json.dumps({"race": race, "EXCEPTION": repr(e),
+                                   "trace": traceback.format_exc()[-1500:]},
+                                  indent=2)
         if cmd == "scoring-import":
             # "scoring-import:<event_code>" or, for multi-round days,
             # "scoring-import:<event_code>@<gg_league_round_id>"
