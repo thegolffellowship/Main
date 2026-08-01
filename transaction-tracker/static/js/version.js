@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.187.0";
+window.TGF_VERSION = "2.187.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.187.1",
+    date: "2026-08-01",
+    changes: [
+      "The 🔴 LIVE badge stands down once a race is DECLARED final (Kerry: 'It also shouldn't show LIVE anymore') — the green 🏁 FINAL pot chip is the state marker now. The championship TODAY/THRU columns stay until GG absorbs the points into its season totals. The Fellowship Cup follows: when every feeding NET race is final its badge drops too, and its movement-chip history thaws so the final order rotates in once and chips show the day's movement — the same between-events behavior as after any other event.",
+    ],
+  },
   {
     version: "2.187.0",
     date: "2026-08-01",

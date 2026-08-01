@@ -5508,7 +5508,13 @@
         let el = document.getElementById("pr-live-banner");
         let badge = document.getElementById("pr-live-badge");
         const scoring = (data && data.champ_scoring) || 0;
-        if (!scoring) { if (el) el.remove(); if (badge) badge.remove(); return; }
+        // A race DECLARED final is no longer live (Kerry, championship
+        // evening: "It also shouldn't show LIVE anymore") — the green
+        // 🏁 FINAL pot chip is the state marker now; the championship
+        // columns stay until GG absorbs the points.
+        if (!scoring || (data && data.race_final)) {
+            if (el) el.remove(); if (badge) badge.remove(); return;
+        }
         const stale = data.champ && data.champ.stale;
         // Phones: one slim LIVE pill beside the fold chip (Kerry 2026-08-01
         // — the three-line banner pushed the board below the fold). Desktop

@@ -8659,8 +8659,16 @@ def get_fellowship_cup_projection(force_refresh: bool = False,
     # Movement chips vs our own recorded history (no GG reference here).
     # During a live championship the history FREEZES: chips read against
     # the last pre-round order instead of rotating on every intra-round
-    # reshuffle (see _apply_rank_movement_history).
-    live = champ_scoring > 0 or champ_field > 0
+    # reshuffle (see _apply_rank_movement_history). Once EVERY feeding
+    # race is DECLARED final the Cup is no longer live (Kerry: "It also
+    # shouldn't show LIVE anymore") — the badge stands down, and the
+    # history thaws so the final order rotates in once and the chips
+    # show the day's movement, exactly like after any other event.
+    all_final = races and all(
+        _points_race_final(k, db_path=db_path) for k in races)
+    live = (champ_scoring > 0 or champ_field > 0) and not all_final
+    if all_final:
+        champ_scoring = champ_field = 0
     try:
         _apply_rank_movement_history(combined, "fellowship_cup",
                                      db_path=db_path, freeze=live)
