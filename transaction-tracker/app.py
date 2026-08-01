@@ -9811,8 +9811,14 @@ def api_points_race_live():
     """
     from email_parser.database import get_points_race_live
     race = request.args.get("race", "san_antonio_net")
+    # force=1 (admin Refresh) forces the SEASON snapshot re-walk and still
+    # returns the merged live view — the old refresh button bypassed the
+    # overlay entirely and painted GG's portal raw, which after close-out
+    # (but before GG posts championship points to the portal) read as if
+    # the event never happened (Kerry, 2026-08-01 evening).
+    force = request.args.get("force") == "1"
     try:
-        return jsonify(get_points_race_live(race))
+        return jsonify(get_points_race_live(race, force_refresh=force))
     except ValueError as e:
         return jsonify({"error": str(e)}), 400
     except Exception as e:

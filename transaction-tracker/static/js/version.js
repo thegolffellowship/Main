@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.186.0";
+window.TGF_VERSION = "2.186.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.186.1",
+    date: "2026-08-01",
+    changes: [
+      "THE CHAMPIONSHIP CAN NO LONGER 'UN-HAPPEN' (Kerry, after closing out GG: 'I refreshed. This is what it came back with. Like the event never happened. That shouldn't occur in any situation'). Two holes closed. FIRST: the admin 'Refresh from Golf Genius' button bypassed the live overlay entirely and painted GG's season portal raw — and GG's portal still shows pre-championship totals even after event close-out, so one tap of the refresh button erased the championship from the screen (the next 60s poll healed it, but it should never paint at all). Every load — forced or not — now goes through the live endpoint, with force=1 riding through so the season snapshot still re-walks GG server-side.",
+      "SECOND, the durability guarantee: the moment a race is DECLARED final (the v2.186.0 dial) and every player on the champ board has posted, the finished board — adjusted points, resolved customer ids — is persisted server-side. If GG ever archives, empties, or repoints that board before its season portal absorbs the points, the overlay serves OUR persisted result instead of letting the event vanish. The fallback window is bounded by the FINAL dial, so next season's reset (which clears the dial) can never resurrect an old championship onto a fresh board; and a non-final race keeps the empty read, so clearing test scores still clears the overlay. The double-count guard is unchanged — once GG's totals actually absorb the championship, the overlay stands down as before.",
+    ],
+  },
   {
     version: "2.186.0",
     date: "2026-08-01",

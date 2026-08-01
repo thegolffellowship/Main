@@ -244,6 +244,62 @@ py3 = {p["name"]: p for p in live3.get("players", [])}
 check("an expired roster + GG failure falls back to the last good maps",
       py3["YOUNGS, Pat"]["points"] == 13.0, str(py3.get("YOUNGS, Pat")))
 
+print("\n== a DECLARED-FINAL board survives GG (Kerry: 'like the event "
+      "never happened. That shouldn't occur in any situation') ==")
+POINTS_BOARD_FINAL = """<html><body><table>
+<tr><td>Pos.</td><td>Player</td><td>Stableford Points</td><td>Details</td></tr>
+<tr><td>1</td><td>YOUNGS, Pat TGF San Antonio</td><td>43 (22/21)</td><td></td></tr>
+<tr><td>2</td><td>MORENO, Robert TGF San Antonio</td><td>38 (19/19)</td><td></td></tr>
+<tr><td>3</td><td>GRIFFIN, Matt TGF San Antonio</td><td>34 (19/15)</td><td></td></tr>
+</table></body></html>"""
+EMPTY_BOARD = "<html><body><p>Tournament not available.</p></body></html>"
+_board_html = {"points": POINTS_BOARD_FINAL}
+def fake_fetch3(url, timeout=20, xhr=False):
+    if url == CARD_BOARD_URL:
+        return {"status_code": 200, "final_url": url, "html": CARD_BOARD_HTML2}
+    if url == POINTS_BOARD_URL:
+        return {"status_code": 200, "final_url": url, "html": _board_html["points"]}
+    raise AssertionError("unexpected GG fetch: " + url)
+gg.fetch_public_page = fake_fetch3
+db._CHAMP_POINTS_CACHE.clear(); db._CHAMP_ROSTER_CACHE.clear()
+db.set_app_setting("gg_points_race_final",
+                   '{"san_antonio_net": "2026-08-01"}', db_path=_bp)
+
+live_fin = db.fetch_champ_points("san_antonio_net", db_path=_bp)
+pf = {p["name"]: p for p in live_fin.get("players", [])}
+check("the final board serves normally, plus deductions applied (43 -> 39)",
+      pf["YOUNGS, Pat"]["points"] == 39.0, str(pf.get("YOUNGS, Pat")))
+check("the finished board was PERSISTED on the first final read",
+      bool(db.get_app_setting("gg_champ_final_board_san_antonio_net",
+                              db_path=_bp)))
+
+_board_html["points"] = EMPTY_BOARD
+db._CHAMP_POINTS_CACHE.clear()
+live_empty = db.fetch_champ_points("san_antonio_net", db_path=_bp)
+pe = {p["name"]: p for p in live_empty.get("players", [])}
+check("GG emptying the board serves the persisted final result",
+      live_empty.get("source") == "final_snapshot"
+      and pe.get("YOUNGS, Pat", {}).get("points") == 39.0
+      and live_empty.get("field") == 3, str(live_empty.get("source")))
+
+gg.fetch_public_page = lambda *a, **k: (_ for _ in ()).throw(
+    RuntimeError("GG down"))
+db._CHAMP_POINTS_CACHE.clear(); db._CHAMP_ROSTER_CACHE.clear()
+live_down = db.fetch_champ_points("san_antonio_net", db_path=_bp)
+check("GG fully down (no cache) still serves the persisted final result",
+      live_down.get("source") == "final_snapshot"
+      and live_down.get("field") == 3, str(live_down.get("source")))
+
+# clearing the FINAL dial closes the fallback window — next season's
+# empty board must never resurrect this year's championship
+gg.fetch_public_page = fake_fetch3
+db.set_app_setting("gg_points_race_final", "{}", db_path=_bp)
+db._CHAMP_POINTS_CACHE.clear()
+live_reset = db.fetch_champ_points("san_antonio_net", db_path=_bp)
+check("dial cleared -> the empty board stays empty (no resurrection)",
+      not live_reset.get("players") and live_reset.get("source") != "final_snapshot",
+      str(live_reset.get("field")))
+
 gg.fetch_public_page = _real_fetch
 os.unlink(_bp)
 

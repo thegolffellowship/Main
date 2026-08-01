@@ -5460,26 +5460,30 @@
             // today's championship Stableford points on top of the stored
             // best-10 figure and re-ranks. It returns the same shape plus
             // season_points / champ_points, so the table renders unchanged.
-            const url = `/api/season-contests/points-race/live?race=${encodeURIComponent(race)}`;
+            const url = `/api/season-contests/points-race/live?race=${encodeURIComponent(race)}${force ? "&force=1" : ""}`;
             const base = `/api/season-contests/points-race?race=${encodeURIComponent(race)}${force ? "&force=1" : ""}`;
             let data = null;
-            if (!force) {
-                try {
-                    const lr = await fetch(url, {cache: "no-store"});
-                    if (lr.ok) {
-                        const ld = await lr.json();
-                        // Prefer the live view whenever the champ board has
-                        // a FIELD — championship day — not only once scoring
-                        // starts. A quiet moment (scores cleared, pre-tee)
-                        // used to drop the page back to the season view and
-                        // stop the poll dead, so members who landed then
-                        // never saw play start without pull-to-refresh
-                        // (Kerry 2026-08-01, mid-round).
-                        if (ld && !ld.error
-                            && ((ld.champ_scoring || 0) > 0 || (ld.champ_field || 0) > 0)) data = ld;
-                    }
-                } catch (_) { /* fall through to the season endpoint */ }
-            }
+            // The live endpoint is tried on EVERY load — including admin
+            // force-refresh (Kerry, close-out evening 2026-08-01: the
+            // Refresh button bypassed the overlay and painted GG's portal
+            // raw, which reads pre-championship until GG posts the points —
+            // "like the event never happened"). force=1 rides through so
+            // the season snapshot still re-walks GG server-side.
+            try {
+                const lr = await fetch(url, {cache: "no-store"});
+                if (lr.ok) {
+                    const ld = await lr.json();
+                    // Prefer the live view whenever the champ board has
+                    // a FIELD — championship day — not only once scoring
+                    // starts. A quiet moment (scores cleared, pre-tee)
+                    // used to drop the page back to the season view and
+                    // stop the poll dead, so members who landed then
+                    // never saw play start without pull-to-refresh
+                    // (Kerry 2026-08-01, mid-round).
+                    if (ld && !ld.error
+                        && ((ld.champ_scoring || 0) > 0 || (ld.champ_field || 0) > 0)) data = ld;
+                }
+            } catch (_) { /* fall through to the season endpoint */ }
             if (!data) {
                 const res = await fetch(base);
                 data = await res.json();

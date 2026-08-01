@@ -851,6 +851,21 @@ fallback source); the per-hole parse counts only `●`, so per-hole NET/PTS
 stay on the same no-give-back basis as GG's points board, and the flat
 deduction reconciles both totals identically.
 
+**Final-board durability (v2.186.1, Kerry post-close-out):** GG's season
+portal does NOT pick up championship points at event close-out (verified
+live — portal still read pre-champ totals after Kerry closed out), so the
+overlay must outlive GG's champ board. (1) The client always loads via
+`points-race/live` — the admin force-refresh passes `force=1` through
+(route + `get_points_race_live(force_refresh)`) instead of bypassing the
+overlay. (2) `fetch_champ_points` persists the finished board once per
+race (`app_settings gg_champ_final_board_<race>`) when the race is
+declared final AND scoring==field; `_champ_final_board` serves it when GG
+errors with no cache or the board parses empty — gated on the FINAL dial
+so clearing the dial at season reset closes the window (no resurrection),
+and non-final races keep empty reads (cleared test scores still clear).
+Post-close-out, GG's champ board swaps its Thru column for a Details
+column (blank thru) — already handled by the v2.185.2 final test.
+
 **FINAL winnings (v2.186.0, Kerry championship evening):** dial
 `app_settings gg_points_race_final` (JSON `{race_key: "date"}`) →
 `_points_race_final` → payload `race_final`. UI (`prRaceFinal`, set by

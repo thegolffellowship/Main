@@ -7328,6 +7328,26 @@ def _champ_plus_adjustments(race_key: str,
             "by_key": roster.get("plus_by_key") or {}}
 
 
+def _champ_final_board(race_key: str,
+                       db_path: str | Path = DB_PATH) -> "list | None":
+    """The persisted FINAL championship board for a race, if one exists
+    AND the race is still declared final (the gg_points_race_final dial).
+    The dial requirement bounds the fallback window: once next season's
+    reset clears the dial, a stale snapshot can never resurrect last
+    year's championship onto a fresh board."""
+    if not _points_race_final(race_key, db_path=db_path):
+        return None
+    try:
+        raw = get_app_setting(f"gg_champ_final_board_{race_key}",
+                              db_path=db_path)
+        if not raw:
+            return None
+        players = (json.loads(raw) or {}).get("players")
+        return players or None
+    except Exception:
+        return None
+
+
 def fetch_champ_points(race_key: str, max_age: float = 45.0,
                        db_path: str | Path = DB_PATH) -> dict:
     """LIVE championship points for one race, straight off the GG board.
@@ -7363,9 +7383,39 @@ def fetch_champ_points(race_key: str, max_age: float = 45.0,
             stale["stale"] = True
             stale["error"] = str(e)
             return stale
+        # No cache to re-serve — before giving up, a DECLARED-FINAL race
+        # can serve its persisted final board (see the durability block
+        # below): GG being down must not un-happen a finished championship.
+        snap = _champ_final_board(race_key, db_path=db_path)
+        if snap:
+            out["players"] = snap
+            out["source"] = "final_snapshot"
+            out["error"] = str(e)
+            out["scoring"] = sum(1 for p in snap
+                                 if p.get("points") is not None)
+            out["field"] = len(snap)
+            _CHAMP_POINTS_CACHE[race_key] = (_t.time(), out)
+            return out
         out["error"] = str(e)
         _CHAMP_POINTS_CACHE[race_key] = (_t.time(), out)
         return out
+
+    if not rows:
+        # GG answered but the board parsed to NOTHING — archived, emptied,
+        # or repointed. For a declared-final race the persisted board
+        # takes over (Kerry, close-out evening 2026-08-01: "Like the
+        # event never happened. That shouldn't occur in any situation").
+        # A non-final race keeps the empty read: cleared test scores must
+        # still clear the overlay (same morning, same board).
+        snap = _champ_final_board(race_key, db_path=db_path)
+        if snap:
+            out["players"] = snap
+            out["source"] = "final_snapshot"
+            out["scoring"] = sum(1 for p in snap
+                                 if p.get("points") is not None)
+            out["field"] = len(snap)
+            _CHAMP_POINTS_CACHE[race_key] = (_t.time(), out)
+            return out
 
     with _connect(db_path) as conn:
         for r in rows:
@@ -7400,6 +7450,28 @@ def fetch_champ_points(race_key: str, max_age: float = 45.0,
                 p["points"] = p["points"] - plus
     out["scoring"] = sum(1 for p in out["players"] if p["points"] is not None)
     out["field"] = len(out["players"])
+
+    # FINAL-RESULT DURABILITY (Kerry, close-out evening 2026-08-01): once
+    # the race is DECLARED final (gg_points_race_final dial) and every
+    # player on the board has posted, persist the finished board —
+    # adjusted points, resolved customer_ids — to app_settings. From then
+    # on the overlay survives GG archiving, emptying, or repointing the
+    # champ board: the result is OURS, served by the fallbacks above
+    # until the double-count guard sees GG's season totals absorb it.
+    # Written once per race (the first final read after the declaration).
+    try:
+        if (out["players"] and out["scoring"] == out["field"]
+                and _points_race_final(race_key, db_path=db_path)):
+            skey = f"gg_champ_final_board_{race_key}"
+            if not get_app_setting(skey, db_path=db_path):
+                from .timezone_utils import today_central_str
+                set_app_setting(skey, json.dumps(
+                    {"date": today_central_str(),
+                     "players": out["players"]}), db_path=db_path)
+    except Exception:
+        logger.warning("final champ board persist failed for %r",
+                       race_key, exc_info=True)
+
     _CHAMP_POINTS_CACHE[race_key] = (_t.time(), out)
     return out
 
