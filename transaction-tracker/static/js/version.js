@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.183.2";
+window.TGF_VERSION = "2.183.3";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.183.3",
+    date: "2026-08-01",
+    changes: [
+      "THE ROOT OF EVERY STALE-LEADERBOARD REPORT TODAY, FOUND AND FIXED. prLoadStandings takes FORCE as its only parameter and reads the active tab from the page — but the 60-second live poll (since v2.174.0, championship-eve) and this morning's return-to-app refresh both called it as (tab, false), passing the tab name where force goes. A truthy force deliberately skips the live endpoint and force-reloads the SEASON standings from Golf Genius. Net effect all morning: the first paint showed live, the first poll tick silently replaced it with a forced season view, and every return to the app did the same — while ALSO re-walking GG's season portal once a minute per open phone for nothing. Both call sites now pass no argument. Confirmed against the new in-process diagnostic (v2.183.2), which showed production computing the live board perfectly the whole time — 32 of 32 scoring — while the page kept asking for the wrong thing.",
+    ],
+  },
   {
     version: "2.183.2",
     date: "2026-08-01",

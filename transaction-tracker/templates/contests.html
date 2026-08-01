@@ -5562,7 +5562,12 @@
             // championship. The refresh resumes on the first quiet tick.
             const cont = $("pr-table-container");
             if (cont && cont.querySelector("tr.pr-detail-row, tr.pr-mo-detail")) return;
-            prLoadStandings(kind, false);
+            // prLoadStandings takes FORCE as its only parameter and derives
+            // the tab itself — passing the tab key here made force truthy,
+            // which SKIPS the live fetch and force-reloads the season view
+            // from GG. That one wrong argument was the entire "still lands
+            // on the old look" saga of 2026-08-01 (v2.183.0–v2.183.2).
+            prLoadStandings();
         }, 60000);
     }
 
@@ -5884,9 +5889,9 @@
     // race. Covers app-switch returns (visibilitychange) and bfcache
     // restores (pageshow.persisted).
     function prRefreshActive() {
-        const cur = document.querySelector(".sub-tab[data-pr].active");
         const sec = document.getElementById("section-points-race");
-        if (cur && sec && sec.offsetParent !== null) prLoadStandings(cur.dataset.pr, false);
+        // no argument: force must stay false or the live fetch is skipped
+        if (sec && sec.offsetParent !== null) prLoadStandings();
     }
     document.addEventListener("visibilitychange", () => {
         if (document.visibilityState === "visible") prRefreshActive();
