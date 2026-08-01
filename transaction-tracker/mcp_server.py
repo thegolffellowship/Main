@@ -2028,6 +2028,50 @@ def _scoring_dispatch(url: str, extract: str):
         if cmd == "scoring-gg-results":
             # GG-recorded winners (CTP/LP/HIO/TEAM Net) for one event
             return json.dumps(db.get_gg_game_results(arg), indent=2)
+        if cmd == "scoring-season-payouts":
+            # Season-contest FINAL payouts (Kerry, championship evening
+            # 2026-08-01). Preview by default; append |record to write.
+            #   scoring-season-payouts:net|<race_key>[|record]
+            #   scoring-season-payouts:mp|<chapter>|<1st>|<2nd>|<3rd>[|record]
+            parts = [x.strip() for x in (arg or "").split("|") if x.strip()]
+            mode = parts[0].lower() if parts else ""
+            do_record = bool(parts) and parts[-1].lower() == "record"
+            if do_record:
+                parts = parts[:-1]
+            if mode == "net" and len(parts) == 2:
+                prev = db.season_race_payout_rows(parts[1])
+                if prev.get("error") or not do_record:
+                    return json.dumps(prev, indent=2, default=str)
+                payouts = [{"golferName": r["golferName"],
+                            "category": "City Net",
+                            "amount": r["amount_cents"] / 100.0,
+                            "description": (f"auto: {prev['label']} final "
+                                            f"standings — {r['rank']} place")}
+                           for r in prev["rows"]]
+                rec = db.record_season_contest_payouts(
+                    f"{prev['label']} FINAL", prev.get("chapter"), payouts)
+                return json.dumps({"assembled": prev, "recorded": rec},
+                                  indent=2, default=str)
+            if mode == "mp" and len(parts) >= 3:
+                chapter = parts[1]
+                prev = db.matchplay_final_payout_rows(chapter, parts[2:])
+                if prev.get("error") or not do_record:
+                    return json.dumps(prev, indent=2, default=str)
+                payouts = [{"golferName": r["golferName"],
+                            "category": "Match Play",
+                            "amount": r["amount_cents"] / 100.0,
+                            "description": (f"auto: {chapter} City Match Play "
+                                            f"final — {r['rank']} place")}
+                           for r in prev["rows"]]
+                rec = db.record_season_contest_payouts(
+                    f"{chapter.upper()} MATCH PLAY 2026 FINAL", chapter,
+                    payouts)
+                return json.dumps({"assembled": prev, "recorded": rec},
+                                  indent=2, default=str)
+            return json.dumps({"error": "usage: scoring-season-payouts:"
+                                        "net|<race_key>[|record] or "
+                                        "mp|<chapter>|<1st>|<2nd>|<3rd>"
+                                        "[|record]"})
         if cmd == "scoring-record-payouts":
             # "scoring-record-payouts:<event>" records one event's assembled
             # winners into the PAYOUTS tab; ":ALL" bulk-populates every past

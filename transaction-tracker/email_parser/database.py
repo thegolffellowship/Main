@@ -7476,6 +7476,143 @@ def fetch_champ_points(race_key: str, max_age: float = 45.0,
     return out
 
 
+def _split_down_ladder(rows: list, amounts: list) -> list:
+    """Walk ENROLLED finishers down a payout ladder — the server-side
+    mirror of the page's prSplitDown (ratified universal rule 2, Kerry
+    2026-07-10): tied rank labels split the combined money of the places
+    they jointly occupy, exact cents by largest remainder. rows must
+    already be enrolled-only and in final order; money flows past
+    non-enrolled players upstream of this call."""
+    out = []
+    place, i = 0, 0
+    while i < len(rows) and place < len(amounts):
+        j = i + 1
+        while (j < len(rows)
+               and str(rows[j].get("rank")) == str(rows[i].get("rank"))):
+            j += 1
+        k = j - i
+        combined = sum(amounts[place:place + k])
+        base, rem = divmod(combined, k)
+        for g in range(k):
+            out.append({**rows[i + g],
+                        "amount_cents": base + (1 if g < rem else 0)})
+        place += k
+        i = j
+    return out
+
+
+def season_race_payout_rows(race_key: str,
+                            db_path: str | Path = DB_PATH) -> dict:
+    """FINAL City NET place money, assigned to the live final standings
+    (Kerry, championship evening 2026-08-01: "need payouts for the Points
+    Net for both Chapters"). Enrolled-only — the money flows past
+    non-enrolled rows to the next bought-in player down — ties split
+    combined places; ladder + pot from the ratified season_payouts rules
+    on the SAME entrant count the page's projection uses."""
+    from . import season_payouts as _sp
+    d = get_points_race_live(race_key, db_path=db_path)
+    enrolled = [
+        {"customer_id": r.get("customer_id"),
+         "golferName": r.get("player_name"),
+         "rank": r.get("rank"),
+         "total_points": r.get("total_points")}
+        for r in (d.get("standings") or []) if r.get("enrolled")]
+    n_pot = len(enrolled) + len(d.get("enrolled_not_ranked") or [])
+    pp = _sp.city_net_payouts(n_pot)
+    if not pp:
+        return {"error": f"no pot for {race_key} (n={n_pot})"}
+    return {"race": race_key, "label": d.get("label"),
+            "chapter": d.get("chapter"),
+            "race_final": bool(d.get("race_final")),
+            "n_pot": n_pot, "pot_cents": pp["pot_cents"],
+            "n_places": len(pp["amounts_cents"]),
+            "amounts_cents": pp["amounts_cents"],
+            "rows": _split_down_ladder(enrolled, pp["amounts_cents"])}
+
+
+def matchplay_final_payout_rows(chapter: str, placements: list,
+                                season: str = "2026",
+                                db_path: str | Path = DB_PATH) -> dict:
+    """City Match Play podium money (Kerry: "payouts for Austin match
+    play 1st thru 3rd"). placements = ordered names from 1st down, one
+    per paid place — a 3rd-place playoff means no ties here. N and the
+    ladder come from the same sources the bracket runs on: the season's
+    PINNED config + the live enrollment count (principle 4). Pool-winner
+    bonuses are deliberately excluded — they belong to the pool stage."""
+    from email_parser.match_play import structure_for_n
+    active = sct_get_active_config("match_play", season, chapter,
+                                   db_path=db_path)
+    if not active:
+        return {"error": "no Match Play config template"}
+    n = len(cmp_enrolled_entrants(season, chapter, db_path=db_path))
+    structure = structure_for_n(active["config"], n)
+    amounts = structure["ladder_amounts_cents"]
+    if len(placements) != len(amounts):
+        return {"error": f"the N={n} ladder pays {len(amounts)} places; "
+                         f"got {len(placements)} placements"}
+    _ord = ("1st", "2nd", "3rd", "4th", "5th", "6th", "7th")
+    rows = []
+    with _connect(db_path) as conn:
+        for i, name in enumerate(placements):
+            try:
+                cid, _how = _resolve_gg_person(conn, name)
+            except Exception:
+                cid = None
+            canon = None
+            if cid:
+                c = conn.execute(
+                    "SELECT first_name || ' ' || last_name AS n "
+                    "FROM customers WHERE customer_id = ?", (cid,)).fetchone()
+                canon = (c["n"] or "").strip() if c else None
+            rows.append({"customer_id": cid, "golferName": canon or name,
+                         "rank": _ord[i], "amount_cents": amounts[i]})
+    return {"chapter": chapter, "season": season, "n": n,
+            "pot_cents": structure["pot_cents"],
+            "adjusted_pot_cents": structure["adjusted_pot_cents"],
+            "pool_bonus_note": (f"{structure['pools']} pool-winner bonuses of "
+                                f"${structure['pool_winner_bonus_each']:.0f}"
+                                " excluded — pool-stage money, not podium"),
+            "rows": rows}
+
+
+def record_season_contest_payouts(code: str, chapter: str, payouts: list,
+                                  db_path: str | Path = DB_PATH) -> dict:
+    """Record season-contest final winnings as TGF PAYOUTS rows.
+
+    Unlike record_event_game_payouts there is no calendar `events` row
+    behind a season race, so the tgf_events row is found-or-created
+    directly by code (the race label + ' FINAL'). Refuses to
+    double-record: ANY existing payout rows on that code stop the write
+    (delete them on the TGF Payouts page first). Inserting delegates to
+    import_tgf_payouts so customer resolution, the prize_payout ledger
+    entry, and Venmo reconciliation reuse the proven path."""
+    from .timezone_utils import today_central_str
+    if not payouts:
+        return {"error": "no payout rows"}
+    with _connect(db_path) as conn:
+        trow = conn.execute(
+            "SELECT id FROM tgf_events WHERE LOWER(code) = ?",
+            (code.lower(),)).fetchone()
+        if trow:
+            tgf_event_id = trow["id"]
+        else:
+            cur = conn.execute(
+                "INSERT INTO tgf_events (code, name, event_date, course, "
+                "chapter) VALUES (?, ?, ?, ?, ?)",
+                (code, code, today_central_str(), "", chapter or ""))
+            tgf_event_id = cur.lastrowid
+        existing = conn.execute(
+            "SELECT COUNT(*) FROM tgf_payouts WHERE event_id = ?",
+            (tgf_event_id,)).fetchone()[0]
+        if existing:
+            return {"error": f"{existing} payout row(s) already recorded on "
+                             f"{code!r} — manage them on the TGF Payouts "
+                             "page instead"}
+        conn.commit()
+    got = import_tgf_payouts(tgf_event_id, payouts, db_path=db_path)
+    return {"code": code, "tgf_event_id": tgf_event_id, **got}
+
+
 def _points_race_final(race_key: str, db_path: str | Path = DB_PATH) -> bool:
     """Is this points race DECLARED final? (Kerry, championship evening
     2026-08-01: "Can you now show winnings for the finishers. City Net is

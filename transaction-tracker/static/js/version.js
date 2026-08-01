@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.186.1";
+window.TGF_VERSION = "2.187.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.187.0",
+    date: "2026-08-01",
+    changes: [
+      "SEASON-CONTEST FINAL PAYOUTS RECORD INTO TGF PAYOUTS (Kerry, championship evening: 'need payouts for the Points Net for both Chapters and payouts for Austin match play 1st thru 3rd'). New server assembly + MCP bridge (scoring-season-payouts, preview by default, |record to write): City NET reads the LIVE final standings, pays enrolled players only with money flowing past non-enrolled rows, splits ties across combined places (rule 2), and takes pot + ladder from the ratified season_payouts rules on the same entrant count the page projects from; Match Play takes explicit podium placements and prices them off the season's PINNED config + live enrollment count (N=9 Austin: $360 pot − 2×$20 pool bonuses = $320 → $160/$96/$64), pool-winner bonuses deliberately excluded as pool-stage money. Recording finds-or-creates a tgf_events row by code ('<RACE LABEL> FINAL'), refuses to double-record onto a code that already has rows, and delegates inserts to import_tgf_payouts so customer resolution, prize_payout ledger entries, and Venmo reconciliation ride the proven path.",
+    ],
+  },
   {
     version: "2.186.1",
     date: "2026-08-01",

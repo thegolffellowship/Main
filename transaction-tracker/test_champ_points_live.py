@@ -367,6 +367,29 @@ check("a mid-round board (hole counts) does NOT read final",
                      {"points": 15.0, "thru": ""}]) is False)
 os.unlink(_bp3)
 
+print("\n== ladder split-down (server mirror of prSplitDown, rule 2) ==")
+_L = [29440, 21160, 14720, 11040, 8280, 7360]   # SA: $920 x 32/23/16/12/9/8%
+_rows_lad = [{"golferName": n, "rank": r} for n, r in [
+    ("A", "1"), ("B", "2"), ("C", "3"), ("D", "4"), ("E", "5"), ("F", "6"),
+    ("G", "7")]]
+paid = db._split_down_ladder(_rows_lad, _L)
+check("clean order pays the ladder straight down, 7th gets nothing",
+      [p["amount_cents"] for p in paid] == _L and len(paid) == 6, str(paid))
+_rows_tie = [{"golferName": n, "rank": r} for n, r in [
+    ("A", "1"), ("B", "T2"), ("C", "T2"), ("D", "4")]]
+paid_t = db._split_down_ladder(_rows_tie, [10000, 6000, 3000, 1000])
+check("a T2 pair splits 2nd+3rd money (6000+3000 -> 4500 each)",
+      paid_t[1]["amount_cents"] == 4500 and paid_t[2]["amount_cents"] == 4500
+      and paid_t[3]["amount_cents"] == 1000, str(paid_t))
+paid_r = db._split_down_ladder(
+    [{"golferName": "A", "rank": "T1"}, {"golferName": "B", "rank": "T1"}],
+    [3333, 3334])
+check("odd cents split by largest remainder, sum exact",
+      sorted(p["amount_cents"] for p in paid_r) == [3333, 3334])
+check("more money than players stops at the last player",
+      len(db._split_down_ladder([{"golferName": "A", "rank": "1"}],
+                                [5000, 3000])) == 1)
+
 print("\n== FINAL is a dial the admin flips (Kerry: 'City Net is final') ==")
 fd4, _bp4 = _tf2.mkstemp(suffix=".db"); os.close(fd4); db.init_db(_bp4)
 check("no dial set -> still projecting",
