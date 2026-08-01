@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.172.0";
+window.TGF_VERSION = "2.173.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.173.0",
+    date: "2026-07-31",
+    changes: [
+      "THE $3,101 HOLE-IN-ONE POT NO LONGER VANISHES — IT WAS BEING WRITTEN INTO A HIDDEN COPY OF THE PAGE (Kerry 2026-07-31: '$3101 would show for a bit, but would just disappear'). The events page renders every event panel TWICE — once into the desktop table and once into the mobile card list — and CSS hides whichever one does not apply. The running-pot line was addressed by a plain HTML id, so two elements in the document shared that id, and the lookup used to fill it returns only the FIRST match: the desktop copy, which is the hidden one on a phone. On whichever render the mobile copy happened to be the only one present the value appeared; the next full re-render recreated both, the fetch filled the hidden desktop line, and the visible one went blank and never recovered. The lines are now addressed by a data attribute and EVERY copy is painted, so which view you are on stops mattering.",
+      "The value also survives a re-render now. The last known pot is cached and painted synchronously as the panel is built, so a repaint shows the figure immediately instead of flashing empty while a new request is in flight — and a failed refresh no longer wipes a good number off the screen, it just leaves the last one standing.",
+      "CORRECTION to v2.172.0: that release said the pot 'could not persist because nothing could write the carry-in'. That was wrong as a diagnosis of THIS bug — the $3,101 was stored correctly the whole time and was purely a display failure. It is still true that no code path could write the carry-in setting, so the endpoint added in v2.172.0 stays as a genuine gap that was worth closing, but it was not the cause of the disappearing figure.",
+    ],
+  },
   {
     version: "2.172.0",
     date: "2026-07-31",

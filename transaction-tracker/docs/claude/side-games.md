@@ -698,11 +698,32 @@ $18×2 + Weekend Individual $16), pre-season events. Per Pricing doc
 
 ## Hole-In-One pot carry-in (v2.172.0, Kerry 2026-07-31)
 
-*"Hole In One Pot is not persisting."* It could not: `get_hio_pot` has
-read `app_settings.hio_pot_carry_in` since 2026-07-20 (ratified $1,822),
-but **no write path existed anywhere in the codebase** — no route, no UI,
-no MCP tool. The key was read-only by omission, so the running pot only
-ever showed what the Tracker itself had accrued.
+*"Hole In One Pot is not persisting."* → follow-up: *"$3101 would show
+for a bit, but would just disappear. $3101 is correct."*
+
+**The real cause was a duplicate HTML id, not persistence.** The value was
+stored and computed correctly throughout. `templates/events.html` renders
+each event panel TWICE — into `#events-body` (desktop table) and
+`#events-mobile-cards` (mobile list), CSS hiding one — and the running-pot
+line carried `id="hio-running-inline"`. Two elements shared that id, and
+`document.getElementById` returns only the FIRST in document order: the
+desktop copy, which is the hidden one on a phone. On a render where only
+the mobile copy existed the figure appeared; the next full `renderEvents()`
+recreated both, the fetch filled the hidden desktop line, and the visible
+one stayed blank. Same bug on the FINANCIAL panel's `id="hio-pot-running"`.
+
+Fixed in v2.173.0: both lines are addressed by data attributes
+(`data-hio-running`, `data-hio-pot-total`) and `paintHioLines()` fills
+EVERY match. The payload is cached in `_hioPotData` and painted
+synchronously while the panel HTML is built, so a repaint never flashes
+empty, and a failed refresh leaves the last good value rather than wiping
+it. **Never use a bare `id` in any per-event panel on this page** — the
+double render makes every one of them ambiguous.
+
+Separately (v2.172.0, NOT the cause of the above): `get_hio_pot` has read
+`app_settings.hio_pot_carry_in` since 2026-07-20 (ratified $1,822) and
+**no write path existed anywhere in the codebase**. That gap is real and
+now closed, but the carry-in was already set in production.
 
 - `POST /api/hio-pot/carry-in` (admin) → `set_app_setting`. Body:
   `carry_in` (required; `$` and `,` tolerated, negatives refused) and an

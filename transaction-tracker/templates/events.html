@@ -4243,12 +4243,8 @@
             }
             html += `<div><span style="color:var(--text-muted);">Actual Payouts:</span> <strong>$${tgfEvent.total_purse.toFixed(2)}</strong></div>`;
             html += `<div><span style="color:var(--text-muted);">Difference:</span> <strong style="color:${diffColor};">$${diff.toFixed(2)}</strong></div>`;
-            html += `<div id="hio-pot-running" style="color:var(--text-muted);"></div>`;
-            html += `</div></div>`;
-            fetch("/api/hio-pot").then(r => r.ok ? r.json() : null).then(d => {
-                const el = document.getElementById("hio-pot-running");
-                if (el && d) el.innerHTML = `Running Hole-In-One pot: <strong>$${d.pot.toFixed(2)}</strong> <span style="font-size:0.78rem;">(${d.events_counted} events)</span>`;
-            }).catch(() => {});
+            html += `<div data-hio-pot-total="1" style="color:var(--text-muted);"></div>`;
+            refreshHioPot();
         }
 
         html += '</div>';
@@ -5730,6 +5726,75 @@
               `\n\nOpen the PAYOUTS tab (TGF page) for prepared payment links.`);
     }
 
+    // ── Hole-In-One running pot ───────────────────────────────────────────
+    // The events page renders the SAME panel twice — once into the desktop
+    // table (#events-body) and once into the mobile card list
+    // (#events-mobile-cards) — and CSS hides one. The running-pot line used
+    // a plain `id`, so two elements shared it and
+    // `document.getElementById` only ever returned the FIRST (the desktop
+    // copy, which is the hidden one on a phone).
+    //
+    // That is exactly the reported symptom (Kerry 2026-07-31: "$3101 would
+    // show for a bit, but would just disappear"): on the render where the
+    // mobile copy happened to be the only one present it filled and showed;
+    // on the next full re-render the desktop copy existed and came first, so
+    // the fetch filled the hidden element and the visible line went blank
+    // and never came back.
+    //
+    // Fixed by addressing the lines with a data attribute and painting EVERY
+    // match, plus caching the last payload so a re-render repaints
+    // instantly instead of flashing empty while a new fetch is in flight.
+    let _hioPotData = null;
+    let _hioPotErr = null;
+
+    function _hioRunningText(eventName) {
+        if (!_hioPotData) return '';
+        const d = _hioPotData;
+        const row = (d.events || []).find(e => e.event === eventName);
+        const thru = row && row.running != null ? row.running : d.pot;
+        if (thru == null) return '';
+        const carry = Number(d.carry_in || 0);
+        const carryBit = carry > 0
+            ? ` <span style="font-weight:400;color:var(--text-muted);">(incl. $${carry.toFixed(2)} carried in)</span>`
+            : '';
+        const label = String(eventName || '').split(' ')[0];
+        return `Running pot thru ${escapeHtml(label)}: <strong>$${Number(thru).toFixed(2)}</strong>${carryBit}`;
+    }
+
+    function paintHioLines() {
+        document.querySelectorAll('[data-hio-running]').forEach(el => {
+            const nm = el.getAttribute('data-hio-running') || '';
+            if (_hioPotData) el.innerHTML = _hioRunningText(nm);
+            else if (_hioPotErr) el.innerHTML = `<span style="color:var(--text-muted);font-style:italic;">Running pot unavailable (${escapeHtml(_hioPotErr)})</span>`;
+        });
+        document.querySelectorAll('[data-hio-pot-total]').forEach(el => {
+            if (_hioPotData && _hioPotData.pot != null) {
+                el.innerHTML = `Running Hole-In-One pot: <strong>$${Number(_hioPotData.pot).toFixed(2)}</strong> <span style="font-size:0.78rem;">(${_hioPotData.events_counted} events)</span>`;
+            } else if (_hioPotErr) {
+                el.innerHTML = `<span style="font-style:italic;">Running pot unavailable (${escapeHtml(_hioPotErr)})</span>`;
+            }
+        });
+    }
+
+    let _hioFetching = false;
+    function refreshHioPot() {
+        if (_hioFetching) return;
+        _hioFetching = true;
+        fetch("/api/hio-pot", {cache: "no-store"}).then(r => {
+            if (!r.ok) throw new Error(`HTTP ${r.status}`);
+            return r.json();
+        }).then(d => {
+            _hioPotData = d || null;
+            _hioPotErr = d ? null : "empty response";
+            paintHioLines();
+        }).catch(err => {
+            // Never wipe a good value on a failed refresh — only report when
+            // there is nothing cached to show.
+            if (!_hioPotData) _hioPotErr = String(err.message || err);
+            paintHioLines();
+        }).finally(() => { _hioFetching = false; });
+    }
+
     function renderGamesPanel(ev) {
         const holes = extractHolesType(ev.item_name, ev.format);
         if (!holes) return '<p style="color:var(--text-muted);">Cannot determine 9/18 hole type from event name.</p>';
@@ -5763,59 +5828,8 @@
         // running cross-event pot THROUGH this event (Kerry 2026-07-20);
         // carry-in from 2025 rides the /api/hio-pot payload once set.
         if (gEvent && gEvent.holeInOne && gEvent.holeInOne !== "NO_EVENT" && gEvent.holeInOne !== "NO_GAME") {
-            html += `<div class="hole-in-one-banner"><div class="hio-line">Hole-in-One Pot: ${fmt$(gEvent.holeInOne)} <span class="gg-det" data-event="${escapeHtml(ev.item_name)}" data-game="hio"></span></div><div class="hio-line" id="hio-running-inline"></div></div>`;
-            // The running line used to fail SILENTLY: a non-OK response
-            // resolved to null and `.catch(() => {})` swallowed everything,
-            // so a broken pot and a still-loading pot looked identical —
-            // an empty banner with no explanation (Kerry 2026-07-31).
-            fetch("/api/hio-pot", {cache: "no-store"}).then(async r => {
-                if (!r.ok) throw new Error(`HTTP ${r.status}`);
-                return r.json();
-            }).then(d => {
-                const el = document.getElementById("hio-running-inline");
-                if (!el) return;
-                if (!d) throw new Error("empty response");
-                const row = (d.events || []).find(e => e.event === ev.item_name);
-                const thru = row && row.running != null ? row.running : d.pot;
-                const carry = Number(d.carry_in || 0);
-                // The carry-in is the balance brought forward from before the
-                // Tracker accrued anything. It is settable ONLY by an admin,
-                // and until v2.172.0 nothing in the app could write it at all.
-                const carryBit = carry > 0
-                    ? ` <span style="font-weight:400;color:var(--text-muted);">(incl. $${carry.toFixed(2)} carried in)</span>`
-                    : (currentRole === "admin"
-                        ? ` <span class="hio-set-carry" style="cursor:pointer;text-decoration:underline dotted;color:var(--text-muted);font-weight:400;" title="No carry-in balance is set — click to enter the pot brought forward from before the Tracker started accruing">no carry-in set</span>`
-                        : '');
-                el.innerHTML = `Running pot thru ${escapeHtml(ev.item_name.split(" ")[0])}: <strong>$${Number(thru).toFixed(2)}</strong>${carryBit}`;
-                const setBtn = el.querySelector(".hio-set-carry");
-                if (setBtn) {
-                    setBtn.addEventListener("click", async () => {
-                        const raw = prompt(
-                            "Hole-In-One pot CARRY-IN\n\n" +
-                            "The balance brought forward from before the Tracker " +
-                            "started accruing. It is added to every running total " +
-                            "and is stored permanently.\n\n" +
-                            "Enter the dollar amount:");
-                        if (raw === null || !raw.trim()) return;
-                        try {
-                            const res = await fetch("/api/hio-pot/carry-in", {
-                                method: "POST",
-                                headers: {"Content-Type": "application/json"},
-                                body: JSON.stringify({carry_in: raw.trim(),
-                                                      note: "Set from the GAMES tab"}),
-                            });
-                            const dd = await res.json().catch(() => ({}));
-                            if (!res.ok) { alert(dd.error || "Could not save the carry-in."); return; }
-                            rerenderDetail(container, ev);
-                        } catch (e) { alert("Could not save the carry-in."); }
-                    });
-                }
-            }).catch(err => {
-                const el = document.getElementById("hio-running-inline");
-                if (el) {
-                    el.innerHTML = `<span style="color:var(--text-muted);font-style:italic;">Running pot unavailable (${escapeHtml(String(err.message || err))})</span>`;
-                }
-            });
+            html += `<div class="hole-in-one-banner"><div class="hio-line">Hole-in-One Pot: ${fmt$(gEvent.holeInOne)} <span class="gg-det" data-event="${escapeHtml(ev.item_name)}" data-game="hio"></span></div><div class="hio-line" data-hio-running="${escapeHtml(ev.item_name)}">${_hioRunningText(ev.item_name)}</div></div>`;
+            refreshHioPot();
         }
 
         html += '<table class="games-table">';
