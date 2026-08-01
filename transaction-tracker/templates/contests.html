@@ -4660,13 +4660,15 @@
 
             // ── D-MP-08 · Consolation (3rd place) block ──
             // Gate strictly on enrolled field size: hasConsolation = fieldN >= 6.
-            // MANAGER-ONLY for now (Kerry 2026-07-19): members don't see the
-            // 3rd-place match — it may not run this season. Managers keep it
-            // so they can schedule/record one if they decide to.
+            // VISIBLE TO MEMBERS as of 2026-08-01 (Kerry, championship
+            // morning: "Not seeing the Austin 3rd place match") — this
+            // supersedes his 2026-07-19 manager-only ruling, which was made
+            // when the match might not run this season. It is running. The
+            // record/clear CONTROLS stay manager-only below.
             const fieldN = (cmpState.structure && cmpState.structure.n != null)
                 ? cmpState.structure.n
                 : (cmpState.enrollees || []).length;
-            const hasConsolation = isManager && fieldN >= 6;
+            const hasConsolation = fieldN >= 6;
             let consolationHtml = '';
             if (hasConsolation) {
                 // Prefer the payout sheet's consolation block (authoritative sf
@@ -4751,7 +4753,7 @@
                 }
                 consolationHtml = `
                     <div class="mp-consolation">
-                        <div class="mp-consolation-label">3rd place${cons && cons.recorded ? " · recorded" : ""} <span style="font-weight:400;letter-spacing:0;text-transform:none;color:var(--text-placeholder,#9CA3AF);">· hidden from members</span></div>
+                        <div class="mp-consolation-label">3rd place${cons && cons.recorded ? " · recorded" : ""}</div>
                         ${consCard}
                         ${consControl}
                         <div class="mp-cons-note">${consNote}</div>

@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.181.1";
+window.TGF_VERSION = "2.182.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.182.0",
+    date: "2026-08-01",
+    changes: [
+      "THE 3RD-PLACE MATCH IS NOW VISIBLE TO MEMBERS (Kerry, championship morning: 'Not seeing the Austin 3rd place match'). It was hidden behind a manager-only gate from his own 2026-07-19 ruling, made when the consolation might not run this season — it is running, today, so members see the card: both semifinal losers, live scoring through the same 60-second poll as the Final, and the scheduling/split explainer. The record and clear CONTROLS remain manager-only, and the 'hidden from members' tag is gone because it no longer is.",
+    ],
+  },
   {
     version: "2.181.1",
     date: "2026-08-01",
