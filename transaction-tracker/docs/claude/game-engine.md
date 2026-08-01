@@ -851,6 +851,23 @@ fallback source); the per-hole parse counts only `●`, so per-hole NET/PTS
 stay on the same no-give-back basis as GG's points board, and the flat
 deduction reconciles both totals identically.
 
+**Live reset re-projection + Fellowship Cup (v2.185.0, Kerry mid-round):**
+`get_points_race_live` re-runs the reset ladder over the LIVE order via
+`_reproject_points_reset(rows, reset_info)` — same methodology/eligible
+set as the season pass (eligibility = rows the season pass gave a reset
+value), coefficient rebuilt exact from `reset_info`'s
+`anchor_count/eligible_count` (the stored `coefficient` is 4dp-rounded
+for display). Fires only when the champ board is scoring.
+`get_fellowship_cup_projection` now builds from `get_points_race_live`
+(passthrough on quiet days), carries summed `champ_scoring`/`champ_field`
++ a `champ.label` for the Cup tab's LIVE badge, and passes
+`freeze=live` to `_apply_rank_movement_history` — frozen mode records NO
+snapshot and stamps `prev_rank` vs the latest stored (pre-round) order so
+intra-round churn can't burn the 12-deep history. Cup tab
+(`prLoadFellowship`) renders the live badge + joins the 60s poll.
+`get_points_race_live` gained `force_refresh` (passes through to the
+season snapshot refresh) — keep it keyword-called.
+
 Tests: `test_champ_points_live.py`.
 
 ## LIVE championship hole-by-hole card (v2.176.0)

@@ -5944,10 +5944,17 @@
         }
         $("pr-summary").textContent = "";
         try {
-            const res = await fetch(`/api/season-contests/points-race/fellowship-cup${force ? "?force=1" : ""}`);
+            const res = await fetch(`/api/season-contests/points-race/fellowship-cup${force ? "?force=1" : ""}`, {cache: "no-store"});
             const data = await res.json();
             if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
             renderFellowshipCup(data);
+            // Championship day: the Cup re-orders as the live reset
+            // projections move (Kerry 2026-08-01) — same LIVE badge and
+            // 60s tick as the races. The payload carries champ_scoring/
+            // champ_field summed across the NET races; a quiet day
+            // renders no badge and the tick is a cheap no-op.
+            prRenderLiveBanner(data);
+            prScheduleLivePoll("tfc", data);
         } catch (e) {
             cont.innerHTML = `<div style="padding:1rem;color:#b91c1c;">${escapeHtml(e.message)}</div>`;
         }

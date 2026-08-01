@@ -7404,7 +7404,39 @@ def fetch_champ_points(race_key: str, max_age: float = 45.0,
     return out
 
 
-def get_points_race_live(race_key: str,
+def _reproject_points_reset(rows: list, reset_info: dict | None) -> None:
+    """Recompute the reset-ladder projection over rows in their CURRENT
+    order — the live re-ranked order (Kerry, championship day 2026-08-01:
+    "I'm currently 3rd for SA City Net, but I'm projecting at 97.5 and I
+    should be 99 with 3rd" — the season pass projected the ladder off the
+    SEASON order and the live merge carried it through unchanged, so every
+    mover kept their pre-round reset all day).
+
+    Eligibility is EXACTLY the season pass's: the rows it gave a reset
+    value (membership/played-once doesn't change mid-round). Same master
+    ladder, same coefficient — rebuilt exact from reset_info's counts
+    (the stored `coefficient` is rounded to 4dp for display); only the
+    positions are live. Mutates rows in place."""
+    ri = reset_info or {}
+    if ri.get("anchor_count") and ri.get("eligible_count"):
+        coef = ri["anchor_count"] / ri["eligible_count"]
+    else:
+        coef = ri.get("coefficient")
+    if not coef:
+        return
+    elig = [r for r in rows if r.get("points_reset") is not None]
+    prev_pts, prev_pos = object(), 0
+    for i, r in enumerate(elig):
+        cur = r.get("live_total", r.get("total_points"))
+        pos = prev_pos if cur == prev_pts else i + 1
+        prev_pts, prev_pos = cur, pos
+        # int(x + 0.5) == Excel ROUND for positive x (half up) — must stay
+        # identical to the season pass or the two projections drift
+        master = int(1 + coef * (pos - 1) + 0.5)
+        r["points_reset"] = 100 - 0.5 * (master - 1)
+
+
+def get_points_race_live(race_key: str, force_refresh: bool = False,
                          db_path: str | Path = DB_PATH) -> dict:
     """Season standings PLUS today's championship points, added together.
 
@@ -7415,7 +7447,8 @@ def get_points_race_live(race_key: str,
     Golf Genius spells people its own way, which is exactly how points
     went missing before.
     """
-    base = get_points_race_standings(race_key, db_path=db_path)
+    base = get_points_race_standings(race_key, force_refresh=force_refresh,
+                                     db_path=db_path)
     live = fetch_champ_points(race_key, db_path=db_path)
 
     # DOUBLE-COUNT GUARD (Kerry 2026-07-31). Golf Genius does not award
@@ -7517,6 +7550,12 @@ def get_points_race_live(race_key: str,
             except (TypeError, ValueError):
                 rows[g]["move"] = None
         i = j
+
+    # The reset projection follows the LIVE order (Kerry, championship
+    # day) — see _reproject_points_reset. Only fires when something is
+    # actually on the board; a quiet day leaves the season figures alone.
+    if any(r.get("champ_points") is not None for r in rows):
+        _reproject_points_reset(rows, base.get("reset_info"))
 
     return {**{k: v for k, v in base.items() if k != "standings"},
             "standings": rows,
@@ -8034,7 +8073,8 @@ def get_points_race_standings(race_key: str,
 
 def _apply_rank_movement_history(standings: list, list_key: str,
                                  db_path: str | Path = DB_PATH,
-                                 keep: int = 12) -> None:
+                                 keep: int = 12,
+                                 freeze: bool = False) -> None:
     """GG-style Previous Rank for OUR OWN computed standings (v2.43.0,
     Kerry: "I know you don't have a GG reference for The Fellowship Cup
     because that's on our side, but could you create the same movement
@@ -8054,6 +8094,30 @@ def _apply_rank_movement_history(standings: list, list_key: str,
     def key_of(r):
         return (str(r["customer_id"]) if r.get("customer_id")
                 else (r.get("player_name") or "").strip().lower())
+
+    # FREEZE (championship day, v2.185.0): a live round reshuffles the
+    # order every poll — rotating a snapshot per tick would burn the
+    # `keep`-deep history on intra-round noise and leave the post-round
+    # chips meaningless. Frozen mode records nothing and stamps movement
+    # against the LATEST stored snapshot (the last pre-live rotation), so
+    # chips read "vs where the day started" all round.
+    if freeze:
+        prev_map = {}
+        with _connect(db_path) as conn:
+            try:
+                latest = conn.execute(
+                    "SELECT id FROM rank_history_snapshots "
+                    "WHERE list_key = ? ORDER BY id DESC LIMIT 1",
+                    (list_key,)).fetchone()
+                if latest:
+                    prev_map = {r["member_key"]: r["rank"] for r in conn.execute(
+                        "SELECT member_key, rank FROM rank_history_rows "
+                        "WHERE snapshot_id = ?", (latest["id"],)).fetchall()}
+            except sqlite3.OperationalError:
+                pass    # tables not created yet — no history, no chips
+        for r in standings:
+            r["prev_rank"] = prev_map.get(key_of(r), "-")
+        return
 
     cur = [(key_of(r), str(r.get("rank") or "")) for r in standings]
     order_hash = hashlib.sha1(
@@ -8255,9 +8319,19 @@ def get_fellowship_cup_projection(force_refresh: bool = False,
     fetched: list = []
     errors: list = []
     cup_n = 0  # every NET-bundle buy-in funds the Cup pot ($40 each)
+    champ_scoring = champ_field = 0
     for k in races:
-        d = get_points_race_standings(k, force_refresh=force_refresh,
-                                      db_path=db_path)
+        # LIVE path (Kerry, championship day 2026-08-01: "start updating
+        # The Fellowship Cup with projected points reset"): during the
+        # City Championships each NET race re-ranks live and re-projects
+        # its reset ladder, and the Cup — a pure function of those
+        # projections — must follow. On any other day the live merge is a
+        # no-op passthrough of the season standings, so this costs one
+        # cached champ-board read per race.
+        d = get_points_race_live(k, force_refresh=force_refresh,
+                                 db_path=db_path)
+        champ_scoring += d.get("champ_scoring") or 0
+        champ_field += d.get("champ_field") or 0
         cup_n += (d.get("n_enrolled") or 0) + len(d.get("enrolled_not_ranked") or [])
         info = d.get("reset_info") or {}
         per_race[k] = {
@@ -8265,6 +8339,7 @@ def get_fellowship_cup_projection(force_refresh: bool = False,
             "chapter": d["chapter"],
             "eligible_count": info.get("eligible_count"),
             "coefficient": info.get("coefficient"),
+            "champ_scoring": d.get("champ_scoring") or 0,
         }
         if d.get("fetched_at"):
             fetched.append(d["fetched_at"])
@@ -8295,10 +8370,14 @@ def get_fellowship_cup_projection(force_refresh: bool = False,
     for r in combined:
         n = r.pop("_rank_num")
         r["rank"] = f"T{n}" if tally[n] > 1 else str(n)
-    # Movement chips vs our own recorded history (no GG reference here)
+    # Movement chips vs our own recorded history (no GG reference here).
+    # During a live championship the history FREEZES: chips read against
+    # the last pre-round order instead of rotating on every intra-round
+    # reshuffle (see _apply_rank_movement_history).
+    live = champ_scoring > 0 or champ_field > 0
     try:
         _apply_rank_movement_history(combined, "fellowship_cup",
-                                     db_path=db_path)
+                                     db_path=db_path, freeze=live)
     except Exception:
         logger.warning("fellowship cup rank history failed", exc_info=True)
 
@@ -8312,6 +8391,11 @@ def get_fellowship_cup_projection(force_refresh: bool = False,
         "projected_payouts": _sp.fellowship_cup_payouts(cup_n),
         "fetched_at": max(fetched) if fetched else None,
         "gg_error": "; ".join(errors) or None,
+        # Live-championship signal for the Cup tab's badge + 60s poll —
+        # the same fields the race payloads carry, summed across races
+        "champ_scoring": champ_scoring,
+        "champ_field": champ_field,
+        "champ": ({"label": "City Championships"} if live else None),
     }
 
 

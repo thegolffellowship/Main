@@ -1413,7 +1413,7 @@ def _scoring_dispatch(url: str, extract: str):
                     "top": [{k: r.get(k) for k in
                              ("player_name", "rank", "total_points",
                               "season_points", "champ_points", "champ_thru",
-                              "move")} for r in rows],
+                              "move", "points_reset")} for r in rows],
                     # plus-handicap deductions in force (Kerry 2026-08-01)
                     "plus_adjusted": [
                         {"name": p.get("name"),

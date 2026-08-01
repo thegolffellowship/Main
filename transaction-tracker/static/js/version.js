@@ -1,5 +1,15 @@
-window.TGF_VERSION = "2.184.0";
+window.TGF_VERSION = "2.185.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.185.0",
+    date: "2026-08-01",
+    changes: [
+      "POINTS-RESET PROJECTIONS NOW FOLLOW THE LIVE BOARD (Kerry, mid-round: 'I'm currently 3rd for SA City Net, but I'm projecting at 97.5 and I should be 99 with 3rd'). The reset ladder was projected once off the SEASON order and carried through the live merge unchanged, so every mover kept their pre-round reset all day. The live view now re-runs the same ladder — identical methodology, identical coefficient (rebuilt exact from the eligible counts, not the display-rounded copy), identical eligible set — over the live-ranked order, so a player sitting live-3rd projects the 3rd-place reset. Quiet days are untouched: the re-projection only fires when the championship board is actually scoring.",
+      "THE FELLOWSHIP CUP UPDATES LIVE during the City Championships (Kerry, same message). The Cup is a pure function of each NET race's reset projection, so it now builds from the LIVE race views instead of the season snapshots — the combined ordering, NET-rank column, reset values, and projected payouts all move with the round. The Cup tab gets the same 🔴 LIVE badge and 60-second tick as the races (payload carries champ_scoring/champ_field summed across both cities). On a non-championship day the live view passes the season standings through unchanged, so the Cup costs one cached champ-board read per race and renders exactly as before.",
+      "Cup movement chips FREEZE during a live round: rank-history snapshots stop rotating (a live board reshuffles every minute and would burn the 12-deep history on intra-round noise) and every chip reads against the last pre-round order instead — 'versus where the day started' — resuming normal between-events rotation after the round.",
+      "The scoring-champ-live diagnostic now reports each top row's live points_reset so the re-projection is verifiable in production at a glance.",
+    ],
+  },
   {
     version: "2.184.0",
     date: "2026-08-01",

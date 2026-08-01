@@ -238,6 +238,73 @@ check("no header row -> nothing parsed (points boards carry no handicap col)",
                                     ["1", "YOUNGS, Pat TGF San Antonio",
                                      "+4", "7"]]]) == {})
 
+print("\n== the reset projection follows the LIVE order (Kerry 2026-08-01) ==")
+# "I'm currently 3rd for SA City Net, but I'm projecting at 97.5 and I
+# should be 99 with 3rd" — the season pass laddered off the season order
+# and the live merge carried those values through unchanged.
+def _rows(*specs):
+    # (name, live_total, eligible) in LIVE order; stale reset marks eligibility
+    return [{"player_name": n, "live_total": t,
+             "points_reset": (0.0 if e else None)} for n, t, e in specs]
+
+rows_r = _rows(("A", 107.0, True), ("B", 102.0, True), ("Kerry", 100.0, True),
+               ("D", 99.0, True), ("E", 97.0, True), ("F", 95.0, True))
+db._reproject_points_reset(rows_r, {"anchor_count": 56, "eligible_count": 56})
+check("live 3rd projects the 3rd-place reset (99, not the season-rank value)",
+      rows_r[2]["points_reset"] == 99.0, str(rows_r[2]))
+check("live 1st projects 100", rows_r[0]["points_reset"] == 100.0)
+check("live 6th projects 97.5 — the value Kerry was wrongly shown for 3rd",
+      rows_r[5]["points_reset"] == 97.5, str(rows_r[5]))
+
+rows_t = _rows(("A", 100.0, True), ("B", 94.0, True), ("C", 94.0, True),
+               ("D", 90.0, True))
+db._reproject_points_reset(rows_t, {"anchor_count": 10, "eligible_count": 10})
+check("a live tie shares the ladder position",
+      rows_t[1]["points_reset"] == rows_t[2]["points_reset"] == 99.5,
+      f'{rows_t[1]["points_reset"]}/{rows_t[2]["points_reset"]}')
+check("the row after a tie takes its enumerated slot (4th -> 98.5)",
+      rows_t[3]["points_reset"] == 98.5, str(rows_t[3]))
+
+rows_i = _rows(("A", 100.0, True), ("Guest", 99.0, False), ("B", 98.0, True))
+db._reproject_points_reset(rows_i, {"anchor_count": 5, "eligible_count": 5})
+check("an ineligible row consumes no ladder slot and stays None",
+      rows_i[1]["points_reset"] is None and rows_i[2]["points_reset"] == 99.5,
+      str(rows_i))
+
+rows_c = _rows(("A", 100.0, True), ("B", 98.0, True))
+db._reproject_points_reset(rows_c, {"anchor_count": 12, "eligible_count": 8})
+check("the prorated coefficient maps to the shared master ladder "
+      "(coef 1.5: 2nd -> master 3 -> 99)",
+      rows_c[1]["points_reset"] == 99.0, str(rows_c[1]))
+rows_n = _rows(("A", 100.0, True))
+before = rows_n[0]["points_reset"]
+db._reproject_points_reset(rows_n, None)
+check("no reset_info -> a no-op, never a crash",
+      rows_n[0]["points_reset"] == before)
+
+print("\n== movement history FREEZES during a live round ==")
+import tempfile as _tf
+fd2, _bp2 = _tf.mkstemp(suffix=".db"); os.close(fd2); db.init_db(_bp2)
+A = [{"customer_id": 1, "player_name": "A", "rank": "1"},
+     {"customer_id": 2, "player_name": "B", "rank": "2"}]
+db._apply_rank_movement_history(A, "t_list", db_path=_bp2)   # seeds snapshot
+B = [{"customer_id": 2, "player_name": "B", "rank": "1"},
+     {"customer_id": 1, "player_name": "A", "rank": "2"}]
+db._apply_rank_movement_history(B, "t_list", db_path=_bp2, freeze=True)
+check("frozen: movement reads vs the last stored (pre-live) order",
+      B[0]["prev_rank"] == "2" and B[1]["prev_rank"] == "1", str(B))
+with db._connect(_bp2) as _c:
+    n_snaps = _c.execute("SELECT COUNT(*) FROM rank_history_snapshots "
+                         "WHERE list_key='t_list'").fetchone()[0]
+check("frozen: NO new snapshot recorded — intra-round churn can't burn "
+      "the history", n_snaps == 1, str(n_snaps))
+db._apply_rank_movement_history(B, "t_list", db_path=_bp2)   # thaw -> rotates
+with db._connect(_bp2) as _c:
+    n_snaps = _c.execute("SELECT COUNT(*) FROM rank_history_snapshots "
+                         "WHERE list_key='t_list'").fetchone()[0]
+check("thawed: the normal rotation still records", n_snaps == 2, str(n_snaps))
+os.unlink(_bp2)
+
 print("\n== the board config is a dial, not code ==")
 import tempfile
 fd, _bp = tempfile.mkstemp(suffix=".db"); os.close(fd); db.init_db(_bp)
