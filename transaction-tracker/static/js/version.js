@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.185.1";
+window.TGF_VERSION = "2.185.2";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.185.2",
+    date: "2026-08-01",
+    changes: [
+      "Post-round follow-up caught during production verification: once the round completes, GG clears the champ board's Thru cells to BLANK — never 'F' — so the guard's board-is-final test (which only recognized F/18) would never have consulted the absorption check, and close-out could never have stood the overlay down (double-counted totals once GG folded the championship in). Blank-thru-with-points now reads as final; a scoring player mid-round always carries a hole count, and even a false positive is harmless because the absorption check still requires the snapshot totals to have actually moved before anything stands down.",
+    ],
+  },
   {
     version: "2.185.1",
     date: "2026-08-01",

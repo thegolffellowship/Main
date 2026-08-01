@@ -351,6 +351,20 @@ check("a prior-day baseline re-captures fresh instead of absorbing",
 check("no identified champ scorers -> never absorbed",
       db._champ_absorbed_check("t_race", _base_pre, {"players": []},
                                db_path=_bp3) is False)
+# GG clears the Thru cells once the round completes (seen live ~4 PM
+# 2026-08-01: points + BLANK thru, never "F") — the guard's final test
+# must treat that as final or close-out could never stand the overlay
+# down. Mirror of the _final expression in get_points_race_live.
+def _mirror_final(players):
+    return bool(players) and all(
+        (str(p.get("thru") or "").strip().upper() in ("F", "18", "")
+         or p.get("points") is None) for p in players)
+check("a completed board with BLANK thru cells reads FINAL",
+      _mirror_final([{"points": 39.0, "thru": ""},
+                     {"points": 29.0, "thru": ""}]) is True)
+check("a mid-round board (hole counts) does NOT read final",
+      _mirror_final([{"points": 20.0, "thru": "13"},
+                     {"points": 15.0, "thru": ""}]) is False)
 os.unlink(_bp3)
 
 print("\n== the board config is a dial, not code ==")

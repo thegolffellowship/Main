@@ -7517,8 +7517,15 @@ def get_points_race_live(race_key: str, force_refresh: bool = False,
     # CONTENT (_champ_absorbed_check: did the snapshot totals move off
     # the board-went-final baseline?), never by the snapshot's date — the
     # morning's pre-round snapshot is also "fetched today".
+    # "Final" includes a BLANK thru: once the round completes GG clears
+    # the Thru cells entirely (seen live ~4 PM 2026-08-01 — every SA row
+    # read points + empty thru, not "F"). A scoring player mid-round
+    # always carries a hole count, so blank-with-points only happens on a
+    # completed board; and even a false positive here is harmless because
+    # the absorption check still requires the snapshot totals to have
+    # actually moved before anything stands down.
     _final = bool(live.get("players")) and all(
-        (str(p.get("thru") or "").strip().upper() in ("F", "18")
+        (str(p.get("thru") or "").strip().upper() in ("F", "18", "")
          or p.get("points") is None)
         for p in live.get("players", []))
     if _final and _champ_absorbed_check(race_key, base, live,
