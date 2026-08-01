@@ -272,7 +272,12 @@
             return head + `<span style="color:var(--text-muted);">No holes posted yet.</span>`;
         }
         const compact = prIsCompact();
-        const td = `padding:${compact ? "2px 1px" : "3px 6px"};text-align:center;border:1px solid #e2e8f0;min-width:${compact ? "1.15em" : "2em"};white-space:nowrap;`;
+        // Every HOLE column is the SAME fixed width (Kerry 2026-08-01) —
+        // min-width let a circled score stretch its own column and the
+        // grid read ragged. Sum/TOT columns size themselves.
+        const holeW = compact ? "1.7em" : "2.2em";
+        const td = `padding:${compact ? "2px 0" : "3px 2px"};text-align:center;border:1px solid #e2e8f0;width:${holeW};max-width:${holeW};overflow:hidden;white-space:nowrap;`;
+        const sumTd = `padding:${compact ? "2px 2px" : "3px 6px"};text-align:center;border:1px solid #e2e8f0;min-width:${compact ? "1.6em" : "2.2em"};white-space:nowrap;`;
         const lbl = `padding:${compact ? "2px 3px" : "3px 8px"};border:1px solid #e2e8f0;font-weight:600;color:#475569;text-align:left;white-space:nowrap;`;
         const fs = compact ? "0.6rem" : "0.8rem";
         const dash = '<span style="color:#9CA3AF;">-</span>';
@@ -298,13 +303,13 @@
         };
         const block = (label, hs, withTot) => {
             const cells = fn => hs.map(fn).join("");
-            const totCell = (v, extra) => `<td style="${td}font-weight:800;${extra || ""}">${v}</td>`;
+            const totCell = (v, extra) => `<td style="${sumTd}font-weight:800;${extra || ""}">${v}</td>`;
             return `<table style="border-collapse:collapse;font-size:${fs};margin:0 0 0.45rem;">
-                <tr><td style="${lbl}">HOLE</td>${cells(h => `<td style="${td}font-weight:700;background:#f8fafc;">${h.hole}</td>`)}<td style="${td}font-weight:700;background:#f8fafc;">${label}</td>${withTot ? `<td style="${td}font-weight:800;background:#f1f5f9;">TOT</td>` : ""}</tr>
-                <tr><td style="${lbl}background:#f8fafc;">PAR</td>${cells(h => `<td style="${td}background:#f8fafc;color:#6B7280;">${h.par ?? "-"}</td>`)}<td style="${td}background:#f8fafc;font-weight:700;color:#6B7280;">${sumOr(hs, "par")}</td>${withTot ? totCell(sumOr(holes, "par"), "background:#f8fafc;color:#6B7280;") : ""}</tr>
-                <tr><td style="${lbl}">GROSS</td>${cells(h => `<td style="${td}">${grossCell(h)}</td>`)}<td style="${td}font-weight:700;">${sumOr(hs, "gross")}</td>${withTot ? totCell(card.gross_total != null ? card.gross_total : sumOr(holes, "gross")) : ""}</tr>
-                <tr><td style="${lbl}background:#f8fafc;">NET</td>${cells(h => `<td style="${td}background:#f8fafc;color:#475569;">${h.net != null ? h.net : dash}</td>`)}<td style="${td}background:#f8fafc;font-weight:700;color:#475569;">${sumOr(hs, "net")}</td>${withTot ? totCell(sumOr(holes, "net"), "background:#f8fafc;color:#475569;") : ""}</tr>
-                <tr><td style="${lbl}">PTS</td>${cells(h => `<td style="${td}${h.pts != null && h.pts >= 3 ? "color:#BF5700;font-weight:700;" : ""}">${h.pts != null ? h.pts : dash}</td>`)}<td style="${td}font-weight:700;">${sumOr(hs, "pts")}</td>${withTot ? totCell(card.computed_points != null ? card.computed_points : sumOr(holes, "pts"), "color:#BF5700;") : ""}</tr>
+                <tr><td style="${lbl}">HOLE</td>${cells(h => `<td style="${td}font-weight:700;background:#f8fafc;">${h.hole}</td>`)}<td style="${sumTd}font-weight:700;background:#f8fafc;">${label}</td>${withTot ? `<td style="${sumTd}font-weight:800;background:#f1f5f9;">TOT</td>` : ""}</tr>
+                <tr><td style="${lbl}background:#f8fafc;">PAR</td>${cells(h => `<td style="${td}background:#f8fafc;color:#6B7280;">${h.par ?? "-"}</td>`)}<td style="${sumTd}background:#f8fafc;font-weight:700;color:#6B7280;">${sumOr(hs, "par")}</td>${withTot ? totCell(sumOr(holes, "par"), "background:#f8fafc;color:#6B7280;") : ""}</tr>
+                <tr><td style="${lbl}">GROSS</td>${cells(h => `<td style="${td}">${grossCell(h)}</td>`)}<td style="${sumTd}font-weight:700;">${sumOr(hs, "gross")}</td>${withTot ? totCell(card.gross_total != null ? card.gross_total : sumOr(holes, "gross")) : ""}</tr>
+                <tr><td style="${lbl}background:#f8fafc;">NET</td>${cells(h => `<td style="${td}background:#f8fafc;color:#475569;">${h.net != null ? h.net : dash}</td>`)}<td style="${sumTd}background:#f8fafc;font-weight:700;color:#475569;">${sumOr(hs, "net")}</td>${withTot ? totCell(sumOr(holes, "net"), "background:#f8fafc;color:#475569;") : ""}</tr>
+                <tr><td style="${lbl}">PTS</td>${cells(h => `<td style="${td}${h.pts != null && h.pts >= 3 ? "color:#BF5700;font-weight:700;" : ""}">${h.pts != null ? h.pts : dash}</td>`)}<td style="${sumTd}font-weight:700;">${sumOr(hs, "pts")}</td>${withTot ? totCell(card.computed_points != null ? card.computed_points : sumOr(holes, "pts"), "color:#BF5700;") : ""}</tr>
             </table>`;
         };
         const front = holes.filter(h => h.hole <= 9);

@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.180.6";
+window.TGF_VERSION = "2.180.7";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.180.7",
+    date: "2026-08-01",
+    changes: [
+      "Live-view width tuning (Kerry): every HOLE column on the card is now the same fixed width — a circled score was stretching its own column and the grid read ragged. On the standings, TODAY and THRU tightened (TODAY holds 1-2 digits, THRU at most '10:00a') and the reclaimed width goes back to the Player column, which a long name + handicap was overlapping on at least one row.",
+    ],
+  },
   {
     version: "2.180.6",
     date: "2026-08-01",

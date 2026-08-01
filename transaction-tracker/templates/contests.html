@@ -5674,7 +5674,11 @@
         // THRU is wide enough for a full tee time ("10:00 AM"), which the
         // shared Rounds width was truncating.
         const mvStyle = `width:${compact ? "24px" : "44px"};text-align:center;`;
-        const thruStyle = `width:${compact ? "58px" : "90px"};text-align:center;border-right:2px solid #cbd5e1;font-size:${compact ? "0.72rem" : "0.85rem"};`;
+        // TODAY holds 1-2 digits, THRU at most "10:00a" — keep both tight
+        // on phones so the Player column gets the width back (Kerry
+        // 2026-08-01: the right side was overlapping long name+handicap).
+        const todayStyle = `width:${compact ? "28px" : "90px"};text-align:center;border-right:2px solid #cbd5e1;`;
+        const thruStyle = `width:${compact ? "46px" : "90px"};text-align:center;border-right:2px solid #cbd5e1;font-size:${compact ? "0.68rem" : "0.85rem"};`;
 
         const rowHtml = r => {
             const bg = r.enrolled ? "background:#bbf7d0;"
@@ -5713,7 +5717,7 @@
             // Live: MOVE gets its own column (PGA-style); the season view
             // keeps its inline last-event arrow in the rank cell.
             const midCells = liveMode
-                ? `<td style="${resetStyle}${r.champ_points != null ? "color:#BF5700;font-weight:800;" : "color:var(--text-muted);"}">${r.champ_points != null ? escapeHtml(String(r.champ_points % 1 ? r.champ_points.toFixed(1) : r.champ_points)) : (r.champ_thru ? "" : "—")}</td>
+                ? `<td style="${todayStyle}${r.champ_points != null ? "color:#BF5700;font-weight:800;" : "color:var(--text-muted);"}">${r.champ_points != null ? escapeHtml(String(r.champ_points % 1 ? r.champ_points.toFixed(1) : r.champ_points)) : (r.champ_thru ? "" : "—")}</td>
                    <td style="${thruStyle}white-space:nowrap;${/\d:\d\d/.test(r.champ_thru || "") ? "color:var(--text-muted);" : "font-weight:600;"}">${escapeHtml(compact ? String(r.champ_thru || "—").replace(/\s*([AaPp])\.?M\.?/, (_, g) => g.toLowerCase()) : (r.champ_thru || "—"))}</td>`
                 : `<td style="${resetStyle}">${prFmtReset(r.points_reset)}</td>
                    ${showRounds ? `<td style="${rndStyle}" class="pr-rnd">${r.tournaments ?? ""}</td>` : ""}`;
@@ -5775,7 +5779,7 @@
                     ${showChapter ? `<th style="${chapStyle}">${compact ? "CH" : "Chapter"}</th>` : ""}
                     <th style="${ptsStyle}">${compact ? "PTS" : "POINTS"}</th>
                     ${liveMode
-                        ? `<th style="${resetStyle}" title="Championship points earned today">TODAY</th>
+                        ? `<th style="${todayStyle}" title="Championship points earned today">TODAY</th>
                            <th style="${thruStyle}" title="Holes completed today — or the tee time if they haven't started">THRU</th>`
                         : `<th style="${resetStyle}"><span class="pr-proj" style="display:block;font-size:${compact ? "0.52rem" : "0.65rem"};font-weight:600;letter-spacing:0.03em;">(${compact ? "proj" : "Projected"})</span>${compact ? "RESET" : "POINTS RESET"}</th>
                            ${showRounds ? `<th style="${rndStyle}" class="pr-rnd" title="Rounds">Rounds</th>` : ""}`}
