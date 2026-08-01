@@ -2052,6 +2052,22 @@ def _scoring_dispatch(url: str, extract: str):
                     f"{prev['label']} FINAL", prev.get("chapter"), payouts)
                 return json.dumps({"assembled": prev, "recorded": rec},
                                   indent=2, default=str)
+            if mode == "mp-pools" and len(parts) == 2:
+                chapter = parts[1]
+                prev = db.matchplay_pool_bonus_rows(chapter)
+                if prev.get("error") or not do_record:
+                    return json.dumps(prev, indent=2, default=str)
+                payouts = [{"golferName": r["golferName"],
+                            "category": "Match Play Pool",
+                            "amount": r["amount_cents"] / 100.0,
+                            "description": (f"auto: {chapter} City Match "
+                                            f"Play — {r['rank']} bonus")}
+                           for r in prev["rows"]]
+                rec = db.record_season_contest_payouts(
+                    f"{chapter.upper()} MATCH PLAY 2026 FINAL", chapter,
+                    payouts, append_category="Match Play Pool")
+                return json.dumps({"assembled": prev, "recorded": rec},
+                                  indent=2, default=str)
             if mode == "mp" and len(parts) >= 3:
                 chapter = parts[1]
                 prev = db.matchplay_final_payout_rows(chapter, parts[2:])

@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.187.1";
+window.TGF_VERSION = "2.187.2";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.187.2",
+    date: "2026-08-01",
+    changes: [
+      "Match Play POOL-WINNER bonuses record into TGF Payouts (Kerry: 'I think pool stage money still needs to be paid'). New scoring-season-payouts mode mp-pools|<chapter>[|record]: one bonus per pool ($20 each per the pinned config) to each pool's rank-1 finisher under the season's ranking rule (D-MP-09 where configured; withdrawn players never win a pool). The rows join the chapter's MATCH PLAY 2026 FINAL payout event alongside the podium — the double-record guard gained an append_category scope so a later wave can join an event that already has rows, but never a second copy of its own category.",
+    ],
+  },
   {
     version: "2.187.1",
     date: "2026-08-01",

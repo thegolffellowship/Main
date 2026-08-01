@@ -7575,7 +7575,44 @@ def matchplay_final_payout_rows(chapter: str, placements: list,
             "rows": rows}
 
 
+def matchplay_pool_bonus_rows(chapter: str, season: str = "2026",
+                              db_path: str | Path = DB_PATH) -> dict:
+    """Pool-winner bonuses (Kerry, championship evening 2026-08-01: "I
+    think pool stage money still needs to be paid"). The $/pool taken off
+    the top of the Match Play pot before the podium ladder — one bonus
+    per pool, to its rank-1 finisher under the season's PINNED ranking
+    rule (D-MP-09 where configured). Withdrawn players never win a pool."""
+    from email_parser.match_play import structure_for_n
+    active = sct_get_active_config("match_play", season, chapter,
+                                   db_path=db_path)
+    if not active:
+        return {"error": "no Match Play config template"}
+    n = len(cmp_enrolled_entrants(season, chapter, db_path=db_path))
+    structure = structure_for_n(active["config"], n)
+    bonus = structure.get("bonus_each_cents") or 0
+    if not bonus:
+        return {"error": f"no pool-winner bonus configured for N={n}"}
+    standings = cmp_get_standings(season, chapter, db_path=db_path)
+    winners = [s for s in standings
+               if s.get("rank") == 1 and not s.get("withdrawn")]
+    rows = []
+    with _connect(db_path) as conn:
+        for w in winners:
+            try:
+                cid, _how = _resolve_gg_person(conn, w["player_name"])
+            except Exception:
+                cid = None
+            rows.append({"customer_id": cid,
+                         "golferName": w["player_name"],
+                         "rank": f"{w['pool_name']} winner",
+                         "amount_cents": bonus})
+    return {"chapter": chapter, "season": season, "n": n,
+            "pools": structure.get("pools"),
+            "bonus_each_cents": bonus, "rows": rows}
+
+
 def record_season_contest_payouts(code: str, chapter: str, payouts: list,
+                                  append_category: str | None = None,
                                   db_path: str | Path = DB_PATH) -> dict:
     """Record season-contest final winnings as TGF PAYOUTS rows.
 
@@ -7583,9 +7620,12 @@ def record_season_contest_payouts(code: str, chapter: str, payouts: list,
     behind a season race, so the tgf_events row is found-or-created
     directly by code (the race label + ' FINAL'). Refuses to
     double-record: ANY existing payout rows on that code stop the write
-    (delete them on the TGF Payouts page first). Inserting delegates to
-    import_tgf_payouts so customer resolution, the prize_payout ledger
-    entry, and Venmo reconciliation reuse the proven path."""
+    (delete them on the TGF Payouts page first). append_category relaxes
+    that to CATEGORY scope — a later wave (e.g. pool-winner bonuses) may
+    join an event that already carries podium rows, but never a second
+    copy of its own category. Inserting delegates to import_tgf_payouts
+    so customer resolution, the prize_payout ledger entry, and Venmo
+    reconciliation reuse the proven path."""
     from .timezone_utils import today_central_str
     if not payouts:
         return {"error": "no payout rows"}
@@ -7601,13 +7641,20 @@ def record_season_contest_payouts(code: str, chapter: str, payouts: list,
                 "chapter) VALUES (?, ?, ?, ?, ?)",
                 (code, code, today_central_str(), "", chapter or ""))
             tgf_event_id = cur.lastrowid
-        existing = conn.execute(
-            "SELECT COUNT(*) FROM tgf_payouts WHERE event_id = ?",
-            (tgf_event_id,)).fetchone()[0]
+        if append_category:
+            existing = conn.execute(
+                "SELECT COUNT(*) FROM tgf_payouts WHERE event_id = ? "
+                "AND category = ?",
+                (tgf_event_id, append_category)).fetchone()[0]
+        else:
+            existing = conn.execute(
+                "SELECT COUNT(*) FROM tgf_payouts WHERE event_id = ?",
+                (tgf_event_id,)).fetchone()[0]
         if existing:
-            return {"error": f"{existing} payout row(s) already recorded on "
-                             f"{code!r} — manage them on the TGF Payouts "
-                             "page instead"}
+            what = (f"{append_category!r} " if append_category else "")
+            return {"error": f"{existing} {what}payout row(s) already "
+                             f"recorded on {code!r} — manage them on the "
+                             "TGF Payouts page instead"}
         conn.commit()
     got = import_tgf_payouts(tgf_event_id, payouts, db_path=db_path)
     return {"code": code, "tgf_event_id": tgf_event_id, **got}
