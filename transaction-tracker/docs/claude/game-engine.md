@@ -851,6 +851,17 @@ fallback source); the per-hole parse counts only `●`, so per-hole NET/PTS
 stay on the same no-give-back basis as GG's points board, and the flat
 deduction reconciles both totals identically.
 
+**Double-count guard is CONTENT-based (v2.185.1):** the original guard
+(snapshot "fetched today" + final board ⇒ absorbed) dropped the whole
+championship at the final putt — the morning pre-round snapshot is also
+same-day. Now `_champ_absorbed_check(race_key, base, live)`: on the first
+final read it stores each champ scorer's snapshot `total_points` as a
+baseline (`app_settings gg_champ_absorb_baseline_<race>`, dated Central);
+absorbed ⇢ a MAJORITY of tracked totals moved off that baseline — which
+only GG close-out does on championship day. Failure/no-baseline ⇒ keep
+the overlay up. Prior-day baselines re-capture. Note the write happens
+inside a member GET read path (same precedent as rank-history rotation).
+
 **Live reset re-projection + Fellowship Cup (v2.185.0, Kerry mid-round):**
 `get_points_race_live` re-runs the reset ladder over the LIVE order via
 `_reproject_points_reset(rows, reset_info)` — same methodology/eligible

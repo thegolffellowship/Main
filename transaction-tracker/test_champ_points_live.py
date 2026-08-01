@@ -305,6 +305,54 @@ with db._connect(_bp2) as _c:
 check("thawed: the normal rotation still records", n_snaps == 2, str(n_snaps))
 os.unlink(_bp2)
 
+print("\n== the double-count guard is CONTENT-based (Kerry: 'SA is not "
+      "persisting now the round is over') ==")
+# The old guard stood down on any same-day snapshot the moment the board
+# read final — the morning's PRE-ROUND snapshot is also "fetched today",
+# so the championship vanished from the standings hours before close-out.
+import tempfile as _tf2
+fd3, _bp3 = _tf2.mkstemp(suffix=".db"); os.close(fd3); db.init_db(_bp3)
+_live_f = {"players": [
+    {"name": "A", "customer_id": 1, "points": 20.0, "thru": "F"},
+    {"name": "B", "customer_id": 2, "points": 15.0, "thru": "F"},
+    {"name": "C", "customer_id": 3, "points": 12.0, "thru": "F"}]}
+_base_pre = {"standings": [
+    {"customer_id": 1, "total_points": 98.0},
+    {"customer_id": 2, "total_points": 94.0},
+    {"customer_id": 3, "total_points": 88.0}]}
+check("first final read captures the baseline and KEEPS the overlay up",
+      db._champ_absorbed_check("t_race", _base_pre, _live_f,
+                               db_path=_bp3) is False)
+check("a pre-close-out refresh (totals unchanged) keeps the overlay up",
+      db._champ_absorbed_check("t_race", _base_pre, _live_f,
+                               db_path=_bp3) is False)
+_base_one = {"standings": [
+    {"customer_id": 1, "total_points": 118.0},     # only one row moved
+    {"customer_id": 2, "total_points": 94.0},
+    {"customer_id": 3, "total_points": 88.0}]}
+check("a single moved total is noise, not close-out (majority rule)",
+      db._champ_absorbed_check("t_race", _base_one, _live_f,
+                               db_path=_bp3) is False)
+_base_post = {"standings": [
+    {"customer_id": 1, "total_points": 118.0},
+    {"customer_id": 2, "total_points": 109.0},
+    {"customer_id": 3, "total_points": 100.0}]}
+check("close-out (totals moved across the board) stands the overlay down",
+      db._champ_absorbed_check("t_race", _base_post, _live_f,
+                               db_path=_bp3) is True)
+# a stale baseline from a PREVIOUS championship day must re-capture, not
+# instantly absorb next year's final board
+db.set_app_setting("gg_champ_absorb_baseline_t_race",
+                   '{"date": "2025-08-02", "baseline": {"1": 1.0}}',
+                   db_path=_bp3)
+check("a prior-day baseline re-captures fresh instead of absorbing",
+      db._champ_absorbed_check("t_race", _base_post, _live_f,
+                               db_path=_bp3) is False)
+check("no identified champ scorers -> never absorbed",
+      db._champ_absorbed_check("t_race", _base_pre, {"players": []},
+                               db_path=_bp3) is False)
+os.unlink(_bp3)
+
 print("\n== the board config is a dial, not code ==")
 import tempfile
 fd, _bp = tempfile.mkstemp(suffix=".db"); os.close(fd); db.init_db(_bp)

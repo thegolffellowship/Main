@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.185.0";
+window.TGF_VERSION = "2.185.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.185.1",
+    date: "2026-08-01",
+    changes: [
+      "THE CHAMPIONSHIP NO LONGER VANISHES WHEN THE ROUND ENDS (Kerry, from the course: 'SA is not persisting now the round is over. Make sure both chapters are showing'). The double-count guard stood the live overlay down when the board read final AND the season snapshot was 'fetched today' — but the morning's PRE-ROUND snapshot is also fetched today, so the moment the last group holed out the standings snapped back to season-only, dropping every championship point hours before anyone closed out Golf Genius. The guard is now CONTENT-based: when a board first reads final, each champ scorer's snapshot total is captured as a baseline (per race, dated, in app_settings); the overlay only stands down once a MAJORITY of those totals actually move — which is exactly what GG close-out does and nothing else does on championship day. Pre-close-out refreshes change nothing and keep the final board showing; both chapters run the same guard; a check failure keeps the overlay up rather than eating the points; and a prior day's baseline re-captures fresh so next championship can't inherit it.",
+    ],
+  },
   {
     version: "2.185.0",
     date: "2026-08-01",

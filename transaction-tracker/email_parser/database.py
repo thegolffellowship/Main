@@ -7404,6 +7404,60 @@ def fetch_champ_points(race_key: str, max_age: float = 45.0,
     return out
 
 
+def _champ_absorbed_check(race_key: str, base: dict, live: dict,
+                          db_path: str | Path = DB_PATH) -> bool:
+    """Has GG folded the (final) championship board into the season
+    snapshot yet? CONTENT-based (v2.185.1, Kerry: "SA is not persisting
+    now the round is over").
+
+    The old guard treated ANY same-day snapshot as proof of absorption,
+    so the overlay stood down the moment the last group finished — the
+    morning's pre-round snapshot was "fetched today" — and the whole
+    championship vanished from the standings hours before close-out. GG
+    only moves season totals at CLOSE-OUT, so the test is now what the
+    data says, not what the clock says: the first time the board reads
+    final, capture each champ scorer's snapshot total as a baseline
+    (app_settings, per race, dated today); ABSORBED = a majority of
+    those totals have since MOVED. A pre-close-out refresh changes
+    nothing (there is no other event today) and keeps the overlay live;
+    the close-out refresh moves everyone at once and stands it down.
+    Any failure returns False — showing live points twice-removed is
+    worse than showing them until the next read."""
+    from .timezone_utils import today_central_str
+    key = f"gg_champ_absorb_baseline_{race_key}"
+    champ_cids = {p["customer_id"] for p in live.get("players", [])
+                  if p.get("customer_id") and p.get("points") is not None}
+    if not champ_cids:
+        return False
+    totals = {r["customer_id"]: r.get("total_points")
+              for r in base.get("standings", []) or []
+              if r.get("customer_id") in champ_cids}
+    if not totals:
+        return False
+    try:
+        today = today_central_str()
+        raw = get_app_setting(key, db_path=db_path)
+        state = json.loads(raw) if raw else None
+        if not isinstance(state, dict) or state.get("date") != today:
+            # First final read today -> capture the pre-close-out baseline.
+            set_app_setting(key, json.dumps(
+                {"date": today,
+                 "baseline": {str(c): t for c, t in totals.items()}}),
+                db_path=db_path)
+            return False
+        baseline = state.get("baseline") or {}
+        tracked = [c for c in totals if str(c) in baseline]
+        moved = sum(
+            1 for c in tracked
+            if totals[c] is not None and baseline[str(c)] is not None
+            and abs(float(totals[c]) - float(baseline[str(c)])) > 1e-6)
+        return bool(tracked) and moved * 2 > len(tracked)
+    except Exception:
+        logger.warning("champ absorption check failed for %r — keeping the "
+                       "live overlay up", race_key, exc_info=True)
+        return False
+
+
 def _reproject_points_reset(rows: list, reset_info: dict | None) -> None:
     """Recompute the reset-ladder projection over rows in their CURRENT
     order — the live re-ranked order (Kerry, championship day 2026-08-01:
@@ -7451,33 +7505,29 @@ def get_points_race_live(race_key: str, force_refresh: bool = False,
                                      db_path=db_path)
     live = fetch_champ_points(race_key, db_path=db_path)
 
-    # DOUBLE-COUNT GUARD (Kerry 2026-07-31). Golf Genius does not award
-    # season points until the manager closes the event out — so during the
-    # round the stored snapshot has no championship in it and adding the
-    # live board is exactly right. Once it IS closed out and the snapshot
-    # refreshes, GG's own total already contains the championship, and
-    # adding the board again would show every player inflated by their
-    # championship score. When the snapshot's own timestamp is newer than
-    # the moment the board went final, GG has spoken: stand down and serve
-    # the season figure unchanged.
+    # DOUBLE-COUNT GUARD (Kerry 2026-07-31; rebuilt 2026-08-01 after the
+    # first version dropped SA the moment the round ended). Golf Genius
+    # does not award season points until the manager closes the event out
+    # — so while the round runs, and for the hours between the last putt
+    # and close-out, the stored snapshot has no championship in it and
+    # adding the live board is exactly right. Once close-out lands and
+    # the snapshot refreshes, GG's own totals already contain the
+    # championship, and adding the board again would inflate everyone by
+    # their championship score. Whether that has happened is decided by
+    # CONTENT (_champ_absorbed_check: did the snapshot totals move off
+    # the board-went-final baseline?), never by the snapshot's date — the
+    # morning's pre-round snapshot is also "fetched today".
     _final = bool(live.get("players")) and all(
         (str(p.get("thru") or "").strip().upper() in ("F", "18")
          or p.get("points") is None)
         for p in live.get("players", []))
-    _snap_at = base.get("fetched_at") or ""
-    if _final and _snap_at:
-        try:
-            from .timezone_utils import today_central_str
-            if str(_snap_at)[:10] >= today_central_str():
-                # Snapshot taken today, after a completed board -> GG has
-                # already folded the championship in.
-                out = dict(base)
-                out["champ"] = {k: v for k, v in live.items() if k != "players"}
-                out["champ_scoring"] = 0
-                out["champ_absorbed"] = True
-                return out
-        except Exception:
-            pass
+    if _final and _champ_absorbed_check(race_key, base, live,
+                                        db_path=db_path):
+        out = dict(base)
+        out["champ"] = {k: v for k, v in live.items() if k != "players"}
+        out["champ_scoring"] = 0
+        out["champ_absorbed"] = True
+        return out
 
     # EVERY board player goes in the maps — including the not-yet-started,
     # whose Thru cell carries their TEE TIME (Kerry 2026-08-01: the live
