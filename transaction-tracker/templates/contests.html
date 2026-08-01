@@ -1890,17 +1890,25 @@
             if (!res.ok || d.error) throw new Error(d.error || res.statusText);
             box.innerHTML = `<div class="lsc-grid">${(d.chapters || []).map(ch => {
                 const seats = ch.seats.map(seat => {
-                    const cap = seat.seat === "CAPTAIN";
+                    const cap = /CAPTAIN/.test(seat.seat || "");
+                    // SECURED (Kerry 2026-08-01, idea 5): a declared-final
+                    // City NET champion's captaincy is settled, not
+                    // projected — gold chip, gold edge. Co-captains (T1,
+                    // ratified rule) show as two secured CO-CAPTAIN seats.
+                    const secured = seat.status === "secured";
                     let who;
                     if (seat.player_name) {
                         const pool = seat.via_pool ? '<span class="lsc-pool-chip">Pool</span>' : "";
-                        who = `<span class="lsc-player">${escapeHtml(seat.player_name)}${pool}` +
+                        const lock = secured
+                            ? ' <span style="display:inline-block;padding:1px 6px;border-radius:9999px;font-size:0.6rem;font-weight:800;letter-spacing:0.05em;background:#FEF3C7;color:#92400E;border:1px solid #F59E0B;vertical-align:1px;">&#127942; SECURED</span>'
+                            : "";
+                        who = `<span class="lsc-player">${escapeHtml(seat.player_name)}${lock}${pool}` +
                               `<span class="lsc-earn">${escapeHtml(seat.earned_as || "")}</span></span>`;
                     } else {
                         who = `<span class="lsc-tbd">To be decided` +
                               `<span class="lsc-earn">${escapeHtml(seat.note || "")}</span></span>`;
                     }
-                    return `<div class="lsc-seat${cap ? " captain" : ""}">` +
+                    return `<div class="lsc-seat${cap ? " captain" : ""}"${secured ? ' style="border-left:3px solid #F59E0B;background:#FEF9EC;"' : ""}>` +
                            `<span class="lsc-seat-label">${escapeHtml(seat.seat)}</span>${who}</div>`;
                 }).join("");
                 const alts = (ch.alternates || []).map((a, i) =>
@@ -1909,7 +1917,7 @@
                     `<span class="ctx">${escapeHtml(a.context)} &middot; ${a.events} event${a.events === 1 ? "" : "s"}</span></div>`
                 ).join("") || '<div class="lsc-alt"><span class="ctx">No eligible alternates yet.</span></div>';
                 return `<div class="lsc-card">` +
-                       `<div class="lsc-card-head">${escapeHtml(ch.chapter)}<span>${ch.n_projected} of 12 projected</span></div>` +
+                       `<div class="lsc-card-head">${escapeHtml(ch.chapter)}<span>${ch.n_projected} of 12 projected${ch.n_secured ? ` &middot; ${ch.n_secured} secured` : ""}</span></div>` +
                        seats +
                        `<div class="lsc-alt-head">Next Men Up &mdash; Alternates Pool</div>` + alts +
                        `</div>`;
@@ -5685,6 +5693,7 @@
         // Plus-handicap deduction (Kerry, championship day 2026-08-01):
         // the TODAY figure already carries it — say so where there's room.
         if (tr.dataset.champPlus) bits.push(`Plus hcp <b>&minus;${escapeHtml(tr.dataset.champPlus)}</b> pts applied`);
+        if (tr.dataset.champion) bits.push(`&#127942; <b style="color:#92400E;">2026 City ${tr.dataset.champion === "co" ? "Co-" : ""}Champion &mdash; Lone Star Cup ${tr.dataset.champion === "co" ? "Co-" : ""}Captain</b>`);
         return bits.join(" &middot; ");
     }
 
@@ -5742,6 +5751,13 @@
         // "Can we show the winnings on the top collapsed level like we
         // were showing the projected amounts before?").
         const showThru = liveMode && !prRaceFinal;
+        // Champion highlights (Kerry 2026-08-01, ideas 1+2 ratified):
+        // once a race is FINAL its champion(s) wear the gold treatment —
+        // a T1 makes CO-CHAMPIONS / LSC CO-CAPTAINS (ratified rule).
+        const champs = (prRaceFinal && d.champions) ? d.champions : [];
+        const champIds = new Set(champs.map(c => c.customer_id).filter(Boolean));
+        const coChamp = champs.length > 1;
+        const champTitle = `2026 City ${coChamp ? "Co-" : ""}Champion — Lone Star Cup ${coChamp ? "Co-" : ""}Captain`;
         const nCols = (showChapter ? 7 : 6)
             - (showBuy ? 0 : 1)
             - (liveMode || showRounds ? 0 : 1)
@@ -5801,6 +5817,8 @@
             // second fetch (the season endpoint has neither field).
             const champAttrs = (r.champ_points != null
                 ? ` data-champ-pts="${escapeHtml(String(r.champ_points))}"` : "")
+                + (r.customer_id && champIds.has(r.customer_id)
+                ? ` data-champion="${coChamp ? "co" : "1"}"` : "")
                 + (r.champ_thru
                 ? ` data-champ-thru="${escapeHtml(String(r.champ_thru))}"` : "")
                 + (r.champ_plus
@@ -5819,7 +5837,11 @@
             return `<tr style="${bg}${expandable ? 'cursor:pointer;' : ''}"${r.member_card_id ? ` data-card="${r.member_card_id}"` : ''}${r.customer_id ? ` data-cid="${r.customer_id}"` : ''}${champAttrs} data-pname="${escapeHtml(r.player_name || "")}">
                 <td style="${rankStyle}white-space:nowrap;">${escapeHtml(r._flightRank ?? r.rank)}${liveMode ? "" : prRankMove(r.rank, r.prev_rank)}</td>
                 ${moveCell}
-                <td>${nameCell}${hcp}${statusPill}${chevron}${compact && !prRaceFinal ? "" : prPayBadge(r)}</td>
+                <td>${nameCell}${hcp}${statusPill}${r.customer_id && champIds.has(r.customer_id)
+                    ? (compact
+                        ? ` <span title="${escapeHtml(champTitle)}" style="font-size:0.9em;vertical-align:1px;">&#127942;</span>`
+                        : ` <span title="${escapeHtml(champTitle)}" style="display:inline-block;padding:1px 6px;border-radius:9999px;font-size:0.62rem;font-weight:700;letter-spacing:0.04em;background:#FEF3C7;color:#92400E;border:1px solid #F59E0B;vertical-align:1px;">&#127942; ${coChamp ? "CO-CHAMPION" : "CHAMPION"} &middot; LSC ${coChamp ? "CO-" : ""}CAPTAIN</span>`)
+                    : ""}${chevron}${compact && !prRaceFinal ? "" : prPayBadge(r)}</td>
                 ${showChapter ? `<td style="${chapStyle}" title="${escapeHtml(r.player_chapter || "")}">${escapeHtml(compact ? prAbbrevChapter(r.player_chapter) : (r.player_chapter || ""))}</td>` : ""}
                 <td style="${ptsStyle}">${r.total_points ?? ""}</td>
                 ${midCells}
@@ -5863,7 +5885,13 @@
             </div>`;
         }
 
-        $("pr-table-container").innerHTML = `
+        // Champion strip (idea 2): the permanent honor line — it stays
+        // even after the fall reset folds the FINAL columns away, as long
+        // as the race is declared final and has a champion.
+        const champStrip = champs.length
+            ? `<div style="margin:0 0 0.6rem;padding:0.5rem 0.75rem;border-radius:8px;background:#FEF9EC;border:1px solid #F59E0B;color:#92400E;font-weight:700;font-size:${compact ? "0.78rem" : "0.88rem"};">&#127942; 2026 ${escapeHtml(d.chapter || "")} City ${coChamp ? "Co-Champions" : "Champion"}: ${champs.map(c => escapeHtml(c.player_name || "")).join(" &amp; ")} <span style="font-weight:600;color:#B45309;">&mdash; Lone Star Cup ${coChamp ? "Co-Captains" : "Captain"}</span></div>`
+            : "";
+        $("pr-table-container").innerHTML = champStrip + `
             <table class="enrollment-table${compact ? " pr-compact" : ""}">
                 <thead><tr>
                     <th style="${rankStyle}">${compact ? "#" : "Rank"}</th>

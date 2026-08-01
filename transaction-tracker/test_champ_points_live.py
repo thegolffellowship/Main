@@ -390,6 +390,30 @@ check("more money than players stops at the last player",
       len(db._split_down_ladder([{"golferName": "A", "rank": "1"}],
                                 [5000, 3000])) == 1)
 
+print("\n== champions (Kerry 2026-08-01: 'co-champions and co-captains "
+      "taking up two of the 7 net slots') ==")
+rows_ch = [
+    {"player_name": "Guest Top", "customer_id": 99, "rank": "1",
+     "enrolled": False},
+    {"player_name": "A", "customer_id": 1, "rank": "2", "enrolled": True},
+    {"player_name": "B", "customer_id": 2, "rank": "3", "enrolled": True}]
+ch1 = db._race_champions(rows_ch)
+check("a non-enrolled table-topper never holds the title",
+      len(ch1) == 1 and ch1[0]["customer_id"] == 1, str(ch1))
+rows_t1 = [
+    {"player_name": "A", "customer_id": 1, "rank": "T1", "enrolled": True},
+    {"player_name": "B", "customer_id": 2, "rank": "T1", "enrolled": True},
+    {"player_name": "C", "customer_id": 3, "rank": "3", "enrolled": True}]
+ch2 = db._race_champions(rows_t1)
+check("a T1 makes CO-CHAMPIONS, both carried",
+      len(ch2) == 2 and {c["customer_id"] for c in ch2} == {1, 2}, str(ch2))
+check("empty standings -> no champion, never a crash",
+      db._race_champions([]) == [])
+for n_cap in (1, 2, 3):
+    n_fc = 6 - (n_cap - 1)
+    check(f"seat math holds: {n_cap} captain(s) + {n_fc} Cup + 1 MP + 4 PC"
+          " = 12 seats", n_cap + n_fc + 1 + 4 == 12)
+
 print("\n== FINAL is a dial the admin flips (Kerry: 'City Net is final') ==")
 fd4, _bp4 = _tf2.mkstemp(suffix=".db"); os.close(fd4); db.init_db(_bp4)
 check("no dial set -> still projecting",

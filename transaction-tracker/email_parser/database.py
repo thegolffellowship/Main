@@ -7660,6 +7660,23 @@ def record_season_contest_payouts(code: str, chapter: str, payouts: list,
     return {"code": code, "tgf_event_id": tgf_event_id, **got}
 
 
+def _race_champions(rows: list) -> list:
+    """The FINAL champion(s) of a points race: the best-ranked ENROLLED
+    row, plus any enrolled rows sharing that rank label. Kerry-ratified
+    2026-08-01: a T1 finish makes CO-CHAMPIONS, who become Lone Star Cup
+    CO-CAPTAINS occupying two of the chapter's seven NET-path seats (the
+    captain seat plus one Fellowship Cup seat). Non-enrolled rows can
+    top the table but never hold the title — same eligibility as the
+    money."""
+    enrolled = [r for r in rows or [] if r.get("enrolled")]
+    if not enrolled:
+        return []
+    top = str(enrolled[0].get("rank"))
+    return [{"customer_id": r.get("customer_id"),
+             "player_name": r.get("player_name")}
+            for r in enrolled if str(r.get("rank")) == top]
+
+
 def _points_race_final(race_key: str, db_path: str | Path = DB_PATH) -> bool:
     """Is this points race DECLARED final? (Kerry, championship evening
     2026-08-01: "Can you now show winnings for the finishers. City Net is
@@ -7891,6 +7908,9 @@ def get_points_race_live(race_key: str, force_refresh: bool = False,
 
     return {**{k: v for k, v in base.items() if k != "standings"},
             "standings": rows,
+            # champions follow the LIVE final order, not the season order
+            "champions": (_race_champions(rows)
+                          if base.get("race_final") else None),
             "champ": {k: v for k, v in live.items() if k != "players"},
             "champ_scoring": live.get("scoring", 0),
             "champ_field": live.get("field", 0)}
@@ -8379,12 +8399,16 @@ def get_points_race_standings(race_key: str,
         _sp.players_cup_payouts(_n_pot) if race.get("flights")
         else _sp.city_net_payouts(_n_pot))
 
+    _final_flag = _points_race_final(race_key, db_path=db_path)
     return {
         "race_key": race_key,
         "label": race["label"],
         "contest_type": race["contest_type"],
         "chapter": race["chapter"],
-        "race_final": _points_race_final(race_key, db_path=db_path),
+        "race_final": _final_flag,
+        # Champion(s) once declared final — the live merge recomputes
+        # this over the live order; post-absorption this IS final order
+        "champions": _race_champions(out_rows) if _final_flag else None,
         "standings": out_rows,
         "cross_chapter": race.get("enroll_chapter") is None,
         "n_players": len(out_rows),
@@ -8754,7 +8778,13 @@ def get_lone_star_cup_projection(db_path: str | Path = DB_PATH) -> dict:
     final Fellowship Cup standings (top 6 FROM THAT CHAPTER on the TGF-wide
     list), 1 City Match Play Champion, 4 from the final Players Cup
     standings (top 4 from the chapter, overall list — flights don't gate
-    LSC seats). Rules applied:
+    LSC seats). CO-CHAMPION amendment (Kerry-ratified 2026-08-01): a T1
+    City NET finish makes co-champions who share the captaincy as
+    CO-CAPTAINS, occupying two of the chapter's seven NET-path seats —
+    the Fellowship Cup allocation drops to 5 so the roster stays 12.
+    Once a NET race is DECLARED final (gg_points_race_final dial) the
+    champion's seat reads status='secured' instead of 'projected'.
+    Rules applied:
 
     - Only bought-in (enrolled) players hold seats — same eligibility
       spirit as projected payouts.
@@ -8790,9 +8820,19 @@ def get_lone_star_cup_projection(db_path: str | Path = DB_PATH) -> dict:
     chapters_out = []
     for chapter, race_key in (("Austin", "austin_net"),
                               ("San Antonio", "san_antonio_net")):
-        net = get_points_race_standings(race_key, db_path=db_path)
+        # LIVE view: identical passthrough on quiet days, and on/after
+        # championship day the captain stream reads the FINAL order
+        # instead of the stale pre-championship snapshot
+        net = get_points_race_live(race_key, db_path=db_path)
         if net.get("gg_error"):
             errors.append(net["gg_error"])
+        # Declared-final champions SECURE the captaincy (Kerry-ratified
+        # 2026-08-01): a T1 makes CO-CHAMPIONS = CO-CAPTAINS, occupying
+        # two of the chapter's seven NET-path seats — the captain seat
+        # plus one Fellowship Cup seat (Cup seats drop to 5).
+        champs = (net.get("champions") or []) if net.get("race_final") else []
+        n_cap = max(1, len(champs))
+        n_fc = 6 - (n_cap - 1)
 
         def stream(rows, chapter_field=None):
             out = []
@@ -8846,16 +8886,21 @@ def get_lone_star_cup_projection(db_path: str | Path = DB_PATH) -> dict:
         # "higher-placed slot" rule without a full assignment solver:
         # first assign every contest's natural holders, then resolve.
         seat_defs = (
-            [("captain", "CAPTAIN", "City NET Champion")]
+            [("captain",
+              "CAPTAIN" if n_cap == 1 else "CO-CAPTAIN",
+              ("City NET Champion" if n_cap == 1 else
+               "City NET Co-Champion (T1) — shares the captaincy"))] * n_cap
             + [("fellowship", f"THE FELLOWSHIP CUP · {i + 1}",
-                "Final standings, top 6 from the chapter") for i in range(6)]
+                f"Final standings, top {n_fc} from the chapter")
+               for i in range(n_fc)]
             + [("matchplay", "CITY MATCH PLAY", "Knockout champion")]
             + [("players", f"THE PLAYERS CUP · {i + 1}",
                 "Final standings, top 4 from the chapter") for i in range(4)]
         )
 
-        # Pass 1 — natural holders per contest (captain: 1, cup: 6, pc: 4)
-        take = {"captain": 1, "fellowship": 6, "players": 4}
+        # Pass 1 — natural holders per contest (captain: n_cap, cup: n_fc,
+        # pc: 4 — always 12 seats total: n_cap + (6-(n_cap-1)) + 1 + 4)
+        take = {"captain": n_cap, "fellowship": n_fc, "players": 4}
         quals: dict = {}          # cid -> list of (place, seat_order_idx, contest, name)
         order_idx = 0
         for contest, n_seats in take.items():
@@ -8940,6 +8985,18 @@ def get_lone_star_cup_projection(db_path: str | Path = DB_PATH) -> dict:
                         via_pool=True, status="projected")
             seats.append(row)
 
+        # Declared-final champions hold their seat as SECURED, not
+        # projected — the one seat the standings can no longer move
+        if champs:
+            champ_ids = {c.get("customer_id") for c in champs
+                         if c.get("customer_id")}
+            for s in seats:
+                if (s["seat"] in ("CAPTAIN", "CO-CAPTAIN")
+                        and s.get("customer_id") in champ_ids):
+                    s["status"] = "secured"
+                    s["earned_as"] = (f"{season} City NET "
+                                      f"{'Co-' if n_cap > 1 else ''}Champion")
+
         alternates = [
             {"player_name": c["name"], "customer_id": c["cid"],
              "percentile": round(c["pct"] * 100, 1),
@@ -8952,7 +9009,9 @@ def get_lone_star_cup_projection(db_path: str | Path = DB_PATH) -> dict:
         chapters_out.append({
             "chapter": chapter,
             "seats": seats,
-            "n_projected": sum(1 for r in seats if r["status"] == "projected"),
+            "n_projected": sum(1 for r in seats
+                               if r["status"] in ("projected", "secured")),
+            "n_secured": sum(1 for r in seats if r["status"] == "secured"),
             "alternates": alternates,
         })
 

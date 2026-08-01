@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.187.3";
+window.TGF_VERSION = "2.188.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.188.0",
+    date: "2026-08-01",
+    changes: [
+      "CITY CHAMPIONS WEAR GOLD (Kerry, championship night). Once a race is declared final, its champion gets three linked honors: a gold pill on their leaderboard row (🏆 CHAMPION · LSC CAPTAIN on desktop, a 🏆 on phones so names keep their width), a champion strip above the standings (🏆 2026 San Antonio City Champion: Rob Callaway — Lone Star Cup Captain) that persists even after the fall reset folds the FINAL columns away, and the same line in their expanded drill-down. Champions are computed, never typed: the best-ranked BOUGHT-IN finisher (a non-enrolled table-topper can't hold the title — same eligibility as the money).",
+      "The Lone Star Cup tab now shows the captaincy as SECURED: the champion's CAPTAIN seat carries a gold 🏆 SECURED chip and gold edge instead of 'projected', the card header counts secured seats, and the captain stream reads the LIVE final standings instead of the pre-championship snapshot.",
+      "CO-CHAMPION RULE (Kerry-ratified 2026-08-01): a T1 City NET finish makes co-champions who share the captaincy as CO-CAPTAINS, occupying two of the chapter's seven NET-path Lone Star Cup seats — the Fellowship Cup allocation drops to 5 so the roster stays 12. The leaderboard, strip, and LSC tab all render the co- forms automatically.",
+    ],
+  },
   {
     version: "2.187.3",
     date: "2026-08-01",

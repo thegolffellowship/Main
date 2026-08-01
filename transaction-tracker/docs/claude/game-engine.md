@@ -866,6 +866,20 @@ and non-final races keep empty reads (cleared test scores still clear).
 Post-close-out, GG's champ board swaps its Thru column for a Details
 column (blank thru) — already handled by the v2.185.2 final test.
 
+**Champions + LSC captaincy (v2.188.0, Kerry championship night):**
+`_race_champions(rows)` — best-ranked ENROLLED row + rank-label ties —
+rides the race payloads as `champions` whenever `race_final` (live path
+recomputes over the live order; absorbed path uses the season order,
+which IS final by then). UI: gold row pill (🏆 icon-only compact),
+champion strip above the table (persists past the reset), drill-down
+line, and the LSC tab's captain seat shows status='secured'.
+**RATIFIED co-champion rule (Kerry verbatim 2026-08-01: "co-champions
+and co-captains taking up two of the 7 net slots for the Lone Star
+Cup")**: T1 ⇒ co-champions = CO-CAPTAIN seats ×2, Fellowship Cup seats
+6→5, roster stays 12 (`get_lone_star_cup_projection` seat math is
+generic in n_champions). The LSC captain stream now reads
+`get_points_race_live` (passthrough on quiet days).
+
 **FINAL winnings (v2.186.0, Kerry championship evening):** dial
 `app_settings gg_points_race_final` (JSON `{race_key: "date"}`) →
 `_points_race_final` → payload `race_final`. UI (`prRaceFinal`, set by
