@@ -8,36 +8,52 @@ unverified. Read the **Notes to self** section before touching anything.
 
 ## THE SESSION PROMPT (paste this to start the new session)
 
-> Continuing TGF Tracker work from the night of 2026-07-31. Read
-> `docs/claude/handoff-2026-08-01-live-standings.md` first — it has the full
-> state, the verified facts, and the traps.
+> Continuing TGF Tracker work from the overnight session of 2026-07-31
+> (v2.166.0 → v2.175.0). Read
+> `docs/claude/handoff-2026-08-01-live-standings.md` IN FULL before doing
+> anything — especially the **OUTSTANDING** section (18 items) and **NOTES
+> TO SELF**. Nothing on that list may be silently dropped: if you don't
+> work an item this session, say so and carry it forward.
 >
-> Context: yesterday (Sat 2026-08-01) both City Championships were played —
-> TGF SAN ANTONIO CHAMPIONSHIP at The Quarry and TGF AUSTIN CHAMPIONSHIP at
-> Falconhead. I shipped a live championship-points overlay on the member
-> LEADERBOARD (v2.174.0/v2.175.0) so players could watch their season total
-> update during the round. **First question: did it actually work?** Check
-> with me before assuming — the GG fetch from Railway had never been
-> exercised end to end.
+> Context: Saturday 2026-08-01 both City Championships were played — TGF
+> SAN ANTONIO CHAMPIONSHIP at The Quarry, TGF AUSTIN CHAMPIONSHIP at
+> Falconhead. The live championship-points overlay on the member
+> LEADERBOARD shipped the night before and had NEVER been exercised end to
+> end from Railway.
 >
-> Then the remaining work, in priority order:
+> Work order:
 >
-> 1. **Live championship points in the player drill-down.** The
+> 1. **Did the live overlay work?** Ask Kerry / check Railway logs for
+>    `fetch_champ_points` before assuming anything. The orange LIVE banner
+>    appearing = it worked.
+> 2. **Ledger duplicates (money, do early):** collapse the two KNOWN
+>    double-counted Venmo income pairs (Jeff Young $50: `ext-pay-2195` +
+>    `exp-promoted-1540`; Julius Jenkins $219: `ext-pay-2140` +
+>    `exp-promoted-1480`) via /admin/duplicate-detective, and check whether
+>    Larry Anthis's $30 (`addon-2491`, Venmo handle `Larry-Anthis`,
+>    cid 41) has now ALSO duplicated — nothing was watching it.
+> 3. **Live championship points into the player drill-down.** The
 >    CITY CHAMPIONSHIP row already accepts `opts.champPoints` /
->    `opts.champThru` (static/js/points-render.js) — nothing feeds them yet.
->    The drill-down is served by `/api/season-contests/points-race/detail`,
->    which I did NOT touch. Wire the live figure through.
-> 2. **Hole-by-hole expansion on that row.** Kerry: "those City Championship
->    lines in the player expanded detail should show the live hole by hole
->    results if a player wants to expand them. All that info should be
->    retrievable in the GG live results page." Not started. See
->    **Where the hole-by-hole data lives** below.
-> 3. Anything Kerry raises from the day itself.
+>    `opts.champThru` (static/js/points-render.js); the drill-down endpoint
+>    `/api/season-contests/points-race/detail` was NOT touched. Wire it.
+> 4. **Hole-by-hole expansion on that row** (Kerry's ask, not started) —
+>    see "Where the hole-by-hole data lives" in the handoff.
+> 5. **Refresh `docs/claude/state-of-the-tracker.md`** (overdue after ten
+>    releases). The session digest IS already posted — mailbox post #2,
+>    2026-08-01 — do not re-post it.
+> 6. **Investigate the mailbox reset**: the live `platform_dialogue` table
+>    held ONLY the boot-seeded welcome post (id 1, dated 2026-07-29) before
+>    the digest. Docs reference posts #42–#242 that no longer exist —
+>    either the table was wiped/recreated on Railway around 2026-07-29 or
+>    the volume was remounted. Tell Kerry what you find.
+> 7. Then the rest of the OUTSTANDING list in its written order, and
+>    anything Kerry raises from championship day.
 >
 > Standing rules: bump `static/js/version.js` + changelog every commit,
-> update `docs/claude/*.md`, and follow the guiding principles in CLAUDE.md —
-> especially #6 (`customer_id` is the identity key; this session produced
-> four separate bugs from name-keyed lookups).
+> update `docs/claude/*.md`, follow CLAUDE.md guiding principle #6
+> (`customer_id` everywhere — four separate name-key bugs last session),
+> and END the session by posting a mailbox digest (rule 4) — last session
+> nearly forgot.
 
 ---
 
@@ -286,13 +302,16 @@ integrity; the rest are asks, offers Kerry never answered, or hygiene.
 
 ### Process debt
 
-14. **No platform-dialogue mailbox digest was posted for this session.**
-    CLAUDE.md workflow rule 4 requires one at the end of a substantive
-    session (author `tracker-claude`: what shipped, findings affecting
-    Platform planning, open questions). Ten releases went out — v2.166.0
-    through v2.175.0 — with nothing posted. **Post this first in the new
-    session**, and refresh `docs/claude/state-of-the-tracker.md`, which is
-    now well behind.
+14. ~~Mailbox digest~~ **DONE** — posted 2026-08-01 05:09 UTC as mailbox
+    post #2 (author tracker-claude, topic session-digest). Do NOT re-post.
+    Still owed: the `docs/claude/state-of-the-tracker.md` refresh.
+    **New finding while posting:** the live `platform_dialogue` table
+    contained ONLY the boot-seeded welcome post (id 1, created
+    2026-07-29 23:17 UTC). The docs cite mailbox posts #42–#242 from
+    earlier sessions; none exist in the current table. Either the table
+    was reset/recreated on Railway around 2026-07-29 or the DB volume
+    changed. Investigate and tell Kerry — if the volume was remounted,
+    other tables may have quietly lost history too.
 
 ### Longer-standing, carried in from before this session
 
