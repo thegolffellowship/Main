@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.177.0";
+window.TGF_VERSION = "2.178.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.178.0",
+    date: "2026-08-01",
+    changes: [
+      "ON PHONES THE LEADERBOARD NOW SITS ONE THUMB AWAY (Kerry, championship morning). Everything between the points-race name and the table — the bought-in line, the POT and payout chips, the structure note, and the HOW IT WORKS pill — folds behind one slim chip that still carries the headline numbers ('Pot $920 · 23/85 in · details ▸'), so collapsing it loses nothing a member actually checks at a glance. Tap to expand; the HOW IT WORKS button rides inside the folded block and keeps working. Desktop is unchanged, and the orange LIVE banner never folds.",
+      "The phone table also drops the Rounds and Buy-in columns (Kerry's call). Who's bought in was already told twice — the green row says it — and the reclaimed width goes to the columns that matter during a championship: PLAYER, PTS, TODAY, THRU. Desktop keeps all columns.",
+    ],
+  },
   {
     version: "2.177.0",
     date: "2026-08-01",

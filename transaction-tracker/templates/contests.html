@@ -38,6 +38,28 @@
            ratified TGF_Season_Contest_Payouts_v1_0 ladders) */
         #pr-payouts { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin: 0.4rem 0 0.55rem; }
         #pr-payouts:empty { display: none; }
+        /* Mobile preamble fold (Kerry 2026-08-01): the summary/pot/structure
+           block collapses behind one chip so the leaderboard sits one thumb
+           away. Desktop never sees the chip. The phase chip hides on phones
+           outright (it repeats what the COUNTED banner says), and the HOW IT
+           WORKS pill rides inside the folded block. */
+        #pr-preamble-toggle { display: none; }
+        @media (max-width: 640px) {
+            #pr-preamble-toggle {
+                display: inline-flex; align-items: center; gap: 6px;
+                height: 26px; padding: 0 12px; margin: 0.4rem 0;
+                background: #F3F2EF; color: #4B5563; border: 1px solid var(--border);
+                border-radius: 9999px; font: 700 10.5px/1 'Bitter', serif;
+                letter-spacing: 1px; text-transform: uppercase; cursor: pointer;
+            }
+            #pr-preamble-toggle .pr-pre-chev { color: var(--primary); font-size: 0.8rem; }
+            #pr-preamble { display: none; }
+            #pr-preamble.open { display: block; }
+            #pr-phase-chip { display: none !important; }
+            /* the header HOW IT WORKS pill folds with the details on phones;
+               a clone inside the preamble keeps it reachable */
+            .standings-section > div:first-child #pr-hiw-btn { display: none; }
+        }
         .pr-pot {
             display: inline-flex; align-items: center; height: 26px; padding: 0 12px;
             background: #1B1B1B; color: #fff; border-radius: 9999px;
@@ -1608,9 +1630,17 @@
                         <span id="pr-phase-chip" style="display:inline-flex;align-items:center;gap:8px;height:30px;padding:0 14px;background:#FDF0E6;color:#BF5700;border-radius:9999px;font:700 11px/1 'Bitter',serif;letter-spacing:1px;text-transform:uppercase;">&#9679;&nbsp;Regular Season &middot; best 10 + City Championship</span>
                         <button id="pr-hiw-btn" class="pr-hiw-link" type="button">How It Works</button>
                     </div>
-                    <div id="pr-summary" style="margin:0.5rem 0;color:var(--text-muted);font-size:0.85rem;"></div>
-                    <div id="pr-payouts"></div>
-                    <div id="pr-structure-note"></div>
+                    <!-- Mobile: everything between the race name and the
+                         table folds behind one slim chip (Kerry 2026-08-01,
+                         championship morning — the board should be one thumb
+                         away). Desktop is unchanged; the LIVE banner never
+                         folds. -->
+                    <button id="pr-preamble-toggle" type="button" aria-expanded="false">Pot &amp; details <span class="pr-pre-chev">&#9656;</span></button>
+                    <div id="pr-preamble">
+                        <div id="pr-summary" style="margin:0.5rem 0;color:var(--text-muted);font-size:0.85rem;"></div>
+                        <div id="pr-payouts"></div>
+                        <div id="pr-structure-note"></div>
+                    </div>
                     <div id="pr-table-container" style="overflow-x:auto;"></div>
                 </div>
                 <div class="standings-section" id="pr-roster-section" style="padding:1rem 2rem;">
@@ -5586,6 +5616,7 @@
         prAssignProjectedPayouts(d);
         prRenderPayoutStrip(d.projected_payouts);
         prRenderStructureNote(d.race_key === "players_cup_gross" ? "THE PLAYERS CUP" : null);
+        prUpdatePreambleChip(d);
 
         const hasFlights = !!(d.flights && d.flights.length);
         const showChapter = !!d.cross_chapter;
@@ -5595,11 +5626,18 @@
         // Rounds step aside for the day — same column count, no layout
         // shift, back on the next quiet load.
         const liveMode = (d.champ_scoring || 0) > 0;
-        const nCols = showChapter ? 7 : 6;
+        const compact = prIsCompact();
+        // Phones drop the Buy-in column (the green row already says who is
+        // in) and, outside live mode, the Rounds column too (Kerry
+        // 2026-08-01) — the table earns back two columns of thumb room.
+        const showBuy = !compact;
+        const showRounds = !compact;   // season view only; live swaps it for THRU
+        const nCols = (showChapter ? 7 : 6)
+            - (showBuy ? 0 : 1)
+            - (liveMode || showRounds ? 0 : 1);
         // Fixed widths on every column but Player so the three race tabs
         // lay out identically regardless of content; phones get narrow
         // columns + short labels so the whole table fits on screen at once
-        const compact = prIsCompact();
         const chapStyle = `width:${compact ? "32px" : "130px"};border-left:2px solid #cbd5e1;border-right:2px solid #cbd5e1;`;
         const rankStyle = `width:${compact ? "28px" : "56px"};`;
         const ptsStyle = `width:${compact ? "34px" : "90px"};text-align:center;font-weight:700;border-left:2px solid #cbd5e1;border-right:2px solid #cbd5e1;`;
@@ -5647,14 +5685,14 @@
                 ? `<td style="${resetStyle}${r.champ_points != null ? "color:#BF5700;font-weight:800;" : "color:var(--text-muted);"}">${r.champ_points != null ? "+" + escapeHtml(String(r.champ_points % 1 ? r.champ_points.toFixed(1) : r.champ_points)) : (r.champ_thru ? "" : "—")}</td>
                    <td style="${rndStyle}white-space:nowrap;${/\d:\d\d/.test(r.champ_thru || "") ? "color:var(--text-muted);font-size:0.85em;" : "font-weight:600;"}">${escapeHtml(r.champ_thru || "—")}</td>`
                 : `<td style="${resetStyle}">${prFmtReset(r.points_reset)}</td>
-                   <td style="${rndStyle}" class="pr-rnd">${r.tournaments ?? ""}</td>`;
+                   ${showRounds ? `<td style="${rndStyle}" class="pr-rnd">${r.tournaments ?? ""}</td>` : ""}`;
             return `<tr style="${bg}${expandable ? 'cursor:pointer;' : ''}"${r.member_card_id ? ` data-card="${r.member_card_id}"` : ''}${r.customer_id ? ` data-cid="${r.customer_id}"` : ''}${champAttrs}>
                 <td style="${rankStyle}white-space:nowrap;">${escapeHtml(r._flightRank ?? r.rank)}${moveHtml}</td>
                 <td>${nameCell}${hcp}${statusPill}${chevron}${prPayBadge(r)}</td>
                 ${showChapter ? `<td style="${chapStyle}" title="${escapeHtml(r.player_chapter || "")}">${escapeHtml(compact ? prAbbrevChapter(r.player_chapter) : (r.player_chapter || ""))}</td>` : ""}
                 <td style="${ptsStyle}">${r.total_points ?? ""}</td>
                 ${midCells}
-                <td style="${buyStyle}">${badge}</td>
+                ${showBuy ? `<td style="${buyStyle}">${badge}</td>` : ""}
             </tr>`;
         };
 
@@ -5704,8 +5742,8 @@
                         ? `<th style="${resetStyle}" title="Championship points earned today">TODAY</th>
                            <th style="${rndStyle}" title="Holes completed today — or the tee time if they haven't started">THRU</th>`
                         : `<th style="${resetStyle}"><span class="pr-proj" style="display:block;font-size:${compact ? "0.52rem" : "0.65rem"};font-weight:600;letter-spacing:0.03em;">(${compact ? "proj" : "Projected"})</span>${compact ? "RESET" : "POINTS RESET"}</th>
-                           <th style="${rndStyle}" class="pr-rnd" title="Rounds">${compact ? "R" : "Rounds"}</th>`}
-                    <th style="${buyStyle}" title="Buy-in">${compact ? "IN" : "Buy-in"}</th>
+                           ${showRounds ? `<th style="${rndStyle}" class="pr-rnd" title="Rounds">Rounds</th>` : ""}`}
+                    ${showBuy ? `<th style="${buyStyle}" title="Buy-in">Buy-in</th>` : ""}
                 </tr></thead>
                 <tbody>${bodyRows}</tbody>
             </table>${extra}`;
@@ -5721,6 +5759,38 @@
     function prFmtReset(v) {
         if (v == null) return "—";
         return v % 1 ? v.toFixed(1) : String(v);
+    }
+
+    // ── Mobile preamble fold (Kerry 2026-08-01) ──
+    // On phones the summary / pot chips / structure note collapse behind
+    // one slim chip so the leaderboard sits one thumb away; the HOW IT
+    // WORKS pill MOVES into the folded block (same node — its modal
+    // listener rides along). Desktop never sees the chip.
+    (function () {
+        const tog = $("pr-preamble-toggle"), pre = $("pr-preamble");
+        if (!tog || !pre) return;
+        if (prIsCompact()) {
+            const hiw = $("pr-hiw-btn");
+            if (hiw) pre.insertBefore(hiw, pre.firstChild);
+        }
+        tog.addEventListener("click", () => {
+            const open = pre.classList.toggle("open");
+            tog.setAttribute("aria-expanded", String(open));
+            const ch = tog.querySelector(".pr-pre-chev");
+            if (ch) ch.innerHTML = open ? "&#9662;" : "&#9656;";
+        });
+    })();
+
+    // The fold chip carries the headline numbers so collapsing loses no
+    // information a member actually checks: pot and bought-in count.
+    function prUpdatePreambleChip(d) {
+        const tog = $("pr-preamble-toggle"), pre = $("pr-preamble");
+        if (!tog) return;
+        const open = pre && pre.classList.contains("open");
+        const potC = d && d.projected_payouts && d.projected_payouts.pot_cents;
+        tog.innerHTML = (potC ? `Pot ${prFmtMoney(potC)} &middot; ` : "")
+            + (d && d.n_players ? `${d.n_enrolled}/${d.n_players} in &middot; ` : "")
+            + `details <span class="pr-pre-chev">${open ? "&#9662;" : "&#9656;"}</span>`;
     }
 
     // DAY movement while a championship is live: start-of-day season rank
