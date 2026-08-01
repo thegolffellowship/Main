@@ -208,6 +208,103 @@ winning where present.
   Totals are exact; the ladder is derived. Adding real rows to the matrix
   generator is the authoritative fix.
 
+---
+
+## OUTSTANDING — raised in this session, never actioned
+
+Ordered by how much they cost if ignored. Items 1–4 are money/data
+integrity; the rest are asks, offers Kerry never answered, or hygiene.
+
+### Money / data integrity
+
+1. **Two known double-counted Venmo income rows are sitting in the ledger
+   right now.** Precedent pairs found while checking Larry Anthis's buy-in:
+   Jeff Young `ext-pay-2195` (6/30, $50) + `exp-promoted-1540` (6/29, $50);
+   Julius Jenkins `ext-pay-2140` + `exp-promoted-1480`, both 6/24, $219.
+   Same money recorded twice — the manual "Add Payment" entry AND the parsed
+   Venmo receipt. Collapse them in `/admin/duplicate-detective`.
+2. **Larry Anthis's $30 NET Games buy-in is the same shape and unwatched.**
+   Kerry's manual entry is item 2491 (`addon-2491`, 2026-07-31). When his
+   Venmo receipt lands it will promote as an `exp-promoted-N` income row for
+   $30 and duplicate. Kerry asked me to watch for it; **I could not arm the
+   Routine** — `create_trigger` and `send_later` both returned "requires
+   approval" and this session is non-interactive. Nothing is watching.
+   Larry's Venmo handle is `Larry-Anthis`, customer_id 41.
+3. **`get_hio_pot` reports two different pots.** `events[].running` =
+   carry-in + contributions (does NOT subtract payouts); `pot` = the same
+   minus `paid_out`. The GAMES banner shows `running`, the FINANCIAL panel
+   shows `pot`. They diverge by exactly the total HIO paid the moment an ace
+   is recorded, and the GAMES banner reads HIGH. Worse, the banner falls back
+   to `d.pot` when the event is not in the contribution list, so two events
+   can show different bases on the same screen. Kerry was told; he has not
+   said which figure he wants. **Do not "fix" this without his call.**
+4. **The 18h games matrix has no multi-event rows.** On a two-championship
+   day the Individual Net *total* is computed exactly, but its per-place
+   ladder is scaled proportionally at render time and marked
+   "(multi-event day)". Authoritative fix is adding real rows to the matrix
+   generator.
+
+### Asked of Kerry, still open
+
+5. **Run `GET /api/admin/gg-points-identity-audit`** (built in v2.165.0) and
+   report the "still unmatched" list. An unresolved standings row shows on
+   the Contests board — it has a name and a total — but is invisible to
+   anything that joins on identity: pairings order, the points column,
+   flighting, payouts. Never run.
+6. **Which HIO figure belongs on the GAMES tab** (see #3).
+7. **`hio_27h_event_patterns` and `hio_player_count_overrides`** are read by
+   `get_hio_pot` but have no write path — the same gap the carry-in had
+   until v2.172.0. If either is wrong the running pot is wrong and there is
+   no way to correct it from the app.
+
+### Offers made, never answered — leave as-is unless he asks
+
+8. **Single-18h-day MVP row label changed** from `MVP` to
+   `City MVP (incl. TGF $, capped)` for consistency with the 9-hole
+   convention. Money identical (verified across all 63 matrix rows). Offered
+   to revert; no answer.
+9. **3rd-place GG auto-fill is deliberately NOT wired.** Normal bracket
+   matches pre-fill a detected winner from GG; the consolation does not,
+   because GG must have the two semifinal losers correctly paired as a match
+   for that to be trustworthy. Offered to enable; no answer.
+10. **`determine_tgf_mvp` has never been dry-run against real 18-hole
+    scorecards.** I verified the format-pooling logic and the money math in
+    tests only. Offered a dry-run against a past 18-hole day; not taken up.
+11. **CUSTOMERS list colours**: `MEMBER #d1fae5` and `FORMER #e2e8f0` are
+    only 27 RGB apart. Offered to bring FORMER in line with the ALUMNI grey.
+
+### Known gaps in what shipped
+
+12. **The consolation match has no event selector of its own.**
+    `cmp_record_consolation` writes no `event_id`; the card inherits the
+    FINAL's event for its header date. If a 3rd-place match is ever played at
+    a different event the header date is wrong (the live GG lookup still
+    works, since it matches on chapter + the two player names).
+13. **Five MCP servers need OAuth** and surfaced as unauthorized all session.
+    A non-interactive session cannot run the flow — Kerry must authorize via
+    claude.ai connector settings or `/mcp` in an interactive session.
+
+### Process debt
+
+14. **No platform-dialogue mailbox digest was posted for this session.**
+    CLAUDE.md workflow rule 4 requires one at the end of a substantive
+    session (author `tracker-claude`: what shipped, findings affecting
+    Platform planning, open questions). Ten releases went out — v2.166.0
+    through v2.175.0 — with nothing posted. **Post this first in the new
+    session**, and refresh `docs/claude/state-of-the-tracker.md`, which is
+    now well behind.
+
+### Longer-standing, carried in from before this session
+
+15. `customer_id` audit + safeguards (four more name-key bugs surfaced here —
+    the case for this is now much stronger).
+16. The no-handicap "send correspondence" path.
+17. Flighting queue: minimum flight size, the 3-flight ladder, pot-split
+    ratification, scenarios 7/8/10, and the flights-lock moment.
+18. The **Aug-29 untether go/no-go for CA**.
+
+---
+
 **Working style that paid off:** reproducing a bug before fixing it. The HIO
 duplicate-`id` fix was written against a jsdom harness that replays Kerry's
 exact "shows then disappears" sequence — old code fails all three steps, new
