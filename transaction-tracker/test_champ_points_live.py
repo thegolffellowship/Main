@@ -38,6 +38,26 @@ check("that distinction matters: None != 0.0", rows[0]["points"] != 0.0)
 check("a scoring player's points are numeric", rows[2]["points"] == 34.0, str(rows[2]))
 check("thru is carried for the live display", rows[3]["thru"] == "12", str(rows[3]))
 
+print("\n== the LIVE scoring format parses (seen 2026-08-01, pre-round test) ==")
+# GG renders a scoring player's points as "3 (3/0)" — total (front/back).
+# The original float() on the whole cell read every scoring player as
+# not-started, so the overlay was silently inert on championship morning.
+tables_live = [[
+    ["Pos.", "Player", "Stableford Points", "Thru"],
+    ["1", "WADE, Mary TGF San Antonio", "3 (3/0)", "1"],
+    [""],
+    ["T2", "MAZANEC, Luke TGF San Antonio", "22 (13/9)", "14"],
+    [""],
+    ["", "FIEBER, Wade TGF San Antonio", "-", "9:00 AM"],
+]]
+rows_l = db._parse_champ_points_tables(tables_live)
+check("'3 (3/0)' parses to 3.0, not None", rows_l[0]["points"] == 3.0, str(rows_l[0]))
+check("'22 (13/9)' parses to 22.0", rows_l[1]["points"] == 22.0, str(rows_l[1]))
+check("a bare '-' still reads None — not-started rule untouched",
+      rows_l[2]["points"] is None, str(rows_l[2]))
+check("the overlay would now count 2 scoring",
+      sum(1 for r in rows_l if r["points"] is not None) == 2)
+
 print("\n== affiliations are stripped before identity resolution ==")
 for raw, want in [("FIEBER, Wade TGF San Antonio", "FIEBER, Wade"),
                   ("Bricco, Rowdy Guest", "Bricco, Rowdy"),

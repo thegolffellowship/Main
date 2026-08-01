@@ -7251,10 +7251,15 @@ def _parse_champ_points_tables(tables: list, affiliations=None) -> list:
             if not name or "," not in name:
                 continue
             praw = cells[hdr["points"]] if hdr["points"] < len(cells) else ""
-            try:
-                pts = float(str(praw).replace(",", ""))
-            except (TypeError, ValueError):
-                pts = None
+            # A SCORING player's cell reads "3 (3/0)" — total (front/back) —
+            # seen on the live board 2026-08-01 during Kerry's pre-round
+            # test; float() on the whole cell read every scoring player as
+            # not-started and the overlay stayed silently inert. Parse the
+            # LEADING number; a bare "-" still yields None (not started),
+            # never zero.
+            m_pts = re.match(r"-?\d+(?:\.\d+)?",
+                             str(praw).replace(",", "").strip())
+            pts = float(m_pts.group(0)) if m_pts else None
             thru = (cells[hdr["thru"]] if hdr["thru"] is not None
                     and hdr["thru"] < len(cells) else "")
             out.append({"name": name, "points": pts, "thru": thru})
