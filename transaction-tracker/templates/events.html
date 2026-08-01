@@ -5764,13 +5764,58 @@
         // carry-in from 2025 rides the /api/hio-pot payload once set.
         if (gEvent && gEvent.holeInOne && gEvent.holeInOne !== "NO_EVENT" && gEvent.holeInOne !== "NO_GAME") {
             html += `<div class="hole-in-one-banner"><div class="hio-line">Hole-in-One Pot: ${fmt$(gEvent.holeInOne)} <span class="gg-det" data-event="${escapeHtml(ev.item_name)}" data-game="hio"></span></div><div class="hio-line" id="hio-running-inline"></div></div>`;
-            fetch("/api/hio-pot").then(r => r.ok ? r.json() : null).then(d => {
+            // The running line used to fail SILENTLY: a non-OK response
+            // resolved to null and `.catch(() => {})` swallowed everything,
+            // so a broken pot and a still-loading pot looked identical —
+            // an empty banner with no explanation (Kerry 2026-07-31).
+            fetch("/api/hio-pot", {cache: "no-store"}).then(async r => {
+                if (!r.ok) throw new Error(`HTTP ${r.status}`);
+                return r.json();
+            }).then(d => {
                 const el = document.getElementById("hio-running-inline");
-                if (!el || !d) return;
+                if (!el) return;
+                if (!d) throw new Error("empty response");
                 const row = (d.events || []).find(e => e.event === ev.item_name);
                 const thru = row && row.running != null ? row.running : d.pot;
-                el.innerHTML = `Running pot thru ${escapeHtml(ev.item_name.split(" ")[0])}: <strong>$${Number(thru).toFixed(2)}</strong>`;
-            }).catch(() => {});
+                const carry = Number(d.carry_in || 0);
+                // The carry-in is the balance brought forward from before the
+                // Tracker accrued anything. It is settable ONLY by an admin,
+                // and until v2.172.0 nothing in the app could write it at all.
+                const carryBit = carry > 0
+                    ? ` <span style="font-weight:400;color:var(--text-muted);">(incl. $${carry.toFixed(2)} carried in)</span>`
+                    : (currentRole === "admin"
+                        ? ` <span class="hio-set-carry" style="cursor:pointer;text-decoration:underline dotted;color:var(--text-muted);font-weight:400;" title="No carry-in balance is set — click to enter the pot brought forward from before the Tracker started accruing">no carry-in set</span>`
+                        : '');
+                el.innerHTML = `Running pot thru ${escapeHtml(ev.item_name.split(" ")[0])}: <strong>$${Number(thru).toFixed(2)}</strong>${carryBit}`;
+                const setBtn = el.querySelector(".hio-set-carry");
+                if (setBtn) {
+                    setBtn.addEventListener("click", async () => {
+                        const raw = prompt(
+                            "Hole-In-One pot CARRY-IN\n\n" +
+                            "The balance brought forward from before the Tracker " +
+                            "started accruing. It is added to every running total " +
+                            "and is stored permanently.\n\n" +
+                            "Enter the dollar amount:");
+                        if (raw === null || !raw.trim()) return;
+                        try {
+                            const res = await fetch("/api/hio-pot/carry-in", {
+                                method: "POST",
+                                headers: {"Content-Type": "application/json"},
+                                body: JSON.stringify({carry_in: raw.trim(),
+                                                      note: "Set from the GAMES tab"}),
+                            });
+                            const dd = await res.json().catch(() => ({}));
+                            if (!res.ok) { alert(dd.error || "Could not save the carry-in."); return; }
+                            rerenderDetail(container, ev);
+                        } catch (e) { alert("Could not save the carry-in."); }
+                    });
+                }
+            }).catch(err => {
+                const el = document.getElementById("hio-running-inline");
+                if (el) {
+                    el.innerHTML = `<span style="color:var(--text-muted);font-style:italic;">Running pot unavailable (${escapeHtml(String(err.message || err))})</span>`;
+                }
+            });
         }
 
         html += '<table class="games-table">';

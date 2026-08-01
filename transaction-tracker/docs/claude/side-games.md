@@ -695,3 +695,30 @@ Lone Star Cup (Side Games $75 add-on), TGF Championship special
 add-ons (NET $50: R1 $15 + R2 $15 + Overall $20; GROSS $52: Skins
 $18×2 + Weekend Individual $16), pre-season events. Per Pricing doc
 §7.11 special-event side games are defined per event.
+
+## Hole-In-One pot carry-in (v2.172.0, Kerry 2026-07-31)
+
+*"Hole In One Pot is not persisting."* It could not: `get_hio_pot` has
+read `app_settings.hio_pot_carry_in` since 2026-07-20 (ratified $1,822),
+but **no write path existed anywhere in the codebase** — no route, no UI,
+no MCP tool. The key was read-only by omission, so the running pot only
+ever showed what the Tracker itself had accrued.
+
+- `POST /api/hio-pot/carry-in` (admin) → `set_app_setting`. Body:
+  `carry_in` (required; `$` and `,` tolerated, negatives refused) and an
+  optional `note` → `hio_pot_carry_in_note`.
+- The GAMES-tab banner exposes it: admins with no carry-in set see a
+  "no carry-in set" prompt; once set the line reads
+  "Running pot thru X: $N (incl. $C carried in)".
+- The banner's fetch no longer swallows failures. It previously mapped a
+  non-OK response to null and had an empty `.catch()`, so a 500, a
+  permission failure and a slow load were indistinguishable from each
+  other — all rendered an empty line. It now prints the reason and uses
+  `cache: "no-store"` so a fresh save is visible immediately.
+
+Related dials, still with NO write path (set them by hand if needed):
+`hio_27h_event_patterns` (27-hole days contribute $3/player) and
+`hio_player_count_overrides` (field-size corrections). Worth an admin
+screen if they ever need changing again.
+
+Tests: `test_hio_carry_in.py`.

@@ -6960,6 +6960,37 @@ def api_hio_pot():
     return jsonify(get_hio_pot())
 
 
+@app.route("/api/hio-pot/carry-in", methods=["POST"])
+@require_role("admin")
+def api_set_hio_carry_in():
+    """Set the Hole-In-One pot CARRY-IN — the balance brought forward from
+    before the Tracker started accruing (Kerry 2026-07-20: ratified $1,822).
+
+    `get_hio_pot` has always READ `hio_pot_carry_in` from app_settings, but
+    nothing in the app ever wrote it — no route, no UI, no MCP tool — so
+    the figure could not be set or corrected and the running pot showed
+    only what the Tracker itself had accrued (Kerry 2026-07-31: "Hole In
+    One Pot is not persisting"). app_settings lives in the DB, so on a
+    Railway volume this survives redeploys.
+    """
+    from email_parser.database import set_app_setting, get_hio_pot
+    data = request.get_json(silent=True) or {}
+    raw = data.get("carry_in")
+    if raw is None or str(raw).strip() == "":
+        return jsonify({"error": "carry_in is required."}), 400
+    try:
+        carry_in = round(float(str(raw).replace("$", "").replace(",", "").strip()), 2)
+    except (TypeError, ValueError):
+        return jsonify({"error": "carry_in must be a number."}), 400
+    if carry_in < 0:
+        return jsonify({"error": "carry_in cannot be negative."}), 400
+    set_app_setting("hio_pot_carry_in", str(carry_in))
+    note = (data.get("note") or "").strip()
+    if note:
+        set_app_setting("hio_pot_carry_in_note", note)
+    return jsonify({"status": "ok", **get_hio_pot()})
+
+
 @app.route("/api/refunds/overview", methods=["GET"])
 @require_role("admin")
 def api_refunds_overview():

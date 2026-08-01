@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.171.0";
+window.TGF_VERSION = "2.172.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.172.0",
+    date: "2026-07-31",
+    changes: [
+      "THE HOLE-IN-ONE CARRY-IN CAN FINALLY BE SET (Kerry 2026-07-31: 'Hole In One Pot is not persisting'). It could not persist, because nothing could write it. The running-pot calculation has read a `hio_pot_carry_in` setting since 2026-07-20 — the balance carried forward from before the Tracker started accruing, ratified at $1,822 — but there was no route, no screen and no tool anywhere in the app that ever SAVED that value. It was read-only by omission. An admin can now click straight through from the GAMES tab banner and enter it; it is stored in app_settings, so it survives redeploys on the Railway volume. Dollar signs and thousands separators in what you type are tolerated; a negative pot is refused.",
+      "The running-pot line no longer fails silently. It swallowed every error — a non-OK response became null and the catch block did nothing — so a broken pot, a permission problem and a still-loading pot all looked identical: a banner with a blank second line and no explanation. It now says what went wrong, and the request skips the browser cache so a freshly saved carry-in shows immediately.",
+      "When a carry-in IS set the banner says so, e.g. \"Running pot thru TGF: $2,145.00 (incl. $1,822.00 carried in)\", so the accrued figure and the brought-forward figure are never confused with each other. An admin who has not set one sees a 'no carry-in set' prompt instead of silence.",
+    ],
+  },
   {
     version: "2.171.0",
     date: "2026-07-31",
