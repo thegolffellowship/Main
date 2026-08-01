@@ -814,6 +814,20 @@ Parser note (v2.176.0): a guest can render in plain `First Last` form with
 no comma (`Matt Larson Guest`, live Austin board 2026-08-01) — multi-word
 comma-less names are accepted; labels/totals rows still skip.
 
+Parser note (v2.175.1, championship-morning hotfix): a SCORING player's
+points cell reads `3 (3/0)` — total (front/back) — so the parse takes the
+LEADING number; a bare `-` still yields None. Found live during Kerry's
+pre-round test; without it every scoring player read as not-started and
+the overlay was silently inert.
+
+**PGA-style live columns (v2.177.0, Kerry mid-test 2026-08-01):** while
+`champ_scoring > 0` the standings table swaps RESET/Rounds for TODAY
+(champ points, orange) and THRU (holes done, or the TEE TIME before they
+start), and the rank cell carries a DAY-movement arrow (`move` =
+start-of-day `season_rank` − live rank, server-computed). The live merge
+carries every board player so the not-started bring tee times with
+points still None; a non-entrant shows neither.
+
 Tests: `test_champ_points_live.py`.
 
 ## LIVE championship hole-by-hole card (v2.176.0)

@@ -255,7 +255,7 @@
         const played = holes.filter(h => h.gross != null);
         const head = `<div style="font-weight:700;color:#BF5700;margin:0 0 0.3rem;">${escapeHtml(card.player_name || "")}`
             + (card.board_points != null ? ` &middot; ${escapeHtml(String(card.board_points))} pts` : "")
-            + (card.board_thru ? ` <span style="font-weight:400;color:#9A5B2E;">thru ${escapeHtml(String(card.board_thru))}</span>` : "")
+            + (card.board_thru ? ` <span style="font-weight:400;color:#9A5B2E;">${/\d:\d\d/.test(String(card.board_thru)) ? "tees off" : "thru"} ${escapeHtml(String(card.board_thru))}</span>` : "")
             + `</div>`;
         if (!played.length) {
             return head + `<span style="color:var(--text-muted);">No holes posted yet`
@@ -517,7 +517,9 @@
             // round is in progress; blank until then.
             const _cc = (opts.champPoints != null && opts.champPoints !== "")
                 ? String(opts.champPoints) : "";
-            const _ccThru = opts.champThru ? ` <span style="font-weight:400;font-size:0.85em;color:#9A5B2E;">thru ${escapeHtml(String(opts.champThru))}</span>` : "";
+            // a tee time is "tees off", a hole count is "thru" — a player
+            // reading "thru 9:00 AM" is nonsense
+            const _ccThru = opts.champThru ? ` <span style="font-weight:400;font-size:0.85em;color:#9A5B2E;">${/\d:\d\d/.test(String(opts.champThru)) ? "tees off" : "thru"} ${escapeHtml(String(opts.champThru))}</span>` : "";
             const ccCells = [];
             for (let ci = 0; ci < Math.max(0, totalCols - 2); ci++) {
                 // Drop the live points under the PTS column when we know it.

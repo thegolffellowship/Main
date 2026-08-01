@@ -5589,6 +5589,12 @@
 
         const hasFlights = !!(d.flights && d.flights.length);
         const showChapter = !!d.cross_chapter;
+        // LIVE championship mode reads like a PGA leaderboard (Kerry
+        // 2026-08-01): day movement on the rank, TODAY's points, and THRU
+        // (hole count, F, or the tee time before they start). RESET and
+        // Rounds step aside for the day — same column count, no layout
+        // shift, back on the next quiet load.
+        const liveMode = (d.champ_scoring || 0) > 0;
         const nCols = showChapter ? 7 : 6;
         // Fixed widths on every column but Player so the three race tabs
         // lay out identically regardless of content; phones get narrow
@@ -5635,13 +5641,19 @@
                 ? ` data-champ-pts="${escapeHtml(String(r.champ_points))}"` : "")
                 + (r.champ_thru
                 ? ` data-champ-thru="${escapeHtml(String(r.champ_thru))}"` : "");
+            // Day movement (live) vs last-event movement (season view)
+            const moveHtml = liveMode ? prDayMove(r.move) : prRankMove(r.rank, r.prev_rank);
+            const midCells = liveMode
+                ? `<td style="${resetStyle}${r.champ_points != null ? "color:#BF5700;font-weight:800;" : "color:var(--text-muted);"}">${r.champ_points != null ? "+" + escapeHtml(String(r.champ_points % 1 ? r.champ_points.toFixed(1) : r.champ_points)) : (r.champ_thru ? "" : "—")}</td>
+                   <td style="${rndStyle}white-space:nowrap;${/\d:\d\d/.test(r.champ_thru || "") ? "color:var(--text-muted);font-size:0.85em;" : "font-weight:600;"}">${escapeHtml(r.champ_thru || "—")}</td>`
+                : `<td style="${resetStyle}">${prFmtReset(r.points_reset)}</td>
+                   <td style="${rndStyle}" class="pr-rnd">${r.tournaments ?? ""}</td>`;
             return `<tr style="${bg}${expandable ? 'cursor:pointer;' : ''}"${r.member_card_id ? ` data-card="${r.member_card_id}"` : ''}${r.customer_id ? ` data-cid="${r.customer_id}"` : ''}${champAttrs}>
-                <td style="${rankStyle}">${escapeHtml(r._flightRank ?? r.rank)}${prRankMove(r.rank, r.prev_rank)}</td>
+                <td style="${rankStyle}white-space:nowrap;">${escapeHtml(r._flightRank ?? r.rank)}${moveHtml}</td>
                 <td>${nameCell}${hcp}${statusPill}${chevron}${prPayBadge(r)}</td>
                 ${showChapter ? `<td style="${chapStyle}" title="${escapeHtml(r.player_chapter || "")}">${escapeHtml(compact ? prAbbrevChapter(r.player_chapter) : (r.player_chapter || ""))}</td>` : ""}
                 <td style="${ptsStyle}">${r.total_points ?? ""}</td>
-                <td style="${resetStyle}">${prFmtReset(r.points_reset)}</td>
-                <td style="${rndStyle}" class="pr-rnd">${r.tournaments ?? ""}</td>
+                ${midCells}
                 <td style="${buyStyle}">${badge}</td>
             </tr>`;
         };
@@ -5688,8 +5700,11 @@
                     <th style="${rankStyle}">${compact ? "#" : "Rank"}</th><th style="width:99%;">Player</th>
                     ${showChapter ? `<th style="${chapStyle}">${compact ? "CH" : "Chapter"}</th>` : ""}
                     <th style="${ptsStyle}">${compact ? "PTS" : "POINTS"}</th>
-                    <th style="${resetStyle}"><span class="pr-proj" style="display:block;font-size:${compact ? "0.52rem" : "0.65rem"};font-weight:600;letter-spacing:0.03em;">(${compact ? "proj" : "Projected"})</span>${compact ? "RESET" : "POINTS RESET"}</th>
-                    <th style="${rndStyle}" class="pr-rnd" title="Rounds">${compact ? "R" : "Rounds"}</th>
+                    ${liveMode
+                        ? `<th style="${resetStyle}" title="Championship points earned today">TODAY</th>
+                           <th style="${rndStyle}" title="Holes completed today — or the tee time if they haven't started">THRU</th>`
+                        : `<th style="${resetStyle}"><span class="pr-proj" style="display:block;font-size:${compact ? "0.52rem" : "0.65rem"};font-weight:600;letter-spacing:0.03em;">(${compact ? "proj" : "Projected"})</span>${compact ? "RESET" : "POINTS RESET"}</th>
+                           <th style="${rndStyle}" class="pr-rnd" title="Rounds">${compact ? "R" : "Rounds"}</th>`}
                     <th style="${buyStyle}" title="Buy-in">${compact ? "IN" : "Buy-in"}</th>
                 </tr></thead>
                 <tbody>${bodyRows}</tbody>
@@ -5706,6 +5721,16 @@
     function prFmtReset(v) {
         if (v == null) return "—";
         return v % 1 ? v.toFixed(1) : String(v);
+    }
+
+    // DAY movement while a championship is live: start-of-day season rank
+    // vs the live combined rank (server-computed `move`; positive = up).
+    // Same arrow language as prRankMove so the two views read alike.
+    function prDayMove(move) {
+        const n = parseInt(move, 10);
+        if (!n) return "";
+        const up = n > 0;
+        return `<span class="pr-move ${up ? "up" : "down"}" title="${up ? "Up" : "Down"} ${Math.abs(n)} today">${up ? "&#9650;" : "&#9660;"}${Math.abs(n)}</span>`;
     }
 
     // GG publishes Current Rank + Previous Rank on its season points

@@ -1,5 +1,15 @@
-window.TGF_VERSION = "2.176.0";
+window.TGF_VERSION = "2.177.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.177.0",
+    date: "2026-08-01",
+    changes: [
+      "THE LIVE LEADERBOARD NOW READS LIKE A PGA TOUR BOARD (Kerry, championship morning, from his phone mid-test). While a championship is scoring, the standings table swaps its season columns for the day's: the rank carries a green/red DAY-MOVEMENT arrow (start-of-day position vs live position, not last-event movement), TODAY shows the championship points earned so far in burnt orange (+3), and THRU shows the holes completed — or the player's TEE TIME if they haven't started, exactly like the Tour app. RESET and Rounds step aside only for the live day; the column count doesn't change, so nothing shifts, and the season view returns on the next quiet load.",
+      "Tee times reach the table because the live merge now carries EVERY board player, not just the ones already scoring — a not-started player keeps points at None (never zero) but brings his tee time along. A player not entered in the championship shows neither, so the three states — playing, waiting to start, not entered — are distinguishable at a glance.",
+      "Wording fix on the drill-down and the hole-by-hole card: a player who hasn't started reads 'tees off 9:00 AM' instead of the nonsense 'thru 9:00 AM'.",
+      "Ships together with v2.176.0 (the drill-down live figure + hole-by-hole card), merged to main on Kerry's go-ahead after v2.175.1's live verification — his pre-round test scores on the real board proved the fetch/parse/match/re-rank chain end to end before first tee.",
+    ],
+  },
   {
     version: "2.176.0",
     date: "2026-08-01",

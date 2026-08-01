@@ -7369,10 +7369,12 @@ def get_points_race_live(race_key: str,
         except Exception:
             pass
 
+    # EVERY board player goes in the maps — including the not-yet-started,
+    # whose Thru cell carries their TEE TIME (Kerry 2026-08-01: the live
+    # table reads like a PGA leaderboard — today's points, thru, or the
+    # tee time if they haven't started). Points stay None until they post.
     by_cid, by_name = {}, {}
     for p in live.get("players", []):
-        if p.get("points") is None:
-            continue
         if p.get("customer_id"):
             by_cid[p["customer_id"]] = p
         for cand in _gg_name_candidates(p["name"]):
@@ -7388,9 +7390,15 @@ def get_points_race_live(race_key: str,
             hit = by_cid[row["customer_id"]]
         elif (row.get("player_name") or "").strip().lower() in by_name:
             hit = by_name[(row["player_name"] or "").strip().lower()]
-        champ = float(hit["points"]) if hit else None
+        champ = (float(hit["points"])
+                 if hit and hit.get("points") is not None else None)
         row["season_points"] = round(season, 2)
+        row["season_rank"] = row.get("rank")
         row["champ_points"] = champ
+        # thru carries for anyone ON today's board: a hole count / "F" once
+        # scoring, the tee time before that. Absent entirely for players
+        # not entered in the championship — the column can tell the three
+        # states apart.
         row["champ_thru"] = hit.get("thru") if hit else None
         row["live_total"] = round(season + (champ or 0.0), 2)
         rows.append(row)
@@ -7400,6 +7408,12 @@ def get_points_race_live(race_key: str,
                              (r.get("player_name") or "").lower()))
     for i, r in enumerate(rows, start=1):
         r["live_rank"] = i
+        # DAY movement, PGA-style: start-of-day (season) rank vs live rank.
+        try:
+            _was = int(re.sub(r"[^0-9]", "", str(r.get("season_rank") or "")))
+            r["move"] = _was - i if _was else None
+        except (TypeError, ValueError):
+            r["move"] = None
         # Overwrite the fields the standings table already renders, so the
         # combined figure shows everywhere with no display surgery — and the
         # season-only numbers stay available beside them.

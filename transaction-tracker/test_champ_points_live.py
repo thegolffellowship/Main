@@ -86,11 +86,10 @@ check("an unknown affiliation still yields 'SURNAME, First'",
 print("\n== the addition rule ==")
 # Merge exactly as get_points_race_live does, without touching the network.
 def merge(standings, live_players):
+    import re as _re
     by_cid, by_name = {}, {}
-    for p in live_players:
-        if p.get("points") is None:
-            continue
-        if p.get("customer_id"):
+    for p in live_players:                    # ALL board players — the
+        if p.get("customer_id"):              # not-started carry tee times
             by_cid[p["customer_id"]] = p
         for cand in db._gg_name_candidates(p["name"]):
             by_name.setdefault(cand.strip().lower(), p)
@@ -100,21 +99,30 @@ def merge(standings, live_players):
         season = float(row.get("total_points") or 0)
         hit = by_cid.get(row.get("customer_id")) or \
             by_name.get((row.get("player_name") or "").strip().lower())
-        champ = float(hit["points"]) if hit else None
-        row.update(season_points=round(season, 2), champ_points=champ,
+        champ = (float(hit["points"])
+                 if hit and hit.get("points") is not None else None)
+        row.update(season_points=round(season, 2),
+                   season_rank=row.get("rank"),
+                   champ_points=champ,
+                   champ_thru=hit.get("thru") if hit else None,
                    live_total=round(season + (champ or 0.0), 2))
         out.append(row)
     out.sort(key=lambda r: (-r["live_total"], -(r["season_points"] or 0),
                             (r.get("player_name") or "").lower()))
     for i, r in enumerate(out, 1):
+        try:
+            _was = int(_re.sub(r"[^0-9]", "", str(r.get("season_rank") or "")))
+            r["move"] = _was - i if _was else None
+        except (TypeError, ValueError):
+            r["move"] = None
         r["rank"] = i
         r["total_points"] = r["live_total"]
     return out
 
 standings = [
     {"player_name": "Roberto Moreno", "customer_id": 11, "total_points": 51, "rank": 1},
-    {"player_name": "Michael Murphy", "customer_id": 12, "total_points": 29, "rank": 2},
-    {"player_name": "Wade Fieber",    "customer_id": 13, "total_points": 45, "rank": 3},
+    {"player_name": "Wade Fieber",    "customer_id": 13, "total_points": 45, "rank": 2},
+    {"player_name": "Michael Murphy", "customer_id": 12, "total_points": 29, "rank": 3},
 ]
 live = [
     {"name": "MORENO, Robert", "points": 34.0, "thru": "F",  "customer_id": 11},
@@ -139,6 +147,22 @@ check("Murphy climbs past Fieber on the day's points (29+28=57 vs 45)",
 check("Moreno holds the lead", m["Roberto Moreno"]["rank"] == 1)
 check("the table's own fields carry the combined figure",
       m["Michael Murphy"]["total_points"] == 57.0, str(m["Michael Murphy"]))
+
+print("\n== PGA-style day columns (Kerry 2026-08-01) ==")
+check("day movement: Murphy is UP 1 from his start-of-day rank (3 -> 2)",
+      m["Michael Murphy"]["move"] == 1, str(m["Michael Murphy"].get("move")))
+check("day movement: Fieber is DOWN 1 (2 -> 3)",
+      m["Wade Fieber"]["move"] == -1, str(m["Wade Fieber"].get("move")))
+check("no movement shows none, not zero-with-arrow",
+      not m["Roberto Moreno"]["move"], str(m["Roberto Moreno"].get("move")))
+check("a NOT-STARTED player still carries his TEE TIME in champ_thru",
+      m["Wade Fieber"]["champ_thru"] == "9:00 AM", str(m["Wade Fieber"].get("champ_thru")))
+check("...while his champ points stay None",
+      m["Wade Fieber"]["champ_points"] is None)
+check("a scoring player's thru is the hole count",
+      m["Michael Murphy"]["champ_thru"] == "12", str(m["Michael Murphy"].get("champ_thru")))
+check("start-of-day rank is preserved beside the live one",
+      m["Wade Fieber"]["season_rank"] == 2, str(m["Wade Fieber"].get("season_rank")))
 
 print("\n== identity: GG's spelling must not lose a player ==")
 # The exact pair that went missing before: GG says Robert/Mike, we say
