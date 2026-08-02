@@ -2028,6 +2028,11 @@ def _scoring_dispatch(url: str, extract: str):
         if cmd == "scoring-gg-results":
             # GG-recorded winners (CTP/LP/HIO/TEAM Net) for one event
             return json.dumps(db.get_gg_game_results(arg), indent=2)
+        if cmd == "scoring-tgf-event-rename":
+            # "<old code>|<new code>" — rename a tgf_events row (refuses
+            # to merge onto an existing code)
+            _old, _, _new = arg.partition("|")
+            return json.dumps(db.rename_tgf_event(_old, _new), indent=2)
         if cmd == "scoring-season-payouts":
             # Season-contest FINAL payouts (Kerry, championship evening
             # 2026-08-01). Preview by default; append |record to write.
@@ -2049,7 +2054,8 @@ def _scoring_dispatch(url: str, extract: str):
                                             f"standings — {r['rank']} place")}
                            for r in prev["rows"]]
                 rec = db.record_season_contest_payouts(
-                    f"{prev['label']} FINAL", prev.get("chapter"), payouts)
+                    prev["label"], prev.get("chapter"), payouts,
+                    append_category="City Net")
                 return json.dumps({"assembled": prev, "recorded": rec},
                                   indent=2, default=str)
             if mode == "mp-pools" and len(parts) == 2:
@@ -2064,7 +2070,7 @@ def _scoring_dispatch(url: str, extract: str):
                                             f"Play — {r['rank']} bonus")}
                            for r in prev["rows"]]
                 rec = db.record_season_contest_payouts(
-                    f"{chapter.upper()} MATCH PLAY 2026 FINAL", chapter,
+                    f"{chapter.upper()} MATCH PLAY 2026", chapter,
                     payouts, append_category="Match Play Pool")
                 return json.dumps({"assembled": prev, "recorded": rec},
                                   indent=2, default=str)
@@ -2080,8 +2086,8 @@ def _scoring_dispatch(url: str, extract: str):
                                             f"final — {r['rank']} place")}
                            for r in prev["rows"]]
                 rec = db.record_season_contest_payouts(
-                    f"{chapter.upper()} MATCH PLAY 2026 FINAL", chapter,
-                    payouts)
+                    f"{chapter.upper()} MATCH PLAY 2026", chapter,
+                    payouts, append_category="Match Play")
                 return json.dumps({"assembled": prev, "recorded": rec},
                                   indent=2, default=str)
             return json.dumps({"error": "usage: scoring-season-payouts:"

@@ -3960,35 +3960,18 @@
         catch (e) { /* the 2-min cycle is the backstop */ }
     }
 
-    // Memo detail (Kerry 2026-08-02: "Needs to be descriptive for both TGF
-    // and for recipient") — what the money is for, appended after the
-    // event: "Individual Net LOW 2nd", "Skins ×3 + Closest to Pin Hole 5".
-    // Mirrors the TGF Payouts page's memoDetail.
-    function payoutMemoDetail(items) {
-        const bits = (items || []).filter(p => p && (p.description || p.category)).map(p => {
-            const label = PAYOUT_CAT_LABELS[p.category] || p.category || "";
-            const short = (shortPayoutDesc(p.description, p.category) || "")
-                .replace(/\s*\|\s*/g, " ");
-            return (short && short.toLowerCase() !== label.toLowerCase())
-                ? `${label} ${short}`.trim() : label;
-        }).filter(Boolean);
-        let out = [...new Set(bits)].join(" + ");
-        if (out.length > 130) {
-            out = out.slice(0, 127).replace(/\s*\+\s*[^+]*$/, "") + " + more";
-        }
-        return out;
-    }
-
     // Method-aware pay link for the per-event PAYOUTS panel. Returns
     // {href,label} for a deep link, {badge} for a no-deep-link method
     // (Zelle), or null when there's no usable handle (→ "+ Add Payment").
-    function payoutPayLink(winData, amount, eventCode, golferName, detail) {
+    // Memo stays the ratified short form — event side games do NOT list
+    // their games out (Kerry 2026-08-02: "Just the standard is fine. I'm
+    // just talking about the season contests" — which live on /tgf).
+    function payoutPayLink(winData, amount, eventCode, golferName) {
         if (!winData) return null;
         const method = (winData.payment_method
             || (winData.venmo_username ? "venmo" : "")).toLowerCase();
         const amt = Number(amount).toFixed(2);
-        const note = `${golferName} - Winnings for ${eventCode}`
-            + (detail ? ` — ${detail}` : "");
+        const note = `${golferName} - Winnings for ${eventCode}`;
         if (method === "venmo" && winData.venmo_username)
             return { href: venmoPayHref(winData.venmo_username, amount, note), label: "Pay" };
         const handle = (winData.payment_handle || "").trim();
@@ -4022,7 +4005,6 @@
             : "padding:2px 8px;border-radius:99px;font-size:0.72rem;font-weight:600;background:#f1f5f9;color:#334155;border:1px dashed #94a3b8;cursor:pointer;white-space:nowrap;";
         return `<span class="ev-add-pay-wrap" data-gid="${g.golfer_id}" data-amt="${g.total}"`
             + ` data-name="${escapeHtml(g.name).replace(/"/g, '&quot;')}" data-code="${escapeHtml(eventCode).replace(/"/g, '&quot;')}"`
-            + ` data-detail="${payoutMemoDetail(g.items || []).replace(/"/g, '&quot;')}"`
             + ` data-method="${opts.method || ''}" data-handle="${(opts.handle || '').replace(/"/g, '&quot;')}">`
             + `<button class="ev-add-pay-btn" style="${style}" title="Tap to set or change how this player gets paid" onclick="event.stopPropagation(); evRevealAddPay(this)">${label}</button>`
             + `</span>`;
@@ -4092,7 +4074,7 @@
             const amt = parseFloat(wrap.dataset.amt) || 0;
             const pa = payoutPayLink(
                 { payment_method: method, venmo_username: method === "venmo" ? handle : "", payment_handle: method === "venmo" ? "" : handle },
-                amt, wrap.dataset.code, wrap.dataset.name, wrap.dataset.detail || "");
+                amt, wrap.dataset.code, wrap.dataset.name);
             if (pa && pa.href) {
                 wrap.outerHTML =
                     `<a href="${pa.href}" target="_blank" rel="noopener" style="display:inline-flex;align-items:center;gap:3px;padding:2px 8px;border-radius:99px;font-size:0.72rem;font-weight:600;background:#008CFF;color:#fff;text-decoration:none;" onclick="event.stopPropagation(); scheduleVenmoCheckEv();"><svg viewBox="0 0 24 24" fill="currentColor" style="width:12px;height:12px;"><path d="M19.5 3c.9 1.5 1.3 3 1.3 5 0 5.5-4.7 12.7-8.5 17H5.2L3 3.5l6-.6 1.2 9.6c1.2-2 2.7-5.2 2.7-7.3 0-1.9-.3-3.2-.8-4.2L19.5 3z"/></svg>${pa.label || 'Pay'}</a>`;
@@ -4202,8 +4184,7 @@
             if (alreadyPaid) {
                 actionCell = PAYOUT_STATUS_BADGE.paid;
             } else {
-                const pa = payoutPayLink(winData, isPartial ? dueTotal : g.total, ev.item_name, g.name,
-                    payoutMemoDetail(isPartial ? g.items.filter(p => p.payment_status !== "paid") : g.items));
+                const pa = payoutPayLink(winData, isPartial ? dueTotal : g.total, ev.item_name, g.name);
                 if (pa && pa.href) {
                     actionCell = `<a href="${pa.href}" target="_blank" rel="noopener" style="display:inline-flex;align-items:center;gap:3px;padding:2px 8px;border-radius:99px;font-size:0.72rem;font-weight:600;background:#008CFF;color:#fff;text-decoration:none;" onclick="event.stopPropagation(); scheduleVenmoCheckEv();"><svg viewBox="0 0 24 24" fill="currentColor" style="width:12px;height:12px;"><path d="M19.5 3c.9 1.5 1.3 3 1.3 5 0 5.5-4.7 12.7-8.5 17H5.2L3 3.5l6-.6 1.2 9.6c1.2-2 2.7-5.2 2.7-7.3 0-1.9-.3-3.2-.8-4.2L19.5 3z"/></svg>${pa.label || 'Pay'}</a>`;
                 } else if (pa && pa.badge && g.golfer_id) {

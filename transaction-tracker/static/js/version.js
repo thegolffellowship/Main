@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.188.3";
+window.TGF_VERSION = "2.188.4";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.188.4",
+    date: "2026-08-02",
+    changes: [
+      "Two memo/naming corrections per Kerry: (1) 'FINAL' is dropped from the season payout event names — new recordings create e.g. 'AUSTIN MATCH PLAY 2026', and a new rename bridge (scoring-tgf-event-rename, refuses to merge onto an existing code) renames the four already-created events in place, payout rows and Venmo matching untouched (they key on the event id). (2) The descriptive memo detail is SEASON CONTESTS ONLY — 'I don't want event side game to list out everything. Just the standard is fine' — so the v2.188.3 per-game listing on ordinary event payouts is reverted on both Pay surfaces; season rows keep 'Pool A winner bonus' / '2nd place'. Season recordings are now category-scoped throughout, so the SA Match Play podium can join the event already holding its pool bonuses when that bracket completes.",
+    ],
+  },
   {
     version: "2.188.3",
     date: "2026-08-02",

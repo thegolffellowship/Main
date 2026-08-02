@@ -7677,6 +7677,35 @@ def _race_champions(rows: list) -> list:
             for r in enrolled if str(r.get("rank")) == top]
 
 
+def rename_tgf_event(old_code: str, new_code: str,
+                     db_path: str | Path = DB_PATH) -> dict:
+    """Rename a tgf_events row's code + name (Kerry 2026-08-02: "I don't
+    think 'FINAL' is necessary in the event name"). Refuses when the new
+    code already belongs to a different event — payouts/matching key on
+    the code, so a silent merge would cross-wire two events' money."""
+    old_code = (old_code or "").strip()
+    new_code = (new_code or "").strip()
+    if not old_code or not new_code:
+        return {"error": "need old and new codes"}
+    with _connect(db_path) as conn:
+        src = conn.execute(
+            "SELECT id FROM tgf_events WHERE LOWER(code) = ?",
+            (old_code.lower(),)).fetchone()
+        if not src:
+            return {"error": f"no tgf_event with code {old_code!r}"}
+        clash = conn.execute(
+            "SELECT id FROM tgf_events WHERE LOWER(code) = ? AND id != ?",
+            (new_code.lower(), src["id"])).fetchone()
+        if clash:
+            return {"error": f"code {new_code!r} already exists "
+                             f"(event {clash['id']}) — refusing to merge"}
+        conn.execute("UPDATE tgf_events SET code = ?, name = ? WHERE id = ?",
+                     (new_code, new_code, src["id"]))
+        conn.commit()
+    return {"renamed": True, "event_id": src["id"],
+            "from": old_code, "to": new_code}
+
+
 def _points_race_final(race_key: str, db_path: str | Path = DB_PATH) -> bool:
     """Is this points race DECLARED final? (Kerry, championship evening
     2026-08-01: "Can you now show winnings for the finishers. City Net is

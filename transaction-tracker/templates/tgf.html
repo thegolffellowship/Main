@@ -705,39 +705,28 @@
             }, 15000);
         }
 
-        // Memo detail (Kerry 2026-08-02: "Needs to be descriptive for both
-        // TGF and for recipient") — WHAT the money is for, appended after
-        // the event so one memo serves the books and the winner. Season
-        // rows read their description tail ("Pool A winner bonus", "2nd
-        // place"); event rows read game + compact desc ("Individual Net
-        // LOW 2nd", "Skins ×3", "Closest to Pin Hole 5").
+        // Memo detail — WHAT the money is for, appended after the event.
+        // SEASON CONTESTS ONLY (Kerry 2026-08-02: "I don't want event side
+        // game to list out everything. Just the standard is fine. I'm just
+        // talking about the season contests.") — event payouts keep the
+        // ratified short memo; season rows read their description tail
+        // ("Pool A winner bonus", "2nd place").
         const SEASON_MEMO_CATS = { "City Net": 1, "Match Play": 1, "Match Play Pool": 1 };
         function memoDetail(items) {
-            const list = (items || []).filter(p => p && (p.description || p.category));
+            const list = (items || []).filter(p => p && p.description);
+            if (!list.length || !list.every(p => SEASON_MEMO_CATS[p.category])) return "";
             const bits = list.map(p => {
-                if (SEASON_MEMO_CATS[p.category]) {
-                    let t = stripAuto(p.description || "").split("—").pop().trim();
-                    const m = t.match(/^(T?)(\d+) place$/i);   // "1 place" -> "1st place"
-                    if (m) {
-                        const n = parseInt(m[2], 10);
-                        const suf = (n % 100 >= 11 && n % 100 <= 13) ? "th"
-                            : ({ 1: "st", 2: "nd", 3: "rd" }[n % 10] || "th");
-                        t = `${m[1] ? "T" : ""}${n}${suf} place`;
-                    }
-                    return t;
+                let t = stripAuto(p.description).split("—").pop().trim();
+                const m = t.match(/^(T?)(\d+) place$/i);   // "1 place" -> "1st place"
+                if (m) {
+                    const n = parseInt(m[2], 10);
+                    const suf = (n % 100 >= 11 && n % 100 <= 13) ? "th"
+                        : ({ 1: "st", 2: "nd", 3: "rd" }[n % 10] || "th");
+                    t = `${m[1] ? "T" : ""}${n}${suf} place`;
                 }
-                const label = CATEGORY_LABELS[p.category] || p.category || "";
-                const short = (shortPayoutDesc(p.description, p.category) || "")
-                    .replace(/\s*\|\s*/g, " ");   // "LOW | 2nd" reads better as "LOW 2nd" in a memo
-                return (short && short.toLowerCase() !== label.toLowerCase())
-                    ? `${label} ${short}`.trim() : label;
+                return t;
             }).filter(Boolean);
-            let out = [...new Set(bits)].join(" + ");
-            // Venmo notes cap near 280 chars — keep a many-game memo humane
-            if (out.length > 130) {
-                out = out.slice(0, 127).replace(/\s*\+\s*[^+]*$/, "") + " + more";
-            }
-            return out;
+            return [...new Set(bits)].join(" + ");
         }
 
         function payAction(winData, amount, eventCode, eventName, golferName, detail) {
