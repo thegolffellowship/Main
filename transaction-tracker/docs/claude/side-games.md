@@ -585,7 +585,12 @@ from our imported scorecards, mirroring the MVP wiring (v2.33.0):
   single player) and split the pot EVENLY among the 3 flights. The
   championships were recorded with `gross_flight_pot_mode=even`
   (temporarily flipped, then restored to `buyins`, the s18.8-matching
-  interim default — the dial is GLOBAL, there is no per-event override).
+  interim default — which the hourly auto-sync promptly clobbered: it
+  force-re-records recent events' payouts, so the temporary global flip
+  reverted on the next sync. v2.188.13 added the per-event override
+  `gross_flight_pot_mode_overrides` — a JSON app_settings dial
+  `{event_name_lower: mode}` consulted before the global dial; both
+  championships are pinned to `even` there).
   Kerry wants a proper mechanism for per-event flight adjustments —
   likely a FLIGHTS tab under EVENTS or inside the GAMES tab, layout
   undecided ("near the final component of the EVENTS tab"). Do not

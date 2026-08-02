@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.188.12";
+window.TGF_VERSION = "2.188.13";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.188.13",
+    date: "2026-08-02",
+    changes: [
+      "Per-event gross-flight pot mode override (the first small piece of Kerry's FLIGHTS mechanism): the hourly auto-sync force-re-records recent events' payouts, so recording the championships under a temporarily-flipped GLOBAL gross_flight_pot_mode dial got clobbered on the next sync (Austin's Larson/McDonnell reverted to the buy-ins split, $134/$48 vs the $118/$64 GG actually paid). A new gross_flight_pot_mode_overrides JSON dial ({event name: mode}) lets one event pay 'even' while the default stays 'buyins' — set for both 2026-08-01 championships, so every future auto re-record assembles them the way GG paid them.",
+    ],
+  },
   {
     version: "2.188.12",
     date: "2026-08-02",

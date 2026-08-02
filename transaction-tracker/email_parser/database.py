@@ -43907,6 +43907,21 @@ def assemble_event_game_payouts(event_name: str, db_path=None) -> dict:
             # either way. Exact cents (largest remainder).
             _mode = (get_app_setting("gross_flight_pot_mode",
                                      db_path=db_path) or "buyins").strip().lower()
+            # Per-EVENT override (v2.188.13, first piece of Kerry's FLIGHTS
+            # mechanism): 'gross_flight_pot_mode_overrides' is a JSON dial
+            # {event_name_lower: mode}. Needed because the global dial
+            # can't represent one event paid differently — the hourly
+            # auto-sync force-re-records recent events, so a temporary
+            # global flip gets clobbered on the next sync (the 2026-08-01
+            # championships were paid EVEN in GG while the default stays
+            # buyins).
+            try:
+                _ovr = json.loads(get_app_setting(
+                    "gross_flight_pot_mode_overrides", db_path=db_path) or "{}")
+            except (TypeError, ValueError):
+                _ovr = {}
+            _mode = (_ovr.get(ev["item_name"].strip().lower())
+                     or _mode).strip().lower()
             gross_total_cents = round(
                 _matrix_num(g_gross.get("individualGross")) * 100)
             fls = d.get("flights") or []
