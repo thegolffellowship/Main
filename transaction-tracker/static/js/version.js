@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.188.11";
+window.TGF_VERSION = "2.188.12";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.188.12",
+    date: "2026-08-02",
+    changes: [
+      "Docs: Kerry ratified that GUESTS are paid their equal team/cart Net share (included with event fees) — captured verbatim in side-games.md next to the blind-draw rule it mirrors, with the 2026-08-01 Austin Championship as the verified example (guest Matt Larson's $32 team share rides on his own payout row; the 'SHARP, Matt Guest' team-string decoration is the member's own slot, not the guest's).",
+    ],
+  },
   {
     version: "2.188.11",
     date: "2026-08-02",

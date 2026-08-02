@@ -299,6 +299,19 @@ SKIPS any teammate already paid, and nets $0 across the group. s9.17
 Silverhorn was repaired this way (South/Moreno/Wade $18→$13.50,
 Hamilton $0→$13.50; Young/Watson already paid at $13.50, untouched).
 
+**GUESTS are paid their team share too (Kerry RATIFIED 2026-08-02,
+verbatim: "Guests can have a share of the team/cart Net pot because
+it's something included with event fees.").** Same principle as the
+blind-draw rule: every slot on a winning team gets an equal share,
+member or not. GG renders a guest either as a first-last guest profile
+("Matt Larson") or with a "Guest" host decoration on a member's slot
+("SHARP, Matt Guest" — that slot is the MEMBER's own share, not the
+guest's; the guest's share rides on their own profile row). Verified
+on the 2026-08-01 Austin Championship: winning team Larson (guest) /
+McDonnell / Reed / Sharp each took $32, matching GG's purse summary
+player-by-player. Guest payout rows typically have no Venmo handle on
+file — the Payouts page shows "+ Add Payment" for them.
+
 ### TEAM Net — definition v1 (s9.16 TPC San Antonio | Oaks setup)
 
 | Setting | Value |
