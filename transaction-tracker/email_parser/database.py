@@ -11192,9 +11192,18 @@ def _game_winners_from_table(table: list) -> list[dict]:
 def import_gg_game_results(widget_url: str, db_path: str | Path = DB_PATH,
                            time_budget: float = 42.0,
                            rewalk_recent: int = 0,
-                           recheck_days: int = 14) -> dict:
+                           recheck_days: int = 14,
+                           force_event: str | None = None) -> dict:
     """Walk a portal's Event Results rounds and record CTP / Longest
     Putt / Hole-in-One / TEAM Net winners as GG-recorded truth.
+
+    force_event (v2.188.5, championship close-out): the round→event map
+    keys on the GG code ([sa]N.N) embedded in an event's item_name —
+    "TGF SAN ANTONIO CHAMPIONSHIP" carries none, so its round's winners
+    recorded with no event and the Payouts assembly never saw them. A
+    round that fails to self-map attaches to the named event instead
+    (substring match on item_name); rounds that DO self-map are never
+    overridden, so a rewalk window covering older rounds stays safe.
 
     Same contract as import_gg_event_mvps: widget_url is the
     tournament_results widget (optionally &round=<id>); already-walked
@@ -11263,6 +11272,16 @@ def import_gg_game_results(widget_url: str, db_path: str | Path = DB_PATH,
             if m:
                 code_map.setdefault(m.group(1).lower(),
                                     (r["id"], r["item_name"], r["event_date"]))
+        forced = None
+        if force_event:
+            fr = conn.execute(
+                "SELECT id, item_name, event_date FROM events "
+                "WHERE item_name LIKE ? ORDER BY event_date DESC LIMIT 1",
+                ("%" + force_event.strip() + "%",)).fetchone()
+            if not fr:
+                return {"error": f"force_event {force_event!r} matches no "
+                                 "event"}
+            forced = (fr["id"], fr["item_name"], fr["event_date"])
         _today = today_central()
 
         pending = [(rid, lbl) for rid, lbl in options if rid not in done]
@@ -11281,6 +11300,13 @@ def import_gg_game_results(widget_url: str, db_path: str | Path = DB_PATH,
             elif "kickoff" in names_blob.lower() and "austin" in host:
                 ev_code = "a18.2"
                 ev_id = code_map.get("a18.2", (None,))[0]
+            if ev_id is None and forced:
+                # championship rounds carry no calendar-mapped code — the
+                # caller names the event (see force_event in the docstring)
+                ev_code = ((m.group(1).lower() if m else None)
+                           or forced[1].strip().lower())
+                ev_id = forced[0]
+                code_map.setdefault(ev_code, forced)
             awaiting = []       # game boards present but no winners entered yet
             round_changed = False   # any tournament's winner set changed
             for l in links:

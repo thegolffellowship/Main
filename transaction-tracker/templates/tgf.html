@@ -1360,7 +1360,13 @@
         function isContestAccount(ev) {
             const c = (ev.code || "").trim();
             return /^(january|february|march|april|may|june|july|august|september|october|november|december)\s+points/i.test(c)
-                || /^(fellowship\s+cup|match\s+play)/i.test(c);
+                || /^(fellowship\s+cup|match\s+play|players\s+cup)/i.test(c)
+                // Season-contest FINAL payout accounts (Kerry 2026-08-02:
+                // "The top four should be under SEASON, not EVENTS") —
+                // chapter-prefixed codes like "SAN ANTONIO Net 2026" /
+                // "AUSTIN MATCH PLAY 2026", and any future gross variant
+                || /match\s+play\s+\d{4}\b/i.test(c)
+                || /\b(net|gross)\s+\d{4}\b/i.test(c);
         }
         function applyPayView() {
             $$("#seg-view .seg-btn").forEach(b =>

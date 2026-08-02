@@ -1974,9 +1974,16 @@ def _scoring_dispatch(url: str, extract: str):
                 db.recompute_computed_mvps(arg.strip() or None), indent=2)
         if cmd == "scoring-games-import":
             # GG-recorded CTP / Longest Putt / HIO / TEAM Net winners;
-            # same widget-url contract + time budget as scoring-mvp-import
-            _rw = 2 if arg.strip().lower().startswith("rewalk") else 0
-            return json.dumps(db.import_gg_game_results(url, rewalk_recent=_rw), indent=2)
+            # same widget-url contract + time budget as scoring-mvp-import.
+            # "[rewalk][|event=<name>]" — event= attaches an unmapped
+            # round's winners to the named calendar event (championship
+            # rounds carry no [sa]N.N code; v2.188.5)
+            _p = [x.strip() for x in (arg or "").split("|") if x.strip()]
+            _rw = 2 if any(x.lower().startswith("rewalk") for x in _p) else 0
+            _fe = next((x[6:].strip() for x in _p
+                        if x.lower().startswith("event=")), None)
+            return json.dumps(db.import_gg_game_results(
+                url, rewalk_recent=_rw, force_event=_fe), indent=2)
         if cmd == "scoring-flight-lab":
             # "scoring-flight-lab:<event>|<game>[|min=<n>][|scale=9|18]"
             # Both flighting modes on one event's real field, graded against

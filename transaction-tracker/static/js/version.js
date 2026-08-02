@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.188.4";
+window.TGF_VERSION = "2.188.5";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.188.5",
+    date: "2026-08-02",
+    changes: [
+      "The four season-contest payout accounts now file under the SEASON tab on the Payouts page, not EVENTS (Kerry: 'The top four should be under SEASON, not EVENTS') — the tab classifier learned the chapter-prefixed season codes ('SAN ANTONIO Net 2026', 'AUSTIN MATCH PLAY 2026', future gross/Players Cup variants).",
+      "Championship game-results import unblocked: the GG round→event mapping keys on the [sa]N.N code embedded in an event's name, and 'TGF SAN ANTONIO CHAMPIONSHIP' carries none — so the championship round's CTP/Team Net winners could never attach to the event and the Payouts assembly reported them missing. scoring-games-import gained an event=<name> override that attaches an UNMAPPED round's winners to the named event (self-mapping rounds are never overridden), clearing the way to record both City Championships' side-game payouts.",
+    ],
+  },
   {
     version: "2.188.4",
     date: "2026-08-02",
