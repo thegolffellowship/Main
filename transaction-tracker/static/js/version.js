@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.188.8";
+window.TGF_VERSION = "2.188.9";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.188.9",
+    date: "2026-08-02",
+    changes: [
+      "Individual Net no longer reports 'awaiting results' on a fully-scored 18-hole event: each buyer has TWO scoring_rounds rows (one per imported GG board — the ALL Gross row carries net/playing-handicap as NULL), and last-row-wins picked whichever board imported last. The game-results engine now merges a buyer's rows, letting later rows fill only missing fields, never overwrite a value with NULL (test_game_results_board_merge.py).",
+      "Flight labels reach the championship: the per-game flights importer stamped event_id only from the [sa]N.N code convention, so a championship round's Ind Net/Gross/Skins flight cuts would have been captured unlinked and invisible to the payouts assembly. It now falls back to the scorecard import's own round→event linkage (scoring_rounds.gg_league_round_id), and a ?round=<id> scoped reset re-walks one round without forcing the auto sync to re-walk the whole portal.",
+    ],
+  },
   {
     version: "2.188.8",
     date: "2026-08-02",

@@ -10943,15 +10943,29 @@ def determine_event_game_results(event_name: str, game: str,
             out["status"] = "no_buyers"
             return out
 
-        # latest round per buyer for this event
+        # One merged round per buyer for this event. A buyer can have
+        # SEVERAL scoring_rounds rows for the same physical round — one
+        # per imported GG board (the ALL Net row carries net +
+        # playing_handicap; the ALL Gross row has them NULL). Last-row-
+        # wins used to pick whichever board imported last and reported
+        # awaiting_results on a fully-scored event (the 2026-08-01
+        # championships), so later rows now only fill fields the merged
+        # row is still missing — never overwrite a value with NULL.
         rounds = {}
         for r in conn.execute(
                 "SELECT id, customer_id, player_name, gross, net, "
                 "       playing_handicap, flight FROM scoring_rounds "
                 "WHERE event_id = ? AND customer_id IS NOT NULL ORDER BY id",
                 (ev["id"],)).fetchall():
-            if r["customer_id"] in binfo["buyers"]:
+            if r["customer_id"] not in binfo["buyers"]:
+                continue
+            cur = rounds.get(r["customer_id"])
+            if cur is None:
                 rounds[r["customer_id"]] = dict(r)
+                continue
+            for k in ("gross", "net", "playing_handicap", "flight"):
+                if cur[k] is None and r[k] is not None:
+                    cur[k] = r[k]
         if not rounds:
             out["status"] = "awaiting_results"
             return out
@@ -11573,10 +11587,18 @@ def import_gg_game_flights(widget_url: str, db_path: str | Path = DB_PATH,
     with _connect(db_path) as conn:
         _ensure_gg_game_flights_tables(conn)
         if reset:
-            # Re-walk everything (e.g. after a parser extension like the
-            # skins Expand-All membership capture). Upserts make it safe.
-            conn.execute("DELETE FROM gg_game_flights_rounds WHERE host = ?",
-                         (host,))
+            # Re-walk (e.g. after a parser extension like the skins
+            # Expand-All membership capture). Upserts make it safe. A
+            # ?round=<id> on the widget URL scopes the reset to that round —
+            # a full-host reset would force the next auto sync to re-walk
+            # every historical round just to re-capture one.
+            if only_round:
+                conn.execute("DELETE FROM gg_game_flights_rounds "
+                             "WHERE host = ? AND gg_round_id = ?",
+                             (host, only_round))
+            else:
+                conn.execute("DELETE FROM gg_game_flights_rounds WHERE host = ?",
+                             (host,))
             conn.commit()
         done = {r["gg_round_id"] for r in conn.execute(
             "SELECT gg_round_id FROM gg_game_flights_rounds WHERE host = ?",
@@ -11602,6 +11624,20 @@ def import_gg_game_flights(widget_url: str, db_path: str | Path = DB_PATH,
             if m and m.group(1).lower() in code_map:
                 ev_code = m.group(1).lower()
                 ev_id = code_map[ev_code][0]
+            if ev_id is None:
+                # No [sa]N.N code in the round's board names (championship
+                # events carry full names, not codes) — resolve through the
+                # scorecard import's own linkage: scoring_rounds already
+                # maps this GG league round to an event, and flight labels
+                # recorded without an event_id are invisible to
+                # determine_event_game_results (its lookup keys on event_id).
+                lr = conn.execute(
+                    "SELECT event_id FROM scoring_rounds "
+                    "WHERE gg_league_round_id = ? AND event_id IS NOT NULL "
+                    "GROUP BY event_id ORDER BY COUNT(*) DESC LIMIT 1",
+                    (rid,)).fetchone()
+                if lr:
+                    ev_id = lr["event_id"]
             for l in links:
                 text = (l.get("text") or "").strip()
                 if "POINTS" in text.upper() or re.search(r"\bMVP\b|\bALL\b", text, re.I):

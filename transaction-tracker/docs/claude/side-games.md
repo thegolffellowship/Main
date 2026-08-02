@@ -557,7 +557,15 @@ from our imported scorecards, mirroring the MVP wiring (v2.33.0):
   handicap so the matrix-named rows align by index; the response
   carries `flight_source` for transparency. Ties = golf-style shared
   positions; the ratified split-combined-places rule applies to the
-  money (UI).
+  money (UI). Two v2.188.9 hardenings from the 2026-08-01 championships:
+  (a) a buyer's MULTIPLE scoring_rounds rows for the same physical round
+  (one per imported GG board — the ALL Gross row has net/playing_handicap
+  NULL) are merged per buyer, later rows filling only missing fields —
+  last-row-wins used to make Individual Net report `awaiting_results` on
+  a fully-scored event; (b) `import_gg_game_flights` stamps `event_id`
+  via scoring_rounds' own `gg_league_round_id` linkage when the round
+  carries no `[sa]N.N` code (championship names), and a `?round=<id>` on
+  the widget URL scopes `reset` to that one round.
 - Display-only (Stage 1 shadow discipline): GG stays official; no
   payout-ledger writes.
 - Games-tab layout (v2.37.0, Kerry): TEAM Net / Individual Net (per
