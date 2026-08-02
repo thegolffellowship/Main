@@ -2035,6 +2035,28 @@ def _scoring_dispatch(url: str, extract: str):
         if cmd == "scoring-gg-results":
             # GG-recorded winners (CTP/LP/HIO/TEAM Net) for one event
             return json.dumps(db.get_gg_game_results(arg), indent=2)
+        if cmd == "scoring-link-rounds":
+            # "<event name>|<gg_round_id>" — stamp event_id on the
+            # scoring_rounds imported from one GG round (repair for rounds
+            # imported before v2.188.6's exact-name event resolution)
+            _en, _, _rid = arg.partition("|")
+            _en, _rid = _en.strip(), _rid.strip()
+            if not _en or not _rid:
+                return json.dumps({"error": "need <event name>|<gg_round_id>"})
+            with db._connect() as conn:
+                ev = conn.execute(
+                    "SELECT id, item_name FROM events WHERE LOWER(item_name)"
+                    " = LOWER(?)", (_en,)).fetchone()
+                if not ev:
+                    return json.dumps({"error": f"event {_en!r} not found"})
+                n = conn.execute(
+                    "UPDATE scoring_rounds SET event_id = ? WHERE "
+                    "gg_round_id = ? AND (event_id IS NULL OR event_id != ?)",
+                    (ev["id"], _rid, ev["id"])).rowcount
+                conn.commit()
+            return json.dumps({"event": ev["item_name"],
+                               "event_id": ev["id"],
+                               "gg_round_id": _rid, "rounds_linked": n})
         if cmd == "scoring-tgf-event-rename":
             # "<old code>|<new code>" — rename a tgf_events row (refuses
             # to merge onto an existing code)

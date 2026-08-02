@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.188.5";
+window.TGF_VERSION = "2.188.6";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.188.6",
+    date: "2026-08-02",
+    changes: [
+      "Championship scorecards link to their event: import_gg_scorecards resolved events only by the [sa]N.N code-prefix convention, so the 48 championship rounds (imported clean, all verified) landed with NO event link — invisible to MVP determination and the payouts assembly. Event resolution now tries an exact full-name match first (prefix convention unchanged for coded events), and a scoring-link-rounds repair stamps the already-imported rounds by their GG round id.",
+    ],
+  },
   {
     version: "2.188.5",
     date: "2026-08-02",

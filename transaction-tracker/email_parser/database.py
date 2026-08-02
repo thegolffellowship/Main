@@ -13825,10 +13825,20 @@ def import_gg_scorecards(tournament_url: str, event_code: str | None = None,
         _ensure_scoring_tables(conn)
         event_id, event_date = None, round_date
         if event_code:
+            # Exact full-name match FIRST (v2.188.6: championship events —
+            # "TGF SAN ANTONIO CHAMPIONSHIP" — carry no [sa]N.N code, so
+            # the prefix pattern below can never find them and the
+            # imported rounds landed with event_id NULL, invisible to MVP
+            # and the payouts assembly), then the code-prefix convention.
             ev = conn.execute(
                 """SELECT id, event_date, course FROM events
-                   WHERE item_name LIKE ? ORDER BY id LIMIT 1""",
-                (event_code.strip() + " %",)).fetchone()
+                   WHERE LOWER(item_name) = LOWER(?) ORDER BY id LIMIT 1""",
+                (event_code.strip(),)).fetchone()
+            if not ev:
+                ev = conn.execute(
+                    """SELECT id, event_date, course FROM events
+                       WHERE item_name LIKE ? ORDER BY id LIMIT 1""",
+                    (event_code.strip() + " %",)).fetchone()
             if ev:
                 event_id, event_date = ev["id"], ev["event_date"]
 
