@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.188.7";
+window.TGF_VERSION = "2.188.8";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.188.8",
+    date: "2026-08-02",
+    changes: [
+      "Ops: a read-only scoring-rounds-orphans diagnostic (unlinked rounds on a date, with every identity field they carry) and a gg_event= selector on the round-link repair — the date+course match also missed because the imported championship rounds carry neither a course link nor a round id, another face of the same string-keyed identity gap Kerry flagged tonight.",
+    ],
+  },
   {
     version: "2.188.7",
     date: "2026-08-02",

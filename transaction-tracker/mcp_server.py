@@ -2035,6 +2035,21 @@ def _scoring_dispatch(url: str, extract: str):
         if cmd == "scoring-gg-results":
             # GG-recorded winners (CTP/LP/HIO/TEAM Net) for one event
             return json.dumps(db.get_gg_game_results(arg), indent=2)
+        if cmd == "scoring-rounds-orphans":
+            # READ-ONLY: scoring_rounds with NO event link on a date —
+            # shows exactly what identity fields the rows DO carry.
+            _dt = (arg or "").strip()
+            with db._connect() as conn:
+                rows = [dict(r) for r in conn.execute(
+                    "SELECT id, player_name, round_date, course_id, "
+                    "gg_event_id, gg_round_id, gg_league_round_id, "
+                    "holes_played, source, imported_at "
+                    "FROM scoring_rounds WHERE event_id IS NULL "
+                    + ("AND round_date LIKE ? " if _dt else "")
+                    + "ORDER BY imported_at DESC LIMIT 60",
+                    ((_dt + "%",) if _dt else ())).fetchall()]
+            return json.dumps({"n": len(rows), "rows": rows}, indent=2,
+                              default=str)
         if cmd == "scoring-link-rounds":
             # "<event name>|<YYYY-MM-DD>|<course substring>" — stamp
             # event_id on UNLINKED scoring_rounds from that date at that
@@ -2045,24 +2060,34 @@ def _scoring_dispatch(url: str, extract: str):
             _p = [x.strip() for x in (arg or "").split("|")]
             if len(_p) != 3 or not all(_p):
                 return json.dumps({"error": "need <event name>|<YYYY-MM-DD>"
-                                            "|<course substring>"})
-            _en, _dt, _co = _p
+                                            "|<course substring OR "
+                                            "gg_event=<id,id,...>>"})
+            _en, _dt, _sel = _p
             with db._connect() as conn:
                 ev = conn.execute(
                     "SELECT id, item_name FROM events WHERE LOWER(item_name)"
                     " = LOWER(?)", (_en,)).fetchone()
                 if not ev:
                     return json.dumps({"error": f"event {_en!r} not found"})
-                n = conn.execute(
-                    "UPDATE scoring_rounds SET event_id = ? "
-                    "WHERE round_date = ? AND event_id IS NULL "
-                    "AND course_id IN (SELECT course_id FROM courses "
-                    "WHERE name LIKE '%' || ? || '%')",
-                    (ev["id"], _dt, _co)).rowcount
+                if _sel.lower().startswith("gg_event="):
+                    ids = [x.strip() for x in _sel[9:].split(",") if x.strip()]
+                    ph = ",".join("?" * len(ids))
+                    n = conn.execute(
+                        f"UPDATE scoring_rounds SET event_id = ? "
+                        f"WHERE round_date LIKE ? AND event_id IS NULL "
+                        f"AND gg_event_id IN ({ph})",
+                        (ev["id"], _dt + "%", *ids)).rowcount
+                else:
+                    n = conn.execute(
+                        "UPDATE scoring_rounds SET event_id = ? "
+                        "WHERE round_date LIKE ? AND event_id IS NULL "
+                        "AND course_id IN (SELECT course_id FROM courses "
+                        "WHERE name LIKE '%' || ? || '%')",
+                        (ev["id"], _dt + "%", _sel)).rowcount
                 conn.commit()
             return json.dumps({"event": ev["item_name"],
                                "event_id": ev["id"], "date": _dt,
-                               "course": _co, "rounds_linked": n})
+                               "selector": _sel, "rounds_linked": n})
         if cmd == "scoring-tgf-event-rename":
             # "<old code>|<new code>" — rename a tgf_events row (refuses
             # to merge onto an existing code)
