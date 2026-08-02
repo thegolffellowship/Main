@@ -299,6 +299,19 @@ SKIPS any teammate already paid, and nets $0 across the group. s9.17
 Silverhorn was repaired this way (South/Moreno/Wade $18→$13.50,
 Hamilton $0→$13.50; Young/Watson already paid at $13.50, untouched).
 
+**GG-posted purses are the money of record for GG-recorded games
+(Kerry 2026-08-02: "we need to allow me to adjust GAMES money").** The
+assembly takes a Team Net position group's pool from the GG board's
+Purse column (summed across tied teams) and a CTP/Longest Putt purse
+from its board row, falling back to the matrix only when no purse is
+posted. Kerry adjusts game money ON GG (e.g. rounding the 2026-08-01 SA
+championship team places to $170/$86 for clean $42.50/$21.50 member
+shares); re-walks refresh `gg_game_results.purse`, so his edits flow
+through every subsequent (auto or manual) re-record. The
+shadow-computed games (Ind Net/Gross, Skins, MVP) remain matrix+dial
+driven — per-event adjustments for those are the pending FLIGHTS
+mechanism.
+
 **GUESTS are paid their team share too (Kerry RATIFIED 2026-08-02,
 verbatim: "Guests can have a share of the team/cart Net pot because
 it's something included with event fees.").** Same principle as the

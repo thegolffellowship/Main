@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.188.13";
+window.TGF_VERSION = "2.188.14";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.188.14",
+    date: "2026-08-02",
+    changes: [
+      "GG-posted purses are now the money of record for the GG-recorded games (Kerry: 'we need to allow me to adjust GAMES money'): the payouts assembly takes a Team Net position's pool from the purse posted on the GG board (captured on every re-walk) instead of the matrix split, and a CTP/Longest Putt purse likewise overrides the matrix amount — so rounding a place to a cleaner number on GG (SA championship team places $170/$86 → $42.50/$21.50 member shares) flows into the tracker automatically, including through the hourly auto re-record. The matrix remains the fallback when no purse is posted.",
+    ],
+  },
   {
     version: "2.188.13",
     date: "2026-08-02",

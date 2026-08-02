@@ -43622,7 +43622,17 @@ def assemble_event_game_payouts(event_name: str, db_path=None) -> dict:
         paid_teams: list = []
         for pos in sorted(team_pos_groups):
             grp = team_pos_groups[pos]
-            pool = sum(place_cents[pos - 1: pos - 1 + len(grp)])
+            # GG-posted purse wins over the matrix split (Kerry 2026-08-02:
+            # "we need to allow me to adjust GAMES money" — he tunes the
+            # place purses directly on the GG board, e.g. rounding the SA
+            # championship's team places to $170/$86 so member shares land
+            # on clean quarters). The board's Purse column is captured per
+            # team on every re-walk, so his GG edits flow through here and
+            # the hourly auto re-record reproduces them. Matrix place money
+            # stays the fallback for boards with no purse posted.
+            gg_pool = round(sum((t.get("purse") or 0) for t in grp) * 100)
+            pool = gg_pool if gg_pool > 0 else \
+                sum(place_cents[pos - 1: pos - 1 + len(grp)])
             if pool <= 0:
                 continue
             suffix = {1: "1st", 2: "2nd", 3: "3rd"}.get(pos, f"{pos}th")
@@ -43717,6 +43727,10 @@ def assemble_event_game_payouts(event_name: str, db_path=None) -> dict:
         notes.append("CTP: no GG-recorded winners yet — skipped")
     for i, p in enumerate(proxies):
         amt = ctp_vals[min(i, len(ctp_vals) - 1)] if ctp_vals else 0
+        # Same GG-money rule as Team Net: a purse posted on the CTP /
+        # Longest Putt board is Kerry's adjusted number — prefer it.
+        if (p.get("purse") or 0) > 0:
+            amt = p["purse"]
         if amt > 0:
             label = "Longest Putt" if p["game"] == "longest_putt" else "CTP"
             rows.append({"golferName": p["player_name"],
