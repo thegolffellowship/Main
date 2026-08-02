@@ -705,27 +705,39 @@
             }, 15000);
         }
 
-        // Season-contest memo detail (Kerry 2026-08-02): what the money is
-        // FOR, off the payout rows being paid — "Pool A winner bonus",
-        // "3rd place + Pool B winner bonus", "2nd place". Only fires when
-        // every row is a season-contest category, so ordinary event
-        // payouts keep Kerry's ratified short memo.
+        // Memo detail (Kerry 2026-08-02: "Needs to be descriptive for both
+        // TGF and for recipient") — WHAT the money is for, appended after
+        // the event so one memo serves the books and the winner. Season
+        // rows read their description tail ("Pool A winner bonus", "2nd
+        // place"); event rows read game + compact desc ("Individual Net
+        // LOW 2nd", "Skins ×3", "Closest to Pin Hole 5").
         const SEASON_MEMO_CATS = { "City Net": 1, "Match Play": 1, "Match Play Pool": 1 };
-        function seasonMemoDetail(items) {
-            const list = (items || []).filter(p => p && p.description);
-            if (!list.length || !list.every(p => SEASON_MEMO_CATS[p.category])) return "";
+        function memoDetail(items) {
+            const list = (items || []).filter(p => p && (p.description || p.category));
             const bits = list.map(p => {
-                let t = stripAuto(p.description).split("—").pop().trim();
-                const m = t.match(/^(T?)(\d+) place$/i);   // "1 place" -> "1st place"
-                if (m) {
-                    const n = parseInt(m[2], 10);
-                    const suf = (n % 100 >= 11 && n % 100 <= 13) ? "th"
-                        : ({ 1: "st", 2: "nd", 3: "rd" }[n % 10] || "th");
-                    t = `${m[1] ? "T" : ""}${n}${suf} place`;
+                if (SEASON_MEMO_CATS[p.category]) {
+                    let t = stripAuto(p.description || "").split("—").pop().trim();
+                    const m = t.match(/^(T?)(\d+) place$/i);   // "1 place" -> "1st place"
+                    if (m) {
+                        const n = parseInt(m[2], 10);
+                        const suf = (n % 100 >= 11 && n % 100 <= 13) ? "th"
+                            : ({ 1: "st", 2: "nd", 3: "rd" }[n % 10] || "th");
+                        t = `${m[1] ? "T" : ""}${n}${suf} place`;
+                    }
+                    return t;
                 }
-                return t;
+                const label = CATEGORY_LABELS[p.category] || p.category || "";
+                const short = (shortPayoutDesc(p.description, p.category) || "")
+                    .replace(/\s*\|\s*/g, " ");   // "LOW | 2nd" reads better as "LOW 2nd" in a memo
+                return (short && short.toLowerCase() !== label.toLowerCase())
+                    ? `${label} ${short}`.trim() : label;
             }).filter(Boolean);
-            return [...new Set(bits)].join(" + ");
+            let out = [...new Set(bits)].join(" + ");
+            // Venmo notes cap near 280 chars — keep a many-game memo humane
+            if (out.length > 130) {
+                out = out.slice(0, 127).replace(/\s*\+\s*[^+]*$/, "") + " + more";
+            }
+            return out;
         }
 
         function payAction(winData, amount, eventCode, eventName, golferName, detail) {
@@ -922,7 +934,7 @@
             const dattrs = `data-gid="${g.golfer_id}" data-evid="${ev.id}" data-amt="${g.total}" `
                 + `data-code="${(ev.code||'').replace(/"/g,'&quot;')}" `
                 + `data-ename="${(ev.name||'').replace(/"/g,'&quot;')}" data-name="${nm}" `
-                + `data-detail="${seasonMemoDetail(g.items).replace(/"/g,'&quot;')}" `
+                + `data-detail="${memoDetail(g.items || []).replace(/"/g,'&quot;')}" `
                 + `data-method="${opts.method||''}" data-handle="${(opts.handle||'').replace(/"/g,'&quot;')}"`;
             const btn = opts.manual
                 ? `<button class="add-venmo-btn" style="background:#ede9fe;color:#5b21b6;border:1px solid #ddd6fe;" title="Tap to change how this player gets paid" onclick="event.stopPropagation(); tgfRevealAddPay(this)">${opts.label}</button>`
@@ -942,7 +954,7 @@
             const gPartial = gDue > 0.005 && (g.total - gDue) > 0.005;
             // the memo describes exactly the rows this Pay covers — the
             // unpaid remainder on a partial, everything otherwise
-            const gDetail = seasonMemoDetail(
+            const gDetail = memoDetail(
                 gPartial ? g.items.filter(p => p.payment_status !== "paid") : g.items);
             const act = !alreadyPaid ? payAction(winData, gPartial ? gDue : g.total, ev.code, ev.name, g.name, gDetail) : null;
             let venmoHtml = "";

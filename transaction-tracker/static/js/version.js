@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.188.2";
+window.TGF_VERSION = "2.188.3";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.188.3",
+    date: "2026-08-02",
+    changes: [
+      "EVERY PAYOUT MEMO NOW SAYS WHAT WAS WON (Kerry: 'Needs to be descriptive for both TGF and for recipient' — superseding the short-memo convention for ordinary event payouts). Both Pay surfaces (the TGF Payouts page and the per-event PAYOUTS panel) append the winnings detail after the event: 'Jay Horton - Winnings for s9.19 The Quarry — Individual Net LOW 2nd + Skins ×3 + Closest to Pin Hole 5'. Season-contest rows keep their v2.188.2 wording (Pool A winner bonus / 3rd place). The '[Name] - Winnings for [event]' skeleton the auto-confirm matchers key on is unchanged, partial payments describe only the rows they cover, and very long multi-game memos truncate gracefully ('+ more') under Venmo's note limit.",
+    ],
+  },
   {
     version: "2.188.2",
     date: "2026-08-02",
