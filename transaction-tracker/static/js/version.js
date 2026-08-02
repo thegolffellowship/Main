@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.188.15";
+window.TGF_VERSION = "2.188.16";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.188.16",
+    date: "2026-08-02",
+    changes: [
+      "Aliases are editable on mobile (Kerry: 'I can't see, edit, or add aliases on Mobile'): the mobile customer card's Info tab now carries the same Aliases section as the desktop panel — list with delete, plus name/email add controls — wired to the existing /api/customers/aliases endpoints and loaded by the shared detail-handler pass. A Venmo display name that doesn't match the member (Chuck's 'Charles Fehlis') can now be captured as an alias from the phone, right where the payout mismatch is noticed.",
+    ],
+  },
   {
     version: "2.188.15",
     date: "2026-08-02",
