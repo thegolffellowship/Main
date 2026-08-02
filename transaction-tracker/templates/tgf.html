@@ -2022,6 +2022,17 @@
             }
         }
 
+        // Inline onclick= handlers can only reach GLOBALS, and this whole
+        // script is a strict-mode IIFE — every function an onclick names
+        // must be exported here or the tap dies with a silent
+        // ReferenceError. That's how "+ Add Payment" (and the method-edit
+        // badge, and the Pay tap's verifying marker) shipped broken: the
+        // buttons rendered fine and did nothing (Kerry, 2026-08-02).
+        window.tgfPayHint = tgfPayHint;
+        window.tgfRevealAddPay = tgfRevealAddPay;
+        window.tgfSaveAddPay = tgfSaveAddPay;
+        window.onPayTap = onPayTap;
+
         // ── Init ─────────────────────────────────────────────────
         document.addEventListener("DOMContentLoaded", () => {
             loadData();

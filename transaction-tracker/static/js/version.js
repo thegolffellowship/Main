@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.188.16";
+window.TGF_VERSION = "2.188.17";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.188.17",
+    date: "2026-08-02",
+    changes: [
+      "'+ Add Payment' on the Payouts page works (Kerry: 'Add Payment button doesn't work'): the page's script is a strict-mode IIFE and its inline onclick handlers (tgfRevealAddPay / tgfSaveAddPay / tgfPayHint / onPayTap) were never exported to window, so tapping the chooser — and the method-edit ✎ badge — threw a silent ReferenceError and did nothing. The four functions are now window-exported. Side effect fixed for free: onPayTap now actually runs on Pay taps, so the 'Sent · verifying…' pill engages instead of the button silently relying on the receipt sweep alone.",
+    ],
+  },
   {
     version: "2.188.16",
     date: "2026-08-02",
