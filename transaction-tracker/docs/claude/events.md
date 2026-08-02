@@ -1084,7 +1084,14 @@ matched. The memo TGF types is authoritative: "Matt Griffin - Winnings
 for s9.17 Silverhorn". Fallback (a) parses the "Name - " prefix and
 resolves it via `_lookup_customer_id`; fallback (b) parses the memo's
 event code and, if exactly one pending payout in that event owes this
-EXACT amount, takes that payee. The expense parser now preserves the
+EXACT amount, takes that payee. Fallback (b) also accepts FULL event
+names (v2.188.15): when the memo carries no `[sa]N.N` code ("Winnings
+for TGF SAN ANTONIO CHAMPIONSHIP", season contests), the event text —
+minus any " — 1st place" detail tail — is matched verbatim against
+`tgf_events.code`. Added for Chuck Fehlis' championship payout
+(2026-08-02): his Venmo displays "Charles Fehlis" (no alias on file)
+AND the extraction dropped his memo's payee prefix, so every earlier
+tier missed and the codeless event name was the only signal left. The expense parser now preserves the
 memo verbatim (the "Name - " prefix was previously stripped), and new
 payout emails resolve customer_id from the memo prefix at insert time
 (app.py) before falling back to the Venmo display name.),

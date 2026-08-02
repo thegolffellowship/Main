@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.188.14";
+window.TGF_VERSION = "2.188.15";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.188.15",
+    date: "2026-08-02",
+    changes: [
+      "Venmo payout matcher learns codeless event names: the memo-event fallback only understood '[sa]N.N' codes, so Chuck Fehlis' $42.50 championship payment — whose Venmo displays 'Charles Fehlis' (no alias) and whose receipt extraction dropped the memo's payee prefix — resolved to nobody and sat pending while every other payment auto-flipped PAID. The fallback now also matches the memo's full event name ('Winnings for TGF SAN ANTONIO CHAMPIONSHIP', season-contest codes) verbatim against tgf_events, then applies the same unique-exact-amount rule.",
+    ],
+  },
   {
     version: "2.188.14",
     date: "2026-08-02",

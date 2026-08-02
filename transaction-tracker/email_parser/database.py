@@ -24851,27 +24851,44 @@ def auto_match_venmo_payouts_to_tgf(
                 if not cid:
                     em = re.search(r"winnings\s+for\s+([a-z]+\d+(?:\.\s*\d+)?)",
                                    memo_txt, re.I)
+                    erow = None
                     if em:
                         ecode = em.group(1).replace(" ", "")
                         erow = conn.execute(
                             "SELECT id FROM tgf_events WHERE LOWER(code) LIKE LOWER(?) LIMIT 1",
                             (ecode + "%",)).fetchone()
-                        if erow:
-                            uniq = conn.execute(
-                                """SELECT p.customer_id AS cid,
-                                          ROUND(SUM(p.amount), 2) AS total
-                                   FROM tgf_payouts p
-                                   LEFT JOIN acct_transactions t
-                                          ON t.id = p.acct_transaction_id
-                                   WHERE p.event_id = ?
-                                     AND (p.acct_transaction_id IS NULL
-                                          OR (t.source = 'pending'
-                                              AND COALESCE(t.status,'active')='active'))
-                                   GROUP BY p.customer_id
-                                   HAVING ABS(total - ?) <= 0.01""",
-                                (erow["id"], amt)).fetchall()
-                            if len(uniq) == 1:
-                                cid = uniq[0]["cid"]
+                    if not erow:
+                        # Full-name events (championships, season contests)
+                        # carry no [sa]N.N code — match the memo's event
+                        # verbatim against tgf_events.code, dropping any
+                        # " — 1st place" detail tail. This is what rescues a
+                        # receipt whose Venmo display name is unknown AND
+                        # whose memo payee prefix got dropped in extraction
+                        # (Chuck Fehlis / "Charles Fehlis", 2026-08-02).
+                        fm = re.search(
+                            r"winnings\s+for\s+(.+?)(?:\s+[—–-]\s+.*)?$",
+                            memo_txt, re.I)
+                        if fm and fm.group(1).strip():
+                            erow = conn.execute(
+                                "SELECT id FROM tgf_events "
+                                "WHERE LOWER(code) = LOWER(?) LIMIT 1",
+                                (fm.group(1).strip(),)).fetchone()
+                    if erow:
+                        uniq = conn.execute(
+                            """SELECT p.customer_id AS cid,
+                                      ROUND(SUM(p.amount), 2) AS total
+                               FROM tgf_payouts p
+                               LEFT JOIN acct_transactions t
+                                      ON t.id = p.acct_transaction_id
+                               WHERE p.event_id = ?
+                                 AND (p.acct_transaction_id IS NULL
+                                      OR (t.source = 'pending'
+                                          AND COALESCE(t.status,'active')='active'))
+                               GROUP BY p.customer_id
+                               HAVING ABS(total - ?) <= 0.01""",
+                            (erow["id"], amt)).fetchall()
+                        if len(uniq) == 1:
+                            cid = uniq[0]["cid"]
                 if not cid:
                     summary["no_candidate"] += 1
                     continue
