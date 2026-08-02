@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.188.1";
+window.TGF_VERSION = "2.188.2";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.188.2",
+    date: "2026-08-02",
+    changes: [
+      "SEASON-CONTEST VENMO MEMOS SAY WHAT THE MONEY IS FOR (Kerry, paying Doug Hamilton's pool bonus: 'Not the right memo for a Match Play Pool Winner' — the prefill read 'Winnings for SAN ANTONIO MATCH PLAY 2026 FINAL', which sounds like podium money). The Pay link now appends the specifics off the exact payout rows being paid: 'Doug Hamilton - Winnings for SAN ANTONIO MATCH PLAY 2026 FINAL — Pool A winner bonus', and a combined payment reads e.g. '3rd place + Pool B winner bonus'. A partial payment describes only the unpaid remainder it covers. The '[Name] - Winnings for [event]' skeleton is unchanged — the Venmo/PayPal/Cash App/Zelle auto-confirm matchers key on the name prefix and that phrase — and ordinary event payouts keep Kerry's ratified short memo (the detail only fires when every row is a season-contest category).",
+    ],
+  },
   {
     version: "2.188.1",
     date: "2026-08-02",
