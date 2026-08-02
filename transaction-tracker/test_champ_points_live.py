@@ -414,6 +414,33 @@ for n_cap in (1, 2, 3):
     check(f"seat math holds: {n_cap} captain(s) + {n_fc} Cup + 1 MP + 4 PC"
           " = 12 seats", n_cap + n_fc + 1 + 4 == 12)
 
+print("\n== bracket saves resolve ids at write time (the LSC-seat defect: "
+      "'didn't populate the Lone Star Cup position with the champion') ==")
+fd5, _bp5 = _tf2.mkstemp(suffix=".db"); os.close(fd5); db.init_db(_bp5)
+with db._connect(_bp5) as _c5:
+    _c5.execute("INSERT INTO customers (first_name, last_name)"
+                " VALUES ('Luke', 'Youngs')")
+    LCID = _c5.execute("SELECT customer_id FROM customers"
+                       " WHERE last_name='Youngs'").fetchone()[0]
+    _c5.commit()
+b1 = db.cmp_save_bracket_slot("2026", "Austin", "final", 0,
+                              player_name="Luke Youngs",
+                              opponent_name="Jay Hogue",
+                              winner_name="Luke Youngs", margin="7&5",
+                              db_path=_bp5)
+check("winner_id resolves at save time (the LSC seat reads it)",
+      b1.get("winner_id") == LCID, str(b1.get("winner_id")))
+check("player_id resolves too", b1.get("player_id") == LCID)
+check("an unknown name stores NULL, never a guessed id",
+      b1.get("opponent_id") is None)
+b2 = db.cmp_save_bracket_slot("2026", "Austin", "final", 0,
+                              player_name="Luke Youngs",
+                              opponent_name="Jay Hogue",
+                              winner_name=None, db_path=_bp5)
+check("clearing the winner clears the id — no stale champion",
+      b2.get("winner_id") is None)
+os.unlink(_bp5)
+
 print("\n== FINAL is a dial the admin flips (Kerry: 'City Net is final') ==")
 fd4, _bp4 = _tf2.mkstemp(suffix=".db"); os.close(fd4); db.init_db(_bp4)
 check("no dial set -> still projecting",

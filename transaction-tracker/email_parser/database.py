@@ -8872,8 +8872,21 @@ def get_lone_star_cup_projection(db_path: str | Path = DB_PATH) -> dict:
                                                  db_path=db_path)
                       if b["round"] == "final" and b.get("winner_name")]
             if finals:
+                _wcid = finals[0].get("winner_id")
+                if not _wcid:
+                    # Rows saved before ids were written at save time
+                    # (the 2026-08-01 'LSC seat stayed TBD after the
+                    # Austin final was recorded' defect) — resolve the
+                    # name at read time; the seat must never sit empty
+                    # because a backfill hasn't run yet.
+                    try:
+                        with _connect(db_path) as _c:
+                            _wcid, _how = _resolve_gg_person(
+                                _c, finals[0]["winner_name"])
+                    except Exception:
+                        _wcid = None
                 mp_champ = {"name": finals[0]["winner_name"],
-                            "cid": finals[0].get("winner_id"), "place": 1}
+                            "cid": _wcid, "place": 1}
         except Exception:
             logger.warning("LSC: match play bracket read failed for %s",
                            chapter, exc_info=True)
@@ -8959,10 +8972,14 @@ def get_lone_star_cup_projection(db_path: str | Path = DB_PATH) -> dict:
             if contest == "matchplay":
                 if mp_champ and kept.get(mp_champ.get("cid"),
                                          (None,))[0] == "matchplay":
+                    # A recorded final is a FACT, not a projection — the
+                    # seat is secured the same way a declared-final City
+                    # NET captaincy is (Kerry 2026-08-01)
                     row.update(player_name=mp_champ["name"],
                                customer_id=mp_champ["cid"],
-                               earned_as="Knockout champion",
-                               status="projected")
+                               earned_as=(f"{season} City Match Play "
+                                          "Champion"),
+                               status="secured")
                 else:
                     row["note"] = "Decided by the knockout bracket"
             elif keepers[contest]:
@@ -31717,6 +31734,30 @@ def cmp_save_bracket_slot(season: str, chapter: str, round_: str, slot: int,
              opponent_name, opponent_stableford,
              winner_name, margin, event_id),
         )
+        # Principle 6: resolve ids AT WRITE TIME, every save. The upsert
+        # above keeps stale ids when a different player lands in a slot,
+        # and nothing else wrote winner_id at all — the boot backfill only
+        # runs at deploy time, so the LSC CITY MATCH PLAY seat stayed
+        # 'to be decided' after Kerry recorded the Austin final
+        # (2026-08-01: "didn't populate the Lone Star Cup position with
+        # the champion"). Unresolvable names store NULL, never a guess.
+        ids = {}
+        for id_col, val in (("player_id", player_name),
+                            ("opponent_id", opponent_name),
+                            ("winner_id", winner_name)):
+            cid = None
+            if val:
+                try:
+                    cid = _lookup_customer_id(conn, val, None)
+                except Exception:
+                    cid = None
+            ids[id_col] = cid
+        conn.execute(
+            "UPDATE cmp_bracket SET player_id = ?, opponent_id = ?, "
+            "winner_id = ? WHERE season = ? AND chapter = ? AND round = ? "
+            "AND slot = ?",
+            (ids["player_id"], ids["opponent_id"], ids["winner_id"],
+             season, chapter, round_, slot))
         conn.commit()
         row = conn.execute(
             "SELECT * FROM cmp_bracket WHERE season = ? AND chapter = ? AND round = ? AND slot = ?",

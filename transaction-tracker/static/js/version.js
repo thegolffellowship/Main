@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.188.0";
+window.TGF_VERSION = "2.188.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.188.1",
+    date: "2026-08-02",
+    changes: [
+      "THE LONE STAR CUP MATCH PLAY SEAT NOW POPULATES WHEN THE FINAL IS RECORDED (Kerry, after closing out the Austin matches: the payout sheet filled in but the LSC seat stayed 'to be decided'). Root cause: the Cup seat identifies the champion by customer_id, but bracket saves only ever wrote the winner's NAME — the id column stayed empty until a deploy-time backfill happened to run. Bracket saves now resolve player/opponent/winner ids at write time (principle 6: unresolvable names store NULL, never a guess; clearing a result clears the id so no stale champion lingers), and the Cup projection resolves the name at read time as a fallback so rows saved before this fix populate immediately. The CITY MATCH PLAY seat also now reads 🏆 SECURED like the captaincy — a recorded final is a fact, not a projection — so Luke Youngs holds Austin's seat as '2026 City Match Play Champion'.",
+    ],
+  },
   {
     version: "2.188.0",
     date: "2026-08-01",

@@ -878,7 +878,13 @@ and co-captains taking up two of the 7 net slots for the Lone Star
 Cup")**: T1 ⇒ co-champions = CO-CAPTAIN seats ×2, Fellowship Cup seats
 6→5, roster stays 12 (`get_lone_star_cup_projection` seat math is
 generic in n_champions). The LSC captain stream now reads
-`get_points_race_live` (passthrough on quiet days).
+`get_points_race_live` (passthrough on quiet days). v2.188.1:
+`cmp_save_bracket_slot` resolves player/opponent/winner ids at WRITE
+time (clearing a result clears the id) — the LSC MATCH PLAY seat reads
+`winner_id` and sat TBD after Kerry recorded the Austin final because
+only the name was stored; a read-time name→cid fallback covers
+pre-fix rows, and a recorded final renders the seat SECURED
+("<season> City Match Play Champion").
 
 **FINAL winnings (v2.186.0, Kerry championship evening):** dial
 `app_settings gg_points_race_final` (JSON `{race_key: "date"}`) →
