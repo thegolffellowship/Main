@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.188.10";
+window.TGF_VERSION = "2.188.11";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.188.11",
+    date: "2026-08-02",
+    changes: [
+      "Docs: recorded both City Championship side-game payouts (SA $1,484 / 33 rows incl. the $156 TGF MVP; Austin $834 / 20 rows), replacing the stale partial team+CTP recordings. Captured Kerry's flight-consolidation precedent (folded the single-player 4th gross flight into 3, pot split evenly — recorded via a temporary gross_flight_pot_mode=even flip, dial restored to buyins) and the pending FLIGHTS-tab mechanism decision in side-games.md.",
+    ],
+  },
   {
     version: "2.188.10",
     date: "2026-08-02",

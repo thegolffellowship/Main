@@ -566,6 +566,17 @@ from our imported scorecards, mirroring the MVP wiring (v2.33.0):
   via scoring_rounds' own `gg_league_round_id` linkage when the round
   carries no `[sa]N.N` code (championship names), and a `?round=<id>` on
   the widget URL scopes `reset` to that one round.
+- **Flight-consolidation precedent (Kerry, 2026-08-02, NOT yet a
+  ratified rule):** at the 2026-08-01 SA Championship he consolidated
+  Ind Gross from the matrix's 4 flights to 3 in GG (Flight 4 had a
+  single player) and split the pot EVENLY among the 3 flights. The
+  championships were recorded with `gross_flight_pot_mode=even`
+  (temporarily flipped, then restored to `buyins`, the s18.8-matching
+  interim default — the dial is GLOBAL, there is no per-event override).
+  Kerry wants a proper mechanism for per-event flight adjustments —
+  likely a FLIGHTS tab under EVENTS or inside the GAMES tab, layout
+  undecided ("near the final component of the EVENTS tab"). Do not
+  build until he settles the layout.
 - Display-only (Stage 1 shadow discipline): GG stays official; no
   payout-ledger writes.
 - Games-tab layout (v2.37.0, Kerry): TEAM Net / Individual Net (per
