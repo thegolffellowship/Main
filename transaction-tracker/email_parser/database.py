@@ -43725,6 +43725,7 @@ def assemble_event_game_payouts(event_name: str, db_path=None) -> dict:
                          "description": f"{label} {p.get('game_label') or ''}".strip()})
 
     # ── MVP (computed): City here; TGF combined pot once per day ──
+    linked: list = []
     det = determine_tgf_mvp(ev["item_name"], db_path=db_path)
     if not det.get("error"):
         per_event = det.get("per_event") or []
@@ -43735,7 +43736,21 @@ def assemble_event_game_payouts(event_name: str, db_path=None) -> dict:
                    if e["event_name"].lower() == ev["item_name"].lower()), None)
         city_val = _matrix_num(g_net.get("cityMVP")) + (0 if linked else tgf_val)
         if holes == 18:
-            city_val = _matrix_num(g_net.get("mvp"))
+            # 18-hole day type (Kerry-ratified 2026-07-31, mirrors the Games
+            # tab): the m18 matrix row encodes the SINGLE-event day — mvp =
+            # min($8xN, $100) with the capped-away excess folded into
+            # Individual Net. With a linked same-day 18-hole event there is
+            # no cap: the full $8xN splits $4/buyer City + $4/buyer TGF
+            # ("exactly like 9s. It's just a bigger $/player"). Matrix
+            # cityMVP/tgfMVP columns win where they exist.
+            half18 = 4.0 * (counts["net"] or 0)
+            city_half = _matrix_num(g_net.get("cityMVP")) or half18
+            tgf_val = _matrix_num(g_net.get("tgfMVP")) or half18
+            if linked:
+                city_val = city_half
+            else:
+                city_val = (_matrix_num(g_net.get("mvp"))
+                            or min(city_half + tgf_val, 100.0))
         cm = my and my.get("city_mvp")
         if cm and cm.get("status") == "determined" and cm.get("winners") and city_val > 0:
             _money_split(city_val, [w["player"] for w in cm["winners"]],
@@ -43743,7 +43758,7 @@ def assemble_event_game_payouts(event_name: str, db_path=None) -> dict:
         elif city_val > 0:
             notes.append("City MVP: not determined yet — skipped")
         t = det.get("tgf_mvp") or {}
-        if linked and holes == 9:
+        if linked:
             if t.get("status") == "determined" and t.get("winners"):
                 # Exactly ONE event of the day owns the combined pot —
                 # the winner's own event (v2.41.2; both linked events
@@ -43757,9 +43772,20 @@ def assemble_event_game_payouts(event_name: str, db_path=None) -> dict:
                                  "(winner's event) — not here")
                 else:
                     combined = tgf_val
+                    mtx = m9 if holes == 9 else m18
                     for le in linked:
-                        le_row = m9.get(str(le.get("net_buyers") or 0)) or {}
-                        combined += _matrix_num(le_row.get("tgfMVP")) or _matrix_num(le_row.get("mvp"))
+                        nb = le.get("net_buyers") or 0
+                        le_row = mtx.get(str(nb)) or {}
+                        if holes == 9:
+                            combined += (_matrix_num(le_row.get("tgfMVP"))
+                                         or _matrix_num(le_row.get("mvp")))
+                        else:
+                            # 18h linked event's TGF half: matrix column if
+                            # present, else the derived $4/buyer (the m18
+                            # mvp column is the CAPPED single-day value —
+                            # never a valid TGF contribution).
+                            combined += (_matrix_num(le_row.get("tgfMVP"))
+                                         or 4.0 * nb)
                     if combined > 0:
                         _money_split(combined, [w["player"] for w in t["winners"]],
                                      "tgf_mvp", "TGF MVP (combined same-day pot)"
@@ -43791,11 +43817,30 @@ def assemble_event_game_payouts(event_name: str, db_path=None) -> dict:
                                          flights=net_flights, db_path=db_path)
         if d.get("status") == "determined":
             if holes == 18:
+                # Multi-event 18-hole day (Kerry-ratified 2026-07-31, mirrors
+                # the Games tab): the m18 ladder encodes the single-event pot
+                # (26xN minus the CAPPED MVP), but on a linked day the full
+                # $8xN goes to MVP money — the capped-away residual leaves
+                # Individual Net, places scaled proportionally so every
+                # matrix ratio holds.
+                _scale = 1.0
+                if linked:
+                    _full_mvp = 8.0 * (counts["net"] or 0)
+                    _capped = _matrix_num(g_net.get("mvp"))
+                    _stored = _matrix_num(g_net.get("individualNet"))
+                    _residual = _full_mvp - _capped
+                    if _residual > 0 and _stored > 0:
+                        _scale = (_stored - _residual) / _stored
+
+                def _scale_amt(v):
+                    n = _matrix_num(v)
+                    return round(n * _scale, 2) if n > 0 else v
+
                 flight_amounts = [
-                    [g_net.get("netLow1st"), g_net.get("netLow2nd"), g_net.get("netLow3rd"), g_net.get("netLow4th")],
-                    [g_net.get("netHigh1st"), g_net.get("netHigh2nd"), g_net.get("netHigh3rd"), g_net.get("netHigh4th")],
-                    [g_net.get("netMid1st"), g_net.get("netMid2nd"), g_net.get("netMid3rd"), g_net.get("netMid4th")],
-                    [g_net.get("net4th1st"), g_net.get("net4th2nd"), g_net.get("net4th3rd"), g_net.get("net4th4th")],
+                    [_scale_amt(g_net.get("netLow1st")), _scale_amt(g_net.get("netLow2nd")), _scale_amt(g_net.get("netLow3rd")), _scale_amt(g_net.get("netLow4th"))],
+                    [_scale_amt(g_net.get("netHigh1st")), _scale_amt(g_net.get("netHigh2nd")), _scale_amt(g_net.get("netHigh3rd")), _scale_amt(g_net.get("netHigh4th"))],
+                    [_scale_amt(g_net.get("netMid1st")), _scale_amt(g_net.get("netMid2nd")), _scale_amt(g_net.get("netMid3rd")), _scale_amt(g_net.get("netMid4th"))],
+                    [_scale_amt(g_net.get("net4th1st")), _scale_amt(g_net.get("net4th2nd")), _scale_amt(g_net.get("net4th3rd")), _scale_amt(g_net.get("net4th4th"))],
                 ]
             else:
                 flight_amounts = [

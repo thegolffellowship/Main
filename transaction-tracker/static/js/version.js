@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.188.9";
+window.TGF_VERSION = "2.188.10";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.188.10",
+    date: "2026-08-02",
+    changes: [
+      "The payouts assembly learned the ratified 18-hole day type (Kerry 2026-07-31) the Games tab already displays: on a day with a linked same-format 18-hole event there is no $100 MVP cap — the full $8/buyer splits $4 City + $4 TGF, the combined TGF MVP pot records once under the winner's event (exactly like the 9s), and Individual Net gives the capped-away residual back with places scaled proportionally. Single-event 18-hole days are unchanged (capped fold, excess already in Individual Net). Without this, both 2026-08-01 championships would have recorded $100 City MVPs, no TGF MVP money, and an Individual Net pot double-counting the residual.",
+    ],
+  },
   {
     version: "2.188.9",
     date: "2026-08-02",
