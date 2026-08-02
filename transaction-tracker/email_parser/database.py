@@ -11946,7 +11946,11 @@ def import_event_scorecards_by_code(widget_url: str, event_code: str,
                 if href.startswith("/"):
                     href = f"https://{host}{href}"
                 try:
+                    # round_key stamps gg_league_round_id on the imported
+                    # rows (v2.188.7 — the omission left championship
+                    # rounds with no round identity to repair by)
                     res = import_gg_scorecards(href, event_code=code,
+                                               round_key=str(rid),
                                                db_path=db_path)
                     out["boards"].append({
                         "board": label,

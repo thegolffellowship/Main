@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.188.6";
+window.TGF_VERSION = "2.188.7";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.188.7",
+    date: "2026-08-02",
+    changes: [
+      "Follow-up to v2.188.6: the round-scan importer never stamped gg_league_round_id on the rows it imported, so the round-id repair had nothing to match. The importer now passes the round id through, and the scoring-link-rounds repair identifies the unlinked championship rounds by DATE + COURSE instead (only NULL-event rows are ever touched).",
+    ],
+  },
   {
     version: "2.188.6",
     date: "2026-08-02",
