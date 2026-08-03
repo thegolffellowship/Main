@@ -13400,6 +13400,11 @@ def send_handicap_recap_email(event_label: str, written: list,
         # A brand-new player has no prior index (None) — show a dash.
         return f"{v:.1f}" if v is not None else "&mdash;"
 
+    def _fx(v):
+        # Index values carry the "N" suffix — TGF indexes are 9-hole
+        # indexes (Kerry 2026-08-03). Differentials stay bare.
+        return f"{v:.1f}N" if v is not None else "&mdash;"
+
     def _delta(p):
         if p.get("index_after") is None or p.get("index_now") is None:
             return None
@@ -13413,8 +13418,8 @@ def send_handicap_recap_email(event_label: str, written: list,
 
     def _mover_line(players):
         return ", ".join(
-            f"{p['player_name']} {_fi(p['index_now'])} &rarr; "
-            f"<b>{_fi(p['index_after'])}</b>" for p in players)
+            f"{p['player_name']} {_fx(p['index_now'])} &rarr; "
+            f"<b>{_fx(p['index_after'])}</b>" for p in players)
 
     trs = []
     for p in rows:
@@ -13436,7 +13441,7 @@ def send_handicap_recap_email(event_label: str, written: list,
             f'<td style="padding:4px 10px;border-bottom:1px solid #E5E7EB;text-align:right;">{p["adjusted_score"]}</td>'
             f'<td style="padding:4px 10px;border-bottom:1px solid #E5E7EB;text-align:right;">{_fi(diff)}</td>'
             f'<td style="padding:4px 10px;border-bottom:1px solid #E5E7EB;text-align:right;white-space:nowrap;">'
-            f'{_fi(p["index_now"])} &rarr; <b>{_fi(p["index_after"])}</b></td>'
+            f'{_fx(p["index_now"])} &rarr; <b>{_fx(p["index_after"])}</b></td>'
             f'<td style="padding:4px 10px;border-bottom:1px solid #E5E7EB;text-align:right;">{arrow}</td>'
             f'</tr>')
 
@@ -13467,7 +13472,7 @@ def send_handicap_recap_email(event_label: str, written: list,
           <th style="padding:4px 10px;">Gross</th>
           <th style="padding:4px 10px;">Adj</th>
           <th style="padding:4px 10px;">Diff</th>
-          <th style="padding:4px 10px;">Index</th>
+          <th style="padding:4px 10px;">9-Hole Index</th>
           <th style="padding:4px 10px;">&Delta;</th>
         </tr></thead>
         <tbody>{''.join(trs)}</tbody>

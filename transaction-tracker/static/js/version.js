@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.191.5";
+window.TGF_VERSION = "2.191.6";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.191.6",
+    date: "2026-08-03",
+    changes: [
+      "Handicap recap emails label their indexes as what they are (Kerry): every index value carries the N suffix (TGF indexes are 9-hole indexes) and the column header reads 9-Hole Index. Differentials stay bare — the suffix marks indexes only.",
+    ],
+  },
   {
     version: "2.191.5",
     date: "2026-08-03",
