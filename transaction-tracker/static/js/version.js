@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.191.2";
+window.TGF_VERSION = "2.191.3";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.191.3",
+    date: "2026-08-03",
+    changes: [
+      "One bordered stat-column standard (Kerry: 'I'd like a standard unless I ask for a specific change'): 50px on phones / 110px on desktop, centered titles, 6px horizontal padding, full-height 2px dividers, stacked two-line titles. Applied to the Fellowship Cup's CITY RANK and RESET columns and the city boards' reset column — the RESET header now stacks POINTS over RESET everywhere it appears, matching CITY over RANK.",
+    ],
+  },
   {
     version: "2.191.2",
     date: "2026-08-03",

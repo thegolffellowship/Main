@@ -5885,9 +5885,11 @@
         const ptsStyle = resetPrimary
             ? `width:${compact ? "40px" : "90px"};text-align:center;color:var(--text-muted);border-left:2px solid #cbd5e1;border-right:2px solid #cbd5e1;`
             : `width:${compact ? "40px" : "90px"};text-align:center;font-weight:700;border-left:2px solid #cbd5e1;border-right:2px solid #cbd5e1;`;
+        // Bordered stat-column standard (Kerry 2026-08-03): 50px compact /
+        // 110px desktop, centered, 6px horizontal padding, stacked titles.
         const resetStyle = resetPrimary
-            ? `width:${compact ? "44px" : "110px"};text-align:center;font-weight:700;border-right:2px solid #cbd5e1;`
-            : `width:${compact ? "44px" : "110px"};text-align:center;border-right:2px solid #cbd5e1;`;
+            ? `width:${compact ? "50px" : "110px"};text-align:center;font-weight:700;border-right:2px solid #cbd5e1;padding-left:6px;padding-right:6px;`
+            : `width:${compact ? "50px" : "110px"};text-align:center;border-right:2px solid #cbd5e1;padding-left:6px;padding-right:6px;`;
         const rndStyle = `width:${compact ? "30px" : "80px"};text-align:center;border-right:2px solid #cbd5e1;`;
         const buyStyle = compact ? "width:26px;text-align:center;" : "width:110px;";
         // Live-day columns (PGA-style): MOVE gets its own slim column and
@@ -6026,7 +6028,7 @@
                     ${liveMode
                         ? `<th style="${todayStyle}" title="Championship points earned today">${compact ? "TDY" : "TODAY"}</th>
                            ${showThru ? `<th style="${thruStyle}" title="Holes completed today — or the tee time if they haven't started">THRU</th>` : ""}`
-                        : `<th style="${resetStyle}">${resetOfficial ? "" : `<span class="pr-proj" style="display:block;font-size:${compact ? "0.52rem" : "0.65rem"};font-weight:600;letter-spacing:0.03em;">(${compact ? "proj" : "Projected"})</span>`}${compact ? "RESET" : "POINTS RESET"}</th>
+                        : `<th style="${resetStyle}line-height:1.25;">${resetOfficial ? "" : `<span class="pr-proj" style="display:block;font-size:${compact ? "0.52rem" : "0.65rem"};font-weight:600;letter-spacing:0.03em;">(${compact ? "proj" : "Projected"})</span>`}POINTS<br>RESET</th>
                            ${showRounds ? `<th style="${rndStyle}" class="pr-rnd" title="Rounds">Rounds</th>` : ""}`}
                     ${showBuy ? `<th style="${buyStyle}" title="Buy-in">Buy-in</th>` : ""}
                 </tr></thead>
@@ -6172,11 +6174,12 @@
 
         const compact = prIsCompact();
         const rankTh = `width:${compact ? "28px" : "56px"};`;
-        // Wide enough for the stacked RANK title + a breath of padding so
-        // the text never runs into the border lines (Kerry 2026-08-03);
-        // border-left draws the full-height divider off the Player column.
-        const netTh = `width:${compact ? "46px" : "90px"};text-align:center;border-left:2px solid #cbd5e1;padding-left:6px;padding-right:6px;`;
-        const resetTh = `width:${compact ? "44px" : "110px"};text-align:center;font-weight:700;border-left:2px solid #cbd5e1;border-right:2px solid #cbd5e1;`;
+        // THE STANDARD for bordered stat columns (Kerry 2026-08-03: "I'd
+        // like a standard unless I ask for a specific change"): 50px
+        // compact / 110px desktop, centered, 6px horizontal padding,
+        // full-height 2px dividers, stacked two-line titles.
+        const netTh = `width:${compact ? "50px" : "110px"};text-align:center;border-left:2px solid #cbd5e1;padding-left:6px;padding-right:6px;`;
+        const resetTh = `width:${compact ? "50px" : "110px"};text-align:center;font-weight:700;border-left:2px solid #cbd5e1;border-right:2px solid #cbd5e1;padding-left:6px;padding-right:6px;`;
         const rows = d.standings.map(r => {
             const bg = r.enrolled ? "background:#bbf7d0;"
                      : (r.customer_id ? "" : "background:#fffbeb;");
@@ -6206,7 +6209,7 @@
                 <thead><tr>
                     <th style="${rankTh}">${compact ? "#" : "Rank"}</th><th style="width:99%;">Player</th>
                     <th style="${netTh}line-height:1.25;" title="Rank in their chapter's City Points race">CITY<br>RANK</th>
-                    <th style="${resetTh}">${d.reset_official ? "" : `<span class="pr-proj" style="display:block;font-size:${compact ? "0.52rem" : "0.65rem"};font-weight:600;letter-spacing:0.03em;">(${compact ? "proj" : "Projected"})</span>`}${compact ? "RESET" : "POINTS RESET"}</th>
+                    <th style="${resetTh}line-height:1.25;">${d.reset_official ? "" : `<span class="pr-proj" style="display:block;font-size:${compact ? "0.52rem" : "0.65rem"};font-weight:600;letter-spacing:0.03em;">(${compact ? "proj" : "Projected"})</span>`}POINTS<br>RESET</th>
                 </tr></thead>
                 <tbody>${rows}</tbody>
             </table>`;
