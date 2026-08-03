@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.189.4";
+window.TGF_VERSION = "2.189.5";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.189.5",
+    date: "2026-08-02",
+    changes: [
+      "Participation is usable on a phone (Kerry: 'participation on mobile slides everything'): the 11-column table now scrolls inside its own wrapper instead of dragging the whole page sideways (header, stat cards, and filters stay put; body overflow-x clipped as a belt), and mobile gets compact table typography and tighter filter controls.",
+    ],
+  },
   {
     version: "2.189.4",
     date: "2026-08-02",

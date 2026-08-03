@@ -28,7 +28,23 @@
         .part-toolbar input[type="search"] { min-width: 220px; }
         .part-toolbar .spacer { flex: 1; }
 
+        /* The 11-column table is wider than a phone — it must scroll
+           inside its own wrapper, never drag the whole page sideways
+           (Kerry 2026-08-02: "participation on mobile slides everything").
+           body overflow-x is clipped as a belt so no future wide element
+           reintroduces the page slide (clip, not hidden: hidden makes the
+           body a scroll container and can break position:sticky). */
+        body { overflow-x: clip; }
+        .part-table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; max-width: 100%; }
         .part-table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+        @media (max-width: 768px) {
+            .part-table { font-size: 0.78rem; }
+            .part-table th { font-size: 0.68rem; }
+            .part-table th, .part-table td { padding: 5px 6px; }
+            .part-toolbar { gap: 6px; }
+            .part-toolbar input[type="search"] { min-width: 0; flex: 1 1 140px; }
+            .part-toolbar input, .part-toolbar select { font-size: 0.82rem; padding: 5px 8px; }
+        }
         .part-table th {
             background: #f1f5f9; padding: 8px 10px; text-align: left;
             font-weight: 600; color: #475569; border-bottom: 1px solid #e2e8f0;
@@ -226,6 +242,7 @@
             <span style="color:#6b7280;font-size:0.85rem;" id="row-count">—</span>
         </div>
 
+        <div class="part-table-wrap">
         <table class="part-table" id="part-table">
             <thead>
                 <tr>
@@ -246,6 +263,7 @@
                 <tr><td colspan="11" style="text-align:center;padding:32px;color:#94a3b8;">Loading…</td></tr>
             </tbody>
         </table>
+        </div>
 
         <div class="selection-bar" id="selection-bar">
             <span class="count" id="selection-count">0 selected</span>
