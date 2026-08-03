@@ -13939,25 +13939,56 @@ def build_player_snapshot_email(customer_id: int,
     serif = "font-family:Georgia,'Times New Roman',serif;"
     sans = "font-family:-apple-system,'Helvetica Neue',Arial,sans-serif;"
 
-    # WHERE YOU STAND rows — every board the player appears on. A player
-    # who hasn't bought in still sees where they'd stand (that IS the
-    # snapshot's point for them); the race carries a muted "not entered"
-    # tag rather than being hidden.
+    # WHERE YOU STAND (Kerry 2026-08-03 v2): the city Net race is DONE —
+    # it renders as a FINAL result (finish, points total, what the Points
+    # Reset converted to) as the lead-in; then THE FELLOWSHIP CUP
+    # standings immediately after, THE PLAYERS CUP last. A player who
+    # hasn't bought in still sees where they'd stand — that IS the
+    # snapshot's point for them — with a muted "not entered" tag.
+    races_all = spot.get("races", [])
+    # Every standings mention deep-links to that live board on the member
+    # Leaderboard page — the hash handler centers the player's row and
+    # pulses it, same as the Spotlight links (Kerry 2026-08-03).
+    _TAB_OF = {"san_antonio_net": "net", "austin_net": "austin",
+               "fellowship_cup": "tfc", "players_cup_gross": "gross"}
+
+    def _board_link(key):
+        t = _TAB_OF.get(key)
+        return (f"https://tgf-tracker.up.railway.app/member/contests"
+                f"#race={t}&player={customer_id}") if t else None
+
+    def _linked(key, label):
+        u = _board_link(key)
+        return (f'<a href="{u}" style="color:inherit;text-decoration:underline;text-decoration-color:#CBD5E1;text-underline-offset:2px;">{label}</a>'
+                if u else label)
+
+    city = next((r for r in races_all
+                 if str(r.get("key", "")).endswith("_net")
+                 and (r.get("enrolled") or r.get("points_back") is not None)),
+                None)
+    city_html = ""
+    if city and city.get("rank") is not None:
+        city_html = f"""
+      <div style="border:1px solid #E5E7EB;border-left:4px solid {DARK};border-radius:0 8px 8px 0;padding:10px 14px;margin:0 0 14px;{sans}font-size:13px;line-height:1.5;">
+        <div style="{serif}font-size:11px;letter-spacing:0.12em;text-transform:uppercase;color:{MUTE};margin-bottom:3px;">{_linked(city.get('key'), city.get('label', ''))} — Final</div>
+        You finished <b>{city.get('rank')} of {city.get('n_players')}</b> with <b>{n1(city.get('total_points'))} points</b> — converting to a <b>{n1(city.get('points_reset'))} Points Reset</b> seed carried into the cups below.
+      </div>"""
     stand_rows = ""
-    for r in spot.get("races", []):
-        if not r.get("enrolled") and r.get("points_back") is None:
+    for k in ("fellowship_cup", "players_cup_gross"):
+        r = next((x for x in races_all if x.get("key") == k), None)
+        if not r or (not r.get("enrolled") and r.get("points_back") is None):
             continue
         pb = r.get("points_back")
         tag = ("" if r.get("enrolled") else
                f' <span style="font-size:10px;color:{MUTE};font-weight:400;">(not entered)</span>')
         stand_rows += f"""
         <tr>
-          <td style="padding:7px 10px;border-bottom:1px solid #E5E7EB;font-weight:700;">{r.get('label', '')}{tag}</td>
+          <td style="padding:7px 10px;border-bottom:1px solid #E5E7EB;font-weight:700;">{_linked(k, r.get('label', ''))}{tag}</td>
           <td style="padding:7px 10px;border-bottom:1px solid #E5E7EB;text-align:center;white-space:nowrap;">{r.get('rank', '—')} of {r.get('n_players', '—')}</td>
           <td style="padding:7px 10px;border-bottom:1px solid #E5E7EB;text-align:center;font-weight:700;">{n1(r.get('points_reset') if r.get('points_reset') is not None else r.get('total_points'))}</td>
           <td style="padding:7px 10px;border-bottom:1px solid #E5E7EB;text-align:center;color:{'#15803D' if pb == 0 else DARK};white-space:nowrap;">{'leader' if pb == 0 else (f'{n1(pb)} back' if pb is not None else '—')}</td>
         </tr>"""
-    stand_html = f"""
+    stand_html = city_html + (f"""
       <table style="border-collapse:collapse;width:100%;font-size:13px;{sans}">
         <thead><tr style="color:{MUTE};font-size:11px;text-transform:uppercase;letter-spacing:0.04em;">
           <th style="text-align:left;padding:4px 10px;">Race</th>
@@ -13966,7 +13997,7 @@ def build_player_snapshot_email(customer_id: int,
           <th style="padding:4px 10px;">Off the lead</th>
         </tr></thead>
         <tbody>{stand_rows}</tbody>
-      </table>""" if stand_rows else ""
+      </table>""" if stand_rows else "")
 
     # LONE STAR CUP line — factual, same modes as the Spotlight. For the
     # hunt/hypothetical modes it measures from the SEAT LINE on each cup
@@ -13977,11 +14008,14 @@ def build_player_snapshot_email(customer_id: int,
 
     def _seat_line(p):
         gap, cut = p.get("gap_to_seat"), p.get("seat_cut_points")
+        _pk = ("fellowship_cup" if "FELLOWSHIP" in (p.get("path") or "")
+               else "players_cup_gross")
+        _pl = (f'<a href="{_board_link(_pk)}" style="color:#fff;text-decoration:underline;text-decoration-color:#9DB4D6;text-underline-offset:2px;"><b>{p.get("path", "")}</b></a>')
         if gap is None:
-            return (f"<b>{p.get('path', '')}</b> path: spot "
+            return (f"{_pl} path: spot "
                     f"{p.get('place')} for {p.get('seats')} seats.")
         if gap >= 0:
-            return (f"<b>{p.get('path', '')}</b> path: you'd be <b>inside "
+            return (f"{_pl} path: you'd be <b>inside "
                     f"the seat line</b> — spot {p.get('place')} of "
                     f"{p.get('seats')}, {n1(gap)} clear of the cut.")
         # Translate a small gap into golf (Kerry 2026-08-03: "you're 1
@@ -13997,7 +14031,7 @@ def build_player_snapshot_email(customer_id: int,
                     "Championship — a couple of holes.")
         else:
             kick = ""
-        return (f"<b>{p.get('path', '')}</b> path: the last seat sits at "
+        return (f"{_pl} path: the last seat sits at "
                 f"{n1(cut)} — you're <b>{n1(-gap)} "
                 f"point{'' if abs(gap) == 1 else 's'} from a seat</b>.{kick}")
 
@@ -14032,11 +14066,47 @@ def build_player_snapshot_email(customer_id: int,
         {lsc_text}
       </div>""" if lsc_text else "")
 
+    # WAYS IN (Kerry 2026-08-03): direct buy-in links + what's actually
+    # purchasable now that City Net is over — The Fellowship Cup by
+    # itself ($50, Kerry-stated), The Players Cup ($50), and the Fall
+    # City Points Race ($50, Best 6 + Fall Championship — its own race,
+    # does NOT feed the TGF Championship or Lone Star Cup). Rendered
+    # only for players not bought into both cups.
+    SHOP = "https://thegolffellowship.com/shop/ols/products/season-contests"
+    in_fc = any(r.get("key") == "fellowship_cup" and r.get("enrolled")
+                for r in races_all)
+    in_pc = any(r.get("key") == "players_cup_gross" and r.get("enrolled")
+                for r in races_all)
+    ways_html = ""
+    if not (in_fc and in_pc):
+        opts = []
+        if not in_fc:
+            opts.append("<b>The Fellowship Cup — $50.</b> City Net is "
+                        "done, so you can now buy the Cup by itself — your "
+                        "reset seed above is waiting on it.")
+        if not in_pc:
+            opts.append("<b>The Players Cup — $50.</b> The gross-points "
+                        "path to the same weekend.")
+        opts.append("<b>Fall City Points Race — $50.</b> Best 6 + Fall "
+                    "Championship. Its own race and its own money — it "
+                    "doesn't feed the TGF Championship or Lone Star Cup, "
+                    "but it's another way to compete this fall.")
+        _lis = "".join(f'<div style="margin:4px 0;">• {o}</div>' for o in opts)
+        ways_html = f"""
+      <div style="border-left:4px solid {ORANGE};background:#FDF0E6;border-radius:0 8px 8px 0;padding:12px 16px;margin:18px 0 0;{sans}font-size:13px;line-height:1.5;">
+        <div style="{serif}font-size:12px;letter-spacing:0.12em;text-transform:uppercase;color:#9A5B2E;margin-bottom:4px;">Ways in</div>
+        {_lis}
+        <div style="margin-top:10px;"><a href="{SHOP}" style="background:{ORANGE};color:#fff;text-decoration:none;font-weight:700;padding:8px 20px;border-radius:9999px;{serif}font-size:12.5px;letter-spacing:0.04em;">BUY IN NOW</a></div>
+      </div>"""
+
     # THE WEEKEND SELL (Kerry 2026-08-03): entering the points race is
     # only half the ask — they need to BE at the TGF Championship. When a
     # fall championship event is posted and this player isn't signed up
     # or RSVP'd, sell the weekend itself: TGF's two best experiences,
-    # family-friendly getaways. No event posted yet → no section.
+    # family-friendly getaways — with the direct signup link. No event
+    # posted yet → no section.
+    CHAMP_SHOP = ("https://thegolffellowship.com/shop/ols/products/"
+                  "2026-tgf-championship")
     weekend_html = ""
     try:
         with _connect(db_path) as conn:
@@ -14049,7 +14119,8 @@ def build_player_snapshot_email(customer_id: int,
       <div style="border:1px solid #E5E7EB;border-radius:8px;padding:14px 18px;margin:18px 0 0;{sans}font-size:14px;line-height:1.55;">
         <div style="{serif}font-size:15px;font-weight:700;margin-bottom:6px;">Be there for the weekend itself.</div>
         <p style="margin:0 0 8px;">The TGF Championship and the Lone Star Cup are, hands down, the two best weekends TGF puts on — our top two experiences of the year. Great courses, the whole fellowship in one place, families welcome, a proper getaway. You don't have to win it all for it to be worth it — plenty of players place in the money. But you do have to be there.</p>
-        <p style="margin:0;font-size:12px;color:{MUTE};">You're not signed up yet{f" — {_evbit}" if _evbit else ""}. Grab your spot on the events page.</p>
+        <p style="margin:0 0 10px;font-size:12px;color:{MUTE};">You're not signed up yet{f" — {_evbit}" if _evbit else ""}.</p>
+        <a href="{CHAMP_SHOP}" style="background:{DARK};color:#fff;text-decoration:none;font-weight:700;padding:8px 20px;border-radius:9999px;{serif}font-size:12.5px;letter-spacing:0.04em;">SIGN UP FOR THE TGF CHAMPIONSHIP</a>
       </div>"""
     except Exception:
         pass
@@ -14074,12 +14145,21 @@ def build_player_snapshot_email(customer_id: int,
                f"point{'' if back == 1 else 's'} off the lead"
                if back else f"Your TGF Snapshot — you're the one they're chasing")
 
+    # Header (Kerry 2026-08-03): TGF logo mark on the LEFT (hosted PNG —
+    # email clients don't render SVG), "YOUR TGF SNAPSHOT" as the small
+    # eyebrow, and the PLAYER'S NAME as the big line.
+    LOGO = "https://tgf-tracker.up.railway.app/static/icon-180.png"
     html = f"""
     <div style="{sans}color:{DARK};max-width:620px;margin:0 auto;">
-      <div style="background:{DARK};border-radius:10px 10px 0 0;padding:22px 26px 18px;">
-        <div style="{serif}color:{ORANGE};font-size:12px;letter-spacing:0.18em;text-transform:uppercase;margin-bottom:6px;">The Golf Fellowship</div>
-        <div style="{serif}color:#fff;font-size:26px;font-weight:700;">Your TGF Snapshot</div>
-        <div style="color:#B9B7B2;font-size:13px;margin-top:5px;">{name} &middot; {chapter} &middot; {today_lbl}</div>
+      <div style="background:{DARK};border-radius:10px 10px 0 0;padding:20px 26px 18px;">
+        <table style="border-collapse:collapse;" role="presentation"><tr>
+          <td style="vertical-align:middle;padding-right:16px;"><img src="{LOGO}" alt="TGF" width="48" height="48" style="display:block;border-radius:10px;"></td>
+          <td style="vertical-align:middle;">
+            <div style="{serif}color:{ORANGE};font-size:11px;letter-spacing:0.18em;text-transform:uppercase;margin-bottom:3px;">Your TGF Snapshot</div>
+            <div style="{serif}color:#fff;font-size:28px;font-weight:700;line-height:1.1;">{name}</div>
+            <div style="color:#B9B7B2;font-size:13px;margin-top:4px;">{chapter} &middot; {today_lbl}</div>
+          </td>
+        </tr></table>
       </div>
       <div style="border:1px solid #E5E7EB;border-top:0;border-radius:0 0 10px 10px;padding:22px 26px 26px;">
         {f'<div style="margin:0 0 16px;font-size:13px;color:{MUTE};">9-Hole Index <b style="color:{DARK};font-size:16px;">{idx9}N</b></div>' if idx9 is not None else ''}
@@ -14093,6 +14173,7 @@ def build_player_snapshot_email(customer_id: int,
           <p style="margin:0;">And it's been done. In 2024, Mark Freund started championship weekend <b>30th on the reset board — dead last among the seeds, 14.5 points back</b>. He won the Fellowship Cup by 2.5, passing all 29 players ahead of him.</p>
         </div>
         {lsc_html}
+        {ways_html}
         {weekend_html}
         <div style="text-align:center;margin:24px 0 4px;">
           <a href="https://tgf-tracker.up.railway.app/member/spotlight?player={customer_id}"

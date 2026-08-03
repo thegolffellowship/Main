@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.196.0";
+window.TGF_VERSION = "2.196.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.196.1",
+    date: "2026-08-03",
+    changes: [
+      "Snapshot email v3 (Kerry's full pass): the TGF logo mark sits left in the dark header with the PLAYER'S NAME as the big line ('Your TGF Snapshot' becomes the eyebrow); the completed city Net race renders as a FINAL block — finish, points total, and what the Points Reset converted to — leading into THE FELLOWSHIP CUP standings then THE PLAYERS CUP; every standings mention deep-links to that live board on the member Leaderboard with the same centered + pulsing landing as the Spotlight links.",
+      "WAYS IN section with the direct buy-in link (thegolffellowship.com season contests): The Fellowship Cup by itself for $50 now that City Net is over (Kerry-stated price), The Players Cup $50, and the Fall City Points Race $50 (Best 6 + Fall Championship — its own race, does not feed the TGF Championship or Lone Star Cup). The weekend section now carries the direct SIGN UP FOR THE TGF CHAMPIONSHIP link.",
+    ],
+  },
   {
     version: "2.196.0",
     date: "2026-08-03",
