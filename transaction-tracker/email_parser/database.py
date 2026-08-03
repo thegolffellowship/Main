@@ -14028,12 +14028,16 @@ def build_player_snapshot_email(customer_id: int,
                  if str(r.get("key", "")).endswith("_net")
                  and (r.get("enrolled") or r.get("points_back") is not None)),
                 None)
+    # The city NET reset carries ONLY into THE FELLOWSHIP CUP; THE
+    # PLAYERS CUP ran its OWN Points Reset and flights (Kerry 2026-08-03)
+    # — the lead-in names the Fellowship Cup specifically and the Players
+    # Cup row shows its own reset + the player's flight.
     city_html = ""
     if city and city.get("rank") is not None:
         city_html = f"""
       <div style="border:1px solid #E5E7EB;border-left:4px solid {DARK};border-radius:0 8px 8px 0;padding:10px 14px;margin:0 0 14px;{sans}font-size:13px;line-height:1.5;">
         <div style="{serif}font-size:11px;letter-spacing:0.12em;text-transform:uppercase;color:{MUTE};margin-bottom:3px;">{_linked(city.get('key'), city.get('label', ''))} — Final</div>
-        You finished <b>{city.get('rank')} of {city.get('n_players')}</b> with <b>{n1(city.get('total_points'))} points</b> — converting to a <b>{n1(city.get('points_reset'))} Points Reset</b> seed carried into the cups below.
+        You finished <b>{city.get('rank')} of {city.get('n_players')}</b> with <b>{n1(city.get('total_points'))} points</b> — converting to a <b>{n1(city.get('points_reset'))} Points Reset</b> seed carried into {_linked('fellowship_cup', 'THE FELLOWSHIP CUP')} below.
       </div>"""
     stand_rows = ""
     for k in ("fellowship_cup", "players_cup_gross"):
@@ -14043,6 +14047,10 @@ def build_player_snapshot_email(customer_id: int,
         pb = r.get("points_back")
         tag = ("" if r.get("enrolled") else
                f' <span style="font-size:10px;color:{MUTE};font-weight:400;">(not entered)</span>')
+        if k == "players_cup_gross":
+            _fl = (r.get("flight") or "").strip()
+            tag += (f' <span style="font-size:10px;color:{MUTE};font-weight:400;">'
+                    f'(own reset{" · " + _fl if _fl else ""})</span>')
         stand_rows += f"""
         <tr>
           <td style="padding:7px 10px;border-bottom:1px solid #E5E7EB;font-weight:700;">{_linked(k, r.get('label', ''))}{tag}</td>
@@ -14050,6 +14058,8 @@ def build_player_snapshot_email(customer_id: int,
           <td style="padding:7px 10px;border-bottom:1px solid #E5E7EB;text-align:center;font-weight:700;">{n1(r.get('points_reset') if r.get('points_reset') is not None else r.get('total_points'))}</td>
           <td style="padding:7px 10px;border-bottom:1px solid #E5E7EB;text-align:center;color:{'#15803D' if pb == 0 else DARK};white-space:nowrap;">{'leader' if pb == 0 else (f'{n1(pb)} back' if pb is not None else '—')}</td>
         </tr>"""
+    _pc_row = next((x for x in races_all
+                    if x.get("key") == "players_cup_gross"), None)
     stand_html = city_html + (f"""
       <table style="border-collapse:collapse;width:100%;font-size:13px;{sans}">
         <thead><tr style="color:{MUTE};font-size:11px;text-transform:uppercase;letter-spacing:0.04em;">
@@ -14059,7 +14069,11 @@ def build_player_snapshot_email(customer_id: int,
           <th style="padding:4px 10px;">Off the lead</th>
         </tr></thead>
         <tbody>{stand_rows}</tbody>
-      </table>""" if stand_rows else "")
+      </table>""" + (f"""
+      <div style="font-size:11px;color:{MUTE};margin:4px 0 0;padding:0 10px;">THE PLAYERS CUP runs its own Points Reset and flights — the city Net reset feeds THE FELLOWSHIP CUP only.</div>"""
+                     if _pc_row and (_pc_row.get("enrolled")
+                                     or _pc_row.get("points_back") is not None)
+                     else "") if stand_rows else "")
 
     # LONE STAR CUP line — factual, same modes as the Spotlight. For the
     # hunt/hypothetical modes it measures from the SEAT LINE on each cup

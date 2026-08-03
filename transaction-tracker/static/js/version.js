@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.196.4";
+window.TGF_VERSION = "2.196.5";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.196.5",
+    date: "2026-08-03",
+    changes: [
+      "Snapshot email reset differentiation (Kerry): the city Net Points Reset carried ONLY into THE FELLOWSHIP CUP - the lead-in now names it specifically, THE PLAYERS CUP row carries an '(own reset · <flight>)' tag, and a footnote spells out that the Players Cup ran its own reset and flights.",
+    ],
+  },
   {
     version: "2.196.4",
     date: "2026-08-03",
