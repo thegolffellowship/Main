@@ -473,6 +473,17 @@ If a new page needs wrapping table text, override with
 contests.html) and set nowrap back inline on the specific cells that need it
 (dates, numbers).
 
+**Companion guard (v2.190.0, mobile wave 1):** `body { overflow-x: clip }`
+is now global in dashboard.css — an unwrapped wide table can no longer drag
+the whole page sideways on a phone. `clip` (not `hidden`) so body never
+becomes a scroll container and `position: sticky` keeps working. Consequence:
+any WIDE table MUST live inside its own `overflow-x: auto` wrapper or its
+right side is unreachable (clipped, not slidable). Every known wide table is
+wrapped (events financial tables, contests enrollments/removals, cashflow,
+tgf import preview + `.tgf-scroll`, test_center `.tc-scroll`, gg_history
+`.ggh-scroll`, points-render.js `.pr-scroll`) — new wide tables must follow
+the same pattern.
+
 ## Jinja gotcha in inline CSS (IMPORTANT)
 
 Flask templates are parsed by Jinja2, which treats `{#` as the start of a comment and `#}` as the end. **CSS rules that pack `{` directly against `#`** (e.g. `@media(max-width:900px){#some-id{...}}`) will crash template rendering with `TemplateSyntaxError: Missing end of comment tag` and the global 500 handler returns `{"error":"Internal server error"}`.

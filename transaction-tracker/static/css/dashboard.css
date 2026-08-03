@@ -60,6 +60,12 @@ body {
     color: var(--text);
     line-height: 1.5;
     min-height: 100vh;
+    /* Mobile page-slide guard: any unwrapped nowrap table would otherwise
+       widen the viewport and let the whole page pan sideways. `clip` (not
+       `hidden`) so body never becomes a scroll container and position:sticky
+       (header, .tab-nav) keeps working. Wide tables must scroll inside their
+       own overflow-x:auto wrapper. */
+    overflow-x: clip;
 }
 
 /* ---- Header ---- */
@@ -2572,10 +2578,11 @@ div.mobile-card.row-rsvp-only {
 }
 .coo-section-header {
     display: flex; justify-content: space-between; align-items: center;
+    flex-wrap: wrap; row-gap: 0.5rem;
     margin-bottom: 1rem; padding-bottom: 0.75rem; border-bottom: 2px solid var(--border);
 }
 .coo-section-header h2 { font-size: 1.15rem; margin: 0; }
-.coo-filter-pills { display: flex; gap: 0.25rem; }
+.coo-filter-pills { display: flex; gap: 0.25rem; flex-wrap: wrap; }
 .coo-pill {
     padding: 0.25rem 0.75rem; border-radius: 999px; border: 1px solid var(--border);
     background: var(--bg); cursor: pointer; font-size: 0.75rem; font-weight: 500;

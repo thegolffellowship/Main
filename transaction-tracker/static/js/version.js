@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.189.9";
+window.TGF_VERSION = "2.190.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.190.0",
+    date: "2026-08-03",
+    changes: [
+      "Mobile wave 1 (Kerry: 'Do wave 1 of the mobile fixes'): the page-slide class of bugs is retired app-wide. A global body overflow-x guard in dashboard.css now stops ANY wide table from dragging the whole page sideways (clip, not hidden, so sticky headers keep working), and every known wide table gained its own horizontal scroll container: Events' Comp Players and Actual Expenses financial tables, Contests' Enrollments and Removals tables, Cashflow's 7-column weekly table, the TGF screenshot-import preview, both Test Center leaderboard/field tables, both GG History tables, and all points-render.js injected drill-downs (rounds list, champ scorecard, points-detail tables).",
+      "TGF Payouts action column is tappable on phones: Pay/Venmo, + Add Payment, and Mark Paid buttons get a 40px tap-target floor on mobile (they were ~22px pills), the Mark Paid button's inline styles moved to a proper class so the mobile override can reach it, the action cell wraps and stacks its controls instead of truncating ('Mark Pa…'), and the handle input is 16px on mobile so iOS stops zooming the page on focus.",
+      "COO dashboard section headers and filter pills wrap on narrow screens instead of overflowing the section card.",
+    ],
+  },
   {
     version: "2.189.9",
     date: "2026-08-02",

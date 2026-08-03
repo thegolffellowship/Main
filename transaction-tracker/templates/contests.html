@@ -5381,12 +5381,14 @@
         `).join("");
 
         container.innerHTML = `
+            <div style="overflow-x:auto; -webkit-overflow-scrolling:touch;">
             <table class="enrollment-table">
                 <thead><tr>
                     <th>Customer</th><th>Chapter</th><th>Contest</th><th>Season</th><th>Enrolled</th><th></th>
                 </tr></thead>
                 <tbody>${rows}</tbody>
             </table>
+            </div>
             <p style="margin-top:0.75rem;font-size:0.8rem;color:var(--text-muted);">
                 ${data.length} enrollment${data.length === 1 ? '' : 's'}
             </p>`;
@@ -5449,13 +5451,15 @@
                 Removals &amp; Refunds
                 <span style="font-weight:400; color:var(--text-muted);">(${data.length})</span>
             </h3>
+            <div style="overflow-x:auto; -webkit-overflow-scrolling:touch;">
             <table class="enrollment-table">
                 <thead><tr>
                     <th>Customer</th><th>Chapter</th><th>Contest</th><th>Season</th>
                     <th>Removed</th><th>Reason</th><th>Refund</th><th>Note</th>
                 </tr></thead>
                 <tbody>${rows}</tbody>
-            </table>`;
+            </table>
+            </div>`;
     }
 
     // ═══════════ POINTS RACE STANDINGS — persisted GG snapshot + buy-in ═══════════

@@ -354,7 +354,7 @@
                            value="${esc(GG_URL)}" style="width:230px;">
                     <button class="tc-btn primary" id="tc-gg-pull">Pull from GG</button>` : ""}
                 </div>
-                <table class="tc-tbl"><thead><tr>
+                <div class="tc-scroll"><table class="tc-tbl"><thead><tr>
                     <th class="n">#</th><th>Player</th><th class="n">HCP</th>
                     <th class="n">Net pts</th><th class="n">Gross pts</th>
                     <th class="n">Gross</th><th class="n">Net</th>
@@ -371,7 +371,7 @@
                     <td class="n">${r.complete ? "F" : r.thru}</td>
                     <td><span class="tc-pill ${r.allocation_source === "derived" ? "seeded" : "off"}">${r.allocation_source}</span></td>
                 </tr>`).join("") || '<tr><td colspan="9" class="tc-muted">No players yet.</td></tr>';
-            h += `</tbody></table></div><div class="tc-grid2">`;
+            h += `</tbody></table></div></div><div class="tc-grid2">`;
 
             h += gameCard("Individual Net", g.individual_net);
             h += gameCard("Individual Gross", g.individual_gross);
@@ -657,7 +657,7 @@
             const s = DATA.session;
             let h = `<div class="tc-card">
                 <h3>Field <span class="sub">${DATA.players.length} players</span></h3>
-                <table class="tc-tbl"><thead><tr>
+                <div class="tc-scroll"><table class="tc-tbl"><thead><tr>
                     <th>Player</th><th class="n">HCP</th><th class="n">Team</th>
                     <th>Flight</th><th class="n">NET</th><th class="n">GROSS</th>
                     <th class="n">Member</th><th></th>
@@ -679,7 +679,7 @@
                     ${p.is_member ? "checked" : ""}></td>
                 <td class="n"><button class="tc-btn danger" data-del="${p.id}">×</button></td>
             </tr>`).join("") || '<tr><td colspan="8" class="tc-muted">No players yet.</td></tr>';
-            h += `</tbody></table>
+            h += `</tbody></table></div>
                 <div class="tc-inline">
                     <input id="tc-np-name" placeholder="Player name" style="width:180px;">
                     <input id="tc-np-hcp" type="number" placeholder="HCP" style="width:74px;">

@@ -147,6 +147,12 @@
         /* Mobile compaction (Kerry, 2026-07-09): shorter tab label, hide
            low-value columns, h-scroll tables */
         .tgf-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+        .mark-paid-btn {
+            font-size: 0.72rem; padding: 2px 8px; border-radius: 99px;
+            background: #dcfce7; color: #166534; border: 1px solid #86efac;
+            font-weight: 600; cursor: pointer; margin-left: 4px;
+        }
+        .payout-table td.pay-cell { white-space: nowrap; }
         @media (max-width: 768px) {
             .tgf-hide-mobile { display: none; }
         }
@@ -180,6 +186,21 @@
         }
         .add-venmo-save:disabled { opacity: 0.6; cursor: default; }
         .add-venmo-msg { font-size: 0.7rem; color: #dc2626; }
+        @media (max-width: 768px) {
+            /* 40px tap-target floor on the payout action controls (mobile
+               audit wave 1) — the desktop pills are ~22px tall, well under
+               the iOS 44px / Android 48px guidance. Must stay AFTER the
+               desktop .venmo-btn/.add-venmo-* rules in source order. */
+            .venmo-btn, .add-venmo-btn, .mark-paid-btn, .add-venmo-save {
+                min-height: 40px; padding: 8px 14px; font-size: 0.8rem;
+            }
+            .add-venmo-input { min-height: 40px; font-size: 16px; }
+            /* Let the action cell stack its controls instead of one long
+               nowrap run that truncates ("Mark Pa…") or forces a huge row. */
+            .payout-table td.pay-cell { white-space: normal; }
+            .pay-cell .venmo-btn, .pay-cell .add-venmo-btn,
+            .pay-cell .mark-paid-btn { margin: 2px 0 2px 4px; }
+        }
         /* "Sent · verifying…" state after a Pay tap (v2.79.1) — not
            clickable; tells the admin the receipt is being confirmed so
            they don't pay twice. Pops back to a Pay button after 5 min. */
@@ -985,7 +1006,7 @@
                 : "";
             const isPending = g.payment_status !== "paid";
             const markPaidBtn = isPending
-                ? `<button class="mark-paid-btn" data-event-id="${ev.id}" data-customer-id="${g.golfer_id}" data-amount="${gPartial ? gDue.toFixed(2) : g.total}" data-name="${g.name.replace(/"/g, '&quot;')}" style="font-size:0.72rem;padding:2px 8px;border-radius:99px;background:#dcfce7;color:#166534;border:1px solid #86efac;font-weight:600;cursor:pointer;margin-left:4px;" onclick="event.stopPropagation()">Mark Paid</button>`
+                ? `<button class="mark-paid-btn" data-event-id="${ev.id}" data-customer-id="${g.golfer_id}" data-amount="${gPartial ? gDue.toFixed(2) : g.total}" data-name="${g.name.replace(/"/g, '&quot;')}" onclick="event.stopPropagation()">Mark Paid</button>`
                 : "";
             // badge AFTER the pay link (Kerry, 2026-07-08)
             return `${venmoHtml} ${markPaidBtn} ${statusBadge}${dueNote}`;
@@ -1571,7 +1592,7 @@
                         <td>${g.name}</td>
                         <td class="right tgf-hide-mobile">${g.items.length}</td>
                         <td class="right total-amount">${fmt(g.total)}</td>
-                        <td class="right" style="white-space:nowrap;">${payCellHtml(ev, g)}</td>
+                        <td class="right pay-cell">${payCellHtml(ev, g)}</td>
                     </tr>
                     <tr class="breakdown-row" data-gid="${g.golfer_id}">
                         <td colspan="5">
@@ -1950,7 +1971,8 @@
                 html += `<h4 style="font-size:0.9rem;font-weight:700;margin:0 0 0.5rem;">
                     Import ${payouts.length} payouts into <span style="color:var(--primary);">${escHtml(ev.code)}</span> — Total: $${total.toFixed(2)}
                 </h4>`;
-                html += `<table style="width:100%;border-collapse:collapse;font-size:0.82rem;margin-bottom:0.75rem;">`;
+                html += `<div class="tgf-scroll" style="margin-bottom:0.75rem;">`;
+                html += `<table style="width:100%;border-collapse:collapse;font-size:0.82rem;">`;
                 html += `<thead><tr style="border-bottom:1px solid var(--border);">
                     <th style="text-align:left;padding:0.3rem 0.4rem;">Golfer</th>
                     <th style="text-align:left;padding:0.3rem 0.4rem;">Category</th>
@@ -1965,7 +1987,7 @@
                         <td style="text-align:right;padding:0.3rem 0.4rem;font-weight:600;color:var(--green);">$${(p.amount || 0).toFixed(2)}</td>
                     </tr>`;
                 });
-                html += `</tbody></table>`;
+                html += `</tbody></table></div>`;
 
                 html += `<div style="display:flex;gap:0.5rem;">`;
                 html += `<button class="btn btn-primary" id="payout-save-btn" style="font-size:0.82rem;padding:0.4rem 1rem;">Save Payouts</button>`;

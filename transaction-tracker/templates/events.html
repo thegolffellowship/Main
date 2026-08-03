@@ -3638,7 +3638,7 @@
         if (compPlayers.length > 0) {
             html += `<div style="margin-top:1rem; padding:0.6rem; background:#fefce8; border:1px solid #fde68a; border-radius:8px;">`;
             html += `<h4 style="font-size:0.82rem; font-weight:700; margin:0 0 0.4rem; color:#92400e;">Comp Players (${compPlayers.length}) — Cost to TGF</h4>`;
-            html += `<div style="font-size:0.78rem;">`;
+            html += `<div style="font-size:0.78rem; overflow-x:auto; -webkit-overflow-scrolling:touch;">`;
             html += `<table style="width:100%; border-collapse:collapse; font-size:0.78rem;">`;
             html += `<tr style="border-bottom:1px solid #fde68a;"><th style="text-align:left; padding:0.2rem 0.4rem;">Player</th><th style="text-align:center; padding:0.2rem;">Holes</th><th style="text-align:center; padding:0.2rem;">Games</th><th style="text-align:right; padding:0.2rem 0.4rem;">Course</th><th style="text-align:right; padding:0.2rem 0.4rem;">Pots</th><th style="text-align:right; padding:0.2rem 0.4rem;">Total</th></tr>`;
             compPlayers.forEach(r => {
@@ -3877,6 +3877,7 @@
             }
             let total = 0;
             let html = `<h4 style="font-size:0.82rem; font-weight:700; margin:0 0 0.4rem; color:#dc2626;">Actual Expenses (${expenses.length})</h4>`;
+            html += `<div style="overflow-x:auto; -webkit-overflow-scrolling:touch;">`;
             html += `<table style="width:100%; border-collapse:collapse; font-size:0.78rem;">`;
             html += `<tr style="border-bottom:1px solid var(--border);"><th style="text-align:left; padding:0.2rem 0.4rem;">Merchant</th><th style="text-align:left; padding:0.2rem;">Date</th><th style="text-align:left; padding:0.2rem;">Source</th><th style="text-align:right; padding:0.2rem 0.4rem;">Amount</th></tr>`;
             expenses.forEach(e => {
@@ -3885,7 +3886,7 @@
                 html += `<tr><td style="padding:0.2rem 0.4rem;">${escapeHtml(e.merchant || "Unknown")}</td><td style="padding:0.2rem;">${e.transaction_date || ""}</td><td style="padding:0.2rem;">${e.source_type || ""}</td><td style="text-align:right; padding:0.2rem 0.4rem;">$${amt.toFixed(2)}</td></tr>`;
             });
             html += `<tr style="border-top:1px solid var(--border);"><td colspan="3" style="padding:0.2rem 0.4rem; font-weight:700;">Total Actual</td><td style="text-align:right; padding:0.2rem 0.4rem; font-weight:700;">$${total.toFixed(2)}</td></tr>`;
-            html += `</table>`;
+            html += `</table></div>`;
             container.innerHTML = html;
         } catch (err) {
             container.innerHTML = `<h4 style="font-size:0.82rem; font-weight:700; margin:0 0 0.4rem; color:var(--text-muted);">Actual Expenses</h4>

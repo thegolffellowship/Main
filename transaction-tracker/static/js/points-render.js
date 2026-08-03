@@ -39,7 +39,11 @@
         .enrollment-table.pr-compact th {
             padding: 0.3rem 0.25rem; font-size: 9px; letter-spacing: 0.5px;
         }
-        .enrollment-table.pr-compact td { padding: 0.3rem 0.25rem; }`;
+        .enrollment-table.pr-compact td { padding: 0.3rem 0.25rem; }
+        /* Wide injected tables scroll inside their own container instead of
+           widening the page (mobile audit wave 1 — body is overflow-x:clip,
+           so an unwrapped wide table would be unreachable, not a slider). */
+        .pr-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }`;
         document.head.appendChild(st);
     }
 
@@ -173,6 +177,7 @@
             <div style="font-weight:700;font-size:0.8rem;letter-spacing:0.04em;color:#334155;margin-bottom:0.25rem;">
                 ${secTitle}${compact || !secNote ? "" : ` <span style="font-weight:400;color:var(--text-muted);">${secNote}</span>`}
             </div>
+            <div class="pr-scroll">
             <table class="enrollment-table${compact ? " pr-compact" : ""}" style="margin:0;font-size:${compact ? "0.72rem" : "0.82rem"};">
                 <thead><tr>
                     <th${compact ? ' style="width:36px;"' : ""}>Date</th><th>Event</th>
@@ -184,6 +189,7 @@
                 </tr></thead>
                 <tbody>${rows}</tbody>
             </table>
+            </div>
         </div>`;
     }
 
@@ -353,7 +359,7 @@
                 : `<div style="color:#b45309;font-size:0.72rem;margin-top:0.2rem;">Our per-hole total (${escapeHtml(String(compEff))}) differs from the GG board (${escapeHtml(String(card.board_points))}) — the board is official.</div>`;
         const src = card.stale
             ? `<div style="color:#b45309;font-size:0.72rem;margin-top:0.2rem;">Showing the last good read — Golf Genius did not answer.</div>` : "";
-        return head + statline + plusNote + html + parity + src;
+        return head + statline + plusNote + `<div class="pr-scroll">${html}</div>` + parity + src;
     }
 
     function prRenderScorecard(card) {
@@ -674,7 +680,8 @@
             // A month filter can empty a table entirely — skip it rather
             // than render a lone header row
             if (opts.plain && !parts.length) return "";
-            return `<table class="enrollment-table${compact ? " pr-compact" : ""}" style="margin:0.35rem 0;font-size:${compact ? "0.72rem" : "0.82rem"};">
+            return `<div class="pr-scroll">
+                <table class="enrollment-table${compact ? " pr-compact" : ""}" style="margin:0.35rem 0;font-size:${compact ? "0.72rem" : "0.82rem"};">
                 <thead><tr>${head.map((c, i) => {
                     const key = (c || "").trim().toLowerCase();
                     if (i === ptsCol) return `<th style="width:${compact ? "40px" : "90px"};text-align:center;border-left:2px solid #cbd5e1;border-right:2px solid #cbd5e1;">${compact ? "PTS" : "POINTS"}</th>`;
@@ -683,7 +690,8 @@
                     return `<th>${escapeHtml(nb(c))}</th>`;
                 }).join("")}${spacer ? `<th style="width:${spacerW}px;"></th>` : ""}</tr></thead>
                 <tbody>${parts.join("")}</tbody>
-            </table>`;
+                </table>
+            </div>`;
         }).join("");
     }
 

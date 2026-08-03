@@ -146,7 +146,7 @@
             `;
 
             // Table
-            let html = `<table class="cf-table">
+            let html = `<div style="overflow-x:auto; -webkit-overflow-scrolling:touch;"><table class="cf-table">
                 <thead><tr>
                     <th>Week Ending</th>
                     <th>Expected Income</th>
@@ -170,7 +170,7 @@
                 </tr>`;
             });
 
-            html += '</tbody></table>';
+            html += '</tbody></table></div>';
             document.getElementById('cf-table-container').innerHTML = html;
         } catch(e) {
             document.getElementById('cf-table-container').innerHTML = `<div style="color:#dc2626;">Failed to load: ${e}</div>`;
