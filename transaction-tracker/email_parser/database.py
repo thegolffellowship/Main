@@ -44395,23 +44395,73 @@ def record_event_game_payouts(event_name: str, payouts: list,
                              "replaces them.",
                     "needs_force": True}
         removed = 0
+        preserved: list = []
         for r in existing_auto:
+            txn = None
             if r["acct_transaction_id"]:
                 txn = conn.execute(
-                    "SELECT id, source FROM acct_transactions WHERE id = ?",
+                    "SELECT id, source, COALESCE(status,'active') AS st "
+                    "FROM acct_transactions WHERE id = ?",
                     (r["acct_transaction_id"],)).fetchone()
-                if txn and txn["source"] == "pending":
-                    conn.execute("DELETE FROM acct_transactions WHERE id = ?",
-                                 (txn["id"],))
+            if txn and txn["source"] != "pending" and txn["st"] == "active":
+                # PAID — a real payment backs this row. A force re-record
+                # must never un-pay money that actually moved (Kerry
+                # 2026-08-02: Chuck Fehlis' cleared payout "came back"
+                # after the hourly auto-sync re-recorded the event — the
+                # old delete-everything dance relied on the receipt
+                # re-matching afterwards, and an ambiguous amount can
+                # silently fail that re-match). Keep the row; its
+                # assembled twin is consumed below instead of re-inserted.
+                pr = conn.execute(
+                    "SELECT customer_id, category, amount FROM tgf_payouts "
+                    "WHERE id = ?", (r["id"],)).fetchone()
+                if pr:
+                    preserved.append(dict(pr))
+                continue
+            if txn and txn["source"] == "pending":
+                conn.execute("DELETE FROM acct_transactions WHERE id = ?",
+                             (txn["id"],))
             conn.execute("DELETE FROM tgf_payouts WHERE id = ?", (r["id"],))
             removed += 1
         conn.commit()
+
+        # Assembled rows already covered by a preserved PAID row are not
+        # re-inserted — matched one-for-one on (customer, category, exact
+        # amount) so legitimate duplicate amounts still record. A paid row
+        # whose assembled amount has since CHANGED stays alongside the new
+        # pending row for admin reconciliation (money that moved is never
+        # deleted; the difference is visible on the Payouts tab).
+        if preserved:
+            pool = list(preserved)
+            remaining = []
+            for p in payouts:
+                nm = (p.get("golferName") or "").strip()
+                cid = _lookup_customer_id(conn, nm, None) if nm else None
+                hit = None
+                if cid:
+                    hit = next((i for i, q in enumerate(pool)
+                                if q["customer_id"] == cid
+                                and q["category"] == p.get("category")
+                                and abs((q["amount"] or 0)
+                                        - (p.get("amount") or 0)) < 0.005),
+                               None)
+                if hit is None:
+                    remaining.append(p)
+                else:
+                    pool.pop(hit)
+            payouts = remaining
+            if not payouts:
+                return {"event_id": tgf_event_id, "payouts_added": 0,
+                        "matched": 0, "pending": 0, "replaced": removed,
+                        "preserved_paid": len(preserved),
+                        "tgf_event_code": full}
 
     stamped = [{**p, "description": "auto: " + (p.get("description") or "")}
                for p in payouts]
     result = import_tgf_payouts(tgf_event_id, stamped, db_path=db_path)
     if isinstance(result, dict) and not result.get("error"):
         result["replaced"] = removed
+        result["preserved_paid"] = len(preserved)
         result["tgf_event_code"] = full
         # Consume any Venmo payment emails that arrived BEFORE the payouts
         # were recorded (Kerry sometimes pays from GG's numbers first) —

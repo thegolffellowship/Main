@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.189.3";
+window.TGF_VERSION = "2.189.4";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.189.4",
+    date: "2026-08-02",
+    changes: [
+      "A force re-record never un-pays money that moved (Kerry: 'I have paid this and initially tracker has cleared it. Why has it come back?'): the hourly auto-sync force-replaces recent events' payout rows, and the old path deleted PAID rows too, re-inserted everything pending, and trusted the receipts to re-match — which silently fails when two players owe the same amount (Chuck Fehlis' $42.50 kept reverting because Don Sharitz' $42.50 made the amount-fallback ambiguous mid-cycle). Rows backed by a real (non-pending) ledger transaction are now PRESERVED through the re-record, their assembled twins consumed one-for-one on (customer, category, exact amount) instead of re-inserted. A paid row whose assembled amount later changes stays alongside the new pending difference for admin reconciliation.",
+    ],
+  },
   {
     version: "2.189.3",
     date: "2026-08-02",

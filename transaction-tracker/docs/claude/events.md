@@ -1123,7 +1123,17 @@ arriving receipt email (expense inbox check), expense review approval
 (PATCH expense-transactions), end of `record_event_game_payouts`
 (consumes receipts that arrived before recording), admin backfill
 `POST /api/tgf/auto-match-venmo-payouts`, bridge command
-`scoring-payouts-venmo-match`. NOTE: the boot-time
+`scoring-payouts-venmo-match`. **Force re-records PRESERVE paid rows
+(v2.189.4):** the hourly auto-sync force-replaces recent events' auto
+rows, and the old path deleted PAID rows too and trusted re-matching —
+which silently fails when two players owe the same amount (Chuck
+Fehlis' $42.50 kept reverting because Sharitz' $42.50 made the
+amount-fallback ambiguous mid-cycle, 2026-08-02). Rows whose
+acct_transactions link is a real non-pending transaction now survive
+the re-record; their assembled twins are consumed one-for-one on
+(customer, category, exact amount). A paid row whose assembled amount
+later changes stays alongside the new pending row — money that moved
+is never deleted. NOTE: the boot-time
 `_match_pending_payouts_to_new_venmo` never matched these receipts —
 it requires `acct_transactions.category='prize_payout'` + a `customer`
 name, which the expense-promotion path doesn't set; the new matcher
