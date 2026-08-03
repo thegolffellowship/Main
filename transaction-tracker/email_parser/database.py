@@ -7933,6 +7933,22 @@ def get_points_race_live(race_key: str, force_refresh: bool = False,
         row["live_total"] = round(season + (champ or 0.0), 2)
         rows.append(row)
 
+    # Championship POSITION for the drill-down's CITY CHAMPIONSHIP row
+    # (Kerry 2026-08-03: "POSITION should populate"): rank on the champ
+    # board among scorers, ties T-labelled.
+    _scorers = sorted((r for r in rows if r.get("champ_points") is not None),
+                      key=lambda r: -r["champ_points"])
+    _i = 0
+    while _i < len(_scorers):
+        _j = _i
+        while (_j < len(_scorers)
+               and _scorers[_j]["champ_points"] == _scorers[_i]["champ_points"]):
+            _j += 1
+        _lbl = ("T" if _j - _i > 1 else "") + str(_i + 1)
+        for _k in range(_i, _j):
+            _scorers[_k]["champ_rank"] = _lbl
+        _i = _j
+
     # Re-rank on the live total; ties keep the season order behind them.
     rows.sort(key=lambda r: (-r["live_total"], -(r.get("season_points") or 0),
                              (r.get("player_name") or "").lower()))
@@ -7973,12 +7989,24 @@ def get_points_race_live(race_key: str, force_refresh: bool = False,
     if any(r.get("champ_points") is not None for r in rows):
         _reproject_points_reset(rows, base.get("reset_info"))
 
+    # Championship date for the drill-down's DATE column (Kerry 2026-08-03)
+    # — the final dial stores {race_key: date} by convention.
+    champ_date = None
+    try:
+        _raw = get_app_setting("gg_points_race_final", db_path=db_path)
+        _v = (json.loads(_raw) if _raw else {}).get(race_key)
+        if isinstance(_v, str) and re.match(r"\d{4}-\d{2}-\d{2}", _v):
+            champ_date = _v
+    except Exception:
+        pass
+
     return {**{k: v for k, v in base.items() if k != "standings"},
             "standings": rows,
             # champions follow the LIVE final order, not the season order
             "champions": (_race_champions(rows)
                           if base.get("race_final") else None),
             "champ": {k: v for k, v in live.items() if k != "players"},
+            "champ_date": champ_date,
             "champ_scoring": live.get("scoring", 0),
             "champ_field": live.get("field", 0)}
 
@@ -9719,6 +9747,7 @@ def get_player_spotlight(customer_id: int,
 
         # current handicap index via handicap_player_links (canonical path)
         idx18 = None
+        handicap_player_name = None      # deep-link target on /handicaps
         idx_by_name = {
             hp["player_name"]: hp["handicap_index_18"]
             for hp in get_all_handicap_players(db_path)
@@ -9730,6 +9759,7 @@ def get_player_spotlight(customer_id: int,
             v = idx_by_name.get(lr["player_name"])
             if v is not None:
                 idx18 = v
+                handicap_player_name = lr["player_name"]
                 break
 
         enrollments = [dict(r) for r in conn.execute(
@@ -9952,7 +9982,11 @@ def get_player_spotlight(customer_id: int,
             if seat:
                 lsc = {"mode": "seat", "chapter": ch["chapter"],
                        "seat": seat["seat"], "earned_as": seat["earned_as"],
-                       "via_pool": seat["via_pool"]}
+                       "via_pool": seat["via_pool"],
+                       # secured (declared-final champion / recorded MP
+                       # final) vs projected (standings can still move) —
+                       # Kerry 2026-08-03: "How do we differentiate?"
+                       "status": seat.get("status") or "projected"}
                 break
             alt = next((i for i, a in enumerate(ch["alternates"])
                         if a.get("customer_id") == customer_id), None)
@@ -10135,6 +10169,7 @@ def get_player_spotlight(customer_id: int,
         "member_status": member_status,  # 'member' | 'alumni' | 'guest' (D1)
         "handicap_index_18": idx18,
         "handicap_index_9": round(idx18 / 2, 1) if idx18 is not None else None,
+        "handicap_player_name": handicap_player_name,
         "stats": {
             # F18: rounds-derived count is the truth (all statuses); the
             # race-standings "tournaments" column stays as a floor in case
@@ -14133,6 +14168,7 @@ def r1_multiplier_impact(apply: bool = False,
     s_new = dict(settings, multiplier="1.0")
     changed = []
     same = 0
+    unchanged_players = []
     with _connect(db_path) as conn:
         hist = _player_diff_history(conn, cutoff)
     for name, rounds in hist.items():
@@ -14143,6 +14179,7 @@ def r1_multiplier_impact(apply: bool = False,
             continue
         if old == new:
             same += 1
+            unchanged_players.append({"player_name": name, "index": new})
             continue
         changed.append({"player_name": name, "index_096": old,
                         "index_100": new,
@@ -14159,6 +14196,7 @@ def r1_multiplier_impact(apply: bool = False,
         "mean_delta": round(sum(deltas) / len(deltas), 2) if deltas else 0,
         "max_delta": max(deltas) if deltas else 0,
         "top_moves": changed[:25],
+        "unchanged_players": unchanged_players[:30],
         "applied": False,
     }
     if apply:

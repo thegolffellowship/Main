@@ -295,7 +295,7 @@
         const compact = prIsCompact();
         // Every HOLE column is the SAME fixed width (Kerry 2026-08-01) —
         // min-width let a circled score stretch its own column and the
-        // grid read ragged. Sum/TOT columns size themselves.
+        // grid read ragged. The sum column sizes itself.
         const holeW = compact ? "1.7em" : "2.2em";
         const td = `padding:${compact ? "2px 0" : "3px 2px"};text-align:center;border:1px solid #e2e8f0;width:${holeW};max-width:${holeW};overflow:hidden;white-space:nowrap;`;
         const sumTd = `padding:${compact ? "2px 2px" : "3px 6px"};text-align:center;border:1px solid #e2e8f0;min-width:${compact ? "1.6em" : "2.2em"};white-space:nowrap;`;
@@ -304,9 +304,15 @@
         const dash = '<span style="color:#9CA3AF;">-</span>';
         const sumOr = (hs, k, fmt) => hs.some(h => h[k] != null)
             ? (fmt || String)(hs.reduce((a, h) => a + (h[k] ?? 0), 0)) : dash;
-        // Classic scorecard marks on the gross score (same language as the
-        // imported cards): red circle birdie, doubled ring eagle+, blue
-        // square bogey, doubled square double+.
+        // Same visual grammar as the imported scorecards
+        // (prRenderScorecard, Kerry 2026-08-03: "It should follow the
+        // formatting of the other scorecards from previous events"): dark
+        // HOLE header, blue course facts, thick-bordered score section,
+        // points on the tinted band. Unplayed holes keep the Tour-style
+        // dash instead of the scorecard's blank cell — this card is live.
+        const sectTop = "border-top:2px solid #1B1B1B;";
+        const sectBot = "border-bottom:2px solid #1B1B1B;";
+        const grey = "background:#EFF4FF;color:#1D4ED8;";
         const spanW = compact ? "1.2em" : "1.5em";
         const deco = d => {
             if (d == null) return "";
@@ -316,31 +322,60 @@
             if (d >= 2) return "border:1.5px solid #2563eb;box-shadow:0 0 0 2px #fff,0 0 0 3.5px #2563eb;";
             return "";
         };
-        const grossCell = h => {
-            if (h.gross == null) return dash;
-            const vs = h.par != null ? h.gross - h.par : null;
-            return `<span style="display:inline-block;min-width:${spanW};line-height:${spanW};${deco(vs)}">${h.gross}</span>`
-                + (h.dots ? `<sup style="font-size:50%;">` + "&#9679;".repeat(Math.min(h.dots, 3)) + "</sup>" : "");
-        };
-        const block = (label, hs, withTot) => {
+        const grossMode = card.scoring === "gross";
+        const L = compact
+            ? { gs: "GROSS", ns: "NET", pts: grossMode ? "G PTS" : "PTS" }
+            : { gs: "GROSS SCORE", ns: "NET SCORE", pts: grossMode ? "GROSS PTS" : "CHAMP PTS" };
+        const scoreSpan = (v, d) => `<span style="display:inline-block;min-width:${spanW};line-height:${spanW};${deco(d)}">${v}</span>`;
+        // ● = handicap stroke, pinned to the cell's top-right corner (the
+        // scorecard convention) — on the NET row in net races, on the
+        // GROSS row in gross races (where no net row renders)
+        const dotsMark = h => h.dots
+            ? `<span style="position:absolute;top:0;right:1px;font-size:0.55em;line-height:1.4;color:#334155;">${"&#9679;".repeat(Math.min(h.dots, 3))}</span>`
+            : "";
+        const block = (label, hs) => {
             const cells = fn => hs.map(fn).join("");
-            const totCell = (v, extra) => `<td style="${sumTd}font-weight:800;${extra || ""}">${v}</td>`;
-            return `<table style="border-collapse:collapse;font-size:${fs};margin:0 0 0.45rem;">
-                <tr><td style="${lbl}">HOLE</td>${cells(h => `<td style="${td}font-weight:700;background:#f8fafc;">${h.hole}</td>`)}<td style="${sumTd}font-weight:700;background:#f8fafc;">${label}</td>${withTot ? `<td style="${sumTd}font-weight:800;background:#f1f5f9;">TOT</td>` : ""}</tr>
-                <tr><td style="${lbl}background:#eef1f5;">PAR</td>${cells(h => `<td style="${td}background:#eef1f5;color:#6B7280;">${h.par ?? "-"}</td>`)}<td style="${sumTd}background:#eef1f5;font-weight:700;color:#6B7280;">${sumOr(hs, "par")}</td>${withTot ? totCell(sumOr(holes, "par"), "background:#eef1f5;color:#6B7280;") : ""}</tr>
-                <tr><td style="${lbl}">GROSS</td>${cells(h => `<td style="${td}">${grossCell(h)}</td>`)}<td style="${sumTd}font-weight:700;">${sumOr(hs, "gross")}</td>${withTot ? totCell(card.gross_total != null ? card.gross_total : sumOr(holes, "gross")) : ""}</tr>
-                ${card.scoring === "gross" ? "" : `<tr><td style="${lbl}background:#eef1f5;">NET</td>${cells(h => `<td style="${td}background:#eef1f5;color:#475569;">${h.net != null ? h.net : dash}</td>`)}<td style="${sumTd}background:#eef1f5;font-weight:700;color:#475569;">${sumOr(hs, "net")}</td>${withTot ? totCell(sumOr(holes, "net"), "background:#eef1f5;color:#475569;") : ""}</tr>`}
-                <tr><td style="${lbl}background:#FDF0E6;color:#BF5700;">PTS</td>${cells(h => `<td style="${td}background:#FDF0E6;color:#BF5700;font-weight:700;">${h.pts != null ? h.pts : dash}</td>`)}<td style="${sumTd}background:#FDF0E6;color:#BF5700;font-weight:800;">${sumOr(hs, "pts")}</td>${withTot ? totCell(card.computed_points != null ? card.computed_points : sumOr(holes, "pts"), "background:#FDF0E6;color:#BF5700;") : ""}</tr>
+            const holeRow = cells(h => `<td style="${td}font-weight:700;background:#1B1B1B;color:#fff;">${h.hole}</td>`);
+            const parRow = cells(h => `<td style="${td}color:#1D4ED8;">${h.par ?? dash}</td>`);
+            const grossRow = cells(h => h.gross == null
+                ? `<td style="${td}${sectTop}">${dash}</td>`
+                : `<td style="${td}${sectTop}font-weight:700;position:relative;">${grossMode ? dotsMark(h) : ""}${scoreSpan(h.gross, h.par != null ? h.gross - h.par : null)}</td>`);
+            const netRow = grossMode ? "" : cells(h => h.net == null
+                ? `<td style="${td}${sectTop}">${dash}</td>`
+                : `<td style="${td}${sectTop}font-weight:700;position:relative;">${dotsMark(h)}${scoreSpan(h.net, h.par != null ? h.net - h.par : null)}</td>`);
+            const ptsRow = cells(h => `<td style="${td}${grey}${sectBot}">${h.pts != null ? h.pts : dash}</td>`);
+            return `<table style="border-collapse:collapse;font-size:${fs};margin:0.25rem 0;">
+                <tr><td style="${lbl}background:#1B1B1B;color:#fff;">HOLE</td>${holeRow}<td style="${sumTd}font-weight:700;background:#1B1B1B;color:#fff;">${label}</td></tr>
+                <tr><td style="${lbl}color:#1D4ED8;">PAR</td>${parRow}<td style="${sumTd}font-weight:700;color:#1D4ED8;background:#f1f5f9;">${sumOr(hs, "par")}</td></tr>
+                <tr><td style="${lbl}${sectTop}font-weight:700;">${L.gs}</td>${grossRow}<td style="${sumTd}${sectTop}font-weight:700;background:#f1f5f9;">${sumOr(hs, "gross")}</td></tr>
+                ${grossMode ? "" : `<tr><td style="${lbl}${sectTop}font-weight:700;" title="Gross minus handicap strokes received on the hole">${L.ns}</td>${netRow}<td style="${sumTd}${sectTop}font-weight:700;background:#f1f5f9;">${sumOr(hs, "net")}</td></tr>`}
+                <tr><td style="${lbl}${grey}${sectBot}" title="Championship-scale stableford points per hole">${L.pts}</td>${ptsRow}<td style="${sumTd}${grey}${sectBot}font-weight:600;">${sumOr(hs, "pts")}</td></tr>
             </table>`;
         };
         const front = holes.filter(h => h.hole <= 9);
         const back = holes.filter(h => h.hole > 9);
-        // Play order (Kerry 2026-08-03): first_hole >= 10 → IN above OUT;
-        // the TOT column rides whichever block renders second
+        // Play order (Kerry 2026-08-03): first_hole >= 10 → IN above OUT
         const backFirst = (card.first_hole || 1) >= 10;
         const html = backFirst
-            ? block("IN", back, false) + block("OUT", front, true)
-            : block("OUT", front, false) + block("IN", back, true);
+            ? block("IN", back) + block("OUT", front)
+            : block("OUT", front) + block("IN", back);
+        // 18-hole totals ride the note line (the scorecard pattern) now
+        // that the grid no longer carries a TOT column
+        const gTot = card.gross_total != null
+            ? card.gross_total
+            : (played.length ? holes.reduce((a, h) => a + (h.gross ?? 0), 0) : null);
+        const pTot = card.computed_points != null ? card.computed_points : null;
+        const sepT = compact ? " · " : " &nbsp;·&nbsp; ";
+        const totBits = [];
+        if (gTot != null) totBits.push(`Gross <strong>${gTot}</strong>`);
+        if (pTot != null) totBits.push(`${grossMode ? "Gross" : "Champ"} points <strong>${pTot}</strong>`);
+        const totLine = totBits.length
+            ? `<div style="font-size:${compact ? "0.7rem" : "0.8rem"};color:#334155;margin-top:0.25rem;">${totBits.join(sepT)}</div>`
+            : "";
+        const legend = `<div style="font-size:${compact ? "0.62rem" : "0.72rem"};color:var(--text-muted);margin-top:0.15rem;">
+            ${holes.some(h => h.dots) ? `&#9679; = handicap stroke${sepT}` : ""}<span style="border:1.5px solid #dc2626;border-radius:50%;padding:0 4px;">n</span> under par &nbsp;
+            <span style="border:1.5px solid #2563eb;padding:0 4px;">n</span> over par
+        </div>`;
         // Two different GG surfaces feed this card: the scorecard partial
         // (per hole) and the points board (total + thru). The scorecard
         // often runs a hole AHEAD of the board for a minute — that is a
@@ -366,7 +401,7 @@
                 : `<div style="color:#b45309;font-size:0.72rem;margin-top:0.2rem;">Our per-hole total (${escapeHtml(String(compEff))}) differs from the GG board (${escapeHtml(String(card.board_points))}) — the board is official.</div>`;
         const src = card.stale
             ? `<div style="color:#b45309;font-size:0.72rem;margin-top:0.2rem;">Showing the last good read — Golf Genius did not answer.</div>` : "";
-        return head + statline + plusNote + `<div class="pr-scroll">${html}</div>` + parity + src;
+        return head + statline + plusNote + `<div class="pr-scroll">${html}</div>` + totLine + legend + parity + src;
     }
 
     function prRenderScorecard(card) {
@@ -593,13 +628,6 @@
             // a tee time is "tees off", a hole count is "thru" — a player
             // reading "thru 9:00 AM" is nonsense
             const _ccThru = opts.champThru ? ` <span style="font-weight:400;font-size:0.85em;color:#9A5B2E;">${/\d:\d\d/.test(String(opts.champThru)) ? "tees off" : "thru"} ${escapeHtml(String(opts.champThru))}</span>` : "";
-            const ccCells = [];
-            for (let ci = 0; ci < Math.max(0, totalCols - 2); ci++) {
-                // Drop the live points under the PTS column when we know it.
-                ccCells.push((ptsCol > -1 && ci === (ptsCol - 2) && _cc)
-                    ? `<td style="font-weight:800;color:#BF5700;">${escapeHtml(_cc)}</td>`
-                    : "<td></td>");
-            }
             // With a race + customer the line expands to the LIVE hole-by-
             // hole card (championship day). Chevron only when expandable so
             // the off-season row stays inert.
@@ -607,9 +635,25 @@
             const _ccChev = _ccExpandable
                 ? ' <span class="pr-cc-chev" style="color:#BF5700;font-size:0.85rem;" title="Live hole-by-hole">&#9656;</span>'
                 : '';
+            // Cells align to the REAL columns (Kerry 2026-08-03: date on
+            // the left, points inside the bordered POINTS column, POS
+            // populated) instead of a colspan guess.
+            const ccCells = [];
+            for (let ci = 0; ci < width; ci++) {
+                if (ci === dateCol) {
+                    ccCells.push(`<td style="white-space:nowrap;color:#BF5700;">${opts.champDate ? escapeHtml(prFmtAwardDate(opts.champDate, compact)) : ""}</td>`);
+                } else if (ci === evtCol) {
+                    ccCells.push(`<td class="pr-wrap" style="font-weight:800;color:#BF5700;">CITY CHAMPIONSHIP Total${_ccThru}${_ccChev}</td>`);
+                } else if (ci === ptsCol) {
+                    ccCells.push(`<td style="text-align:center;font-weight:800;color:#BF5700;border-left:2px solid #cbd5e1;border-right:2px solid #cbd5e1;">${escapeHtml(_cc)}</td>`);
+                } else if (ci === posCol) {
+                    ccCells.push(`<td style="text-align:center;font-weight:700;color:#BF5700;">${opts.champPos ? escapeHtml(String(opts.champPos)) : ""}</td>`);
+                } else {
+                    ccCells.push("<td></td>");
+                }
+            }
+            if (spacer) ccCells.push("<td></td>");
             const ccRow = `<tr${_ccExpandable ? ` data-champ-race="${escapeHtml(String(opts.champRace))}" data-champ-cid="${escapeHtml(String(opts.champCid))}" style="cursor:pointer;` : ` style="`}background:#FDF0E6;border-top:2px solid #BF5700;border-bottom:2px solid #BF5700;">
-                <td></td>
-                <td style="font-weight:800;color:#BF5700;">CITY CHAMPIONSHIP Total${_ccThru}${_ccChev}</td>
                 ${ccCells.join("")}
             </tr>`;
             // Admin-specced section banners: counted = black bar with white

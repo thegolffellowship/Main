@@ -5937,6 +5937,10 @@
             // second fetch (the season endpoint has neither field).
             const champAttrs = (r.champ_points != null
                 ? ` data-champ-pts="${escapeHtml(String(r.champ_points))}"` : "")
+                + (r.champ_rank
+                ? ` data-champ-pos="${escapeHtml(String(r.champ_rank))}"` : "")
+                + (d.champ_date
+                ? ` data-champ-date="${escapeHtml(String(d.champ_date))}"` : "")
                 + (r.customer_id && champIds.has(r.customer_id)
                 ? ` data-champion="${coChamp ? "co" : "1"}"` : "")
                 + (r.champ_thru
@@ -6492,6 +6496,8 @@
                         hBody.innerHTML = (ptsTables ? prRenderDetailTables(ptsTables, rounds, claimed, {
                             champPoints: tr.dataset.champPts != null ? tr.dataset.champPts : null,
                             champThru: tr.dataset.champThru || null,
+                            champPos: tr.dataset.champPos || null,
+                            champDate: tr.dataset.champDate || null,
                         }) : '<span style="color:var(--text-muted);">No season detail for this player yet.</span>');
                         hBody.dataset.loaded = "1";
                         prBindScorecardToggles(hBody);
@@ -6534,6 +6540,8 @@
             let html = ptsTables ? prRenderDetailTables(ptsTables, rounds, claimed, {
                 champPoints: tr.dataset.champPts != null ? tr.dataset.champPts : null,
                 champThru: tr.dataset.champThru || null,
+                champPos: tr.dataset.champPos || null,
+                champDate: tr.dataset.champDate || null,
                 champRace: raceKey,
                 champCid: tr.dataset.cid || null,
             }) : "";

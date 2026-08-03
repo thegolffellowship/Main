@@ -212,6 +212,22 @@ sequence: #99 build set (in-reach lines, leaderboard deep links, ENTER
 doorway, invitation empty states) + "This is me" (#106) once CD layers
 them; member flip stays gated on Kerry's explicit ratification.
 
+**Post-championship Spotlight wave (v2.193.x–v2.194.0, Kerry 2026-08-03):**
+WHERE THEY STAND reads the LIVE points boards via `get_points_race_live`
+(not stale snapshots); recent winnings group per event in `<details>`
+expanders with friendly game lines from `_friendly_game` ("Individual
+Net — 1st Place | Low Flight", skins holes, team partners via
+`_team_partners`); a navy (#002868) LONE STAR CUP row renders on EVERY
+spotlight until the `lsc_selection_deadline` dial (default 2026-08-14)
+— modes: seat (payload `status`: `secured` = locked champion seat, SEAT
+· locked 🔒; `projected` = PROJ · seat), alternate, in_hunt (enrolled,
+outside seats), hypothetical (NOT enrolled: best hypothetical seat off
+either cup board if the season ended today) — after the deadline only
+enrolled cup players show the row; Fellowship seat count is the real
+projection count (co-captain year 6→5). The hero index tile deep-links
+to `/(member/)handicaps?player=<handicap_player_name>` (pins + expands
++ pulses, same link the recap emails use).
+
 ## Member UX Audit S1 package (v2.86.0, Kerry-ratified mailbox #149–#151)
 
 - **D1 — status source of truth:** member-facing surfaces derive status at

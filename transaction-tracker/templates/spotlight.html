@@ -348,8 +348,12 @@
                 `<div class="spt-badges">${chapterChip(d.chapter)}` +
                 statusChips(d) +
                 `</div></div>` +
-                `<div class="spt-idx"><div class="n">${hcp != null ? esc(hcp.toFixed(1)) : "&mdash;"}</div>` +
-                `<div class="l">Index${d.handicap_index_9 != null ? `<br>9-hole ${esc(d.handicap_index_9.toFixed(1))}` : ""}</div></div>` +
+                (d.handicap_player_name
+                    ? `<a class="spt-idx" style="text-decoration:none;" title="Full handicap detail — every posted round" href="${window.MEMBER_MODE ? "/member/handicaps" : "/handicaps"}?player=${encodeURIComponent(d.handicap_player_name)}">`
+                    : `<div class="spt-idx">`) +
+                `<div class="n">${hcp != null ? esc(hcp.toFixed(1)) : "&mdash;"}</div>` +
+                `<div class="l">Index${d.handicap_index_9 != null ? `<br>9-hole ${esc(d.handicap_index_9.toFixed(1))}` : ""}${d.handicap_player_name ? `<br><span style="color:var(--primary,#E87C3E);">Full detail &rsaquo;</span>` : ""}</div>` +
+                (d.handicap_player_name ? `</a>` : `</div>`) +
                 `</div>${lscLine}</div>`;
 
             const st = d.stats || {};
@@ -455,8 +459,12 @@
                 const l = d.lone_star_cup;
                 let rk, fld, meta, pill = pillIn;
                 if (l.mode === "seat" || l.seat) {
-                    rk = "SEAT"; fld = esc(l.chapter || "");
-                    meta = `${l.seat}${l.earned_as ? " — " + l.earned_as : ""}${l.via_pool ? " (alternates pool)" : ""}`;
+                    // SECURED (declared champion / recorded final) vs
+                    // PROJECTED (standings can still move) — Kerry 2026-08-03
+                    const secured = l.status === "secured";
+                    rk = secured ? "SEAT" : "PROJ";
+                    fld = secured ? "locked &#128274;" : "seat";
+                    meta = `${secured ? "Secured" : "Projected"} — ${l.seat}${l.earned_as ? " · " + l.earned_as : ""}${l.via_pool ? " (alternates pool)" : ""}`;
                 } else if (l.mode === "alternate" || l.alternate_rank) {
                     rk = `A${l.alternate_rank}`; fld = esc(l.chapter || "");
                     meta = `Alternate #${l.alternate_rank} — next in when a seat opens`;

@@ -1,5 +1,16 @@
-window.TGF_VERSION = "2.193.3";
+window.TGF_VERSION = "2.194.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.194.0",
+    date: "2026-08-03",
+    changes: [
+      "CITY CHAMPIONSHIP drill-down row aligns to its real columns (Kerry): the championship date sits in the Date column on the left, the points total sits inside the bordered POINTS column (same centered 2px-rule treatment as every other row), and POSITION populates with the player's live championship rank (T-ties included). The date comes from the gg_points_race_final dial; the rank is computed among scorers on every board read.",
+      "The live championship hole-by-hole card now follows the SAME formatting as the imported scorecards (Kerry: 'It should follow the formatting of the other scorecards from previous events'): dark HOLE header band, blue PAR facts row, thick-bordered GROSS SCORE section with the red-circle/blue-square vs-par marks, NET SCORE with corner handicap dots on net races, and points on the tinted band. Each nine carries its own OUT/IN total column; 18-hole Gross + points totals ride the note line beneath, with the under/over-par legend. Unplayed holes keep the Tour-style dash — this card is live.",
+      "Player Spotlight hero index tile now links to the player's full handicap detail on the Handicaps page — pinned to top, expanded, pulsing (the same deep link the recap emails use).",
+      "Lone Star Cup SEAT differentiates projected vs secured (Kerry: 'I'm showing a SEAT... but that's a projection for me, whereas Callaway and Straiton... are locked'): a locked champion seat reads SEAT · locked 🔒 · Secured, while a live projection reads PROJ · seat · Projected.",
+      "scoring-hcp-r1-impact now reports the unchanged players by name (Kerry: 'which 10 player handicaps did not rise?').",
+    ],
+  },
   {
     version: "2.193.3",
     date: "2026-08-03",
