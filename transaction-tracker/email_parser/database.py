@@ -27203,7 +27203,10 @@ _HANDICAP_ADJUSTMENT = {3: -2.0, 4: -1.0, 6: -1.0}
 _HANDICAP_SETTINGS_DEFAULTS = {
     "lookback_months": "12",      # max age of rounds to count
     "min_rounds": "3",            # minimum rounds before index is shown
-    "multiplier": "0.96",         # USGA 0.96 factor
+    # R1 APPLIED 2026-08-03 (ratified 2026-07-16): the pre-2020 USGA 0.96
+    # "bonus for excellence" is removed per WHS — dial + default are 1.0
+    # so a settings wipe can't resurrect it.
+    "multiplier": "1.0",
 }
 
 

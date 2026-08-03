@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.192.2";
+window.TGF_VERSION = "2.192.3";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.192.3",
+    date: "2026-08-03",
+    changes: [
+      "R1 APPLIED — the ×0.96 multiplier is out of the handicap index (ratified 7/16, sequenced behind an impact sweep that ran today: 158 of 168 indexes rise, mean +0.31, max +0.8). The live dial and the code default are both 1.0 so a settings reset can't resurrect it; the HOW IT WORKS copy, the calc modal default, and the handicap docs all drop the factor. Record layer updates retroactively by design; no paid result is touched.",
+    ],
+  },
   {
     version: "2.192.2",
     date: "2026-08-03",

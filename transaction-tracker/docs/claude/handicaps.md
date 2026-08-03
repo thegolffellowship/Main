@@ -20,9 +20,10 @@ the ratified items below changes code or data without Kerry's sign-off.**
   rounds THEN caps; our spec caps THEN rounds — equivalent at integer caps,
   but **pin the order in config before any fractional/per-game cap exists.**
 - **R1 — REMOVE the ×0.96 multiplier** (pre-2020 USGA "bonus for
-  excellence," deleted by WHS). Raises field indexes ~4%. **Sequenced:
-  impact sweep (I-2) FIRST → report → apply under the retroactivity
-  boundary. NOT yet applied.**
+  excellence," deleted by WHS). **APPLIED 2026-08-03** per the ratified
+  sequence: sweep (`scoring-hcp-r1-impact`) reported 158/168 indexes rise,
+  mean +0.31, max +0.8 → dial + default flipped to 1.0. Record layer
+  updates retroactively (by design); no paid result touched.
 - **R2 — 12-month lookback window is a DELIBERATE deviation, ratified**
   (deviation register).
 - **R3 — Plus handling = "fall-where-it-falls" for now.** Website ÷2 rule
@@ -71,12 +72,12 @@ the ratified items below changes code or data without Kerry's sign-off.**
 | 19 | Avg Low 7 | 0 |
 | 20 | Avg Low 8 (fully established) | 0 |
 
-Formula: `round((avg_of_lowest_N × 0.96) + adjustment, 1)`
+Formula: `round(avg_of_lowest_N + adjustment, 1)` (×0.96 removed 2026-08-03, R1)
 
 ## Calculation rules
 - **Lookback window:** 12 months (configurable)
 - **Pool:** most recent 20 rounds within the window
-- **Multiplier:** avg of lowest N × 0.96
+- **Multiplier:** none — avg of lowest N (the 0.96 was removed 2026-08-03, R1)
 - **Rounding:** standard round-to-nearest-tenth per **WHS Rule 5.2** (2020-present):
   *"The result of the calculation is rounded to the nearest tenth."* (.5 rounds up)
   e.g. 6.282 → 6.3; 6.24 → 6.2; −0.228 → −0.2N (plus-handicapper, rounds toward +∞)

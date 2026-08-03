@@ -1697,7 +1697,7 @@
 
     function buildCalcHTML(playerName, rounds) {
         const lookbackMonths = parseInt(settings.lookback_months || 12);
-        const multiplier     = parseFloat(settings.multiplier || 0.96);
+        const multiplier     = parseFloat(settings.multiplier || 1.0);   // R1: 0.96 removed 2026-08-03
         const minRounds      = parseInt(settings.min_rounds || 3);
 
         const cutoff = new Date();
@@ -2419,8 +2419,8 @@
 
             <h4>4 &middot; Your index averages your best recent golf</h4>
             <p>Your index is the average of your <b>lowest 8 differentials
-               from your last 20 rounds</b> (past 12 months) &times; 0.96,
-               rounded to a tenth. The green checks on your card mark the rounds that are
+               from your last 20 rounds</b> (past 12 months), rounded to a
+               tenth. The green checks on your card mark the rounds that are
                counting right now — shoot better and they roll in
                automatically. Newer players start counting at 3 posted
                rounds with a smaller sample (and a safety adjustment) until
