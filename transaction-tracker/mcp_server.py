@@ -2397,6 +2397,12 @@ def _scoring_dispatch(url: str, extract: str):
             mode = arg.strip().lower()
             return json.dumps(db.persist_handicap_round_nines(
                 dry_run=(mode != "apply")), indent=2, default=str)
+        if cmd == "scoring-spotlight":
+            # "<customer_id>" — the full Player Spotlight payload (same
+            # data the member page renders); lets a session verify the
+            # WHERE-PLAYER-STANDS / LSC / winnings shapes end-to-end.
+            return json.dumps(db.get_player_spotlight(int(arg.strip())),
+                              indent=2, default=str)
         if cmd == "scoring-hcp-r1-impact":
             # R1 sweep (ratified 2026-07-16, 'sweep first -> report ->
             # apply'): recompute all indexes without the x0.96 multiplier
