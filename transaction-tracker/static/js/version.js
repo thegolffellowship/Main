@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.189.5";
+window.TGF_VERSION = "2.189.6";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.189.6",
+    date: "2026-08-02",
+    changes: [
+      "Hotfix on v2.189.4's paid-row preservation: the consumed-twin matching resolved assembled names with the generic customer lookup, which can't read GG's 'VASQUEZ, Gus' format — so the first live force re-record preserved all 33 paid SA rows correctly but re-inserted 26 of them as pending duplicates. Consumption now uses the same _resolve_customer_for_payout resolver the insert path uses; a follow-up force re-record deletes the pending duplicates and inserts nothing back.",
+    ],
+  },
   {
     version: "2.189.5",
     date: "2026-08-02",

@@ -44436,7 +44436,11 @@ def record_event_game_payouts(event_name: str, payouts: list,
             remaining = []
             for p in payouts:
                 nm = (p.get("golferName") or "").strip()
-                cid = _lookup_customer_id(conn, nm, None) if nm else None
+                # SAME resolver import_tgf_payouts uses on insert — the
+                # generic name lookup can't read GG's "VASQUEZ, Gus"
+                # format, so consumption missed 26 of 33 preserved rows on
+                # the first live run and re-inserted them as duplicates.
+                cid = _resolve_customer_for_payout(conn, nm) if nm else None
                 hit = None
                 if cid:
                     hit = next((i for i, q in enumerate(pool)
