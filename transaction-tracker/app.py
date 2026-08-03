@@ -13971,6 +13971,76 @@ try:
 except Exception:
     logger.warning("Startup backfill failed", exc_info=True)
 
+# ═══════════════════════════════════════════════════════════════════════
+# SNAPSHOT COMMAND CENTER (admin) — Kerry 2026-08-03: "an interactive
+# Command Center for me to approve, preview, mark accordingly". The
+# targeting queue (push_entry / defend / normal off the live cup boards)
+# with per-player marks; Preview renders the exact email HTML; Send Test
+# mails the admin recipient; a REAL send requires an APPROVED mark —
+# Kerry's click IS the per-send rule-3b ratification. Never bulk-sends.
+# ═══════════════════════════════════════════════════════════════════════
+
+@app.route("/admin/snapshot-center")
+@require_role("admin")
+def snapshot_center_page():
+    return render_template("snapshot_center.html",
+                           SHELL_TITLE="Snapshot Command Center",
+                           SHELL_ACTIVE="admin")
+
+
+@app.route("/api/snapshot-center/queue")
+@require_role("admin")
+def api_snapshot_center_queue():
+    from email_parser.database import snapshot_center_queue
+    try:
+        return jsonify(snapshot_center_queue())
+    except Exception as e:
+        logger.exception("snapshot center queue failed")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/snapshot-center/mark", methods=["POST"])
+@require_role("admin")
+def api_snapshot_center_mark():
+    from email_parser.database import snapshot_center_mark
+    body = request.get_json(silent=True) or {}
+    try:
+        res = snapshot_center_mark(int(body.get("customer_id") or 0),
+                                   (body.get("status") or "").strip(),
+                                   note=body.get("note"))
+        return (jsonify(res), 200 if res.get("ok") else 400)
+    except Exception as e:
+        logger.exception("snapshot center mark failed")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/snapshot-center/preview")
+@require_role("admin")
+def api_snapshot_center_preview():
+    from email_parser.database import build_player_snapshot_email
+    try:
+        res = build_player_snapshot_email(int(request.args.get("cid") or 0),
+                                          send=False)
+        return jsonify(res) if res.get("ok") else (jsonify(res), 400)
+    except Exception as e:
+        logger.exception("snapshot center preview failed")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/snapshot-center/send", methods=["POST"])
+@require_role("admin")
+def api_snapshot_center_send():
+    from email_parser.database import snapshot_center_send
+    body = request.get_json(silent=True) or {}
+    try:
+        res = snapshot_center_send(int(body.get("customer_id") or 0),
+                                   test=bool(body.get("test")))
+        return (jsonify(res), 200 if res.get("ok") else 400)
+    except Exception as e:
+        logger.exception("snapshot center send failed")
+        return jsonify({"error": str(e)}), 500
+
+
 # Seed upcoming San Antonio events (idempotent — skips existing)
 _SA_EVENTS = [
     {"item_name": "s9.1 The Quarry", "event_date": "2026-03-17", "course": "The Quarry", "chapter": "San Antonio"},

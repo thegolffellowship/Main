@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
+    <title>TGF — Snapshot Command Center</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Bitter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/css/dashboard.css">
+    <link rel="stylesheet" href="/static/css/shell.css">
+    <link rel="icon" href="/static/icon.svg" type="image/svg+xml">
+    <link rel="apple-touch-icon" href="/static/icon-180.png">
+    <style>
+        .sc-wrap { padding: 1rem 1.5rem 2.5rem; }
+        .sc-note { font-size: 12.5px; color: var(--text-muted); margin: 0.25rem 0 0.9rem; }
+        .sc-champ { border: 1px solid var(--border); border-left: 4px solid var(--primary); border-radius: 8px; padding: 8px 14px; font-size: 13px; margin: 0 0 1rem; background: #fff; }
+        .sc-tabs { display: flex; gap: 8px; margin: 0 0 0.9rem; flex-wrap: wrap; }
+        .sc-tab { border: 2px solid #1B1B1B; background: #fff; color: #1B1B1B; border-radius: 9999px; padding: 6px 16px; font: 700 12px 'Bitter', serif; letter-spacing: 0.06em; text-transform: uppercase; cursor: pointer; }
+        .sc-tab.active { background: #1B1B1B; color: #fff; }
+        .sc-tab .n { font-weight: 400; opacity: 0.75; }
+        .sc-table { width: 100%; border-collapse: collapse; background: #fff; }
+        .sc-table th { text-align: left; font: 700 10px/1.3 'Bitter', serif; letter-spacing: 1px; text-transform: uppercase; color: #9CA3AF; padding: 8px 6px 6px; border-bottom: 2px solid var(--border); }
+        .sc-table td { padding: 7px 6px; border-bottom: 1px solid #F3F2EF; font-size: 13px; white-space: normal; vertical-align: middle; }
+        .sc-table td.c, .sc-table th.c { text-align: center; }
+        .sc-chip { display: inline-block; padding: 2px 10px; border-radius: 9999px; font-size: 10.5px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; }
+        .sc-chip.approved { background: #DCFCE7; color: #15803D; }
+        .sc-chip.deferred { background: #FEF3C7; color: #B45309; }
+        .sc-chip.skipped { background: #E5E7EB; color: #4B5563; }
+        .sc-chip.sent { background: #DBEAFE; color: #1D4ED8; }
+        .sc-chip.none { background: #F8F8F8; color: #9CA3AF; border: 1px dashed #D1D5DB; }
+        .sc-btn { border: 1.5px solid #1B1B1B; background: #fff; color: #1B1B1B; border-radius: 9999px; padding: 3px 11px; font-size: 11.5px; font-weight: 600; cursor: pointer; margin: 1px 2px; }
+        .sc-btn:hover { background: #F3F4F6; }
+        .sc-btn.primary { background: var(--primary); border-color: var(--primary); color: #fff; }
+        .sc-btn.primary:hover { background: var(--primary-hover); }
+        .sc-btn.ghost { border-color: #D1D5DB; color: #6B7280; }
+        .sc-btn.send { background: #002868; border-color: #002868; color: #fff; }
+        .sc-btn[disabled] { opacity: 0.4; cursor: not-allowed; }
+        .sc-flag { font-size: 11px; font-weight: 700; }
+        .sc-flag.in { color: #15803D; }
+        .sc-flag.out { color: #B91C1C; }
+        .sc-flag.na { color: #9CA3AF; font-weight: 400; }
+        .sc-scroll { overflow-x: auto; }
+        .sc-modal { position: fixed; inset: 0; background: rgba(27,27,27,0.55); display: none; align-items: flex-start; justify-content: center; padding: 4vh 1rem; z-index: 300; }
+        .sc-modal.open { display: flex; }
+        .sc-modal .box { background: #fff; border-radius: 12px; max-width: 700px; width: 100%; max-height: 90vh; display: flex; flex-direction: column; overflow: hidden; }
+        .sc-modal .box header { display: flex; align-items: center; justify-content: space-between; padding: 10px 16px; background: #1B1B1B; color: #fff; position: static; }
+        .sc-modal .box header .t { font: 700 14px 'Bitter', serif; }
+        .sc-modal iframe { border: 0; width: 100%; flex: 1; min-height: 60vh; background: #fff; }
+        .sc-toast { position: fixed; bottom: 18px; left: 50%; transform: translateX(-50%); background: #1B1B1B; color: #fff; border-radius: 9999px; padding: 9px 20px; font-size: 13px; z-index: 400; display: none; }
+        @media (max-width: 768px) { .sc-wrap { padding: 0.5rem 0.5rem 2rem; } }
+    </style>
+</head>
+<body>
+    {% if shell_v2 %}
+    {% set SHELL_TITLE = 'Snapshot Command Center' %}{% set SHELL_ACTIVE = 'admin' %}
+    {% include '_shell_nav.html' %}
+    {% else %}
+    <header>
+        <div class="header-content">
+            <h1>TGF Transaction Tracker</h1>
+            <p class="subtitle">Snapshot Command Center</p>
+            <a href="/changelog" class="version-link" id="version-badge" title="View changelog">v2.0.0</a>
+        </div>
+        <div class="header-actions">
+            <span id="role-badge" class="role-badge" style="display:none;"></span>
+            <button id="btn-logout" class="btn btn-secondary" title="Log out" style="display:none;">Log Out</button>
+        </div>
+    </header>
+    {% endif %}
+
+    <main>
+        <div class="sc-wrap">
+            <div class="sc-note">
+                The live targeting queue off both cup boards. <b>PUSH</b> = in the window, not bought in ·
+                <b>DEFEND</b> = in the window, bought in · <b>NORMAL</b> = everyone else.
+                Preview shows the exact email. <b>Send Test</b> mails YOU. A real <b>Send</b> goes to the player
+                and requires your Approve first — nothing ever bulk-sends.
+            </div>
+            <div id="sc-champ" class="sc-champ" style="display:none;"></div>
+            <div class="sc-tabs" id="sc-tabs"></div>
+            <div class="sc-scroll"><div id="sc-body"><span style="color:var(--text-muted);">Loading queue (live GG reads — a few seconds)…</span></div></div>
+        </div>
+    </main>
+
+    <div class="sc-modal" id="sc-modal">
+        <div class="box">
+            <header>
+                <span class="t" id="sc-modal-title">Preview</span>
+                <button class="sc-btn ghost" onclick="scCloseModal()" style="border-color:#6B7280;color:#fff;background:transparent;">Close ✕</button>
+            </header>
+            <iframe id="sc-frame" sandbox=""></iframe>
+        </div>
+    </div>
+    <div class="sc-toast" id="sc-toast"></div>
+
+    <script src="/static/js/version.js"></script>
+    <script src="/static/js/auth.js"></script>
+    <script>
+    (function () {
+        "use strict";
+        const esc = s => String(s ?? "").replace(/[&<>"']/g,
+            c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+        let Q = null, tab = "push_entry";
+
+        const fmtN = v => v == null ? "—" : String(Number(v) % 1 ? Number(v).toFixed(1) : Number(v));
+        const seatCell = e => {
+            if (e.best_gap_to_seat == null) return "—";
+            const g = Number(e.best_gap_to_seat);
+            return g >= 0
+                ? `<span class="sc-flag in">inside +${fmtN(g)}</span>`
+                : `<span>${fmtN(-g)} out</span>`;
+        };
+        const champCell = e => e.tgf_champ_signed_up == null
+            ? '<span class="sc-flag na" title="No fall championship event posted yet">—</span>'
+            : (e.tgf_champ_signed_up
+                ? '<span class="sc-flag in">✓ IN</span>'
+                : '<span class="sc-flag out">✗ Not signed up</span>');
+        const markChip = e => {
+            const m = e.mark || "none";
+            const label = m === "none" ? "unmarked" : m
+                + (m === "sent" && e.sent_at ? ` ${e.sent_at}` : "");
+            return `<span class="sc-chip ${m}">${esc(label)}</span>`
+                + (e.mark_note ? `<div style="font-size:11px;color:#6B7280;">${esc(e.mark_note)}</div>` : "");
+        };
+
+        function toast(msg) {
+            const t = document.getElementById("sc-toast");
+            t.textContent = msg;
+            t.style.display = "block";
+            clearTimeout(t._h);
+            t._h = setTimeout(() => { t.style.display = "none"; }, 3200);
+        }
+
+        window.scCloseModal = function () {
+            document.getElementById("sc-modal").classList.remove("open");
+            document.getElementById("sc-frame").srcdoc = "";
+        };
+
+        window.scPreview = async function (cid, name) {
+            document.getElementById("sc-modal-title").textContent = `Preview — ${name}`;
+            document.getElementById("sc-frame").srcdoc = "<p style='font-family:sans-serif;color:#6B7280;padding:1rem;'>Building from live boards…</p>";
+            document.getElementById("sc-modal").classList.add("open");
+            try {
+                const r = await fetch(`/api/snapshot-center/preview?cid=${cid}`);
+                const d = await r.json();
+                if (!r.ok || !d.ok) throw new Error(d.error || `HTTP ${r.status}`);
+                document.getElementById("sc-modal-title").textContent = `${name} — ${d.subject}`;
+                document.getElementById("sc-frame").srcdoc = `<body style="margin:14px;background:#F8F8F8;">${d.preview}</body>`;
+            } catch (e) {
+                document.getElementById("sc-frame").srcdoc = `<p style='font-family:sans-serif;color:#B91C1C;padding:1rem;'>${esc(e.message)}</p>`;
+            }
+        };
+
+        window.scMark = async function (cid, status) {
+            let note = null;
+            if (status === "deferred" || status === "skipped") {
+                note = prompt(status === "deferred"
+                    ? "Defer note (e.g. 'in Hawaii until Sept'):"
+                    : "Skip note (optional):") || "";
+            }
+            const r = await fetch("/api/snapshot-center/mark", {
+                method: "POST", headers: {"Content-Type": "application/json"},
+                body: JSON.stringify({customer_id: cid, status, note}),
+            });
+            const d = await r.json();
+            if (!r.ok || !d.ok) { toast(d.error || "Mark failed"); return; }
+            toast(status === "clear" ? "Mark cleared" : `Marked ${status}`);
+            load(false);
+        };
+
+        window.scSend = async function (cid, name, test) {
+            if (!test && !confirm(`Send the snapshot email to ${name}'s inbox?\n\nThis is a REAL member send.`)) return;
+            toast(test ? "Sending test to your inbox…" : `Sending to ${name}…`);
+            const r = await fetch("/api/snapshot-center/send", {
+                method: "POST", headers: {"Content-Type": "application/json"},
+                body: JSON.stringify({customer_id: cid, test: !!test}),
+            });
+            const d = await r.json();
+            if (!r.ok || !d.ok) { toast(d.error || "Send failed"); return; }
+            toast(`Sent to ${d.sent_to}`);
+            load(false);
+        };
+
+        function actions(e) {
+            const approved = e.mark === "approved";
+            return `
+                <button class="sc-btn" onclick="scPreview(${e.customer_id}, '${esc(e.name).replace(/'/g, "\\'")}')">Preview</button>
+                <button class="sc-btn primary" onclick="scMark(${e.customer_id}, 'approved')">Approve</button>
+                <button class="sc-btn ghost" onclick="scMark(${e.customer_id}, 'deferred')">Defer</button>
+                <button class="sc-btn ghost" onclick="scMark(${e.customer_id}, 'skipped')">Skip</button>
+                <button class="sc-btn ghost" onclick="scMark(${e.customer_id}, 'clear')">Clear</button>
+                <button class="sc-btn ghost" onclick="scSend(${e.customer_id}, '${esc(e.name).replace(/'/g, "\\'")}', true)">Send Test</button>
+                <button class="sc-btn send" ${approved ? "" : "disabled title='Approve first'"} onclick="scSend(${e.customer_id}, '${esc(e.name).replace(/'/g, "\\'")}', false)">Send</button>`;
+        }
+
+        function render() {
+            const tabs = [["push_entry", "Push Entry"], ["defend", "Defend"], ["normal", "Normal"]];
+            document.getElementById("sc-tabs").innerHTML = tabs.map(([k, label]) =>
+                `<button class="sc-tab${k === tab ? " active" : ""}" onclick="scTab('${k}')">${label} <span class="n">${(Q.counts || {})[k] ?? ""}</span></button>`).join("");
+            const ce = Q.championship_events;
+            const cEl = document.getElementById("sc-champ");
+            cEl.style.display = "block";
+            cEl.innerHTML = ce && ce.length
+                ? `<b>TGF Championship signups tracked against:</b> ${ce.map(e2 => `${esc(e2.item_name)} (${esc(e2.event_date || "")})`).join(" · ")}`
+                : `<b>No fall TGF Championship event is posted yet</b> — the TGF CHAMP column lights up (✓ / ✗) as soon as the event exists on the EVENTS page.`;
+            const rows = (Q[tab] || []).map(e => `
+                <tr>
+                    <td><b>${esc(e.name)}</b>${e.secured_seat ? ' <span title="Holds a secured LSC seat">🔒</span>' : ""}</td>
+                    <td>${esc(e.chapter || "")}</td>
+                    <td class="c">${fmtN(e.best_back)}</td>
+                    <td class="c">${seatCell(e)}</td>
+                    <td class="c">${e.enrolled_any ? '<span class="sc-flag in">✓</span>' : '<span class="sc-flag out">✗</span>'}</td>
+                    <td class="c">${champCell(e)}</td>
+                    <td>${markChip(e)}</td>
+                    <td style="white-space:nowrap;">${actions(e)}</td>
+                </tr>`).join("");
+            document.getElementById("sc-body").innerHTML = `
+                <table class="sc-table">
+                    <thead><tr>
+                        <th>Player</th><th>Chapter</th><th class="c" title="Points back of the lead (reset seeds)">Off Lead</th>
+                        <th class="c" title="Gap to the nearest Lone Star Cup seat line">Seat Line</th>
+                        <th class="c" title="Bought into either cup">Cup</th>
+                        <th class="c" title="Signed up / RSVP'd for the TGF Championship">TGF Champ</th>
+                        <th>Mark</th><th>Actions</th>
+                    </tr></thead>
+                    <tbody>${rows || '<tr><td colspan="8" style="color:#9CA3AF;">Nobody in this bucket.</td></tr>'}</tbody>
+                </table>`;
+        }
+
+        window.scTab = function (k) { tab = k; render(); };
+
+        async function load(showSpinner = true) {
+            if (showSpinner) document.getElementById("sc-body").innerHTML =
+                '<span style="color:var(--text-muted);">Loading queue (live GG reads — a few seconds)…</span>';
+            try {
+                const r = await fetch("/api/snapshot-center/queue");
+                const d = await r.json();
+                if (!r.ok) throw new Error(d.error || `HTTP ${r.status}`);
+                Q = d;
+                render();
+            } catch (e) {
+                document.getElementById("sc-body").innerHTML =
+                    `<span style="color:#B91C1C;">${esc(e.message)}</span>`;
+            }
+        }
+
+        document.addEventListener("DOMContentLoaded", () => {
+            if (typeof initAuth === "function") initAuth();
+            load();
+        });
+    })();
+    </script>
+</body>
+</html>

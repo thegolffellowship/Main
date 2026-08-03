@@ -8278,11 +8278,25 @@ def fetch_champ_player_card(race_key: str, customer_id: int,
         try:
             with _connect(db_path) as _c:
                 _fh = _c.execute(
-                    """SELECT e.item_name FROM scoring_rounds sr
+                    """SELECT e.item_name, sr.tee_id FROM scoring_rounds sr
                        JOIN events e ON e.id = sr.event_id
                        WHERE sr.customer_id = ? AND sr.holes_played > 9
                        ORDER BY sr.round_date DESC, sr.id DESC LIMIT 1""",
                     (int(customer_id),)).fetchone()
+                # Course facts (Kerry 2026-08-03: "Show YARDS and HCP rows
+                # for the City Championship too") come off the player's
+                # own imported round's tee — course DB, never guessed.
+                # Additive: pre-import (live day) the rows simply don't
+                # render.
+                if _fh and _fh["tee_id"]:
+                    for th in _c.execute(
+                            """SELECT hole_number, yardage, stroke_index
+                               FROM course_tee_holes WHERE tee_id = ?""",
+                            (_fh["tee_id"],)).fetchall():
+                        hn = th["hole_number"]
+                        if 1 <= hn <= 18:
+                            holes[hn - 1]["yardage"] = th["yardage"]
+                            holes[hn - 1]["stroke_index"] = th["stroke_index"]
             if _fh and _event_first_nine(_fh["item_name"],
                                          db_path=db_path) == "back":
                 card_first_hole = 10
@@ -14018,6 +14032,28 @@ def build_player_snapshot_email(customer_id: int,
         {lsc_text}
       </div>""" if lsc_text else "")
 
+    # THE WEEKEND SELL (Kerry 2026-08-03): entering the points race is
+    # only half the ask — they need to BE at the TGF Championship. When a
+    # fall championship event is posted and this player isn't signed up
+    # or RSVP'd, sell the weekend itself: TGF's two best experiences,
+    # family-friendly getaways. No event posted yet → no section.
+    weekend_html = ""
+    try:
+        with _connect(db_path) as conn:
+            _evs, _champ_cids = _tgf_champ_signups(conn)
+        if _evs is not None and customer_id not in _champ_cids:
+            _ev0 = _evs[0]
+            _evbit = " · ".join(x for x in (
+                _ev0.get("item_name"), _ev0.get("event_date")) if x)
+            weekend_html = f"""
+      <div style="border:1px solid #E5E7EB;border-radius:8px;padding:14px 18px;margin:18px 0 0;{sans}font-size:14px;line-height:1.55;">
+        <div style="{serif}font-size:15px;font-weight:700;margin-bottom:6px;">Be there for the weekend itself.</div>
+        <p style="margin:0 0 8px;">The TGF Championship and the Lone Star Cup are, hands down, the two best weekends TGF puts on — our top two experiences of the year. Great courses, the whole fellowship in one place, families welcome, a proper getaway. You don't have to win it all for it to be worth it — plenty of players place in the money. But you do have to be there.</p>
+        <p style="margin:0;font-size:12px;color:{MUTE};">You're not signed up yet{f" — {_evbit}" if _evbit else ""}. Grab your spot on the events page.</p>
+      </div>"""
+    except Exception:
+        pass
+
     _lbl = feature.get("label", "")
     _race = _lbl if _lbl.upper().startswith("THE ") else f"the {_lbl}"
     story_lead = (
@@ -14057,6 +14093,7 @@ def build_player_snapshot_email(customer_id: int,
           <p style="margin:0;">And it's been done. In 2024, Mark Freund started championship weekend <b>30th on the reset board — dead last among the seeds, 14.5 points back</b>. He won the Fellowship Cup by 2.5, passing all 29 players ahead of him.</p>
         </div>
         {lsc_html}
+        {weekend_html}
         <div style="text-align:center;margin:24px 0 4px;">
           <a href="https://tgf-tracker.up.railway.app/member/spotlight?player={customer_id}"
              style="background:{ORANGE};color:#fff;text-decoration:none;font-weight:700;padding:11px 26px;border-radius:9999px;{serif}font-size:14px;letter-spacing:0.04em;">SEE YOUR FULL SPOTLIGHT</a>
@@ -14095,8 +14132,38 @@ def build_player_snapshot_email(customer_id: int,
     return {**result, "ok": bool(ok), "sent": bool(ok), "sent_to": to}
 
 
+def _tgf_champ_signups(conn) -> tuple:
+    """Upcoming TGF Championship events (any chapter) + the customer_ids
+    signed up (registration purchase or matched RSVP). Returns
+    (events_list_or_None, cid_set) — None events means no fall
+    championship is posted yet, so signup status is unknowable."""
+    from .timezone_utils import today_central_str
+    evs = conn.execute(
+        """SELECT id, item_name, event_date, chapter FROM events
+           WHERE UPPER(item_name) LIKE '%CHAMPIONSHIP%' AND event_date >= ?
+           ORDER BY event_date""", (today_central_str(),)).fetchall()
+    if not evs:
+        return None, set()
+    cids = set()
+    for ev in evs:
+        for r in conn.execute(
+                """SELECT DISTINCT customer_id FROM items
+                   WHERE item_name = ? AND customer_id IS NOT NULL
+                     AND COALESCE(transaction_status, '') != 'credited'""",
+                (ev["item_name"],)).fetchall():
+            cids.add(r["customer_id"])
+        for r in conn.execute(
+                """SELECT DISTINCT i.customer_id FROM rsvps rv
+                   JOIN items i ON i.id = rv.matched_item_id
+                   WHERE rv.matched_event = ? AND UPPER(rv.response) LIKE 'Y%'
+                     AND i.customer_id IS NOT NULL""",
+                (ev["item_name"],)).fetchall():
+            cids.add(r["customer_id"])
+    return [dict(e) for e in evs], cids
+
+
 def snapshot_target_list(window_points: float = 15.0,
-                         seat_window: float = 3.0,
+                         seat_window: float = 15.0,
                          db_path: str | Path | None = None) -> dict:
     """WHO GETS WHICH SNAPSHOT EMAIL — the targeting queue (Kerry
     2026-08-03: "a list of identifying who is in our window to push on
@@ -14187,6 +14254,17 @@ def snapshot_target_list(window_points: float = 15.0,
                 "seats": seats,
             }
 
+    # THE SECOND LAYER (Kerry 2026-08-03): being in the points window is
+    # only half the ask — they also need to be signed up for the TGF
+    # Championship itself. Signup status rides every entry so the
+    # Command Center can show who needs the weekend sold to them.
+    champ_evs, champ_cids = None, set()
+    try:
+        with _connect(db_path) as conn:
+            champ_evs, champ_cids = _tgf_champ_signups(conn)
+    except Exception:
+        logger.warning("champ signup lookup failed", exc_info=True)
+
     push, defend, normal = [], [], []
     for e in players.values():
         backs = [pp["points_back"] for pp in e["paths"].values()]
@@ -14199,6 +14277,9 @@ def snapshot_target_list(window_points: float = 15.0,
                      or (e["best_gap_to_seat"] is not None
                          and e["best_gap_to_seat"] >= -seat_window))
         e["secured_seat"] = e["customer_id"] in secured_cids
+        e["tgf_champ_signed_up"] = (
+            (e["customer_id"] in champ_cids) if champ_evs is not None
+            else None)
         if in_window and not e["enrolled_any"]:
             push.append(e)
         elif in_window:
@@ -14214,14 +14295,108 @@ def snapshot_target_list(window_points: float = 15.0,
                      "seat_window": seat_window,
                      "note": "review queue only — availability is a "
                              "human call; nothing auto-sends"},
+        "championship_events": champ_evs,
         "push_entry": push,
         "defend": defend,
         "normal": [{"customer_id": e["customer_id"], "name": e["name"],
                     "chapter": e["chapter"],
-                    "enrolled_any": e["enrolled_any"]} for e in normal],
+                    "enrolled_any": e["enrolled_any"],
+                    "tgf_champ_signed_up": e["tgf_champ_signed_up"]}
+                   for e in normal],
         "counts": {"push_entry": len(push), "defend": len(defend),
                    "normal": len(normal)},
     }
+
+
+# ── SNAPSHOT COMMAND CENTER (Kerry 2026-08-03: "an interactive Command
+#    Center for me to approve, preview, mark accordingly") ──
+# Marks live in the snapshot_center_marks app-setting (rules-as-data, no
+# schema change): {"<cid>": {status, note, marked_at, sent_at, sent_to}}.
+# status ∈ approved | skipped | deferred | sent. A REAL send requires an
+# APPROVED mark — Kerry clicking Approve+Send in the Command Center IS
+# the per-send rule-3b ratification; nothing sends in bulk.
+
+_SNAPSHOT_MARKS_KEY = "snapshot_center_marks"
+
+
+def _snapshot_marks(db_path=None) -> dict:
+    try:
+        raw = get_app_setting(_SNAPSHOT_MARKS_KEY, db_path=db_path)
+        return json.loads(raw) if raw else {}
+    except Exception:
+        return {}
+
+
+def snapshot_center_queue(db_path: str | Path | None = None) -> dict:
+    """The targeting queue + Kerry's marks, one payload for the UI."""
+    q = snapshot_target_list(db_path=db_path)
+    marks = _snapshot_marks(db_path)
+    for seg in ("push_entry", "defend", "normal"):
+        for e in q.get(seg) or []:
+            m = marks.get(str(e["customer_id"])) or {}
+            e["mark"] = m.get("status")
+            e["mark_note"] = m.get("note")
+            e["sent_at"] = m.get("sent_at")
+            e["sent_to"] = m.get("sent_to")
+    return q
+
+
+def snapshot_center_mark(customer_id: int, status: str,
+                         note: str | None = None,
+                         db_path: str | Path | None = None) -> dict:
+    """Set/clear a player's mark. status: approved|skipped|deferred|clear."""
+    from .timezone_utils import now_central
+    if status not in ("approved", "skipped", "deferred", "clear"):
+        return {"ok": False, "error": f"unknown status {status!r}"}
+    marks = _snapshot_marks(db_path)
+    key = str(int(customer_id))
+    if status == "clear":
+        marks.pop(key, None)
+    else:
+        entry = marks.setdefault(key, {})
+        entry["status"] = status
+        if note is not None:
+            entry["note"] = note.strip()[:300]
+        entry["marked_at"] = now_central().strftime("%Y-%m-%d %H:%M")
+    set_app_setting(_SNAPSHOT_MARKS_KEY, json.dumps(marks), db_path=db_path)
+    return {"ok": True, "customer_id": int(customer_id),
+            "status": None if status == "clear" else status}
+
+
+def snapshot_center_send(customer_id: int, test: bool = False,
+                         db_path: str | Path | None = None) -> dict:
+    """Send a player's snapshot email. test=True mails the ADMIN recap
+    recipient (safe preview in a real inbox). A real send goes to the
+    player's primary email and requires an APPROVED mark — the Command
+    Center approval is the per-send ratification."""
+    from .timezone_utils import now_central
+    marks = _snapshot_marks(db_path)
+    key = str(int(customer_id))
+    to = None
+    if not test:
+        if (marks.get(key) or {}).get("status") != "approved":
+            return {"ok": False,
+                    "error": "not approved — approve this player in the "
+                             "Command Center before sending"}
+        with _connect(db_path) as conn:
+            row = conn.execute(
+                """SELECT email FROM customer_emails
+                   WHERE customer_id = ? AND TRIM(COALESCE(email,'')) != ''
+                   ORDER BY is_primary DESC, email_id LIMIT 1""",
+                (int(customer_id),)).fetchone()
+            to = (row["email"] or "").strip() if row else None
+        if not to:
+            return {"ok": False, "error": "no email on file for this player"}
+    res = build_player_snapshot_email(int(customer_id), to_address=to,
+                                      send=True, db_path=db_path)
+    if res.get("sent") and not test:
+        entry = marks.setdefault(key, {})
+        entry["status"] = "sent"
+        entry["sent_at"] = now_central().strftime("%Y-%m-%d %H:%M")
+        entry["sent_to"] = res.get("sent_to")
+        set_app_setting(_SNAPSHOT_MARKS_KEY, json.dumps(marks),
+                        db_path=db_path)
+    return res
 
 
 def _two_nine_recap_rows(event_query: str,
@@ -15486,8 +15661,44 @@ def get_scorecard(scoring_round_id: int, db_path: str | Path = DB_PATH) -> dict 
         10 if (round_out.get("holes_played") or 9) > 9
         and _event_first_nine(round_out.get("event_name"),
                               db_path=db_path) == "back" else 1)
+    # Per-nine adjusted gross + differential for 18-hole rounds (Kerry
+    # 2026-08-03: "18 hole adjusted gross and differentials need to show
+    # as 9 hole adjusted and diffs under each 9") — read from the POSTED
+    # two-nine handicap rows so the card shows exactly what was banked,
+    # each nine against its own GG-course-setup rating/slope.
+    nines = []
+    if (round_out.get("holes_played") or 9) > 9 and round_out.get("tee_name"):
+        try:
+            with _connect(db_path) as conn:
+                names = {_normalize_player_name(
+                    round_out.get("player_name") or "")}
+                if round_out.get("customer_id"):
+                    for lk in conn.execute(
+                            "SELECT player_name FROM handicap_player_links "
+                            "WHERE customer_id = ?",
+                            (round_out["customer_id"],)).fetchall():
+                        names.add(lk["player_name"])
+                qm = ",".join("?" * len(names))
+                for hr in conn.execute(
+                        f"""SELECT tee_name, adjusted_score, rating, slope,
+                                   differential
+                            FROM handicap_rounds
+                            WHERE player_name IN ({qm}) AND round_date = ?
+                              AND tee_name IN (?, ?)
+                            ORDER BY id""",
+                        (*names, round_out.get("round_date"),
+                         f"{round_out['tee_name']} — Front 9",
+                         f"{round_out['tee_name']} — Back 9")).fetchall():
+                    nines.append({
+                        "nine": ("front" if "Front" in (hr["tee_name"] or "")
+                                 else "back"),
+                        "adjusted_gross": hr["adjusted_score"],
+                        "rating": hr["rating"], "slope": hr["slope"],
+                        "differential": hr["differential"]})
+        except Exception:
+            logger.warning("per-nine scorecard lookup failed", exc_info=True)
     return {"round": round_out, "holes": out_holes, "derived_totals": totals,
-            "formulas": formulas}
+            "nines": nines or None, "formulas": formulas}
 
 
 def verify_scoring_round(scoring_round_id: int,

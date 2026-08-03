@@ -247,12 +247,26 @@ deep-links `/member/spotlight?player=<cid>`.
 **Sends only to the named/admin address — member sends are rule-3b
 gated on Kerry's ratification.** Seat-line gaps ≤1 translate to golf
 ("That's one net bogey at the TGF Championship" — Kerry's framing).
-**Targeting queue (v2.195.0):** `snapshot_target_list()` / bridge
-`scoring-snapshot-targets[:window|seat]` segments every cup-board
-player — `push_entry` (in the window, NOT bought in: ≤15 back of the
-lead or within 3 of an LSC seat line), `defend` (in window, bought
-in), `normal`. REVIEW QUEUE ONLY — availability ("he'll be in Hawaii")
-is Kerry's call; nothing auto-sends.
+**Targeting queue (v2.195.0, widened v2.196.0):**
+`snapshot_target_list()` / bridge `scoring-snapshot-targets[:window|seat]`
+segments every cup-board player — `push_entry` (in the window, NOT
+bought in: ≤15 back of the lead OR within 15 of an LSC seat line),
+`defend` (in window, bought in), `normal`. Each entry carries
+`tgf_champ_signed_up` (registration purchase or matched YES RSVP for an
+upcoming `%CHAMPIONSHIP%` event via `_tgf_champ_signups`; None = no
+fall championship posted yet). REVIEW QUEUE ONLY — availability ("he'll
+be in Hawaii") is Kerry's call; nothing auto-sends. The email adds a
+"Be there for the weekend itself" section (TGF Champ + LSC = top two
+experiences, family, getaway) when the player isn't signed up.
+**SNAPSHOT COMMAND CENTER (v2.196.0)** — `/admin/snapshot-center`
+(admin): queue tabs + per-player Preview (exact HTML in an iframe),
+Approve / Defer(note) / Skip / Clear marks (`snapshot_center_marks`
+app setting), Send Test → admin inbox, real Send → player's primary
+`customer_emails` address, GATED on an approved mark (Kerry's click is
+the per-send rule-3b ratification; no bulk send exists).
+FUTURE (platform, once player logins exist — Kerry 2026-08-03): member
+self-service "out of town" calendar windows that suppress sends or at
+least inform managers.
 
 ## Member UX Audit S1 package (v2.86.0, Kerry-ratified mailbox #149–#151)
 

@@ -217,7 +217,8 @@
                     const res = await fetch(`/api/scoring/scorecard/${row.dataset.srid}`);
                     const data = await res.json();
                     if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
-                    det.firstElementChild.innerHTML = prRenderScorecard(data);
+                    det.firstElementChild.innerHTML = prRenderScorecard(data,
+                        {hideGrossPts: row.dataset.hideGp === "1"});
                 } catch (e) {
                     det.firstElementChild.innerHTML = `<span style="color:#b91c1c;">${escapeHtml(e.message)}</span>`;
                 }
@@ -280,12 +281,13 @@
             ? `${/\d:\d\d/.test(String(card.board_thru)) ? "tees off" : "thru"} ${escapeHtml(String(card.board_thru))}`
             : "";
         // Name leads, pinned on top (the row scrolls to the top of the
-        // screen when this card is the whole expansion).
-        const head = `<div style="margin:0 0 0.45rem;font-size:${big ? "1.02rem" : "0.88rem"};">
-            <span style="font-weight:800;color:#BF5700;">${escapeHtml(card.player_name || "")}</span>
-            ${card.board_points != null ? `<span style="font-weight:800;color:#1B1B1B;"> &middot; ${escapeHtml(String(card.board_points))} pts</span>` : ""}
-            ${thruBit ? ` <span style="font-weight:600;font-size:0.82em;color:#9A5B2E;">${thruBit}</span>` : ""}
-        </div>`;
+        // No name/points headline (Kerry 2026-08-03: the CITY CHAMPIONSHIP
+        // row above already names the player) — the 18-hole total renders
+        // as a bold orange cell hanging under the last block's PTS sum
+        // instead. During live play the thru bit still shows.
+        const head = thruBit
+            ? `<div style="margin:0 0 0.45rem;font-size:${big ? "0.9rem" : "0.8rem"};font-weight:600;color:#9A5B2E;">${thruBit}</div>`
+            : "";
         // Projected winnings / points reset ride here on phones (Kerry
         // 2026-08-01 — the collapsed rows give that room back to names)
         const statline = card._statline
@@ -316,8 +318,8 @@
             ? (fmt || String)(hs.reduce((a, h) => a + (h[k] ?? 0), 0)) : dash;
         const grossMode = card.scoring === "gross";
         const L = compact
-            ? { gs: "GROSS", ns: "NET", pts: grossMode ? "G PTS" : "PTS" }
-            : { gs: "GROSS SCORE", ns: "NET SCORE", pts: grossMode ? "GROSS PTS" : "CHAMP PTS" };
+            ? { yds: "YDS", gs: "GROSS", ns: "NET", pts: grossMode ? "G PTS" : "PTS" }
+            : { yds: "YARDS", gs: "GROSS SCORE", ns: "NET SCORE", pts: grossMode ? "GROSS PTS" : "CHAMP PTS" };
         const scoreSpan = (v, d) => `<span style="display:inline-block;min-width:${spanW};line-height:${spanW};${deco(d)}">${v}</span>`;
         // ● = handicap stroke, pinned to the cell's top-right corner (the
         // scorecard convention) — on the NET row in net races, on the
@@ -325,23 +327,45 @@
         const dotsMark = h => h.dots
             ? `<span style="position:absolute;top:0;right:1px;font-size:0.55em;line-height:1.4;color:#334155;">${"&#9679;".repeat(Math.min(h.dots, 3))}</span>`
             : "";
-        const block = (label, hs) => {
+        // 18-hole totals: gross rides the note line; champ points hang as
+        // a bold orange cell right under the LAST block's PTS sum (Kerry
+        // 2026-08-03)
+        const gTot = card.gross_total != null
+            ? card.gross_total
+            : (played.length ? holes.reduce((a, h) => a + (h.gross ?? 0), 0) : null);
+        const pTot = card.computed_points != null ? card.computed_points : null;
+        const sepT = compact ? " · " : " &nbsp;·&nbsp; ";
+        // CHAMP PTS band is the championship's faded-orange treatment
+        // (Kerry 2026-08-03: match the CITY CHAMPIONSHIP Total row), not
+        // the season cards' blue band
+        const band = "background:#FDF0E6;color:#BF5700;font-weight:700;";
+        // YARDS/HCP course facts render when the imported round supplied
+        // them (Kerry 2026-08-03: "Show YARDS and HCP rows for the City
+        // Championship too")
+        const haveYds = holes.some(h => h.yardage != null);
+        const haveSi = holes.some(h => h.stroke_index != null);
+        const block = (label, hs, isLast) => {
             const cells = fn => hs.map(fn).join("");
             const holeRow = cells(h => `<td style="${td}font-weight:700;background:#1B1B1B;color:#fff;">${h.hole}</td>`);
             const parRow = cells(h => `<td style="${td}color:#1D4ED8;">${h.par ?? dash}</td>`);
+            const ydsRow = !haveYds ? "" : cells(h => `<td style="${td}color:#1D4ED8;">${h.yardage ?? ""}</td>`);
+            const siRow = !haveSi ? "" : cells(h => `<td style="${td}color:#1D4ED8;opacity:.75;">${h.stroke_index ?? ""}</td>`);
             const grossRow = cells(h => h.gross == null
                 ? `<td style="${td}${sectTop}">${dash}</td>`
                 : `<td style="${td}${sectTop}font-weight:700;position:relative;">${grossMode ? dotsMark(h) : ""}${scoreSpan(h.gross, h.par != null ? h.gross - h.par : null)}</td>`);
             const netRow = grossMode ? "" : cells(h => h.net == null
                 ? `<td style="${td}${sectTop}">${dash}</td>`
                 : `<td style="${td}${sectTop}font-weight:700;position:relative;">${dotsMark(h)}${scoreSpan(h.net, h.par != null ? h.net - h.par : null)}</td>`);
-            const ptsRow = cells(h => `<td style="${td}${grey}${sectBot}">${h.pts != null ? h.pts : dash}</td>`);
+            const ptsRow = cells(h => `<td style="${td}${band}${sectBot}">${h.pts != null ? h.pts : dash}</td>`);
             return `<table style="border-collapse:collapse;font-size:${fs};margin:0.25rem 0;">
                 <tr><td style="${lbl}background:#1B1B1B;color:#fff;">HOLE</td>${holeRow}<td style="${td}font-weight:700;background:#1B1B1B;color:#fff;">${label}</td></tr>
                 <tr><td style="${lbl}color:#1D4ED8;">PAR</td>${parRow}<td style="${td}font-weight:700;background:#f1f5f9;">${sumOr(hs, "par")}</td></tr>
+                ${!ydsRow ? "" : `<tr><td style="${lbl}color:#1D4ED8;">${L.yds}</td>${ydsRow}<td style="${td}font-weight:700;background:#f1f5f9;">${sumOr(hs, "yardage")}</td></tr>`}
+                ${!siRow ? "" : `<tr><td style="${lbl}color:#1D4ED8;" title="Hole handicap ranking (stroke index): 1 = hardest">HCP</td>${siRow}<td style="${td}background:#f1f5f9;"></td></tr>`}
                 <tr><td style="${lbl}${sectTop}font-weight:700;">${L.gs}</td>${grossRow}<td style="${td}${sectTop}font-weight:700;background:#f1f5f9;">${sumOr(hs, "gross")}</td></tr>
                 ${grossMode ? "" : `<tr><td style="${lbl}${sectTop}font-weight:700;" title="Gross minus handicap strokes received on the hole">${L.ns}</td>${netRow}<td style="${td}${sectTop}font-weight:700;background:#f1f5f9;">${sumOr(hs, "net")}</td></tr>`}
-                <tr><td style="${lbl}${grey}${sectBot}" title="Championship-scale stableford points per hole">${L.pts}</td>${ptsRow}<td style="${td}${grey}${sectBot}font-weight:600;">${sumOr(hs, "pts")}</td></tr>
+                <tr><td style="${lbl}${band}${sectBot}" title="Championship-scale stableford points per hole">${L.pts}</td>${ptsRow}<td style="${td}${band}${sectBot}">${sumOr(hs, "pts")}</td></tr>
+                ${isLast && pTot != null ? `<tr><td colspan="${hs.length + 1}" style="border:1px solid transparent;"></td><td style="${td}${band}font-weight:800;border:2px solid #BF5700;" title="18-hole championship points total">${pTot}</td></tr>` : ""}
             </table>`;
         };
         const front = holes.filter(h => h.hole <= 9);
@@ -349,15 +373,8 @@
         // Play order (Kerry 2026-08-03): first_hole >= 10 → IN above OUT
         const backFirst = (card.first_hole || 1) >= 10;
         const html = backFirst
-            ? block("IN", back) + block("OUT", front)
-            : block("OUT", front) + block("IN", back);
-        // 18-hole totals ride the note line (the scorecard pattern) now
-        // that the grid no longer carries a TOT column
-        const gTot = card.gross_total != null
-            ? card.gross_total
-            : (played.length ? holes.reduce((a, h) => a + (h.gross ?? 0), 0) : null);
-        const pTot = card.computed_points != null ? card.computed_points : null;
-        const sepT = compact ? " · " : " &nbsp;·&nbsp; ";
+            ? block("IN", back, false) + block("OUT", front, true)
+            : block("OUT", front, false) + block("IN", back, true);
         const totBits = [];
         if (gTot != null) totBits.push(`Gross <strong>${gTot}</strong>`);
         if (pTot != null) totBits.push(`${grossMode ? "Gross" : "Champ"} points <strong>${pTot}</strong>`);
@@ -396,7 +413,10 @@
         return head + statline + plusNote + `<div class="pr-scroll">${html}</div>` + totLine + legend + parity + src;
     }
 
-    function prRenderScorecard(card) {
+    function prRenderScorecard(card, opts = {}) {
+        // opts.hideGrossPts: under CITY NET race drill-downs the GROSS
+        // PTS row is noise (Kerry 2026-08-03) — the raw GROSS SCORE stays
+        // as the basis, only the gross points line goes.
         const holes = card.holes || [];
         if (!holes.some(h => h.strokes != null)) {
             return '<span style="color:var(--text-muted);">No hole data on this card.</span>';
@@ -449,6 +469,26 @@
         // score section (GROSS most important, then NET), then points —
         // sectTop/sectBot/grey come from prCardStyle above
         const netOf = h => (h.strokes == null ? null : h.strokes - (h.strokes_received || 0));
+        // Phones: plain-space separators (the &nbsp; glue defeats line
+        // wrapping)
+        const sep = compact ? " · " : " &nbsp;·&nbsp; ";
+        // TGF banks 18-hole rounds as TWO 9-hole differentials (Kerry
+        // 2026-08-03: "adjusted gross and differentials need to show as 9
+        // hole... under each 9") — card.nines carries the POSTED per-nine
+        // rows; each block gets its own note line
+        const nineFor = label => ((card.nines || []).find(n =>
+            n.nine === (label === "OUT" ? "front" : "back")) || null);
+        const nineNote = label => {
+            const nn = nineFor(label);
+            if (!nn) return "";
+            const bits2 = [];
+            if (nn.adjusted_gross != null) bits2.push(`Adj. gross <strong>${nn.adjusted_gross}</strong>`);
+            if (nn.differential != null) bits2.push(`Differential <strong>${Number(nn.differential).toFixed(1)}</strong>`);
+            if (nn.rating != null && nn.slope != null) bits2.push(`<span style="color:var(--text-muted);">${nn.rating}/${nn.slope}</span>`);
+            return bits2.length
+                ? `<div style="font-size:${compact ? "0.66rem" : "0.76rem"};color:#334155;margin:-0.1rem 0 0.4rem;">${bits2.join(sep)}</div>`
+                : "";
+        };
         const tables = blocks.map(([label, hs]) => {
             const holeRow = hs.map(h => `<td style="${td}font-weight:700;background:#1B1B1B;color:#fff;">${h.hole_number}</td>`).join("");
             const info = "color:#1D4ED8;";
@@ -484,26 +524,27 @@
                 <tr><td style="${lbl}color:#1D4ED8;" title="Hole handicap ranking (stroke index): 1 = hardest — decides which holes a player's handicap dots land on">HCP</td>${siRow}<td ${tot}></td></tr>
                 <tr><td style="${lbl}${sectTop}font-weight:700;">${L.gs}</td>${scRow}<td ${totG}>${sum(hs, h => h.strokes) || ""}</td></tr>
                 ${anyCapped ? `<tr><td style="${lbl}color:#E87C3E;" title="WHS net double bogey cap: par + 2 + strokes received. Orange holes were lowered for handicap purposes.">${L.adj}</td>${adjRow}<td style="${td}font-weight:700;background:#f1f5f9;color:#E87C3E;">${sum(hs, h => h.adjusted_strokes) || ""}</td></tr>` : ""}
-                <tr><td style="${lbl}${grey}" title="Gross stableford points per hole">${L.gp}</td>${gpRow}<td ${totGP}>${sumPts(hs, h => h.stableford_gross)}</td></tr>
+                ${opts.hideGrossPts ? "" : `<tr><td style="${lbl}${grey}" title="Gross stableford points per hole">${L.gp}</td>${gpRow}<td ${totGP}>${sumPts(hs, h => h.stableford_gross)}</td></tr>`}
                 <tr><td style="${lbl}${sectTop}font-weight:700;" title="Gross strokes minus handicap strokes received on the hole">${L.ns}</td>${netRow}<td ${totN}>${sumPts(hs, netOf)}</td></tr>
                 <tr><td style="${lbl}${grey}${sectBot}" title="Net stableford points per hole (through the admin formula settings)">${L.np}</td>${npRow}<td ${totNP}>${sumPts(hs, h => h.stableford_net)}</td></tr>
-            </table>`;
+            </table>${nineNote(label)}`;
         }).join("");
 
         // Gross/Net/Stableford totals already live in the grid's OUT/IN
-        // columns — the note line carries only the derived extras
+        // columns — the note line carries only the derived extras. When
+        // per-nine rows rendered, the 18-hole adj/diff line goes away (the
+        // banked numbers ARE the per-nine ones).
         const r = card.round || {}, dt = card.derived_totals || {};
         const bits = [];
-        if (dt.adjusted_gross != null) bits.push(`Adj. gross <strong>${dt.adjusted_gross}</strong>`);
-        if (dt.adjusted_gross != null && r.slope && r.rating != null) {
-            bits.push(`Differential <strong>${((113 / r.slope) * (dt.adjusted_gross - r.rating)).toFixed(1)}</strong>`);
+        if (!card.nines) {
+            if (dt.adjusted_gross != null) bits.push(`Adj. gross <strong>${dt.adjusted_gross}</strong>`);
+            if (dt.adjusted_gross != null && r.slope && r.rating != null) {
+                bits.push(`Differential <strong>${((113 / r.slope) * (dt.adjusted_gross - r.rating)).toFixed(1)}</strong>`);
+            }
         }
-        // Phones: plain-space separators (the &nbsp; glue defeats line
-        // wrapping) and a hard viewport cap so the text always folds
-        const sep = compact ? " · " : " &nbsp;·&nbsp; ";
         const noteW = compact ? "max-width:calc(100vw - 3rem);" : "";
         return `<div style="overflow-x:auto;max-width:calc(100vw - 2rem);">${tables}</div>
-            <div style="font-size:${compact ? "0.7rem" : "0.8rem"};color:#334155;margin-top:0.25rem;${noteW}">${bits.join(sep)}</div>
+            ${bits.length ? `<div style="font-size:${compact ? "0.7rem" : "0.8rem"};color:#334155;margin-top:0.25rem;${noteW}">${bits.join(sep)}</div>` : ""}
             <div style="font-size:${compact ? "0.62rem" : "0.72rem"};color:var(--text-muted);margin-top:0.15rem;${noteW}">
                 ● = handicap stroke${sep}○ = plus stroke${sep}<span style="border:1.5px solid #dc2626;border-radius:50%;padding:0 4px;">n</span> under par &nbsp;
                 <span style="border:1.5px solid #2563eb;padding:0 4px;">n</span> over par
@@ -690,7 +731,7 @@
                     }
                 }
                 if (match && claimed) claimed.add(match.id);
-                parts.push(`<tr${match ? ` data-srid="${match.id}" style="cursor:pointer;" title="Click for the hole-by-hole scorecard"` : ""}>${r.map((c, i) => {
+                parts.push(`<tr${match ? ` data-srid="${match.id}"${opts.netRace ? ' data-hide-gp="1"' : ""} style="cursor:pointer;" title="Click for the hole-by-hole scorecard"` : ""}>${r.map((c, i) => {
                     // PTS column mirrors the level-1 standings points column:
                     // centered, bold, 2px side borders
                     let style;

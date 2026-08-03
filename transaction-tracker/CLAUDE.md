@@ -347,6 +347,7 @@ No Python or local install needed — Claude Desktop connects directly to Railwa
   identity queue (Link/Guest/Not-a-person), per-portal archive coverage,
   standings browser; backend in `email_parser/gg_history.py` (see
   `docs/claude/gg-history.md`)
+- `templates/snapshot_center.html` — Snapshot Command Center (admin, v2.196.0): the snapshot-email targeting queue (push/defend/normal off the live cup boards + TGF Championship signup layer) with per-player Preview / Approve / Defer / Skip marks and gated single sends. Routes under `# SNAPSHOT COMMAND CENTER` in app.py; data layer `snapshot_center_*` in database.py; marks in the `snapshot_center_marks` app setting
 - `templates/database.html` — Admin database browser
 - `templates/changelog.html` — Version changelog
 - `static/js/dashboard.js` — Transactions page logic (largest JS file)

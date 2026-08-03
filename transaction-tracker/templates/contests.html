@@ -5897,7 +5897,10 @@
             ? `${statCol}font-weight:700;border-right:2px solid #cbd5e1;`
             : `${statCol}border-right:2px solid #cbd5e1;`;
         const rndStyle = `width:${compact ? "30px" : "80px"};text-align:center;border-right:2px solid #cbd5e1;${pad6}`;
-        const buyStyle = compact ? `width:26px;text-align:center;${pad6}` : `width:110px;${pad6}`;
+        // BUY-IN centers like every other stat column (Kerry 2026-08-03
+        // asked why it read as extra right padding — it was a 110px column
+        // with left-aligned content, not section padding)
+        const buyStyle = compact ? `width:26px;text-align:center;${pad6}` : `width:110px;text-align:center;${pad6}`;
         // Live-day columns (PGA-style): MOVE gets its own slim column;
         // TODAY/THRU take the standard width on desktop but keep their
         // tuned tight widths on phones (Kerry 2026-08-01: the right side
@@ -6503,6 +6506,7 @@
                             champThru: tr.dataset.champThru || null,
                             champPos: tr.dataset.champPos || null,
                             champDate: tr.dataset.champDate || null,
+                            netRace: !/gross/.test(raceKey || ""),
                         }) : '<span style="color:var(--text-muted);">No season detail for this player yet.</span>');
                         hBody.dataset.loaded = "1";
                         prBindScorecardToggles(hBody);
@@ -6549,6 +6553,7 @@
                 champDate: tr.dataset.champDate || null,
                 champRace: raceKey,
                 champCid: tr.dataset.cid || null,
+                netRace: !/gross/.test(raceKey || ""),
             }) : "";
             // NON-POINTS EVENTS list removed (Kerry 2026-07-12): contests
             // show points events only; rounds still power the in-place

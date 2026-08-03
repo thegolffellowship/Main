@@ -2421,9 +2421,10 @@ def _scoring_dispatch(url: str, extract: str):
             # vs defend (in the window, bought in) vs normal. Review
             # queue only — nothing sends.
             _p = [x.strip() for x in (arg or "").split("|") if x.strip()]
-            return json.dumps(db.snapshot_target_list(
-                window_points=float(_p[0]) if _p else 15.0,
-                seat_window=float(_p[1]) if len(_p) > 1 else 3.0),
+            return json.dumps(db.snapshot_center_queue()
+                              if not _p else db.snapshot_target_list(
+                window_points=float(_p[0]),
+                seat_window=float(_p[1]) if len(_p) > 1 else 15.0),
                 indent=2, default=str)
         if cmd == "scoring-snapshot-email":
             # "<customer_id>[|<to>][|send]" — YOUR TGF SNAPSHOT mock

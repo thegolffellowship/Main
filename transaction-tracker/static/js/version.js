@@ -1,5 +1,17 @@
-window.TGF_VERSION = "2.195.1";
+window.TGF_VERSION = "2.196.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.196.0",
+    date: "2026-08-03",
+    changes: [
+      "SNAPSHOT COMMAND CENTER at /admin/snapshot-center (Kerry: 'an interactive Command Center for me to approve, preview, mark accordingly'): the live targeting queue as PUSH ENTRY / DEFEND / NORMAL tabs with each player's points back, seat-line gap, cup buy-in, and TGF Championship signup status; per-player Preview (the exact email HTML), Approve / Defer (with a note — 'in Hawaii until Sept') / Skip / Clear marks, Send Test (to your inbox), and a real Send that goes to the player's primary email ONLY after your Approve — nothing ever bulk-sends. Marks persist in the snapshot_center_marks app setting.",
+      "TGF Championship signup is the queue's second layer (Kerry): every entry carries whether the player is signed up or RSVP'd for an upcoming championship event; when they're not, the snapshot email adds 'Be there for the weekend itself' — the TGF Championship and Lone Star Cup as TGF's top two experiences, family welcome, place-in-the-money honest. No fall championship event posted yet reads as unknown, never guessed.",
+      "Seat-line window widened to 15 points (Kerry: 'within 15 points of an LSC seat line would be relevant too') — the push window is now within-15-of-the-lead OR within-15-of-a-seat.",
+      "City Championship card final polish (Kerry): the name/points headline is gone (the row above already names the player) and the 18-hole total hangs as a bold orange cell right under the last nine's CHAMP PTS sum; CHAMP PTS rows wear the faded-orange band matching the CITY CHAMPIONSHIP Total row; YARDS and HCP rows render from the player's imported round's tee.",
+      "18-hole scorecards show what was actually banked: per-nine Adj. gross + Differential (each against its own GG-course-setup rating/slope) under each nine block, replacing the 18-hole adj/diff line — on the Contests drill-downs, the member Handicaps page, and /me.",
+      "GROSS PTS row hidden under CITY NET race scorecards (the gross score itself stays as the basis); BUY-IN column centers like every other stat column (Kerry asked about its 'extra padding' — it was a 110px column with left-aligned content).",
+    ],
+  },
   {
     version: "2.195.1",
     date: "2026-08-03",

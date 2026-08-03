@@ -61,6 +61,23 @@
             return any ? t : "";
         };
 
+        // TGF banks 18-hole rounds as TWO 9-hole differentials (Kerry
+        // 2026-08-03) — card.nines carries the POSTED per-nine rows and
+        // each block gets its own Adj. gross / Differential note line
+        const sep = compact ? " · " : " &nbsp;·&nbsp; ";
+        const nineNote = label => {
+            const nn = (card.nines || []).find(n =>
+                n.nine === (label === "OUT" ? "front" : "back"));
+            if (!nn) return "";
+            const nb = [];
+            if (nn.adjusted_gross != null) nb.push(`Adj. gross <strong>${nn.adjusted_gross}</strong>`);
+            if (nn.differential != null) nb.push(`Differential <strong>${Number(nn.differential).toFixed(1)}</strong>`);
+            if (nn.rating != null && nn.slope != null) nb.push(`<span style="color:#64748b;">${nn.rating}/${nn.slope}</span>`);
+            return nb.length
+                ? `<div style="font-size:${compact ? "0.66rem" : "0.76rem"};color:#334155;margin:-0.1rem 0 0.4rem;">${nb.join(sep)}</div>`
+                : "";
+        };
+
         const tables = blocks.map(([label, hs]) => {
             const holeRow = hs.map(h => `<td style="${td}font-weight:700;${dark}">${h.hole_number}</td>`).join("");
             const parRow = hs.map(h => `<td style="${td}${info}">${h.par ?? ""}</td>`).join("");
@@ -98,23 +115,24 @@
                 <tr><td style="${lbl}${grey}">${L.gp}</td>${gpRow}<td ${totGP}>${sumPts(hs, h => h.stableford_gross)}</td></tr>
                 <tr><td style="${lbl}${sectTop}font-weight:700;">${L.ns}</td>${netRow}<td ${totN}>${sumPts(hs, netOf)}</td></tr>
                 <tr><td style="${lbl}${grey}${sectBot}">${L.np}</td>${npRow}<td ${totNP}>${sumPts(hs, h => h.stableford_net)}</td></tr>
-            </table>`;
+            </table>${nineNote(label)}`;
         }).join("");
 
         // Gross/Net/Stableford totals already live in the grid's OUT/IN
-        // columns — the note line carries only the derived extras
+        // columns — the note line carries only the derived extras; when
+        // per-nine rows rendered, the 18-hole adj/diff line goes away
+        // (the banked numbers ARE the per-nine ones)
         const r = card.round || {}, dt = card.derived_totals || {};
         const bits = [];
-        if (dt.adjusted_gross != null) bits.push(`Adj. gross <strong>${dt.adjusted_gross}</strong>`);
-        if (dt.adjusted_gross != null && r.slope && r.rating != null) {
-            bits.push(`Differential <strong>${((113 / r.slope) * (dt.adjusted_gross - r.rating)).toFixed(1)}</strong>`);
+        if (!card.nines) {
+            if (dt.adjusted_gross != null) bits.push(`Adj. gross <strong>${dt.adjusted_gross}</strong>`);
+            if (dt.adjusted_gross != null && r.slope && r.rating != null) {
+                bits.push(`Differential <strong>${((113 / r.slope) * (dt.adjusted_gross - r.rating)).toFixed(1)}</strong>`);
+            }
         }
-        // Phones: plain-space separators (the &nbsp; glue defeats line
-        // wrapping) and a hard viewport cap so the text always folds
-        const sep = compact ? " · " : " &nbsp;·&nbsp; ";
         const noteW = compact ? "max-width:calc(100vw - 3rem);" : "";
         return `<div style="overflow-x:auto;max-width:calc(100vw - 2rem);">${tables}</div>
-            <div style="font-size:${compact ? "0.7rem" : "0.8rem"};color:#334155;margin-top:0.25rem;${noteW}">${bits.join(sep)}</div>
+            ${bits.length ? `<div style="font-size:${compact ? "0.7rem" : "0.8rem"};color:#334155;margin-top:0.25rem;${noteW}">${bits.join(sep)}</div>` : ""}
             <div style="font-size:${compact ? "0.62rem" : "0.72rem"};color:#64748b;margin-top:0.15rem;${noteW}">
                 ● = handicap stroke${sep}○ = plus stroke${sep}<span style="border:1.5px solid #dc2626;border-radius:50%;padding:0 4px;">n</span> under par &nbsp;
                 <span style="border:1.5px solid #2563eb;padding:0 4px;">n</span> over par
