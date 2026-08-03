@@ -14184,10 +14184,12 @@ def build_player_snapshot_email(customer_id: int,
     CHAMP_SHOP = ("https://thegolffellowship.com/shop/ols/products/"
                   "2026-tgf-championship")
     weekend_html = ""
+    _needs_champ_signup = False
     try:
         with _connect(db_path) as conn:
             _evs, _champ_cids = _tgf_champ_signups(conn)
         if _evs is not None and customer_id not in _champ_cids:
+            _needs_champ_signup = True
             _ev0 = _evs[0]
             _evbit = " · ".join(x for x in (
                 _ev0.get("item_name"), _ev0.get("event_date")) if x)
@@ -14221,6 +14223,23 @@ def build_player_snapshot_email(customer_id: int,
                f"point{'' if back == 1 else 's'} off the lead"
                if back else f"Your TGF Snapshot — you're the one they're chasing")
 
+    # IMMEDIATE CTA under WHERE YOU STAND (Kerry 2026-08-03: "Needs to be
+    # an immediate CTA button after the Where you stand summary"): the
+    # single most relevant next action — buy in if they're outside a cup,
+    # else the TGF Championship signup if they still need it.
+    if not (in_fc and in_pc):
+        early_cta = f'''
+        <div style="text-align:center;margin:14px 0 4px;">
+          <a href="{SHOP}" style="background:{ORANGE};color:#fff;text-decoration:none;font-weight:700;padding:10px 24px;border-radius:9999px;{serif}font-size:13px;letter-spacing:0.04em;">BUY IN NOW</a>
+        </div>'''
+    elif _needs_champ_signup:
+        early_cta = f'''
+        <div style="text-align:center;margin:14px 0 4px;">
+          <a href="{CHAMP_SHOP}" style="background:{DARK};color:#fff;text-decoration:none;font-weight:700;padding:10px 24px;border-radius:9999px;{serif}font-size:13px;letter-spacing:0.04em;">SIGN UP FOR THE TGF CHAMPIONSHIP</a>
+        </div>'''
+    else:
+        early_cta = ""
+
     # Header (Kerry 2026-08-03): TGF logo mark on the LEFT (hosted PNG —
     # email clients don't render SVG), "YOUR TGF SNAPSHOT" as the small
     # eyebrow, and the PLAYER'S NAME as the big line.
@@ -14241,6 +14260,7 @@ def build_player_snapshot_email(customer_id: int,
         {f'<div style="margin:0 0 16px;font-size:13px;color:{MUTE};">9-Hole Index <b style="color:{DARK};font-size:16px;">{idx9}N</b></div>' if idx9 is not None else ''}
         <div style="{serif}font-size:15px;font-weight:700;margin:0 0 8px;">Where you stand</div>
         {stand_html}
+        {early_cta}
         <div style="border-left:4px solid {ORANGE};background:#FDF0E6;border-radius:0 8px 8px 0;padding:14px 18px;margin:20px 0 0;font-size:14px;line-height:1.55;">
           <div style="{serif}font-size:15px;font-weight:700;margin-bottom:6px;">The reset just put you in it, {first_name}.</div>
           <p style="margin:0 0 10px;">{story_lead} — with the whole fall season and the TGF Championship still to play.</p>

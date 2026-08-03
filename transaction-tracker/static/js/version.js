@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.196.5";
+window.TGF_VERSION = "2.196.6";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.196.6",
+    date: "2026-08-03",
+    changes: [
+      "Snapshot email: immediate CTA button right after the WHERE YOU STAND summary (Kerry) - BUY IN NOW when the player is outside a cup, SIGN UP FOR THE TGF CHAMPIONSHIP when they are in but not registered; nothing when both are handled. The detailed WAYS IN and weekend blocks stay below for the readers who want the why.",
+    ],
+  },
   {
     version: "2.196.5",
     date: "2026-08-03",
