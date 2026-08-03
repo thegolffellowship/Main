@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.195.0";
+window.TGF_VERSION = "2.195.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.195.1",
+    date: "2026-08-03",
+    changes: [
+      "Snapshot targeting queue only scores chapters that field Lone Star Cup teams - a lone player from an inactive chapter (live find: a single Houston player on the gross board) was otherwise 'leading' a pool of one and landing in the push list.",
+    ],
+  },
   {
     version: "2.195.0",
     date: "2026-08-03",
