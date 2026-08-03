@@ -5762,6 +5762,29 @@
         return bits.join(" &middot; ");
     }
 
+    // Jump from a Fellowship Cup CITY RANK link to that player's row on
+    // their chapter's city race board (Kerry 2026-08-03: "pins them in the
+    // center of page so they can see who's above and below"). Reuses the
+    // tab's own click handler (one code path for switch + load), then
+    // centers + pulses the row exactly like the Spotlight deep links.
+    window.prJumpToCityRace = function (race, cid) {
+        const tab = document.querySelector(`.sub-tab[data-pr="${race}"]`);
+        if (!tab) return;
+        tab.click();
+        try { history.replaceState(null, "", `#race=${race}&player=${cid}`); } catch (e) { /* ignore */ }
+        let tries = 0;
+        (function seek() {
+            const row = document.querySelector(`#pr-table-container tr[data-cid="${cid}"]`);
+            if (row) {
+                row.scrollIntoView({ behavior: "smooth", block: "center" });
+                row.classList.add("pr-row-focus");
+                setTimeout(() => row.classList.remove("pr-row-focus"), 4000);
+            } else if (++tries < 40) {
+                setTimeout(seek, 250);   // standings still loading
+            }
+        })();
+    };
+
     function renderPointsRace(d) {
         prLastData = d;   // applyRole re-renders so staff get the diagnostics line
         prRaceFinal = !!d.race_final;   // WON vs PROJECTED (admin dial)
@@ -6144,10 +6167,18 @@
             const nameCell = (r.customer_id && !window.MEMBER_MODE)
                 ? `<a href="/customers?cid=${r.customer_id}" class="cell-link">${escapeHtml(r.player_name)}</a>`
                 : escapeHtml(r.player_name);
+            // The CITY RANK links to that player's row on their chapter's
+            // city race board — centered + pulsed, same as the Spotlight
+            // deep links (Kerry 2026-08-03).
+            const cityRace = String(r.chapter || "").toLowerCase().includes("austin")
+                ? "austin" : "net";
+            const cityCell = r.customer_id
+                ? `<a href="#race=${cityRace}&player=${r.customer_id}" class="cell-link" title="See who's above and below on the ${cityRace === "austin" ? "Austin" : "San Antonio"} city board" onclick="prJumpToCityRace('${cityRace}', ${r.customer_id}); return false;">${escapeHtml(String(r.net_rank))}</a>`
+                : escapeHtml(String(r.net_rank));
             return `<tr style="${bg}">
                 <td style="${rankTh}">${escapeHtml(r.rank)}${prRankMove(r.rank, r.prev_rank)}</td>
                 <td>${nameCell}${prChapterBadge(r.chapter)}${hcp}${prPayBadge(r)}</td>
-                <td style="${netTh}">${escapeHtml(String(r.net_rank))}</td>
+                <td style="${netTh}">${cityCell}</td>
                 <td style="${resetTh}">${prFmtReset(r.points_reset)}</td>
             </tr>`;
         }).join("");
@@ -6156,7 +6187,7 @@
             <table class="enrollment-table${compact ? " pr-compact" : ""}">
                 <thead><tr>
                     <th style="${rankTh}">${compact ? "#" : "Rank"}</th><th style="width:99%;">Player</th>
-                    <th style="${netTh}" title="Rank in their chapter's City Points race">${compact ? "CITY #" : "CITY Rank"}</th>
+                    <th style="${netTh}line-height:1.25;" title="Rank in their chapter's City Points race">CITY<br>RANK</th>
                     <th style="${resetTh}">${d.reset_official ? "" : `<span class="pr-proj" style="display:block;font-size:${compact ? "0.52rem" : "0.65rem"};font-weight:600;letter-spacing:0.03em;">(${compact ? "proj" : "Projected"})</span>`}${compact ? "RESET" : "POINTS RESET"}</th>
                 </tr></thead>
                 <tbody>${rows}</tbody>

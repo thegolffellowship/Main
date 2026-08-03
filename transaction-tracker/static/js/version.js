@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.190.2";
+window.TGF_VERSION = "2.191.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.191.0",
+    date: "2026-08-03",
+    changes: [
+      "Fellowship Cup CITY RANK links (Kerry): the column header stacks as CITY / RANK (it was colliding with RESET on phones as 'CITY # RESET'), and each player's rank is now a link that jumps to their chapter's city race board, centers their row on screen, and pulses it — the same treatment as the Spotlight deep links — so anyone can see who's above and below them in one tap.",
+    ],
+  },
   {
     version: "2.190.2",
     date: "2026-08-03",
