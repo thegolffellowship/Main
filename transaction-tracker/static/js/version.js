@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.192.3";
+window.TGF_VERSION = "2.193.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.193.0",
+    date: "2026-08-03",
+    changes: [
+      "LONE STAR CUP row on every Player Spotlight (Kerry): a Texas-navy row in WHERE PLAYER STANDS linking to the LSC projections page. Seat holders see their seat, alternates their number, enrolled cup players their live path place — and players who haven't bought in see where they WOULD land today via the better of the Fellowship Cup or Players Cup path ('buy in to make it count'). Until the selection deadline (Aug 14, dial lsc_selection_deadline) everyone sees the row; after that it narrows to players bought into either cup. The old hero-card LSC line retires into this row.",
+    ],
+  },
   {
     version: "2.192.3",
     date: "2026-08-03",

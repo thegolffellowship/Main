@@ -9778,6 +9778,8 @@ def get_player_spotlight(customer_id: int,
     races, errors, events_played = [], [], 0
     race_pots: dict = {}
     member_card = None
+    gross_d = None          # kept for the LONE STAR CUP line below
+    cup_d = None
     for key in _GG_POINTS_RACES:
         try:
             # LIVE path, same as the CONTESTS page (Kerry 2026-08-03:
@@ -9785,6 +9787,8 @@ def get_player_spotlight(customer_id: int,
             # snapshots lag championship points and the reset
             # re-projection; the live read carries both.
             d = get_points_race_live(key, db_path=db_path)
+            if key == "players_cup_gross":
+                gross_d = d
         except Exception as e:
             errors.append(f"{key}: {e}")
             continue
@@ -9835,6 +9839,7 @@ def get_player_spotlight(customer_id: int,
             (pp or {}).get("pot_cents"))
     try:
         cup = get_fellowship_cup_projection(db_path=db_path)
+        cup_d = cup
         pp = cup.get("projected_payouts")
         race_pots["fellowship_cup"] = {
             "label": "THE FELLOWSHIP CUP", "chapter": None,
@@ -9890,23 +9895,83 @@ def get_player_spotlight(customer_id: int,
             errors.append(f"match play: {e}")
             match_play = {"chapter": mp_enr["chapter"], "enrolled": True}
 
-    # ── projected Lone Star Cup seat / alternate ──
+    # ── LONE STAR CUP line (Kerry 2026-08-03): every player sees it until
+    #    the selection deadline (dial lsc_selection_deadline, default
+    #    2026-08-14); after that only players bought into either cup keep
+    #    it. Non-enrolled players get their HYPOTHETICAL landing spot —
+    #    the best projection of either cup path if the season ended today
+    #    and they bought in — as the conversion nudge. ──
     lsc = None
     try:
+        _deadline = (get_app_setting("lsc_selection_deadline",
+                                     db_path=db_path) or "2026-08-14")
+        from .timezone_utils import today_central_str as _tcs
+        _pre_deadline = _tcs() < _deadline
+
+        my_ch = (cust["chapter"] or "").strip()
+        crow_ = next((r for r in (cup_d or {}).get("standings", [])
+                      if r.get("customer_id") == customer_id), None)
+        grow_ = next((r for r in (gross_d or {}).get("standings", [])
+                      if r.get("customer_id") == customer_id), None)
+        enrolled_any = bool((crow_ and crow_.get("enrolled"))
+                            or (grow_ and grow_.get("enrolled")))
+
         proj = get_lone_star_cup_projection(db_path=db_path)
         for ch in proj["chapters"]:
             seat = next((r for r in ch["seats"]
                          if r.get("customer_id") == customer_id), None)
             if seat:
-                lsc = {"chapter": ch["chapter"], "seat": seat["seat"],
-                       "earned_as": seat["earned_as"],
+                lsc = {"mode": "seat", "chapter": ch["chapter"],
+                       "seat": seat["seat"], "earned_as": seat["earned_as"],
                        "via_pool": seat["via_pool"]}
                 break
             alt = next((i for i, a in enumerate(ch["alternates"])
                         if a.get("customer_id") == customer_id), None)
             if alt is not None:
-                lsc = {"chapter": ch["chapter"], "alternate_rank": alt + 1}
+                lsc = {"mode": "alternate", "chapter": ch["chapter"],
+                       "alternate_rank": alt + 1}
                 break
+
+        if lsc is None and (enrolled_any or _pre_deadline):
+            # Place on each cup path among the players who'd actually
+            # compete for the chapter's seats — currently-enrolled chapter
+            # players (plus this player). Seat counts are the standard
+            # 6 Fellowship / 4 Players Cup allocations (co-captain years
+            # shave one Cup seat; close enough for a projection line).
+            def _path_place(rows, ch_field):
+                place = 0
+                for r in rows or []:
+                    same = (r.get(ch_field) or "").strip() == my_ch
+                    if not same:
+                        continue
+                    if r.get("customer_id") == customer_id:
+                        return place + 1
+                    if r.get("enrolled"):
+                        place += 1
+                return None
+
+            paths = []
+            if cup_d:
+                p = _path_place(cup_d.get("standings"), "chapter")
+                if p:
+                    paths.append({"path": "THE FELLOWSHIP CUP",
+                                  "place": p, "seats": 6})
+            if gross_d:
+                p = _path_place(gross_d.get("standings"), "player_chapter")
+                if p:
+                    paths.append({"path": "THE PLAYERS CUP",
+                                  "place": p, "seats": 4})
+            if paths:
+                best = min(paths, key=lambda x: (x["place"] > x["seats"],
+                                                 x["place"] / x["seats"]))
+                lsc = {"mode": "in_hunt" if enrolled_any else "hypothetical",
+                       "chapter": my_ch, "path": best["path"],
+                       "place": best["place"], "seats": best["seats"]}
+
+        # Post-deadline the line narrows to players in the running
+        if lsc and not _pre_deadline and not enrolled_any \
+                and lsc.get("mode") in ("hypothetical",):
+            lsc = None
     except Exception as e:
         errors.append(f"lone star cup: {e}")
 

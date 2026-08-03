@@ -72,10 +72,11 @@
         .spt-idx .n { font: 700 34px/0.9 'Bitter', serif; color: #1B1B1B; font-variant-numeric: tabular-nums; }
         .spt-idx .l { font: 700 8.5px/1.3 'Bitter', serif; letter-spacing: 0.5px; color: #6B7280;
                       margin-top: 4px; text-transform: uppercase; }
-        .spt-lsc-line { display: flex; align-items: center; gap: 7px; margin-top: 12px;
-                        padding-top: 11px; border-top: 1px solid #F0EEE9;
-                        font: 600 11px/1.3 'Helvetica Neue', Arial, sans-serif; color: #BF5700; }
-        .spt-lsc-line b { font-weight: 800; letter-spacing: 0.3px; }
+        /* LONE STAR CUP row — Texas-flag navy, distinct from every race
+           row (Kerry 2026-08-03) */
+        .spt-stand-lsc { border-left: 3px solid #002868; background: #F5F7FC; }
+        .spt-stand-lsc .race { color: #002868 !important; }
+        .spt-stand-lsc .rk .r { color: #002868 !important; }
 
         .spt-strip { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 9px; }
         .spt-tile { background: #fff; border: 1px solid var(--border); border-radius: 12px; padding: 11px 12px; }
@@ -337,13 +338,9 @@
         }
 
         function render(d) {
-            const lsc = d.lone_star_cup;
-            const lscLine = lsc
-                ? `<div class="spt-lsc-line"><span style="font-size:12px;">&#127942;</span>` +
-                  `<span><b>LONE STAR CUP</b> &middot; ${lsc.seat
-                      ? `proj. seat &mdash; ${esc(lsc.seat)} (${esc(lsc.chapter)})`
-                      : `alternate #${lsc.alternate_rank} (${esc(lsc.chapter)})`}</span></div>`
-                : "";
+            // LONE STAR CUP moved into WHERE THEY STAND as its own navy
+            // row (Kerry 2026-08-03) — the hero line is retired.
+            const lscLine = "";
             const hcp = d.handicap_index_18;
             const hero =
                 `<div class="spt-card"><div class="spt-hero-row">` +
@@ -448,6 +445,34 @@
                         `${contestsBase}#tab=mp`)
                     : standRow("—", "#C6C2BA", "", `City Match Play · ${mp.chapter}`,
                         "Pools not drawn yet", pillIn, `${contestsBase}#tab=mp`));
+            }
+            // LONE STAR CUP row — navy, links to the projections page
+            // (Kerry 2026-08-03): seat/alternate holders see their spot;
+            // enrolled players see their live path; non-enrolled players
+            // (until the Aug 14 selection deadline) see where they WOULD
+            // land if they bought into either cup today.
+            if (d.lone_star_cup) {
+                const l = d.lone_star_cup;
+                let rk, fld, meta, pill = pillIn;
+                if (l.mode === "seat" || l.seat) {
+                    rk = "SEAT"; fld = esc(l.chapter || "");
+                    meta = `${l.seat}${l.earned_as ? " — " + l.earned_as : ""}${l.via_pool ? " (alternates pool)" : ""}`;
+                } else if (l.mode === "alternate" || l.alternate_rank) {
+                    rk = `A${l.alternate_rank}`; fld = esc(l.chapter || "");
+                    meta = `Alternate #${l.alternate_rank} — next in when a seat opens`;
+                } else if (l.mode === "in_hunt") {
+                    rk = String(l.place); fld = `top ${l.seats} go`;
+                    meta = `${l.path} path (${l.chapter}) — top ${l.seats} earn seats`;
+                } else {
+                    rk = `~${l.place}`; fld = `top ${l.seats} go`;
+                    meta = `Would project via ${l.path} — buy in to make it count`;
+                    pill = pillOut;
+                }
+                rows.push(
+                    `<a href="${contestsBase}#tab=lsc" class="spt-stand spt-stand-lsc">` +
+                    `<div class="rk"><div class="r">${esc(String(rk))}</div><div class="f">${fld}</div></div>` +
+                    `<div class="mid"><div class="race">&#127942; LONE STAR CUP</div><div class="meta">${esc(meta)}</div></div>` +
+                    pill + `<span class="spt-go">&rsaquo;</span></a>`);
             }
             // dormant fall placeholder LAST — active competitions outrank
             // a race that hasn't started (Kerry 2026-07-13)
