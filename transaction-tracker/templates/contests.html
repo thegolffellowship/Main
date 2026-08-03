@@ -2233,12 +2233,20 @@
         }
         function prHiwRender(key) {
             const ct = HIW[key] || HIW.cityNet;
-            const secs = ct.sections.map(sc =>
-                `<div><div class="pr-hiw-sec-h">${escapeHtml(sc.head)}</div><div class="pr-hiw-sec-b">${escapeHtml(sc.body)}</div></div>`).join("");
+            const secHtml = sc =>
+                `<div><div class="pr-hiw-sec-h">${escapeHtml(sc.head)}</div><div class="pr-hiw-sec-b">${escapeHtml(sc.body)}</div></div>`;
+            // THE MONEY reads below the points chart + example scorecard
+            // (Kerry 2026-08-02) — on contests with those visuals; the
+            // chart-less Match Play modal keeps its written order.
+            const hasVisual = !!(ct.chart || ct.scorecard);
+            const moneyIdx = ct.sections.findIndex(s => /^the money$/i.test(s.head));
+            const pre = (hasVisual && moneyIdx > -1)
+                ? ct.sections.filter((_, i) => i !== moneyIdx) : ct.sections;
+            const post = (hasVisual && moneyIdx > -1) ? [ct.sections[moneyIdx]] : [];
             content.innerHTML =
                 `<div class="pr-hiw-title">${escapeHtml(ct.title.pre)}<span class="hiw-name">${escapeHtml(ct.title.name)}</span>${escapeHtml(ct.title.post)}</div>`
                 + `<div class="pr-hiw-chips">${ct.chips.map(t => `<span>${escapeHtml(t)}</span>`).join("")}</div>`
-                + `<div class="pr-hiw-secs">${secs}${hiwChartHtml(ct.chart)}${hiwCardHtml(ct.scorecard)}</div>`
+                + `<div class="pr-hiw-secs">${pre.map(secHtml).join("")}${hiwChartHtml(ct.chart)}${hiwCardHtml(ct.scorecard)}${post.map(secHtml).join("")}</div>`
                 + `<div class="pr-hiw-foot">${escapeHtml(ct.footnote)}</div>`
                 + `<div class="pr-hiw-cta"><button type="button" id="pr-hiw-gotit">Got it</button></div>`;
             modal.setAttribute("aria-label", ct.title.pre + ct.title.name + ct.title.post);

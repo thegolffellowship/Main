@@ -8824,6 +8824,19 @@ def get_fellowship_cup_projection(force_refresh: bool = False,
     }
 
 
+def _lsc_standard_name(nm: str) -> str:
+    """'Luke Youngs' -> 'YOUNGS, Luke' — the Lone Star Cup page renders
+    every seat in the GG standings style (SURNAME, First), but the match
+    play bracket stores plain display names (Kerry 2026-08-02: "Luke
+    Youngs name doesn't show as standard"). Already-standard or
+    single-word names pass through unchanged."""
+    nm = (nm or "").strip()
+    if "," in nm or " " not in nm:
+        return nm
+    parts = nm.split()
+    return f"{parts[-1].upper()}, {' '.join(parts[:-1])}"
+
+
 def _lsc_ordinal(n: int) -> str:
     if 10 <= n % 100 <= 20:
         return f"{n}th"
@@ -8948,7 +8961,7 @@ def get_lone_star_cup_projection(db_path: str | Path = DB_PATH) -> dict:
                                 _c, finals[0]["winner_name"])
                     except Exception:
                         _wcid = None
-                mp_champ = {"name": finals[0]["winner_name"],
+                mp_champ = {"name": _lsc_standard_name(finals[0]["winner_name"]),
                             "cid": _wcid, "place": 1}
         except Exception:
             logger.warning("LSC: match play bracket read failed for %s",

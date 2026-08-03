@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.189.2";
+window.TGF_VERSION = "2.189.3";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.189.3",
+    date: "2026-08-02",
+    changes: [
+      "Lone Star Cup: the City Match Play champion's seat renders in the standard standings style ('YOUNGS, Luke') — the bracket stores plain display names, so a formatter normalizes it to match every other seat.",
+      "How It Works: THE MONEY section reads below the points chart and example scorecard on every contest that has them (the chart-less Match Play modal keeps its written order) — race first, points and the worked card, then the money.",
+    ],
+  },
   {
     version: "2.189.2",
     date: "2026-08-02",
