@@ -14162,6 +14162,11 @@ def snapshot_target_list(window_points: float = 15.0,
             v = _val(r)
             if not cid or not ch or v is None:
                 continue
+            # only chapters that actually field Lone Star Cup teams — a
+            # lone player from an inactive chapter is otherwise "leading"
+            # a pool of one (live find: Julius Jenkins, Houston)
+            if ch not in fc_seats_by_ch:
+                continue
             seats = (fc_seats_by_ch.get(ch, 6)
                      if key == "fellowship_cup" else 4)
             d = by_ch[ch]
