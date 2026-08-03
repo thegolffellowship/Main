@@ -343,11 +343,26 @@
         // (Kerry 2026-08-03: match the CITY CHAMPIONSHIP Total row), not
         // the season cards' blue band
         const band = "background:#FDF0E6;color:#BF5700;font-weight:700;";
-        // YARDS/HCP course facts render when the imported round supplied
-        // them (Kerry 2026-08-03: "Show YARDS and HCP rows for the City
-        // Championship too")
+        // YARDS/HCP course facts render when GG's tee block (or the
+        // imported round's tee) supplied them (Kerry 2026-08-03: "Show
+        // YARDS and HCP rows for the City Championship too")
         const haveYds = holes.some(h => h.yardage != null);
         const haveSi = holes.some(h => h.stroke_index != null);
+        // Posted per-nine handicap numbers under each block (Kerry
+        // 2026-08-03: the City Championship cards get the same Adj.
+        // gross + Differential notes as the regular 18-hole cards)
+        const nineNote = label => {
+            const nn = ((card.nines || []).find(n =>
+                n.nine === (label === "OUT" ? "front" : "back")) || null);
+            if (!nn) return "";
+            const nbits = [];
+            if (nn.adjusted_gross != null) nbits.push(`Adj. gross <strong>${nn.adjusted_gross}</strong>`);
+            if (nn.differential != null) nbits.push(`Differential <strong>${Number(nn.differential).toFixed(1)}</strong>`);
+            if (nn.rating != null && nn.slope != null) nbits.push(`<span style="color:var(--text-muted);">${nn.rating}/${nn.slope}</span>`);
+            return nbits.length
+                ? `<div style="font-size:${compact ? "0.66rem" : "0.76rem"};color:#334155;margin:-0.1rem 0 0.4rem;">${nbits.join(sepT)}</div>`
+                : "";
+        };
         const block = (label, hs, isLast) => {
             const cells = fn => hs.map(fn).join("");
             const holeRow = cells(h => `<td style="${td}font-weight:700;background:#1B1B1B;color:#fff;">${h.hole}</td>`);
@@ -377,8 +392,8 @@
         // Play order (Kerry 2026-08-03): first_hole >= 10 → IN above OUT
         const backFirst = (card.first_hole || 1) >= 10;
         const html = backFirst
-            ? block("IN", back, false) + block("OUT", front, true)
-            : block("OUT", front, false) + block("IN", back, true);
+            ? block("IN", back, false) + nineNote("IN") + block("OUT", front, true) + nineNote("OUT")
+            : block("OUT", front, false) + nineNote("OUT") + block("IN", back, true) + nineNote("IN");
         const totBits = [];
         if (gTot != null) totBits.push(`Gross <strong>${gTot}</strong>`);
         if (pTot != null) totBits.push(`${grossMode ? "Gross" : "Champ"} points <strong>${pTot}</strong>`);
