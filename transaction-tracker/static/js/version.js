@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.191.1";
+window.TGF_VERSION = "2.191.2";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.191.2",
+    date: "2026-08-03",
+    changes: [
+      "Fellowship Cup CITY RANK column gets its full-height left divider line, a centered title, and enough width that RANK no longer overflows into the RESET border on phones (the 34px column couldn't hold the 9px-caps title). Header-title padding audit across table views: compact table headers get 6px horizontal everywhere — the main standings container already had it; the base compact rule and the points-render.js injected drill-down tables (Customers page Points tab) now match, so no bordered column title touches its divider.",
+    ],
+  },
   {
     version: "2.191.1",
     date: "2026-08-03",

@@ -37,7 +37,9 @@
         }
         .enrollment-table.pr-compact { font-size: 0.78rem; table-layout: fixed; }
         .enrollment-table.pr-compact th {
-            padding: 0.3rem 0.25rem; font-size: 9px; letter-spacing: 0.5px;
+            /* 6px horizontal so bordered column titles (PTS etc.) never
+               touch their divider lines (Kerry 2026-08-03) */
+            padding: 0.3rem 6px; font-size: 9px; letter-spacing: 0.5px;
         }
         .enrollment-table.pr-compact td { padding: 0.3rem 0.25rem; }
         /* Wide injected tables scroll inside their own container instead of

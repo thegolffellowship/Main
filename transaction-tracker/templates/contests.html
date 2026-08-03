@@ -1124,7 +1124,9 @@
            inside its cell instead of pushing columns off the screen edge */
         .enrollment-table.pr-compact { font-size: 0.72rem; table-layout: fixed; }
         .enrollment-table.pr-compact th {
-            padding: 0.3rem 0.25rem; font-size: 0.6rem; letter-spacing: 0;
+            /* 6px horizontal so bordered column titles never touch their
+               divider lines (Kerry 2026-08-03) */
+            padding: 0.3rem 6px; font-size: 0.6rem; letter-spacing: 0;
         }
         .enrollment-table.pr-compact td { padding: 0.3rem 0.25rem; }
 
@@ -6170,7 +6172,10 @@
 
         const compact = prIsCompact();
         const rankTh = `width:${compact ? "28px" : "56px"};`;
-        const netTh = `width:${compact ? "34px" : "90px"};text-align:center;`;
+        // Wide enough for the stacked RANK title + a breath of padding so
+        // the text never runs into the border lines (Kerry 2026-08-03);
+        // border-left draws the full-height divider off the Player column.
+        const netTh = `width:${compact ? "46px" : "90px"};text-align:center;border-left:2px solid #cbd5e1;padding-left:6px;padding-right:6px;`;
         const resetTh = `width:${compact ? "44px" : "110px"};text-align:center;font-weight:700;border-left:2px solid #cbd5e1;border-right:2px solid #cbd5e1;`;
         const rows = d.standings.map(r => {
             const bg = r.enrolled ? "background:#bbf7d0;"
