@@ -1701,6 +1701,13 @@ def _scoring_dispatch(url: str, extract: str):
             _k = arg.strip()
             return json.dumps({"key": _k,
                                "value": db.get_app_setting(_k)})
+        if cmd == "scoring-champ-card":
+            # "<race_key>|<customer_id>" — one player's championship
+            # hole-by-hole card (same payload as the member champ-card
+            # endpoint; lets a session verify the card path end-to-end).
+            _race, _, _cid = arg.partition("|")
+            return json.dumps(db.fetch_champ_player_card(
+                _race.strip(), int(_cid.strip())), indent=2, default=str)
         if cmd == "scoring-credit-stamp":
             # "<item_id>|<method>|<date>|<note>" — stamp refunded WITHOUT
             # a ledger write (receipt already promoted to acct_transactions;
