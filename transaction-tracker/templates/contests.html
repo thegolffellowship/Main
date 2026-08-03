@@ -1598,23 +1598,27 @@
                 <!-- L3 race selector (contests-handicaps-071026 view 1a/1e):
                      pill chips on desktop, .shell-menu dropdown on mobile -->
                 <div class="pr-race-row">
+                    <!-- Cups first + The Fellowship Cup is the landing race
+                         (Kerry 2026-08-02, post-reset: "the fellowship cup
+                         needs to be the landing page for contests and I'd
+                         like to move the two cups section to the top") -->
                     <div class="pr-race-chips">
-                        <button class="sub-tab active" data-pr="net">San Antonio NET</button>
-                        <button class="sub-tab" data-pr="austin">Austin NET</button>
-                        <button class="sub-tab" data-pr="tfc">The Fellowship Cup</button>
+                        <button class="sub-tab active" data-pr="tfc">The Fellowship Cup</button>
                         <button class="sub-tab" data-pr="gross">The Players Cup</button>
+                        <button class="sub-tab" data-pr="net">San Antonio NET</button>
+                        <button class="sub-tab" data-pr="austin">Austin NET</button>
                         <button class="sub-tab" data-pr="monthly">Monthly</button>
                         <button class="sub-tab pr-fall" data-pr="fall_sa">SA Fall NET</button>
                         <button class="sub-tab pr-fall" data-pr="fall_austin">Austin Fall NET</button>
                     </div>
                     <div class="pr-race-dd" id="pr-race-dd">
-                        <button class="pr-race-dd-btn" id="pr-race-dd-btn" aria-haspopup="listbox">San Antonio NET <span style="margin-left:auto;">&#9662;</span></button>
+                        <button class="pr-race-dd-btn" id="pr-race-dd-btn" aria-haspopup="listbox">The Fellowship Cup <span style="margin-left:auto;">&#9662;</span></button>
                         <div class="shell-menu pr-race-dd-menu" id="pr-race-dd-menu" style="display:none;">
-                            <button data-pr-dd="net" class="active">San Antonio NET</button>
-                            <button data-pr-dd="austin">Austin NET</button>
-                            <div class="pr-dd-divider"></div>
-                            <button data-pr-dd="tfc">The Fellowship Cup</button>
+                            <button data-pr-dd="tfc" class="active">The Fellowship Cup</button>
                             <button data-pr-dd="gross">The Players Cup</button>
+                            <div class="pr-dd-divider"></div>
+                            <button data-pr-dd="net">San Antonio NET</button>
+                            <button data-pr-dd="austin">Austin NET</button>
                             <div class="pr-dd-divider"></div>
                             <button data-pr-dd="monthly">Monthly</button>
                             <div class="pr-dd-divider"></div>
@@ -1954,7 +1958,7 @@
                 else if (top === "enrollment") history.replaceState(null, "", "#tab=enr");
                 else if (top === "lone-star-cup") history.replaceState(null, "", "#tab=lsc");
                 else {
-                    const activeRace = (document.querySelector(".sub-tab[data-pr].active") || {}).dataset?.pr || "net";
+                    const activeRace = (document.querySelector(".sub-tab[data-pr].active") || {}).dataset?.pr || "tfc";
                     history.replaceState(null, "", "#race=" + activeRace);
                 }
             } catch (e) { /* ignore */ }
@@ -2243,7 +2247,7 @@
         const openFor = key => { prHiwRender(key); setOpen(true); modal.scrollTop = 0; };
         btn.addEventListener("click", e => {
             e.stopPropagation();
-            const kind = (document.querySelector(".sub-tab[data-pr].active") || {}).dataset?.pr || "net";
+            const kind = (document.querySelector(".sub-tab[data-pr].active") || {}).dataset?.pr || "tfc";
             openFor(kind.startsWith("fall") ? "fall"
                 : kind === "monthly" ? "monthly"
                 : kind === "tfc" ? "fellowship"
@@ -2295,7 +2299,7 @@
     })();
 
     async function loadPrRoster() {
-        const kind = (document.querySelector(".sub-tab[data-pr].active") || {}).dataset?.pr || "net";
+        const kind = (document.querySelector(".sub-tab[data-pr].active") || {}).dataset?.pr || "tfc";
         // Enrollment lists only on the upcoming fall pages (Kerry,
         // 2026-07-10) — in-progress races already show buy-in status on
         // every standings row, and Monthly's explainer lives in the
@@ -5448,7 +5452,7 @@
     $("pr-refresh-btn").addEventListener("click", () => prLoadStandings(true));
 
     async function prLoadStandings(force = false) {
-        const kind = (document.querySelector(".sub-tab[data-pr].active") || {}).dataset?.pr || "net";
+        const kind = (document.querySelector(".sub-tab[data-pr].active") || {}).dataset?.pr || "tfc";
         // monthly swaps the header refresh button for an inline one;
         // fall previews have nothing to refresh yet
         $("pr-refresh-btn").style.display =
@@ -5739,6 +5743,12 @@
         // Rounds step aside for the day — same column count, no layout
         // shift, back on the next quiet load.
         const liveMode = (d.champ_scoring || 0) > 0 || (d.champ_field || 0) > 0;
+        // GG has actually performed the season reset (server dial):
+        // the reset column stops reading "(Projected)", and on THE
+        // PLAYERS CUP the reset number becomes the headline figure while
+        // season points step back (Kerry 2026-08-02).
+        const resetOfficial = !!d.reset_official;
+        const resetPrimary = resetOfficial && d.race_key === "players_cup_gross";
         const compact = prIsCompact();
         // Phones drop the Buy-in column (the green row already says who is
         // in) and, outside live mode, the Rounds column too (Kerry
@@ -5768,8 +5778,12 @@
         // columns + short labels so the whole table fits on screen at once
         const chapStyle = `width:${compact ? "32px" : "130px"};border-left:2px solid #cbd5e1;border-right:2px solid #cbd5e1;`;
         const rankStyle = `width:${compact ? "28px" : "56px"};`;
-        const ptsStyle = `width:${compact ? "40px" : "90px"};text-align:center;font-weight:700;border-left:2px solid #cbd5e1;border-right:2px solid #cbd5e1;`;
-        const resetStyle = `width:${compact ? "44px" : "110px"};text-align:center;border-right:2px solid #cbd5e1;`;
+        const ptsStyle = resetPrimary
+            ? `width:${compact ? "40px" : "90px"};text-align:center;color:var(--text-muted);border-left:2px solid #cbd5e1;border-right:2px solid #cbd5e1;`
+            : `width:${compact ? "40px" : "90px"};text-align:center;font-weight:700;border-left:2px solid #cbd5e1;border-right:2px solid #cbd5e1;`;
+        const resetStyle = resetPrimary
+            ? `width:${compact ? "44px" : "110px"};text-align:center;font-weight:700;border-right:2px solid #cbd5e1;`
+            : `width:${compact ? "44px" : "110px"};text-align:center;border-right:2px solid #cbd5e1;`;
         const rndStyle = `width:${compact ? "30px" : "80px"};text-align:center;border-right:2px solid #cbd5e1;`;
         const buyStyle = compact ? "width:26px;text-align:center;" : "width:110px;";
         // Live-day columns (PGA-style): MOVE gets its own slim column and
@@ -5898,11 +5912,11 @@
                     ${liveMode ? `<th style="${mvStyle}" title="Day movement">&#8597;</th>` : ""}
                     <th style="width:99%;">Player</th>
                     ${showChapter ? `<th style="${chapStyle}">${compact ? "CH" : "Chapter"}</th>` : ""}
-                    <th style="${ptsStyle}">${compact ? "PTS" : "POINTS"}</th>
+                    <th style="${ptsStyle}"${resetPrimary ? ' title="Pre-reset season points"' : ''}>${resetPrimary ? (compact ? "SEA" : "SEASON") : (compact ? "PTS" : "POINTS")}</th>
                     ${liveMode
                         ? `<th style="${todayStyle}" title="Championship points earned today">${compact ? "TDY" : "TODAY"}</th>
                            ${showThru ? `<th style="${thruStyle}" title="Holes completed today — or the tee time if they haven't started">THRU</th>` : ""}`
-                        : `<th style="${resetStyle}"><span class="pr-proj" style="display:block;font-size:${compact ? "0.52rem" : "0.65rem"};font-weight:600;letter-spacing:0.03em;">(${compact ? "proj" : "Projected"})</span>${compact ? "RESET" : "POINTS RESET"}</th>
+                        : `<th style="${resetStyle}">${resetOfficial ? "" : `<span class="pr-proj" style="display:block;font-size:${compact ? "0.52rem" : "0.65rem"};font-weight:600;letter-spacing:0.03em;">(${compact ? "proj" : "Projected"})</span>`}${compact ? "RESET" : "POINTS RESET"}</th>
                            ${showRounds ? `<th style="${rndStyle}" class="pr-rnd" title="Rounds">Rounds</th>` : ""}`}
                     ${showBuy ? `<th style="${buyStyle}" title="Buy-in">Buy-in</th>` : ""}
                 </tr></thead>
@@ -5996,7 +6010,7 @@
         const cont = $("pr-table-container");
         if (!cont.innerHTML || force) {
             cont.innerHTML = '<div style="padding:1rem;color:var(--text-muted);">'
-                + (force ? 'Refreshing both NET races from Golf Genius…' : 'Building The Fellowship Cup projection…') + '</div>';
+                + (force ? 'Refreshing both NET races from Golf Genius…' : 'Loading The Fellowship Cup…') + '</div>';
         }
         $("pr-summary").textContent = "";
         try {
@@ -6037,7 +6051,9 @@
                 + pr.map(x => ` · ${x.chapter}: ${x.eligible_count} eligible (coef ${x.coefficient})`).join("")
                 + (fetched ? ` · from Golf Genius ${fetched}` : "")
                 + (d.gg_error ? ` · ⚠ ${d.gg_error}` : "")));
-        $("pr-summary").title = "Projection only — the actual reset happens after the City Championships";
+        $("pr-summary").title = d.reset_official
+            ? "Official — Golf Genius has performed the season points reset"
+            : "Projection only — the actual reset happens after the City Championships";
         prLastCupData = d;   // role-aware re-render, same as the races
         prAssignProjectedPayouts(d);
         prRenderPayoutStrip(d.projected_payouts);
@@ -6071,7 +6087,7 @@
                     <th style="${rankTh}">${compact ? "#" : "Rank"}</th><th style="width:99%;">Player</th>
                     <th style="${chapTh}">${compact ? "CH" : "Chapter"}</th>
                     <th style="${netTh}" title="Rank in their chapter's NET race">${compact ? "NET #" : "NET Rank"}</th>
-                    <th style="${resetTh}"><span class="pr-proj" style="display:block;font-size:${compact ? "0.52rem" : "0.65rem"};font-weight:600;letter-spacing:0.03em;">(${compact ? "proj" : "Projected"})</span>${compact ? "RESET" : "POINTS RESET"}</th>
+                    <th style="${resetTh}">${d.reset_official ? "" : `<span class="pr-proj" style="display:block;font-size:${compact ? "0.52rem" : "0.65rem"};font-weight:600;letter-spacing:0.03em;">(${compact ? "proj" : "Projected"})</span>`}${compact ? "RESET" : "POINTS RESET"}</th>
                 </tr></thead>
                 <tbody>${rows}</tbody>
             </table>`;

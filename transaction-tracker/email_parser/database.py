@@ -7725,6 +7725,18 @@ def _points_race_final(race_key: str, db_path: str | Path = DB_PATH) -> bool:
         return False
 
 
+def _points_reset_official(db_path: str | Path = DB_PATH) -> bool:
+    """Has GG actually PERFORMED the season points reset? (Kerry,
+    2026-08-02: "Points Resets have occurred so they don't need to show
+    Projected".) A dial like race_final — 'gg_points_reset_official'
+    truthy means the reset columns stop reading '(Projected)' and the
+    Players Cup leads with the reset number. Clear the dial next season
+    while the new races are projecting again."""
+    v = (get_app_setting("gg_points_reset_official", db_path=db_path)
+         or "").strip().lower()
+    return v not in ("", "0", "false", "no", "off")
+
+
 def _champ_absorbed_check(race_key: str, base: dict, live: dict,
                           db_path: str | Path = DB_PATH) -> bool:
     """Has GG folded the (final) championship board into the season
@@ -8435,6 +8447,7 @@ def get_points_race_standings(race_key: str,
         "contest_type": race["contest_type"],
         "chapter": race["chapter"],
         "race_final": _final_flag,
+        "reset_official": _points_reset_official(db_path=db_path),
         # Champion(s) once declared final — the live merge recomputes
         # this over the live order; post-absorption this IS final order
         "champions": _race_champions(out_rows) if _final_flag else None,
@@ -8778,6 +8791,7 @@ def get_fellowship_cup_projection(force_refresh: bool = False,
     from . import season_payouts as _sp
     return {
         "label": "THE FELLOWSHIP CUP",
+        "reset_official": _points_reset_official(db_path=db_path),
         "standings": combined,
         "n_players": len(combined),
         "n_enrolled": cup_n,

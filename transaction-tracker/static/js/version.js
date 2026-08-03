@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.188.17";
+window.TGF_VERSION = "2.189.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.189.0",
+    date: "2026-08-02",
+    changes: [
+      "Post-reset Contests page (Kerry, after GG performed the season points resets): THE FELLOWSHIP CUP is now the landing race, and the two cups lead the race switcher — chips and mobile dropdown both order The Fellowship Cup, The Players Cup, then the city NET races, Monthly, and the fall previews. Race deep links (#race=) still override the landing.",
+      "The reset is official, so the reset columns stop reading '(Projected)' on The Fellowship Cup and The Players Cup (and everywhere the column renders) — driven by a new gg_points_reset_official dial the payloads carry as reset_official, so next season's pre-reset phase can read Projected again by clearing one setting.",
+      "THE PLAYERS CUP leads with the reset: the POINTS RESET column takes the bold headline treatment and season points step back to a muted SEASON column (Kerry: 'deemphasize season points in the players cup and emphasize the reset').",
+    ],
+  },
   {
     version: "2.188.17",
     date: "2026-08-02",

@@ -895,6 +895,17 @@ Won, hover "Final result". Ladder/tie-split/eligibility unchanged. Set
 via `scoring-setting-set:gg_points_race_final|{...}`; clear the dial to
 return to projecting.
 
+**Reset OFFICIAL (v2.189.0, Kerry 2026-08-02 "Points Resets have
+occurred"):** dial `app_settings gg_points_reset_official` (truthy) →
+`_points_reset_official` → payload `reset_official` on the race
+standings/live payloads AND the fellowship-cup payload. UI: the reset
+columns drop their "(Projected)" sub-label everywhere, and THE PLAYERS
+CUP flips emphasis — POINTS RESET takes the bold headline column while
+season points render muted under a SEASON header. Also as of v2.189.0
+the Contests page LANDS on The Fellowship Cup and the two cups lead the
+race switcher (chips + mobile dropdown); `#race=` deep links still
+override. Clear the dial next season while the new races project again.
+
 **Double-count guard is CONTENT-based (v2.185.1):** the original guard
 (snapshot "fetched today" + final board ⇒ absorbed) dropped the whole
 championship at the final putt — the morning pre-round snapshot is also
