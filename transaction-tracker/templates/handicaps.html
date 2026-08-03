@@ -76,6 +76,12 @@
 
         .rounds-expand { background: #f8fafc; }
         .rounds-expand td { padding: 0 !important; }
+        /* Full Spotlight pill on the expanded rounds view — same control as
+           the Season Contests player expansion */
+        .hcp-spt-pill { display: inline-block; margin: 10px 0 2px 12px; padding: 5px 12px;
+            border-radius: 999px; background: var(--surface-dark, #1B1B1B); color: #fff;
+            font: 600 11px/1 'Bitter', serif; letter-spacing: 0.6px; text-decoration: none; }
+        .hcp-spt-pill:hover { background: var(--primary, #E87C3E); color: #fff; }
         /* Recap-email deep link: clear the sticky header when pinning a
            player to the top, and pulse their row on arrival */
         .player-row, .hcp-mc-top { scroll-margin-top: 110px; }
@@ -144,6 +150,43 @@
             cursor: pointer; color: #94a3b8; line-height: 1;
         }
         #calc-modal-close:hover { color: #1e293b; }
+
+        /* HOW IT WORKS modal (Kerry 2026-08-03) — same shell as the calc
+           modal, page-level content explaining the TGF handicap system */
+        #hiw-modal-overlay {
+            display: none; position: fixed; inset: 0;
+            background: rgba(0,0,0,0.35); z-index: 2000;
+            align-items: center; justify-content: center;
+        }
+        #hiw-modal-overlay.open { display: flex; }
+        #hiw-modal {
+            background: #fff; border-radius: 10px;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.18);
+            padding: 26px 30px; max-width: 620px; width: 92%;
+            max-height: 86vh; overflow-y: auto; -webkit-overflow-scrolling: touch;
+            position: relative; font-size: 0.92em; line-height: 1.6;
+        }
+        #hiw-modal h3 {
+            margin: 0 0 14px; font: 700 1.05em 'Bitter', serif; color: #0f172a;
+            border-bottom: 2px solid var(--primary, #E87C3E); padding-bottom: 8px;
+            letter-spacing: 0.03em;
+        }
+        #hiw-modal h4 { margin: 16px 0 4px; font-size: 0.95em; color: #1B1B1B; }
+        #hiw-modal p { margin: 4px 0; color: #374151; }
+        #hiw-modal .hiw-formula {
+            background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px;
+            padding: 6px 10px; margin: 6px 0; font-family: ui-monospace, Menlo, monospace;
+            font-size: 0.86em; overflow-x: auto; white-space: nowrap;
+        }
+        #hiw-modal table { border-collapse: collapse; font-size: 0.86em; margin: 6px 0; }
+        #hiw-modal th, #hiw-modal td { padding: 3px 10px; border-bottom: 1px solid #eef1f5; text-align: left; }
+        #hiw-modal th { color: #6B7280; font-weight: 600; }
+        #hiw-modal-close {
+            position: absolute; top: 12px; right: 16px;
+            background: none; border: none; font-size: 1.3em;
+            cursor: pointer; color: #94a3b8; line-height: 1;
+        }
+        #hiw-modal-close:hover { color: #1e293b; }
 
         .expand-btn {
             background: none; border: none; cursor: pointer;
@@ -344,6 +387,7 @@
         <span style="width:1px;background:var(--border,#E5E7EB);margin:0 4px;align-self:stretch;"></span>
         <span class="ev-tab active" data-hcp-status="members">MEMBERS</span>
         <span class="ev-tab" data-hcp-status="all">EVERYONE</span>
+        <span class="ev-tab" id="hcp-hiw-btn" style="margin-left:auto;color:var(--primary,#E87C3E);border-color:var(--primary,#E87C3E);">HOW IT WORKS &#9656;</span>
     </nav></div>
 
         <!-- Stats -->
@@ -1179,7 +1223,12 @@
             expandTr.style.display = isExpanded ? '' : 'none';
             const canDelete = role === 'admin' || role === 'manager';
             const colspan = window.MEMBER_MODE ? 5 : (isAdmin ? 9 : 8);
-            expandTr.innerHTML = `<td colspan="${colspan}"><div class="rounds-inner" id="rounds-inner-${safeid(p.player_name)}">
+            // Full Spotlight pill on the expanded view — same control as the
+            // Season Contests player expansion (Kerry 2026-08-03)
+            const sptPill = p.customer_id
+                ? `<a class="hcp-spt-pill" href="${window.MEMBER_MODE ? "/member/spotlight" : "/spotlight"}?player=${p.customer_id}">Full Spotlight &rarr;</a>`
+                : '';
+            expandTr.innerHTML = `<td colspan="${colspan}">${sptPill}<div class="rounds-inner" id="rounds-inner-${safeid(p.player_name)}">
                 <em style="color:#94a3b8;">Loading rounds…</em>
             </div></td>`;
             tbody.appendChild(expandTr);
@@ -1228,6 +1277,7 @@
                             </div>
                         </div>
                         <div class="hcp-mc-rounds" id="m-rounds-${id}" style="display:none">
+                            ${p.customer_id ? `<a class="hcp-spt-pill" href="${window.MEMBER_MODE ? "/member/spotlight" : "/spotlight"}?player=${p.customer_id}">Full Spotlight &rarr;</a>` : ''}
                             <div class="rounds-inner" id="rounds-inner-m-${id}">
                                 <em style="color:#94a3b8;">Loading rounds…</em>
                             </div>
@@ -1621,13 +1671,29 @@
         document.getElementById('calc-modal-overlay').classList.remove('open');
     }
 
-    document.addEventListener('keydown', e => { if (e.key === 'Escape') closeCalcModal(); });
+    document.addEventListener('keydown', e => { if (e.key === 'Escape') { closeCalcModal(); closeHiwModal(); } });
     document.addEventListener('DOMContentLoaded', function() {
         var overlay = document.getElementById('calc-modal-overlay');
         if (overlay) overlay.addEventListener('click', function(e) {
             if (e.target === this) closeCalcModal();
         });
+        // HOW IT WORKS (Kerry 2026-08-03) — page-level explainer modal
+        var hiwBtn = document.getElementById('hcp-hiw-btn');
+        var hiwOverlay = document.getElementById('hiw-modal-overlay');
+        if (hiwBtn && hiwOverlay) {
+            hiwBtn.addEventListener('click', function() { hiwOverlay.classList.add('open'); });
+            hiwOverlay.addEventListener('click', function(e) {
+                if (e.target === this) closeHiwModal();
+            });
+            var hiwClose = document.getElementById('hiw-modal-close');
+            if (hiwClose) hiwClose.addEventListener('click', closeHiwModal);
+        }
     });
+
+    function closeHiwModal() {
+        var el = document.getElementById('hiw-modal-overlay');
+        if (el) el.classList.remove('open');
+    }
 
     function buildCalcHTML(playerName, rounds) {
         const lookbackMonths = parseInt(settings.lookback_months || 12);
@@ -2327,6 +2393,66 @@
     </script>
 
     <!-- Handicap Calculation Modal -->
+    <div id="hiw-modal-overlay">
+        <div id="hiw-modal">
+            <button id="hiw-modal-close" aria-label="Close">&times;</button>
+            <h3>HOW TGF HANDICAPS WORK</h3>
+
+            <h4>1 &middot; TGF keeps a 9-hole index — that's the "N"</h4>
+            <p>TGF plays 9-hole golf, so your index is a <b>9-hole index</b>
+               (shown with an <b>N</b>). The second number is simply its
+               18-hole equivalent (doubled). When we play an 18-hole event
+               like a City Championship, your round posts as <b>two 9-hole
+               scores</b> — front and back — each measured against that
+               nine's own course rating and slope.</p>
+
+            <h4>2 &middot; Blow-up holes are capped before anything counts</h4>
+            <p>For handicap purposes only, the most any hole can count is a
+               <b>net double bogey</b>: par + 2 + any handicap strokes you
+               get on that hole (World Handicap System rule). That's the ADJ
+               column on your card — one bad hole can't wreck your index.</p>
+
+            <h4>3 &middot; Every score becomes a differential</h4>
+            <p>A differential measures your adjusted score against the tee
+               you actually played, so rounds travel fairly between courses:</p>
+            <div class="hiw-formula">differential = (adjusted score &minus; course rating) &times; 113 &divide; slope</div>
+
+            <h4>4 &middot; Your index averages your best recent golf</h4>
+            <p>Your index is the average of your <b>lowest 8 differentials
+               from your last 20 rounds</b> (past 12 months) &times; 0.96,
+               rounded to a tenth. The green checks on your card mark the rounds that are
+               counting right now — shoot better and they roll in
+               automatically. Newer players start counting at 3 posted
+               rounds with a smaller sample (and a safety adjustment) until
+               the record fills out:</p>
+            <table>
+                <thead><tr><th>Rounds posted</th><th>Index uses</th></tr></thead>
+                <tbody>
+                    <tr><td>1&ndash;2</td><td>No index yet</td></tr>
+                    <tr><td>3&ndash;5</td><td>Lowest 1</td></tr>
+                    <tr><td>6&ndash;8</td><td>Best 2</td></tr>
+                    <tr><td>9&ndash;11</td><td>Best 3</td></tr>
+                    <tr><td>12&ndash;14</td><td>Best 4</td></tr>
+                    <tr><td>15&ndash;18</td><td>Best 5&ndash;6</td></tr>
+                    <tr><td>19&ndash;20</td><td>Best 7&ndash;8 (fully established)</td></tr>
+                </tbody>
+            </table>
+
+            <h4>5 &middot; On event day it becomes your playing handicap</h4>
+            <p>Your index converts to the tee you're playing:</p>
+            <div class="hiw-formula">playing handicap = index &times; slope &divide; 113 + (rating &minus; par)</div>
+            <p>at 100% allowance, capped at 18 strokes per nine, with your
+               strokes falling on the hardest holes first (max 2 per hole).
+               Those are the dots on your scorecard.</p>
+
+            <p style="margin-top:14px;padding-top:10px;border-top:1px solid #e2e8f0;color:#6B7280;font-size:0.88em;">
+               Scores post automatically from every TGF event — nothing to
+               submit. Tap the <b>i</b> next to any index to see that
+               player's exact calculation, or expand their row for every
+               posted round.</p>
+        </div>
+    </div>
+
     <div id="calc-modal-overlay">
         <div id="calc-modal">
             <button id="calc-modal-close" onclick="closeCalcModal()">×</button>

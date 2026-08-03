@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.191.7";
+window.TGF_VERSION = "2.192.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.192.0",
+    date: "2026-08-03",
+    changes: [
+      "Handicaps page gets a HOW IT WORKS explainer (Kerry): a page-level modal walking through the TGF system in member language — the 9-hole N index and its 18-hole twin, championship rounds posting as two nines against each nine's own rating/slope, the net-double-bogey cap, the differential formula, best-8-of-20 over 12 months (with the small-record ladder for newer players), and how the index becomes event-day playing handicap dots. Opens from a HOW IT WORKS pill in the filter row.",
+      "Full Spotlight pill on the expanded handicap view (Kerry: 'same that you added on expanded player view in the season contests') — expanding any linked player's rounds now offers the same black Full Spotlight → link the Contests drill-down carries, on desktop and mobile cards, member and admin views.",
+    ],
+  },
   {
     version: "2.191.7",
     date: "2026-08-03",
