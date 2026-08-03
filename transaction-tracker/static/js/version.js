@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.192.1";
+window.TGF_VERSION = "2.192.2";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.192.2",
+    date: "2026-08-03",
+    changes: [
+      "Player Spotlight WHERE PLAYER STANDS reads the LIVE standings path (Kerry: 'not all updated') — the section was built on the base season snapshots, which lag championship points and the official reset re-projection; it now uses the same championship-inclusive live read the Contests page serves, so ranks, totals, and reset values match the leaderboard.",
+      "Spotlight Recent Winnings groups by EVENT (Kerry): one row per event with the total won, tap to expand the games and amounts inside it (native expander, latest six events). Older payloads fall back to the flat list.",
+    ],
+  },
   {
     version: "2.192.1",
     date: "2026-08-03",

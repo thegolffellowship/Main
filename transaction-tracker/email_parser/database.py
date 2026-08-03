@@ -9780,7 +9780,11 @@ def get_player_spotlight(customer_id: int,
     member_card = None
     for key in _GG_POINTS_RACES:
         try:
-            d = get_points_race_standings(key, db_path=db_path)
+            # LIVE path, same as the CONTESTS page (Kerry 2026-08-03:
+            # "WHERE PLAYER STANDS is not all updated") — the base
+            # snapshots lag championship points and the reset
+            # re-projection; the live read carries both.
+            d = get_points_race_live(key, db_path=db_path)
         except Exception as e:
             errors.append(f"{key}: {e}")
             continue
@@ -9907,12 +9911,33 @@ def get_player_spotlight(customer_id: int,
         errors.append(f"lone star cup: {e}")
 
     # ── winnings ──
-    total_winnings, recent_payouts = 0, []
+    # recent_events groups the rows per EVENT (Kerry 2026-08-03: "recent
+    # winnings to show event totals... expand to see which games and
+    # amounts"); recent_payouts stays for backward compatibility.
+    total_winnings, recent_payouts, recent_events = 0, [], []
     try:
         w = get_customer_winnings(name, db_path=db_path,
                                   customer_id=customer_id)
         total_winnings = w.get("total_winnings") or 0
         recent_payouts = (w.get("payouts") or [])[:5]
+        by_event: dict = {}
+        ev_order: list = []
+        for p in (w.get("payouts") or []):     # already event_date DESC
+            k = (p.get("event_name"), p.get("event_date"))
+            if k not in by_event:
+                if len(ev_order) >= 6:
+                    continue
+                by_event[k] = {"event_name": p.get("event_name"),
+                               "event_date": p.get("event_date"),
+                               "total": 0.0, "games": []}
+                ev_order.append(k)
+            by_event[k]["total"] = round(
+                by_event[k]["total"] + (p.get("amount") or 0), 2)
+            by_event[k]["games"].append({
+                "category": p.get("category"),
+                "description": p.get("description"),
+                "amount": p.get("amount")})
+        recent_events = [by_event[k] for k in ev_order]
     except Exception as e:
         errors.append(f"winnings: {e}")
 
@@ -9940,6 +9965,7 @@ def get_player_spotlight(customer_id: int,
         "match_play": match_play,
         "lone_star_cup": lsc,
         "recent_payouts": recent_payouts,
+        "recent_events": recent_events,
         "member_card": member_card,
         "gg_error": "; ".join(dict.fromkeys(errors)) or None,
     }
