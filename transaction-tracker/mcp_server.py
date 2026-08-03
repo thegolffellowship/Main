@@ -2415,6 +2415,16 @@ def _scoring_dispatch(url: str, extract: str):
             # WHERE-PLAYER-STANDS / LSC / winnings shapes end-to-end.
             return json.dumps(db.get_player_spotlight(int(arg.strip())),
                               indent=2, default=str)
+        if cmd == "scoring-snapshot-targets":
+            # "[<window_pts>|<seat_window>]" — the snapshot-email
+            # targeting queue: push_entry (in the window, not bought in)
+            # vs defend (in the window, bought in) vs normal. Review
+            # queue only — nothing sends.
+            _p = [x.strip() for x in (arg or "").split("|") if x.strip()]
+            return json.dumps(db.snapshot_target_list(
+                window_points=float(_p[0]) if _p else 15.0,
+                seat_window=float(_p[1]) if len(_p) > 1 else 3.0),
+                indent=2, default=str)
         if cmd == "scoring-snapshot-email":
             # "<customer_id>[|<to>][|send]" — YOUR TGF SNAPSHOT mock
             # (Kerry 2026-08-03): personalized reset-comeback email built

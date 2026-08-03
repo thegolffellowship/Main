@@ -1840,6 +1840,7 @@
     </style>{% endif %}
     <script src="/static/js/version.js"></script>
     <script src="/static/js/auth.js"></script>
+    <script src="/static/js/tgf-standards.js"></script>
     <script src="/static/js/points-render.js"></script>
     <script>
     // ═══════════ Contests Page ═══════════
@@ -5881,32 +5882,33 @@
         // Fixed widths on every column but Player so the three race tabs
         // lay out identically regardless of content; phones get narrow
         // columns + short labels so the whole table fits on screen at once
-        // 6px horizontal padding is THE column standard (Kerry 2026-08-03:
-        // "POINTS RESET is the one to follow... It's 6 right?") — every
-        // stat column carries it so titles and values space identically.
+        // THE stat-column standard (Kerry 2026-08-03, tgf-standards.js):
+        // 110px desktop / 50px compact, centered, 6px horizontal padding
+        // ("the wider of the two dictates" — POINTS joined POINTS RESET
+        // at 110). Auxiliary columns keep their tuned widths but carry
+        // the same 6px padding.
+        const statCol = window.TGF_STAT_COL(compact);
         const pad6 = "padding-left:6px;padding-right:6px;";
         const rankStyle = `width:${compact ? "28px" : "56px"};${pad6}`;
         const ptsStyle = resetPrimary
-            ? `width:${compact ? "40px" : "90px"};text-align:center;color:var(--text-muted);border-left:2px solid #cbd5e1;border-right:2px solid #cbd5e1;${pad6}`
-            : `width:${compact ? "40px" : "90px"};text-align:center;font-weight:700;border-left:2px solid #cbd5e1;border-right:2px solid #cbd5e1;${pad6}`;
-        // Bordered stat-column standard (Kerry 2026-08-03): 50px compact /
-        // 110px desktop, centered, 6px horizontal padding, stacked titles.
+            ? `${statCol}color:var(--text-muted);border-left:2px solid #cbd5e1;border-right:2px solid #cbd5e1;`
+            : `${statCol}font-weight:700;border-left:2px solid #cbd5e1;border-right:2px solid #cbd5e1;`;
         const resetStyle = resetPrimary
-            ? `width:${compact ? "50px" : "110px"};text-align:center;font-weight:700;border-right:2px solid #cbd5e1;${pad6}`
-            : `width:${compact ? "50px" : "110px"};text-align:center;border-right:2px solid #cbd5e1;${pad6}`;
+            ? `${statCol}font-weight:700;border-right:2px solid #cbd5e1;`
+            : `${statCol}border-right:2px solid #cbd5e1;`;
         const rndStyle = `width:${compact ? "30px" : "80px"};text-align:center;border-right:2px solid #cbd5e1;${pad6}`;
         const buyStyle = compact ? `width:26px;text-align:center;${pad6}` : `width:110px;${pad6}`;
-        // Live-day columns (PGA-style): MOVE gets its own slim column and
-        // THRU is wide enough for a full tee time ("10:00 AM"), which the
-        // shared Rounds width was truncating.
+        // Live-day columns (PGA-style): MOVE gets its own slim column;
+        // TODAY/THRU take the standard width on desktop but keep their
+        // tuned tight widths on phones (Kerry 2026-08-01: the right side
+        // was overlapping long name+handicap).
         const mvStyle = `width:${compact ? "24px" : "44px"};text-align:center;${pad6}`;
-        // TODAY holds 1-2 digits, THRU at most "10:00a" — keep both tight
-        // on phones so the Player column gets the width back (Kerry
-        // 2026-08-01: the right side was overlapping long name+handicap).
-        const todayStyle = `width:${compact ? "28px" : "90px"};text-align:center;border-right:2px solid #cbd5e1;${pad6}`;
+        const todayStyle = (compact ? `width:28px;text-align:center;${pad6}` : statCol)
+            + "border-right:2px solid #cbd5e1;";
         // font-size stays OFF the shared style — it leaked into the TH and
         // made the THRU heading bigger than its neighbours (Kerry)
-        const thruStyle = `width:${compact ? "46px" : "90px"};text-align:center;border-right:2px solid #cbd5e1;${pad6}`;
+        const thruStyle = (compact ? `width:46px;text-align:center;${pad6}` : statCol)
+            + "border-right:2px solid #cbd5e1;";
         const thruFont = `font-size:${compact ? "0.68rem" : "0.85rem"};`;
 
         const rowHtml = r => {
@@ -6182,12 +6184,11 @@
 
         const compact = prIsCompact();
         const rankTh = `width:${compact ? "28px" : "56px"};padding-left:6px;padding-right:6px;`;
-        // THE STANDARD for bordered stat columns (Kerry 2026-08-03: "I'd
-        // like a standard unless I ask for a specific change"): 50px
-        // compact / 110px desktop, centered, 6px horizontal padding,
-        // full-height 2px dividers, stacked two-line titles.
-        const netTh = `width:${compact ? "50px" : "110px"};text-align:center;border-left:2px solid #cbd5e1;padding-left:6px;padding-right:6px;`;
-        const resetTh = `width:${compact ? "50px" : "110px"};text-align:center;font-weight:700;border-left:2px solid #cbd5e1;border-right:2px solid #cbd5e1;padding-left:6px;padding-right:6px;`;
+        // THE stat-column standard (tgf-standards.js — Kerry 2026-08-03:
+        // "I'd like a standard unless I ask for a specific change"):
+        // full-height 2px dividers + stacked titles ride on top of it.
+        const netTh = `${window.TGF_STAT_COL(compact)}border-left:2px solid #cbd5e1;`;
+        const resetTh = `${window.TGF_STAT_COL(compact)}font-weight:700;border-left:2px solid #cbd5e1;border-right:2px solid #cbd5e1;`;
         const rows = d.standings.map(r => {
             const bg = r.enrolled ? "background:#bbf7d0;"
                      : (r.customer_id ? "" : "background:#fffbeb;");

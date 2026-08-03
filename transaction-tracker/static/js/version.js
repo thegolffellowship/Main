@@ -1,5 +1,15 @@
-window.TGF_VERSION = "2.194.3";
+window.TGF_VERSION = "2.195.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.195.0",
+    date: "2026-08-03",
+    changes: [
+      "UNIVERSAL card standard (Kerry: 'if we make a change to the look of it, it will change universally'): the hole-by-hole card style moved to static/js/tgf-standards.js (window.TGF_CARD_STYLE) and EVERY scorecard renderer consumes it — Contests drill-down event cards, the live City Championship card, and the member-portal cards on Handicaps + /me (scorecard-render.js had quietly drifted: darker header shade, 3px section borders, grey facts rows — now pixel-identical, and it picked up the back-nine-first play-order rule it was missing).",
+      "UNIVERSAL stat-column standard (window.TGF_STAT_COL, same file): 110px desktop / 50px compact, centered, 6px horizontal padding. 'The wider of the two dictates' — POINTS joined POINTS RESET at 110px on the standings tables and the drill-down; TODAY/THRU take the standard width on desktop and keep their phone-tuned tight widths.",
+      "Snapshot email seat-line gaps translate to golf (Kerry: 'you're 1 point from... is equal to one net bogey in the TGF Championship!'): gaps ≤1 read 'That's one net bogey at the TGF Championship', small gaps read as a hole count.",
+      "Snapshot targeting queue (scoring-snapshot-targets): walks both cup boards and segments every player — push_entry (in the window, not bought in: within 15 of the lead or within 3 of an LSC seat line), defend (in the window, bought in), normal. A review queue for Kerry — availability is a human call; nothing auto-sends.",
+    ],
+  },
   {
     version: "2.194.3",
     date: "2026-08-03",

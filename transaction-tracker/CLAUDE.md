@@ -354,6 +354,7 @@ No Python or local install needed — Claude Desktop connects directly to Railwa
 - `static/js/auth.js` — PIN auth + role management + sticky nav offsets
 - `static/js/games-matrix.js` — Prize matrix data (9-hole & 18-hole, 2-64 players)
 - `static/js/points-render.js` — Shared Points Races drill-down renderers (Contests page + Customers Points tab); injects its own table CSS
+- `static/js/tgf-standards.js` — UNIVERSAL display standards (Kerry 2026-08-03): `TGF_CARD_STYLE` (every hole-by-hole scorecard grid) + `TGF_STAT_COL` (110px/50px, 6px-padding stat columns). Load before points-render.js / scorecard-render.js; change look-and-feel HERE, never inline in a renderer
 - `static/js/version.js` — Version number + changelog data
 - `static/js/chat-widget.js` — Support/feedback chat widget
 - `golf_genius_sync.py` — Golf Genius handicap sync via HTTP

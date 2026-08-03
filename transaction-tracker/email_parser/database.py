@@ -13970,9 +13970,22 @@ def build_player_snapshot_email(customer_id: int,
             return (f"<b>{p.get('path', '')}</b> path: you'd be <b>inside "
                     f"the seat line</b> — spot {p.get('place')} of "
                     f"{p.get('seats')}, {n1(gap)} clear of the cut.")
+        # Translate a small gap into golf (Kerry 2026-08-03: "you're 1
+        # point from... is equal to one net bogey in the TGF
+        # Championship!") — a net bogey scores 1 point, so the gap IS a
+        # hole count at championship scoring.
+        k = -gap
+        if k <= 1:
+            kick = " That's <b>one net bogey</b> at the TGF Championship."
+        elif k <= 4:
+            import math as _m
+            kick = (f" That's <b>{_m.ceil(k)} net bogeys</b> at the TGF "
+                    "Championship — a couple of holes.")
+        else:
+            kick = ""
         return (f"<b>{p.get('path', '')}</b> path: the last seat sits at "
                 f"{n1(cut)} — you're <b>{n1(-gap)} "
-                f"point{'' if abs(gap) == 1 else 's'} from a seat</b>.")
+                f"point{'' if abs(gap) == 1 else 's'} from a seat</b>.{kick}")
 
     def _seat_lines():
         paths = lsc.get("paths") or []
@@ -14080,6 +14093,130 @@ def build_player_snapshot_email(customer_id: int,
     logger.info("Snapshot email for cid=%s (%s) -> %s: %s", customer_id,
                 name, to, "sent" if ok else "FAILED")
     return {**result, "ok": bool(ok), "sent": bool(ok), "sent_to": to}
+
+
+def snapshot_target_list(window_points: float = 15.0,
+                         seat_window: float = 3.0,
+                         db_path: str | Path | None = None) -> dict:
+    """WHO GETS WHICH SNAPSHOT EMAIL — the targeting queue (Kerry
+    2026-08-03: "a list of identifying who is in our window to push on
+    entry because they're realistically in the mix, versus those who
+    just gets a more normalized spotlight email").
+
+    Walks the two cup boards once and segments every player with a
+    tracker profile:
+      push_entry — IN THE WINDOW but NOT bought into either cup: within
+                   `window_points` of the lead on the reset seeds, OR
+                   within `seat_window` of a Lone Star Cup seat line.
+      defend     — in the window AND bought in (motivate, don't pitch).
+      normal     — on a board but outside the window (the normalized
+                   snapshot).
+    This is a REVIEW QUEUE, not a send list — availability and personal
+    context (the "he'll be in Hawaii" factor) is Kerry's knowledge, so
+    every send stays a per-player decision. Nothing here emails anyone.
+    """
+    cup = get_fellowship_cup_projection(db_path=db_path)
+    gross = get_points_race_live("players_cup_gross", db_path=db_path)
+    proj = get_lone_star_cup_projection(db_path=db_path)
+
+    def _val(r):
+        return (r.get("points_reset") if r.get("points_reset") is not None
+                else r.get("total_points"))
+
+    # per-chapter seat counts (co-captain years shave Fellowship 6 -> 5)
+    fc_seats_by_ch = {}
+    for ch in proj.get("chapters", []):
+        n = sum(1 for s in ch.get("seats", [])
+                if str(s.get("seat", "")).startswith("THE FELLOWSHIP CUP"))
+        fc_seats_by_ch[ch.get("chapter")] = n or 6
+    secured_cids = {s.get("customer_id")
+                    for ch in proj.get("chapters", [])
+                    for s in ch.get("seats", []) if s.get("customer_id")}
+
+    paths = {
+        "fellowship_cup": {"rows": cup.get("standings", []),
+                           "ch_field": "chapter", "label": "Fellowship"},
+        "players_cup": {"rows": gross.get("standings", []),
+                        "ch_field": "player_chapter", "label": "Players"},
+    }
+    players: dict = {}
+    for key, p in paths.items():
+        # leader + seat cut per chapter, among enrolled players
+        by_ch: dict = {}
+        for r in p["rows"]:
+            ch = (r.get(p["ch_field"]) or "").strip()
+            v = _val(r)
+            if not ch or v is None:
+                continue
+            by_ch.setdefault(ch, {"enrolled_vals": [], "lead": None})
+            d = by_ch[ch]
+            d["lead"] = v if d["lead"] is None else max(d["lead"], v)
+            if r.get("enrolled"):
+                d["enrolled_vals"].append(v)
+        for d in by_ch.values():
+            vals = sorted(d["enrolled_vals"], reverse=True)
+            d["cuts"] = vals
+        for r in p["rows"]:
+            cid = r.get("customer_id")
+            ch = (r.get(p["ch_field"]) or "").strip()
+            v = _val(r)
+            if not cid or not ch or v is None:
+                continue
+            seats = (fc_seats_by_ch.get(ch, 6)
+                     if key == "fellowship_cup" else 4)
+            d = by_ch[ch]
+            cut = d["cuts"][seats - 1] if len(d["cuts"]) >= seats else None
+            e = players.setdefault(cid, {
+                "customer_id": cid, "chapter": ch,
+                "name": (r.get("player_name") or r.get("customer_name")
+                         or "").strip(),
+                "enrolled_any": False, "paths": {}})
+            if not e["name"]:
+                e["name"] = (r.get("player_name") or "").strip()
+            e["enrolled_any"] = e["enrolled_any"] or bool(r.get("enrolled"))
+            e["paths"][p["label"]] = {
+                "points": v, "enrolled": bool(r.get("enrolled")),
+                "points_back": round(max(d["lead"] - v, 0), 2),
+                "gap_to_seat": (round(v - cut, 2) if cut is not None
+                                else None),
+                "seats": seats,
+            }
+
+    push, defend, normal = [], [], []
+    for e in players.values():
+        backs = [pp["points_back"] for pp in e["paths"].values()]
+        gaps = [pp["gap_to_seat"] for pp in e["paths"].values()
+                if pp["gap_to_seat"] is not None]
+        e["best_back"] = min(backs) if backs else None
+        e["best_gap_to_seat"] = max(gaps) if gaps else None
+        in_window = ((e["best_back"] is not None
+                      and e["best_back"] <= window_points)
+                     or (e["best_gap_to_seat"] is not None
+                         and e["best_gap_to_seat"] >= -seat_window))
+        e["secured_seat"] = e["customer_id"] in secured_cids
+        if in_window and not e["enrolled_any"]:
+            push.append(e)
+        elif in_window:
+            defend.append(e)
+        else:
+            normal.append(e)
+    push.sort(key=lambda x: (x["best_back"] if x["best_back"] is not None
+                             else 99))
+    defend.sort(key=lambda x: (x["best_back"] if x["best_back"] is not None
+                               else 99))
+    return {
+        "criteria": {"window_points": window_points,
+                     "seat_window": seat_window,
+                     "note": "review queue only — availability is a "
+                             "human call; nothing auto-sends"},
+        "push_entry": push,
+        "defend": defend,
+        "normal": [{"customer_id": e["customer_id"], "name": e["name"],
+                    "chapter": e["chapter"],
+                    "enrolled_any": e["enrolled_any"]} for e in normal],
+        "counts": {"push_entry": len(push), "defend": len(defend),
+                   "normal": len(normal)},
+    }
 
 
 def _two_nine_recap_rows(event_query: str,
