@@ -2415,6 +2415,19 @@ def _scoring_dispatch(url: str, extract: str):
             # WHERE-PLAYER-STANDS / LSC / winnings shapes end-to-end.
             return json.dumps(db.get_player_spotlight(int(arg.strip())),
                               indent=2, default=str)
+        if cmd == "scoring-snapshot-email":
+            # "<customer_id>[|<to>][|send]" — YOUR TGF SNAPSHOT mock
+            # (Kerry 2026-08-03): personalized reset-comeback email built
+            # from the live spotlight payload. Default is a dry-run
+            # returning the HTML preview; "|send" mails it to <to> (or
+            # the admin recap recipient) — NEVER to the player in mock
+            # phase (member sends await Kerry rule-3b ratification).
+            _p = [x.strip() for x in arg.split("|")]
+            _to = next((x for x in _p[1:] if "@" in x), None)
+            _send = any(x.lower() == "send" for x in _p[1:])
+            return json.dumps(db.build_player_snapshot_email(
+                int(_p[0]), to_address=_to, send=_send),
+                indent=2, default=str)
         if cmd == "scoring-hcp-r1-impact":
             # R1 sweep (ratified 2026-07-16, 'sweep first -> report ->
             # apply'): recompute all indexes without the x0.96 multiplier

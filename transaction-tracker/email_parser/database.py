@@ -9834,6 +9834,29 @@ def get_player_spotlight(customer_id: int,
                     "text": f"First money rung: {_drama_money(nxt)}"}
         return None
 
+    # Reset-aware field position (Kerry 2026-08-03: the Points Reset is
+    # TGF's Tour Championship — it puts ~30 players within range of
+    # winning it all): points back from the leader plus how many players
+    # sit within 15 points of the lead, computed on the reset seeds when
+    # they exist, else on live points. Rides every race entry so the
+    # Spotlight and the snapshot email tell the same story.
+    def _field_extras(standings, row):
+        def val(r):
+            return (r.get("points_reset") if r.get("points_reset") is not None
+                    else r.get("total_points"))
+        pool = [r for r in standings if val(r) is not None]
+        if any(r.get("enrolled") for r in pool):
+            pool = [r for r in pool if r.get("enrolled")]
+        if not pool:
+            return {}
+        lead = max(val(r) for r in pool)
+        mine = val(row)
+        return {
+            "leader_points": lead,
+            "points_back": (round(lead - mine, 2) if mine is not None else None),
+            "n_within_15": sum(1 for r in pool if lead - val(r) <= 15),
+        }
+
     races, errors, events_played = [], [], 0
     race_pots: dict = {}
     member_card = None
@@ -9893,6 +9916,7 @@ def get_player_spotlight(customer_id: int,
             "in_reach": in_reach_for(row, d["standings"], pp,
                                      "total_points"),
         })
+        races[-1].update(_field_extras(d["standings"], row))
         races[-1]["drama"] = drama_for(
             row["rank"], bool(row.get("enrolled")), races[-1]["in_reach"],
             (pp or {}).get("pot_cents"))
@@ -9918,6 +9942,7 @@ def get_player_spotlight(customer_id: int,
                 "in_reach": in_reach_for(crow, cup["standings"], pp,
                                          "points_reset"),
             })
+            races[-1].update(_field_extras(cup["standings"], crow))
             races[-1]["drama"] = drama_for(
                 crow["rank"], bool(crow.get("enrolled")),
                 races[-1]["in_reach"], (pp or {}).get("pot_cents"))
@@ -13791,6 +13816,195 @@ def send_handicap_recap_email(event_label: str, written: list,
                 chapter_label, to_address, "sent" if ok else "FAILED")
     return {"ok": bool(ok), "sent_to": to_address, "chapter": chapter_label,
             "players": len(rows)}
+
+
+def build_player_snapshot_email(customer_id: int,
+                                to_address: str | None = None,
+                                send: bool = False,
+                                db_path: str | Path | None = None) -> dict:
+    """YOUR TGF SNAPSHOT — the personalized member email (Kerry
+    2026-08-03: 'clean and totally about them', sharp, NO bait; 'anyone
+    within 15 points of first has a very realistic chance').
+
+    The story it tells is the Points Reset (Kerry: the reset is TGF's
+    Tour Championship — it puts ~30 players within possible range of
+    winning it all, and Mark Freund's 2024 run is the proof of concept:
+    30th on the seeded board when championship weekend started, 14.5
+    back, won the Fellowship Cup by 2.5, passing all 29 players ahead
+    of him — verified off the tgf-champ24 GG portal 2026-08-03).
+
+    Every number comes from the live spotlight payload — nothing is
+    hand-typed. MOCK PHASE: sends only to `to_address` (or the admin
+    recap recipient when omitted) — NEVER to the player. Member sends
+    are a Kerry rule-3b ratification away.
+    """
+    import os as _os
+
+    spot = get_player_spotlight(customer_id,
+                                db_path=db_path or DB_PATH)
+    if spot.get("error"):
+        return {"ok": False, "error": spot["error"]}
+    name = spot.get("name") or spot.get("player_name") or ""
+    first_name = (name.split() or [""])[0]
+    chapter = spot.get("chapter") or ""
+
+    # Feature race: the CUP the player is closest to the lead in
+    # (enrolled first; the hypothetical path only if they're in neither)
+    cup_keys = ("fellowship_cup", "players_cup_gross")
+    cups = [r for r in spot.get("races", [])
+            if r.get("key") in cup_keys and r.get("points_back") is not None]
+    enrolled_cups = [r for r in cups if r.get("enrolled")]
+    feature = min(enrolled_cups or cups, key=lambda r: r["points_back"],
+                  default=None)
+    if feature is None:
+        return {"ok": False,
+                "error": "player appears on no cup board — no story to tell"}
+
+    def n1(v):
+        # 100.0 -> "100", 99.5 -> "99.5"
+        return f"{v:g}" if v is not None else "—"
+
+    from .timezone_utils import today_central
+    today_lbl = today_central().strftime("%B %-d, %Y")
+    idx18 = spot.get("handicap_index_18")
+    idx9 = round(idx18 / 2, 1) if idx18 is not None else None
+
+    back = feature["points_back"]
+    lead = feature.get("leader_points")
+    within = feature.get("n_within_15")
+    rank = feature.get("rank")
+    npl = feature.get("n_players")
+    seed = feature.get("points_reset") if feature.get(
+        "points_reset") is not None else feature.get("total_points")
+
+    ORANGE, DARK, NAVY, MUTE = "#E87C3E", "#1B1B1B", "#002868", "#6B7280"
+    serif = "font-family:Georgia,'Times New Roman',serif;"
+    sans = "font-family:-apple-system,'Helvetica Neue',Arial,sans-serif;"
+
+    # WHERE YOU STAND rows — every race the player is enrolled in
+    stand_rows = ""
+    for r in spot.get("races", []):
+        if not r.get("enrolled"):
+            continue
+        pb = r.get("points_back")
+        stand_rows += f"""
+        <tr>
+          <td style="padding:7px 10px;border-bottom:1px solid #E5E7EB;font-weight:700;">{r.get('label', '')}</td>
+          <td style="padding:7px 10px;border-bottom:1px solid #E5E7EB;text-align:center;white-space:nowrap;">{r.get('rank', '—')} of {r.get('n_players', '—')}</td>
+          <td style="padding:7px 10px;border-bottom:1px solid #E5E7EB;text-align:center;font-weight:700;">{n1(r.get('points_reset') if r.get('points_reset') is not None else r.get('total_points'))}</td>
+          <td style="padding:7px 10px;border-bottom:1px solid #E5E7EB;text-align:center;color:{'#15803D' if pb == 0 else DARK};white-space:nowrap;">{'leader' if pb == 0 else (f'{n1(pb)} back' if pb is not None else '—')}</td>
+        </tr>"""
+    stand_html = f"""
+      <table style="border-collapse:collapse;width:100%;font-size:13px;{sans}">
+        <thead><tr style="color:{MUTE};font-size:11px;text-transform:uppercase;letter-spacing:0.04em;">
+          <th style="text-align:left;padding:4px 10px;">Race</th>
+          <th style="padding:4px 10px;">Place</th>
+          <th style="padding:4px 10px;">Points</th>
+          <th style="padding:4px 10px;">Off the lead</th>
+        </tr></thead>
+        <tbody>{stand_rows}</tbody>
+      </table>""" if stand_rows else ""
+
+    # LONE STAR CUP line — factual, same modes as the Spotlight
+    lsc = spot.get("lone_star_cup") or {}
+    lsc_bits = {
+        "seat": lambda: ("Your current Lone Star Cup projection: "
+                         f"<b>{lsc.get('seat', 'a seat')}</b>"
+                         + (" — <b>secured</b>." if lsc.get("status") == "secured"
+                            else ". Projections move until selection day —"
+                                 " every fall point defends it.")),
+        "alternate": lambda: ("You currently project as "
+                              f"<b>alternate #{lsc.get('alternate_rank')}</b> "
+                              "for the Lone Star Cup — one seat away."),
+        "in_hunt": lambda: "The Lone Star Cup seats run through these standings — a strong fall puts your name on that team sheet.",
+        "hypothetical": lambda: (
+            (f"If the season ended today and you were in, you'd hold a "
+             f"Lone Star Cup seat off the <b>{lsc.get('path', '')}</b> path "
+             f"— spot {lsc.get('place')} of {lsc.get('seats')}.")
+            if (lsc.get("place") or 99) <= (lsc.get("seats") or 0) else
+            (f"On the <b>{lsc.get('path', '')}</b> path you'd currently sit "
+             f"{lsc.get('place')} for {lsc.get('seats')} Lone Star Cup seats "
+             "— inside striking distance.")),
+    }.get(lsc.get("mode"))
+    lsc_html = (f"""
+      <div style="background:{NAVY};color:#fff;border-radius:8px;padding:12px 16px;margin:18px 0 0;{sans}font-size:13px;">
+        <div style="{serif}font-size:12px;letter-spacing:0.12em;text-transform:uppercase;color:#9DB4D6;margin-bottom:3px;">Lone Star Cup</div>
+        {lsc_bits()}
+      </div>""" if lsc_bits else "")
+
+    _lbl = feature.get("label", "")
+    _race = _lbl if _lbl.upper().startswith("THE ") else f"the {_lbl}"
+    story_lead = (
+        f"First place carries <b>{n1(lead)}</b> into the fall. You carry "
+        f"<b>{n1(seed)}</b> — <b>{n1(back)} points off the lead</b> in "
+        f"{_race}"
+        if back else
+        f"You lead {_race} at <b>{n1(seed)}</b> — "
+        "and the reset means everyone behind you is still in range")
+    within_line = (
+        f"Right now <b>{within} players</b> sit within 15 points of the "
+        "lead. That's the design — the same thing the Tour Championship "
+        "does on the PGA: bring the field back within reach, then let the "
+        "fall decide it." if within else "")
+
+    subject = (f"Your TGF Snapshot — {n1(back)} points off the lead"
+               if back else f"Your TGF Snapshot — you're the one they're chasing")
+
+    html = f"""
+    <div style="{sans}color:{DARK};max-width:620px;margin:0 auto;">
+      <div style="background:{DARK};border-radius:10px 10px 0 0;padding:22px 26px 18px;">
+        <div style="{serif}color:{ORANGE};font-size:12px;letter-spacing:0.18em;text-transform:uppercase;margin-bottom:6px;">The Golf Fellowship</div>
+        <div style="{serif}color:#fff;font-size:26px;font-weight:700;">Your TGF Snapshot</div>
+        <div style="color:#B9B7B2;font-size:13px;margin-top:5px;">{name} &middot; {chapter} &middot; {today_lbl}</div>
+      </div>
+      <div style="border:1px solid #E5E7EB;border-top:0;border-radius:0 0 10px 10px;padding:22px 26px 26px;">
+        {f'<div style="margin:0 0 16px;font-size:13px;color:{MUTE};">9-Hole Index <b style="color:{DARK};font-size:16px;">{idx9}N</b></div>' if idx9 is not None else ''}
+        <div style="{serif}font-size:15px;font-weight:700;margin:0 0 8px;">Where you stand</div>
+        {stand_html}
+        <div style="border-left:4px solid {ORANGE};background:#FDF0E6;border-radius:0 8px 8px 0;padding:14px 18px;margin:20px 0 0;font-size:14px;line-height:1.55;">
+          <div style="{serif}font-size:15px;font-weight:700;margin-bottom:6px;">The reset just put you in it, {first_name}.</div>
+          <p style="margin:0 0 10px;">{story_lead} — with the whole fall season and the TGF Championship still to play.</p>
+          {f'<p style="margin:0 0 10px;">{within_line}</p>' if within_line else ''}
+          <p style="margin:0 0 10px;">A championship weekend where you simply shoot your handicap is worth roughly <b>72 points</b> on its own. The math is not against you. The math is the invitation.</p>
+          <p style="margin:0;">And it's been done. In 2024, Mark Freund started championship weekend <b>30th on the reset board — dead last among the seeds, 14.5 points back</b>. He won the Fellowship Cup by 2.5, passing all 29 players ahead of him.</p>
+        </div>
+        {lsc_html}
+        <div style="text-align:center;margin:24px 0 4px;">
+          <a href="https://tgf-tracker.up.railway.app/member/spotlight?player={customer_id}"
+             style="background:{ORANGE};color:#fff;text-decoration:none;font-weight:700;padding:11px 26px;border-radius:9999px;{serif}font-size:14px;letter-spacing:0.04em;">SEE YOUR FULL SPOTLIGHT</a>
+        </div>
+        <p style="text-align:center;color:{MUTE};font-size:11px;margin:14px 0 0;">
+          Every number above is live from the TGF Tracker as of {today_lbl}.
+        </p>
+      </div>
+    </div>"""
+
+    result = {"ok": True, "player": name, "customer_id": customer_id,
+              "feature_race": feature.get("key"), "points_back": back,
+              "n_within_15": within, "rank": f"{rank} of {npl}",
+              "subject": subject, "html_chars": len(html), "sent": False}
+    if not send:
+        result["preview"] = html
+        return result
+
+    with _connect(db_path) as conn:
+        to = (to_address or "").strip() or _handicap_recap_recipient(conn, "")
+    if not to:
+        return {**result, "ok": False, "error": "no recipient configured"}
+    tenant_id = _os.getenv("AZURE_TENANT_ID")
+    client_id = _os.getenv("AZURE_CLIENT_ID")
+    client_secret = _os.getenv("AZURE_CLIENT_SECRET")
+    from_address = _os.getenv("EMAIL_ADDRESS")
+    if not all([tenant_id, client_id, client_secret, from_address]):
+        return {**result, "ok": False, "error": "email not configured on server"}
+    from email_parser.fetcher import send_mail_graph
+    ok = send_mail_graph(tenant_id=tenant_id, client_id=client_id,
+                         client_secret=client_secret,
+                         from_address=from_address, to_address=to,
+                         subject=subject, html_body=html)
+    logger.info("Snapshot email for cid=%s (%s) -> %s: %s", customer_id,
+                name, to, "sent" if ok else "FAILED")
+    return {**result, "ok": bool(ok), "sent": bool(ok), "sent_to": to}
 
 
 def _two_nine_recap_rows(event_query: str,

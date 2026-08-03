@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.194.0";
+window.TGF_VERSION = "2.194.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.194.1",
+    date: "2026-08-03",
+    changes: [
+      "YOUR TGF SNAPSHOT email builder (MOCK phase — Kerry: 'clean and totally about them', no bait): a personalized member email telling the Points Reset story — where the player stands in every race they're in, points back from the lead on the reset seeds, how many players sit within 15 of the lead ('this is our Tour Championship'), the ~72-points-for-shooting-your-handicap weekend math, and the verified Mark Freund 2024 proof of concept (30th on the seeded board when championship weekend started, 14.5 back, won the Fellowship Cup by 2.5). Bridge: scoring-snapshot-email:<cid>[|<to>][|send] — dry-run preview by default; sends ONLY to the named/admin address until Kerry ratifies member sends.",
+      "Spotlight race entries carry reset-field context: leader_points, points_back, and n_within_15 (players within 15 points of the lead, on reset seeds when official).",
+    ],
+  },
   {
     version: "2.194.0",
     date: "2026-08-03",

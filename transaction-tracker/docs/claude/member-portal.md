@@ -228,6 +228,21 @@ projection count (co-captain year 6→5). The hero index tile deep-links
 to `/(member/)handicaps?player=<handicap_player_name>` (pins + expands
 + pulses, same link the recap emails use).
 
+**YOUR TGF SNAPSHOT email (v2.194.1 — MOCK phase, Kerry 2026-08-03):**
+`build_player_snapshot_email(cid, to_address, send)` in database.py /
+bridge `scoring-snapshot-email:<cid>[|<to>][|send]`. Personalized
+reset-comeback email built entirely from the live spotlight payload
+(races[].points_back / leader_points / n_within_15 added same release):
+where they stand, points off the lead on the reset seeds, the
+within-15 field count (Kerry: the reset is TGF's Tour Championship —
+~30 players in range), the ~72-point shoot-your-handicap weekend math,
+and the VERIFIED Freund 2024 story (30th/last on the 2024-08-01 seeded
+board, 14.5 back, won the Fellowship Cup by 2.5 — tgf-champ24 GG
+portal, season_points_v2 widget with effective_date). Navy LSC line
+per spotlight mode; CTA deep-links `/member/spotlight?player=<cid>`.
+**Sends only to the named/admin address — member sends are rule-3b
+gated on Kerry's ratification.**
+
 ## Member UX Audit S1 package (v2.86.0, Kerry-ratified mailbox #149–#151)
 
 - **D1 — status source of truth:** member-facing surfaces derive status at
