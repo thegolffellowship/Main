@@ -499,7 +499,7 @@
                     `</div><span class="amt">${fmtMoney(ev.total)}</span></div></summary>` +
                     `<div class="spt-win-games">` +
                     ev.games.map(g =>
-                        `<div class="spt-win-game"><span class="g">${esc(g.category || "")}${g.description ? " · " + esc(g.description) : ""}</span>` +
+                        `<div class="spt-win-game"><span class="g">${esc(g.label || ((g.category || "") + (g.description ? " · " + g.description : "")))}</span>` +
                         `<span class="a">${fmtMoney(g.amount)}</span></div>`).join("") +
                     `</div></details>`).join("")
                 : (d.recent_payouts || []).map(pp =>

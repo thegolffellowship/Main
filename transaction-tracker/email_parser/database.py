@@ -9658,6 +9658,16 @@ def _spotlight_assign_payouts(standings: list, pp: dict | None,
     return out
 
 
+# Payout category display names (server-side mirror of the tgf.html /
+# events.html maps) — used by member-facing winnings labels.
+_PAYOUT_CAT_LABELS = {
+    "team_net": "Team Net", "individual_net": "Individual Net",
+    "individual_gross": "Individual Gross", "skins": "Skins",
+    "closest_to_pin": "Closest to Pin", "hole_in_one": "Hole in One",
+    "mvp": "MVP", "monthly_points": "Monthly Points", "other": "Other",
+}
+
+
 def get_player_spotlight(customer_id: int,
                          db_path: str | Path = DB_PATH) -> dict:
     """PLAYER SPOTLIGHT payload (v1, admin preview — Kerry directed
@@ -10002,15 +10012,93 @@ def get_player_spotlight(customer_id: int,
     # ── winnings ──
     # recent_events groups the rows per EVENT (Kerry 2026-08-03: "recent
     # winnings to show event totals... expand to see which games and
-    # amounts"); recent_payouts stays for backward compatibility.
+    # amounts"); recent_payouts stays for backward compatibility. Each
+    # game carries a FRIENDLY label ("Individual Net — 1st Place | Low
+    # Flight") — the raw category/description read like gobbledygook
+    # (Kerry, same day).
     total_winnings, recent_payouts, recent_events = 0, [], []
     try:
         w = get_customer_winnings(name, db_path=db_path,
                                   customer_id=customer_id)
         total_winnings = w.get("total_winnings") or 0
         recent_payouts = (w.get("payouts") or [])[:5]
+
+        def _team_partners(event_name):
+            """Teammates' last names via scoring_rounds.team_num — event
+            matched by its code prefix ('s18.8 …')."""
+            code = (event_name or "").split(" ")[0].strip()
+            if not code:
+                return []
+            try:
+                with _connect(db_path) as _c:
+                    rows_ = _c.execute(
+                        """SELECT DISTINCT sr2.player_name
+                           FROM scoring_rounds sr
+                           JOIN events e ON e.id = sr.event_id
+                           JOIN scoring_rounds sr2
+                             ON sr2.event_id = sr.event_id
+                            AND sr2.team_num = sr.team_num
+                            AND sr2.customer_id IS NOT sr.customer_id
+                           WHERE sr.customer_id = ? AND sr.team_num IS NOT NULL
+                             AND e.item_name LIKE ?""",
+                        (customer_id, f"{code}%")).fetchall()
+                out_, seen_ = [], set()
+                for r_ in rows_:
+                    nm_ = (r_["player_name"] or "").strip()
+                    last = (nm_.split(",")[0].strip().title() if "," in nm_
+                            else (nm_.split()[-1].title() if nm_ else ""))
+                    if last and last.lower() not in seen_:
+                        seen_.add(last.lower())
+                        out_.append(last)
+                return out_
+            except Exception:
+                return []
+
+        def _friendly_game(p, partners):
+            cat = p.get("category") or ""
+            desc = p.get("description") or ""
+            label = _PAYOUT_CAT_LABELS.get(cat) or (
+                cat.replace("_", " ").title() if cat else "Payout")
+            bits = []
+            m = re.search(r"\b(\d+)(st|nd|rd|th)\b", desc)
+            tied = "(T)" in desc
+            if m and cat != "skins":
+                bits.append(f"{'T' if tied else ''}{m.group(1)}{m.group(2)} Place")
+            if cat == "skins":
+                hm = re.search(r"holes?\s+([\d,\s&]+)", desc, re.I)
+                cm = re.search(r"×\s*(\d+)", desc)
+                if hm:
+                    _hl = [h for h in re.split(r"[\s,&]+", hm.group(1)) if h]
+                    bits.append(("Hole " if len(_hl) == 1 else "Holes ")
+                                + (" & ".join(_hl) if len(_hl) <= 2
+                                   else ", ".join(_hl[:-1]) + " & " + _hl[-1]))
+                elif cm:
+                    n_ = int(cm.group(1))
+                    bits.append(f"{n_} skin{'s' if n_ != 1 else ''}")
+            if cat == "closest_to_pin":
+                pm = re.search(r"#\s*(\d+)", desc)
+                if pm:
+                    bits.append(f"Hole {pm.group(1)}")
+            fm = re.search(r"\b(LOW|MID|HIGH)\b[\s-]*Flight", desc, re.I)
+            fn = re.search(r"Flight\s*(\d+)", desc, re.I)
+            if fm:
+                bits.append(f"{fm.group(1).title()} Flight")
+            elif fn:
+                bits.append(f"Flight {fn.group(1)}")
+            if cat == "team_net" and partners:
+                _w = "w/ " + " & ".join(partners)
+                if bits:
+                    bits[-1] += f" {_w}"     # "T1st Place w/ Smith & Jones"
+                else:
+                    bits.append(_w)
+            if bits:
+                return f"{label} — {' | '.join(bits)}"
+            return label + (f" — {desc}" if desc
+                            and desc.lower() != label.lower() else "")
+
         by_event: dict = {}
         ev_order: list = []
+        partners_cache: dict = {}
         for p in (w.get("payouts") or []):     # already event_date DESC
             k = (p.get("event_name"), p.get("event_date"))
             if k not in by_event:
@@ -10020,11 +10108,17 @@ def get_player_spotlight(customer_id: int,
                                "event_date": p.get("event_date"),
                                "total": 0.0, "games": []}
                 ev_order.append(k)
+            partners = []
+            if (p.get("category") or "") == "team_net":
+                if k not in partners_cache:
+                    partners_cache[k] = _team_partners(p.get("event_name"))
+                partners = partners_cache[k]
             by_event[k]["total"] = round(
                 by_event[k]["total"] + (p.get("amount") or 0), 2)
             by_event[k]["games"].append({
                 "category": p.get("category"),
                 "description": p.get("description"),
+                "label": _friendly_game(p, partners),
                 "amount": p.get("amount")})
         recent_events = [by_event[k] for k in ev_order]
     except Exception as e:
@@ -44541,9 +44635,14 @@ def assemble_event_game_payouts(event_name: str, db_path=None) -> dict:
                                    key=lambda i: (-floors[i][3], i))
                     bump = set(order[:short])
                     for i, (nm, cnt, cents, _) in enumerate(floors):
+                        # holes ride the description so member surfaces can
+                        # say WHICH skins (Kerry 2026-08-03)
+                        _won = [str(s["hole"]) for s in (fl.get("skins") or [])
+                                if s.get("player") == nm]
+                        _ht = f" holes {', '.join(_won)}" if _won else ""
                         rows.append({"golferName": nm, "category": "skins",
                                      "amount": (cents + (1 if i in bump else 0)) / 100.0,
-                                     "description": f"Skins {fl['flight']} ×{cnt}"})
+                                     "description": f"Skins {fl['flight']} ×{cnt}{_ht}"})
             else:
                 notes.append(f"Skins: {d.get('status', 'unknown')} — skipped")
 

@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.193.1";
+window.TGF_VERSION = "2.193.2";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.193.2",
+    date: "2026-08-03",
+    changes: [
+      "Spotlight winnings games read like English (Kerry: 'individual_net · Ind Net LOW Flight 1st is really gobbledy guck'): each game renders as 'Individual Net — 1st Place | Low Flight', 'Skins — Holes 3, 7 & 12 | Low Flight', 'Team Net — T1st Place w/ Callaway & Wade', 'Individual Gross — T1st Place | Flight 1'. Team partners resolve live from the event's saved team pairings; skins payouts now record WHICH holes in their description going forward (older rows show the skin count). Closest to Pin shows its hole.",
+    ],
+  },
   {
     version: "2.193.1",
     date: "2026-08-03",
