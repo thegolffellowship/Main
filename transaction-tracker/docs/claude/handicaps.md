@@ -612,3 +612,32 @@ to a key the other screen never reads, and the value looks gone.
 
 Name keys are retained as a fallback, so nothing that still looks up by
 name breaks.
+
+## 18-hole events post as TWO 9-hole rounds (championships)
+
+TGF is a 9-hole-index league — an 18-hole event posts as two 9-hole
+`handicap_rounds` per player (front + back), each with its OWN per-nine
+course rating + slope. `derive_18hole_rounds_as_two_nines(event_query,
+per_nine, dry_run)` in database.py; bridge `scoring-hcp-2nines:<event>|
+<per_nine_json>[|apply]` (generic successor to the Vaaler-specific
+command; JSON maps tee_id -> {"front": [rating, slope], "back": [...]}).
+Rules of record:
+
+- **Per-nine numbers come from GG course setup** (Kerry reads them off
+  the course's tee editor — front/back rating & slope are the first-class
+  fields there). Never derive slopes by inverting the 18-hole value: GG
+  stores the 18-hole slope independently (The Quarry Blue is 103/115
+  per nine yet 113 for 18 — not the average). Ratings DO sum exactly
+  (F + B = 18-hole rating), which is the validation check.
+- **Intra-run dedup** (v2.191.4): the ALL Net → ALL Gross scorecard
+  backfill banks TWO scoring_rounds per player per event; the derive
+  plans each (player, date, tee-nine) once and skips the twin.
+- **Recap emails**: `scoring-hcp-recap:<event>` detects two-nine postings
+  (the 9-hole preview path skips 18-hole rounds) and rebuilds recap rows
+  from the POSTED handicap_rounds via `_two_nine_recap_rows` (v2.191.5).
+- **Posted 2026-08-03**: TGF SAN ANTONIO CHAMPIONSHIP (The Quarry — Gold
+  F 34.2/117 B 35.6/128, Blue F 32.5/103 B 34.2/115, Red F 31.3/103
+  B 32.3/98, Red(L) F 34.1/119 B 35.0/121; 32 players / 64 rounds) and
+  TGF AUSTIN CHAMPIONSHIP (Falconhead — Blue F 36.4/130 B 36.1/136,
+  White F 35.1/121 B 34.8/126, Red F 33.2/116 B 33.2/119; 16 players /
+  32 rounds). All numbers Kerry-read from GG course setup.

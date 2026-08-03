@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.191.4";
+window.TGF_VERSION = "2.191.5";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.191.5",
+    date: "2026-08-03",
+    changes: [
+      "Championship handicaps POSTED, both chapters: SA 32 players / 64 nine-hole differentials (The Quarry) and Austin 16 players / 32 (Falconhead) — every 18-hole round split into front + back nines, each against that nine's own GG-course-setup rating and slope (Kerry-read; the validation rule is that front + back ratings sum exactly to the 18-hole rating, while GG stores the 18-hole slope independently). The chapter recap email now works for two-nine postings: the 9-hole preview path deliberately skips 18-hole rounds, so the recap rebuilds its rows from the posted handicap rounds instead.",
+    ],
+  },
   {
     version: "2.191.4",
     date: "2026-08-03",

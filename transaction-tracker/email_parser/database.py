@@ -13489,6 +13489,84 @@ def send_handicap_recap_email(event_label: str, written: list,
             "players": len(rows)}
 
 
+def _two_nine_recap_rows(event_query: str,
+                         db_path: str | Path | None = None) -> list:
+    """Posted TWO-NINE handicap rows for an 18-hole event, rebuilt for the
+    manager recap email. Rating/slope/differential come straight off the
+    POSTED handicap_rounds rows (no per-nine map needed); gross/adjusted/
+    capped are recomputed per nine from the bridged scorecard; the index
+    before/after pair excludes/includes this event's own rows."""
+    formulas = get_scoring_formulas(db_path=db_path)
+    settings = get_handicap_settings(db_path)
+    lookback_months = int(settings.get("lookback_months", 12))
+    cutoff = (datetime.now()
+              - timedelta(days=lookback_months * 30.44)).strftime("%Y-%m-%d")
+    out: list = []
+    with _connect(db_path) as conn:
+        rows = conn.execute(
+            """SELECT hr.id AS hrid, hr.player_name, hr.round_date,
+                      hr.course_name, hr.tee_name, hr.adjusted_score,
+                      hr.rating, hr.slope, hr.differential,
+                      hr.scoring_round_id, sr.tee_id, sr.customer_id
+               FROM handicap_rounds hr
+               JOIN scoring_rounds sr ON sr.id = hr.scoring_round_id
+               JOIN events e ON e.id = sr.event_id
+               WHERE e.item_name LIKE ? AND sr.holes_played > 9
+                 AND (hr.tee_name LIKE '%Front 9' OR hr.tee_name LIKE '%Back 9')
+               ORDER BY hr.player_name, hr.tee_name""",
+            (f"%{event_query}%",)).fetchall()
+        event_ids_by_player: dict = {}
+        for r in rows:
+            event_ids_by_player.setdefault(r["player_name"], set()).add(r["hrid"])
+        for r in rows:
+            holeset = (range(1, 10) if "Front 9" in (r["tee_name"] or "")
+                       else range(10, 19))
+            hrows = conn.execute(
+                """SELECT sh.hole_number, sh.strokes, sh.strokes_received, cth.par
+                   FROM scoring_holes sh
+                   LEFT JOIN course_tee_holes cth
+                     ON cth.tee_id = ? AND cth.hole_number = sh.hole_number
+                   WHERE sh.scoring_round_id = ?""",
+                (r["tee_id"], r["scoring_round_id"])).fetchall()
+            by_hole = {h["hole_number"]: h for h in hrows}
+            gross9 = capped = 0
+            for hn in holeset:
+                h = by_hole.get(hn)
+                if not h or h["strokes"] is None:
+                    continue
+                gross9 += h["strokes"]
+                if h["par"] is not None:
+                    a = compute_hole_derivations(
+                        h["par"], h["strokes"], h["strokes_received"] or 0,
+                        formulas)["adjusted_strokes"]
+                    if a < h["strokes"]:
+                        capped += 1
+            hist = conn.execute(
+                """SELECT id, round_date, differential FROM handicap_rounds
+                   WHERE player_name = ? AND differential IS NOT NULL
+                     AND round_date >= ?
+                   ORDER BY round_date, id""",
+                (r["player_name"], cutoff)).fetchall()
+            own = event_ids_by_player.get(r["player_name"], set())
+            all_pairs = [(h["round_date"], h["differential"]) for h in hist]
+            pre_pairs = [(h["round_date"], h["differential"]) for h in hist
+                         if h["id"] not in own]
+            out.append({
+                "player_name": r["player_name"], "customer_id": r["customer_id"],
+                "scoring_round_id": r["scoring_round_id"],
+                "round_date": r["round_date"], "course_name": r["course_name"],
+                "tee_name": r["tee_name"],
+                "adjusted_score": r["adjusted_score"], "gross": gross9,
+                "capped_holes": capped, "rating": r["rating"],
+                "slope": r["slope"], "differential": r["differential"],
+                "index_now": compute_handicap_index(
+                    [d for _, d in pre_pairs[-20:]], settings),
+                "index_after": compute_handicap_index(
+                    [d for _, d in all_pairs[-20:]], settings),
+            })
+    return out
+
+
 def send_handicap_recap_for_event(event_query: str,
                                   db_path: str | Path | None = None) -> dict:
     """Manual (re)send of the manager recap for an ALREADY-POSTED event.
@@ -13496,7 +13574,9 @@ def send_handicap_recap_for_event(event_query: str,
     excludes each card's own bridged round, so index before/after stay
     correct even after the rounds are in — and sends the same email the
     apply path fires automatically. Recaps a posting, not a plan: only
-    rounds already bridged to a handicap round are included."""
+    rounds already bridged to a handicap round are included. 18-hole
+    events posted as two nines (the 9-hole preview skips them) rebuild
+    from the posted rows instead."""
     preview = get_scoring_handicap_preview(event_query, db_path=db_path)
     if preview.get("error"):
         return preview
@@ -13510,6 +13590,8 @@ def send_handicap_recap_for_event(event_query: str,
         "differential": r["differential_ndb"],
         "index_now": r["index_now"], "index_after": r["index_after_ndb"],
     } for r in preview["rounds"] if r["already_imported"]]
+    if not written:
+        written = _two_nine_recap_rows(event_query, db_path=db_path)
     if not written:
         return {"ok": False,
                 "error": f"no posted handicap rounds for {event_query!r} yet "
