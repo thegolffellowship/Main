@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.196.1";
+window.TGF_VERSION = "2.196.2";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.196.2",
+    date: "2026-08-03",
+    changes: [
+      "Snapshot Center joined the admin subnav on every admin page (Kerry: 'Can't see Command Center access' - the page existed but only by URL).",
+    ],
+  },
   {
     version: "2.196.1",
     date: "2026-08-03",
