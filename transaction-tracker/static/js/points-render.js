@@ -47,9 +47,10 @@
            so an unwrapped wide table would be unreachable, not a slider). */
         .pr-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
         /* Points-record rows read tighter than the standings rows
-           (Kerry 2026-08-03: "less padding above and below each row") */
-        .pr-detail td { padding-top: 0.22rem; padding-bottom: 0.22rem; }
-        .pr-detail.pr-compact td { padding-top: 0.18rem; padding-bottom: 0.18rem; }`;
+           (Kerry 2026-08-03, twice: "less padding above and below each
+           row" then "still more than I want") — near text-height */
+        .pr-detail td { padding-top: 0.1rem; padding-bottom: 0.1rem; }
+        .pr-detail.pr-compact td { padding-top: 0.08rem; padding-bottom: 0.08rem; }`;
         document.head.appendChild(st);
     }
 

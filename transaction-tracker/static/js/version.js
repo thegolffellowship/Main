@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.197.0";
+window.TGF_VERSION = "2.197.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.197.1",
+    date: "2026-08-03",
+    changes: [
+      "Points-record rows cut to near text-height (Kerry: 'Vertical Padding still more than I want on the rows') - 0.1rem vertical padding on the drill-down detail tables; standings rows unchanged.",
+    ],
+  },
   {
     version: "2.197.0",
     date: "2026-08-03",
