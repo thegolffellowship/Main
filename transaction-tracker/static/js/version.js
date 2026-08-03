@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.191.0";
+window.TGF_VERSION = "2.191.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.191.1",
+    date: "2026-08-03",
+    changes: [
+      "The cross-links now run both directions (Kerry): a POINTS RESET value on the San Antonio or Austin city board links back to that player's row on THE FELLOWSHIP CUP — same center-and-pulse landing as the CITY RANK links going the other way. Only the two cup-feeding NET races link; gross and monthly resets seed other contests. Also guards the jump against pouncing on the same player's row in the outgoing table before the new board renders.",
+    ],
+  },
   {
     version: "2.191.0",
     date: "2026-08-03",

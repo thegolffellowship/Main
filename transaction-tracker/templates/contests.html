@@ -5762,20 +5762,25 @@
         return bits.join(" &middot; ");
     }
 
-    // Jump from a Fellowship Cup CITY RANK link to that player's row on
-    // their chapter's city race board (Kerry 2026-08-03: "pins them in the
-    // center of page so they can see who's above and below"). Reuses the
-    // tab's own click handler (one code path for switch + load), then
-    // centers + pulses the row exactly like the Spotlight deep links.
-    window.prJumpToCityRace = function (race, cid) {
+    // Jump to a player's row on another race board — Fellowship Cup CITY
+    // RANK -> city board, and city-board POINTS RESET -> Fellowship Cup
+    // (Kerry 2026-08-03: "pins them in the center of page so they can see
+    // who's above and below"). Reuses the tab's own click handler (one
+    // code path for switch + load), then centers + pulses the row exactly
+    // like the Spotlight deep links.
+    window.prJumpToRaceRow = function (race, cid) {
         const tab = document.querySelector(`.sub-tab[data-pr="${race}"]`);
         if (!tab) return;
+        // Both boards' rows carry data-cid — remember the outgoing table so
+        // the seek can't pounce on the SAME player's row in the old board
+        // before the new one renders.
+        const staleTable = document.querySelector("#pr-table-container table");
         tab.click();
         try { history.replaceState(null, "", `#race=${race}&player=${cid}`); } catch (e) { /* ignore */ }
         let tries = 0;
         (function seek() {
             const row = document.querySelector(`#pr-table-container tr[data-cid="${cid}"]`);
-            if (row) {
+            if (row && (!staleTable || !staleTable.contains(row))) {
                 row.scrollIntoView({ behavior: "smooth", block: "center" });
                 row.classList.add("pr-row-focus");
                 setTimeout(() => row.classList.remove("pr-row-focus"), 4000);
@@ -5941,7 +5946,15 @@
             const midCells = liveMode
                 ? `<td style="${todayStyle}${r.champ_points != null ? "color:#BF5700;font-weight:800;" : "color:var(--text-muted);"}">${r.champ_points != null ? escapeHtml(String(r.champ_points % 1 ? r.champ_points.toFixed(1) : r.champ_points)) : (r.champ_thru ? "" : "—")}</td>
                    ${showThru ? `<td style="${thruStyle}${thruFont}white-space:nowrap;${/\d:\d\d/.test(r.champ_thru || "") ? "color:var(--text-muted);" : "font-weight:600;"}">${escapeHtml(compact ? String(r.champ_thru || "—").replace(/\s*([AaPp])\.?M\.?/, (_, g) => g.toLowerCase()) : (r.champ_thru || "—"))}</td>` : ""}`
-                : `<td style="${resetStyle}">${prFmtReset(r.points_reset)}</td>
+                : `<td style="${resetStyle}">${
+                    // City NET reset values feed THE FELLOWSHIP CUP — link
+                    // straight to the player's cup row, centered + pulsed
+                    // (Kerry 2026-08-03). Gross/monthly resets seed other
+                    // races, so only the two cup-feeding races link.
+                    (r.customer_id && r.points_reset != null
+                        && (d.race_key === "san_antonio_net" || d.race_key === "austin_net"))
+                        ? `<a href="#race=tfc&player=${r.customer_id}" class="cell-link" title="See their spot on THE FELLOWSHIP CUP" onclick="event.stopPropagation(); prJumpToRaceRow('tfc', ${r.customer_id}); return false;">${prFmtReset(r.points_reset)}</a>`
+                        : prFmtReset(r.points_reset)}</td>
                    ${showRounds ? `<td style="${rndStyle}" class="pr-rnd">${r.tournaments ?? ""}</td>` : ""}`;
             const moveCell = liveMode
                 ? `<td style="${mvStyle}">${prDayMove(r.move) || '<span style="color:#cbd5e1;">&ndash;</span>'}</td>` : "";
@@ -6173,9 +6186,9 @@
             const cityRace = String(r.chapter || "").toLowerCase().includes("austin")
                 ? "austin" : "net";
             const cityCell = r.customer_id
-                ? `<a href="#race=${cityRace}&player=${r.customer_id}" class="cell-link" title="See who's above and below on the ${cityRace === "austin" ? "Austin" : "San Antonio"} city board" onclick="prJumpToCityRace('${cityRace}', ${r.customer_id}); return false;">${escapeHtml(String(r.net_rank))}</a>`
+                ? `<a href="#race=${cityRace}&player=${r.customer_id}" class="cell-link" title="See who's above and below on the ${cityRace === "austin" ? "Austin" : "San Antonio"} city board" onclick="prJumpToRaceRow('${cityRace}', ${r.customer_id}); return false;">${escapeHtml(String(r.net_rank))}</a>`
                 : escapeHtml(String(r.net_rank));
-            return `<tr style="${bg}">
+            return `<tr${r.customer_id ? ` data-cid="${r.customer_id}"` : ""} style="${bg}">
                 <td style="${rankTh}">${escapeHtml(r.rank)}${prRankMove(r.rank, r.prev_rank)}</td>
                 <td>${nameCell}${prChapterBadge(r.chapter)}${hcp}${prPayBadge(r)}</td>
                 <td style="${netTh}">${cityCell}</td>
