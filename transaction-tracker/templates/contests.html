@@ -5478,6 +5478,27 @@
         return (words.length > 1 ? words.map(w => w[0]).join("") : words[0].slice(0, 3)).toUpperCase();
     }
 
+    // Chapter identity as a small colored badge beside the name — replaces
+    // the Chapter COLUMN on cross-chapter boards (Kerry 2026-08-02:
+    // "Rather than a chapter column can we do a chapter badge with the
+    // chapter color. Simple SA or A"). Brand chapter colors from the
+    // dashboard.css semantic layer; unknown future chapters fall back to
+    // initials on the national gray.
+    function prChapterBadge(chapter) {
+        const ch = String(chapter || "").trim();
+        if (!ch) return "";
+        const low = ch.toLowerCase();
+        let label, bg, fg;
+        if (low.includes("austin")) {
+            label = "A"; bg = "var(--chapter-austin, #BF5700)"; fg = "#fff";
+        } else if (low.includes("san antonio") || low === "sa") {
+            label = "SA"; bg = "var(--chapter-sa, #D3DDE4)"; fg = "#1B1B1B";
+        } else {
+            label = prAbbrevChapter(ch); bg = "var(--chapter-national, #374151)"; fg = "#fff";
+        }
+        return ` <span title="${escapeHtml(ch)}" style="display:inline-block;padding:1px 5px;border-radius:4px;font-size:0.6rem;font-weight:700;letter-spacing:0.04em;background:${bg};color:${fg};vertical-align:1px;">${label}</span>`;
+    }
+
     $("pr-refresh-btn").addEventListener("click", () => prLoadStandings(true));
 
     async function prLoadStandings(force = false) {
@@ -5810,7 +5831,10 @@
         const champIds = new Set(champs.map(c => c.customer_id).filter(Boolean));
         const coChamp = champs.length > 1;
         const champTitle = `2026 City ${coChamp ? "Co-" : ""}Champion — Lone Star Cup ${coChamp ? "Co-" : ""}Captain`;
-        const nCols = (showChapter ? 7 : 6)
+        // Chapter renders as a colored badge beside the name, not a column
+        // (Kerry 2026-08-02) — showChapter only decides whether the badge
+        // renders, so the column count no longer varies by race scope.
+        const nCols = 6
             - (showBuy ? 0 : 1)
             - (liveMode || showRounds ? 0 : 1)
             - (liveMode && !showThru ? 1 : 0)
@@ -5818,7 +5842,6 @@
         // Fixed widths on every column but Player so the three race tabs
         // lay out identically regardless of content; phones get narrow
         // columns + short labels so the whole table fits on screen at once
-        const chapStyle = `width:${compact ? "32px" : "130px"};border-left:2px solid #cbd5e1;border-right:2px solid #cbd5e1;`;
         const rankStyle = `width:${compact ? "28px" : "56px"};`;
         const ptsStyle = resetPrimary
             ? `width:${compact ? "40px" : "90px"};text-align:center;color:var(--text-muted);border-left:2px solid #cbd5e1;border-right:2px solid #cbd5e1;`
@@ -5893,12 +5916,11 @@
             return `<tr style="${bg}${expandable ? 'cursor:pointer;' : ''}"${r.member_card_id ? ` data-card="${r.member_card_id}"` : ''}${r.customer_id ? ` data-cid="${r.customer_id}"` : ''}${champAttrs} data-pname="${escapeHtml(r.player_name || "")}">
                 <td style="${rankStyle}white-space:nowrap;">${escapeHtml(r._flightRank ?? r.rank)}${liveMode ? "" : prRankMove(r.rank, r.prev_rank)}</td>
                 ${moveCell}
-                <td>${nameCell}${hcp}${statusPill}${r.customer_id && champIds.has(r.customer_id)
+                <td>${nameCell}${showChapter ? prChapterBadge(r.player_chapter) : ""}${hcp}${statusPill}${r.customer_id && champIds.has(r.customer_id)
                     ? (compact
                         ? ` <span title="${escapeHtml(champTitle)}" style="font-size:0.9em;vertical-align:1px;">&#127942;</span>`
                         : ` <span title="${escapeHtml(champTitle)}" style="display:inline-block;padding:1px 6px;border-radius:9999px;font-size:0.62rem;font-weight:700;letter-spacing:0.04em;background:#FEF3C7;color:#92400E;border:1px solid #F59E0B;vertical-align:1px;">&#127942; ${coChamp ? "CO-CHAMPION" : "CHAMPION"} &middot; LSC ${coChamp ? "CO-" : ""}CAPTAIN</span>`)
                     : ""}${chevron}${compact && !prRaceFinal ? "" : prPayBadge(r)}</td>
-                ${showChapter ? `<td style="${chapStyle}" title="${escapeHtml(r.player_chapter || "")}">${escapeHtml(compact ? prAbbrevChapter(r.player_chapter) : (r.player_chapter || ""))}</td>` : ""}
                 <td style="${ptsStyle}">${r.total_points ?? ""}</td>
                 ${midCells}
                 ${showBuy ? `<td style="${buyStyle}">${badge}</td>` : ""}
@@ -5953,7 +5975,6 @@
                     <th style="${rankStyle}">${compact ? "#" : "Rank"}</th>
                     ${liveMode ? `<th style="${mvStyle}" title="Day movement">&#8597;</th>` : ""}
                     <th style="width:99%;">Player</th>
-                    ${showChapter ? `<th style="${chapStyle}">${compact ? "CH" : "Chapter"}</th>` : ""}
                     <th style="${ptsStyle}"${resetPrimary ? ' title="Pre-reset season points"' : ''}>${resetPrimary ? (compact ? "SEA" : "SEASON") : (compact ? "PTS" : "POINTS")}</th>
                     ${liveMode
                         ? `<th style="${todayStyle}" title="Championship points earned today">${compact ? "TDY" : "TODAY"}</th>
@@ -6103,7 +6124,6 @@
 
         const compact = prIsCompact();
         const rankTh = `width:${compact ? "28px" : "56px"};`;
-        const chapTh = `width:${compact ? "34px" : "130px"};border-left:2px solid #cbd5e1;border-right:2px solid #cbd5e1;`;
         const netTh = `width:${compact ? "34px" : "90px"};text-align:center;`;
         const resetTh = `width:${compact ? "44px" : "110px"};text-align:center;font-weight:700;border-left:2px solid #cbd5e1;border-right:2px solid #cbd5e1;`;
         const rows = d.standings.map(r => {
@@ -6116,8 +6136,7 @@
                 : escapeHtml(r.player_name);
             return `<tr style="${bg}">
                 <td style="${rankTh}">${escapeHtml(r.rank)}${prRankMove(r.rank, r.prev_rank)}</td>
-                <td>${nameCell}${hcp}${prPayBadge(r)}</td>
-                <td style="${chapTh}" title="${escapeHtml(r.chapter || "")}">${escapeHtml(compact ? prAbbrevChapter(r.chapter) : (r.chapter || ""))}</td>
+                <td>${nameCell}${prChapterBadge(r.chapter)}${hcp}${prPayBadge(r)}</td>
                 <td style="${netTh}">${escapeHtml(String(r.net_rank))}</td>
                 <td style="${resetTh}">${prFmtReset(r.points_reset)}</td>
             </tr>`;
@@ -6127,7 +6146,6 @@
             <table class="enrollment-table${compact ? " pr-compact" : ""}">
                 <thead><tr>
                     <th style="${rankTh}">${compact ? "#" : "Rank"}</th><th style="width:99%;">Player</th>
-                    <th style="${chapTh}">${compact ? "CH" : "Chapter"}</th>
                     <th style="${netTh}" title="Rank in their chapter's NET race">${compact ? "NET #" : "NET Rank"}</th>
                     <th style="${resetTh}">${d.reset_official ? "" : `<span class="pr-proj" style="display:block;font-size:${compact ? "0.52rem" : "0.65rem"};font-weight:600;letter-spacing:0.03em;">(${compact ? "proj" : "Projected"})</span>`}${compact ? "RESET" : "POINTS RESET"}</th>
                 </tr></thead>
@@ -6214,7 +6232,6 @@
         }).join(" ");
 
         const rankStyle = `width:${compact ? "28px" : "56px"};`;
-        const chapStyle = `width:${compact ? "32px" : "130px"};border-left:2px solid #cbd5e1;border-right:2px solid #cbd5e1;`;
         const rndStyle = `width:${compact ? "30px" : "80px"};text-align:center;border-right:2px solid #cbd5e1;`;
         const ptsStyle = `width:${compact ? "40px" : "90px"};text-align:center;font-weight:700;border-left:2px solid #cbd5e1;border-right:2px solid #cbd5e1;`;
         const purseStyle = `width:${compact ? "48px" : "90px"};text-align:center;`;
@@ -6225,9 +6242,6 @@
             // Points detail comes from the player's chapter season page —
             // the monthly table itself is TGF-wide, so pick the race by chapter
             const race = r.chapter === "Austin" ? "austin_net" : "san_antonio_net";
-            // Chapter column is narrow here (POT takes the slack): initials
-            // only on phones — "A" / "SA" — since even AUS overflows
-            const chAbbr = String(r.chapter || "").trim().split(/\s+/).filter(Boolean).map(w => w[0]).join("").toUpperCase();
             const name = (r.customer_id && !window.MEMBER_MODE)
                 ? `<a href="/customers?cid=${r.customer_id}" class="cell-link">${escapeHtml(r.player_name)}</a>`
                 : escapeHtml(r.player_name);
@@ -6240,8 +6254,7 @@
                 purse = `<span style="color:var(--text-muted);" title="Projected — month in progress">$${sel.purse}</span>`;
             return `<tr${r.customer_id ? ` data-cid="${r.customer_id}"` : ""}${r.member_card_id ? ` data-card="${escapeHtml(String(r.member_card_id))}" data-race="${race}"` : ""} style="${bg}${r.customer_id ? "cursor:pointer;" : ""}">
                 <td style="${rankStyle}${win ? "font-weight:700;" : ""}">${escapeHtml(r.rank_label)}</td>
-                <td class="pr-wrap"${win ? ' style="font-weight:700;"' : ""}>${name}${win ? " &#127942;" : ""}${chevron}</td>
-                <td style="${chapStyle}" title="${escapeHtml(r.chapter || "")}">${escapeHtml(compact ? chAbbr : (r.chapter || ""))}</td>
+                <td class="pr-wrap"${win ? ' style="font-weight:700;"' : ""}>${name}${prChapterBadge(r.chapter)}${win ? " &#127942;" : ""}${chevron}</td>
                 <td style="${rndStyle}">${r.rounds ?? ""}</td>
                 <td style="${ptsStyle}">${r.points}</td>
                 <td style="${purseStyle}">${purse}</td>
@@ -6263,8 +6276,7 @@
             </div>${statusChip}
             <table class="enrollment-table${compact ? " pr-compact" : ""}">
                 <thead><tr>
-                    <th style="${rankStyle}">${compact ? "#" : "Rank"}</th><th>Player</th>
-                    <th style="${chapStyle}">${compact ? "CH" : "Chapter"}</th>
+                    <th style="${rankStyle}">${compact ? "#" : "Rank"}</th><th style="width:99%;">Player</th>
                     <th style="${rndStyle}" title="Rounds this month">${compact ? "R" : "Rounds"}</th>
                     <th style="${ptsStyle}">${compact ? "PTS" : "POINTS"}</th>
                     <th style="${purseStyle}" title="$1 per TGF member at month close; ties split">${compact ? "$" : "POT"}</th>

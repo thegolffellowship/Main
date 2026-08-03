@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.189.8";
+window.TGF_VERSION = "2.189.9";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.189.9",
+    date: "2026-08-02",
+    changes: [
+      "Chapter badges replace the Chapter column (Kerry: 'Rather than a chapter column can we do a chapter badge with the chapter color. Simple SA or A'): on every cross-chapter board — The Fellowship Cup, The Players Cup, and Monthly — the chapter now rides as a small colored pill beside the player's name (SA on the steel chapter blue, A on the Austin burnt orange, future chapters as initials on national gray) and the whole column disappears, giving the Player column the width back on phones.",
+    ],
+  },
   {
     version: "2.189.8",
     date: "2026-08-02",
