@@ -5553,7 +5553,10 @@
         // evening: "It also shouldn't show LIVE anymore") — the green
         // 🏁 FINAL pot chip is the state marker now; the championship
         // columns stay until GG absorbs the points.
-        if (!scoring || (data && data.race_final)) {
+        if (!scoring || (data && (data.race_final || data.reset_official))) {
+            // Declared-final races AND the post-reset state drop the LIVE
+            // badge — after the official reset nothing is "live", the
+            // final champ boards just keep reporting scorers forever.
             if (el) el.remove(); if (badge) badge.remove(); return;
         }
         const stale = data.champ && data.champ.stale;
@@ -5771,13 +5774,23 @@
         // (hole count, F, or the tee time before they start). RESET and
         // Rounds step aside for the day — same column count, no layout
         // shift, back on the next quiet load.
-        const liveMode = (d.champ_scoring || 0) > 0 || (d.champ_field || 0) > 0;
         // GG has actually performed the season reset (server dial):
         // the reset column stops reading "(Projected)", and on THE
         // PLAYERS CUP the reset number becomes the headline figure while
         // season points step back (Kerry 2026-08-02).
         const resetOfficial = !!d.reset_official;
         const resetPrimary = resetOfficial && d.race_key === "players_cup_gross";
+        // Post-reset the championship-day layout STANDS DOWN (Kerry
+        // 2026-08-02: "The Players Cup to update to Points Reset status
+        // with regular season totals dimmed") — the champ gross overlay
+        // stays permanently "scoring" because its final boards are never
+        // absorbed, and without this gate the Cup wore the LIVE badge and
+        // TDY/THRU columns forever. Totals stay championship-inclusive;
+        // only the presentation returns to the season+reset view. When
+        // the TGF Championship goes live this fall, its boards get their
+        // own dial config — revisit this gate then.
+        const liveMode = !resetOfficial
+            && ((d.champ_scoring || 0) > 0 || (d.champ_field || 0) > 0);
         const compact = prIsCompact();
         // Phones drop the Buy-in column (the green row already says who is
         // in) and, outside live mode, the Rounds column too (Kerry

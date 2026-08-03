@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.189.7";
+window.TGF_VERSION = "2.189.8";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.189.8",
+    date: "2026-08-02",
+    changes: [
+      "THE PLAYERS CUP settles into Points Reset status (Kerry): the championship gross overlay's final boards report scorers forever, so the Cup was stuck wearing the LIVE badge and the championship-day TDY/THRU columns. Once the reset is official the live layout stands down — championship-inclusive totals stay, presented as the season view with POINTS RESET leading and the season totals dimmed under a SEASON header, no LIVE badge. The TGF Championship's own live day this fall gets its own board config.",
+    ],
+  },
   {
     version: "2.189.7",
     date: "2026-08-02",
