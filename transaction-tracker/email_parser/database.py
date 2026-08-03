@@ -8244,17 +8244,20 @@ def fetch_champ_player_card(race_key: str, customer_id: int,
                         if computed is not None and plus_adj else computed)
 
         # Nines render in PLAY order (Kerry 2026-08-03: SA teed off on the
-        # back) — the imported championship round carries first_hole
+        # back) — the player's latest 18-hole event checks the
+        # event_first_nine dial.
         card_first_hole = 1
         try:
             with _connect(db_path) as _c:
                 _fh = _c.execute(
-                    """SELECT first_hole FROM scoring_rounds
-                       WHERE customer_id = ? AND holes_played > 9
-                       ORDER BY round_date DESC, id DESC LIMIT 1""",
+                    """SELECT e.item_name FROM scoring_rounds sr
+                       JOIN events e ON e.id = sr.event_id
+                       WHERE sr.customer_id = ? AND sr.holes_played > 9
+                       ORDER BY sr.round_date DESC, sr.id DESC LIMIT 1""",
                     (int(customer_id),)).fetchone()
-                if _fh and _fh["first_hole"]:
-                    card_first_hole = _fh["first_hole"]
+            if _fh and _event_first_nine(_fh["item_name"],
+                                         db_path=db_path) == "back":
+                card_first_hole = 10
         except Exception:
             pass
 
@@ -14275,6 +14278,20 @@ def ghin_comparison_analysis(db_path: str | Path | None = None) -> dict:
     }
 
 
+def _event_first_nine(item_name: str,
+                      db_path: str | Path | None = None) -> str:
+    """Which nine an 18-hole event PLAYED FIRST — 'front' (default) or
+    'back'. Rules-as-data: the app_settings dial `event_first_nine` maps
+    lowercased event names to the nine that teed off first (Kerry
+    2026-08-03: the SA championship started on the back)."""
+    try:
+        raw = get_app_setting("event_first_nine", db_path=db_path)
+        m = json.loads(raw) if raw else {}
+        return (m or {}).get((item_name or "").strip().lower(), "front")
+    except Exception:
+        return "front"
+
+
 def set_event_nine_order(event_query: str, first_nine: str,
                          dry_run: bool = True,
                          db_path: str | Path | None = None) -> dict:
@@ -14282,32 +14299,29 @@ def set_event_nine_order(event_query: str, first_nine: str,
     the SA championship played the back nine first) and make every surface
     agree:
 
-    - scoring_rounds.first_hole stamps 10 (back) / 1 (front) on the
-      event's 18-hole rounds, so scorecard renderers show the nines in
-      play order;
+    - the `event_first_nine` dial records the order per event, so
+      scorecard renderers show the nines in play order;
     - each player's TWO-NINE handicap_rounds pair swaps payloads when
       needed so the first-played nine holds the LOWER id — the newest-
       first differentials list then shows the second-played nine on top.
 
-    Idempotent: already-ordered pairs and already-stamped rounds no-op.
+    Idempotent: already-ordered pairs no-op; the dial write is a merge.
     """
     first_nine = (first_nine or "").strip().lower()
     if first_nine not in ("front", "back"):
         return {"error": "first_nine must be 'front' or 'back'"}
-    first_hole = 10 if first_nine == "back" else 1
-    swapped, stamped = [], 0
+    swapped = []
+    events_matched: set = set()
     SWAP_COLS = ("tee_name", "adjusted_score", "rating", "slope",
                  "differential", "nine")
     with _connect(db_path) as conn:
         _ensure_scoring_tables(conn)
-        rounds = conn.execute(
-            """SELECT sr.id, sr.first_hole FROM scoring_rounds sr
-               JOIN events e ON e.id = sr.event_id
-               WHERE e.item_name LIKE ? AND sr.holes_played > 9""",
-            (f"%{event_query}%",)).fetchall()
-        stamp_ids = [r["id"] for r in rounds
-                     if (r["first_hole"] or 1) != first_hole]
-        stamped = len(stamp_ids)
+        for r in conn.execute(
+                """SELECT DISTINCT e.item_name FROM scoring_rounds sr
+                   JOIN events e ON e.id = sr.event_id
+                   WHERE e.item_name LIKE ? AND sr.holes_played > 9""",
+                (f"%{event_query}%",)).fetchall():
+            events_matched.add(r["item_name"])
         pairs = conn.execute(
             """SELECT hr.id, hr.player_name, hr.scoring_round_id, hr.tee_name,
                       hr.adjusted_score, hr.rating, hr.slope,
@@ -14342,14 +14356,19 @@ def set_event_nine_order(event_query: str, first_nine: str,
                         f"WHERE id = ?",
                         (*[b[c] for c in SWAP_COLS], a["id"]))
         if not dry_run:
-            if stamp_ids:
-                qm = ",".join("?" * len(stamp_ids))
-                conn.execute(
-                    f"UPDATE scoring_rounds SET first_hole = ? "
-                    f"WHERE id IN ({qm})", (first_hole, *stamp_ids))
             conn.commit()
+    if not dry_run and events_matched:
+        try:
+            raw = get_app_setting("event_first_nine", db_path=db_path)
+            m = json.loads(raw) if raw else {}
+        except Exception:
+            m = {}
+        for nm in events_matched:
+            m[nm.strip().lower()] = first_nine
+        set_app_setting("event_first_nine", json.dumps(m), db_path=db_path)
     return {"event_query": event_query, "first_nine": first_nine,
-            "dry_run": dry_run, "rounds_stamped": stamped,
+            "dry_run": dry_run,
+            "events_stamped": sorted(events_matched),
             "pairs_swapped": len(swapped), "swapped": swapped[:40]}
 
 
@@ -14991,7 +15010,14 @@ def get_scorecard(scoring_round_id: int, db_path: str | Path = DB_PATH) -> dict 
             totals["stableford_net"] += d["stableford_net"]
             totals["stableford_gross"] += d["stableford_gross"]
             totals["adjusted_gross"] += d["adjusted_strokes"] or 0
-    return {"round": dict(sr), "holes": out_holes, "derived_totals": totals,
+    round_out = dict(sr)
+    # Play order for the scorecard renderers (Kerry 2026-08-03: SA champ
+    # teed off on the back): first_hole 10 puts the IN block on top.
+    round_out["first_hole"] = (
+        10 if (round_out.get("holes_played") or 9) > 9
+        and _event_first_nine(round_out.get("event_name"),
+                              db_path=db_path) == "back" else 1)
+    return {"round": round_out, "holes": out_holes, "derived_totals": totals,
             "formulas": formulas}
 
 

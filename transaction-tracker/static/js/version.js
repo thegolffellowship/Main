@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.193.2";
+window.TGF_VERSION = "2.193.3";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.193.3",
+    date: "2026-08-03",
+    changes: [
+      "Play-order fix rebuilt on a dial: scoring_rounds has no first_hole column (the field in round lists is computed at read time), so which nine an event teed off on lives in the event_first_nine app-settings dial instead of a schema change. The scorecard payload and the championship drill-down card read the dial; the scoring-hcp-nine-order command writes it and still reorders the two-nine differential pairs.",
+    ],
+  },
   {
     version: "2.193.2",
     date: "2026-08-03",
