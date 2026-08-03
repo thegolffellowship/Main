@@ -7361,7 +7361,15 @@ def fetch_champ_points(race_key: str, max_age: float = 45.0,
 
     boards = champ_points_boards(db_path=db_path)
     board = boards.get(race_key)
-    if not board or not board.get("url"):
+    # A race's dial entry may be a LIST of boards (Kerry 2026-08-02: "We
+    # didn't wire up gross points from the championships to be added to
+    # the players cup" — THE PLAYERS CUP is one cross-chapter race fed by
+    # BOTH cities' championship gross boards). A single dict stays the
+    # common case; any board failing fails the whole read so a half-cup
+    # overlay never renders.
+    blist = board if isinstance(board, list) else ([board] if board else [])
+    blist = [b for b in blist if isinstance(b, dict) and b.get("url")]
+    if not blist:
         return {"race": race_key, "configured": False, "players": []}
 
     hit = _CHAMP_POINTS_CACHE.get(race_key)
@@ -7369,14 +7377,17 @@ def fetch_champ_points(race_key: str, max_age: float = 45.0,
         return hit[1]
 
     out = {"race": race_key, "configured": True,
-           "label": board.get("label") or "Championship Points",
-           "url": board["url"], "players": [], "stale": False}
+           "label": " + ".join((b.get("label") or "Championship Points")
+                               for b in blist),
+           "url": blist[0]["url"], "players": [], "stale": False}
     try:
-        page = fetch_public_page(board["url"], xhr=False)
-        if page["status_code"] != 200:
-            raise RuntimeError(f"GG returned HTTP {page['status_code']}")
-        struct = parse_page_structure(page["html"], board["url"])
-        rows = _parse_champ_points_tables(struct.get("tables") or [])
+        rows = []
+        for b in blist:
+            page = fetch_public_page(b["url"], xhr=False)
+            if page["status_code"] != 200:
+                raise RuntimeError(f"GG returned HTTP {page['status_code']}")
+            struct = parse_page_structure(page["html"], b["url"])
+            rows.extend(_parse_champ_points_tables(struct.get("tables") or []))
     except Exception as e:
         if hit:
             stale = dict(hit[1])
@@ -7460,8 +7471,14 @@ def fetch_champ_points(race_key: str, max_age: float = 45.0,
     # until the double-count guard sees GG's season totals absorb it.
     # Written once per race (the first final read after the declaration).
     try:
+        # A fully-posted board persists once the race is DECLARED final —
+        # or once the season reset is OFFICIAL (the city championships are
+        # certainly over then), which covers races that continue past the
+        # reset and are never themselves "final" (THE PLAYERS CUP runs on
+        # to the TGF Championship, so its race_final never flips).
         if (out["players"] and out["scoring"] == out["field"]
-                and _points_race_final(race_key, db_path=db_path)):
+                and (_points_race_final(race_key, db_path=db_path)
+                     or _points_reset_official(db_path=db_path))):
             skey = f"gg_champ_final_board_{race_key}"
             if not get_app_setting(skey, db_path=db_path):
                 from .timezone_utils import today_central_str
@@ -8856,7 +8873,10 @@ def get_lone_star_cup_projection(db_path: str | Path = DB_PATH) -> dict:
         except (TypeError, ValueError):
             return None
 
-    gross = get_points_race_standings("players_cup_gross", db_path=db_path)
+    # LIVE view for the Players Cup too (Kerry 2026-08-02: "We didn't wire
+    # up gross points from the championships") — quiet-day passthrough,
+    # championship-inclusive order once the champ gross boards are dialed in
+    gross = get_points_race_live("players_cup_gross", db_path=db_path)
     cup = get_fellowship_cup_projection(db_path=db_path)
     errors = [e for e in (gross.get("gg_error"), cup.get("gg_error")) if e]
 

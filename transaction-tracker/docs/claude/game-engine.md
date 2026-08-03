@@ -778,6 +778,15 @@ race; defaults in `_GG_CHAMP_BOARDS_DEFAULT`):
 |---|---|---|
 | `san_antonio_net` | sChampionship POINTS Net | `tgf-sa` v2tournaments/4779202 |
 | `austin_net` | aChamp POINTS | `tgf-austin` v2tournaments/4779168 |
+| `players_cup_gross` | sChampionship POINTS Gross **+** aChamp POINTS Gross | `tgf-sa` v2tournaments/4779205 + `tgf-austin` v2tournaments/4779167 |
+
+A race's dial entry may be a **LIST of boards** (v2.189.2): THE PLAYERS
+CUP is one cross-chapter race fed by BOTH cities' championship gross
+boards, merged into one player list. Any board failing fails the whole
+read — a half-cup overlay never renders. The gross boards are set via
+the dial (not the code default); the persist-final gate also accepts
+`gg_points_reset_official`, because the Cup never flips race_final (it
+continues to the TGF Championship).
 
 Board shape: `Pos. | Player | Stableford Points | Thru`, with blank
 single-cell spacer rows between players and the name cell carrying the

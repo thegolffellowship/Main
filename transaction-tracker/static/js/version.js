@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.189.1";
+window.TGF_VERSION = "2.189.2";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.189.2",
+    date: "2026-08-02",
+    changes: [
+      "Championship GROSS points reach THE PLAYERS CUP (Kerry: 'We didn't wire up gross points from the championships to be added to the players cup!'): the championship-points overlay now accepts a LIST of boards per race — the Cup is one cross-chapter race fed by BOTH cities' championship gross boards (sChampionship POINTS Gross + aChamp POINTS Gross) — so season totals, ranks, and the straight-restack reset ladder all include the championships. Any board failing fails the whole read (no half-cup overlays); the double-count guard stands the overlay down when GG absorbs the points. The Lone Star Cup projection's Players Cup seats read the live combined order, and a fully-posted champ board persists once the reset is official even for races that continue to the TGF Championship and never flip race_final.",
+    ],
+  },
   {
     version: "2.189.1",
     date: "2026-08-02",
