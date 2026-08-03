@@ -13556,6 +13556,7 @@ def derive_18hole_rounds_as_two_nines(event_query: str, per_nine: dict,
     plan: list = []
     skipped: list = []
     events_seen: set = set()
+    planned_keys: set = set()   # intra-run dedup — see below
     with _connect(db_path) as conn:
         _ensure_scoring_tables(conn)
         rounds = conn.execute(
@@ -13568,7 +13569,7 @@ def derive_18hole_rounds_as_two_nines(event_query: str, per_nine: dict,
                LEFT JOIN courses c ON c.course_id = sr.course_id
                LEFT JOIN course_tees ct ON ct.tee_id = sr.tee_id
                WHERE e.item_name LIKE ?
-               ORDER BY sr.player_name""",
+               ORDER BY sr.player_name, sr.id""",
             (f"%{event_query}%",)).fetchall()
         if not rounds:
             return {"error": f"no imported scoring rounds match event "
@@ -13678,6 +13679,19 @@ def derive_18hole_rounds_as_two_nines(event_query: str, per_nine: dict,
                                     "scoring_round_id": r["srid"],
                                     "reason": f"already posted (hr {n['dup_id']})"})
                     continue
+                # Intra-run dedup: the ALL Net -> ALL Gross scorecard
+                # backfill banks TWO scoring_rounds per player for the same
+                # day (one per board) — the pre-existing dup check above
+                # only sees rows already WRITTEN, so without this a single
+                # apply would post every nine twice.
+                pkey = (target_name, r["round_date"], n["tee_name"])
+                if pkey in planned_keys:
+                    skipped.append({"player_name": target_name, "nine": n["nine"],
+                                    "scoring_round_id": r["srid"],
+                                    "reason": "duplicate scoring round for the same "
+                                              "day/tee (net+gross board imports)"})
+                    continue
+                planned_keys.add(pkey)
                 plan.append({
                     "player_name": target_name, "customer_id": r["customer_id"],
                     "scoring_round_id": r["srid"], "round_date": r["round_date"],

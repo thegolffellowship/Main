@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.191.3";
+window.TGF_VERSION = "2.191.4";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.191.4",
+    date: "2026-08-03",
+    changes: [
+      "Championship handicap posting prep (Kerry: '2 x 9 hole diffs posted based on 9 front and back ratings/slope'): the two-nines derive gains a generic MCP bridge command (scoring-hcp-2nines:<event>|<per-nine JSON>|apply — the Vaaler command's reusable successor) and an intra-run dedup guard: the ALL Net → ALL Gross scorecard backfill banks two scoring rounds per player per championship, and without the guard a single apply would have posted every nine twice.",
+    ],
+  },
   {
     version: "2.191.3",
     date: "2026-08-03",

@@ -2397,6 +2397,23 @@ def _scoring_dispatch(url: str, extract: str):
             mode = arg.strip().lower()
             return json.dumps(db.persist_handicap_round_nines(
                 dry_run=(mode != "apply")), indent=2, default=str)
+        if cmd == "scoring-hcp-2nines":
+            # "<event>|<per_nine_json>[|apply]" — post any 18-hole event as
+            # TWO 9-hole handicap rounds per player (front + back), each
+            # nine with its OWN course rating + slope (TGF is a 9-hole
+            # index league). per_nine_json maps tee_id ->
+            # {"front": [rating, slope], "back": [rating, slope]} — values
+            # read off GG course setup, never guessed (Vaaler precedent,
+            # Kerry 2026-07-18). Default is a dry-run preview; "|apply"
+            # writes. Generic successor to scoring-hcp-2nines-vaaler.
+            _p = arg.split("|")
+            if len(_p) < 2:
+                return json.dumps({"error": "<event>|<per_nine_json>[|apply]"})
+            _pn = {int(k): {"front": tuple(v["front"]), "back": tuple(v["back"])}
+                   for k, v in json.loads(_p[1]).items()}
+            _apply = len(_p) > 2 and _p[2].strip().lower() == "apply"
+            return json.dumps(db.derive_18hole_rounds_as_two_nines(
+                _p[0].strip(), _pn, dry_run=not _apply), indent=2, default=str)
         if cmd == "scoring-hcp-2nines-vaaler":
             # Post the s18.8 Vaaler Creek 18-hole event as TWO 9-hole handicap
             # rounds per player (front + back), each with that nine's own course
