@@ -1,5 +1,15 @@
-window.TGF_VERSION = "2.190.0";
+window.TGF_VERSION = "2.190.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.190.1",
+    date: "2026-08-03",
+    changes: [
+      "City Championship scorecard shows on THE PLAYERS CUP drill-down (Kerry: 'No scorecard showing for city champ'): the cross-chapter gross race had no scorecard-board config, so the hole-by-hole card came back 'No holes posted yet.' The race now reads BOTH cities' championship scorecard boards (list entry, same shape as the points boards), and gross races score the card correctly: points off the raw gross vs par, no handicap dots, no NET row, no plus-handicap deduction. A guard in the plus-adjustment path keeps the new scorecard config from ever re-scoring the gross race totals — the plus rule is a NET-points rule and the GG gross boards were recorded as posted.",
+      "Fellowship Cup column relabel (Kerry: 'Net # is more accurately CITY'): the per-chapter rank column now reads CITY # / CITY Rank.",
+      "The expanded row's 'Proj. points reset' line stands down once the reset is official (Kerry: 'projected points reset is redundant and projected is obsolete') — the table's RESET column already carries the figure.",
+      "New MCP bridge command scoring-setting-get:<key> — read an app_settings dial (companion to scoring-setting-set).",
+    ],
+  },
   {
     version: "2.190.0",
     date: "2026-08-03",

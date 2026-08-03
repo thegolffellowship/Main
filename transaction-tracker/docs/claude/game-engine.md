@@ -974,4 +974,16 @@ parses cached for the day, failures retried). Route: `GET
 PII-free — the payload is what GG's public board already shows plus our
 computed columns).
 
+**GROSS races (v2.190.1, Kerry: "No scorecard showing for city champ").**
+A scorecard-boards dial entry may be a LIST (same shape as the points
+boards): `players_cup_gross` reads BOTH cities' championship scorecard
+boards and `_champ_card_roster` merges the rosters. Race keys ending in
+`_gross` score the card off the raw gross vs par — dots zeroed, NET null
+(renderer drops the row via payload `scoring: "gross"`), no plus-handicap
+deduction. **Guard that must not be removed:** `_champ_plus_adjustments`
+returns empty for `_gross` races — the plus rule is a NET-points rule, and
+without the guard, configuring a gross scorecard board would silently make
+`fetch_champ_points` start deducting plus handicaps from the recorded
+gross race totals (Players Cup reset money rides on those figures).
+
 Tests: `test_champ_card_live.py`.

@@ -1695,6 +1695,12 @@ def _scoring_dispatch(url: str, extract: str):
             db.set_app_setting(_k.strip(), _v.strip())
             return json.dumps({"key": _k.strip(), "value": _v.strip(),
                                "saved": True})
+        if cmd == "scoring-setting-get":
+            # "<key>" — read an app_settings dial (null when unset, i.e.
+            # the code default applies).
+            _k = arg.strip()
+            return json.dumps({"key": _k,
+                               "value": db.get_app_setting(_k)})
         if cmd == "scoring-credit-stamp":
             # "<item_id>|<method>|<date>|<note>" — stamp refunded WITHOUT
             # a ledger write (receipt already promoted to acct_transactions;

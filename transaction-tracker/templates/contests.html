@@ -5662,6 +5662,7 @@
     // every renderer that uses the payout helpers — winnings badges read
     // WON instead of PROJECTED and the strip carries a FINAL chip.
     let prRaceFinal = false;
+    let prResetOfficial = false;   // GG has performed the season reset
 
     function prRenderPayoutStrip(pp) {
         const el = $("pr-payouts");
@@ -5750,7 +5751,10 @@
     function prExpStatLine(tr) {
         const bits = [];
         if (tr.dataset.proj) bits.push(`<span title="${escapeHtml(tr.dataset.projTitle || "")}">${prRaceFinal ? "Won" : "Projected"} <b style="color:#15803d;">${prFmtMoney(+tr.dataset.proj)}</b></span>`);
-        if (tr.dataset.reset) bits.push(`Proj. points reset <b>${prFmtReset(+tr.dataset.reset)}</b>`);
+        // Once the reset is OFFICIAL the table's RESET column already
+        // shows the figure and "Proj." is obsolete (Kerry 2026-08-03) —
+        // the line only earns its row while it is still a projection.
+        if (tr.dataset.reset && !prResetOfficial) bits.push(`Proj. points reset <b>${prFmtReset(+tr.dataset.reset)}</b>`);
         // Plus-handicap deduction (Kerry, championship day 2026-08-01):
         // the TODAY figure already carries it — say so where there's room.
         if (tr.dataset.champPlus) bits.push(`Plus hcp <b>&minus;${escapeHtml(tr.dataset.champPlus)}</b> pts applied`);
@@ -5761,6 +5765,7 @@
     function renderPointsRace(d) {
         prLastData = d;   // applyRole re-renders so staff get the diagnostics line
         prRaceFinal = !!d.race_final;   // WON vs PROJECTED (admin dial)
+        prResetOfficial = !!d.reset_official;
         // just the contest name — big and clean (Kerry, 2026-07-10)
         $("pr-standings-title").textContent = d.label;
         let fetched = "";
@@ -6101,6 +6106,7 @@
         // The Cup is decided at the TGF Championship, not today — its
         // money stays PROJECTED even while the city races read FINAL
         prRaceFinal = false;
+        prResetOfficial = !!d.reset_official;
         $("pr-standings-title").textContent = "THE FELLOWSHIP CUP";
         let fetched = "";
         if (d.fetched_at) {
@@ -6150,7 +6156,7 @@
             <table class="enrollment-table${compact ? " pr-compact" : ""}">
                 <thead><tr>
                     <th style="${rankTh}">${compact ? "#" : "Rank"}</th><th style="width:99%;">Player</th>
-                    <th style="${netTh}" title="Rank in their chapter's NET race">${compact ? "NET #" : "NET Rank"}</th>
+                    <th style="${netTh}" title="Rank in their chapter's City Points race">${compact ? "CITY #" : "CITY Rank"}</th>
                     <th style="${resetTh}">${d.reset_official ? "" : `<span class="pr-proj" style="display:block;font-size:${compact ? "0.52rem" : "0.65rem"};font-weight:600;letter-spacing:0.03em;">(${compact ? "proj" : "Projected"})</span>`}${compact ? "RESET" : "POINTS RESET"}</th>
                 </tr></thead>
                 <tbody>${rows}</tbody>

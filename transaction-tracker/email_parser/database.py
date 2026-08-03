@@ -7318,7 +7318,16 @@ def _champ_plus_adjustments(race_key: str,
     Sourced from the scorecard-board roster walk (cached 120s there). A
     roster failure falls back to the last cached roster — the points
     fetch must never die, and an adjustment must never silently vanish,
-    because the scorecard board hiccuped once."""
+    because the scorecard board hiccuped once.
+
+    GROSS races get NO deduction: Kerry's plus-handicap rule (championship
+    day 2026-08-01) takes the playing handicap off NET championship
+    points; gross points have no handicap component and the GG gross
+    boards were recorded into the Players Cup reset as posted. Without
+    this guard, configuring a scorecard board for players_cup_gross (for
+    the hole-by-hole card) would silently start re-scoring the gross race."""
+    if race_key.endswith("_gross"):
+        return {"by_cid": {}, "by_key": {}}
     try:
         roster = _champ_card_roster(race_key, db_path=db_path)
     except Exception:
@@ -7992,6 +8001,23 @@ _GG_CHAMP_CARD_BOARDS_DEFAULT: dict = {
         "url": ("https://tgf-austin.golfgenius.com/v2tournaments/4779165"
                 "?player_stats_for_portal=true&round_index=31"),
     },
+    # THE PLAYERS CUP is one cross-chapter race — its hole-by-hole cards
+    # live on BOTH cities' championship scorecard boards (same boards as
+    # the net races; the per-hole gross + pars are shared facts). A LIST
+    # entry merges the rosters, mirroring the points-boards dial shape
+    # (Kerry 2026-08-03: "No scorecard showing for city champ").
+    "players_cup_gross": [
+        {
+            "label": "ALL Net 18",
+            "url": ("https://tgf-sa.golfgenius.com/v2tournaments/4779120"
+                    "?player_stats_for_portal=true&round_index=35"),
+        },
+        {
+            "label": "ALL Net 18",
+            "url": ("https://tgf-austin.golfgenius.com/v2tournaments/4779165"
+                    "?player_stats_for_portal=true&round_index=31"),
+        },
+    ],
 }
 
 _CHAMP_ROSTER_CACHE: dict = {}   # race_key -> (epoch, roster dict)
@@ -8033,45 +8059,50 @@ def _champ_card_roster(race_key: str, max_age: float = 120.0,
         return hit[1]
 
     board = champ_card_boards(db_path=db_path).get(race_key)
-    if not board or not board.get("url"):
+    # A race entry may be a LIST of boards (players_cup_gross spans both
+    # cities' scorecard boards) — same shape as the points-boards dial.
+    blist = board if isinstance(board, list) else ([board] if board else [])
+    blist = [b for b in blist if isinstance(b, dict) and b.get("url")]
+    if not blist:
         roster = {"configured": False, "by_cid": {}, "by_key": {}}
         _CHAMP_ROSTER_CACHE[race_key] = (_t.time(), roster)
         return roster
-    page = fetch_public_page(board["url"], xhr=False)
-    if page["status_code"] != 200:
-        raise RuntimeError(f"GG returned HTTP {page['status_code']}")
-    struct = parse_page_structure(page["html"], board["url"])
-    roster = {"configured": True, "url": board["url"],
+    roster = {"configured": True, "url": blist[0]["url"],
               "by_cid": {}, "by_key": {}, "plus_by_cid": {}, "plus_by_key": {}}
-    plus_names = _parse_champ_plus_column(struct.get("tables") or [])
     with _connect(db_path) as conn:
-        for l in struct.get("links") or []:
-            href = l.get("href") or ""
-            name = re.sub(r"\s+", " ", (l.get("text") or "")).strip()
-            if not re.search(r"/tournaments2/details/\d+", href) or not name:
-                continue
-            entry = {"name": name, "url": href}
-            try:
-                cid, _how = _resolve_gg_person(conn, name)
-            except Exception:
-                cid = None
-            if cid and cid not in roster["by_cid"]:
-                roster["by_cid"][cid] = entry
-            k = _cmp_person_key(name)
-            if k[0] and k[1]:
-                roster["by_key"].setdefault(k, entry)
-        # Plus-handicap deductions ride the same board walk (Kerry's
-        # championship rule — see _parse_champ_plus_column).
-        for name, plus in plus_names.items():
-            try:
-                cid, _how = _resolve_gg_person(conn, name)
-            except Exception:
-                cid = None
-            if cid:
-                roster["plus_by_cid"].setdefault(cid, plus)
-            k = _cmp_person_key(name)
-            if k[0] and k[1]:
-                roster["plus_by_key"].setdefault(k, plus)
+        for b in blist:
+            page = fetch_public_page(b["url"], xhr=False)
+            if page["status_code"] != 200:
+                raise RuntimeError(f"GG returned HTTP {page['status_code']}")
+            struct = parse_page_structure(page["html"], b["url"])
+            plus_names = _parse_champ_plus_column(struct.get("tables") or [])
+            for l in struct.get("links") or []:
+                href = l.get("href") or ""
+                name = re.sub(r"\s+", " ", (l.get("text") or "")).strip()
+                if not re.search(r"/tournaments2/details/\d+", href) or not name:
+                    continue
+                entry = {"name": name, "url": href}
+                try:
+                    cid, _how = _resolve_gg_person(conn, name)
+                except Exception:
+                    cid = None
+                if cid and cid not in roster["by_cid"]:
+                    roster["by_cid"][cid] = entry
+                k = _cmp_person_key(name)
+                if k[0] and k[1]:
+                    roster["by_key"].setdefault(k, entry)
+            # Plus-handicap deductions ride the same board walk (Kerry's
+            # championship rule — see _parse_champ_plus_column).
+            for name, plus in plus_names.items():
+                try:
+                    cid, _how = _resolve_gg_person(conn, name)
+                except Exception:
+                    cid = None
+                if cid:
+                    roster["plus_by_cid"].setdefault(cid, plus)
+                k = _cmp_person_key(name)
+                if k[0] and k[1]:
+                    roster["plus_by_key"].setdefault(k, plus)
     _CHAMP_ROSTER_CACHE[race_key] = (_t.time(), roster)
     return roster
 
@@ -8152,15 +8183,23 @@ def fetch_champ_player_card(race_key: str, customer_id: int,
                     _CHAMP_TEE_CACHE[nurl] = tee
             pars = (tee or {}).get("par") or {}
 
+        # GROSS races (players_cup_gross): points come off the raw gross
+        # score vs par — no handicap dots, no NET line, no plus deduction.
+        # The shared scorecard boards are net boards, so the dots exist on
+        # the partial; they are simply not this race's scoring facts.
+        gross_mode = race_key.endswith("_gross")
         holes = []
         computed = None
         for n in range(1, 19):
             h = (player.get("holes") or {}).get(n) or {}
             gross = h.get("strokes")
-            dots = h.get("dots") or 0
+            dots = 0 if gross_mode else (h.get("dots") or 0)
             par = pars.get(n)
-            net = (gross - dots) if gross is not None else None
-            nvp = (net - par) if (net is not None and par is not None) else None
+            net = None if gross_mode else (
+                (gross - dots) if gross is not None else None)
+            score_for_pts = gross if gross_mode else net
+            nvp = (score_for_pts - par) if (score_for_pts is not None
+                                            and par is not None) else None
             pts = _champ_stableford(nvp, gross)
             if pts is not None:
                 computed = (computed or 0) + pts
@@ -8190,10 +8229,13 @@ def fetch_champ_player_card(race_key: str, customer_id: int,
         ph = player.get("playing_handicap")
         if plus_adj is None and ph is not None and ph < 0:
             plus_adj = -ph
+        if gross_mode:
+            plus_adj = None     # net-points rule only — see _champ_plus_adjustments
         computed_adj = (computed - plus_adj
                         if computed is not None and plus_adj else computed)
 
         out = {"race": race_key, "configured": True,
+               "scoring": "gross" if gross_mode else "net",
                "player_name": entry["name"], "customer_id": int(customer_id),
                "playing_handicap": player.get("playing_handicap"),
                "plus_adjustment": plus_adj,
