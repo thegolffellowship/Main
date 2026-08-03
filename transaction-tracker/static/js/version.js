@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.189.6";
+window.TGF_VERSION = "2.189.7";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.189.7",
+    date: "2026-08-02",
+    changes: [
+      "Receipt memos keep their payee prefix deterministically: the AI email reader is instructed to copy the memo verbatim but still dropped the 'Chuck Fehlis - ' prefix on 8 of 15 championship receipts — starving the payout matcher of its best identity signal. After extraction the code now finds the returned memo in the raw email and, when a 'Name - ' run precedes it on the same line, takes the full line. The email text outranks the model's rendering.",
+    ],
+  },
   {
     version: "2.189.6",
     date: "2026-08-02",

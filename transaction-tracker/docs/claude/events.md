@@ -1084,8 +1084,13 @@ matched. The memo TGF types is authoritative: "Matt Griffin - Winnings
 for s9.17 Silverhorn". Fallback (a) parses the "Name - " prefix and
 resolves it via `_lookup_customer_id`; fallback (b) parses the memo's
 event code and, if exactly one pending payout in that event owes this
-EXACT amount, takes that payee. Fallback (b) also accepts FULL event
-names (v2.188.15): when the memo carries no `[sa]N.N` code ("Winnings
+EXACT amount, takes that payee. **Prefix restore (v2.189.7):** the LLM
+receipt reader drops the "Name - " prefix on some receipts despite the
+verbatim instruction (8 of 15 in the SA championship batch), so
+`parse_p2p_payment` post-checks the RAW email: if the returned memo
+appears preceded on the same line by a "<name> - " run, the full line
+replaces it — the email text outranks the model. Fallback (b) also
+accepts FULL event names (v2.188.15): when the memo carries no `[sa]N.N` code ("Winnings
 for TGF SAN ANTONIO CHAMPIONSHIP", season contests), the event text —
 minus any " — 1st place" detail tail — is matched verbatim against
 `tgf_events.code`. Added for Chuck Fehlis' championship payout

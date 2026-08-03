@@ -278,6 +278,25 @@ Return ONLY the JSON object."""
     result.setdefault("transaction_type", "payout")
     if "amount" in result:
         result["amount"] = abs(float(result["amount"]))
+
+    # DETERMINISTIC PREFIX RESTORE (v2.189.7 — Chuck Fehlis, 2026-08-02):
+    # the prompt orders the model to keep the memo's "Name - " payee prefix
+    # verbatim, and it still drops it on some receipts (8 of 15 in the SA
+    # championship batch), which starves the payout matcher of its best
+    # identity signal. If the raw email contains the returned memo preceded
+    # on the same line by a "<name> - " run, the full line wins — the email
+    # text outranks the model's rendering.
+    memo = (result.get("memo") or "").strip()
+    if memo and body_text:
+        i = body_text.find(memo)
+        if i > 0:
+            line_start = max(body_text.rfind("\n", 0, i),
+                             body_text.rfind(">", 0, i)) + 1
+            lead = body_text[line_start:i]
+            m = re.search(r"([A-Za-z][A-Za-z .,'’-]{1,60}\s[-–—]\s)$",
+                          lead)
+            if m:
+                result["memo"] = (m.group(1) + memo).strip()
     return result
 
 
