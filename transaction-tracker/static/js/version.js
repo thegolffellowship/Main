@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.191.6";
+window.TGF_VERSION = "2.191.7";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.191.7",
+    date: "2026-08-03",
+    changes: [
+      "Handicap recap email reads as one block per player (Kerry: 'listed the name only once and the final Index and change only once... added a Side column'): the two nine rows sit under a single name with a Front/Back SIDE column, the 9-hole index and change span the block, inner dividers lighten so each player reads as one unit, the movers list dedupes to one entry per player, and the WHS-cap dagger rides the capped side. Single-round postings keep their old shape — the SIDE column only appears when a posting has sides.",
+      "Player names in the recap link to the member handicap page with that player pinned to the top and their rounds expanded (Kerry) — /member/handicaps?player=<name> now scrolls the row to the top, expands their differentials, and pulses it, on the desktop table and the mobile cards alike.",
+    ],
+  },
   {
     version: "2.191.6",
     date: "2026-08-03",

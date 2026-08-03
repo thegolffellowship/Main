@@ -13405,6 +13405,15 @@ def send_handicap_recap_email(event_label: str, written: list,
         # indexes (Kerry 2026-08-03). Differentials stay bare.
         return f"{v:.1f}N" if v is not None else "&mdash;"
 
+    from urllib.parse import quote as _q
+
+    def _plink(name):
+        # Names link to the member handicap page with the player pinned to
+        # the top and their rounds expanded (Kerry 2026-08-03).
+        return (f'<a href="https://tgf-tracker.up.railway.app/member/handicaps'
+                f'?player={_q(name)}" style="color:#2563eb;text-decoration:none;">'
+                f'{name}</a>')
+
     def _delta(p):
         if p.get("index_after") is None or p.get("index_now") is None:
             return None
@@ -13412,18 +13421,44 @@ def send_handicap_recap_email(event_label: str, written: list,
 
     rows = sorted(written, key=lambda p: (_delta(p) if _delta(p) is not None
                                           else 99.0, p["player_name"]))
-    movers_dn = [p for p in rows if (_delta(p) or 0) <= -0.4]
-    movers_up = [p for p in rows if (_delta(p) or 0) >= 0.4]
+    # One entry per PLAYER for the movers lines — a two-nine posting has
+    # two rows with the same before/after index and would list twice.
+    _seen_names: set = set()
+    uniq = [p for p in rows
+            if not (p["player_name"] in _seen_names
+                    or _seen_names.add(p["player_name"]))]
+    movers_dn = [p for p in uniq if (_delta(p) or 0) <= -0.4]
+    movers_up = [p for p in uniq if (_delta(p) or 0) >= 0.4]
     capped_n = sum(1 for p in rows if p.get("capped_holes"))
 
     def _mover_line(players):
         return ", ".join(
-            f"{p['player_name']} {_fx(p['index_now'])} &rarr; "
+            f"{_plink(p['player_name'])} {_fx(p['index_now'])} &rarr; "
             f"<b>{_fx(p['index_after'])}</b>" for p in players)
 
-    trs = []
+    # One block per PLAYER (Kerry 2026-08-03: "listed the name only once
+    # and the final Index and change only once"): a two-nine posting shows
+    # two side rows (Front/Back) under one name, with the index and change
+    # spanning both. Single-round postings keep one row; the SIDE column
+    # only renders when a posting actually has sides.
+    def _side(p):
+        t = p.get("tee_name") or ""
+        return "Front" if "Front 9" in t else ("Back" if "Back 9" in t else "")
+
+    has_side = any(_side(p) for p in rows)
+    groups: dict = {}
+    order: list = []
     for p in rows:
-        delta = _delta(p)
+        if p["player_name"] not in groups:
+            order.append(p["player_name"])
+        groups.setdefault(p["player_name"], []).append(p)
+
+    trs = []
+    for name in order:
+        grp = sorted(groups[name], key=lambda p: 0 if _side(p) == "Front" else 1)
+        n = len(grp)
+        first = grp[0]
+        delta = _delta(first)
         if delta is None:
             arrow = '<span style="color:#9CA3AF;">new</span>'
         elif delta < 0:
@@ -13432,18 +13467,34 @@ def send_handicap_recap_email(event_label: str, written: list,
             arrow = f'<span style="color:#B45309;">&#9650; {delta:.1f}</span>'
         else:
             arrow = '<span style="color:#9CA3AF;">&mdash;</span>'
-        cap = " &dagger;" if p.get("capped_holes") else ""
-        diff = p.get("differential")
-        trs.append(
-            f'<tr>'
-            f'<td style="padding:4px 10px;border-bottom:1px solid #E5E7EB;">{p["player_name"]}{cap}</td>'
-            f'<td style="padding:4px 10px;border-bottom:1px solid #E5E7EB;text-align:right;">{p["gross"]}</td>'
-            f'<td style="padding:4px 10px;border-bottom:1px solid #E5E7EB;text-align:right;">{p["adjusted_score"]}</td>'
-            f'<td style="padding:4px 10px;border-bottom:1px solid #E5E7EB;text-align:right;">{_fi(diff)}</td>'
-            f'<td style="padding:4px 10px;border-bottom:1px solid #E5E7EB;text-align:right;white-space:nowrap;">'
-            f'{_fx(p["index_now"])} &rarr; <b>{_fx(p["index_after"])}</b></td>'
-            f'<td style="padding:4px 10px;border-bottom:1px solid #E5E7EB;text-align:right;">{arrow}</td>'
-            f'</tr>')
+        span_td = ('style="padding:4px 10px;border-bottom:1px solid #E5E7EB;'
+                   'vertical-align:top;"')
+        for i, p in enumerate(grp):
+            cap = " &dagger;" if p.get("capped_holes") else ""
+            # inner rows of a group get a lighter divider so the block
+            # reads as one player
+            bb = "#E5E7EB" if i == n - 1 else "#F3F4F6"
+            row_td = (f'style="padding:4px 10px;border-bottom:1px solid {bb};'
+                      f'text-align:right;"')
+            cells = []
+            if i == 0:
+                name_cap = "" if has_side else cap
+                cells.append(f'<td rowspan="{n}" {span_td}>{_plink(name)}{name_cap}</td>')
+            if has_side:
+                cells.append(
+                    f'<td style="padding:4px 10px;border-bottom:1px solid {bb};">'
+                    f'{_side(p)}{cap}</td>')
+            cells.append(f'<td {row_td}>{p["gross"]}</td>')
+            cells.append(f'<td {row_td}>{p["adjusted_score"]}</td>')
+            cells.append(f'<td {row_td}>{_fi(p.get("differential"))}</td>')
+            if i == 0:
+                cells.append(
+                    f'<td rowspan="{n}" {span_td.replace("vertical-align:top;", "text-align:right;white-space:nowrap;vertical-align:top;")}>'
+                    f'{_fx(first["index_now"])} &rarr; <b>{_fx(first["index_after"])}</b></td>')
+                cells.append(
+                    f'<td rowspan="{n}" {span_td.replace("vertical-align:top;", "text-align:right;vertical-align:top;")}>'
+                    f'{arrow}</td>')
+            trs.append(f'<tr>{"".join(cells)}</tr>')
 
     movers_html = ""
     if movers_dn:
@@ -13469,6 +13520,7 @@ def send_handicap_recap_email(event_label: str, written: list,
       <table style="border-collapse:collapse;font-size:13px;width:100%;">
         <thead><tr style="text-align:right;color:#6B7280;">
           <th style="text-align:left;padding:4px 10px;">Player</th>
+          {'<th style="text-align:left;padding:4px 10px;">Side</th>' if has_side else ''}
           <th style="padding:4px 10px;">Gross</th>
           <th style="padding:4px 10px;">Adj</th>
           <th style="padding:4px 10px;">Diff</th>
