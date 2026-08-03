@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.190.1";
+window.TGF_VERSION = "2.190.2";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.190.2",
+    date: "2026-08-03",
+    changes: [
+      "Players Cup scorecard scores GROSS points correctly (Kerry: 'it needs to show the Gross points, not the net points'): v2.190.1's card used the championship NET scale on the gross race, showing Pat 43 while the board said 50. The championship gross boards actually used the SEASON gross doubling table (birdie 4, eagle 8, par 2, bogey 1, double 0, triple -1; ace 9) — verified exactly against six players' GG board totals spanning +50 to -4, including the negative finishes. The card now computes through get_championship_formulas + compute_hole_derivations (the same formula layer that already encoded this rule), so Pat's card sums to his official 50.",
+    ],
+  },
   {
     version: "2.190.1",
     date: "2026-08-03",

@@ -8185,9 +8185,15 @@ def fetch_champ_player_card(race_key: str, customer_id: int,
 
         # GROSS races (players_cup_gross): points come off the raw gross
         # score vs par — no handicap dots, no NET line, no plus deduction.
-        # The shared scorecard boards are net boards, so the dots exist on
-        # the partial; they are simply not this race's scoring facts.
+        # The scale is the SEASON GROSS table through the championship
+        # formulas (get_championship_formulas keeps the gross vs-par table
+        # unchanged, only the ace bonus goes +1 -> 9) — verified against
+        # every total on the GG championship gross boards (Youngs 50,
+        # Rideout 6, Anthis 11, Thompson -1, Murphy -2, Bricco -4). The
+        # champion +1 scale (_champ_stableford) is the NET rule only.
         gross_mode = race_key.endswith("_gross")
+        gross_formulas = (get_championship_formulas(db_path=db_path)
+                          if gross_mode else None)
         holes = []
         computed = None
         for n in range(1, 19):
@@ -8197,10 +8203,13 @@ def fetch_champ_player_card(race_key: str, customer_id: int,
             par = pars.get(n)
             net = None if gross_mode else (
                 (gross - dots) if gross is not None else None)
-            score_for_pts = gross if gross_mode else net
-            nvp = (score_for_pts - par) if (score_for_pts is not None
-                                            and par is not None) else None
-            pts = _champ_stableford(nvp, gross)
+            if gross_mode:
+                pts = compute_hole_derivations(
+                    par, gross, 0, gross_formulas)["stableford_gross"]
+            else:
+                nvp = (net - par) if (net is not None
+                                      and par is not None) else None
+                pts = _champ_stableford(nvp, gross)
             if pts is not None:
                 computed = (computed or 0) + pts
             holes.append({"hole": n, "par": par, "gross": gross,

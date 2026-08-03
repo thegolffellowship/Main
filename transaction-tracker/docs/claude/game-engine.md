@@ -974,13 +974,17 @@ parses cached for the day, failures retried). Route: `GET
 PII-free — the payload is what GG's public board already shows plus our
 computed columns).
 
-**GROSS races (v2.190.1, Kerry: "No scorecard showing for city champ").**
+**GROSS races (v2.190.1-2, Kerry: "No scorecard showing for city champ").**
 A scorecard-boards dial entry may be a LIST (same shape as the points
 boards): `players_cup_gross` reads BOTH cities' championship scorecard
 boards and `_champ_card_roster` merges the rosters. Race keys ending in
 `_gross` score the card off the raw gross vs par — dots zeroed, NET null
 (renderer drops the row via payload `scoring: "gross"`), no plus-handicap
-deduction. **Guard that must not be removed:** `_champ_plus_adjustments`
+deduction. The PTS scale is the SEASON GROSS doubling table through
+`get_championship_formulas` + `compute_hole_derivations` (birdie 4,
+eagle 8, par 2, bogey 1, double 0, triple −1, gross ace 9) — NOT
+`_champ_stableford`, which is the NET championship rule. Verified exactly
+against six players' GG championship gross board totals (+50 … −4). **Guard that must not be removed:** `_champ_plus_adjustments`
 returns empty for `_gross` races — the plus rule is a NET-points rule, and
 without the guard, configuring a gross scorecard board would silently make
 `fetch_champ_points` start deducting plus handicaps from the recorded
