@@ -1,5 +1,17 @@
-window.TGF_VERSION = "2.196.3";
+window.TGF_VERSION = "2.196.4";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.196.4",
+    date: "2026-08-03",
+    changes: [
+      "Championship card HCP row restored (Kerry): the merged championship tee had no stroke-index data in the course DB, but GG's own tee block carries YARDS + HCP rows — parse_tee_block already read them and the card now consumes them (course-DB tee stays as fill-in). Applies live, no import needed.",
+      "Championship card gets the per-nine handicap notes (Kerry: 'you added the handicap diffs for each 18 hole regular season event, but not the City championships'): Adj. gross + Differential against each nine's own rating/slope render under the IN and OUT blocks, from the POSTED two-nine handicap rows.",
+      "CHAMPIONSHIP TOTAL label sits left of the bold orange 18-hole total cell (Kerry).",
+      "POINTS NOT COUNTED collapses by default on player expansion (Kerry) - the gray banner is the toggle; opening/closing it also folds any scorecards expanded inside.",
+      "Tighter drill-down rhythm (Kerry): less padding between the Full Spotlight pill and the DATE/EVENT header, and slimmer vertical padding on every points-record row (.pr-detail).",
+      "Fellowship Cup standalone $50 split confirmed by Kerry (40 pool / 10 markup) - pricing records updated.",
+    ],
+  },
   {
     version: "2.196.3",
     date: "2026-08-03",

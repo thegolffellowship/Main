@@ -8211,7 +8211,7 @@ def fetch_champ_player_card(race_key: str, customer_id: int,
         if not player:
             raise RuntimeError("scorecard partial held no player rows")
 
-        pars = {}
+        pars, sis, ydss = {}, {}, {}
         if player.get("net_id"):
             base = "https://" + urlparse(entry["url"]).netloc
             nurl = (f"{base}/tournaments2/nets/{player['net_id']}"
@@ -8229,6 +8229,11 @@ def fetch_champ_player_card(race_key: str, customer_id: int,
                 if tee:
                     _CHAMP_TEE_CACHE[nurl] = tee
             pars = (tee or {}).get("par") or {}
+            # GG's own tee block carries YARDS + HCP (stroke index) rows —
+            # the live source of truth (Kerry 2026-08-03: "HCP row isn't
+            # showing"); the imported round's course-DB tee is the fallback
+            sis = (tee or {}).get("stroke_index") or {}
+            ydss = (tee or {}).get("yardage") or {}
 
         # GROSS races (players_cup_gross): points come off the raw gross
         # score vs par — no handicap dots, no NET line, no plus deduction.
@@ -8260,7 +8265,9 @@ def fetch_champ_player_card(race_key: str, customer_id: int,
             if pts is not None:
                 computed = (computed or 0) + pts
             holes.append({"hole": n, "par": par, "gross": gross,
-                          "dots": dots, "net": net, "pts": pts})
+                          "dots": dots, "net": net, "pts": pts,
+                          "yardage": ydss.get(n),
+                          "stroke_index": sis.get(n)})
 
         # The champ board's own figure rides along so the card can say
         # when the two disagree (the board stays official).
@@ -8294,19 +8301,22 @@ def fetch_champ_player_card(race_key: str, customer_id: int,
         # back) — the player's latest 18-hole event checks the
         # event_first_nine dial.
         card_first_hole = 1
+        nines = []
         try:
             with _connect(db_path) as _c:
                 _fh = _c.execute(
-                    """SELECT e.item_name, sr.tee_id FROM scoring_rounds sr
+                    """SELECT e.item_name, sr.tee_id, sr.round_date,
+                              sr.player_name, ct.tee_name
+                       FROM scoring_rounds sr
                        JOIN events e ON e.id = sr.event_id
+                       LEFT JOIN course_tees ct ON ct.tee_id = sr.tee_id
                        WHERE sr.customer_id = ? AND sr.holes_played > 9
                        ORDER BY sr.round_date DESC, sr.id DESC LIMIT 1""",
                     (int(customer_id),)).fetchone()
                 # Course facts (Kerry 2026-08-03: "Show YARDS and HCP rows
-                # for the City Championship too") come off the player's
-                # own imported round's tee — course DB, never guessed.
-                # Additive: pre-import (live day) the rows simply don't
-                # render.
+                # for the City Championship too") fill from the imported
+                # round's course-DB tee only where the GG tee block above
+                # didn't supply them — never guessed.
                 if _fh and _fh["tee_id"]:
                     for th in _c.execute(
                             """SELECT hole_number, yardage, stroke_index
@@ -8314,8 +8324,40 @@ def fetch_champ_player_card(race_key: str, customer_id: int,
                             (_fh["tee_id"],)).fetchall():
                         hn = th["hole_number"]
                         if 1 <= hn <= 18:
-                            holes[hn - 1]["yardage"] = th["yardage"]
-                            holes[hn - 1]["stroke_index"] = th["stroke_index"]
+                            h = holes[hn - 1]
+                            if h.get("yardage") is None:
+                                h["yardage"] = th["yardage"]
+                            if h.get("stroke_index") is None:
+                                h["stroke_index"] = th["stroke_index"]
+                # Per-nine handicap adjusted gross + differentials for the
+                # championship card too (Kerry 2026-08-03: "you added the
+                # handicap diffs for each 18 hole regular season event,
+                # but not the City championships") — the POSTED two-nine
+                # handicap rows, same source as get_scorecard.
+                if _fh and _fh["tee_name"]:
+                    _names = {_normalize_player_name(_fh["player_name"] or "")}
+                    for lk in _c.execute(
+                            "SELECT player_name FROM handicap_player_links "
+                            "WHERE customer_id = ?",
+                            (int(customer_id),)).fetchall():
+                        _names.add(lk["player_name"])
+                    _qm = ",".join("?" * len(_names))
+                    for hr in _c.execute(
+                            f"""SELECT tee_name, adjusted_score, rating,
+                                       slope, differential
+                                FROM handicap_rounds
+                                WHERE player_name IN ({_qm})
+                                  AND round_date = ? AND tee_name IN (?, ?)
+                                ORDER BY id""",
+                            (*_names, _fh["round_date"],
+                             f"{_fh['tee_name']} — Front 9",
+                             f"{_fh['tee_name']} — Back 9")).fetchall():
+                        nines.append({
+                            "nine": ("front" if "Front" in (hr["tee_name"] or "")
+                                     else "back"),
+                            "adjusted_gross": hr["adjusted_score"],
+                            "rating": hr["rating"], "slope": hr["slope"],
+                            "differential": hr["differential"]})
             if _fh and _event_first_nine(_fh["item_name"],
                                          db_path=db_path) == "back":
                 card_first_hole = 10
@@ -8325,6 +8367,7 @@ def fetch_champ_player_card(race_key: str, customer_id: int,
         out = {"race": race_key, "configured": True,
                "scoring": "gross" if gross_mode else "net",
                "first_hole": card_first_hole,
+               "nines": nines or None,
                "player_name": entry["name"], "customer_id": int(customer_id),
                "playing_handicap": player.get("playing_handicap"),
                "plus_adjustment": plus_adj,

@@ -45,7 +45,11 @@
         /* Wide injected tables scroll inside their own container instead of
            widening the page (mobile audit wave 1 — body is overflow-x:clip,
            so an unwrapped wide table would be unreachable, not a slider). */
-        .pr-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }`;
+        .pr-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+        /* Points-record rows read tighter than the standings rows
+           (Kerry 2026-08-03: "less padding above and below each row") */
+        .pr-detail td { padding-top: 0.22rem; padding-bottom: 0.22rem; }
+        .pr-detail.pr-compact td { padding-top: 0.18rem; padding-bottom: 0.18rem; }`;
         document.head.appendChild(st);
     }
 
@@ -365,7 +369,7 @@
                 <tr><td style="${lbl}${sectTop}font-weight:700;">${L.gs}</td>${grossRow}<td style="${td}${sectTop}font-weight:700;background:#f1f5f9;">${sumOr(hs, "gross")}</td></tr>
                 ${grossMode ? "" : `<tr><td style="${lbl}${sectTop}font-weight:700;" title="Gross minus handicap strokes received on the hole">${L.ns}</td>${netRow}<td style="${td}${sectTop}font-weight:700;background:#f1f5f9;">${sumOr(hs, "net")}</td></tr>`}
                 <tr><td style="${lbl}${band}${sectBot}" title="Championship-scale stableford points per hole">${L.pts}</td>${ptsRow}<td style="${td}${band}${sectBot}">${sumOr(hs, "pts")}</td></tr>
-                ${isLast && pTot != null ? `<tr><td colspan="${hs.length + 1}" style="border:1px solid transparent;"></td><td style="${td}${band}font-weight:800;border:2px solid #BF5700;" title="18-hole championship points total">${pTot}</td></tr>` : ""}
+                ${isLast && pTot != null ? `<tr><td colspan="${hs.length + 1}" style="border:1px solid transparent;text-align:right;font-weight:700;color:#BF5700;font-size:0.85em;letter-spacing:0.05em;padding-right:8px;white-space:nowrap;">CHAMPIONSHIP TOTAL</td><td style="${td}${band}font-weight:800;border:2px solid #BF5700;" title="18-hole championship points total">${pTot}</td></tr>` : ""}
             </table>`;
         };
         const front = holes.filter(h => h.hole <= 9);
@@ -558,6 +562,26 @@
         return v < 0 ? `+${Math.abs(v) % 1 ? Math.abs(v).toFixed(1) : Math.abs(v)}` : `${v}`;
     }
 
+    // POINTS NOT COUNTED collapses by default (Kerry 2026-08-03) — the
+    // gray banner toggles its rows. An open toggle also re-collapses any
+    // scorecard expansion living under a row being hidden.
+    window.prToggleNc = function (tr) {
+        const open = tr.dataset.open === "1";
+        tr.dataset.open = open ? "" : "1";
+        const chev = tr.querySelector(".pr-nc-chev");
+        if (chev) chev.innerHTML = open ? "&#9656;" : "&#9662;";
+        let n = tr.nextElementSibling;
+        while (n) {
+            if (n.classList.contains("pr-nc-row")) {
+                n.style.display = open ? "none" : "";
+            } else if (open && n.classList.contains("pr-sc-detail")) {
+                n.remove();
+                n = tr;      // sibling chain changed — restart walk is overkill; continue from tr
+            }
+            n = n.nextElementSibling;
+        }
+    };
+
     function prRenderDetailTables(tables, rounds, claimed, opts = {}) {
         // opts.monthFilter (YYYY-MM) keeps only rows awarded that month;
         // opts.plain skips the counted/not-counted sections and CITY row
@@ -699,9 +723,11 @@
                     if (counted) {
                         if (!ccPlaced) parts.push(ccRow);
                         counted = false;
-                        if (order) { parts.push(secHdr(compact ? "Not Counted" : "Points Not Counted", "#B9B7B2", "#1B1B1B")); continue; }
+                        // Collapsed by default (Kerry 2026-08-03) —
+                        // the banner itself is the toggle
+                        if (order) { parts.push(`<tr onclick="prToggleNc(this)" style="cursor:pointer;" title="Show the rounds that didn't count"><td colspan="${totalCols}" class="pr-wrap" style="background:#B9B7B2;color:#1B1B1B;font:700 11px/1.5 'Bitter',serif;letter-spacing:1px;text-transform:uppercase;"><span class="pr-nc-chev" style="font-size:0.85rem;">&#9656;</span> ${compact ? "Not Counted" : "Points Not Counted"}</td></tr>`); continue; }
                     }
-                    parts.push(`<tr><td colspan="${totalCols}" class="pr-wrap" style="text-align:center;font-weight:600;background:#f8fafc;">${escapeHtml(nb(r.join(" ")))}</td></tr>`);
+                    parts.push(`<tr${counted ? "" : ' class="pr-nc-row" style="display:none;"'}><td colspan="${totalCols}" class="pr-wrap" style="text-align:center;font-weight:600;background:#f8fafc;">${escapeHtml(nb(r.join(" ")))}</td></tr>`);
                     continue;
                 }
                 if (opts.monthFilter && dateCol > -1
@@ -740,7 +766,7 @@
                     }
                 }
                 if (match && claimed) claimed.add(match.id);
-                parts.push(`<tr${match ? ` data-srid="${match.id}"${opts.netRace ? ' data-hide-gp="1"' : ""} style="cursor:pointer;" title="Click for the hole-by-hole scorecard"` : ""}>${r.map((c, i) => {
+                parts.push(`<tr${counted ? "" : ' class="pr-nc-row"'}${match ? ` data-srid="${match.id}"${opts.netRace ? ' data-hide-gp="1"' : ""} style="cursor:pointer;${counted ? "" : "display:none;"}" title="Click for the hole-by-hole scorecard"` : (counted ? "" : ' style="display:none;"')}>${r.map((c, i) => {
                     // PTS column mirrors the level-1 standings points column:
                     // centered, bold, 2px side borders
                     let style;
@@ -763,7 +789,7 @@
             // than render a lone header row
             if (opts.plain && !parts.length) return "";
             return `<div class="pr-scroll">
-                <table class="enrollment-table${compact ? " pr-compact" : ""}" style="margin:0.35rem 0;font-size:${compact ? "0.72rem" : "0.82rem"};">
+                <table class="enrollment-table pr-detail${compact ? " pr-compact" : ""}" style="margin:0.1rem 0 0.35rem;font-size:${compact ? "0.72rem" : "0.82rem"};">
                 <thead><tr>${head.map((c, i) => {
                     const key = (c || "").trim().toLowerCase();
                     if (i === ptsCol) return `<th style="${window.TGF_STAT_COL(compact)}border-left:2px solid #cbd5e1;border-right:2px solid #cbd5e1;">${compact ? "PTS" : "POINTS"}</th>`;
