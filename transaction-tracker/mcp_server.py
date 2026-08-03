@@ -2397,6 +2397,18 @@ def _scoring_dispatch(url: str, extract: str):
             mode = arg.strip().lower()
             return json.dumps(db.persist_handicap_round_nines(
                 dry_run=(mode != "apply")), indent=2, default=str)
+        if cmd == "scoring-hcp-r1-impact":
+            # R1 sweep (ratified 2026-07-16, 'sweep first -> report ->
+            # apply'): recompute all indexes without the x0.96 multiplier
+            # and report the movement. ":apply" flips the dial to 1.0.
+            return json.dumps(db.r1_multiplier_impact(
+                apply=(arg.strip().lower() == "apply")), indent=2, default=str)
+        if cmd == "scoring-hcp-ghin-compare":
+            # READ-ONLY comparable-GHIN analysis (Kerry 2026-08-03):
+            # combine-9s 18-hole indexes from TGF scores vs TGF index x2,
+            # plus the 75% onboarding-rule validation.
+            return json.dumps(db.ghin_comparison_analysis(),
+                              indent=2, default=str)
         if cmd == "scoring-hcp-2nines":
             # "<event>|<per_nine_json>[|apply]" — post any 18-hole event as
             # TWO 9-hole handicap rounds per player (front + back), each

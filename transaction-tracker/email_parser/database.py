@@ -13886,6 +13886,186 @@ def derive_18hole_rounds_as_two_nines(event_query: str, per_nine: dict,
                         "course rating + slope (18-hole event → two 9-hole records)"}
 
 
+def _player_diff_history(conn, cutoff: str | None = None) -> dict:
+    """player_name -> [(round_date, differential, rating, slope,
+    adjusted_score)] ordered by date, id — the raw pool every handicap
+    analysis draws from. cutoff (YYYY-MM-DD) bounds the window; None = all."""
+    q = ("SELECT player_name, round_date, differential, rating, slope, "
+         "adjusted_score FROM handicap_rounds WHERE differential IS NOT NULL ")
+    args: tuple = ()
+    if cutoff:
+        q += "AND round_date >= ? "
+        args = (cutoff,)
+    q += "ORDER BY player_name, round_date, id"
+    out: dict = {}
+    for r in conn.execute(q, args).fetchall():
+        out.setdefault(r["player_name"], []).append(
+            (r["round_date"], r["differential"], r["rating"], r["slope"],
+             r["adjusted_score"]))
+    return out
+
+
+def r1_multiplier_impact(apply: bool = False,
+                         db_path: str | Path | None = None) -> dict:
+    """R1 impact sweep (Kerry-ratified 2026-07-16, sequenced 'sweep first
+    → report → apply'): recompute every current index with the ×0.96
+    multiplier removed and report the movement. apply=True flips the
+    handicap_settings multiplier dial to 1.0 (indexes recompute everywhere
+    they are read — the RECORD layer updates retroactively by design; paid
+    results are never touched, per the retroactivity boundary)."""
+    settings = get_handicap_settings(db_path)
+    lookback_months = int(settings.get("lookback_months", 12))
+    cutoff = (datetime.now()
+              - timedelta(days=lookback_months * 30.44)).strftime("%Y-%m-%d")
+    s_old = dict(settings, multiplier="0.96")
+    s_new = dict(settings, multiplier="1.0")
+    changed = []
+    same = 0
+    with _connect(db_path) as conn:
+        hist = _player_diff_history(conn, cutoff)
+    for name, rounds in hist.items():
+        diffs = [d for _, d, *_ in rounds][-20:]
+        old = compute_handicap_index(diffs, s_old)
+        new = compute_handicap_index(diffs, s_new)
+        if old is None and new is None:
+            continue
+        if old == new:
+            same += 1
+            continue
+        changed.append({"player_name": name, "index_096": old,
+                        "index_100": new,
+                        "delta": (round(new - old, 1)
+                                  if old is not None and new is not None
+                                  else None)})
+    changed.sort(key=lambda p: -(abs(p["delta"]) if p["delta"] else 0))
+    deltas = [p["delta"] for p in changed if p["delta"] is not None]
+    out = {
+        "current_multiplier": settings.get("multiplier"),
+        "players_with_index": same + len(changed),
+        "unchanged": same,
+        "changed": len(changed),
+        "mean_delta": round(sum(deltas) / len(deltas), 2) if deltas else 0,
+        "max_delta": max(deltas) if deltas else 0,
+        "top_moves": changed[:25],
+        "applied": False,
+    }
+    if apply:
+        update_handicap_settings({"multiplier": "1.0"}, db_path=db_path)
+        out["applied"] = True
+        out["new_multiplier"] = "1.0"
+    return out
+
+
+def ghin_comparison_analysis(db_path: str | Path | None = None) -> dict:
+    """Comparable-GHIN analysis (Kerry 2026-08-03): from TGF event scores
+    ONLY, build 18-hole scores the old GHIN way — combine consecutive
+    9-hole rounds chronologically (adj = a1+a2, rating = r1+r2, slope =
+    avg) — compute a WHS-style 18-hole index (best 8 of last 20, NO 0.96,
+    no time window, like real GHIN), and compare it to the player's TGF
+    index expressed as its 18-hole equivalent (9-hole index × 2).
+
+    Also validates the 75% onboarding rule: players with a manager-stamped
+    starting_handicap_18 (their external/GHIN handicap at onboarding) are
+    compared current-TGF-18 vs that original number.
+    """
+    settings = get_handicap_settings(db_path)
+    lookback_months = int(settings.get("lookback_months", 12))
+    cutoff = (datetime.now()
+              - timedelta(days=lookback_months * 30.44)).strftime("%Y-%m-%d")
+    ghin_settings = dict(settings, multiplier="1.0")
+
+    players = []
+    with _connect(db_path) as conn:
+        hist_all = _player_diff_history(conn, cutoff=None)
+        hist_win = _player_diff_history(conn, cutoff)
+        onboarded = conn.execute(
+            """SELECT customer_id,
+                      TRIM(COALESCE(first_name,'') || ' ' ||
+                           COALESCE(last_name,'')) AS nm,
+                      starting_handicap_18
+               FROM customers WHERE starting_handicap_18 IS NOT NULL"""
+        ).fetchall()
+        links = {r["player_name"]: r["customer_id"] for r in conn.execute(
+            "SELECT player_name, customer_id FROM handicap_player_links "
+            "WHERE customer_id IS NOT NULL").fetchall()}
+
+    for name, rounds in hist_all.items():
+        # GHIN-comparable: combine consecutive nines into 18s
+        combined = []
+        usable = [r for r in rounds
+                  if r[2] is not None and r[3] is not None
+                  and r[4] is not None]
+        for i in range(0, len(usable) - 1, 2):
+            d1, d2 = usable[i], usable[i + 1]
+            adj18 = d1[4] + d2[4]
+            rat18 = d1[2] + d2[2]
+            slp18 = (d1[3] + d2[3]) / 2.0
+            if not slp18:
+                continue
+            combined.append(round((adj18 - rat18) * 113.0 / slp18, 1))
+        ghin18 = compute_handicap_index(combined[-20:], ghin_settings)
+        # TGF side: current 9-hole index (live settings, 12-mo window)
+        win = hist_win.get(name) or []
+        tgf9 = compute_handicap_index([d for _, d, *_ in win][-20:], settings)
+        if ghin18 is None or tgf9 is None:
+            continue
+        tgf18 = round(tgf9 * 2, 1)
+        ratio = (round(tgf18 / ghin18, 3)
+                 if ghin18 and ghin18 >= 4.0 else None)
+        players.append({"player_name": name, "nines": len(usable),
+                        "combined_18s": len(combined),
+                        "tgf_index_9": tgf9, "tgf_index_18_equiv": tgf18,
+                        "ghin_comparable_18": ghin18, "ratio": ratio})
+
+    ratios = sorted(p["ratio"] for p in players
+                    if p["ratio"] is not None and p["combined_18s"] >= 6)
+    def _pct(q):
+        if not ratios:
+            return None
+        k = max(0, min(len(ratios) - 1, int(round(q * (len(ratios) - 1)))))
+        return ratios[k]
+    in_band = sum(1 for r in ratios if 0.75 <= r <= 0.90)
+
+    # 75% onboarding validation — original external handicap vs where the
+    # player's TGF index actually settled
+    onboarding = []
+    name_by_cid = {}
+    for nm, cid in links.items():
+        name_by_cid.setdefault(cid, nm)
+    for r in onboarded:
+        nm = name_by_cid.get(r["customer_id"])
+        match = next((p for p in players if p["player_name"] == nm), None)
+        if not match or not r["starting_handicap_18"]:
+            continue
+        onboarding.append({
+            "player_name": nm, "external_18": r["starting_handicap_18"],
+            "onboard_75pct_18": round(r["starting_handicap_18"] * 0.75, 1),
+            "settled_tgf_18": match["tgf_index_18_equiv"],
+            "settled_ratio": round(
+                match["tgf_index_18_equiv"] / r["starting_handicap_18"], 3)
+            if r["starting_handicap_18"] >= 4 else None,
+            "rounds_since": match["nines"]})
+
+    players.sort(key=lambda p: (p["ratio"] is None, p["ratio"] or 99))
+    return {
+        "method": ("GHIN-comparable = consecutive TGF nines combined into "
+                   "18s (adj sum, rating sum, slope avg), WHS best-8-of-20, "
+                   "no 0.96, no time window; TGF-18 = 9-hole index × 2 "
+                   "(live settings)"),
+        "summary": {
+            "players_compared": len(ratios),
+            "ratio_mean": round(sum(ratios) / len(ratios), 3) if ratios else None,
+            "ratio_median": _pct(0.5), "ratio_p25": _pct(0.25),
+            "ratio_p75": _pct(0.75),
+            "pct_in_75_90_band": (round(100.0 * in_band / len(ratios), 1)
+                                  if ratios else None),
+        },
+        "players": players,
+        "onboarding_75pct": sorted(onboarding,
+                                   key=lambda o: o["settled_ratio"] or 99),
+    }
+
+
 def repair_handicap_adjusted_scores(cells: list[dict], dry_run: bool = True,
                                     db_path: str | Path = DB_PATH) -> dict:
     """Repair 2026 handicap_rounds whose adjusted_score was imported as

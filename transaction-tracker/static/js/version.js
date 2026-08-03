@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.192.0";
+window.TGF_VERSION = "2.192.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.192.1",
+    date: "2026-08-03",
+    changes: [
+      "Two handicap analyses land as MCP bridge commands (Kerry): scoring-hcp-ghin-compare builds each player's comparable-GHIN 18-hole index from TGF event scores only — consecutive nines combined into 18s the old GHIN way, WHS best-8-of-20, no 0.96, no time window — and reports the TGF-to-GHIN ratio distribution (testing the '75-90% of GHIN' rule of thumb) plus a validation of the 75% onboarding rule against players with stamped starting handicaps. scoring-hcp-r1-impact runs the R1 sweep the 7/16 ratification sequenced (recompute every index without the ×0.96 and report movement); :apply flips the multiplier dial to 1.0.",
+    ],
+  },
   {
     version: "2.192.0",
     date: "2026-08-03",
