@@ -2049,8 +2049,12 @@
             ["Triple Bogey", -1], ["Double Bogey", 0], ["Bogey", 1], ["Par", 2, null, "par"],
             ["Birdie", 4], ["Eagle", 8], ["Double Eagle", 16], ["Hole-in-One", 8, null, "hio"],
         ]);
-        const netChart = champ => ({ caption: "Net Stableford · per hole",
-            valHeader: champ ? "Reg" : "Points", champ, rows: netRows(champ) });
+        // champPrimary (Kerry 2026-08-02, post-reset): the Cup is decided
+        // at the Championships, so its chart leads with the CHAMP column —
+        // bold on its tinted band — while REG steps back muted.
+        const netChart = (champ, champPrimary) => ({ caption: "Net Stableford · per hole",
+            valHeader: champ ? "Reg" : "Points", champ,
+            champPrimary: !!champPrimary, rows: netRows(champ) });
         const grossChart = { caption: "Gross Stableford · per hole",
             valHeader: "Points", champ: false, rows: grossRows };
 
@@ -2070,9 +2074,9 @@
         const pts = n => n < 0 ? "−" + Math.abs(n) : String(n);
         const scRow = (label, cells, out, kind) => ({
             label, cells, out: String(out),
-            nc: kind === "score" ? "#1B1B1B" : "#2563EB",
+            nc: kind === "score" ? "#1B1B1B" : (kind === "champ" ? "#BF5700" : "#2563EB"),
             wt: kind === "par" ? 400 : 700,
-            rbg: kind === "pts" ? "#F1F5FB" : "#FFFFFF",
+            rbg: kind === "pts" ? "#F1F5FB" : (kind === "champ" ? "#FCF0E4" : "#FFFFFF"),
             btop: kind === "score" ? "2px solid #1B1B1B" : "1px solid #EDECE8",
         });
         const GROSS = [3, 4, 5, 3, 6, 7, 3, 5, 4], DOTS = [1, 0, 0, 1, 1, 0, 0, 0, 0];
@@ -2086,6 +2090,23 @@
                 scRow("GROSS SCORE", scoreCells(GROSS, null), sum(GROSS), "score"),
                 scRow("NET SCORE", scoreCells(NET, DOTS), sum(NET), "score"),
                 scRow("NET PTS", plainCells(NETPTS.map(pts)), sum(NETPTS), "pts"),
+            ],
+        };
+        // Championship worked example for THE FELLOWSHIP CUP (Kerry
+        // 2026-08-02): the Cup is decided at the Championships, so its
+        // example scores the BONUS scale — every hole +1 over regular
+        // (triple bogey's −1 rides up to 0), same card otherwise. The
+        // regular NET PTS line stays for comparison; CHAMP PTS leads.
+        const CHPTS = NETPTS.map(p => p + 1);
+        const scChamp = {
+            strokes: true,
+            caption: "Worked example at a Championship — every hole carries a +1 bonus point: eagle +4, birdie +3, par +2, bogey +1, double bogey or worse 0.",
+            rows: [
+                scRow("PAR", plainCells(PAR), sum(PAR), "par"),
+                scRow("GROSS SCORE", scoreCells(GROSS, null), sum(GROSS), "score"),
+                scRow("NET SCORE", scoreCells(NET, DOTS), sum(NET), "score"),
+                scRow("REG PTS", plainCells(NETPTS.map(pts)), sum(NETPTS), "pts"),
+                scRow("CHAMP PTS", plainCells(CHPTS.map(pts)), sum(CHPTS), "champ"),
             ],
         };
         const CG = [3, 6, 5, 3, 3, 7, 3, 5, 4], CGP = [4, 0, 1, 2, 8, -1, 2, 1, 2];
@@ -2122,7 +2143,7 @@
                     S("The Points", "Net Stableford, hole by hole (chart below). Holes can go negative; your event total never drops below 0. At the City and TGF Championships, every hole is worth one extra point."),
                 ],
                 footnote: "Comes with your NET Bundle — the same points that power your city’s race power the Cup.",
-                chart: netChart(true), scorecard: scNet,
+                chart: netChart(true, true), scorecard: scChamp,
             },
             playersCup: {
                 title: { pre: "How ", name: "The Players Cup", post: " Works" },
@@ -2177,10 +2198,10 @@
             const rows = ch.rows.map(r => {
                 const bg = r.kind === "par" ? "#FBFAF8" : (r.kind === "hio" ? "#FCF6EF" : "transparent");
                 const champCell = ch.champ
-                    ? `<span class="hiwc-val champ${r.champNeg ? " neg" : ""}">${r.champ}</span>` : "";
+                    ? `<span class="hiwc-val champ${r.champNeg ? " neg" : ""}"${ch.champPrimary ? ' style="font-weight:800;color:#BF5700;background:rgba(191,87,0,.12);"' : ''}>${r.champ}</span>` : "";
                 return `<div class="hiwc-row" style="background:${bg};">`
                     + `<span class="hiwc-lab" style="font-weight:${r.kind === "hio" ? 700 : 500};">${r.label}</span>`
-                    + `<span class="hiwc-val${r.regNeg ? " neg" : ""}">${r.reg}</span>`
+                    + `<span class="hiwc-val${r.regNeg ? " neg" : ""}"${ch.champPrimary && !r.regNeg ? ' style="color:#9CA3AF;font-weight:500;"' : ''}>${r.reg}</span>`
                     + champCell + `</div>`;
             }).join("");
             return `<div class="hiwc"><div class="hiwc-head">`

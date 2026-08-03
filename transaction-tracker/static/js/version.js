@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.189.0";
+window.TGF_VERSION = "2.189.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.189.1",
+    date: "2026-08-02",
+    changes: [
+      "The Fellowship Cup's HOW IT WORKS leads with championship scoring (Kerry): the Net Stableford chart's CHAMP column takes the bold orange treatment on a deeper tinted band while REG steps back muted, and the example scorecard now works the Championship BONUS scale — a new orange CHAMP PTS line (every hole +1: eagle +4, birdie +3, par +2, bogey +1, double bogey or worse 0, totaling 17 on the sample card) above the regular REG PTS line kept for comparison. The city NET / Monthly / Fall modals keep the regular-emphasis chart and card.",
+    ],
+  },
   {
     version: "2.189.0",
     date: "2026-08-02",
