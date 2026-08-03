@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.194.2";
+window.TGF_VERSION = "2.194.3";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.194.3",
+    date: "2026-08-03",
+    changes: [
+      "Season-standings payout lines read friendly on the Spotlight (spotted on live Callaway/Niester payloads): 'City Net — SAN ANTONIO Net 2026 final standings — 2 place' now renders 'City Points Race — 2nd Place | Season Standings'.",
+    ],
+  },
   {
     version: "2.194.2",
     date: "2026-08-03",

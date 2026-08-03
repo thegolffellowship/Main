@@ -9698,6 +9698,8 @@ _PAYOUT_CAT_LABELS = {
     "hole_in_one": "Hole in One",
     "mvp": "City MVP", "tgf_mvp": "TGF MVP",
     "monthly_points": "Monthly Points", "other": "Other",
+    # season-standings payouts store their category as a display string
+    "City Net": "City Points Race", "City Gross": "City Points Race",
 }
 
 
@@ -10150,9 +10152,18 @@ def get_player_spotlight(customer_id: int,
             label = _PAYOUT_CAT_LABELS.get(cat) or (
                 cat.replace("_", " ").title() if cat else "Payout")
             bits = []
+            # "SAN ANTONIO Net 2026 final standings — 2 place" (season
+            # payout rows) → "2nd Place | Season Standings"
+            fs_ = re.search(r"final standings\s*[—\-]\s*(\d+)\s*place",
+                            desc, re.I)
+            if fs_:
+                n_ = int(fs_.group(1))
+                suf_ = ("th" if 10 <= n_ % 100 <= 13
+                        else {1: "st", 2: "nd", 3: "rd"}.get(n_ % 10, "th"))
+                bits.append(f"{n_}{suf_} Place | Season Standings")
             m = re.search(r"\b(\d+)(st|nd|rd|th)\b", desc)
             tied = "(T)" in desc
-            if m and cat != "skins":
+            if m and cat != "skins" and not fs_:
                 bits.append(f"{'T' if tied else ''}{m.group(1)}{m.group(2)} Place")
             if cat == "skins":
                 hm = re.search(r"holes?\s+([\d,\s&]+)", desc, re.I)
