@@ -8000,6 +8000,24 @@ def get_points_race_live(race_key: str, force_refresh: bool = False,
     except Exception:
         pass
 
+    # Championship course per chapter (Kerry 2026-08-03: the course name
+    # rides a second line under the CITY CHAMPIONSHIP row) — off the
+    # championship-day events, never guessed. Cross-chapter races (the
+    # cups) carry both chapters' courses; the row picks by player chapter.
+    champ_courses: dict = {}
+    if champ_date:
+        try:
+            with _connect(db_path) as _c:
+                for _e in _c.execute(
+                        """SELECT chapter, course FROM events
+                           WHERE UPPER(item_name) LIKE '%CHAMPIONSHIP%'
+                             AND event_date = ? AND COALESCE(course,'') != ''""",
+                        (champ_date,)).fetchall():
+                    if _e["chapter"]:
+                        champ_courses[_e["chapter"]] = _e["course"]
+        except Exception:
+            pass
+
     return {**{k: v for k, v in base.items() if k != "standings"},
             "standings": rows,
             # champions follow the LIVE final order, not the season order
@@ -8007,6 +8025,7 @@ def get_points_race_live(race_key: str, force_refresh: bool = False,
                           if base.get("race_final") else None),
             "champ": {k: v for k, v in live.items() if k != "players"},
             "champ_date": champ_date,
+            "champ_courses": champ_courses,
             "champ_scoring": live.get("scoring", 0),
             "champ_field": live.get("field", 0)}
 

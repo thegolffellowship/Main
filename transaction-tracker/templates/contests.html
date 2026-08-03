@@ -5944,12 +5944,20 @@
             // Live-overlay rows carry today's championship figures so the
             // drill-down can paint the CITY CHAMPIONSHIP line without a
             // second fetch (the season endpoint has neither field).
+            // Chapter + championship course ride each row (Kerry
+            // 2026-08-03: "[CHAPTER] CITY CHAMPIONSHIP" + the course on a
+            // second line) — cross-chapter cup boards pick the player's
+            // own chapter's championship.
+            const _rowCh = r.chapter || r.player_chapter || d.chapter || "";
+            const _rowCourse = ((d.champ_courses || {})[_rowCh]) || "";
             const champAttrs = (r.champ_points != null
                 ? ` data-champ-pts="${escapeHtml(String(r.champ_points))}"` : "")
                 + (r.champ_rank
                 ? ` data-champ-pos="${escapeHtml(String(r.champ_rank))}"` : "")
                 + (d.champ_date
                 ? ` data-champ-date="${escapeHtml(String(d.champ_date))}"` : "")
+                + (_rowCh ? ` data-champ-chapter="${escapeHtml(_rowCh)}"` : "")
+                + (_rowCourse ? ` data-champ-course="${escapeHtml(_rowCourse)}"` : "")
                 + (r.customer_id && champIds.has(r.customer_id)
                 ? ` data-champion="${coChamp ? "co" : "1"}"` : "")
                 + (r.champ_thru
@@ -6506,6 +6514,8 @@
                             champThru: tr.dataset.champThru || null,
                             champPos: tr.dataset.champPos || null,
                             champDate: tr.dataset.champDate || null,
+                            champChapter: tr.dataset.champChapter || null,
+                            champCourse: tr.dataset.champCourse || null,
                             netRace: !/gross/.test(raceKey || ""),
                         }) : '<span style="color:var(--text-muted);">No season detail for this player yet.</span>');
                         hBody.dataset.loaded = "1";
@@ -6551,6 +6561,8 @@
                 champThru: tr.dataset.champThru || null,
                 champPos: tr.dataset.champPos || null,
                 champDate: tr.dataset.champDate || null,
+                champChapter: tr.dataset.champChapter || null,
+                champCourse: tr.dataset.champCourse || null,
                 champRace: raceKey,
                 champCid: tr.dataset.cid || null,
                 netRace: !/gross/.test(raceKey || ""),

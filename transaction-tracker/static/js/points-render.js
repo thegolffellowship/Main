@@ -648,21 +648,30 @@
             // reading "thru 9:00 AM" is nonsense
             const _ccThru = opts.champThru ? ` <span style="font-weight:400;font-size:0.85em;color:#9A5B2E;">${/\d:\d\d/.test(String(opts.champThru)) ? "tees off" : "thru"} ${escapeHtml(String(opts.champThru))}</span>` : "";
             // With a race + customer the line expands to the LIVE hole-by-
-            // hole card (championship day). Chevron only when expandable so
-            // the off-season row stays inert.
+            // hole card (championship day). Chevron sits LEFT of the name
+            // like every other expandable row (Kerry 2026-08-03); only
+            // when expandable so the off-season row stays inert.
             const _ccExpandable = !!(opts.champRace && opts.champCid);
             const _ccChev = _ccExpandable
-                ? ' <span class="pr-cc-chev" style="color:#BF5700;font-size:0.85rem;" title="Live hole-by-hole">&#9656;</span>'
+                ? '<span class="pr-cc-chev" style="color:#BF5700;font-size:0.85rem;" title="Live hole-by-hole">&#9656;</span> '
                 : '';
+            // "[CHAPTER] CITY CHAMPIONSHIP" with the course on a second
+            // line (Kerry 2026-08-03) — no more "Total"
+            const _ccLabel = `${opts.champChapter ? escapeHtml(String(opts.champChapter).toUpperCase()) + " " : ""}CITY CHAMPIONSHIP`;
+            const _ccCourse = opts.champCourse
+                ? `<span style="display:block;font-weight:400;color:var(--text-muted);font-size:0.85em;">${escapeHtml(opts.champCourse)}</span>`
+                : "";
             // Cells align to the REAL columns (Kerry 2026-08-03: date on
             // the left, points inside the bordered POINTS column, POS
             // populated) instead of a colspan guess.
             const ccCells = [];
             for (let ci = 0; ci < width; ci++) {
                 if (ci === dateCol) {
-                    ccCells.push(`<td style="white-space:nowrap;color:#BF5700;padding-left:6px;padding-right:6px;">${opts.champDate ? escapeHtml(prFmtAwardDate(opts.champDate, compact)) : ""}</td>`);
+                    // default cell padding so the date indents exactly
+                    // like the regular event rows (Kerry 2026-08-03)
+                    ccCells.push(`<td style="white-space:nowrap;color:#BF5700;">${opts.champDate ? escapeHtml(prFmtAwardDate(opts.champDate, compact)) : ""}</td>`);
                 } else if (ci === evtCol) {
-                    ccCells.push(`<td class="pr-wrap" style="font-weight:800;color:#BF5700;">CITY CHAMPIONSHIP Total${_ccThru}${_ccChev}</td>`);
+                    ccCells.push(`<td class="pr-wrap" style="font-weight:800;color:#BF5700;">${_ccChev}${_ccLabel}${_ccThru}${_ccCourse}</td>`);
                 } else if (ci === ptsCol) {
                     ccCells.push(`<td style="text-align:center;font-weight:800;color:#BF5700;border-left:2px solid #cbd5e1;border-right:2px solid #cbd5e1;padding-left:6px;padding-right:6px;">${escapeHtml(_cc)}</td>`);
                 } else if (ci === posCol) {

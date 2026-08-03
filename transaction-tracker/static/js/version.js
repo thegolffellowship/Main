@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.196.2";
+window.TGF_VERSION = "2.196.3";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.196.3",
+    date: "2026-08-03",
+    changes: [
+      "CITY CHAMPIONSHIP drill-down row matches its neighbors exactly (Kerry): the date cell uses the same default indent as every event row, the expand chevron sits LEFT of the name like the other expandable lines, the label reads '[CHAPTER] CITY CHAMPIONSHIP' (no more 'Total'), and the championship course renders on a second line beneath it. The course comes off the championship-day event per chapter (payload champ_courses) - cross-chapter cup boards pick each player's own chapter's championship.",
+    ],
+  },
   {
     version: "2.196.2",
     date: "2026-08-03",
