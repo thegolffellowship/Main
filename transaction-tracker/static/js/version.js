@@ -1,5 +1,15 @@
-window.TGF_VERSION = "2.194.1";
+window.TGF_VERSION = "2.194.2";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.194.2",
+    date: "2026-08-03",
+    changes: [
+      "ONE hole-by-hole card standard (Kerry: 'adopt the same style setting for the City Championship scorecard display on everything, including the column widths'): prCardStyle() now feeds BOTH the championship card and the imported-event scorecards — cell metrics, column widths, label column, section borders, points band, and the vs-par marks come from a single place so the grids can never drift.",
+      "Column padding equalized to the POINTS RESET standard (Kerry: 'It's 6 right?'): every stat column on the standings tables — RANK, POINTS/SEASON, POINTS RESET, ROUNDS, BUY-IN, and the live MOVE/TODAY/THRU set — plus the drill-down POINTS/Date/POS headers, body cells, and the CITY CHAMPIONSHIP row all carry 6px horizontal padding.",
+      "Snapshot email measures from the Lone Star Cup seat line (Kerry: 'making your city's Lone Star Cup team is an even lower bar'): the navy LSC block now shows BOTH cup paths with the last seat's points and the player's gap to it — inside-the-line players see their cushion, chasers see exactly how few points a seat costs. The spotlight LSC payload carries seat_cut_points / my_points / gap_to_seat per path.",
+      "Snapshot email fixes from the live Youngs payload: a non-enrolled player who out-points every enrolled player no longer reads as negative points back (the player joins their own comparison field), non-entered boards now show in WHERE YOU STAND with a '(not entered)' tag, and winnings labels polish — 'City MVP', 'TGF MVP — combined same-day pot', 'Closest to Pin — Hole 3'.",
+    ],
+  },
   {
     version: "2.194.1",
     date: "2026-08-03",

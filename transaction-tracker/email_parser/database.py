@@ -9694,8 +9694,10 @@ def _spotlight_assign_payouts(standings: list, pp: dict | None,
 _PAYOUT_CAT_LABELS = {
     "team_net": "Team Net", "individual_net": "Individual Net",
     "individual_gross": "Individual Gross", "skins": "Skins",
-    "closest_to_pin": "Closest to Pin", "hole_in_one": "Hole in One",
-    "mvp": "MVP", "monthly_points": "Monthly Points", "other": "Other",
+    "closest_to_pin": "Closest to Pin", "ctp": "Closest to Pin",
+    "hole_in_one": "Hole in One",
+    "mvp": "City MVP", "tgf_mvp": "TGF MVP",
+    "monthly_points": "Monthly Points", "other": "Other",
 }
 
 
@@ -9846,7 +9848,11 @@ def get_player_spotlight(customer_id: int,
                     else r.get("total_points"))
         pool = [r for r in standings if val(r) is not None]
         if any(r.get("enrolled") for r in pool):
-            pool = [r for r in pool if r.get("enrolled")]
+            # the player belongs in their own comparison field even when
+            # not bought in — otherwise a non-enrolled player who out-
+            # scores every enrolled player reads as NEGATIVE points back
+            pool = [r for r in pool if r.get("enrolled")
+                    or r.get("customer_id") == customer_id]
         if not pool:
             return {}
         lead = max(val(r) for r in pool)
@@ -10034,35 +10040,57 @@ def get_player_spotlight(customer_id: int,
                     1 for s in _chp.get("seats", [])
                     if str(s.get("seat", "")).startswith("THE FELLOWSHIP CUP")
                 ) or 6
-            def _path_place(rows, ch_field):
-                place = 0
+            def _path_stats(rows, ch_field, seats):
+                # Place among the enrolled chapter field, PLUS the seat-
+                # line measurement (Kerry 2026-08-03: "making your city's
+                # Lone Star Cup team is an even lower bar. Measuring from
+                # that on either the Fellowship or Players Cup would be
+                # really good"): the points the LAST seat currently holds
+                # and this player's gap to it (positive = inside).
+                def _val(r):
+                    return (r.get("points_reset")
+                            if r.get("points_reset") is not None
+                            else r.get("total_points"))
+                place, vals, mine, seen = 0, [], None, False
                 for r in rows or []:
-                    same = (r.get(ch_field) or "").strip() == my_ch
-                    if not same:
+                    if (r.get(ch_field) or "").strip() != my_ch:
                         continue
                     if r.get("customer_id") == customer_id:
-                        return place + 1
+                        mine, seen = _val(r), True
+                        continue
                     if r.get("enrolled"):
-                        place += 1
-                return None
+                        vals.append(_val(r))
+                        if not seen:
+                            place += 1
+                if not seen:
+                    return None
+                cut = (vals[seats - 1] if len(vals) >= seats
+                       and vals[seats - 1] is not None else None)
+                return {"place": place + 1, "seats": seats,
+                        "seat_cut_points": cut, "my_points": mine,
+                        "gap_to_seat": (round(mine - cut, 2)
+                                        if mine is not None and cut is not None
+                                        else None)}
 
             paths = []
             if cup_d:
-                p = _path_place(cup_d.get("standings"), "chapter")
+                p = _path_stats(cup_d.get("standings"), "chapter", fc_seats)
                 if p:
-                    paths.append({"path": "THE FELLOWSHIP CUP",
-                                  "place": p, "seats": fc_seats})
+                    paths.append({"path": "THE FELLOWSHIP CUP", **p})
             if gross_d:
-                p = _path_place(gross_d.get("standings"), "player_chapter")
+                p = _path_stats(gross_d.get("standings"), "player_chapter", 4)
                 if p:
-                    paths.append({"path": "THE PLAYERS CUP",
-                                  "place": p, "seats": 4})
+                    paths.append({"path": "THE PLAYERS CUP", **p})
             if paths:
                 best = min(paths, key=lambda x: (x["place"] > x["seats"],
                                                  x["place"] / x["seats"]))
                 lsc = {"mode": "in_hunt" if enrolled_any else "hypothetical",
                        "chapter": my_ch, "path": best["path"],
-                       "place": best["place"], "seats": best["seats"]}
+                       "place": best["place"], "seats": best["seats"],
+                       "seat_cut_points": best.get("seat_cut_points"),
+                       "my_points": best.get("my_points"),
+                       "gap_to_seat": best.get("gap_to_seat"),
+                       "paths": paths}
 
         # Post-deadline the line narrows to players in the running
         if lsc and not _pre_deadline and not enrolled_any \
@@ -10137,7 +10165,7 @@ def get_player_spotlight(customer_id: int,
                 elif cm:
                     n_ = int(cm.group(1))
                     bits.append(f"{n_} skin{'s' if n_ != 1 else ''}")
-            if cat == "closest_to_pin":
+            if cat in ("closest_to_pin", "ctp"):
                 pm = re.search(r"#\s*(\d+)", desc)
                 if pm:
                     bits.append(f"Hole {pm.group(1)}")
@@ -10155,6 +10183,11 @@ def get_player_spotlight(customer_id: int,
                     bits.append(_w)
             if bits:
                 return f"{label} — {' | '.join(bits)}"
+            # desc that merely restates the label collapses ("TGF MVP
+            # (combined same-day pot)" → "TGF MVP — combined same-day pot")
+            if desc and desc.lower().startswith(label.lower()):
+                rest = desc[len(label):].strip(" -—()")
+                return label + (f" — {rest}" if rest else "")
             return label + (f" — {desc}" if desc
                             and desc.lower() != label.lower() else "")
 
@@ -13869,7 +13902,7 @@ def build_player_snapshot_email(customer_id: int,
     idx18 = spot.get("handicap_index_18")
     idx9 = round(idx18 / 2, 1) if idx18 is not None else None
 
-    back = feature["points_back"]
+    back = max(feature["points_back"], 0)
     lead = feature.get("leader_points")
     within = feature.get("n_within_15")
     rank = feature.get("rank")
@@ -13881,15 +13914,20 @@ def build_player_snapshot_email(customer_id: int,
     serif = "font-family:Georgia,'Times New Roman',serif;"
     sans = "font-family:-apple-system,'Helvetica Neue',Arial,sans-serif;"
 
-    # WHERE YOU STAND rows — every race the player is enrolled in
+    # WHERE YOU STAND rows — every board the player appears on. A player
+    # who hasn't bought in still sees where they'd stand (that IS the
+    # snapshot's point for them); the race carries a muted "not entered"
+    # tag rather than being hidden.
     stand_rows = ""
     for r in spot.get("races", []):
-        if not r.get("enrolled"):
+        if not r.get("enrolled") and r.get("points_back") is None:
             continue
         pb = r.get("points_back")
+        tag = ("" if r.get("enrolled") else
+               f' <span style="font-size:10px;color:{MUTE};font-weight:400;">(not entered)</span>')
         stand_rows += f"""
         <tr>
-          <td style="padding:7px 10px;border-bottom:1px solid #E5E7EB;font-weight:700;">{r.get('label', '')}</td>
+          <td style="padding:7px 10px;border-bottom:1px solid #E5E7EB;font-weight:700;">{r.get('label', '')}{tag}</td>
           <td style="padding:7px 10px;border-bottom:1px solid #E5E7EB;text-align:center;white-space:nowrap;">{r.get('rank', '—')} of {r.get('n_players', '—')}</td>
           <td style="padding:7px 10px;border-bottom:1px solid #E5E7EB;text-align:center;font-weight:700;">{n1(r.get('points_reset') if r.get('points_reset') is not None else r.get('total_points'))}</td>
           <td style="padding:7px 10px;border-bottom:1px solid #E5E7EB;text-align:center;color:{'#15803D' if pb == 0 else DARK};white-space:nowrap;">{'leader' if pb == 0 else (f'{n1(pb)} back' if pb is not None else '—')}</td>
@@ -13905,8 +13943,38 @@ def build_player_snapshot_email(customer_id: int,
         <tbody>{stand_rows}</tbody>
       </table>""" if stand_rows else ""
 
-    # LONE STAR CUP line — factual, same modes as the Spotlight
+    # LONE STAR CUP line — factual, same modes as the Spotlight. For the
+    # hunt/hypothetical modes it measures from the SEAT LINE on each cup
+    # path (Kerry 2026-08-03: "making your city's Lone Star Cup team is
+    # an even lower bar. Measuring from that on either the Fellowship or
+    # Players Cup would be really good").
     lsc = spot.get("lone_star_cup") or {}
+
+    def _seat_line(p):
+        gap, cut = p.get("gap_to_seat"), p.get("seat_cut_points")
+        if gap is None:
+            return (f"<b>{p.get('path', '')}</b> path: spot "
+                    f"{p.get('place')} for {p.get('seats')} seats.")
+        if gap >= 0:
+            return (f"<b>{p.get('path', '')}</b> path: you'd be <b>inside "
+                    f"the seat line</b> — spot {p.get('place')} of "
+                    f"{p.get('seats')}, {n1(gap)} clear of the cut.")
+        return (f"<b>{p.get('path', '')}</b> path: the last seat sits at "
+                f"{n1(cut)} — you're <b>{n1(-gap)} "
+                f"point{'' if abs(gap) == 1 else 's'} from a seat</b>.")
+
+    def _seat_lines():
+        paths = lsc.get("paths") or []
+        lines = "".join(f'<div style="margin:3px 0;">{_seat_line(p)}</div>'
+                        for p in paths)
+        lead = ("Winning it all isn't the only prize — making your city's "
+                "Lone Star Cup team is an even lower bar, and you're "
+                "already knocking:"
+                if lsc.get("mode") == "hypothetical" else
+                "Winning the cup isn't the only prize — your city's Lone "
+                "Star Cup seats run through these same standings:")
+        return f"{lead}{lines}" if lines else None
+
     lsc_bits = {
         "seat": lambda: ("Your current Lone Star Cup projection: "
                          f"<b>{lsc.get('seat', 'a seat')}</b>"
@@ -13916,27 +13984,22 @@ def build_player_snapshot_email(customer_id: int,
         "alternate": lambda: ("You currently project as "
                               f"<b>alternate #{lsc.get('alternate_rank')}</b> "
                               "for the Lone Star Cup — one seat away."),
-        "in_hunt": lambda: "The Lone Star Cup seats run through these standings — a strong fall puts your name on that team sheet.",
-        "hypothetical": lambda: (
-            (f"If the season ended today and you were in, you'd hold a "
-             f"Lone Star Cup seat off the <b>{lsc.get('path', '')}</b> path "
-             f"— spot {lsc.get('place')} of {lsc.get('seats')}.")
-            if (lsc.get("place") or 99) <= (lsc.get("seats") or 0) else
-            (f"On the <b>{lsc.get('path', '')}</b> path you'd currently sit "
-             f"{lsc.get('place')} for {lsc.get('seats')} Lone Star Cup seats "
-             "— inside striking distance.")),
+        "in_hunt": _seat_lines,
+        "hypothetical": _seat_lines,
     }.get(lsc.get("mode"))
+    lsc_text = lsc_bits() if lsc_bits else None
     lsc_html = (f"""
-      <div style="background:{NAVY};color:#fff;border-radius:8px;padding:12px 16px;margin:18px 0 0;{sans}font-size:13px;">
+      <div style="background:{NAVY};color:#fff;border-radius:8px;padding:12px 16px;margin:18px 0 0;{sans}font-size:13px;line-height:1.5;">
         <div style="{serif}font-size:12px;letter-spacing:0.12em;text-transform:uppercase;color:#9DB4D6;margin-bottom:3px;">Lone Star Cup</div>
-        {lsc_bits()}
-      </div>""" if lsc_bits else "")
+        {lsc_text}
+      </div>""" if lsc_text else "")
 
     _lbl = feature.get("label", "")
     _race = _lbl if _lbl.upper().startswith("THE ") else f"the {_lbl}"
     story_lead = (
         f"First place carries <b>{n1(lead)}</b> into the fall. You carry "
-        f"<b>{n1(seed)}</b> — <b>{n1(back)} points off the lead</b> in "
+        f"<b>{n1(seed)}</b> — <b>{n1(back)} "
+        f"point{'' if back == 1 else 's'} off the lead</b> in "
         f"{_race}"
         if back else
         f"You lead {_race} at <b>{n1(seed)}</b> — "
@@ -13947,7 +14010,8 @@ def build_player_snapshot_email(customer_id: int,
         "does on the PGA: bring the field back within reach, then let the "
         "fall decide it." if within else "")
 
-    subject = (f"Your TGF Snapshot — {n1(back)} points off the lead"
+    subject = (f"Your TGF Snapshot — {n1(back)} "
+               f"point{'' if back == 1 else 's'} off the lead"
                if back else f"Your TGF Snapshot — you're the one they're chasing")
 
     html = f"""

@@ -253,6 +253,33 @@
         });
     }
 
+    // THE hole-by-hole card style standard (Kerry 2026-08-03: "adopt the
+    // same style setting for the City Championship scorecard display on
+    // everything, including the column widths"). prRenderScorecard and
+    // prRenderChampCard both destructure from here — cell metrics, label
+    // column, section borders, tinted points band, and the vs-par
+    // circle/square marks come from ONE place so the grids stay
+    // identical. Change values here, never inline in a renderer.
+    function prCardStyle(compact) {
+        return {
+            td: `padding:${compact ? "1px 1px" : "2px 6px"};text-align:center;border:1px solid #e2e8f0;min-width:${compact ? "1.1em" : "2em"};white-space:nowrap;`,
+            lbl: `padding:${compact ? "1px 2px" : "2px 8px"};border:1px solid #e2e8f0;font-weight:600;color:#475569;text-align:left;white-space:nowrap;`,
+            fs: compact ? "0.58rem" : "0.8rem",
+            spanW: compact ? "1.08em" : "1.4em",
+            sectTop: "border-top:2px solid #1B1B1B;",
+            sectBot: "border-bottom:2px solid #1B1B1B;",
+            grey: "background:#EFF4FF;color:#1D4ED8;",
+            deco: d => {
+                if (d == null) return "";
+                if (d <= -2) return "border:1.5px solid #dc2626;border-radius:50%;box-shadow:0 0 0 2px #fff,0 0 0 3.5px #dc2626;";
+                if (d === -1) return "border:1.5px solid #dc2626;border-radius:50%;";
+                if (d === 1) return "border:1.5px solid #2563eb;";
+                if (d >= 2) return "border:1.5px solid #2563eb;box-shadow:0 0 0 2px #fff,0 0 0 3.5px #2563eb;";
+                return "";
+            },
+        };
+    }
+
     // The live championship hole-by-hole card, PGA-Tour style (Kerry
     // 2026-08-01): BOTH nines always render, every hole showing, a dash
     // until a score lands — exactly how the Tour app shows a player who
@@ -293,35 +320,17 @@
             return head + statline + plusNote + `<span style="color:var(--text-muted);">No holes posted yet.</span>`;
         }
         const compact = prIsCompact();
-        // Every HOLE column is the SAME fixed width (Kerry 2026-08-01) —
-        // min-width let a circled score stretch its own column and the
-        // grid read ragged. The sum column sizes itself.
-        const holeW = compact ? "1.7em" : "2.2em";
-        const td = `padding:${compact ? "2px 0" : "3px 2px"};text-align:center;border:1px solid #e2e8f0;width:${holeW};max-width:${holeW};overflow:hidden;white-space:nowrap;`;
-        const sumTd = `padding:${compact ? "2px 2px" : "3px 6px"};text-align:center;border:1px solid #e2e8f0;min-width:${compact ? "1.6em" : "2.2em"};white-space:nowrap;`;
-        const lbl = `padding:${compact ? "2px 3px" : "3px 8px"};border:1px solid #e2e8f0;font-weight:600;color:#475569;text-align:left;white-space:nowrap;`;
-        const fs = compact ? "0.6rem" : "0.8rem";
+        // ONE style standard for every hole-by-hole card (Kerry
+        // 2026-08-03: "adopt the same style setting for the City
+        // Championship scorecard display on everything, including the
+        // column widths") — this card and prRenderScorecard both build
+        // from prCardStyle, so the grids can never drift apart. Unplayed
+        // holes keep the Tour-style dash instead of the scorecard's blank
+        // cell — this card is live.
+        const { td, lbl, fs, spanW, sectTop, sectBot, grey, deco } = prCardStyle(compact);
         const dash = '<span style="color:#9CA3AF;">-</span>';
         const sumOr = (hs, k, fmt) => hs.some(h => h[k] != null)
             ? (fmt || String)(hs.reduce((a, h) => a + (h[k] ?? 0), 0)) : dash;
-        // Same visual grammar as the imported scorecards
-        // (prRenderScorecard, Kerry 2026-08-03: "It should follow the
-        // formatting of the other scorecards from previous events"): dark
-        // HOLE header, blue course facts, thick-bordered score section,
-        // points on the tinted band. Unplayed holes keep the Tour-style
-        // dash instead of the scorecard's blank cell — this card is live.
-        const sectTop = "border-top:2px solid #1B1B1B;";
-        const sectBot = "border-bottom:2px solid #1B1B1B;";
-        const grey = "background:#EFF4FF;color:#1D4ED8;";
-        const spanW = compact ? "1.2em" : "1.5em";
-        const deco = d => {
-            if (d == null) return "";
-            if (d <= -2) return "border:1.5px solid #dc2626;border-radius:50%;box-shadow:0 0 0 2px #fff,0 0 0 3.5px #dc2626;";
-            if (d === -1) return "border:1.5px solid #dc2626;border-radius:50%;";
-            if (d === 1) return "border:1.5px solid #2563eb;";
-            if (d >= 2) return "border:1.5px solid #2563eb;box-shadow:0 0 0 2px #fff,0 0 0 3.5px #2563eb;";
-            return "";
-        };
         const grossMode = card.scoring === "gross";
         const L = compact
             ? { gs: "GROSS", ns: "NET", pts: grossMode ? "G PTS" : "PTS" }
@@ -345,11 +354,11 @@
                 : `<td style="${td}${sectTop}font-weight:700;position:relative;">${dotsMark(h)}${scoreSpan(h.net, h.par != null ? h.net - h.par : null)}</td>`);
             const ptsRow = cells(h => `<td style="${td}${grey}${sectBot}">${h.pts != null ? h.pts : dash}</td>`);
             return `<table style="border-collapse:collapse;font-size:${fs};margin:0.25rem 0;">
-                <tr><td style="${lbl}background:#1B1B1B;color:#fff;">HOLE</td>${holeRow}<td style="${sumTd}font-weight:700;background:#1B1B1B;color:#fff;">${label}</td></tr>
-                <tr><td style="${lbl}color:#1D4ED8;">PAR</td>${parRow}<td style="${sumTd}font-weight:700;color:#1D4ED8;background:#f1f5f9;">${sumOr(hs, "par")}</td></tr>
-                <tr><td style="${lbl}${sectTop}font-weight:700;">${L.gs}</td>${grossRow}<td style="${sumTd}${sectTop}font-weight:700;background:#f1f5f9;">${sumOr(hs, "gross")}</td></tr>
-                ${grossMode ? "" : `<tr><td style="${lbl}${sectTop}font-weight:700;" title="Gross minus handicap strokes received on the hole">${L.ns}</td>${netRow}<td style="${sumTd}${sectTop}font-weight:700;background:#f1f5f9;">${sumOr(hs, "net")}</td></tr>`}
-                <tr><td style="${lbl}${grey}${sectBot}" title="Championship-scale stableford points per hole">${L.pts}</td>${ptsRow}<td style="${sumTd}${grey}${sectBot}font-weight:600;">${sumOr(hs, "pts")}</td></tr>
+                <tr><td style="${lbl}background:#1B1B1B;color:#fff;">HOLE</td>${holeRow}<td style="${td}font-weight:700;background:#1B1B1B;color:#fff;">${label}</td></tr>
+                <tr><td style="${lbl}color:#1D4ED8;">PAR</td>${parRow}<td style="${td}font-weight:700;background:#f1f5f9;">${sumOr(hs, "par")}</td></tr>
+                <tr><td style="${lbl}${sectTop}font-weight:700;">${L.gs}</td>${grossRow}<td style="${td}${sectTop}font-weight:700;background:#f1f5f9;">${sumOr(hs, "gross")}</td></tr>
+                ${grossMode ? "" : `<tr><td style="${lbl}${sectTop}font-weight:700;" title="Gross minus handicap strokes received on the hole">${L.ns}</td>${netRow}<td style="${td}${sectTop}font-weight:700;background:#f1f5f9;">${sumOr(hs, "net")}</td></tr>`}
+                <tr><td style="${lbl}${grey}${sectBot}" title="Championship-scale stableford points per hole">${L.pts}</td>${ptsRow}<td style="${td}${grey}${sectBot}font-weight:600;">${sumOr(hs, "pts")}</td></tr>
             </table>`;
         };
         const front = holes.filter(h => h.hole <= 9);
@@ -419,10 +428,11 @@
         if (((card.round || {}).first_hole || 1) >= 10) blocks.reverse();
 
         // Compact variant on phones: tighter cells, smaller type, and
-        // abbreviated row labels so a full nine fits with minimal scrolling
+        // abbreviated row labels so a full nine fits with minimal
+        // scrolling. All grid metrics come from prCardStyle — the shared
+        // standard with the championship card (Kerry 2026-08-03).
         const compact = prIsCompact();
-        const td = `padding:${compact ? "1px 1px" : "2px 6px"};text-align:center;border:1px solid #e2e8f0;min-width:${compact ? "1.1em" : "2em"};white-space:nowrap;`;
-        const lbl = `padding:${compact ? "1px 2px" : "2px 8px"};border:1px solid #e2e8f0;font-weight:600;color:#475569;text-align:left;white-space:nowrap;`;
+        const { td, lbl, fs, spanW, sectTop, sectBot, grey, deco: decoFor } = prCardStyle(compact);
         const L = compact
             ? { yds: "YDS", gs: "GROSS", gp: "G PTS", ns: "NET", np: "N PTS", adj: "ADJ" }
             : { yds: "YARDS", gs: "GROSS SCORE", gp: "GROSS PTS", ns: "NET SCORE", np: "NET PTS", adj: "ADJ SCORE" };
@@ -431,19 +441,6 @@
         // capped holes render TGF orange.
         const anyCapped = (card.holes || []).some(h =>
             h.strokes != null && h.adjusted_strokes != null && h.adjusted_strokes !== h.strokes);
-        const fs = compact ? "0.58rem" : "0.8rem";
-        const spanW = compact ? "1.08em" : "1.4em";
-        // Circle/square marks are vs-par symbols computed from OUR facts:
-        // the GROSS row uses vs_par, the NET row uses net_vs_par (GG's own
-        // markings are net-relative and stay stored for verification only)
-        const decoFor = d => {
-            if (d == null) return "";
-            if (d <= -2) return "border:1.5px solid #dc2626;border-radius:50%;box-shadow:0 0 0 2px #fff,0 0 0 3.5px #dc2626;";
-            if (d === -1) return "border:1.5px solid #dc2626;border-radius:50%;";
-            if (d === 1) return "border:1.5px solid #2563eb;";
-            if (d >= 2) return "border:1.5px solid #2563eb;box-shadow:0 0 0 2px #fff,0 0 0 3.5px #2563eb;";
-            return "";
-        };
         const scoreCell = (h, extra = "") => {
             if (h.strokes == null) return `<td style="${td}${extra}"></td>`;
             return `<td style="${td}${extra}"><span style="display:inline-block;min-width:${spanW};line-height:${spanW};${decoFor(h.vs_par)}">${h.strokes}</span></td>`;
@@ -466,9 +463,8 @@
         };
 
         // Visual hierarchy: course facts on top, then a thick-bordered
-        // score section (GROSS most important, then NET), then points
-        const sectTop = "border-top:2px solid #1B1B1B;";
-        const sectBot = "border-bottom:2px solid #1B1B1B;";
+        // score section (GROSS most important, then NET), then points —
+        // sectTop/sectBot/grey come from prCardStyle above
         const netOf = h => (h.strokes == null ? null : h.strokes - (h.strokes_received || 0));
         const tables = blocks.map(([label, hs]) => {
             const holeRow = hs.map(h => `<td style="${td}font-weight:700;background:#1B1B1B;color:#fff;">${h.hole_number}</td>`).join("");
@@ -479,7 +475,6 @@
             // GROSS section (bold score + its points on a grey band), then
             // NET section, each opened by a thick border — points sit
             // directly beneath their score and read visually subordinate
-            const grey = "background:#EFF4FF;color:#1D4ED8;";
             const scRow = hs.map(h => scoreCell(h, sectTop + "font-weight:700;")).join("");
             const adjRow = !anyCapped ? "" : hs.map(h => {
                 if (h.strokes == null || h.adjusted_strokes == null) return `<td style="${td}"></td>`;
@@ -641,13 +636,13 @@
             const ccCells = [];
             for (let ci = 0; ci < width; ci++) {
                 if (ci === dateCol) {
-                    ccCells.push(`<td style="white-space:nowrap;color:#BF5700;">${opts.champDate ? escapeHtml(prFmtAwardDate(opts.champDate, compact)) : ""}</td>`);
+                    ccCells.push(`<td style="white-space:nowrap;color:#BF5700;padding-left:6px;padding-right:6px;">${opts.champDate ? escapeHtml(prFmtAwardDate(opts.champDate, compact)) : ""}</td>`);
                 } else if (ci === evtCol) {
                     ccCells.push(`<td class="pr-wrap" style="font-weight:800;color:#BF5700;">CITY CHAMPIONSHIP Total${_ccThru}${_ccChev}</td>`);
                 } else if (ci === ptsCol) {
-                    ccCells.push(`<td style="text-align:center;font-weight:800;color:#BF5700;border-left:2px solid #cbd5e1;border-right:2px solid #cbd5e1;">${escapeHtml(_cc)}</td>`);
+                    ccCells.push(`<td style="text-align:center;font-weight:800;color:#BF5700;border-left:2px solid #cbd5e1;border-right:2px solid #cbd5e1;padding-left:6px;padding-right:6px;">${escapeHtml(_cc)}</td>`);
                 } else if (ci === posCol) {
-                    ccCells.push(`<td style="text-align:center;font-weight:700;color:#BF5700;">${opts.champPos ? escapeHtml(String(opts.champPos)) : ""}</td>`);
+                    ccCells.push(`<td style="text-align:center;font-weight:700;color:#BF5700;padding-left:6px;padding-right:6px;">${opts.champPos ? escapeHtml(String(opts.champPos)) : ""}</td>`);
                 } else {
                     ccCells.push("<td></td>");
                 }
@@ -716,9 +711,9 @@
                     // PTS column mirrors the level-1 standings points column:
                     // centered, bold, 2px side borders
                     let style;
-                    if (i === ptsCol) style = `text-align:center;font-weight:700;border-left:2px solid #cbd5e1;border-right:2px solid #cbd5e1;${counted ? "" : "color:var(--text-muted);"}`;
+                    if (i === ptsCol) style = `text-align:center;font-weight:700;border-left:2px solid #cbd5e1;border-right:2px solid #cbd5e1;padding-left:6px;padding-right:6px;${counted ? "" : "color:var(--text-muted);"}`;
                     else if (i === evtCol) style = bold;
-                    else if (i === posCol) style = "text-align:center;" + (counted ? "" : "color:var(--text-muted);");
+                    else if (i === posCol) style = "text-align:center;padding-left:6px;padding-right:6px;" + (counted ? "" : "color:var(--text-muted);");
                     else style = counted ? "" : "color:var(--text-muted);";
                     let val = nb(c);
                     if (i === dateCol) val = prFmtAwardDate(val, compact);
@@ -738,9 +733,9 @@
                 <table class="enrollment-table${compact ? " pr-compact" : ""}" style="margin:0.35rem 0;font-size:${compact ? "0.72rem" : "0.82rem"};">
                 <thead><tr>${head.map((c, i) => {
                     const key = (c || "").trim().toLowerCase();
-                    if (i === ptsCol) return `<th style="width:${compact ? "40px" : "90px"};text-align:center;border-left:2px solid #cbd5e1;border-right:2px solid #cbd5e1;">${compact ? "PTS" : "POINTS"}</th>`;
-                    if (i === dateCol) return `<th style="width:${compact ? "36px" : "110px"};">Date</th>`;
-                    if (key === "position") return `<th style="width:80px;text-align:center;">POS</th>`;
+                    if (i === ptsCol) return `<th style="width:${compact ? "40px" : "90px"};text-align:center;border-left:2px solid #cbd5e1;border-right:2px solid #cbd5e1;padding-left:6px;padding-right:6px;">${compact ? "PTS" : "POINTS"}</th>`;
+                    if (i === dateCol) return `<th style="width:${compact ? "36px" : "110px"};padding-left:6px;padding-right:6px;">Date</th>`;
+                    if (key === "position") return `<th style="width:80px;text-align:center;padding-left:6px;padding-right:6px;">POS</th>`;
                     return `<th>${escapeHtml(nb(c))}</th>`;
                 }).join("")}${spacer ? `<th style="width:${spacerW}px;"></th>` : ""}</tr></thead>
                 <tbody>${parts.join("")}</tbody>

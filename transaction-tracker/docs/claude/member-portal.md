@@ -239,7 +239,11 @@ within-15 field count (Kerry: the reset is TGF's Tour Championship —
 and the VERIFIED Freund 2024 story (30th/last on the 2024-08-01 seeded
 board, 14.5 back, won the Fellowship Cup by 2.5 — tgf-champ24 GG
 portal, season_points_v2 widget with effective_date). Navy LSC line
-per spotlight mode; CTA deep-links `/member/spotlight?player=<cid>`.
+per spotlight mode — for in_hunt/hypothetical it measures from the
+SEAT LINE on both cup paths (Kerry: "making your city's Lone Star Cup
+team is an even lower bar"): lsc payload carries `paths[]` with
+`seat_cut_points` / `my_points` / `gap_to_seat` (v2.194.2). CTA
+deep-links `/member/spotlight?player=<cid>`.
 **Sends only to the named/admin address — member sends are rule-3b
 gated on Kerry's ratification.**
 
