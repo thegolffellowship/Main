@@ -138,7 +138,7 @@ An MCP (Model Context Protocol) server at `mcp_server.py` gives Claude direct re
 
 ### Claude Code setup
 
-The `.mcp.json` at the repo root auto-configures it. Just restart Claude Code in this directory and you'll see the `tgf-transactions` server with 61 tools.
+The `.mcp.json` at the repo root auto-configures it. Just restart Claude Code in this directory and you'll see the `tgf-transactions` server with 68 tools.
 
 ### Claude Desktop setup (remote — no local install)
 
@@ -157,7 +157,7 @@ The MCP endpoint is built into the Railway app at `/mcp/mcp`. Add this to your `
 
 No Python or local install needed — Claude Desktop connects directly to Railway.
 
-### Available tools (61)
+### Available tools (68)
 
 **Read:** `get_transactions`, `get_transaction_by_id`, `get_statistics`, `get_data_quality_report`, `get_recent_snapshot`, `list_events`, `get_event_registrations`, `list_customers`, `get_customer_details`, `get_customer_profile` (full identity snapshot: canonical row, emails, aliases, statuses, memberships, handicap links, contest enrollments/removals — flags nameless shell profiles), `search_transactions`, `get_season_contest_enrollments`, `get_season_contest_removals`, `get_customer_data_audit` (all-customer identity health sweep: shells, splits, missing/shared emails, dangling ids, unlinked rows, shadowing aliases), `list_customer_contacts` (bulk name/chapter/status/email/venmo/phone export for cross-referencing external rosters)
 
@@ -166,6 +166,8 @@ No Python or local install needed — Claude Desktop connects directly to Railwa
 **Write:** `update_transaction`, `credit_transaction`, `transfer_transaction`, `undo_credit_or_transfer`, `create_new_event`, `update_existing_event`, `delete_existing_event`, `add_player`, `delete_transaction`, `sync_events`, `run_autofix`, `sync_season_contests`
 
 **Scoring (v2.23.0):** `import_gg_scorecards` (walk a GG tournament page into scoring_rounds/scoring_holes + course tees), `get_scoring_rounds`, `get_scorecard_detail` (facts + formula-layer derivations), `verify_scoring_round_tool` (parallel-run checks vs GG's numbers), `get_courses` (course DB w/ tees), `get_differential_parity_tool` (Phase 2 parity proof vs GG handicap export), `determine_tgf_mvp` (v2.33.0 — City MVP per linked same-day event from our scorecards + formula layer, TGF MVP winner comparison; see `docs/claude/events.md`). See `docs/claude/scoring.md`.
+
+**Member outreach (v2.197.0):** `snapshot_command_center` — the Snapshot Command Center opened to CA (actions: overview/queue/targets/preview/mark/send_test/send; real sends stay gated on Kerry's approved mark). Spec of record: `docs/claude/snapshot-command-center.md`.
 
 **Platform collaboration (v2.32.0):** `get_tracker_docs` (list/read CLAUDE.md + docs/claude/*.md — the authoritative built-state picture for the claude.ai Golf Fellowship Project), `get_side_games_matrix` (the LIVE prize matrix from app_settings — the repo's games-matrix.js is a seed that UI saves rewrite only on ephemeral disk, so it drifts; never audit from the seed), `read_platform_dialogue` / `post_platform_dialogue` (the tracker-claude ↔ platform-claude mailbox: durable two-way planning channel in the `platform_dialogue` table; boot seeds a welcome post). See **Workflow rules** #4.
 
@@ -215,7 +217,7 @@ No Python or local install needed — Claude Desktop connects directly to Railwa
 - **COO AI** — Claude-powered business intelligence chat with 6 specialist agents
 - **TGF Payouts** — tournament payout tracking with screenshot import via Claude Vision
 - **Golf Genius sync** via direct HTTP requests in `golf_genius_sync.py` (rewritten from Playwright). The nightly 02:00 job is removed as of v2.18.0 (never established a reliable connection) — the live path is the manual CSV export (`/api/handicaps/export-csv`) the admin uploads in the GG UI; see `docs/claude/handicaps.md`
-- **MCP Server** in `mcp_server.py` — 61 tools for Claude direct DB access
+- **MCP Server** in `mcp_server.py` — 68 tools for Claude direct DB access
 - **Pairings generator** with seed/lock, cart pairs, and round-robin history.
   Tables (`event_pairings`, `pairing_history`) are created lazily by
   `_ensure_pairing_tables()` on first pairing operation so existing live deployments
@@ -359,7 +361,7 @@ No Python or local install needed — Claude Desktop connects directly to Railwa
 - `static/js/version.js` — Version number + changelog data
 - `static/js/chat-widget.js` — Support/feedback chat widget
 - `golf_genius_sync.py` — Golf Genius handicap sync via HTTP
-- `mcp_server.py` — MCP server (61 tools for Claude direct DB access)
+- `mcp_server.py` — MCP server (68 tools for Claude direct DB access)
 - `email_parser/timezone_utils.py` — `now_central()`/`today_central()`/
   `today_central_str()` (pytz America/Chicago, naive). See **Timezone** below.
 - `email_parser/ops_alerts.py` — `maybe_alert_anthropic_billing(exc)`:

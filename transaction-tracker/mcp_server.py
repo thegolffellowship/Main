@@ -2934,6 +2934,116 @@ def get_courses() -> str:
 # ═══════════════════════════════════════════════════════════════════════
 
 @mcp.tool()
+def snapshot_command_center(action: str, customer_id: int = 0,
+                            window_points: float = 15.0,
+                            seat_window: float = 15.0,
+                            status: str = "", note: str = "") -> str:
+    """The Snapshot Command Center — TGF's member-outreach engine, opened
+    up for CA's optimization session (Kerry 2026-08-03). One tool, full
+    access to everything the system computes and can do: the personalized
+    "Your TGF Snapshot" email (reset comeback story, Freund 2024 proof,
+    seat-line math, buy-in + TGF Championship CTAs) and the targeting
+    queue that decides who gets pushed on entry vs a normalized email.
+
+    READ docs first: get_tracker_docs('snapshot-command-center.md') is
+    the spec of record — strategy, email anatomy, criteria, governance,
+    and the optimization levers Kerry wants worked.
+
+    Actions:
+      overview  — system state in one payload: live queue counts +
+                  criteria, championship event + signup coverage, dials
+                  (LSC deadline, reset date), and the spec doc pointer.
+      queue     — full Command Center queue (push_entry / defend /
+                  normal segments with per-path points_back,
+                  gap_to_seat, tgf_champ_signed_up, and Kerry's marks).
+                  Tune window_points / seat_window per call.
+      targets   — raw snapshot_target_list with custom windows (same
+                  data, no marks).
+      preview   — customer_id required: the exact email (subject + full
+                  HTML + computed fields) built live from the boards.
+      mark      — customer_id + status (approved|skipped|deferred|clear,
+                  note optional): set Kerry's review marks. Marks are
+                  reversible and drive the send gate.
+      send_test — customer_id required: mail that player's snapshot to
+                  the ADMIN (Kerry) inbox for review. Unrestricted.
+      send      — customer_id required: REAL member send to the player's
+                  primary email. Hard-gated: refuses unless the player
+                  carries an APPROVED mark (Kerry's approval IS the
+                  per-send ratification; there is no bulk send).
+
+    Args:
+        action: overview | queue | targets | preview | mark | send_test | send
+        customer_id: player (required for preview/mark/send_test/send)
+        window_points: points-back window for queue/targets (default 15)
+        seat_window: seat-line window for queue/targets (default 15)
+        status: for mark — approved | skipped | deferred | clear
+        note: optional mark note (e.g. "in Hawaii until Sept")
+    """
+    import email_parser.database as db
+    a = (action or "").strip().lower()
+    try:
+        if a == "overview":
+            q = db.snapshot_center_queue()
+            marks = db._snapshot_marks(None)
+            return json.dumps({
+                "spec_doc": "get_tracker_docs('snapshot-command-center.md')",
+                "counts": q.get("counts"),
+                "criteria": q.get("criteria"),
+                "championship_events": q.get("championship_events"),
+                "champ_signup_coverage": {
+                    seg: {
+                        "signed_up": sum(1 for e in q.get(seg) or []
+                                         if e.get("tgf_champ_signed_up")),
+                        "total": len(q.get(seg) or []),
+                    } for seg in ("push_entry", "defend", "normal")},
+                "marks_set": len(marks),
+                "dials": {
+                    "lsc_selection_deadline":
+                        db.get_app_setting("lsc_selection_deadline")
+                        or "2026-08-14",
+                    "gg_points_reset_official":
+                        db.get_app_setting("gg_points_reset_official"),
+                },
+                "surfaces": {
+                    "admin_ui": "/admin/snapshot-center",
+                    "email_builder": "build_player_snapshot_email",
+                    "member_deep_links":
+                        "/member/contests#race=<tfc|gross|net|austin>"
+                        "&player=<cid>",
+                },
+            }, indent=2, default=str)
+        if a == "queue":
+            q = db.snapshot_center_queue()
+            if window_points != 15.0 or seat_window != 15.0:
+                q = db.snapshot_target_list(window_points=window_points,
+                                            seat_window=seat_window)
+            return json.dumps(q, indent=2, default=str)
+        if a == "targets":
+            return json.dumps(db.snapshot_target_list(
+                window_points=window_points, seat_window=seat_window),
+                indent=2, default=str)
+        if a == "preview":
+            return json.dumps(db.build_player_snapshot_email(
+                int(customer_id), send=False), indent=2, default=str)
+        if a == "mark":
+            return json.dumps(db.snapshot_center_mark(
+                int(customer_id), (status or "").strip().lower(),
+                note=note or None), indent=2, default=str)
+        if a == "send_test":
+            return json.dumps(db.snapshot_center_send(
+                int(customer_id), test=True), indent=2, default=str)
+        if a == "send":
+            return json.dumps(db.snapshot_center_send(
+                int(customer_id), test=False), indent=2, default=str)
+        return json.dumps({"error": f"unknown action {action!r}",
+                           "actions": ["overview", "queue", "targets",
+                                       "preview", "mark", "send_test",
+                                       "send"]})
+    except Exception as e:
+        return json.dumps({"error": str(e)})
+
+
+@mcp.tool()
 def get_tracker_docs(name: str = "") -> str:
     """Read the Tracker's living documentation (CLAUDE.md + docs/claude/*.md).
 

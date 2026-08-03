@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.196.6";
+window.TGF_VERSION = "2.197.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.197.0",
+    date: "2026-08-03",
+    changes: [
+      "snapshot_command_center MCP tool (Kerry: give CA 'full access with everything that you created and that can be created with it'): one tool for the whole outreach engine - overview (live counts, criteria, championship signup coverage, dials), queue/targets (tunable windows), preview (the exact email), mark (approve/defer/skip), send_test (to Kerry's inbox), and send (real member send, still hard-gated on Kerry's approved mark - no bulk send exists). Connects via the claude.ai/Desktop MCP endpoint.",
+      "docs/claude/snapshot-command-center.md is the spec of record for CA's optimization session: Kerry's intent (regular spotlight email + TGF Championship, cup races, and Lone Star Cup qualification promotion), the verified story facts, targeting criteria, email anatomy, send governance, and the levers to optimize (segment copy variants, cadence, windows, measurement).",
+      "CHAMPIONSHIP TOTAL label and its total cell are vertically centered (Kerry - baseline mismatch from the smaller label font).",
+    ],
+  },
   {
     version: "2.196.6",
     date: "2026-08-03",
