@@ -151,6 +151,16 @@
         }
         #calc-modal-close:hover { color: #1e293b; }
 
+        /* HOW IT WORKS pill — same control as the Season Contests pages
+           (.pr-hiw-link, Kerry 2026-08-03) */
+        .pr-hiw-link {
+            display: inline-flex; align-items: center; height: 30px; padding: 0 14px;
+            background: var(--primary, #E87C3E); border: none; border-radius: 9999px;
+            cursor: pointer; color: #fff;
+            font: 700 11px/1 'Bitter', serif; letter-spacing: 1px; text-transform: uppercase;
+        }
+        .pr-hiw-link:hover { background: var(--primary-hover, #D06B2E); }
+
         /* HOW IT WORKS modal (Kerry 2026-08-03) — same shell as the calc
            modal, page-level content explaining the TGF handicap system */
         #hiw-modal-overlay {
@@ -387,7 +397,7 @@
         <span style="width:1px;background:var(--border,#E5E7EB);margin:0 4px;align-self:stretch;"></span>
         <span class="ev-tab active" data-hcp-status="members">MEMBERS</span>
         <span class="ev-tab" data-hcp-status="all">EVERYONE</span>
-        <span class="ev-tab" id="hcp-hiw-btn" style="margin-left:auto;color:var(--primary,#E87C3E);border-color:var(--primary,#E87C3E);">HOW IT WORKS &#9656;</span>
+        <button id="hcp-hiw-btn" class="pr-hiw-link" type="button" style="margin-left:auto;align-self:center;">How It Works</button>
     </nav></div>
 
         <!-- Stats -->
@@ -500,10 +510,11 @@
                         </div>
                     </div>
                     <div class="settings-field">
-                        <label for="set-multiplier">Multiplier (USGA = 0.96)</label>
+                        <label for="set-multiplier">Multiplier (WHS = 1.0)</label>
                         <input type="number" id="set-multiplier" min="0.01" max="2" step="0.01">
                         <div class="settings-desc">
-                            Applied to the average of best differentials. Default: 0.96.
+                            Applied to the average of best differentials. Default: 1.0
+                            (the pre-2020 USGA 0.96 factor was retired 2026-08-03, R1).
                         </div>
                     </div>
                 </div>
@@ -1751,9 +1762,9 @@
             <p>To determine the golf handicap, we look at the best <strong>${numUsed}</strong>
             differential${numUsed !== 1 ? 's' : ''} out of ${poolDesc}.
             The differentials are: ${diffList}.
-            Their average is <strong>${avg.toFixed(2)}</strong>.
-            The average is multiplied by <strong>${multiplier}</strong>, resulting in
-            <strong>${(avg * multiplier).toFixed(3)}</strong>.${adjNote}
+            Their average is <strong>${avg.toFixed(2)}</strong>.${multiplier !== 1
+                ? ` The average is multiplied by <strong>${multiplier}</strong>, resulting in
+            <strong>${(avg * multiplier).toFixed(3)}</strong>.` : ''}${adjNote}
             Rounded to the nearest tenth: <span class="calc-result-line" style="color:${index <= 0 ? '#15803d':'#1e40af'};">
             ${displayIndex}</span>.</p>`;
     }
@@ -1762,7 +1773,7 @@
     function openSettingsModal() {
         document.getElementById('set-lookback').value   = settings.lookback_months || 12;
         document.getElementById('set-min-rounds').value = settings.min_rounds       || 3;
-        document.getElementById('set-multiplier').value = settings.multiplier       || 0.96;
+        document.getElementById('set-multiplier').value = settings.multiplier       || 1.0;
         document.getElementById('settings-error').style.display = 'none';
         document.getElementById('modal-settings').style.display = 'flex';
     }
@@ -2398,33 +2409,46 @@
             <button id="hiw-modal-close" aria-label="Close">&times;</button>
             <h3>HOW TGF HANDICAPS WORK</h3>
 
-            <h4>1 &middot; TGF keeps a 9-hole index — that's the "N"</h4>
-            <p>TGF plays 9-hole golf, so your index is a <b>9-hole index</b>
-               (shown with an <b>N</b>). The second number is simply its
-               18-hole equivalent (doubled). When we play an 18-hole event
-               like a City Championship, your round posts as <b>two 9-hole
-               scores</b> — front and back — each measured against that
+            <p style="margin-bottom:10px;">Your TGF Handicap is the <b>best 8
+               of your last 20 nine-hole differentials</b> — World Handicap
+               System standards, built on 9-hole scores instead of 18-hole
+               ones, because 9-hole golf is what we play. Only scores from
+               TGF individual stroke-play competition count, which keeps it
+               equitable and fair.</p>
+
+            <h4>1 &middot; The "N" means a 9-hole index</h4>
+            <p>Your index is a <b>9-hole index</b> (the <b>N</b>); the second
+               number is simply its 18-hole equivalent. When we play an
+               18-hole event like a City Championship, your round posts as
+               <b>two 9-hole scores</b> — front and back — each against that
                nine's own course rating and slope.</p>
 
-            <h4>2 &middot; Blow-up holes are capped before anything counts</h4>
+            <h4>2 &middot; Why 9-hole beats combining nines</h4>
+            <p>A GHIN handicap combines two 9-hole scores into one 18-hole
+               differential — your great front nine gets chained to whatever
+               nine follows it, and nothing counts until the pair completes.
+               TGF recognizes <b>each nine on its own</b>: your best golf is
+               the sign of your potential, which is exactly what a handicap
+               is meant to represent — and your index updates after every
+               event instead of waiting for a pairing.</p>
+
+            <h4>3 &middot; Blow-up holes are capped before anything counts</h4>
             <p>For handicap purposes only, the most any hole can count is a
                <b>net double bogey</b>: par + 2 + any handicap strokes you
-               get on that hole (World Handicap System rule). That's the ADJ
-               column on your card — one bad hole can't wreck your index.</p>
+               get on that hole (WHS rule). That's the ADJ column on your
+               card — one bad hole can't wreck your index.</p>
 
-            <h4>3 &middot; Every score becomes a differential</h4>
+            <h4>4 &middot; Every score becomes a differential</h4>
             <p>A differential measures your adjusted score against the tee
                you actually played, so rounds travel fairly between courses:</p>
             <div class="hiw-formula">differential = (adjusted score &minus; course rating) &times; 113 &divide; slope</div>
 
-            <h4>4 &middot; Your index averages your best recent golf</h4>
-            <p>Your index is the average of your <b>lowest 8 differentials
-               from your last 20 rounds</b> (past 12 months), rounded to a
-               tenth. The green checks on your card mark the rounds that are
-               counting right now — shoot better and they roll in
-               automatically. Newer players start counting at 3 posted
-               rounds with a smaller sample (and a safety adjustment) until
-               the record fills out:</p>
+            <h4>5 &middot; Your index averages your best recent golf</h4>
+            <p>Best 8 of your last 20 rounds (past 12 months), rounded to a
+               tenth. The green checks on your card mark the rounds counting
+               right now — shoot better and they roll in automatically. An
+               index appears after just 3 posted rounds, using a smaller
+               sample (with a safety adjustment) until the record fills out:</p>
             <table>
                 <thead><tr><th>Rounds posted</th><th>Index uses</th></tr></thead>
                 <tbody>
@@ -2438,7 +2462,13 @@
                 </tbody>
             </table>
 
-            <h4>5 &middot; On event day it becomes your playing handicap</h4>
+            <h4>6 &middot; New to TGF with an existing handicap?</h4>
+            <p>New members carrying a handicap from another organization
+               (GHIN etc.) play at <b>75% of that index</b> until their TGF
+               Handicap establishes — which takes only <b>27 holes of TGF
+               event play</b>.</p>
+
+            <h4>7 &middot; On event day it becomes your playing handicap</h4>
             <p>Your index converts to the tee you're playing:</p>
             <div class="hiw-formula">playing handicap = index &times; slope &divide; 113 + (rating &minus; par)</div>
             <p>at 100% allowance, capped at 18 strokes per nine, with your

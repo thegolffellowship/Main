@@ -8243,8 +8243,24 @@ def fetch_champ_player_card(race_key: str, customer_id: int,
         computed_adj = (computed - plus_adj
                         if computed is not None and plus_adj else computed)
 
+        # Nines render in PLAY order (Kerry 2026-08-03: SA teed off on the
+        # back) — the imported championship round carries first_hole
+        card_first_hole = 1
+        try:
+            with _connect(db_path) as _c:
+                _fh = _c.execute(
+                    """SELECT first_hole FROM scoring_rounds
+                       WHERE customer_id = ? AND holes_played > 9
+                       ORDER BY round_date DESC, id DESC LIMIT 1""",
+                    (int(customer_id),)).fetchone()
+                if _fh and _fh["first_hole"]:
+                    card_first_hole = _fh["first_hole"]
+        except Exception:
+            pass
+
         out = {"race": race_key, "configured": True,
                "scoring": "gross" if gross_mode else "net",
+               "first_hole": card_first_hole,
                "player_name": entry["name"], "customer_id": int(customer_id),
                "playing_handicap": player.get("playing_handicap"),
                "plus_adjustment": plus_adj,
@@ -9935,9 +9951,17 @@ def get_player_spotlight(customer_id: int,
         if lsc is None and (enrolled_any or _pre_deadline):
             # Place on each cup path among the players who'd actually
             # compete for the chapter's seats — currently-enrolled chapter
-            # players (plus this player). Seat counts are the standard
-            # 6 Fellowship / 4 Players Cup allocations (co-captain years
-            # shave one Cup seat; close enough for a projection line).
+            # players (plus this player). Fellowship seat count comes off
+            # the REAL projection (a co-captain year shaves it 6 -> 5,
+            # Kerry-confirmed 2026-08-03); Players Cup is always 4.
+            fc_seats = 6
+            _chp = next((c for c in proj.get("chapters", [])
+                         if c.get("chapter") == my_ch), None)
+            if _chp:
+                fc_seats = sum(
+                    1 for s in _chp.get("seats", [])
+                    if str(s.get("seat", "")).startswith("THE FELLOWSHIP CUP")
+                ) or 6
             def _path_place(rows, ch_field):
                 place = 0
                 for r in rows or []:
@@ -9955,7 +9979,7 @@ def get_player_spotlight(customer_id: int,
                 p = _path_place(cup_d.get("standings"), "chapter")
                 if p:
                     paths.append({"path": "THE FELLOWSHIP CUP",
-                                  "place": p, "seats": 6})
+                                  "place": p, "seats": fc_seats})
             if gross_d:
                 p = _path_place(gross_d.get("standings"), "player_chapter")
                 if p:
@@ -14155,6 +14179,84 @@ def ghin_comparison_analysis(db_path: str | Path | None = None) -> dict:
         "onboarding_75pct": sorted(onboarding,
                                    key=lambda o: o["settled_ratio"] or 99),
     }
+
+
+def set_event_nine_order(event_query: str, first_nine: str,
+                         dry_run: bool = True,
+                         db_path: str | Path | None = None) -> dict:
+    """Record which nine an 18-hole event PLAYED FIRST (Kerry 2026-08-03:
+    the SA championship played the back nine first) and make every surface
+    agree:
+
+    - scoring_rounds.first_hole stamps 10 (back) / 1 (front) on the
+      event's 18-hole rounds, so scorecard renderers show the nines in
+      play order;
+    - each player's TWO-NINE handicap_rounds pair swaps payloads when
+      needed so the first-played nine holds the LOWER id — the newest-
+      first differentials list then shows the second-played nine on top.
+
+    Idempotent: already-ordered pairs and already-stamped rounds no-op.
+    """
+    first_nine = (first_nine or "").strip().lower()
+    if first_nine not in ("front", "back"):
+        return {"error": "first_nine must be 'front' or 'back'"}
+    first_hole = 10 if first_nine == "back" else 1
+    swapped, stamped = [], 0
+    SWAP_COLS = ("tee_name", "adjusted_score", "rating", "slope",
+                 "differential", "nine")
+    with _connect(db_path) as conn:
+        _ensure_scoring_tables(conn)
+        rounds = conn.execute(
+            """SELECT sr.id, sr.first_hole FROM scoring_rounds sr
+               JOIN events e ON e.id = sr.event_id
+               WHERE e.item_name LIKE ? AND sr.holes_played > 9""",
+            (f"%{event_query}%",)).fetchall()
+        stamp_ids = [r["id"] for r in rounds
+                     if (r["first_hole"] or 1) != first_hole]
+        stamped = len(stamp_ids)
+        pairs = conn.execute(
+            """SELECT hr.id, hr.player_name, hr.scoring_round_id, hr.tee_name,
+                      hr.adjusted_score, hr.rating, hr.slope,
+                      hr.differential, hr.nine
+               FROM handicap_rounds hr
+               JOIN scoring_rounds sr ON sr.id = hr.scoring_round_id
+               JOIN events e ON e.id = sr.event_id
+               WHERE e.item_name LIKE ? AND sr.holes_played > 9
+                 AND (hr.tee_name LIKE '%Front 9' OR hr.tee_name LIKE '%Back 9')
+               ORDER BY hr.player_name, hr.id""",
+            (f"%{event_query}%",)).fetchall()
+        by_player: dict = {}
+        for r in pairs:
+            by_player.setdefault(
+                (r["player_name"], r["scoring_round_id"]), []).append(dict(r))
+        for (pname, srid), rows in by_player.items():
+            if len(rows) != 2:
+                continue
+            lo, hi = rows          # ordered by id
+            lo_is_front = "Front 9" in (lo["tee_name"] or "")
+            # lower id must be the FIRST-PLAYED nine
+            needs_swap = (first_nine == "back" and lo_is_front) or \
+                         (first_nine == "front" and not lo_is_front)
+            if not needs_swap:
+                continue
+            swapped.append({"player_name": pname, "ids": [lo["id"], hi["id"]]})
+            if not dry_run:
+                for a, b in ((lo, hi), (hi, lo)):
+                    conn.execute(
+                        f"UPDATE handicap_rounds SET "
+                        f"{', '.join(c + ' = ?' for c in SWAP_COLS)} "
+                        f"WHERE id = ?",
+                        (*[b[c] for c in SWAP_COLS], a["id"]))
+        if not dry_run:
+            if stamp_ids:
+                qm = ",".join("?" * len(stamp_ids))
+                conn.execute(
+                    f"UPDATE scoring_rounds SET first_hole = ? "
+                    f"WHERE id IN ({qm})", (first_hole, *stamp_ids))
+            conn.commit()
+    return {"event_query": event_query, "first_nine": first_nine,
+            "dry_run": dry_run, "rounds_stamped": stamped,
+            "pairs_swapped": len(swapped), "swapped": swapped[:40]}
 
 
 def repair_handicap_adjusted_scores(cells: list[dict], dry_run: bool = True,

@@ -335,7 +335,12 @@
         };
         const front = holes.filter(h => h.hole <= 9);
         const back = holes.filter(h => h.hole > 9);
-        const html = block("OUT", front, false) + block("IN", back, true);
+        // Play order (Kerry 2026-08-03): first_hole >= 10 → IN above OUT;
+        // the TOT column rides whichever block renders second
+        const backFirst = (card.first_hole || 1) >= 10;
+        const html = backFirst
+            ? block("IN", back, false) + block("OUT", front, true)
+            : block("OUT", front, false) + block("IN", back, true);
         // Two different GG surfaces feed this card: the scorecard partial
         // (per hole) and the points board (total + thru). The scorecard
         // often runs a hole AHEAD of the board for a minute — that is a
@@ -374,6 +379,9 @@
         const back = holes.filter(h => h.hole_number > 9);
         if (front.some(h => h.strokes != null)) blocks.push(["OUT", front]);
         if (back.some(h => h.strokes != null)) blocks.push(["IN", back]);
+        // Nines render in PLAY order (Kerry 2026-08-03: the SA championship
+        // teed off on the back) — first_hole >= 10 puts IN above OUT
+        if (((card.round || {}).first_hole || 1) >= 10) blocks.reverse();
 
         // Compact variant on phones: tighter cells, smaller type, and
         // abbreviated row labels so a full nine fits with minimal scrolling

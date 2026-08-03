@@ -2397,6 +2397,18 @@ def _scoring_dispatch(url: str, extract: str):
             mode = arg.strip().lower()
             return json.dumps(db.persist_handicap_round_nines(
                 dry_run=(mode != "apply")), indent=2, default=str)
+        if cmd == "scoring-hcp-nine-order":
+            # "<event>|<front|back>[|apply]" — record which nine an
+            # 18-hole event played FIRST: stamps scoring_rounds.first_hole
+            # and reorders each player's two-nine handicap pair so lists
+            # and scorecards read in play order (Kerry 2026-08-03).
+            _p = [x.strip() for x in arg.split("|")]
+            if len(_p) < 2:
+                return json.dumps({"error": "<event>|<front|back>[|apply]"})
+            return json.dumps(db.set_event_nine_order(
+                _p[0], _p[1],
+                dry_run=not (len(_p) > 2 and _p[2].lower() == "apply")),
+                indent=2, default=str)
         if cmd == "scoring-spotlight":
             # "<customer_id>" — the full Player Spotlight payload (same
             # data the member page renders); lets a session verify the

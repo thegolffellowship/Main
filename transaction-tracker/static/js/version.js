@@ -1,5 +1,15 @@
-window.TGF_VERSION = "2.193.0";
+window.TGF_VERSION = "2.193.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.193.1",
+    date: "2026-08-03",
+    changes: [
+      "Handicaps HOW IT WORKS matches the Season Contests pill (Kerry) and its content rebuilds on the thegolffellowship.com handicaps page language: best 8 of last 20 nine-hole differentials, WHS standards on 9-hole scores, why counting each nine on its own beats GHIN's combine-9s (your best golf is your potential, and the index updates every event), the net-double-bogey cap, the small-record ladder, the 75%-of-existing-handicap onboarding until 27 TGF holes, and event-day playing handicaps.",
+      "Every lingering ×0.96 surface is scrubbed (Kerry: 'I thought we sunset that' — it sunset today, v2.192.3): the per-player calc modal hides the multiplier sentence at 1.0, and the admin settings modal reads WHS = 1.0 with a note that the pre-2020 factor retired.",
+      "Nines display in PLAY order (Kerry: the SA championship teed off on the back): new scoring-hcp-nine-order:<event>|<front|back>|apply stamps first_hole on the event's rounds and reorders each player's two-nine differential pair so the newest-first list shows the second-played nine on top; expanded scorecards (imported rounds and the championship drill-down card) render IN above OUT when the round started on 10.",
+      "Spotlight LSC line uses the chapter's REAL Fellowship seat count (a co-captain year shaves 6 to 5 — Kerry-confirmed).",
+    ],
+  },
   {
     version: "2.193.0",
     date: "2026-08-03",
