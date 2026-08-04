@@ -14485,6 +14485,80 @@ def snapshot_target_list(window_points: float = 15.0,
     }
 
 
+# ── EVENT PACKAGE CONFIGURATIONS (Kerry 2026-08-03) ──
+# Outlier events (the TGF Championship: Friday practice + Sat/Sun
+# championship, sold as day-combination packages with a $100 side-game
+# bundle) don't fit the single-price event model. Packages are
+# rules-as-data in ONE app setting — no schema change:
+#   {"<event_id>": {"packages": [{"label": str, "price": float}, ...],
+#                   "assignments": {"<item_id>": <package index>}}}
+# Registrations auto-match a package by exact paid price; credit rows
+# and odd payments get a manual assignment. The roster's due badge and
+# balance requests compute against the matched package price.
+
+_EVENT_PACKAGES_KEY = "event_package_configs"
+
+
+def _event_packages_all(db_path=None) -> dict:
+    try:
+        raw = get_app_setting(_EVENT_PACKAGES_KEY, db_path=db_path)
+        return json.loads(raw) if raw else {}
+    except Exception:
+        return {}
+
+
+def get_all_event_packages(db_path: str | Path | None = None) -> dict:
+    """The full per-event package map (small — one page load serves it)."""
+    return _event_packages_all(db_path)
+
+
+def set_event_packages(event_id: int, packages: list,
+                       db_path: str | Path | None = None) -> dict:
+    """Replace an event's package list. Each: {label, price}. Prices are
+    Kerry-entered through the UI — that entry IS the ratification.
+    Assignments pointing past the new list length are dropped."""
+    clean = []
+    for p in packages or []:
+        label = str(p.get("label") or "").strip()[:80]
+        try:
+            price = round(float(p.get("price")), 2)
+        except (TypeError, ValueError):
+            continue
+        if label and price >= 0:
+            clean.append({"label": label, "price": price})
+    allp = _event_packages_all(db_path)
+    key = str(int(event_id))
+    entry = allp.setdefault(key, {})
+    entry["packages"] = clean
+    entry["assignments"] = {k: v for k, v in
+                            (entry.get("assignments") or {}).items()
+                            if isinstance(v, int) and 0 <= v < len(clean)}
+    if not clean and not entry["assignments"]:
+        allp.pop(key, None)
+    set_app_setting(_EVENT_PACKAGES_KEY, json.dumps(allp), db_path=db_path)
+    return {"ok": True, "event_id": int(event_id), "packages": clean}
+
+
+def assign_event_package(event_id: int, item_id: int,
+                         package_index,
+                         db_path: str | Path | None = None) -> dict:
+    """Pin a registration to a package (None clears the pin)."""
+    allp = _event_packages_all(db_path)
+    entry = allp.setdefault(str(int(event_id)), {})
+    packages = entry.get("packages") or []
+    assignments = entry.setdefault("assignments", {})
+    if package_index is None:
+        assignments.pop(str(int(item_id)), None)
+    else:
+        idx = int(package_index)
+        if not (0 <= idx < len(packages)):
+            return {"ok": False, "error": f"package index {idx} out of range"}
+        assignments[str(int(item_id))] = idx
+    set_app_setting(_EVENT_PACKAGES_KEY, json.dumps(allp), db_path=db_path)
+    return {"ok": True, "event_id": int(event_id), "item_id": int(item_id),
+            "package_index": package_index}
+
+
 # ── SNAPSHOT COMMAND CENTER (Kerry 2026-08-03: "an interactive Command
 #    Center for me to approve, preview, mark accordingly") ──
 # Marks live in the snapshot_center_marks app-setting (rules-as-data, no

@@ -967,6 +967,22 @@
                             <div id="edit-pricing-summary-combo"></div>
                         </div>
                     </div>
+
+                    <!-- Package configurations (Kerry 2026-08-03): outlier
+                         multi-day events (TGF Championship) sold as
+                         day-combination packages. Prices entered here are
+                         the ratified numbers the roster computes against. -->
+                    <div id="edit-packages-wrap" style="margin-top:1rem; padding:0.75rem; background:#FDF0E6; border:1px solid #F3D9BB; border-radius:8px;">
+                        <label style="font-weight:700; font-size:0.82rem; display:block;">Package Configurations
+                            <span style="font-weight:400; color:var(--text-muted); font-size:0.75rem;">— for multi-day / outlier events sold as packages (days + bundles). Registrations auto-match by paid price; unmatched rows get an Assign control on the roster and any shortfall shows as a due badge.</span>
+                        </label>
+                        <div id="edit-packages-rows" style="margin-top:0.5rem;"></div>
+                        <div style="margin-top:0.4rem; display:flex; gap:0.5rem; align-items:center;">
+                            <button type="button" id="edit-packages-add" class="btn btn-secondary" style="font-size:0.75rem; padding:0.25rem 0.7rem;">+ Add Package</button>
+                            <button type="button" id="edit-packages-save" class="btn btn-primary" style="font-size:0.75rem; padding:0.25rem 0.7rem;">Save Packages</button>
+                            <span id="edit-packages-status" style="font-size:0.75rem; color:var(--text-muted);"></span>
+                        </div>
+                    </div>
                 </div><!-- end PRICING tab -->
 
                 <div class="modal-actions">
@@ -2895,6 +2911,115 @@
             }
         }
     }
+
+    // ── EVENT PACKAGE CONFIGURATIONS (Kerry 2026-08-03) ──
+    // {event_id: {packages: [{label, price}], assignments: {item_id: idx}}}
+    let EVENT_PACKAGES = {};
+    fetch("/api/events/packages")
+        .then(r => r.ok ? r.json() : {})
+        .then(d => { EVENT_PACKAGES = d || {}; try { renderEvents(); } catch (e) { /* pre-load */ } })
+        .catch(() => {});
+
+    function pkgFor(evId) { return EVENT_PACKAGES[String(evId)] || null; }
+
+    // Match a registration to a package: manual assignment wins, then an
+    // exact paid-price match (real purchases only — a "(credit)" price is
+    // what was TRANSFERRED, not what the package costs).
+    function pkgMatch(evId, r) {
+        const entry = pkgFor(evId);
+        if (!entry || !(entry.packages || []).length) return null;
+        const asn = (entry.assignments || {})[String(r.id)];
+        if (asn != null && entry.packages[asn]) {
+            return { pkg: entry.packages[asn], idx: asn, pinned: true };
+        }
+        if (!/\(credit\)/i.test(r.item_price || "")) {
+            const paid = parseFloat((r.item_price || "0").replace(/[^0-9.]/g, "")) || 0;
+            const i = entry.packages.findIndex(pk => Math.abs(pk.price - paid) < 0.005);
+            if (i > -1) return { pkg: entry.packages[i], idx: i, pinned: false };
+        }
+        return null;
+    }
+
+    window.pkgAssign = async function (sel, evId, itemId) {
+        const v = sel.value === "" ? null : parseInt(sel.value, 10);
+        try {
+            const res = await fetch(`/api/events/${evId}/packages/assign`, {
+                method: "POST", headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ item_id: itemId, package_index: v }),
+            });
+            const d = await res.json();
+            if (!res.ok || !d.ok) throw new Error(d.error || `HTTP ${res.status}`);
+            const entry = EVENT_PACKAGES[String(evId)] = EVENT_PACKAGES[String(evId)] || { packages: [], assignments: {} };
+            entry.assignments = entry.assignments || {};
+            if (v === null) delete entry.assignments[String(itemId)];
+            else entry.assignments[String(itemId)] = v;
+            renderEvents();
+        } catch (e) {
+            alert("Package assign failed: " + e.message);
+        }
+    };
+
+    function pkgRowHtml(pkg) {
+        const lbl = (pkg && pkg.label || "").replace(/"/g, "&quot;");
+        const pr = pkg && pkg.price != null ? pkg.price : "";
+        return `<div class="pkg-row" style="display:flex; gap:0.4rem; margin-bottom:0.3rem; align-items:center;">
+            <input type="text" class="modal-input pkg-label" placeholder="e.g. Championship (Sat/Sun) + Side Games" value="${lbl}" style="flex:2; margin:0;">
+            <input type="number" class="modal-input pkg-price" min="0" step="0.01" placeholder="420.00" value="${pr}" style="flex:1; margin:0;">
+            <button type="button" class="btn btn-secondary pkg-del" style="font-size:0.7rem; padding:0.2rem 0.5rem;">&#10005;</button>
+        </div>`;
+    }
+
+    function pkgBindRow(rowEl) {
+        const del = rowEl.querySelector(".pkg-del");
+        if (del) del.onclick = () => rowEl.remove();
+    }
+
+    function pkgRenderEditor(ev) {
+        window._pkgEditingEventId = ev.id;
+        const wrap = document.getElementById("edit-packages-rows");
+        if (!wrap) return;
+        const entry = pkgFor(ev.id);
+        wrap.innerHTML = ((entry && entry.packages) || []).map(pkgRowHtml).join("");
+        wrap.querySelectorAll(".pkg-row").forEach(pkgBindRow);
+        const st = document.getElementById("edit-packages-status");
+        if (st) st.textContent = "";
+    }
+
+    document.addEventListener("DOMContentLoaded", () => {
+        const addBtn = document.getElementById("edit-packages-add");
+        const saveBtn = document.getElementById("edit-packages-save");
+        if (addBtn) addBtn.onclick = () => {
+            const wrap = document.getElementById("edit-packages-rows");
+            wrap.insertAdjacentHTML("beforeend", pkgRowHtml(null));
+            pkgBindRow(wrap.lastElementChild);
+        };
+        if (saveBtn) saveBtn.onclick = async () => {
+            const evId = window._pkgEditingEventId;
+            if (!evId) return;
+            const packages = [];
+            document.querySelectorAll("#edit-packages-rows .pkg-row").forEach(row => {
+                const label = row.querySelector(".pkg-label").value.trim();
+                const price = parseFloat(row.querySelector(".pkg-price").value);
+                if (label && !isNaN(price)) packages.push({ label, price });
+            });
+            const st = document.getElementById("edit-packages-status");
+            try {
+                const res = await fetch(`/api/events/${evId}/packages`, {
+                    method: "POST", headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ packages }),
+                });
+                const d = await res.json();
+                if (!res.ok || !d.ok) throw new Error(d.error || `HTTP ${res.status}`);
+                const entry = EVENT_PACKAGES[String(evId)] = EVENT_PACKAGES[String(evId)] || {};
+                entry.packages = d.packages;
+                entry.assignments = entry.assignments || {};
+                if (st) { st.textContent = `Saved ${d.packages.length} package${d.packages.length === 1 ? "" : "s"} ✓`; st.style.color = "#15803d"; }
+                renderEvents();
+            } catch (e) {
+                if (st) { st.textContent = "Save failed: " + e.message; st.style.color = "#b91c1c"; }
+            }
+        };
+    });
 
     function renderEvents() {
         const tbody = document.getElementById("events-body");
@@ -6517,13 +6642,41 @@
                     // fee \u2014 before optional side games), show what's still
                     // due. "\u2265" because buy-ins only raise the real figure.
                     let dueBadge = "";
-                    if (/\(credit\)/i.test(r.item_price || "") && txStatus === "active"
+                    const _isCredit = /\(credit\)/i.test(r.item_price || "");
+                    const _paid = parseFloat((r.item_price || "0").replace(/[^0-9.]/g, "")) || 0;
+                    const _pkgEntry = pkgFor(ev.id);
+                    if (_pkgEntry && (_pkgEntry.packages || []).length && txStatus === "active") {
+                        // Package-aware pricing (Kerry 2026-08-03, TGF
+                        // CHAMPIONSHIP day combos): a matched package gives an
+                        // EXACT amount due \u2014 no "\u2265" hedge needed.
+                        const _m = pkgMatch(ev.id, r);
+                        if (_m) {
+                            if (_m.pinned) {
+                                const _opts = _pkgEntry.packages.map((pk, i) =>
+                                    `<option value="${i}" ${i === _m.idx ? "selected" : ""}>${escapeHtml(pk.label)} ($${(+pk.price).toFixed(2)})</option>`).join("");
+                                dueBadge = ` <select class="pkg-assign-sel" onchange="pkgAssign(this, ${ev.id}, ${r.id})" title="Assigned package \u2014 change or clear" style="font-size:0.65rem; padding:0.1rem 0.2rem; border:1px solid #c7d2fe; background:#eef2ff; color:#3730a3; border-radius:4px; max-width:170px; font-weight:700;"><option value="">\u2014 no package \u2014</option>${_opts}</select>`;
+                            } else {
+                                dueBadge = ` <span class="status-tag" style="background:#eef2ff;color:#3730a3;border:1px solid #c7d2fe;font-size:0.65rem;padding:0.1rem 0.35rem;border-radius:4px;font-weight:700;white-space:nowrap;" title="Matched by paid price to the $${(+_m.pkg.price).toFixed(2)} package">${escapeHtml(_m.pkg.label)}</span>`;
+                            }
+                            if (_paid < _m.pkg.price - 0.005) {
+                                dueBadge += ` <span class="status-tag" style="background:#fef3c7;color:#92400e;border:1px solid #fcd34d;font-size:0.65rem;padding:0.1rem 0.35rem;border-radius:4px;font-weight:700;white-space:nowrap;" title="${_isCredit ? "Credit covers" : "Paid"} $${_paid.toFixed(2)} of the $${(+_m.pkg.price).toFixed(2)} ${escapeHtml(_m.pkg.label)} package \u2014 collect the difference">$${(_m.pkg.price - _paid).toFixed(2)} due</span>`;
+                            }
+                        } else if (_isCredit) {
+                            // Credit rows never auto-match (the credited amount
+                            // is what was transferred, not a package price) \u2014
+                            // offer the assignment dropdown.
+                            const _opts = _pkgEntry.packages.map((pk, i) =>
+                                `<option value="${i}">${escapeHtml(pk.label)} ($${(+pk.price).toFixed(2)})</option>`).join("");
+                            dueBadge = ` <select class="pkg-assign-sel" onchange="pkgAssign(this, ${ev.id}, ${r.id})" title="Assign this registration to a package to compute the exact balance due" style="font-size:0.65rem; padding:0.1rem 0.2rem; border:1px solid #fcd34d; background:#fef3c7; color:#92400e; border-radius:4px; max-width:170px; font-weight:700;"><option value="">\u2014 assign package \u2014</option>${_opts}</select>`;
+                        }
+                    } else if (_isCredit && txStatus === "active"
                         && (ev.course_cost != null || ev.tgf_markup != null)) {
-                        const _credited = parseFloat((r.item_price || "0").replace(/[^0-9.]/g, "")) || 0;
+                        // No packages defined for this event \u2014 fall back to the
+                        // \u2265-base heuristic (Callaway case, v2.197.2).
                         const _sub = (ev.course_cost || 0) + (ev.tgf_markup || 0) + (ev.side_game_fee || 0);
                         const _base = _sub + Math.round(_sub * (ev.transaction_fee_pct || 0)) / 100;
-                        if (_base > 0 && _credited < _base - 0.005) {
-                            dueBadge = ` <span class="status-tag" style="background:#fef3c7;color:#92400e;border:1px solid #fcd34d;font-size:0.65rem;padding:0.1rem 0.35rem;border-radius:4px;font-weight:700;white-space:nowrap;" title="Credit covers $${_credited.toFixed(2)} of the $${_base.toFixed(2)} base price (before any side-game buy-ins) \u2014 collect the difference">&ge; $${(_base - _credited).toFixed(2)} due</span>`;
+                        if (_base > 0 && _paid < _base - 0.005) {
+                            dueBadge = ` <span class="status-tag" style="background:#fef3c7;color:#92400e;border:1px solid #fcd34d;font-size:0.65rem;padding:0.1rem 0.35rem;border-radius:4px;font-weight:700;white-space:nowrap;" title="Credit covers $${_paid.toFixed(2)} of the $${_base.toFixed(2)} base price (before any side-game buy-ins) \u2014 collect the difference">&ge; $${(_base - _paid).toFixed(2)} due</span>`;
                         }
                     }
                     html += `<td style="font-weight:600; font-variant-numeric:tabular-nums; ${style}">${escapeHtml(stripPriceSuffix(r.item_price) || "\u2014")}${dueBadge}</td>`;
@@ -11112,6 +11265,7 @@
         // Update pricing tab display
         updatePricingTabForFormat(ev.format || "");
         updatePricingPreview("edit");
+        pkgRenderEditor(ev);
         if (isCombo) updateComboPricingPreview();
 
         // Show aliases in edit modal

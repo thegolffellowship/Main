@@ -841,6 +841,43 @@ The Pricing tab has a **compact layout** with collapsible calculators and live-u
 - Header shows `Math.ceil(total)` (rounded-up course cost)
 - Auto-expands if non-green-fees items have saved data
 
+## Event Package Configurations (v2.198.0, Kerry 2026-08-03)
+
+For outlier multi-day events sold as day combinations (the trigger: the
+2026 TGF CHAMPIONSHIP — a 36-hole Sat/Sun event plus a Friday practice
+round, sellable as all-three / Friday only / Saturday only / Sunday only /
+Championship Sat/Sun only, with the Championship side games a bundled
+$100 add-on). Kerry needed these configurations to send accurate balance
+requests to players holding a transferred credit (the Callaway case).
+
+- **Storage:** the `event_package_configs` app setting — NO schema change.
+  Shape: `{"<event_id>": {"packages": [{"label", "price"}],
+  "assignments": {"<item_id>": <package index>}}}`. Data layer in
+  `database.py` under the matching banner: `get_all_event_packages`,
+  `set_event_packages` (replaces the list; drops out-of-range
+  assignments; deletes the entry when both lists empty),
+  `assign_event_package` (pin/clear one registration).
+- **Ratification:** package prices are Kerry-entered through the UI —
+  that entry IS the rule-3b ratification. Never guess a price.
+- **Editor:** Edit Event → PRICING → "Package Configurations" panel
+  (`edit-packages-*` ids; admin-only save). Label + price rows,
+  add/delete, Save posts the full replacement list.
+- **Routes:** `GET /api/events/packages` (manager — full map, one fetch
+  per page load), `POST /api/events/<id>/packages` (admin),
+  `POST /api/events/<id>/packages/assign` (manager).
+- **Roster matching** (`pkgMatch` in events.html): a manual assignment
+  wins; otherwise a registration auto-matches the package whose price
+  equals the paid price exactly. **"(credit)" rows never auto-match** —
+  the credited amount is what was transferred, not what the package
+  costs.
+- **Price cell rendering:** matched-by-price rows show an indigo package
+  chip; pinned rows show an editable dropdown (change/clear the pin);
+  unmatched credit rows show an amber "— assign package —" dropdown.
+  When the paid/credited amount covers less than the matched package
+  price, an **exact** `$X.XX due` badge renders (no `≥` hedge — the
+  package price is the full obligation). Events with no packages keep
+  the v2.197.2 `≥ $X due` base-price heuristic for credit rows.
+
 ## Pricing Calculation Flow
 
 ```

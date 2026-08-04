@@ -13980,6 +13980,46 @@ except Exception:
 # Kerry's click IS the per-send rule-3b ratification. Never bulk-sends.
 # ═══════════════════════════════════════════════════════════════════════
 
+# ── EVENT PACKAGE CONFIGURATIONS (Kerry 2026-08-03) — outlier multi-day
+#    events sold as day-combination packages; see database.py banner ──
+
+@app.route("/api/events/packages")
+@require_role("manager")
+def api_event_packages_all():
+    from email_parser.database import get_all_event_packages
+    try:
+        return jsonify(get_all_event_packages())
+    except Exception as e:
+        logger.exception("event packages fetch failed")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/events/<int:event_id>/packages", methods=["POST"])
+@require_role("admin")
+def api_event_packages_save(event_id):
+    from email_parser.database import set_event_packages
+    body = request.get_json(silent=True) or {}
+    try:
+        return jsonify(set_event_packages(event_id, body.get("packages") or []))
+    except Exception as e:
+        logger.exception("event packages save failed")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/events/<int:event_id>/packages/assign", methods=["POST"])
+@require_role("manager")
+def api_event_packages_assign(event_id):
+    from email_parser.database import assign_event_package
+    body = request.get_json(silent=True) or {}
+    try:
+        res = assign_event_package(event_id, int(body.get("item_id") or 0),
+                                   body.get("package_index"))
+        return (jsonify(res), 200 if res.get("ok") else 400)
+    except Exception as e:
+        logger.exception("event package assign failed")
+        return jsonify({"error": str(e)}), 500
+
+
 @app.route("/admin/snapshot-center")
 @require_role("admin")
 def snapshot_center_page():

@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.197.2";
+window.TGF_VERSION = "2.198.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.198.0",
+    date: "2026-08-04",
+    changes: [
+      "Event Package Configurations (Kerry: the 2026 TGF CHAMPIONSHIP is a 36-hole Sat/Sun event plus a Friday practice round, sold as day combinations - 'I need to be able to create these configurations now in order to send accurate balance requests to those with credit'): Edit Event > PRICING gains a Package Configurations editor (admin) where each package is a label + price (Kerry entering prices IS the rule-3b ratification). Stored per-event in the event_package_configs app setting - no schema change.",
+      "Package-aware roster pricing: registrations auto-match a package by exact paid price (credit rows never auto-match - the credited amount is what was transferred, not a package price); unmatched '(credit)' rows get an amber assign-package dropdown, and assigned rows keep an editable dropdown so a pin can be changed or cleared. A matched row whose payment covers less than its package price shows an EXACT '$X.XX due' badge (no >= hedge); events without packages keep the v2.197.2 >=-base heuristic.",
+      "New API: GET /api/events/packages (manager), POST /api/events/<id>/packages (admin, replaces the list), POST /api/events/<id>/packages/assign (manager, pins/clears one registration).",
+    ],
+  },
   {
     version: "2.197.2",
     date: "2026-08-03",
