@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.198.0";
+window.TGF_VERSION = "2.199.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.199.0",
+    date: "2026-08-04",
+    changes: [
+      "Two-tier desktop width (Kerry: 'widen admin/manager data pages to 1280 universally'): manager and admin sessions now get a 1280px work column on every page via an html.tgf-wide class auth.js stamps when the role resolves (pre-applied from sessionStorage so returning sessions don't flash narrow-then-wide). Member, view-only, and anonymous visitors keep the ratified 1080px. The /me page (720px) and print sheets are unaffected.",
+      "PACKAGES is now a first-class tab in BOTH the Add Event and Edit Event modals (Kerry: 'I'd rather do an Event Creator that allows me to build that event and associated packages' - the v2.198.0 editor buried inside PRICING was unclear). The tab explains the concept in plain language (what the event sells, name + total checkout price, auto-match by exact paid amount, credit rows assigned from the roster), and packages entered while CREATING an event save automatically the moment the event is created - no second trip into Edit.",
+      "Data fix: the 'Marq' RSVP-only row on the 2026 TGF CHAMPIONSHIP (typed into Add Player without picking from the typeahead) is now linked to Mike Marques (customer_id 14, email/phone/chapter restored), so the Remind flow can reach him.",
+    ],
+  },
   {
     version: "2.198.0",
     date: "2026-08-04",

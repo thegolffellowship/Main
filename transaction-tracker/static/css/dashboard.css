@@ -183,14 +183,21 @@ header h1 {
 }
 
 /* ---- Main ----
-   1080px is the ratified desktop content width for ALL pages — admin,
-   manager, and member (Kerry, 2026-07-20: "It all just displays too
-   wide"). The dark nav header stays full width; only the work column
-   is capped and centered. Don't widen per-page. */
+   Two-tier desktop content width (Kerry, 2026-08-04: "widen
+   admin/manager data pages to 1280 universally"): 1080px stays the
+   default for member/view-only/anonymous (the 2026-07-20 ratified
+   width), and manager/admin sessions get 1280px app-wide via the
+   html.tgf-wide class auth.js stamps once the role resolves. The dark
+   nav header stays full width; only the work column is capped and
+   centered. Don't widen per-page. */
 main {
     max-width: 1080px;
     margin: 0 auto;
     padding: 1.1rem 1.5rem 2.5rem;
+}
+
+html.tgf-wide main {
+    max-width: 1280px;
 }
 
 /* ---- Stats row ---- */

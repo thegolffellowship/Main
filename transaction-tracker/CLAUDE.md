@@ -437,14 +437,20 @@ starting inside a drawer/sheet/dialog (`SKIP` selector, `.no-ptr` /
 `[data-ptr-skip]` opt-out) are ignored. The Contests/Handicaps CONTENT redesign
 is the next design-claude handoff, built into this fixed shell.
 
-## Desktop width + density standard (v2.130.0 — Kerry-ratified 2026-07-20)
+## Desktop width + density standard (v2.130.0 + v2.199.0 two-tier update)
 
-**1080px is the desktop content width for ALL pages — Admin, Manager, and
-Member.** The global `main` rule in `dashboard.css` caps and centers every
-page's work column (`max-width: 1080px; margin: 0 auto`); the dark nav
-header/shell stays full width. Do NOT add page-local `main` width overrides
-(wider or narrower) — `/me` (720px personal page) and the print sheets
-(cart signs, starter sheet, which don't load dashboard.css) are the only
+**Two-tier desktop content width (Kerry, 2026-08-04: "widen admin/manager
+data pages to 1280 universally"):** the global `main` rule in `dashboard.css`
+caps and centers every page's work column at **1080px** (the 2026-07-20
+ratified default — member, view-only, anonymous), and **manager/admin
+sessions get 1280px app-wide** via `html.tgf-wide main` — auth.js stamps
+the `tgf-wide` class on the root element in `_applyWidthTier()` (called
+from `updateRoleUI()` on init/login/logout) and pre-applies it from
+sessionStorage (`tgf_wide`) so returning sessions don't flash
+narrow-then-wide. The dark nav header/shell stays full width. Do NOT add
+page-local `main` width overrides (wider or narrower) — `/me` (720px
+personal page, doesn't load dashboard.css) and the print sheets (cart
+signs, starter sheet, which don't load dashboard.css) are the only
 exceptions. **Admin table density is the app-wide default**: global
 `thead th` 4px / `tbody td` 5px vertical padding, 10px horizontal — the
 ratified TGF-console density ("functional, not all this beautiful white

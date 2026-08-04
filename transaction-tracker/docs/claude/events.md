@@ -859,9 +859,16 @@ requests to players holding a transferred credit (the Callaway case).
   `assign_event_package` (pin/clear one registration).
 - **Ratification:** package prices are Kerry-entered through the UI —
   that entry IS the rule-3b ratification. Never guess a price.
-- **Editor:** Edit Event → PRICING → "Package Configurations" panel
-  (`edit-packages-*` ids; admin-only save). Label + price rows,
-  add/delete, Save posts the full replacement list.
+- **Editor (v2.199.0 — Kerry: "I'd rather do an Event Creator that
+  allows me to build that event and associated packages"):** PACKAGES is
+  a first-class tab in BOTH the Add Event and Edit Event modals
+  (`add-tab-packages` / `edit-tab-packages`), with a plain-language
+  explainer. Edit mode: `edit-packages-*` ids, Save posts the full
+  replacement list (admin). Add mode: `add-packages-*` rows are
+  collected by `pkgCollectRows()` and persisted by `pkgSave()`
+  immediately after `POST /api/events` returns the new event id — the
+  event and its packages are built together in one pass. The original
+  v2.198.0 panel buried inside the PRICING tab is gone.
 - **Routes:** `GET /api/events/packages` (manager — full map, one fetch
   per page load), `POST /api/events/<id>/packages` (admin),
   `POST /api/events/<id>/packages/assign` (manager).

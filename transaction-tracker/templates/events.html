@@ -753,6 +753,7 @@
             <div class="edit-modal-tabs" style="display:flex; border-bottom:2px solid var(--border); margin:0 1.5rem;">
                 <button type="button" class="edit-modal-tab active" data-tab="general" style="flex:1; padding:0.5rem 1rem; font-weight:600; font-size:0.85rem; border:none; background:none; cursor:pointer; border-bottom:2px solid var(--primary); margin-bottom:-2px; color:var(--primary);">GENERAL</button>
                 <button type="button" class="edit-modal-tab" data-tab="pricing" style="flex:1; padding:0.5rem 1rem; font-weight:600; font-size:0.85rem; border:none; background:none; cursor:pointer; border-bottom:2px solid transparent; margin-bottom:-2px; color:var(--text-muted);">PRICING</button>
+                <button type="button" class="edit-modal-tab" data-tab="packages" style="flex:1; padding:0.5rem 1rem; font-weight:600; font-size:0.85rem; border:none; background:none; cursor:pointer; border-bottom:2px solid transparent; margin-bottom:-2px; color:var(--text-muted);">PACKAGES</button>
             </div>
             <form id="edit-event-form" class="edit-form">
                 <input type="hidden" id="edit-event-id">
@@ -968,22 +969,37 @@
                         </div>
                     </div>
 
-                    <!-- Package configurations (Kerry 2026-08-03): outlier
-                         multi-day events (TGF Championship) sold as
-                         day-combination packages. Prices entered here are
-                         the ratified numbers the roster computes against. -->
-                    <div id="edit-packages-wrap" style="margin-top:1rem; padding:0.75rem; background:#FDF0E6; border:1px solid #F3D9BB; border-radius:8px;">
-                        <label style="font-weight:700; font-size:0.82rem; display:block;">Package Configurations
-                            <span style="font-weight:400; color:var(--text-muted); font-size:0.75rem;">— for multi-day / outlier events sold as packages (days + bundles). Registrations auto-match by paid price; unmatched rows get an Assign control on the roster and any shortfall shows as a due badge.</span>
-                        </label>
-                        <div id="edit-packages-rows" style="margin-top:0.5rem;"></div>
+                </div><!-- end PRICING tab -->
+
+                <!-- PACKAGES tab (Kerry 2026-08-04: "an Event Creator that
+                     allows me to build that event and associated packages").
+                     Prices entered here are the ratified numbers the roster
+                     computes against. -->
+                <div id="edit-tab-packages" class="edit-tab-content" style="display:none;">
+                    <div style="padding:0.35rem 0.1rem 0.6rem; font-size:0.8rem; color:var(--text-body); line-height:1.5;">
+                        <strong>What the event sells.</strong> Use packages when this event has more
+                        than one way to buy in &mdash; day combinations, practice rounds, bundled
+                        add-ons. Each package is a <strong>name the player would recognize</strong>
+                        plus its <strong>total price</strong> (what they actually pay at checkout).
+                        <div style="margin-top:0.4rem; color:var(--text-muted); font-size:0.75rem;">
+                            Purchases match a package automatically when the amount paid equals a
+                            package price exactly. Credit transfers can't self-match &mdash; assign
+                            those from the roster's PRICE column, and the exact balance due appears
+                            next to the credit. Regular single-price events don't need packages.
+                        </div>
+                    </div>
+                    <div id="edit-packages-wrap" style="padding:0.75rem; background:#FDF0E6; border:1px solid #F3D9BB; border-radius:8px;">
+                        <div style="display:flex; gap:0.4rem; font-size:0.7rem; font-weight:700; color:var(--text-muted); letter-spacing:0.04em; margin-bottom:0.25rem;">
+                            <span style="flex:2;">PACKAGE NAME</span><span style="flex:1;">PRICE ($)</span><span style="width:2rem;"></span>
+                        </div>
+                        <div id="edit-packages-rows"></div>
                         <div style="margin-top:0.4rem; display:flex; gap:0.5rem; align-items:center;">
                             <button type="button" id="edit-packages-add" class="btn btn-secondary" style="font-size:0.75rem; padding:0.25rem 0.7rem;">+ Add Package</button>
                             <button type="button" id="edit-packages-save" class="btn btn-primary" style="font-size:0.75rem; padding:0.25rem 0.7rem;">Save Packages</button>
                             <span id="edit-packages-status" style="font-size:0.75rem; color:var(--text-muted);"></span>
                         </div>
                     </div>
-                </div><!-- end PRICING tab -->
+                </div><!-- end PACKAGES tab -->
 
                 <div class="modal-actions">
                     <button type="button" id="edit-event-cancel" class="btn btn-secondary">Cancel</button>
@@ -1537,6 +1553,7 @@
                 <div style="display:flex; gap:0; border-bottom:2px solid var(--border); margin-bottom:0.75rem;">
                     <button type="button" class="add-modal-tab active" data-tab="general" style="padding:0.5rem 1.2rem; font-weight:600; font-size:0.85rem; border:none; background:none; cursor:pointer; border-bottom:2px solid var(--primary); margin-bottom:-2px; color:var(--primary);">GENERAL</button>
                     <button type="button" class="add-modal-tab" data-tab="pricing" style="padding:0.5rem 1.2rem; font-weight:600; font-size:0.85rem; border:none; background:none; cursor:pointer; border-bottom:2px solid transparent; margin-bottom:-2px; color:var(--text-muted);">PRICING</button>
+                    <button type="button" class="add-modal-tab" data-tab="packages" style="padding:0.5rem 1.2rem; font-weight:600; font-size:0.85rem; border:none; background:none; cursor:pointer; border-bottom:2px solid transparent; margin-bottom:-2px; color:var(--text-muted);">PACKAGES</button>
                 </div>
 
                 <!-- GENERAL tab -->
@@ -1742,6 +1759,35 @@
                         </div>
                     </div>
                 </div><!-- end add-tab-pricing -->
+
+                <!-- PACKAGES tab for Add Event (Kerry 2026-08-04: build the
+                     event and its packages together). Rows entered here are
+                     saved automatically right after the event is created. -->
+                <div id="add-tab-packages" class="add-tab-content" style="display:none;">
+                    <div style="padding:0.35rem 0.1rem 0.6rem; font-size:0.8rem; color:var(--text-body); line-height:1.5;">
+                        <strong>What the event sells.</strong> Use packages when this event has more
+                        than one way to buy in &mdash; day combinations, practice rounds, bundled
+                        add-ons. Each package is a <strong>name the player would recognize</strong>
+                        plus its <strong>total price</strong> (what they actually pay at checkout).
+                        <div style="margin-top:0.4rem; color:var(--text-muted); font-size:0.75rem;">
+                            Purchases match a package automatically when the amount paid equals a
+                            package price exactly. Credit transfers can't self-match &mdash; assign
+                            those from the roster's PRICE column, and the exact balance due appears
+                            next to the credit. Regular single-price events don't need packages &mdash;
+                            leave this tab empty. Packages save with the event when you click
+                            Create Event.
+                        </div>
+                    </div>
+                    <div id="add-packages-wrap" style="padding:0.75rem; background:#FDF0E6; border:1px solid #F3D9BB; border-radius:8px;">
+                        <div style="display:flex; gap:0.4rem; font-size:0.7rem; font-weight:700; color:var(--text-muted); letter-spacing:0.04em; margin-bottom:0.25rem;">
+                            <span style="flex:2;">PACKAGE NAME</span><span style="flex:1;">PRICE ($)</span><span style="width:2rem;"></span>
+                        </div>
+                        <div id="add-packages-rows"></div>
+                        <div style="margin-top:0.4rem;">
+                            <button type="button" id="add-packages-add" class="btn btn-secondary" style="font-size:0.75rem; padding:0.25rem 0.7rem;">+ Add Package</button>
+                        </div>
+                    </div>
+                </div><!-- end add-tab-packages -->
 
                 <!-- Tee Time Advisor Panel -->
                 <div id="add-advisor-panel" class="advisor-panel" style="display:none; margin-top:1rem;"></div>
@@ -2985,6 +3031,34 @@
         if (st) st.textContent = "";
     }
 
+    // Collect {label, price} rows from a packages editor (add or edit modal).
+    function pkgCollectRows(wrapId) {
+        const packages = [];
+        document.querySelectorAll(`#${wrapId} .pkg-row`).forEach(row => {
+            const label = row.querySelector(".pkg-label").value.trim();
+            const price = parseFloat(row.querySelector(".pkg-price").value);
+            if (label && !isNaN(price)) packages.push({ label, price });
+        });
+        return packages;
+    }
+
+    // Save an event's packages and refresh the local cache. Returns true on
+    // success. Used by the edit-modal Save button and the Add Event flow
+    // (packages entered on the new PACKAGES tab persist right after the
+    // event row is created).
+    async function pkgSave(evId, packages) {
+        const res = await fetch(`/api/events/${evId}/packages`, {
+            method: "POST", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ packages }),
+        });
+        const d = await res.json();
+        if (!res.ok || !d.ok) throw new Error(d.error || `HTTP ${res.status}`);
+        const entry = EVENT_PACKAGES[String(evId)] = EVENT_PACKAGES[String(evId)] || {};
+        entry.packages = d.packages;
+        entry.assignments = entry.assignments || {};
+        return d.packages;
+    }
+
     document.addEventListener("DOMContentLoaded", () => {
         const addBtn = document.getElementById("edit-packages-add");
         const saveBtn = document.getElementById("edit-packages-save");
@@ -2993,27 +3067,19 @@
             wrap.insertAdjacentHTML("beforeend", pkgRowHtml(null));
             pkgBindRow(wrap.lastElementChild);
         };
+        const addModalBtn = document.getElementById("add-packages-add");
+        if (addModalBtn) addModalBtn.onclick = () => {
+            const wrap = document.getElementById("add-packages-rows");
+            wrap.insertAdjacentHTML("beforeend", pkgRowHtml(null));
+            pkgBindRow(wrap.lastElementChild);
+        };
         if (saveBtn) saveBtn.onclick = async () => {
             const evId = window._pkgEditingEventId;
             if (!evId) return;
-            const packages = [];
-            document.querySelectorAll("#edit-packages-rows .pkg-row").forEach(row => {
-                const label = row.querySelector(".pkg-label").value.trim();
-                const price = parseFloat(row.querySelector(".pkg-price").value);
-                if (label && !isNaN(price)) packages.push({ label, price });
-            });
             const st = document.getElementById("edit-packages-status");
             try {
-                const res = await fetch(`/api/events/${evId}/packages`, {
-                    method: "POST", headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ packages }),
-                });
-                const d = await res.json();
-                if (!res.ok || !d.ok) throw new Error(d.error || `HTTP ${res.status}`);
-                const entry = EVENT_PACKAGES[String(evId)] = EVENT_PACKAGES[String(evId)] || {};
-                entry.packages = d.packages;
-                entry.assignments = entry.assignments || {};
-                if (st) { st.textContent = `Saved ${d.packages.length} package${d.packages.length === 1 ? "" : "s"} ✓`; st.style.color = "#15803d"; }
+                const saved = await pkgSave(evId, pkgCollectRows("edit-packages-rows"));
+                if (st) { st.textContent = `Saved ${saved.length} package${saved.length === 1 ? "" : "s"} ✓`; st.style.color = "#15803d"; }
                 renderEvents();
             } catch (e) {
                 if (st) { st.textContent = "Save failed: " + e.message; st.style.color = "#b91c1c"; }
@@ -10520,6 +10586,9 @@
         });
         document.getElementById("add-tab-general").style.display = "";
         document.getElementById("add-tab-pricing").style.display = "none";
+        document.getElementById("add-tab-packages").style.display = "none";
+        const addPkgRows = document.getElementById("add-packages-rows");
+        if (addPkgRows) addPkgRows.innerHTML = "";
 
         // Reset pricing fields
         ["add-event-tgf_markup", "add-event-side_game_fee", "add-event-transaction_fee_pct",
@@ -10659,6 +10728,16 @@
                 const data = await res.json();
                 alert(data.error || "Failed to create event.");
                 return;
+            }
+            // Persist any packages entered on the PACKAGES tab against the
+            // freshly created event (Kerry 2026-08-04: build the event and
+            // its packages together).
+            try {
+                const newEv = (await res.json()).event;
+                const pkgs = pkgCollectRows("add-packages-rows");
+                if (newEv && newEv.id && pkgs.length) await pkgSave(newEv.id, pkgs);
+            } catch (err) {
+                alert("Event created, but saving its packages failed — re-enter them in Edit Event → PACKAGES.");
             }
             closeAddEventModal();
             await fetchEvents();
@@ -11283,6 +11362,7 @@
         });
         document.getElementById("edit-tab-general").style.display = "";
         document.getElementById("edit-tab-pricing").style.display = "none";
+        document.getElementById("edit-tab-packages").style.display = "none";
 
         // Mark saved start times as user-set so advisor won't overwrite
         [stSingle, st9, st18].forEach(el => {

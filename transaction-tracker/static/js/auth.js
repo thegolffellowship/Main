@@ -33,6 +33,23 @@
 let currentRole = null;
 let currentChapter = null;   // chapter-manager sessions carry their chapter
 
+// Two-tier desktop width (Kerry 2026-08-04): manager/admin sessions get a
+// 1280px work column app-wide (html.tgf-wide in dashboard.css); everyone
+// else stays at the 1080px default. Pre-apply from sessionStorage so a
+// returning manager/admin doesn't see the page snap wider after the async
+// role check; _applyWidthTier() is the source of truth once the role
+// resolves (init, login, logout).
+function _applyWidthTier() {
+    const wide = currentRole === "admin" || currentRole === "manager";
+    document.documentElement.classList.toggle("tgf-wide", wide);
+    try { sessionStorage.setItem("tgf_wide", wide ? "1" : ""); } catch (e) { /* private mode */ }
+}
+try {
+    if (!window.MEMBER_MODE && sessionStorage.getItem("tgf_wide") === "1") {
+        document.documentElement.classList.add("tgf-wide");
+    }
+} catch (e) { /* private mode */ }
+
 async function checkRole() {
     try {
         const res = await fetch("/api/auth/role");
@@ -104,6 +121,7 @@ async function handleLogout() {
 }
 
 function updateRoleUI() {
+    _applyWidthTier();   // before the badge guard — width applies on every page
     const badge = document.getElementById("role-badge");
     const logoutBtn = document.getElementById("btn-logout");
     if (!badge || !logoutBtn) return;
