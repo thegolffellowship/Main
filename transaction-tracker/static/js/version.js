@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.197.1";
+window.TGF_VERSION = "2.197.2";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.197.2",
+    date: "2026-08-03",
+    changes: [
+      "Under-covering credit flag on event rosters (Kerry, the Callaway case: an $86 duplicate-payment credit transferred onto a ~$335+ championship entry showed no difference due): any active '(credit)' registration whose credit covers less than the event's BASE price (course + markup + fee, before optional side-game buy-ins) now shows an amber '>= $X due' badge next to the price. Applies to every transfer pathway, all chapters.",
+      "ACTIONS column pins to the right edge of the roster (Kerry: 'My window is unable to scroll left right without scrolling all the way to bottom, so I can't see the ability to reverse it') - the last column is position:sticky with a separating shadow, so Edit/reverse controls stay reachable while the wide table scrolls under it.",
+    ],
+  },
   {
     version: "2.197.1",
     date: "2026-08-03",

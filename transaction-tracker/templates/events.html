@@ -6509,7 +6509,24 @@
                     const infoIcon = hasExtraInfo ? '<span class="player-info-icon" title="Has notes / partner / fellowship info">i</span>' : '';
                     html += `<td style="${style}"><a class="cell-link" href="/customers?name=${encodeURIComponent(r.customer || "")}">${escapeHtml(displayName(r.customer, r.user_status))}</a>${tag}${infoIcon}</td>`;
                 } else if (c.key === "item_price") {
-                    html += `<td style="font-weight:600; font-variant-numeric:tabular-nums; ${style}">${escapeHtml(stripPriceSuffix(r.item_price) || "\u2014")}</td>`;
+                    // Under-covering credit flag (Kerry 2026-08-03, the
+                    // Callaway case: an $86 duplicate-payment credit was
+                    // transferred onto a ~$335+ championship entry with no
+                    // difference shown). When a "(credit)" price covers
+                    // less than the event's BASE price (course + markup +
+                    // fee \u2014 before optional side games), show what's still
+                    // due. "\u2265" because buy-ins only raise the real figure.
+                    let dueBadge = "";
+                    if (/\(credit\)/i.test(r.item_price || "") && txStatus === "active"
+                        && (ev.course_cost != null || ev.tgf_markup != null)) {
+                        const _credited = parseFloat((r.item_price || "0").replace(/[^0-9.]/g, "")) || 0;
+                        const _sub = (ev.course_cost || 0) + (ev.tgf_markup || 0) + (ev.side_game_fee || 0);
+                        const _base = _sub + Math.round(_sub * (ev.transaction_fee_pct || 0)) / 100;
+                        if (_base > 0 && _credited < _base - 0.005) {
+                            dueBadge = ` <span class="status-tag" style="background:#fef3c7;color:#92400e;border:1px solid #fcd34d;font-size:0.65rem;padding:0.1rem 0.35rem;border-radius:4px;font-weight:700;white-space:nowrap;" title="Credit covers $${_credited.toFixed(2)} of the $${_base.toFixed(2)} base price (before any side-game buy-ins) \u2014 collect the difference">&ge; $${(_base - _credited).toFixed(2)} due</span>`;
+                        }
+                    }
+                    html += `<td style="font-weight:600; font-variant-numeric:tabular-nums; ${style}">${escapeHtml(stripPriceSuffix(r.item_price) || "\u2014")}${dueBadge}</td>`;
                 } else if (c.key === "actions") {
                     // Build the row's action items as menu entries; collapsed
                     // into a single "⚙ ▾" dropdown for compactness.
