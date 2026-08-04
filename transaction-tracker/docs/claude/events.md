@@ -183,6 +183,15 @@ per-player selected-tee slope/rating/par and is a fast follow-up).
   was transferred out is **not** treated as "already registered," so the manager can add
   them back. This matches the `activePlayers` filter that renders the player table — if you
   can't see them in the roster, the guard won't claim they're registered.
+- **Unknown-name guard (v2.199.1, Kerry — the "Marq" case).** Saving an
+  `rsvp` or `paid_separately` player whose typed name matches no known
+  player (case-insensitive against `apCustomerNames`, the typeahead
+  pool) asks for confirmation first, listing up to 3 closest matches
+  ("Did you mean: Mike Marques?"). Guards against Enter being hit
+  before the typeahead fills the full name, which saves an unlinked
+  partial-name row (no email, no `customer_id`). Skipped for `comp`
+  mode (fixed manager dropdown) and when `apCustomerNames` hasn't
+  loaded yet (avoids false alarms on a cold page).
 
 ## Add Payment
 - Creates a child payment row linked to parent registration via `parent_item_id`

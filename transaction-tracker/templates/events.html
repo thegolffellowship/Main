@@ -10870,6 +10870,26 @@
             return;
         }
 
+        // Unknown-name guard (Kerry 2026-08-04, the "Marq" case: return was
+        // hit before the typeahead filled "Mike Marques", saving an unlinked
+        // partial name). If the typed name matches no known player, confirm
+        // before saving — surfacing the closest matches as the hint.
+        if (mode !== "comp" && apCustomerNames.length) {
+            const lower = name.toLowerCase();
+            const isKnownName = apCustomerNames.some(n => n.toLowerCase() === lower);
+            if (!isKnownName) {
+                const near = apCustomerNames.filter(n => {
+                    const ln = n.toLowerCase();
+                    return ln.startsWith(lower) || ln.includes(lower)
+                        || lower.split(/\s+/).every(w => w && ln.includes(w));
+                }).slice(0, 3);
+                const hint = near.length
+                    ? `\n\nDid you mean: ${near.join(", ")}?\nClick Cancel and pick the name from the dropdown.`
+                    : "";
+                if (!confirm(`"${name}" doesn't match any known player.${hint}\n\nAdd "${name}" as a brand-new person anyway?`)) return;
+            }
+        }
+
         // Send the browser's local date so the order_date matches the user's timezone
         const now = new Date();
         const localDate = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0') + '-' + String(now.getDate()).padStart(2, '0');

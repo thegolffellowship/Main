@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.199.0";
+window.TGF_VERSION = "2.199.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.199.1",
+    date: "2026-08-04",
+    changes: [
+      "Add Player unknown-name guard (Kerry, the 'Marq' case: return was hit before the typeahead filled 'Mike Marques', saving an unlinked partial name onto the TGF Championship roster): saving an RSVP or paid-separately player whose typed name matches no known player now asks for confirmation first, listing the closest matching names ('Did you mean: Mike Marques?') so the manager can cancel and pick from the dropdown instead of creating an orphan row.",
+    ],
+  },
   {
     version: "2.199.0",
     date: "2026-08-04",
