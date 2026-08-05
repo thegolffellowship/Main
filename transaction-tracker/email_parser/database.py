@@ -14670,6 +14670,35 @@ def _champ_roster_bundles(conn, db_path=None) -> dict:
             "child_bundle_ids": child_bundle_ids}
 
 
+def get_event_bucket_accounts(db_path=None) -> dict:
+    """Map events.id -> its per-bucket payout accounts.
+
+    A bucket account is a tgf_events row whose code is
+    '<event item_name> — <BUCKET>' (the 2A championship pattern). Events
+    with bucket accounts replace the regular GAMES-matrix panel with
+    these purses (Kerry 2026-08-05: the matrix doesn't apply to the
+    championship, and managers shouldn't read it as "the games").
+    """
+    out: dict = {}
+    with _connect(db_path) as conn:
+        by_prefix: dict = {}
+        for r in conn.execute(
+                "SELECT code, total_purse FROM tgf_events "
+                "WHERE code LIKE '% — %'").fetchall():
+            prefix, _, bucket = r["code"].rpartition(" — ")
+            if prefix and bucket:
+                by_prefix.setdefault(prefix.strip().lower(), []).append(
+                    {"code": r["code"], "bucket": bucket,
+                     "purse": r["total_purse"] or 0})
+        if not by_prefix:
+            return out
+        for e in conn.execute("SELECT id, item_name FROM events").fetchall():
+            b = by_prefix.get((e["item_name"] or "").strip().lower())
+            if b:
+                out[str(e["id"])] = b
+    return out
+
+
 def record_championship_bucket_accounts(db_path=None) -> dict:
     """Upsert the three championship payout accounts with DERIVED purses.
 

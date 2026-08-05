@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.200.2";
+window.TGF_VERSION = "2.200.3";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.200.3",
+    date: "2026-08-05",
+    changes: [
+      "GAMES tab shows bucket purses on bucket-account events (Kerry: 'I just don't want my manager coming in there and thinking these are the games'): events with per-bucket payout accounts (the championship pattern) replace the regular 9/18 matrix panel with the derived SATURDAY/SUNDAY/COMBINED purse cards plus a field-based explainer — the matrix doesn't apply to a 36-hole event and no championship matrix exists yet. Regular-season events unchanged; works on desktop and the mobile GAMES toggle (same renderer).",
+    ],
+  },
   {
     version: "2.200.2",
     date: "2026-08-05",

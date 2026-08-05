@@ -2968,6 +2968,16 @@
 
     function pkgFor(evId) { return EVENT_PACKAGES[String(evId)] || null; }
 
+    // Per-bucket payout accounts (championship pattern): events that have
+    // them show bucket purses on the GAMES tab instead of the regular
+    // matrix (Kerry 2026-08-05: the matrix doesn't apply, and a manager
+    // shouldn't open GAMES and think "these are the games").
+    let EVENT_BUCKETS = {};
+    fetch("/api/events/bucket-accounts")
+        .then(r => r.ok ? r.json() : {})
+        .then(d => { EVENT_BUCKETS = d || {}; })
+        .catch(() => {});
+
     // Match a registration to a package: manual assignment wins, then an
     // exact paid-price match (real purchases only — a "(credit)" price is
     // what was TRANSFERRED, not what the package costs).
@@ -5991,6 +6001,25 @@
     }
 
     function renderGamesPanel(ev) {
+        // Bucket-account events: the regular 9/18 matrix does NOT apply —
+        // render the derived bucket purses instead of matrix pots so the
+        // GAMES tab never misreads as regular-season games.
+        const _buckets = EVENT_BUCKETS[String(ev.id)];
+        if (_buckets && _buckets.length) {
+            let bh = '<div class="games-panel">';
+            bh += `<div class="games-panel-header">SIDE-GAME POTS &mdash; per-bucket purses (regular games matrix does not apply to this event)</div>`;
+            bh += '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:0.6rem;padding:0.75rem 0;">';
+            for (const b of _buckets) {
+                bh += `<div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:0.75rem;text-align:center;">
+                    <div style="font-size:0.7rem;font-weight:700;color:var(--text-muted);letter-spacing:0.05em;">${escapeHtml(b.bucket)}</div>
+                    <div style="font-size:1.35rem;font-weight:700;color:#059669;">$${(+b.purse).toFixed(2)}</div>
+                </div>`;
+            }
+            bh += '</div>';
+            bh += `<div style="font-size:0.78rem;color:var(--text-muted);">Pots are field-based &mdash; they scale with side-games bundle buyers and recompute as the roster changes. Payouts are recorded under each bucket account on the PAYOUTS tab.</div>`;
+            bh += '</div>';
+            return bh;
+        }
         const holes = extractHolesType(ev.item_name, ev.format);
         if (!holes) return '<p style="color:var(--text-muted);">Cannot determine 9/18 hole type from event name.</p>';
         const matrix = holes === 9 ? window.GAMES_MATRIX_9 : window.GAMES_MATRIX_18;

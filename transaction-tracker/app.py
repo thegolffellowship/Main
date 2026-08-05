@@ -13985,6 +13985,18 @@ except Exception:
 # ── EVENT PACKAGE CONFIGURATIONS (Kerry 2026-08-03) — outlier multi-day
 #    events sold as day-combination packages; see database.py banner ──
 
+@app.route("/api/events/bucket-accounts")
+@require_role("manager")
+def api_events_bucket_accounts():
+    """Per-bucket payout accounts keyed by event id (championship pattern)."""
+    from email_parser.database import get_event_bucket_accounts
+    try:
+        return jsonify(get_event_bucket_accounts())
+    except Exception as e:
+        logger.exception("bucket accounts fetch failed")
+        return jsonify({"error": str(e)}), 500
+
+
 @app.route("/api/events/packages")
 @require_role("manager")
 def api_event_packages_all():
