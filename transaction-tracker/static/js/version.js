@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.200.3";
+window.TGF_VERSION = "2.200.4";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.200.4",
+    date: "2026-08-05",
+    changes: [
+      "FINANCIAL tab is now admin-only (Kerry): hidden from managers on both the desktop tab row and the mobile toggle, and the financial-summary API is raised to admin so the hide is enforced server-side too. For admins the tab renders in persistent TGF orange — always filled, going a shade darker with a white inset ring when it's the active view.",
+    ],
+  },
   {
     version: "2.200.3",
     date: "2026-08-05",

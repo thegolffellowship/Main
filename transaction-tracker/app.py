@@ -12008,7 +12008,7 @@ def api_acct_calculate_all_allocations():
 # ── Event Financial Summary (Unified Financial Model, Issue #242) ─────────
 
 @app.route("/api/events/<event_name>/financial-summary")
-@require_role("manager")
+@require_role("admin")
 def api_event_financial_summary(event_name):
     """Return unified financial summary for an event from the accounting system."""
     try:
