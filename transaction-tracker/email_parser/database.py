@@ -14563,6 +14563,218 @@ def assign_event_package(event_id: int, item_id: int,
             "package_index": package_index}
 
 
+# ── 2026 Championship: per-bucket payout accounts + bundle reclass ──
+# Mailbox #276 items A/B, approved #279 (Kerry "I approve", 2026-08-05).
+# Ratified side-games bundle: $100 = $30 SAT / $30 SUN / $40 COMBINED,
+# $0 taxable, pure pot pass-through; single-day bundle $30 (day games
+# only). Pots are FIELD-BASED and purses are DERIVED at record time so
+# late adds (Jenkins, Callaway completing his balance) self-correct.
+
+_CHAMP_EVENT_ID = 3291
+_CHAMP_EVENT_NAME = "2026 TGF CHAMPIONSHIP"
+_CHAMP_BUCKETS = (
+    ("2026 TGF CHAMPIONSHIP — SATURDAY", "2026-08-15"),
+    ("2026 TGF CHAMPIONSHIP — SUNDAY", "2026-08-16"),
+    ("2026 TGF CHAMPIONSHIP — COMBINED", "2026-08-16"),
+)
+
+
+def _champ_roster_bundles(conn, db_path=None) -> dict:
+    """Classify the championship's ACTIVE roster into side-games bundle
+    carriers.
+
+    A registration carries the bundle when its package label (pinned
+    assignment first, else exact price match against Kerry's package
+    configs) mentions side games, or when a +PAY child holds a $100
+    BOTH-games payment (Robert Straiton's comp case). Single-day bundles
+    ($30) need a day; that lives in the `champ_single_day_assignments`
+    dial ("Name=SAT,Name=SUN") until assigned, and unassigned players are
+    surfaced rather than silently counted.
+    """
+    entry = _event_packages_all(db_path).get(str(_CHAMP_EVENT_ID)) or {}
+    packages = entry.get("packages") or []
+    assignments = entry.get("assignments") or {}
+    day_dial = {}
+    for part in (get_app_setting("champ_single_day_assignments",
+                                 db_path=db_path) or "").split(","):
+        name, _, day = part.partition("=")
+        if name.strip() and day.strip().upper() in ("SAT", "SUN"):
+            day_dial[name.strip().lower()] = day.strip().upper()
+
+    parents = [dict(r) for r in conn.execute(
+        """SELECT id, customer, item_price, order_id, order_date, chapter
+             FROM items
+            WHERE event_id = ? AND parent_item_id IS NULL
+              AND COALESCE(transaction_status, 'active') = 'active'
+              AND COALESCE(item_price, '') NOT LIKE '%comp%'""",
+        (_CHAMP_EVENT_ID,)).fetchall()]
+    comps = [dict(r) for r in conn.execute(
+        """SELECT id, customer, item_price, order_id, order_date, chapter
+             FROM items
+            WHERE event_id = ? AND parent_item_id IS NULL
+              AND COALESCE(transaction_status, 'active') = 'active'
+              AND COALESCE(item_price, '') LIKE '%comp%'""",
+        (_CHAMP_EVENT_ID,)).fetchall()]
+
+    def _pkg_label(item):
+        pin = assignments.get(str(item["id"]))
+        if pin is not None and 0 <= int(pin) < len(packages):
+            return (packages[int(pin)].get("label") or "").upper()
+        price = _parse_dollar(item.get("item_price"))
+        for p in packages:
+            if abs(float(p.get("price") or 0) - price) < 0.005:
+                return (p.get("label") or "").upper()
+        return ""
+
+    full, singles, unassigned, no_bundle = [], {"SAT": [], "SUN": []}, [], []
+    rows_by_bundle = {}  # item_id -> bundle dollars (for the reclass pass)
+    for it in parents:
+        label = _pkg_label(it)
+        has_games = "SIDE GAMES" in label or "+ GAMES" in label \
+            or "+ PRACTICE + GAMES" in label or "GAMES)" in label
+        if not has_games:
+            no_bundle.append(it["customer"])
+            continue
+        if "ONE DAY" in label:
+            rows_by_bundle[it["id"]] = 30.0
+            day = day_dial.get((it["customer"] or "").lower())
+            if day:
+                singles[day].append(it["customer"])
+            else:
+                unassigned.append(it["customer"])
+        else:
+            rows_by_bundle[it["id"]] = 100.0
+            full.append(it["customer"])
+    # Comp registrations join via a $100 BOTH-games +PAY child.
+    child_bundle_ids = {}
+    for it in comps:
+        ch = conn.execute(
+            """SELECT id FROM items WHERE parent_item_id = ?
+                 AND COALESCE(transaction_status,'active') = 'active'
+                 AND UPPER(COALESCE(side_games,'')) = 'BOTH'
+                 AND item_price LIKE '%100%'""",
+            (it["id"],)).fetchone()
+        if ch:
+            full.append(it["customer"])
+            child_bundle_ids[ch["id"]] = 100.0
+    return {"full": full, "singles": singles, "unassigned": unassigned,
+            "no_bundle": no_bundle, "rows_by_bundle": rows_by_bundle,
+            "child_bundle_ids": child_bundle_ids}
+
+
+def record_championship_bucket_accounts(db_path=None) -> dict:
+    """Upsert the three championship payout accounts with DERIVED purses.
+
+    SAT/SUN purse = (full bundles + that day's single-day buyers) × $30;
+    COMBINED purse = full bundles × $40. Re-running recomputes purses from
+    the live roster (idempotent); payout rows are recorded separately
+    after play through the normal flows.
+    """
+    with _connect(db_path) as conn:
+        b = _champ_roster_bundles(conn, db_path=db_path)
+        n_full = len(b["full"])
+        purses = {
+            _CHAMP_BUCKETS[0][0]: 30.0 * (n_full + len(b["singles"]["SAT"])),
+            _CHAMP_BUCKETS[1][0]: 30.0 * (n_full + len(b["singles"]["SUN"])),
+            _CHAMP_BUCKETS[2][0]: 40.0 * n_full,
+        }
+        out = []
+        for (code, date), purse in zip(_CHAMP_BUCKETS,
+                                       purses.values()):
+            row = conn.execute(
+                "SELECT id, total_purse FROM tgf_events WHERE LOWER(code) = LOWER(?)",
+                (code,)).fetchone()
+            if row:
+                conn.execute(
+                    "UPDATE tgf_events SET total_purse = ? WHERE id = ?",
+                    (purse, row["id"]))
+                out.append({"code": code, "purse": purse,
+                            "was": row["total_purse"], "action": "updated"})
+            else:
+                conn.execute(
+                    """INSERT INTO tgf_events (code, name, event_date,
+                                               course, chapter, total_purse)
+                       VALUES (?, ?, ?, 'Lost Pines', 'TGF', ?)""",
+                    (code, code, date, purse))
+                out.append({"code": code, "purse": purse, "action": "created"})
+        conn.commit()
+    return {"accounts": out, "full_bundles": b["full"],
+            "single_day": b["singles"],
+            "single_day_unassigned_needs_kerry": b["unassigned"],
+            "no_bundle": b["no_bundle"]}
+
+
+def reclass_championship_allocations(db_path=None) -> dict:
+    """Apply the #279-approved bundle reclass on event 3291 allocations.
+
+    Bundle dollars ($100 full / $30 single-day) move to prize_pool with $0
+    tax; on existing rows the delta comes OUT of tgf_operating and
+    course_payable stays untouched. Pure-bundle rows (Robert's $100 +PAY
+    child) zero their other buckets — there is no golf in that $100.
+    Missing allocations are created with ONLY the ratified fields and
+    status 'pending' (the schema's word for the proposal's 'partial');
+    they complete when the event-model decomposition lands. Idempotent.
+    """
+    changed, created, skipped = [], [], []
+    with _connect(db_path) as conn:
+        b = _champ_roster_bundles(conn, db_path=db_path)
+        targets = dict(b["rows_by_bundle"])
+        targets.update(b["child_bundle_ids"])
+        for item_id, bundle in targets.items():
+            it = dict(conn.execute(
+                "SELECT * FROM items WHERE id = ?", (item_id,)).fetchone())
+            alloc = conn.execute(
+                "SELECT * FROM acct_allocations WHERE item_id = ?",
+                (item_id,)).fetchone()
+            pure_bundle = abs(_parse_dollar(it.get("item_price")) - bundle) < 0.005
+            if alloc:
+                alloc = dict(alloc)
+                if abs((alloc.get("prize_pool") or 0) - bundle) < 0.005 \
+                        and (alloc.get("tax_reserve") or 0) == 0:
+                    skipped.append({"item_id": item_id,
+                                    "customer": it.get("customer"),
+                                    "reason": "already reclassed"})
+                    continue
+                delta = bundle - (alloc.get("prize_pool") or 0)
+                new_op = 0.0 if pure_bundle else \
+                    max(0.0, round((alloc.get("tgf_operating") or 0) - delta, 2))
+                new_course = 0.0 if pure_bundle else alloc.get("course_payable")
+                conn.execute(
+                    """UPDATE acct_allocations
+                          SET prize_pool = ?, tgf_operating = ?,
+                              course_payable = ?, tax_reserve = 0,
+                              notes = COALESCE(notes || ' | ', '') || ?
+                        WHERE id = ?""",
+                    (bundle, new_op, new_course,
+                     f"reclass #279: bundle ${bundle:.0f} -> prize_pool, "
+                     f"$0 tax; delta from tgf_operating",
+                     alloc["id"]))
+                changed.append({"item_id": item_id,
+                                "customer": it.get("customer"),
+                                "prize_pool": bundle,
+                                "tgf_operating": new_op})
+            else:
+                conn.execute(
+                    """INSERT OR IGNORE INTO acct_allocations
+                           (order_id, item_id, event_name, chapter,
+                            allocation_date, prize_pool, total_collected,
+                            allocation_status, notes)
+                       VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', ?)""",
+                    (it.get("order_id") or f"manual-{item_id}", item_id,
+                     _CHAMP_EVENT_NAME, it.get("chapter"),
+                     it.get("order_date"), bundle,
+                     _parse_dollar(it.get("item_price")),
+                     "reclass #279: ratified fields only (bundle -> "
+                     "prize_pool, $0 tax); golf-side buckets await the "
+                     "event-model decomposition"))
+                created.append({"item_id": item_id,
+                                "customer": it.get("customer"),
+                                "prize_pool": bundle})
+        conn.commit()
+    return {"changed": changed, "created": created, "skipped": skipped,
+            "single_day_unassigned_needs_kerry": b["unassigned"]}
+
+
 # ── SNAPSHOT COMMAND CENTER (Kerry 2026-08-03: "an interactive Command
 #    Center for me to approve, preview, mark accordingly") ──
 # Marks live in the snapshot_center_marks app-setting (rules-as-data, no
@@ -44977,6 +45189,14 @@ def get_hio_pot(db_path=None) -> dict:
                     (get_app_setting("hio_27h_event_patterns",
                                      db_path=db_path)
                      or "HILL COUNTRY MATCHES").split(",") if p.strip()]
+        # 36-hole championships contribute $4/player — two 18-hole
+        # COMPETITION days ($1/nine/player law, ratified #276 item 7;
+        # sizing instruction #279). Friday practice contributes $0, and
+        # the field is ALL registered players, not just bundle buyers.
+        pats_36h = [p.strip().upper() for p in
+                    (get_app_setting("hio_36h_event_patterns",
+                                     db_path=db_path)
+                     or "2026 TGF CHAMPIONSHIP").split(",") if p.strip()]
         # Field-size overrides for days where the tracker's registration
         # count lags the true field (Kerry: 2026 Matches was 32 players,
         # tracker holds 29 registrations). Dial format:
@@ -45018,7 +45238,9 @@ def get_hio_pot(db_path=None) -> dict:
             players = next((n for pat, n in overrides.items()
                             if pat in name_u),
                            max(counts["players"] or 0, banked))
-            if any(p in name_u for p in pats_27h):
+            if any(p in name_u for p in pats_36h):
+                hio = float(players or 0) * 4.0
+            elif any(p in name_u for p in pats_27h):
                 hio = float(players or 0) * 3.0
             else:
                 holes = _event_holes_type(ev["item_name"], None)

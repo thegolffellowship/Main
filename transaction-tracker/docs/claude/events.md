@@ -989,6 +989,25 @@ event showed default amounts ($8/$7) in Withdraw Player / Partial Refund.
 ## Skins Type row
 - Computed row in matrix showing which skins format applies per player count
 
+# 2026 Championship Buckets (v2.199.3, #276 A/B approved #279)
+
+- **Three payout accounts** — "2026 TGF CHAMPIONSHIP — SATURDAY / SUNDAY /
+  COMBINED" `tgf_events` rows, EVENTS tab (Kerry-approved placement). Purses
+  are **derived, never fixed**: bridge `scoring-champ-buckets` recomputes from
+  the live bundle-carrier roster (SAT/SUN = (full + that-day singles) × $30,
+  COMBINED = full × $40). Bundle carriers resolve from Kerry's package configs
+  (pinned assignment first, else exact price match; label mentioning games =
+  bundle) plus $100 BOTH +PAY children on comp rows (Robert). Single-day days
+  live in the `champ_single_day_assignments` dial ("Name=SAT,Name=SUN");
+  unassigned singles are reported in the bridge output, not counted.
+- **Allocation reclass** — bridge `scoring-champ-alloc-reclass` (idempotent):
+  bundle dollars → prize_pool, tax_reserve 0, delta from tgf_operating,
+  course_payable untouched; pure-bundle rows zero other buckets; missing
+  allocations created with ratified fields only, status **'pending'** (the
+  schema CHECK has no 'partial') until the event-model decomposition lands.
+- **HIO**: NO fourth account — championship HIO feeds the season pot like any
+  week, sized $4/player by `hio_36h_event_patterns` (get_hio_pot).
+
 # TGF Payouts Page
 
 ## Architecture

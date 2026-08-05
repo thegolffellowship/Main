@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.199.2";
+window.TGF_VERSION = "2.199.3";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.199.3",
+    date: "2026-08-05",
+    changes: [
+      "Championship per-bucket payout accounts (mailbox #276 A, approved #279): bridge scoring-champ-buckets upserts '2026 TGF CHAMPIONSHIP — SATURDAY / SUNDAY / COMBINED' tgf_events accounts with purses DERIVED from the live bundle-carrier roster (SAT/SUN = carriers × $30, COMBINED = full bundles × $40). Single-day buyers count toward their day via the champ_single_day_assignments dial ('Name=SAT'); unassigned players are surfaced, never silently counted.",
+      "Championship allocation reclass (mailbox #276 B, approved #279): bridge scoring-champ-alloc-reclass moves each bundle's dollars ($100 full / $30 single-day) to prize_pool with $0 tax — delta out of tgf_operating, course_payable untouched, pure-bundle rows (Robert's +PAY) zero their other buckets, and missing allocations are created status 'pending' with ratified fields only.",
+      "HIO pot sizes 36-hole championships at $4/player via the new hio_36h_event_patterns dial (default '2026 TGF CHAMPIONSHIP') — two 18-hole competition days per the $1/nine/player law; Friday practice contributes $0; field = all registered players.",
+    ],
+  },
   {
     version: "2.199.2",
     date: "2026-08-05",

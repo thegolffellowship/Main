@@ -1868,6 +1868,20 @@ def _scoring_dispatch(url: str, extract: str):
             _p = json.loads(arg)
             return json.dumps(db.patch_expense_row(
                 int(_p["id"]), _p.get("fields") or {}), indent=2, default=str)
+        if cmd == "scoring-champ-buckets":
+            # Upsert the three 2026 Championship payout accounts
+            # (SATURDAY/SUNDAY/COMBINED) with purses DERIVED from the live
+            # bundle-carrier roster. Idempotent — re-run any time the
+            # roster changes. Mailbox #276 A, approved #279.
+            return json.dumps(db.record_championship_bucket_accounts(),
+                              indent=2, default=str)
+        if cmd == "scoring-champ-alloc-reclass":
+            # Apply the #279-approved bundle reclass on event 3291
+            # allocations (bundle -> prize_pool, $0 tax, delta from
+            # tgf_operating; missing rows created 'pending' with ratified
+            # fields only). Idempotent. Mailbox #276 B.
+            return json.dumps(db.reclass_championship_allocations(),
+                              indent=2, default=str)
         if cmd == "scoring-add-payment":
             # JSON: {"event": <event name>, "customer": <player>,
             #   "item": "BOTH Games", "amount": "$100.00", "source": "Venmo",
