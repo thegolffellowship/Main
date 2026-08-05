@@ -210,14 +210,29 @@ def get_event_registrations(event_name: str) -> str:
     """Get all registrations (active transactions) for a specific event.
 
     Args:
-        event_name: The exact event/item name
+        event_name: The event/item name (canonical or any registered alias)
     """
     conn = get_connection()
-    rows = conn.execute(
-        """SELECT * FROM items
-           WHERE item_name = ? COLLATE NOCASE AND COALESCE(transaction_status, 'active') = 'active'
-           ORDER BY customer ASC""",
+    # Resolve through event_aliases both directions, like the UI roster does:
+    # the given name may be an alias of a canonical event, and roster rows may
+    # carry alias spellings (e.g. "TGF CHAMPIONSHIP" vs "2026 TGF CHAMPIONSHIP").
+    row = conn.execute(
+        "SELECT canonical_event_name FROM event_aliases WHERE alias_name = ? COLLATE NOCASE",
         (event_name,),
+    ).fetchone()
+    canonical = row["canonical_event_name"] if row else event_name
+    alias_rows = conn.execute(
+        "SELECT alias_name FROM event_aliases WHERE canonical_event_name = ? COLLATE NOCASE",
+        (canonical,),
+    ).fetchall()
+    names = {canonical.lower()} | {r["alias_name"].lower() for r in alias_rows}
+    placeholders = ",".join("?" for _ in names)
+    rows = conn.execute(
+        f"""SELECT * FROM items
+            WHERE LOWER(item_name) IN ({placeholders})
+              AND COALESCE(transaction_status, 'active') = 'active'
+            ORDER BY customer ASC""",
+        tuple(names),
     ).fetchall()
     conn.close()
     return json.dumps([dict(r) for r in rows], indent=2)

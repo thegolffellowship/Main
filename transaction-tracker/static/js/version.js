@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.199.1";
+window.TGF_VERSION = "2.199.2";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.199.2",
+    date: "2026-08-05",
+    changes: [
+      "MCP get_event_registrations now resolves event_aliases in both directions (mailbox #276 item G): querying '2026 TGF CHAMPIONSHIP' also returns rows stored under the 'TGF CHAMPIONSHIP' alias (James Jones item 2392) and vice versa, matching what the UI roster shows.",
+      "Boot heal: items with a null chapter now derive it from the customer's record (mailbox #276 item H, Kerry ruling: customer record, never shipping address) — fills chapter and chapter_id in one pass. Covers the Aug 5 championship orders (items 2505/2507/2509) whose event_id also links on this boot via the existing alias-aware backfill.",
+    ],
+  },
   {
     version: "2.199.1",
     date: "2026-08-04",

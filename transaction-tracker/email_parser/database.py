@@ -5425,6 +5425,10 @@ def init_db(db_path: str | Path | None = None) -> None:
             _backfill_event_id_on_string_tables(conn)
         except Exception:
             logger.exception("Non-fatal: _backfill_event_id_on_string_tables failed")
+        try:
+            _backfill_chapter_from_customer(conn)
+        except Exception:
+            logger.exception("Non-fatal: _backfill_chapter_from_customer failed")
 
         # Promote approved expense_transactions that have not yet been linked
         # to acct_transactions (e.g. expenses approved before this feature shipped).
@@ -18977,6 +18981,40 @@ def _backfill_event_id_on_items(conn: sqlite3.Connection) -> int:
     conn.commit()
     if updated:
         logger.info("Backfilled event_id for %d items rows", updated)
+    return updated
+
+
+def _backfill_chapter_from_customer(conn: sqlite3.Connection) -> int:
+    """Populate items.chapter from the customer's record when extraction left it null.
+
+    Kerry ruling (mailbox #276 item H, 2026-08-05): when the parser can't
+    determine chapter from the item itself, it derives from the CUSTOMER
+    record — never from the shipping/billing address. Also links chapter_id
+    in the same pass so the dimension backfill doesn't lag a boot behind.
+    """
+    rows = conn.execute(
+        """SELECT i.id, c.chapter
+           FROM items i JOIN customers c ON c.id = i.customer_id
+           WHERE (i.chapter IS NULL OR i.chapter = '')
+             AND c.chapter IS NOT NULL AND c.chapter != ''"""
+    ).fetchall()
+    if not rows:
+        return 0
+    chapter_ids = {
+        r["name"]: r["id"]
+        for r in conn.execute("SELECT id, name FROM chapters").fetchall()
+    }
+    updated = 0
+    for row in rows:
+        cur = conn.execute(
+            "UPDATE items SET chapter = ?, chapter_id = COALESCE(chapter_id, ?) "
+            "WHERE id = ? AND (chapter IS NULL OR chapter = '')",
+            (row["chapter"], chapter_ids.get(row["chapter"]), row["id"]),
+        )
+        updated += cur.rowcount
+    conn.commit()
+    if updated:
+        logger.info("Backfilled chapter from customer for %d items rows", updated)
     return updated
 
 
