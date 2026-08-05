@@ -195,6 +195,15 @@ per-player selected-tee slope/rating/par and is a fast follow-up).
 
 ## Add Payment
 - Creates a child payment row linked to parent registration via `parent_item_id`
+- Remote path: bridge `scoring-add-payment` (JSON: event/customer/item/amount/
+  source/date/note) calls the same `add_payment_to_event` as the UI modal —
+  alias-aware parent lookup, allocation + `addon-<id>` ledger entry. First use:
+  Robert Straiton's $100 championship bundle (item 2510, mailbox #276 C); his
+  pre-existing inbound Venmo ledger row (exp-promoted-1711, acct 10852) was then
+  merged into the addon entry (acct 13424) via `scoring-acct-patch`
+  status:merged to prevent double-counting. That merge step is required any
+  time the money ALREADY arrived as a promoted inbound Venmo before the +PAY
+  is recorded.
 - Child rows excluded from player counts, shown as indented "+PAY" sub-rows
 - Item types: NET Games, GROSS Games, BOTH Games, Event Upgrade (9→18 holes), Other
 - **Event Upgrade** updates the parent item's `holes` to "18" but does NOT affect games
