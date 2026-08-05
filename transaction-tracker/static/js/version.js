@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.200.0";
+window.TGF_VERSION = "2.200.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.200.1",
+    date: "2026-08-05",
+    changes: [
+      "scoring-expense-patch can now set matched_item_id, linking an inbound receipt to the roster registration it paid for (mailbox #284: Jenkins' $420 Venmo receipt → his Add Player row, with review_status 'ignored' guarding the double-count since the paid-separately add already booked the income).",
+    ],
+  },
   {
     version: "2.200.0",
     date: "2026-08-05",

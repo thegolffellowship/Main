@@ -37569,7 +37569,7 @@ def patch_expense_row(expense_id: int, fields: dict,
     (recategorize, link event, fix type). append_note adds to notes."""
     allowed = {"category", "transaction_type", "event_name", "customer_id",
                "merchant", "entity", "email_uid", "account_id",
-               "review_status"}
+               "review_status", "matched_item_id"}
     if "review_status" in fields and fields["review_status"] not in (
             "pending", "approved", "corrected", "ignored"):
         # 'ignored' is the schema's dismissal state (CHECK constraint on
