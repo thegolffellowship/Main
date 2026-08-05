@@ -1868,6 +1868,26 @@ def _scoring_dispatch(url: str, extract: str):
             _p = json.loads(arg)
             return json.dumps(db.patch_expense_row(
                 int(_p["id"]), _p.get("fields") or {}), indent=2, default=str)
+        if cmd == "scoring-add-payment":
+            # JSON: {"event": <event name>, "customer": <player>,
+            #   "item": "BOTH Games", "amount": "$100.00", "source": "Venmo",
+            #   "date": "YYYY-MM-DD", "note": ...} — records a +PAY child on
+            # the player's active registration, same path as the UI Add
+            # Payment modal (alias-aware parent lookup, allocation + addon
+            # ledger entry). Mailbox #276 item C (Robert Straiton) is the
+            # first use.
+            _p = json.loads(arg)
+            _r = db.add_payment_to_event(
+                event_name=_p["event"], customer=_p["customer"],
+                payment_item=_p.get("item", ""),
+                payment_amount=_p.get("amount", ""),
+                payment_source=_p.get("source", ""),
+                note=_p.get("note", ""),
+                order_date=_p.get("date", ""))
+            if _r is None:
+                _r = {"error": "no active registration found for that "
+                               "customer on that event"}
+            return json.dumps(_r, indent=2, default=str)
         if cmd == "scoring-acct-patch":
             # JSON: {"id": <acct_transaction_id>, "fields": {entity,
             #   category, event, append_note}} — connectivity patch for
