@@ -6710,6 +6710,16 @@
                     let dueBadge = "";
                     const _isCredit = /\(credit\)/i.test(r.item_price || "");
                     const _paid = parseFloat((r.item_price || "0").replace(/[^0-9.]/g, "")) || 0;
+                    // Settled +PAY children count toward the package (#286,
+                    // Callaway: $86 credit + $334 Venmo child still showed
+                    // "$334.00 due"), and the paid_at: stamp — the same one
+                    // the green $ badge reads — suppresses the badge outright.
+                    const _childPaid = childPayments
+                        .filter(c => String(c.parent_item_id) === String(r.id)
+                            && (c.transaction_status || "active") === "active")
+                        .reduce((s, c) => s + (parseFloat((c.item_price || "0").replace(/[^0-9.]/g, "")) || 0), 0);
+                    const _covered = _paid + _childPaid;
+                    const _paidStamped = (r.credit_note || "").startsWith("paid_at:");
                     const _pkgEntry = pkgFor(ev.id);
                     if (_pkgEntry && (_pkgEntry.packages || []).length && txStatus === "active") {
                         // Package-aware pricing (Kerry 2026-08-03, TGF
@@ -6724,8 +6734,8 @@
                             } else {
                                 dueBadge = ` <span class="status-tag" style="background:#eef2ff;color:#3730a3;border:1px solid #c7d2fe;font-size:0.65rem;padding:0.1rem 0.35rem;border-radius:4px;font-weight:700;white-space:nowrap;" title="Matched by paid price to the $${(+_m.pkg.price).toFixed(2)} package">${escapeHtml(_m.pkg.label)}</span>`;
                             }
-                            if (_paid < _m.pkg.price - 0.005) {
-                                dueBadge += ` <span class="status-tag" style="background:#fef3c7;color:#92400e;border:1px solid #fcd34d;font-size:0.65rem;padding:0.1rem 0.35rem;border-radius:4px;font-weight:700;white-space:nowrap;" title="${_isCredit ? "Credit covers" : "Paid"} $${_paid.toFixed(2)} of the $${(+_m.pkg.price).toFixed(2)} ${escapeHtml(_m.pkg.label)} package \u2014 collect the difference">$${(_m.pkg.price - _paid).toFixed(2)} due</span>`;
+                            if (!_paidStamped && _covered < _m.pkg.price - 0.005) {
+                                dueBadge += ` <span class="status-tag" style="background:#fef3c7;color:#92400e;border:1px solid #fcd34d;font-size:0.65rem;padding:0.1rem 0.35rem;border-radius:4px;font-weight:700;white-space:nowrap;" title="${_isCredit ? "Credit covers" : "Paid"} $${_covered.toFixed(2)} of the $${(+_m.pkg.price).toFixed(2)} ${escapeHtml(_m.pkg.label)} package \u2014 collect the difference">$${(_m.pkg.price - _covered).toFixed(2)} due</span>`;
                             }
                         } else if (_isCredit) {
                             // Credit rows never auto-match (the credited amount
@@ -6741,8 +6751,8 @@
                         // \u2265-base heuristic (Callaway case, v2.197.2).
                         const _sub = (ev.course_cost || 0) + (ev.tgf_markup || 0) + (ev.side_game_fee || 0);
                         const _base = _sub + Math.round(_sub * (ev.transaction_fee_pct || 0)) / 100;
-                        if (_base > 0 && _paid < _base - 0.005) {
-                            dueBadge = ` <span class="status-tag" style="background:#fef3c7;color:#92400e;border:1px solid #fcd34d;font-size:0.65rem;padding:0.1rem 0.35rem;border-radius:4px;font-weight:700;white-space:nowrap;" title="Credit covers $${_paid.toFixed(2)} of the $${_base.toFixed(2)} base price (before any side-game buy-ins) \u2014 collect the difference">&ge; $${(_base - _paid).toFixed(2)} due</span>`;
+                        if (_base > 0 && !_paidStamped && _covered < _base - 0.005) {
+                            dueBadge = ` <span class="status-tag" style="background:#fef3c7;color:#92400e;border:1px solid #fcd34d;font-size:0.65rem;padding:0.1rem 0.35rem;border-radius:4px;font-weight:700;white-space:nowrap;" title="Credit covers $${_covered.toFixed(2)} of the $${_base.toFixed(2)} base price (before any side-game buy-ins) \u2014 collect the difference">&ge; $${(_base - _covered).toFixed(2)} due</span>`;
                         }
                     }
                     html += `<td style="font-weight:600; font-variant-numeric:tabular-nums; ${style}">${escapeHtml(stripPriceSuffix(r.item_price) || "\u2014")}${dueBadge}</td>`;

@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.200.1";
+window.TGF_VERSION = "2.200.2";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.200.2",
+    date: "2026-08-05",
+    changes: [
+      "Package due-badge now nets settled +PAY children and respects the paid_at stamp (mailbox #286, Kerry screenshot: Callaway's $86 credit + $334 settled Venmo child still showed '$334.00 DUE' next to his package chip). Due = package price − (parent + active +PAY children), suppressed entirely once the row carries the balance-paid stamp the green $ badge reads. Mazanec (genuinely unpaid) keeps his DUE badge until his Venmo lands. Same netting applied to the no-packages ≥-base fallback badge.",
+    ],
+  },
   {
     version: "2.200.1",
     date: "2026-08-05",
