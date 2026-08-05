@@ -13248,6 +13248,20 @@
 
             // Find event data for live price recalculation
             const selEvent = allEvents.find(e => e.item_name === eventName);
+            // Package-aware pricing (mailbox #281, Kerry-ratified 2026-08-05):
+            // when the event has package configs, the sellable packages ARE the
+            // prices — the per-holes chain produced $355 for Callaway on 3291,
+            // a price matching no real combination. The dropdown is filtered by
+            // the player's status via the "- Member"/"- Guest" label suffix
+            // convention; 1ST TIMER prices as member.
+            const crdPkgEntry = selEvent ? pkgFor(selEvent.id) : null;
+            const crdHasPkgs = !!(crdPkgEntry && (crdPkgEntry.packages || []).length);
+            const _crdPkgOptions = status => {
+                const suf = (status || '').toUpperCase().includes('GUEST') ? '- GUEST' : '- MEMBER';
+                return (crdPkgEntry.packages || [])
+                    .map((p, i) => ({ p, i }))
+                    .filter(({ p }) => (p.label || '').toUpperCase().trim().endsWith(suf));
+            };
             const evFmt = selEvent ? (selEvent.format || '') : '';
             const isComboEvt = evFmt.toLowerCase().includes('combo') || evFmt.toLowerCase().includes('9/18');
             const prev = info.previous_selections || {};
@@ -13337,8 +13351,12 @@
                     ${scenarioLabel}
                 </div>
                 <div id="credit-selections" data-holes="${escapeHtml(initHoles)}" data-games="${escapeHtml(initGames)}" data-status="${escapeHtml(initStatus)}" data-tee="${escapeHtml(initTee)}" style="margin-bottom:0.75rem;padding:0.5rem 0.75rem;background:#f9fafb;border-radius:6px;border:1px solid #e5e7eb;">
-                    <div style="font-size:0.72rem;font-weight:600;color:#374151;margin-bottom:0.35rem;">Event Selections</div>
-                    ${holesChipsHtml}${gamesChipsHtml}${statusChipsHtml}${teeSelectHtml}
+                    <div style="font-size:0.72rem;font-weight:600;color:#374151;margin-bottom:0.35rem;">${crdHasPkgs ? 'Package' : 'Event Selections'}</div>
+                    ${crdHasPkgs ? `
+                    <div style="display:flex;align-items:center;flex-wrap:wrap;margin-bottom:0.25rem;">
+                        <span style="font-size:0.72rem;color:#6b7280;width:52px;flex-shrink:0;">Pkg:</span>
+                        <select id="credit-pkg-sel" style="font-size:0.75rem;padding:0.15rem 0.3rem;border:1px solid #d1d5db;border-radius:4px;color:#374151;max-width:100%;"></select>
+                    </div>` : holesChipsHtml + gamesChipsHtml}${statusChipsHtml}${teeSelectHtml}
                 </div>
                 <div id="credit-excess-section" style="margin-top:0.75rem;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:6px;padding:0.6rem 0.75rem;display:none;"></div>
                 <div id="credit-balance-note" style="display:none;margin-top:0.5rem;font-size:0.82rem;color:#92400e;background:#fef3c7;border:1px solid #fde68a;border-radius:6px;padding:0.5rem 0.75rem;"></div>
@@ -13363,7 +13381,23 @@
                 const fmt2 = v => '$' + parseFloat(v || 0).toFixed(2);
 
                 let newSubtotal = null;
-                if (selEvent) {
+                if (crdHasPkgs) {
+                    // Package price IS the price (#281). The dropdown holds the
+                    // package INDEX into the event's stored configs; the server
+                    // re-reads the price from the configs on submit.
+                    const sel = document.getElementById('credit-pkg-sel');
+                    const idx = sel && sel.value !== '' ? parseInt(sel.value, 10) : NaN;
+                    const pk = !isNaN(idx) ? (crdPkgEntry.packages || [])[idx] : null;
+                    if (pk) {
+                        newSubtotal = parseFloat(pk.price);
+                        applyCreditState.packageIndex = idx;
+                        const lu = (pk.label || '').toUpperCase();
+                        container.dataset.games = (lu.includes('SIDE GAMES') || lu.includes('+ GAMES')
+                            || lu.includes('+ PRACTICE + GAMES') || lu.includes('GAMES)')) ? 'BOTH' : 'NONE';
+                    } else {
+                        applyCreditState.packageIndex = null;
+                    }
+                } else if (selEvent) {
                     const ef = selEvent.format || '';
                     const isC = ef.toLowerCase().includes('combo') || ef.toLowerCase().includes('9/18');
                     let cc, muM, sg;
@@ -13519,6 +13553,27 @@
                 applyCreditState.currentSelections = { holes: curHoles, side_games: curGames, tee_choice: curTee, user_status: curStatus };
             }
 
+            // Populate the package dropdown for the current status; a status
+            // flip refilters while keeping the same base package when its
+            // Member/Guest counterpart exists (#281).
+            function _rebuildCrdPkgOptions() {
+                if (!crdHasPkgs) return;
+                const sel = document.getElementById('credit-pkg-sel');
+                if (!sel) return;
+                const c = document.getElementById('credit-selections');
+                const status = c ? (c.dataset.status || 'MEMBER') : 'MEMBER';
+                const opts = _crdPkgOptions(status);
+                const prevLabel = sel.selectedOptions && sel.selectedOptions[0]
+                    ? sel.selectedOptions[0].textContent : '';
+                sel.innerHTML = opts.map(({ p, i }) =>
+                    `<option value="${i}">${escapeHtml(p.label)} — $${parseFloat(p.price).toFixed(2)}</option>`).join('');
+                if (prevLabel) {
+                    const base = prevLabel.split('—')[0].replace(/- *(Member|Guest).*$/i, '').trim().toUpperCase();
+                    const m = opts.findIndex(({ p }) => (p.label || '').toUpperCase().startsWith(base));
+                    if (m > -1) sel.selectedIndex = m;
+                }
+            }
+
             document.querySelectorAll('.crd-chip').forEach(chip => {
                 chip.addEventListener('click', () => {
                     const grp = chip.dataset.group;
@@ -13526,9 +13581,15 @@
                     const c = document.getElementById('credit-selections');
                     if (c) { if (grp==='holes') c.dataset.holes=val; else if (grp==='games') c.dataset.games=val; else if (grp==='status') c.dataset.status=val; }
                     _activateCrdChip(grp, val);
+                    if (grp === 'status') _rebuildCrdPkgOptions();
                     _updateCrdCalc();
                 });
             });
+            if (crdHasPkgs) {
+                _rebuildCrdPkgOptions();
+                const _pkgSel = document.getElementById('credit-pkg-sel');
+                if (_pkgSel) _pkgSel.addEventListener('change', _updateCrdCalc);
+            }
             const _teeSel = document.getElementById('credit-tee-sel');
             if (_teeSel) {
                 _teeSel.addEventListener('change', () => {
@@ -13618,6 +13679,7 @@
                     tee_choice: curSel.tee_choice || prev.tee_choice || '',
                     user_status: curSel.user_status || prev.user_status || '',
                     auto_email: (document.getElementById('credit-auto-email') || {checked: true}).checked,
+                    package_index: applyCreditState.packageIndex != null ? applyCreditState.packageIndex : undefined,
                 })
             });
             if (doVenmo) {

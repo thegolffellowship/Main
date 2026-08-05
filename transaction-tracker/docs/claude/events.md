@@ -1007,6 +1007,18 @@ event showed default amounts ($8/$7) in Withdraw Player / Partial Refund.
   schema CHECK has no 'partial') until the event-model decomposition lands.
 - **HIO**: NO fourth account — championship HIO feeds the season pot like any
   week, sized $4/player by `hio_36h_event_patterns` (get_hio_pot).
+- **Package-aware Apply Credit (v2.200.0, #281 Kerry-ratified).** On events
+  WITH package configs the modal replaces Event Selections with a Package
+  dropdown filtered by player status via the "- Member"/"- Guest" label
+  suffix (1st Timer = member; status flip refilters, keeping the same base
+  package). New Event Price = package price (`apply_credit_to_rsvp
+  package_index` param — server re-reads price from stored configs); games
+  derive from the label; the registration is pinned via
+  `assign_event_package` post-commit; balance-due email pipeline gets the
+  package-derived balance. Events without configs: unchanged legacy path.
+- **Single-day day resolution (#282)**: extractor carries "WHICH DAYS?:
+  <answer>" into item notes; `_champ_roster_bundles` self-assigns SAT/SUN
+  from it, with the `champ_single_day_assignments` dial as the override.
 
 # TGF Payouts Page
 

@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.199.3";
+window.TGF_VERSION = "2.200.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.200.0",
+    date: "2026-08-05",
+    changes: [
+      "Package-aware Apply Credit (mailbox #281, Kerry-ratified, championship-critical): on events with package configurations the modal's Event Selections block becomes a Package dropdown filtered by the player's status ('- Member'/'- Guest' label suffix; 1st Timer prices as member; flipping status refilters, keeping the same base package). New Event Price = the selected package's price — Callaway picking 'Both Days + Side Games - Member' shows $420 − $86 = $334 due, exact — games auto-derive from the label, the created registration is pinned to the package, and the balance-due email/Venmo-request pipeline receives the package-derived balance. Events without configs behave exactly as before; the server re-reads the price from stored configs, never trusting the client.",
+      "WHICH DAYS extraction (mailbox #282): the order-email parser now always carries the multi-day 'WHICH DAYS?' answer into notes, and the championship bundle classifier self-assigns single-day buyers from it (the champ_single_day_assignments dial remains the override). Larson's day was ruled SATURDAY from his order email — SATURDAY purse $480.",
+    ],
+  },
   {
     version: "2.199.3",
     date: "2026-08-05",

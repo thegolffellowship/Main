@@ -5848,6 +5848,7 @@ def api_apply_credit_to_rsvp(item_id):
         side_games=side_games,
         tee_choice=tee_choice,
         user_status=user_status,
+        package_index=data.get("package_index"),
     )
     if not result.get("ok"):
         return jsonify({"error": result.get("error", "Failed")}), 400
@@ -5981,6 +5982,7 @@ def api_gg_rsvp_apply_credit(rsvp_id):
         side_games=side_games,
         tee_choice=tee_choice,
         user_status=user_status,
+        package_index=data.get("package_index"),
     )
     if not result.get("ok"):
         return jsonify({"error": result.get("error", "Failed")}), 400

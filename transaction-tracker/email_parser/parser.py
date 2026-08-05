@@ -220,7 +220,12 @@ FIELD-SPECIFIC GUIDANCE:
   instructions from the player. Look for "Notes", "Comments", \
   "Special Requests", "Special Instructions", "Additional Info", etc. \
   If BOTH "Notes" and "Special Instructions" fields exist, combine them \
-  with " - " between them. Preserve the text as-is.
+  with " - " between them. Preserve the text as-is. \
+  IMPORTANT — day selection: multi-day championship orders carry a \
+  "WHICH DAYS?" question (e.g. "WHICH DAYS?: SATURDAY Only = $170"). \
+  When present, ALWAYS include it in notes as "WHICH DAYS?: <answer>" \
+  (prepend it before other notes, separated by ", ") — day selection \
+  drives day-game pot assignment and must not be dropped.
 - "date_of_birth": YYYY-MM-DD format. Often appears on membership orders.
 - "transaction_fees": The processing/transaction fee amount charged on the \
   order (e.g. "$4.90"). This is an ORDER-level field, not per-item. \

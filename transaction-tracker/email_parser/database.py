@@ -14602,7 +14602,7 @@ def _champ_roster_bundles(conn, db_path=None) -> dict:
             day_dial[name.strip().lower()] = day.strip().upper()
 
     parents = [dict(r) for r in conn.execute(
-        """SELECT id, customer, item_price, order_id, order_date, chapter
+        """SELECT id, customer, item_price, order_id, order_date, chapter, notes
              FROM items
             WHERE event_id = ? AND parent_item_id IS NULL
               AND COALESCE(transaction_status, 'active') = 'active'
@@ -14637,7 +14637,15 @@ def _champ_roster_bundles(conn, db_path=None) -> dict:
             continue
         if "ONE DAY" in label:
             rows_by_bundle[it["id"]] = 30.0
+            # Dial is the OVERRIDE (#282); the order email's "WHICH DAYS?"
+            # answer (carried in notes by the extractor) self-assigns when
+            # no override is set.
             day = day_dial.get((it["customer"] or "").lower())
+            if not day:
+                m = re.search(r"WHICH DAYS\?:\s*(SATURDAY|SUNDAY)",
+                              (it.get("notes") or "").upper())
+                if m:
+                    day = "SAT" if m.group(1) == "SATURDAY" else "SUN"
             if day:
                 singles[day].append(it["customer"])
             else:
@@ -25037,6 +25045,7 @@ def apply_credit_to_rsvp(
     side_games: str = "",
     tee_choice: str = "",
     user_status: str = "",
+    package_index: int | None = None,
     db_path: str | Path | None = None,
 ) -> dict:
     """Apply player credits to an RSVP-only item, converting it to an active registration.
@@ -25046,6 +25055,11 @@ def apply_credit_to_rsvp(
     - Creates accounting transfer entries.
     - excess_action='keep': leftover credit stays as a new credited item.
     - excess_action='note': just records the excess amount, admin handles manually.
+    - package_index (mailbox #281, Kerry-ratified 2026-08-05): on events with
+      package configs the selected PACKAGE is the price — the per-holes pricing
+      chain produces prices matching no sellable combination on multi-day
+      events (Callaway $355 case). Games derive from the package label and the
+      registration is pinned to the package so the roster chips it.
     Returns dict with ok, amount_applied, excess.
     """
     import time as _time
@@ -25112,10 +25126,30 @@ def apply_credit_to_rsvp(
         u_games = side_games or credited_items[0].get("side_games") or "NONE"
         u_tee = tee_choice or credited_items[0].get("tee_choice") or ""
 
-        breakdown = _calc_event_pricing_breakdown(event, u_status, u_holes, u_games)
+        # Package-aware path (#281): validate the selected package against the
+        # stored configs — the server reads the price from the configs, never
+        # from the client.
+        package = None
+        if package_index is not None and event.get("id"):
+            _pkgs = (_event_packages_all(db_path).get(str(event["id"]))
+                     or {}).get("packages") or []
+            try:
+                package = _pkgs[int(package_index)]
+            except (IndexError, ValueError, TypeError):
+                return {"ok": False,
+                        "error": f"package index {package_index} out of range"}
+            _lbl = (package.get("label") or "").upper()
+            u_games = "BOTH" if ("SIDE GAMES" in _lbl or "+ GAMES" in _lbl
+                                 or "+ PRACTICE + GAMES" in _lbl
+                                 or "GAMES)" in _lbl) else "NONE"
+
+        breakdown = None if package else \
+            _calc_event_pricing_breakdown(event, u_status, u_holes, u_games)
         # Compare credit against the pre-tx-fee subtotal: any balance due is paid via
-        # Venmo (no merchant fee), so we don't charge tx fee on it.
-        new_subtotal = breakdown["subtotal"] if breakdown else None
+        # Venmo (no merchant fee), so we don't charge tx fee on it. With a
+        # package selected, the package price IS the subtotal (#281).
+        new_subtotal = float(package["price"]) if package else \
+            (breakdown["subtotal"] if breakdown else None)
         applied = min(total_credit, new_subtotal) if new_subtotal else total_credit
         excess = round(total_credit - (new_subtotal or total_credit), 2)
 
@@ -25267,6 +25301,16 @@ def apply_credit_to_rsvp(
             excess_credit_id = cur.lastrowid
 
         conn.commit()
+        # Pin the registration to its package AFTER the commit (the pin
+        # writes app_settings through its own connection) so the roster
+        # chips it and future balance math reads the same package (#281).
+        if package is not None:
+            try:
+                assign_event_package(event["id"], rsvp_item_id,
+                                     int(package_index), db_path=db_path)
+            except Exception:
+                logger.warning("apply-credit package pin failed for item %d",
+                               rsvp_item_id, exc_info=True)
         return {
             "ok": True,
             "amount_applied": applied,
@@ -25280,8 +25324,10 @@ def apply_credit_to_rsvp(
             "total_paid": total_paid,
             "remaining_owed": remaining_after_payments,
             "overpayment_credit_id": overpayment_credit_id,
-            "new_price": breakdown["total"] if breakdown else None,
+            "new_price": float(package["price"]) if package else
+                (breakdown["total"] if breakdown else None),
             "new_subtotal": new_subtotal,
+            "package": (package or {}).get("label"),
         }
 
 
