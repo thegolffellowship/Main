@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.201.5";
+window.TGF_VERSION = "2.201.6";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.201.6",
+    date: "2026-08-06",
+    changes: [
+      "Spotlight NOT IN pills are now amber-urgent instead of neutral gray (Kerry: 'Don't you think the NOT INs need a more urgent color?'): the enrollment pill on the WHERE X STANDS race cards uses the app's due-badge warning family (amber fill, dark-amber text, thin amber ring) so an un-entered race reads as a call to action rather than a disabled state. The IN pill is unchanged; pill size is identical (inset ring, no border).",
+    ],
+  },
   {
     version: "2.201.5",
     date: "2026-08-06",
