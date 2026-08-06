@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.201.21";
+window.TGF_VERSION = "2.201.22";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.201.22",
+    date: "2026-08-06",
+    changes: [
+      "Chase email PATH EMPHASIS (Kerry, Matt Griffin/Jeff Young cases): the email can now lead with THE PLAYERS CUP road to the Lone Star Cup instead of The Fellowship Cup — same visual skeleton, data flipped per Kerry's spec: box 1 = Players Cup regular-season finish, box 2 = Players Cup points reset, navy row 1 = gross-path seat gap, navy row 2 = points from winning the Players Cup (flight-scoped), and THE FELLOWSHIP CUP becomes the suppressible second-road card. Path picked per player: the chase_path_overrides dial is the manual toggle ({customer_id: 'players'|'fellowship'}, seeded for Griffin + Young); with no override the auto rule leads players when that seat line is strictly better (inside beats outside, smaller gap wins; ties keep fellowship). Gross-flavored ladder + subjects ('you're holding a Lone Star Cup seat' when inside).",
+    ],
+  },
   {
     version: "2.201.21",
     date: "2026-08-06",

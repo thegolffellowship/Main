@@ -295,8 +295,8 @@ def seat_ladder(gap, inside):
 
 
 def _subject(gap, inside):
-    """#299 candidate (AWAITING KERRY): ladder-driven for rungs 1-4,
-    fallback for 5-7."""
+    """#299 candidate (Kerry-ratified 2026-08-06): ladder-driven for rungs
+    1-4, fallback for 5-7."""
     if not inside:
         if gap <= 1:
             unit = "one net bogey"
@@ -311,6 +311,49 @@ def _subject(gap, inside):
         if unit:
             return f"Your TGF Snapshot — {unit} from a Lone Star Cup seat"
     return "Your TGF Snapshot — the TGF Championship decides it"
+
+
+def seat_ladder_gross(gap, inside):
+    """PLAYERS-CUP-path ladder (Kerry 2026-08-06, Matt Griffin/Jeff Young:
+    highlight the gross road when it's the player's strong one). Gross
+    points don't map to net-score rungs, so the copy speaks in plain
+    points; inside gets the hold-your-seat framing."""
+    if inside:
+        return ("you'd have a seat off your gross path — nothing's final "
+                "until Sunday", "IN")
+    display = "1 point" if gap == 1 else _n1(gap)
+    word = "point" if gap == 1 else "points"
+    if gap < 6:
+        return (f"you're only {_n1(gap)} {word} from that Lone Star Cup "
+                "seat on your gross path", display)
+    return f"you're {_n1(gap)} points from that seat", display
+
+
+def _subject_gross(gap, inside):
+    """Players-path subject: inside leads with the seat they're holding."""
+    if inside:
+        return "Your TGF Snapshot — you're holding a Lone Star Cup seat"
+    if gap <= 4:
+        word = "point" if gap == 1 else "points"
+        return f"Your TGF Snapshot — {_dot(gap)} {word} from a Lone Star Cup seat"
+    return "Your TGF Snapshot — the TGF Championship decides it"
+
+
+# THE FELLOWSHIP CUP as the SECONDARY module when the players path leads
+# (mirror of _PC_CARD; same suppress rules applied to the fellowship gap)
+_FC_CARD = """  <!-- FELLOWSHIP CUP CARD — SECONDARY MODULE (players-path renders only) -->
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse; width:100%; margin-top:16px;">
+    <tr><td style="border:1px solid #E2DFDA; border-top:3px solid #E87C3E; background:#F6F4F1; padding:0;" bgcolor="#F6F4F1">
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse;"><tr>
+        <td style="width:58px; vertical-align:middle; text-align:center;"><img src="{{ASSET_TROPHY_ORANGE}}" alt="" width="26" height="26" style="display:inline-block; border:0;"></td>
+        <td style="padding:12px 20px 12px 0; font-family:Helvetica,Arial,sans-serif; font-size:15px; line-height:1.6; color:#44403B;">
+          <div style="font-family:Georgia,serif; font-size:13px; letter-spacing:0.16em; text-transform:uppercase; color:#1B1B1B; font-weight:700; margin-bottom:4px;">The Fellowship Cup &middot; your net path</div>
+          A second road to the Lone Star Cup weekend: your <b>{{fc_reset}}</b> points reset seed sits <b>{{fc_seat_line}}</b>.
+        </td>
+      </tr></table>
+      <div style="background:#F3D9C0; text-align:center; padding:5px 2px;" bgcolor="#F3D9C0"><a href="{{fc_link}}" style="font-family:Helvetica,Arial,sans-serif; font-size:10px; letter-spacing:0.1em; color:#9A5B2E; text-decoration:none; font-weight:700;">CLICK FOR STANDINGS</a></div>
+    </td></tr>
+  </table>"""
 
 PREHEADER = "Your city finish is banked. The rest is decided Aug 15–16."
 
@@ -368,17 +411,43 @@ def build_chase_email(customer_id: int, to_address: str | None = None,
     net_key = "austin_net" if chapter == "Austin" else "san_antonio_net"
     net = races.get(net_key) or {}
 
+    # ── PATH EMPHASIS (Kerry 2026-08-06, Matt Griffin / Jeff Young:
+    # "highlight The Players Cup path to the Lone Star Cup over The
+    # Fellowship Cup if it makes sense"). The TOGGLE is the
+    # chase_path_overrides dial ({customer_id: "players"|"fellowship"});
+    # with no override the AUTO rule picks players when that seat line is
+    # strictly better — inside beats outside, smaller gap beats bigger.
+    # Ties keep the fellowship template (the default story).
+    f_raw = fcp.get("gap_to_seat")
+    p_raw = pcp.get("gap_to_seat")
+    try:
+        _po = json.loads(get_app_setting("chase_path_overrides",
+                                         db_path=db_path) or "{}")
+        if not isinstance(_po, dict):
+            _po = {}
+    except Exception:
+        _po = {}
+    path = ov.get("path") or _po.get(str(cid))
+    if path not in ("players", "fellowship"):
+        def _dist(raw):
+            return None if raw is None else (0.0 if raw >= 0 else -raw)
+        fd, pd = _dist(f_raw), _dist(p_raw)
+        path = ("players" if pd is not None and (fd is None or pd < fd)
+                else "fellowship")
+
     # gap_to_seat is points - cut: >= 0 means INSIDE the line.
-    raw_gap = fcp.get("gap_to_seat")
+    raw_gap = p_raw if path == "players" else f_raw
     inside = ov.get("inside", raw_gap is not None and raw_gap >= 0)
     gap = ov.get("gap", round(-raw_gap, 2) if raw_gap is not None
                  and raw_gap < 0 else 0)
     if raw_gap is None and "gap" not in ov and "inside" not in ov:
         return {"ok": False,
-                "error": "no Fellowship seat line for this player "
+                "error": f"no {path} seat line for this player "
                          "(chapter fields no LSC team?)"}
 
-    phrase, gap_display = seat_ladder(gap, inside)
+    phrase, gap_display = (seat_ladder_gross(gap, inside)
+                           if path == "players"
+                           else seat_ladder(gap, inside))
     seat_label = (f"A SEAT ON {chapter.upper()}'S<br>LONE STAR CUP TEAM "
                   f"&mdash; IF IT ENDED TODAY" if inside else
                   f"from a seat on {chapter}'s<br>Lone Star Cup team")
@@ -393,6 +462,7 @@ def build_chase_email(customer_id: int, to_address: str | None = None,
     # _path_stats: place among ENROLLED chapter players plus self, on the
     # descending gross board (#296: Bryce = 5th).
     pc_place = None
+    pc_back = None   # points from WINNING the players cup (flight leader)
     try:
         gross = get_points_race_live("players_cup_gross", db_path=db_path)
         ahead, seen = 0, False
@@ -405,6 +475,25 @@ def build_chase_email(customer_id: int, to_address: str | None = None,
             if r.get("enrolled") and not seen:
                 ahead += 1
         pc_place = ahead + 1 if seen else None
+
+        # "from winning The Players Cup" (players-path navy row 2, Kerry
+        # 2026-08-06): distance to the leader of HIS FLIGHT among enrolled
+        # players (the PC races per flight, Kerry 2026-07-12) — reset
+        # values when present, live points otherwise.
+        def _val(r):
+            return (r.get("points_reset") if r.get("points_reset")
+                    is not None else r.get("total_points"))
+        mine = next((r for r in gross.get("standings", [])
+                     if r.get("customer_id") == cid), None)
+        if mine is not None and _val(mine) is not None:
+            pool = [r for r in gross.get("standings", [])
+                    if (r.get("enrolled") or r.get("customer_id") == cid)
+                    and _val(r) is not None
+                    and (not mine.get("flight")
+                         or r.get("flight") == mine.get("flight"))]
+            if pool:
+                lead = max(_val(r) for r in pool)
+                pc_back = round(max(lead - _val(mine), 0), 2)
     except Exception:
         logger.warning("chase: players-cup place lookup failed",
                        exc_info=True)
@@ -484,6 +573,38 @@ def build_chase_email(customer_id: int, to_address: str | None = None,
         "ASSET_TROPHY_BLACK": f"{BASE}/static/email/trophy-black-52.png",
     }
 
+    # ── players-path render (Kerry 2026-08-06: "follow the exact same
+    # visual setup, just flip" — box 1 = PC regular-season finish, box 2
+    # = PC points reset, navy row 1 = gross seat gap, navy row 2 = points
+    # from winning the players cup; the FELLOWSHIP CUP becomes the
+    # suppressible second-road card).
+    second_card = _PC_CARD
+    if path == "players":
+        f_inside = f_raw is not None and f_raw >= 0
+        f_dist = (0 if f_inside
+                  else (round(-f_raw, 2) if f_raw is not None else None))
+        suppress = ov.get("suppress_pc")
+        if suppress is None:
+            suppress = (f_dist is None
+                        or (thr not in (None, "") and not f_inside
+                            and f_dist > float(thr)))
+        second_card = _FC_CARD
+        slots.update({
+            "city_finish_ordinal": (_ordinal(pc_place) if pc_place else "—"),
+            "city_net_label": f"{chapter.upper()} PLAYERS CUP",
+            "reset_seed": _n1(pcp.get("points")),
+            "cup_gap": _n1(pc_back) if pc_back is not None else "—",
+            "link_city_net": slots["link_players_cup"],
+            "link_fellowship_cup": slots["link_players_cup"],
+            "fc_reset": _n1(fcp.get("points")),
+            "fc_link": f"{BASE}/member/contests#race=tfc&player={cid}",
+            "fc_seat_line": (
+                "inside the seat line today" if f_inside else
+                (f"only {_dot(f_dist)} from one of the "
+                 f"{fcp.get('seats') or 6} net seats available"
+                 if f_dist is not None else "waiting on a buy-in")),
+        })
+
     # assemble modules
     if state == "A":
         cards = _BUYIN_CARDS.replace("{{fellowship_buyin_pill}}", "") \
@@ -500,9 +621,25 @@ def build_chase_email(customer_id: int, to_address: str | None = None,
         cta = _CTA_STATE_B.replace("{{buyin_cards}}", cards)
     else:  # C — no commerce CTA
         cta = ""
+    if cta and path == "players":
+        # {{reset_seed}} now carries the PC reset — the Fellowship buy-in
+        # card's caption must keep the FELLOWSHIP number
+        cta = cta.replace("Your {{reset_seed}} reset seed is waiting on it",
+                          f"Your {_n1(fcp.get('points'))} reset seed is "
+                          "waiting on it")
 
-    html = TEMPLATE.replace("{{pc_card}}", "" if suppress else _PC_CARD) \
+    html = TEMPLATE.replace("{{pc_card}}", "" if suppress else second_card) \
                    .replace("{{cta_block}}", cta)
+    if path == "players":
+        html = (html
+                .replace("Fellowship Cup<br>Points Reset",
+                         "Players Cup<br>Points Reset")
+                .replace("&mdash; Final &mdash;",
+                         "&mdash; Regular Season &mdash;")
+                .replace("from winning<br>The Fellowship Cup",
+                         "from winning<br>The Players Cup")
+                .replace("your city finish is banked",
+                         "your regular season is banked"))
 
     # Compliance footer (#299 item 2): rides MEMBER sends; test sends to
     # Kerry keep it too so he approves the real render.
@@ -515,9 +652,10 @@ def build_chase_email(customer_id: int, to_address: str | None = None,
     for k, v in slots.items():
         html = html.replace("{{" + k + "}}", str(v))
 
-    subject = _subject(gap, inside)
+    subject = (_subject_gross(gap, inside) if path == "players"
+               else _subject(gap, inside))
     result = {"ok": True, "customer_id": cid, "name": name,
-              "state": state, "gap": gap, "inside": inside,
+              "state": state, "path": path, "gap": gap, "inside": inside,
               "suppress_pc": bool(suppress), "no_flight": bool(no_flight),
               "subject": subject, "preheader": PREHEADER,
               "store_links_placeholder": signup_url == _PLACEHOLDER_STORE}
