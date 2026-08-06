@@ -17,8 +17,8 @@ import logging
 import os
 
 from .database import (DB_PATH, _connect, get_app_setting,
-                       get_player_spotlight, _tgf_champ_signups,
-                       _handicap_recap_recipient)
+                       get_player_spotlight, snapshot_target_list,
+                       get_points_race_live, _handicap_recap_recipient)
 
 logger = logging.getLogger(__name__)
 
@@ -299,26 +299,42 @@ def build_chase_email(customer_id: int, to_address: str | None = None,
     still comes from the player's spotlight payload.
     """
     ov = overrides or {}
-    spot = get_player_spotlight(customer_id, db_path=db_path or DB_PATH)
-    if spot.get("error"):
-        return {"ok": False, "error": spot["error"]}
-    name = spot.get("name") or spot.get("player_name") or ""
-    first = (name.split() or [""])[0]
-    chapter = (spot.get("chapter") or "").strip()
+    cid = int(customer_id)
 
-    races = {r.get("key"): r for r in spot.get("races", [])}
+    # Seat/gap/signup data: the Command Center target list computes
+    # gap_to_seat for every push/defend player regardless of whether the
+    # spotlight's LSC block resolved them to a seat/alternate (which
+    # carries no gap numbers — first live find: Bryce, projected
+    # alternate). The chase email IS the push/defend variant, so the
+    # target list is its natural source of truth.
+    tl = snapshot_target_list(db_path=db_path)
+    entry = None
+    for seg in ("push_entry", "defend"):
+        entry = next((e for e in tl.get(seg, [])
+                      if e.get("customer_id") == cid), None)
+        if entry:
+            break
+    if not entry:
+        return {"ok": False,
+                "error": "player is not in the push/defend window — the "
+                         "chase variant targets window players (normal "
+                         "players get the standard snapshot)"}
+
+    name = entry.get("name") or ""
+    first = (name.split() or [""])[0]
+    chapter = (entry.get("chapter") or "").strip()
+    fcp = (entry.get("paths") or {}).get("Fellowship") or {}
+    pcp = (entry.get("paths") or {}).get("Players") or {}
+
+    # City-net final rank still comes off the spotlight (single-chapter
+    # board, rank is already city-scoped).
+    spot = get_player_spotlight(cid, db_path=db_path or DB_PATH)
+    races = {r.get("key"): r for r in (spot.get("races") or [])}
     net_key = "austin_net" if chapter == "Austin" else "san_antonio_net"
     net = races.get(net_key) or {}
-    fc = races.get("fellowship_cup") or {}
-    pc = races.get("players_cup_gross") or {}
 
-    lsc = spot.get("lsc") or {}
-    paths = {p.get("path"): p for p in (lsc.get("paths") or [])}
-    fc_path = paths.get("THE FELLOWSHIP CUP") or {}
-    pc_path = paths.get("THE PLAYERS CUP") or {}
-
-    # gap_to_seat is my_points - cut: >= 0 means INSIDE the line.
-    raw_gap = fc_path.get("gap_to_seat")
+    # gap_to_seat is points - cut: >= 0 means INSIDE the line.
+    raw_gap = fcp.get("gap_to_seat")
     inside = ov.get("inside", raw_gap is not None and raw_gap >= 0)
     gap = ov.get("gap", round(-raw_gap, 2) if raw_gap is not None
                  and raw_gap < 0 else 0)
@@ -333,23 +349,41 @@ def build_chase_email(customer_id: int, to_address: str | None = None,
                   f"from a seat on {chapter}'s<br>Lone Star Cup team")
 
     # CTA state (#291/#297b)
-    with _connect(db_path) as conn:
-        _, champ_cids = _tgf_champ_signups(conn)
-    signed_up = customer_id in champ_cids
-    enrolled_any = bool(fc.get("enrolled") or pc.get("enrolled"))
+    signed_up = bool(entry.get("tgf_champ_signed_up"))
+    enrolled_any = bool(entry.get("enrolled_any"))
     state = ov.get("cta_state") or ("A" if not signed_up
                                     else ("C" if enrolled_any else "B"))
+
+    # Players Cup chapter place — same convention as the spotlight's
+    # _path_stats: place among ENROLLED chapter players plus self, on the
+    # descending gross board (#296: Bryce = 5th).
+    pc_place = None
+    try:
+        gross = get_points_race_live("players_cup_gross", db_path=db_path)
+        ahead, seen = 0, False
+        for r in gross.get("standings", []):
+            if (r.get("player_chapter") or "").strip() != chapter:
+                continue
+            if r.get("customer_id") == cid:
+                seen = True
+                continue
+            if r.get("enrolled") and not seen:
+                ahead += 1
+        pc_place = ahead + 1 if seen else None
+    except Exception:
+        logger.warning("chase: players-cup place lookup failed",
+                       exc_info=True)
 
     # Players Cup module suppression (#297c): flag wired, threshold is a
     # dial AWAITING KERRY. Unset dial = always show (test-matrix forces
     # the suppressed render). Auto-suppress when the player has no gross
     # standing at all.
-    pc_gap_raw = pc_path.get("gap_to_seat")
+    pc_gap_raw = pcp.get("gap_to_seat")
     pc_inside = pc_gap_raw is not None and pc_gap_raw >= 0
     pc_gap = (round(-pc_gap_raw, 2) if pc_gap_raw is not None
               and pc_gap_raw < 0 else 0)
     no_flight = ov.get("pc_no_flight", pc_gap_raw is None
-                       or pc_path.get("place") is None)
+                       or pc_place is None)
     thr = get_app_setting("chase_pc_suppress_gap", db_path=db_path)
     suppress = ov.get("suppress_pc")
     if suppress is None:
@@ -362,7 +396,6 @@ def build_chase_email(customer_id: int, to_address: str | None = None,
     deadline = (get_app_setting("chase_deadline_display", db_path=db_path)
                 or "Sunday, August 9")
 
-    cid = int(customer_id)
     signup_url = (get_app_setting(_SIGNUP_DIAL, db_path=db_path)
                   or _PLACEHOLDER_STORE)
     buyin_url = (get_app_setting(_BUYIN_DIAL, db_path=db_path)
@@ -378,20 +411,16 @@ def build_chase_email(customer_id: int, to_address: str | None = None,
         "city_finish_ordinal": (_ordinal(net["rank"]) if net.get("rank")
                                 else "—"),
         "city_net_label": f"{chapter.upper()} CITY NET",
-        "reset_seed": _n1(fc.get("points_reset")
-                          if fc.get("points_reset") is not None
-                          else fc.get("total_points")),
+        "reset_seed": _n1(fcp.get("points")),
         "seat_gap_display": gap_display,
         "seat_row_label": seat_label,
         "seat_phrase": phrase,
-        "cup_gap": _n1(max(fc.get("points_back") or 0, 0)),
-        "pc_place_ordinal": (_ordinal(pc_path["place"])
-                             if pc_path.get("place") else "—"),
-        "pc_reset": _n1(pc.get("points_reset")
-                        if pc.get("points_reset") is not None
-                        else pc.get("total_points")),
+        "cup_gap": _n1(max(fcp.get("points_back") or 0, 0)),
+        "pc_place_ordinal": (_ordinal(pc_place)
+                             if pc_place else "—"),
+        "pc_reset": _n1(pcp.get("points")),
         "pc_seat_gap": ("inside the line" if pc_inside else _dot(pc_gap)),
-        "pc_seats_available": str(pc_path.get("seats") or 4),
+        "pc_seats_available": str(pcp.get("seats") or 4),
         "pc_buyin_caption": ("The gross-points path to the same weekend"
                              if no_flight else
                              "The gross path — you're "
