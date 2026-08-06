@@ -865,6 +865,22 @@ def build_chase_email(customer_id: int, to_address: str | None = None,
     html = TEMPLATE.replace("{{pc_card}}", "" if suppress else second_card) \
                    .replace("{{cta_block}}", cta)
 
+    # signed-up players lose the "One thing's for sure" closer entirely
+    # (Kerry 2026-08-06, Gus Vasquez then Robert Straiton: "for those
+    # that are signed up for everything, they don't need the One thing's
+    # for sure line") — every version of that line is an ask to play,
+    # and they're playing. Runs BEFORE the secured swap so a secured
+    # signed-up player (Straiton) doesn't get the secured closer either;
+    # a secured player NOT signed up (Luke) keeps it — it's his pitch.
+    if signed_up:
+        html = html.replace(
+            '  <div style="font-family:Helvetica,Arial,sans-serif; '
+            'font-size:15px; color:#44403B; line-height:1.65; '
+            'margin-top:12px;"><b>One thing\'s for sure</b> &mdash; if '
+            "you don't play, there's no chance to qualify. And your "
+            "chances are better than you probably realize: seats only "
+            "go to players who show up.</div>", "")
+
     # secured-seat P1/P3 (Kerry 2026-08-06, Luke Youngs): the seat is
     # locked, so "if it ended today you'd have a seat" and "no chance to
     # qualify" are both false — sell winning the Cup + the money instead
@@ -926,19 +942,6 @@ def build_chase_email(customer_id: int, to_address: str | None = None,
                          "<b>{{fc_reset}}</b> points reset seed has you "
                          "in the hunt for <b>The Fellowship Cup title "
                          "and its purse</b>."))
-
-    # signed-up players: "if you don't play, there's no chance to
-    # qualify" is false — they're playing (Kerry 2026-08-06, Gus
-    # Vasquez: "the One thing's for sure paragraph doesn't fit, so it
-    # should be hidden"). Secured renders already swapped their own P3.
-    if signed_up and not sec_seat:
-        html = html.replace(
-            '  <div style="font-family:Helvetica,Arial,sans-serif; '
-            'font-size:15px; color:#44403B; line-height:1.65; '
-            'margin-top:12px;"><b>One thing\'s for sure</b> &mdash; if '
-            "you don't play, there's no chance to qualify. And your "
-            "chances are better than you probably realize: seats only "
-            "go to players who show up.</div>", "")
 
     # flight-incentive PC card body (Kerry 2026-08-06, Gus Vasquez):
     # sell joining the PC to fight his FLIGHT for its money — no seat

@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.204.3";
+window.TGF_VERSION = "2.204.4";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.204.4",
+    date: "2026-08-06",
+    changes: [
+      "The 'One thing's for sure' closer now hides for EVERY signed-up player, secured seats included (Kerry, Robert Straiton: 'for those that are signed up for everything, they don't need the One thing's for sure line'). v2.204.3 hid it for regular signed-up renders but a secured signed-up player (Straiton: NET Champion captain, registered, in the cups) still got the secured 'None of it happens if you don't tee it up' version — an ask to play aimed at someone already playing. The hide now runs before the secured swap; a secured player NOT yet signed up (Luke Youngs) keeps the secured closer, since for him it IS the pitch.",
+    ],
+  },
   {
     version: "2.204.3",
     date: "2026-08-06",
