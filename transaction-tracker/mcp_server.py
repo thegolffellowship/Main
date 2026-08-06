@@ -1882,6 +1882,27 @@ def _scoring_dispatch(url: str, extract: str):
             # fields only). Idempotent. Mailbox #276 B.
             return json.dumps(db.reclass_championship_allocations(),
                               indent=2, default=str)
+        if cmd == "scoring-chase-preview":
+            # "<customer_id>[|{json overrides}]" — build the R6 chase
+            # email WITHOUT sending; returns render metadata (state, gap,
+            # subject, unfilled slots). Mailbox #294-#299 build.
+            _parts = arg.split("|", 1)
+            from email_parser.chase_email import build_chase_email
+            _ov = json.loads(_parts[1]) if len(_parts) > 1 and _parts[1] else None
+            _r = build_chase_email(int(_parts[0]), send=False, overrides=_ov)
+            _r.pop("preview", None)  # HTML too large for the bridge
+            return json.dumps(_r, indent=2, default=str)
+        if cmd == "scoring-chase-test":
+            # "<baseline_cid>[|send]" — the #299 consolidated test matrix
+            # (State A baseline + ladder 1-7 + State B + suppressed +
+            # no-flight). send mails each render to KERRY'S recap inbox
+            # ONLY. No member-send path exists in this bridge by design.
+            _parts = [p.strip() for p in arg.split("|")]
+            from email_parser.chase_email import chase_test_matrix
+            return json.dumps(chase_test_matrix(
+                int(_parts[0]), send=(len(_parts) > 1
+                                      and _parts[1] == "send")),
+                indent=2, default=str)
         if cmd == "scoring-add-payment":
             # JSON: {"event": <event name>, "customer": <player>,
             #   "item": "BOTH Games", "amount": "$100.00", "source": "Venmo",

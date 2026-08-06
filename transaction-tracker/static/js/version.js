@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.200.4";
+window.TGF_VERSION = "2.201.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.201.0",
+    date: "2026-08-05",
+    changes: [
+      "R6 Championship Chase email built from the design handoff package (mailbox #294-#299): email_parser/chase_email.py carries design-claude's production template verbatim with the sanctioned module tokens — 7-state seat-gap phrase ladder (exact arithmetic), CTA states A/B/C keyed off championship signup + cup enrollment, suppressible Players Cup card (threshold dial chase_pc_suppress_gap AWAITING KERRY; auto-suppress when no gross standing), inside-the-line payoff ('IN'), no-flight caption swap, #299 preheader, ladder-driven subject candidate, and the previously-missing CAN-SPAM compliance footer (unsubscribe + business address dial email_business_address). Assets hosted at /static/email/ (white roundel, star, two trophies — PNGs @2x from SVG masters). Deep links per #300. Store URLs are dials (chase_link_signup / chase_link_buyin) with a flagged placeholder until Kerry posts the GoDaddy product pages.",
+      "Bridges: scoring-chase-preview:<cid>[|overrides] renders without sending; scoring-chase-test:<cid>[|send] runs the #299 test matrix (State A baseline, ladder states 1-7, State B, gross-suppressed, no-flight) to Kerry's recap inbox ONLY — no member-send path exists in the bridge by design.",
+    ],
+  },
   {
     version: "2.200.4",
     date: "2026-08-05",
