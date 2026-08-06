@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.201.25";
+window.TGF_VERSION = "2.201.26";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.201.26",
+    date: "2026-08-06",
+    changes: [
+      "THE LONE STAR CUP finally says when and where (Kerry: 'October 10-11 at The Hideout in Brownwood, TX'): the member LSC tab gets a navy event banner (dates + venue above the projected rosters) and the chase email's navy card carries the same line under the seat numbers. Both read the new lsc_event_info dial ({dates, venue, city}) — one source, edits without a deploy.",
+    ],
+  },
   {
     version: "2.201.25",
     date: "2026-08-06",

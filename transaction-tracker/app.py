@@ -9869,9 +9869,18 @@ def api_fellowship_cup_projection():
 @require_role("member")
 def api_lone_star_cup():
     """LONE STAR CUP projected rosters + alternates pool (member LSC tab)."""
-    from email_parser.database import get_lone_star_cup_projection
+    from email_parser.database import get_lone_star_cup_projection, get_app_setting
     try:
-        return jsonify(get_lone_star_cup_projection())
+        d = get_lone_star_cup_projection()
+        # Event banner (Kerry 2026-08-06): the lsc_event_info dial holds
+        # {dates, venue, city} — one source for this tab AND the emails
+        try:
+            import json as _json
+            d["event_info"] = _json.loads(
+                get_app_setting("lsc_event_info") or "null")
+        except Exception:
+            d["event_info"] = None
+        return jsonify(d)
     except Exception as e:
         logger.exception("Lone Star Cup projection failed")
         return jsonify({"error": f"Projection failed: {e}"}), 500
