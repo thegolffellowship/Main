@@ -217,6 +217,18 @@ a WD not credited stays one. Keep that; do not invent a parallel rule.
 
 **Lock moment proposed:** publishing the tee sheet. Not ratified.
 
+**RATIFIED (Kerry 2026-08-06) — the SEASON Players Cup race flights are
+LOCKED as of that date** (distinct from the per-event lock moment above,
+which stays open): "The Players Cup flights need to be locked now...
+We will have handicap updates after Day 1 of the TGF Championship, but
+I don't want anyone to move flights in The Players Cup because of it."
+Mechanism (v2.205.1, `get_points_race_standings`): the first read after
+deploy stamps every customer's current flight into the
+`flight_lock_players_cup_gross` app setting; all later reads serve the
+locked flight, so index changes keep moving the HCP column but never
+the flight. New faces lock at first sight; deleting the dial re-locks
+from then-current handicaps on the next read.
+
 ---
 
 ## 7. The parity gate

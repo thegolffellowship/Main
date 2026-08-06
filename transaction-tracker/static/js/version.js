@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.205.0";
+window.TGF_VERSION = "2.205.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.205.1",
+    date: "2026-08-06",
+    changes: [
+      "Players Cup flights are LOCKED (Kerry: handicap updates land after Day 1 of the TGF Championship, 'but I don't want anyone to move flights in The Players Cup because of it'): the first board read after this deploy stamps every player's current flight into the flight_lock_players_cup_gross setting, and every read after that serves the locked flight. Handicap indexes keep updating on the board — the HCP column moves, the flight never does. Players appearing on the board for the first time lock at first sight; deleting the dial re-locks everyone from then-current handicaps. Everything downstream (chase-email flight gate, Rob's 1st-in-flight rank, flight pots) reads the locked assignment automatically.",
+    ],
+  },
   {
     version: "2.205.0",
     date: "2026-08-06",

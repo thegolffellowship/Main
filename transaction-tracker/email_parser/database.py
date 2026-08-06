@@ -8531,8 +8531,34 @@ def get_points_race_standings(race_key: str,
 
         # Current handicap per customer (every race, admin request): 18-hole
         # index via handicap_player_links — computed at read time so a
-        # handicap change updates the column (and any flight) automatically
+        # handicap change updates the column automatically. FLIGHTS are
+        # the exception — see the flight lock below.
         flights = race.get("flights")
+        # ── FLIGHT LOCK (Kerry 2026-08-06: "The Players Cup flights
+        # need to be locked now... We will have handicap updates after
+        # Day 1 of the TGF Championship, but I don't want anyone to
+        # move flights in The Players Cup because of it.") ──
+        # First read stamps each customer's current flight into the
+        # flight_lock_<race> app setting; every later read serves the
+        # locked flight, so index changes move the HCP column but never
+        # the flight. New faces lock at first sight. Deleting the dial
+        # re-locks from then-current handicaps on the next read.
+        flight_lock, lock_dirty = None, False
+        if flights:
+            try:
+                _raw = get_app_setting(f"flight_lock_{race_key}",
+                                       db_path=db_path)
+                flight_lock = json.loads(_raw) if _raw else None
+            except Exception:
+                flight_lock = None
+            if (not isinstance(flight_lock, dict)
+                    or not isinstance(flight_lock.get("assignments"),
+                                      dict)):
+                from .timezone_utils import now_central
+                flight_lock = {"locked_at": now_central()
+                               .strftime("%Y-%m-%d %H:%M"),
+                               "assignments": {}}
+                lock_dirty = True
         idx_by_cid: dict = {}
         if True:
             idx_by_name = {
@@ -8573,8 +8599,27 @@ def get_points_race_standings(race_key: str,
             hcp = idx_by_cid.get(cid) if cid else None
             r["handicap_index"] = hcp
             if flights:
-                r["flight"] = _assign_flight(hcp, flights)
+                locked = (flight_lock["assignments"].get(str(cid))
+                          if cid else None)
+                if locked is None:
+                    locked = _assign_flight(hcp, flights)
+                    if cid and locked:
+                        flight_lock["assignments"][str(cid)] = locked
+                        lock_dirty = True
+                r["flight"] = locked
             out_rows.append(r)
+
+        # persist the flight lock the first time it forms (and whenever
+        # a new face gets locked at first sight)
+        if flights and lock_dirty:
+            try:
+                set_app_setting(f"flight_lock_{race_key}",
+                                json.dumps(flight_lock), db_path=db_path)
+                logger.info("flight lock stamped for %s: %d players",
+                            race_key, len(flight_lock["assignments"]))
+            except Exception:
+                logger.warning("flight lock save failed for %s",
+                               race_key, exc_info=True)
 
         # R4 (Kerry-ratified #149/#151): SHOW non-members, don't hide them.
         # The old "members only" admin rule dropped non-enrolled non-members
