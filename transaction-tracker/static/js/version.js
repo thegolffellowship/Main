@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.201.31";
+window.TGF_VERSION = "2.201.32";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.201.32",
+    date: "2026-08-06",
+    changes: [
+      "LSC seat strings substitute the chapter name for 'City' everywhere (Kerry): '2026 Austin NET Champion' / '2026 San Antonio Match Play Champion', the AUSTIN/SAN ANTONIO MATCH PLAY seat labels, and the alternates-pool context lines ('9th of 85 in San Antonio NET'). Co-champion variants follow the same pattern.",
+    ],
+  },
   {
     version: "2.201.31",
     date: "2026-08-06",

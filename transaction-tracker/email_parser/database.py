@@ -9185,7 +9185,7 @@ def get_lone_star_cup_projection(db_path: str | Path = DB_PATH) -> dict:
             "players": len(gross["standings"]),
         }
         contest_names = {
-            "captain": "City NET",
+            "captain": f"{chapter} NET",
             "fellowship": "The Fellowship Cup",
             "players": "The Players Cup",
         }
@@ -9227,12 +9227,12 @@ def get_lone_star_cup_projection(db_path: str | Path = DB_PATH) -> dict:
         seat_defs = (
             [("captain",
               "CAPTAIN" if n_cap == 1 else "CO-CAPTAIN",
-              ("City NET Champion" if n_cap == 1 else
-               "City NET Co-Champion (T1) — shares the captaincy"))] * n_cap
+              (f"{chapter} NET Champion" if n_cap == 1 else
+               f"{chapter} NET Co-Champion (T1) — shares the captaincy"))] * n_cap
             + [("fellowship", f"THE FELLOWSHIP CUP · {i + 1}",
                 f"Final standings, top {n_fc} from the chapter")
                for i in range(n_fc)]
-            + [("matchplay", "CITY MATCH PLAY", "Knockout champion")]
+            + [("matchplay", f"{chapter.upper()} MATCH PLAY", "Knockout champion")]
             + [("players", f"THE PLAYERS CUP · {i + 1}",
                 "Final standings, top 4 from the chapter") for i in range(4)]
         )
@@ -9303,7 +9303,7 @@ def get_lone_star_cup_projection(db_path: str | Path = DB_PATH) -> dict:
                     # NET captaincy is (Kerry 2026-08-01)
                     row.update(player_name=mp_champ["name"],
                                customer_id=mp_champ["cid"],
-                               earned_as=(f"{season} City Match Play "
+                               earned_as=(f"{season} {chapter} Match Play "
                                           "Champion"),
                                status="secured")
                 else:
@@ -9337,7 +9337,7 @@ def get_lone_star_cup_projection(db_path: str | Path = DB_PATH) -> dict:
                 if (s["seat"] in ("CAPTAIN", "CO-CAPTAIN")
                         and s.get("customer_id") in champ_ids):
                     s["status"] = "secured"
-                    s["earned_as"] = (f"{season} City NET "
+                    s["earned_as"] = (f"{season} {chapter} NET "
                                       f"{'Co-' if n_cap > 1 else ''}Champion")
 
         alternates = [
