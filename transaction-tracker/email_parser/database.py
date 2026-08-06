@@ -14305,7 +14305,7 @@ def build_player_snapshot_email(customer_id: int,
     _needs_champ_signup = False
     try:
         with _connect(db_path) as conn:
-            _evs, _champ_cids = _tgf_champ_signups(conn)
+            _evs, _champ_cids, _ = _tgf_champ_signups(conn)
         if _evs is not None and customer_id not in _champ_cids:
             _needs_champ_signup = True
             _ev0 = _evs[0]
@@ -14428,33 +14428,46 @@ def build_player_snapshot_email(customer_id: int,
 
 
 def _tgf_champ_signups(conn) -> tuple:
-    """Upcoming TGF Championship events (any chapter) + the customer_ids
-    signed up (registration purchase or matched RSVP). Returns
-    (events_list_or_None, cid_set) — None events means no fall
-    championship is posted yet, so signup status is unknowable."""
+    """Upcoming TGF Championship events (any chapter) + who's in.
+
+    Returns (events_list_or_None, paid_cids, rsvp_only_cids) — PAID means
+    a registration purchase row exists; RSVP_ONLY means a matched YES
+    RSVP with NO purchase (Kerry 2026-08-06, Mike Marques: "We have
+    players RSVP'd but not paid" — they must NOT read as signed up).
+    None events means no fall championship is posted yet, so signup
+    status is unknowable."""
     from .timezone_utils import today_central_str
     evs = conn.execute(
         """SELECT id, item_name, event_date, chapter FROM events
            WHERE UPPER(item_name) LIKE '%CHAMPIONSHIP%' AND event_date >= ?
            ORDER BY event_date""", (today_central_str(),)).fetchall()
     if not evs:
-        return None, set()
-    cids = set()
+        return None, set(), set()
+    paid, rsvp = set(), set()
     for ev in evs:
+        # a purchase row — the rsvp_only placeholder rows the RSVP
+        # matcher creates are NOT purchases and land in the rsvp set
         for r in conn.execute(
                 """SELECT DISTINCT customer_id FROM items
                    WHERE item_name = ? AND customer_id IS NOT NULL
-                     AND COALESCE(transaction_status, '') != 'credited'""",
+                     AND COALESCE(transaction_status, '')
+                         NOT IN ('credited', 'rsvp_only')""",
                 (ev["item_name"],)).fetchall():
-            cids.add(r["customer_id"])
+            paid.add(r["customer_id"])
+        for r in conn.execute(
+                """SELECT DISTINCT customer_id FROM items
+                   WHERE item_name = ? AND customer_id IS NOT NULL
+                     AND COALESCE(transaction_status, '') = 'rsvp_only'""",
+                (ev["item_name"],)).fetchall():
+            rsvp.add(r["customer_id"])
         for r in conn.execute(
                 """SELECT DISTINCT i.customer_id FROM rsvps rv
                    JOIN items i ON i.id = rv.matched_item_id
                    WHERE rv.matched_event = ? AND UPPER(rv.response) LIKE 'Y%'
                      AND i.customer_id IS NOT NULL""",
                 (ev["item_name"],)).fetchall():
-            cids.add(r["customer_id"])
-    return [dict(e) for e in evs], cids
+            rsvp.add(r["customer_id"])
+    return [dict(e) for e in evs], paid, rsvp - paid
 
 
 def snapshot_target_list(window_points: float = 15.0,
@@ -14553,10 +14566,10 @@ def snapshot_target_list(window_points: float = 15.0,
     # only half the ask — they also need to be signed up for the TGF
     # Championship itself. Signup status rides every entry so the
     # Command Center can show who needs the weekend sold to them.
-    champ_evs, champ_cids = None, set()
+    champ_evs, champ_cids, champ_rsvp = None, set(), set()
     try:
         with _connect(db_path) as conn:
-            champ_evs, champ_cids = _tgf_champ_signups(conn)
+            champ_evs, champ_cids, champ_rsvp = _tgf_champ_signups(conn)
     except Exception:
         logger.warning("champ signup lookup failed", exc_info=True)
 
@@ -14587,6 +14600,10 @@ def snapshot_target_list(window_points: float = 15.0,
         e["tgf_champ_signed_up"] = (
             (e["customer_id"] in champ_cids) if champ_evs is not None
             else None)
+        # RSVP'd yes but no purchase (Kerry 2026-08-06, Mike Marques):
+        # NOT signed up — the email owes them the two-steps ask
+        e["tgf_champ_rsvp_only"] = (champ_evs is not None
+                                    and e["customer_id"] in champ_rsvp)
         if in_window and not e["enrolled_any"]:
             push.append(e)
         elif in_window:
@@ -14608,7 +14625,8 @@ def snapshot_target_list(window_points: float = 15.0,
         "normal": [{"customer_id": e["customer_id"], "name": e["name"],
                     "chapter": e["chapter"],
                     "enrolled_any": e["enrolled_any"],
-                    "tgf_champ_signed_up": e["tgf_champ_signed_up"]}
+                    "tgf_champ_signed_up": e["tgf_champ_signed_up"],
+                    "tgf_champ_rsvp_only": e["tgf_champ_rsvp_only"]}
                    for e in normal],
         "counts": {"push_entry": len(push), "defend": len(defend),
                    "normal": len(normal)},

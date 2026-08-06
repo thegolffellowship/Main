@@ -512,6 +512,10 @@ def build_chase_email(customer_id: int, to_address: str | None = None,
     # or both cups has ONE step to get in — the sign-up — and the card
     # for an already-purchased cup is removed).
     signed_up = bool(entry.get("tgf_champ_signed_up"))
+    # RSVP'd yes, no registration purchase (Kerry 2026-08-06, Mike
+    # Marques): acknowledged but NOT signed up — the ask stays live
+    rsvp_only = (bool(entry.get("tgf_champ_rsvp_only"))
+                 and not signed_up)
     enrolled_any = bool(entry.get("enrolled_any"))
     fc_in = bool((races.get("fellowship_cup") or {}).get("enrolled"))
     pc_in = bool((races.get("players_cup_gross") or {}).get("enrolled"))
@@ -755,6 +759,26 @@ def build_chase_email(customer_id: int, to_address: str | None = None,
         cta = _CTA_STATE_B.replace("{{buyin_cards}}", cards)
     else:  # C — no commerce CTA
         cta = ""
+    # RSVP'd-not-paid heads (Kerry 2026-08-06 verbatim: "it needs to say
+    # 'You're RSVPd for the TGF Championship. Two steps left: 1. Sign up
+    # for the TGF CHAMPIONSHIP 2. Get in on the CUP races.'") — the RSVP
+    # is acknowledged, but sign-up stays step 1.
+    if rsvp_only and state == "A":
+        cta = (cta.replace("TWO STEPS TO GET IN:",
+                           "You're RSVP'd for the TGF Championship. "
+                           "Two steps left:")
+                  .replace("Get in the field.",
+                           "Sign up for the TGF Championship.")
+                  .replace("Then buy into your Cup(s).",
+                           "Get in on the Cup races."))
+    elif rsvp_only and state == "A1":
+        cta = (cta.replace("ONE STEP TO GET IN:",
+                           "You're RSVP'd for the TGF Championship. "
+                           "One step left:")
+                  .replace("Get in the field &mdash; your buy-in is "
+                           "already working.",
+                           "Sign up for the TGF Championship &mdash; "
+                           "your buy-in is already working."))
     if cta and path == "players":
         # {{reset_seed}} now carries the PC reset — the Fellowship buy-in
         # card's caption must keep the FELLOWSHIP number
@@ -789,7 +813,8 @@ def build_chase_email(customer_id: int, to_address: str | None = None,
     subject = (_subject_gross(gap, inside) if path == "players"
                else _subject(gap, inside))
     result = {"ok": True, "customer_id": cid, "name": name,
-              "state": state, "path": path, "gap": gap, "inside": inside,
+              "state": state, "rsvp_only": rsvp_only,
+              "path": path, "gap": gap, "inside": inside,
               "suppress_pc": bool(suppress), "no_flight": bool(no_flight),
               "subject": subject, "preheader": PREHEADER,
               "store_links_placeholder": signup_url == _PLACEHOLDER_STORE}

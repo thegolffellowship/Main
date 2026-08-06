@@ -53,6 +53,7 @@
         .sc-flag.in { color: #15803D; }
         .sc-flag.out { color: #B91C1C; }
         .sc-flag.na { color: #9CA3AF; font-weight: 400; }
+        .sc-flag.rsvp { color: #B45309; }  /* RSVP'd yes, not paid */
         .sc-scroll { overflow-x: auto; }
         .sc-modal { position: fixed; inset: 0; background: rgba(27,27,27,0.55); display: none; align-items: flex-start; justify-content: center; padding: 4vh 1rem; z-index: 300; }
         .sc-modal.open { display: flex; }
@@ -172,7 +173,9 @@
             ? '<span class="sc-flag na" title="No fall championship event posted yet">—</span>'
             : (e.tgf_champ_signed_up
                 ? '<span class="sc-flag in">✓ IN</span>'
-                : '<span class="sc-flag out">✗ Not signed up</span>');
+                : (e.tgf_champ_rsvp_only
+                    ? '<span class="sc-flag rsvp" title="RSVP&#39;d yes but no registration purchase — their email reads You&#39;re RSVP&#39;d... with sign-up as step 1">◐ RSVP · not paid</span>'
+                    : '<span class="sc-flag out">✗ Not signed up</span>'));
         const markChip = e => {
             const m = e.mark || "none";
             const label = m === "none" ? "unmarked" : m

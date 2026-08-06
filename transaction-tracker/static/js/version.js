@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.203.2";
+window.TGF_VERSION = "2.204.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.204.0",
+    date: "2026-08-06",
+    changes: [
+      "RSVP'd-but-not-paid is its own email state (Kerry, Mike Marques case): the champ-signup check no longer lumps YES RSVPs (or their rsvp_only placeholder rows) in with registration purchases. A player who RSVP'd but hasn't paid now gets 'You're RSVP'd for the TGF Championship. Two steps left: 1. Sign up for the TGF Championship 2. Get in on the Cup races' — or the one-step version if they already hold a cup buy-in. Paid registrations keep the 'You're signed up' render.",
+      "Command Center TGF CHAMP column shows the middle tier: amber '◐ RSVP · not paid' between green ✓ IN (paid) and red ✗ Not signed up, so the queue tells you who needs the payment chased, not just the weekend sold. The retired R5 builder's weekend pitch also now keys off PAID registrations only.",
+    ],
+  },
   {
     version: "2.203.2",
     date: "2026-08-06",

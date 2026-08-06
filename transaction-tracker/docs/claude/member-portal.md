@@ -252,9 +252,11 @@ gated on Kerry's ratification.** Seat-line gaps ≤1 translate to golf
 segments every cup-board player — `push_entry` (in the window, NOT
 bought in: ≤15 back of the lead OR within 15 of an LSC seat line),
 `defend` (in window, bought in), `normal`. Each entry carries
-`tgf_champ_signed_up` (registration purchase or matched YES RSVP for an
-upcoming `%CHAMPIONSHIP%` event via `_tgf_champ_signups`; None = no
-fall championship posted yet). REVIEW QUEUE ONLY — availability ("he'll
+`tgf_champ_signed_up` (a registration PURCHASE for an upcoming
+`%CHAMPIONSHIP%` event via `_tgf_champ_signups`; None = no fall
+championship posted yet) and `tgf_champ_rsvp_only` (matched YES RSVP or
+rsvp_only placeholder row with NO purchase — Kerry 2026-08-06, the Mike
+Marques split: RSVP'd players must not read as signed up). REVIEW QUEUE ONLY — availability ("he'll
 be in Hawaii") is Kerry's call; nothing auto-sends. The email adds a
 "Be there for the weekend itself" section (TGF Champ + LSC = top two
 experiences, family, getaway) when the player isn't signed up.

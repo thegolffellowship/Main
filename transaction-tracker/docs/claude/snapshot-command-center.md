@@ -75,7 +75,12 @@ chapters only) and segments every player with a tracker profile:
 Every entry carries: per-path `points_back`, `gap_to_seat`,
 `seat_cut_points`, `enrolled_any`, `secured_seat` (locked LSC seat),
 and **`tgf_champ_signed_up`** (the second ask layer — None until a fall
-championship event exists; it exists now). Live counts 2026-08-03:
+championship event exists; it exists now; as of v2.204.0 this means a
+registration PURCHASE only) plus **`tgf_champ_rsvp_only`** (YES RSVP /
+rsvp_only row, no purchase — renders the amber "◐ RSVP · not paid"
+tier in the queue, and the chase email swaps to "You're RSVP'd for the
+TGF Championship. Two steps left: 1. Sign up... 2. Get in on the Cup
+races" — or the one-step variant when a cup buy-in already exists). Live counts 2026-08-03:
 push 41 / defend 26 / normal 70 — only 4 of the 41 push players were
 championship-registered.
 
