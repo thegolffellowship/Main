@@ -496,6 +496,22 @@ def build_chase_email(customer_id: int, to_address: str | None = None,
     # Ties keep the fellowship template (the default story).
     f_raw = fcp.get("gap_to_seat")
     p_raw = pcp.get("gap_to_seat")
+    # 1st-Flight gate (Kerry 2026-08-06: "Nobody below 1st Flight should
+    # have The Players Cup as the way in. Like Lance Rohrmann or John
+    # White.") — the gross seats effectively belong to 1st Flight, so
+    # below it the auto rule never leads with the players path, the
+    # second-road PC card is suppressed, and the PC buy-in card sells
+    # the flight money instead of the seat line. The chase_path_overrides
+    # dial still forces either path explicitly.
+    pc_first_flight = False
+    try:
+        _g = get_points_race_live("players_cup_gross", db_path=db_path)
+        _fl = next((r.get("flight") for r in _g.get("standings", [])
+                    if r.get("customer_id") == cid), None)
+        pc_first_flight = (_fl == "1st Flight")
+    except Exception:
+        logger.warning("chase: flight lookup failed cid=%s", cid,
+                       exc_info=True)
     try:
         _po = json.loads(get_app_setting("chase_path_overrides",
                                          db_path=db_path) or "{}")
@@ -508,7 +524,8 @@ def build_chase_email(customer_id: int, to_address: str | None = None,
         def _dist(raw):
             return None if raw is None else (0.0 if raw >= 0 else -raw)
         fd, pd = _dist(f_raw), _dist(p_raw)
-        path = ("players" if pd is not None and (fd is None or pd < fd)
+        path = ("players" if pc_first_flight and pd is not None
+                and (fd is None or pd < fd)
                 else "fellowship")
 
     # gap_to_seat is points - cut: >= 0 means INSIDE the line.
@@ -621,9 +638,14 @@ def build_chase_email(customer_id: int, to_address: str | None = None,
     thr = get_app_setting("chase_pc_suppress_gap", db_path=db_path)
     suppress = ov.get("suppress_pc")
     if suppress is None:
-        suppress = no_flight or (thr not in (None, "")
-                                 and not pc_inside
-                                 and pc_gap > float(thr))
+        # below 1st Flight the gross-SEAT story never shows (Kerry
+        # 2026-08-06), whatever the gap says — but a SECURED player's
+        # card is a title+purse pitch, not a way-in pitch, so it stays
+        suppress = (no_flight
+                    or (not pc_first_flight and not sec_seat)
+                    or (not sec_seat and thr not in (None, "")
+                        and not pc_inside
+                        and pc_gap > float(thr)))
 
     from .timezone_utils import today_central
     send_date = today_central().strftime("%B %-d, %Y")
@@ -691,13 +713,16 @@ def build_chase_email(customer_id: int, to_address: str | None = None,
         "pc_reset": _n1(pcp.get("points")),
         "pc_seat_gap": ("inside the line" if pc_inside else _dot(pc_gap)),
         "pc_seats_available": str(pcp.get("seats") or 4),
-        "pc_buyin_caption": ("The gross-points path to the same weekend"
-                             if no_flight else
-                             "The gross path — you're "
-                             f"{'inside' if pc_inside else _dot(pc_gap)}"
-                             " off its seat line" if not pc_inside else
-                             "The gross path — you're inside its "
-                             "seat line today"),
+        # below 1st Flight the card sells the flight money, never the
+        # seat line (Kerry 2026-08-06)
+        "pc_buyin_caption": (
+            "Race your flight for the Players Cup money"
+            if not pc_first_flight else
+            "The gross-points path to the same weekend"
+            if no_flight else
+            "The gross path — you're inside its seat line today"
+            if pc_inside else
+            f"The gross path — you're {_dot(pc_gap)} off its seat line"),
         "deadline_date": deadline,
         "link_city_net": (f"{BASE}/member/contests#race="
                           f"{_NET_RACE_HASH.get(chapter, 'net')}"
@@ -860,7 +885,33 @@ def build_chase_email(customer_id: int, to_address: str | None = None,
                          "<b>One thing's for sure</b> &mdash; the seat "
                          "is yours, but the trophies and the money still "
                          "have to be won. None of it happens if you "
-                         "don't tee it up."))
+                         "don't tee it up.")
+                # the second-road card pivots too (Kerry 2026-08-06
+                # follow-up: "the Players Cup block also needs to
+                # support the money and cup incentive... not the Lone
+                # Star Cup weekend") — whichever second card rendered,
+                # its LSC-weekend pitch becomes a title+purse pitch;
+                # the absent card's replace is a no-op
+                .replace("A second road to the Lone Star Cup weekend: "
+                         "you sit <b>{{pc_place_ordinal}}</b> with a "
+                         "points reset of <b>{{pc_reset}}</b> &mdash; "
+                         "only <b>{{pc_seat_gap}} from one of the "
+                         "{{pc_seats_available}} gross seats</b> "
+                         "available.",
+                         "Your seat's already locked &mdash; this one's "
+                         "about the trophy and the money: you sit "
+                         "<b>{{pc_place_ordinal}}</b> with a points "
+                         "reset of <b>{{pc_reset}}</b>, and <b>The "
+                         "Players Cup title and its purse</b> are still "
+                         "up for grabs at the Championship.")
+                .replace("A second road to the Lone Star Cup weekend: "
+                         "your <b>{{fc_reset}}</b> points reset seed "
+                         "sits <b>{{fc_seat_line}}</b>.",
+                         "Your seat's already locked &mdash; this one's "
+                         "about the trophy and the money: your "
+                         "<b>{{fc_reset}}</b> points reset seed has you "
+                         "in the hunt for <b>The Fellowship Cup title "
+                         "and its purse</b>."))
 
     if path == "players":
         html = (html
@@ -892,6 +943,7 @@ def build_chase_email(customer_id: int, to_address: str | None = None,
     result = {"ok": True, "customer_id": cid, "name": name,
               "state": state, "rsvp_only": rsvp_only,
               "secured_seat": bool(sec_seat),
+              "pc_first_flight": pc_first_flight,
               "path": path, "gap": gap, "inside": inside,
               "suppress_pc": bool(suppress), "no_flight": bool(no_flight),
               "subject": subject, "preheader": PREHEADER,

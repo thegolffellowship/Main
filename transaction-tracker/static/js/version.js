@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.204.1";
+window.TGF_VERSION = "2.204.2";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.204.2",
+    date: "2026-08-06",
+    changes: [
+      "1st-Flight gate on the Players Cup path (Kerry: 'Nobody below 1st Flight should have The Players Cup as the way in. Like Lance Rohrmann or John White.'): the chase email's auto path rule only leads with the gross path for 1st Flight players; below it the second-road Players Cup card is suppressed regardless of gap, and the $50 Players Cup buy-in card's caption sells the flight money ('Race your flight for the Players Cup money') instead of the seat line. The chase_path_overrides dial still forces either path explicitly per player.",
+      "Secured-seat second-road card (Kerry follow-up on Luke Youngs: 'the Players Cup block also needs to support the money and cup incentive... not the Lone Star Cup weekend'): for a locked-seat player, whichever second cup card renders drops the 'second road to the Lone Star Cup weekend' pitch for 'Your seat's already locked — this one's about the trophy and the money', naming the cup's title and purse. Secured players keep the card even below 1st Flight — for them it's a money pitch, not a way-in pitch.",
+    ],
+  },
   {
     version: "2.204.1",
     date: "2026-08-06",
