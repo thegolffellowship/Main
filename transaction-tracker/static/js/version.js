@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.201.26";
+window.TGF_VERSION = "2.201.27";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.201.27",
+    date: "2026-08-06",
+    changes: [
+      "LSC tab polish (Kerry): the navy event banner (Oct 10–11 · The Hideout · Brownwood) moves up directly under The Lone Star Cup title, and the two team cards are chapter-branded instead of generic dark — Austin in burnt orange (white header text), San Antonio in the steel-blue chapter palette (dark header text, steel captain-row tint), matching the app's chapter color semantics.",
+    ],
+  },
   {
     version: "2.201.26",
     date: "2026-08-06",
