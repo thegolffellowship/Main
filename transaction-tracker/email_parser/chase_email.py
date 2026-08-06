@@ -231,6 +231,22 @@ def _ordinal(n):
     return str(n) + {1: "st", 2: "nd", 3: "rd"}.get(n % 10, "th")
 
 
+def _rank_ordinal(v):
+    """Board ranks arrive as ints OR tie notation ('T7'). 'T7' -> 'T7th'
+    (first live find: Bryce's city finish)."""
+    if v in (None, ""):
+        return "—"
+    s = str(v).strip().upper()
+    tied = s.startswith("T")
+    if tied:
+        s = s[1:]
+    try:
+        o = _ordinal(int(float(s)))
+    except (ValueError, TypeError):
+        return str(v)
+    return ("T" + o) if tied else o
+
+
 def _n1(v):
     """One-decimal board style: 93.5 -> '93.5', 100.0 -> '100'."""
     return f"{v:g}" if v is not None else "—"
@@ -408,8 +424,7 @@ def build_chase_email(customer_id: int, to_address: str | None = None,
         "chapter": chapter,
         "chapter_possessive": f"{chapter}'s",
         "send_date": send_date,
-        "city_finish_ordinal": (_ordinal(net["rank"]) if net.get("rank")
-                                else "—"),
+        "city_finish_ordinal": _rank_ordinal(net.get("rank")),
         "city_net_label": f"{chapter.upper()} CITY NET",
         "reset_seed": _n1(fcp.get("points")),
         "seat_gap_display": gap_display,
