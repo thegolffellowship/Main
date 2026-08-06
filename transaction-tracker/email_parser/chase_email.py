@@ -584,6 +584,9 @@ def build_chase_email(customer_id: int, to_address: str | None = None,
     pc_back = None
     pc_flight_rank = None   # visible-board rank within his flight (box 1)
     pc_flight_label = None
+    pc_flight_place = None  # rank WITHIN his flight, everyone-in (Kerry
+                            # 2026-08-06, Rob Callaway: "He'd be in 1st
+                            # Place!")
     try:
         gross = get_points_race_live("players_cup_gross", db_path=db_path)
         ahead, seen = 0, False
@@ -615,6 +618,8 @@ def build_chase_email(customer_id: int, to_address: str | None = None,
             if pool:
                 lead = max(_val(r) for r in pool)
                 pc_back = round(max(lead - _val(mine), 0), 2)
+                pc_flight_place = 1 + sum(1 for r in pool
+                                          if _val(r) > _val(mine))
             # Box-1 "regular season finish" (players-path renders) uses
             # the OVERALL visible board rank — everyone counts, bought in
             # or not, and NO flight scoping (Kerry 2026-08-06: "Remove
@@ -930,13 +935,19 @@ def build_chase_email(customer_id: int, to_address: str | None = None,
                          "available.",
                          "Your seat's already locked &mdash; this one's "
                          "about the trophy and the money: you sit "
-                         "<b>{{pc_place_ordinal}}</b> with a points "
-                         "reset of <b>{{pc_reset}}</b>, and <b>The "
-                         "Players Cup title and "
-                         # name his flight's money when we know it
-                         # (Kerry 2026-08-06, Rob Callaway)
-                         + (f"the {pc_flight_name} money"
-                            if pc_flight_name else "its purse")
+                         # rank WITHIN his flight (Kerry 2026-08-06, Rob
+                         # Callaway: "Keep the rank for his flight.
+                         # That's important! He'd be in 1st Place!" —
+                         # 1st in the 3rd Flight); chapter place is the
+                         # fallback when no flight is assigned
+                         + ("<b>" + _ordinal(pc_flight_place) + " in "
+                            + pc_flight_name + "</b>"
+                            if pc_flight_place and pc_flight_name
+                            else "<b>{{pc_place_ordinal}}</b>")
+                         + " with a points reset of <b>{{pc_reset}}</b>,"
+                         " and <b>The Players Cup title and "
+                         + ("the flight money" if pc_flight_name
+                            else "its purse")
                          + "</b> are still up for grabs at the "
                          "Championship.")
                 .replace("A second road to the Lone Star Cup weekend: "

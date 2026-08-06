@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.204.5";
+window.TGF_VERSION = "2.204.6";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.204.6",
+    date: "2026-08-06",
+    changes: [
+      "Secured Players Cup card ranks the player WITHIN his flight (Kerry, Rob Callaway: 'Keep the rank for his flight. That's important! He'd be in 1st Place!'): 'you sit 1st in 3rd Flight with a points reset of 93, and The Players Cup title and the flight money are still up for grabs at the Championship.' The flight rank uses the same everyone-in flight pool as the from-winning number; chapter place remains the fallback when no flight is assigned.",
+    ],
+  },
   {
     version: "2.204.5",
     date: "2026-08-06",
