@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.201.3";
+window.TGF_VERSION = "2.201.4";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.201.4",
+    date: "2026-08-06",
+    changes: [
+      "Spotlight city Net cards count MVPs instead of GG 'wins' (Kerry: 'change wins to count MVPs... Only count MVPs per event, not per 9'): the count reads our engine's per-event MVP determinations (event_mvp_computed, kind 'mvp', distinct events, chapter-scoped) — the per-nine drill-down rows display the same award twice but it counts once. John Wade's AUSTIN NET card reads '113 pts · 18 ev · 1 MVP · reset 97'. Non-net cards keep their previous behavior.",
+    ],
+  },
   {
     version: "2.201.3",
     date: "2026-08-06",

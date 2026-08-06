@@ -432,7 +432,15 @@
                         ? `${+(+r.points_back).toFixed(1)} from 1st` : "leads");
                 }
                 if (r.tournaments != null) metaBits.push(`${r.tournaments} ev`);
-                if (r.wins) metaBits.push(`${r.wins} win${r.wins === 1 ? "" : "s"}`);
+                // City Net cards count MVPs, not GG "wins" (Kerry
+                // 2026-08-06) — MVPs are per EVENT (the per-nine badge
+                // rows display the same award twice).
+                const isNet = r.key === "san_antonio_net" || r.key === "austin_net";
+                if (isNet) {
+                    if (r.mvps) metaBits.push(`${r.mvps} MVP${r.mvps === 1 ? "" : "s"}`);
+                } else if (r.wins) {
+                    metaBits.push(`${r.wins} win${r.wins === 1 ? "" : "s"}`);
+                }
                 if (r.points_reset != null && r.key !== "fellowship_cup") metaBits.push(`reset ${r.points_reset}`);
                 rows.push(standRow(
                     esc(String(r.rank)), pc ? "#BF5700" : "#1B1B1B", `of ${r.n_players}`,

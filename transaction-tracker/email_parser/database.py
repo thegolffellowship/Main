@@ -9967,6 +9967,25 @@ def get_player_spotlight(customer_id: int,
     member_card = None
     gross_d = None          # kept for the LONE STAR CUP line below
     cup_d = None
+    # City MVP count per chapter for the net-race cards (Kerry 2026-08-06:
+    # "change wins to count MVPs... Only count MVPs per event, not per 9").
+    # event_mvp_computed is keyed per EVENT by construction — the per-nine
+    # drill-down rows only DISPLAY the badge twice; our engine's
+    # determination (determine_tgf_mvp) is the authority.
+    mvps_by_chapter: dict = {}
+    try:
+        with _connect(db_path) as conn:
+            for r in conn.execute(
+                    """SELECT COALESCE(e.chapter, '') AS ch,
+                              COUNT(DISTINCT m.event_id) AS n
+                         FROM event_mvp_computed m
+                         JOIN events e ON e.id = m.event_id
+                        WHERE m.customer_id = ? AND m.kind = 'mvp'
+                        GROUP BY COALESCE(e.chapter, '')""",
+                    (customer_id,)).fetchall():
+                mvps_by_chapter[(r["ch"] or "").strip()] = r["n"]
+    except Exception:
+        logger.warning("spotlight MVP count failed", exc_info=True)
     for key in _GG_POINTS_RACES:
         try:
             # LIVE path, same as the CONTESTS page (Kerry 2026-08-03:
@@ -10015,6 +10034,9 @@ def get_player_spotlight(customer_id: int,
             "total_points": row.get("total_points"),
             "tournaments": row.get("tournaments"),
             "wins": row.get("wins"),
+            "mvps": (mvps_by_chapter.get("Austin") if key == "austin_net"
+                     else mvps_by_chapter.get("San Antonio")
+                     if key == "san_antonio_net" else None),
             "enrolled": bool(row.get("enrolled")),
             "flight": row.get("flight"),
             "points_reset": row.get("points_reset"),
