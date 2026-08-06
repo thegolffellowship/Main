@@ -14481,8 +14481,11 @@ def snapshot_target_list(window_points: float = 15.0,
     Walks the two cup boards once and segments every player with a
     tracker profile:
       push_entry — IN THE WINDOW but NOT bought into either cup: within
-                   `window_points` of the lead on the reset seeds, OR
-                   within `seat_window` of a Lone Star Cup seat line.
+                   `window_points` of the lead on the reset seeds (best
+                   path). Seat-line proximity alone no longer qualifies
+                   (Kerry 2026-08-06: 16+ off the Fellowship lead =
+                   Normal, whatever the seat gap says); `seat_window`
+                   is retained for signature compatibility and display.
       defend     — in the window AND bought in (motivate, don't pitch).
       normal     — on a board but outside the window (the normalized
                    snapshot).
@@ -14592,10 +14595,15 @@ def snapshot_target_list(window_points: float = 15.0,
         e["best_gap_path"] = (
             max(gap_items, key=lambda kv: kv[1]["gap_to_seat"])[0]
             if gap_items else None)
-        in_window = ((e["best_back"] is not None
-                      and e["best_back"] <= window_points)
-                     or (e["best_gap_to_seat"] is not None
-                         and e["best_gap_to_seat"] >= -seat_window))
+        # Seat-line proximity no longer overrides a blown points gap
+        # (Kerry 2026-08-06: "Move these 16 or more from the Fellowship
+        # Cup to the Normal tab" — Ingram/White/Horton et al. sat 15.5+
+        # off the lead yet stayed in the active queue because their
+        # seat gap squeaked under seat_window). More than window_points
+        # off the lead on the BEST path = NORMAL, whatever the seat
+        # math says; best_gap_to_seat stays on the row for display.
+        in_window = (e["best_back"] is not None
+                     and e["best_back"] <= window_points)
         e["secured_seat"] = e["customer_id"] in secured_cids
         e["tgf_champ_signed_up"] = (
             (e["customer_id"] in champ_cids) if champ_evs is not None

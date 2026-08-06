@@ -144,8 +144,10 @@ one they're chasing" (leader).
 
 ## Optimization levers CA can work with (the session agenda)
 
-- **Window criteria**: `window_points` / `seat_window` (both default
-  15) — where does "realistically in the mix" end?
+- **Window criteria**: `window_points` (default 15) is the ONE gate as
+  of v2.205.0 — Kerry 2026-08-06: players 16+ off the lead go Normal
+  even when the seat-line gap looks close, so `seat_window` no longer
+  qualifies anyone by itself (kept for signature compat + display).
 - **Segment copy variants**: today one builder serves all segments.
   DEFEND tier arguably needs "protect what you built" instead of the
   comeback pitch; NORMAL gets facts-not-pitch. The builder is one

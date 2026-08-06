@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.204.7";
+window.TGF_VERSION = "2.205.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.205.0",
+    date: "2026-08-06",
+    changes: [
+      "Queue window tightened (Kerry: 'Move these 16 or more from the Fellowship Cup to the Normal tab'): the points window is now the ONE gate — a player more than 15 off the lead on his best path goes to Normal even when his Lone Star Cup seat gap looks close. The seat-line criterion had been independently qualifying players sitting 15.5–19 off the Fellowship lead (Ingram, White, Horton, Decker, Moore, Fieber, Lee, Romero, Cannon, Reyes…) into Push Entry/Defend; the seat gap stays visible on every row but no longer changes the tab.",
+    ],
+  },
   {
     version: "2.204.7",
     date: "2026-08-06",
