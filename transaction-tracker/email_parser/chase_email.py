@@ -150,7 +150,9 @@ TEMPLATE = """<!DOCTYPE html>
 </body>
 </html>"""
 
-# ── #297b CTA state blocks (copy frozen per #296) ────────────────────
+# ── #297b CTA state blocks (copy frozen per #296; step-1 head reworded
+#    per Kerry 2026-08-06 — "Redundant CTA on step 1": the head no longer
+#    duplicates the button label) ──────────────────────────────────────
 _CTA_STATE_A = """  <!-- TWO STEPS — STATE A -->
   <div style="font-family:Georgia,serif; font-size:15px; color:#1B1B1B; font-weight:700; letter-spacing:0.04em; line-height:1.65; margin-top:20px;">TWO STEPS TO GET IN:</div>
   <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse; width:100%; margin-top:8px;">
@@ -158,7 +160,7 @@ _CTA_STATE_A = """  <!-- TWO STEPS — STATE A -->
       <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse;"><tr>
         <td style="width:26px; vertical-align:top; font-family:Georgia,serif; font-size:16px; font-weight:700; color:#BF5700;">1</td>
         <td style="vertical-align:top; font-family:Helvetica,Arial,sans-serif; font-size:13px; line-height:1.55; color:#44403B; padding-bottom:14px;">
-          <div style="font-family:Georgia,serif; font-size:15px; font-weight:700; color:#1B1B1B; margin-bottom:6px;">Sign up for the TGF Championship.</div>
+          <div style="font-family:Georgia,serif; font-size:15px; font-weight:700; color:#1B1B1B; margin-bottom:6px;">Get in the field.</div>
           <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse;"><tr>
             <td style="background:#E87C3E; border-radius:9999px;" bgcolor="#E87C3E"><a href="{{link_signup}}" style="display:inline-block; color:#FFFFFF; font-family:Georgia,serif; font-weight:700; padding:11px 26px; font-size:13px; letter-spacing:0.08em; text-decoration:none;">SIGN UP FOR THE TGF CHAMPIONSHIP</a></td>
           </tr></table>

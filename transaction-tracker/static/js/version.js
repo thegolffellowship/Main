@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.201.6";
+window.TGF_VERSION = "2.201.7";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.201.7",
+    date: "2026-08-06",
+    changes: [
+      "Chase email State A: step 1's head line no longer duplicates the button (Kerry: 'Redundant CTA on step 1') — the head now reads 'Get in the field.' and the orange SIGN UP FOR THE TGF CHAMPIONSHIP button carries the action, matching step 2's 'Then buy into your Cup(s).' rhythm. Copy deviation from the #296 frozen block; flagged to design-claude.",
+    ],
+  },
   {
     version: "2.201.6",
     date: "2026-08-06",
