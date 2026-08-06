@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.201.11";
+window.TGF_VERSION = "2.201.12";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.201.12",
+    date: "2026-08-06",
+    changes: [
+      "Chase email header now carries the REGISTERED TGF logo — the roundel with 'THE GOLF FELLOWSHIP' wrapped around the G plus the (R) mark — instead of the plain G icon (Kerry: 'why can't we seem to get our actual logo in there... our registered trademark'). Sourced from the TGF Design System's tgf-logo-white.svg via DesignSync (the OneDrive image path can't serve binaries); rendered to static/email/tgf-logo-r-white-216.png at 3x for retina, SVG master alongside. The old plain-G roundel PNG stays on disk so previously sent emails keep their image.",
+    ],
+  },
   {
     version: "2.201.11",
     date: "2026-08-06",

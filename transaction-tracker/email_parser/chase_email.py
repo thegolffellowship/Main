@@ -473,7 +473,12 @@ def build_chase_email(customer_id: int, to_address: str | None = None,
         "link_signup": signup_url,
         "link_fellowship_buyin": buyin_url,
         "link_players_buyin": buyin_url,
-        "ASSET_ROUNDEL_WHITE": f"{BASE}/static/email/tgf-roundel-white-144.png",
+        # The REGISTERED trademark (wrapped "THE GOLF FELLOWSHIP" + (R)),
+        # sourced from the TGF Design System's tgf-logo-white.svg via
+        # DesignSync (Kerry 2026-08-06: "our actual logo ... our
+        # registered trademark"). The plain-G roundel it replaces stays
+        # on disk for older sent emails that reference it.
+        "ASSET_ROUNDEL_WHITE": f"{BASE}/static/email/tgf-logo-r-white-216.png",
         "ASSET_STAR_WHITE": f"{BASE}/static/email/star-white-44.png",
         "ASSET_TROPHY_ORANGE": f"{BASE}/static/email/trophy-orange-44.png",
         "ASSET_TROPHY_BLACK": f"{BASE}/static/email/trophy-black-52.png",
