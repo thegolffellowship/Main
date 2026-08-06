@@ -118,8 +118,7 @@
         .hcp-mc-idx { font-weight: 800; font-size: 1.45rem; color: var(--text, #1B1B1B); line-height: 1; }
         .hcp-mc-idx.na { font-size: 1rem; color: #9ca3af; font-style: italic; }
         .hcp-mc-n   { font-size: 0.7rem; color: #94a3b8; font-weight: 500; align-self: flex-end; margin-bottom: 2px; }
-        .hcp-mc-chev { color: #94a3b8; font-size: 0.7rem;
-                       transition: transform 0.15s; margin-left: 4px; }
+        .hcp-mc-chev { margin-left: 4px; }  /* look from .tgf-exp (dashboard.css) */
         .hcp-mc-top.open .hcp-mc-chev { transform: rotate(90deg); }
         .hcp-mc-rounds { border-top: 1px solid #e2e8f0; overflow-x: auto; }
 
@@ -200,8 +199,7 @@
 
         .expand-btn {
             background: none; border: none; cursor: pointer;
-            color: #64748b; font-size: 0.85em; padding: 0 4px;
-            transition: transform 0.15s;
+            padding: 0 4px;  /* color/size come from .tgf-exp (dashboard.css) */
         }
         .expand-btn.open { transform: rotate(90deg); }
 
@@ -1170,14 +1168,14 @@
                     ? `<span style="color:#16A34A;font-weight:700;">▼ ${Math.abs(t).toFixed(1)}</span>`
                     : `<span style="color:#DC2626;font-weight:700;">▲ ${t.toFixed(1)}</span>`;
             tr.innerHTML = window.MEMBER_MODE ? `
-                <td><button class="expand-btn ${isExpanded?'open':''}"
+                <td><button class="expand-btn tgf-exp ${isExpanded?'open':''}"
                     onclick="toggleRounds(${esc(JSON.stringify(p.player_name))}, this)">▶</button></td>
                 <td>${playerCell}</td>
                 <td style="text-align:right;">${indexCell}</td>
                 <td style="text-align:right;">${trendCell}</td>
                 <td style="text-align:right;">${activeLabel}</td>
             ` : `
-                <td><button class="expand-btn ${isExpanded?'open':''}"
+                <td><button class="expand-btn tgf-exp ${isExpanded?'open':''}"
                     onclick="toggleRounds(${esc(JSON.stringify(p.player_name))}, this)">▶</button></td>
                 <td>${playerCell}</td>
                 <td>${indexCell} ${trendCell}</td>
@@ -1285,7 +1283,7 @@
                             <div class="hcp-mc-right">
                                 ${mobileEmailBtn}
                                 ${idxHtml}
-                                <span class="hcp-mc-chev">▶</span>
+                                <span class="hcp-mc-chev tgf-exp">▶</span>
                             </div>
                         </div>
                         <div class="hcp-mc-rounds" id="m-rounds-${id}" style="display:none">
@@ -1537,7 +1535,7 @@
             const dateCell = expandable
                 ? `<a href="javascript:void(0)" onclick="toggleHcpScorecard(this, ${rnd.scoring_round_id}, ${colspan}, '${nineFor18}', ${rnd.gross ?? 'null'}, ${rnd.adjusted_score})"
                      style="color:inherit;text-decoration:none;white-space:nowrap;">
-                     <span class="hcp-card-chev" style="display:inline-block;transition:transform .15s;color:var(--primary, #E87C3E);font-weight:700;">&#8250;</span> ${fmtRoundDate(rnd.round_date)}</a>`
+                     <span class="hcp-card-chev tgf-exp">&#9654;</span> ${fmtRoundDate(rnd.round_date)}</a>`
                 : fmtRoundDate(rnd.round_date);
             if (MEMBER) {
                 // view 1a: counting rounds carry the success-green left bar,

@@ -172,7 +172,7 @@
                 : "";
             return `<tr data-srid="${r.id}" style="cursor:pointer;" title="Click for the hole-by-hole scorecard">
                 <td style="white-space:nowrap;">${escapeHtml(dateTxt)}</td>
-                <td class="pr-wrap"><span class="pr-sc-chev" style="color:var(--primary);font-size:0.85rem;">&#9656;</span> ${escapeHtml((compact ? prPrettyEvent(r.event_name || "") : (r.event_name || "")).replace(/[–—]/g, "-"))}${prBadgeLayout(prMvpBadges(r), r.event_name, compact)}${courseCell}</td>
+                <td class="pr-wrap"><span class="pr-sc-chev tgf-exp">&#9654;</span> ${escapeHtml((compact ? prPrettyEvent(r.event_name || "") : (r.event_name || "")).replace(/[–—]/g, "-"))}${prBadgeLayout(prMvpBadges(r), r.event_name, compact)}${courseCell}</td>
                 ${compact ? "" : `<td>${escapeHtml(course)}${sr ? ` <span style="color:var(--text-muted);font-size:0.8em;">(${escapeHtml(sr)})</span>` : ""}</td>`}
                 <td style="text-align:center;">${r.holes_played ?? ""}</td>
                 <td style="text-align:center;">${prFmtHcp(r.playing_handicap)}</td>
@@ -210,14 +210,14 @@
                 const next = row.nextElementSibling;
                 if (next && next.classList.contains("pr-sc-detail")) {
                     next.remove();
-                    if (chev) chev.innerHTML = "&#9656;";
+                    if (chev) chev.innerHTML = "&#9654;";
                     return;
                 }
                 const det = document.createElement("tr");
                 det.className = "pr-sc-detail";
                 det.innerHTML = `<td colspan="${row.children.length}" class="pr-wrap" style="background:#fff;padding:${prIsCompact() ? "0.4rem 0.1rem" : "0.5rem 0.75rem"};"><span style="color:var(--text-muted);">Loading scorecard…</span></td>`;
                 row.after(det);
-                if (chev) chev.innerHTML = "&#9662;";
+                if (chev) chev.innerHTML = "&#9660;";
                 try {
                     const res = await fetch(`/api/scoring/scorecard/${row.dataset.srid}`);
                     const data = await res.json();
@@ -239,14 +239,14 @@
                 const next = row.nextElementSibling;
                 if (next && next.classList.contains("pr-cc-detail")) {
                     next.remove();
-                    if (chev) chev.innerHTML = "&#9656;";
+                    if (chev) chev.innerHTML = "&#9654;";
                     return;
                 }
                 const det = document.createElement("tr");
                 det.className = "pr-cc-detail";
                 det.innerHTML = `<td colspan="${row.children.length}" class="pr-wrap" style="background:#fff;padding:${prIsCompact() ? "0.4rem 0.1rem" : "0.5rem 0.75rem"};"><span style="color:var(--text-muted);">Loading live card…</span></td>`;
                 row.after(det);
-                if (chev) chev.innerHTML = "&#9662;";
+                if (chev) chev.innerHTML = "&#9660;";
                 try {
                     const res = await fetch(`/api/season-contests/points-race/champ-card?race=${encodeURIComponent(row.dataset.champRace)}&cid=${encodeURIComponent(row.dataset.champCid)}`, {cache: "no-store"});
                     const data = await res.json();
@@ -585,7 +585,7 @@
         const open = tr.dataset.open === "1";
         tr.dataset.open = open ? "" : "1";
         const chev = tr.querySelector(".pr-nc-chev");
-        if (chev) chev.innerHTML = open ? "&#9656;" : "&#9662;";
+        if (chev) chev.innerHTML = open ? "&#9654;" : "&#9660;";
         let n = tr.nextElementSibling;
         while (n) {
             if (n.classList.contains("pr-nc-row")) {
@@ -716,7 +716,7 @@
             // when expandable so the off-season row stays inert.
             const _ccExpandable = !!(opts.champRace && opts.champCid);
             const _ccChev = _ccExpandable
-                ? '<span class="pr-cc-chev" style="color:#BF5700;font-size:0.85rem;" title="Live hole-by-hole">&#9656;</span> '
+                ? '<span class="pr-cc-chev tgf-exp" title="Live hole-by-hole">&#9654;</span> '
                 : '';
             // "[CHAPTER] CITY CHAMPIONSHIP" with the course on a second
             // line (Kerry 2026-08-03) — no more "Total"
@@ -764,7 +764,7 @@
                         counted = false;
                         // Collapsed by default (Kerry 2026-08-03) —
                         // the banner itself is the toggle
-                        if (order) { parts.push(`<tr onclick="prToggleNc(this)" style="cursor:pointer;" title="Show the rounds that didn't count"><td colspan="${totalCols}" class="pr-wrap" style="background:#B9B7B2;color:#1B1B1B;font:700 11px/1.5 'Bitter',serif;letter-spacing:1px;text-transform:uppercase;"><span class="pr-nc-chev" style="font-size:0.85rem;">&#9656;</span> ${compact ? "Not Counted" : "Points Not Counted"}</td></tr>`); continue; }
+                        if (order) { parts.push(`<tr onclick="prToggleNc(this)" style="cursor:pointer;" title="Show the rounds that didn't count"><td colspan="${totalCols}" class="pr-wrap" style="background:#B9B7B2;color:#1B1B1B;font:700 11px/1.5 'Bitter',serif;letter-spacing:1px;text-transform:uppercase;"><span class="pr-nc-chev tgf-exp">&#9654;</span> ${compact ? "Not Counted" : "Points Not Counted"}</td></tr>`); continue; }
                     }
                     parts.push(`<tr${counted ? "" : ' class="pr-nc-row" style="display:none;"'}><td colspan="${totalCols}" class="pr-wrap" style="text-align:center;font-weight:600;background:#f8fafc;">${escapeHtml(nb(r.join(" ")))}</td></tr>`);
                     continue;
@@ -817,7 +817,7 @@
                     if (i === dateCol) val = prFmtAwardDate(val, compact);
                     else if (compact && i === evtCol) val = prPrettyEvent(val);
                     if (i === evtCol && match) val += prNineSuffix(val, match);
-                    const chev = match && i === evtCol ? '<span class="pr-sc-chev" style="color:var(--primary);font-size:0.85rem;">&#9656;</span> ' : "";
+                    const chev = match && i === evtCol ? '<span class="pr-sc-chev tgf-exp">&#9654;</span> ' : "";
                     const badges = i === evtCol && match
                         ? prBadgeLayout(prMvpBadges(match), val, compact) : "";
                     return `<td${i === evtCol ? ' class="pr-wrap"' : ""} style="${style}">${chev}${escapeHtml(val)}${badges}</td>`;

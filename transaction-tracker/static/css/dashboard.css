@@ -2953,3 +2953,21 @@ div.mobile-card.row-rsvp-only {
     font-weight: 700;
 }
 .pace-value.pace-default { color: var(--text-muted); font-weight: 500; }
+
+/* ── TGF EXPAND ARROW standard (Kerry 2026-08-06: "use these arrow icons
+   for our EXPAND arrows everywhere on the Member facing pages... more
+   visible. Use the TGF Orange") ──
+   Every expand/collapse indicator is the SAME solid triangle: ▶ (&#9654;)
+   closed / ▼ (&#9660;) or a 90° rotation when open, TGF orange, 14px.
+   Apply .tgf-exp to the glyph element; each page's existing open-state
+   hook (rotate or glyph swap) rides on top. Do NOT restyle arrows
+   per-page — change the look HERE. */
+.tgf-exp {
+    display: inline-block;
+    color: var(--primary, #E87C3E);
+    font-size: 14px;
+    line-height: 1;
+    font-style: normal;
+    font-weight: 400;
+    transition: transform 0.15s;
+}

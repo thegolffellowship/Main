@@ -1,5 +1,28 @@
-window.TGF_VERSION = "2.201.36";
+window.TGF_VERSION = "2.203.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.203.0",
+    date: "2026-08-06",
+    changes: [
+      "EXPAND ARROW standard (Kerry): every expand/collapse indicator on the member-facing pages is now the same solid TGF-orange triangle — one glyph (▶ closed, ▼ or a 90° rotation when open), one 14px size, defined once as .tgf-exp in dashboard.css. Converted: Spotlight recent-winnings event rows, Handicaps table expand buttons + mobile-card and scorecard-date chevrons (were slate gray and three different sizes), the Leaderboard's Pot & Details fold chip, Match Play row accordions (were gray ›), and every points-race drill-down chevron in points-render.js including the live hole-by-hole and Points Not Counted banners. Restyle arrows in dashboard.css only — never per page.",
+    ],
+  },
+  {
+    version: "2.202.0",
+    date: "2026-08-06",
+    changes: [
+      "Email open/click tracking is LIVE (Kerry: 'Build the email tracking'). Every chase-email send now carries a per-send token: a 1x1 pixel (/t/o/<token>.gif) records opens and every http(s) link is rewritten through /t/c/<token>?u=... which records the click and 302s to the real destination — allowlisted hosts only (tracker + thegolffellowship.com), so the redirect can never be aimed elsewhere; mailto (unsubscribe) links stay untouched. New tables email_sends (per-send aggregates: opened_at/open_count/clicked_at/click_count, customer_id FK per rule 6) and email_send_events (raw beacon stream with user-agent), created lazily. Test sends to the recap inbox are flagged is_test so Kerry's own opens never pollute the member signal.",
+      "Snapshot Command Center shows the result: green OPENED and orange CLICKED chips (with first-open/first-click timestamps and ×N counts) join the mark chip on each queue row, from the latest REAL send per player. Caveat shown by design: opens are a floor — Apple/Gmail image proxies can prefetch the pixel and image-blocking clients never report one; clicks are the hard signal.",
+    ],
+  },
+  {
+    version: "2.201.37",
+    date: "2026-08-06",
+    changes: [
+      "LSC tab uses the full desktop width (Kerry: 'We're not using the full width of the standard 1280 page for desktop. I'd like to.'): the 720px caps on the navy banner, intro, legend, and footnote are gone, so the whole tab spans the standard work column (1080px member / 1280px manager-admin) like the team-card grid already did.",
+      "The Lone Star Cup gets a HOW IT WORKS button (Kerry) next to the PROJECTED ROSTERS chip, on the same modal chrome as the races: THE WEEKEND schedule (Fri Oct 9 Practice Round · Sat Oct 10 AM Fourball / PM Foursomes · Sun Oct 11 Singles), the How-You-Qualify 12-seat breakdown (moved into the modal from the inline box, which is retired), and a Seats & Alternates explainer. The venue chip follows the lsc_event_info dial.",
+    ],
+  },
   {
     version: "2.201.36",
     date: "2026-08-06",

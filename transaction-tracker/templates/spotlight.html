@@ -167,8 +167,7 @@
         details.spt-win-ev > summary { list-style: none; cursor: pointer; }
         details.spt-win-ev > summary::-webkit-details-marker { display: none; }
         details.spt-win-ev > summary .spt-win { border-top: none; }
-        .spt-win-chev { flex: none; color: var(--primary, #E87C3E); font-size: 0.8rem;
-            transition: transform 0.15s; }
+        .spt-win-chev { flex: none; }  /* look comes from .tgf-exp (dashboard.css) */
         details.spt-win-ev[open] .spt-win-chev { transform: rotate(90deg); }
         .spt-win-games { padding: 0 14px 10px 24px; }
         .spt-win-game { display: flex; align-items: baseline; gap: 10px; padding: 3px 0;
@@ -541,7 +540,7 @@
             const pays = (d.recent_events && d.recent_events.length)
                 ? d.recent_events.map(ev =>
                     `<details class="spt-win-ev"><summary><div class="spt-win">` +
-                    `<span class="spt-win-chev">&#9656;</span><div class="mid">` +
+                    `<span class="spt-win-chev tgf-exp">&#9654;</span><div class="mid">` +
                     `<div class="ev">${esc(ev.event_name || "Event")}</div>` +
                     `<div class="meta">${ev.games.length} game${ev.games.length === 1 ? "" : "s"}${ev.event_date ? " · " + esc(fmtDate(ev.event_date)) : ""}</div>` +
                     `</div><span class="amt">${fmtMoney(ev.total)}</span></div></summary>` +
