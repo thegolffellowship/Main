@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.201.17";
+window.TGF_VERSION = "2.201.18";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.201.18",
+    date: "2026-08-06",
+    changes: [
+      "Future-contest status badges (STARTS AUG 29) go solid TGF orange with white text (Kerry: amber was 'boring and non-descriptive... either green or tgf orange' — orange chosen over green so the chip can't be confused with the green IN enrollment pills). Final badge palette: past = gray fill, current = black outline, future = TGF orange fill.",
+    ],
+  },
   {
     version: "2.201.17",
     date: "2026-08-06",
