@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.201.32";
+window.TGF_VERSION = "2.201.33";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.201.33",
+    date: "2026-08-06",
+    changes: [
+      "Design-claude R6 addendum applied (#311/#312, Kerry-ratified): the payoff star is a true five-point Texas star (new star-texas-white asset), the LSC gets its own STAR-ON-TROPHY mark (trophy-star-white, 32px), and the email's LSC details card adopts the production A3 markup — navy with 3px orange top rule, icon column, eyebrow/date/venue, deep-link bar (whole card tappable; CLICK strip kept at 10px per Kerry's block-text ruling). Fellowship second-path card switches to the plain black outline trophy; inside-the-line gross phrase now reads 'via your gross path' (was 'off'). The hybrid one-step/two-step question (#312 fix 3) awaits Kerry's pick.",
+    ],
+  },
   {
     version: "2.201.32",
     date: "2026-08-06",

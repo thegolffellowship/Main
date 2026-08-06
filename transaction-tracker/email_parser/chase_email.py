@@ -350,7 +350,7 @@ def seat_ladder_gross(gap, inside):
     points don't map to net-score rungs, so the copy speaks in plain
     points; inside gets the hold-your-seat framing."""
     if inside:
-        return ("you'd have a seat off your gross path — nothing's final "
+        return ("you'd have a seat via your gross path — nothing's final "
                 "until Sunday", "IN")
     display = "1 point" if gap == 1 else _n1(gap)
     word = "point" if gap == 1 else "points"
@@ -376,7 +376,7 @@ _FC_CARD = """  <!-- FELLOWSHIP CUP CARD — SECONDARY MODULE (players-path rend
   <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse; width:100%; margin-top:16px;">
     <tr><td style="border:1px solid #E2DFDA; border-top:3px solid #E87C3E; background:#F6F4F1; padding:0;" bgcolor="#F6F4F1">
       <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse;"><tr>
-        <td style="width:58px; vertical-align:middle; text-align:center;"><img src="{{ASSET_TROPHY_ORANGE}}" alt="" width="26" height="26" style="display:inline-block; border:0;"></td>
+        <td style="width:58px; vertical-align:middle; text-align:center;"><img src="{{ASSET_TROPHY_BLACK}}" alt="" width="26" height="26" style="display:inline-block; border:0;"></td>
         <td style="padding:12px 20px 12px 0; font-family:Helvetica,Arial,sans-serif; font-size:15px; line-height:1.6; color:#44403B;">
           <div style="font-family:Georgia,serif; font-size:13px; letter-spacing:0.16em; text-transform:uppercase; color:#1B1B1B; font-weight:700; margin-bottom:4px;">The Fellowship Cup &middot; your net path</div>
           A second road to the Lone Star Cup weekend: your <b>{{fc_reset}}</b> points reset seed sits <b>{{fc_seat_line}}</b>.
@@ -592,35 +592,28 @@ def build_chase_email(customer_id: int, to_address: str | None = None,
         if isinstance(_lev, dict) and _lev.get("dates"):
             _venue = " &middot; ".join(
                 p for p in (_lev.get("venue"), _lev.get("city")) if p)
+            # Stylized LSC details card — design-claude #311 A3 production
+            # markup (navy + 3px orange rule, star-on-trophy icon in its
+            # 64px column, eyebrow/date/venue, deep-link bar). Whole card
+            # is tappable per Kerry; the CLICK strip stays 10px per his
+            # earlier block-text ruling (A3 shipped 8px — flagged back).
             _lsc_url = f"{BASE}/member/contests#tab=lsc"
-            lsc_event_block = (
-                '  <table role="presentation" width="100%" cellpadding="0"'
-                ' cellspacing="0" border="0" style="border-collapse:collapse;'
-                ' width:100%; margin-top:16px;">\n'
-                '    <tr><td style="background:#002868; border-radius:12px;'
-                ' padding:0; overflow:hidden;" bgcolor="#002868">\n'
-                f'      <a href="{_lsc_url}" style="display:block;'
-                ' text-decoration:none; padding:14px 18px 12px;">\n'
-                '        <div style="font-family:Helvetica,Arial,sans-serif;'
-                ' font-size:10px; letter-spacing:0.16em;'
-                ' text-transform:uppercase; color:#9DB4D6;'
-                ' font-weight:700;">The Lone Star Cup</div>\n'
-                '        <div style="color:#FFFFFF; font-family:Georgia,serif;'
-                ' font-size:18px; font-weight:700; margin-top:4px;">'
-                f'&#127942; {_lev.get("dates")}</div>\n'
-                '        <div style="font-family:Helvetica,Arial,sans-serif;'
-                ' font-size:13px; color:#9DB4D6; margin-top:3px;">'
-                f'{_venue}</div>\n'
-                '      </a>\n'
-                '      <div style="background:#0B3574; text-align:center;'
-                ' padding:5px 2px;">'
-                f'<a href="{_lsc_url}"'
-                ' style="font-family:Helvetica,Arial,sans-serif;'
-                ' font-size:10px; letter-spacing:0.1em; color:#9DB4D6;'
-                ' text-decoration:none; font-weight:700;">'
-                'CLICK FOR THE LONE STAR CUP</a></div>\n'
-                '    </td></tr>\n'
-                '  </table>')
+            _icon = f"{BASE}/static/email/trophy-star-white-64.png"
+            lsc_event_block = f"""  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse; width:100%; margin-top:16px;">
+    <tr><td style="background:#002868; border-top:3px solid #E87C3E; padding:0;" bgcolor="#002868">
+      <a href="{_lsc_url}" style="display:block; text-decoration:none;">
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse;"><tr>
+        <td style="width:64px; vertical-align:middle; text-align:center;"><img src="{_icon}" alt="" width="32" height="32" style="display:inline-block; border:0;"></td>
+        <td style="padding:14px 20px 13px 0;">
+          <div style="font-family:Georgia,serif; font-size:11px; letter-spacing:0.18em; text-transform:uppercase; color:#9DB4D6; font-weight:700; margin-bottom:4px;">The Lone Star Cup</div>
+          <div style="font-family:Georgia,serif; font-size:20px; font-weight:700; color:#FFFFFF; line-height:1.1;">{_lev.get("dates")}</div>
+          <div style="font-family:Helvetica,Arial,sans-serif; font-size:12px; color:#C9D6EA; margin-top:4px;">{_venue}</div>
+        </td>
+      </tr></table>
+      </a>
+      <div style="background:#0B3574; text-align:center; padding:5px 2px;" bgcolor="#0B3574"><a href="{_lsc_url}" style="font-family:Helvetica,Arial,sans-serif; font-size:10px; letter-spacing:0.1em; color:#9DB4D6; text-decoration:none; font-weight:700;">CLICK FOR THE LONE STAR CUP</a></div>
+    </td></tr>
+  </table>"""
     except Exception:
         lsc_event_block = ""
 
@@ -668,7 +661,9 @@ def build_chase_email(customer_id: int, to_address: str | None = None,
         # registered trademark"). The plain-G roundel it replaces stays
         # on disk for older sent emails that reference it.
         "ASSET_ROUNDEL_WHITE": f"{BASE}/static/email/tgf-logo-r-white-216.png",
-        "ASSET_STAR_WHITE": f"{BASE}/static/email/star-white-44.png",
+        "ASSET_STAR_WHITE": f"{BASE}/static/email/star-texas-white-44.png",
+        # A2 (#311): the LSC's own mark — trophy with a filled star
+        "ASSET_TROPHY_STAR_WHITE": f"{BASE}/static/email/trophy-star-white-64.png",
         "ASSET_TROPHY_ORANGE": f"{BASE}/static/email/trophy-orange-44.png",
         "ASSET_TROPHY_BLACK": f"{BASE}/static/email/trophy-black-52.png",
     }
