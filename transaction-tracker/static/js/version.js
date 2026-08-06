@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.201.29";
+window.TGF_VERSION = "2.201.30";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.201.30",
+    date: "2026-08-06",
+    changes: [
+      "Chase email P1 (Kerry): 'The rest is decided at the TGF Championship, Aug 15–16 at Lost Pines' is now bold and names the venue.",
+    ],
+  },
   {
     version: "2.201.29",
     date: "2026-08-06",

@@ -129,7 +129,7 @@ TEMPLATE = """<!DOCTYPE html>
   </table>
 
   <!-- EXPLAINER PASSAGE (P1/P2/P3 frozen per #296) -->
-  <div style="font-family:Helvetica,Arial,sans-serif; font-size:15px; color:#44403B; line-height:1.65; margin-top:20px;"><b>{{first_name}}</b>, your city finish is banked. The rest is decided at the TGF Championship, Aug 15&ndash;16 &mdash; if it ended today, {{seat_phrase}}.</div>
+  <div style="font-family:Helvetica,Arial,sans-serif; font-size:15px; color:#44403B; line-height:1.65; margin-top:20px;"><b>{{first_name}}</b>, your city finish is banked. <b>The rest is decided at the TGF Championship, Aug 15&ndash;16 at Lost Pines</b> &mdash; if it ended today, {{seat_phrase}}.</div>
   <div style="font-family:Helvetica,Arial,sans-serif; font-size:15px; color:#44403B; line-height:1.65; margin-top:14px; background:#FBEFE4; padding:12px 16px;"><b style="font-family:Georgia,serif; color:#BF5700; letter-spacing:0.08em;">TRUE STORY</b> &mdash; Mark Freund, from San Antonio, overcame a 14.5 point deficit in 2024 to win The Fellowship Cup by 2.5 points!</div>
   <div style="font-family:Helvetica,Arial,sans-serif; font-size:15px; color:#44403B; line-height:1.65; margin-top:12px;"><b>One thing's for sure</b> &mdash; if you don't play, there's no chance to qualify. And your chances are better than you probably realize: seats only go to players who show up.</div>
 
