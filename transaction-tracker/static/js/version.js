@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.201.15";
+window.TGF_VERSION = "2.201.16";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.201.16",
+    date: "2026-08-06",
+    changes: [
+      "Spotlight status badges now use three tiers (Kerry: 'Past, current, future all need different color badges'): past = gray COMPLETED, current = green (active races with a status note — the cups' 'Ends at TGF Championship'), future = amber (the fall 'STARTS AUG 29' chips). Cup wording also updated to 'Ends at TGF Championship' via the race_status_notes dial.",
+    ],
+  },
   {
     version: "2.201.15",
     date: "2026-08-06",

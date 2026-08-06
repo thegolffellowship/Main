@@ -141,7 +141,9 @@
         .spt-badge { display: inline-block; font: 700 8px/1 'Bitter', serif; letter-spacing: 0.06em;
                      text-transform: uppercase; padding: 3px 6px; border-radius: 4px;
                      margin-left: 7px; vertical-align: 2px; white-space: nowrap; }
+        /* three status tiers (Kerry 2026-08-06): past gray / current green / future amber */
         .spt-badge.done { color: #6B675F; background: #E8E5E0; }
+        .spt-badge.live { color: #1B6B45; background: #E3F4E9; box-shadow: inset 0 0 0 1px #BFE5CC; }
         .spt-badge.soon { color: #BF5700; background: #FFF4E8; box-shadow: inset 0 0 0 1px #F3D9C0; }
         .spt-pill.in { color: #1B6B45; background: #C9EBD5; }
         /* NOT IN = amber warning, not neutral gray (Kerry 2026-08-06:
@@ -428,9 +430,12 @@
                 `<div class="mid"><div class="race">${esc(race)}${badge || ""}</div><div class="meta">${esc(meta)}</div>${drama ? `<div class="spt-drama ${drama.kind}">${esc(drama.text)}</div>` : ""}</div>` +
                 pill +
                 `${href ? '<span class="spt-go">&rsaquo;</span></a>' : "</div>"}`;
+            // past = gray COMPLETED; current = green (an active race with a
+            // status note, e.g. the cups' "Ends at TGF Championship");
+            // future = amber (the fall STARTS chips below)
             const statusBadge = r => r.final
                 ? `<span class="spt-badge done">Completed</span>`
-                : (r.status_note ? `<span class="spt-badge soon">${esc(r.status_note)}</span>` : "");
+                : (r.status_note ? `<span class="spt-badge live">${esc(r.status_note)}</span>` : "");
             const rows = [];
             // display order (Kerry 2026-07-12): Fellowship Cup above Players Cup
             const RACE_ORDER = { san_antonio_net: 0, austin_net: 1, fellowship_cup: 2, players_cup_gross: 3 };
