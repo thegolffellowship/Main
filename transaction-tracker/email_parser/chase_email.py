@@ -208,13 +208,16 @@ _BUYIN_PILL = """<table role="presentation" cellpadding="0" cellspacing="0" bord
                   <td style="background:{color}; border-radius:9999px;" bgcolor="{color}"><a href="{href}" style="display:inline-block; color:#FFFFFF; font-family:Georgia,serif; font-weight:700; padding:9px 18px; font-size:11px; letter-spacing:0.08em; text-decoration:none;">BUY IN &middot; $50</a></td>
                 </tr></table>"""
 
-_PC_CARD = """  <!-- PLAYERS CUP CARD — SUPPRESSIBLE MODULE (drop this whole table when suppressed) -->
+_PC_CARD = """  <!-- PLAYERS CUP CARD — SUPPRESSIBLE MODULE (drop this whole table when suppressed)
+       Body 15px to MATCH the narrative paragraphs (Kerry 2026-08-06:
+       "the players cup text is too small. It should match the size of
+       body text above"); kicker bumped 12→13 to hold hierarchy. -->
   <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse; width:100%; margin-top:16px;">
     <tr><td style="border:1px solid #E2DFDA; border-top:3px solid #1B1B1B; background:#F6F4F1; padding:0;" bgcolor="#F6F4F1">
       <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse;"><tr>
         <td style="width:58px; vertical-align:middle; text-align:center;"><img src="{{ASSET_TROPHY_BLACK}}" alt="" width="26" height="26" style="display:inline-block; border:0;"></td>
-        <td style="padding:12px 20px 12px 0; font-family:Helvetica,Arial,sans-serif; font-size:12.5px; line-height:1.55; color:#44403B;">
-          <div style="font-family:Georgia,serif; font-size:12px; letter-spacing:0.16em; text-transform:uppercase; color:#1B1B1B; font-weight:700; margin-bottom:4px;">The Players Cup &middot; your gross path</div>
+        <td style="padding:12px 20px 12px 0; font-family:Helvetica,Arial,sans-serif; font-size:15px; line-height:1.6; color:#44403B;">
+          <div style="font-family:Georgia,serif; font-size:13px; letter-spacing:0.16em; text-transform:uppercase; color:#1B1B1B; font-weight:700; margin-bottom:4px;">The Players Cup &middot; your gross path</div>
           A second road to the Lone Star Cup weekend: you sit <b>{{pc_place_ordinal}}</b> with a points reset of <b>{{pc_reset}}</b> &mdash; only <b>{{pc_seat_gap}} from one of the {{pc_seats_available}} gross seats</b> available.
         </td>
       </tr></table>

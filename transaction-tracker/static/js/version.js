@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.201.7";
+window.TGF_VERSION = "2.201.8";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.201.8",
+    date: "2026-08-06",
+    changes: [
+      "Chase email: THE PLAYERS CUP gross-path card text bumped 12.5px → 15px to match the narrative body paragraphs (Kerry: 'the players cup text is too small. It should match the size of body text above'); the small-caps kicker head goes 12px → 13px so the label still reads as a label. Second deviation-batch from the #296 frozen design, folded into mailbox note to design-claude.",
+    ],
+  },
   {
     version: "2.201.7",
     date: "2026-08-06",
