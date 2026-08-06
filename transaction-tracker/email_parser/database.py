@@ -14975,10 +14975,119 @@ def _snapshot_marks(db_path=None) -> dict:
         return {}
 
 
+# ── EMAIL OPEN/CLICK TRACKING (Kerry 2026-08-06: "Build the email
+#    tracking") ──
+# Every outbound chase email carries a per-send token: a 1x1 pixel
+# (GET /t/o/<token>.gif) records opens, and every tracked link is
+# rewritten through GET /t/c/<token>?u=... which records the click and
+# 302s to the real destination (allowlisted hosts only — never an open
+# redirect). Aggregates live on email_sends; the raw beacon stream in
+# email_send_events. Caveat for the admin UI: Apple/Gmail image proxies
+# prefetch pixels, so "opened" is a floor-of-truth signal, and clients
+# that block images never report an open at all.
+
+def _ensure_email_tracking_tables(conn) -> None:
+    conn.execute("""CREATE TABLE IF NOT EXISTS email_sends (
+        token TEXT PRIMARY KEY,
+        customer_id INTEGER REFERENCES customers(customer_id),
+        email_kind TEXT NOT NULL DEFAULT 'chase',
+        sent_to TEXT,
+        is_test INTEGER NOT NULL DEFAULT 0,
+        subject TEXT,
+        sent_at TEXT,
+        created_at TEXT DEFAULT (datetime('now')),
+        opened_at TEXT,
+        open_count INTEGER NOT NULL DEFAULT 0,
+        clicked_at TEXT,
+        click_count INTEGER NOT NULL DEFAULT 0
+    )""")
+    conn.execute("""CREATE TABLE IF NOT EXISTS email_send_events (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        token TEXT NOT NULL REFERENCES email_sends(token),
+        kind TEXT NOT NULL,
+        url TEXT,
+        user_agent TEXT,
+        created_at TEXT DEFAULT (datetime('now'))
+    )""")
+    conn.execute("""CREATE INDEX IF NOT EXISTS idx_email_sends_customer
+                    ON email_sends(customer_id)""")
+
+
+def email_tracking_register(token: str, customer_id: int,
+                            sent_to: str | None, is_test: bool,
+                            subject: str | None = None,
+                            email_kind: str = "chase",
+                            db_path: str | Path | None = None) -> None:
+    """Record an outbound send so its beacons have somewhere to land."""
+    from .timezone_utils import now_central
+    with _connect(db_path) as conn:
+        _ensure_email_tracking_tables(conn)
+        conn.execute(
+            """INSERT OR REPLACE INTO email_sends
+               (token, customer_id, email_kind, sent_to, is_test,
+                subject, sent_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?)""",
+            (token, int(customer_id), email_kind, sent_to,
+             1 if is_test else 0, subject,
+             now_central().strftime("%Y-%m-%d %H:%M")))
+        conn.commit()
+
+
+def email_tracking_record(token: str, kind: str, url: str | None = None,
+                          user_agent: str | None = None,
+                          db_path: str | Path | None = None) -> bool:
+    """Record an open/click beacon. Returns False for unknown tokens
+    (the beacon route still serves its pixel/redirect either way)."""
+    from .timezone_utils import now_central
+    if kind not in ("open", "click"):
+        return False
+    ts = now_central().strftime("%Y-%m-%d %H:%M")
+    with _connect(db_path) as conn:
+        _ensure_email_tracking_tables(conn)
+        row = conn.execute("SELECT token FROM email_sends WHERE token = ?",
+                           (token,)).fetchone()
+        if not row:
+            return False
+        col = "open" if kind == "open" else "click"
+        conn.execute(
+            f"""UPDATE email_sends
+                SET {col}_count = {col}_count + 1,
+                    {col}ed_at = COALESCE({col}ed_at, ?)
+                WHERE token = ?""", (ts, token))
+        conn.execute(
+            """INSERT INTO email_send_events (token, kind, url, user_agent)
+               VALUES (?, ?, ?, ?)""",
+            (token, kind, (url or "")[:500] or None,
+             (user_agent or "")[:200] or None))
+        conn.commit()
+        return True
+
+
+def _email_tracking_latest(db_path=None) -> dict:
+    """Latest REAL (non-test) send per customer, keyed by str(cid) —
+    what the Command Center queue joins its OPENED/CLICKED chips from."""
+    with _connect(db_path) as conn:
+        try:
+            rows = conn.execute(
+                """SELECT s.customer_id, s.sent_at, s.opened_at,
+                          s.open_count, s.clicked_at, s.click_count
+                   FROM email_sends s
+                   JOIN (SELECT customer_id, MAX(created_at) AS mc
+                         FROM email_sends WHERE is_test = 0
+                         GROUP BY customer_id) last
+                     ON last.customer_id = s.customer_id
+                    AND last.mc = s.created_at
+                   WHERE s.is_test = 0""").fetchall()
+        except sqlite3.OperationalError:
+            return {}
+    return {str(r["customer_id"]): dict(r) for r in rows}
+
+
 def snapshot_center_queue(db_path: str | Path | None = None) -> dict:
     """The targeting queue + Kerry's marks, one payload for the UI."""
     q = snapshot_target_list(db_path=db_path)
     marks = _snapshot_marks(db_path)
+    tracking = _email_tracking_latest(db_path)
     for seg in ("push_entry", "defend", "normal"):
         for e in q.get(seg) or []:
             m = marks.get(str(e["customer_id"])) or {}
@@ -14986,6 +15095,11 @@ def snapshot_center_queue(db_path: str | Path | None = None) -> dict:
             e["mark_note"] = m.get("note")
             e["sent_at"] = m.get("sent_at")
             e["sent_to"] = m.get("sent_to")
+            t = tracking.get(str(e["customer_id"])) or {}
+            e["opened_at"] = t.get("opened_at")
+            e["open_count"] = t.get("open_count") or 0
+            e["clicked_at"] = t.get("clicked_at")
+            e["click_count"] = t.get("click_count") or 0
     return q
 
 

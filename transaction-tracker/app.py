@@ -9,6 +9,7 @@ Includes a webhook connector for external integrations and a daily email report.
 import os
 import re
 import json
+import base64
 import secrets
 import logging
 import shutil
@@ -11000,6 +11001,59 @@ def api_member_traffic():
     """Aggregated member-side traffic for the admin Traffic view."""
     from email_parser.database import get_member_traffic_summary
     return jsonify(get_member_traffic_summary())
+
+
+# ── EMAIL OPEN/CLICK BEACONS (Kerry 2026-08-06: "Build the email
+#    tracking") — anonymous by necessity: email clients and image
+#    proxies fetch with no session. PII-free: the token maps to a send
+#    server-side; nothing identifying rides the URL. ──
+
+_TRACK_PIXEL_GIF = base64.b64decode(
+    "R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7")
+# click redirects may only land on our own surfaces — never an open
+# redirect for whatever ?u= a stranger crafts
+_TRACK_REDIRECT_HOSTS = {
+    "tgf-tracker.up.railway.app",
+    "thegolffellowship.com",
+    "www.thegolffellowship.com",
+}
+_TRACK_FALLBACK_URL = "https://tgf-tracker.up.railway.app/member/spotlight"
+
+
+@app.route("/t/o/<token>.gif")
+@require_role("member")
+def track_email_open(token):
+    """1x1 open pixel. Always serves the GIF, even for junk tokens."""
+    try:
+        from email_parser.database import email_tracking_record
+        email_tracking_record(token[:64], "open",
+                              user_agent=request.headers.get("User-Agent"))
+    except Exception:
+        logger.warning("email open beacon failed", exc_info=True)
+    resp = app.response_class(_TRACK_PIXEL_GIF, mimetype="image/gif")
+    resp.headers["Cache-Control"] = ("no-store, no-cache, must-revalidate, "
+                                     "max-age=0")
+    return resp
+
+
+@app.route("/t/c/<token>")
+@require_role("member")
+def track_email_click(token):
+    """Click-through: record, then 302 to the real (allowlisted) URL.
+    The member always lands somewhere — unknown tokens still redirect."""
+    from urllib.parse import urlparse
+    target = (request.args.get("u") or "").strip()
+    parsed = urlparse(target)
+    if (parsed.scheme not in ("http", "https")
+            or (parsed.hostname or "").lower() not in _TRACK_REDIRECT_HOSTS):
+        target = _TRACK_FALLBACK_URL
+    try:
+        from email_parser.database import email_tracking_record
+        email_tracking_record(token[:64], "click", url=target,
+                              user_agent=request.headers.get("User-Agent"))
+    except Exception:
+        logger.warning("email click beacon failed", exc_info=True)
+    return redirect(target, code=302)
 
 
 @app.route("/traffic")

@@ -15,6 +15,9 @@ Kerry-ratified copy is frozen — DO NOT EDIT wording (#296).
 import json
 import logging
 import os
+import re
+import secrets
+from urllib.parse import quote
 
 from .database import (DB_PATH, _connect, get_app_setting,
                        get_player_spotlight, snapshot_target_list,
@@ -32,6 +35,28 @@ _NET_RACE_HASH = {"San Antonio": "net", "Austin": "austin"}
 _SIGNUP_DIAL = "chase_link_signup"
 _BUYIN_DIAL = "chase_link_buyin"
 _PLACEHOLDER_STORE = "https://thegolffellowship.com/shop"
+
+
+def _instrument_tracking(html: str, token: str) -> str:
+    """Open/click tracking (Kerry 2026-08-06: "Build the email tracking").
+
+    Rewrites every http(s) link through /t/c/<token>?u=... (the server
+    records the click, then 302s to the real destination — allowlisted
+    hosts only) and appends a 1x1 open pixel at /t/o/<token>.gif.
+    mailto: links (the unsubscribe line) stay untouched so replies keep
+    working, and image src= URLs are never wrapped."""
+    def _wrap(m):
+        url = m.group(1)
+        if not url.startswith(("http://", "https://")) or "/t/c/" in url:
+            return m.group(0)
+        return f'href="{BASE}/t/c/{token}?u={quote(url, safe="")}"'
+    html = re.sub(r'href="([^"]+)"', _wrap, html)
+    pixel = (f'<img src="{BASE}/t/o/{token}.gif" width="1" height="1" '
+             'alt="" style="display:block; width:1px; height:1px; '
+             'border:0;" />')
+    if "</body>" in html:
+        return html.replace("</body>", pixel + "</body>", 1)
+    return html + pixel
 
 TEMPLATE = """<!DOCTYPE html>
 <html lang="en" xmlns="http://www.w3.org/1999/xhtml">
@@ -791,14 +816,29 @@ def build_chase_email(customer_id: int, to_address: str | None = None,
     if not all([tenant_id, client_id, client_secret, from_address]):
         return {**result, "ok": False,
                 "error": "email not configured on server"}
+    # tracking token: pixel + wrapped links ride every send; test sends
+    # (no explicit to_address → Kerry's recap inbox) are flagged is_test
+    # so his own opens never light up the Command Center chips
+    token = secrets.token_urlsafe(12)
+    is_test = not bool((to_address or "").strip())
+    html_send = _instrument_tracking(html, token)
     from email_parser.fetcher import send_mail_graph
     ok = send_mail_graph(tenant_id=tenant_id, client_id=client_id,
                          client_secret=client_secret,
                          from_address=from_address, to_address=to,
-                         subject=subject, html_body=html)
+                         subject=subject, html_body=html_send)
+    if ok:
+        try:
+            from .database import email_tracking_register
+            email_tracking_register(token, cid, sent_to=to,
+                                    is_test=is_test, subject=subject,
+                                    db_path=db_path)
+        except Exception:
+            logger.warning("email tracking register failed for cid=%s",
+                           cid, exc_info=True)
     logger.info("Chase email cid=%s state=%s gap=%s -> %s: %s",
                 cid, state, gap, to, "sent" if ok else "FAILED")
-    return {**result, "sent": bool(ok), "sent_to": to}
+    return {**result, "sent": bool(ok), "sent_to": to, "track_token": token}
 
 
 def chase_test_matrix(baseline_customer_id: int, send: bool = False,

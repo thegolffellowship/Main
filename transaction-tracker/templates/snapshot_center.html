@@ -29,6 +29,9 @@
         .sc-chip.skipped { background: #E5E7EB; color: #4B5563; }
         .sc-chip.sent { background: #DBEAFE; color: #1D4ED8; }
         .sc-chip.none { background: #F8F8F8; color: #9CA3AF; border: 1px dashed #D1D5DB; }
+        /* open/click tracking chips (Kerry 2026-08-06) */
+        .sc-chip.opened { background: #DCFCE7; color: #15803D; margin-left: 4px; }
+        .sc-chip.clicked { background: #FDF0E6; color: #BF5700; margin-left: 4px; }
         .sc-btn { border: 1.5px solid #1B1B1B; background: #fff; color: #1B1B1B; border-radius: 9999px; padding: 3px 11px; font-size: 11.5px; font-weight: 600; cursor: pointer; margin: 1px 2px; }
         .sc-btn:hover { background: #F3F4F6; }
         .sc-btn.primary { background: var(--primary); border-color: var(--primary); color: #fff; }
@@ -146,7 +149,13 @@
             const m = e.mark || "none";
             const label = m === "none" ? "unmarked" : m
                 + (m === "sent" && e.sent_at ? ` ${e.sent_at}` : "");
-            return `<span class="sc-chip ${m}">${esc(label)}</span>`
+            // open/click chips (Kerry 2026-08-06): from the latest REAL
+            // send's tracking pixel + tagged links. Opens are a floor —
+            // image-blocking clients never report one.
+            let track = "";
+            if (e.open_count) track += `<span class="sc-chip opened" title="First opened ${esc(e.opened_at || "")}">opened${e.open_count > 1 ? " ×" + e.open_count : ""}</span>`;
+            if (e.click_count) track += `<span class="sc-chip clicked" title="First clicked ${esc(e.clicked_at || "")}">clicked${e.click_count > 1 ? " ×" + e.click_count : ""}</span>`;
+            return `<span class="sc-chip ${m}">${esc(label)}</span>` + track
                 + (e.mark_note ? `<div style="font-size:11px;color:#6B7280;">${esc(e.mark_note)}</div>` : "");
         };
 

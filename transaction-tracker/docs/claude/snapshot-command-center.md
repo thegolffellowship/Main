@@ -155,8 +155,46 @@ one they're chasing" (leader).
 - **Design**: design-claude pass in flight (mailbox #269-#272): full
   roundel header, hierarchy/spacing, CTA treatment.
 - **Measurement**: `member_analytics` (the traffic beacon) counts
-  member-page opens/clicks — deep links from the email land there;
-  per-send click attribution would need a token parameter (not built).
+  member-page opens/clicks — deep links from the email land there.
+  Per-send attribution IS built as of v2.202.0 — see below.
+
+## Open/click tracking (v2.202.0 — Kerry: "Build the email tracking")
+
+Every `build_chase_email(send=True)` generates a `secrets.token_urlsafe(12)`
+token and instruments the outgoing HTML (`_instrument_tracking` in
+`chase_email.py`):
+
+- **Opens**: a 1x1 GIF at `GET /t/o/<token>.gif` appended before
+  `</body>`. Route serves the pixel unconditionally (junk tokens
+  included) with `Cache-Control: no-store`.
+- **Clicks**: every `href="http(s)..."` is rewritten to
+  `GET /t/c/<token>?u=<urlencoded target>`; the route records the click
+  and 302s to the target. **Allowlist** (`_TRACK_REDIRECT_HOSTS` in
+  app.py): tgf-tracker.up.railway.app + thegolffellowship.com(+www) —
+  anything else (or a junk scheme) redirects to /member/spotlight, so
+  the endpoint is never an open redirect. `mailto:` (unsubscribe) is
+  never wrapped; `src=` image URLs untouched.
+
+Storage (`email_parser/database.py`, lazily created):
+- `email_sends` — token PK, `customer_id` FK (rule 6), sent_to,
+  `is_test`, subject, sent_at (Central), opened_at/open_count,
+  clicked_at/click_count.
+- `email_send_events` — raw beacon stream (kind, url, user_agent,
+  created_at UTC).
+
+Wiring: `email_tracking_register` records the send only after Graph
+accepts it; `email_tracking_record` handles both beacon kinds.
+`snapshot_center_queue` joins `_email_tracking_latest` (latest REAL
+send per customer) onto each row; the Command Center renders green
+OPENED / orange CLICKED chips with first-timestamps + ×N counts next
+to the mark chip. Test sends (no explicit to_address → recap inbox)
+are `is_test=1` and excluded from the chips, so Kerry's own opens
+never read as member engagement.
+
+Honesty caveat (surfaced in the UI comment): opens are a FLOOR —
+Apple Mail Privacy Protection / Gmail image proxies may prefetch the
+pixel (over-count) while image-blocking clients report nothing
+(under-count). Clicks are the hard signal.
 
 ## Change protocol
 
