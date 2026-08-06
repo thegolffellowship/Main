@@ -43,7 +43,16 @@
         .sc-scroll { overflow-x: auto; }
         .sc-modal { position: fixed; inset: 0; background: rgba(27,27,27,0.55); display: none; align-items: flex-start; justify-content: center; padding: 4vh 1rem; z-index: 300; }
         .sc-modal.open { display: flex; }
-        .sc-modal .box { background: #fff; border-radius: 12px; max-width: 700px; width: 100%; max-height: 90vh; display: flex; flex-direction: column; overflow: hidden; }
+        .sc-modal .box { background: #fff; border-radius: 12px; max-width: 700px; width: 100%; max-height: 90vh; display: flex; flex-direction: column; overflow: hidden; position: relative; }
+        /* drag-to-resize handles (Kerry 2026-08-06: "click and drag larger
+           on edges or a corner") — right edge, bottom edge, corner grip */
+        .sc-rz { position: absolute; z-index: 6; }
+        .sc-rz.r { top: 0; right: -3px; width: 10px; height: 100%; cursor: ew-resize; }
+        .sc-rz.b { left: 0; bottom: -3px; height: 10px; width: 100%; cursor: ns-resize; }
+        .sc-rz.br { right: -2px; bottom: -2px; width: 22px; height: 22px; cursor: nwse-resize;
+                    background: linear-gradient(135deg, transparent 50%, #C6C2BA 50%, #C6C2BA 60%, transparent 60%,
+                                transparent 70%, #C6C2BA 70%, #C6C2BA 80%, transparent 80%);
+                    border-bottom-right-radius: 12px; }
         .sc-modal .box header { display: flex; align-items: center; justify-content: space-between; padding: 10px 16px; background: #1B1B1B; color: #fff; position: static; }
         .sc-modal .box header .t { font: 700 14px 'Bitter', serif; }
         .sc-modal iframe { border: 0; width: 100%; flex: 1; min-height: 60vh; background: #fff; }
@@ -98,12 +107,15 @@
     </main>
 
     <div class="sc-modal" id="sc-modal">
-        <div class="box">
+        <div class="box" id="sc-box">
             <header>
                 <span class="t" id="sc-modal-title">Preview</span>
                 <button class="sc-btn ghost" onclick="scCloseModal()" style="border-color:#6B7280;color:#fff;background:transparent;">Close ✕</button>
             </header>
             <iframe id="sc-frame" sandbox=""></iframe>
+            <div class="sc-rz r" data-rz="r"></div>
+            <div class="sc-rz b" data-rz="b"></div>
+            <div class="sc-rz br" data-rz="rb"></div>
         </div>
     </div>
     <div class="sc-toast" id="sc-toast"></div>
@@ -150,6 +162,47 @@
             document.getElementById("sc-modal").classList.remove("open");
             document.getElementById("sc-frame").srcdoc = "";
         };
+
+        // drag-to-resize the preview box (Kerry 2026-08-06: "click and drag
+        // larger on edges or a corner"). Pointer events on the handle strips;
+        // the iframe gets pointer-events:none DURING the drag so it can't
+        // swallow the pointermove stream. Size persists for the session.
+        (function () {
+            const box = document.getElementById("sc-box");
+            const frame = document.getElementById("sc-frame");
+            box.querySelectorAll(".sc-rz").forEach(h => {
+                h.addEventListener("pointerdown", ev => {
+                    ev.preventDefault();
+                    const dirs = h.dataset.rz;             // 'r', 'b', or 'rb'
+                    const r0 = box.getBoundingClientRect();
+                    const x0 = ev.clientX, y0 = ev.clientY;
+                    box.style.maxWidth = "none";           // release the 700px cap
+                    frame.style.pointerEvents = "none";
+                    const move = e => {
+                        if (dirs.includes("r")) {
+                            const w = Math.min(window.innerWidth - 24,
+                                               Math.max(340, r0.width + (e.clientX - x0)));
+                            box.style.width = w + "px";
+                        }
+                        if (dirs.includes("b")) {
+                            const hpx = Math.min(window.innerHeight - 24,
+                                                 Math.max(320, r0.height + (e.clientY - y0)));
+                            box.style.height = hpx + "px";
+                            box.style.maxHeight = "none";
+                        }
+                    };
+                    const up = () => {
+                        frame.style.pointerEvents = "";
+                        document.removeEventListener("pointermove", move);
+                        document.removeEventListener("pointerup", up);
+                        document.removeEventListener("pointercancel", up);
+                    };
+                    document.addEventListener("pointermove", move);
+                    document.addEventListener("pointerup", up);
+                    document.addEventListener("pointercancel", up);
+                });
+            });
+        })();
 
         window.scPreview = async function (cid, name) {
             document.getElementById("sc-modal-title").textContent = `Preview — ${name}`;

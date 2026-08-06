@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.201.20";
+window.TGF_VERSION = "2.201.21";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.201.21",
+    date: "2026-08-06",
+    changes: [
+      "Snapshot Command Center preview window is drag-resizable (Kerry): grab the right edge, bottom edge, or the striped bottom-right corner grip to size it up to nearly full screen (min 340×320). The email iframe ignores pointer events during the drag so the resize doesn't die when the cursor crosses the preview; the chosen size holds until the page reloads.",
+    ],
+  },
   {
     version: "2.201.20",
     date: "2026-08-06",
