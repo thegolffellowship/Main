@@ -1591,10 +1591,10 @@
             </div>
             {% else %}
             <div class="cmp-body">
-                <div style="display:flex;justify-content:flex-end;margin:0 0 0.6rem;">
+                <div style="display:flex;justify-content:flex-start;margin:0 0 0.6rem;">
                     <button id="cmp-hiw-btn" class="pr-hiw-link" type="button">How It Works</button>
                     {% if not member_mode %}
-                    <a href="/admin/matchplay-preview" class="btn admin-only mp-preview-link" style="display:none;margin-left:0.5rem;font-size:0.75rem;">&#128269; Preview new Match Play design &rarr;</a>
+                    <a href="/admin/matchplay-preview" class="btn admin-only mp-preview-link" style="display:none;margin-left:auto;font-size:0.75rem;">&#128269; Preview new Match Play design &rarr;</a>
                     {% endif %}
                 </div>
                 <div id="cmp-structure-banner"></div>
@@ -1672,11 +1672,12 @@
                     </div>
                 </div>
                 <div class="standings-section" style="padding:1rem 2rem;">
+                    <!-- HIW left beside the title, badges right (Kerry 2026-08-06) -->
                     <div style="display:flex;align-items:center;gap:0.75rem;flex-wrap:wrap;">
                         <h4 id="pr-standings-title"></h4>
-                        <button class="btn manager-only" id="pr-refresh-btn" style="font-size:0.78rem;">&#8635; Refresh from Golf Genius</button>
-                        <span id="pr-phase-chip" style="display:inline-flex;align-items:center;gap:8px;height:30px;padding:0 14px;background:#FDF0E6;color:#BF5700;border-radius:9999px;font:700 11px/1 'Bitter',serif;letter-spacing:1px;text-transform:uppercase;">&#9679;&nbsp;Regular Season &middot; best 10 + City Championship</span>
                         <button id="pr-hiw-btn" class="pr-hiw-link" type="button">How It Works</button>
+                        <span id="pr-phase-chip" style="margin-left:auto;display:inline-flex;align-items:center;gap:8px;height:30px;padding:0 14px;background:#FDF0E6;color:#BF5700;border-radius:9999px;font:700 11px/1 'Bitter',serif;letter-spacing:1px;text-transform:uppercase;">&#9679;&nbsp;Regular Season &middot; best 10 + City Championship</span>
+                        <button class="btn manager-only" id="pr-refresh-btn" style="font-size:0.78rem;">&#8635; Refresh from Golf Genius</button>
                     </div>
                     <!-- Mobile: everything between the race name and the
                          table folds behind one slim chip (Kerry 2026-08-01,
@@ -1722,9 +1723,10 @@
                         <div class="meta"><b id="lsc-ev-dates"></b><span class="v" id="lsc-ev-venue"></span></div>
                     </div>
                 </div>
+                <!-- HIW left, badges right (Kerry 2026-08-06) -->
                 <div style="margin-top:0.7rem; display:flex; align-items:center; gap:0.6rem; flex-wrap:wrap;">
-                    <span class="lsc-chip">&#9679;&nbsp;Projected Rosters &middot; Live from today's standings</span>
                     <button id="lsc-hiw-btn" class="pr-hiw-link" type="button">How It Works</button>
+                    <span class="lsc-chip" style="margin-left:auto;">&#9679;&nbsp;Projected Rosters &middot; Live from today's standings</span>
                 </div>
                 <p class="lsc-intro">Austin vs San Antonio — each chapter fields a
                 12-player team earned through the season's contests. Rosters are

@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.203.0";
+window.TGF_VERSION = "2.203.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.203.1",
+    date: "2026-08-06",
+    changes: [
+      "HOW IT WORKS buttons left-justify; badges go right (Kerry). Points-race header: the pill now sits beside the race title with the Regular Season phase chip pushed to the right edge (Refresh from Golf Genius rides far right for managers). LSC tab: pill left, PROJECTED ROSTERS chip right. Legacy Match Play row flips from right- to left-justified (admin preview link moves right); Handicaps' pill leaves the right edge to sit after the tab filters. The mpv2 Match Play row was already left-justified.",
+    ],
+  },
   {
     version: "2.203.0",
     date: "2026-08-06",
