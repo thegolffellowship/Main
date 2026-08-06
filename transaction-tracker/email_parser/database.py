@@ -14784,6 +14784,34 @@ def _champ_roster_bundles(conn, db_path=None) -> dict:
             "child_bundle_ids": child_bundle_ids}
 
 
+# One-off TGF Championship sub-game rates (Kerry 2026-08-06, "still a
+# one off for the TGF Championship right now"). Per side-games-bundle
+# player: DAILY $30/day = Team Net $8 + Skins $18 (divided by 2 flights)
+# + Closest to Pins $4; COMBINED $40 = Individual Net $20 + Individual
+# Gross $20. The per-game pot derives from the bucket purse: n players
+# = purse / rate-sum, pot = rate x n.
+_CHAMP_SUBGAME_RATES = {
+    "daily": (30.0, [("Team Net", 8.0, None),
+                     ("Skins", 18.0, "2 flights"),
+                     ("Closest to Pins", 4.0, None)]),
+    "combined": (40.0, [("Individual Net", 20.0, None),
+                        ("Individual Gross", 20.0, None)]),
+}
+
+
+def _bucket_subgames(bucket: str, purse: float) -> list:
+    kind = "combined" if (bucket or "").strip().upper() == "COMBINED" else "daily"
+    per_head, games = _CHAMP_SUBGAME_RATES[kind]
+    n = round((purse or 0) / per_head) if per_head else 0
+    out = []
+    for label, rate, note in games:
+        pot = rate * n
+        if note == "2 flights":
+            note = f"2 flights · ${pot / 2:.2f} each"
+        out.append({"label": label, "rate": rate, "pot": pot, "note": note})
+    return out
+
+
 def get_event_bucket_accounts(db_path=None) -> dict:
     """Map events.id -> its per-bucket payout accounts.
 
@@ -14792,6 +14820,7 @@ def get_event_bucket_accounts(db_path=None) -> dict:
     with bucket accounts replace the regular GAMES-matrix panel with
     these purses (Kerry 2026-08-05: the matrix doesn't apply to the
     championship, and managers shouldn't read it as "the games").
+    Each bucket carries its sub-game pot breakdown (_CHAMP_SUBGAME_RATES).
     """
     out: dict = {}
     with _connect(db_path) as conn:
@@ -14803,7 +14832,8 @@ def get_event_bucket_accounts(db_path=None) -> dict:
             if prefix and bucket:
                 by_prefix.setdefault(prefix.strip().lower(), []).append(
                     {"code": r["code"], "bucket": bucket,
-                     "purse": r["total_purse"] or 0})
+                     "purse": r["total_purse"] or 0,
+                     "games": _bucket_subgames(bucket, r["total_purse"] or 0)})
         if not by_prefix:
             return out
         for e in conn.execute("SELECT id, item_name FROM events").fetchall():

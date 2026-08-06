@@ -6024,9 +6024,20 @@
             bh += `<div class="games-panel-header">SIDE-GAME POTS &mdash; per-bucket purses (regular games matrix does not apply to this event)</div>`;
             bh += '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:0.6rem;padding:0.75rem 0;">';
             for (const b of _buckets) {
+                // sub-game pot breakdown (Kerry 2026-08-06): daily $30/head =
+                // Team Net 8 + Skins 18 (2 flights) + CTP 4; combined $40 =
+                // Ind Net 20 + Ind Gross 20 — served per bucket by the API
+                let gh = "";
+                for (const g of (b.games || [])) {
+                    gh += `<div style="display:flex;justify-content:space-between;gap:0.5rem;font-size:0.78rem;padding:2px 0;border-top:1px dashed var(--border);">
+                        <span style="text-align:left;">${escapeHtml(g.label)}${g.note ? `<span style="color:var(--text-muted);"> (${escapeHtml(g.note)})</span>` : ""}</span>
+                        <span style="font-weight:700;white-space:nowrap;">$${(+g.pot).toFixed(2)}</span>
+                    </div>`;
+                }
                 bh += `<div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:0.75rem;text-align:center;">
                     <div style="font-size:0.7rem;font-weight:700;color:var(--text-muted);letter-spacing:0.05em;">${escapeHtml(b.bucket)}</div>
                     <div style="font-size:1.35rem;font-weight:700;color:#059669;">$${(+b.purse).toFixed(2)}</div>
+                    ${gh ? `<div style="margin-top:0.5rem;">${gh}</div>` : ""}
                 </div>`;
             }
             bh += '</div>';

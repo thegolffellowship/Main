@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.201.19";
+window.TGF_VERSION = "2.201.20";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.201.20",
+    date: "2026-08-06",
+    changes: [
+      "GAMES tab bucket cards break each championship purse into its sub-game pots (Kerry's rates, one-off for the TGF Championship): DAILY $30/player/day = Team Net $8 + Skins $18 (divided by 2 flights, per-flight amount shown) + Closest to Pins $4; COMBINED $40/player = Individual Net $20 + Individual Gross $20. Pots derive from each bucket's purse (players = purse / rate-sum) so they re-scale automatically as the roster changes.",
+    ],
+  },
   {
     version: "2.201.19",
     date: "2026-08-06",
