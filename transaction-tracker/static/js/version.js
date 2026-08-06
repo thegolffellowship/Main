@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.203.1";
+window.TGF_VERSION = "2.203.2";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.203.2",
+    date: "2026-08-06",
+    changes: [
+      "Command Center says WHICH cup (Kerry: 'I can't tell which cup the stat columns apply to'): OFF LEAD and SEAT LINE are the player's best number across the two cup boards — and could silently mix sources on one row. Each value now carries a small FC/PC tag naming its board, hovering either cell shows the full both-cups breakdown (off-lead + seat gap + bought-in per cup), and the CUP column's single checkmark becomes per-cup FC/PC chips (green = bought in, gray = not).",
+    ],
+  },
   {
     version: "2.203.1",
     date: "2026-08-06",

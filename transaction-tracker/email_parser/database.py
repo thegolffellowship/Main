@@ -14567,6 +14567,18 @@ def snapshot_target_list(window_points: float = 15.0,
                 if pp["gap_to_seat"] is not None]
         e["best_back"] = min(backs) if backs else None
         e["best_gap_to_seat"] = max(gaps) if gaps else None
+        # WHICH cup produced each best number (Kerry 2026-08-06: "I
+        # can't tell which cup the stat columns apply to") — the two
+        # cells can come from DIFFERENT boards for the same player
+        e["best_back_path"] = (
+            min(e["paths"].items(),
+                key=lambda kv: kv[1]["points_back"])[0]
+            if backs else None)
+        gap_items = [kv for kv in e["paths"].items()
+                     if kv[1]["gap_to_seat"] is not None]
+        e["best_gap_path"] = (
+            max(gap_items, key=lambda kv: kv[1]["gap_to_seat"])[0]
+            if gap_items else None)
         in_window = ((e["best_back"] is not None
                       and e["best_back"] <= window_points)
                      or (e["best_gap_to_seat"] is not None

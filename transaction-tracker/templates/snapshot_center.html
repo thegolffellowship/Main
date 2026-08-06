@@ -32,6 +32,16 @@
         /* open/click tracking chips (Kerry 2026-08-06) */
         .sc-chip.opened { background: #DCFCE7; color: #15803D; margin-left: 4px; }
         .sc-chip.clicked { background: #FDF0E6; color: #BF5700; margin-left: 4px; }
+        /* which-cup tags (Kerry 2026-08-06: "which cup the stat columns
+           apply to") — FC/PC source tag on each best-value stat, and
+           per-cup bought-in chips in the CUP column */
+        .sc-src { font-size: 9px; font-weight: 800; letter-spacing: 0.06em;
+                  color: #9CA3AF; vertical-align: 1px; margin-left: 3px; }
+        .sc-cup { display: inline-block; padding: 1px 7px; border-radius: 9999px;
+                  font-size: 9.5px; font-weight: 800; letter-spacing: 0.06em;
+                  margin: 0 1px; }
+        .sc-cup.in { background: #DCFCE7; color: #15803D; }
+        .sc-cup.out { background: #F3F4F6; color: #9CA3AF; }
         .sc-btn { border: 1.5px solid #1B1B1B; background: #fff; color: #1B1B1B; border-radius: 9999px; padding: 3px 11px; font-size: 11.5px; font-weight: 600; cursor: pointer; margin: 1px 2px; }
         .sc-btn:hover { background: #F3F4F6; }
         .sc-btn.primary { background: var(--primary); border-color: var(--primary); color: #fff; }
@@ -133,12 +143,30 @@
         let Q = null, tab = "push_entry";
 
         const fmtN = v => v == null ? "—" : String(Number(v) % 1 ? Number(v).toFixed(1) : Number(v));
+        // which-cup helpers (Kerry 2026-08-06): the stat cells are the
+        // BEST across the two cup boards and can mix sources on one row —
+        // each value gets an FC/PC tag, and hovering shows both cups
+        const cupAbbr = p => p === "Fellowship" ? "FC" : "PC";
+        const srcTag = p => p ? `<span class="sc-src">${cupAbbr(p)}</span>` : "";
+        const pathsTitle = e => Object.entries(e.paths || {}).map(([k, v]) => {
+            const seat = v.gap_to_seat == null ? "no seat cut yet"
+                : (v.gap_to_seat >= 0 ? `inside the seat line +${fmtN(v.gap_to_seat)}`
+                                      : `${fmtN(-v.gap_to_seat)} outside the seat line`);
+            return `${k} Cup: ${fmtN(v.points_back)} off lead, ${seat}${v.enrolled ? "" : " (not bought in)"}`;
+        }).join("  ·  ");
         const seatCell = e => {
             if (e.best_gap_to_seat == null) return "—";
             const g = Number(e.best_gap_to_seat);
-            return g >= 0
+            return (g >= 0
                 ? `<span class="sc-flag in">inside +${fmtN(g)}</span>`
-                : `<span>${fmtN(-g)} out</span>`;
+                : `<span>${fmtN(-g)} out</span>`) + srcTag(e.best_gap_path);
+        };
+        const cupCell = e => {
+            const ps = e.paths || {};
+            if (!Object.keys(ps).length)
+                return e.enrolled_any ? '<span class="sc-flag in">✓</span>' : '<span class="sc-flag out">✗</span>';
+            return ["Fellowship", "Players"].filter(k => ps[k]).map(k =>
+                `<span class="sc-cup ${ps[k].enrolled ? "in" : "out"}" title="${k} Cup — ${ps[k].enrolled ? "bought in" : "not bought in"}">${cupAbbr(k)}</span>`).join("");
         };
         const champCell = e => e.tgf_champ_signed_up == null
             ? '<span class="sc-flag na" title="No fall championship event posted yet">—</span>'
@@ -284,9 +312,9 @@
                 <tr>
                     <td><b>${esc(e.name)}</b>${e.secured_seat ? ' <span title="Holds a secured LSC seat">🔒</span>' : ""}</td>
                     <td>${esc(e.chapter || "")}</td>
-                    <td class="c">${fmtN(e.best_back)}</td>
-                    <td class="c">${seatCell(e)}</td>
-                    <td class="c">${e.enrolled_any ? '<span class="sc-flag in">✓</span>' : '<span class="sc-flag out">✗</span>'}</td>
+                    <td class="c" title="${esc(pathsTitle(e))}">${fmtN(e.best_back)}${srcTag(e.best_back_path)}</td>
+                    <td class="c" title="${esc(pathsTitle(e))}">${seatCell(e)}</td>
+                    <td class="c">${cupCell(e)}</td>
                     <td class="c">${champCell(e)}</td>
                     <td>${markChip(e)}</td>
                     <td style="white-space:nowrap;">${actions(e)}</td>
@@ -294,9 +322,9 @@
             document.getElementById("sc-body").innerHTML = `
                 <table class="sc-table">
                     <thead><tr>
-                        <th>Player</th><th>Chapter</th><th class="c" title="Points back of the lead (reset seeds)">Off Lead</th>
-                        <th class="c" title="Gap to the nearest Lone Star Cup seat line">Seat Line</th>
-                        <th class="c" title="Bought into either cup">Cup</th>
+                        <th>Player</th><th>Chapter</th><th class="c" title="Points back of the lead (reset seeds) — the BEST of the two cups; the FC/PC tag says which. Hover a value for both cups.">Off Lead</th>
+                        <th class="c" title="Gap to the nearest Lone Star Cup seat line — the BEST of the two cups; the FC/PC tag says which. Hover a value for both cups.">Seat Line</th>
+                        <th class="c" title="Bought in per cup: FC = Fellowship Cup, PC = Players Cup (green = in)">Cup</th>
                         <th class="c" title="Signed up / RSVP'd for the TGF Championship">TGF Champ</th>
                         <th>Mark</th><th>Actions</th>
                     </tr></thead>
