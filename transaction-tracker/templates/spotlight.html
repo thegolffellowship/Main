@@ -424,6 +424,13 @@
                 const pc = r.key === "players_cup_gross";
                 const metaBits = [];
                 if (r.total_points != null) metaBits.push(`${r.total_points} pts`);
+                // Fellowship Cup carries the distance to the LEAD (Kerry
+                // 2026-08-06: "Add in a points difference from first" — e.g.
+                // "3 from 1st"); "leads" when the player IS first.
+                if (r.key === "fellowship_cup" && r.points_back != null) {
+                    metaBits.push(r.points_back > 0
+                        ? `${+(+r.points_back).toFixed(1)} from 1st` : "leads");
+                }
                 if (r.tournaments != null) metaBits.push(`${r.tournaments} ev`);
                 if (r.wins) metaBits.push(`${r.wins} win${r.wins === 1 ? "" : "s"}`);
                 if (r.points_reset != null && r.key !== "fellowship_cup") metaBits.push(`reset ${r.points_reset}`);

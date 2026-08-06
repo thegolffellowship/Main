@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.201.1";
+window.TGF_VERSION = "2.201.2";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.201.2",
+    date: "2026-08-06",
+    changes: [
+      "Spotlight: THE FELLOWSHIP CUP card now shows the distance to the lead (Kerry: '3 from 1st') right after the points — 'leads' when the player is first. John Wade reads 'T12 of 121 · 97 pts · 3 from 1st'.",
+    ],
+  },
   {
     version: "2.201.1",
     date: "2026-08-06",
