@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.201.13";
+window.TGF_VERSION = "2.201.14";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.201.14",
+    date: "2026-08-06",
+    changes: [
+      "Follow-up to the cup-only fix (Kerry: 'Still showing in on Austin Net 2026'): the race boards' enrollment query had NO season scoping, so John Wade's '2026 Fall' NET row (a legitimate Austin Fall Net buy-in) was lighting the finished AUSTIN NET 2026 board's IN pill even after his main-season row was flagged cup-only. Main-season boards now exclude '<year> Fall' enrollment rows from their pill and pot counts; the fall spotlight card reads its own list and is unaffected.",
+    ],
+  },
   {
     version: "2.201.13",
     date: "2026-08-06",

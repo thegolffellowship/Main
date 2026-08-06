@@ -8498,6 +8498,13 @@ def get_points_race_standings(race_key: str,
 
         clauses = ["contest_type = ?"]
         params: list = [race["contest_type"]]
+        # Main-season boards only (Kerry 2026-08-06, "Still showing in on
+        # Austin Net 2026"): every configured race is a main-season board,
+        # and a '<year> Fall' enrollment must not light its pill or count
+        # in its pot — John Wade's Austin Fall NET buy-in did exactly that
+        # because this query had no season scoping. Fall boards get their
+        # own configs (and their own season filter) when they exist.
+        clauses.append("COALESCE(season, '') NOT LIKE '%Fall'")
         if race.get("enroll_chapter"):
             clauses.append("(chapter = ? OR chapter IS NULL OR chapter = '')")
             params.append(race["enroll_chapter"])
