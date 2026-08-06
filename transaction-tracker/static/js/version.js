@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.201.22";
+window.TGF_VERSION = "2.201.23";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.201.23",
+    date: "2026-08-06",
+    changes: [
+      "Players-path chase email box 1 now shows the VISIBLE flight rank ('4th · PLAYERS CUP · 1ST FLIGHT') instead of the enrolled-only chapter place that read Matt Griffin as '2nd' (Kerry: 'I'm showing 3rd in San Antonio and 4th overall') — everyone on the board counts toward the regular-season finish, bought in or not, flight-scoped per the ratified 2026-07-12 convention. The 'from winning The Players Cup' line deliberately stays measured against the BOUGHT-IN flight leader (only entrants can win the pot — Pat Youngs at 100, not in, is not the reference line); the enrolled-only place convention remains on the fellowship-mode PC card per #296.",
+    ],
+  },
   {
     version: "2.201.22",
     date: "2026-08-06",

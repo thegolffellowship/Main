@@ -462,7 +462,12 @@ def build_chase_email(customer_id: int, to_address: str | None = None,
     # _path_stats: place among ENROLLED chapter players plus self, on the
     # descending gross board (#296: Bryce = 5th).
     pc_place = None
-    pc_back = None   # points from WINNING the players cup (flight leader)
+    # "from winning The Players Cup": distance to the BOUGHT-IN flight
+    # leader — only entrants can win the pot (Kerry noted Pat Youngs sits
+    # at 100 NOT bought in; he is deliberately not the reference line).
+    pc_back = None
+    pc_flight_rank = None   # visible-board rank within his flight (box 1)
+    pc_flight_label = None
     try:
         gross = get_points_race_live("players_cup_gross", db_path=db_path)
         ahead, seen = 0, False
@@ -494,6 +499,20 @@ def build_chase_email(customer_id: int, to_address: str | None = None,
             if pool:
                 lead = max(_val(r) for r in pool)
                 pc_back = round(max(lead - _val(mine), 0), 2)
+            # Box-1 "regular season finish" (players-path renders) uses
+            # the VISIBLE board rank within his flight — everyone on the
+            # board counts, bought in or not (Kerry 2026-08-06: Matt
+            # Griffin is 4th in the 1st flight with Pat Youngs 1st and
+            # not bought in; the enrolled-only pc_place said '2nd').
+            # Flight-scoped per the ratified convention (2026-07-12).
+            fl = mine.get("flight")
+            pc_flight_label = fl
+            frows = [r for r in gross.get("standings", [])
+                     if _val(r) is not None
+                     and (not fl or r.get("flight") == fl)]
+            better = sum(1 for r in frows if _val(r) > _val(mine))
+            tied = sum(1 for r in frows if _val(r) == _val(mine))
+            pc_flight_rank = ("T" if tied > 1 else "") + str(better + 1)
     except Exception:
         logger.warning("chase: players-cup place lookup failed",
                        exc_info=True)
@@ -590,8 +609,15 @@ def build_chase_email(customer_id: int, to_address: str | None = None,
                             and f_dist > float(thr)))
         second_card = _FC_CARD
         slots.update({
-            "city_finish_ordinal": (_ordinal(pc_place) if pc_place else "—"),
-            "city_net_label": f"{chapter.upper()} PLAYERS CUP",
+            # box 1 = VISIBLE flight rank (everyone on the board counts,
+            # bought in or not); enrolled-only pc_place stays reserved
+            # for the fellowship-mode PC card sentence (#296).
+            "city_finish_ordinal": (_rank_ordinal(pc_flight_rank)
+                                    if pc_flight_rank else
+                                    (_ordinal(pc_place) if pc_place else "—")),
+            "city_net_label": (f"PLAYERS CUP · {pc_flight_label.upper()}"
+                               if pc_flight_label else
+                               f"{chapter.upper()} PLAYERS CUP"),
             "reset_seed": _n1(pcp.get("points")),
             "cup_gap": _n1(pc_back) if pc_back is not None else "—",
             "link_city_net": slots["link_players_cup"],
