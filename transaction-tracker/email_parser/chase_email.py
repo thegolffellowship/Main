@@ -975,6 +975,29 @@ def build_chase_email(customer_id: int, to_address: str | None = None,
             "The Players Cup purse. Your <b>{{pc_reset}}</b> points "
             "reset is already on the board.")
 
+    # sign-up bar on the PC pitch cards (Kerry 2026-08-06, follow-up on
+    # Rob Callaway's 1st-in-flight card: "there should be a link for
+    # signing up for The Players Cup. For him") — an orange buy-in bar
+    # above the standings bar, ONLY on renders pitching a player who
+    # isn't in the PC yet
+    if (pc_flight_pitch or (sec_seat and not pc_in)) and not suppress:
+        _pc_bar = ('      <div style="background:#E8E5E0; '
+                   'text-align:center; padding:5px 2px;" '
+                   'bgcolor="#E8E5E0"><a href="{{link_players_cup}}" '
+                   'style="font-family:Helvetica,Arial,sans-serif; '
+                   'font-size:10px; letter-spacing:0.1em; '
+                   'color:#9A5B2E; text-decoration:none; '
+                   'font-weight:700;">CLICK FOR STANDINGS</a></div>')
+        html = html.replace(
+            _pc_bar,
+            '      <div style="background:#E87C3E; text-align:center; '
+            'padding:6px 2px;" bgcolor="#E87C3E">'
+            '<a href="{{link_players_buyin}}" '
+            'style="font-family:Helvetica,Arial,sans-serif; '
+            'font-size:10px; letter-spacing:0.1em; color:#FFFFFF; '
+            'text-decoration:none; font-weight:700;">SIGN UP FOR THE '
+            'PLAYERS CUP &middot; $50</a></div>\n' + _pc_bar)
+
     if path == "players":
         html = (html
                 .replace("Fellowship Cup<br>Points Reset",

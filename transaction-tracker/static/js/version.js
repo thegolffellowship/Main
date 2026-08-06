@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.204.6";
+window.TGF_VERSION = "2.204.7";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.204.7",
+    date: "2026-08-06",
+    changes: [
+      "Players Cup pitch cards get a sign-up link (Kerry, on Rob Callaway's 1st-in-flight card: 'there should be a link for signing up for The Players Cup. For him'): an orange SIGN UP FOR THE PLAYERS CUP · $50 bar renders above the CLICK FOR STANDINGS bar, linking to the store buy-in URL — only on cards pitching a player who isn't in the PC yet (the secured trophy-and-money card and the state-C flight-money card). Players already bought in never see it.",
+    ],
+  },
   {
     version: "2.204.6",
     date: "2026-08-06",
