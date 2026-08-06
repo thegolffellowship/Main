@@ -1892,6 +1892,19 @@ def _scoring_dispatch(url: str, extract: str):
             _r = build_chase_email(int(_parts[0]), send=False, overrides=_ov)
             _r.pop("preview", None)  # HTML too large for the bridge
             return json.dumps(_r, indent=2, default=str)
+        if cmd == "scoring-chase-send":
+            # "<customer_id>[|{json overrides}]" — build + send ONE full
+            # render (all live modules, no forced states) to KERRY'S
+            # recap inbox ONLY (build_chase_email falls back to
+            # _handicap_recap_recipient; this bridge takes no address by
+            # design — no member-send path). Kerry 2026-08-06: "Just
+            # send an email with the full render" vs the 11-case matrix.
+            _parts = arg.split("|", 1)
+            from email_parser.chase_email import build_chase_email
+            _ov = json.loads(_parts[1]) if len(_parts) > 1 and _parts[1] else None
+            _r = build_chase_email(int(_parts[0]), send=True, overrides=_ov)
+            _r.pop("preview", None)
+            return json.dumps(_r, indent=2, default=str)
         if cmd == "scoring-chase-test":
             # "<baseline_cid>[|send]" — the #299 consolidated test matrix
             # (State A baseline + ladder 1-7 + State B + suppressed +

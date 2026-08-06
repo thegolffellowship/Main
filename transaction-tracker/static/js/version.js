@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.201.9";
+window.TGF_VERSION = "2.201.10";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.201.10",
+    date: "2026-08-06",
+    changes: [
+      "New bridge command scoring-chase-send:<cid> — builds and sends ONE full chase-email render (the player's live data, no forced test states) to Kerry's recap inbox, for single-render review passes ('Just send an email with the full render') without firing the 11-case matrix. Like the matrix bridge, it accepts no destination address — the only recipient is the recap inbox; member sends remain gated elsewhere.",
+    ],
+  },
   {
     version: "2.201.9",
     date: "2026-08-06",
