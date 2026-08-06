@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.201.30";
+window.TGF_VERSION = "2.201.31";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.201.31",
+    date: "2026-08-06",
+    changes: [
+      "LSC lock icon is now a solid padlock (inline SVG) tinted in the TEAM color — burnt orange on Team AUSTIN rows, steel on Team SAN ANTONIO — at 1.5× the old emoji size (Kerry, with reference image; the emoji couldn't be tinted). New legend under the rosters explains both badges: Lock = seat SECURED (champion declared / result final), Pool = seat projected to fill from the Alternates Pool.",
+    ],
+  },
   {
     version: "2.201.30",
     date: "2026-08-06",
