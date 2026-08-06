@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.201.4";
+window.TGF_VERSION = "2.201.5";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.201.5",
+    date: "2026-08-06",
+    changes: [
+      "Handicaps rounds list shows 'Star Ranch' instead of 'The Golf Club Star Ranch' (Kerry): the course row had imported with short_name set to its full name, which the fill-only-if-empty seed skips — 'Star Ranch' is now in the ratified short-name pin list (applied via the scoring-course-short-pins bridge, which corrects mismatches; keyed so Texas Star Golf Course never matches).",
+    ],
+  },
   {
     version: "2.201.4",
     date: "2026-08-06",

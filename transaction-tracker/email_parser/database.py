@@ -17653,6 +17653,11 @@ _COURSE_SHORT_PINS: list = [
     (r"olympia\s+hills", "Olympia Hills"),
     (r"black\s*jack", "Black Jack's"),
     (r"brackenridge", "Brackenridge"),
+    # "The Golf Club Star Ranch" imported with short_name = the FULL name,
+    # which the fill-only-if-empty boot seed skips (Kerry 2026-08-06:
+    # shorten to "Star Ranch"). Keyed on "star ranch" so Texas Star Golf
+    # Course never matches.
+    (r"star\s+ranch", "Star Ranch"),
 ]
 
 
