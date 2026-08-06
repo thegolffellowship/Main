@@ -14071,10 +14071,13 @@ def api_snapshot_center_mark():
 @app.route("/api/snapshot-center/preview")
 @require_role("admin")
 def api_snapshot_center_preview():
-    from email_parser.database import build_player_snapshot_email
+    # R6 chase email is the format of record (Kerry 2026-08-06: the old
+    # R5 snapshot render is "Not our current email format") — the Command
+    # Center previews and sends the same build Kerry approved.
+    from email_parser.chase_email import build_chase_email
     try:
-        res = build_player_snapshot_email(int(request.args.get("cid") or 0),
-                                          send=False)
+        res = build_chase_email(int(request.args.get("cid") or 0),
+                                send=False)
         return jsonify(res) if res.get("ok") else (jsonify(res), 400)
     except Exception as e:
         logger.exception("snapshot center preview failed")

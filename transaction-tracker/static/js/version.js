@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.201.18";
+window.TGF_VERSION = "2.201.19";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.201.19",
+    date: "2026-08-06",
+    changes: [
+      "Snapshot Command Center now previews and sends the R6 CHASE email — the Kerry-approved format with the chain cards, TRUE STORY block, and the two-step CTA (Kerry, previewing Luke Youngs: 'Not our current email format'). The old R5 snapshot builder is retired from the Center's preview/test/send paths; every gate is unchanged (test sends to the recap inbox, real sends require the per-player APPROVED mark and mark the row SENT).",
+    ],
+  },
   {
     version: "2.201.18",
     date: "2026-08-06",

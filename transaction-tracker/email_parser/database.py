@@ -15005,8 +15005,14 @@ def snapshot_center_send(customer_id: int, test: bool = False,
             to = (row["email"] or "").strip() if row else None
         if not to:
             return {"ok": False, "error": "no email on file for this player"}
-    res = build_player_snapshot_email(int(customer_id), to_address=to,
-                                      send=True, db_path=db_path)
+    # R6 chase email is the send of record (Kerry 2026-08-06) — the same
+    # Kerry-approved build the test sends used; the old R5 snapshot
+    # builder (build_player_snapshot_email) is retired from this path.
+    # Lazy import: chase_email imports from this module.
+    from .chase_email import build_chase_email
+    res = build_chase_email(int(customer_id), to_address=to,
+                            send=True, db_path=db_path)
+    res.pop("preview", None)
     if res.get("sent") and not test:
         entry = marks.setdefault(key, {})
         entry["status"] = "sent"
