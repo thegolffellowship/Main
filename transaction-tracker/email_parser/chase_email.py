@@ -450,6 +450,26 @@ def build_chase_email(customer_id: int, to_address: str | None = None,
     fcp = (entry.get("paths") or {}).get("Fellowship") or {}
     pcp = (entry.get("paths") or {}).get("Players") or {}
 
+    # ── SECURED LSC SEAT (Kerry 2026-08-06, Luke Youngs: Austin's Match
+    # Play champion — his seat is LOCKED, so the email must stop selling
+    # a seat he already owns and sell what's actually left: winning the
+    # Cup itself, plus the Championship money) ──
+    sec_seat = None
+    try:
+        from .database import get_lone_star_cup_projection
+        for _ch in (get_lone_star_cup_projection(db_path=db_path)
+                    .get("chapters") or []):
+            for _s in _ch.get("seats") or []:
+                if (_s.get("customer_id") == cid
+                        and _s.get("status") == "secured"):
+                    sec_seat = _s
+                    break
+            if sec_seat:
+                break
+    except Exception:
+        logger.warning("secured-seat lookup failed cid=%s", cid,
+                       exc_info=True)
+
     # City-net final rank still comes off the spotlight (single-chapter
     # board, rank is already city-scoped) — and so does the CANONICAL
     # display name: the target list carries GG-style "DOGGETT, Bryce",
@@ -496,7 +516,8 @@ def build_chase_email(customer_id: int, to_address: str | None = None,
     inside = ov.get("inside", raw_gap is not None and raw_gap >= 0)
     gap = ov.get("gap", round(-raw_gap, 2) if raw_gap is not None
                  and raw_gap < 0 else 0)
-    if raw_gap is None and "gap" not in ov and "inside" not in ov:
+    if (raw_gap is None and "gap" not in ov and "inside" not in ov
+            and not sec_seat):
         return {"ok": False,
                 "error": f"no {path} seat line for this player "
                          "(chapter fields no LSC team?)"}
@@ -507,6 +528,11 @@ def build_chase_email(customer_id: int, to_address: str | None = None,
     seat_label = (f"A SEAT ON {chapter.upper()}'S<br>LONE STAR CUP TEAM "
                   f"&mdash; IF IT ENDED TODAY" if inside else
                   f"from a seat on {chapter}'s<br>Lone Star Cup team")
+    if sec_seat:
+        # the seat is a FACT, not a projection — the navy block says so
+        gap_display = "LOCKED"
+        seat_label = (f"YOUR SEAT ON {chapter.upper()}'S<br>"
+                      "LONE STAR CUP TEAM &mdash; SECURED")
 
     # CTA state (#291/#297b + Kerry 2026-08-06: a player already in one
     # or both cups has ONE step to get in — the sign-up — and the card
@@ -779,6 +805,17 @@ def build_chase_email(customer_id: int, to_address: str | None = None,
                            "already working.",
                            "Sign up for the TGF Championship &mdash; "
                            "your buy-in is already working."))
+    # secured-seat CTA head (Kerry 2026-08-06, Luke Youngs: "How do we
+    # modify to incentivize him to play? There's money and the Cups on
+    # the line") — the get-a-seat framing is wrong for a locked seat;
+    # the RSVP acknowledgment above outranks this when both apply.
+    if sec_seat and not rsvp_only:
+        cta = (cta.replace("TWO STEPS TO GET IN:",
+                           "YOUR SEAT IS LOCKED &mdash; TWO STEPS TO GET "
+                           "IN ON THE MONEY:")
+                  .replace("ONE STEP TO GET IN:",
+                           "YOUR SEAT IS LOCKED &mdash; ONE STEP TO GET "
+                           "IN ON THE MONEY:"))
     if cta and path == "players":
         # {{reset_seed}} now carries the PC reset — the Fellowship buy-in
         # card's caption must keep the FELLOWSHIP number
@@ -788,6 +825,43 @@ def build_chase_email(customer_id: int, to_address: str | None = None,
 
     html = TEMPLATE.replace("{{pc_card}}", "" if suppress else second_card) \
                    .replace("{{cta_block}}", cta)
+
+    # secured-seat P1/P3 (Kerry 2026-08-06, Luke Youngs): the seat is
+    # locked, so "if it ended today you'd have a seat" and "no chance to
+    # qualify" are both false — sell winning the Cup + the money instead
+    if sec_seat:
+        earned = (sec_seat.get("earned_as") or "").strip()
+        cup_title = ("The Players Cup" if path == "players"
+                     else "The Fellowship Cup")
+        gap_txt = str(slots.get("cup_gap") or "")
+        win_bit = ""
+        if gap_txt and gap_txt != "—":
+            word = "point" if gap_txt in ("1", "1.0") else "points"
+            win_bit = (f", and you're only <b>{gap_txt}</b> {word} from "
+                       "winning it")
+        slots["seat_phrase"] = (f"the <b>{cup_title}</b> title and the "
+                                f"Championship money are still on the "
+                                f"line{win_bit}")
+        html = (html
+                .replace(", your city finish is banked. <b>The rest is "
+                         "decided",
+                         ", your city finish is banked &mdash; and your "
+                         f"seat on {chapter}'s Lone Star Cup team is "
+                         "already <b>locked</b>"
+                         + (f" as {earned}" if earned else "")
+                         + ". <b>The rest is decided")
+                .replace("</b> &mdash; if it ended today, "
+                         "{{seat_phrase}}.",
+                         "</b> &mdash; {{seat_phrase}}.")
+                .replace("<b>One thing's for sure</b> &mdash; if you "
+                         "don't play, there's no chance to qualify. And "
+                         "your chances are better than you probably "
+                         "realize: seats only go to players who show up.",
+                         "<b>One thing's for sure</b> &mdash; the seat "
+                         "is yours, but the trophies and the money still "
+                         "have to be won. None of it happens if you "
+                         "don't tee it up."))
+
     if path == "players":
         html = (html
                 .replace("Fellowship Cup<br>Points Reset",
@@ -812,8 +886,12 @@ def build_chase_email(customer_id: int, to_address: str | None = None,
 
     subject = (_subject_gross(gap, inside) if path == "players"
                else _subject(gap, inside))
+    if sec_seat:
+        subject = ("Your TGF Snapshot — your Lone Star Cup seat is "
+                   "locked. The Cup itself isn't.")
     result = {"ok": True, "customer_id": cid, "name": name,
               "state": state, "rsvp_only": rsvp_only,
+              "secured_seat": bool(sec_seat),
               "path": path, "gap": gap, "inside": inside,
               "suppress_pc": bool(suppress), "no_flight": bool(no_flight),
               "subject": subject, "preheader": PREHEADER,

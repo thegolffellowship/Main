@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.204.0";
+window.TGF_VERSION = "2.204.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.204.1",
+    date: "2026-08-06",
+    changes: [
+      "SECURED-seat chase variant (Kerry, Luke Youngs: Austin's Match Play champion holds a LOCKED Lone Star Cup seat but isn't signed up for the Championship or the cups — 'There's money and the Cups on the line'): when the LSC projection marks a player's seat status=secured, the email stops selling the seat. Navy block reads LOCKED / YOUR SEAT ON AUSTIN'S LONE STAR CUP TEAM — SECURED; the lead paragraph says the seat is locked (named by how it was earned, e.g. 2026 Austin Match Play Champion) and pivots to the Cup title + Championship money with the points-from-winning number; the qualify-or-miss-out closer becomes 'the seat is yours, but the trophies and the money still have to be won'; the CTA head becomes YOUR SEAT IS LOCKED — TWO STEPS (or ONE STEP) TO GET IN ON THE MONEY; subject: 'your Lone Star Cup seat is locked. The Cup itself isn't.' RSVP'd-not-paid acknowledgment outranks the secured CTA head when both apply.",
+    ],
+  },
   {
     version: "2.204.0",
     date: "2026-08-06",
