@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.201.35";
+window.TGF_VERSION = "2.201.36";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.201.36",
+    date: "2026-08-06",
+    changes: [
+      "The LSC tab's navy banner becomes the section header (Kerry): CD's star-on-trophy mark + 'The Lone Star Cup' title live inside the banner with the date and venue (3px orange top rule, matching the email's LSC card), and the PROJECTED ROSTERS chip moves below it. The separate plain-text title row is gone.",
+    ],
+  },
   {
     version: "2.201.35",
     date: "2026-08-06",

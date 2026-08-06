@@ -1296,11 +1296,13 @@
         .lsc-intro { margin: 0.6rem 0 0; font-size: 14px; line-height: 1.6; color: var(--text-body, #4B5563); max-width: 720px; }
         /* event banner (Kerry 2026-08-06): dates + venue from the
            lsc_event_info dial — the Cup finally says WHEN and WHERE */
-        .lsc-event { margin-top: 0.75rem; max-width: 720px; background: #002868; color: #fff;
-                     border-radius: 12px; padding: 12px 18px; display: flex; align-items: baseline;
-                     gap: 10px; flex-wrap: wrap; }
-        .lsc-event .d { font: 700 16px/1.3 'Bitter', serif; }
-        .lsc-event .v { font: 500 13.5px/1.3 'Helvetica Neue', Arial, sans-serif; color: #9DB4D6; }
+        .lsc-event { margin-top: 0.25rem; max-width: 720px; background: #002868; color: #fff;
+                     border-top: 3px solid #E87C3E; border-radius: 12px; padding: 14px 18px;
+                     display: flex; align-items: center; gap: 15px; }
+        .lsc-event .ic { flex: 0 0 auto; line-height: 0; }
+        .lsc-event .t { font: 700 20px/1.2 'Bitter', serif; color: #fff; }
+        .lsc-event .meta { margin-top: 3px; font: 700 14px/1.3 'Bitter', serif; color: #fff; }
+        .lsc-event .meta .v { font: 500 13px/1.3 'Helvetica Neue', Arial, sans-serif; color: #C9D6EA; margin-left: 9px; }
         /* chapter-branded team cards (Kerry 2026-08-06: "each team branded
            by their chapter colors" — Austin burnt orange, SA steel) */
         .lsc-card.austin { border-color: #BF5700; border-top: 4px solid #BF5700; }
@@ -1705,11 +1707,17 @@
              happens after the Championships with admin manual fill) ═══════════ -->
         <div id="section-lone-star-cup" class="section-hidden">
             <div class="standings-section" style="padding:1.25rem 2rem;">
-                <div style="display:flex;align-items:center;gap:0.75rem;flex-wrap:wrap;">
-                    <h4 class="lsc-title">The Lone Star Cup</h4>
-                    <span class="lsc-chip">&#9679;&nbsp;Projected Rosters &middot; Live from today's standings</span>
+                <!-- Navy header banner (Kerry 2026-08-06): CD's star-on-trophy
+                     mark + The Lone Star Cup title + date/venue from the
+                     lsc_event_info dial; the rosters chip sits below -->
+                <div class="lsc-event">
+                    <span class="ic"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="38" height="38" fill="none" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/><path d="M4 22h16"/><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/><polygon points="12 3.4 13.0 5.42 15.23 5.75 13.62 7.33 14.0 9.55 12 8.5 10.0 9.55 10.38 7.33 8.77 5.75 11.0 5.42" fill="#FFFFFF" stroke="none"/></svg></span>
+                    <div>
+                        <div class="t">The Lone Star Cup</div>
+                        <div class="meta"><b id="lsc-ev-dates"></b><span class="v" id="lsc-ev-venue"></span></div>
+                    </div>
                 </div>
-                <div id="lsc-event-slot"></div>
+                <div style="margin-top:0.7rem;"><span class="lsc-chip">&#9679;&nbsp;Projected Rosters &middot; Live from today's standings</span></div>
                 <p class="lsc-intro">Austin vs San Antonio — each chapter fields a
                 12-player team earned through the season's contests. Rosters are
                 decided after the City and TGF Championships; until then, every
@@ -1942,12 +1950,14 @@
             const d = await res.json();
             if (!res.ok || d.error) throw new Error(d.error || res.statusText);
             const lscEv = d.event_info;
-            // banner lives directly under the title (Kerry 2026-08-06)
-            const evSlot = $("lsc-event-slot");
-            if (evSlot) evSlot.innerHTML = lscEv
-                ? `<div class="lsc-event"><span class="d">&#127942; ${escapeHtml(lscEv.dates || "")}</span>` +
-                  `<span class="v">${escapeHtml(lscEv.venue || "")} &middot; ${escapeHtml(lscEv.city || "")}</span></div>`
-                : "";
+            // banner IS the section header (Kerry 2026-08-06) — the title
+            // and icon are static; JS fills the date/venue from the dial
+            if (lscEv) {
+                const de = $("lsc-ev-dates"), ve = $("lsc-ev-venue");
+                if (de) de.textContent = lscEv.dates || "";
+                if (ve) ve.textContent = [lscEv.venue, lscEv.city]
+                    .filter(Boolean).join(" · ");
+            }
             box.innerHTML = `<div class="lsc-grid">${(d.chapters || []).map(ch => {
                 const seats = ch.seats.map(seat => {
                     const cap = /CAPTAIN/.test(seat.seat || "");
