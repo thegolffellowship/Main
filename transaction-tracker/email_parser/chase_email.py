@@ -120,7 +120,6 @@ TEMPLATE = """<!DOCTYPE html>
                   <div style="font-family:Helvetica,Arial,sans-serif; font-size:11.5px; letter-spacing:0.06em; text-transform:uppercase; color:#9DB4D6; margin-top:4px; line-height:1.45;">from winning<br>The Fellowship Cup</div>
                 </td>
               </tr>
-              <tr><td colspan="2" style="text-align:center; padding-top:8px;">{{lsc_event_line}}</td></tr>
             </table>
           </td></tr>
           <tr><td style="background:#0B3574; text-align:center; padding:5px 2px;" bgcolor="#0B3574"><a href="{{link_lone_star_cup}}" style="font-family:Helvetica,Arial,sans-serif; font-size:10px; letter-spacing:0.1em; color:#9DB4D6; text-decoration:none; font-weight:700;">CLICK FOR STANDINGS</a></td></tr>
@@ -135,6 +134,8 @@ TEMPLATE = """<!DOCTYPE html>
   <div style="font-family:Helvetica,Arial,sans-serif; font-size:15px; color:#44403B; line-height:1.65; margin-top:12px;"><b>One thing's for sure</b> &mdash; if you don't play, there's no chance to qualify. And your chances are better than you probably realize: seats only go to players who show up.</div>
 
 {{pc_card}}
+
+{{lsc_event_block}}
 
 {{cta_block}}
 
@@ -579,25 +580,38 @@ def build_chase_email(customer_id: int, to_address: str | None = None,
     buyin_url = (get_app_setting(_BUYIN_DIAL, db_path=db_path)
                  or _PLACEHOLDER_STORE)
 
-    # LSC event line under the navy card numbers (Kerry 2026-08-06:
-    # "October 10-11 at The Hideout in Brownwood, TX... we need to
-    # reference it on our emails") — lsc_event_info dial, shared with
-    # the member LSC tab. Empty dial = no line.
-    lsc_event_line = ""
+    # LSC event block (Kerry 2026-08-06, second pass: the in-card line
+    # was "too garbled" — it's now its OWN navy banner, mirroring the
+    # tracker's LSC tab banner, placed below the second cup's card and
+    # before the ONE/TWO STEPS line). lsc_event_info dial, shared with
+    # the member LSC tab. Empty dial = no block.
+    lsc_event_block = ""
     try:
         _lev = json.loads(get_app_setting("lsc_event_info",
                                           db_path=db_path) or "null")
         if isinstance(_lev, dict) and _lev.get("dates"):
-            _parts = " &middot; ".join(
-                p for p in (_lev.get("dates"), _lev.get("venue"),
-                            _lev.get("city")) if p)
-            lsc_event_line = (
-                '<div style="font-family:Helvetica,Arial,sans-serif; '
-                'font-size:10px; letter-spacing:0.08em; '
-                'text-transform:uppercase; color:#9DB4D6;">'
-                f"{_parts}</div>")
+            _venue = " &middot; ".join(
+                p for p in (_lev.get("venue"), _lev.get("city")) if p)
+            lsc_event_block = (
+                '  <table role="presentation" width="100%" cellpadding="0"'
+                ' cellspacing="0" border="0" style="border-collapse:collapse;'
+                ' width:100%; margin-top:16px;">\n'
+                '    <tr><td style="background:#002868; border-radius:12px;'
+                ' padding:14px 18px;" bgcolor="#002868">\n'
+                '      <div style="font-family:Helvetica,Arial,sans-serif;'
+                ' font-size:10px; letter-spacing:0.16em;'
+                ' text-transform:uppercase; color:#9DB4D6;'
+                ' font-weight:700;">The Lone Star Cup</div>\n'
+                '      <div style="color:#FFFFFF; font-family:Georgia,serif;'
+                ' font-size:18px; font-weight:700; margin-top:4px;">'
+                f'&#127942; {_lev.get("dates")}</div>\n'
+                '      <div style="font-family:Helvetica,Arial,sans-serif;'
+                ' font-size:13px; color:#9DB4D6; margin-top:3px;">'
+                f'{_venue}</div>\n'
+                '    </td></tr>\n'
+                '  </table>')
     except Exception:
-        lsc_event_line = ""
+        lsc_event_block = ""
 
     slots = {
         "preheader": PREHEADER,
@@ -636,7 +650,7 @@ def build_chase_email(customer_id: int, to_address: str | None = None,
         "link_signup": signup_url,
         "link_fellowship_buyin": buyin_url,
         "link_players_buyin": buyin_url,
-        "lsc_event_line": lsc_event_line,
+        "lsc_event_block": lsc_event_block,
         # The REGISTERED trademark (wrapped "THE GOLF FELLOWSHIP" + (R)),
         # sourced from the TGF Design System's tgf-logo-white.svg via
         # DesignSync (Kerry 2026-08-06: "our actual logo ... our

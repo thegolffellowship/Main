@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.201.27";
+window.TGF_VERSION = "2.201.28";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.201.28",
+    date: "2026-08-06",
+    changes: [
+      "Chase email LSC event info gets its own navy banner block (Kerry: the in-card line was 'too garbled') — 'THE LONE STAR CUP / 🏆 October 10–11, 2026 / The Hideout · Brownwood, TX', mirroring the tracker's LSC tab banner, placed below the second cup's card and above the ONE/TWO STEPS TO GET IN line. The cramped line inside the navy chain card is removed.",
+    ],
+  },
   {
     version: "2.201.27",
     date: "2026-08-06",
