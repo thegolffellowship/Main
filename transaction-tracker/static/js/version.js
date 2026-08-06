@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.201.8";
+window.TGF_VERSION = "2.201.9";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.201.9",
+    date: "2026-08-06",
+    changes: [
+      "Chase email State B head now names what the player is signed up for (Kerry: \"'You're signed up' for WHAT?\") — 'You're signed up for the TGF Championship. One step left:'. This was the one head line flagged as not-yet-ratified (#299 item 3); Kerry's rework closes that gate item.",
+    ],
+  },
   {
     version: "2.201.8",
     date: "2026-08-06",

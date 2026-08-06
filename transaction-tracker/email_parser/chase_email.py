@@ -177,8 +177,9 @@ _CTA_STATE_A = """  <!-- TWO STEPS — STATE A -->
     </td></tr>
   </table>"""
 
-_CTA_STATE_B = """  <!-- ONE STEP — STATE B (head copy NOT Kerry-ratified; #299 item 3) -->
-  <div style="font-family:Georgia,serif; font-size:15px; color:#1B1B1B; font-weight:700; letter-spacing:0.04em; line-height:1.65; margin-top:20px;">You're signed up. One step left:</div>
+_CTA_STATE_B = """  <!-- ONE STEP — STATE B (head reworded per Kerry 2026-08-06:
+       "'You're signed up' for WHAT?" — name the championship) -->
+  <div style="font-family:Georgia,serif; font-size:15px; color:#1B1B1B; font-weight:700; letter-spacing:0.04em; line-height:1.65; margin-top:20px;">You're signed up for the TGF Championship. One step left:</div>
   <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse; width:100%; margin-top:8px;">
     <tr><td style="border-top:2px solid #1B1B1B; padding-top:16px;">
 {{buyin_cards}}
