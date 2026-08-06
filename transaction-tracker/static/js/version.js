@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.204.4";
+window.TGF_VERSION = "2.204.5";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.204.5",
+    date: "2026-08-06",
+    changes: [
+      "Secured Players Cup card names the player's flight (Kerry, Rob Callaway): 'The Players Cup title and the 1st Flight money are still up for grabs at the Championship' — the flight rides the money, not the rank, because the 'you sit 6th' number is the chapter-board place, not a flight-scoped one. Falls back to 'its purse' when no flight is assigned.",
+    ],
+  },
   {
     version: "2.204.4",
     date: "2026-08-06",

@@ -932,8 +932,13 @@ def build_chase_email(customer_id: int, to_address: str | None = None,
                          "about the trophy and the money: you sit "
                          "<b>{{pc_place_ordinal}}</b> with a points "
                          "reset of <b>{{pc_reset}}</b>, and <b>The "
-                         "Players Cup title and its purse</b> are still "
-                         "up for grabs at the Championship.")
+                         "Players Cup title and "
+                         # name his flight's money when we know it
+                         # (Kerry 2026-08-06, Rob Callaway)
+                         + (f"the {pc_flight_name} money"
+                            if pc_flight_name else "its purse")
+                         + "</b> are still up for grabs at the "
+                         "Championship.")
                 .replace("A second road to the Lone Star Cup weekend: "
                          "your <b>{{fc_reset}}</b> points reset seed "
                          "sits <b>{{fc_seat_line}}</b>.",
