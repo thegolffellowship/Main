@@ -52,7 +52,6 @@
                 border-radius: 9999px; font: 700 10.5px/1 'Bitter', serif;
                 letter-spacing: 1px; text-transform: uppercase; cursor: pointer;
             }
-            #pr-preamble-toggle .pr-pre-chev { color: var(--primary); font-size: 0.8rem; }
             #pr-preamble { display: none; }
             #pr-preamble.open { display: block; }
             #pr-phase-chip { display: none !important; }
@@ -840,7 +839,7 @@
         .mpv2 .mp-row-toggle.rank1:hover { background: #FBEFE6; }
         .mpv2 .mp-row-toggle:active { background: #F0EDE8; }
         .mpv2 .mp-row-toggle:focus-visible { outline: 2px solid var(--mp-accent); outline-offset: -2px; }
-        .mpv2 .mp-row-toggle.open .mp-chev { transform: rotate(90deg); color: var(--mp-accent); }
+        .mpv2 .mp-row-toggle.open .mp-chev { transform: rotate(90deg); }
         .mpv2 .mp-rank { font: 700 0.9rem/1 'Bitter', Georgia, serif; color: var(--text-muted); font-variant-numeric: tabular-nums; text-align: center; }
         .mpv2 .mp-row.rank1 .mp-rank { color: var(--mp-accent); }
         .mpv2 .mp-name-cell { display: flex; align-items: center; gap: 0.4rem; min-width: 0; }
@@ -862,10 +861,10 @@
         .mpv2 .mp-dot.extra { opacity: 0.4; }   /* D-MP-09 non-counting 4th match */
         .mpv2 .mp-pts { font: 700 1.05rem/1 'Bitter', Georgia, serif; color: var(--text); font-variant-numeric: tabular-nums; text-align: right; }
         .mpv2 .mp-chev {
-            background: none; border: none; cursor: pointer; color: var(--text-placeholder, #9CA3AF);
-            font-size: 1rem; line-height: 1; padding: 0; transition: transform 0.15s;
+            background: none; border: none; cursor: pointer; padding: 0;
+            /* color/size come from .tgf-exp (dashboard.css) */
         }
-        .mpv2 .mp-chev.open { transform: rotate(90deg); color: var(--mp-accent); }
+        .mpv2 .mp-chev.open { transform: rotate(90deg); }
         .mpv2 .mp-expand { padding: 0.5rem 0 0.75rem; }
         .mpv2 .mp-expand-empty { font-size: 0.76rem; color: var(--text-muted); padding: 0.4rem 0.15rem; }
         .mpv2 .mp-rank-note {
@@ -1293,10 +1292,10 @@
             background: #FDF0E6; color: #BF5700; border-radius: 9999px;
             font: 700 11px/1 'Bitter', serif; letter-spacing: 1px; text-transform: uppercase;
         }
-        .lsc-intro { margin: 0.6rem 0 0; font-size: 14px; line-height: 1.6; color: var(--text-body, #4B5563); max-width: 720px; }
+        .lsc-intro { margin: 0.6rem 0 0; font-size: 14px; line-height: 1.6; color: var(--text-body, #4B5563); }
         /* event banner (Kerry 2026-08-06): dates + venue from the
            lsc_event_info dial — the Cup finally says WHEN and WHERE */
-        .lsc-event { margin-top: 0.25rem; max-width: 720px; background: #002868; color: #fff;
+        .lsc-event { margin-top: 0.25rem; background: #002868; color: #fff;
                      border-top: 3px solid #E87C3E; border-radius: 12px; padding: 14px 18px;
                      display: flex; align-items: center; gap: 15px; }
         .lsc-event .ic { flex: 0 0 auto; line-height: 0; }
@@ -1315,9 +1314,15 @@
         .lsc-card.sa .lsc-alt-head { border-top-color: #8FA8B8; }
         .lsc-card.sa .lsc-seat.captain { background: #EEF3F6; }
         .lsc-card.sa .lsc-seat.captain .lsc-seat-label { color: #4B6274; }
-        .lsc-qual { margin: 1rem 0 0; border: 1px solid var(--border); border-radius: 12px; padding: 12px 16px; max-width: 720px; background: #FBFAF8; }
-        .lsc-qual h5 { margin: 0 0 6px; font: 700 11px/1.3 'Bitter', serif; letter-spacing: 1.2px; text-transform: uppercase; color: #1B1B1B; }
-        .lsc-qual ul { margin: 0; padding-left: 1.1rem; font-size: 13.5px; line-height: 1.7; color: var(--text-body, #4B5563); }
+        /* LSC How-It-Works modal internals (Kerry 2026-08-06): the weekend
+           schedule card; the qualify list moved in from the old .lsc-qual box */
+        .lsc-sched { border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
+        .lsc-sched .d { display: flex; justify-content: space-between; gap: 12px; padding: 10px 14px; border-top: 1px solid #F1F1EF; font-size: 14.5px; }
+        .lsc-sched .d:first-child { border-top: none; }
+        .lsc-sched .d:nth-child(odd) { background: #FBFAF8; }
+        .lsc-sched .dt { font-weight: 700; color: #1B1B1B; white-space: nowrap; }
+        .lsc-sched .fmt { color: #4B5563; text-align: right; }
+        .lsc-hiw-ul { margin: 0; padding-left: 1.1rem; line-height: 1.7; }
         .lsc-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 1.1rem; }
         .lsc-card { border: 1px solid var(--border); border-radius: 12px; overflow: hidden; background: #fff; }
         .lsc-card-head {
@@ -1332,7 +1337,7 @@
         .lsc-lock { margin-left: auto; align-self: center; padding-left: 8px; line-height: 0; }
         .lsc-card.austin .lsc-lock { color: #BF5700; }
         .lsc-card.sa .lsc-lock { color: #4B6274; }
-        .lsc-legend { margin-top: 0.9rem; max-width: 720px; display: flex; flex-direction: column; gap: 7px; }
+        .lsc-legend { margin-top: 0.9rem; display: flex; flex-direction: column; gap: 7px; }
         .lsc-legend .li { display: flex; align-items: flex-start; gap: 9px; font-size: 12.5px; line-height: 1.5; color: var(--text-body, #4B5563); }
         .lsc-legend .li .ic { flex: 0 0 auto; color: #1B1B1B; line-height: 0; padding-top: 1px; }
         .lsc-card.austin .lsc-seat.secured { background: #F7E0CC; border-left: 4px solid #BF5700; }
@@ -1362,7 +1367,7 @@
         .lsc-alt .n { flex: 0 0 18px; font-weight: 700; color: #9CA3AF; font-variant-numeric: tabular-nums; }
         .lsc-alt .who { font-weight: 600; color: #1B1B1B; }
         .lsc-alt .ctx { color: #9CA3AF; font-size: 11px; }
-        .lsc-foot { margin-top: 0.9rem; font-size: 12px; line-height: 1.55; color: #9CA3AF; max-width: 720px; }
+        .lsc-foot { margin-top: 0.9rem; font-size: 12px; line-height: 1.55; color: #9CA3AF; }
         @media (max-width: 768px) {
             .lsc-grid { grid-template-columns: 1fr; }
             .standings-section h4.lsc-title { font-size: 1.22rem; }
@@ -1678,7 +1683,7 @@
                          championship morning — the board should be one thumb
                          away). Desktop is unchanged; the LIVE banner never
                          folds. -->
-                    <button id="pr-preamble-toggle" type="button" aria-expanded="false">Pot &amp; details <span class="pr-pre-chev">&#9656;</span></button>
+                    <button id="pr-preamble-toggle" type="button" aria-expanded="false">Pot &amp; details <span class="pr-pre-chev tgf-exp">&#9654;</span></button>
                     <div id="pr-preamble">
                         <div id="pr-summary" style="margin:0.5rem 0;color:var(--text-muted);font-size:0.85rem;"></div>
                         <div id="pr-payouts"></div>
@@ -1717,21 +1722,15 @@
                         <div class="meta"><b id="lsc-ev-dates"></b><span class="v" id="lsc-ev-venue"></span></div>
                     </div>
                 </div>
-                <div style="margin-top:0.7rem;"><span class="lsc-chip">&#9679;&nbsp;Projected Rosters &middot; Live from today's standings</span></div>
+                <div style="margin-top:0.7rem; display:flex; align-items:center; gap:0.6rem; flex-wrap:wrap;">
+                    <span class="lsc-chip">&#9679;&nbsp;Projected Rosters &middot; Live from today's standings</span>
+                    <button id="lsc-hiw-btn" class="pr-hiw-link" type="button">How It Works</button>
+                </div>
                 <p class="lsc-intro">Austin vs San Antonio — each chapter fields a
                 12-player team earned through the season's contests. Rosters are
                 decided after the City and TGF Championships; until then, every
                 seat below is projected live from the current standings, just
                 like the projected payouts.</p>
-                <div class="lsc-qual">
-                    <h5>How You Qualify &mdash; 12 Seats Per Chapter</h5>
-                    <ul>
-                        <li><b>1 &middot; Captain</b> &mdash; your City NET Champion</li>
-                        <li><b>6</b> &mdash; final standings of The Fellowship Cup (top 6 from your chapter)</li>
-                        <li><b>1</b> &mdash; your City Match Play Champion</li>
-                        <li><b>4</b> &mdash; final standings of The Players Cup (top 4 from your chapter)</li>
-                    </ul>
-                </div>
                 <div id="lsc-rosters"><p style="color:var(--text-muted);margin-top:1rem;">Loading projected rosters&hellip;</p></div>
                 <div class="lsc-legend">
                     <span class="li"><span class="ic"><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M8 10V7a4 4 0 0 1 8 0v3" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"/><path fill="currentColor" fill-rule="evenodd" d="M6.2 10h11.6c1.2 0 2.2 1 2.2 2.2v7.6c0 1.2-1 2.2-2.2 2.2H6.2C5 22 4 21 4 19.8v-7.6C4 11 5 10 6.2 10zm5.8 3.2a1.9 1.9 0 0 0-1 3.5V19a1 1 0 0 0 2 0v-2.3a1.9 1.9 0 0 0-1-3.5z"/></svg></span>
@@ -1744,6 +1743,47 @@
                 placed higher, and the seat you free up goes to the next man up
                 from the alternates pool. Alternates are ranked by how high you
                 finished relative to your field; ties go to whoever played more.</p>
+
+                <!-- LSC HOW IT WORKS popup (Kerry 2026-08-06): the weekend
+                     schedule + the How-You-Qualify breakdown (moved here from
+                     the inline .lsc-qual box), sharing the pr-hiw chrome -->
+                <div class="pr-hiw-scrim" id="lsc-hiw-scrim" style="display:none;"></div>
+                <div class="pr-hiw-modal" id="lsc-hiw-modal" style="display:none;" role="dialog" aria-modal="true" aria-label="How the Lone Star Cup works">
+                    <button id="lsc-hiw-close" class="pr-hiw-close" type="button" aria-label="Close">&#10005;</button>
+                    <div class="pr-hiw-title">How <span class="hiw-name">The Lone Star Cup</span> Works</div>
+                    <div class="pr-hiw-chips"><span>Austin vs San Antonio</span><span>12 Seats Per Chapter</span><span id="lsc-hiw-venue-chip">The Hideout &middot; Brownwood, TX</span></div>
+                    <div class="pr-hiw-secs">
+                        <div>
+                            <div class="pr-hiw-sec-h">The Weekend</div>
+                            <div class="lsc-sched">
+                                <div class="d"><span class="dt">Friday, October 9</span><span class="fmt">Practice Round</span></div>
+                                <div class="d"><span class="dt">Saturday, October 10</span><span class="fmt">AM Fourball &middot; PM Foursomes</span></div>
+                                <div class="d"><span class="dt">Sunday, October 11</span><span class="fmt">Singles</span></div>
+                            </div>
+                        </div>
+                        <div>
+                            <div class="pr-hiw-sec-h">How You Qualify &mdash; 12 Seats Per Chapter</div>
+                            <div class="pr-hiw-sec-b">
+                                <ul class="lsc-hiw-ul">
+                                    <li><b>1 &middot; Captain</b> &mdash; your City NET Champion</li>
+                                    <li><b>6</b> &mdash; final standings of The Fellowship Cup (top 6 from your chapter)</li>
+                                    <li><b>1</b> &mdash; your City Match Play Champion</li>
+                                    <li><b>4</b> &mdash; final standings of The Players Cup (top 4 from your chapter)</li>
+                                </ul>
+                            </div>
+                        </div>
+                        <div>
+                            <div class="pr-hiw-sec-h">Seats &amp; Alternates</div>
+                            <div class="pr-hiw-sec-b">Only bought-in players hold seats. Qualify in more than one
+                            contest and you take the seat where you placed higher &mdash; the seat you free up goes
+                            to the next man up from the alternates pool. Alternates are ranked by how high you
+                            finished relative to your field; ties go to whoever played more.</div>
+                        </div>
+                    </div>
+                    <div class="pr-hiw-foot">Rosters are decided after the City and TGF Championships &mdash; until
+                    then every seat is projected live from the current standings.</div>
+                    <div class="pr-hiw-cta"><button type="button" id="lsc-hiw-gotit">Got it</button></div>
+                </div>
             </div>
         </div>
 
@@ -1957,6 +1997,11 @@
                 if (de) de.textContent = lscEv.dates || "";
                 if (ve) ve.textContent = [lscEv.venue, lscEv.city]
                     .filter(Boolean).join(" · ");
+                // keep the How-It-Works venue chip on the same dial
+                const vc = $("lsc-hiw-venue-chip");
+                if (vc && (lscEv.venue || lscEv.city))
+                    vc.textContent = [lscEv.venue, lscEv.city]
+                        .filter(Boolean).join(" · ");
             }
             box.innerHTML = `<div class="lsc-grid">${(d.chapters || []).map(ch => {
                 const seats = ch.seats.map(seat => {
@@ -2080,6 +2125,27 @@
         document.addEventListener("click", () => {
             if (menu.classList.contains("pr-tab-anchored")) menu.style.display = "none";
         });
+    })();
+
+    // ── LSC HOW IT WORKS (Kerry 2026-08-06): the weekend schedule + the
+    //    qualify breakdown in a static modal on the pr-hiw chrome; hoisted
+    //    to body like the races' modal so it paints over hidden sections ──
+    (function () {
+        const btn = $("lsc-hiw-btn"), modal = $("lsc-hiw-modal"),
+              scrim = $("lsc-hiw-scrim"), close = $("lsc-hiw-close"),
+              gotit = $("lsc-hiw-gotit");
+        if (!btn || !modal || !scrim) return;
+        document.body.appendChild(scrim);
+        document.body.appendChild(modal);
+        const setOpen = open => {
+            modal.style.display = open ? "" : "none";
+            scrim.style.display = open ? "" : "none";
+            document.body.style.overflow = open ? "hidden" : "";
+        };
+        btn.addEventListener("click", () => setOpen(true));
+        scrim.addEventListener("click", () => setOpen(false));
+        close.addEventListener("click", () => setOpen(false));
+        if (gotit) gotit.addEventListener("click", () => setOpen(false));
     })();
 
     // ── How It Works popups — handoff hiw-popup-final-071026 (Kerry-RATIFIED
@@ -2690,7 +2756,7 @@
             <span class="mp-name-cell"><span class="mp-name">${escapeHtml(r.player_name)}</span>${chip}</span>
             ${dots}
             <span class="mp-pts">${r.stableford_pts != null ? r.stableford_pts : '&mdash;'}</span>
-            <span class="mp-chev" aria-hidden="true">&rsaquo;</span>
+            <span class="mp-chev tgf-exp" aria-hidden="true">&#9654;</span>
         </div>
         <div class="mp-expand" style="display:none;"></div>`;
     }
@@ -6181,7 +6247,7 @@
         const potC = d && d.projected_payouts && d.projected_payouts.pot_cents;
         tog.innerHTML = (potC ? `Pot ${prFmtMoney(potC)} &middot; ` : "")
             + (d && d.n_players ? `${d.n_enrolled}/${d.n_players} in &middot; ` : "")
-            + `details <span class="pr-pre-chev">${open ? "&#9662;" : "&#9656;"}</span>`;
+            + `details <span class="pr-pre-chev tgf-exp">${open ? "&#9660;" : "&#9654;"}</span>`;
     }
 
     // DAY movement while a championship is live: start-of-day season rank
