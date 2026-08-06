@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.201.10";
+window.TGF_VERSION = "2.201.11";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.201.11",
+    date: "2026-08-06",
+    changes: [
+      "Chase email chain cards sized up (Kerry: 'I'd still like to see the block text in the 3 blocks get bigger'): the city-finish and points-reset numerals go 30px → 34px, the navy card's gap numerals 22px → 26px, the small-caps captions 9.5px → 12px (navy 9px → 11.5px), and every CLICK FOR STANDINGS strip 8px → 10px (including the Players Cup card's) so the tap targets grow with the text.",
+    ],
+  },
   {
     version: "2.201.10",
     date: "2026-08-06",

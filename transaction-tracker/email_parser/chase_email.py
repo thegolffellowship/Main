@@ -72,26 +72,29 @@ TEMPLATE = """<!DOCTYPE html>
 
 <tr><td class="shell-pad" style="background:#FFFFFF; border:1px solid #E2DFDA; border-top:0; padding:26px 30px 30px;" bgcolor="#FFFFFF">
 
-  <!-- CAUSAL CHAIN STRIP: widths 22.5/7/22.5/7/41 -->
+  <!-- CAUSAL CHAIN STRIP: widths 22.5/7/22.5/7/41
+       (sizes bumped per Kerry 2026-08-06 "block text in the 3 blocks get
+       bigger": numerals 30→34 / navy 22→26, captions 9.5→12 / navy
+       9→11.5, CLICK strips 8→10 incl. the PC card's) -->
   <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" class="chain" style="border-collapse:collapse; width:100%; table-layout:fixed;">
     <tr>
       <td class="chain-cell" style="width:22.5%; background:#F6F4F1; border-top:3px solid #1B1B1B; vertical-align:bottom; padding:0;" bgcolor="#F6F4F1">
         <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse;">
           <tr><td style="text-align:center; padding:15px 8px 13px;">
-            <div style="font-size:30px; font-weight:700; line-height:1;">{{city_finish_ordinal}}</div>
-            <div style="font-family:Helvetica,Arial,sans-serif; font-size:9.5px; letter-spacing:0.08em; text-transform:uppercase; color:#8A867F; margin-top:7px; line-height:1.4;">{{city_net_label}}<br>&mdash; Final &mdash;</div>
+            <div style="font-size:34px; font-weight:700; line-height:1;">{{city_finish_ordinal}}</div>
+            <div style="font-family:Helvetica,Arial,sans-serif; font-size:12px; letter-spacing:0.08em; text-transform:uppercase; color:#8A867F; margin-top:7px; line-height:1.4;">{{city_net_label}}<br>&mdash; Final &mdash;</div>
           </td></tr>
-          <tr><td style="background:#E8E5E0; text-align:center; padding:5px 2px;" bgcolor="#E8E5E0"><a href="{{link_city_net}}" style="font-family:Helvetica,Arial,sans-serif; font-size:8px; letter-spacing:0.1em; color:#6B675F; text-decoration:none; font-weight:700;">CLICK FOR STANDINGS</a></td></tr>
+          <tr><td style="background:#E8E5E0; text-align:center; padding:5px 2px;" bgcolor="#E8E5E0"><a href="{{link_city_net}}" style="font-family:Helvetica,Arial,sans-serif; font-size:10px; letter-spacing:0.1em; color:#6B675F; text-decoration:none; font-weight:700;">CLICK FOR STANDINGS</a></td></tr>
         </table>
       </td>
       <td class="chain-arrow" style="width:7%; text-align:center; color:#C05B21; font-size:17px; font-weight:700;"><span class="arrow-h">&#9654;</span><span class="arrow-v" style="display:none;">&#9660;</span></td>
       <td class="chain-cell" style="width:22.5%; background:#FBEFE4; border-top:3px solid #E87C3E; vertical-align:bottom; padding:0;" bgcolor="#FBEFE4">
         <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse;">
           <tr><td style="text-align:center; padding:15px 8px 13px;">
-            <div style="font-size:30px; font-weight:700; line-height:1; color:#C05B21;">{{reset_seed}}</div>
-            <div style="font-family:Helvetica,Arial,sans-serif; font-size:9.5px; letter-spacing:0.08em; text-transform:uppercase; color:#9A5B2E; margin-top:7px; line-height:1.4;">Fellowship Cup<br>Points Reset</div>
+            <div style="font-size:34px; font-weight:700; line-height:1; color:#C05B21;">{{reset_seed}}</div>
+            <div style="font-family:Helvetica,Arial,sans-serif; font-size:12px; letter-spacing:0.08em; text-transform:uppercase; color:#9A5B2E; margin-top:7px; line-height:1.4;">Fellowship Cup<br>Points Reset</div>
           </td></tr>
-          <tr><td style="background:#F3D9C0; text-align:center; padding:5px 2px;" bgcolor="#F3D9C0"><a href="{{link_fellowship_cup}}" style="font-family:Helvetica,Arial,sans-serif; font-size:8px; letter-spacing:0.1em; color:#9A5B2E; text-decoration:none; font-weight:700;">CLICK FOR STANDINGS</a></td></tr>
+          <tr><td style="background:#F3D9C0; text-align:center; padding:5px 2px;" bgcolor="#F3D9C0"><a href="{{link_fellowship_cup}}" style="font-family:Helvetica,Arial,sans-serif; font-size:10px; letter-spacing:0.1em; color:#9A5B2E; text-decoration:none; font-weight:700;">CLICK FOR STANDINGS</a></td></tr>
         </table>
       </td>
       <td class="chain-arrow" style="width:7%; text-align:center; color:#C05B21; font-size:17px; font-weight:700;"><span class="arrow-h">&#9654;</span><span class="arrow-v" style="display:none;">&#9660;</span></td>
@@ -102,8 +105,8 @@ TEMPLATE = """<!DOCTYPE html>
               <tr>
                 <td style="width:36px; vertical-align:middle; text-align:center;"><img src="{{ASSET_STAR_WHITE}}" alt="" width="22" height="22" style="display:inline-block; border:0;"></td>
                 <td style="vertical-align:middle; text-align:center;">
-                  <div style="color:#FFFFFF; font-size:22px; font-weight:700; line-height:1;">{{seat_gap_display}}</div>
-                  <div style="font-family:Helvetica,Arial,sans-serif; font-size:9px; letter-spacing:0.06em; text-transform:uppercase; color:#9DB4D6; margin-top:4px; line-height:1.45;">{{seat_row_label}}</div>
+                  <div style="color:#FFFFFF; font-size:26px; font-weight:700; line-height:1;">{{seat_gap_display}}</div>
+                  <div style="font-family:Helvetica,Arial,sans-serif; font-size:11.5px; letter-spacing:0.06em; text-transform:uppercase; color:#9DB4D6; margin-top:4px; line-height:1.45;">{{seat_row_label}}</div>
                 </td>
               </tr>
               <tr>
@@ -113,13 +116,13 @@ TEMPLATE = """<!DOCTYPE html>
               <tr>
                 <td style="width:36px; vertical-align:middle; text-align:center;"><img src="{{ASSET_TROPHY_ORANGE}}" alt="" width="22" height="22" style="display:inline-block; border:0;"></td>
                 <td style="vertical-align:middle; text-align:center;">
-                  <div style="color:#FFFFFF; font-size:22px; font-weight:700; line-height:1;">{{cup_gap}}</div>
-                  <div style="font-family:Helvetica,Arial,sans-serif; font-size:9px; letter-spacing:0.06em; text-transform:uppercase; color:#9DB4D6; margin-top:4px; line-height:1.45;">from winning<br>The Fellowship Cup</div>
+                  <div style="color:#FFFFFF; font-size:26px; font-weight:700; line-height:1;">{{cup_gap}}</div>
+                  <div style="font-family:Helvetica,Arial,sans-serif; font-size:11.5px; letter-spacing:0.06em; text-transform:uppercase; color:#9DB4D6; margin-top:4px; line-height:1.45;">from winning<br>The Fellowship Cup</div>
                 </td>
               </tr>
             </table>
           </td></tr>
-          <tr><td style="background:#0B3574; text-align:center; padding:5px 2px;" bgcolor="#0B3574"><a href="{{link_lone_star_cup}}" style="font-family:Helvetica,Arial,sans-serif; font-size:8px; letter-spacing:0.1em; color:#9DB4D6; text-decoration:none; font-weight:700;">CLICK FOR STANDINGS</a></td></tr>
+          <tr><td style="background:#0B3574; text-align:center; padding:5px 2px;" bgcolor="#0B3574"><a href="{{link_lone_star_cup}}" style="font-family:Helvetica,Arial,sans-serif; font-size:10px; letter-spacing:0.1em; color:#9DB4D6; text-decoration:none; font-weight:700;">CLICK FOR STANDINGS</a></td></tr>
         </table>
       </td>
     </tr>
@@ -222,7 +225,7 @@ _PC_CARD = """  <!-- PLAYERS CUP CARD — SUPPRESSIBLE MODULE (drop this whole t
           A second road to the Lone Star Cup weekend: you sit <b>{{pc_place_ordinal}}</b> with a points reset of <b>{{pc_reset}}</b> &mdash; only <b>{{pc_seat_gap}} from one of the {{pc_seats_available}} gross seats</b> available.
         </td>
       </tr></table>
-      <div style="background:#E8E5E0; text-align:center; padding:5px 2px;" bgcolor="#E8E5E0"><a href="{{link_players_cup}}" style="font-family:Helvetica,Arial,sans-serif; font-size:8px; letter-spacing:0.1em; color:#9A5B2E; text-decoration:none; font-weight:700;">CLICK FOR STANDINGS</a></div>
+      <div style="background:#E8E5E0; text-align:center; padding:5px 2px;" bgcolor="#E8E5E0"><a href="{{link_players_cup}}" style="font-family:Helvetica,Arial,sans-serif; font-size:10px; letter-spacing:0.1em; color:#9A5B2E; text-decoration:none; font-weight:700;">CLICK FOR STANDINGS</a></div>
     </td></tr>
   </table>"""
 
