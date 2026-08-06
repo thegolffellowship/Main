@@ -7801,8 +7801,20 @@ def _champ_absorbed_check(race_key: str, base: dict, live: dict,
         today = today_central_str()
         raw = get_app_setting(key, db_path=db_path)
         state = json.loads(raw) if raw else None
-        if not isinstance(state, dict) or state.get("date") != today:
-            # First final read today -> capture the pre-close-out baseline.
+        # Once absorbed, absorbed FOREVER — GG never un-absorbs a
+        # closed-out event, and re-baselining would restart the double
+        # count (v2.201.1).
+        if isinstance(state, dict) and state.get("absorbed"):
+            return True
+        if not isinstance(state, dict) or not state.get("baseline"):
+            # First final read -> capture the pre-close-out baseline ONCE.
+            # NOT date-scoped (v2.201.1, Kerry emergency 2026-08-06): GG's
+            # close-out can land DAYS after the board goes final — the 2026
+            # city championships closed out ~Aug 5, and the old date-scoped
+            # baseline re-captured every morning from already-absorbed
+            # totals, so "moved" never tripped and the overlay double-added
+            # championship points onto GG totals that already contained
+            # them, both chapters.
             set_app_setting(key, json.dumps(
                 {"date": today,
                  "baseline": {str(c): t for c, t in totals.items()}}),
@@ -7814,7 +7826,12 @@ def _champ_absorbed_check(race_key: str, base: dict, live: dict,
             1 for c in tracked
             if totals[c] is not None and baseline[str(c)] is not None
             and abs(float(totals[c]) - float(baseline[str(c)])) > 1e-6)
-        return bool(tracked) and moved * 2 > len(tracked)
+        absorbed = bool(tracked) and moved * 2 > len(tracked)
+        if absorbed:
+            state["absorbed"] = True
+            state["absorbed_at"] = today
+            set_app_setting(key, json.dumps(state), db_path=db_path)
+        return absorbed
     except Exception:
         logger.warning("champ absorption check failed for %r — keeping the "
                        "live overlay up", race_key, exc_info=True)

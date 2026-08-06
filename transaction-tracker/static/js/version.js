@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.201.0";
+window.TGF_VERSION = "2.201.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.201.1",
+    date: "2026-08-06",
+    changes: [
+      "EMERGENCY (Kerry, both chapters): championship points were double-counted on the points races — GG's close-out folded the championship into its own season totals days AFTER the board went final, and the overlay's absorption baseline was date-scoped, so every morning it re-baselined against already-absorbed totals and never stood down. Immediate fix was data-side (championship boards dial disabled, backup in gg_champ_points_boards_backup_20260806); this release makes the absorption check durable: the baseline is captured ONCE (not per-day) and absorption LATCHES permanently once a majority of championship scorers' snapshot totals move.",
+      "Drill-down presentation per Kerry's rule ('only the standalone, not one of the 10'): after close-out GG lists the championship as a plain white row inside the counted list — the renderer now harvests that row out of the list and carries its points and date on the orange CITY CHAMPIONSHIP line itself.",
+    ],
+  },
   {
     version: "2.201.0",
     date: "2026-08-05",

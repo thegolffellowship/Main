@@ -676,14 +676,37 @@
             // CITY CHAMPIONSHIP Total line joins them (blank until played):
             // final = best 10 point totals + City Championship total.
             let counted = true;
+            // CHAMPIONSHIP ROW HARVEST (Kerry 2026-08-06 emergency
+            // follow-up): after GG's close-out the championship shows in
+            // GG's OWN counted list as a plain white row ("2026 SA
+            // Championship - Points Net"). The ratified presentation is
+            // the orange standalone line carrying that total — so pull
+            // GG's row OUT of the counted list and move its points (and
+            // date) onto the CITY CHAMPIONSHIP line. Counted section
+            // only; the first short row is the section divider.
+            let _ccHarvested = "", _ccHarvestedDate = "";
+            if (!opts.plain && evtCol > -1) {
+                const champRe = /championship[^|]*points|points[^|]*championship/i;
+                for (let bi = 0; bi < body.length; bi++) {
+                    const r = body[bi];
+                    if (r.length !== width) break;
+                    if (champRe.test(nb(r[evtCol] || ""))) {
+                        if (ptsCol > -1) _ccHarvested = nb(r[ptsCol] || "").trim();
+                        if (dateCol > -1) _ccHarvestedDate = nb(r[dateCol] || "").trim();
+                        body.splice(bi, 1);
+                        break;
+                    }
+                }
+            }
             // CITY CHAMPIONSHIP sits at the TOP of the counted list, not the
             // bottom (Kerry 2026-07-31) — it is a REQUIRED, never-droppable
             // add-on, so it reads as the headline rather than a footnote, and
             // it carries a contrasting burnt-orange treatment against the
             // plain counted rows. opts.champPoints fills it live while the
-            // round is in progress; blank until then.
+            // round is in progress; after close-out the harvested GG row
+            // fills it instead.
             const _cc = (opts.champPoints != null && opts.champPoints !== "")
-                ? String(opts.champPoints) : "";
+                ? String(opts.champPoints) : _ccHarvested;
             // a tee time is "tees off", a hole count is "thru" — a player
             // reading "thru 9:00 AM" is nonsense
             const _ccThru = opts.champThru ? ` <span style="font-weight:400;font-size:0.85em;color:#9A5B2E;">${/\d:\d\d/.test(String(opts.champThru)) ? "tees off" : "thru"} ${escapeHtml(String(opts.champThru))}</span>` : "";
@@ -709,7 +732,7 @@
                 if (ci === dateCol) {
                     // default cell padding so the date indents exactly
                     // like the regular event rows (Kerry 2026-08-03)
-                    ccCells.push(`<td style="white-space:nowrap;color:#BF5700;">${opts.champDate ? escapeHtml(prFmtAwardDate(opts.champDate, compact)) : ""}</td>`);
+                    ccCells.push(`<td style="white-space:nowrap;color:#BF5700;">${opts.champDate ? escapeHtml(prFmtAwardDate(opts.champDate, compact)) : escapeHtml(_ccHarvestedDate)}</td>`);
                 } else if (ci === evtCol) {
                     ccCells.push(`<td class="pr-wrap" style="font-weight:800;color:#BF5700;">${_ccChev}${_ccLabel}${_ccThru}${_ccCourse}</td>`);
                 } else if (ci === ptsCol) {
