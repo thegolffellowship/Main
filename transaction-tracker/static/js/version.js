@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.201.28";
+window.TGF_VERSION = "2.201.29";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.201.29",
+    date: "2026-08-06",
+    changes: [
+      "LSC secured seats get fanfare instead of a chip (Kerry): the amber SECURED pill is gone — a locked player's row now fills with a bold chapter-color band (deep burnt-orange tint for Team AUSTIN, steel for Team SAN ANTONIO), the name goes heavy in the chapter's deep color, and a lock icon sits at the far right of the row. Team cards are now titled 'Team AUSTIN' / 'Team SAN ANTONIO'.",
+      "The chase email's LONE STAR CUP banner block now links to the member tracker's Lone Star Cup page (whole banner tappable + a CLICK FOR THE LONE STAR CUP strip, matching the other cards).",
+    ],
+  },
   {
     version: "2.201.28",
     date: "2026-08-06",

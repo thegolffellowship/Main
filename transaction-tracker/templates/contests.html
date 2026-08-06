@@ -1320,9 +1320,19 @@
         .lsc-card { border: 1px solid var(--border); border-radius: 12px; overflow: hidden; background: #fff; }
         .lsc-card-head {
             background: var(--surface-dark, #1B1B1B); color: #fff; padding: 11px 14px;
-            font: 700 12px/1 'Bitter', serif; letter-spacing: 1.2px; text-transform: uppercase;
+            font: 700 12.5px/1 'Bitter', serif; letter-spacing: 1.2px;
             display: flex; justify-content: space-between; align-items: center;
         }
+        /* SECURED seats (Kerry 2026-08-06): chapter-bold row + trailing
+           lock — replaces the amber SECURED chip */
+        .lsc-seat.secured .lsc-player { font-weight: 800; }
+        .lsc-lock { margin-left: auto; font-size: 15px; align-self: center; padding-left: 8px; }
+        .lsc-card.austin .lsc-seat.secured { background: #F7E0CC; border-left: 4px solid #BF5700; }
+        .lsc-card.austin .lsc-seat.secured .lsc-player { color: #8C3F00; }
+        .lsc-card.austin .lsc-seat.secured .lsc-seat-label { color: #BF5700; }
+        .lsc-card.sa .lsc-seat.secured { background: #DCE6EC; border-left: 4px solid #4B6274; }
+        .lsc-card.sa .lsc-seat.secured .lsc-player { color: #33505F; }
+        .lsc-card.sa .lsc-seat.secured .lsc-seat-label { color: #4B6274; }
         .lsc-card-head span { color: #9CA3AF; font: 600 10px/1 'Bitter', serif; letter-spacing: 0.8px; }
         .lsc-seat { display: flex; gap: 10px; padding: 8px 14px; border-top: 1px solid #F1F1EF; align-items: baseline; }
         .lsc-seat-label { flex: 0 0 170px; font: 700 9.5px/1.45 'Bitter', serif; letter-spacing: 0.8px; color: #6B7280; text-transform: uppercase; }
@@ -1929,21 +1939,24 @@
                     // City NET champion's captaincy is settled, not
                     // projected — gold chip, gold edge. Co-captains (T1,
                     // ratified rule) show as two secured CO-CAPTAIN seats.
+                    // SECURED rows (Kerry 2026-08-06: "bolder colors for a
+                    // little more fanfare and just show a LOCK icon on the
+                    // far right") — chapter-bold row via .secured on the
+                    // chapter-classed card, trailing lock, no chip.
                     const secured = seat.status === "secured";
                     let who;
                     if (seat.player_name) {
                         const pool = seat.via_pool ? '<span class="lsc-pool-chip">Pool</span>' : "";
-                        const lock = secured
-                            ? ' <span style="display:inline-block;padding:1px 6px;border-radius:9999px;font-size:0.6rem;font-weight:800;letter-spacing:0.05em;background:#FEF3C7;color:#92400E;border:1px solid #F59E0B;vertical-align:1px;">&#127942; SECURED</span>'
-                            : "";
-                        who = `<span class="lsc-player">${escapeHtml(seat.player_name)}${lock}${pool}` +
+                        who = `<span class="lsc-player">${escapeHtml(seat.player_name)}${pool}` +
                               `<span class="lsc-earn">${escapeHtml(seat.earned_as || "")}</span></span>`;
                     } else {
                         who = `<span class="lsc-tbd">To be decided` +
                               `<span class="lsc-earn">${escapeHtml(seat.note || "")}</span></span>`;
                     }
-                    return `<div class="lsc-seat${cap ? " captain" : ""}"${secured ? ' style="border-left:3px solid #F59E0B;background:#FEF9EC;"' : ""}>` +
-                           `<span class="lsc-seat-label">${escapeHtml(seat.seat)}</span>${who}</div>`;
+                    return `<div class="lsc-seat${cap ? " captain" : ""}${secured ? " secured" : ""}">` +
+                           `<span class="lsc-seat-label">${escapeHtml(seat.seat)}</span>${who}` +
+                           (secured ? '<span class="lsc-lock">&#128274;</span>' : "") +
+                           `</div>`;
                 }).join("");
                 const alts = (ch.alternates || []).map((a, i) =>
                     `<div class="lsc-alt"><span class="n">${i + 1}</span>` +
@@ -1951,7 +1964,7 @@
                     `<span class="ctx">${escapeHtml(a.context)} &middot; ${a.events} event${a.events === 1 ? "" : "s"}</span></div>`
                 ).join("") || '<div class="lsc-alt"><span class="ctx">No eligible alternates yet.</span></div>';
                 return `<div class="lsc-card ${/austin/i.test(ch.chapter || "") ? "austin" : "sa"}">` +
-                       `<div class="lsc-card-head">${escapeHtml(ch.chapter)}<span>${ch.n_projected} of 12 projected${ch.n_secured ? ` &middot; ${ch.n_secured} secured` : ""}</span></div>` +
+                       `<div class="lsc-card-head">Team ${escapeHtml((ch.chapter || "").toUpperCase())}<span>${ch.n_projected} of 12 projected${ch.n_secured ? ` &middot; ${ch.n_secured} secured` : ""}</span></div>` +
                        seats +
                        `<div class="lsc-alt-head">Next Men Up &mdash; Alternates Pool</div>` + alts +
                        `</div>`;

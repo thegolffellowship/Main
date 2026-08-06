@@ -592,22 +592,33 @@ def build_chase_email(customer_id: int, to_address: str | None = None,
         if isinstance(_lev, dict) and _lev.get("dates"):
             _venue = " &middot; ".join(
                 p for p in (_lev.get("venue"), _lev.get("city")) if p)
+            _lsc_url = f"{BASE}/member/contests#tab=lsc"
             lsc_event_block = (
                 '  <table role="presentation" width="100%" cellpadding="0"'
                 ' cellspacing="0" border="0" style="border-collapse:collapse;'
                 ' width:100%; margin-top:16px;">\n'
                 '    <tr><td style="background:#002868; border-radius:12px;'
-                ' padding:14px 18px;" bgcolor="#002868">\n'
-                '      <div style="font-family:Helvetica,Arial,sans-serif;'
+                ' padding:0; overflow:hidden;" bgcolor="#002868">\n'
+                f'      <a href="{_lsc_url}" style="display:block;'
+                ' text-decoration:none; padding:14px 18px 12px;">\n'
+                '        <div style="font-family:Helvetica,Arial,sans-serif;'
                 ' font-size:10px; letter-spacing:0.16em;'
                 ' text-transform:uppercase; color:#9DB4D6;'
                 ' font-weight:700;">The Lone Star Cup</div>\n'
-                '      <div style="color:#FFFFFF; font-family:Georgia,serif;'
+                '        <div style="color:#FFFFFF; font-family:Georgia,serif;'
                 ' font-size:18px; font-weight:700; margin-top:4px;">'
                 f'&#127942; {_lev.get("dates")}</div>\n'
-                '      <div style="font-family:Helvetica,Arial,sans-serif;'
+                '        <div style="font-family:Helvetica,Arial,sans-serif;'
                 ' font-size:13px; color:#9DB4D6; margin-top:3px;">'
                 f'{_venue}</div>\n'
+                '      </a>\n'
+                '      <div style="background:#0B3574; text-align:center;'
+                ' padding:5px 2px;">'
+                f'<a href="{_lsc_url}"'
+                ' style="font-family:Helvetica,Arial,sans-serif;'
+                ' font-size:10px; letter-spacing:0.1em; color:#9DB4D6;'
+                ' text-decoration:none; font-weight:700;">'
+                'CLICK FOR THE LONE STAR CUP</a></div>\n'
                 '    </td></tr>\n'
                 '  </table>')
     except Exception:
