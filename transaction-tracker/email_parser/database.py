@@ -10022,6 +10022,17 @@ def get_player_spotlight(customer_id: int,
     member_card = None
     gross_d = None          # kept for the LONE STAR CUP line below
     cup_d = None
+    # Free-text status badges per race (Kerry 2026-08-06) — a DIAL
+    # (race_status_notes app setting, JSON {race_key: text}) so wording
+    # like "Ends Aug 15-16" is editable without a deploy. COMPLETED is
+    # derived from the race_final flag, never from this dial.
+    try:
+        _race_status_notes = json.loads(
+            get_app_setting("race_status_notes", db_path=db_path) or "{}")
+        if not isinstance(_race_status_notes, dict):
+            _race_status_notes = {}
+    except Exception:
+        _race_status_notes = {}
     # City MVP count per chapter for the net-race cards (Kerry 2026-08-06:
     # "change wins to count MVPs... Only count MVPs per event, not per 9").
     # event_mvp_computed is keyed per EVENT by construction — the per-nine
@@ -10093,6 +10104,13 @@ def get_player_spotlight(customer_id: int,
                      else mvps_by_chapter.get("San Antonio")
                      if key == "san_antonio_net" else None),
             "enrolled": bool(row.get("enrolled")),
+            # Status badge feed (Kerry 2026-08-06: "some type of badge
+            # ... that gives status of the contest"): final -> COMPLETED;
+            # status_note (race_status_notes dial, {race_key: text}) ->
+            # free-text badge like "Ends Aug 15-16" for races whose
+            # race_final never flips (THE PLAYERS CUP).
+            "final": bool(d.get("race_final")),
+            "status_note": _race_status_notes.get(key),
             "flight": row.get("flight"),
             "points_reset": row.get("points_reset"),
             "in_reach": in_reach_for(row, d["standings"], pp,
@@ -10120,6 +10138,8 @@ def get_player_spotlight(customer_id: int,
                 "total_points": crow.get("points_reset"),
                 "tournaments": None, "wins": None,
                 "enrolled": bool(crow.get("enrolled")),
+                "final": False,
+                "status_note": _race_status_notes.get("fellowship_cup"),
                 "flight": None, "points_reset": crow.get("points_reset"),
                 "in_reach": in_reach_for(crow, cup["standings"], pp,
                                          "points_reset"),

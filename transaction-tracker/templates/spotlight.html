@@ -136,6 +136,13 @@
         .spt-stand .meta { font: 500 12.5px/1.35 'Helvetica Neue', Arial, sans-serif; color: #1B1B1B; margin-top: 3px; }
         .spt-pill { flex: none; font: 700 8.5px/1 'Bitter', serif; letter-spacing: 0.4px;
                     padding: 5px 8px; border-radius: 9999px; text-transform: uppercase; }
+        /* contest-status badge next to the race name (Kerry 2026-08-06:
+           COMPLETED for finished races, "STARTS AUG 29" for future ones) */
+        .spt-badge { display: inline-block; font: 700 8px/1 'Bitter', serif; letter-spacing: 0.06em;
+                     text-transform: uppercase; padding: 3px 6px; border-radius: 4px;
+                     margin-left: 7px; vertical-align: 2px; white-space: nowrap; }
+        .spt-badge.done { color: #6B675F; background: #E8E5E0; }
+        .spt-badge.soon { color: #BF5700; background: #FFF4E8; box-shadow: inset 0 0 0 1px #F3D9C0; }
         .spt-pill.in { color: #1B6B45; background: #C9EBD5; }
         /* NOT IN = amber warning, not neutral gray (Kerry 2026-08-06:
            "the NOT INs need a more urgent color") — same due-badge family
@@ -413,12 +420,17 @@
             // conversion CTA.
             const pillIn = `<span class="spt-pill in">In</span>`;
             const pillOut = `<span class="spt-pill out">Not In</span>`;
-            const standRow = (rank, rankColor, field, race, meta, pill, href, drama) =>
+            // badge: prebuilt status-chip html appended after the race name
+            // (Kerry 2026-08-06: contest status — COMPLETED / STARTS AUG 29)
+            const standRow = (rank, rankColor, field, race, meta, pill, href, drama, badge) =>
                 `<${href ? `a href="${href}"` : "div"} class="spt-stand"><div class="rk"><div class="r" style="color:${rankColor};">${rank}</div>` +
                 `<div class="f">${esc(field)}</div></div>` +
-                `<div class="mid"><div class="race">${esc(race)}</div><div class="meta">${esc(meta)}</div>${drama ? `<div class="spt-drama ${drama.kind}">${esc(drama.text)}</div>` : ""}</div>` +
+                `<div class="mid"><div class="race">${esc(race)}${badge || ""}</div><div class="meta">${esc(meta)}</div>${drama ? `<div class="spt-drama ${drama.kind}">${esc(drama.text)}</div>` : ""}</div>` +
                 pill +
                 `${href ? '<span class="spt-go">&rsaquo;</span></a>' : "</div>"}`;
+            const statusBadge = r => r.final
+                ? `<span class="spt-badge done">Completed</span>`
+                : (r.status_note ? `<span class="spt-badge soon">${esc(r.status_note)}</span>` : "");
             const rows = [];
             // display order (Kerry 2026-07-12): Fellowship Cup above Players Cup
             const RACE_ORDER = { san_antonio_net: 0, austin_net: 1, fellowship_cup: 2, players_cup_gross: 3 };
@@ -457,7 +469,8 @@
                     // quoted it as points-from-the-money and understated badly.
                     // Re-enable only after the server computes a true money-line
                     // gap (points to the last paying position on the ladder).
-                    null));
+                    null,
+                    statusBadge(r)));
             });
             if (d.match_play) {
                 const mp = d.match_play;
@@ -505,10 +518,12 @@
             // dormant fall placeholder LAST — active competitions outrank
             // a race that hasn't started (Kerry 2026-07-13)
             (d.fall_buyins || []).forEach(f => {
-                rows.push(standRow("—", "#C6C2BA", "Aug 29",
+                rows.push(standRow("—", "#C6C2BA", "",
                     (f.chapter === "Austin" ? "Austin" : "SA") + " Fall NET",
                     "Lights up when fall races begin", pillIn,
-                    `${contestsBase}#race=${f.chapter === "Austin" ? "fall_austin" : "fall_sa"}`));
+                    `${contestsBase}#race=${f.chapter === "Austin" ? "fall_austin" : "fall_sa"}`,
+                    null,
+                    `<span class="spt-badge soon">Starts Aug 29</span>`));
             });
             const stands = rows.length
                 ? `<div><div class="spt-sec-head"><span class="t">Where ${esc((d.name || "").split(" ")[0] || "They")} Stands</span>` +

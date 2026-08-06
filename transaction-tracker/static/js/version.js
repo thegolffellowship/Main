@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.201.14";
+window.TGF_VERSION = "2.201.15";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.201.15",
+    date: "2026-08-06",
+    changes: [
+      "Spotlight race cards carry a contest-status badge next to the race name (Kerry: 'some type of badge next to these that gives status of the contest'): finished races show a gray COMPLETED chip (derived from the race_final dial — AUSTIN NET 2026 / SAN ANTONIO NET 2026 today), the dormant fall cards show an amber 'STARTS AUG 29' chip, and the cups show an editable free-text chip from the new race_status_notes app-settings dial (seeded 'Ends Aug 15–16' for THE FELLOWSHIP CUP and THE PLAYERS CUP) — wording changes are a dial edit, not a deploy.",
+    ],
+  },
   {
     version: "2.201.14",
     date: "2026-08-06",
