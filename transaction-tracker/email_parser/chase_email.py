@@ -180,6 +180,21 @@ _CTA_STATE_A = """  <!-- TWO STEPS — STATE A -->
     </td></tr>
   </table>"""
 
+_CTA_STATE_A_ONE = """  <!-- ONE STEP — not signed up but already in a cup
+       (Kerry 2026-08-06: "if they're in one or both of the cups already
+       ... it should only be one" step — the sign-up). -->
+  <div style="font-family:Georgia,serif; font-size:15px; color:#1B1B1B; font-weight:700; letter-spacing:0.04em; line-height:1.65; margin-top:20px;">ONE STEP TO GET IN:</div>
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse; width:100%; margin-top:8px;">
+    <tr><td style="border-top:2px solid #1B1B1B; padding-top:16px; font-family:Helvetica,Arial,sans-serif; font-size:13px; line-height:1.55; color:#44403B;">
+      <div style="font-family:Georgia,serif; font-size:15px; font-weight:700; color:#1B1B1B; margin-bottom:6px;">Get in the field &mdash; your buy-in is already working.</div>
+      <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse;"><tr>
+        <td style="background:#E87C3E; border-radius:9999px;" bgcolor="#E87C3E"><a href="{{link_signup}}" style="display:inline-block; color:#FFFFFF; font-family:Georgia,serif; font-weight:700; padding:11px 26px; font-size:13px; letter-spacing:0.08em; text-decoration:none;">SIGN UP FOR THE TGF CHAMPIONSHIP</a></td>
+      </tr></table>
+      <div style="font-size:11px; color:#8A867F; margin-top:8px;">Registration closes end of day <b style="color:#44403B;">{{deadline_date}}</b>.</div>
+{{buyin_cards}}
+    </td></tr>
+  </table>"""
+
 _CTA_STATE_B = """  <!-- ONE STEP — STATE B (head reworded per Kerry 2026-08-06:
        "'You're signed up' for WHAT?" — name the championship) -->
   <div style="font-family:Georgia,serif; font-size:15px; color:#1B1B1B; font-weight:700; letter-spacing:0.04em; line-height:1.65; margin-top:20px;">You're signed up for the TGF Championship. One step left:</div>
@@ -189,24 +204,38 @@ _CTA_STATE_B = """  <!-- ONE STEP — STATE B (head reworded per Kerry 2026-08-0
     </td></tr>
   </table>"""
 
-_BUYIN_CARDS = """          <table role="presentation" cellpadding="0" cellspacing="8" border="0" style="border-collapse:separate; border-spacing:8px 0; width:100%; table-layout:fixed; margin-left:-8px;">
-            <tr>
-              <td style="border:1px solid #E2DFDA; border-top:3px solid #E87C3E; background:#FFFFFF; text-align:center; padding:12px 8px 10px; vertical-align:top;" bgcolor="#FFFFFF">
+_BUYIN_TD_FC = """              <td style="border:1px solid #E2DFDA; border-top:3px solid #E87C3E; background:#FFFFFF; text-align:center; padding:12px 8px 10px; vertical-align:top;" bgcolor="#FFFFFF">
                 <a href="{{link_fellowship_buyin}}" style="text-decoration:none; color:#1B1B1B;">
                   <div style="font-family:Georgia,serif; font-size:20px; font-weight:700;">$50</div>
                   <div style="font-family:Georgia,serif; font-size:12px; font-weight:700; margin-top:3px;">The Fellowship Cup</div>
                   <div style="font-family:Helvetica,Arial,sans-serif; font-size:10.5px; color:#8A867F; line-height:1.45; margin-top:4px;">Your {{reset_seed}} reset seed is waiting on it</div>
                 </a>{{fellowship_buyin_pill}}
-              </td>
-              <td style="border:1px solid #E2DFDA; border-top:3px solid #1B1B1B; background:#FFFFFF; text-align:center; padding:12px 8px 10px; vertical-align:top;" bgcolor="#FFFFFF">
+              </td>"""
+
+_BUYIN_TD_PC = """              <td style="border:1px solid #E2DFDA; border-top:3px solid #1B1B1B; background:#FFFFFF; text-align:center; padding:12px 8px 10px; vertical-align:top;" bgcolor="#FFFFFF">
                 <a href="{{link_players_buyin}}" style="text-decoration:none; color:#1B1B1B;">
                   <div style="font-family:Georgia,serif; font-size:20px; font-weight:700;">$50</div>
                   <div style="font-family:Georgia,serif; font-size:12px; font-weight:700; margin-top:3px;">The Players Cup</div>
                   <div style="font-family:Helvetica,Arial,sans-serif; font-size:10.5px; color:#8A867F; line-height:1.45; margin-top:4px;">{{pc_buyin_caption}}</div>
                 </a>{{players_buyin_pill}}
-              </td>
+              </td>"""
+
+
+def _buyin_cards(fc=True, pc=True):
+    """Cup buy-in card grid — an ALREADY-PURCHASED cup's card is removed
+    (Kerry 2026-08-06). Returns '' when neither card applies."""
+    tds = (_BUYIN_TD_FC if fc else "") + ("\n" if fc and pc else "") \
+        + (_BUYIN_TD_PC if pc else "")
+    if not tds:
+        return ""
+    return ("""          <table role="presentation" cellpadding="0" cellspacing="8" border="0" style="border-collapse:separate; border-spacing:8px 0; width:100%; table-layout:fixed; margin-left:-8px;">
+            <tr>
+""" + tds + """
             </tr>
-          </table>"""
+          </table>""")
+
+
+_BUYIN_CARDS = _buyin_cards()
 
 _BUYIN_PILL = """<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse; margin:8px auto 0;"><tr>
                   <td style="background:{color}; border-radius:9999px;" bgcolor="{color}"><a href="{href}" style="display:inline-block; color:#FFFFFF; font-family:Georgia,serif; font-weight:700; padding:9px 18px; font-size:11px; letter-spacing:0.08em; text-decoration:none;">BUY IN &middot; $50</a></td>
@@ -452,11 +481,21 @@ def build_chase_email(customer_id: int, to_address: str | None = None,
                   f"&mdash; IF IT ENDED TODAY" if inside else
                   f"from a seat on {chapter}'s<br>Lone Star Cup team")
 
-    # CTA state (#291/#297b)
+    # CTA state (#291/#297b + Kerry 2026-08-06: a player already in one
+    # or both cups has ONE step to get in — the sign-up — and the card
+    # for an already-purchased cup is removed).
     signed_up = bool(entry.get("tgf_champ_signed_up"))
     enrolled_any = bool(entry.get("enrolled_any"))
-    state = ov.get("cta_state") or ("A" if not signed_up
-                                    else ("C" if enrolled_any else "B"))
+    fc_in = bool((races.get("fellowship_cup") or {}).get("enrolled"))
+    pc_in = bool((races.get("players_cup_gross") or {}).get("enrolled"))
+    if enrolled_any and not (fc_in or pc_in):
+        # the target list says a cup buy-in exists but the boards didn't
+        # resolve a flag — trust the money; no cards rather than a wrong
+        # re-sell of something already purchased
+        fc_in = pc_in = True
+    state = ov.get("cta_state") or (
+        ("A1" if (fc_in or pc_in) else "A") if not signed_up
+        else ("C" if enrolled_any else "B"))
 
     # Players Cup chapter place — same convention as the spotlight's
     # _path_stats: place among ENROLLED chapter players plus self, on the
@@ -501,19 +540,13 @@ def build_chase_email(customer_id: int, to_address: str | None = None,
                 lead = max(_val(r) for r in pool)
                 pc_back = round(max(lead - _val(mine), 0), 2)
             # Box-1 "regular season finish" (players-path renders) uses
-            # the VISIBLE board rank within his flight — everyone on the
-            # board counts, bought in or not (Kerry 2026-08-06: Matt
-            # Griffin is 4th in the 1st flight with Pat Youngs 1st and
-            # not bought in; the enrolled-only pc_place said '2nd').
-            # Flight-scoped per the ratified convention (2026-07-12).
-            fl = mine.get("flight")
-            pc_flight_label = fl
-            frows = [r for r in gross.get("standings", [])
-                     if _val(r) is not None
-                     and (not fl or r.get("flight") == fl)]
-            better = sum(1 for r in frows if _val(r) > _val(mine))
-            tied = sum(1 for r in frows if _val(r) == _val(mine))
-            pc_flight_rank = ("T" if tied > 1 else "") + str(better + 1)
+            # the OVERALL visible board rank — everyone counts, bought in
+            # or not, and NO flight scoping (Kerry 2026-08-06: "Remove
+            # flight from the 1st chain block. Irrelevant for making the
+            # Lone Star Cup team."). The board's own re-rank carries tie
+            # notation already.
+            pc_flight_rank = mine.get("rank")
+            pc_flight_label = None
     except Exception:
         logger.warning("chase: players-cup place lookup failed",
                        exc_info=True)
@@ -616,9 +649,8 @@ def build_chase_email(customer_id: int, to_address: str | None = None,
             "city_finish_ordinal": (_rank_ordinal(pc_flight_rank)
                                     if pc_flight_rank else
                                     (_ordinal(pc_place) if pc_place else "—")),
-            "city_net_label": (f"PLAYERS CUP · {pc_flight_label.upper()}"
-                               if pc_flight_label else
-                               f"{chapter.upper()} PLAYERS CUP"),
+            # no flight in the label — irrelevant for making the LSC team
+            "city_net_label": "THE PLAYERS CUP",
             "reset_seed": _n1(pcp.get("points")),
             "cup_gap": _n1(pc_back) if pc_back is not None else "—",
             "link_city_net": slots["link_players_cup"],
@@ -637,6 +669,14 @@ def build_chase_email(customer_id: int, to_address: str | None = None,
         cards = _BUYIN_CARDS.replace("{{fellowship_buyin_pill}}", "") \
                             .replace("{{players_buyin_pill}}", "")
         cta = _CTA_STATE_A.replace("{{buyin_cards}}", cards)
+    elif state == "A1":
+        # one step (sign up); only the UNPURCHASED cup's card shows
+        cards = _buyin_cards(fc=not fc_in, pc=not pc_in) \
+            .replace("{{fellowship_buyin_pill}}", "") \
+            .replace("{{players_buyin_pill}}", "")
+        if cards:
+            cards = ('<div style="margin-top:14px;"></div>' + cards)
+        cta = _CTA_STATE_A_ONE.replace("{{buyin_cards}}", cards)
     elif state == "B":
         cards = _BUYIN_CARDS \
             .replace("{{fellowship_buyin_pill}}",

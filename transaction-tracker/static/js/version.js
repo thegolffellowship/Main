@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.201.24";
+window.TGF_VERSION = "2.201.25";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.201.25",
+    date: "2026-08-06",
+    changes: [
+      "Players-path chase email box 1 drops the flight (Kerry: 'Remove flight from the 1st chain block. Irrelevant for making the Lone Star Cup team') — the label is simply THE PLAYERS CUP and the rank is the overall visible board rank (the board's own re-rank, tie notation preserved). The 'from winning' line stays flight-scoped since the pot pays per flight.",
+      "New CTA state A1 (Kerry): a player already in one or both cups but not signed up gets ONE STEP TO GET IN — the sign-up button ('Get in the field — your buy-in is already working.') — instead of the two-step block, and the buy-in card for an already-purchased cup is removed (only the missing cup's card shows; none when both are owned). Matt Griffin is the first case: Players Cup owned, so his render is sign-up + the Fellowship Cup card only.",
+    ],
+  },
   {
     version: "2.201.24",
     date: "2026-08-06",
