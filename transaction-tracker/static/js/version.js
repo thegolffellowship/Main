@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.201.23";
+window.TGF_VERSION = "2.201.24";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.201.24",
+    date: "2026-08-06",
+    changes: [
+      "'From winning The Players Cup' now measures against the flight leader AS IF EVERYONE WAS IN (Kerry: 'base it off if everyone was in. Otherwise it will be confusing... 98.5 is 1.5 behind 100. Logical math') — Pat Youngs' 100, not bought in, is the reference line, so Matt Griffin reads 1.5 instead of 1. Players-path previews now report pc_flight_rank and pc_back for verification.",
+    ],
+  },
   {
     version: "2.201.23",
     date: "2026-08-06",

@@ -462,9 +462,10 @@ def build_chase_email(customer_id: int, to_address: str | None = None,
     # _path_stats: place among ENROLLED chapter players plus self, on the
     # descending gross board (#296: Bryce = 5th).
     pc_place = None
-    # "from winning The Players Cup": distance to the BOUGHT-IN flight
-    # leader — only entrants can win the pot (Kerry noted Pat Youngs sits
-    # at 100 NOT bought in; he is deliberately not the reference line).
+    # "from winning The Players Cup": distance to the flight leader AS IF
+    # EVERYONE WAS IN (Kerry ruling 2026-08-06: "base it off if everyone
+    # was in. Otherwise it will be confusing" — Pat Youngs at 100, not
+    # bought in, IS the reference line; Matt Griffin reads 1.5).
     pc_back = None
     pc_flight_rank = None   # visible-board rank within his flight (box 1)
     pc_flight_label = None
@@ -491,9 +492,9 @@ def build_chase_email(customer_id: int, to_address: str | None = None,
         mine = next((r for r in gross.get("standings", [])
                      if r.get("customer_id") == cid), None)
         if mine is not None and _val(mine) is not None:
+            # whole visible flight — bought in or not (Kerry 2026-08-06)
             pool = [r for r in gross.get("standings", [])
-                    if (r.get("enrolled") or r.get("customer_id") == cid)
-                    and _val(r) is not None
+                    if _val(r) is not None
                     and (not mine.get("flight")
                          or r.get("flight") == mine.get("flight"))]
             if pool:
@@ -685,6 +686,9 @@ def build_chase_email(customer_id: int, to_address: str | None = None,
               "suppress_pc": bool(suppress), "no_flight": bool(no_flight),
               "subject": subject, "preheader": PREHEADER,
               "store_links_placeholder": signup_url == _PLACEHOLDER_STORE}
+    if path == "players":
+        result["pc_flight_rank"] = pc_flight_rank
+        result["pc_back"] = pc_back
     if "{{" in html:
         import re as _re
         result["unfilled_slots"] = sorted(set(
