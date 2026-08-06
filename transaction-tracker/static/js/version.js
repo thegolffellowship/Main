@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.201.16";
+window.TGF_VERSION = "2.201.17";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.201.17",
+    date: "2026-08-06",
+    changes: [
+      "Current-contest status badges restyled per Kerry: black border, black text, no background (outline chip) — past stays gray-filled COMPLETED, future stays amber STARTS AUG 29.",
+    ],
+  },
   {
     version: "2.201.16",
     date: "2026-08-06",
