@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.201.12";
+window.TGF_VERSION = "2.201.13";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.201.13",
+    date: "2026-08-06",
+    changes: [
+      "CUP-ONLY enrollments (Kerry ruling, John Wade's $150 Venmo bundle): a NET Points Race buy-in made AFTER the chapter's City NET race is declared final is a Fellowship Cup entry only — 'He shouldn't be shown as paid for that one. It's over and he didn't buy into it.' New season_contests.cup_only flag: the city board's IN pill and $40×N pot exclude these rows; THE FELLOWSHIP CUP counts them fully (enrolled + pot head). The contest sync stamps the flag automatically from the gg_points_race_final dial, so future post-final Cup buy-ins behave the same; boot heal marks John Wade's existing row.",
+    ],
+  },
   {
     version: "2.201.12",
     date: "2026-08-06",

@@ -5180,6 +5180,30 @@ def init_db(db_path: str | Path | None = None) -> None:
         except sqlite3.OperationalError:
             pass  # column already exists
 
+        # ── cup_only flag on season_contests (Kerry ruling 2026-08-06) ──
+        # A NET Points Race buy-in made AFTER the chapter's City NET race
+        # is declared final can only be a FELLOWSHIP CUP entry ($50 = $40
+        # Cup pot + $10 TGF) — the city race is over and its pot closed.
+        # cup_only=1 rows are excluded from the city board's enrolled
+        # pills and its $40×N pot, but count fully in the Fellowship Cup
+        # (enrolled + pot). First case: John Wade's $150 Venmo bundle
+        # (item 2516) — "He shouldn't be shown as paid for that one. It's
+        # over and he didn't buy into it."
+        try:
+            conn.execute(
+                "ALTER TABLE season_contests ADD COLUMN cup_only INTEGER NOT NULL DEFAULT 0"
+            )
+        except sqlite3.OperationalError:
+            pass  # column already exists
+        try:
+            conn.execute(
+                """UPDATE season_contests SET cup_only = 1
+                   WHERE source_item_id = 2516 AND contest_type = 'NET Points Race'
+                     AND season = '2026' AND COALESCE(cup_only, 0) = 0"""
+            )
+        except sqlite3.OperationalError:
+            pass
+
         # ── Bridge tgf_events → events (main event registry) ────────
         try:
             conn.execute(
@@ -8478,14 +8502,24 @@ def get_points_race_standings(race_key: str,
             clauses.append("(chapter = ? OR chapter IS NULL OR chapter = '')")
             params.append(race["enroll_chapter"])
         enr_rows = conn.execute(
-            f"""SELECT customer_id, customer_name FROM season_contests
+            f"""SELECT customer_id, customer_name,
+                       COALESCE(cup_only, 0) AS cup_only
+                FROM season_contests
                 WHERE {' AND '.join(clauses)}""",
             params,
         ).fetchall()
-        enrolled_ids = {r["customer_id"] for r in enr_rows if r["customer_id"]}
+        # cup_only rows (Kerry 2026-08-06): a NET buy-in made after the
+        # city race was declared final — a Fellowship Cup entry only.
+        # They never count as city-enrolled (pill stays NOT IN, city pot
+        # excludes them) but the Cup includes them fully.
+        cup_only_ids = {r["customer_id"] for r in enr_rows
+                        if r["customer_id"] and r["cup_only"]}
+        n_cup_only = sum(1 for r in enr_rows if r["cup_only"])
+        city_rows = [r for r in enr_rows if not r["cup_only"]]
+        enrolled_ids = {r["customer_id"] for r in city_rows if r["customer_id"]}
         enrolled_names = {
             (r["customer_name"] or "").strip().lower(): r["customer_id"]
-            for r in enr_rows
+            for r in city_rows
         }
 
         # Current handicap per customer (every race, admin request): 18-hole
@@ -8524,6 +8558,11 @@ def get_points_race_standings(race_key: str,
             if cid:
                 ranked_ids.add(cid)
             r["enrolled"] = bool(cid and cid in enrolled_ids)
+            # Cup-side enrollment: city entrants AND cup-only buy-ins —
+            # the Fellowship Cup projection reads this instead of the
+            # city 'enrolled' flag.
+            r["cup_enrolled"] = bool(
+                cid and (cid in enrolled_ids or cid in cup_only_ids))
             hcp = idx_by_cid.get(cid) if cid else None
             r["handicap_index"] = hcp
             if flights:
@@ -8638,7 +8677,7 @@ def get_points_race_standings(race_key: str,
 
         enrolled_not_ranked = [
             {"customer_id": e["customer_id"], "customer_name": e["customer_name"]}
-            for e in enr_rows
+            for e in city_rows
             if e["customer_id"] and e["customer_id"] not in ranked_ids
         ]
 
@@ -8667,6 +8706,9 @@ def get_points_race_standings(race_key: str,
         "cross_chapter": race.get("enroll_chapter") is None,
         "n_players": len(out_rows),
         "n_enrolled": sum(1 for r in out_rows if r["enrolled"]),
+        # Fellowship-Cup-only buy-ins attached to this city race (paid
+        # $40 Cup entries; NOT in the city pot/pill counts above)
+        "n_cup_only": n_cup_only,
         "n_unresolved": sum(1 for r in out_rows if not r["customer_id"]),
         "enrolled_not_ranked": enrolled_not_ranked,
         "hidden_nonmembers": hidden_nonmembers,
@@ -8943,7 +8985,11 @@ def get_fellowship_cup_projection(force_refresh: bool = False,
                                  db_path=db_path)
         champ_scoring += d.get("champ_scoring") or 0
         champ_field += d.get("champ_field") or 0
-        cup_n += (d.get("n_enrolled") or 0) + len(d.get("enrolled_not_ranked") or [])
+        # City entries + cup-only buy-ins (post-final Fellowship Cup
+        # entries, Kerry 2026-08-06) — every one is a $40 Cup pot head
+        cup_n += ((d.get("n_enrolled") or 0)
+                  + len(d.get("enrolled_not_ranked") or [])
+                  + (d.get("n_cup_only") or 0))
         info = d.get("reset_info") or {}
         per_race[k] = {
             "label": d["label"],
@@ -8965,7 +9011,9 @@ def get_fellowship_cup_projection(force_refresh: bool = False,
                 "chapter": d["chapter"],
                 "net_rank": r["rank"],
                 "handicap_index": r.get("handicap_index"),
-                "enrolled": r["enrolled"],
+                # Cup enrollment includes cup-only buy-ins; falls back to
+                # the city flag for snapshots predating cup_enrolled
+                "enrolled": r.get("cup_enrolled", r["enrolled"]),
                 "points_reset": r["points_reset"],
             })
 
@@ -31733,16 +31781,34 @@ def sync_season_contests_from_items(db_path: str | Path | None = None) -> dict:
         # item's, making the reconciliation below delete the enrollment as
         # "no backing purchase" on every run (the endless "9 new
         # enrollments" loop).
+        # RULE (Kerry 2026-08-06, John Wade $150 bundle): a NET Points
+        # Race buy-in that arrives AFTER the chapter's City NET race is
+        # declared final can only be a FELLOWSHIP CUP entry — the city
+        # race is over and its pot closed. Stamp cup_only=1 on INSERT so
+        # the city board/pot never counts it; the Cup counts it fully.
+        # Fall seasons and existing rows are untouched (ON CONFLICT does
+        # not update cup_only).
+        cup_only = 0
+        if contest_type == "NET Points Race" and season and "Fall" not in season:
+            _rk = {"Austin": "austin_net",
+                   "San Antonio": "san_antonio_net"}.get(chapter)
+            if _rk:
+                try:
+                    cup_only = 1 if _points_race_final(_rk, db_path=db_path) else 0
+                except Exception:
+                    cup_only = 0
         result = conn.execute(
             """INSERT INTO season_contests
-               (customer_name, customer_id, contest_type, chapter, season, source_item_id)
-               VALUES (?, ?, ?, ?, ?, ?)
+               (customer_name, customer_id, contest_type, chapter, season,
+                source_item_id, cup_only)
+               VALUES (?, ?, ?, ?, ?, ?, ?)
                ON CONFLICT(customer_name, contest_type, chapter, season)
                DO UPDATE SET source_item_id = excluded.source_item_id,
                              customer_id = COALESCE(excluded.customer_id,
                                                     season_contests.customer_id)
                    WHERE season_contests.source_item_id IS NULL""",
-            (customer, customer_id, contest_type, chapter, season, item_id),
+            (customer, customer_id, contest_type, chapter, season, item_id,
+             cup_only),
         )
         row = conn.execute(
             """SELECT source_item_id FROM season_contests
