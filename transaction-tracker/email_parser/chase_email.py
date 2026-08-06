@@ -142,7 +142,7 @@ TEMPLATE = """<!DOCTYPE html>
   <!-- SPOTLIGHT CLOSE -->
   <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse; width:100%; margin-top:20px;"><tr><td style="border-top:2px solid #1B1B1B; padding-top:18px; text-align:center;">
     <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse; margin:0 auto;"><tr>
-      <td style="border:2px solid #1B1B1B; border-radius:9999px;"><a href="{{link_spotlight}}" style="display:inline-block; color:#1B1B1B; font-family:Georgia,serif; font-weight:700; padding:10px 24px; font-size:13px; letter-spacing:0.08em; text-decoration:none;">SEE YOUR FULL SPOTLIGHT</a></td>
+      <td><a href="{{link_spotlight}}" style="display:inline-block; color:#1B1B1B; border:2px solid #1B1B1B; border-radius:9999px; font-family:Georgia,serif; font-weight:700; padding:10px 24px; font-size:13px; letter-spacing:0.08em; text-decoration:none;">SEE YOUR FULL SPOTLIGHT</a></td>
     </tr></table>
     <p style="font-family:Helvetica,Arial,sans-serif; color:#8A867F; font-size:11px; margin:12px 0 0;">Every number above is live from the TGF Tracker as of {{send_date}}.</p>
   </td></tr></table>

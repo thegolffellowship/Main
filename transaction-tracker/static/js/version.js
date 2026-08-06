@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.201.34";
+window.TGF_VERSION = "2.201.35";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.201.35",
+    date: "2026-08-06",
+    changes: [
+      "SEE YOUR FULL SPOTLIGHT renders as a true pill (Kerry): the border-radius sat on a td inside a border-collapse table, which email clients render square — the border + radius now live on the link itself, so the button rounds like the orange sign-up pill.",
+    ],
+  },
   {
     version: "2.201.34",
     date: "2026-08-06",
