@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.201.33";
+window.TGF_VERSION = "2.201.34";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.201.34",
+    date: "2026-08-06",
+    changes: [
+      "Hybrid-state ruling (Kerry, closing #312 fix 3): a player already in a cup but not registered gets ONE STEP TO GET IN with the sign-up button and NOTHING else — no buy-in cards ('If it's actually 2 steps that we're offering then say two steps... What he needs to do most is sign up... so I'd say just ONE Thing'). The other cup's story stays in the second-road standings card above as information, not an ask.",
+    ],
+  },
   {
     version: "2.201.33",
     date: "2026-08-06",

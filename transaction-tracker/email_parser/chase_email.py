@@ -712,13 +712,13 @@ def build_chase_email(customer_id: int, to_address: str | None = None,
                             .replace("{{players_buyin_pill}}", "")
         cta = _CTA_STATE_A.replace("{{buyin_cards}}", cards)
     elif state == "A1":
-        # one step (sign up); only the UNPURCHASED cup's card shows
-        cards = _buyin_cards(fc=not fc_in, pc=not pc_in) \
-            .replace("{{fellowship_buyin_pill}}", "") \
-            .replace("{{players_buyin_pill}}", "")
-        if cards:
-            cards = ('<div style="margin-top:14px;"></div>' + cards)
-        cta = _CTA_STATE_A_ONE.replace("{{buyin_cards}}", cards)
+        # ONE thing, no second ask (Kerry 2026-08-06 ruling on the
+        # hybrid state: "If it's actually 2 steps that we're offering
+        # then say two steps... What he needs to do most is sign up for
+        # the TGF Championship... so I'd say just ONE Thing." The other
+        # cup's story lives in the second-road standings card above —
+        # information, not a step; NO buy-in cards here.)
+        cta = _CTA_STATE_A_ONE.replace("{{buyin_cards}}", "")
     elif state == "B":
         cards = _BUYIN_CARDS \
             .replace("{{fellowship_buyin_pill}}",
