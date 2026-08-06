@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.201.2";
+window.TGF_VERSION = "2.201.3";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.201.3",
+    date: "2026-08-06",
+    changes: [
+      "Chase email mobile fix (Kerry, first test-render review: 'the mobile state renders way too small'): the 620px fixed shell was being scale-to-fit shrunk by iPhone Mail (~63%) — the chain stacked but inside a shrunken canvas. The stacking media query now also makes the shell fluid (width:100%) and tightens side padding to 18px, so phones render at true size like the design mock.",
+      "Chase email name fix (the 'DOGGETT,, your city finish' double comma): the builder took names from the target list, which carries GG-style 'DOGGETT, Bryce' — display name now comes from the canonical customer record via the spotlight ('Bryce Doggett' in the header, 'Bryce' in the passage), with a GG-style transform fallback.",
+    ],
+  },
   {
     version: "2.201.2",
     date: "2026-08-06",

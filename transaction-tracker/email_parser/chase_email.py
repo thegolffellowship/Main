@@ -47,6 +47,8 @@ TEMPLATE = """<!DOCTYPE html>
     .chain td.chain-arrow{display:block !important; width:100% !important; padding:5px 0 !important;}
     .arrow-h{display:none !important;}
     .arrow-v{display:inline !important;}
+    table.shell{width:100% !important; max-width:620px !important;}
+    td.shell-pad{padding-left:18px !important; padding-right:18px !important;}
   }
 </style>
 </head>
@@ -54,10 +56,10 @@ TEMPLATE = """<!DOCTYPE html>
 <div style="display:none; font-size:1px; line-height:1px; max-height:0; max-width:0; opacity:0; overflow:hidden; mso-hide:all;">{{preheader}}</div>
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse; background:#F3F1EE;" bgcolor="#F3F1EE">
 <tr><td align="center" style="padding:28px 12px;">
-<table role="presentation" width="620" cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse; width:620px; max-width:620px; font-family:Georgia,'Times New Roman',serif; color:#1B1B1B;">
+<table role="presentation" width="620" cellpadding="0" cellspacing="0" border="0" class="shell" style="border-collapse:collapse; width:620px; max-width:620px; font-family:Georgia,'Times New Roman',serif; color:#1B1B1B;">
 
 <!-- HEADER (ratified as-is) -->
-<tr><td style="background:#1B1B1B; padding:26px 30px 24px;" bgcolor="#1B1B1B">
+<tr><td class="shell-pad" style="background:#1B1B1B; padding:26px 30px 24px;" bgcolor="#1B1B1B">
   <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse;"><tr>
     <td style="vertical-align:middle; padding-right:20px;"><img src="{{ASSET_ROUNDEL_WHITE}}" alt="The Golf Fellowship" width="72" height="72" style="display:block; border:0;"></td>
     <td style="vertical-align:middle;">
@@ -68,7 +70,7 @@ TEMPLATE = """<!DOCTYPE html>
   </tr></table>
 </td></tr>
 
-<tr><td style="background:#FFFFFF; border:1px solid #E2DFDA; border-top:0; padding:26px 30px 30px;" bgcolor="#FFFFFF">
+<tr><td class="shell-pad" style="background:#FFFFFF; border:1px solid #E2DFDA; border-top:0; padding:26px 30px 30px;" bgcolor="#FFFFFF">
 
   <!-- CAUSAL CHAIN STRIP: widths 22.5/7/22.5/7/41 -->
   <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" class="chain" style="border-collapse:collapse; width:100%; table-layout:fixed;">
@@ -336,15 +338,23 @@ def build_chase_email(customer_id: int, to_address: str | None = None,
                          "chase variant targets window players (normal "
                          "players get the standard snapshot)"}
 
-    name = entry.get("name") or ""
-    first = (name.split() or [""])[0]
     chapter = (entry.get("chapter") or "").strip()
     fcp = (entry.get("paths") or {}).get("Fellowship") or {}
     pcp = (entry.get("paths") or {}).get("Players") or {}
 
     # City-net final rank still comes off the spotlight (single-chapter
-    # board, rank is already city-scoped).
+    # board, rank is already city-scoped) — and so does the CANONICAL
+    # display name: the target list carries GG-style "DOGGETT, Bryce",
+    # which rendered "DOGGETT,, your city finish..." in the first test
+    # sends (double comma, wrong header casing).
     spot = get_player_spotlight(cid, db_path=db_path or DB_PATH)
+    name = (spot.get("name") or "").strip()
+    if not name:
+        raw = (entry.get("name") or "").strip()
+        m = __import__("re").match(r"^([^,]+),\s*(.+)$", raw)
+        name = (f"{m.group(2).strip()} {m.group(1).strip().title()}"
+                if m else raw)
+    first = (name.split() or [""])[0]
     races = {r.get("key"): r for r in (spot.get("races") or [])}
     net_key = "austin_net" if chapter == "Austin" else "san_antonio_net"
     net = races.get(net_key) or {}
