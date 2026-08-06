@@ -504,11 +504,13 @@ def build_chase_email(customer_id: int, to_address: str | None = None,
     # the flight money instead of the seat line. The chase_path_overrides
     # dial still forces either path explicitly.
     pc_first_flight = False
+    pc_flight_name = None
     try:
         _g = get_points_race_live("players_cup_gross", db_path=db_path)
         _fl = next((r.get("flight") for r in _g.get("standings", [])
                     if r.get("customer_id") == cid), None)
         pc_first_flight = (_fl == "1st Flight")
+        pc_flight_name = _fl
     except Exception:
         logger.warning("chase: flight lookup failed cid=%s", cid,
                        exc_info=True)
@@ -646,6 +648,18 @@ def build_chase_email(customer_id: int, to_address: str | None = None,
                     or (not sec_seat and thr not in (None, "")
                         and not pc_inside
                         and pc_gap > float(thr)))
+    # State-C flight incentive (Kerry 2026-08-06, Gus Vasquez: signed up
+    # + in the Fellowship Cup, below 1st Flight — "add The Players Cup
+    # back in after for incentive to join to fight for his flight"):
+    # C has no CTA, so the PC card slot carries the flight-money pitch
+    # instead of staying suppressed. Never for players already in the
+    # PC, never over an explicit suppress override.
+    pc_flight_pitch = (state == "C" and not pc_in and not no_flight
+                       and not pc_first_flight and not sec_seat
+                       and path != "players"
+                       and ov.get("suppress_pc") is None)
+    if pc_flight_pitch:
+        suppress = False
 
     from .timezone_utils import today_central
     send_date = today_central().strftime("%B %-d, %Y")
@@ -913,6 +927,35 @@ def build_chase_email(customer_id: int, to_address: str | None = None,
                          "in the hunt for <b>The Fellowship Cup title "
                          "and its purse</b>."))
 
+    # signed-up players: "if you don't play, there's no chance to
+    # qualify" is false — they're playing (Kerry 2026-08-06, Gus
+    # Vasquez: "the One thing's for sure paragraph doesn't fit, so it
+    # should be hidden"). Secured renders already swapped their own P3.
+    if signed_up and not sec_seat:
+        html = html.replace(
+            '  <div style="font-family:Helvetica,Arial,sans-serif; '
+            'font-size:15px; color:#44403B; line-height:1.65; '
+            'margin-top:12px;"><b>One thing\'s for sure</b> &mdash; if '
+            "you don't play, there's no chance to qualify. And your "
+            "chances are better than you probably realize: seats only "
+            "go to players who show up.</div>", "")
+
+    # flight-incentive PC card body (Kerry 2026-08-06, Gus Vasquez):
+    # sell joining the PC to fight his FLIGHT for its money — no seat
+    # talk, no weekend talk
+    if pc_flight_pitch:
+        _fl_name = pc_flight_name or "your flight"
+        html = html.replace(
+            "A second road to the Lone Star Cup weekend: you sit "
+            "<b>{{pc_place_ordinal}}</b> with a points reset of "
+            "<b>{{pc_reset}}</b> &mdash; only <b>{{pc_seat_gap}} from "
+            "one of the {{pc_seats_available}} gross seats</b> "
+            "available.",
+            "Not in The Players Cup yet &mdash; and there's flight "
+            "money in it: buy in and race <b>" + _fl_name + "</b> for "
+            "The Players Cup purse. Your <b>{{pc_reset}}</b> points "
+            "reset is already on the board.")
+
     if path == "players":
         html = (html
                 .replace("Fellowship Cup<br>Points Reset",
@@ -944,6 +987,7 @@ def build_chase_email(customer_id: int, to_address: str | None = None,
               "state": state, "rsvp_only": rsvp_only,
               "secured_seat": bool(sec_seat),
               "pc_first_flight": pc_first_flight,
+              "pc_flight_pitch": pc_flight_pitch,
               "path": path, "gap": gap, "inside": inside,
               "suppress_pc": bool(suppress), "no_flight": bool(no_flight),
               "subject": subject, "preheader": PREHEADER,

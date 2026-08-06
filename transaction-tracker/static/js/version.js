@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.204.2";
+window.TGF_VERSION = "2.204.3";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.204.3",
+    date: "2026-08-06",
+    changes: [
+      "All-in players read right (Kerry, Gus Vasquez: signed up + in the Fellowship Cup): the 'One thing's for sure — if you don't play, there's no chance to qualify' paragraph is hidden for every signed-up player (it's false — they're playing; secured renders already carry their own closer), and the otherwise-suppressed Players Cup slot comes back as a flight-money incentive for state-C players not yet in the PC: 'Not in The Players Cup yet — and there's flight money in it: buy in and race 2nd Flight for The Players Cup purse. Your 96 points reset is already on the board.' No seat talk, no weekend talk — just the flight fight.",
+    ],
+  },
   {
     version: "2.204.2",
     date: "2026-08-06",
