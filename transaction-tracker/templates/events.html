@@ -2582,8 +2582,8 @@
         const fullRegs = getRegistrants(ev.item_name);
         // HCP display rule: 9-only or mixed → show 9-hole net; 18-only →
         // show 18-hole. 36 and 54 are 18-hole play, so they count here too.
-        const evCount9 = registrants.filter(rr => String(rr.holes).trim() === "9").length;
-        const evCount18 = registrants.filter(rr => isEighteenStyleHoles(rr.holes)).length;
+        const evCount9 = registrants.filter(rr => rowHoles(ev, rr) === "9").length;
+        const evCount18 = registrants.filter(rr => isEighteenStyleHoles(rowHoles(ev, rr))).length;
         const showHcp18Only = evCount9 === 0 && evCount18 > 0;
         let html = '';
         registrants.forEach(r => {
@@ -2678,7 +2678,7 @@
             const sideGame = getEffectiveGameType(r, fullRegs);
             const sideGameLabel = sideGame === "NO GAMES" ? "NONE" : sideGame;
             const tee = (r.tee_choice || "").trim();
-            const holes = (r.holes || "").trim();
+            const holes = rowHoles(ev, r);
             const topTags = `${holes ? `<span class="mc-type mc-holes">${escapeHtml(holes)}h</span>` : ''}${sideGameLabel !== "NONE" ? `<span class="mc-type">${escapeHtml(sideGameLabel)}</span>` : ''}${tee ? `<span class="mc-type mc-tee">${escapeHtml(tee)}</span>` : ''}`;
 
             // Full desktop action parity on mobile (Kerry 2026-07-16):
@@ -2696,7 +2696,7 @@
                     if (lh === undefined) return r.handicap || "\u2014";
                     return showHcp18Only ? lh.index_18.toFixed(1) : (lh.index_9.toFixed(1) + 'N');
                 })()],
-                ["Holes", r.holes || "\u2014"],
+                ["Holes", rowHoles(ev, r) || "\u2014"],
                 ["Status", _cleanStatus(r.user_status)],
                 ["Partner Request", r.partner_request || "\u2014"],
                 ["Fellowship", r.fellowship || "\u2014"],
@@ -2866,7 +2866,7 @@
                     // Apply holes filter
                     const mHolesF = eventHolesFilter[ev.id] || null;
                     if (mHolesF) {
-                        filteredRegs = filteredRegs.filter(r => String(r.holes) === mHolesF);
+                        filteredRegs = filteredRegs.filter(r => rowHoles(ev, r) === mHolesF);
                     }
                     filteredRegs = sortRegistrants(filteredRegs, registrants);
                     if (!activeFilter || activeFilter === "NO GAMES") {
@@ -3026,11 +3026,51 @@
     function pkgRowHtml(pkg) {
         const lbl = (pkg && pkg.label || "").replace(/"/g, "&quot;");
         const pr = pkg && pkg.price != null ? pkg.price : "";
+        // Holes the package BUYS — 18 one day, 36 both days, 54 all three.
+        // Left blank it is read off the label (pkgHolesFromLabel); set it
+        // when the label doesn't say, or to overrule what was read.
+        const hv = pkg && pkg.holes != null ? String(pkg.holes) : "";
+        const hOpt = (v, t) => `<option value="${v}" ${hv === v ? "selected" : ""}>${t}</option>`;
         return `<div class="pkg-row" style="display:flex; gap:0.4rem; margin-bottom:0.3rem; align-items:center;">
             <input type="text" class="modal-input pkg-label" placeholder="e.g. Championship (Sat/Sun) + Side Games" value="${lbl}" style="flex:2; margin:0;">
             <input type="number" class="modal-input pkg-price" min="0" step="0.01" placeholder="420.00" value="${pr}" style="flex:1; margin:0;">
+            <select class="modal-input pkg-holes" title="Holes this package buys — leave on Auto to read it from the label" style="width:104px; flex:0 0 auto; margin:0;">
+                ${hOpt("", "Auto")}${hOpt("9", "9")}${hOpt("18", "18")}${hOpt("36", "36")}${hOpt("54", "54")}
+            </select>
             <button type="button" class="btn btn-secondary pkg-del" style="font-size:0.7rem; padding:0.2rem 0.5rem;">&#10005;</button>
         </div>`;
+    }
+
+    // How many holes a package label says it buys. Checked longest-claim
+    // first: "FULL WEEKEND (BOTH DAYS + PRACTICE + GAMES)" contains "BOTH
+    // DAYS", so a both-days test running first would call it 36.
+    function pkgHolesFromLabel(label) {
+        const s = String(label || "").toLowerCase();
+        if (/\b(full weekend|all three|three[- ]day|3[- ]day)\b/.test(s)) return 54;
+        if (/\b(both days|two[- ]day|2[- ]day)\b/.test(s)) return 36;
+        if (/\b(one[- ]day|1[- ]day|single[- ]day)\b/.test(s)) return 18;
+        return null;
+    }
+
+    // Holes a registration's matched package buys, or null when it has no
+    // package and the order's own value stands.
+    function pkgHolesFor(evId, r) {
+        const m = pkgMatch(evId, r);
+        if (!m) return null;
+        const explicit = parseInt(m.pkg.holes, 10);
+        if (!isNaN(explicit) && explicit > 0) return explicit;
+        return pkgHolesFromLabel(m.pkg.label);
+    }
+
+    // The hole count the roster SHOWS for a row. A championship sells days,
+    // not holes — the order carries 18 (one round) while the player bought
+    // two or three of them, so the package is the truth when there is one
+    // (Kerry 2026-08-07).
+    function rowHoles(ev, r) {
+        const fromPkg = pkgHolesFor(ev.id, r);
+        if (fromPkg) return String(fromPkg);
+        const raw = String(r.holes == null ? "" : r.holes).trim();
+        return /^\d+$/.test(raw) ? raw : "";
     }
 
     function pkgBindRow(rowEl) {
@@ -3055,7 +3095,9 @@
         document.querySelectorAll(`#${wrapId} .pkg-row`).forEach(row => {
             const label = row.querySelector(".pkg-label").value.trim();
             const price = parseFloat(row.querySelector(".pkg-price").value);
-            if (label && !isNaN(price)) packages.push({ label, price });
+            const holesSel = row.querySelector(".pkg-holes");
+            const holes = holesSel && holesSel.value ? parseInt(holesSel.value, 10) : null;
+            if (label && !isNaN(price)) packages.push({ label, price, holes });
         });
         return packages;
     }
@@ -3316,8 +3358,10 @@
             }
             if (detailSortField === "handicap") {
                 const refs = allRegs || registrants;
-                const cnt9 = refs.filter(r => r.holes === "9" || r.holes === 9).length;
-                const cnt18 = refs.filter(r => r.holes === "18" || r.holes === 18).length;
+                // Same 18-only rule the HCP column displays (36/54 count as
+                // 18-hole play), so the sort order matches what's on screen.
+                const cnt9 = refs.filter(r => String(r.holes).trim() === "9").length;
+                const cnt18 = refs.filter(r => isEighteenStyleHoles(r.holes)).length;
                 const use18 = cnt9 === 0 && cnt18 > 0;
                 const getHcp = r => {
                     const lh = r.customer ? handicapIndexMap[(r.customer || "").toLowerCase()] : undefined;
@@ -3529,13 +3573,13 @@
     // 18|36|54 on the championship, just 9|18 on a combo Tuesday
     // (Kerry 2026-08-07: "Make the tabs event specific").
     const HOLES_TAB_INACTIVE = ["credited", "refunded", "transferred", "wd"];
-    function holesBuckets(registrants) {
+    function holesBuckets(ev, registrants) {
         const counts = new Map();
         (registrants || []).forEach(r => {
             if (r.parent_item_id) return;
             if (HOLES_TAB_INACTIVE.includes(r.transaction_status)) return;
-            const v = String(r.holes == null ? "" : r.holes).trim();
-            if (!/^\d+$/.test(v)) return;   // RSVP-only rows carry no holes
+            const v = rowHoles(ev, r);
+            if (!v) return;                 // RSVP-only rows carry no holes
             counts.set(v, (counts.get(v) || 0) + 1);
         });
         return [...counts.entries()]
@@ -3546,7 +3590,7 @@
     // Render the hole tab group, self-healing a stale filter (a value can
     // stop existing when the last player on it is credited or re-entered).
     function holesTabsHtml(ev, registrants) {
-        const buckets = holesBuckets(registrants);
+        const buckets = holesBuckets(ev, registrants);
         const active = eventHolesFilter[ev.id] || null;
         if (active && !buckets.some(b => b.holes === active)) {
             delete eventHolesFilter[ev.id];
@@ -6611,7 +6655,7 @@
         // Filter by holes (9 or 18) if active
         const holesFilter = eventHolesFilter[ev.id] || null;
         if (holesFilter) {
-            filtered = filtered.filter(r => String(r.holes) === holesFilter);
+            filtered = filtered.filter(r => rowHoles(ev, r) === holesFilter);
         }
 
         // Sort the filtered registrants
@@ -6673,8 +6717,8 @@
         const emailOverrides = allRsvpEmailOverrides[ev.item_name] || {};
         // HCP display rule: 9-only or mixed → show 9-hole net; 18-only →
         // show 18-hole. 36 and 54 are 18-hole play, so they count here too.
-        const evCount9 = registrants.filter(rr => String(rr.holes).trim() === "9").length;
-        const evCount18 = registrants.filter(rr => isEighteenStyleHoles(rr.holes)).length;
+        const evCount9 = registrants.filter(rr => rowHoles(ev, rr) === "9").length;
+        const evCount18 = registrants.filter(rr => isEighteenStyleHoles(rowHoles(ev, rr))).length;
         const showHcp18Only = evCount9 === 0 && evCount18 > 0;
         // Detect active rows with duplicate customer+event registrations for badge display.
         const _activeRegistrations = registrants.filter(rr =>
@@ -6952,6 +6996,15 @@
                                  >&mdash;</button></td>`
                             : `<td style="${style}" title="No handicap, and this registration is not linked to a customer record">\u2014</td>`;
                     }
+                } else if (c.key === "holes") {
+                    // Package wins over the order's per-day value: a player
+                    // on BOTH DAYS bought 36, even though the order says 18.
+                    const shownHoles = rowHoles(ev, r);
+                    const fromPkg = pkgHolesFor(ev.id, r);
+                    const hTitle = fromPkg
+                        ? ` title="From the ${escapeHtml((pkgMatch(ev.id, r) || {}).pkg.label)} package"`
+                        : "";
+                    html += `<td style="${style}"${hTitle}>${escapeHtml(shownHoles || "—")}</td>`;
                 } else if (c.key === "side_games") {
                     // Show effective game type (parent + children combined)
                     const effectiveType = getEffectiveGameType(r, registrants);

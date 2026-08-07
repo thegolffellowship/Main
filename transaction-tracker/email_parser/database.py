@@ -14735,11 +14735,19 @@ def get_all_event_packages(db_path: str | Path | None = None) -> dict:
     return _event_packages_all(db_path)
 
 
+#: Hole counts a package may declare. 36 and 54 are the two- and
+#: three-day multi-day counts (v2.206.0).
+_PACKAGE_HOLES_CHOICES = (9, 18, 36, 54)
+
+
 def set_event_packages(event_id: int, packages: list,
                        db_path: str | Path | None = None) -> dict:
-    """Replace an event's package list. Each: {label, price}. Prices are
-    Kerry-entered through the UI — that entry IS the ratification.
-    Assignments pointing past the new list length are dropped."""
+    """Replace an event's package list. Each: {label, price, holes?}.
+    Prices are Kerry-entered through the UI — that entry IS the
+    ratification. `holes` is optional: when set it is how many holes the
+    package buys (18 one day / 36 both days / 54 all three), and the
+    roster shows it in the Holes column in place of the order's per-day
+    value. Assignments pointing past the new list length are dropped."""
     clean = []
     for p in packages or []:
         label = str(p.get("label") or "").strip()[:80]
@@ -14747,8 +14755,17 @@ def set_event_packages(event_id: int, packages: list,
             price = round(float(p.get("price")), 2)
         except (TypeError, ValueError):
             continue
+        try:
+            holes = int(p.get("holes"))
+        except (TypeError, ValueError):
+            holes = None
+        if holes not in _PACKAGE_HOLES_CHOICES:
+            holes = None
         if label and price >= 0:
-            clean.append({"label": label, "price": price})
+            pkg = {"label": label, "price": price}
+            if holes:
+                pkg["holes"] = holes
+            clean.append(pkg)
     allp = _event_packages_all(db_path)
     key = str(int(event_id))
     entry = allp.setdefault(key, {})

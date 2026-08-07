@@ -99,6 +99,21 @@ The `user_status` field is cleaned at display time via `_cleanStatus()`:
 - Parsed from emails: "9 or 18 HOLES?" field → stored as `holes` TEXT column
 - Shown as column in both Transactions and Events tables
 - Mobile collapsed view: amber badge showing "9h"/"18h"/"36h"/"54h" (first of three badges: Holes, Games, Tees)
+- **The roster's hole count is `rowHoles(ev, r)`, not `items.holes`
+  (v2.207.0).** A championship sells DAYS — the order carries 18 because
+  one round is one round — so when a registration matches a package, the
+  package's hole count wins and the order's value is the fallback.
+  `pkgHolesFor()` takes the matched package's explicit `holes` when set,
+  else reads it off the label via `pkgHolesFromLabel()`: `full weekend` /
+  `all three` / `three day` -> 54, `both days` / `two day` -> 36,
+  `one day` / `single day` -> 18. **Longest claim is tested first** —
+  "FULL WEEKEND (BOTH DAYS + PRACTICE + GAMES)" contains "BOTH DAYS", so
+  a both-days test running first would call it 36. Every hole-shaped read
+  on the roster goes through `rowHoles`: the Holes cell (tooltipped with
+  the package name when derived), the tabs and their counts, the tab
+  filter, the mobile card badge + Holes detail row, and the HCP 18-only
+  rule in both display and sort. `items.holes` is untouched — this is
+  display derivation, not a write.
 - **Event-specific hole tabs in Events (v2.206.0, Kerry: "Make the tabs
   event specific")**: the roster's hole filter is no longer a fixed 9|18
   pair. `holesBuckets()` in `events.html` reads the distinct hole counts
@@ -890,8 +905,11 @@ $100 add-on). Kerry needed these configurations to send accurate balance
 requests to players holding a transferred credit (the Callaway case).
 
 - **Storage:** the `event_package_configs` app setting — NO schema change.
-  Shape: `{"<event_id>": {"packages": [{"label", "price"}],
-  "assignments": {"<item_id>": <package index>}}}`. Data layer in
+  Shape: `{"<event_id>": {"packages": [{"label", "price", "holes"?}],
+  "assignments": {"<item_id>": <package index>}}}`. `holes` (v2.207.0) is
+  optional, one of 9/18/36/54, and is how many holes the package BUYS —
+  the Holes selector on each editor row, defaulting to Auto (read from
+  the label). Anything else is stored as absent. Data layer in
   `database.py` under the matching banner: `get_all_event_packages`,
   `set_event_packages` (replaces the list; drops out-of-range
   assignments; deletes the entry when both lists empty),

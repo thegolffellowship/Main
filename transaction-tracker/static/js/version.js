@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.206.0";
+window.TGF_VERSION = "2.207.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.207.0",
+    date: "2026-08-07",
+    changes: [
+      "The Holes column reads the PACKAGE, not the order (Kerry, on the 2026 TGF CHAMPIONSHIP roster: v2.206.0 gave the tabs somewhere to put 36 and 54, but every row still said 18 because that is what the order carries — a championship sells DAYS, and one round is one round no matter how many you bought). A registration matched to a package now shows the holes that package buys: BOTH DAYS + SIDE GAMES reads 36, FULL WEEKEND (BOTH DAYS + PRACTICE + GAMES) reads 54, ONE DAY + SIDE GAMES reads 18. The cell carries a tooltip naming the package it came from. Rows with no package — every normal event — keep showing the order's own value exactly as before.",
+      "Each package row in the Event Creator gets a Holes selector (Auto / 9 / 18 / 36 / 54). On Auto the count is read off the label: 'full weekend' / 'all three' / 'three day' → 54, 'both days' / 'two day' → 36, 'one day' / 'single day' → 18. Longest claim wins, so 'FULL WEEKEND (BOTH DAYS + PRACTICE + GAMES)' reads 54 rather than being caught by the BOTH DAYS inside it. Set the selector on any package whose label doesn't say, or to overrule what was read.",
+      "Everything hole-shaped on the roster now agrees with what the column shows: the event-specific tabs and their counts, the tab filter, the mobile card badge and its Holes detail row, and the HCP column's 18-only rule (in the sort as well as the display).",
+    ],
+  },
   {
     version: "2.206.0",
     date: "2026-08-07",
