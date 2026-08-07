@@ -1695,6 +1695,9 @@ def _scoring_dispatch(url: str, extract: str):
                                    force-replaces named players' stale cards;
                                    url = the portal widget
       scoring-facilities           facility census (course registry v1)
+      scoring-partial-credit       JSON {"item_id","amount","new_holes"?,
+                                   "package_index"?,"note"?} — partial CREDIT
+                                   (bridge twin of partial_credit_transaction)
       scoring-mp-import-gg[:<round>|verify[:<round>]]  snapshot GG's own
                                    match-play detail (start hole + NET per-hole
                                    winner/strokes) onto cmp_matches; url = the
@@ -2234,6 +2237,33 @@ def _scoring_dispatch(url: str, extract: str):
             if _r is None:
                 _r = {"error": "no active registration found for that "
                                "customer on that event"}
+            return json.dumps(_r, indent=2, default=str)
+        if cmd == "scoring-partial-credit":
+            # JSON: {"item_id": 2507, "amount": 105.0, "new_holes": "36",
+            #   "package_index": 2, "note": "..."} — partial CREDIT via
+            #   apply_partial_refund (the Kerry-ratified package-downgrade
+            #   path, v2.210.0). Bridge twin of partial_credit_transaction
+            #   for sessions whose cached tool inventory predates it.
+            #   Credit-only (no outbound money through the bridge), audited.
+            _p = json.loads(arg)
+            _amt = round(float(_p["amount"]), 2)
+            if _amt <= 0:
+                return json.dumps({"error": "amount must be positive"})
+            _pi = _p.get("package_index")
+            _key = "package_downgrade" if _pi is not None else "partial_credit"
+            _r = db.apply_partial_refund(
+                int(_p["item_id"]), method="Credit",
+                components={_key: _amt},
+                new_holes=(str(_p.get("new_holes")) if _p.get("new_holes")
+                           else None),
+                note=_p.get("note", ""),
+                new_package_index=_pi)
+            _audit("partial_credit_transaction(bridge)",
+                   f"item={_p['item_id']} amount=${_amt:.2f} "
+                   f"new_holes={_p.get('new_holes')} pkg_index={_pi} "
+                   f"note={_p.get('note', '')!r}",
+                   item_id=int(_p["item_id"]),
+                   outcome="ok" if _r.get("status") == "ok" else "failed")
             return json.dumps(_r, indent=2, default=str)
         if cmd == "scoring-acct-patch":
             # JSON: {"id": <acct_transaction_id>, "fields": {entity,

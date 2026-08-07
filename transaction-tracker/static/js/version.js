@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.210.0";
+window.TGF_VERSION = "2.210.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.210.1",
+    date: "2026-08-07",
+    changes: [
+      "scoring-partial-credit bridge command — the probe_golf_genius scoring-* bridge exists precisely because MCP client sessions freeze their tool list at session start, and the session that shipped partial_credit_transaction could not itself call it. The bridge twin takes the same JSON (item_id, amount, optional new_holes / package_index / note), is credit-only like the tool, and audits to agent_action_log the same way. First use: Jeff Young's Kerry-ratified $105 practice-round drop.",
+    ],
+  },
   {
     version: "2.210.0",
     date: "2026-08-07",
