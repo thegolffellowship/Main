@@ -104,11 +104,13 @@ The `user_status` field is cleaned at display time via `_cleanStatus()`:
   one round is one round — so when a registration matches a package, the
   package's hole count wins and the order's value is the fallback.
   `pkgHolesFor()` takes the matched package's explicit `holes` when set,
-  else reads it off the label via `pkgHolesFromLabel()`: `full weekend` /
-  `all three` / `three day` -> 54, `both days` / `two day` -> 36,
-  `one day` / `single day` -> 18. **Longest claim is tested first** —
-  "FULL WEEKEND (BOTH DAYS + PRACTICE + GAMES)" contains "BOTH DAYS", so
-  a both-days test running first would call it 36. Every hole-shaped read
+  else reads it off the label via `pkgHolesFromLabel()`, which counts
+  **ROUNDS** (v2.207.2): `both days` = 2, `one day` = 2 - 1 = 1, and
+  `practice` adds one on top — so "Both Days + Practice" is 54, not the
+  36 a phrase-match returns, and "Practice Round Only" is 18. `full
+  weekend` / `all three` / `three day` short-circuit to 54 **before** the
+  count, because those labels contain "Both Days" themselves. Every
+  hole-shaped read
   on the roster goes through `rowHoles`: the Holes cell (tooltipped with
   the package name when derived), the tabs and their counts, the tab
   filter, the mobile card badge + Holes detail row, the HCP 18-only rule

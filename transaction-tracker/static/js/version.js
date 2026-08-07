@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.207.1";
+window.TGF_VERSION = "2.207.2";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.207.2",
+    date: "2026-08-07",
+    changes: [
+      "Package hole counts count ROUNDS, not phrases. Read against the championship's real 14-package list (not the three visible on one screen), the previous rule got 'Both Days + Practice' ($425 member / $450 guest) wrong — it matched 'both days' and stopped at 36, but a practice round is another 18 on top of the tournament days, so that package is 54. The label now resolves to a round count: both days = 2, one day = 1, '+ practice' adds one, and 'Full Weekend' / 'All Three' short-circuit to 54 before the count (they contain 'Both Days' themselves). All 14 live packages now resolve correctly, including 'Practice Round Only' at 18. Verified against the live roster: 18 (2) | 36 (16) | 54 (6), with Callaway's and Mazanec's credit-transfer rows reading 36 off their pinned Both Days + Side Games assignments.",
+    ],
+  },
   {
     version: "2.207.1",
     date: "2026-08-07",

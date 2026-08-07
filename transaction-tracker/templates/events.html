@@ -3041,15 +3041,20 @@
         </div>`;
     }
 
-    // How many holes a package label says it buys. Checked longest-claim
-    // first: "FULL WEEKEND (BOTH DAYS + PRACTICE + GAMES)" contains "BOTH
-    // DAYS", so a both-days test running first would call it 36.
+    // How many holes a package label says it buys — counted as ROUNDS,
+    // because a practice round is another 18 on top of the tournament
+    // days. "Both Days + Practice" is three rounds (54), not two; a
+    // both-days test alone would have called it 36. "Full Weekend" and
+    // "All Three" already name the whole thing, so they short-circuit
+    // before the count (they contain "Both Days" too).
     function pkgHolesFromLabel(label) {
         const s = String(label || "").toLowerCase();
-        if (/\b(full weekend|all three|three[- ]day|3[- ]day)\b/.test(s)) return 54;
-        if (/\b(both days|two[- ]day|2[- ]day)\b/.test(s)) return 36;
-        if (/\b(one[- ]day|1[- ]day|single[- ]day)\b/.test(s)) return 18;
-        return null;
+        if (/\b(full weekend|all three|three[- ]days?|3[- ]days?)\b/.test(s)) return 54;
+        let rounds = 0;
+        if (/\b(both days|two[- ]days?|2[- ]days?)\b/.test(s)) rounds = 2;
+        else if (/\b(one day|single[- ]day|1[- ]day)\b/.test(s)) rounds = 1;
+        if (/\bpractice\b/.test(s)) rounds += 1;   // "Practice Round Only" = 1
+        return rounds ? rounds * 18 : null;
     }
 
     // Holes a registration's matched package buys, or null when it has no
