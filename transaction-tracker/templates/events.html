@@ -6914,13 +6914,19 @@
                             } else {
                                 dueBadge = ` <span class="status-tag" style="background:#eef2ff;color:#3730a3;border:1px solid #c7d2fe;font-size:0.65rem;padding:0.1rem 0.35rem;border-radius:4px;font-weight:700;white-space:nowrap;" title="Matched by paid price to the $${(+_m.pkg.price).toFixed(2)} package">${escapeHtml(_m.pkg.label)}</span>`;
                             }
-                            if (!_paidStamped && _covered < _m.pkg.price - 0.005) {
+                            // A COMP owes nothing by definition — pinning a
+                            // comp to a $420 package must not invoice Kerry.
+                            if (!isCompRow && !_paidStamped && _covered < _m.pkg.price - 0.005) {
                                 dueBadge += ` <span class="status-tag" style="background:#fef3c7;color:#92400e;border:1px solid #fcd34d;font-size:0.65rem;padding:0.1rem 0.35rem;border-radius:4px;font-weight:700;white-space:nowrap;" title="${_isCredit ? "Credit covers" : "Paid"} $${_covered.toFixed(2)} of the $${(+_m.pkg.price).toFixed(2)} ${escapeHtml(_m.pkg.label)} package \u2014 collect the difference">$${(_m.pkg.price - _covered).toFixed(2)} due</span>`;
                             }
-                        } else if (_isCredit) {
-                            // Credit rows never auto-match (the credited amount
-                            // is what was transferred, not a package price) \u2014
-                            // offer the assignment dropdown.
+                        } else {
+                            // No price match. Credit rows never auto-match (the
+                            // credited amount is what was transferred, not a
+                            // package price), and a comp row is $0 so it matches
+                            // nothing either \u2014 both need a way to say what was
+                            // bought (Kerry 2026-08-07, Robert Straiton: comped
+                            // in, both days, and the roster offered no control
+                            // at all). Any unmatched active row gets the picker.
                             const _opts = _pkgEntry.packages.map((pk, i) =>
                                 `<option value="${i}">${escapeHtml(pk.label)} ($${(+pk.price).toFixed(2)})</option>`).join("");
                             dueBadge = ` <select class="pkg-assign-sel" onchange="pkgAssign(this, ${ev.id}, ${r.id})" title="Assign this registration to a package to compute the exact balance due" style="font-size:0.65rem; padding:0.1rem 0.2rem; border:1px solid #fcd34d; background:#fef3c7; color:#92400e; border-radius:4px; max-width:170px; font-weight:700;"><option value="">\u2014 assign package \u2014</option>${_opts}</select>`;

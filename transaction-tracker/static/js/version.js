@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.208.0";
+window.TGF_VERSION = "2.208.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.208.1",
+    date: "2026-08-07",
+    changes: [
+      "A COMP row can be assigned a package (Kerry, on Robert Straiton: 'Add a BOTH DAYS + SIDE GAMES - MEMBER badge'). The package picker only rendered for rows that matched a package by price or were credit transfers — a $0.00 (comp) row matched nothing and got no control at all, so there was no way to say what a comped player actually bought. Any unmatched ACTIVE row on a package event now gets the '— assign package —' dropdown.",
+      "A comp is never invoiced. Pinning a comp to the $420 Both Days + Side Games package would previously have rendered a '$320.00 due' badge against it, because the balance-due math only saw $100 of +PAY covering a $420 package. A comp owes nothing by definition, so the due badge is suppressed on comp rows.",
+    ],
+  },
   {
     version: "2.208.0",
     date: "2026-08-07",
