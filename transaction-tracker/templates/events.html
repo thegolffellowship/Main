@@ -9681,17 +9681,57 @@
             return names.has((item.item_name || "").toLowerCase());
         });
         const eventName = ev ? ev.item_name : item.item_name;
-        const components = calculateWdComponents(item, eventName) || [];
+        const container = document.getElementById("ev-credit-partial-items");
+        let hasGameComponents = false;
+
+        // ── Package downgrade (Kerry-ratified 2026-08-07) ──
+        // On a package-config event the refund schedule IS the package
+        // ladder: the component list comes from the EVENT, not from the
+        // hardcoded net/gross set (which prices games this event doesn't
+        // sell that way). Refund = current package price − target package
+        // price, straight off Kerry's entered prices — never derived from
+        // parts. Picking a target also flips the registration's holes to
+        // the target package's count and re-pins the assignment on submit.
+        // Side games are NOT touched — the ratified case (Jeff Young,
+        // Full Weekend → Both Days + Side Games, $105) is a pure day
+        // drop; a downgrade that drops a games-carrying day is an OPEN
+        // question for Kerry.
+        const prPkgMatch = ev ? pkgMatch(ev.id, item) : null;
+        window._prPkgCtx = null;
+        if (prPkgMatch) {
+            const pkgs = (pkgFor(ev.id).packages || []);
+            const cheaper = pkgs.map((p, i) => ({ p, i }))
+                .filter(x => x.p.price < prPkgMatch.pkg.price - 0.004);
+            window._prPkgCtx = { evId: ev.id, cur: prPkgMatch, pkgs };
+            const opts = cheaper.map(x => {
+                const diff = Math.round((prPkgMatch.pkg.price - x.p.price) * 100) / 100;
+                return `<option value="${x.i}" data-amount="${diff}">&rarr; ${escapeHtml(x.p.label)} (refund $${diff.toFixed(2)})</option>`;
+            }).join("");
+            hasGameComponents = true;
+            container.innerHTML = `
+                <div style="padding:0.5rem; background:var(--bg-card); border:1px solid var(--border); border-radius:6px;">
+                    <div style="font-size:0.8rem; font-weight:600; margin-bottom:0.35rem;">
+                        Package Downgrade &mdash; currently ${escapeHtml(prPkgMatch.pkg.label)} ($${Number(prPkgMatch.pkg.price).toFixed(2)})
+                    </div>
+                    ${cheaper.length
+                        ? `<select id="partial-refund-pkg-target" class="modal-input" style="width:100%; margin:0;">
+                               <option value="">&mdash; keep current package &mdash;</option>${opts}
+                           </select>`
+                        : `<div style="font-size:0.8rem; color:var(--text-muted);">No cheaper package on this event's ladder.</div>`}
+                </div>`;
+            const pkgSel = document.getElementById("partial-refund-pkg-target");
+            if (pkgSel) pkgSel.addEventListener("change", updatePartialRefundTotal);
+        }
+
+        const components = prPkgMatch ? [] : (calculateWdComponents(item, eventName) || []);
         // Downgrade 18 → 9 rides the same checkbox list; checking it also
         // flips the registration's holes to 9 on submit.
-        const dgAmount = calcDowngradeAmount(ev, item);
+        const dgAmount = prPkgMatch ? null : calcDowngradeAmount(ev, item);
         if (dgAmount != null) {
             components.unshift({ key: "event_downgrade",
                                  label: "Event Downgrade 18 → 9 holes",
                                  amount: dgAmount });
         }
-        const container = document.getElementById("ev-credit-partial-items");
-        let hasGameComponents = false;
         if (components && components.length) {
             // Game components + the downgrade (not course fee / markup)
             const refundable = components.filter(c => ["net_games", "gross_games", "event_downgrade"].includes(c.key));
@@ -9742,11 +9782,31 @@
             total += parseFloat(cb.dataset.amount) || 0;
             checked.push(cb.dataset.key);
         });
+        // Package downgrade amount (package-config events)
+        const prPkgSel = document.getElementById("partial-refund-pkg-target");
+        let prPkgTarget = null;
+        if (prPkgSel && prPkgSel.value !== "" && window._prPkgCtx) {
+            const opt = prPkgSel.selectedOptions[0];
+            total += parseFloat(opt && opt.dataset.amount) || 0;
+            prPkgTarget = window._prPkgCtx.pkgs[parseInt(prPkgSel.value, 10)] || null;
+        }
         // Add custom amount if entered
         const customInput = document.getElementById("partial-refund-custom-amount");
         const customAmt = customInput ? (parseFloat(customInput.value) || 0) : 0;
         total += customAmt;
         document.getElementById("ev-credit-partial-total").textContent = `Refund Total: $${total.toFixed(2)}`;
+        if (prPkgTarget && window._prPkgCtx) {
+            const curPkg = window._prPkgCtx.cur.pkg;
+            const curHoles = apPkgHoles(curPkg);
+            const tgtHoles = apPkgHoles(prPkgTarget);
+            const notes = [`Package will change: <strong>${escapeHtml(curPkg.label)}</strong> → <strong>${escapeHtml(prPkgTarget.label)}</strong>`];
+            if (curHoles && tgtHoles && curHoles !== tgtHoles) {
+                notes.push(`Registration will change: <strong>${curHoles} holes</strong> → <strong>${tgtHoles} holes</strong>`);
+            }
+            notes.push("Side games are not changed by a package downgrade.");
+            document.getElementById("ev-credit-partial-games-note").innerHTML = notes.join("<br>");
+            return;
+        }
         // Show what side_games will become
         const item = allItems.find(r => r.id === evCreditItemId);
         if (item) {
@@ -9799,6 +9859,22 @@
                     components[cb.dataset.key] = parseFloat(cb.dataset.amount) || 0;
                     checkedKeys.push(cb.dataset.key);
                 });
+                // Package downgrade (package-config events): the ladder
+                // difference is the refund; the target flips holes and
+                // re-pins the assignment server-side.
+                let pkgTargetIndex = null;
+                let pkgNewHoles = null;
+                const prPkgSel = document.getElementById("partial-refund-pkg-target");
+                if (prPkgSel && prPkgSel.value !== "" && window._prPkgCtx) {
+                    const opt = prPkgSel.selectedOptions[0];
+                    const diff = parseFloat(opt && opt.dataset.amount) || 0;
+                    pkgTargetIndex = parseInt(prPkgSel.value, 10);
+                    components["package_downgrade"] = diff;
+                    const target = window._prPkgCtx.pkgs[pkgTargetIndex];
+                    const curHoles = apPkgHoles(window._prPkgCtx.cur.pkg);
+                    const tgtHoles = target ? apPkgHoles(target) : null;
+                    if (tgtHoles && tgtHoles !== curHoles) pkgNewHoles = String(tgtHoles);
+                }
                 // Include custom amount if entered
                 const customInput = document.getElementById("partial-refund-custom-amount");
                 const customAmt = customInput ? (parseFloat(customInput.value) || 0) : 0;
@@ -9823,10 +9899,20 @@
                     method: "POST", headers: { "Content-Type": "application/json" },
                     body: JSON.stringify({ method, components,
                         new_side_games: newGames !== currentGames ? newGames : null,
-                        new_holes: checkedKeys.includes("event_downgrade") ? "9" : null,
+                        new_holes: pkgNewHoles || (checkedKeys.includes("event_downgrade") ? "9" : null),
+                        package_target_index: pkgTargetIndex,
                         note }),
                 });
                 if (!res.ok) throw new Error((await res.json()).error || "Partial refund failed");
+                // Mirror the server-side re-pin locally so the roster badge
+                // updates without a page reload (EVENT_PACKAGES loads once).
+                if (pkgTargetIndex != null && window._prPkgCtx) {
+                    const entry = EVENT_PACKAGES[String(window._prPkgCtx.evId)];
+                    if (entry) {
+                        entry.assignments = entry.assignments || {};
+                        entry.assignments[String(evCreditItemId)] = pkgTargetIndex;
+                    }
+                }
             } else {
                 const target = document.getElementById("ev-credit-target-event").value;
                 if (!target) { alert("Please select a target event."); return; }

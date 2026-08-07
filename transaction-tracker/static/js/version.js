@@ -1,5 +1,15 @@
-window.TGF_VERSION = "2.209.0";
+window.TGF_VERSION = "2.210.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.210.0",
+    date: "2026-08-07",
+    changes: [
+      "Package Downgrade refunds (Kerry-ratified 2026-08-07 — carry-forward #2 from the handoff). On a package-config event the Credit/Partial Refund modal replaces the hardcoded net/gross component list with a Package Downgrade picker built from the EVENT's own ladder: refund = current package price − target package price, straight off Kerry's entered prices, never derived from parts. Submitting flips the registration's holes to the target package's count and re-pins the assignment, so the roster badge, Holes column, and due math all follow the downgrade. Side games are deliberately untouched — whether a downgrade that drops a games-carrying day should also adjust the bundle is still an open Kerry question. First real case: Jeff Young dropping the Friday practice round, Full Weekend → Both Days + Side Games – Member, $105 credit, 54 → 36 holes.",
+      "The partial-refund new_holes validator accepted only 9 and 18 (app.py) — it now accepts 36 and 54, the blocker that would have rejected any multi-day downgrade.",
+      "The partial-refund implementation moved out of app.py into apply_partial_refund() in database.py — one function now serves both the route and the new MCP tool, so the two surfaces cannot drift.",
+      "New MCP tool partial_credit_transaction (70 tools now; the destructive set grows to seven): a partial CREDIT against a registration, credit-only by design — outbound partial refunds stay UI-only. Takes amount, optional new holes, optional package re-pin index; returns a preview until confirm=true and audits every call per the v2.208.0 guardrail.",
+    ],
+  },
   {
     version: "2.209.0",
     date: "2026-08-07",

@@ -7023,125 +7023,20 @@ def api_partial_refund_item(item_id):
     # Credit / balance emails) instead of an outbound refund.
     if method and method not in ("Credit", "GoDaddy", "Venmo", "Zelle", "PayPal", "Cash App"):
         return jsonify({"error": "Invalid refund method."}), 400
-    as_credit = (method == "Credit")
-    refunded_components = data.get("components", {})  # e.g. {"gross_games": 30}
-    new_side_games = data.get("new_side_games")  # e.g. "NET" (after removing GROSS)
-    # Event Downgrade (Kerry 2026-07-14): refunding the 18-vs-9 price
-    # difference on a 9/18 Combo event also flips the registration to 9.
-    new_holes = data.get("new_holes")
-    if new_holes is not None and str(new_holes) not in ("9", "18"):
-        return jsonify({"error": "new_holes must be 9 or 18."}), 400
-    note = data.get("note", "")
-    total = sum(refunded_components.values())
-
-    # Build description
-    comp_labels = ", ".join(f"{k.replace('_', ' ').title()}" for k in refunded_components.keys())
-    if as_credit:
-        refund_desc = f"Partial credit: {comp_labels} (held for a future event)"
-    else:
-        refund_desc = f"Refund {comp_labels} via {method}" if method else f"Refund {comp_labels}"
-
-    import time as _time
-    from email_parser.database import _connect
-    uid = f"manual-refund-{int(_time.time() * 1000)}"
-    with _connect() as conn:
-        parent = conn.execute("SELECT * FROM items WHERE id = ?", (item_id,)).fetchone()
-        if not parent:
-            return jsonify({"error": "Item not found."}), 404
-        parent = dict(parent)
-
-        # Snapshot parent's mutable fields BEFORE modifying
-        parent_snap = {}
-        for fld in ("side_games", "holes", "tee_choice", "user_status"):
-            if parent.get(fld) is not None:
-                parent_snap[fld] = parent[fld]
-
-        # Compute new side_games from current DB value based on refunded components
-        current_sg = (parent.get("side_games") or "NONE").strip().upper()
-        refunding_net = "net_games" in refunded_components
-        refunding_gross = "gross_games" in refunded_components
-        computed_new_sg = current_sg
-        if current_sg == "BOTH":
-            if refunding_net and refunding_gross:
-                computed_new_sg = "NONE"
-            elif refunding_net:
-                computed_new_sg = "GROSS"
-            elif refunding_gross:
-                computed_new_sg = "NET"
-        elif current_sg == "NET" and refunding_net:
-            computed_new_sg = "NONE"
-        elif current_sg == "GROSS" and refunding_gross:
-            computed_new_sg = "NONE"
-
-        # Update parent side_games if changed
-        if computed_new_sg != current_sg:
-            conn.execute("UPDATE items SET side_games = ? WHERE id = ?",
-                         (computed_new_sg, item_id))
-
-        # Event Downgrade: flip the registration's holes (the previous
-        # value is already preserved in parent_snapshot for reversal)
-        if new_holes is not None and str(parent.get("holes") or "") != str(new_holes):
-            conn.execute("UPDATE items SET holes = ? WHERE id = ?",
-                         (str(new_holes), item_id))
-
-        # Create the child row with parent snapshot (customer_id copied from
-        # parent, same as transfer_item() — already resolved, no new lookup).
-        # Refund → -PAY child (money out). Credit → a CREDITED child with a
-        # POSITIVE price: get_player_credits() surfaces any credited row
-        # (parent or child), so it flows into Apply Credit / balance emails.
-        cur = conn.execute(
-            """INSERT INTO items (email_uid, merchant, customer, item_name, item_price,
-               side_games, notes, parent_item_id, parent_snapshot, transaction_status, order_date,
-               customer_id)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-            (uid,
-             "Partial Credit" if as_credit else (f"Refund ({method})" if method else "Partial Refund"),
-             parent["customer"], parent["item_name"],
-             f"${total:.2f}" if as_credit else f"-${total:.2f}",
-             None,
-             refund_desc + (f" — {note}" if note else ""),
-             item_id,
-             json.dumps(parent_snap) if parent_snap else None,
-             "credited" if as_credit else "active",
-             today_central_str(),
-             parent.get("customer_id")),
-        )
-        new_child_id = cur.lastrowid
-
-        # ── Accounting: flat entry for partial refund ──
-        # A CREDIT writes NO acct entry — it's an internal ledger move
-        # (unified-financial-model rule: only real outbound payments hit
-        # acct_transactions); the money leaves when the credit is later
-        # applied or refunded through those flows.
-        if not as_credit:
-            try:
-                from email_parser.database import _write_acct_entry
-                refund_source = method.lower().replace(" ", "_") if method else "manual"
-                _m = (method or "").lower()
-                refund_account = "Venmo" if "venmo" in _m else ("PayPal" if "paypal" in _m else "TGF Checking")
-                _write_acct_entry(
-                    conn,
-                    item_id=new_child_id,
-                    event_name=parent["item_name"],
-                    customer=parent["customer"],
-                    order_id=parent.get("order_id", ""),
-                    entry_type="expense",
-                    category="refund",
-                    source=refund_source,
-                    amount=float(total),
-                    description=f"Partial refund ({method}): {parent['customer']} — {parent['item_name']}",
-                    account=refund_account,
-                    source_ref=f"partial-refund-{new_child_id}",
-                    date=today_central_str(),
-                )
-            except Exception:
-                logger.warning("Failed to create accounting entry for partial refund %d", item_id, exc_info=True)
-
-        conn.commit()
-
-    return jsonify({"status": "ok", "refunded": total,
-                    "new_side_games": computed_new_sg,
-                    "new_holes": new_holes})
+    from email_parser.database import apply_partial_refund
+    res = apply_partial_refund(
+        item_id,
+        method=method,
+        components=data.get("components", {}),  # e.g. {"gross_games": 30}
+        new_holes=data.get("new_holes"),
+        note=data.get("note", ""),
+        # Package downgrade (Kerry-ratified 2026-08-07): re-pin the
+        # registration to the cheaper package it dropped to.
+        new_package_index=data.get("package_target_index"),
+    )
+    if res.get("error"):
+        return jsonify({"error": res["error"]}), (404 if res.get("not_found") else 400)
+    return jsonify(res)
 
 
 @app.route("/api/items/<int:item_id>/transfer", methods=["POST"])

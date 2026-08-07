@@ -793,3 +793,32 @@ Related dials, still with NO write path (set them by hand if needed):
 screen if they ever need changing again.
 
 Tests: `test_hio_carry_in.py`.
+
+## 2026 TGF CHAMPIONSHIP — GAMES vocabulary + per-game breakdown (Kerry, 2026-08-07, RATIFIED)
+
+Kerry's ruling on the open GAMES-axis question (session prompt 2026-08-07):
+**YES / SAT / SUN / NO REPLACES NET | GROSS | NONE — but ONLY for the TGF
+Championship.** It is not a second axis: the championship's games are
+structured differently from normal events, so the event's vocabulary is a
+per-event replacement, not a global change. Normal events keep NET/GROSS/NONE.
+
+Kerry's per-game breakdown (2026-08-07, verbatim structure):
+
+| Bucket | Game | Price |
+|---|---|---:|
+| Daily (per day) | Team Game | $8 |
+| Daily (per day) | Skins | $18 |
+| Daily (per day) | CTPs × 4 | $4 |
+| Combined | Individual Net | $20 |
+| Combined | Individual Gross | $20 |
+
+Checks: Daily $8 + $18 + $4 = **$30/day** and Combined $20 + $20 = **$40** —
+exactly the ratified bundle split ($100 = $30 SAT / $30 SUN / $40 COMBINED,
+mailbox #276/#279), so the breakdown and the bundle economics agree.
+
+Implementation status: NOT BUILT. This is carry-forward #3 (event-specific
+GAME options) — money path (pot sizing, `_champ_roster_bundles`, payouts),
+to be scoped with CA and not half-shipped before 08-15. The
+`champ_single_day_assignments` dial remains the interim mechanism. The
+hole-tab precedent (derive the tab set and cell vocabulary from the EVENT)
+is the working model when it is built.

@@ -238,24 +238,28 @@ ship mid-week because it was display-only; this is not.
 
 ## ITEMS STILL NEEDED / OPEN QUESTIONS
 
-- [ ] **Website option label** still reads `= $450` on the guest ALL 3 DAYS variants while
-      charging $460/$560. Customer-facing $10 surprise. Update the option text to `= $460`.
+- [x] ~~Website option label `= $450`~~ **FIXED by Kerry 2026-08-07** ("Fixed the GoDaddy
+      product online for any future purchases").
 - [ ] **⚠ The `tgf-pricing` skill file is CORRUPTED** — dollar figures in its tables have been
       replaced by stray words ("round,", "an", "vs", "Guest", "championship", "price").
       e.g. New Member reads `$44 | round, | $50` where the middle cell should be `$6`. This is
       the reference Kerry files Texas sales tax from. Repair against
-      `TGF_Pricing___Services_Master_Document_v2_0.md`. Raised 2026-08-07.
+      `TGF_Pricing___Services_Master_Document_v2_0.md`. **Handed to CA 2026-08-07 (Kerry:
+      "Pass the skill thing onto CA so that we can address over there and pass back to you")**
+      — mailbox post to CA/platform-claude; awaiting the repaired file back.
 - [ ] Confirm whether a day-drop should also adjust the side-games bundle when the dropped
       day carried games (Jeff Young's does not — practice has no games — but One Day + Side
-      Games dropping its only day would).
+      Games dropping its only day would). The shipped package-downgrade refund (v2.210.0)
+      deliberately NEVER touches side games pending this ruling.
 - [ ] CA alignment on re-opening Event Creator ahead of the championship vs after.
 - [ ] Should Add Player write `items.holes` from the chosen package, or stay display-derived
-      like the roster? (Straiton was fixed by writing `items.holes` directly — that works and
-      survives the boot heal, but it is a different mechanism from the roster's derivation.)
-- [ ] Does per-event GAME vocabulary (#3) replace `side_games` values, or map onto them?
-      A `SAT`-only buyer is still "in the Saturday net AND gross games" — so YES/SAT/SUN/NO
-      may be a DAY axis that is orthogonal to net/gross, not a replacement for it. **Confirm
-      with Kerry before designing the schema.**
+      like the roster? (v2.209.0 does BOTH: writes `items.holes` AND pins the package.)
+- [x] ~~Does per-event GAME vocabulary (#3) replace `side_games` or map onto it?~~
+      **RULED by Kerry 2026-08-07: YES/SAT/SUN/NO REPLACES NET|GROSS|NONE, but ONLY for the
+      TGF Championship** — a per-event vocabulary, because the championship's games are
+      structured differently (Daily: Team $8 / Skins $18 / CTPs ×4 $4 = $30; Combined:
+      Ind Net $20 / Ind Gross $20 = $40). Full breakdown recorded in
+      `docs/claude/side-games.md`. Build remains carry-forward #3 — scope with CA, after 08-15.
 
 ---
 

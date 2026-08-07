@@ -970,6 +970,95 @@ def assign_event_package(event_id: int, item_id: int = 0,
 
 
 @mcp.tool()
+def partial_credit_transaction(transaction_id: int, amount: float,
+                               reason: str = "",
+                               new_holes: str = "",
+                               new_package_index: int = -1,
+                               confirm: bool = False) -> str:
+    """Partially CREDIT a registration — the money stays in the house as
+    a credited child row (surfaces in Apply Credit / balance emails); the
+    player stays active. Credit only: outbound partial refunds (Venmo etc.)
+    are UI-only by design.
+
+    Built for the Kerry-ratified package-downgrade case (2026-08-07): the
+    refund schedule on a package-config event is the package LADDER —
+    amount = current package price − target package price, never derived
+    from parts. Pass new_package_index to re-pin the registration to the
+    package it dropped to, and new_holes for the target package's count.
+    First real case: Jeff Young dropping the Friday practice round —
+    $105, Full Weekend → Both Days + Side Games, holes 54 → 36, side
+    games untouched.
+
+    DESTRUCTIVE (money path): returns a preview until confirm=true.
+
+    Args:
+        transaction_id: The registration (parent item) to credit against
+        amount: Credit amount in dollars (e.g. 105.0)
+        reason: Note recorded on the credit row (say WHY — e.g. the
+                package downgrade it represents)
+        new_holes: "9"/"18"/"36"/"54" to flip the registration's hole
+                   count, or "" to leave it
+        new_package_index: 0-based package index to re-pin to (use
+                           assign_event_package's preview to list), or -1
+                           to leave the pin alone
+        confirm: False returns the preview; True executes
+    """
+    from email_parser.database import (apply_partial_refund,
+                                       get_all_event_packages,
+                                       resolve_event_id_by_name)
+    try:
+        amount = round(float(amount), 2)
+    except (TypeError, ValueError):
+        return json.dumps({"error": "amount must be a number"})
+    if amount <= 0:
+        return json.dumps({"error": "amount must be positive"})
+    if new_holes and new_holes not in ("9", "18", "36", "54"):
+        return json.dumps({"error": "new_holes must be 9, 18, 36 or 54"})
+
+    target = _item_summary(transaction_id)
+    if not target:
+        return json.dumps({"error": f"Transaction {transaction_id} not found"})
+
+    target_pkg = None
+    if new_package_index >= 0:
+        ev_id = resolve_event_id_by_name(target.get("item_name") or "")
+        pkgs = ((get_all_event_packages() or {}).get(str(ev_id)) or {}).get("packages") or []
+        if not (0 <= new_package_index < len(pkgs)):
+            return json.dumps({"error": f"new_package_index {new_package_index} "
+                               f"out of range for event {ev_id} ({len(pkgs)} packages)"})
+        target_pkg = pkgs[new_package_index]
+
+    comp_key = "package_downgrade" if new_package_index >= 0 else "partial_credit"
+    if not confirm:
+        return _confirm_gate(
+            "partial_credit_transaction", target,
+            f"Create a ${amount:.2f} CREDITED child row against item "
+            f"{transaction_id} (money stays in the house)"
+            + (f", set holes to {new_holes}" if new_holes else "")
+            + (f", re-pin to package [{new_package_index}] "
+               f"{target_pkg['label']!r}" if target_pkg else ""),
+            reversible="Reversible: the credit reverses via the roster's "
+                       "Reverse action; holes and the package pin can be "
+                       "set back.",
+            credit_amount=amount, component=comp_key,
+            new_holes=new_holes or None, target_package=target_pkg,
+            reason=reason or None)
+
+    res = apply_partial_refund(
+        transaction_id, method="Credit", components={comp_key: amount},
+        new_holes=new_holes or None, note=reason,
+        new_package_index=(new_package_index if new_package_index >= 0 else None))
+    _audit("partial_credit_transaction",
+           f"item={transaction_id} amount=${amount:.2f} component={comp_key} "
+           f"new_holes={new_holes or None} pkg_index="
+           f"{new_package_index if new_package_index >= 0 else None} "
+           f"reason={reason!r} before={target}",
+           item_id=transaction_id,
+           outcome="ok" if res.get("status") == "ok" else "failed")
+    return json.dumps(res, indent=2, default=str)
+
+
+@mcp.tool()
 def delete_transaction(transaction_id: int, confirm: bool = False) -> str:
     """Permanently delete a transaction. This cannot be undone.
 

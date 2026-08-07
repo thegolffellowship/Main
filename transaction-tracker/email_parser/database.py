@@ -23791,6 +23791,193 @@ def add_player_to_event(event_name: str, customer: str, mode: str = "comp",
     return new_values
 
 
+def _event_id_for_item_name(conn, item_name: str):
+    """events.id for an item_name, alias-aware (older championship rows
+    carry 'TGF CHAMPIONSHIP' which aliases to the canonical name)."""
+    ev = conn.execute(
+        "SELECT id FROM events WHERE item_name = ? COLLATE NOCASE",
+        (item_name,)).fetchone()
+    if not ev:
+        ev = conn.execute(
+            """SELECT e.id FROM events e
+               JOIN event_aliases a
+                 ON a.canonical_event_name = e.item_name COLLATE NOCASE
+               WHERE a.alias_name = ? COLLATE NOCASE""",
+            (item_name,)).fetchone()
+    return ev[0] if ev else None
+
+
+def resolve_event_id_by_name(item_name: str,
+                             db_path: str | Path | None = None):
+    """Public wrapper for _event_id_for_item_name (MCP previews)."""
+    with _connect(db_path) as conn:
+        return _event_id_for_item_name(conn, item_name)
+
+
+def apply_partial_refund(item_id: int, method: str = "",
+                         components: dict | None = None,
+                         new_holes=None, note: str = "",
+                         new_package_index=None,
+                         db_path: str | Path | None = None) -> dict:
+    """Partially refund/credit components of a registration while keeping
+    the player active. Single implementation behind BOTH the
+    /api/items/<id>/partial-refund route and the partial_credit MCP tool
+    (v2.210.0 — moved out of app.py when the Kerry-ratified package
+    downgrade landed, so the two surfaces cannot drift).
+
+    method "Credit" keeps the money in the house: the child row is a
+    CREDITED item with a POSITIVE price (picked up by get_player_credits
+    → Apply Credit / balance emails) instead of an outbound refund, and
+    writes NO acct entry (internal ledger move).
+
+    new_holes: widened to 9/18/36/54 (v2.210.0) — a package downgrade on
+    a multi-day event writes 36 or 54 (Jeff Young: 54 → 36).
+
+    new_package_index: on a package-config event, re-pin the registration
+    to this package after the refund (the package ladder IS the refund
+    schedule — Full Weekend → Both Days + Side Games is a $105 day drop
+    off Kerry's entered prices, never derived from parts). The event is
+    resolved from the parent's item_name (alias-aware); the pin happens
+    AFTER the refund commits, same one-writer rule as add_player_to_event.
+    """
+    components = dict(components or {})
+    as_credit = (method == "Credit")
+    if new_holes is not None and str(new_holes) not in ("9", "18", "36", "54"):
+        return {"error": "new_holes must be 9, 18, 36 or 54."}
+    total = sum(components.values())
+
+    comp_labels = ", ".join(k.replace("_", " ").title() for k in components)
+    if as_credit:
+        refund_desc = f"Partial credit: {comp_labels} (held for a future event)"
+    else:
+        refund_desc = (f"Refund {comp_labels} via {method}" if method
+                       else f"Refund {comp_labels}")
+
+    import time as _time
+    uid = f"manual-refund-{int(_time.time() * 1000)}"
+    event_id = None
+    with _connect(db_path) as conn:
+        parent = conn.execute("SELECT * FROM items WHERE id = ?",
+                              (item_id,)).fetchone()
+        if not parent:
+            return {"error": "Item not found.", "not_found": True}
+        parent = dict(parent)
+
+        # Snapshot parent's mutable fields BEFORE modifying
+        parent_snap = {}
+        for fld in ("side_games", "holes", "tee_choice", "user_status"):
+            if parent.get(fld) is not None:
+                parent_snap[fld] = parent[fld]
+
+        # Compute new side_games from current DB value based on refunded
+        # components. A package downgrade does NOT touch side games — the
+        # only ratified case (Jeff Young) is a pure day drop; whether a
+        # downgrade that drops a games-carrying day should also adjust the
+        # bundle is an OPEN question for Kerry (handoff 2026-08-07).
+        current_sg = (parent.get("side_games") or "NONE").strip().upper()
+        refunding_net = "net_games" in components
+        refunding_gross = "gross_games" in components
+        computed_new_sg = current_sg
+        if current_sg == "BOTH":
+            if refunding_net and refunding_gross:
+                computed_new_sg = "NONE"
+            elif refunding_net:
+                computed_new_sg = "GROSS"
+            elif refunding_gross:
+                computed_new_sg = "NET"
+        elif current_sg == "NET" and refunding_net:
+            computed_new_sg = "NONE"
+        elif current_sg == "GROSS" and refunding_gross:
+            computed_new_sg = "NONE"
+
+        if computed_new_sg != current_sg:
+            conn.execute("UPDATE items SET side_games = ? WHERE id = ?",
+                         (computed_new_sg, item_id))
+
+        # Event/package downgrade: flip the registration's holes (the
+        # previous value is preserved in parent_snapshot for reversal)
+        if new_holes is not None and str(parent.get("holes") or "") != str(new_holes):
+            conn.execute("UPDATE items SET holes = ? WHERE id = ?",
+                         (str(new_holes), item_id))
+
+        # Resolve the event id (alias-aware) for the package re-pin
+        if new_package_index is not None:
+            event_id = _event_id_for_item_name(conn, parent["item_name"])
+
+        # Child row with parent snapshot (customer_id copied from parent —
+        # already resolved, no new lookup). Refund → -PAY child (money
+        # out). Credit → CREDITED child with a POSITIVE price.
+        cur = conn.execute(
+            """INSERT INTO items (email_uid, merchant, customer, item_name, item_price,
+               side_games, notes, parent_item_id, parent_snapshot, transaction_status, order_date,
+               customer_id)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (uid,
+             "Partial Credit" if as_credit else (f"Refund ({method})" if method else "Partial Refund"),
+             parent["customer"], parent["item_name"],
+             f"${total:.2f}" if as_credit else f"-${total:.2f}",
+             None,
+             refund_desc + (f" — {note}" if note else ""),
+             item_id,
+             json.dumps(parent_snap) if parent_snap else None,
+             "credited" if as_credit else "active",
+             today_central_str(),
+             parent.get("customer_id")),
+        )
+        new_child_id = cur.lastrowid
+
+        # A CREDIT writes NO acct entry — money leaves only when the
+        # credit is later applied or refunded through those flows.
+        if not as_credit:
+            try:
+                refund_source = method.lower().replace(" ", "_") if method else "manual"
+                _m = (method or "").lower()
+                refund_account = ("Venmo" if "venmo" in _m else
+                                  ("PayPal" if "paypal" in _m else "TGF Checking"))
+                _write_acct_entry(
+                    conn,
+                    item_id=new_child_id,
+                    event_name=parent["item_name"],
+                    customer=parent["customer"],
+                    order_id=parent.get("order_id", ""),
+                    entry_type="expense",
+                    category="refund",
+                    source=refund_source,
+                    amount=float(total),
+                    description=f"Partial refund ({method}): {parent['customer']} — {parent['item_name']}",
+                    account=refund_account,
+                    source_ref=f"partial-refund-{new_child_id}",
+                    date=today_central_str(),
+                )
+            except Exception:
+                logger.warning("Failed to create accounting entry for partial refund %d",
+                               item_id, exc_info=True)
+
+        conn.commit()
+
+    # Re-pin AFTER the refund commits (assign_event_package writes
+    # app_settings on its own connection).
+    package_pin = None
+    if new_package_index is not None:
+        if event_id:
+            package_pin = assign_event_package(event_id, item_id,
+                                               int(new_package_index),
+                                               db_path=db_path)
+            if not package_pin.get("ok"):
+                logger.warning("Package re-pin failed for item %d: %s",
+                               item_id, package_pin.get("error"))
+        else:
+            package_pin = {"ok": False,
+                           "error": f"no event found for {parent['item_name']!r}"}
+            logger.warning("Package re-pin skipped for item %d: %s",
+                           item_id, package_pin["error"])
+
+    return {"status": "ok", "refunded": total, "child_id": new_child_id,
+            "as_credit": as_credit,
+            "new_side_games": computed_new_sg, "new_holes": new_holes,
+            "package_pin": package_pin}
+
+
 def get_add_payment_quote(event_name: str, customer: str,
                           db_path: str | Path | None = None) -> dict:
     """Everything the Add Payment modal needs to price itself (Kerry

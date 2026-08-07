@@ -280,6 +280,24 @@ per-player selected-tee slope/rating/par and is a fast follow-up).
   (games/holes), and NO acct entry is written (internal ledger move).
   Kerry flagged the modal's option sprawl for a consolidation design
   pass (task #19) — semantics frozen until then.
+- **Package Downgrade (v2.210.0, Kerry-ratified 2026-08-07).** On a
+  package-config event where the item matches a package (pinned or
+  price-matched), the Partial Refund tab REPLACES the hardcoded
+  net/gross component list with a Package Downgrade select listing
+  every cheaper package on the event's ladder. Refund = current
+  package price − target package price (Kerry's entered prices ARE the
+  refund schedule — never derived from parts). Submitting flips the
+  registration's holes to the target package's count
+  (`new_holes` validator widened to 9/18/36/54) and RE-PINS the
+  assignment to the target (`package_target_index` →
+  `assign_event_package`, after the refund commits). Side games are
+  deliberately NOT touched — whether a downgrade that drops a
+  games-carrying day should also adjust the bundle is an open Kerry
+  question. Implementation is `apply_partial_refund()` in
+  `database.py` — single function behind the route AND the
+  `partial_credit_transaction` MCP tool. First real case: Jeff Young
+  item 2507, Full Weekend → Both Days + Side Games – Member, $105
+  credit, 54 → 36, games untouched.
 - **Event Downgrade (18→9) lives in the CREDIT modal's Partial Refund tab**,
   not here (v2.92.0, Kerry): players registered for 18 in a 9/18 Combo get an
   "Event Downgrade 18 → 9 holes" component (`calcDowngradeAmount` — the
