@@ -14924,7 +14924,7 @@ _CHAMP_SUBGAME_RATES = {
 
 def _champ_subgame_optouts(db_path=None) -> dict:
     """Per-player SUB-GAME opt-outs — the `champ_subgame_optouts` app
-    setting (Kerry 2026-08-08, Carlos Zapata: credit the handicap-games
+    setting (Kerry 2026-08-07, Carlos Zapata: credit the handicap-games
     portion — Team Net both days + Individual Net — while he stays in
     Skins, CTPs and Individual Gross). Shape:
 

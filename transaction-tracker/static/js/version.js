@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.211.0";
+window.TGF_VERSION = "2.211.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.211.1",
+    date: "2026-08-07",
+    changes: [
+      "chore: correct the ruling date in the champ_subgame_optouts docstring (Kerry's Carlos Zapata directive came 2026-08-07, not 08-08).",
+    ],
+  },
   {
     version: "2.211.0",
     date: "2026-08-07",
