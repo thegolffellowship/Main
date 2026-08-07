@@ -912,6 +912,64 @@ def add_player(
 
 
 @mcp.tool()
+def assign_event_package(event_id: int, item_id: int = 0,
+                         package_index: int = -1,
+                         clear: bool = False) -> str:
+    """Pin a registration to one of an event's day-combination packages —
+    the programmatic twin of the roster's package dropdown (the pin drives
+    the roster badge, the package-derived Holes column, and the due math).
+
+    Call with only event_id to LIST the event's packages and current
+    assignments (read-only preview — use it to find the right index).
+    Then re-call with item_id + package_index to pin, or item_id +
+    clear=true to remove a pin. Only the assignments map is touched;
+    package labels/prices are Kerry-entered and never modified here.
+
+    Args:
+        event_id: The event's ID (e.g. 3291 for the 2026 TGF CHAMPIONSHIP)
+        item_id: The registration's item/transaction ID to pin
+        package_index: 0-based index into the event's package list
+        clear: True to remove the item's pin instead of setting one
+    """
+    from email_parser.database import (get_all_event_packages,
+                                       assign_event_package as _assign)
+    entry = (get_all_event_packages() or {}).get(str(int(event_id))) or {}
+    packages = [{"index": i, **p}
+                for i, p in enumerate(entry.get("packages") or [])]
+    assignments = entry.get("assignments") or {}
+
+    if not item_id:
+        return json.dumps({
+            "status": "preview", "event_id": event_id,
+            "packages": packages, "assignments": assignments,
+            "next_step": "Re-call with item_id + package_index to pin, "
+                         "or item_id + clear=true to unpin.",
+        }, indent=2)
+
+    if not packages:
+        return json.dumps({"error": f"Event {event_id} has no package "
+                           "config — nothing to assign."})
+    if not clear and package_index < 0:
+        return json.dumps({"error": "Pass package_index (0-based; call "
+                           "with only event_id to list), or clear=true."})
+
+    before = assignments.get(str(int(item_id)))
+    res = _assign(event_id, item_id, None if clear else package_index)
+    label = None
+    if res.get("ok") and not clear:
+        label = packages[package_index]["label"]
+    action_desc = "CLEAR" if clear else f"index={package_index} ({label!r})"
+    _audit("assign_event_package",
+           f"event={event_id} item={item_id} {action_desc} before={before}",
+           item_id=item_id,
+           outcome="ok" if res.get("ok") else "failed")
+    if res.get("ok"):
+        res["package"] = None if clear else packages[package_index]
+        res["previous_index"] = before
+    return json.dumps(res, indent=2, default=str)
+
+
+@mcp.tool()
 def delete_transaction(transaction_id: int, confirm: bool = False) -> str:
     """Permanently delete a transaction. This cannot be undone.
 

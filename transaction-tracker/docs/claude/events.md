@@ -241,6 +241,22 @@ per-player selected-tee slope/rating/par and is a fast follow-up).
   partial-name row (no email, no `customer_id`). Skipped for `comp`
   mode (fixed manager dropdown) and when `apCustomerNames` hasn't
   loaded yet (avoids false alarms on a cold page).
+- **Package dropdown on package-config events (v2.209.0, task #34).** On
+  an event with `event_package_configs` the modal leads with a Package
+  select (`#add-player-package`, `apPkg*` helpers in `events.html`):
+  picking one sets Holes (package `holes` or `pkgHolesFromLabel`), Side
+  Games (label mentions "game" → `Both`, else `None` — current
+  vocabulary; the event-specific YES/SAT/SUN/NO axis, carry-forward #3,
+  will re-map this), Status from the label (Guest/Member, skipped in
+  comp mode where MANAGER is forced), and in Paid Separately mode
+  prefills the Amount with the package price (editable — a partial
+  payment still shows a due badge against the package). Submit passes
+  `package_index`; the server (`add_player_to_event(package_index=…)`)
+  PINS the new registration via `assign_event_package` after the insert
+  commits, so a $0 comp reads the right badge/holes immediately (the
+  Straiton failure mode). Hidden for RSVP mode — an RSVP is not a
+  purchase. Manual fields stay live as the fallback; events without
+  packages are unchanged.
 
 ## Add Payment
 - Creates a child payment row linked to parent registration via `parent_item_id`

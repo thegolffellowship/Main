@@ -7179,6 +7179,12 @@ def api_add_player():
     mode = data.get("mode", "comp")
     if mode not in ("comp", "rsvp", "paid_separately"):
         return jsonify({"error": "Invalid mode."}), 400
+    package_index = data.get("package_index")
+    if package_index is not None:
+        try:
+            package_index = int(package_index)
+        except (TypeError, ValueError):
+            return jsonify({"error": "package_index must be an integer."}), 400
     try:
         item = add_player_to_event(
             event_name=data["event_name"],
@@ -7194,6 +7200,7 @@ def api_add_player():
             customer_phone=data.get("customer_phone", ""),
             holes=data.get("holes", ""),
             order_date=data.get("order_date", ""),
+            package_index=package_index,
         )
         if item:
             return jsonify({"status": "ok", "item": item}), 201

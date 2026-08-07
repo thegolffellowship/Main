@@ -23625,6 +23625,7 @@ def add_player_to_event(event_name: str, customer: str, mode: str = "comp",
                         payment_amount: str = "", payment_source: str = "",
                         customer_email: str = "", customer_phone: str = "",
                         holes: str = "", order_date: str = "",
+                        package_index=None,
                         db_path: str | Path | None = None) -> dict | None:
     """
     Add a player to an event.
@@ -23633,6 +23634,11 @@ def add_player_to_event(event_name: str, customer: str, mode: str = "comp",
       - 'comp': Manager comp ($0.00 price, full golf details)
       - 'rsvp': RSVP-only placeholder (name only, no price, no games)
       - 'paid_separately': Paid via Venmo/Zelle/Cash (custom price, full details)
+
+    package_index: on a package-config event, pin the new registration to
+    this package (task #34 — one choice sets holes/games/price and the
+    roster badge reads from the pin, so a $0 comp still matches). Ignored
+    for RSVP mode — an RSVP is not a purchase.
 
     Returns the new item dict or None on failure.
     """
@@ -23764,10 +23770,25 @@ def add_player_to_event(event_name: str, customer: str, mode: str = "comp",
 
         conn.commit()
 
-        new_values["id"] = new_id
-        logger.info("Added player %s to event %s (mode=%s, id=%d)",
-                    customer, event_name, mode, new_id)
-        return new_values
+    # Pin the chosen package AFTER the insert commits — assign_event_package
+    # writes app_settings through its own connection, so doing it inside the
+    # open write transaction above would deadlock on the same file.
+    if package_index is not None and mode != "rsvp" and event.get("id"):
+        try:
+            asn = assign_event_package(event["id"], new_id, int(package_index),
+                                       db_path=db_path)
+            new_values["package_assignment"] = asn
+            if not asn.get("ok"):
+                logger.warning("Package pin failed for new player %d: %s",
+                               new_id, asn.get("error"))
+        except Exception:
+            logger.warning("Package pin failed for new player %d", new_id,
+                           exc_info=True)
+
+    new_values["id"] = new_id
+    logger.info("Added player %s to event %s (mode=%s, id=%d)",
+                customer, event_name, mode, new_id)
+    return new_values
 
 
 def get_add_payment_quote(event_name: str, customer: str,

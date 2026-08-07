@@ -1365,6 +1365,17 @@
                     </label>
                 </div>
 
+                <!-- Package picker: primary control on package-config events
+                     (comp + paid modes). Picking one sets holes, side games
+                     and price together, and pins the package on the roster —
+                     a comp both-days entry can no longer land as 18 holes. -->
+                <div id="ap-package-section" class="ap-field-section" style="display:none;">
+                    <label class="ap-field-label"><span>Package</span>
+                        <select id="add-player-package" class="modal-input"></select>
+                    </label>
+                    <div id="ap-package-hint" style="font-size:0.75rem;color:var(--text-muted);margin-top:0.2rem;"></div>
+                </div>
+
                 <!-- Golf details: shown for comp and paid_separately, hidden for rsvp -->
                 <div id="ap-golf-details" class="edit-grid">
                     <label><span>Holes <span style="color:#e11d48;">*</span></span>
@@ -10951,9 +10962,93 @@
 
     // ---- Add Player modal logic ----
     let addPlayerEventName = null;
+    let addPlayerEventId = null;
 
     // ---- Add Player modal (3 modes) ----
     let addPlayerMode = "comp";
+
+    // ── Add Player package picker (task #34, Kerry #284 feedback) ──
+    // On an event with package configs the Package select is the primary
+    // control: one choice sets holes + side games + price, and the saved
+    // registration is PINNED to the package so the roster badge, the Holes
+    // column, and the due math all read from it. Manual fields stay live
+    // as the fallback (and for events with no packages).
+    function apPkgList() {
+        if (addPlayerEventId == null) return [];
+        const entry = pkgFor(addPlayerEventId);
+        return (entry && entry.packages) || [];
+    }
+
+    function apPkgSelected() {
+        const sel = document.getElementById("add-player-package");
+        if (!sel || sel.value === "") return null;
+        const idx = parseInt(sel.value, 10);
+        const pkg = apPkgList()[idx];
+        return pkg ? { pkg, idx } : null;
+    }
+
+    function apPkgHoles(pkg) {
+        const explicit = parseInt(pkg.holes, 10);
+        if (!isNaN(explicit) && explicit > 0) return explicit;
+        return pkgHolesFromLabel(pkg.label);
+    }
+
+    function apPkgRender() {
+        const sec = document.getElementById("ap-package-section");
+        const sel = document.getElementById("add-player-package");
+        if (!sec || !sel) return;
+        const pkgs = apPkgList();
+        const show = pkgs.length > 0 && getAddPlayerMode() !== "rsvp";
+        sec.style.display = show ? "" : "none";
+        if (!show) { apPkgHint(); return; }
+        const prev = sel.value;
+        sel.innerHTML = '<option value="">Manual entry (no package)</option>' +
+            pkgs.map((p, i) => `<option value="${i}">${escapeHtml(p.label)} — $${Number(p.price).toFixed(2)}</option>`).join("");
+        if (prev !== "" && pkgs[parseInt(prev, 10)]) sel.value = prev;
+        apPkgHint();
+    }
+
+    function apPkgApply() {
+        const chosen = apPkgSelected();
+        if (chosen) {
+            const { pkg } = chosen;
+            const holes = apPkgHoles(pkg);
+            if (holes) document.getElementById("add-player-holes").value = String(holes);
+            // Current side_games vocabulary: a games-bundle buyer is in that
+            // day's net AND gross games (ratified split, mailbox #276/#279)
+            // → "Both"; no bundle → "None". Event-specific YES/SAT/SUN/NO
+            // vocabulary (carry-forward #3) will re-map this when it lands.
+            document.getElementById("add-player-side-games").value =
+                /game/i.test(pkg.label || "") ? "Both" : "None";
+            const statusSel = document.getElementById("add-player-status");
+            if (!statusSel.disabled) {
+                if (/guest/i.test(pkg.label || "")) statusSel.value = "GUEST";
+                else if (/member/i.test(pkg.label || "")) statusSel.value = "MEMBER";
+            }
+            if (getAddPlayerMode() === "paid_separately") {
+                const amt = document.getElementById("add-player-amount");
+                if (amt) amt.value = Number(pkg.price).toFixed(2);
+            }
+        }
+        apPkgHint();
+    }
+
+    function apPkgHint() {
+        const hint = document.getElementById("ap-package-hint");
+        if (!hint) return;
+        const chosen = apPkgSelected();
+        if (!chosen) {
+            hint.textContent = apPkgList().length
+                ? "Picking a package sets holes, games and price together, and pins it on the roster."
+                : "";
+            return;
+        }
+        const { pkg } = chosen;
+        const holes = apPkgHoles(pkg);
+        const games = /game/i.test(pkg.label || "") ? "side-games bundle" : "no side games";
+        const compNote = getAddPlayerMode() === "comp" ? " · comp charges $0, package still pinned" : "";
+        hint.textContent = `Sets ${holes || "?"} holes · ${games} · $${Number(pkg.price).toFixed(2)}${compNote}`;
+    }
 
     function getAddPlayerMode() {
         const checked = document.querySelector('input[name="add-player-mode"]:checked');
@@ -11015,15 +11110,25 @@
         if (!isComp) {
             apCustomerNames = [...new Set(allItems.map(i => i.customer).filter(Boolean))].sort();
         }
+
+        // Package picker visibility follows the mode (hidden for RSVP —
+        // an RSVP is not a purchase); re-apply on switch so a package
+        // chosen in comp mode carries its price into paid mode.
+        apPkgRender();
+        if (apPkgSelected()) apPkgApply();
     }
 
     function openAddPlayerModal(eventName) {
         addPlayerEventName = eventName;
+        const _apEv = allEvents.find(e => e.item_name === eventName);
+        addPlayerEventId = _apEv ? _apEv.id : null;
         // Reset mode to comp
         document.querySelector('input[name="add-player-mode"][value="comp"]').checked = true;
         // Clear all fields
         document.getElementById("add-player-manager").value = "";
         document.getElementById("add-player-name").value = "";
+        const _apPkgSel = document.getElementById("add-player-package");
+        if (_apPkgSel) _apPkgSel.value = "";
         document.getElementById("add-player-holes").value = "";
         document.getElementById("add-player-side-games").value = "";
         document.getElementById("add-player-tee").value = "";
@@ -11041,6 +11146,7 @@
     function closeAddPlayerModal() {
         document.getElementById("add-player-overlay").style.display = "none";
         addPlayerEventName = null;
+        addPlayerEventId = null;
     }
 
     async function handleAddPlayerSubmit(e) {
@@ -11106,6 +11212,8 @@
         };
 
         if (mode !== "rsvp") {
+            const chosenPkg = apPkgSelected();
+            if (chosenPkg) payload.package_index = chosenPkg.idx;
             payload.holes = document.getElementById("add-player-holes").value;
             if (!payload.holes) missing.push("Holes");
             payload.side_games = document.getElementById("add-player-side-games").value;
@@ -11151,6 +11259,17 @@
                 const data = await res.json();
                 alert(data.error || "Failed to add player.");
                 return;
+            }
+            // Mirror the server-side package pin into the local cache so the
+            // roster badge shows without waiting for a page reload
+            // (EVENT_PACKAGES is fetched once at load).
+            const data = await res.json().catch(() => ({}));
+            const newId = data && data.item && data.item.id;
+            if (payload.package_index != null && newId != null && addPlayerEventId != null) {
+                const entry = EVENT_PACKAGES[String(addPlayerEventId)] =
+                    EVENT_PACKAGES[String(addPlayerEventId)] || { packages: [], assignments: {} };
+                entry.assignments = entry.assignments || {};
+                entry.assignments[String(newId)] = payload.package_index;
             }
             closeAddPlayerModal();
             await fetchItems();
@@ -12699,6 +12818,8 @@
         document.querySelectorAll('input[name="add-player-mode"]').forEach(radio => {
             radio.addEventListener("change", updateAddPlayerMode);
         });
+        // Package picker (package-config events)
+        document.getElementById("add-player-package").addEventListener("change", apPkgApply);
 
         // Add Payment modal
         document.getElementById("add-payment-form").addEventListener("submit", handleAddPaymentSubmit);

@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.208.1";
+window.TGF_VERSION = "2.209.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.209.0",
+    date: "2026-08-07",
+    changes: [
+      "Add Player speaks the event's language (task #34, carry-forward #1 from the 2026-08-07 handoff). On an event with package configs the modal now leads with a Package dropdown — picking one sets holes, side games and (in Paid Separately mode) the price together, and the saved registration is PINNED to that package so the roster badge, the package-derived Holes column, and the due math all read from it, comp rows included. This is the modal that let Robert Straiton be comped in as 18 holes on a both-days entry: nothing on the old flat Holes list said 'both days'. Manual fields stay live as the fallback, and events without packages see no change.",
+      "New MCP tool assign_event_package — the programmatic twin of the roster's package dropdown. Called with just an event_id it lists the packages and current pins (read-only preview); with item_id + package_index it pins, with clear=true it unpins. Only the assignments map is ever touched — package labels and prices are Kerry-entered and this tool cannot modify them. Every call is audited (v2.208.0 guardrail). Until now pinning was UI-only, which is why the previous session could fix Straiton's hole count but not his badge.",
+    ],
+  },
   {
     version: "2.208.1",
     date: "2026-08-07",
