@@ -635,6 +635,58 @@ def get_customer_data_audit() -> str:
 #  WRITE TOOLS
 # ═══════════════════════════════════════════════════════════════════════
 
+# ── Write guardrail (Kerry-ratified 2026-08-07) ────────────────────────
+# Two gaps this closes. (1) NOTHING here reached the agent_action_log —
+# the table and log_agent_action() both existed and were never called
+# from the MCP surface, so every agent write against live financial data
+# was invisible after the fact. (2) The destructive tools fired on a
+# single call: delete_transaction's own docstring says "cannot be undone"
+# and there was no way to see what it was about to hit.
+#
+# _audit() records the write. _confirm_gate() returns a PREVIEW of the
+# exact change and mutates nothing until a second call passes
+# confirm=True. Reads are untouched.
+
+_AGENT_NAME = "mcp-claude"
+
+
+def _audit(action_type: str, description: str,
+           item_id: int | None = None, outcome: str = "ok") -> None:
+    """Record an MCP write. Never raises — a logging failure must not
+    take down the operation it is describing."""
+    try:
+        from email_parser.database import log_agent_action
+        log_agent_action(_AGENT_NAME, action_type, description,
+                         related_item_id=item_id, outcome=outcome)
+    except Exception as exc:          # pragma: no cover - best effort
+        print(f"[mcp audit] could not log {action_type}: {exc}", file=sys.stderr)
+
+
+def _confirm_gate(action: str, target, will_do: str,
+                  reversible: str = "This CANNOT be undone.",
+                  **detail) -> str:
+    """The preview a destructive tool returns when confirm is not set."""
+    return json.dumps({
+        "status": "confirmation_required",
+        "action": action,
+        "target": target,
+        "will_do": will_do,
+        "reversible": reversible,
+        **detail,
+        "next_step": "Re-call this tool with confirm=true to execute.",
+    }, indent=2, default=str)
+
+
+def _item_summary(transaction_id: int) -> dict | None:
+    """Small human-checkable snapshot of a row, for confirm previews."""
+    item = get_item(transaction_id)
+    if not item:
+        return None
+    keep = ("id", "customer", "item_name", "item_price", "order_date",
+            "transaction_status", "holes", "side_games", "event_id")
+    return {k: item.get(k) for k in keep if k in item}
+
+
 @mcp.tool()
 def update_transaction(transaction_id: int, fields: dict) -> str:
     """Update fields on a transaction.
@@ -650,49 +702,101 @@ def update_transaction(transaction_id: int, fields: dict) -> str:
                 gross_points_race, city_match_play, fellowship,
                 notes, holes
     """
+    before = _item_summary(transaction_id)
     ok = update_item(transaction_id, fields)
+    _audit("update_transaction",
+           f"fields={sorted(fields or {})} before={before}",
+           item_id=transaction_id, outcome="ok" if ok else "no-op")
     if ok:
         return json.dumps({"status": "ok", "updated_id": transaction_id})
     return json.dumps({"error": f"Transaction {transaction_id} not found or no valid fields"})
 
 
 @mcp.tool()
-def credit_transaction(transaction_id: int, note: str = "") -> str:
+def credit_transaction(transaction_id: int, note: str = "",
+                       confirm: bool = False) -> str:
     """Mark a transaction as credited (money held for future event).
+
+    Moves money. Returns a preview unless confirm=True.
 
     Args:
         transaction_id: The transaction ID to credit
         note: Optional note explaining the credit
+        confirm: Must be True to actually apply the credit
     """
+    row = _item_summary(transaction_id)
+    if not row:
+        return json.dumps({"error": f"Transaction {transaction_id} not found"})
+    if not confirm:
+        return _confirm_gate(
+            "credit_transaction", row,
+            f"Mark this registration CREDITED (note: {note or 'none'}) — the "
+            "player leaves the active roster and the money is held for a "
+            "future event.",
+            "Reversible with undo_credit_or_transfer.")
     ok = credit_item(transaction_id, note)
+    _audit("credit_transaction", f"note={note!r} row={row}",
+           item_id=transaction_id, outcome="ok" if ok else "no-op")
     if ok:
         return json.dumps({"status": "ok", "credited_id": transaction_id})
     return json.dumps({"error": f"Transaction {transaction_id} not found or already credited/transferred"})
 
 
 @mcp.tool()
-def transfer_transaction(transaction_id: int, target_event: str, note: str = "") -> str:
+def transfer_transaction(transaction_id: int, target_event: str, note: str = "",
+                         confirm: bool = False) -> str:
     """Transfer a transaction to a different event. Creates a new $0 registration at the target event.
+
+    Moves money between events. Returns a preview unless confirm=True.
 
     Args:
         transaction_id: The original transaction ID to transfer
         target_event: The exact event name to transfer to
         note: Optional note
+        confirm: Must be True to actually perform the transfer
     """
+    row = _item_summary(transaction_id)
+    if not row:
+        return json.dumps({"error": f"Transaction {transaction_id} not found"})
+    if not confirm:
+        return _confirm_gate(
+            "transfer_transaction", row,
+            f"Credit this registration and create a new $0 registration at "
+            f"{target_event!r} (note: {note or 'none'}).",
+            "Reversible with undo_credit_or_transfer.",
+            target_event=target_event)
     result = transfer_item(transaction_id, target_event, note)
+    _audit("transfer_transaction",
+           f"to={target_event!r} note={note!r} row={row}",
+           item_id=transaction_id, outcome="ok" if result else "failed")
     if result:
         return json.dumps({"status": "ok", "original_id": transaction_id, "new_item": result})
     return json.dumps({"error": f"Transfer failed — transaction {transaction_id} not found or already credited/transferred"})
 
 
 @mcp.tool()
-def undo_credit_or_transfer(transaction_id: int) -> str:
+def undo_credit_or_transfer(transaction_id: int, confirm: bool = False) -> str:
     """Reverse a credit or transfer, restoring the original transaction to active status.
+
+    Moves money. Returns a preview unless confirm=True.
 
     Args:
         transaction_id: The credited/transferred transaction ID
+        confirm: Must be True to actually reverse
     """
+    row = _item_summary(transaction_id)
+    if not row:
+        return json.dumps({"error": f"Transaction {transaction_id} not found"})
+    if not confirm:
+        return _confirm_gate(
+            "undo_credit_or_transfer", row,
+            "Restore this registration to ACTIVE, unwinding the credit or "
+            "transfer. If it was transferred, the $0 row created at the "
+            "target event is affected too.",
+            "Re-runnable, but check the target event afterwards.")
     ok = reverse_credit(transaction_id)
+    _audit("undo_credit_or_transfer", f"row={row}",
+           item_id=transaction_id, outcome="ok" if ok else "no-op")
     if ok:
         return json.dumps({"status": "ok", "restored_id": transaction_id})
     return json.dumps({"error": f"Transaction {transaction_id} not found or not in credited/transferred state"})
@@ -724,6 +828,8 @@ def create_new_event(
     ev = create_event(event_name, event_date or None, course or None, chapter or None,
                       course_cost=course_cost, tgf_markup=tgf_markup,
                       side_game_fee=side_game_fee, transaction_fee_pct=transaction_fee_pct)
+    _audit("create_new_event", f"event={event_name!r} -> {ev}",
+           outcome="ok" if ev else "duplicate")
     if ev:
         return json.dumps({"status": "ok", "event": ev})
     return json.dumps({"error": f"Event '{event_name}' already exists"})
@@ -743,19 +849,31 @@ def update_existing_event(event_id: int, fields: dict) -> str:
                 tgf_markup_9, tgf_markup_18, side_game_fee_9, side_game_fee_18.
     """
     ok = update_event(event_id, fields)
+    _audit("update_existing_event",
+           f"event_id={event_id} fields={fields}",
+           outcome="ok" if ok else "no-op")
     if ok:
         return json.dumps({"status": "ok", "updated_id": event_id})
     return json.dumps({"error": f"Event {event_id} not found or no valid fields"})
 
 
 @mcp.tool()
-def delete_existing_event(event_id: int) -> str:
-    """Delete an event by ID.
+def delete_existing_event(event_id: int, confirm: bool = False) -> str:
+    """Delete an event by ID. Returns a preview unless confirm=True.
 
     Args:
         event_id: The event ID to delete
+        confirm: Must be True to actually delete
     """
+    if not confirm:
+        return _confirm_gate(
+            "delete_existing_event", {"event_id": event_id},
+            "PERMANENTLY delete this event. Registrations, pairings, "
+            "package configs and payout records keyed to it are orphaned "
+            "or lost. Check the roster first with get_event_registrations.")
     ok = delete_event(event_id)
+    _audit("delete_existing_event", f"PERMANENT delete of event_id={event_id}",
+           outcome="ok" if ok else "not-found")
     if ok:
         return json.dumps({"status": "ok", "deleted_id": event_id})
     return json.dumps({"error": f"Event {event_id} not found"})
@@ -784,19 +902,37 @@ def add_player(
         event_name, customer, side_games=side_games, tee_choice=tee_choice,
         handicap=handicap, user_status=user_status,
     )
+    _audit("add_player",
+           f"event={event_name!r} customer={customer!r} games={side_games!r} "
+           f"tee={tee_choice!r} hcp={handicap!r} status={user_status!r}",
+           item_id=(item or {}).get("id"), outcome="ok" if item else "failed")
     if item:
         return json.dumps({"status": "ok", "item": item})
     return json.dumps({"error": "Failed to add player"})
 
 
 @mcp.tool()
-def delete_transaction(transaction_id: int) -> str:
+def delete_transaction(transaction_id: int, confirm: bool = False) -> str:
     """Permanently delete a transaction. This cannot be undone.
+
+    Returns a preview of the exact row unless confirm=True.
 
     Args:
         transaction_id: The transaction ID to delete
+        confirm: Must be True to actually delete
     """
+    row = _item_summary(transaction_id)
+    if not row:
+        return json.dumps({"error": f"Transaction {transaction_id} not found"})
+    if not confirm:
+        return _confirm_gate(
+            "delete_transaction", row,
+            "PERMANENTLY delete this transaction row. Prefer "
+            "credit_transaction for a registration that is being unwound — "
+            "deleting loses the payment record entirely.")
     ok = delete_item(transaction_id)
+    _audit("delete_transaction", f"PERMANENT delete of {row}",
+           item_id=transaction_id, outcome="ok" if ok else "not-found")
     if ok:
         return json.dumps({"status": "ok", "deleted_id": transaction_id})
     return json.dumps({"error": f"Transaction {transaction_id} not found"})
@@ -806,13 +942,28 @@ def delete_transaction(transaction_id: int) -> str:
 def sync_events() -> str:
     """Auto-create events from transaction data. Scans items and creates event records for any new events found."""
     result = sync_events_from_items()
+    _audit("sync_events", f"result={result}")
     return json.dumps({"status": "ok", **result})
 
 
 @mcp.tool()
-def run_autofix() -> str:
-    """Run all data quality autofixes: normalize side games, customer names, course names, and item names."""
+def run_autofix(confirm: bool = False) -> str:
+    """Run all data quality autofixes: normalize side games, customer names, course names, and item names.
+
+    Rewrites many rows at once. Returns a preview unless confirm=True.
+
+    Args:
+        confirm: Must be True to actually run the fixes
+    """
+    if not confirm:
+        return _confirm_gate(
+            "run_autofix", "every item row",
+            "Normalize side games, customer names, course names and item "
+            "names ACROSS THE WHOLE TABLE. There is no per-row review and "
+            "no bulk undo.",
+            "No bulk undo — individual rows must be corrected by hand.")
     result = autofix_all()
+    _audit("run_autofix", f"bulk normalize; result={result}")
     return json.dumps({"status": "ok", **result})
 
 
@@ -823,6 +974,7 @@ def sync_season_contests() -> str:
     {enrolled, linked}; enrolled should be 0 when nothing new was purchased."""
     from email_parser.database import sync_season_contests_from_items
     result = sync_season_contests_from_items()
+    _audit("sync_season_contests", f"result={result}")
     return json.dumps({"status": "ok", **result})
 
 

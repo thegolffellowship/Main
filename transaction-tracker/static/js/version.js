@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.207.2";
+window.TGF_VERSION = "2.208.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.208.0",
+    date: "2026-08-07",
+    changes: [
+      "MCP write guardrail (Kerry-ratified 2026-08-07). Two gaps closed on the agent-facing write surface. First, NOTHING an agent wrote through MCP was ever recorded — the agent_action_log table and log_agent_action() both existed and mcp_server.py called them zero times, so every agent change to live financial data was invisible after the fact. Every write tool now logs what it did, visible through get_agent_action_log. Second, the destructive tools fired on a single call with no preview: delete_transaction's own docstring says 'cannot be undone'. delete_transaction, delete_existing_event, credit_transaction, transfer_transaction, undo_credit_or_transfer and run_autofix now return a preview of the exact row and the exact effect, and change nothing until a second call passes confirm=true. Reads are untouched, and the non-destructive writes (update_transaction, add_player, create/update event, the syncs) run as before but are now logged.",
+    ],
+  },
   {
     version: "2.207.2",
     date: "2026-08-07",
