@@ -14907,8 +14907,9 @@ def _champ_roster_bundles(conn, db_path=None) -> dict:
 
 
 # One-off TGF Championship sub-game rates (Kerry 2026-08-06, "still a
-# one off for the TGF Championship right now"). Per side-games-bundle
-# player: DAILY $30/day = Team Net $8 + Skins $18 (divided by 2 flights)
+# one off for the TGF Championship right now"; per-game breakdown
+# re-confirmed verbatim 2026-08-07). Per side-games-bundle player:
+# DAILY $30/day = Team Net $8 + Skins $18 (divided by 2 flights)
 # + Closest to Pins $4; COMBINED $40 = Individual Net $20 + Individual
 # Gross $20. The per-game pot derives from the bucket purse: n players
 # = purse / rate-sum, pot = rate x n.
@@ -14921,15 +14922,76 @@ _CHAMP_SUBGAME_RATES = {
 }
 
 
-def _bucket_subgames(bucket: str, purse: float) -> list:
+def _champ_subgame_optouts(db_path=None) -> dict:
+    """Per-player SUB-GAME opt-outs — the `champ_subgame_optouts` app
+    setting (Kerry 2026-08-08, Carlos Zapata: credit the handicap-games
+    portion — Team Net both days + Individual Net — while he stays in
+    Skins, CTPs and Individual Gross). Shape:
+
+      {"Carlos Zapata": {"SAT": ["Team Net"], "SUN": ["Team Net"],
+                         "COMBINED": ["Individual Net"]}}
+
+    The registration credit moves the actual money; this dial is what
+    makes the DERIVED pot math agree with it — bucket purses drop by the
+    opted-out rates and the named games' pots count one fewer head,
+    while every other game keeps the full field."""
+    try:
+        raw = get_app_setting("champ_subgame_optouts", db_path=db_path)
+        return json.loads(raw) if raw else {}
+    except Exception:
+        return {}
+
+
+def _subgame_optout_key(bucket: str) -> str:
+    """Dial keys are SAT/SUN/COMBINED; bucket ACCOUNTS are named
+    SATURDAY/SUNDAY/COMBINED — normalize either form to the dial key."""
+    b = (bucket or "").strip().upper()
+    if b.startswith("SAT"):
+        return "SAT"
+    if b.startswith("SUN"):
+        return "SUN"
+    return b
+
+
+def _subgame_optout_counts(bucket: str, optouts: dict) -> dict:
+    """{game label: n opted out} for one bucket (SAT/SUN/COMBINED)."""
+    key = _subgame_optout_key(bucket)
+    counts: dict = {}
+    for per_player in (optouts or {}).values():
+        for lbl in (per_player or {}).get(key) or []:
+            counts[lbl] = counts.get(lbl, 0) + 1
+    return counts
+
+
+def _subgame_optout_dollars(bucket: str, optouts: dict) -> float:
+    kind = "combined" if (bucket or "").strip().upper() == "COMBINED" else "daily"
+    rate_by_label = {l: r for l, r, _ in _CHAMP_SUBGAME_RATES[kind][1]}
+    return sum(rate_by_label.get(lbl, 0.0) * n
+               for lbl, n in _subgame_optout_counts(bucket, optouts).items())
+
+
+def _bucket_subgames(bucket: str, purse: float, optouts: dict | None = None) -> list:
+    """Per-game pots for one bucket. `optouts` is {game label: heads out}
+    for THIS bucket: the stored purse is real money (already short the
+    opted-out dollars), so the full-field head count is recovered by
+    adding those dollars back before dividing, and only the named games
+    lose heads."""
     kind = "combined" if (bucket or "").strip().upper() == "COMBINED" else "daily"
     per_head, games = _CHAMP_SUBGAME_RATES[kind]
-    n = round((purse or 0) / per_head) if per_head else 0
+    optouts = optouts or {}
+    rate_by_label = {l: r for l, r, _ in games}
+    oo_dollars = sum(rate_by_label.get(lbl, 0.0) * n
+                     for lbl, n in optouts.items())
+    n = round(((purse or 0) + oo_dollars) / per_head) if per_head else 0
     out = []
     for label, rate, note in games:
-        pot = rate * n
+        n_g = max(0, n - int(optouts.get(label) or 0))
+        pot = rate * n_g
         if note == "2 flights":
             note = f"2 flights · ${pot / 2:.2f} each"
+        if optouts.get(label):
+            oo_note = f"{int(optouts[label])} opted out"
+            note = f"{note} · {oo_note}" if note else oo_note
         out.append({"label": label, "rate": rate, "pot": pot, "note": note})
     return out
 
@@ -14945,6 +15007,7 @@ def get_event_bucket_accounts(db_path=None) -> dict:
     Each bucket carries its sub-game pot breakdown (_CHAMP_SUBGAME_RATES).
     """
     out: dict = {}
+    optouts = _champ_subgame_optouts(db_path)
     with _connect(db_path) as conn:
         by_prefix: dict = {}
         for r in conn.execute(
@@ -14955,13 +15018,56 @@ def get_event_bucket_accounts(db_path=None) -> dict:
                 by_prefix.setdefault(prefix.strip().lower(), []).append(
                     {"code": r["code"], "bucket": bucket,
                      "purse": r["total_purse"] or 0,
-                     "games": _bucket_subgames(bucket, r["total_purse"] or 0)})
+                     "games": _bucket_subgames(
+                         bucket, r["total_purse"] or 0,
+                         _subgame_optout_counts(bucket, optouts))})
         if not by_prefix:
             return out
         for e in conn.execute("SELECT id, item_name FROM events").fetchall():
             b = by_prefix.get((e["item_name"] or "").strip().lower())
             if b:
                 out[str(e["id"])] = b
+    return out
+
+
+def get_event_games_axis(db_path=None) -> dict:
+    """Per-event DAY-GAMES vocabulary (Kerry-ratified 2026-08-07:
+    YES/SAT/SUN/NO REPLACES NET|GROSS|NONE — for the TGF Championship
+    ONLY, because its games are day-shaped: the $100 bundle is
+    $30 SAT / $30 SUN / $40 COMBINED and a single-day buyer pays $30
+    for that day's games).
+
+    An event uses this vocabulary when it has bucket accounts (the
+    championship pattern — same marker that swaps the GAMES matrix for
+    bucket purses). Rows are classified by _champ_roster_bundles: full
+    bundle → YES, single-day → SAT/SUN (dial/order-notes), single-day
+    with no day yet → DAY?, everyone else → NO. Keyed by lowercased
+    customer name (the classification is name-keyed throughout).
+
+    Returns {event_id: {"vocabulary": [...], "rows": {name: value},
+    "unassigned": [names]}} — the roster tabs and GAMES cells read this
+    instead of items.side_games on these events."""
+    out: dict = {}
+    if not get_event_bucket_accounts(db_path):
+        return out
+    with _connect(db_path) as conn:
+        b = _champ_roster_bundles(conn, db_path=db_path)
+    rows: dict = {}
+    for n in b["no_bundle"]:
+        rows[(n or "").lower()] = "NO"
+    for n in b["singles"]["SAT"]:
+        rows[(n or "").lower()] = "SAT"
+    for n in b["singles"]["SUN"]:
+        rows[(n or "").lower()] = "SUN"
+    for n in b["unassigned"]:
+        rows[(n or "").lower()] = "DAY?"
+    for n in b["full"]:
+        rows[(n or "").lower()] = "YES"
+    out[str(_CHAMP_EVENT_ID)] = {
+        "vocabulary": ["YES", "SAT", "SUN", "NO"],
+        "rows": rows,
+        "unassigned": b["unassigned"],
+    }
     return out
 
 
@@ -14976,10 +15082,19 @@ def record_championship_bucket_accounts(db_path=None) -> dict:
     with _connect(db_path) as conn:
         b = _champ_roster_bundles(conn, db_path=db_path)
         n_full = len(b["full"])
+        # Sub-game opt-outs (champ_subgame_optouts) reduce the REAL money
+        # in a bucket: the player was credited those rates, so the purse
+        # is short exactly that amount while every other game keeps the
+        # full field (_bucket_subgames adds the dollars back to recover
+        # the head count).
+        oo = _champ_subgame_optouts(db_path)
         purses = {
-            _CHAMP_BUCKETS[0][0]: 30.0 * (n_full + len(b["singles"]["SAT"])),
-            _CHAMP_BUCKETS[1][0]: 30.0 * (n_full + len(b["singles"]["SUN"])),
-            _CHAMP_BUCKETS[2][0]: 40.0 * n_full,
+            _CHAMP_BUCKETS[0][0]: 30.0 * (n_full + len(b["singles"]["SAT"]))
+            - _subgame_optout_dollars("SAT", oo),
+            _CHAMP_BUCKETS[1][0]: 30.0 * (n_full + len(b["singles"]["SUN"]))
+            - _subgame_optout_dollars("SUN", oo),
+            _CHAMP_BUCKETS[2][0]: 40.0 * n_full
+            - _subgame_optout_dollars("COMBINED", oo),
         }
         out = []
         for (code, date), purse in zip(_CHAMP_BUCKETS,

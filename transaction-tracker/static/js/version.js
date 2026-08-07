@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.210.1";
+window.TGF_VERSION = "2.211.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.211.0",
+    date: "2026-08-07",
+    changes: [
+      "The championship roster speaks DAYS, not net/gross (Kerry-ratified 2026-08-07, verbatim: 'GAMES tabs NET | GROSS | NONE should show YES | SAT | SUN | NO'). On an event with bucket accounts the games tabs are now YES (both days, $100 bundle) | SAT | SUN | NO with counts, the GAMES column shows the same value, and both are DERIVED server-side from the matched package plus the single-day day assignment (dial or the order's WHICH DAYS? answer) — the same event-owns-its-vocabulary shape as the hole tabs. A single-day games buyer with no day yet shows an amber DAY? tab instead of being silently miscounted. Replacement is per-event: every normal event keeps NET | GROSS | NONE untouched. Desktop and mobile.",
+      "Per-game pool opt-outs (Kerry, the Carlos Zapata one-off: credit the handicap games — Team Net both days + Individual Net — while staying in Skins, CTPs and Individual Gross). New champ_subgame_optouts dial: bucket purses drop by exactly the opted-out rates (real money, matching the registration credit) and ONLY the named games lose heads — every other pot keeps the full field, with an 'N opted out' note on the affected game. The scoring-partial-credit path moves the money; this dial makes the derived pot math agree with it.",
+    ],
+  },
   {
     version: "2.210.1",
     date: "2026-08-07",

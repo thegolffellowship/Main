@@ -975,7 +975,11 @@ requests to players holding a transferred credit (the Callaway case).
   v2.198.0 panel buried inside the PRICING tab is gone.
 - **Routes:** `GET /api/events/packages` (manager — full map, one fetch
   per page load), `POST /api/events/<id>/packages` (admin),
-  `POST /api/events/<id>/packages/assign` (manager).
+  `POST /api/events/<id>/packages/assign` (manager),
+  `GET /api/events/games-axis` (manager — the per-event DAY-GAMES
+  vocabulary, v2.211.0: YES/SAT/SUN/NO tabs + cell values for
+  bucket-account events, derived server-side; see
+  `docs/claude/side-games.md` → Implementation).
 - **Roster matching** (`pkgMatch` in events.html): a manual assignment
   wins; otherwise a registration auto-matches the package whose price
   equals the paid price exactly. **"(credit)" rows never auto-match** —

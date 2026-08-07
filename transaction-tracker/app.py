@@ -13973,6 +13973,18 @@ def api_event_packages_all():
         return jsonify({"error": str(e)}), 500
 
 
+@app.route("/api/events/games-axis")
+@require_role("manager")
+def api_event_games_axis():
+    """Per-event DAY-GAMES vocabulary (YES/SAT/SUN/NO — championship)."""
+    from email_parser.database import get_event_games_axis
+    try:
+        return jsonify(get_event_games_axis())
+    except Exception as e:
+        logger.exception("games axis fetch failed")
+        return jsonify({"error": str(e)}), 500
+
+
 @app.route("/api/events/<int:event_id>/packages", methods=["POST"])
 @require_role("admin")
 def api_event_packages_save(event_id):

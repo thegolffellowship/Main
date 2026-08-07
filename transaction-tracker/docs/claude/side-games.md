@@ -822,3 +822,27 @@ to be scoped with CA and not half-shipped before 08-15. The
 `champ_single_day_assignments` dial remains the interim mechanism. The
 hole-tab precedent (derive the tab set and cell vocabulary from the EVENT)
 is the working model when it is built.
+
+### Implementation (v2.211.0) — display axis + per-game opt-outs
+
+- **Roster GAMES vocabulary is LIVE** on bucket-account events:
+  `get_event_games_axis()` (database.py) classifies the roster via
+  `_champ_roster_bundles` (full → YES, single-day → SAT/SUN, unassigned →
+  DAY?, else NO), served at `GET /api/events/games-axis`; events.html
+  renders YES|SAT|SUN|NO tabs + a read-only GAMES cell from it
+  (`EVENT_GAMES_AXIS` / `axisGameValue` / `axisTabsHtml`). Normal events
+  keep NET|GROSS|NONE. The cell is read-only because the value derives
+  from the package + day assignment — fix a day via the
+  `champ_single_day_assignments` dial (or the order's WHICH DAYS? note).
+- **Per-game opt-outs** — `champ_subgame_optouts` app setting
+  (`{"Carlos Zapata": {"SAT": ["Team Net"], "SUN": ["Team Net"],
+  "COMBINED": ["Individual Net"]}}`). `record_championship_bucket_accounts`
+  subtracts the opted-out rates from the bucket purses (real money — the
+  player was credited exactly that), and `_bucket_subgames` recovers the
+  full-field head count by adding those dollars back before dividing, so
+  ONLY the named games lose heads ('N opted out' note). First case:
+  Carlos Zapata (item 2453) — $36 credit = Team Net $8×2 + Individual
+  Net $20; stays in Skins, CTPs, Individual Gross.
+- The money path for such a credit is `partial_credit_transaction` /
+  `scoring-partial-credit` (no holes change, no package change), then set
+  the dial, then re-run `scoring-champ-buckets` to re-derive purses.

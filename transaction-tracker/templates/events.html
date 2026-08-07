@@ -2686,8 +2686,9 @@
             const circleHtml = `<span class="rsvp-circle${circleClass}" data-item-id="${r.id}" data-event-name="${escapeHtml(ev.item_name)}" data-rsvp-state="${circleState}" data-circle-source="${circleSource}" data-player-email="${escapeHtml(r.customer_email || '')}" title="${circleTitle}"></span>`;
             // Effective games = parent + game add-on children (same as the
             // desktop cell) — a NET add-on on a GROSS registration reads BOTH.
-            const sideGame = getEffectiveGameType(r, fullRegs);
-            const sideGameLabel = sideGame === "NO GAMES" ? "NONE" : sideGame;
+            const mAxisVal = !r.parent_item_id ? axisGameValue(ev, r) : null;
+            const sideGame = mAxisVal || getEffectiveGameType(r, fullRegs);
+            const sideGameLabel = (sideGame === "NO GAMES" || sideGame === "NO" || sideGame === "—") ? "NONE" : sideGame;
             const tee = (r.tee_choice || "").trim();
             const holes = rowHoles(ev, r);
             const topTags = `${holes ? `<span class="mc-type mc-holes">${escapeHtml(holes)}h</span>` : ''}${sideGameLabel !== "NONE" ? `<span class="mc-type">${escapeHtml(sideGameLabel)}</span>` : ''}${tee ? `<span class="mc-type mc-tee">${escapeHtml(tee)}</span>` : ''}`;
@@ -2838,11 +2839,16 @@
                     // Hole tabs — one per hole count this event actually sold
                     badgesHtml += holesTabsHtml(ev, registrants);
 
-                    badgesHtml += '<span class="view-toggle-group">';
-                    badgesHtml += `<span class="game-stat-badge ${activeFilter === 'NET' ? 'active' : ''}" data-event-id="${ev.id}" data-filter="NET">NET <strong>${stats.net}</strong></span>`;
-                    badgesHtml += `<span class="game-stat-badge ${activeFilter === 'GROSS' ? 'active' : ''}" data-event-id="${ev.id}" data-filter="GROSS">GROSS <strong>${stats.gross}</strong></span>`;
-                    badgesHtml += `<span class="game-stat-badge ${activeFilter === 'NO GAMES' ? 'active' : ''}" data-event-id="${ev.id}" data-filter="NO GAMES">NONE <strong>${stats.noGames}</strong></span>`;
-                    badgesHtml += '</span>';
+                    if (gamesAxisFor(ev.id)) {
+                        // Day-games events: YES | SAT | SUN | NO (Kerry 2026-08-07)
+                        badgesHtml += axisTabsHtml(ev, registrants, activeFilter);
+                    } else {
+                        badgesHtml += '<span class="view-toggle-group">';
+                        badgesHtml += `<span class="game-stat-badge ${activeFilter === 'NET' ? 'active' : ''}" data-event-id="${ev.id}" data-filter="NET">NET <strong>${stats.net}</strong></span>`;
+                        badgesHtml += `<span class="game-stat-badge ${activeFilter === 'GROSS' ? 'active' : ''}" data-event-id="${ev.id}" data-filter="GROSS">GROSS <strong>${stats.gross}</strong></span>`;
+                        badgesHtml += `<span class="game-stat-badge ${activeFilter === 'NO GAMES' ? 'active' : ''}" data-event-id="${ev.id}" data-filter="NO GAMES">NONE <strong>${stats.noGames}</strong></span>`;
+                        badgesHtml += '</span>';
+                    }
                 }
                 badgesHtml += '</div>';
 
@@ -2866,7 +2872,9 @@
                     const mobileInactive = registrants.filter(r => MOBILE_INACTIVE.includes(r.transaction_status) && !r.parent_item_id);
                     let filteredRegs = mobileActive;
                     if (activeFilter) {
+                        const mAx = gamesAxisFor(ev.id);
                         filteredRegs = mobileActive.filter(r => {
+                            if (mAx) return axisFilterMatch(ev, r, activeFilter);
                             const type = getEffectiveGameType(r, registrants);
                             if (activeFilter === "NET") return type === "NET" || type === "BOTH";
                             if (activeFilter === "GROSS") return type === "GROSS" || type === "BOTH";
@@ -2880,7 +2888,8 @@
                         filteredRegs = filteredRegs.filter(r => rowHoles(ev, r) === mHolesF);
                     }
                     filteredRegs = sortRegistrants(filteredRegs, registrants, ev);
-                    if (!mHolesF && (!activeFilter || activeFilter === "NO GAMES")) {
+                    if (!mHolesF && (!activeFilter || activeFilter === "NO GAMES"
+                            || (gamesAxisFor(ev.id) && activeFilter === "NO"))) {
                         filteredRegs = filteredRegs.concat(mGgRows);
                         filteredRegs = sortRegistrants(filteredRegs, registrants, ev);
                     }
@@ -2996,6 +3005,70 @@
         .then(r => r.ok ? r.json() : {})
         .then(d => { EVENT_BUCKETS = d || {}; })
         .catch(() => {});
+
+    // ── DAY-GAMES vocabulary (Kerry-ratified 2026-08-07) ──
+    // YES/SAT/SUN/NO REPLACES NET|GROSS|NONE — for the championship only.
+    // The event's roster tabs and GAMES cells read this server-derived
+    // classification (bundle packages + the single-day dial/order notes)
+    // instead of items.side_games. Same shape as the hole tabs: the
+    // vocabulary comes from the EVENT, not a global enum.
+    let EVENT_GAMES_AXIS = {};
+    fetch("/api/events/games-axis")
+        .then(r => r.ok ? r.json() : {})
+        .then(d => { EVENT_GAMES_AXIS = d || {}; try { renderEvents(); } catch (e) { /* pre-load */ } })
+        .catch(() => {});
+
+    function gamesAxisFor(evId) { return EVENT_GAMES_AXIS[String(evId)] || null; }
+
+    // A row's day-games value. "—" for RSVP rows (not a purchase);
+    // unknown names default to NO (no games bought).
+    function axisGameValue(ev, r) {
+        const ax = gamesAxisFor(ev.id);
+        if (!ax) return null;
+        const st = r.transaction_status || "active";
+        if (st === "rsvp_only" || st === "gg_rsvp" || String(r.id).startsWith("gg-rsvp")) return "—";
+        return (ax.rows || {})[(r.customer || "").toLowerCase()] || "NO";
+    }
+
+    function computeAxisStats(ev, registrants) {
+        const counts = { "YES": 0, "SAT": 0, "SUN": 0, "NO": 0, "DAY?": 0 };
+        const INACT = ["credited", "refunded", "transferred", "wd"];
+        registrants
+            .filter(r => !r.parent_item_id && !INACT.includes(r.transaction_status))
+            .forEach(r => {
+                const v = axisGameValue(ev, r);
+                const key = v === "—" ? "NO" : v;
+                counts[key] = (counts[key] || 0) + 1;
+            });
+        return counts;
+    }
+
+    function axisTabsHtml(ev, registrants, activeFilter) {
+        const c = computeAxisStats(ev, registrants);
+        let h = '<span class="view-toggle-group">';
+        ["YES", "SAT", "SUN", "NO"].forEach(v => {
+            h += `<span class="game-stat-badge ${activeFilter === v ? 'active' : ''}" data-event-id="${ev.id}" data-filter="${v}">${v} <strong>${c[v]}</strong></span>`;
+        });
+        if (c["DAY?"]) {
+            h += `<span class="game-stat-badge ${activeFilter === 'DAY?' ? 'active' : ''}" data-event-id="${ev.id}" data-filter="DAY?" style="color:#b45309;" title="Single-day games buyers with no day assigned yet">DAY? <strong>${c["DAY?"]}</strong></span>`;
+        }
+        h += '</span>';
+        return h;
+    }
+
+    function axisFilterMatch(ev, r, filter) {
+        const v = axisGameValue(ev, r);
+        if (filter === "NO") return v === "NO" || v === "—";
+        return v === filter;
+    }
+
+    function axisCellTitle(v) {
+        return v === "YES" ? "Games both days ($100 bundle) — derived from the package"
+            : v === "SAT" ? "Saturday games only ($30) — derived from the package + day assignment"
+            : v === "SUN" ? "Sunday games only ($30) — derived from the package + day assignment"
+            : v === "DAY?" ? "Single-day games bought — day not assigned yet"
+            : "No games — derived from the package";
+    }
 
     // Match a registration to a package: manual assignment wins, then an
     // exact paid-price match (real purchases only — a "(credit)" price is
@@ -3411,6 +3484,12 @@
                 return asc ? na - nb : nb - na;
             }
             if (detailSortField === "side_games") {
+                if (ev && gamesAxisFor(ev.id)) {
+                    const AX_ORDER = { "YES": 0, "SAT": 1, "SUN": 2, "DAY?": 3, "NO": 4, "—": 5 };
+                    const oa = AX_ORDER[axisGameValue(ev, a)] ?? 6;
+                    const ob = AX_ORDER[axisGameValue(ev, b)] ?? 6;
+                    return asc ? oa - ob : ob - oa;
+                }
                 const refs = allRegs || registrants;
                 const ORDER = { "BOTH": 0, "NET": 1, "GROSS": 2, "NO GAMES": 3 };
                 const oa = ORDER[getEffectiveGameType(a, refs)] ?? 4;
@@ -6602,11 +6681,16 @@
             // Hole tabs — one per hole count this event actually sold
             html += holesTabsHtml(ev, registrants);
 
-            html += '<span class="view-toggle-group">';
-            html += `<span class="game-stat-badge ${activeFilter === 'NET' ? 'active' : ''}" data-event-id="${ev.id}" data-filter="NET">NET <strong>${stats.net}</strong></span>`;
-            html += `<span class="game-stat-badge ${activeFilter === 'GROSS' ? 'active' : ''}" data-event-id="${ev.id}" data-filter="GROSS">GROSS <strong>${stats.gross}</strong></span>`;
-            html += `<span class="game-stat-badge ${activeFilter === 'NO GAMES' ? 'active' : ''}" data-event-id="${ev.id}" data-filter="NO GAMES">NONE <strong>${stats.noGames}</strong></span>`;
-            html += '</span>';
+            if (gamesAxisFor(ev.id)) {
+                // Day-games events: YES | SAT | SUN | NO (Kerry 2026-08-07)
+                html += axisTabsHtml(ev, registrants, activeFilter);
+            } else {
+                html += '<span class="view-toggle-group">';
+                html += `<span class="game-stat-badge ${activeFilter === 'NET' ? 'active' : ''}" data-event-id="${ev.id}" data-filter="NET">NET <strong>${stats.net}</strong></span>`;
+                html += `<span class="game-stat-badge ${activeFilter === 'GROSS' ? 'active' : ''}" data-event-id="${ev.id}" data-filter="GROSS">GROSS <strong>${stats.gross}</strong></span>`;
+                html += `<span class="game-stat-badge ${activeFilter === 'NO GAMES' ? 'active' : ''}" data-event-id="${ev.id}" data-filter="NO GAMES">NONE <strong>${stats.noGames}</strong></span>`;
+                html += '</span>';
+            }
             if (rsvps.length) {
                 html += `<span class="game-stat-badge rsvp-stat-badge" style="cursor:default;">GG <strong>${playingRsvps.length}</strong> / <strong style="color:var(--red);">${notPlayingRsvps.length}</strong></span>`;
             }
@@ -6666,7 +6750,9 @@
         // Use effective game type (parent + children combined)
         let filtered = activePlayers;
         if (activeFilter) {
+            const ax = gamesAxisFor(ev.id);
             filtered = activePlayers.filter(r => {
+                if (ax) return axisFilterMatch(ev, r, activeFilter);
                 const type = getEffectiveGameType(r, registrants);
                 if (activeFilter === "NET") return type === "NET" || type === "BOTH";
                 if (activeFilter === "GROSS") return type === "GROSS" || type === "BOTH";
@@ -6687,7 +6773,8 @@
         // Append GG RSVP players (show when no filter or NO GAMES filter).
         // A hole tab excludes them outright — they carry no hole count, so
         // they belong under no tab and were reappearing after the filter ran.
-        if (!holesFilter && (!activeFilter || activeFilter === "NO GAMES")) {
+        if (!holesFilter && (!activeFilter || activeFilter === "NO GAMES"
+                || (gamesAxisFor(ev.id) && activeFilter === "NO"))) {
             filtered = filtered.concat(ggRsvpRows);
             filtered = sortRegistrants(filtered, registrants, ev);
         }
@@ -7037,15 +7124,24 @@
                         : "";
                     html += `<td style="${style}"${hTitle}>${escapeHtml(shownHoles || "—")}</td>`;
                 } else if (c.key === "side_games") {
-                    // Show effective game type (parent + children combined)
-                    const effectiveType = getEffectiveGameType(r, registrants);
-                    const displayGames = effectiveType === "NO GAMES" ? "NONE" : effectiveType;
-                    const canToggle = !r.parent_item_id && !isSynthetic && txStatus === "active"
-                        && (effectiveType === "NET" || effectiveType === "GROSS");
-                    if (canToggle) {
-                        html += `<td style="${style}"><span class="btn-cycle-games" data-item-id="${r.id}" data-current-games="${escapeHtml(r.side_games || "")}" style="cursor:pointer; text-decoration:underline dotted; text-underline-offset:3px;" title="Click to switch to ${effectiveType === 'NET' ? 'GROSS' : 'NET'}">${escapeHtml(displayGames)}</span></td>`;
+                    // Day-games events show the derived YES/SAT/SUN/NO
+                    // value, read-only (it comes from the package + day
+                    // assignment, not items.side_games).
+                    const rowAxis = !r.parent_item_id ? axisGameValue(ev, r) : null;
+                    if (rowAxis) {
+                        const axStyle = rowAxis === "DAY?" ? `${style} color:#b45309; font-weight:600;` : style;
+                        html += `<td style="${axStyle}" title="${axisCellTitle(rowAxis)}">${escapeHtml(rowAxis)}</td>`;
                     } else {
-                        html += `<td style="${style}">${escapeHtml(displayGames)}</td>`;
+                        // Show effective game type (parent + children combined)
+                        const effectiveType = getEffectiveGameType(r, registrants);
+                        const displayGames = effectiveType === "NO GAMES" ? "NONE" : effectiveType;
+                        const canToggle = !r.parent_item_id && !isSynthetic && txStatus === "active"
+                            && (effectiveType === "NET" || effectiveType === "GROSS");
+                        if (canToggle) {
+                            html += `<td style="${style}"><span class="btn-cycle-games" data-item-id="${r.id}" data-current-games="${escapeHtml(r.side_games || "")}" style="cursor:pointer; text-decoration:underline dotted; text-underline-offset:3px;" title="Click to switch to ${effectiveType === 'NET' ? 'GROSS' : 'NET'}">${escapeHtml(displayGames)}</span></td>`;
+                        } else {
+                            html += `<td style="${style}">${escapeHtml(displayGames)}</td>`;
+                        }
                     }
                 } else {
                     html += `<td style="${style}">${escapeHtml(r[c.key] || "\u2014")}</td>`;
