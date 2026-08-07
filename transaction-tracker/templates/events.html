@@ -2868,10 +2868,10 @@
                     if (mHolesF) {
                         filteredRegs = filteredRegs.filter(r => rowHoles(ev, r) === mHolesF);
                     }
-                    filteredRegs = sortRegistrants(filteredRegs, registrants);
-                    if (!activeFilter || activeFilter === "NO GAMES") {
+                    filteredRegs = sortRegistrants(filteredRegs, registrants, ev);
+                    if (!mHolesF && (!activeFilter || activeFilter === "NO GAMES")) {
                         filteredRegs = filteredRegs.concat(mGgRows);
-                        filteredRegs = sortRegistrants(filteredRegs, registrants);
+                        filteredRegs = sortRegistrants(filteredRegs, registrants, ev);
                     }
 
                     // Render inactive section for mobile
@@ -3067,6 +3067,11 @@
     // two or three of them, so the package is the truth when there is one
     // (Kerry 2026-08-07).
     function rowHoles(ev, r) {
+        // An RSVP is not a purchase — it has no hole count and must never
+        // pick one up from a package (a $0 package would match its blank
+        // price and put it under a hole tab it doesn't belong to).
+        const st = r.transaction_status || "active";
+        if (st === "rsvp_only" || st === "gg_rsvp" || String(r.id).startsWith("gg-rsvp")) return "";
         const fromPkg = pkgHolesFor(ev.id, r);
         if (fromPkg) return String(fromPkg);
         const raw = String(r.holes == null ? "" : r.holes).trim();
@@ -3340,7 +3345,7 @@
         try { localStorage.setItem("tgf_detail_visible_columns", JSON.stringify(detailVisibleColumns)); } catch (e) {}
     }
 
-    function sortRegistrants(registrants, allRegs) {
+    function sortRegistrants(registrants, allRegs, ev) {
         const sorted = [...registrants];
         const asc = detailSortDir === "asc";
         sorted.sort((a, b) => {
@@ -3375,13 +3380,15 @@
                 return asc ? na - nb : nb - na;
             }
             if (detailSortField === "holes") {
-                // Numeric, or "9" would sort above "54". Rows with no hole
-                // count (RSVP-only) sort last in both directions.
+                // Sort what the column SHOWS, not items.holes — on a package
+                // event the raw value is 18 for everyone, so comparing it
+                // returned 0 for every pair and the rows never moved.
                 const n = v => {
                     const p = parseInt(String(v).trim(), 10);
                     return isNaN(p) ? null : p;
                 };
-                const na = n(va), nb = n(vb);
+                const na = n(ev ? rowHoles(ev, a) : va);
+                const nb = n(ev ? rowHoles(ev, b) : vb);
                 if (na === null && nb === null) return 0;
                 if (na === null) return 1;
                 if (nb === null) return -1;
@@ -6659,12 +6666,14 @@
         }
 
         // Sort the filtered registrants
-        filtered = sortRegistrants(filtered, registrants);
+        filtered = sortRegistrants(filtered, registrants, ev);
 
-        // Append GG RSVP players (show when no filter or NO GAMES filter)
-        if (!activeFilter || activeFilter === "NO GAMES") {
+        // Append GG RSVP players (show when no filter or NO GAMES filter).
+        // A hole tab excludes them outright — they carry no hole count, so
+        // they belong under no tab and were reappearing after the filter ran.
+        if (!holesFilter && (!activeFilter || activeFilter === "NO GAMES")) {
             filtered = filtered.concat(ggRsvpRows);
-            filtered = sortRegistrants(filtered, registrants);
+            filtered = sortRegistrants(filtered, registrants, ev);
         }
 
         // Detail controls row: column toggle + count + Add Player + Remind All

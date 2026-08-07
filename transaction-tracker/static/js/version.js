@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.207.0";
+window.TGF_VERSION = "2.207.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.207.1",
+    date: "2026-08-07",
+    changes: [
+      "Sorting the Holes column does nothing (Kerry). The sort compared items.holes, which on a package event is 18 for every row — every pair tied, so the stable sort left the roster in whatever order it was already in and only the header arrow moved. It now sorts the value the column actually SHOWS (the package-derived count), so 18 / 36 / 54 order correctly in both directions with the hole-less RSVP rows last.",
+      "A hole tab was showing RSVPs that have no hole count (Kerry). The GG RSVP rows are appended AFTER the hole filter runs, gated only on the NET/GROSS/NONE filter, so they came straight back in — 36 would show the 36-hole players plus everyone who had merely RSVP'd. A hole tab now excludes them outright: an RSVP is not a purchase, it belongs under no hole tab. rowHoles() also refuses to read a hole count off a package for any RSVP row, so a $0 package can't match a blank price and file an RSVP under a tab.",
+    ],
+  },
   {
     version: "2.207.0",
     date: "2026-08-07",

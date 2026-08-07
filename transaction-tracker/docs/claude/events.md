@@ -111,9 +111,20 @@ The `user_status` field is cleaned at display time via `_cleanStatus()`:
   a both-days test running first would call it 36. Every hole-shaped read
   on the roster goes through `rowHoles`: the Holes cell (tooltipped with
   the package name when derived), the tabs and their counts, the tab
-  filter, the mobile card badge + Holes detail row, and the HCP 18-only
-  rule in both display and sort. `items.holes` is untouched — this is
-  display derivation, not a write.
+  filter, the mobile card badge + Holes detail row, the HCP 18-only rule
+  in both display and sort, and **the Holes column sort itself** —
+  `sortRegistrants` takes `ev` as a third argument for exactly this
+  (v2.207.1). Sorting the raw value was a silent no-op on a package
+  event: 18 for every row, so every pair tied and the stable sort never
+  moved anything while the header arrow still flipped. `items.holes` is
+  untouched — this is display derivation, not a write.
+- **An RSVP has no hole count and belongs under no hole tab (v2.207.1).**
+  `rowHoles` returns `""` for `rsvp_only` / `gg_rsvp` / synthetic
+  `gg-rsvp-*` rows BEFORE it consults packages, so a $0 package can't
+  match their blank price and file them under a tab. The GG RSVP rows are
+  appended AFTER the hole filter runs (gated only on the
+  NET/GROSS/NONE filter), so that append is gated on `!holesFilter` too —
+  otherwise they reappear under every tab.
 - **Event-specific hole tabs in Events (v2.206.0, Kerry: "Make the tabs
   event specific")**: the roster's hole filter is no longer a fixed 9|18
   pair. `holesBuckets()` in `events.html` reads the distinct hole counts
