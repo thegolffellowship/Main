@@ -11031,14 +11031,32 @@ def _event_holes_type(item_name: str, fmt: str) -> int:
     return 9
 
 
+# 36 and 54 are DELIBERATE multi-day entries — a two- or three-day
+# championship package (Kerry 2026-08-07, on the 2026 TGF CHAMPIONSHIP
+# roster). `_event_holes_type` can only ever return 9 or 18, so the holes
+# heal below would "correct" every 36/54 straight back to 18 on the next
+# boot and silently delete the manager's choice. Honoured only on
+# 18-style events: on a 9-hole event a 36 IS the sequence-number misread
+# this heal exists to fix ("a9.36 Some Course" parsed as holes='36').
+_MULTI_DAY_HOLES = {"36", "54"}
+
+
+def _is_multi_day_holes(current, item_name: str, fmt: str) -> bool:
+    return (str(current or "").strip() in _MULTI_DAY_HOLES
+            and _event_holes_type(item_name, fmt) == 18)
+
+
 def _canon_holes_for_item(conn: sqlite3.Connection,
-                          item_name: str) -> str | None:
+                          item_name: str,
+                          current=None) -> str | None:
     """Authoritative holes value ('9'/'18') for an item on a single-format
     EVENT, alias-aware. None when no event matches, when the event is a
     9/18 Combo (holes is the player's choice there), or when the event
     declares no format (pseudo-events like SEASON CONTESTS). Kerry
     2026-07-21: blank holes undercounts the side-games player buckets,
-    so event rows must never sit blank waiting for the boot heal."""
+    so event rows must never sit blank waiting for the boot heal.
+    Also None when `current` is a multi-day 36/54 on an 18-style event —
+    that value outranks the event's per-day count."""
     name = (item_name or "").strip()
     if not name:
         return None
@@ -11053,6 +11071,8 @@ def _canon_holes_for_item(conn: sqlite3.Connection,
         return None
     fmt = (row["fmt"] or "").strip()
     if not fmt or "combo" in fmt.lower():
+        return None
+    if _is_multi_day_holes(current, row["ev_name"], fmt):
         return None
     return str(_event_holes_type(row["ev_name"], fmt))
 
@@ -11094,6 +11114,8 @@ def heal_item_holes_from_event(db_path=None, conn=None) -> dict:
             canon = str(_event_holes_type(r["item_name"], r["fmt"]))
             cur = (r["holes"] or "").strip()
             if cur == canon:
+                continue
+            if _is_multi_day_holes(cur, r["item_name"], r["fmt"]):
                 continue
             c.execute("UPDATE items SET holes = ? WHERE id = ?", (canon, r["id"]))
             fixed += 1
@@ -19746,7 +19768,8 @@ def save_items(rows: list[dict], db_path: str | Path | None = None,
             # authoritative — stamp it here so fresh rows are right
             # immediately instead of waiting for the boot heal
             # (heal_item_holes_from_event remains the backstop).
-            _canon_h = _canon_holes_for_item(conn, row.get("item_name"))
+            _canon_h = _canon_holes_for_item(conn, row.get("item_name"),
+                                             row.get("holes"))
             if _canon_h and (str(row.get("holes") or "").strip() != _canon_h):
                 row["holes"] = _canon_h
 

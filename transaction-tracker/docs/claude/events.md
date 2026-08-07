@@ -98,8 +98,23 @@ The `user_status` field is cleaned at display time via `_cleanStatus()`:
 ## Holes field
 - Parsed from emails: "9 or 18 HOLES?" field → stored as `holes` TEXT column
 - Shown as column in both Transactions and Events tables
-- Mobile collapsed view: amber badge showing "9h" or "18h" (first of three badges: Holes, Games, Tees)
-- 9|18 toggle filter in Events: filters registrants by hole count
+- Mobile collapsed view: amber badge showing "9h"/"18h"/"36h"/"54h" (first of three badges: Holes, Games, Tees)
+- **Event-specific hole tabs in Events (v2.206.0, Kerry: "Make the tabs
+  event specific")**: the roster's hole filter is no longer a fixed 9|18
+  pair. `holesBuckets()` in `events.html` reads the distinct hole counts
+  on the event's live roster (skipping `+PAY` children, credited /
+  refunded / transferred / WD rows, and RSVP-only rows that carry no hole
+  count) and `holesTabsHtml()` renders one badge per value in play order
+  with its count — `18|36|54` on a multi-day championship, `9|18` on a
+  combo, a lone `18` on a standard event. A filter pinned to a value that
+  no longer exists on the roster clears itself. Desktop and mobile share
+  both helpers.
+- **36 and 54 are multi-day hole counts** (two- and three-day
+  championship packages). Add Player offers them alongside 9 and 18; the
+  Holes column sorts numerically (string sort put "9" above "54"); and
+  `isEighteenStyleHoles()` makes the HCP column's 18-only rule count them
+  as 18-hole play, so a 36/54 roster no longer falls back to the 9-hole
+  net index.
 - Can be backfilled via `/api/audit/re-extract-fields`
 - **Authoritative source is the EVENT, not the order (v2.84.2).** The AI
   parser sometimes mis-reads the hole count — most often it grabs the
@@ -108,7 +123,13 @@ The `user_status` field is cleaned at display time via `_cleanStatus()`:
   event. `heal_item_holes_from_event()` (boot heal + bridge
   `scoring-heal-holes`) forces `items.holes` to `_event_holes_type(name,
   format)` for every NON-combo event; combo events keep their real
-  per-player 9/18 choice. **Display-only** — side-game pot sizing derives
+  per-player 9/18 choice. **36/54 are exempt (v2.206.0)** —
+  `_event_holes_type` can only return 9 or 18, so the heal would reset
+  every deliberate multi-day entry to 18 on the next boot;
+  `_is_multi_day_holes()` skips them, but only on 18-style events (on a
+  9-hole event a `36` IS the sequence-number misread the heal exists to
+  fix). Same exemption at insert time via `_canon_holes_for_item(conn,
+  item_name, current)`. **Display-only** — side-game pot sizing derives
   its matrix from the event via `_event_holes_type`/`extractHolesType`,
   never from `items.holes`, so a bad value never affected money, only the
   badge, the 9|18 filter, and the hole-aware HCP column.
@@ -902,6 +923,15 @@ requests to players holding a transferred credit (the Callaway case).
   price, an **exact** `$X.XX due` badge renders (no `≥` hedge — the
   package price is the full obligation). Events with no packages keep
   the v2.197.2 `≥ $X due` base-price heuristic for credit rows.
+- **Every roster purchase chip is downstream of this list.** If an event
+  shows no package chips at all, its `event_package_configs` entry is
+  empty or keyed to a different event id (a merge re-keys the event) —
+  the chips are not a separate feature that can break on their own.
+  **Save-guard (v2.206.0):** Save Packages on an empty editor used to
+  delete the whole config and report "Saved 0 packages ✓". An empty save
+  over an existing config now confirms first, and a row carrying a name
+  but no price (silently dropped by `pkgCollectRows`) blocks the save
+  with a message rather than quietly deleting that package.
 
 ## Pricing Calculation Flow
 

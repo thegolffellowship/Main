@@ -1372,6 +1372,8 @@
                             <option value="">Select…</option>
                             <option value="9">9</option>
                             <option value="18">18</option>
+                            <option value="36">36 (two days)</option>
+                            <option value="54">54 (three days)</option>
                         </select>
                     </label>
                     <label><span>Side Games <span style="color:#e11d48;">*</span></span>
@@ -2578,9 +2580,10 @@
         // Full event list INCLUDING child +PAY rows — the callers pass a
         // parent-only filtered list, but effective-games needs the children.
         const fullRegs = getRegistrants(ev.item_name);
-        // HCP display rule: 9-only or mixed → show 9-hole net; 18-only → show 18-hole.
-        const evCount9 = registrants.filter(rr => rr.holes === "9").length;
-        const evCount18 = registrants.filter(rr => rr.holes === "18").length;
+        // HCP display rule: 9-only or mixed → show 9-hole net; 18-only →
+        // show 18-hole. 36 and 54 are 18-hole play, so they count here too.
+        const evCount9 = registrants.filter(rr => String(rr.holes).trim() === "9").length;
+        const evCount18 = registrants.filter(rr => isEighteenStyleHoles(rr.holes)).length;
         const showHcp18Only = evCount9 === 0 && evCount18 > 0;
         let html = '';
         registrants.forEach(r => {
@@ -2821,17 +2824,8 @@
                 }
                 badgesHtml += '</span>';
                 if (!mobileGamesView && !mobilePairingsView && !mobileFinancialView && !mobilePayoutsView) {
-                    // 9/18 holes filter
-                    const mHolesFilter = eventHolesFilter[ev.id] || null;
-                    const mInactive = ["credited", "refunded", "transferred", "wd"];
-                    const mCount9 = registrants.filter(r => !r.parent_item_id && !mInactive.includes(r.transaction_status) && (r.holes === "9" || r.holes === 9)).length;
-                    const mCount18 = registrants.filter(r => !r.parent_item_id && !mInactive.includes(r.transaction_status) && (r.holes === "18" || r.holes === 18)).length;
-                    if (mCount9 > 0 || mCount18 > 0) {
-                        badgesHtml += '<span class="view-toggle-group">';
-                        badgesHtml += `<span class="game-stat-badge ${mHolesFilter === '9' ? 'active' : ''}" data-event-id="${ev.id}" data-holes-filter="9">9 <strong>${mCount9}</strong></span>`;
-                        badgesHtml += `<span class="game-stat-badge ${mHolesFilter === '18' ? 'active' : ''}" data-event-id="${ev.id}" data-holes-filter="18">18 <strong>${mCount18}</strong></span>`;
-                        badgesHtml += '</span>';
-                    }
+                    // Hole tabs — one per hole count this event actually sold
+                    badgesHtml += holesTabsHtml(ev, registrants);
 
                     badgesHtml += '<span class="view-toggle-group">';
                     badgesHtml += `<span class="game-stat-badge ${activeFilter === 'NET' ? 'active' : ''}" data-event-id="${ev.id}" data-filter="NET">NET <strong>${stats.net}</strong></span>`;
@@ -3101,8 +3095,29 @@
             const evId = window._pkgEditingEventId;
             if (!evId) return;
             const st = document.getElementById("edit-packages-status");
+            const rows = pkgCollectRows("edit-packages-rows");
+            // A row missing a name or a price is dropped on collect. Saving
+            // past that silently deletes a package still visible on screen —
+            // and every roster chip reading from it.
+            const onScreen = document.querySelectorAll("#edit-packages-rows .pkg-row").length;
+            if (rows.length < onScreen) {
+                if (st) {
+                    st.textContent = `${onScreen - rows.length} row${onScreen - rows.length === 1 ? "" : "s"} need both a name and a price — fill in or delete, then save.`;
+                    st.style.color = "#b91c1c";
+                }
+                return;
+            }
+            // An empty save DELETES the event's package config outright. The
+            // roster's purchase chips and the exact balance-due badges are
+            // computed from that list, so this is never a one-click action.
+            const existing = ((pkgFor(evId) || {}).packages || []).length;
+            if (!rows.length && existing && !confirm(
+                `Remove all ${existing} package${existing === 1 ? "" : "s"} from this event?\n\n`
+                + `The roster's purchase chips and the exact "$X due" badges are built from this list — they will disappear.`)) {
+                return;
+            }
             try {
-                const saved = await pkgSave(evId, pkgCollectRows("edit-packages-rows"));
+                const saved = await pkgSave(evId, rows);
                 if (st) { st.textContent = `Saved ${saved.length} package${saved.length === 1 ? "" : "s"} ✓`; st.style.color = "#15803d"; }
                 renderEvents();
             } catch (e) {
@@ -3315,6 +3330,19 @@
                 if (nb === null) return -1;
                 return asc ? na - nb : nb - na;
             }
+            if (detailSortField === "holes") {
+                // Numeric, or "9" would sort above "54". Rows with no hole
+                // count (RSVP-only) sort last in both directions.
+                const n = v => {
+                    const p = parseInt(String(v).trim(), 10);
+                    return isNaN(p) ? null : p;
+                };
+                const na = n(va), nb = n(vb);
+                if (na === null && nb === null) return 0;
+                if (na === null) return 1;
+                if (nb === null) return -1;
+                return asc ? na - nb : nb - na;
+            }
             if (detailSortField === "side_games") {
                 const refs = allRegs || registrants;
                 const ORDER = { "BOTH": 0, "NET": 1, "GROSS": 2, "NO GAMES": 3 };
@@ -3491,6 +3519,52 @@
         if (m) return parseInt(m[1]);
         // Default to 18 holes — GAMES tab should always be available
         return 18;
+    }
+
+    // ── Hole buckets: what THIS event actually sold ────────────────────
+    // The roster's hole tabs used to be a fixed 9|18 pair, which printed
+    // "9 0" on every 18-hole event and had nowhere to put a multi-day
+    // entry. Championship-style events sell 36 (two days) and 54 (three
+    // days), so the tabs are built from the values the roster holds —
+    // 18|36|54 on the championship, just 9|18 on a combo Tuesday
+    // (Kerry 2026-08-07: "Make the tabs event specific").
+    const HOLES_TAB_INACTIVE = ["credited", "refunded", "transferred", "wd"];
+    function holesBuckets(registrants) {
+        const counts = new Map();
+        (registrants || []).forEach(r => {
+            if (r.parent_item_id) return;
+            if (HOLES_TAB_INACTIVE.includes(r.transaction_status)) return;
+            const v = String(r.holes == null ? "" : r.holes).trim();
+            if (!/^\d+$/.test(v)) return;   // RSVP-only rows carry no holes
+            counts.set(v, (counts.get(v) || 0) + 1);
+        });
+        return [...counts.entries()]
+            .sort((a, b) => parseInt(a[0], 10) - parseInt(b[0], 10))
+            .map(([holes, count]) => ({ holes, count }));
+    }
+
+    // Render the hole tab group, self-healing a stale filter (a value can
+    // stop existing when the last player on it is credited or re-entered).
+    function holesTabsHtml(ev, registrants) {
+        const buckets = holesBuckets(registrants);
+        const active = eventHolesFilter[ev.id] || null;
+        if (active && !buckets.some(b => b.holes === active)) {
+            delete eventHolesFilter[ev.id];
+        }
+        if (!buckets.length) return "";
+        const cur = eventHolesFilter[ev.id] || null;
+        return '<span class="view-toggle-group">'
+            + buckets.map(b =>
+                `<span class="game-stat-badge ${cur === b.holes ? 'active' : ''}" data-event-id="${ev.id}" data-holes-filter="${b.holes}">${b.holes} <strong>${b.count}</strong></span>`
+            ).join("")
+            + '</span>';
+    }
+
+    // An 18-hole-style player for HCP display purposes: 18, 36 and 54 all
+    // play 18s, so a 36/54 roster must not fall back to the 9-hole index.
+    function isEighteenStyleHoles(v) {
+        const n = parseInt(String(v == null ? "" : v).trim(), 10);
+        return !isNaN(n) && n >= 18;
     }
 
     function fmt$(v) {
@@ -6458,17 +6532,8 @@
 
         // Sub-filter badges (only in PLAYERS view)
         if (!gamesView && !pairingsView && !financialView && !payoutsView) {
-            // 9/18 holes filter toggle
-            const holesFilter = eventHolesFilter[ev.id] || null;
-            const holeInactive = ["credited", "refunded", "transferred", "wd"];
-            const count9 = registrants.filter(r => !r.parent_item_id && !holeInactive.includes(r.transaction_status) && (r.holes === "9" || r.holes === 9)).length;
-            const count18 = registrants.filter(r => !r.parent_item_id && !holeInactive.includes(r.transaction_status) && (r.holes === "18" || r.holes === 18)).length;
-            if (count9 > 0 || count18 > 0) {
-                html += '<span class="view-toggle-group">';
-                html += `<span class="game-stat-badge ${holesFilter === '9' ? 'active' : ''}" data-event-id="${ev.id}" data-holes-filter="9">9 <strong>${count9}</strong></span>`;
-                html += `<span class="game-stat-badge ${holesFilter === '18' ? 'active' : ''}" data-event-id="${ev.id}" data-holes-filter="18">18 <strong>${count18}</strong></span>`;
-                html += '</span>';
-            }
+            // Hole tabs — one per hole count this event actually sold
+            html += holesTabsHtml(ev, registrants);
 
             html += '<span class="view-toggle-group">';
             html += `<span class="game-stat-badge ${activeFilter === 'NET' ? 'active' : ''}" data-event-id="${ev.id}" data-filter="NET">NET <strong>${stats.net}</strong></span>`;
@@ -6606,9 +6671,10 @@
 
         const overrides = allRsvpOverrides[ev.item_name] || {};
         const emailOverrides = allRsvpEmailOverrides[ev.item_name] || {};
-        // HCP display rule: 9-only or mixed → show 9-hole net; 18-only → show 18-hole.
-        const evCount9 = registrants.filter(rr => rr.holes === "9").length;
-        const evCount18 = registrants.filter(rr => rr.holes === "18").length;
+        // HCP display rule: 9-only or mixed → show 9-hole net; 18-only →
+        // show 18-hole. 36 and 54 are 18-hole play, so they count here too.
+        const evCount9 = registrants.filter(rr => String(rr.holes).trim() === "9").length;
+        const evCount18 = registrants.filter(rr => isEighteenStyleHoles(rr.holes)).length;
         const showHcp18Only = evCount9 === 0 && evCount18 > 0;
         // Detect active rows with duplicate customer+event registrations for badge display.
         const _activeRegistrations = registrants.filter(rr =>

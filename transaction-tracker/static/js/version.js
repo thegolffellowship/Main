@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.205.1";
+window.TGF_VERSION = "2.206.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.206.0",
+    date: "2026-08-07",
+    changes: [
+      "Roster hole tabs are EVENT SPECIFIC (Kerry, on the 2026 TGF CHAMPIONSHIP roster: 'can we add to the Holes column 36 and 54 and tabs/counts along with the 9|18? Make the tabs event specific'): the fixed 9|18 pair is gone. The tab group is now built from the hole counts the event's live roster actually holds, in play order, each with its count — 18|36|54 on a multi-day championship, 9|18 on a combo Tuesday, a single 18 tab on a standard 18-hole event (no more '9 0' on every event that never sold a 9). Credited/refunded/transferred/WD rows and +PAY children are excluded from the counts, exactly as before; RSVP-only rows carry no hole count and are counted under no tab. A filter left on a hole count that no longer exists on the roster clears itself instead of showing an empty table. Same treatment on desktop and mobile.",
+      "36 and 54 are first-class hole counts. Add Player offers '36 (two days)' and '54 (three days)' alongside 9 and 18, the Holes column sorts numerically (9 used to sort above 54 as a string, and rows with no hole count now sort last in both directions), and the HCP column's 18-only rule counts 36 and 54 as 18-hole play — a 36/54 roster was previously falling back to the 9-hole net index because nobody on it was literally '18'.",
+      "Event PACKAGES can no longer be wiped by one click. Save Packages on an empty editor used to delete the event's whole package config with a cheerful 'Saved 0 packages ✓' — and the roster's purchase chips and exact '$X due' badges are computed from that list, so they vanished with it. An empty save over an existing config now asks first, and a row with a name but no price (silently dropped on collect) blocks the save with a message instead of quietly deleting that package.",
+    ],
+  },
   {
     version: "2.205.1",
     date: "2026-08-06",
