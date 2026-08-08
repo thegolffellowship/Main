@@ -34,7 +34,14 @@
   }
   header .brand small { color: var(--dim); letter-spacing: 1px; font-weight: 600; }
   header .event-name { color: var(--dim); font-size: 14px; }
-  header .updated { margin-left: auto; color: var(--dim); font-size: 12.5px; }
+  header .total-pot {
+    margin-left: auto; background: #14210f; border: 1px solid #2f5a1e;
+    color: #9ff08a; font-weight: 800; letter-spacing: .5px; font-size: 14px;
+    padding: 5px 12px; border-radius: 8px; white-space: nowrap;
+  }
+  header .total-pot small { color: #6f9c5f; font-weight: 600; margin-left: 6px; }
+  header .updated { color: var(--dim); font-size: 12.5px; margin-left: 14px; }
+  header .total-pot.hidden + .updated { margin-left: auto; }
   .wrap { max-width: 860px; margin: 0 auto; padding: 14px 14px 80px; }
 
   /* Right-side payout column, aligned per team row (locked to the flight) */
@@ -141,6 +148,11 @@
   .modal p { color: var(--dim); font-size: 13.5px; margin: 6px 0 14px; }
   .modal .row { display: flex; gap: 8px; margin-top: 12px; }
   .modal textarea { width: 100%; min-height: 220px; font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 13px; }
+  .rules-sec { border: 1px solid var(--line); border-radius: 9px; padding: 10px 12px; margin-bottom: 12px; }
+  .rules-h { color: var(--gold); font-weight: 800; letter-spacing: 1px; text-transform: uppercase; font-size: 12px; margin-bottom: 8px; }
+  .rrow { display: flex; align-items: center; gap: 8px; margin: 7px 0; flex-wrap: wrap; }
+  .rrow > label:first-child { color: var(--dim); font-size: 13px; min-width: 130px; }
+  .rules-note { color: var(--dim); font-size: 11.5px; margin: 4px 0 2px; }
   .hidden { display: none !important; }
   #pinInput { width: 100%; font-size: 20px; letter-spacing: 6px; text-align: center; }
   .toast {
@@ -155,6 +167,7 @@
 <header>
   <div class="brand">Two Man Tour <small>· Flight Board</small></div>
   <div class="event-name" id="eventName"></div>
+  <div class="total-pot hidden" id="totalPot"></div>
   <div class="updated" id="updatedAt"></div>
 </header>
 
@@ -163,10 +176,11 @@
     <div class="grp">
       <label>Flights</label>
       <button id="flightsMinus" title="Fewer flights">−</button>
-      <input type="number" id="flightCount" min="1" max="8" value="3">
+      <input type="number" id="flightCount" min="1" max="12" value="3">
       <button id="flightsPlus" title="More flights">+</button>
     </div>
     <button id="resetLines">Reset lines</button>
+    <button id="rulesBtn" title="Flight & payout rules">Rules ⚙</button>
     <div class="grp">
       <label>Score</label>
       <select id="scoreCol"></select>
@@ -179,9 +193,6 @@
       <label>Pay top</label>
       <input type="number" id="payPct" min="5" max="100" step="5" value="25" style="width:56px;text-align:center">
       <label>%</label>
-    </div>
-    <div class="grp">
-      <label title="Round each payout to a whole dollar (pot stays exact)"><input type="checkbox" id="payWholeDollars" checked style="width:auto;vertical-align:middle;"> Whole $</label>
     </div>
     <button id="refreshBtn" class="primary">Refresh</button>
     <button id="ugLoginBtn" class="hidden" style="border-color:var(--gold);color:var(--gold);">Log in to Unknown Golf</button>
@@ -227,6 +238,72 @@
       <button class="primary" id="pasteGo" style="flex:1">Use these scores</button>
       <button id="pasteCancel">Cancel</button>
     </div>
+  </div>
+</div>
+
+<!-- Flight & payout rules -->
+<div class="overlay hidden" id="rulesOverlay">
+  <div class="modal" style="max-width:480px;">
+    <h2>Flight &amp; payout rules</h2>
+
+    <div class="rules-sec">
+      <div class="rules-h">Flights</div>
+      <div class="rrow">
+        <label>Mode</label>
+        <select id="rFlightMode">
+          <option value="count">By flight count</option>
+          <option value="band">By stroke band</option>
+        </select>
+      </div>
+      <div class="rrow" id="rCountRow">
+        <label>Number of flights</label>
+        <input type="number" id="rFlights" min="1" max="12" style="width:64px">
+      </div>
+      <div class="rrow" id="rBandRow">
+        <label>Band width (strokes)</label>
+        <input type="number" id="rBandWidth" min="1" max="20" style="width:64px">
+        <label style="margin-left:10px;">Max flights</label>
+        <input type="number" id="rMaxFlights" min="1" max="12" style="width:64px">
+      </div>
+      <div class="rrow"><label><input type="checkbox" id="rLockLower"> Lock lower flights when dragging</label></div>
+      <div class="rules-note">Tied scores always stay in the same flight — lines snap across equal-score blocks.</div>
+    </div>
+
+    <div class="rules-sec">
+      <div class="rules-h">Payouts</div>
+      <div class="rrow">
+        <label>Pot across flights</label>
+        <select id="rPotModel">
+          <option value="prorata">Pro-rata (self-funded)</option>
+          <option value="even">Even per flight</option>
+        </select>
+      </div>
+      <div class="rrow">
+        <label>Split within flight</label>
+        <select id="rSplitMode">
+          <option value="places">Places (1st &gt; 2nd &gt; 3rd)</option>
+          <option value="even">Even among paid places</option>
+        </select>
+      </div>
+      <div class="rrow">
+        <label>Top-flight bonus</label>
+        <input type="range" id="rTopFlight" min="0" max="75" step="5" style="flex:1;">
+        <span id="rTopFlightVal" style="width:74px;text-align:right;color:var(--gold);font-weight:700;"></span>
+      </div>
+      <div class="rules-note">Skims that % of the <b>total</b> pot off the top and adds it to Flight 1.</div>
+      <div class="rrow">
+        <label>Round places to</label>
+        <select id="rRoundIncr">
+          <option value="1">$1</option><option value="5">$5</option>
+          <option value="10">$10</option><option value="25">$25</option>
+          <option value="50">$50</option><option value="100">$100</option>
+        </select>
+        <label style="margin-left:10px;"><input type="checkbox" id="rFirstTo100"> 1st to nearest $100</label>
+      </div>
+      <div class="rules-note">Last paid place absorbs the remainder so each flight sums to its pot exactly.</div>
+    </div>
+
+    <div class="row"><button class="primary" id="rulesClose" style="flex:1">Done</button></div>
   </div>
 </div>
 
@@ -295,8 +372,18 @@
     flights: 3,
     buyin: 0,            // $ per player, for flight pot totals
     payPct: 25,          // pay top N% of teams in each flight
-    payWhole: true,      // round payouts to whole dollars
-    showPayouts: false,  // show inline per-flight payout strips
+    showPayouts: false,  // show payout column
+    // payout rules
+    potModel: "prorata", // 'prorata' (self-funded) | 'even' (across flights)
+    splitMode: "places", // 'places' (step-down) | 'even' (within flight)
+    topFlightPct: 0,     // % of TOTAL pot skimmed off the top to Flight 1
+    roundIncr: 50,       // round places to nearest $ (last place absorbs remainder)
+    firstTo100: true,    // round 1st place to nearest $100
+    // flight rules
+    flightMode: "count", // 'count' | 'band'
+    bandWidth: 4,        // stroke band width
+    maxFlights: 6,       // cap for band mode
+    lockLower: false,    // dragging a line shifts lower lines by the same size
     cuts: [],            // ascending cut indexes: teams-above-the-line counts
     headers: [], rows: [], nameCol: 0, numericCols: [],
     scoreCol: "auto",
@@ -310,8 +397,12 @@
     try {
       localStorage.setItem(storeKey(), JSON.stringify({
         flights: state.flights, cuts: state.cuts, scoreCol: state.scoreCol,
-        buyin: state.buyin, payPct: state.payPct, payWhole: state.payWhole,
-        showPayouts: state.showPayouts,
+        buyin: state.buyin, payPct: state.payPct, showPayouts: state.showPayouts,
+        potModel: state.potModel, splitMode: state.splitMode,
+        topFlightPct: state.topFlightPct, roundIncr: state.roundIncr,
+        firstTo100: state.firstTo100, flightMode: state.flightMode,
+        bandWidth: state.bandWidth, maxFlights: state.maxFlights,
+        lockLower: state.lockLower,
       }));
       localStorage.setItem("tmt-last-event", JSON.stringify({ eventId: state.eventId, tourId: state.tourId }));
     } catch (e) {}
@@ -327,8 +418,16 @@
         state.scoreCol = (s.scoreCol === undefined) ? "auto" : s.scoreCol;
         state.buyin = parseFloat(s.buyin) || 0;
         if (s.payPct) state.payPct = Math.min(100, Math.max(5, s.payPct));
-        state.payWhole = s.payWhole !== false;
         state.showPayouts = !!s.showPayouts;
+        if (s.potModel) state.potModel = s.potModel;
+        if (s.splitMode) state.splitMode = s.splitMode;
+        if (s.topFlightPct != null) state.topFlightPct = Math.min(75, Math.max(0, s.topFlightPct));
+        if (s.roundIncr) state.roundIncr = s.roundIncr;
+        state.firstTo100 = s.firstTo100 !== false;
+        if (s.flightMode) state.flightMode = s.flightMode;
+        if (s.bandWidth) state.bandWidth = Math.max(1, s.bandWidth);
+        if (s.maxFlights) state.maxFlights = Math.max(1, s.maxFlights);
+        state.lockLower = !!s.lockLower;
       }
     } catch (e) {}
   }
@@ -403,26 +502,100 @@
   }
 
   // ---------- flights / cuts ----------
+  // Tie rule (always on): a flight line may only fall between two DIFFERENT
+  // scores, so teams sharing a score are never split across flights.
+  function scoreKey(t) { return t.score === null ? "NS" : t.score; }
+  function validBounds() {
+    var b = [];
+    for (var i = 1; i < state.teams.length; i++)
+      if (scoreKey(state.teams[i - 1]) !== scoreKey(state.teams[i])) b.push(i);
+    return b;
+  }
+  function snapCut(idx, lo, hi) {
+    var vb = validBounds();
+    if (!vb.length) return Math.max(lo, Math.min(hi, Math.round(idx))); // no scores → free
+    var inRange = vb.filter(function (x) { return x >= lo && x <= hi; });
+    if (!inRange.length) return null;   // no legal boundary in this gap
+    return inRange.reduce(function (best, x) {
+      return Math.abs(x - idx) < Math.abs(best - idx) ? x : best;
+    }, inRange[0]);
+  }
+  // Equal-count cuts, each snapped to a valid (tie-respecting) boundary.
   function equalCuts() {
-    var n = state.teams.length, N = state.flights, cuts = [];
-    for (var i = 1; i < N; i++) {
-      var c = Math.round(n * i / N);
-      c = Math.max(i, Math.min(n - (N - i), c));
-      cuts.push(c);
+    var n = state.teams.length, N = state.flights;
+    var vb = validBounds();
+    if (!vb.length) {                    // pre-scores: free equal spacing
+      var out = [], prev = 0;
+      for (var i = 1; i < N; i++) {
+        var c = Math.max(prev + 1, Math.min(n - (N - i), Math.round(n * i / N)));
+        prev = c; out.push(c);
+      }
+      return out;
+    }
+    // snap each ideal position to the nearest still-unused valid boundary
+    var used = {}, cuts = [];
+    for (var k = 1; k < N; k++) {
+      var ideal = n * k / N;
+      var cand = vb.filter(function (x) { return !used[x]; });
+      if (!cand.length) break;
+      var best = cand.reduce(function (b, x) {
+        return Math.abs(x - ideal) < Math.abs(b - ideal) ? x : b;
+      }, cand[0]);
+      used[best] = 1; cuts.push(best);
+    }
+    return cuts.sort(function (a, b) { return a - b; });
+  }
+  // Stroke-band cuts: bands of bandWidth strokes from the leader, capped at
+  // maxFlights (last flight absorbs the widest range). Naturally tie-safe.
+  function bandCuts() {
+    var n = state.teams.length;
+    if (!n) return [];
+    var scored = state.teams.filter(function (t) { return t.score !== null; });
+    if (!scored.length) return equalCuts();
+    var leader = scored[0].score, W = Math.max(1, state.bandWidth),
+        maxF = Math.max(1, state.maxFlights);
+    var bandOf = function (t) {
+      return t.score === null ? Infinity : Math.floor((t.score - leader) / W);
+    };
+    var cuts = [], cur = bandOf(state.teams[0]), made = 0;
+    for (var i = 1; i < n; i++) {
+      var bi = bandOf(state.teams[i]);
+      if (bi !== cur) {
+        if (made < maxF - 1) { cuts.push(i); made++; }
+        cur = bi;   // beyond the cap: keep everyone in the last flight
+      }
     }
     return cuts;
+  }
+  // Recompute cuts from the active mode; keeps state.flights in sync.
+  function recomputeFlights() {
+    if (!state.teams.length) { state.cuts = []; return; }
+    if (state.flightMode === "band") {
+      state.cuts = bandCuts();
+      state.flights = state.cuts.length + 1;
+    } else {
+      var vb = validBounds();
+      var maxFl = vb.length ? vb.length + 1 : state.teams.length;
+      state.flights = Math.min(state.flights, Math.max(1, maxFl));
+      state.cuts = equalCuts();
+      state.flights = state.cuts.length + 1;
+    }
   }
   function normalizeCuts() {
     var n = state.teams.length;
     if (n === 0) { state.cuts = []; return; }
-    state.flights = Math.min(state.flights, Math.max(1, n));
-    if (state.cuts.length !== state.flights - 1) { state.cuts = equalCuts(); return; }
+    // A saved cut set that's still legal (right length, strictly increasing,
+    // all on valid boundaries) is kept; otherwise recompute from the mode.
+    var vb = validBounds(), vset = {};
+    vb.forEach(function (x) { vset[x] = 1; });
+    var ok = state.cuts.length >= 1 && state.cuts.length === state.flights - 1;
     var prev = 0;
-    state.cuts = state.cuts.map(function (c, i) {
-      c = Math.max(prev + 1, Math.min(n - (state.cuts.length - i), Math.round(c)));
+    if (ok) for (var i = 0; i < state.cuts.length; i++) {
+      var c = state.cuts[i];
+      if (!(c > prev && c < n) || (vb.length && !vset[c])) { ok = false; break; }
       prev = c;
-      return c;
-    });
+    }
+    if (!ok) recomputeFlights();
   }
 
   // ---------- render ----------
@@ -432,6 +605,8 @@
     $("flightCount").value = state.flights;
     if (!state.teams.length) return;
 
+    var payouts = state.showPayouts ? computePayouts() : null;
+    updateTotalPot();
     var bounds = [0].concat(state.cuts, [state.teams.length]);
     for (var f = 0; f < bounds.length - 1; f++) {
       if (f > 0) {
@@ -452,15 +627,12 @@
       var head = document.createElement("div");
       head.className = "flight-head";
       head.style.color = color;
-      var potHtml = "";
-      if (state.buyin > 0) {
-        var pot = teams.length * 2 * state.buyin;
-        potHtml = '<span class="pot">POT $' + (pot % 1 ? pot.toFixed(2) : pot) + "</span>";
-      }
-      var pay = state.showPayouts ? flightPayout(teams) : null;
+      var pay = payouts ? payouts[f] : null;
+      var pot = pay ? pay.pot : (state.buyin > 0 ? teams.length * 2 * state.buyin : 0);
+      var potHtml = pot > 0 ? '<span class="pot">POT $' + fmtMoney(pot) + "</span>" : "";
       var payHint = "";
       if (pay) payHint = '<span class="pay-hd">' +
-        (pay.pot > 0 ? "$ pays " + pay.paid : "pays " + pay.paid + " (set buy-in)") + "</span>";
+        (pot > 0 ? "$ pays " + pay.paid : "pays " + pay.paid + " (set buy-in)") + "</span>";
       head.innerHTML = "Flight " + (f + 1) +
         ' <span class="meta">' + teams.length + " team" + (teams.length === 1 ? "" : "s") +
         " · " + range + "</span>" + potHtml + payHint;
@@ -474,7 +646,7 @@
         var payHtml = "";
         if (pay) {
           var amt = (i < pay.paid)
-            ? (pay.pot > 0 ? "$" + fmtMoney(pay.amounts[i]) : "—")
+            ? (pot > 0 ? "$" + fmtMoney(pay.amounts[i]) : "—")
             : "";
           payHtml = '<div class="pay' + (i < pay.paid ? " win" : "") + '">' + amt + '</div>';
         }
@@ -502,33 +674,78 @@
     }
   }
 
-  // ---------- inline per-flight payouts ----------
-  // Standard step-down curve: pay the top ~payPct% of each flight (≥1),
-  // weighted so 1st > 2nd > 3rd. Rendered INSIDE each flight box so it
-  // moves with the flight line. Planning aid only — no money moves.
-  function payoutSplit(n) {
-    var weights = [];
-    for (var i = 0; i < n; i++) weights.push(n - i);      // n, n-1, …, 1
-    var sum = weights.reduce(function (a, b) { return a + b; }, 0);
-    return weights.map(function (w) { return w / sum; });
+  // ---------- payouts ----------
+  // Money in = TOTAL POT = teams × 2 × buy-in. Distributed across flights
+  // (pro-rata self-funded, or even), with an optional top-flight bonus
+  // skimmed off the total; split within each flight by places (step-down)
+  // or evenly; rounded (1st→$100, others→increment, last absorbs remainder).
+  function totalPot() {
+    return state.buyin > 0 ? state.teams.length * 2 * state.buyin : 0;
   }
-  function flightPayout(teams) {
-    var nTeams = teams.length;
-    var pot = state.buyin > 0 ? nTeams * 2 * state.buyin : 0;
-    var paid = Math.min(nTeams, Math.max(1, Math.ceil(nTeams * state.payPct / 100)));
-    var amounts = payoutSplit(paid).map(function (s) { return pot * s; });
-    if (state.payWhole && pot > 0) amounts = roundWhole(amounts, pot);
-    return { pot: pot, paid: paid, amounts: amounts };
+  function splitWeights(n) {
+    if (state.splitMode === "even") {
+      var e = []; for (var i = 0; i < n; i++) e.push(1 / n); return e;
+    }
+    var w = [], s = 0;
+    for (var j = 0; j < n; j++) { w.push(n - j); s += n - j; }
+    return w.map(function (x) { return x / s; });
   }
-  function roundWhole(amounts, pot) {
-    // round each to nearest dollar, then fix the remainder onto 1st place
-    var r = amounts.map(function (a) { return Math.round(a); });
-    var diff = Math.round(pot) - r.reduce(function (a, b) { return a + b; }, 0);
-    r[0] += diff;
-    return r;
+  function roundNearest(v, incr) { return Math.round(v / incr) * incr; }
+  function largestRemainderInt(vals, target) {
+    if (target <= 0) return vals.map(function () { return 0; });
+    var fl = vals.map(function (v) { return Math.floor(v); });
+    var rema = target - fl.reduce(function (a, b) { return a + b; }, 0);
+    var order = vals.map(function (v, i) { return { i: i, f: v - Math.floor(v) }; })
+      .sort(function (a, b) { return b.f - a.f; });
+    for (var k = 0; k < rema && k < order.length; k++) fl[order[k].i]++;
+    return fl;
   }
-  function fmtMoney(v) {
-    return (v % 1 === 0) ? String(v) : v.toFixed(2);
+  function roundAmounts(raw, pot, paid) {
+    if (pot <= 0) return raw.map(function () { return 0; });
+    if (paid === 1) return [Math.round(pot)];
+    var a = raw.slice();
+    a[0] = state.firstTo100 ? roundNearest(raw[0], 100) : roundNearest(raw[0], state.roundIncr);
+    for (var i = 1; i < paid - 1; i++) a[i] = roundNearest(raw[i], state.roundIncr);
+    var others = 0; for (var j = 0; j < paid - 1; j++) others += a[j];
+    a[paid - 1] = Math.round(pot) - others;   // last place absorbs remainder
+    if (a[paid - 1] < 0) { a[0] += a[paid - 1]; a[paid - 1] = 0; }
+    return a;
+  }
+  // Returns per-flight { pot, paid, amounts } for the whole board.
+  function computePayouts() {
+    var bounds = [0].concat(state.cuts, [state.teams.length]);
+    var nF = bounds.length - 1, totalTeams = state.teams.length;
+    var total = totalPot();
+    var fTeams = [];
+    for (var f = 0; f < nF; f++) fTeams.push(bounds[f + 1] - bounds[f]);
+    var bonus = total * (state.topFlightPct / 100), rem = total - bonus;
+    var pots = [];
+    for (var g = 0; g < nF; g++) {
+      var base = state.potModel === "even"
+        ? rem / nF
+        : (totalTeams ? rem * (fTeams[g] / totalTeams) : 0);
+      pots.push(base + (g === 0 ? bonus : 0));
+    }
+    pots = largestRemainderInt(pots, Math.round(total));
+    var out = [];
+    for (var h = 0; h < nF; h++) {
+      var nT = fTeams[h];
+      var paid = Math.min(nT, Math.max(1, Math.ceil(nT * state.payPct / 100)));
+      var raw = splitWeights(paid).map(function (w) { return pots[h] * w; });
+      out.push({ pot: pots[h], paid: paid, amounts: roundAmounts(raw, pots[h], paid) });
+    }
+    return out;
+  }
+  function fmtMoney(v) { return (v % 1 === 0) ? String(v) : v.toFixed(2); }
+  function updateTotalPot() {
+    var el = $("totalPot"), total = totalPot();
+    if (total > 0 && state.teams.length) {
+      el.innerHTML = "TOTAL POT $" + fmtMoney(total) +
+        "<small>" + state.teams.length + " teams · $" + fmtMoney(state.buyin) + "/player</small>";
+      el.classList.remove("hidden");
+    } else {
+      el.classList.add("hidden");
+    }
   }
 
   // ---------- expandable hole-by-hole scorecard ----------
@@ -597,15 +814,34 @@
       var r = rows[i].getBoundingClientRect();
       if (e.clientY > r.top + r.height / 2) cut = i + 1;
     }
-    var lo = (drag.idx === 0 ? 0 : state.cuts[drag.idx - 1]) + 1;
-    var hi = (drag.idx === state.cuts.length - 1 ? state.teams.length : state.cuts[drag.idx + 1]) - 1;
-    cut = Math.max(lo, Math.min(hi, cut));
-    if (cut !== state.cuts[drag.idx]) {
-      state.cuts[drag.idx] = cut;
-      render();
-      var el = document.querySelector('.divider[data-idx="' + drag.idx + '"]');
-      if (el) el.classList.add("dragging");
+    var idx = drag.idx;
+    var lo = (idx === 0 ? 0 : state.cuts[idx - 1]) + 1;
+    var hi = (idx === state.cuts.length - 1 ? state.teams.length : state.cuts[idx + 1]) - 1;
+    // snap to a tie-respecting boundary (never split equal scores)
+    var snapped = snapCut(cut, lo, hi);
+    if (snapped === null || snapped === state.cuts[idx]) return;
+    if (state.lockLower) {
+      // shift lower lines to preserve their flight sizes, snapping each
+      var sizes = [];
+      for (var j = idx + 1; j < state.cuts.length; j++)
+        sizes.push(state.cuts[j] - state.cuts[j - 1]);
+      var newCuts = state.cuts.slice();
+      newCuts[idx] = snapped;
+      var prev = snapped, okAll = true;
+      for (var k = 0; k < sizes.length; k++) {
+        var want = prev + sizes[k];
+        var s = snapCut(want, prev + 1, state.teams.length - (sizes.length - k));
+        if (s === null) { okAll = false; break; }
+        newCuts[idx + 1 + k] = s; prev = s;
+      }
+      if (okAll) state.cuts = newCuts;
+      else state.cuts[idx] = snapped;   // fall back to moving just this line
+    } else {
+      state.cuts[idx] = snapped;
     }
+    render();
+    var el = document.querySelector('.divider[data-idx="' + idx + '"]');
+    if (el) el.classList.add("dragging");
   }, { passive: false });
   document.addEventListener("pointerup", function () {
     if (!drag) return;
@@ -834,24 +1070,17 @@
   function copyFlights() {
     var bounds = [0].concat(state.cuts, [state.teams.length]);
     var out = [];
+    var payouts = (state.showPayouts && state.buyin > 0) ? computePayouts() : null;
+    if (payouts) out.push("TOTAL POT $" + fmtMoney(totalPot()) + "  (" + state.teams.length + " teams)\n");
     for (var f = 0; f < bounds.length - 1; f++) {
-      var fCount = bounds[f + 1] - bounds[f];
-      out.push("FLIGHT " + (f + 1) +
-        (state.buyin > 0 ? " — POT $" + (fCount * 2 * state.buyin) : ""));
       var fTeams = state.teams.slice(bounds[f], bounds[f + 1]);
+      var pay = payouts ? payouts[f] : null;
+      out.push("FLIGHT " + (f + 1) + (pay ? " — POT $" + fmtMoney(pay.pot) : ""));
       fTeams.forEach(function (t, i) {
         var who = (t.players && t.players.length) ? " (" + t.players.join(" / ") + ")" : "";
-        out.push("  " + (bounds[f] + i + 1) + ". " + t.name + who + "  " + t.display);
+        var amt = (pay && i < pay.paid) ? "   → $" + fmtMoney(pay.amounts[i]) : "";
+        out.push("  " + (bounds[f] + i + 1) + ". " + t.name + who + "  " + t.display + amt);
       });
-      if (state.showPayouts && state.buyin > 0) {
-        var pot = fTeams.length * 2 * state.buyin;
-        var paid = Math.min(fTeams.length, Math.max(1, Math.ceil(fTeams.length * state.payPct / 100)));
-        var amts = payoutSplit(paid).map(function (s) { return pot * s; });
-        if (state.payWhole) amts = roundWhole(amts, pot);
-        out.push("  Payouts (top " + paid + " of " + fTeams.length + ", pot $" + fmtMoney(pot) + "):");
-        for (var pi = 0; pi < paid; pi++)
-          out.push("    " + (pi + 1) + ". " + (fTeams[pi] ? fTeams[pi].name : "—") + "  $" + fmtMoney(amts[pi]));
-      }
       out.push("");
     }
     navigator.clipboard.writeText(out.join("\n")).then(function () {
@@ -978,20 +1207,22 @@
     if (state.auto) { clearInterval(state.auto); state.auto = null; this.classList.remove("on"); this.textContent = "Auto 60s"; }
     else { state.auto = setInterval(refresh, 60000); this.classList.add("on"); this.textContent = "Auto ON"; refresh(); }
   });
+  function setFlightCount(n) {
+    state.flightMode = "count";
+    state.flights = Math.min(12, Math.max(1, n));
+    recomputeFlights();
+    render(); saveState(); syncRules();
+  }
   $("flightCount").addEventListener("change", function () {
-    state.flights = Math.min(8, Math.max(1, parseInt(this.value, 10) || 1));
-    state.cuts = equalCuts();
-    render(); saveState();
+    setFlightCount(parseInt(this.value, 10) || 1);
   });
   $("flightsMinus").addEventListener("click", function () {
-    if (state.flights > 1) { state.flights--; state.cuts = equalCuts(); render(); saveState(); }
+    if (state.flights > 1) setFlightCount(state.flights - 1);
   });
   $("flightsPlus").addEventListener("click", function () {
-    if (state.flights < 8 && state.flights < state.teams.length) {
-      state.flights++; state.cuts = equalCuts(); render(); saveState();
-    }
+    if (state.flights < 12 && state.flights < state.teams.length) setFlightCount(state.flights + 1);
   });
-  $("resetLines").addEventListener("click", function () { state.cuts = equalCuts(); render(); saveState(); });
+  $("resetLines").addEventListener("click", function () { recomputeFlights(); render(); saveState(); });
   $("buyIn").addEventListener("input", function () {
     state.buyin = Math.max(0, parseFloat(this.value) || 0);
     render(); saveState();
@@ -1054,10 +1285,56 @@
     state.payPct = Math.min(100, Math.max(5, parseInt(this.value, 10) || 25));
     render(); saveState();
   });
-  $("payWholeDollars").addEventListener("change", function () {
-    state.payWhole = this.checked;
+
+  // ---------- rules modal ----------
+  function syncRules() {
+    $("rFlightMode").value = state.flightMode;
+    $("rFlights").value = state.flights;
+    $("rBandWidth").value = state.bandWidth;
+    $("rMaxFlights").value = state.maxFlights;
+    $("rLockLower").checked = state.lockLower;
+    $("rPotModel").value = state.potModel;
+    $("rSplitMode").value = state.splitMode;
+    $("rTopFlight").value = state.topFlightPct;
+    $("rTopFlightVal").textContent = state.topFlightPct + "% off top";
+    $("rRoundIncr").value = String(state.roundIncr);
+    $("rFirstTo100").checked = state.firstTo100;
+    $("rCountRow").style.display = state.flightMode === "count" ? "" : "none";
+    $("rBandRow").style.display = state.flightMode === "band" ? "" : "none";
+    $("flightCount").value = state.flights;
+    $("flightCount").disabled = state.flightMode === "band";
+  }
+  $("rulesBtn").addEventListener("click", function () { syncRules(); $("rulesOverlay").classList.remove("hidden"); });
+  $("rulesClose").addEventListener("click", function () { $("rulesOverlay").classList.add("hidden"); });
+  $("rFlightMode").addEventListener("change", function () {
+    state.flightMode = this.value; recomputeFlights(); render(); saveState(); syncRules();
+  });
+  $("rFlights").addEventListener("change", function () {
+    state.flightMode = "count";
+    state.flights = Math.min(12, Math.max(1, parseInt(this.value, 10) || 1));
+    recomputeFlights(); render(); saveState(); syncRules();
+  });
+  $("rBandWidth").addEventListener("change", function () {
+    state.bandWidth = Math.max(1, parseInt(this.value, 10) || 4);
+    if (state.flightMode === "band") { recomputeFlights(); render(); }
+    saveState(); syncRules();
+  });
+  $("rMaxFlights").addEventListener("change", function () {
+    state.maxFlights = Math.max(1, parseInt(this.value, 10) || 6);
+    if (state.flightMode === "band") { recomputeFlights(); render(); }
+    saveState(); syncRules();
+  });
+  $("rLockLower").addEventListener("change", function () { state.lockLower = this.checked; saveState(); });
+  $("rPotModel").addEventListener("change", function () { state.potModel = this.value; render(); saveState(); });
+  $("rSplitMode").addEventListener("change", function () { state.splitMode = this.value; render(); saveState(); });
+  $("rTopFlight").addEventListener("input", function () {
+    state.topFlightPct = Math.min(75, Math.max(0, parseInt(this.value, 10) || 0));
+    $("rTopFlightVal").textContent = state.topFlightPct + "% off top";
     render(); saveState();
   });
+  $("rRoundIncr").addEventListener("change", function () { state.roundIncr = parseInt(this.value, 10) || 50; render(); saveState(); });
+  $("rFirstTo100").addEventListener("change", function () { state.firstTo100 = this.checked; render(); saveState(); });
+
   $("setupBtn").addEventListener("click", function () {
     $("cfgEvent").value = state.eventId; $("cfgTour").value = state.tourId;
     $("setupOverlay").classList.remove("hidden");
@@ -1111,8 +1388,8 @@
   $("flightCount").value = state.flights;
   if (state.buyin > 0) $("buyIn").value = state.buyin;
   $("payPct").value = state.payPct;
-  $("payWholeDollars").checked = state.payWhole;
   applyPayoutsToggle();
+  syncRules();
   fetch("/api/auth/role").then(function (r) { return r.json(); }).then(function (j) {
     if (j.role === "admin") refresh(); else showPin();
   }).catch(showPin);

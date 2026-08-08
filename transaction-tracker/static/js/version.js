@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.223.0";
+window.TGF_VERSION = "2.224.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.224.0",
+    date: "2026-08-08",
+    changes: [
+      "Flight Board — TOTAL POT header + full payout & flight rules (Kerry's spec). Top bar shows TOTAL POT (teams × 2 × buy-in). New Rules ⚙ modal: PAYOUTS — pot across flights Pro-rata/self-funded (default) or Even; split within flight Places (step-down) or Even; a Top-flight bonus slider that skims X% of the total pot off the top into Flight 1; rounding to a chosen increment (default $50) with 1st place to nearest $100 and the last paid place absorbing the remainder so each flight sums to its pot exactly (total always conserved via largest-remainder across flights). Payouts stay in the right-side per-row column.",
+      "Flight Board — FLIGHT RULES. Tied scores now NEVER split across flights (always on): flight lines snap across equal-score blocks, and equal-spacing/auto all respect it. Two flighting modes: By count, or By stroke band (width default 4) + Max flights cap — bands run from the leader and the last flight absorbs the widest range, with no unnecessary flights added when the field is tight. New Lock-lower-flights toggle: dragging a line shifts the lines below it by the same size so you can move just the top flight and push the rest down intact. Known edge: Even-split + '1st→$100' on an odd pot can print 2nd above 1st; Places split (default) stays ordered.",
+    ],
+  },
   {
     version: "2.223.0",
     date: "2026-08-08",

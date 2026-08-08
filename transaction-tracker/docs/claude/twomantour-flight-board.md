@@ -26,6 +26,17 @@ lets Kerry set flights interactively:
   lists/loads/deletes snapshots. Routes: GET/POST
   `/twomantour/api/saves`, GET/DELETE `/twomantour/api/saves/<id>`,
   all `@require_role("admin")`.
+- (v2.224.0) **TOTAL POT header + Rules modal.** Payout rules: pot
+  across flights `potModel` prorata(self-funded, default)|even; within
+  flight `splitMode` places(default)|even; `topFlightPct` slider skims %
+  of total pot to Flight 1; rounding `roundIncr` (default 50) with
+  `firstTo100` (1st→$100) and last-place-absorbs-remainder; flight pots
+  are integer via largest-remainder so the total is conserved.
+  Flight rules: ties never split (always on — `validBounds`/`snapCut`);
+  `flightMode` count|band (band = `bandWidth` strokes from leader,
+  capped at `maxFlights`, last flight widest); `lockLower` drag shifts
+  lower lines preserving sizes. Known edge: even-split + firstTo100 on
+  an odd pot can invert 1st/2nd; places split stays ordered.
 - (v2.223.0) **Payouts as a right-side column** — each paying place's
   amount renders on the right edge of that team's row (aligned per row),
   with `POT $X · $ pays N` in the flight header. Pot (teams × 2 ×
