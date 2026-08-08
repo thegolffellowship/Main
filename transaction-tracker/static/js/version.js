@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.219.0";
+window.TGF_VERSION = "2.219.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.219.1",
+    date: "2026-08-08",
+    changes: [
+      "Unknown Golf login fix (Kerry hit 'Couldn't find the login form'): the event page draws its login with JavaScript, so its raw HTML has no form. site_login now walks a candidate list — entry page, the platform's real login URLs (/platform/login.jsp and /platform/signin/, found via public site recon), plus any same-host login links it encounters (cap 6) — and posts the first genuine password form it finds. When every page is a JS shell, the response carries per-page diagnostics (form counts, raw <input> tags, auth-looking URLs) that the login modal renders into the on-page panel, so the next fix reads evidence off Kerry's screenshot.",
+    ],
+  },
   {
     version: "2.219.0",
     date: "2026-08-08",

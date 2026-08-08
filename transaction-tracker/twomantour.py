@@ -500,10 +500,45 @@ def _looks_logged_out(html):
         re.search(r"password|log ?in|sign ?in", joined))
 
 
+def _page_diag(url, html):
+    """Evidence bundle for a page where no usable login form was found."""
+    inputs = re.findall(r"(?is)<input\b[^>]*>", html)[:12]
+    auth_urls = []
+    for m in re.finditer(
+            r'["\']([^"\'\s]{1,200}(?:login|signin|auth|session)[^"\'\s]{0,100})["\']',
+            html, re.I):
+        if m.group(1) not in auth_urls:
+            auth_urls.append(m.group(1))
+        if len(auth_urls) >= 10:
+            break
+    return {
+        "url": url,
+        "form_count": len(re.findall(r"(?i)<form\b", html)),
+        "inputs": [i[:160] for i in inputs],
+        "auth_urls": auth_urls,
+    }
+
+
+def _login_links(html, base_url):
+    """Same-host login/signin links found in a page."""
+    from urllib.parse import urljoin, urlparse
+    out = []
+    for m in re.finditer(r'(?is)<a\b[^>]*href=["\']([^"\']+)["\']', html):
+        href = m.group(1)
+        if re.search(r"login|sign ?in", href, re.I):
+            u = urljoin(base_url, unescape(href))
+            if urlparse(u).netloc == ALLOWED_HOST:
+                out.append(u)
+    return out
+
+
 def site_login(email, password, event_id=None, tour_id=None):
     """Form-login to Unknown Golf; on success store the session cookie.
-    Returns {'status': 'ok'} or {'error': ...}. The password is used for
-    this one request chain and never stored."""
+    Returns {'status': 'ok'} or {'error': ..., 'diag': [...]}. Tries the
+    entry page, the platform's known login URLs (/platform/login.jsp and
+    /platform/signin/ — the event page draws its login with JS, so the
+    raw HTML there has no form), and any same-host login links it sees.
+    The password is used for this one request chain and never stored."""
     from urllib.parse import urljoin, urlparse
     s = requests.Session()
     s.headers.update({"User-Agent": _UA,
@@ -511,28 +546,53 @@ def site_login(email, password, event_id=None, tour_id=None):
     entry = (f"https://{ALLOWED_HOST}/event.jsp?eventId={event_id}"
              f"&tourId={tour_id}" if event_id and tour_id
              else f"https://{ALLOWED_HOST}/")
-    r = s.get(entry, timeout=FETCH_TIMEOUT)
-    form = _find_login_form(r.text)
-    if not form:
-        if not _looks_logged_out(r.text):
-            # Already logged in somehow (stale wall?) — keep the cookies.
-            _save_session_cookie(s)
-            return {"status": "ok", "note": "no login form — page already open"}
-        return {"error": "Couldn't find the login form on the page."}
-    action, method, fields, email_field, password_field = form
-    if not email_field:
-        return {"error": "Login form found but no email/username field."}
-    fields[email_field] = email
-    fields[password_field] = password
-    post_url = urljoin(r.url, action or r.url)
-    if urlparse(post_url).netloc != ALLOWED_HOST:
-        return {"error": "Login form posts off-site — refusing."}
-    fn = s.post if method != "get" else s.get
-    r2 = fn(post_url, data=fields, timeout=FETCH_TIMEOUT)
-    if _find_login_form(r2.text) and _looks_logged_out(r2.text):
-        return {"error": "Login didn't stick — check the email/password."}
-    _save_session_cookie(s)
-    return {"status": "ok"}
+    candidates = [entry,
+                  f"https://{ALLOWED_HOST}/platform/login.jsp",
+                  f"https://{ALLOWED_HOST}/platform/signin/"]
+    tried, diag = set(), []
+    i = 0
+    while i < len(candidates) and len(tried) < 6:
+        url = candidates[i]
+        i += 1
+        if url in tried:
+            continue
+        tried.add(url)
+        try:
+            r = s.get(url, timeout=FETCH_TIMEOUT)
+        except Exception as e:
+            diag.append({"url": url, "error": str(e)})
+            continue
+        form = _find_login_form(r.text)
+        if not form:
+            if url == entry and not _looks_logged_out(r.text):
+                # Entry page already open (stale wall?) — keep cookies.
+                _save_session_cookie(s)
+                return {"status": "ok", "note": "page already open"}
+            diag.append(_page_diag(url, r.text))
+            for link in _login_links(r.text, r.url):
+                if link not in tried and link not in candidates:
+                    candidates.append(link)
+            continue
+        action, method, fields, email_field, password_field = form
+        if not email_field:
+            diag.append({"url": url, "error": "password form but no email/username field",
+                         **_page_diag(url, r.text)})
+            continue
+        fields[email_field] = email
+        fields[password_field] = password
+        post_url = urljoin(r.url, action or r.url)
+        if urlparse(post_url).netloc != ALLOWED_HOST:
+            diag.append({"url": url, "error": f"form posts off-site: {post_url}"})
+            continue
+        fn = s.post if method != "get" else s.get
+        r2 = fn(post_url, data=fields, timeout=FETCH_TIMEOUT)
+        if _find_login_form(r2.text) and _looks_logged_out(r2.text):
+            return {"error": "Login didn't stick — check the email/password.",
+                    "diag": [{"url": post_url, "note": "site returned the login form again"}]}
+        _save_session_cookie(s)
+        return {"status": "ok", "login_url": url}
+    return {"error": "Couldn't find a usable login form on the site.",
+            "diag": diag}
 
 
 def _save_session_cookie(session):

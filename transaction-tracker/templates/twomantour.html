@@ -986,7 +986,15 @@
     }).then(function (r) { return r.json().then(function (j) { return { ok: r.ok, status: r.status, j: j }; }); })
       .then(function (res) {
         if (res.status === 401 && res.j.error && /log in/i.test(res.j.error || "")) { showPin(); return; }
-        if (!res.ok) { $("ugErr").textContent = res.j.error || "Login failed."; return; }
+        if (!res.ok) {
+          $("ugErr").textContent = res.j.error || "Login failed.";
+          if (res.j.diag) {
+            $("diagText").textContent = "LOGIN DIAGNOSTICS\n" + JSON.stringify(res.j.diag, null, 1);
+            $("diagBox").classList.remove("hidden");
+            $("diagBox").open = true;
+          }
+          return;
+        }
         $("ugPass").value = "";
         $("ugOverlay").classList.add("hidden");
         $("ugLoginBtn").classList.add("hidden");
