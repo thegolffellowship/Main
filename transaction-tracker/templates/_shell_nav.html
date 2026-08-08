@@ -53,6 +53,9 @@
         <a href="/transactions" class="{{ 'active' if SHELL_ACTIVE == 'transactions' else '' }}">Transactions</a>
         <a href="/customers" class="{{ 'active' if SHELL_ACTIVE == 'customers' else '' }}">Customers</a>
         <a href="/tgf" class="admin-nav {{ 'active' if SHELL_ACTIVE == 'tgf' else '' }}" style="display:none;">Payouts</a>
+        {# Two Man Tour = sibling brand, admin-only: gold pill, deliberately
+           NOT in TGF orange so it reads as a doorway out of the Tracker. #}
+        <a href="/twomantour" class="admin-nav shell-tmt-pill" style="display:none;" title="Two Man Tour Flight Board">Two Man Tour</a>
     </nav>
     <div class="shell-nav-right">
         <a class="shell-admin-link admin-nav" href="/accounting" title="Admin dashboard" style="display:none;"><span class="shell-admin-pill{{ ' active' if SHELL_ACTIVE == 'admin' else '' }}">Admin</span></a>
@@ -77,6 +80,7 @@
         <a href="/customers" class="{{ 'active' if SHELL_ACTIVE == 'customers' else '' }}">Customers</a>
         <a href="/tgf" class="admin-nav {{ 'active' if SHELL_ACTIVE == 'tgf' else '' }}" style="display:none;">Payouts <span class="shell-admin-pill shell-pill-inline">Admin</span></a>
         <a href="/accounting" class="admin-nav {{ 'active' if SHELL_ACTIVE == 'admin' else '' }}" style="display:none;">Admin</a>
+        <a href="/twomantour" class="admin-nav shell-tmt-drawer" style="display:none;">Two Man Tour</a>
     </nav>
     <div class="shell-drawer-foot">
         <span class="role-badge shell-drawer-role" style="display:none;"></span>

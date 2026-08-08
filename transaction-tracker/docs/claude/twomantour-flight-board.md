@@ -20,6 +20,14 @@ lets Kerry set flights interactively:
 - Per-event **localStorage** persistence (flight count, line positions,
   score column, last event ids) — nothing is stored server-side.
 
+## Getting there
+
+v2.213.0: the Tracker nav carries an **admin-only gold "Two Man Tour" pill**
+(desktop `.shell-tmt-pill` + mobile drawer `.shell-tmt-drawer` in
+`_shell_nav.html`) linking to `/twomantour`. It rides the existing
+`admin-nav` gating in `auth.js` — only admin sessions see it. Gold
+`#d4af37`, deliberately not TGF orange: it's a doorway out of the Tracker.
+
 ## Data path
 
 - Route `GET /twomantour` (page shell, public — shows its own PIN gate;

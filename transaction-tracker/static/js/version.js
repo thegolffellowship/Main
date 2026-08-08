@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.212.0";
+window.TGF_VERSION = "2.213.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.213.0",
+    date: "2026-08-08",
+    changes: [
+      "Admin-only TWO MAN TOUR button in the Tracker nav (Kerry, 2026-08-08) — a gold pill (Two Man Tour brand #d4af37, deliberately NOT TGF orange, so it reads as a doorway out of the Tracker) linking straight to the /twomantour Flight Board. Desktop nav + mobile drawer; rides the existing admin-nav gating in auth.js, so only an admin session ever sees it.",
+    ],
+  },
   {
     version: "2.212.0",
     date: "2026-08-08",

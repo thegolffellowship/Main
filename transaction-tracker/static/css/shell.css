@@ -32,6 +32,17 @@ header.shell-nav {
 }
 .shell-nav-links a:hover { color: var(--primary, #E87C3E); }
 .shell-nav-links a.active { color: var(--primary, #E87C3E); border-bottom-color: var(--primary, #E87C3E); }
+/* Two Man Tour (sibling brand, admin-only): gold pill so it reads as a
+   doorway OUT of the TGF Tracker — never TGF orange. */
+.shell-nav-links a.shell-tmt-pill {
+    background: #d4af37; color: #14100a; border-radius: 9999px;
+    padding: 8px 14px 7px; border-bottom: none; transition: background .15s;
+}
+.shell-nav-links a.shell-tmt-pill:hover { background: #e6c964; color: #14100a; }
+.shell-drawer-nav a.shell-tmt-drawer {
+    color: #d4af37; border-left-color: #d4af37;
+    background: rgba(212,175,55,.08);
+}
 .shell-nav-right { display: flex; align-items: center; gap: 14px; }
 .shell-admin-link { text-decoration: none; }
 .shell-admin-pill {
