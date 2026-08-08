@@ -16,6 +16,8 @@ markup change breaks the guesses.
 """
 
 import re
+import json
+import sqlite3
 import logging
 from html import unescape
 from html.parser import HTMLParser
@@ -365,6 +367,74 @@ def _text_lines(html):
         if ln:
             lines.append(ln)
     return lines
+
+
+# ---------------------------------------------------------------------------
+# Saved events (tag + save a board, reload it later)
+#
+# One isolated table in the Tracker's SQLite file (so it lives on the
+# Railway persistent volume) — deliberately NO foreign keys or joins to
+# any TGF table; the payload is the whole board as JSON (teams with
+# players + scorecards, flight cuts, flight count, buy-in).
+# ---------------------------------------------------------------------------
+def _db():
+    from email_parser.database import DB_PATH  # same file → persistent volume
+    conn = sqlite3.connect(str(DB_PATH))
+    conn.row_factory = sqlite3.Row
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS twomantour_saves (
+            id         INTEGER PRIMARY KEY AUTOINCREMENT,
+            tag        TEXT NOT NULL,
+            event_id   TEXT,
+            tour_id    TEXT,
+            event_name TEXT,
+            team_count INTEGER NOT NULL DEFAULT 0,
+            payload    TEXT NOT NULL,
+            saved_at   TEXT NOT NULL DEFAULT (datetime('now', 'localtime'))
+        )""")
+    return conn
+
+
+def save_board(tag, event_id, tour_id, event_name, payload):
+    """Insert a snapshot; returns the new save id."""
+    tag = (tag or "").strip()[:120] or "untitled"
+    team_count = len(payload.get("teams") or [])
+    with _db() as conn:
+        cur = conn.execute(
+            "INSERT INTO twomantour_saves (tag, event_id, tour_id, event_name,"
+            " team_count, payload) VALUES (?,?,?,?,?,?)",
+            (tag, str(event_id or ""), str(tour_id or ""),
+             (event_name or "")[:200], team_count,
+             json.dumps(payload)))
+        return cur.lastrowid
+
+
+def list_saves():
+    with _db() as conn:
+        rows = conn.execute(
+            "SELECT id, tag, event_id, tour_id, event_name, team_count,"
+            " saved_at FROM twomantour_saves ORDER BY id DESC LIMIT 200"
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+
+def get_save(save_id):
+    with _db() as conn:
+        row = conn.execute(
+            "SELECT * FROM twomantour_saves WHERE id = ?", (save_id,)
+        ).fetchone()
+        if not row:
+            return None
+        d = dict(row)
+        d["payload"] = json.loads(d["payload"])
+        return d
+
+
+def delete_save(save_id):
+    with _db() as conn:
+        cur = conn.execute(
+            "DELETE FROM twomantour_saves WHERE id = ?", (save_id,))
+        return cur.rowcount > 0
 
 
 # ---------------------------------------------------------------------------

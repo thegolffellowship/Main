@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.216.0";
+window.TGF_VERSION = "2.217.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.217.0",
+    date: "2026-08-08",
+    changes: [
+      "Flight Board: TAG + SAVE EVENTS server-side (Kerry: 'Is it built to persist? Can I tag and save events?'). Save Event snapshots the whole board — teams with players and hole-by-hole cards, flight lines, flight count, buy-in — under a tag into a new isolated twomantour_saves table (Tracker SQLite on the Railway persistent volume; deliberately zero FKs/joins to any TGF table). The Saved button lists every snapshot (tag, team count, timestamp) with one-tap Load and Delete; loading restores the full board including pots. All endpoints admin-only. Until now persistence was browser-localStorage only (lines/buy-in per event on one device); saves now survive devices, browsers, and redeploys.",
+    ],
+  },
   {
     version: "2.216.0",
     date: "2026-08-08",

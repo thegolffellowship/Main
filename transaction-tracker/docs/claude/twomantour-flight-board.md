@@ -18,7 +18,18 @@ lets Kerry set flights interactively:
 - **Auto 60s** re-fetches while scores are still coming in. Flight lines are
   kept (by position index) across refreshes.
 - Per-event **localStorage** persistence (flight count, line positions,
-  score column, last event ids) — nothing is stored server-side.
+  score column, buy-in, last event ids) for the working session, plus
+  (v2.217.0) **server-side tag+save**: Save Event snapshots the whole
+  board (teams w/ players + hole cards, cuts, flights, buy-in) into the
+  isolated `twomantour_saves` table (Tracker SQLite on the Railway
+  persistent volume — deliberately NO FKs/joins to TGF tables); Saved
+  lists/loads/deletes snapshots. Routes: GET/POST
+  `/twomantour/api/saves`, GET/DELETE `/twomantour/api/saves/<id>`,
+  all `@require_role("admin")`.
+- (v2.216.0) Tap a team row to expand its **18-hole scorecard** (front/
+  back nines, OUT/IN/TOT/PAR, parsed from the 22-column hole row; raw
+  fallback), and a **Buy-in $/player** input that shows each flight's
+  pot (teams × 2 × buy-in) live in the flight headers and Copy Flights.
 
 ## Getting there
 

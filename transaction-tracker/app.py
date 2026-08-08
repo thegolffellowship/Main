@@ -14179,6 +14179,38 @@ def twomantour_api_live():
     return jsonify(payload)
 
 
+@app.route("/twomantour/api/saves", methods=["GET", "POST"])
+@require_role("admin")
+def twomantour_api_saves():
+    """Tag + save the whole board (teams, flights, buy-in) server-side;
+    isolated twomantour_saves table, no TGF joins."""
+    import twomantour as tmt
+    if request.method == "GET":
+        return jsonify({"saves": tmt.list_saves()})
+    data = request.get_json(silent=True) or {}
+    payload = data.get("state")
+    if not isinstance(payload, dict) or not payload.get("teams"):
+        return jsonify({"error": "Nothing to save — the board is empty."}), 400
+    save_id = tmt.save_board(
+        data.get("tag"), data.get("event_id"), data.get("tour_id"),
+        data.get("event_name"), payload)
+    return jsonify({"status": "ok", "id": save_id})
+
+
+@app.route("/twomantour/api/saves/<int:save_id>", methods=["GET", "DELETE"])
+@require_role("admin")
+def twomantour_api_save_one(save_id):
+    import twomantour as tmt
+    if request.method == "DELETE":
+        if not tmt.delete_save(save_id):
+            return jsonify({"error": "Save not found."}), 404
+        return jsonify({"status": "ok"})
+    row = tmt.get_save(save_id)
+    if not row:
+        return jsonify({"error": "Save not found."}), 404
+    return jsonify(row)
+
+
 # Only start the scheduler in one Gunicorn worker (or in dev mode).
 # Gunicorn's --preload flag shares module-level state, but with forked workers
 # each gets its own scheduler.  We use a PID-based guard so only one runs.

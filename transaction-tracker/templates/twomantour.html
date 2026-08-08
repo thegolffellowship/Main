@@ -158,6 +158,8 @@
     <button id="pasteBtn">Paste scores</button>
     <button id="clearBtn">Clear</button>
     <button id="copyBtn">Copy flights</button>
+    <button id="saveBtn">Save event</button>
+    <button id="savedBtn">Saved</button>
     <button id="setupBtn" title="Event settings">⚙</button>
   </div>
   <div class="note" id="statusNote">Loading…</div>
@@ -189,6 +191,28 @@
       <button class="primary" id="pasteGo" style="flex:1">Use these scores</button>
       <button id="pasteCancel">Cancel</button>
     </div>
+  </div>
+</div>
+
+<!-- Save event -->
+<div class="overlay hidden" id="saveOverlay">
+  <div class="modal">
+    <h2>Save event</h2>
+    <p>Tag this board (teams, scores, scorecards, flight lines, buy-in) and reload it any time from “Saved”.</p>
+    <input type="text" id="saveTag" placeholder="e.g. TPC San Antonio 8/8" style="width:100%">
+    <div class="row">
+      <button class="primary" id="saveGo" style="flex:1">Save</button>
+      <button id="saveCancel">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- Saved events -->
+<div class="overlay hidden" id="savedOverlay">
+  <div class="modal">
+    <h2>Saved events</h2>
+    <div id="savedList" style="max-height:340px;overflow-y:auto;"></div>
+    <div class="row"><button id="savedClose" style="flex:1">Close</button></div>
   </div>
 </div>
 
@@ -675,6 +699,93 @@
     setTimeout(function () { t.remove(); }, 2200);
   }
 
+  // ---------- save / load events (server-side, admin-only) ----------
+  function saveEvent() {
+    var tag = $("saveTag").value.trim();
+    if (!tag) { $("saveTag").focus(); return; }
+    var body = {
+      tag: tag,
+      event_id: state.eventId, tour_id: state.tourId,
+      event_name: $("eventName").textContent,
+      state: { teams: state.teams, cuts: state.cuts, flights: state.flights,
+               buyin: state.buyin, source: state.source },
+    };
+    fetch("/twomantour/api/saves", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    }).then(function (r) { return r.json().then(function (j) { return { ok: r.ok, status: r.status, j: j }; }); })
+      .then(function (res) {
+        if (res.status === 401 || res.status === 403) { showPin(); return; }
+        if (!res.ok) { toast(res.j.error || "Save failed"); return; }
+        $("saveOverlay").classList.add("hidden");
+        toast("Saved “" + tag + "”");
+      })
+      .catch(function () { toast("Save failed — network error"); });
+  }
+  function renderSavedList(saves) {
+    var list = $("savedList");
+    list.innerHTML = "";
+    if (!saves.length) {
+      var e = document.createElement("p");
+      e.className = "note"; e.textContent = "No saved events yet.";
+      list.appendChild(e); return;
+    }
+    saves.forEach(function (s) {
+      var row = document.createElement("div");
+      row.style.cssText = "display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--line);";
+      var info = document.createElement("div");
+      info.style.flex = "1"; info.style.minWidth = "0";
+      var t1 = document.createElement("div"); t1.textContent = s.tag;
+      var t2 = document.createElement("div");
+      t2.style.cssText = "color:var(--dim);font-size:12px;";
+      t2.textContent = s.team_count + " teams · " + s.saved_at;
+      info.appendChild(t1); info.appendChild(t2);
+      var loadB = document.createElement("button"); loadB.textContent = "Load"; loadB.className = "primary";
+      var delB = document.createElement("button"); delB.textContent = "✕"; delB.title = "Delete";
+      loadB.addEventListener("click", function () { loadSave(s.id, s.tag); });
+      delB.addEventListener("click", function () {
+        if (!confirm("Delete “" + s.tag + "”?")) return;
+        fetch("/twomantour/api/saves/" + s.id, { method: "DELETE" })
+          .then(function () { openSaved(); });
+      });
+      row.appendChild(info); row.appendChild(loadB); row.appendChild(delB);
+      list.appendChild(row);
+    });
+  }
+  function openSaved() {
+    fetch("/twomantour/api/saves")
+      .then(function (r) {
+        if (r.status === 401 || r.status === 403) { showPin(); throw new Error("auth"); }
+        return r.json();
+      })
+      .then(function (j) {
+        renderSavedList(j.saves || []);
+        $("savedOverlay").classList.remove("hidden");
+      })
+      .catch(function () {});
+  }
+  function loadSave(id, tag) {
+    fetch("/twomantour/api/saves/" + id)
+      .then(function (r) { return r.json(); })
+      .then(function (j) {
+        var p = j.payload || {};
+        state.flights = Math.min(8, Math.max(1, p.flights || 3));
+        state.buyin = parseFloat(p.buyin) || 0;
+        state.cuts = Array.isArray(p.cuts) ? p.cuts : [];
+        state.source = "saved";
+        if (j.event_id) { state.eventId = j.event_id; state.tourId = j.tour_id || state.tourId; }
+        $("buyIn").value = state.buyin || "";
+        $("eventName").textContent = j.event_name || "";
+        expandedTeams.clear();
+        state.teams = p.teams || [];
+        normalizeCuts(); render(); saveState();
+        $("savedOverlay").classList.add("hidden");
+        $("updatedAt").textContent = "Loaded save · " + (j.saved_at || "");
+        setStatus("Loaded “" + tag + "” — " + state.teams.length + " teams.");
+      })
+      .catch(function () { toast("Load failed"); });
+  }
+
   // ---------- PIN gate ----------
   function showPin() { $("pinOverlay").classList.remove("hidden"); $("pinInput").focus(); }
   function hidePin() { $("pinOverlay").classList.add("hidden"); }
@@ -754,6 +865,17 @@
     setStatus("Cleared. Hit Refresh for live scores, or Paste scores.");
   });
   $("copyBtn").addEventListener("click", copyFlights);
+  $("saveBtn").addEventListener("click", function () {
+    if (!state.teams.length) { toast("Nothing to save yet"); return; }
+    $("saveTag").value = $("eventName").textContent ||
+      ("Two Man Tour " + new Date().toLocaleDateString());
+    $("saveOverlay").classList.remove("hidden");
+    $("saveTag").focus(); $("saveTag").select();
+  });
+  $("saveGo").addEventListener("click", saveEvent);
+  $("saveCancel").addEventListener("click", function () { $("saveOverlay").classList.add("hidden"); });
+  $("savedBtn").addEventListener("click", openSaved);
+  $("savedClose").addEventListener("click", function () { $("savedOverlay").classList.add("hidden"); });
   $("setupBtn").addEventListener("click", function () {
     $("cfgEvent").value = state.eventId; $("cfgTour").value = state.tourId;
     $("setupOverlay").classList.remove("hidden");
