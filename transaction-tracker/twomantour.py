@@ -278,17 +278,49 @@ def _hole_row_score(line):
     return None, ""
 
 
+def _num(t):
+    return int(t) if re.fullmatch(r"\d{1,3}", t or "") else None
+
+
 def _parse_card(line):
-    """Map a 22-column hole row (holes 1-9, F, 10-18, B, Total, (vs Par))
-    into a scorecard dict; falls back to the raw row when the shape is
-    unexpected so the UI can still show something on expansion."""
+    """Map a hole row into a scorecard dict. The row layout is
+    holes 1-9, OUT, holes 10-18, IN, [Total], optionally preceded by a
+    team-HC column — so instead of trusting one shape, try each offset
+    and VALIDATE the running-total arithmetic (OUT == sum of scored
+    front holes, IN == sum of scored back, Total == OUT+IN). Falls back
+    to the raw row so the UI always has something to show."""
     m = _RE_PARENS_SCORE.search(line)
     vspar = m.group(1) if m else None
     body = _RE_PARENS_SCORE.sub("", line).strip()
     toks = body.split()
-    if len(toks) == 21:
-        return {"holes": toks[0:9] + toks[10:19], "out": toks[9],
-                "inn": toks[19], "total": toks[20], "vspar": vspar}
+
+    def try_map(rem, hc):
+        if len(rem) not in (19, 20, 21):
+            return None
+        front, out, back = rem[0:9], rem[9], rem[10:19]
+        inn = rem[19] if len(rem) > 19 else None
+        total = rem[20] if len(rem) > 20 else None
+        fs = [_num(x) for x in front if _num(x) is not None]
+        bs = [_num(x) for x in back if _num(x) is not None]
+        ok_f = (_num(out) == sum(fs)) if _num(out) is not None else not fs
+        ok_b = (True if inn is None else
+                ((_num(inn) == sum(bs)) if _num(inn) is not None else not bs))
+        ok_t = (True if (total is None or _num(total) is None) else
+                _num(total) == (_num(out) or 0) + (_num(inn) or 0))
+        if not (ok_f and ok_b and ok_t):
+            return None
+        if inn is None:
+            inn = str(sum(bs)) if bs else "-"
+        if total is None:
+            played = (_num(out) or 0) + (_num(inn) or 0)
+            total = str(played) if played else "-"
+        return {"holes": front + back, "out": out, "inn": inn,
+                "total": total, "vspar": vspar, "hc": hc}
+
+    for off in (0, 1):
+        r = try_map(toks[off:], toks[0] if off else None)
+        if r:
+            return r
     return {"raw": body, "vspar": vspar}
 
 
@@ -395,6 +427,119 @@ def _db():
     return conn
 
 
+def _kv_get(key):
+    with _db() as conn:
+        conn.execute("CREATE TABLE IF NOT EXISTS twomantour_kv"
+                     " (key TEXT PRIMARY KEY, value TEXT)")
+        row = conn.execute("SELECT value FROM twomantour_kv WHERE key = ?",
+                           (key,)).fetchone()
+        return row["value"] if row else None
+
+
+def _kv_set(key, value):
+    with _db() as conn:
+        conn.execute("CREATE TABLE IF NOT EXISTS twomantour_kv"
+                     " (key TEXT PRIMARY KEY, value TEXT)")
+        conn.execute("INSERT INTO twomantour_kv (key, value) VALUES (?, ?)"
+                     " ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                     (key, value or ""))
+
+
+def stored_cookie():
+    return _kv_get("ug_cookie") or None
+
+
+# ---------------------------------------------------------------------------
+# Unknown Golf site login
+#
+# The event page sits behind a login wall (evidence: Kerry's live
+# diagnostics 2026-08-08 — the server receives "Welcome back, player!"
+# with an email/password form). The server performs the same form login
+# a browser would, then stores ONLY the resulting session cookie in
+# twomantour_kv (the password is never persisted anywhere). Fetches use
+# the stored cookie until the site expires it, at which point the login
+# wall is re-detected and the admin logs in again.
+# ---------------------------------------------------------------------------
+def _find_login_form(html):
+    """Locate the form containing a password input; return
+    (action, method, fields-dict, email_field, password_field)."""
+    for fm in re.finditer(r"(?is)<form\b([^>]*)>(.*?)</form>", html):
+        attrs, body = fm.group(1), fm.group(2)
+        if not re.search(r'(?i)type=["\']?password', body):
+            continue
+        action_m = re.search(r'(?i)action=["\']([^"\']*)["\']', attrs)
+        method_m = re.search(r'(?i)method=["\']([^"\']*)["\']', attrs)
+        action = action_m.group(1) if action_m else ""
+        method = (method_m.group(1) if method_m else "post").lower()
+        fields, email_field, password_field = {}, None, None
+        for im in re.finditer(r"(?is)<input\b[^>]*>", body):
+            tag = im.group(0)
+            name_m = re.search(r'(?i)name=["\']([^"\']+)["\']', tag)
+            if not name_m:
+                continue
+            name = name_m.group(1)
+            type_m = re.search(r'(?i)type=["\']?(\w+)', tag)
+            itype = (type_m.group(1) if type_m else "text").lower()
+            value_m = re.search(r'(?i)value=["\']([^"\']*)["\']', tag)
+            value = unescape(value_m.group(1)) if value_m else ""
+            if itype == "password":
+                password_field = name
+            elif itype == "email" or re.search(r"(?i)email|user|login", name):
+                if not email_field:
+                    email_field = name
+            fields[name] = value
+        if password_field:
+            return action, method, fields, email_field, password_field
+    return None
+
+
+def _looks_logged_out(html):
+    lines = _text_lines(html)
+    joined = " ".join(lines[:60]).lower()
+    return len(lines) < 45 and bool(
+        re.search(r"password|log ?in|sign ?in", joined))
+
+
+def site_login(email, password, event_id=None, tour_id=None):
+    """Form-login to Unknown Golf; on success store the session cookie.
+    Returns {'status': 'ok'} or {'error': ...}. The password is used for
+    this one request chain and never stored."""
+    from urllib.parse import urljoin, urlparse
+    s = requests.Session()
+    s.headers.update({"User-Agent": _UA,
+                      "Accept": "text/html,application/xhtml+xml"})
+    entry = (f"https://{ALLOWED_HOST}/event.jsp?eventId={event_id}"
+             f"&tourId={tour_id}" if event_id and tour_id
+             else f"https://{ALLOWED_HOST}/")
+    r = s.get(entry, timeout=FETCH_TIMEOUT)
+    form = _find_login_form(r.text)
+    if not form:
+        if not _looks_logged_out(r.text):
+            # Already logged in somehow (stale wall?) — keep the cookies.
+            _save_session_cookie(s)
+            return {"status": "ok", "note": "no login form — page already open"}
+        return {"error": "Couldn't find the login form on the page."}
+    action, method, fields, email_field, password_field = form
+    if not email_field:
+        return {"error": "Login form found but no email/username field."}
+    fields[email_field] = email
+    fields[password_field] = password
+    post_url = urljoin(r.url, action or r.url)
+    if urlparse(post_url).netloc != ALLOWED_HOST:
+        return {"error": "Login form posts off-site — refusing."}
+    fn = s.post if method != "get" else s.get
+    r2 = fn(post_url, data=fields, timeout=FETCH_TIMEOUT)
+    if _find_login_form(r2.text) and _looks_logged_out(r2.text):
+        return {"error": "Login didn't stick — check the email/password."}
+    _save_session_cookie(s)
+    return {"status": "ok"}
+
+
+def _save_session_cookie(session):
+    pairs = ["%s=%s" % (c.name, c.value) for c in session.cookies]
+    _kv_set("ug_cookie", "; ".join(pairs))
+
+
 def save_board(tag, event_id, tour_id, event_name, payload):
     """Insert a snapshot; returns the new save id."""
     tag = (tag or "").strip()[:120] or "untitled"
@@ -496,6 +641,8 @@ def fetch_live(event_id, tour_id, cookie=None):
         raise ValueError("tourId must be numeric")
     url = (f"https://{ALLOWED_HOST}/event.jsp"
            f"?eventId={event_id}&tourId={tour_id}")
+    if not cookie:
+        cookie = stored_cookie()
     resp = _get(url, cookie)
     payload, lines = _parse_page(resp.text)
     payload["source_url"] = url
@@ -531,7 +678,6 @@ def fetch_live(event_id, tour_id, cookie=None):
     if not payload["found"] and not payload.get("teams"):
         payload["sample_lines"] = lines[:80]
         payload["tried_urls"] = tried
-        joined = " ".join(lines[:60]).lower()
-        if len(lines) < 45 and re.search(r"password|log ?in|sign ?in", joined):
+        if _looks_logged_out(resp.text):
             payload["login_wall_suspected"] = True
     return payload

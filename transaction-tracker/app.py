@@ -14179,6 +14179,29 @@ def twomantour_api_live():
     return jsonify(payload)
 
 
+@app.route("/twomantour/api/login", methods=["POST"])
+@require_role("admin")
+def twomantour_api_login():
+    """Form-login to Unknown Golf server-side; stores only the session
+    cookie (twomantour_kv) — the password is never persisted."""
+    import twomantour as tmt
+    data = request.get_json(silent=True) or {}
+    email = (data.get("email") or "").strip()
+    password = data.get("password") or ""
+    if not email or not password:
+        return jsonify({"error": "Email and password are required."}), 400
+    try:
+        result = tmt.site_login(email, password,
+                                event_id=(data.get("event_id") or "").strip() or None,
+                                tour_id=(data.get("tour_id") or "").strip() or None)
+    except Exception as e:
+        logger.warning("Two Man Tour site login failed: %s", e)
+        return jsonify({"error": f"Login request failed: {e}"}), 502
+    if result.get("error"):
+        return jsonify(result), 401
+    return jsonify(result)
+
+
 @app.route("/twomantour/api/saves", methods=["GET", "POST"])
 @require_role("admin")
 def twomantour_api_saves():

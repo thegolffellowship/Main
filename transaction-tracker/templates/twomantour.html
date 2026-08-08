@@ -78,14 +78,22 @@
   .team-row .nm .pl { color: var(--dim); font-size: 12px; line-height: 1.25; overflow: hidden; text-overflow: ellipsis; }
   .team-row.expandable { cursor: pointer; }
   .team-row .chev { color: var(--dim); font-size: 11px; width: 14px; text-align: center; }
-  .sc-card { padding: 4px 12px 10px 46px; border-top: 1px dashed #202a39; background: #121924; overflow-x: auto; }
-  .sc-card table { border-collapse: collapse; margin: 6px 0 0; }
+  .sc-card { padding: 8px 14px 12px; border-top: 1px dashed #202a39; background: #10161f; overflow-x: auto; }
+  .sc-head { display: flex; justify-content: space-between; align-items: center; font-size: 11.5px; letter-spacing: 1px; color: var(--dim); font-weight: 700; margin-bottom: 2px; }
+  .sc-badge { color: var(--gold); }
+  .sc-badge.under { color: #ff6b63; }
+  .sc-card table { border-collapse: collapse; margin: 6px 0 0; width: 100%; table-layout: fixed; }
   .sc-card th, .sc-card td {
-    border: 1px solid #2b3648; padding: 3px 0; font-size: 12.5px; text-align: center;
-    min-width: 30px; font-variant-numeric: tabular-nums;
+    border: 1px solid #263041; padding: 5px 0; font-size: 13px; text-align: center;
+    font-variant-numeric: tabular-nums; overflow: hidden;
   }
-  .sc-card th { color: var(--dim); font-weight: 600; background: var(--panel2); }
-  .sc-card td.tot { font-weight: 700; color: var(--gold); }
+  .sc-card th { color: #7c8aa0; font-weight: 600; font-size: 10.5px; letter-spacing: .5px; background: #1a2230; }
+  .sc-card td { background: #0d131c; color: #e8edf4; font-weight: 600; }
+  .sc-card th.lbl, .sc-card td.lbl { width: 52px; font-size: 9.5px; letter-spacing: 1px; color: #5b6a80; background: #161d29; font-weight: 700; }
+  .sc-card th.toth { background: rgba(212,175,55,.12); color: var(--gold); width: 40px; }
+  .sc-card td.tot { font-weight: 800; color: var(--gold); background: rgba(212,175,55,.07); }
+  .sc-card td.nos { color: #45526a; font-weight: 400; }
+  .sc-card th.sp, .sc-card td.sp { border: none; background: transparent; width: 40px; }
   .sc-card .sc-raw { color: var(--dim); font-size: 12.5px; font-family: ui-monospace, Menlo, Consolas, monospace; }
   .flight-head .pot { margin-left: auto; color: #7fe0a7; font-weight: 700; letter-spacing: 0; font-size: 13px; }
   .team-row .thru { color: var(--dim); font-size: 12.5px; width: 52px; text-align: right; }
@@ -154,6 +162,7 @@
       <input type="number" id="buyIn" min="0" step="5" placeholder="0" style="width:70px">
     </div>
     <button id="refreshBtn" class="primary">Refresh</button>
+    <button id="ugLoginBtn" class="hidden" style="border-color:var(--gold);color:var(--gold);">Log in to Unknown Golf</button>
     <button id="autoBtn">Auto 60s</button>
     <button id="pasteBtn">Paste scores</button>
     <button id="clearBtn">Clear</button>
@@ -195,6 +204,22 @@
       <button class="primary" id="pasteGo" style="flex:1">Use these scores</button>
       <button id="pasteCancel">Cancel</button>
     </div>
+  </div>
+</div>
+
+<!-- Unknown Golf login -->
+<div class="overlay hidden" id="ugOverlay">
+  <div class="modal">
+    <h2>Unknown Golf login</h2>
+    <p>The live-scoring page requires your Unknown Golf login. The server signs in
+       once and keeps only the session — your password is <b>not stored</b>.</p>
+    <div class="row"><input type="email" id="ugEmail" placeholder="Email" style="flex:1" autocomplete="username"></div>
+    <div class="row"><input type="password" id="ugPass" placeholder="Password" style="flex:1" autocomplete="current-password"></div>
+    <div class="row">
+      <button class="primary" id="ugGo" style="flex:1">Log in &amp; refresh</button>
+      <button id="ugCancel">Cancel</button>
+    </div>
+    <p id="ugErr" class="note error"></p>
   </div>
 </div>
 
@@ -440,30 +465,43 @@
     var wrap = document.createElement("div");
     wrap.className = "sc-card";
     var c = t.card;
+    var vp = c.vspar == null ? null :
+      (/^E$/i.test(c.vspar) ? "E" : (/^[+-]/.test(c.vspar) ? c.vspar : "+" + c.vspar));
+    // header strip: HC chip left, TOTAL + vs-par badge right
+    var head = document.createElement("div");
+    head.className = "sc-head";
+    var left = document.createElement("span");
+    left.textContent = (c.hc != null && c.hc !== "-") ? "TEAM HC " + c.hc : "";
+    var right = document.createElement("span");
+    right.className = "sc-badge" + (vp && vp.charAt(0) === "-" ? " under" : "");
+    right.textContent = (c.total && c.total !== "-" ? "TOTAL " + c.total : "") +
+                        (vp ? "  ·  " + vp : "");
+    head.appendChild(left); head.appendChild(right);
+    wrap.appendChild(head);
+
     if (c.holes && c.holes.length === 18) {
-      var front = document.createElement("table");
-      var back = document.createElement("table");
-      function fill(tbl, labels, vals, totLabels, totVals) {
-        var trh = tbl.insertRow(), trv;
-        labels.concat(totLabels).forEach(function (h) {
-          var th = document.createElement("th"); th.textContent = h; trh.appendChild(th);
-        });
+      function nine(labels, vals, totLabel, totVal, extraLabel, extraVal) {
+        var tbl = document.createElement("table");
+        var trh = tbl.insertRow(), trv = null;
+        function th(txt, cls) { var e = document.createElement("th"); e.textContent = txt; if (cls) e.className = cls; trh.appendChild(e); }
+        th("HOLE", "lbl");
+        labels.forEach(function (h) { th(h); });
+        th(totLabel, "toth");
+        th(extraLabel === null ? "" : extraLabel, extraLabel === null ? "sp" : "toth");
         trv = tbl.insertRow();
-        vals.concat(totVals).forEach(function (v, idx) {
-          var td = trv.insertCell();
-          td.textContent = v;
-          if (idx >= vals.length) td.className = "tot";
-        });
+        function td(txt, cls) { var e = trv.insertCell(); e.textContent = txt; if (cls) e.className = cls; }
+        td("SCORE", "lbl");
+        vals.forEach(function (v) { td(v === "-" ? "–" : v, v === "-" ? "nos" : ""); });
+        td(totVal === "-" ? "–" : totVal, "tot");
+        td(extraVal === null ? "" : (extraVal === "-" ? "–" : extraVal), extraVal === null ? "sp" : "tot");
+        return tbl;
       }
-      fill(front, ["1","2","3","4","5","6","7","8","9"], c.holes.slice(0, 9), ["OUT"], [c.out]);
-      var totCols = ["IN", "TOT"], totVals = [c.inn, c.total];
-      if (c.vspar != null) { totCols.push("PAR"); totVals.push(/^[+-]|^E$/i.test(c.vspar) ? c.vspar : (c.vspar > 0 ? "+" + c.vspar : c.vspar)); }
-      fill(back, ["10","11","12","13","14","15","16","17","18"], c.holes.slice(9), totCols, totVals);
-      wrap.appendChild(front); wrap.appendChild(back);
+      wrap.appendChild(nine(["1","2","3","4","5","6","7","8","9"], c.holes.slice(0, 9), "OUT", c.out, null, null));
+      wrap.appendChild(nine(["10","11","12","13","14","15","16","17","18"], c.holes.slice(9), "IN", c.inn, "TOT", c.total));
     } else {
       var raw = document.createElement("div");
       raw.className = "sc-raw";
-      raw.textContent = (c.raw || "") + (c.vspar != null ? "  (" + c.vspar + ")" : "");
+      raw.textContent = (c.raw || "");
       wrap.appendChild(raw);
     }
     return wrap;
@@ -565,12 +603,17 @@
         if (!j.found) {
           var msg = "Fetched the page but couldn't read a leaderboard from it (" +
                     j.table_count + " tables scanned).";
-          if (j.login_wall_suspected) msg += " It looks like the page may require a LOGIN — the server sees a sign-in page, not scores.";
-          msg += " Use “Paste scores” — copy the leaderboard right off the live page.";
+          if (j.login_wall_suspected) {
+            msg = "The live-scoring page requires a LOGIN — tap “Log in to Unknown Golf” once and live refresh will work.";
+            $("ugLoginBtn").classList.remove("hidden");
+          } else {
+            msg += " Use “Paste scores” — copy the leaderboard right off the live page.";
+          }
           setStatus(msg, true);
           showDiag(j);
           return;
         }
+        $("ugLoginBtn").classList.add("hidden");
         state.headers = j.headers; state.rows = j.rows;
         state.nameCol = j.name_col; state.numericCols = j.numeric_cols;
         state.source = "live";
@@ -611,14 +654,36 @@
     // block never emit; a bare line mid-block (the course) is ignored.
     var teams = [], cur = null, pending = null, curScore = null, curRaw = "", scored = false, players = [], curCard = null;
     function parseCard(line) {
+      // Layout: [team HC] holes1-9 OUT holes10-18 IN [Total] (vs Par).
+      // Try each offset and VALIDATE the running totals (OUT = sum of
+      // scored front holes, IN = sum of back, Total = OUT+IN).
       var m = line.match(/\(([+-]?\d+(?:\.\d+)?|E)\)\s*$/i);
       var vspar = m ? m[1] : null;
       var body = line.replace(/\(([+-]?\d+(?:\.\d+)?|E)\)\s*$/i, "").trim();
       var toks = body.split(/\s+/);
-      if (toks.length === 21)
-        return { holes: toks.slice(0, 9).concat(toks.slice(10, 19)),
-                 out: toks[9], inn: toks[19], total: toks[20], vspar: vspar };
-      return { raw: body, vspar: vspar };
+      function num(t) { return /^\d{1,3}$/.test(t) ? parseInt(t, 10) : null; }
+      function tryMap(rem, hc) {
+        if (rem.length < 19 || rem.length > 21) return null;
+        var front = rem.slice(0, 9), out = rem[9], back = rem.slice(10, 19);
+        var inn = rem.length > 19 ? rem[19] : null;
+        var total = rem.length > 20 ? rem[20] : null;
+        var fs = front.map(num).filter(function (v) { return v !== null; });
+        var bs = back.map(num).filter(function (v) { return v !== null; });
+        var sum = function (a) { return a.reduce(function (x, y) { return x + y; }, 0); };
+        var okF = num(out) !== null ? num(out) === sum(fs) : !fs.length;
+        var okB = inn === null ? true : (num(inn) !== null ? num(inn) === sum(bs) : !bs.length);
+        var okT = (total === null || num(total) === null) ? true
+                  : num(total) === (num(out) || 0) + (num(inn) || 0);
+        if (!okF || !okB || !okT) return null;
+        if (inn === null) inn = bs.length ? String(sum(bs)) : "-";
+        if (total === null) {
+          var played = (num(out) || 0) + (num(inn) || 0);
+          total = played ? String(played) : "-";
+        }
+        return { holes: front.concat(back), out: out, inn: inn, total: total, vspar: vspar, hc: hc };
+      }
+      var r = tryMap(toks, null) || tryMap(toks.slice(1), toks[0]);
+      return r || { raw: body, vspar: vspar };
     }
     function flush() {
       if (cur) teams.push({ name: cur, score: curScore, raw: curRaw, thru: "", players: players, card: curCard });
@@ -903,6 +968,32 @@
     state.tourId = $("cfgTour").value.trim();
     $("setupOverlay").classList.add("hidden");
     loadState(); saveState(); refresh();
+  });
+  $("ugLoginBtn").addEventListener("click", function () {
+    $("ugErr").textContent = "";
+    $("ugOverlay").classList.remove("hidden");
+    $("ugEmail").focus();
+  });
+  $("ugCancel").addEventListener("click", function () { $("ugOverlay").classList.add("hidden"); });
+  $("ugGo").addEventListener("click", function () {
+    var email = $("ugEmail").value.trim(), pass = $("ugPass").value;
+    if (!email || !pass) { $("ugErr").textContent = "Email and password required."; return; }
+    $("ugErr").textContent = "Logging in…";
+    fetch("/twomantour/api/login", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email: email, password: pass,
+                             event_id: state.eventId, tour_id: state.tourId }),
+    }).then(function (r) { return r.json().then(function (j) { return { ok: r.ok, status: r.status, j: j }; }); })
+      .then(function (res) {
+        if (res.status === 401 && res.j.error && /log in/i.test(res.j.error || "")) { showPin(); return; }
+        if (!res.ok) { $("ugErr").textContent = res.j.error || "Login failed."; return; }
+        $("ugPass").value = "";
+        $("ugOverlay").classList.add("hidden");
+        $("ugLoginBtn").classList.add("hidden");
+        toast("Logged in to Unknown Golf");
+        refresh();
+      })
+      .catch(function () { $("ugErr").textContent = "Network error."; });
   });
   $("pinGo").addEventListener("click", tryPin);
   $("pinInput").addEventListener("keydown", function (e) { if (e.key === "Enter") tryPin(); });

@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.218.0";
+window.TGF_VERSION = "2.219.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.219.0",
+    date: "2026-08-08",
+    changes: [
+      "MYSTERY SOLVED — the Flight Board's live fetch was blocked by a LOGIN WALL (Kerry's diagnostics screenshot showed the server receiving Unknown Golf's 'Welcome back, player!' sign-in page, not scores). New 'Log in to Unknown Golf' flow: the button appears when the wall is detected, Kerry enters his UG email/password once, the SERVER performs the same form login a browser would (finds the password form, carries hidden/CSRF fields, posts same-host only) and stores ONLY the resulting session cookie in twomantour_kv — the password is never persisted. Every subsequent fetch (Refresh, Auto-60s) rides that cookie until the site expires it, at which point the wall is re-detected and the button reappears.",
+      "Typical-looking expandable scorecard (Kerry request): proper HOLE/SCORE rows for each nine with aligned columns, gold OUT/IN/TOT cells, dimmed dashes for unplayed holes, and a header strip showing TEAM HC and TOTAL · vs-par. Under the hood the hole-row mapper is now SELF-VALIDATING: the row layout ([team HC] holes 1-9, OUT, holes 10-18, IN, [Total]) is tried at each offset and only accepted when the arithmetic checks (OUT = sum of scored front holes, IN = sum of back, TOTAL = OUT+IN) — this is what fixed the raw-text fallback Kerry screenshotted, whose rows carry a leading team-HC column the old fixed-width mapper couldn't place.",
+    ],
+  },
   {
     version: "2.218.0",
     date: "2026-08-08",

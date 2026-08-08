@@ -96,6 +96,23 @@ block results over the generic table guess whenever ≥2 teams parse
 directly. When neither parser reads the page, the response includes
 `sample_lines` (first 80 page-text lines) for evidence-based fixes.
 
+**v2.219.0 — LOGIN WALL (root cause of every live-fetch failure).**
+Kerry's diagnostics screenshot proved the event page serves Unknown
+Golf's sign-in page ("Welcome back, player!") to anonymous fetches.
+`site_login()` does a browser-equivalent form login (locates the
+password form, keeps hidden/CSRF fields, same-host-only post) and
+stores ONLY the session cookie in `twomantour_kv` (`ug_cookie`) — the
+password is never persisted. `fetch_live()` sends the stored cookie
+automatically; when the site expires it the wall is re-detected and
+the UI's "Log in to Unknown Golf" button reappears. Route: POST
+`/twomantour/api/login` (admin).
+
+Also v2.219.0: the hole-row → card mapper is self-validating — layout
+`[team HC] h1-9 OUT h10-18 IN [Total]` tried at each offset, accepted
+only when OUT/IN/TOTAL match the summed hole scores. The card renders
+as a typical scorecard (HOLE/SCORE rows per nine, gold OUT/IN/TOT,
+TEAM HC + TOTAL · vs-par header strip).
+
 v2.218.0: when the top-level page yields nothing, the server chases
 same-host embedded sub-pages (iframes first, then scoring-looking
 `.jsp` URLs; host-locked, max 4) and parses each until teams appear.
