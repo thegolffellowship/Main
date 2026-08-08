@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.222.0";
+window.TGF_VERSION = "2.223.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.223.0",
+    date: "2026-08-08",
+    changes: [
+      "Payouts moved to a RIGHT-SIDE COLUMN aligned per team row (Kerry: 'locked to the right side, not the bottom; payout rows align with the flight rows'). Each paying place shows its dollar amount on the right edge of that team's row (1st $133, 2nd $67, …), with 'POT $X · $ pays N' in the flight header. Replaces the bottom strip; still the step-down curve, whole-$ rounding conserves the pot, recomputes as flight lines drag, toggled by Payouts, in Copy Flights.",
+    ],
+  },
   {
     version: "2.222.0",
     date: "2026-08-08",

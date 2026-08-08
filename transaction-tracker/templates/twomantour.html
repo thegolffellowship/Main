@@ -37,21 +37,19 @@
   header .updated { margin-left: auto; color: var(--dim); font-size: 12.5px; }
   .wrap { max-width: 860px; margin: 0 auto; padding: 14px 14px 80px; }
 
-  /* Inline per-flight payouts (part of the flight box, moves with it) */
-  .pay-strip { background: #10161f; border-top: 1px dashed #2b3648; padding: 7px 12px 8px; }
-  .pay-strip .pay-head {
-    display: flex; justify-content: space-between; align-items: baseline;
-    font-size: 10.5px; letter-spacing: 1px; text-transform: uppercase;
-    color: var(--dim); font-weight: 700; margin-bottom: 4px;
+  /* Right-side payout column, aligned per team row (locked to the flight) */
+  .team-row .pay {
+    width: 74px; text-align: right; padding-left: 12px;
+    border-left: 1px solid #202a39; margin-left: 4px;
+    font-weight: 800; font-variant-numeric: tabular-nums; color: var(--gold);
+    white-space: nowrap;
   }
-  .pay-strip .pay-head .pot { color: #7fe0a7; }
-  .pay-strip .pay-row {
-    display: flex; align-items: baseline; gap: 8px; padding: 2px 0; font-size: 13px;
+  .team-row .pay:empty::after { content: ""; }
+  .flight-head .pay-hd {
+    width: 74px; text-align: right; color: #7fe0a7; font-weight: 700;
+    letter-spacing: 0; text-transform: none; font-size: 12px;
+    padding-left: 12px; border-left: 1px solid #2b3648; margin-left: 8px;
   }
-  .pay-strip .pay-row .pl { color: var(--gold); width: 26px; font-weight: 700; }
-  .pay-strip .pay-row .nm { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .pay-strip .pay-row .amt { color: var(--gold); font-weight: 800; font-variant-numeric: tabular-nums; }
-  .pay-strip .pay-note { color: var(--dim); font-size: 11.5px; }
 
   .controls {
     display: flex; flex-wrap: wrap; gap: 10px; align-items: center;
@@ -459,20 +457,32 @@
         var pot = teams.length * 2 * state.buyin;
         potHtml = '<span class="pot">POT $' + (pot % 1 ? pot.toFixed(2) : pot) + "</span>";
       }
+      var pay = state.showPayouts ? flightPayout(teams) : null;
+      var payHint = "";
+      if (pay) payHint = '<span class="pay-hd">' +
+        (pay.pot > 0 ? "$ pays " + pay.paid : "pays " + pay.paid + " (set buy-in)") + "</span>";
       head.innerHTML = "Flight " + (f + 1) +
         ' <span class="meta">' + teams.length + " team" + (teams.length === 1 ? "" : "s") +
-        " · " + range + "</span>" + potHtml;
+        " · " + range + "</span>" + potHtml + payHint;
       grp.appendChild(head);
       teams.forEach(function (t, i) {
         var row = document.createElement("div");
         row.className = "team-row" + (t.card ? " expandable" : "");
         row.dataset.team = t.name;
         var cls = t.score === null ? "sc none" : (t.score < 0 ? "sc under" : "sc");
+        // Right-side payout cell, aligned with this team's row.
+        var payHtml = "";
+        if (pay) {
+          var amt = (i < pay.paid)
+            ? (pay.pot > 0 ? "$" + fmtMoney(pay.amounts[i]) : "—")
+            : "";
+          payHtml = '<div class="pay' + (i < pay.paid ? " win" : "") + '">' + amt + '</div>';
+        }
         row.innerHTML = '<div class="pos">' + (bounds[f] + i + 1) + '</div>' +
           '<div class="nm"></div>' +
           '<div class="thru"></div>' +
           '<div class="chev"></div>' +
-          '<div class="' + cls + '"></div>';
+          '<div class="' + cls + '"></div>' + payHtml;
         var nm = row.querySelector(".nm");
         nm.textContent = t.name;
         if (t.players && t.players.length) {
@@ -483,11 +493,11 @@
         }
         row.querySelector(".thru").textContent = t.thru || "";
         row.querySelector(".chev").textContent = t.card ? (expandedTeams.has(t.name) ? "▾" : "▸") : "";
-        row.lastElementChild.textContent = t.display;
+        // score lives on the .sc cell (a pay cell may follow it, so don't use lastChild)
+        row.querySelector(".sc").textContent = t.display;
         grp.appendChild(row);
         if (t.card && expandedTeams.has(t.name)) grp.appendChild(cardEl(t));
       });
-      if (state.showPayouts) grp.appendChild(payStripEl(f, teams, color));
       board.appendChild(grp);
     }
   }
@@ -509,29 +519,6 @@
     var amounts = payoutSplit(paid).map(function (s) { return pot * s; });
     if (state.payWhole && pot > 0) amounts = roundWhole(amounts, pot);
     return { pot: pot, paid: paid, amounts: amounts };
-  }
-  function payStripEl(f, teams, color) {
-    var pay = flightPayout(teams);
-    var wrap = document.createElement("div");
-    wrap.className = "pay-strip";
-    var head = document.createElement("div");
-    head.className = "pay-head";
-    head.innerHTML = '<span>Payouts · top ' + pay.paid + " of " + teams.length +
-      "</span>" + (pay.pot > 0
-        ? '<span class="pot">Pot $' + fmtMoney(pay.pot) + "</span>"
-        : '<span class="pay-note">set Buy-in $/player</span>');
-    wrap.appendChild(head);
-    for (var i = 0; i < pay.paid; i++) {
-      var t = teams[i];
-      var row = document.createElement("div");
-      row.className = "pay-row";
-      row.innerHTML = '<span class="pl">' + (i + 1) + '</span>' +
-        '<span class="nm"></span>' +
-        '<span class="amt">' + (pay.pot > 0 ? "$" + fmtMoney(pay.amounts[i]) : "—") + '</span>';
-      row.querySelector(".nm").textContent = t ? t.name : "—";
-      wrap.appendChild(row);
-    }
-    return wrap;
   }
   function roundWhole(amounts, pot) {
     // round each to nearest dollar, then fix the remainder onto 1st place
