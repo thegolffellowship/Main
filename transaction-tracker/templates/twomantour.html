@@ -52,6 +52,14 @@
     white-space: nowrap;
   }
   .team-row .pay:empty::after { content: ""; }
+  .team-row .pay.win[data-f] { cursor: pointer; }
+  .team-row .pay.win[data-f]:hover { text-decoration: underline; text-underline-offset: 3px; }
+  .team-row .pay.locked { color: #4dd0e1; }         /* manually set */
+  .team-row .pay.locked::before { content: "●"; font-size: 8px; vertical-align: middle; margin-right: 4px; color: #4dd0e1; }
+  .team-row .pay .pay-edit {
+    width: 66px; text-align: right; font-size: 13px; padding: 2px 4px;
+    background: var(--panel2); color: var(--text); border: 1px solid var(--gold); border-radius: 5px;
+  }
   .flight-head .pay-hd {
     width: 74px; text-align: right; color: #7fe0a7; font-weight: 700;
     letter-spacing: 0; text-transform: none; font-size: 12px;
@@ -191,8 +199,8 @@
     </div>
     <div class="grp">
       <label>Pay top</label>
-      <input type="number" id="payPct" min="5" max="100" step="5" value="25" style="width:56px;text-align:center">
-      <label>%</label>
+      <input type="number" id="payPct" min="25" max="100" step="5" value="25" style="width:56px;text-align:center">
+      <label>% (min 25)</label>
     </div>
     <button id="refreshBtn" class="primary">Refresh</button>
     <button id="ugLoginBtn" class="hidden" style="border-color:var(--gold);color:var(--gold);">Log in to Unknown Golf</button>
@@ -300,7 +308,8 @@
         </select>
         <label style="margin-left:10px;"><input type="checkbox" id="rFirstTo100"> 1st to nearest $100</label>
       </div>
-      <div class="rules-note">Last paid place absorbs the remainder so each flight sums to its pot exactly.</div>
+      <div class="rules-note">Last paid place absorbs the remainder so each flight sums to its pot exactly. Click any payout on the board to set it manually — the others adjust to keep the pot exact.</div>
+      <div class="rrow"><button id="rClearOverrides">Clear manual payout edits</button></div>
     </div>
 
     <div class="row"><button class="primary" id="rulesClose" style="flex:1">Done</button></div>
@@ -384,6 +393,7 @@
     bandWidth: 4,        // stroke band width
     maxFlights: 6,       // cap for band mode
     lockLower: false,    // dragging a line shifts lower lines by the same size
+    payOverrides: {},    // "flightIdx:placeIdx" -> manual $ (others adjust)
     cuts: [],            // ascending cut indexes: teams-above-the-line counts
     headers: [], rows: [], nameCol: 0, numericCols: [],
     scoreCol: "auto",
@@ -402,7 +412,7 @@
         topFlightPct: state.topFlightPct, roundIncr: state.roundIncr,
         firstTo100: state.firstTo100, flightMode: state.flightMode,
         bandWidth: state.bandWidth, maxFlights: state.maxFlights,
-        lockLower: state.lockLower,
+        lockLower: state.lockLower, payOverrides: state.payOverrides,
       }));
       localStorage.setItem("tmt-last-event", JSON.stringify({ eventId: state.eventId, tourId: state.tourId }));
     } catch (e) {}
@@ -428,6 +438,7 @@
         if (s.bandWidth) state.bandWidth = Math.max(1, s.bandWidth);
         if (s.maxFlights) state.maxFlights = Math.max(1, s.maxFlights);
         state.lockLower = !!s.lockLower;
+        state.payOverrides = (s.payOverrides && typeof s.payOverrides === "object") ? s.payOverrides : {};
       }
     } catch (e) {}
   }
@@ -496,6 +507,7 @@
       return a.score - b.score;
     });
     state.teams = teams;
+    clearPayOverrides();
     normalizeCuts();
     render();
     saveState();
@@ -569,6 +581,7 @@
   }
   // Recompute cuts from the active mode; keeps state.flights in sync.
   function recomputeFlights() {
+    clearPayOverrides();   // flight structure changed → manual edits no longer map
     if (!state.teams.length) { state.cuts = []; return; }
     if (state.flightMode === "band") {
       state.cuts = bandCuts();
@@ -645,10 +658,12 @@
         // Right-side payout cell, aligned with this team's row.
         var payHtml = "";
         if (pay) {
-          var amt = (i < pay.paid)
-            ? (pot > 0 ? "$" + fmtMoney(pay.amounts[i]) : "—")
-            : "";
-          payHtml = '<div class="pay' + (i < pay.paid ? " win" : "") + '">' + amt + '</div>';
+          var isPaid = i < pay.paid;
+          var amt = isPaid ? (pot > 0 ? "$" + fmtMoney(pay.amounts[i]) : "—") : "";
+          var lockCls = (isPaid && pay.locked[i]) ? " locked" : "";
+          var attrs = (isPaid && pot > 0)
+            ? ' data-f="' + f + '" data-i="' + i + '" title="Click to set this payout — others adjust"' : "";
+          payHtml = '<div class="pay' + (isPaid ? " win" : "") + lockCls + '"' + attrs + '>' + amt + '</div>';
         }
         row.innerHTML = '<div class="pos">' + (bounds[f] + i + 1) + '</div>' +
           '<div class="nm"></div>' +
@@ -730,12 +745,65 @@
     var out = [];
     for (var h = 0; h < nF; h++) {
       var nT = fTeams[h];
-      var paid = Math.min(nT, Math.max(1, Math.ceil(nT * state.payPct / 100)));
-      var raw = splitWeights(paid).map(function (w) { return pots[h] * w; });
-      out.push({ pot: pots[h], paid: paid, amounts: roundAmounts(raw, pots[h], paid) });
+      var paid = flightPaid(nT);
+      var amounts = flightHasOverride(h, paid)
+        ? distributeWithOverrides(h, pots[h], paid)
+        : roundAmounts(splitWeights(paid).map(function (w) { return pots[h] * w; }), pots[h], paid);
+      var locked = [];
+      for (var q = 0; q < paid; q++) locked.push(state.payOverrides[h + ":" + q] != null);
+      // Enforce 1st ≥ 2nd ≥ 3rd … (Kerry): sort amounts descending, carrying
+      // the locked flags. Sum is invariant, so each flight still equals its pot.
+      var paired = amounts.map(function (a, idx) { return { a: a, l: locked[idx] }; });
+      paired.sort(function (x, y) { return y.a - x.a; });
+      amounts = paired.map(function (pp) { return pp.a; });
+      locked = paired.map(function (pp) { return pp.l; });
+      out.push({ pot: pots[h], paid: paid, amounts: amounts, locked: locked });
     }
     return out;
   }
+  // Paid places per flight: pay top payPct%, floored at a 25% minimum
+  // (Kerry) and at least 1, capped at the flight size.
+  function flightPaid(nT) {
+    var pct = Math.max(25, state.payPct);
+    return Math.min(nT, Math.max(1, Math.ceil(nT * pct / 100)));
+  }
+  function flightHasOverride(f, paid) {
+    for (var i = 0; i < paid; i++) if (state.payOverrides[f + ":" + i] != null) return true;
+    return false;
+  }
+  // Manual override: locked places keep their entered $, the rest split the
+  // remaining pot by weight (last free place absorbs the remainder), so the
+  // flight pot stays exact.
+  function distributeWithOverrides(f, pot, paid) {
+    var weights = splitWeights(paid), amounts = new Array(paid).fill(null);
+    var lockedSum = 0, locks = [];
+    for (var i = 0; i < paid; i++) {
+      var v = state.payOverrides[f + ":" + i];
+      if (v != null) { v = Math.max(0, Math.round(v)); amounts[i] = v; lockedSum += v; locks.push(i); }
+    }
+    if (lockedSum > pot && lockedSum > 0) {           // locks exceed pot → scale to fit
+      var scale = pot / lockedSum; lockedSum = 0;
+      locks.forEach(function (i) { amounts[i] = Math.round(amounts[i] * scale); lockedSum += amounts[i]; });
+    }
+    var free = [];
+    for (var j = 0; j < paid; j++) if (amounts[j] === null) free.push(j);
+    if (!free.length) {
+      var s = 0; amounts.forEach(function (a) { s += a; });
+      amounts[paid - 1] += Math.round(pot) - s;       // all locked → leftover on last
+      return amounts;
+    }
+    var remaining = Math.max(0, Math.round(pot) - lockedSum);
+    var fw = free.map(function (j) { return weights[j]; });
+    var fsum = fw.reduce(function (a, b) { return a + b; }, 0) || free.length;
+    var raw = free.map(function (j, idx) { return fsum ? remaining * fw[idx] / fsum : remaining / free.length; });
+    for (var m = 0; m < free.length; m++) amounts[free[m]] = roundNearest(raw[m], state.roundIncr);
+    var lastFree = free[free.length - 1], others = 0;
+    for (var n = 0; n < paid; n++) if (n !== lastFree) others += amounts[n];
+    amounts[lastFree] = Math.round(pot) - others;
+    if (amounts[lastFree] < 0) amounts[lastFree] = 0;
+    return amounts;
+  }
+  function clearPayOverrides() { state.payOverrides = {}; }
   function fmtMoney(v) { return (v % 1 === 0) ? String(v) : v.toFixed(2); }
   function updateTotalPot() {
     var el = $("totalPot"), total = totalPot();
@@ -820,6 +888,7 @@
     // snap to a tie-respecting boundary (never split equal scores)
     var snapped = snapCut(cut, lo, hi);
     if (snapped === null || snapped === state.cuts[idx]) return;
+    clearPayOverrides();   // flight membership changed
     if (state.lockLower) {
       // shift lower lines to preserve their flight sizes, snapping each
       var sizes = [];
@@ -1229,12 +1298,35 @@
   });
   $("board").addEventListener("click", function (e) {
     if (drag) return;
+    var payCell = e.target.closest(".team-row .pay.win[data-f]");
+    if (payCell) { e.stopPropagation(); editPayCell(payCell); return; }
     var row = e.target.closest(".team-row.expandable");
     if (!row) return;
     var name = row.dataset.team;
     if (expandedTeams.has(name)) expandedTeams.delete(name); else expandedTeams.add(name);
     render();
   });
+  function editPayCell(cell) {
+    var f = cell.dataset.f, i = cell.dataset.i;
+    var cur = cell.textContent.replace(/[^0-9.]/g, "");
+    var inp = document.createElement("input");
+    inp.type = "number"; inp.className = "pay-edit"; inp.value = cur; inp.min = 0;
+    cell.textContent = ""; cell.appendChild(inp); inp.focus(); inp.select();
+    var done = false;
+    function commit() {
+      if (done) return; done = true;
+      var v = inp.value.trim();
+      if (v === "") delete state.payOverrides[f + ":" + i];
+      else state.payOverrides[f + ":" + i] = Math.max(0, parseFloat(v) || 0);
+      render(); saveState();
+    }
+    inp.addEventListener("keydown", function (e) {
+      if (e.key === "Enter") { e.preventDefault(); inp.blur(); }
+      else if (e.key === "Escape") { done = true; render(); }
+    });
+    inp.addEventListener("blur", commit);
+    inp.addEventListener("click", function (e) { e.stopPropagation(); });
+  }
   $("scoreCol").addEventListener("change", function () {
     state.scoreCol = (this.value === "auto") ? "auto" : parseInt(this.value, 10);
     rebuildTeamsFromRows();
@@ -1282,7 +1374,7 @@
     render(); saveState();
   });
   $("payPct").addEventListener("input", function () {
-    state.payPct = Math.min(100, Math.max(5, parseInt(this.value, 10) || 25));
+    state.payPct = Math.min(100, Math.max(25, parseInt(this.value, 10) || 25));
     render(); saveState();
   });
 
@@ -1334,6 +1426,7 @@
   });
   $("rRoundIncr").addEventListener("change", function () { state.roundIncr = parseInt(this.value, 10) || 50; render(); saveState(); });
   $("rFirstTo100").addEventListener("change", function () { state.firstTo100 = this.checked; render(); saveState(); });
+  $("rClearOverrides").addEventListener("click", function () { clearPayOverrides(); render(); saveState(); toast("Manual payout edits cleared"); });
 
   $("setupBtn").addEventListener("click", function () {
     $("cfgEvent").value = state.eventId; $("cfgTour").value = state.tourId;

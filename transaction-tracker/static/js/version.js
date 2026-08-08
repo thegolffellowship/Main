@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.224.0";
+window.TGF_VERSION = "2.225.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.225.0",
+    date: "2026-08-08",
+    changes: [
+      "Flight Board — EDITABLE PAYOUTS (Kerry): click any payout amount on the board to type a value; that place locks (cyan with a ● dot) and the other paid places redistribute the remaining pot by weight, so the flight pot stays exact. Multiple locks supported (if they exceed the pot they scale to fit). 'Clear manual payout edits' in the Rules modal, and any structural change (drag a flight line, change flight count/mode, reload teams) clears the edits since the places no longer map. Overrides persist per event otherwise.",
+      "Flight Board — 1st ≥ 2nd ≥ 3rd is now always enforced (Kerry): payouts are ordered descending after all rounding/overrides (sum preserved, so each flight still equals its pot). This also fixes the earlier even-split + $100-rounding inversion. And places-paid now has a MINIMUM of 25% of each flight (Kerry) — the Pay-top-% control floors at 25%.",
+    ],
+  },
   {
     version: "2.224.0",
     date: "2026-08-08",

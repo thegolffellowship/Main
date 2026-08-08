@@ -26,6 +26,13 @@ lets Kerry set flights interactively:
   lists/loads/deletes snapshots. Routes: GET/POST
   `/twomantour/api/saves`, GET/DELETE `/twomantour/api/saves/<id>`,
   all `@require_role("admin")`.
+- (v2.225.0) **Editable payouts** — click a payout cell → `payOverrides`
+  `{"f:i": $}`; locked places keep their value, others redistribute the
+  remaining pot (`distributeWithOverrides`), pot stays exact. Cleared on
+  any structural change (drag/flight-count/mode/reload) and via Rules'
+  Clear button; persists otherwise. **1st ≥ 2nd ≥ …** enforced (amounts
+  sorted descending, sum preserved). Places-paid floored at **25%** of
+  each flight (`flightPaid`, payPct min 25).
 - (v2.224.0) **TOTAL POT header + Rules modal.** Payout rules: pot
   across flights `potModel` prorata(self-funded, default)|even; within
   flight `splitMode` places(default)|even; `topFlightPct` slider skims %
