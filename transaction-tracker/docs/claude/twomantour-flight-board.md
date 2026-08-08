@@ -58,12 +58,35 @@ token (`E`, `+2`, `-5`, `68` all parse; leading positions and thru markers
 are stripped). Everything downstream (sorting, flights, dragging, copy)
 works identically on pasted data.
 
+## The REAL page format (learned live, 2026-08-08)
+
+Kerry's first live use showed the event page is NOT a name+score
+leaderboard table — it renders **per-team scorecard blocks**:
+
+```
+player HC 1 2 3 4 5 6 7 8 9 F 10 ... 18 B Total (vs Par)   <- header
+Weapons of Grass Destruction                               <- team name
+Todd Albert (0)                                            <- players (HC in parens)
+Josiah Prindle (0)
+Tpc San Antonio - Canyons                                  <- course
+- - - - - - 3 3 4 3 4 - 17 17 (-2)                         <- hole row, (vs par) last
+Unofficial Score                                           <- block terminator
+```
+
+v2.214.0: `parse_scorecard_blocks()` (twomantour.py, mirrored in the
+template's JS for paste) parses this into teams. Key rules: a bare line
+only becomes a team name once a player/hole row follows it (headings and
+course lines never leak); the trailing parenthesized vs-par is the score,
+falling back to a signed token, then the last number. The server prefers
+block results over the generic table guess whenever ≥2 teams parse
+(or the table path found nothing); the client uses `payload.teams`
+directly. When neither parser reads the page, the response includes
+`sample_lines` (first 80 page-text lines) for evidence-based fixes.
+
 ## Known limits / future
 
-- Verified against synthetic JSP-style markup + Playwright UI tests, not the
-  real event page (sandbox egress blocked `league.unknowngolf.com`); the
-  column picker + paste fallback are the insurance. After first live use,
-  note here what the real page's table actually looks like.
+- The block parser is built from Kerry's mid-event screenshot; a Clear
+  button resets a bad import instantly.
 - Flight assignments are not persisted server-side and nothing feeds payouts
   — this is a decision aid Kerry reads from during flighting. If Two Man
   Tour ever needs money math in the Tracker, that's a new scope (rule 3b).

@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.213.0";
+window.TGF_VERSION = "2.214.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.214.0",
+    date: "2026-08-08",
+    changes: [
+      "Two Man Tour Flight Board learns the REAL unknowngolf page format (Kerry's live screenshot, mid-event): the page isn't a name+score leaderboard table — it renders per-team SCORECARD BLOCKS (team name / players with handicaps in parens / course / hole-by-hole row ending in the vs-par total like '(-2)' / 'Unofficial Score'). Both the server fetch AND the Paste-scores importer now parse that block format into a clean team list, so Kerry's drag-copy of the whole page produces exactly the field, not 42 junk rows. A bare line only becomes a team name once a player or hole row follows it, so page headings and course lines never leak in; the vs-par value in trailing parens is the ranking score, with signed/last-number fallbacks.",
+      "New CLEAR button on the Flight Board (Kerry request) — wipes the board, flight lines, pasted text, and auto-refresh in one tap so a bad paste never has to be picked apart by hand. Plus diagnostics: when the live fetch can't read the page, the API response now carries the first 80 text lines of what it actually saw (admin-only), so the next parser fix works from evidence instead of guesses.",
+    ],
+  },
   {
     version: "2.213.0",
     date: "2026-08-08",

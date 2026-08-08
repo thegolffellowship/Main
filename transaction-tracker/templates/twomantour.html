@@ -139,6 +139,7 @@
     <button id="refreshBtn" class="primary">Refresh</button>
     <button id="autoBtn">Auto 60s</button>
     <button id="pasteBtn">Paste scores</button>
+    <button id="clearBtn">Clear</button>
     <button id="copyBtn">Copy flights</button>
     <button id="setupBtn" title="Event settings">⚙</button>
   </div>
@@ -439,9 +440,22 @@
         if (!res.ok) throw new Error(res.j.error || ("HTTP " + res.status));
         var j = res.j;
         $("eventName").textContent = j.event_name || "";
+        if (j.teams && j.teams.length >= 2) {
+          // Server recognized the per-team scorecard-block layout and
+          // returns teams directly — no column guessing needed.
+          state.source = "live";
+          $("scoreCol").innerHTML = "<option value='auto'>Auto</option>";
+          finishTeams(j.teams.map(function (t) {
+            return { name: t.name, score: t.score, raw: t.raw || "", thru: "" };
+          }));
+          $("updatedAt").textContent = "Updated " + new Date().toLocaleTimeString();
+          setStatus(state.teams.length + " teams (live) · drag the gold lines to set flights.");
+          return;
+        }
         if (!j.found) {
-          setStatus("Fetched the page but couldn't find a leaderboard table (" +
-                    j.table_count + " tables scanned). Use “Paste scores” below — copy the leaderboard right off the live page.", true);
+          if (j.sample_lines) console.log("TMT page sample:", j.sample_lines);
+          setStatus("Fetched the page but couldn't read a leaderboard from it (" +
+                    j.table_count + " tables scanned). Use “Paste scores” — copy the leaderboard right off the live page.", true);
           return;
         }
         state.headers = j.headers; state.rows = j.rows;
@@ -459,7 +473,70 @@
   }
 
   // ---------- paste fallback ----------
+  // Scorecard-block layout (what the real unknowngolf page copies as):
+  // team name / players "(0)" / course / hole row ending "(-2)" /
+  // "Unofficial Score". Mirrors the server-side parser.
+  function isHoleRow(line) {
+    var toks = line.split(/\s+/);
+    if (toks.length < 5) return false;
+    var holeish = toks.filter(function (t) {
+      return /^-+$|^\d{1,3}$|^F$|^\([+-]?\d+\)$|^\(E\)$/i.test(t);
+    }).length;
+    return holeish >= 5 && holeish >= toks.length - 1;
+  }
+  function looksLikeScorecard(lines) {
+    var holeRows = 0;
+    for (var i = 0; i < lines.length; i++) {
+      if (/^player\s+HC\b/i.test(lines[i])) return true;
+      if (isHoleRow(lines[i])) holeRows++;
+    }
+    return holeRows >= 2;
+  }
+  function parseBlocks(lines) {
+    // A bare line only becomes a team name once a player or hole row
+    // follows it (pending → cur), so headings/junk before the first
+    // block never emit; a bare line mid-block (the course) is ignored.
+    var teams = [], cur = null, pending = null, curScore = null, curRaw = "", scored = false;
+    function flush() {
+      if (cur) teams.push({ name: cur, score: curScore, raw: curRaw, thru: "" });
+      cur = null; curScore = null; curRaw = ""; scored = false;
+    }
+    function openBlock() { if (cur === null && pending !== null) { cur = pending; pending = null; } }
+    lines.forEach(function (line) {
+      line = line.replace(/\s+/g, " ").trim();
+      if (!line || /^player\s+HC\b/i.test(line)) return;
+      if (/^((un)?official\s+score|thru\b.*|hole|out|in|total)$/i.test(line)) { flush(); pending = null; return; }
+      if (isHoleRow(line)) {
+        openBlock();
+        if (!cur) return;
+        var m = line.match(/\(([+-]?\d+(?:\.\d+)?|E)\)\s*$/i);
+        var v = null, tok = "";
+        if (m) { v = parseScoreToken(m[1]); tok = "(" + m[1] + ")"; }
+        else {
+          var toks = line.split(/\s+/);
+          for (var i = toks.length - 1; i >= 0 && v === null; i--)
+            if (/^[+-]\d+$|^E$/i.test(toks[i])) { v = parseScoreToken(toks[i]); tok = toks[i]; }
+          for (var k = toks.length - 1; k >= 0 && v === null; k--) {
+            var pv = parseScoreToken(toks[k]);
+            if (pv !== null) { v = pv; tok = toks[k]; }
+          }
+        }
+        if (v !== null) { curScore = v; curRaw = tok; scored = true; }
+        return;
+      }
+      if (/\([+-]?\d+\)\s*$/.test(line)) { openBlock(); return; }   // player w/ handicap
+      if (line.replace(/[^A-Za-z]/g, "").length >= 3) {
+        var name = line.replace(/^T?\d+[.)]?\s+/, "");
+        if (cur !== null && scored) flush();
+        if (cur === null) pending = name;
+      }
+    });
+    flush();
+    return teams;
+  }
   function parsePaste(text) {
+    var allLines = text.split(/\r?\n/);
+    if (looksLikeScorecard(allLines)) return parseBlocks(allLines);
     var teams = [];
     text.split(/\r?\n/).forEach(function (line) {
       line = line.replace(/\t/g, "  ").trim();
@@ -559,6 +636,17 @@
     finishTeams(teams);
     setStatus(teams.length + " teams (pasted) · drag the gold lines to set flights.");
     $("updatedAt").textContent = "Pasted " + new Date().toLocaleTimeString();
+  });
+  $("clearBtn").addEventListener("click", function () {
+    state.teams = []; state.rows = []; state.headers = [];
+    state.numericCols = []; state.cuts = []; state.source = null;
+    $("pasteText").value = "";
+    $("scoreCol").innerHTML = "<option value='auto'>Auto</option>";
+    if (state.auto) { clearInterval(state.auto); state.auto = null;
+      $("autoBtn").classList.remove("on"); $("autoBtn").textContent = "Auto 60s"; }
+    render(); saveState();
+    $("updatedAt").textContent = "";
+    setStatus("Cleared. Hit Refresh for live scores, or Paste scores.");
   });
   $("copyBtn").addEventListener("click", copyFlights);
   $("setupBtn").addEventListener("click", function () {

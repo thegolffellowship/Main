@@ -232,6 +232,120 @@ def extract_leaderboard(html):
 
 
 # ---------------------------------------------------------------------------
+# Scorecard-block format (what the real event page turned out to be,
+# per Kerry's screenshot 2026-08-08): each team renders as a block —
+#   Weapons of Grass Destruction        <- team name (bare line)
+#   Todd Albert (0)                     <- players, handicap in parens
+#   Josiah Prindle (0)
+#   Tpc San Antonio - Canyons           <- course (bare line, ignored)
+#   - - - - - - 3 3 4 3 4 - 17 17 (-2)  <- hole row; (vs par) at the end
+#   Unofficial Score                    <- block terminator
+# ---------------------------------------------------------------------------
+_RE_HEADER = re.compile(r"^player\s+HC\b", re.I)
+_RE_STATUS = re.compile(r"^((un)?official\s+score|thru\b.*|hole|out|in|total)$", re.I)
+_RE_PLAYER = re.compile(r"\([+-]?\d+\)\s*$")
+_RE_PARENS_SCORE = re.compile(r"\(([+-]?\d+(?:\.\d+)?|E)\)\s*$", re.I)
+
+
+def _tokens(line):
+    return line.split()
+
+
+def _is_hole_row(line):
+    toks = _tokens(line)
+    if len(toks) < 5:
+        return False
+    holeish = sum(1 for t in toks
+                  if re.fullmatch(r"-+|\d{1,3}|F|\([+-]?\d+\)|\(E\)", t, re.I))
+    return holeish >= 5 and holeish >= len(toks) - 1
+
+
+def _hole_row_score(line):
+    m = _RE_PARENS_SCORE.search(line)
+    if m:
+        return parse_score_token(m.group(1)), "(" + m.group(1) + ")"
+    toks = _tokens(line)
+    # last signed/E token, else last plain number (gross total)
+    for t in reversed(toks):
+        if re.fullmatch(r"[+-]\d+|E", t, re.I):
+            return parse_score_token(t), t
+    for t in reversed(toks):
+        v = parse_score_token(t)
+        if v is not None:
+            return v, t
+    return None, ""
+
+
+def parse_scorecard_blocks(lines):
+    """Parse the per-team scorecard-block layout into teams. Returns
+    [{name, score, raw}] — score is the (vs par) value when present.
+
+    A bare line only becomes a team name once a player or hole row
+    follows it (`pending` → `cur`), so page headings / nav junk before
+    the first block are overwritten by the real team name and never
+    emitted. A bare line inside an open block (the course) is ignored."""
+    teams, cur, pending, cur_score, cur_raw, scored = [], None, None, None, "", False
+
+    def flush():
+        nonlocal cur, cur_score, cur_raw, scored
+        if cur:
+            teams.append({"name": cur, "score": cur_score, "raw": cur_raw})
+        cur, cur_score, cur_raw, scored = None, None, "", False
+
+    def open_block():
+        nonlocal cur, pending
+        if cur is None and pending is not None:
+            cur, pending = pending, None
+
+    for raw_line in lines:
+        line = re.sub(r"\s+", " ", raw_line).strip()
+        if not line or _RE_HEADER.search(line):
+            continue
+        if _RE_STATUS.fullmatch(line):
+            flush()
+            pending = None
+            continue
+        if _is_hole_row(line):
+            open_block()
+            if cur:
+                v, tok = _hole_row_score(line)
+                if v is not None:
+                    cur_score, cur_raw, scored = v, tok, True
+            continue
+        if _RE_PLAYER.search(line):
+            open_block()
+            continue
+        if _is_namelike(line):
+            name = re.sub(r"^T?\d+[.)]?\s+", "", line)
+            if cur is not None and scored:
+                flush()
+            if cur is None:
+                pending = name
+    flush()
+    return teams
+
+
+# ---------------------------------------------------------------------------
+# Page text extraction (for block parsing + diagnostics)
+# ---------------------------------------------------------------------------
+def _text_lines(html):
+    """Flatten the page to text lines: a table row becomes ONE line
+    (cells joined by spaces), block-level tags break lines — matching
+    what a drag-copy of the page looks like."""
+    s = re.sub(r"(?is)<(script|style)[^>]*>.*?</\1>", " ", html)
+    s = re.sub(r"(?i)</t[dh]>", " ", s)
+    s = re.sub(r"(?i)<(br|/tr|/div|/p|/li|/h[1-6]|/table|/section)[^>]*>", "\n", s)
+    s = re.sub(r"<[^>]+>", " ", s)
+    s = unescape(s)
+    lines = []
+    for ln in s.splitlines():
+        ln = re.sub(r"\s+", " ", ln).strip()
+        if ln:
+            lines.append(ln)
+    return lines
+
+
+# ---------------------------------------------------------------------------
 # Fetch
 # ---------------------------------------------------------------------------
 def fetch_live(event_id, tour_id, cookie=None):
@@ -252,4 +366,20 @@ def fetch_live(event_id, tour_id, cookie=None):
     payload = extract_leaderboard(resp.text)
     payload["source_url"] = url
     payload["http_status"] = resp.status_code
+
+    # The real event page (seen 2026-08-08) renders per-team scorecard
+    # blocks, not a name+score table — try the block parser on the page
+    # text and prefer it when it finds a real field of teams.
+    lines = _text_lines(resp.text)
+    blocks = parse_scorecard_blocks(lines)
+    scored = [t for t in blocks if t["score"] is not None]
+    if len(blocks) >= 2 and (len(scored) >= 2 or not payload["found"]):
+        payload["teams"] = blocks
+        payload["mode"] = "blocks"
+
+    # Diagnostics: when neither parser produced anything, ship the first
+    # chunk of page text so the failure is visible in the response
+    # (admin-only endpoint) instead of guessing at the markup again.
+    if not payload["found"] and not payload.get("teams"):
+        payload["sample_lines"] = lines[:80]
     return payload
