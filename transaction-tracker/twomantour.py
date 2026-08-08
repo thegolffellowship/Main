@@ -285,12 +285,14 @@ def parse_scorecard_blocks(lines):
     the first block are overwritten by the real team name and never
     emitted. A bare line inside an open block (the course) is ignored."""
     teams, cur, pending, cur_score, cur_raw, scored = [], None, None, None, "", False
+    players = []
 
     def flush():
-        nonlocal cur, cur_score, cur_raw, scored
+        nonlocal cur, cur_score, cur_raw, scored, players
         if cur:
-            teams.append({"name": cur, "score": cur_score, "raw": cur_raw})
-        cur, cur_score, cur_raw, scored = None, None, "", False
+            teams.append({"name": cur, "score": cur_score, "raw": cur_raw,
+                          "players": players})
+        cur, cur_score, cur_raw, scored, players = None, None, "", False, []
 
     def open_block():
         nonlocal cur, pending
@@ -314,6 +316,10 @@ def parse_scorecard_blocks(lines):
             continue
         if _RE_PLAYER.search(line):
             open_block()
+            if cur is not None:
+                pname = _RE_PLAYER.sub("", line).strip()
+                if pname and pname not in players:
+                    players.append(pname)
             continue
         if _is_namelike(line):
             name = re.sub(r"^T?\d+[.)]?\s+", "", line)

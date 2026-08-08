@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.214.0";
+window.TGF_VERSION = "2.215.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.215.0",
+    date: "2026-08-08",
+    changes: [
+      "Flight Board shows the PLAYERS on every team (Kerry, mid-event): the scorecard-block parsers (server fetch + paste) already walked past each team's player lines — now they keep them, so every row shows the team name with its two players underneath in dim text ('Team #44 / Jerod Durst · Kwinton Reno'). Copy Flights includes them too, so the texted flight list names actual people, not just Team #NN.",
+    ],
+  },
   {
     version: "2.214.0",
     date: "2026-08-08",

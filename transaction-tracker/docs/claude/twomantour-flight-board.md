@@ -74,7 +74,9 @@ Unofficial Score                                           <- block terminator
 ```
 
 v2.214.0: `parse_scorecard_blocks()` (twomantour.py, mirrored in the
-template's JS for paste) parses this into teams. Key rules: a bare line
+template's JS for paste) parses this into teams; v2.215.0 also captures
+each block's player names (handicap parens stripped) — shown under the
+team name and included in Copy Flights. Key rules: a bare line
 only becomes a team name once a player/hole row follows it (headings and
 course lines never leak); the trailing parenthesized vs-par is the score,
 falling back to a signed token, then the last number. The server prefers
