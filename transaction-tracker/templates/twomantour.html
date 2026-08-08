@@ -1,0 +1,587 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Two Man Tour — Flight Board</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --panel: #161d27;
+    --panel2: #1c2532;
+    --line: #2b3648;
+    --text: #e8edf4;
+    --dim: #93a1b5;
+    --gold: #d4af37;
+    --gold-dim: #a8892b;
+    --danger: #e5534b;
+    --f1: #4c8dff; --f2: #2fbf71; --f3: #d4af37; --f4: #e07be0;
+    --f5: #ff8c42; --f6: #4dd0e1; --f7: #b39ddb; --f8: #ef6292;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font: 15px/1.45 -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  }
+  header {
+    display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap;
+    padding: 14px 18px 10px; border-bottom: 2px solid var(--gold);
+    background: linear-gradient(180deg, #10151d, #0d1117);
+  }
+  header .brand {
+    font-size: 22px; font-weight: 800; letter-spacing: 2.5px; color: var(--gold);
+    text-transform: uppercase; white-space: nowrap;
+  }
+  header .brand small { color: var(--dim); letter-spacing: 1px; font-weight: 600; }
+  header .event-name { color: var(--dim); font-size: 14px; }
+  header .updated { margin-left: auto; color: var(--dim); font-size: 12.5px; }
+  .wrap { max-width: 860px; margin: 0 auto; padding: 14px 14px 80px; }
+
+  .controls {
+    display: flex; flex-wrap: wrap; gap: 10px; align-items: center;
+    background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
+    padding: 10px 12px; margin-bottom: 14px;
+  }
+  .controls label { color: var(--dim); font-size: 12.5px; margin-right: 4px; }
+  .controls .grp { display: flex; align-items: center; gap: 4px; }
+  input[type=number], input[type=text], select, textarea {
+    background: var(--panel2); color: var(--text); border: 1px solid var(--line);
+    border-radius: 7px; padding: 7px 9px; font-size: 14px;
+  }
+  input#flightCount { width: 64px; text-align: center; font-size: 16px; font-weight: 700; }
+  button {
+    background: var(--panel2); color: var(--text); border: 1px solid var(--line);
+    border-radius: 7px; padding: 8px 13px; font-size: 14px; cursor: pointer;
+  }
+  button:hover { border-color: var(--gold-dim); }
+  button.primary { background: var(--gold); border-color: var(--gold); color: #14100a; font-weight: 700; }
+  button.on { background: #1d3323; border-color: #2fbf71; color: #7fe0a7; }
+  .note { color: var(--dim); font-size: 12.5px; margin: 6px 2px 12px; }
+  .note.error { color: var(--danger); }
+
+  /* Leaderboard */
+  .board { user-select: none; }
+  .flight { border: 1px solid var(--line); border-radius: 10px; overflow: hidden; background: var(--panel); }
+  .flight + .flight { margin-top: 0; }
+  .flight-head {
+    display: flex; align-items: center; gap: 10px; padding: 7px 12px;
+    font-weight: 800; letter-spacing: 1.2px; font-size: 13px; text-transform: uppercase;
+    background: var(--panel2);
+  }
+  .flight-head .meta { font-weight: 600; letter-spacing: 0; text-transform: none; color: var(--dim); font-size: 12.5px; }
+  .team-row {
+    display: flex; align-items: center; gap: 10px; padding: 8px 12px;
+    border-top: 1px solid #202a39; font-size: 15.5px;
+  }
+  .team-row .pos { width: 34px; color: var(--dim); font-variant-numeric: tabular-nums; }
+  .team-row .nm { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .team-row .thru { color: var(--dim); font-size: 12.5px; width: 52px; text-align: right; }
+  .team-row .sc { width: 56px; text-align: right; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .team-row .sc.under { color: #ff6b63; }
+  .team-row .sc.none { color: var(--dim); font-weight: 400; }
+
+  /* Draggable divider between flights */
+  .divider {
+    height: 26px; margin: 4px 0; display: flex; align-items: center; gap: 10px;
+    cursor: grab; touch-action: none;
+  }
+  .divider:active { cursor: grabbing; }
+  .divider .bar { flex: 1; height: 4px; border-radius: 2px; background: var(--gold); box-shadow: 0 0 8px rgba(212,175,55,.45); }
+  .divider .grip {
+    background: var(--gold); color: #14100a; font-size: 11px; font-weight: 800;
+    letter-spacing: 1px; padding: 3px 10px; border-radius: 20px; white-space: nowrap;
+  }
+  .divider.dragging .bar, .divider.dragging .grip { background: #ffd75e; }
+
+  /* Modals / overlays */
+  .overlay {
+    position: fixed; inset: 0; background: rgba(5,8,12,.82); display: flex;
+    align-items: center; justify-content: center; z-index: 50; padding: 16px;
+  }
+  .modal {
+    background: var(--panel); border: 1px solid var(--line); border-radius: 12px;
+    padding: 22px; width: 100%; max-width: 460px;
+  }
+  .modal h2 { margin: 0 0 4px; color: var(--gold); letter-spacing: 1.5px; font-size: 18px; text-transform: uppercase; }
+  .modal p { color: var(--dim); font-size: 13.5px; margin: 6px 0 14px; }
+  .modal .row { display: flex; gap: 8px; margin-top: 12px; }
+  .modal textarea { width: 100%; min-height: 220px; font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 13px; }
+  .hidden { display: none !important; }
+  #pinInput { width: 100%; font-size: 20px; letter-spacing: 6px; text-align: center; }
+  .toast {
+    position: fixed; bottom: 18px; left: 50%; transform: translateX(-50%);
+    background: var(--panel2); border: 1px solid var(--gold-dim); color: var(--text);
+    padding: 9px 16px; border-radius: 8px; font-size: 13.5px; z-index: 60;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="brand">Two Man Tour <small>· Flight Board</small></div>
+  <div class="event-name" id="eventName"></div>
+  <div class="updated" id="updatedAt"></div>
+</header>
+
+<div class="wrap">
+  <div class="controls">
+    <div class="grp">
+      <label>Flights</label>
+      <button id="flightsMinus" title="Fewer flights">−</button>
+      <input type="number" id="flightCount" min="1" max="8" value="3">
+      <button id="flightsPlus" title="More flights">+</button>
+    </div>
+    <button id="resetLines">Reset lines</button>
+    <div class="grp">
+      <label>Score</label>
+      <select id="scoreCol"></select>
+    </div>
+    <button id="refreshBtn" class="primary">Refresh</button>
+    <button id="autoBtn">Auto 60s</button>
+    <button id="pasteBtn">Paste scores</button>
+    <button id="copyBtn">Copy flights</button>
+    <button id="setupBtn" title="Event settings">⚙</button>
+  </div>
+  <div class="note" id="statusNote">Loading…</div>
+  <div class="board" id="board"></div>
+</div>
+
+<!-- PIN gate -->
+<div class="overlay hidden" id="pinOverlay">
+  <div class="modal">
+    <h2>Two Man Tour</h2>
+    <p>Admin PIN required.</p>
+    <input type="password" id="pinInput" inputmode="numeric" autocomplete="off" placeholder="••••">
+    <div class="row">
+      <button class="primary" id="pinGo" style="flex:1">Enter</button>
+    </div>
+    <p id="pinErr" class="note error"></p>
+  </div>
+</div>
+
+<!-- Paste fallback -->
+<div class="overlay hidden" id="pasteOverlay">
+  <div class="modal">
+    <h2>Paste scores</h2>
+    <p>Copy the leaderboard text from the live-scoring page and paste it here —
+       one team per line, score as the last number (E / +2 / -5 / 68 all work).
+       Position numbers and "thru" columns are ignored automatically.</p>
+    <textarea id="pasteText" placeholder="1  Smith / Jones   -6&#10;2  Miller / Davis  -4"></textarea>
+    <div class="row">
+      <button class="primary" id="pasteGo" style="flex:1">Use these scores</button>
+      <button id="pasteCancel">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- Event settings -->
+<div class="overlay hidden" id="setupOverlay">
+  <div class="modal">
+    <h2>Event</h2>
+    <p>From the live-scoring URL: league.unknowngolf.com/event.jsp?eventId=…&tourId=…</p>
+    <div class="row"><label style="width:70px">eventId</label><input type="text" id="cfgEvent" style="flex:1"></div>
+    <div class="row"><label style="width:70px">tourId</label><input type="text" id="cfgTour" style="flex:1"></div>
+    <div class="row">
+      <button class="primary" id="cfgGo" style="flex:1">Save &amp; refresh</button>
+      <button id="cfgCancel">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+  "use strict";
+  var $ = function (id) { return document.getElementById(id); };
+
+  var FLIGHT_COLORS = ["--f1", "--f2", "--f3", "--f4", "--f5", "--f6", "--f7", "--f8"];
+  var state = {
+    eventId: "{{ default_event_id }}",
+    tourId: "{{ default_tour_id }}",
+    teams: [],           // [{name, score(null|number), display, thru}]
+    flights: 3,
+    cuts: [],            // ascending cut indexes: teams-above-the-line counts
+    headers: [], rows: [], nameCol: 0, numericCols: [],
+    scoreCol: "auto",
+    source: null,        // 'live' | 'paste'
+    auto: null,
+  };
+
+  // ---------- persistence ----------
+  function storeKey() { return "tmt-flightboard-" + state.eventId; }
+  function saveState() {
+    try {
+      localStorage.setItem(storeKey(), JSON.stringify({
+        flights: state.flights, cuts: state.cuts, scoreCol: state.scoreCol,
+      }));
+      localStorage.setItem("tmt-last-event", JSON.stringify({ eventId: state.eventId, tourId: state.tourId }));
+    } catch (e) {}
+  }
+  function loadState() {
+    try {
+      var last = JSON.parse(localStorage.getItem("tmt-last-event") || "null");
+      if (last && last.eventId) { state.eventId = last.eventId; state.tourId = last.tourId; }
+      var s = JSON.parse(localStorage.getItem(storeKey()) || "null");
+      if (s) {
+        state.flights = Math.min(8, Math.max(1, s.flights || 3));
+        state.cuts = Array.isArray(s.cuts) ? s.cuts : [];
+        state.scoreCol = (s.scoreCol === undefined) ? "auto" : s.scoreCol;
+      }
+    } catch (e) {}
+  }
+
+  // ---------- score helpers ----------
+  function parseScoreToken(s) {
+    s = (s || "").trim().replace(/\*+$/, "");
+    if (!s || /^(wd|dq|ns|dns|cut|--|-)$/i.test(s)) return null;
+    if (/^e$/i.test(s)) return 0;
+    if (/^[+-]?\d+(\.\d+)?$/.test(s)) return parseFloat(s);
+    return null;
+  }
+  function fmtScore(v, toPar) {
+    if (v === null || v === undefined) return "—";
+    if (toPar) return v === 0 ? "E" : (v > 0 ? "+" + v : String(v));
+    return String(v);
+  }
+
+  // ---------- build teams from a fetched table ----------
+  function autoScoreCol() {
+    var pick = function (re) {
+      for (var k = 0; k < state.numericCols.length; k++) {
+        var i = state.numericCols[k];
+        if (re.test(state.headers[i] || "")) return i;
+      }
+      return null;
+    };
+    var c = pick(/net/i);
+    if (c === null) c = pick(/total|score/i);
+    if (c === null) c = pick(/gross/i);
+    if (c === null && state.numericCols.length)
+      c = state.numericCols[state.numericCols.length - 1];
+    return c;
+  }
+  function thruCol() {
+    for (var i = 0; i < state.headers.length; i++)
+      if (/thru|hole/i.test(state.headers[i] || "")) return i;
+    return null;
+  }
+  function rebuildTeamsFromRows() {
+    var col = (state.scoreCol === "auto") ? autoScoreCol() : state.scoreCol;
+    var tc = thruCol();
+    var teams = [];
+    state.rows.forEach(function (r) {
+      var name = (r[state.nameCol] || "").trim();
+      // Strip a leading position marker the page may glue onto the name.
+      name = name.replace(/^T?\d+[.)]?\s+/, "");
+      if (!name) return;
+      var score = (col === null) ? null : parseScoreToken(r[col]);
+      teams.push({ name: name, score: score, raw: (col === null) ? "" : (r[col] || ""),
+                   thru: (tc === null) ? "" : (r[tc] || "") });
+    });
+    finishTeams(teams);
+  }
+  function finishTeams(teams) {
+    // to-par formatting when the column contains E / signed values / small numbers
+    var scored = teams.filter(function (t) { return t.score !== null; });
+    var toPar = scored.length > 0 && scored.every(function (t) { return Math.abs(t.score) <= 30; }) &&
+                (scored.some(function (t) { return t.score <= 0; }) ||
+                 teams.some(function (t) { return /^[+-]|^e$/i.test((t.raw || "").trim()); }));
+    teams.forEach(function (t) { t.display = fmtScore(t.score, toPar); });
+    teams.sort(function (a, b) {
+      if (a.score === null && b.score === null) return 0;
+      if (a.score === null) return 1;
+      if (b.score === null) return -1;
+      return a.score - b.score;
+    });
+    state.teams = teams;
+    normalizeCuts();
+    render();
+    saveState();
+  }
+
+  // ---------- flights / cuts ----------
+  function equalCuts() {
+    var n = state.teams.length, N = state.flights, cuts = [];
+    for (var i = 1; i < N; i++) {
+      var c = Math.round(n * i / N);
+      c = Math.max(i, Math.min(n - (N - i), c));
+      cuts.push(c);
+    }
+    return cuts;
+  }
+  function normalizeCuts() {
+    var n = state.teams.length;
+    if (n === 0) { state.cuts = []; return; }
+    state.flights = Math.min(state.flights, Math.max(1, n));
+    if (state.cuts.length !== state.flights - 1) { state.cuts = equalCuts(); return; }
+    var prev = 0;
+    state.cuts = state.cuts.map(function (c, i) {
+      c = Math.max(prev + 1, Math.min(n - (state.cuts.length - i), Math.round(c)));
+      prev = c;
+      return c;
+    });
+  }
+
+  // ---------- render ----------
+  function render() {
+    var board = $("board");
+    board.innerHTML = "";
+    $("flightCount").value = state.flights;
+    if (!state.teams.length) return;
+
+    var bounds = [0].concat(state.cuts, [state.teams.length]);
+    for (var f = 0; f < bounds.length - 1; f++) {
+      if (f > 0) {
+        var div = document.createElement("div");
+        div.className = "divider";
+        div.dataset.idx = f - 1;
+        div.innerHTML = '<div class="bar"></div><div class="grip">⇕ FLIGHT LINE</div><div class="bar"></div>';
+        board.appendChild(div);
+      }
+      var color = "var(" + FLIGHT_COLORS[f % FLIGHT_COLORS.length] + ")";
+      var grp = document.createElement("div");
+      grp.className = "flight";
+      grp.style.borderLeft = "5px solid " + color;
+      var teams = state.teams.slice(bounds[f], bounds[f + 1]);
+      var scores = teams.filter(function (t) { return t.score !== null; })
+                        .map(function (t) { return t.display; });
+      var range = scores.length ? (scores[0] + (scores.length > 1 ? " – " + scores[scores.length - 1] : "")) : "no scores";
+      var head = document.createElement("div");
+      head.className = "flight-head";
+      head.style.color = color;
+      head.innerHTML = "Flight " + (f + 1) +
+        ' <span class="meta">' + teams.length + " team" + (teams.length === 1 ? "" : "s") +
+        " · " + range + "</span>";
+      grp.appendChild(head);
+      teams.forEach(function (t, i) {
+        var row = document.createElement("div");
+        row.className = "team-row";
+        var cls = t.score === null ? "sc none" : (t.score < 0 ? "sc under" : "sc");
+        row.innerHTML = '<div class="pos">' + (bounds[f] + i + 1) + '</div>' +
+          '<div class="nm"></div>' +
+          '<div class="thru"></div>' +
+          '<div class="' + cls + '"></div>';
+        row.querySelector(".nm").textContent = t.name;
+        row.querySelector(".thru").textContent = t.thru || "";
+        row.lastElementChild.textContent = t.display;
+        grp.appendChild(row);
+      });
+      board.appendChild(grp);
+    }
+  }
+
+  // ---------- divider dragging ----------
+  var drag = null;   // {idx, el}
+  document.addEventListener("pointerdown", function (e) {
+    var d = e.target.closest(".divider");
+    if (!d) return;
+    e.preventDefault();
+    drag = { idx: parseInt(d.dataset.idx, 10) };
+    d.classList.add("dragging");
+  });
+  document.addEventListener("pointermove", function (e) {
+    if (!drag) return;
+    e.preventDefault();
+    var rows = document.querySelectorAll("#board .team-row");
+    var cut = 0;
+    for (var i = 0; i < rows.length; i++) {
+      var r = rows[i].getBoundingClientRect();
+      if (e.clientY > r.top + r.height / 2) cut = i + 1;
+    }
+    var lo = (drag.idx === 0 ? 0 : state.cuts[drag.idx - 1]) + 1;
+    var hi = (drag.idx === state.cuts.length - 1 ? state.teams.length : state.cuts[drag.idx + 1]) - 1;
+    cut = Math.max(lo, Math.min(hi, cut));
+    if (cut !== state.cuts[drag.idx]) {
+      state.cuts[drag.idx] = cut;
+      render();
+      var el = document.querySelector('.divider[data-idx="' + drag.idx + '"]');
+      if (el) el.classList.add("dragging");
+    }
+  }, { passive: false });
+  document.addEventListener("pointerup", function () {
+    if (!drag) return;
+    drag = null;
+    document.querySelectorAll(".divider.dragging").forEach(function (el) {
+      el.classList.remove("dragging");
+    });
+    saveState();
+  });
+
+  // ---------- score column picker ----------
+  function renderScorePicker() {
+    var sel = $("scoreCol");
+    sel.innerHTML = "";
+    var optAuto = document.createElement("option");
+    optAuto.value = "auto"; optAuto.textContent = "Auto";
+    sel.appendChild(optAuto);
+    state.numericCols.forEach(function (i) {
+      var o = document.createElement("option");
+      o.value = i;
+      o.textContent = (state.headers[i] || ("Column " + (i + 1)));
+      sel.appendChild(o);
+    });
+    sel.value = String(state.scoreCol);
+    if (sel.selectedIndex < 0) { sel.value = "auto"; state.scoreCol = "auto"; }
+  }
+
+  // ---------- live fetch ----------
+  function setStatus(msg, isErr) {
+    var n = $("statusNote");
+    n.textContent = msg;
+    n.className = "note" + (isErr ? " error" : "");
+  }
+  function refresh() {
+    setStatus("Fetching live scores…");
+    fetch("/twomantour/api/live?eventId=" + encodeURIComponent(state.eventId) +
+          "&tourId=" + encodeURIComponent(state.tourId))
+      .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, status: r.status, j: j }; }); })
+      .then(function (res) {
+        if (res.status === 401 || res.status === 403) { showPin(); return; }
+        if (!res.ok) throw new Error(res.j.error || ("HTTP " + res.status));
+        var j = res.j;
+        $("eventName").textContent = j.event_name || "";
+        if (!j.found) {
+          setStatus("Fetched the page but couldn't find a leaderboard table (" +
+                    j.table_count + " tables scanned). Use “Paste scores” below — copy the leaderboard right off the live page.", true);
+          return;
+        }
+        state.headers = j.headers; state.rows = j.rows;
+        state.nameCol = j.name_col; state.numericCols = j.numeric_cols;
+        state.source = "live";
+        renderScorePicker();
+        rebuildTeamsFromRows();
+        $("updatedAt").textContent = "Updated " + new Date().toLocaleTimeString();
+        setStatus(state.teams.length + " teams · drag the gold lines to set flights.");
+      })
+      .catch(function (err) {
+        setStatus("Live fetch failed: " + err.message +
+                  " — you can still run tonight with “Paste scores”.", true);
+      });
+  }
+
+  // ---------- paste fallback ----------
+  function parsePaste(text) {
+    var teams = [];
+    text.split(/\r?\n/).forEach(function (line) {
+      line = line.replace(/\t/g, "  ").trim();
+      if (!line) return;
+      var toks = line.split(/\s{1,}/);
+      // find last score-looking token
+      var scoreIdx = -1, score = null;
+      for (var i = toks.length - 1; i >= 0; i--) {
+        var v = parseScoreToken(toks[i]);
+        if (v !== null) { scoreIdx = i; score = v; break; }
+        if (/^F$/i.test(toks[i]) || /^\d+$/.test(toks[i])) continue;
+        break;
+      }
+      var nameToks = (scoreIdx === -1) ? toks.slice() : toks.slice(0, scoreIdx);
+      if (nameToks.length && /^T?\d+[.)]?$/.test(nameToks[0])) nameToks.shift();
+      var name = nameToks.join(" ").trim();
+      if (!name || /^(pos|team|player|name|thru|score|net|gross|total)s?$/i.test(name)) return;
+      if (name.length < 3) return;
+      teams.push({ name: name, score: score, raw: (scoreIdx === -1 ? "" : toks[scoreIdx]), thru: "" });
+    });
+    return teams;
+  }
+
+  // ---------- copy flights ----------
+  function copyFlights() {
+    var bounds = [0].concat(state.cuts, [state.teams.length]);
+    var out = [];
+    for (var f = 0; f < bounds.length - 1; f++) {
+      out.push("FLIGHT " + (f + 1));
+      state.teams.slice(bounds[f], bounds[f + 1]).forEach(function (t, i) {
+        out.push("  " + (bounds[f] + i + 1) + ". " + t.name + "  " + t.display);
+      });
+      out.push("");
+    }
+    navigator.clipboard.writeText(out.join("\n")).then(function () {
+      toast("Flight list copied");
+    }, function () { toast("Copy failed — clipboard blocked"); });
+  }
+  function toast(msg) {
+    var t = document.createElement("div");
+    t.className = "toast"; t.textContent = msg;
+    document.body.appendChild(t);
+    setTimeout(function () { t.remove(); }, 2200);
+  }
+
+  // ---------- PIN gate ----------
+  function showPin() { $("pinOverlay").classList.remove("hidden"); $("pinInput").focus(); }
+  function hidePin() { $("pinOverlay").classList.add("hidden"); }
+  function tryPin() {
+    var pin = $("pinInput").value.trim();
+    if (!pin) return;
+    fetch("/api/auth/login", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ pin: pin }),
+    }).then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
+      .then(function (res) {
+        if (!res.ok) { $("pinErr").textContent = res.j.error || "Invalid PIN."; return; }
+        if (res.j.role !== "admin") { $("pinErr").textContent = "Admin PIN required — that PIN is " + res.j.role + "."; return; }
+        $("pinErr").textContent = "";
+        hidePin();
+        refresh();
+      })
+      .catch(function () { $("pinErr").textContent = "Login failed — network error."; });
+  }
+
+  // ---------- wire up ----------
+  $("refreshBtn").addEventListener("click", refresh);
+  $("autoBtn").addEventListener("click", function () {
+    if (state.auto) { clearInterval(state.auto); state.auto = null; this.classList.remove("on"); this.textContent = "Auto 60s"; }
+    else { state.auto = setInterval(refresh, 60000); this.classList.add("on"); this.textContent = "Auto ON"; refresh(); }
+  });
+  $("flightCount").addEventListener("change", function () {
+    state.flights = Math.min(8, Math.max(1, parseInt(this.value, 10) || 1));
+    state.cuts = equalCuts();
+    render(); saveState();
+  });
+  $("flightsMinus").addEventListener("click", function () {
+    if (state.flights > 1) { state.flights--; state.cuts = equalCuts(); render(); saveState(); }
+  });
+  $("flightsPlus").addEventListener("click", function () {
+    if (state.flights < 8 && state.flights < state.teams.length) {
+      state.flights++; state.cuts = equalCuts(); render(); saveState();
+    }
+  });
+  $("resetLines").addEventListener("click", function () { state.cuts = equalCuts(); render(); saveState(); });
+  $("scoreCol").addEventListener("change", function () {
+    state.scoreCol = (this.value === "auto") ? "auto" : parseInt(this.value, 10);
+    rebuildTeamsFromRows();
+  });
+  $("pasteBtn").addEventListener("click", function () { $("pasteOverlay").classList.remove("hidden"); $("pasteText").focus(); });
+  $("pasteCancel").addEventListener("click", function () { $("pasteOverlay").classList.add("hidden"); });
+  $("pasteGo").addEventListener("click", function () {
+    var teams = parsePaste($("pasteText").value);
+    if (!teams.length) { toast("Couldn't read any teams from that text"); return; }
+    state.source = "paste";
+    $("pasteOverlay").classList.add("hidden");
+    finishTeams(teams);
+    setStatus(teams.length + " teams (pasted) · drag the gold lines to set flights.");
+    $("updatedAt").textContent = "Pasted " + new Date().toLocaleTimeString();
+  });
+  $("copyBtn").addEventListener("click", copyFlights);
+  $("setupBtn").addEventListener("click", function () {
+    $("cfgEvent").value = state.eventId; $("cfgTour").value = state.tourId;
+    $("setupOverlay").classList.remove("hidden");
+  });
+  $("cfgCancel").addEventListener("click", function () { $("setupOverlay").classList.add("hidden"); });
+  $("cfgGo").addEventListener("click", function () {
+    state.eventId = $("cfgEvent").value.trim();
+    state.tourId = $("cfgTour").value.trim();
+    $("setupOverlay").classList.add("hidden");
+    loadState(); saveState(); refresh();
+  });
+  $("pinGo").addEventListener("click", tryPin);
+  $("pinInput").addEventListener("keydown", function (e) { if (e.key === "Enter") tryPin(); });
+
+  // ---------- boot ----------
+  loadState();
+  $("flightCount").value = state.flights;
+  fetch("/api/auth/role").then(function (r) { return r.json(); }).then(function (j) {
+    if (j.role === "admin") refresh(); else showPin();
+  }).catch(showPin);
+})();
+</script>
+</body>
+</html>

@@ -14139,6 +14139,46 @@ _s94_result = add_tgf_event({
 if "event_id" in _s94_result and "error" not in _s94_result:
     logger.info("Seeded TGF payout event s9.4 The Quarry (event_id=%d)", _s94_result["event_id"])
 
+# ═══════════════════════════════════════════════════════════════════════════
+# Two Man Tour — admin-only Flight Board (separate brand, NOT TGF)
+# ═══════════════════════════════════════════════════════════════════════════
+# Kerry runs Two Man Tour events on league.unknowngolf.com live scoring.
+# /twomantour is a standalone admin page (own branding, no TGF nav) that
+# proxies the live-scoring page server-side (the browser can't cross-origin
+# fetch it), builds a low-to-high team leaderboard, and lets Kerry set
+# flights interactively with draggable flight lines. No database writes —
+# flight lines live in the admin's browser localStorage only.
+
+@app.route("/twomantour")
+def twomantour_page():
+    """Page shell is served without auth; all data calls require admin, and
+    the page itself shows a PIN gate when the session isn't admin."""
+    return render_template(
+        "twomantour.html",
+        default_event_id="116885",
+        default_tour_id="6667",
+    )
+
+
+@app.route("/twomantour/api/live")
+@require_role("admin")
+def twomantour_api_live():
+    """Server-side fetch+parse of the unknowngolf event page (host-locked
+    in twomantour.fetch_live — only league.unknowngolf.com, numeric ids)."""
+    from twomantour import fetch_live
+    event_id = (request.args.get("eventId") or "").strip()
+    tour_id = (request.args.get("tourId") or "").strip()
+    try:
+        payload = fetch_live(event_id, tour_id,
+                             cookie=os.getenv("TWOMANTOUR_COOKIE") or None)
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+    except Exception as e:
+        logger.warning("Two Man Tour live fetch failed: %s", e)
+        return jsonify({"error": f"Could not fetch live scoring: {e}"}), 502
+    return jsonify(payload)
+
+
 # Only start the scheduler in one Gunicorn worker (or in dev mode).
 # Gunicorn's --preload flag shares module-level state, but with forked workers
 # each gets its own scheduler.  We use a PID-based guard so only one runs.

@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.211.1";
+window.TGF_VERSION = "2.212.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.212.0",
+    date: "2026-08-08",
+    changes: [
+      "TWO MAN TOUR FLIGHT BOARD (Kerry, 2026-08-08, for tonight's event) — a completely separate, admin-only page at /twomantour with its own Two Man Tour branding (no TGF nav, no TGF data). It proxies the league.unknowngolf.com live-scoring page server-side (new twomantour.py — stdlib HTML table extractor that scores every table on the page and picks the one that looks like a leaderboard; host-locked to league.unknowngolf.com, numeric-id validated), ranks teams low-to-high, and gives Kerry a Flights count with draggable gold flight lines that start at equal spacing across the field. Drag a line to move the flight break; flight headers show live team counts and score ranges; Copy Flights puts the final list on the clipboard.",
+      "Resilience for event night: a Score column picker (auto-prefers NET, falls back TOTAL/SCORE then GROSS; position/thru columns are filtered out of the candidates), a Paste Scores fallback that parses a leaderboard copied straight off the live page (positions and thru markers stripped automatically), Auto-60s refresh, and per-event localStorage persistence of flight count + line positions. The page shell is public but every data call is @require_role('admin'); the page shows its own PIN gate, so nothing TGF-branded appears in the flow.",
+    ],
+  },
   {
     version: "2.211.1",
     date: "2026-08-07",

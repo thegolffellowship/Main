@@ -24,6 +24,7 @@ Before working on a specific area, Read the relevant sub-doc:
 - `docs/claude/pairings.md` (TGF Pairing Standards — Kerry's ruleset of record for the pairings engine, 2026-07-12; CA docs merge + pairing_history amendment pending)
 - `docs/claude/handoff-2026-08-01-live-standings.md` (**session handoff** — live City Points standings, the GG championship POINTS boards, what is verified vs unverified, and the traps: duplicate `id`s on the double-rendered events page, silent `.catch()`, the games-matrix seed-vs-app_settings drift)
 - `docs/claude/handoff-2026-08-07-event-specific-entry-refunds.md` (**session handoff** — the championship's 14 day-combination packages, the ratified side-games bundle split, why hole counts are display-derived from packages rather than stored, the boot-heal 36/54 exemption, and the three carry-forwards: Add Player event options, per-day Credit/Partial Refund, and event-specific GAME options (YES/SAT/SUN/NO). Companion prompt: `docs/claude/session-prompt-2026-08-07-event-specific.md`)
+- `docs/claude/twomantour-flight-board.md` (admin-only `/twomantour` Flight Board for the **Two Man Tour sibling brand** — unknowngolf live-scoring proxy + draggable flight lines; deliberately shares nothing with TGF surfaces)
 - `docs/claude/handicap-projection.md` (Task #16 — self-computed playing handicap from index + selected tee; SHADOW/parity-validated 100% vs GG allocation, awaiting Kerry+CA ratification; `handicap_calc.py`)
 
 ## Guiding Principles
