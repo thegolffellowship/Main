@@ -96,6 +96,18 @@ block results over the generic table guess whenever ≥2 teams parse
 directly. When neither parser reads the page, the response includes
 `sample_lines` (first 80 page-text lines) for evidence-based fixes.
 
+**Unknown Golf login contract (confirmed from doLogin() source, 2026-08-08).**
+The login is formless: `<input id="idEmail">` / `<input id="idPassword">`
+and a jQuery `doLogin()` that POSTs **form-encoded** to `/account.ukg`
+with `{a:"1", userEmail, userPsswd, ac:"null"}` (`dataType:"json"` is the
+RESPONSE type; the request body is form-encoded). Success returns JSON
+with `urlRedirect`. `_js_login()` finds doLogin's source, parses its
+`data:{…}` object (constants kept, #idEmail/#idPassword fields mapped),
+posts that payload, and verifies via urlRedirect + a re-fetch past the
+wall. `site_login()` returns rich `diag` (doLogin snippet, endpoints,
+parsed template, per-attempt results) on failure for screenshot-driven
+fixes.
+
 **v2.219.0 — LOGIN WALL (root cause of every live-fetch failure).**
 Kerry's diagnostics screenshot proved the event page serves Unknown
 Golf's sign-in page ("Welcome back, player!") to anonymous fetches.

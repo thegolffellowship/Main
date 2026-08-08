@@ -563,10 +563,11 @@ def _find_dologin_source(s, html, base_url):
 
 
 def _extract_login_call(js):
-    """From doLogin's source, pull candidate endpoint URLs, request param
-    names, and whether it sends JSON."""
-    m = re.search(r"(?:function\s+doLogin|doLogin\s*=\s*function)[\s\S]{0,5000}", js)
-    region = m.group(0) if m else js[:5000]
+    """From doLogin's source, pull candidate endpoint URLs, the request
+    data template (constants + which keys hold the email/password), and
+    whether it sends JSON."""
+    m = re.search(r"(?:function\s+doLogin|doLogin\s*=\s*function)[\s\S]{0,6000}", js)
+    region = m.group(0) if m else js[:6000]
     urls = []
     for pat in (r'\.open\(\s*["\']\w+["\']\s*,\s*["\']([^"\']+)["\']',
                 r'fetch\(\s*["\']([^"\']+)["\']',
@@ -576,17 +577,37 @@ def _extract_login_call(js):
         for u in re.findall(pat, region):
             if u not in urls:
                 urls.append(u)
-    # "email=" + … / &password= … style param names
-    params = []
+
+    # Parse the jQuery-style `data : { "k" : v, ... }` object literal.
+    # Each pair is either a constant ("a":"1") or a reference to the
+    # email / password input ($('#idEmail').val()). Keeps constants so
+    # the server sends the full payload the endpoint expects.
+    template, email_key, pass_key = {}, None, None
+    dm = re.search(r"data\s*:\s*\{(.*?)\}", region, re.S)
+    if dm:
+        for km in re.finditer(
+                r'["\']?([A-Za-z_]\w{0,30})["\']?\s*:\s*([^,}]+)', dm.group(1)):
+            key, val = km.group(1), km.group(2).strip()
+            if re.search(r'idEmail|#idEmail|Email', val):
+                email_key = key
+                template[key] = None
+            elif re.search(r'idPassword|#idPassword|Password|Psswd|Pass', val):
+                pass_key = key
+                template[key] = None
+            else:
+                template[key] = val.strip().strip("'\"")
+
+    # Fallback: "userEmail=" + … style params if there was no data object.
+    loose = []
     for p in re.findall(r'["\'&?]([A-Za-z_]\w{0,30})=["\']?\s*\+', region):
-        if p not in params:
-            params.append(p)
-    # {email: …, password: …} style keys near the id lookups
-    for p in re.findall(r'["\']?([A-Za-z_]\w{0,30})["\']?\s*:\s*[^,}]{0,60}id(?:Email|Password)', region):
-        if p not in params:
-            params.append(p)
-    json_mode = bool(re.search(r"JSON\.stringify", region))
-    return urls, params, json_mode, region[:1500]
+        if p not in loose:
+            loose.append(p)
+    # A jQuery `data:{...}` object is sent FORM-ENCODED unless the code
+    # JSON.stringifies it or sets an explicit JSON contentType. dataType
+    # only describes the RESPONSE, so it must not force a JSON request.
+    json_mode = bool(re.search(r"JSON\.stringify", region) or
+                     re.search(r"contentType\s*:\s*['\"]application/json", region))
+    return urls, template, email_key, pass_key, loose, json_mode, region[:1800]
 
 
 def _login_success(s, event_id, tour_id):
@@ -608,37 +629,62 @@ def _js_login(s, html, base_url, email, password, event_id, tour_id):
         return False, {"url": base_url,
                        "error": "doLogin() source not found",
                        "scripts": _script_srcs(html, base_url)[:8]}
-    urls, params, json_mode, snippet = _extract_login_call(js)
+    urls, template, email_key, pass_key, loose, json_mode, snippet = \
+        _extract_login_call(js)
     endpoints = []
     for u in urls:
         full = urljoin(base_url, u)
         if urlparse(full).netloc == ALLOWED_HOST and full not in endpoints:
             endpoints.append(full)
-    keysets = []
-    email_keys = [p for p in params if re.search(r"mail|user|login", p, re.I)]
-    pass_keys = [p for p in params if re.search(r"pass|pwd", p, re.I)]
-    if email_keys and pass_keys:
-        keysets.append((email_keys[0], pass_keys[0]))
-    keysets += [("email", "password"), ("username", "password"),
-                ("emailAddress", "password")]
+
+    # Build candidate payloads. Preferred: the parsed data template with
+    # its constants, filling the identified email/password keys. Then
+    # fall back to loose param names and generic guesses.
+    payloads = []
+    if template and email_key and pass_key:
+        base = dict(template)
+        base[email_key] = email
+        base[pass_key] = password
+        # 'null' in the JS is the literal string, not a real null.
+        payloads.append(base)
+    if loose:
+        ek = next((p for p in loose if re.search(r"mail|user|login", p, re.I)), None)
+        pk = next((p for p in loose if re.search(r"pass|pwd|psswd", p, re.I)), None)
+        if ek and pk:
+            payloads.append({ek: email, pk: password})
+    for ek, pk in (("userEmail", "userPsswd"), ("email", "password"),
+                   ("emailAddress", "password"), ("username", "password")):
+        payloads.append({ek: email, pk: password})
+
     tried = []
     for ep in endpoints[:3]:
-        for ek, pk in keysets[:4]:
-            data = {ek: email, pk: password}
+        for data in payloads[:6]:
+            keys = "+".join(k for k in data if data[k] in (email, password))
             try:
                 if json_mode:
                     r = s.post(ep, json=data, timeout=FETCH_TIMEOUT)
                 else:
                     r = s.post(ep, data=data, timeout=FETCH_TIMEOUT)
             except Exception as e:
-                tried.append(f"{ep} [{ek}/{pk}] -> {e}")
+                tried.append(f"{ep} [{keys}] -> {e}")
                 continue
-            tried.append(f"{ep} [{ek}/{pk}] -> HTTP {r.status_code}")
-            if r.status_code < 400 and _login_success(s, event_id, tour_id):
-                return True, {"endpoint": ep, "keys": [ek, pk]}
+            # The endpoint answers 200 for both success and bad creds; the
+            # JSON body / a post-login re-fetch is the real signal.
+            body_ok = False
+            try:
+                j = r.json()
+                body_ok = bool(j.get("urlRedirect")) or j.get("success") is True \
+                    or j.get("result") in ("ok", "success", True)
+            except Exception:
+                pass
+            tried.append(f"{ep} [{keys}] -> HTTP {r.status_code}"
+                         f"{' body-ok' if body_ok else ''}")
+            if r.status_code < 400 and (body_ok or _login_success(s, event_id, tour_id)):
+                return True, {"endpoint": ep, "keys": list(data.keys())}
     return False, {"url": base_url, "error": "doLogin replay failed",
                    "dologin_from": js_src, "endpoints": endpoints,
-                   "params": params, "json_mode": json_mode,
+                   "data_template": template, "email_key": email_key,
+                   "pass_key": pass_key, "json_mode": json_mode,
                    "attempts": tried, "dologin_snippet": snippet}
 
 

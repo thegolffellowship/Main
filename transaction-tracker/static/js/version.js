@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.219.2";
+window.TGF_VERSION = "2.219.3";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.219.3",
+    date: "2026-08-08",
+    changes: [
+      "UG login round 4 — nailed the exact contract from Kerry's doLogin() dump: POST /account.ukg (form-encoded) with a=1, userEmail, userPsswd, ac=null. The replay failed before because (a) it dropped the constant a/ac fields the endpoint requires and (b) userPsswd didn't match the old pass-key heuristic. Now the server parses doLogin's jQuery `data:{…}` object literally — keeping every constant and mapping the fields that reference #idEmail / #idPassword — and posts that full payload. Also fixed a request-encoding trap: jQuery's `dataType:'json'` describes the RESPONSE, so the body is sent form-encoded (only JSON.stringify / an explicit JSON contentType switches the request to JSON). Success is confirmed by the JSON urlRedirect and a post-login re-fetch past the wall before the session cookie is stored.",
+    ],
+  },
   {
     version: "2.219.2",
     date: "2026-08-08",
