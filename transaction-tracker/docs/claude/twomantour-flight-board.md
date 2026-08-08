@@ -36,6 +36,18 @@ lets Kerry set flights interactively:
   tries known display/leaderboard endpoints, and parses HTML or a JSON
   leaderboard (`_teams_from_json`). Unresolved probes are dumped with
   samples in the diagnostics panel.
+- (v2.221.0) **Data-feed discovery** — the standings live in UG's `.ukg`
+  JSON endpoints (`leaderboard.ukg`/`gameResult.ukg`), which need
+  eventId+tourId+an action code (a bare call returns "request is not
+  recognized"). `discover_data_feed()` opens the display pages
+  (tvLeaderboard.jsp, event.jsp), extracts the AJAX call their scripts
+  make to a `.ukg` endpoint (`_extract_ajax_calls`, balanced-brace so the
+  nested `data:{…}` isn't truncated), resolves the data object against
+  the real ids (`_resolve_data`), replays it with the cookie, and parses
+  the JSON. Per-endpoint probes (params + sample) go to diagnostics on
+  failure. NOTE: the exact `.ukg` param set is still unconfirmed against
+  the live site — if discovery fails, the diagnostics sample of the
+  display page's AJAX call is the last missing piece.
 - (v2.216.0) Tap a team row to expand its **18-hole scorecard** (front/
   back nines, OUT/IN/TOT/PAR, parsed from the 22-column hole row; raw
   fallback), and a **Buy-in $/player** input that shows each flight's

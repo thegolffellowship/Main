@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.220.0";
+window.TGF_VERSION = "2.221.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.221.0",
+    date: "2026-08-08",
+    changes: [
+      "Flight Board live DATA FEED discovery (Kerry's probe screenshot pinpointed it): the standings come from Unknown Golf's *.ukg JSON endpoints (leaderboard.ukg / gameResult.ukg), which reject a bare call ('Your request is not recognized') because they need the event/tour ids + an action code. The server now opens the score-display pages (tvLeaderboard.jsp, the event page), finds the AJAX call their scripts make to a .ukg endpoint (balanced-brace JS parse of $.ajax/$.post/$.get), resolves its data object against the real ids (eventId/tourId filled, constants kept, unknown JS vars dropped), replays it with the session cookie, and parses the JSON leaderboard. If it still can't read scores, the diagnostics now include each replayed endpoint, the exact params sent, and a response sample.",
+      "Payouts pane confirmed locked to the flight lines — the pane recomputes from the same flight boundaries as the board, so dragging a flight line moves the pot, paid-place count, and named payees together (already the behavior; verified).",
+    ],
+  },
   {
     version: "2.220.0",
     date: "2026-08-08",

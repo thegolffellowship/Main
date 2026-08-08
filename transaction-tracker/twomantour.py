@@ -867,6 +867,179 @@ def _gather_scoring_candidates(html, base_url, event_id, tour_id, cookie):
     return out[:8]
 
 
+def _parse_data_obj(block):
+    """Parse a jQuery `data:{ "k": v, ... }` literal → {key: raw_value_str}."""
+    out = {}
+    dm = re.search(r"data\s*:\s*\{(.*?)\}", block, re.S)
+    if not dm:
+        return out
+    for km in re.finditer(r'["\']?([A-Za-z_]\w{0,30})["\']?\s*:\s*([^,}]+)',
+                          dm.group(1)):
+        out[km.group(1)] = km.group(2).strip()
+    return out
+
+
+def _balanced_braces(s, open_idx):
+    """Given the index of a '{', return the substring through its matching
+    '}' (inclusive), respecting nesting and string literals."""
+    depth, i, n = 0, open_idx, len(s)
+    quote = None
+    while i < n:
+        c = s[i]
+        if quote:
+            if c == "\\":
+                i += 2
+                continue
+            if c == quote:
+                quote = None
+        elif c in "\"'":
+            quote = c
+        elif c == "{":
+            depth += 1
+        elif c == "}":
+            depth -= 1
+            if depth == 0:
+                return s[open_idx:i + 1]
+        i += 1
+    return s[open_idx:]
+
+
+def _extract_ajax_calls(js):
+    """Every $.ajax/$.post/$.get call in a script → list of
+    {url, data(raw), method, json_mode}, using balanced-brace matching so
+    the nested data:{…} object doesn't truncate the block."""
+    calls = []
+    for m in re.finditer(r'\$\.(ajax|post|get)\s*\(\s*\{', js):
+        brace = js.index("{", m.end() - 1)
+        block = _balanced_braces(js, brace)
+        um = re.search(r'url\s*:\s*["\']([^"\']+)["\']', block)
+        if not um:
+            continue
+        tm = re.search(r'type\s*:\s*["\'](\w+)["\']', block)
+        method = (tm.group(1) if tm else
+                  ("GET" if m.group(1) == "get" else "POST")).upper()
+        calls.append({
+            "url": um.group(1),
+            "data": _parse_data_obj(block),
+            "method": method,
+            "json_mode": bool(re.search(r'contentType\s*:\s*["\']application/json', block)),
+        })
+    # bare $.get("url", {data}) / $.post("url", {data})
+    for m in re.finditer(r'\$\.(get|post)\s*\(\s*["\']([^"\']+)["\']\s*,\s*\{', js):
+        brace = js.index("{", m.end() - 1)
+        block = _balanced_braces(js, brace)
+        calls.append({
+            "url": m.group(2),
+            "data": _parse_data_obj("data:" + block),
+            "method": m.group(1).upper(),
+            "json_mode": False,
+        })
+    return calls
+
+
+def _resolve_data(raw_data, event_id, tour_id):
+    """Fill a raw data template with the real ids. Keys/values referencing
+    event → eventId, tour/round → tourId; quoted/numeric literals kept as
+    constants; unknown JS variables dropped."""
+    out = {}
+    for k, raw in raw_data.items():
+        v = (raw or "").strip()
+        if re.search(r"event", k, re.I) or re.fullmatch(r"eventId", v):
+            out[k] = str(event_id)
+        elif re.search(r"tour|round", k, re.I) or re.fullmatch(r"tourId|roundId", v):
+            out[k] = str(tour_id)
+        elif re.fullmatch(r'["\'][^"\']*["\']|\d+', v):
+            out[k] = v.strip("'\"")
+        # else: an unresolved JS variable — omit it
+    return out
+
+
+def discover_data_feed(cookie, event_id, tour_id):
+    """Fetch Unknown Golf's score-display pages, find the AJAX call each
+    makes to a *.ukg data endpoint, replay it with the real ids, and parse
+    a JSON leaderboard. Returns (teams, diag)."""
+    from urllib.parse import urljoin, urlparse
+    diag = []
+    display_pages = [
+        f"https://{ALLOWED_HOST}/platform/tv/tvLeaderboard.jsp"
+        f"?eventId={event_id}" + (f"&tourId={tour_id}" if tour_id else ""),
+        f"https://{ALLOWED_HOST}/event.jsp?eventId={event_id}&tourId={tour_id}",
+    ]
+    seen_calls = set()
+    for page_url in display_pages:
+        try:
+            page = _get(page_url, cookie).text
+        except Exception as e:
+            diag.append({"page": page_url, "error": str(e)[:120]})
+            continue
+        # collect JS: inline + same-host external scripts
+        blobs = re.findall(r"(?is)<script\b[^>]*>(.*?)</script>", page)
+        for m in re.finditer(r'<script[^>]+src=["\']([^"\']+)["\']', page, re.I):
+            src = urljoin(page_url, unescape(m.group(1)))
+            if urlparse(src).netloc == ALLOWED_HOST and re.search(
+                    r"leader|score|tv|game|result|event", src, re.I):
+                try:
+                    blobs.append(_get(src, cookie).text)
+                except Exception:
+                    pass
+        for js in blobs:
+            for call in _extract_ajax_calls(js):
+                if not re.search(r"\.ukg|leader|score|game|result|standing",
+                                 call["url"], re.I):
+                    continue
+                ep = urljoin(page_url, call["url"])
+                if urlparse(ep).netloc != ALLOWED_HOST:
+                    continue
+                data = _resolve_data(call["data"], event_id, tour_id)
+                key = (ep, tuple(sorted(data.items())), call["method"])
+                if key in seen_calls:
+                    continue
+                seen_calls.add(key)
+                try:
+                    if call["method"] == "GET":
+                        r = _session_get(ep, data, cookie)
+                    else:
+                        r = _post(ep, data, cookie, as_json=call["json_mode"])
+                except Exception as e:
+                    diag.append({"endpoint": ep, "data": data, "error": str(e)[:120]})
+                    continue
+                sample = r.text[:300]
+                teams = []
+                try:
+                    teams = _teams_from_json(r.json())
+                except Exception:
+                    pass
+                if len(teams) >= 2:
+                    return teams, {"endpoint": ep, "data": data, "method": call["method"]}
+                diag.append({"endpoint": ep, "data": data,
+                             "method": call["method"], "status": r.status_code,
+                             "sample": sample})
+    return [], diag
+
+
+def _post(url, data, cookie=None, as_json=False):
+    headers = {"User-Agent": _UA, "X-Requested-With": "XMLHttpRequest",
+               "Accept": "application/json, text/plain, */*"}
+    if cookie:
+        headers["Cookie"] = cookie
+    if as_json:
+        resp = requests.post(url, json=data, headers=headers, timeout=FETCH_TIMEOUT)
+    else:
+        resp = requests.post(url, data=data, headers=headers, timeout=FETCH_TIMEOUT)
+    resp.raise_for_status()
+    return resp
+
+
+def _session_get(url, params, cookie=None):
+    headers = {"User-Agent": _UA, "X-Requested-With": "XMLHttpRequest",
+               "Accept": "application/json, text/plain, */*"}
+    if cookie:
+        headers["Cookie"] = cookie
+    resp = requests.get(url, params=params, headers=headers, timeout=FETCH_TIMEOUT)
+    resp.raise_for_status()
+    return resp
+
+
 def _teams_from_json(obj):
     """Best-effort: find a list of team-ish records in a JSON payload —
     a list of dicts each carrying a name-ish string and a score-ish
@@ -950,6 +1123,19 @@ def fetch_live(event_id, tour_id, cookie=None):
     # endpoints, parsing HTML blocks/tables or a JSON leaderboard.
     cand_diag = []
     if not payload.get("teams") and not payload["found"]:
+        # First: discover the leaderboard DATA FEED — find the AJAX call
+        # the score-display pages make to a *.ukg endpoint and replay it.
+        try:
+            feed_teams, feed_diag = discover_data_feed(cookie, event_id, tour_id)
+        except Exception as e:
+            feed_teams, feed_diag = [], [{"error": f"feed discovery: {e}"}]
+        if len(feed_teams) >= 2:
+            return {"event_name": payload.get("event_name", ""),
+                    "found": True, "teams": feed_teams, "mode": "feed",
+                    "source_url": feed_diag.get("endpoint") if isinstance(feed_diag, dict) else url,
+                    "http_status": 200, "via_feed": True, "tried_urls": tried}
+        if feed_diag:
+            cand_diag.append({"feed_probes": feed_diag})
         for sub in _gather_scoring_candidates(resp.text, url, event_id, tour_id, cookie):
             if sub in tried:
                 continue
