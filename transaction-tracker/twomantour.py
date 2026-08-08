@@ -532,6 +532,116 @@ def _login_links(html, base_url):
     return out
 
 
+# -- JS login discovery ------------------------------------------------------
+# Evidence (Kerry's diagnostics, 2026-08-08): every UG login surface has
+# <input id="idEmail"> / <input id="idPassword"> with NO <form> — a JS
+# doLogin() submits them. So: locate doLogin's source (inline scripts,
+# then same-host external scripts), pull the endpoint URL + parameter
+# style out of it, and replay that call server-side.
+def _script_srcs(html, base_url):
+    from urllib.parse import urljoin, urlparse
+    out = []
+    for m in re.finditer(r'(?is)<script\b[^>]*src=["\']([^"\']+)["\']', html):
+        u = urljoin(base_url, unescape(m.group(1)))
+        if urlparse(u).netloc == ALLOWED_HOST and u not in out:
+            out.append(u)
+    return out
+
+
+def _find_dologin_source(s, html, base_url):
+    for sc in re.findall(r"(?is)<script\b[^>]*>(.*?)</script>", html):
+        if re.search(r"function\s+doLogin|doLogin\s*=\s*function", sc):
+            return sc, base_url
+    for src in _script_srcs(html, base_url)[:8]:
+        try:
+            r = s.get(src, timeout=FETCH_TIMEOUT)
+        except Exception:
+            continue
+        if re.search(r"function\s+doLogin|doLogin\s*=\s*function", r.text):
+            return r.text, src
+    return None, None
+
+
+def _extract_login_call(js):
+    """From doLogin's source, pull candidate endpoint URLs, request param
+    names, and whether it sends JSON."""
+    m = re.search(r"(?:function\s+doLogin|doLogin\s*=\s*function)[\s\S]{0,5000}", js)
+    region = m.group(0) if m else js[:5000]
+    urls = []
+    for pat in (r'\.open\(\s*["\']\w+["\']\s*,\s*["\']([^"\']+)["\']',
+                r'fetch\(\s*["\']([^"\']+)["\']',
+                r'\burl\s*[:=]\s*["\']([^"\']+)["\']',
+                r'\.post\(\s*["\']([^"\']+)["\']',
+                r'\baction\s*[:=]\s*["\']([^"\']+)["\']'):
+        for u in re.findall(pat, region):
+            if u not in urls:
+                urls.append(u)
+    # "email=" + … / &password= … style param names
+    params = []
+    for p in re.findall(r'["\'&?]([A-Za-z_]\w{0,30})=["\']?\s*\+', region):
+        if p not in params:
+            params.append(p)
+    # {email: …, password: …} style keys near the id lookups
+    for p in re.findall(r'["\']?([A-Za-z_]\w{0,30})["\']?\s*:\s*[^,}]{0,60}id(?:Email|Password)', region):
+        if p not in params:
+            params.append(p)
+    json_mode = bool(re.search(r"JSON\.stringify", region))
+    return urls, params, json_mode, region[:1500]
+
+
+def _login_success(s, event_id, tour_id):
+    check = (f"https://{ALLOWED_HOST}/event.jsp?eventId={event_id}"
+             f"&tourId={tour_id}" if event_id and tour_id
+             else f"https://{ALLOWED_HOST}/")
+    try:
+        r = s.get(check, timeout=FETCH_TIMEOUT)
+    except Exception:
+        return False
+    return not _looks_logged_out(r.text)
+
+
+def _js_login(s, html, base_url, email, password, event_id, tour_id):
+    """Replay the site's doLogin() call. Returns ok-bool + diag dict."""
+    from urllib.parse import urljoin, urlparse
+    js, js_src = _find_dologin_source(s, html, base_url)
+    if not js:
+        return False, {"url": base_url,
+                       "error": "doLogin() source not found",
+                       "scripts": _script_srcs(html, base_url)[:8]}
+    urls, params, json_mode, snippet = _extract_login_call(js)
+    endpoints = []
+    for u in urls:
+        full = urljoin(base_url, u)
+        if urlparse(full).netloc == ALLOWED_HOST and full not in endpoints:
+            endpoints.append(full)
+    keysets = []
+    email_keys = [p for p in params if re.search(r"mail|user|login", p, re.I)]
+    pass_keys = [p for p in params if re.search(r"pass|pwd", p, re.I)]
+    if email_keys and pass_keys:
+        keysets.append((email_keys[0], pass_keys[0]))
+    keysets += [("email", "password"), ("username", "password"),
+                ("emailAddress", "password")]
+    tried = []
+    for ep in endpoints[:3]:
+        for ek, pk in keysets[:4]:
+            data = {ek: email, pk: password}
+            try:
+                if json_mode:
+                    r = s.post(ep, json=data, timeout=FETCH_TIMEOUT)
+                else:
+                    r = s.post(ep, data=data, timeout=FETCH_TIMEOUT)
+            except Exception as e:
+                tried.append(f"{ep} [{ek}/{pk}] -> {e}")
+                continue
+            tried.append(f"{ep} [{ek}/{pk}] -> HTTP {r.status_code}")
+            if r.status_code < 400 and _login_success(s, event_id, tour_id):
+                return True, {"endpoint": ep, "keys": [ek, pk]}
+    return False, {"url": base_url, "error": "doLogin replay failed",
+                   "dologin_from": js_src, "endpoints": endpoints,
+                   "params": params, "json_mode": json_mode,
+                   "attempts": tried, "dologin_snippet": snippet}
+
+
 def site_login(email, password, event_id=None, tour_id=None):
     """Form-login to Unknown Golf; on success store the session cookie.
     Returns {'status': 'ok'} or {'error': ..., 'diag': [...]}. Tries the
@@ -568,7 +678,17 @@ def site_login(email, password, event_id=None, tour_id=None):
                 # Entry page already open (stale wall?) — keep cookies.
                 _save_session_cookie(s)
                 return {"status": "ok", "note": "page already open"}
-            diag.append(_page_diag(url, r.text))
+            # Formless login (id-only inputs + doLogin()) — replay the JS call.
+            if re.search(r'(?i)type=["\']?password', r.text):
+                ok, js_diag = _js_login(s, r.text, r.url, email, password,
+                                        event_id, tour_id)
+                if ok:
+                    _save_session_cookie(s)
+                    return {"status": "ok", "via": "doLogin",
+                            "endpoint": js_diag.get("endpoint")}
+                diag.append(js_diag)
+            else:
+                diag.append(_page_diag(url, r.text))
             for link in _login_links(r.text, r.url):
                 if link not in tried and link not in candidates:
                     candidates.append(link)

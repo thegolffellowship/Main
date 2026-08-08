@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.219.1";
+window.TGF_VERSION = "2.219.2";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.219.2",
+    date: "2026-08-08",
+    changes: [
+      "UG login round 3 (Kerry's diagnostics: id-only inputs idEmail/idPassword, form_count 0, a JS doLogin() submits) — the server now REPLAYS doLogin(): it locates the function's source (inline scripts, then same-host external scripts), extracts the endpoint URL (xhr.open/fetch/url:/action:) and the parameter names it sends ('email='+… style and JSON keys), posts the credentials the same way (form-encoded or JSON), and verifies success by re-fetching the event page past the login wall before storing the session cookie. On failure the diagnostics now include the doLogin source snippet, endpoints, params, and per-attempt HTTP results — the next fix reads the exact JS off Kerry's screenshot.",
+    ],
+  },
   {
     version: "2.219.1",
     date: "2026-08-08",
