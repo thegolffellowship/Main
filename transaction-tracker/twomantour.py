@@ -987,6 +987,12 @@ def discover_data_feed(cookie, event_id, tour_id):
                 if not re.search(r"\.ukg|leader|score|game|result|standing",
                                  call["url"], re.I):
                     continue
+                # Skip obvious non-leaderboard feeds (course/player pickers,
+                # autocompletes) that also live on *.ukg — those are what
+                # produced the "golf courses, not the leaderboard" pull.
+                if re.search(r"course|autocomplete|typeahead|search|lookup|"
+                             r"roster|member|list", call["url"], re.I):
+                    continue
                 ep = urljoin(page_url, call["url"])
                 if urlparse(ep).netloc != ALLOWED_HOST:
                     continue
@@ -1040,34 +1046,65 @@ def _session_get(url, params, cookie=None):
     return resp
 
 
+_JSON_NAME_KEYS = ("teamName", "team", "name", "displayName", "entry",
+                   "playerNames", "players")
+# Keys whose PRESENCE marks a record as a scored leaderboard row. A course
+# list / player dropdown has a name but none of these — that's how we tell
+# the leaderboard feed apart from an autocomplete list.
+_JSON_SCORE_KEYS = ("toPar", "vsPar", "toParDisplay", "scoreToPar", "total",
+                    "totalToPar", "net", "gross", "thru", "thruHole",
+                    "holesPlayed", "position", "pos", "rank", "score",
+                    "scoreDisplay")
+
+
 def _teams_from_json(obj):
-    """Best-effort: find a list of team-ish records in a JSON payload —
-    a list of dicts each carrying a name-ish string and a score-ish
-    number. Returns [] when nothing plausible is found."""
-    name_keys = ("teamName", "team", "name", "displayName", "player", "entry")
-    score_keys = ("toPar", "vsPar", "score", "total", "net", "totalToPar",
-                  "scoreDisplay", "thruScore")
+    """Find the leaderboard list in a JSON payload: a list of dicts that
+    each have a name AND where the records actually carry score/position
+    fields. Lists that are just names (course/player dropdowns) are
+    rejected. Returns [] when nothing leaderboard-like is found."""
     best = []
 
-    def walk(node):
+    def consider(node):
         nonlocal best
-        if isinstance(node, list):
-            teams = []
-            for it in node:
-                if not isinstance(it, dict):
-                    break
-                nm = next((str(it[k]) for k in name_keys if it.get(k)), None)
-                sv = None
-                for k in score_keys:
-                    if k in it and it[k] is not None:
-                        sv = parse_score_token(str(it[k]))
-                        if sv is not None:
-                            break
+        if not (isinstance(node, list) and len(node) >= 2
+                and all(isinstance(x, dict) for x in node)):
+            return
+        named = score_bearing = 0
+        teams = []
+        for it in node:
+            nm = None
+            for k in _JSON_NAME_KEYS:
+                v = it.get(k)
+                if isinstance(v, list) and v:
+                    nm = " / ".join(str(x) for x in v)
+                elif v:
+                    nm = str(v)
                 if nm:
-                    teams.append({"name": nm, "score": sv,
-                                  "raw": "", "players": [], "card": None})
-            if len(teams) > len(best) and len(teams) >= 2:
-                best = teams
+                    break
+            has_score_key = any(k in it for k in _JSON_SCORE_KEYS)
+            sv = None
+            for k in ("toPar", "scoreToPar", "totalToPar", "vsPar", "net",
+                      "total", "score"):
+                if it.get(k) is not None:
+                    sv = parse_score_token(str(it[k]))
+                    if sv is not None:
+                        break
+            if nm:
+                named += 1
+            if has_score_key:
+                score_bearing += 1
+            teams.append({"name": nm or "?", "score": sv,
+                          "raw": "", "players": [], "card": None})
+        # Require nearly all rows named AND at least half to carry a score
+        # field — a plain name list (courses/players) fails the second test.
+        if (named >= len(teams) * 0.8
+                and score_bearing >= max(1, len(teams) * 0.5)
+                and len(teams) > len(best)):
+            best = [t for t in teams if t["name"] != "?"]
+
+    def walk(node):
+        consider(node)
+        if isinstance(node, list):
             for it in node:
                 walk(it)
         elif isinstance(node, dict):

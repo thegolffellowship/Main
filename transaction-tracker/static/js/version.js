@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.221.0";
+window.TGF_VERSION = "2.222.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.222.0",
+    date: "2026-08-08",
+    changes: [
+      "Payouts moved INLINE into each flight box (Kerry: 'I want it literally next to the flights as part of that window'). The right-side pane is gone; each flight now shows a payout strip directly under its teams — 'Payouts · top N of M · Pot $X' with the paid places and amounts — so it's visually part of the flight and moves with the flight line. Pay-top-% and Whole-$ controls now live in the top toolbar next to Buy-in; the Payouts button toggles the strips; all persist per event, and Copy Flights still includes them.",
+      "Live-feed fix — stop pulling the wrong list (Kerry saw golf-course names, not teams). The JSON leaderboard reader now REQUIRES records to carry a score/position field, so a course dropdown or player list (names only) is rejected; only a real scored leaderboard is accepted (early-round rows with the score keys present but values still empty are still recognized). Feed discovery also skips course/search/roster/autocomplete *.ukg endpoints outright.",
+    ],
+  },
   {
     version: "2.221.0",
     date: "2026-08-08",

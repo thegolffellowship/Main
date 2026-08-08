@@ -26,11 +26,14 @@ lets Kerry set flights interactively:
   lists/loads/deletes snapshots. Routes: GET/POST
   `/twomantour/api/saves`, GET/DELETE `/twomantour/api/saves/<id>`,
   all `@require_role("admin")`.
-- (v2.220.0) **Potential Payouts pane** — right-side (mobile: below the
-  board), splits each flight's pot (teams × 2 × buy-in) among the top
-  `payPct`% of teams (default 25, ≥1 place) on a step-down curve
-  (weights n..1), whole-dollar rounding conserves the pot; recomputes on
-  drag/buy-in, included in Copy Flights, persisted per event.
+- (v2.222.0) **Inline per-flight payouts** — a payout strip renders
+  INSIDE each flight box (under its teams): pot (teams × 2 × buy-in)
+  split among the top `payPct`% (default 25, ≥1 place) on a step-down
+  curve (weights n..1), whole-dollar rounding conserves the pot. It's
+  part of the flight window, so it moves with the flight line. Controls
+  (Buy-in, Pay-top-%, Whole-$) are in the toolbar; Payouts button
+  toggles; persists per event; in Copy Flights. (Replaced the v2.220.0
+  right-side pane per Kerry.)
 - (v2.220.0) Live fetch, post-login: the authenticated event page is a
   JS shell; the server scans it + its external scripts for scoring URLs,
   tries known display/leaderboard endpoints, and parses HTML or a JSON
