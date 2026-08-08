@@ -811,29 +811,98 @@ def delete_save(save_id):
 # ---------------------------------------------------------------------------
 # Fetch
 # ---------------------------------------------------------------------------
-def _candidate_subpages(html):
-    """URLs inside the page that may carry the actual live scoring —
-    iframes first, then any same-host .jsp URL that smells like scoring.
-    JSP sites frequently render the leaderboard in an embedded page that
-    a top-level server fetch never sees. Host-locked, deduped, capped."""
+_SCORE_KW = r"score|leader|standing|live|card|result|board|team|tv"
+
+
+def _gather_scoring_candidates(html, base_url, event_id, tour_id, cookie):
+    """URLs that may carry the actual leaderboard data. The event page is
+    a JS shell — the standings load from a separate feed — so we look in
+    iframes, inline URLs, AND external script files (fetched and scanned),
+    then add Unknown Golf's known display/leaderboard endpoints as
+    explicit guesses. Host-locked, deduped, leaderboard-first, capped."""
     from urllib.parse import urlparse, urljoin
     found = []
     for m in re.finditer(r'<i?frame[^>]+src=["\']([^"\']+)["\']', html, re.I):
         found.append(m.group(1))
-    for m in re.finditer(r'["\']([^"\'\s]{1,300}\.jsp[^"\'\s]{0,200})["\']', html, re.I):
-        if re.search(r"score|leader|live|card|result|board|team", m.group(1), re.I):
+    url_pat = r'["\']([^"\'\s]{1,300}\.(?:jsp|ukg|do)[^"\'\s]{0,200})["\']'
+    for m in re.finditer(url_pat, html, re.I):
+        if re.search(_SCORE_KW, m.group(1), re.I):
             found.append(m.group(1))
+    # external scripts — the leaderboard AJAX URL usually lives in a .js
+    scanned = 0
+    for m in re.finditer(r'<script[^>]+src=["\']([^"\']+)["\']', html, re.I):
+        if scanned >= 6:
+            break
+        src = urljoin(base_url, unescape(m.group(1)))
+        if urlparse(src).netloc != ALLOWED_HOST:
+            continue
+        scanned += 1
+        try:
+            js = _get(src, cookie).text
+        except Exception:
+            continue
+        for jm in re.finditer(url_pat, js, re.I):
+            if re.search(_SCORE_KW, jm.group(1), re.I):
+                found.append(jm.group(1))
+    # explicit high-probability guesses (display/TV leaderboards render
+    # standalone HTML; result summaries sometimes do too)
+    q = f"?eventId={event_id}" + (f"&tourId={tour_id}" if tour_id else "")
+    found += ["/platform/tv/tvLeaderboard.jsp" + q,
+              "/eventLeaderboard.jsp" + q,
+              "/eventResultSummary.jsp" + q,
+              "/eventLeaderboardStandings.jsp" + q,
+              "/leaderboard.ukg" + q,
+              "/eventLeaderboard.ukg" + q]
     out, seen = [], set()
     base = f"https://{ALLOWED_HOST}/"
     for u in found:
-        u = urljoin(base, unescape(u.strip()))
-        p = urlparse(u)
+        full = urljoin(base_url or base, unescape(u.strip()))
+        p = urlparse(full)
         if p.scheme != "https" or p.netloc != ALLOWED_HOST:
             continue
-        if u not in seen:
-            seen.add(u)
-            out.append(u)
-    return out[:4]
+        if full not in seen:
+            seen.add(full)
+            out.append(full)
+    out.sort(key=lambda u: 0 if re.search(r"leader|tv|standing|result", u, re.I) else 1)
+    return out[:8]
+
+
+def _teams_from_json(obj):
+    """Best-effort: find a list of team-ish records in a JSON payload —
+    a list of dicts each carrying a name-ish string and a score-ish
+    number. Returns [] when nothing plausible is found."""
+    name_keys = ("teamName", "team", "name", "displayName", "player", "entry")
+    score_keys = ("toPar", "vsPar", "score", "total", "net", "totalToPar",
+                  "scoreDisplay", "thruScore")
+    best = []
+
+    def walk(node):
+        nonlocal best
+        if isinstance(node, list):
+            teams = []
+            for it in node:
+                if not isinstance(it, dict):
+                    break
+                nm = next((str(it[k]) for k in name_keys if it.get(k)), None)
+                sv = None
+                for k in score_keys:
+                    if k in it and it[k] is not None:
+                        sv = parse_score_token(str(it[k]))
+                        if sv is not None:
+                            break
+                if nm:
+                    teams.append({"name": nm, "score": sv,
+                                  "raw": "", "players": [], "card": None})
+            if len(teams) > len(best) and len(teams) >= 2:
+                best = teams
+            for it in node:
+                walk(it)
+        elif isinstance(node, dict):
+            for v in node.values():
+                walk(v)
+
+    walk(obj)
+    return best
 
 
 def _get(url, cookie=None):
@@ -875,20 +944,38 @@ def fetch_live(event_id, tour_id, cookie=None):
     payload["http_status"] = resp.status_code
     tried = [url]
 
-    # No teams on the top-level page? JSP live scoring often lives in an
-    # embedded sub-page (iframe / secondary .jsp) that only the browser
-    # loads — chase those same-host candidates before giving up.
+    # No teams on the top-level page? The standings load from a separate
+    # feed (JS/AJAX) — chase same-host scoring candidates (incl. URLs
+    # found inside external scripts) and Unknown Golf's known leaderboard
+    # endpoints, parsing HTML blocks/tables or a JSON leaderboard.
+    cand_diag = []
     if not payload.get("teams") and not payload["found"]:
-        for sub in _candidate_subpages(resp.text):
+        for sub in _gather_scoring_candidates(resp.text, url, event_id, tour_id, cookie):
             if sub in tried:
                 continue
             tried.append(sub)
             try:
                 sub_resp = _get(sub, cookie)
             except Exception as e:
-                logger.info("Two Man Tour subpage fetch failed %s: %s", sub, e)
+                cand_diag.append({"url": sub, "error": str(e)[:120]})
                 continue
-            sub_payload, sub_lines = _parse_page(sub_resp.text)
+            ctype = sub_resp.headers.get("Content-Type", "")
+            body = sub_resp.text
+            # JSON feed?
+            if "json" in ctype.lower() or body.lstrip()[:1] in "[{":
+                try:
+                    jteams = _teams_from_json(sub_resp.json())
+                except Exception:
+                    jteams = []
+                if len(jteams) >= 2:
+                    return {"event_name": payload.get("event_name", ""),
+                            "found": True, "teams": jteams, "mode": "json",
+                            "source_url": sub, "http_status": sub_resp.status_code,
+                            "via_subpage": True, "tried_urls": tried}
+                cand_diag.append({"url": sub, "type": "json",
+                                  "sample": body[:400]})
+                continue
+            sub_payload, sub_lines = _parse_page(body)
             if sub_payload.get("teams") or sub_payload["found"]:
                 sub_payload["source_url"] = sub
                 sub_payload["http_status"] = sub_resp.status_code
@@ -897,6 +984,9 @@ def fetch_live(event_id, tour_id, cookie=None):
                 if not sub_payload.get("event_name"):
                     sub_payload["event_name"] = payload.get("event_name", "")
                 return sub_payload
+            cand_diag.append({"url": sub, "type": "html",
+                              "tables": sub_payload.get("table_count", 0),
+                              "sample": " ".join(sub_lines[:12])[:400]})
 
     # Diagnostics: when neither parser produced anything, ship the first
     # chunk of page text so the failure is visible in the response
@@ -904,6 +994,8 @@ def fetch_live(event_id, tour_id, cookie=None):
     if not payload["found"] and not payload.get("teams"):
         payload["sample_lines"] = lines[:80]
         payload["tried_urls"] = tried
+        if cand_diag:
+            payload["candidate_diag"] = cand_diag
         if _looks_logged_out(resp.text):
             payload["login_wall_suspected"] = True
     return payload

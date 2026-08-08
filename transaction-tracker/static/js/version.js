@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.219.3";
+window.TGF_VERSION = "2.220.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.220.0",
+    date: "2026-08-08",
+    changes: [
+      "Flight Board POTENTIAL PAYOUTS pane (Kerry): a right-side pane (collapses below the board on mobile) that splits each flight's pot among its top finishers. 'Pay top N% of teams' (default 25%, min 1 place) with a standard step-down curve (weights n,n-1,…,1) so 1st > 2nd > 3rd; whole-dollar rounding conserves the pot exactly (remainder lands on 1st). Recomputes as flight lines drag and buy-in changes; included in Copy Flights. Toggle with the Payouts button; the % and pane state persist per event.",
+      "Flight Board live fetch — the login now WORKS (server reads the authenticated event page), but the standings load from a separate JS feed. The server now hunts that feed: it scans the authenticated page AND its external script files for same-host scoring URLs, tries Unknown Golf's known display/leaderboard endpoints (tvLeaderboard, eventLeaderboard(Standings), result summary, *.ukg), and parses either HTML blocks/tables OR a JSON leaderboard. When it still can't read scores, the diagnostics panel now lists every data-endpoint it probed with a content sample — so the exact feed URL/shape is one screenshot away.",
+    ],
+  },
   {
     version: "2.219.3",
     date: "2026-08-08",
