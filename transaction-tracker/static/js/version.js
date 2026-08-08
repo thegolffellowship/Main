@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.215.0";
+window.TGF_VERSION = "2.216.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.216.0",
+    date: "2026-08-08",
+    changes: [
+      "Flight Board: tap any team to EXPAND ITS 18-HOLE SCORECARD (Kerry, mid-event) — the parsers now map the 22-column hole row (holes 1-9, F, 10-18, B, Total, vs-Par) into a card, rendered as front/back nine tables with OUT / IN / TOT / PAR, chevron on every expandable row, expansion state survives refreshes and line drags. Rows whose hole row doesn't match the 22-column shape still expand to the raw line, so nothing is ever hidden.",
+      "Flight Board: BUY-IN $/PLAYER input → live POT TOTALS per flight (Kerry, mid-event). Enter the per-player buy-in and every flight header shows its pot (teams × 2 players × buy-in) in green; pots recompute instantly as flight lines drag and are included in Copy Flights ('FLIGHT 1 — POT $120'). Buy-in persists per event in localStorage like the flight lines.",
+    ],
+  },
   {
     version: "2.215.0",
     date: "2026-08-08",

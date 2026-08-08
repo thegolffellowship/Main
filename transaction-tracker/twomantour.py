@@ -276,6 +276,20 @@ def _hole_row_score(line):
     return None, ""
 
 
+def _parse_card(line):
+    """Map a 22-column hole row (holes 1-9, F, 10-18, B, Total, (vs Par))
+    into a scorecard dict; falls back to the raw row when the shape is
+    unexpected so the UI can still show something on expansion."""
+    m = _RE_PARENS_SCORE.search(line)
+    vspar = m.group(1) if m else None
+    body = _RE_PARENS_SCORE.sub("", line).strip()
+    toks = body.split()
+    if len(toks) == 21:
+        return {"holes": toks[0:9] + toks[10:19], "out": toks[9],
+                "inn": toks[19], "total": toks[20], "vspar": vspar}
+    return {"raw": body, "vspar": vspar}
+
+
 def parse_scorecard_blocks(lines):
     """Parse the per-team scorecard-block layout into teams. Returns
     [{name, score, raw}] — score is the (vs par) value when present.
@@ -285,14 +299,15 @@ def parse_scorecard_blocks(lines):
     the first block are overwritten by the real team name and never
     emitted. A bare line inside an open block (the course) is ignored."""
     teams, cur, pending, cur_score, cur_raw, scored = [], None, None, None, "", False
-    players = []
+    players, cur_card = [], None
 
     def flush():
-        nonlocal cur, cur_score, cur_raw, scored, players
+        nonlocal cur, cur_score, cur_raw, scored, players, cur_card
         if cur:
             teams.append({"name": cur, "score": cur_score, "raw": cur_raw,
-                          "players": players})
-        cur, cur_score, cur_raw, scored, players = None, None, "", False, []
+                          "players": players, "card": cur_card})
+        cur, cur_score, cur_raw, scored, players, cur_card = (
+            None, None, "", False, [], None)
 
     def open_block():
         nonlocal cur, pending
@@ -313,6 +328,7 @@ def parse_scorecard_blocks(lines):
                 v, tok = _hole_row_score(line)
                 if v is not None:
                     cur_score, cur_raw, scored = v, tok, True
+                cur_card = _parse_card(line)
             continue
         if _RE_PLAYER.search(line):
             open_block()
