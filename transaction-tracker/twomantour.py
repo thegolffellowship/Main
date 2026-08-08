@@ -440,6 +440,52 @@ def delete_save(save_id):
 # ---------------------------------------------------------------------------
 # Fetch
 # ---------------------------------------------------------------------------
+def _candidate_subpages(html):
+    """URLs inside the page that may carry the actual live scoring —
+    iframes first, then any same-host .jsp URL that smells like scoring.
+    JSP sites frequently render the leaderboard in an embedded page that
+    a top-level server fetch never sees. Host-locked, deduped, capped."""
+    from urllib.parse import urlparse, urljoin
+    found = []
+    for m in re.finditer(r'<i?frame[^>]+src=["\']([^"\']+)["\']', html, re.I):
+        found.append(m.group(1))
+    for m in re.finditer(r'["\']([^"\'\s]{1,300}\.jsp[^"\'\s]{0,200})["\']', html, re.I):
+        if re.search(r"score|leader|live|card|result|board|team", m.group(1), re.I):
+            found.append(m.group(1))
+    out, seen = [], set()
+    base = f"https://{ALLOWED_HOST}/"
+    for u in found:
+        u = urljoin(base, unescape(u.strip()))
+        p = urlparse(u)
+        if p.scheme != "https" or p.netloc != ALLOWED_HOST:
+            continue
+        if u not in seen:
+            seen.add(u)
+            out.append(u)
+    return out[:4]
+
+
+def _get(url, cookie=None):
+    headers = {"User-Agent": _UA, "Accept": "text/html,application/xhtml+xml"}
+    if cookie:
+        headers["Cookie"] = cookie
+    resp = requests.get(url, headers=headers, timeout=FETCH_TIMEOUT)
+    resp.raise_for_status()
+    return resp
+
+
+def _parse_page(html):
+    """Run both parsers over one page; returns (payload, lines)."""
+    payload = extract_leaderboard(html)
+    lines = _text_lines(html)
+    blocks = parse_scorecard_blocks(lines)
+    scored = [t for t in blocks if t["score"] is not None]
+    if len(blocks) >= 2 and (len(scored) >= 2 or not payload["found"]):
+        payload["teams"] = blocks
+        payload["mode"] = "blocks"
+    return payload, lines
+
+
 def fetch_live(event_id, tour_id, cookie=None):
     """Fetch the unknowngolf event page and return the parsed payload.
     Raises ValueError on bad ids; network errors bubble up as
@@ -450,28 +496,42 @@ def fetch_live(event_id, tour_id, cookie=None):
         raise ValueError("tourId must be numeric")
     url = (f"https://{ALLOWED_HOST}/event.jsp"
            f"?eventId={event_id}&tourId={tour_id}")
-    headers = {"User-Agent": _UA, "Accept": "text/html,application/xhtml+xml"}
-    if cookie:
-        headers["Cookie"] = cookie
-    resp = requests.get(url, headers=headers, timeout=FETCH_TIMEOUT)
-    resp.raise_for_status()
-    payload = extract_leaderboard(resp.text)
+    resp = _get(url, cookie)
+    payload, lines = _parse_page(resp.text)
     payload["source_url"] = url
     payload["http_status"] = resp.status_code
+    tried = [url]
 
-    # The real event page (seen 2026-08-08) renders per-team scorecard
-    # blocks, not a name+score table — try the block parser on the page
-    # text and prefer it when it finds a real field of teams.
-    lines = _text_lines(resp.text)
-    blocks = parse_scorecard_blocks(lines)
-    scored = [t for t in blocks if t["score"] is not None]
-    if len(blocks) >= 2 and (len(scored) >= 2 or not payload["found"]):
-        payload["teams"] = blocks
-        payload["mode"] = "blocks"
+    # No teams on the top-level page? JSP live scoring often lives in an
+    # embedded sub-page (iframe / secondary .jsp) that only the browser
+    # loads — chase those same-host candidates before giving up.
+    if not payload.get("teams") and not payload["found"]:
+        for sub in _candidate_subpages(resp.text):
+            if sub in tried:
+                continue
+            tried.append(sub)
+            try:
+                sub_resp = _get(sub, cookie)
+            except Exception as e:
+                logger.info("Two Man Tour subpage fetch failed %s: %s", sub, e)
+                continue
+            sub_payload, sub_lines = _parse_page(sub_resp.text)
+            if sub_payload.get("teams") or sub_payload["found"]:
+                sub_payload["source_url"] = sub
+                sub_payload["http_status"] = sub_resp.status_code
+                sub_payload["via_subpage"] = True
+                sub_payload["tried_urls"] = tried
+                if not sub_payload.get("event_name"):
+                    sub_payload["event_name"] = payload.get("event_name", "")
+                return sub_payload
 
     # Diagnostics: when neither parser produced anything, ship the first
     # chunk of page text so the failure is visible in the response
     # (admin-only endpoint) instead of guessing at the markup again.
     if not payload["found"] and not payload.get("teams"):
         payload["sample_lines"] = lines[:80]
+        payload["tried_urls"] = tried
+        joined = " ".join(lines[:60]).lower()
+        if len(lines) < 45 and re.search(r"password|log ?in|sign ?in", joined):
+            payload["login_wall_suspected"] = True
     return payload

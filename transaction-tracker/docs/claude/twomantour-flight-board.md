@@ -96,6 +96,13 @@ block results over the generic table guess whenever ≥2 teams parse
 directly. When neither parser reads the page, the response includes
 `sample_lines` (first 80 page-text lines) for evidence-based fixes.
 
+v2.218.0: when the top-level page yields nothing, the server chases
+same-host embedded sub-pages (iframes first, then scoring-looking
+`.jsp` URLs; host-locked, max 4) and parses each until teams appear.
+Persistent failures render an on-page "What the server saw" panel
+(tried URLs, table count, sample lines) and flag a suspected login
+wall — so diagnosis works from Kerry's screenshot, not guesses.
+
 ## Known limits / future
 
 - The block parser is built from Kerry's mid-event screenshot; a Clear

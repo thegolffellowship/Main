@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.217.0";
+window.TGF_VERSION = "2.218.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.218.0",
+    date: "2026-08-08",
+    changes: [
+      "Flight Board live fetch: SUBPAGE CHASING + visible diagnostics (Kerry: 'still not grabbing from the page live'). JSP live-scoring pages often render the actual leaderboard in an embedded iframe/secondary .jsp the browser loads but a top-level server fetch never sees — the server now scans the event page for same-host scoring-looking sub-URLs (iframes first, then *.jsp mentioning score/leader/live/card/result/board, host-locked, capped at 4) and parses each until teams appear. When every attempt still fails, the page shows a 'What the server saw' panel — URLs tried, table count, first 80 text lines of the page — so the next fix works from a screenshot of evidence, and a heuristic calls out when the server is being served a LOGIN page instead of scores (the likely cause if Kerry is logged in on his browser but the server isn't).",
+    ],
+  },
   {
     version: "2.217.0",
     date: "2026-08-08",
