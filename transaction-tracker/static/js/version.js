@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.228.0";
+window.TGF_VERSION = "2.229.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.229.0",
+    date: "2026-08-09",
+    changes: [
+      "Flight Board THRU column (Kerry): each team row now shows its progress — 'thru N' (holes scored) while a round is in progress, flipping to the actual GROSS TOTAL (bold, e.g. 69) once all 18 holes are in. Derived from the parsed scorecard (counts scored holes; shows card total when complete). The to-par score stays in its own column, so you see both gross total and vs-par at a glance.",
+    ],
+  },
   {
     version: "2.228.0",
     date: "2026-08-09",

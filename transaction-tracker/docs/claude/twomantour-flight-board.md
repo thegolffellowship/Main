@@ -36,6 +36,9 @@ lets Kerry set flights interactively:
   re-syncs controls (`syncAllControls`); 120-step cap; guarded against
   self-recording during restore. **Accordion scorecards** — expanding one
   card collapses others (`expandedTeams.clear()` before add).
+- (v2.229.0) **Thru column** (`teamThru`): 'thru N' while scoring, flips
+  to the gross total (bold) when all 18 holes are in; derived from the
+  parsed scorecard. To-par stays in the score column.
 - (v2.228.0) **Rounding rework** — middle places → `roundIncr`; LAST
   place → round DOWN to `lastRoundDown` (default $20); each flight's
   leftover pools into the **REMAINING POT** chip up top (not added to any

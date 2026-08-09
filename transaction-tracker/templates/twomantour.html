@@ -134,7 +134,8 @@
   .sc-card th.sp, .sc-card td.sp { border: none; background: transparent; width: 40px; }
   .sc-card .sc-raw { color: var(--dim); font-size: 12.5px; font-family: ui-monospace, Menlo, Consolas, monospace; }
   .flight-head .pot { margin-left: auto; color: #7fe0a7; font-weight: 700; letter-spacing: 0; font-size: 13px; }
-  .team-row .thru { color: var(--dim); font-size: 12.5px; width: 52px; text-align: right; }
+  .team-row .thru { color: var(--dim); font-size: 12.5px; width: 66px; text-align: right; font-variant-numeric: tabular-nums; }
+  .team-row .thru.done { color: var(--text); font-weight: 700; }
   .team-row .sc { width: 56px; text-align: right; font-weight: 700; font-variant-numeric: tabular-nums; }
   .team-row .sc.under { color: #ff6b63; }
   .team-row .sc.none { color: var(--dim); font-weight: 400; }
@@ -594,6 +595,20 @@
     saveState();
   }
 
+  // Thru / completion from the parsed scorecard: how many holes are
+  // scored, and — when all 18 are in — the actual gross total.
+  function teamThru(t) {
+    var c = t.card;
+    if (c && c.holes && c.holes.length === 18) {
+      var played = c.holes.filter(function (h) { return /^\d+$/.test(h); }).length;
+      var totalNum = /^\d+$/.test(String(c.total)) ? c.total : null;
+      if (played >= 18 && totalNum) return { complete: true, total: totalNum, thru: 18 };
+      return { complete: false, thru: played };
+    }
+    if (t.thru) return { complete: /^F$/i.test(t.thru), total: null, thru: t.thru };
+    return null;
+  }
+
   // ---------- flights / cuts ----------
   // Tie rule (always on): a flight line may only fall between two DIFFERENT
   // scores, so teams sharing a score are never split across flights.
@@ -760,7 +775,19 @@
           pl.textContent = t.players.join(" · ");
           nm.appendChild(pl);
         }
-        row.querySelector(".thru").textContent = t.thru || "";
+        var thruCell = row.querySelector(".thru");
+        var info = teamThru(t);
+        thruCell.classList.remove("done");
+        if (info && info.complete) {
+          thruCell.textContent = info.total != null ? info.total : "F";
+          thruCell.classList.add("done");
+          thruCell.title = "Final gross total";
+        } else if (info && info.thru != null && info.thru !== "") {
+          thruCell.textContent = /^\d+$/.test(String(info.thru)) ? ("thru " + info.thru) : info.thru;
+          thruCell.title = "Holes played";
+        } else {
+          thruCell.textContent = t.thru || "";
+        }
         row.querySelector(".chev").textContent = t.card ? (expandedTeams.has(t.name) ? "▾" : "▸") : "";
         // score lives on the .sc cell (a pay cell may follow it, so don't use lastChild)
         row.querySelector(".sc").textContent = t.display;
