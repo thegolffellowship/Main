@@ -26,6 +26,11 @@ lets Kerry set flights interactively:
   lists/loads/deletes snapshots. Routes: GET/POST
   `/twomantour/api/saves`, GET/DELETE `/twomantour/api/saves/<id>`,
   all `@require_role("admin")`.
+- (v2.226.0) **Undo/redo** — ↶ ↷ + Ctrl/Cmd+Z / Ctrl+Shift+Z. Debounced
+  history of a snapshot (`HIST_KEYS`) recorded from `saveState`; restore
+  re-syncs controls (`syncAllControls`); 120-step cap; guarded against
+  self-recording during restore. **Accordion scorecards** — expanding one
+  card collapses others (`expandedTeams.clear()` before add).
 - (v2.225.0) **Editable payouts** — click a payout cell → `payOverrides`
   `{"f:i": $}`; locked places keep their value, others redistribute the
   remaining pot (`distributeWithOverrides`), pot stays exact. Cleared on

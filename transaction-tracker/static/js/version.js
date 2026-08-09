@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.225.0";
+window.TGF_VERSION = "2.226.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.226.0",
+    date: "2026-08-09",
+    changes: [
+      "Flight Board UNDO/REDO (Kerry): ↶ ↷ arrows in the toolbar plus Ctrl/Cmd+Z and Ctrl+Shift+Z (or Ctrl+Y). A debounced history stack snapshots the whole board (teams, flight lines, flight count/mode, buy-in, pay %, all payout rules, manual payout edits, score column) after every committed change; undo/redo restore the state AND the toolbar/modal controls. Up to 120 steps; buttons disable at the ends.",
+      "Flight Board scorecards are now an ACCORDION (Kerry): expanding one team's hole-by-hole card auto-collapses any other, so only one is open at a time.",
+    ],
+  },
   {
     version: "2.225.0",
     date: "2026-08-08",

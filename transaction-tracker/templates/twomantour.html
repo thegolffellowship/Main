@@ -83,6 +83,9 @@
     border-radius: 7px; padding: 8px 13px; font-size: 14px; cursor: pointer;
   }
   button:hover { border-color: var(--gold-dim); }
+  button:disabled { opacity: .38; cursor: default; }
+  button:disabled:hover { border-color: var(--line); }
+  #undoBtn, #redoBtn { font-size: 17px; line-height: 1; padding: 6px 11px; }
   button.primary { background: var(--gold); border-color: var(--gold); color: #14100a; font-weight: 700; }
   button.on { background: #1d3323; border-color: #2fbf71; color: #7fe0a7; }
   .note { color: var(--dim); font-size: 12.5px; margin: 6px 2px 12px; }
@@ -181,6 +184,10 @@
 
 <div class="wrap">
   <div class="controls">
+    <div class="grp">
+      <button id="undoBtn" title="Undo (Ctrl+Z)" disabled>↶</button>
+      <button id="redoBtn" title="Redo (Ctrl+Shift+Z)" disabled>↷</button>
+    </div>
     <div class="grp">
       <label>Flights</label>
       <button id="flightsMinus" title="Fewer flights">−</button>
@@ -416,6 +423,52 @@
       }));
       localStorage.setItem("tmt-last-event", JSON.stringify({ eventId: state.eventId, tourId: state.tourId }));
     } catch (e) {}
+    if (!restoring) { clearTimeout(histTimer); histTimer = setTimeout(recordHistory, 300); }
+  }
+
+  // ---------- undo / redo ----------
+  var history = [], hptr = -1, restoring = false, histTimer = null;
+  var HIST_KEYS = ["teams", "cuts", "flights", "buyin", "payPct", "showPayouts",
+    "potModel", "splitMode", "topFlightPct", "roundIncr", "firstTo100",
+    "flightMode", "bandWidth", "maxFlights", "lockLower", "payOverrides",
+    "scoreCol", "source"];
+  function snapshot() {
+    var o = {};
+    HIST_KEYS.forEach(function (k) { o[k] = state[k]; });
+    return JSON.stringify(o);
+  }
+  function recordHistory() {
+    if (restoring) return;
+    var sn = snapshot();
+    if (hptr >= 0 && history[hptr] === sn) return;
+    history = history.slice(0, hptr + 1);
+    history.push(sn); hptr = history.length - 1;
+    if (history.length > 120) { history.shift(); hptr--; }
+    updateUndoButtons();
+  }
+  function restoreSnapshot(sn) {
+    var o = JSON.parse(sn);
+    restoring = true;
+    HIST_KEYS.forEach(function (k) { if (k in o) state[k] = o[k]; });
+    syncAllControls();
+    render();
+    saveState();
+    restoring = false;
+    updateUndoButtons();
+  }
+  function undo() { if (hptr > 0) { hptr--; restoreSnapshot(history[hptr]); } }
+  function redo() { if (hptr < history.length - 1) { hptr++; restoreSnapshot(history[hptr]); } }
+  function updateUndoButtons() {
+    var u = $("undoBtn"), r = $("redoBtn");
+    if (u) u.disabled = hptr <= 0;
+    if (r) r.disabled = hptr >= history.length - 1;
+  }
+  function syncAllControls() {
+    $("flightCount").value = state.flights;
+    $("buyIn").value = state.buyin || "";
+    $("payPct").value = state.payPct;
+    applyPayoutsToggle();
+    syncRules();
   }
   function loadState() {
     try {
@@ -1271,6 +1324,18 @@
   }
 
   // ---------- wire up ----------
+  $("undoBtn").addEventListener("click", undo);
+  $("redoBtn").addEventListener("click", redo);
+  document.addEventListener("keydown", function (e) {
+    if (e.target && /^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName)) return;
+    var mod = e.ctrlKey || e.metaKey;
+    if (mod && (e.key === "z" || e.key === "Z")) {
+      e.preventDefault();
+      if (e.shiftKey) redo(); else undo();
+    } else if (mod && (e.key === "y" || e.key === "Y")) {
+      e.preventDefault(); redo();
+    }
+  });
   $("refreshBtn").addEventListener("click", refresh);
   $("autoBtn").addEventListener("click", function () {
     if (state.auto) { clearInterval(state.auto); state.auto = null; this.classList.remove("on"); this.textContent = "Auto 60s"; }
@@ -1303,7 +1368,9 @@
     var row = e.target.closest(".team-row.expandable");
     if (!row) return;
     var name = row.dataset.team;
-    if (expandedTeams.has(name)) expandedTeams.delete(name); else expandedTeams.add(name);
+    // Accordion: opening a scorecard auto-collapses any other (Kerry).
+    if (expandedTeams.has(name)) { expandedTeams.delete(name); }
+    else { expandedTeams.clear(); expandedTeams.add(name); }
     render();
   });
   function editPayCell(cell) {
@@ -1483,6 +1550,7 @@
   $("payPct").value = state.payPct;
   applyPayoutsToggle();
   syncRules();
+  recordHistory();   // baseline for undo/redo
   fetch("/api/auth/role").then(function (r) { return r.json(); }).then(function (j) {
     if (j.role === "admin") refresh(); else showPin();
   }).catch(showPin);
