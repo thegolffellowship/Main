@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.226.0";
+window.TGF_VERSION = "2.227.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.227.0",
+    date: "2026-08-09",
+    changes: [
+      "Flight Board — lockable PAID-TEAMS count for the pot (Kerry: 46 teams paid, only some have posted scores). New 'Paid teams' field: leave it blank to use the teams shown, or lock it to the full field (e.g. 46) so TOTAL POT = 46 × 2 × buy-in even while fewer teams are on the board. The header shows '46 paid teams (locked · 30 scored)', and the full pot is distributed across the current flights so payouts always sum to it; as more teams post scores it stays consistent. Undo/redo covers the lock.",
+      "Undo/redo arms instantly: a change made within the history debounce window is now immediately undoable (the arrow enables the moment you change something, and undo/redo flush any pending snapshot first).",
+    ],
+  },
   {
     version: "2.226.0",
     date: "2026-08-09",

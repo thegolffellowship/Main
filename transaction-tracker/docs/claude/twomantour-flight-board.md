@@ -26,6 +26,11 @@ lets Kerry set flights interactively:
   lists/loads/deletes snapshots. Routes: GET/POST
   `/twomantour/api/saves`, GET/DELETE `/twomantour/api/saves/<id>`,
   all `@require_role("admin")`.
+- (v2.227.0) **Lockable paid-teams count** (`potTeams`): pot is funded by
+  the full paid field (e.g. 46) even when fewer teams have posted scores;
+  `totalPot() = paidTeams() × 2 × buyin`, distribution denominator stays
+  the displayed count so payouts still sum to the full pot. Blank = use
+  teams shown. Undo/redo arms instantly (dirty-aware, flush-on-undo).
 - (v2.226.0) **Undo/redo** — ↶ ↷ + Ctrl/Cmd+Z / Ctrl+Shift+Z. Debounced
   history of a snapshot (`HIST_KEYS`) recorded from `saveState`; restore
   re-syncs controls (`syncAllControls`); 120-step cap; guarded against

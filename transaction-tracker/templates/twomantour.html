@@ -205,6 +205,10 @@
       <input type="number" id="buyIn" min="0" step="5" placeholder="0" style="width:70px">
     </div>
     <div class="grp">
+      <label title="Total paid teams for the pot — lock it (e.g. 46) when some haven't posted scores yet">Paid teams</label>
+      <input type="number" id="potTeams" min="1" placeholder="auto" style="width:64px" title="Empty = use teams shown. Set to the full field (e.g. 46) to lock the pot.">
+    </div>
+    <div class="grp">
       <label>Pay top</label>
       <input type="number" id="payPct" min="25" max="100" step="5" value="25" style="width:56px;text-align:center">
       <label>% (min 25)</label>
@@ -387,6 +391,7 @@
     teams: [],           // [{name, score(null|number), display, thru}]
     flights: 3,
     buyin: 0,            // $ per player, for flight pot totals
+    potTeams: null,      // locked paid-team count for the pot (null = use displayed)
     payPct: 25,          // pay top N% of teams in each flight
     showPayouts: false,  // show payout column
     // payout rules
@@ -414,7 +419,8 @@
     try {
       localStorage.setItem(storeKey(), JSON.stringify({
         flights: state.flights, cuts: state.cuts, scoreCol: state.scoreCol,
-        buyin: state.buyin, payPct: state.payPct, showPayouts: state.showPayouts,
+        buyin: state.buyin, potTeams: state.potTeams,
+        payPct: state.payPct, showPayouts: state.showPayouts,
         potModel: state.potModel, splitMode: state.splitMode,
         topFlightPct: state.topFlightPct, roundIncr: state.roundIncr,
         firstTo100: state.firstTo100, flightMode: state.flightMode,
@@ -423,12 +429,16 @@
       }));
       localStorage.setItem("tmt-last-event", JSON.stringify({ eventId: state.eventId, tourId: state.tourId }));
     } catch (e) {}
-    if (!restoring) { clearTimeout(histTimer); histTimer = setTimeout(recordHistory, 300); }
+    if (!restoring) {
+      histDirty = true;
+      clearTimeout(histTimer); histTimer = setTimeout(recordHistory, 250);
+      updateUndoButtons();   // arm the undo arrow the instant something changes
+    }
   }
 
   // ---------- undo / redo ----------
-  var history = [], hptr = -1, restoring = false, histTimer = null;
-  var HIST_KEYS = ["teams", "cuts", "flights", "buyin", "payPct", "showPayouts",
+  var history = [], hptr = -1, restoring = false, histTimer = null, histDirty = false;
+  var HIST_KEYS = ["teams", "cuts", "flights", "buyin", "potTeams", "payPct", "showPayouts",
     "potModel", "splitMode", "topFlightPct", "roundIncr", "firstTo100",
     "flightMode", "bandWidth", "maxFlights", "lockLower", "payOverrides",
     "scoreCol", "source"];
@@ -439,13 +449,15 @@
   }
   function recordHistory() {
     if (restoring) return;
+    histDirty = false; clearTimeout(histTimer);
     var sn = snapshot();
-    if (hptr >= 0 && history[hptr] === sn) return;
+    if (hptr >= 0 && history[hptr] === sn) { updateUndoButtons(); return; }
     history = history.slice(0, hptr + 1);
     history.push(sn); hptr = history.length - 1;
     if (history.length > 120) { history.shift(); hptr--; }
     updateUndoButtons();
   }
+  function flushHistory() { if (histDirty) recordHistory(); }
   function restoreSnapshot(sn) {
     var o = JSON.parse(sn);
     restoring = true;
@@ -456,16 +468,17 @@
     restoring = false;
     updateUndoButtons();
   }
-  function undo() { if (hptr > 0) { hptr--; restoreSnapshot(history[hptr]); } }
-  function redo() { if (hptr < history.length - 1) { hptr++; restoreSnapshot(history[hptr]); } }
+  function undo() { flushHistory(); if (hptr > 0) { hptr--; restoreSnapshot(history[hptr]); } }
+  function redo() { flushHistory(); if (hptr < history.length - 1) { hptr++; restoreSnapshot(history[hptr]); } }
   function updateUndoButtons() {
     var u = $("undoBtn"), r = $("redoBtn");
-    if (u) u.disabled = hptr <= 0;
+    if (u) u.disabled = !(hptr > 0 || histDirty);   // dirty change is undoable
     if (r) r.disabled = hptr >= history.length - 1;
   }
   function syncAllControls() {
     $("flightCount").value = state.flights;
     $("buyIn").value = state.buyin || "";
+    $("potTeams").value = (state.potTeams && state.potTeams > 0) ? state.potTeams : "";
     $("payPct").value = state.payPct;
     applyPayoutsToggle();
     syncRules();
@@ -480,6 +493,7 @@
         state.cuts = Array.isArray(s.cuts) ? s.cuts : [];
         state.scoreCol = (s.scoreCol === undefined) ? "auto" : s.scoreCol;
         state.buyin = parseFloat(s.buyin) || 0;
+        state.potTeams = (s.potTeams && s.potTeams > 0) ? Math.floor(s.potTeams) : null;
         if (s.payPct) state.payPct = Math.min(100, Math.max(5, s.payPct));
         state.showPayouts = !!s.showPayouts;
         if (s.potModel) state.potModel = s.potModel;
@@ -747,8 +761,13 @@
   // (pro-rata self-funded, or even), with an optional top-flight bonus
   // skimmed off the total; split within each flight by places (step-down)
   // or evenly; rounded (1st→$100, others→increment, last absorbs remainder).
+  // Paid-team count that funds the pot — locked value (e.g. 46 total field)
+  // or the number of teams currently on the board.
+  function paidTeams() {
+    return (state.potTeams && state.potTeams > 0) ? state.potTeams : state.teams.length;
+  }
   function totalPot() {
-    return state.buyin > 0 ? state.teams.length * 2 * state.buyin : 0;
+    return state.buyin > 0 ? paidTeams() * 2 * state.buyin : 0;
   }
   function splitWeights(n) {
     if (state.splitMode === "even") {
@@ -860,9 +879,16 @@
   function fmtMoney(v) { return (v % 1 === 0) ? String(v) : v.toFixed(2); }
   function updateTotalPot() {
     var el = $("totalPot"), total = totalPot();
+    var potInput = $("potTeams");
+    if (potInput) potInput.placeholder = state.teams.length || "auto";
     if (total > 0 && state.teams.length) {
+      var locked = state.potTeams && state.potTeams > 0;
+      var teamStr = locked
+        ? paidTeams() + " paid teams (locked" +
+          (state.teams.length < paidTeams() ? " · " + state.teams.length + " scored" : "") + ")"
+        : state.teams.length + " teams";
       el.innerHTML = "TOTAL POT $" + fmtMoney(total) +
-        "<small>" + state.teams.length + " teams · $" + fmtMoney(state.buyin) + "/player</small>";
+        "<small>" + teamStr + " · $" + fmtMoney(state.buyin) + "/player</small>";
       el.classList.remove("hidden");
     } else {
       el.classList.add("hidden");
@@ -1361,6 +1387,11 @@
     state.buyin = Math.max(0, parseFloat(this.value) || 0);
     render(); saveState();
   });
+  $("potTeams").addEventListener("input", function () {
+    var v = parseInt(this.value, 10);
+    state.potTeams = (v && v > 0) ? v : null;
+    render(); saveState();
+  });
   $("board").addEventListener("click", function (e) {
     if (drag) return;
     var payCell = e.target.closest(".team-row .pay.win[data-f]");
@@ -1547,6 +1578,7 @@
   loadState();
   $("flightCount").value = state.flights;
   if (state.buyin > 0) $("buyIn").value = state.buyin;
+  if (state.potTeams > 0) $("potTeams").value = state.potTeams;
   $("payPct").value = state.payPct;
   applyPayoutsToggle();
   syncRules();
