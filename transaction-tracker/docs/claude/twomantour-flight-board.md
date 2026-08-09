@@ -36,6 +36,12 @@ lets Kerry set flights interactively:
   re-syncs controls (`syncAllControls`); 120-step cap; guarded against
   self-recording during restore. **Accordion scorecards** — expanding one
   card collapses others (`expandedTeams.clear()` before add).
+- (v2.230.0) **Locks** — `lockFlights` (freeze cuts: drag off, controls
+  disabled, `normalizeCuts`/`recomputeFlights` keep cuts) and
+  `lockPayouts` (freeze amounts: `frozenPayouts` = captured
+  `{flights,totalRemaining}`; `getPayouts()` returns it while locked;
+  editing blocked). Both persist + in undo history; `computePayouts`
+  returns `{flights,totalRemaining}` (object, not array).
 - (v2.229.0) **Thru column** (`teamThru`): 'thru N' while scoring, flips
   to the gross total (bold) when all 18 holes are in; derived from the
   parsed scorecard. To-par stays in the score column.

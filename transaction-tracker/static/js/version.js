@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.229.0";
+window.TGF_VERSION = "2.230.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.230.0",
+    date: "2026-08-09",
+    changes: [
+      "Flight Board LOCKS (Kerry): two toggle buttons next to Payouts. 🔒 Flights freezes the flight lines — dragging is disabled, the flight-count/mode/reset controls grey out, and new pasted/refreshed scores won't re-flight (lines stay put, just clamped). 🔒 Payouts freezes the dollar amounts — it snapshots the current payouts so changing buy-in, pot, or rules no longer moves them, and clicking a payout to edit is blocked until you unlock. Both locks persist per event and are covered by undo/redo. Unlocking payouts recomputes live again.",
+    ],
+  },
   {
     version: "2.229.0",
     date: "2026-08-09",

@@ -60,6 +60,8 @@
   .team-row .pay:empty::after { content: ""; }
   .team-row .pay.win[data-f] { cursor: pointer; }
   .team-row .pay.win[data-f]:hover { text-decoration: underline; text-underline-offset: 3px; }
+  #board.pay-locked .team-row .pay.win[data-f] { cursor: default; }
+  #board.pay-locked .team-row .pay.win[data-f]:hover { text-decoration: none; }
   .team-row .pay.locked { color: #4dd0e1; }         /* manually set */
   .team-row .pay.locked::before { content: "●"; font-size: 8px; vertical-align: middle; margin-right: 4px; color: #4dd0e1; }
   .team-row .pay .pay-edit {
@@ -152,6 +154,8 @@
     letter-spacing: 1px; padding: 3px 10px; border-radius: 20px; white-space: nowrap;
   }
   .divider.dragging .bar, .divider.dragging .grip { background: #ffd75e; }
+  .divider.locked { cursor: default; opacity: .5; }
+  .divider.locked .grip::after { content: " 🔒"; }
 
   /* Modals / overlays */
   .overlay {
@@ -230,6 +234,8 @@
     <button id="saveBtn">Save event</button>
     <button id="savedBtn">Saved</button>
     <button id="payoutsBtn">Payouts</button>
+    <button id="lockFlightsBtn" title="Lock flight lines (freeze, no dragging)">🔓 Flights</button>
+    <button id="lockPayBtn" title="Lock payout amounts (freeze the numbers)">🔓 Payouts</button>
     <button id="setupBtn" title="Event settings">⚙</button>
   </div>
   <div class="note" id="statusNote">Loading…</div>
@@ -420,6 +426,9 @@
     bandWidth: 4,        // stroke band width
     maxFlights: 6,       // cap for band mode
     lockLower: false,    // dragging a line shifts lower lines by the same size
+    lockFlights: false,  // freeze flight lines (no drag, no auto-recompute)
+    lockPayouts: false,  // freeze payout amounts (frozenPayouts holds them)
+    frozenPayouts: null, // captured {flights, totalRemaining} while locked
     payOverrides: {},    // "flightIdx:placeIdx" -> manual $ (others adjust)
     cuts: [],            // ascending cut indexes: teams-above-the-line counts
     headers: [], rows: [], nameCol: 0, numericCols: [],
@@ -441,6 +450,8 @@
         lastRoundDown: state.lastRoundDown, flightMode: state.flightMode,
         bandWidth: state.bandWidth, maxFlights: state.maxFlights,
         lockLower: state.lockLower, payOverrides: state.payOverrides,
+        lockFlights: state.lockFlights, lockPayouts: state.lockPayouts,
+        frozenPayouts: state.frozenPayouts,
       }));
       localStorage.setItem("tmt-last-event", JSON.stringify({ eventId: state.eventId, tourId: state.tourId }));
     } catch (e) {}
@@ -456,7 +467,7 @@
   var HIST_KEYS = ["teams", "cuts", "flights", "buyin", "potTeams", "payPct", "showPayouts",
     "potModel", "splitMode", "topFlightPct", "roundIncr", "lastRoundDown",
     "flightMode", "bandWidth", "maxFlights", "lockLower", "payOverrides",
-    "scoreCol", "source"];
+    "lockFlights", "lockPayouts", "frozenPayouts", "scoreCol", "source"];
   function snapshot() {
     var o = {};
     HIST_KEYS.forEach(function (k) { o[k] = state[k]; });
@@ -521,6 +532,9 @@
         if (s.maxFlights) state.maxFlights = Math.max(1, s.maxFlights);
         state.lockLower = !!s.lockLower;
         state.payOverrides = (s.payOverrides && typeof s.payOverrides === "object") ? s.payOverrides : {};
+        state.lockFlights = !!s.lockFlights;
+        state.lockPayouts = !!s.lockPayouts;
+        state.frozenPayouts = s.frozenPayouts || null;
       }
     } catch (e) {}
   }
@@ -677,6 +691,7 @@
   }
   // Recompute cuts from the active mode; keeps state.flights in sync.
   function recomputeFlights() {
+    if (state.lockFlights && state.cuts.length) return;   // frozen
     clearPayOverrides();   // flight structure changed → manual edits no longer map
     if (!state.teams.length) { state.cuts = []; return; }
     if (state.flightMode === "band") {
@@ -693,6 +708,15 @@
   function normalizeCuts() {
     var n = state.teams.length;
     if (n === 0) { state.cuts = []; return; }
+    if (state.lockFlights) {   // frozen: keep cuts, just clamp into range
+      var p = 0;
+      state.cuts = (state.cuts || []).map(function (c, i) {
+        c = Math.max(p + 1, Math.min(n - (state.cuts.length - i), Math.round(c)));
+        p = c; return c;
+      }).filter(function (c) { return c > 0 && c < n; });
+      state.flights = state.cuts.length + 1;
+      return;
+    }
     // A saved cut set that's still legal (right length, strictly increasing,
     // all on valid boundaries) is kept; otherwise recompute from the mode.
     var vb = validBounds(), vset = {};
@@ -714,9 +738,10 @@
     $("flightCount").value = state.flights;
     if (!state.teams.length) return;
 
-    var payouts = state.showPayouts ? computePayouts() : null;
+    var payoutData = state.showPayouts ? getPayouts() : null;
+    var payouts = payoutData ? payoutData.flights : null;
     updateTotalPot();
-    updateRemainPot(payouts ? payouts.totalRemaining : 0);
+    updateRemainPot(payoutData ? payoutData.totalRemaining : 0);
     var bounds = [0].concat(state.cuts, [state.teams.length]);
     for (var f = 0; f < bounds.length - 1; f++) {
       if (f > 0) {
@@ -796,6 +821,7 @@
       });
       board.appendChild(grp);
     }
+    applyLockButtons();   // reapply divider/board lock styling after rebuild
   }
 
   // ---------- payouts ----------
@@ -880,8 +906,16 @@
       locked = paired.map(function (pp) { return pp.l; });
       out.push({ pot: pots[h], paid: paid, amounts: amounts, locked: locked, remainder: res.remainder || 0 });
     }
-    out.totalRemaining = totalRemaining;
-    return out;
+    return { flights: out, totalRemaining: totalRemaining };
+  }
+  // Payouts, honoring the payout lock (returns the frozen copy when locked).
+  function getPayouts() {
+    if (state.lockPayouts && state.frozenPayouts &&
+        state.frozenPayouts.flights &&
+        state.frozenPayouts.flights.length === state.cuts.length + 1) {
+      return state.frozenPayouts;
+    }
+    return computePayouts();
   }
   // Paid places per flight: pay top payPct%, floored at a 25% minimum
   // (Kerry) and at least 1, capped at the flight size.
@@ -1009,7 +1043,7 @@
   var drag = null;   // {idx, el}
   document.addEventListener("pointerdown", function (e) {
     var d = e.target.closest(".divider");
-    if (!d) return;
+    if (!d || state.lockFlights) return;   // flights locked → no dragging
     e.preventDefault();
     drag = { idx: parseInt(d.dataset.idx, 10) };
     d.classList.add("dragging");
@@ -1280,10 +1314,11 @@
   function copyFlights() {
     var bounds = [0].concat(state.cuts, [state.teams.length]);
     var out = [];
-    var payouts = (state.showPayouts && state.buyin > 0) ? computePayouts() : null;
-    if (payouts) {
+    var payoutData = (state.showPayouts && state.buyin > 0) ? getPayouts() : null;
+    var payouts = payoutData ? payoutData.flights : null;
+    if (payoutData) {
       out.push("TOTAL POT $" + fmtMoney(totalPot()) + "  (" + paidTeams() + " paid teams)");
-      if (payouts.totalRemaining > 0) out.push("REMAINING POT $" + fmtMoney(payouts.totalRemaining) + " (rounded off)");
+      if (payoutData.totalRemaining > 0) out.push("REMAINING POT $" + fmtMoney(payoutData.totalRemaining) + " (rounded off)");
       out.push("");
     }
     for (var f = 0; f < bounds.length - 1; f++) {
@@ -1461,7 +1496,11 @@
   $("board").addEventListener("click", function (e) {
     if (drag) return;
     var payCell = e.target.closest(".team-row .pay.win[data-f]");
-    if (payCell) { e.stopPropagation(); editPayCell(payCell); return; }
+    if (payCell) {
+      e.stopPropagation();
+      if (state.lockPayouts) { toast("Payouts are locked"); return; }
+      editPayCell(payCell); return;
+    }
     var row = e.target.closest(".team-row.expandable");
     if (!row) return;
     var name = row.dataset.team;
@@ -1531,11 +1570,49 @@
   $("savedClose").addEventListener("click", function () { $("savedOverlay").classList.add("hidden"); });
   function applyPayoutsToggle() {
     $("payoutsBtn").classList.toggle("on", state.showPayouts);
+    applyLockButtons();
+  }
+  function applyLockButtons() {
+    var lf = $("lockFlightsBtn"), lp = $("lockPayBtn");
+    if (lf) {
+      lf.classList.toggle("on", state.lockFlights);
+      lf.textContent = (state.lockFlights ? "🔒" : "🔓") + " Flights";
+    }
+    if (lp) {
+      lp.classList.toggle("on", state.lockPayouts);
+      lp.textContent = (state.lockPayouts ? "🔒" : "🔓") + " Payouts";
+    }
+    // Flight controls disabled while flights are locked
+    ["flightCount", "flightsMinus", "flightsPlus", "resetLines"].forEach(function (id) {
+      var el = $(id); if (el) el.disabled = state.lockFlights;
+    });
+    document.querySelectorAll(".divider").forEach(function (d) {
+      d.classList.toggle("locked", state.lockFlights);
+    });
+    $("board").classList.toggle("pay-locked", state.lockPayouts);
   }
   $("payoutsBtn").addEventListener("click", function () {
     state.showPayouts = !state.showPayouts;
     applyPayoutsToggle();
     render(); saveState();
+  });
+  $("lockFlightsBtn").addEventListener("click", function () {
+    state.lockFlights = !state.lockFlights;
+    applyLockButtons();
+    saveState();
+    toast(state.lockFlights ? "Flight lines locked" : "Flight lines unlocked");
+  });
+  $("lockPayBtn").addEventListener("click", function () {
+    state.lockPayouts = !state.lockPayouts;
+    if (state.lockPayouts) {
+      if (!state.showPayouts) { state.showPayouts = true; applyPayoutsToggle(); }
+      state.frozenPayouts = computePayouts();   // freeze current amounts
+    } else {
+      state.frozenPayouts = null;
+    }
+    applyLockButtons();
+    render(); saveState();
+    toast(state.lockPayouts ? "Payouts locked" : "Payouts unlocked");
   });
   $("payPct").addEventListener("input", function () {
     state.payPct = Math.min(100, Math.max(25, parseInt(this.value, 10) || 25));
