@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.227.0";
+window.TGF_VERSION = "2.228.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.228.0",
+    date: "2026-08-09",
+    changes: [
+      "Flight Board payout rounding reworked (Kerry): the last paid place in each flight now rounds DOWN to the nearest $20 (configurable $5–$50 in Rules), and each flight's leftover collects into a new REMAINING POT chip shown up top — it is NOT dumped onto 1st place. Middle places still round to the chosen increment ($50 default); 1st is a clean rounded number too. Payouts + remaining pot always sum to the total pot. Replaces the old 'last place absorbs remainder / 1st to $100' scheme (the 1st-to-$100 toggle is gone). Copy Flights and manual overrides respect the new model.",
+    ],
+  },
   {
     version: "2.227.0",
     date: "2026-08-09",

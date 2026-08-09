@@ -40,6 +40,12 @@
     padding: 5px 12px; border-radius: 8px; white-space: nowrap;
   }
   header .total-pot small { color: #6f9c5f; font-weight: 600; margin-left: 6px; }
+  header .remain-pot {
+    background: #21160f; border: 1px solid #5a3f1e; color: #e6b980;
+    font-weight: 800; letter-spacing: .5px; font-size: 14px;
+    padding: 5px 12px; border-radius: 8px; white-space: nowrap; margin-left: 10px;
+  }
+  header .remain-pot small { color: #9c7a4f; font-weight: 600; margin-left: 6px; }
   header .updated { color: var(--dim); font-size: 12.5px; margin-left: 14px; }
   header .total-pot.hidden + .updated { margin-left: auto; }
   .wrap { max-width: 860px; margin: 0 auto; padding: 14px 14px 80px; }
@@ -179,6 +185,7 @@
   <div class="brand">Two Man Tour <small>· Flight Board</small></div>
   <div class="event-name" id="eventName"></div>
   <div class="total-pot hidden" id="totalPot"></div>
+  <div class="remain-pot hidden" id="remainPot"></div>
   <div class="updated" id="updatedAt"></div>
 </header>
 
@@ -311,15 +318,22 @@
       </div>
       <div class="rules-note">Skims that % of the <b>total</b> pot off the top and adds it to Flight 1.</div>
       <div class="rrow">
-        <label>Round places to</label>
+        <label>Round middle places to</label>
         <select id="rRoundIncr">
           <option value="1">$1</option><option value="5">$5</option>
           <option value="10">$10</option><option value="25">$25</option>
           <option value="50">$50</option><option value="100">$100</option>
         </select>
-        <label style="margin-left:10px;"><input type="checkbox" id="rFirstTo100"> 1st to nearest $100</label>
       </div>
-      <div class="rules-note">Last paid place absorbs the remainder so each flight sums to its pot exactly. Click any payout on the board to set it manually — the others adjust to keep the pot exact.</div>
+      <div class="rrow">
+        <label>Last place: round down to</label>
+        <select id="rLastRoundDown">
+          <option value="5">$5</option><option value="10">$10</option>
+          <option value="20">$20</option><option value="25">$25</option>
+          <option value="50">$50</option>
+        </select>
+      </div>
+      <div class="rules-note">The last paid place is rounded DOWN to that amount; each flight's leftover collects into the REMAINING POT shown up top (not added to any place). Click any payout on the board to set it manually — the others adjust.</div>
       <div class="rrow"><button id="rClearOverrides">Clear manual payout edits</button></div>
     </div>
 
@@ -398,8 +412,8 @@
     potModel: "prorata", // 'prorata' (self-funded) | 'even' (across flights)
     splitMode: "places", // 'places' (step-down) | 'even' (within flight)
     topFlightPct: 0,     // % of TOTAL pot skimmed off the top to Flight 1
-    roundIncr: 50,       // round places to nearest $ (last place absorbs remainder)
-    firstTo100: true,    // round 1st place to nearest $100
+    roundIncr: 50,       // round middle places to nearest $
+    lastRoundDown: 20,   // round the LAST paid place DOWN to nearest $; remainder → 1st
     // flight rules
     flightMode: "count", // 'count' | 'band'
     bandWidth: 4,        // stroke band width
@@ -423,7 +437,7 @@
         payPct: state.payPct, showPayouts: state.showPayouts,
         potModel: state.potModel, splitMode: state.splitMode,
         topFlightPct: state.topFlightPct, roundIncr: state.roundIncr,
-        firstTo100: state.firstTo100, flightMode: state.flightMode,
+        lastRoundDown: state.lastRoundDown, flightMode: state.flightMode,
         bandWidth: state.bandWidth, maxFlights: state.maxFlights,
         lockLower: state.lockLower, payOverrides: state.payOverrides,
       }));
@@ -439,7 +453,7 @@
   // ---------- undo / redo ----------
   var history = [], hptr = -1, restoring = false, histTimer = null, histDirty = false;
   var HIST_KEYS = ["teams", "cuts", "flights", "buyin", "potTeams", "payPct", "showPayouts",
-    "potModel", "splitMode", "topFlightPct", "roundIncr", "firstTo100",
+    "potModel", "splitMode", "topFlightPct", "roundIncr", "lastRoundDown",
     "flightMode", "bandWidth", "maxFlights", "lockLower", "payOverrides",
     "scoreCol", "source"];
   function snapshot() {
@@ -500,7 +514,7 @@
         if (s.splitMode) state.splitMode = s.splitMode;
         if (s.topFlightPct != null) state.topFlightPct = Math.min(75, Math.max(0, s.topFlightPct));
         if (s.roundIncr) state.roundIncr = s.roundIncr;
-        state.firstTo100 = s.firstTo100 !== false;
+        if (s.lastRoundDown) state.lastRoundDown = s.lastRoundDown;
         if (s.flightMode) state.flightMode = s.flightMode;
         if (s.bandWidth) state.bandWidth = Math.max(1, s.bandWidth);
         if (s.maxFlights) state.maxFlights = Math.max(1, s.maxFlights);
@@ -687,6 +701,7 @@
 
     var payouts = state.showPayouts ? computePayouts() : null;
     updateTotalPot();
+    updateRemainPot(payouts ? payouts.totalRemaining : 0);
     var bounds = [0].concat(state.cuts, [state.teams.length]);
     for (var f = 0; f < bounds.length - 1; f++) {
       if (f > 0) {
@@ -787,16 +802,21 @@
     for (var k = 0; k < rema && k < order.length; k++) fl[order[k].i]++;
     return fl;
   }
+  function floorTo(v, incr) { return Math.floor(v / incr) * incr; }
+  // Round each paid place (middle → nearest increment, LAST → round DOWN to
+  // $lastRoundDown). The leftover (pot − paid out) is NOT forced onto any
+  // place — it's returned as the flight's remainder and pooled into the
+  // REMAINING POT shown up top. Returns { amounts, remainder }.
   function roundAmounts(raw, pot, paid) {
-    if (pot <= 0) return raw.map(function () { return 0; });
-    if (paid === 1) return [Math.round(pot)];
+    if (pot <= 0) return { amounts: raw.map(function () { return 0; }), remainder: 0 };
     var a = raw.slice();
-    a[0] = state.firstTo100 ? roundNearest(raw[0], 100) : roundNearest(raw[0], state.roundIncr);
-    for (var i = 1; i < paid - 1; i++) a[i] = roundNearest(raw[i], state.roundIncr);
-    var others = 0; for (var j = 0; j < paid - 1; j++) others += a[j];
-    a[paid - 1] = Math.round(pot) - others;   // last place absorbs remainder
-    if (a[paid - 1] < 0) { a[0] += a[paid - 1]; a[paid - 1] = 0; }
-    return a;
+    if (paid === 1) { a[0] = floorTo(pot, state.lastRoundDown); return { amounts: a, remainder: Math.round(pot) - a[0] }; }
+    for (var i = 0; i < paid; i++)
+      a[i] = (i === paid - 1) ? floorTo(raw[i], state.lastRoundDown) : roundNearest(raw[i], state.roundIncr);
+    var sum = 0; for (var j = 0; j < paid; j++) sum += a[j];
+    var rem = Math.round(pot) - sum;
+    if (rem < 0) { a[0] += rem; if (a[0] < 0) a[0] = 0; rem = 0; }  // never overpay
+    return { amounts: a, remainder: rem };
   }
   // Returns per-flight { pot, paid, amounts } for the whole board.
   function computePayouts() {
@@ -814,23 +834,26 @@
       pots.push(base + (g === 0 ? bonus : 0));
     }
     pots = largestRemainderInt(pots, Math.round(total));
-    var out = [];
+    var out = [], totalRemaining = 0;
     for (var h = 0; h < nF; h++) {
       var nT = fTeams[h];
       var paid = flightPaid(nT);
-      var amounts = flightHasOverride(h, paid)
+      var res = flightHasOverride(h, paid)
         ? distributeWithOverrides(h, pots[h], paid)
         : roundAmounts(splitWeights(paid).map(function (w) { return pots[h] * w; }), pots[h], paid);
+      var amounts = res.amounts;
+      totalRemaining += res.remainder || 0;
       var locked = [];
       for (var q = 0; q < paid; q++) locked.push(state.payOverrides[h + ":" + q] != null);
       // Enforce 1st ≥ 2nd ≥ 3rd … (Kerry): sort amounts descending, carrying
-      // the locked flags. Sum is invariant, so each flight still equals its pot.
+      // the locked flags. Sum is invariant.
       var paired = amounts.map(function (a, idx) { return { a: a, l: locked[idx] }; });
       paired.sort(function (x, y) { return y.a - x.a; });
       amounts = paired.map(function (pp) { return pp.a; });
       locked = paired.map(function (pp) { return pp.l; });
-      out.push({ pot: pots[h], paid: paid, amounts: amounts, locked: locked });
+      out.push({ pot: pots[h], paid: paid, amounts: amounts, locked: locked, remainder: res.remainder || 0 });
     }
+    out.totalRemaining = totalRemaining;
     return out;
   }
   // Paid places per flight: pay top payPct%, floored at a 25% minimum
@@ -861,19 +884,22 @@
     for (var j = 0; j < paid; j++) if (amounts[j] === null) free.push(j);
     if (!free.length) {
       var s = 0; amounts.forEach(function (a) { s += a; });
-      amounts[paid - 1] += Math.round(pot) - s;       // all locked → leftover on last
-      return amounts;
+      return { amounts: amounts, remainder: Math.max(0, Math.round(pot) - s) };  // all locked → leftover to remaining pot
     }
     var remaining = Math.max(0, Math.round(pot) - lockedSum);
     var fw = free.map(function (j) { return weights[j]; });
     var fsum = fw.reduce(function (a, b) { return a + b; }, 0) || free.length;
     var raw = free.map(function (j, idx) { return fsum ? remaining * fw[idx] / fsum : remaining / free.length; });
-    for (var m = 0; m < free.length; m++) amounts[free[m]] = roundNearest(raw[m], state.roundIncr);
-    var lastFree = free[free.length - 1], others = 0;
-    for (var n = 0; n < paid; n++) if (n !== lastFree) others += amounts[n];
-    amounts[lastFree] = Math.round(pot) - others;
-    if (amounts[lastFree] < 0) amounts[lastFree] = 0;
-    return amounts;
+    var lastFree = free[free.length - 1];
+    for (var m = 0; m < free.length; m++) {
+      var jj = free[m];
+      amounts[jj] = (jj === lastFree) ? floorTo(raw[m], state.lastRoundDown)
+                                      : roundNearest(raw[m], state.roundIncr);
+    }
+    var sum2 = 0; for (var n = 0; n < paid; n++) sum2 += amounts[n];
+    var rem = Math.round(pot) - sum2;
+    if (rem < 0) { amounts[free[0]] += rem; if (amounts[free[0]] < 0) amounts[free[0]] = 0; rem = 0; }
+    return { amounts: amounts, remainder: Math.max(0, rem) };  // leftover → remaining pot
   }
   function clearPayOverrides() { state.payOverrides = {}; }
   function fmtMoney(v) { return (v % 1 === 0) ? String(v) : v.toFixed(2); }
@@ -889,6 +915,15 @@
         : state.teams.length + " teams";
       el.innerHTML = "TOTAL POT $" + fmtMoney(total) +
         "<small>" + teamStr + " · $" + fmtMoney(state.buyin) + "/player</small>";
+      el.classList.remove("hidden");
+    } else {
+      el.classList.add("hidden");
+    }
+  }
+  function updateRemainPot(rem) {
+    var el = $("remainPot");
+    if (rem && rem > 0) {
+      el.innerHTML = "REMAINING POT $" + fmtMoney(rem) + "<small>rounded off</small>";
       el.classList.remove("hidden");
     } else {
       el.classList.add("hidden");
@@ -1219,7 +1254,11 @@
     var bounds = [0].concat(state.cuts, [state.teams.length]);
     var out = [];
     var payouts = (state.showPayouts && state.buyin > 0) ? computePayouts() : null;
-    if (payouts) out.push("TOTAL POT $" + fmtMoney(totalPot()) + "  (" + state.teams.length + " teams)\n");
+    if (payouts) {
+      out.push("TOTAL POT $" + fmtMoney(totalPot()) + "  (" + paidTeams() + " paid teams)");
+      if (payouts.totalRemaining > 0) out.push("REMAINING POT $" + fmtMoney(payouts.totalRemaining) + " (rounded off)");
+      out.push("");
+    }
     for (var f = 0; f < bounds.length - 1; f++) {
       var fTeams = state.teams.slice(bounds[f], bounds[f + 1]);
       var pay = payouts ? payouts[f] : null;
@@ -1488,7 +1527,7 @@
     $("rTopFlight").value = state.topFlightPct;
     $("rTopFlightVal").textContent = state.topFlightPct + "% off top";
     $("rRoundIncr").value = String(state.roundIncr);
-    $("rFirstTo100").checked = state.firstTo100;
+    $("rLastRoundDown").value = String(state.lastRoundDown);
     $("rCountRow").style.display = state.flightMode === "count" ? "" : "none";
     $("rBandRow").style.display = state.flightMode === "band" ? "" : "none";
     $("flightCount").value = state.flights;
@@ -1523,7 +1562,7 @@
     render(); saveState();
   });
   $("rRoundIncr").addEventListener("change", function () { state.roundIncr = parseInt(this.value, 10) || 50; render(); saveState(); });
-  $("rFirstTo100").addEventListener("change", function () { state.firstTo100 = this.checked; render(); saveState(); });
+  $("rLastRoundDown").addEventListener("change", function () { state.lastRoundDown = parseInt(this.value, 10) || 20; render(); saveState(); });
   $("rClearOverrides").addEventListener("click", function () { clearPayOverrides(); render(); saveState(); toast("Manual payout edits cleared"); });
 
   $("setupBtn").addEventListener("click", function () {

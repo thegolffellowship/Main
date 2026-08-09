@@ -36,6 +36,13 @@ lets Kerry set flights interactively:
   re-syncs controls (`syncAllControls`); 120-step cap; guarded against
   self-recording during restore. **Accordion scorecards** — expanding one
   card collapses others (`expandedTeams.clear()` before add).
+- (v2.228.0) **Rounding rework** — middle places → `roundIncr`; LAST
+  place → round DOWN to `lastRoundDown` (default $20); each flight's
+  leftover pools into the **REMAINING POT** chip up top (not added to any
+  place). `roundAmounts`/`distributeWithOverrides` return
+  `{amounts, remainder}`; `computePayouts` sums to `out.totalRemaining`.
+  Payouts + remaining = total pot. (Replaced 1st→$100 / last-absorbs; the
+  `firstTo100` setting is gone.)
 - (v2.225.0) **Editable payouts** — click a payout cell → `payOverrides`
   `{"f:i": $}`; locked places keep their value, others redistribute the
   remaining pot (`distributeWithOverrides`), pot stays exact. Cleared on
