@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.231.0";
+window.TGF_VERSION = "2.231.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.231.1",
+    date: "2026-08-12",
+    changes: [
+      "docs: championship weekend runbook (docs/claude/runbook-tgf-championship-2026-08-14.md) — pre-flight findings (empty Lost Pines course row 22819 pending the GG import; Kaleb's unnamed practice guest; Barstow/Jenkins missing tees), the verified post-relink purses (SAT $952 / SUN $802 / COMBINED $1,060), and the Thursday + game-day checklists.",
+    ],
+  },
   {
     version: "2.231.0",
     date: "2026-08-12",
