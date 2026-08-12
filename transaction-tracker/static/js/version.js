@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.230.0";
+window.TGF_VERSION = "2.231.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.231.0",
+    date: "2026-08-12",
+    changes: [
+      "Championship pre-flight catch: every purchase since the last deploy (Aug 8) was missing from the derived game pools. items.event_id was only backfilled at BOOT, so eleven Aug 9–10 championship orders — five of them full games-bundle buyers, four single-day games buyers — sat unlinked and _champ_roster_bundles (which filters on event_id) undercounted the SAT/SUN/COMBINED purses by roughly $150 a bucket, and the roster's YES|SAT|SUN|NO cells read those players as NO. Three fixes: the backfill is now callable (backfill_event_links) and runs after every scheduler inbox check, so a late add self-corrects the pools within minutes instead of at the next deploy; Add Player and Add Payment stamp event_id at insert; and this deploy's boot pass links the eleven stranded rows immediately.",
+    ],
+  },
   {
     version: "2.230.0",
     date: "2026-08-09",

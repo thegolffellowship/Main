@@ -19678,6 +19678,21 @@ def _backfill_events_id_on_tgf_events(conn: sqlite3.Connection) -> int:
     return updated
 
 
+def backfill_event_links(db_path: str | Path | None = None) -> int:
+    """Run the event_id backfill on demand (v2.231.0 championship
+    pre-flight finding): the only caller used to be init_db, so purchases
+    made AFTER the last deploy stayed unlinked until the NEXT one — four
+    days of championship orders (11 rows, five of them games-bundle
+    buyers) were invisible to `_champ_roster_bundles`, silently
+    undercounting the SAT/SUN/COMBINED purses. Now also called after
+    every scheduler inbox check so late adds self-correct the pools
+    within minutes, per the ratified field-based-pots design."""
+    with _connect(db_path) as conn:
+        n = _backfill_event_id_on_items(conn)
+        conn.commit()
+    return n
+
+
 def _backfill_event_id_on_items(conn: sqlite3.Connection) -> int:
     """Populate event_id on items rows that lack it.
 
@@ -23780,6 +23795,10 @@ def add_player_to_event(event_name: str, customer: str, mode: str = "comp",
         new_values["order_date"] = order_date if order_date else today_central_str()
         new_values["course"] = event.get("course") or ""
         new_values["chapter"] = event.get("chapter") or ""
+        # Link to the event at insert (v2.231.0) — waiting for the boot
+        # backfill left new rows out of event_id-filtered derivations
+        # (the championship game pools) until the next deploy.
+        new_values["event_id"] = event.get("id")
         new_values["transaction_status"] = "active"
 
         if mode == "comp":
@@ -24300,6 +24319,8 @@ def add_payment_to_event(event_name: str, customer: str,
         new_values["order_date"] = order_date if order_date else today_central_str()
         new_values["course"] = event.get("course") or ""
         new_values["chapter"] = event.get("chapter") or ""
+        # Same insert-time event link as add_player_to_event (v2.231.0)
+        new_values["event_id"] = event.get("id")
         new_values["transaction_status"] = "active"
         new_values["merchant"] = f"Manual Entry ({payment_source})"
         new_values["item_price"] = payment_amount

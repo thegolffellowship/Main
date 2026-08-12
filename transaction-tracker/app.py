@@ -541,6 +541,17 @@ def check_inbox():
         except Exception:
             logger.exception("Auto-sync season contests failed (non-fatal)")
 
+        # Link new rows to their events NOW rather than at the next deploy
+        # (v2.231.0 — the boot-only backfill left four days of championship
+        # orders out of the derived game pools).
+        try:
+            from email_parser.database import backfill_event_links
+            linked = backfill_event_links()
+            if linked:
+                logger.info("Linked %d new items to events", linked)
+        except Exception:
+            logger.exception("Event-link backfill failed (non-fatal)")
+
     _inbox_check_status["message"] = f"Done — saved {total_saved} items from {len(new_emails)} new emails ({len(emails)} total scanned)"
     logger.info("Done — saved %d total new items from %d new emails", total_saved, len(new_emails))
 
