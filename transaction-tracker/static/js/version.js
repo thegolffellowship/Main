@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.234.0";
+window.TGF_VERSION = "2.234.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.234.1",
+    date: "2026-08-13",
+    changes: [
+      "Caught on Kerry's test scores: in cup mode the reset ladder was re-projecting off the LIVE order, feeding championship points back into POINTS RESET — the reset column shifted as scores landed and disagreed with the CUP TOTAL. Once the reset is official it is settled history: the championship ADDS to each player's reset, it does not reshuffle it. Re-projection now stays exactly as it was for pre-reset city championships and stands down in cup mode.",
+    ],
+  },
   {
     version: "2.234.0",
     date: "2026-08-13",

@@ -8099,7 +8099,13 @@ def get_points_race_live(race_key: str, force_refresh: bool = False,
     # The reset projection follows the LIVE order (Kerry, championship
     # day) — see _reproject_points_reset. Only fires when something is
     # actually on the board; a quiet day leaves the season figures alone.
-    if any(r.get("champ_points") is not None for r in rows):
+    # NOT in cup mode: once the reset is OFFICIAL the ladder is settled
+    # history — the TGF Championship ADDS to each player's reset, it does
+    # not reshuffle it (re-projecting off the live order fed the champ
+    # points back into the reset and cup_total disagreed with the reset
+    # column, seen on the 08-13 test scores).
+    if (any(r.get("champ_points") is not None for r in rows)
+            and not _cup_mode):
         _reproject_points_reset(rows, base.get("reset_info"))
 
     # Championship date for the drill-down's DATE column (Kerry 2026-08-03)
