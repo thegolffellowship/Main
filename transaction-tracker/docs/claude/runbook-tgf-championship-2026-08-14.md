@@ -174,13 +174,22 @@ the 08-13 test boards (v2.234.1): every row reads reset + rounds exactly.
   scores are test data). **SATURDAY MORNING before first tee: clear the
   dial** (`scoring-setting-set` bridge, set to "0" or delete) — the
   banner drops instantly, no deploy.
-- **SUNDAY MORNING (or Sat night, when GG releases round 1692725):**
-  discover R2 tournament ids (probe
-  `…/leagues/546813/widgets/tournament_results?shared=false&round=1692725`,
-  extract=links), then append `{"label": "Round 2", "url": …}` entries to
-  BOTH races in `gg_champ_points_boards` and to both keys in
-  `gg_champ_scorecard_boards` (scoring-setting-set bridge). The RD 2
-  column, summing, and the Round 2 card toggle then appear on their own.
+- **ROUND 2 IS AUTOMATIC (v2.237.0, tested live 2026-08-13 on Kerry's
+  random R2 scores):** the R2 entries in `gg_champ_points_boards` carry
+  `discover` (the round-1692725 tournament_results widget) + `match`
+  ("FELLOWSHIP CUP - Round 2" / "PLAYERS CUP - Overall"); the moment GG
+  releases the round, the next leaderboard poll resolves the board URL,
+  persists it, and mirrors a scorecard entry — RD 2 column, summing,
+  and the Round 2 card toggle all appeared with zero manual steps.
+  Discovered ids for the record: fellowship 4749235, players cup
+  4749243 (both `round_index=3`). Sunday needs only a VERIFY, not a
+  wiring step. Per-round cards compare against their own round's board
+  figure (v2.237.1).
+- **AFTER the 08-13 test** (when Kerry clears test scores / re-hides
+  R2): set `"not_before": "2026-08-16"` on both R2 points entries —
+  the column returns to a blank pending state and reactivates itself
+  by date on Sunday. Discovery is independent of not_before, so
+  nothing needs re-wiring.
 - **Do NOT award cup/season points in GG at close-out** — the Tracker owns
   cup resolution (reset + rounds). The 08-06 emergency (double-added
   Players Cup) is why the city boards' dial entries stay disabled. The
