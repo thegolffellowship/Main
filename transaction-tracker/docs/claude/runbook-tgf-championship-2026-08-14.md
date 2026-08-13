@@ -161,8 +161,14 @@ the 08-13 test boards (v2.234.1): every row reads reset + rounds exactly.
   rounds: practice 1692726 · **R1 1692724** · **R2 1692725**):
   `gg_champ_points_boards` → fellowship_cup 4749234 ("THE FELLOWSHIP
   CUP"), players_cup_gross 4749239 ("THE PLAYERS CUP - Overall");
-  `gg_champ_scorecard_boards` → ALL Net 4749269 (ALL Gross twin 4749247).
-  All Round 1, `round_index=2`.
+  `gg_champ_scorecard_boards` repointed (v2.235.x) to the SAME points
+  boards 4749234/4749239 — the ALL Net partial (4749269) only carries
+  front-nine strokes on this portal, while the points boards' partials
+  hold all 18 + GG's per-hole Stableford. All Round 1, `round_index=2`.
+- Phones show the SLIM cup layout (v2.236.0, Kerry-ratified): # |
+  Player | RESET | RD 1 | RD 2 | CUP TOTAL on one screen; CITY RANK is
+  in the row expansion, THRU sits under the player's name, names wrap.
+  Desktop keeps the full column set.
 - **SUNDAY MORNING (or Sat night, when GG releases round 1692725):**
   discover R2 tournament ids (probe
   `…/leagues/546813/widgets/tournament_results?shared=false&round=1692725`,
