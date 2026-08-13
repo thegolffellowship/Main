@@ -926,6 +926,15 @@ def parse_scorecard_details(fragment: str) -> dict:
             strokes = int(sm.group(1)) if sm else None
             dots = cell.count("●")
             result = next((c for c in _RESULT_CLASSES if c in classes), None)
+            # The champ POINTS boards' partials repeat every hole cell in
+            # a second "Stableford Points" section whose cells carry no
+            # score_box — those repeats must never clobber the parsed
+            # strokes (Kerry's Rideout test card read all-blank,
+            # 2026-08-13). First strokes-bearing cell wins.
+            prev = holes.get(hole_no)
+            if prev is not None and (strokes is None
+                                     or prev["strokes"] is not None):
+                continue
             holes[hole_no] = {"strokes": strokes, "dots": dots,
                               "result": result}
         def _num(cls):

@@ -8494,8 +8494,12 @@ def fetch_champ_player_card(race_key: str, customer_id: int,
                             "adjusted_gross": hr["adjusted_score"],
                             "rating": hr["rating"], "slope": hr["slope"],
                             "differential": hr["differential"]})
-            if _fh and _event_first_nine(_fh["item_name"],
-                                         db_path=db_path) == "back":
+            # The dial only applies to TODAY's imported round — a stale
+            # back-first flag from a prior shotgun event must not flip a
+            # championship card whose scores start on hole 1.
+            if (_fh and _fh["round_date"] == today_central_str()
+                    and _event_first_nine(_fh["item_name"],
+                                          db_path=db_path) == "back"):
                 card_first_hole = 10
         except Exception:
             pass

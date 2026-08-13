@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.235.0";
+window.TGF_VERSION = "2.235.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.235.1",
+    date: "2026-08-13",
+    changes: [
+      "Column divider between POINTS RESET and RD 1 on THE FELLOWSHIP CUP board (Kerry: 'Give me a row border between reset and Rd 1') — the reset column now carries the same 2px right border it already had on THE PLAYERS CUP, so the reset figure and the championship rounds read as separate sections.",
+      "The championship scorecard cards parse again after the dial repoint: the POINTS boards' detail partials repeat every hole cell a second time in their Stableford-points section WITHOUT a score box, and the parser's last-write-wins loop was clobbering all 18 strokes back to blank (Rideout's card read zero scores while the board said 56). First parsed strokes now win; a later pass may only fill a hole that has no strokes yet.",
+      "The back-nine-first dial is gated to TODAY's round: a player's latest 18-hole event from a PRIOR date (e.g. the Aug 1 SA shotgun) can no longer flip a championship card to back-first — play order comes from the current day's round or defaults to hole 1.",
+    ],
+  },
   {
     version: "2.235.0",
     date: "2026-08-13",
