@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.233.0";
+window.TGF_VERSION = "2.234.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.234.0",
+    date: "2026-08-13",
+    changes: [
+      "The cup boards read the way Kerry specced them from Iowa: a TGF CHAMP group header spans one column per championship round (RD 1 / RD 2 as each releases), rounds add to POINTS RESET, and a bold CUP TOTAL decides the standings — on THE FELLOWSHIP CUP and THE PLAYERS CUP both. The Players Cup also stops resolving on season points: post-reset, a race with live championship boards ranks on reset + championship (cup_total), leaving every final city board untouched.",
+      "Round scorecards, exactly like the City Championship: a cup row expands to the live hole-by-hole championship card, now with Round 1 / Round 2 toggle pills (per-round cards served by the champ-card endpoint's new board parameter against the round's scorecard board). The Fellowship Cup tab gains the expansion for the first time; the Players Cup keeps its existing one, upgraded with the toggles.",
+      "Wiring: the cups' championship boards point at the dedicated tgf-champ26.golfgenius.com portal (league 546813) — Round 1 points boards 4749234 (THE FELLOWSHIP CUP) and 4749239 (THE PLAYERS CUP - Overall), scorecards off ALL Net 4749269; Round 2 ids get added the moment GG releases round 1692725. The Players Cup's city-championship absorption baseline was archived (gg_champ_absorb_baseline_players_cup_gross_2026city) so the 08-06 absorbed-forever state can't stand the new overlay down.",
+    ],
+  },
   {
     version: "2.233.0",
     date: "2026-08-13",

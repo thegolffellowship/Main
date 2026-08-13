@@ -8003,6 +8003,16 @@ def get_points_race_live(race_key: str, force_refresh: bool = False,
         for cand in _gg_name_candidates(p["name"]):
             by_name.setdefault(cand.strip().lower(), p)
 
+    # Post-reset CUP RESOLUTION (Kerry 2026-08-13: the championship rounds
+    # "add to the Points Reset for an overall total"). Once the season
+    # reset is OFFICIAL, a race with LIVE championship boards resolves on
+    # reset + championship — the season total was the CITY currency and
+    # already crowned its champions. Gating on configured boards leaves
+    # every final city board exactly as it stands (their champ boards
+    # were emergency-unconfigured 2026-08-06).
+    _cup_mode = (live.get("configured") is True
+                 and _points_reset_official(db_path=db_path))
+
     rows = []
     for r in base.get("standings", []) or []:
         row = dict(r)
@@ -8027,7 +8037,13 @@ def get_points_race_live(race_key: str, force_refresh: bool = False,
         # fetch_champ_points; the size rides along so the drill-down can
         # say so instead of leaving the smaller figure unexplained.
         row["champ_plus"] = hit.get("plus_adjustment") if hit else None
+        # Per-round split (Round 1 / Round 2) for the cup columns
+        row["champ_days"] = hit.get("days") if hit else None
         row["live_total"] = round(season + (champ or 0.0), 2)
+        if _cup_mode:
+            row["cup_total"] = round(float(row.get("points_reset") or 0.0)
+                                     + (champ or 0.0), 2)
+            row["live_total"] = row["cup_total"]
         rows.append(row)
 
     # Championship POSITION for the drill-down's CITY CHAMPIONSHIP row
@@ -8187,7 +8203,8 @@ def champ_card_boards(db_path: str | Path = DB_PATH) -> dict:
 
 
 def _champ_card_roster(race_key: str, max_age: float = 120.0,
-                       db_path: str | Path = DB_PATH) -> dict:
+                       db_path: str | Path = DB_PATH,
+                       board_label: "str | None" = None) -> dict:
     """cid/person-key -> details-partial URL, off the scorecard board page.
 
     The board lists every player as a link to their own
@@ -8198,7 +8215,8 @@ def _champ_card_roster(race_key: str, max_age: float = 120.0,
     import time as _t
     from golf_genius_sync import fetch_public_page, parse_page_structure
 
-    hit = _CHAMP_ROSTER_CACHE.get(race_key)
+    _rk = (race_key, board_label)
+    hit = _CHAMP_ROSTER_CACHE.get(_rk)
     if hit and (_t.time() - hit[0]) < max_age:
         return hit[1]
 
@@ -8207,9 +8225,14 @@ def _champ_card_roster(race_key: str, max_age: float = 120.0,
     # cities' scorecard boards) — same shape as the points-boards dial.
     blist = board if isinstance(board, list) else ([board] if board else [])
     blist = [b for b in blist if isinstance(b, dict) and b.get("url")]
+    # Per-round cards (Kerry 2026-08-13: "scorecards for both rounds with
+    # toggles for Round 1 v Round 2") — a board_label narrows the walk to
+    # that round's scorecard board.
+    if board_label:
+        blist = [b for b in blist if (b.get("label") or "") == board_label]
     if not blist:
         roster = {"configured": False, "by_cid": {}, "by_key": {}}
-        _CHAMP_ROSTER_CACHE[race_key] = (_t.time(), roster)
+        _CHAMP_ROSTER_CACHE[_rk] = (_t.time(), roster)
         return roster
     roster = {"configured": True, "url": blist[0]["url"],
               "by_cid": {}, "by_key": {}, "plus_by_cid": {}, "plus_by_key": {}}
@@ -8247,7 +8270,7 @@ def _champ_card_roster(race_key: str, max_age: float = 120.0,
                 k = _cmp_person_key(name)
                 if k[0] and k[1]:
                     roster["plus_by_key"].setdefault(k, plus)
-    _CHAMP_ROSTER_CACHE[race_key] = (_t.time(), roster)
+    _CHAMP_ROSTER_CACHE[_rk] = (_t.time(), roster)
     return roster
 
 
@@ -8265,7 +8288,8 @@ def _champ_stableford(net_vs_par, gross) -> "int | None":
 
 def fetch_champ_player_card(race_key: str, customer_id: int,
                             max_age: float = 45.0,
-                            db_path: str | Path = DB_PATH) -> dict:
+                            db_path: str | Path = DB_PATH,
+                            board_label: "str | None" = None) -> dict:
     """One player's LIVE championship hole-by-hole card, off GG.
 
     Per-hole gross + handicap dots come from the player's scorecard
@@ -8280,13 +8304,14 @@ def fetch_champ_player_card(race_key: str, customer_id: int,
     from golf_genius_sync import (fetch_public_page, parse_scorecard_details,
                                   parse_tee_block, _unwrap_js_string)
 
-    ck = (race_key, int(customer_id))
+    ck = (race_key, int(customer_id), board_label)
     hit = _CHAMP_CARD_CACHE.get(ck)
     if hit and (_t.time() - hit[0]) < max_age:
         return hit[1]
 
     try:
-        roster = _champ_card_roster(race_key, db_path=db_path)
+        roster = _champ_card_roster(race_key, db_path=db_path,
+                                    board_label=board_label)
         if not roster.get("configured"):
             return {"race": race_key, "configured": False, "holes": []}
         entry = roster["by_cid"].get(int(customer_id))

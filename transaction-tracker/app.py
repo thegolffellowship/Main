@@ -10270,9 +10270,14 @@ def api_season_contest_champ_card():
     from email_parser.database import fetch_champ_player_card
     race_key = request.args.get("race", "")
     cid = (request.args.get("cid") or "").strip()
+    # Optional round selector (Kerry 2026-08-13: the cup expansions carry
+    # Round 1 / Round 2 toggles) — matches the scorecard dial's board label.
+    board = (request.args.get("board") or "").strip() or None
     if not cid.isdigit():
         return jsonify({"error": "cid must be a numeric customer id"}), 400
-    data = fetch_champ_player_card(race_key, int(cid))
+    data = fetch_champ_player_card(race_key, int(cid), board_label=board)
+    if board and isinstance(data, dict):
+        data.setdefault("board", board)
     if data.get("error") and not data.get("holes"):
         code = 404 if "not on the championship" in data["error"] else 502
         return jsonify(data), code

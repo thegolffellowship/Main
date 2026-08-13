@@ -6008,11 +6008,18 @@
         // Chapter renders as a colored badge beside the name, not a column
         // (Kerry 2026-08-02) — showChapter only decides whether the badge
         // renders, so the column count no longer varies by race scope.
+        // CUP MODE (Kerry 2026-08-13): post-reset races with live TGF
+        // Championship boards resolve reset + Rd 1 + Rd 2 — grouped
+        // TGF CHAMP header over per-round columns plus a CUP TOTAL.
+        const cupMode = liveMode && (d.standings || []).some(r => r.cup_total != null);
+        const cupBoards = (cupMode && d.champ && d.champ.boards && d.champ.boards.length)
+            ? d.champ.boards : (cupMode ? ["Round 1"] : []);
         const nCols = 6
             - (showBuy ? 0 : 1)
             - (liveMode || showRounds ? 0 : 1)
             - (liveMode && !showThru ? 1 : 0)
-            + (liveMode ? 1 : 0);      // live adds the MOVE column (PGA-style)
+            + (liveMode ? 1 : 0)      // live adds the MOVE column (PGA-style)
+            + (cupMode ? cupBoards.length : 0);   // rounds replace TODAY, + CUP TOTAL
         // Fixed widths on every column but Player so the three race tabs
         // lay out identically regardless of content; phones get narrow
         // columns + short labels so the whole table fits on screen at once
@@ -6102,9 +6109,21 @@
                 + (r.points_reset != null ? ` data-reset="${escapeHtml(String(r.points_reset))}"` : "");
             // Live: MOVE gets its own column (PGA-style); the season view
             // keeps its inline last-event arrow in the rank cell.
-            const midCells = liveMode
+            const thruCellHtml = showThru ? `<td style="${thruStyle}${thruFont}white-space:nowrap;${/\d:\d\d/.test(r.champ_thru || "") ? "color:var(--text-muted);" : "font-weight:600;"}">${escapeHtml(compact ? String(r.champ_thru || "—").replace(/\s*([AaPp])\.?M\.?/, (_, g) => g.toLowerCase()) : (r.champ_thru || "—"))}</td>` : "";
+            // CUP MODE (Kerry 2026-08-13): TGF CHAMP rounds as their own
+            // columns adding to POINTS RESET — Reset | Rd 1 | Rd 2 | Thru
+            // | CUP TOTAL. The per-round split comes off champ_days.
+            const cupRoundCells = cupMode ? cupBoards.map(bl => {
+                const dd = (r.champ_days || []).find(x => x.board === bl);
+                const pts = dd && dd.points != null ? dd.points : null;
+                return `<td style="${todayStyle}${pts != null ? "color:#BF5700;font-weight:800;" : "color:var(--text-muted);"}">${pts != null ? escapeHtml(String(pts % 1 ? pts.toFixed(1) : pts)) : (dd && dd.thru ? "" : "—")}</td>`;
+            }).join("") : "";
+            const midCells = cupMode
+                ? `${cupRoundCells}${thruCellHtml}
+                   <td style="${statCol}font-weight:800;border-right:2px solid #cbd5e1;">${r.cup_total != null ? escapeHtml(String(r.cup_total % 1 ? r.cup_total.toFixed(1) : r.cup_total)) : ""}</td>`
+                : liveMode
                 ? `<td style="${todayStyle}${r.champ_points != null ? "color:#BF5700;font-weight:800;" : "color:var(--text-muted);"}">${r.champ_points != null ? escapeHtml(String(r.champ_points % 1 ? r.champ_points.toFixed(1) : r.champ_points)) : (r.champ_thru ? "" : "—")}</td>
-                   ${showThru ? `<td style="${thruStyle}${thruFont}white-space:nowrap;${/\d:\d\d/.test(r.champ_thru || "") ? "color:var(--text-muted);" : "font-weight:600;"}">${escapeHtml(compact ? String(r.champ_thru || "—").replace(/\s*([AaPp])\.?M\.?/, (_, g) => g.toLowerCase()) : (r.champ_thru || "—"))}</td>` : ""}`
+                   ${thruCellHtml}`
                 : `<td style="${resetStyle}">${
                     // City NET reset values feed THE FELLOWSHIP CUP — link
                     // straight to the player's cup row, centered + pulsed
@@ -6125,7 +6144,7 @@
                         ? ` <span title="${escapeHtml(champTitle)}" style="font-size:0.9em;vertical-align:1px;">&#127942;</span>`
                         : ` <span title="${escapeHtml(champTitle)}" style="display:inline-block;padding:1px 6px;border-radius:9999px;font-size:0.62rem;font-weight:700;letter-spacing:0.04em;background:#FEF3C7;color:#92400E;border:1px solid #F59E0B;vertical-align:1px;">&#127942; ${coChamp ? "CO-CHAMPION" : "CHAMPION"} &middot; LSC ${coChamp ? "CO-" : ""}CAPTAIN</span>`)
                     : ""}${chevron}${compact && !prRaceFinal ? "" : prPayBadge(r)}</td>
-                <td style="${ptsStyle}">${r.total_points ?? ""}</td>
+                <td style="${ptsStyle}">${cupMode ? prFmtReset(r.points_reset) : (r.total_points ?? "")}</td>
                 ${midCells}
                 ${showBuy ? `<td style="${buyStyle}">${badge}</td>` : ""}
             </tr>`;
@@ -6173,9 +6192,22 @@
         const champStrip = champs.length
             ? `<div style="margin:0 0 0.6rem;padding:0.5rem 0.75rem;border-radius:8px;background:#FEF9EC;border:1px solid #F59E0B;color:#92400E;font-weight:700;font-size:${compact ? "0.78rem" : "0.88rem"};">&#127942; 2026 ${escapeHtml(d.chapter || "")} City ${coChamp ? "Co-Champions" : "Champion"}: ${champs.map(c => escapeHtml(c.player_name || "")).join(" &amp; ")} <span style="font-weight:600;color:#B45309;">&mdash; Lone Star Cup ${coChamp ? "Co-Captains" : "Captain"}</span></div>`
             : "";
-        $("pr-table-container").innerHTML = champStrip + `
-            <table class="enrollment-table${compact ? " pr-compact" : ""}">
-                <thead><tr>
+        // CUP MODE header: a TGF CHAMP group header spans the per-round
+        // columns (Kerry 2026-08-13: "TGF Champ header over Round 1 &
+        // Round 2 columns").
+        const theadHtml = cupMode
+            ? `<tr>
+                    <th rowspan="2" style="${rankStyle}">${compact ? "#" : "Rank"}</th>
+                    <th rowspan="2" style="${mvStyle}" title="Day movement">&#8597;</th>
+                    <th rowspan="2" style="width:99%;">Player</th>
+                    <th rowspan="2" style="${ptsStyle}line-height:1.25;" title="Season points reset — the cups' starting totals">POINTS<br>RESET</th>
+                    <th colspan="${cupBoards.length}" style="text-align:center;${pad6}border-right:2px solid #cbd5e1;border-bottom:1px dashed #cbd5e1;font-size:${compact ? "0.6rem" : "0.72rem"};letter-spacing:0.06em;">TGF CHAMP</th>
+                    ${showThru ? `<th rowspan="2" style="${thruStyle}" title="Holes completed today — or the tee time if they haven't started">THRU</th>` : ""}
+                    <th rowspan="2" style="${statCol}line-height:1.25;border-right:2px solid #cbd5e1;" title="Points reset + championship rounds — the cup is decided on this number">CUP<br>TOTAL</th>
+                    ${showBuy ? `<th rowspan="2" style="${buyStyle}" title="Buy-in">Buy-in</th>` : ""}
+                </tr>
+                <tr>${cupBoards.map(bl => `<th style="${todayStyle}" title="${escapeHtml(bl)} championship points">${escapeHtml(compact ? bl.replace(/round\s*/i, "R") : bl.replace(/round\s*/i, "RD "))}</th>`).join("")}</tr>`
+            : `<tr>
                     <th style="${rankStyle}">${compact ? "#" : "Rank"}</th>
                     ${liveMode ? `<th style="${mvStyle}" title="Day movement">&#8597;</th>` : ""}
                     <th style="width:99%;">Player</th>
@@ -6186,11 +6218,16 @@
                         : `<th style="${resetStyle}line-height:1.25;">${resetOfficial ? "" : `<span class="pr-proj" style="display:block;font-size:${compact ? "0.52rem" : "0.65rem"};font-weight:600;letter-spacing:0.03em;">(${compact ? "proj" : "Projected"})</span>`}POINTS<br>RESET</th>
                            ${showRounds ? `<th style="${rndStyle}" class="pr-rnd" title="Rounds">Rounds</th>` : ""}`}
                     ${showBuy ? `<th style="${buyStyle}" title="Buy-in">Buy-in</th>` : ""}
-                </tr></thead>
+                </tr>`;
+        $("pr-table-container").innerHTML = champStrip + `
+            <table class="enrollment-table${compact ? " pr-compact" : ""}">
+                <thead>${theadHtml}</thead>
                 <tbody>${bodyRows}</tbody>
             </table>${extra}`;
 
         $("pr-table-container").dataset.live = liveMode ? "1" : "0";
+        // Round list for the expansion's Round 1 / Round 2 card toggle
+        $("pr-table-container").dataset.champBoards = JSON.stringify(cupMode ? cupBoards : []);
         $("pr-table-container").querySelectorAll("tr[data-card], tr[data-cid]").forEach(tr => {
             tr.addEventListener("click", ev => {
                 if (ev.target.closest("a")) return;   // profile links still navigate
@@ -6335,13 +6372,17 @@
         const netTh = `${window.TGF_STAT_COL(compact)}border-left:2px solid #cbd5e1;`;
         const resetTh = `${window.TGF_STAT_COL(compact)}font-weight:700;border-left:2px solid #cbd5e1;border-right:2px solid #cbd5e1;`;
         // TGF Championship overlay (Kerry 2026-08-13): while champ boards
-        // are configured the Cup resolves live — reset + Day 1 + Day 2 —
-        // and two extra columns show the championship points (with thru)
-        // and the deciding CUP TOTAL.
+        // are configured the Cup resolves live — a TGF CHAMP group header
+        // spans one column per round, adding to POINTS RESET for the
+        // deciding CUP TOTAL; champ rows expand to the round scorecards.
         const cupChamp = !!d.champ_overlay;
+        const cupBoardsF = cupChamp
+            ? ((d.champ_boards && d.champ_boards.length) ? d.champ_boards : ["Round 1"])
+            : [];
         const resetThOv = `${window.TGF_STAT_COL(compact)}border-left:2px solid #cbd5e1;`;
-        const champTh = `${window.TGF_STAT_COL(compact)}border-left:2px solid #cbd5e1;`;
-        const totalTh = `${window.TGF_STAT_COL(compact)}font-weight:700;border-left:2px solid #cbd5e1;border-right:2px solid #cbd5e1;`;
+        const roundTh = `${window.TGF_STAT_COL(compact)}border-right:2px solid #cbd5e1;`;
+        const thruThF = (compact ? "width:46px;text-align:center;padding-left:6px;padding-right:6px;" : window.TGF_STAT_COL(compact)) + "border-right:2px solid #cbd5e1;";
+        const totalTh = `${window.TGF_STAT_COL(compact)}font-weight:700;border-right:2px solid #cbd5e1;`;
         const rows = d.standings.map(r => {
             const bg = r.enrolled ? "background:#bbf7d0;"
                      : (r.customer_id ? "" : "background:#fffbeb;");
@@ -6358,42 +6399,72 @@
             const cityCell = r.customer_id
                 ? `<a href="#race=${cityRace}&player=${r.customer_id}" class="cell-link" title="See who's above and below on the ${cityRace === "austin" ? "Austin" : "San Antonio"} city board" onclick="prJumpToRaceRow('${cityRace}', ${r.customer_id}); return false;">${escapeHtml(String(r.net_rank))}</a>`
                 : escapeHtml(String(r.net_rank));
-            // Championship cells: points once posted, otherwise the thru
-            // cell (tee time before starting) — the not-started state must
-            // never read as zero. CUP TOTAL is the deciding figure.
+            // Per-round cells: points once posted; before that the round
+            // cell stays quiet and THRU carries the tee time — not-started
+            // must never read as zero. CUP TOTAL is the deciding figure.
             let champCells = "";
             if (cupChamp) {
-                const started = r.champ_points != null;
-                const champTxt = started
-                    ? `${r.champ_points}${r.champ_thru && String(r.champ_thru).toUpperCase() !== "F" ? ` <span style="color:var(--text-muted);font-size:0.8em;">(${escapeHtml(String(r.champ_thru))})</span>` : ""}`
-                    : (r.champ_thru ? `<span style="color:var(--text-muted);font-size:0.85em;">${escapeHtml(String(r.champ_thru))}</span>` : "—");
-                const champTitle = (r.champ_days || []).map(dd =>
-                    `${dd.board}: ${dd.points != null ? dd.points : "—"}${dd.thru ? ` (${dd.thru})` : ""}`).join(" · ")
-                    + (r.champ_plus ? ` · plus adj −${r.champ_plus}` : "");
-                champCells = `
-                <td style="${champTh}" title="${escapeHtml(champTitle)}">${champTxt}</td>
-                <td style="${totalTh}">${r.cup_total != null ? r.cup_total : prFmtReset(r.points_reset)}</td>`;
+                champCells = cupBoardsF.map(bl => {
+                    const dd = (r.champ_days || []).find(x => x.board === bl);
+                    const pts = dd && dd.points != null ? dd.points : null;
+                    return `<td style="${roundTh}${pts != null ? "color:#BF5700;font-weight:800;" : "color:var(--text-muted);"}">${pts != null ? escapeHtml(String(pts % 1 ? pts.toFixed(1) : pts)) : (dd && dd.thru ? "" : "—")}</td>`;
+                }).join("");
+                const thruTxt = r.champ_thru
+                    ? escapeHtml(compact ? String(r.champ_thru).replace(/\s*([AaPp])\.?M\.?/, (_, g) => g.toLowerCase()) : String(r.champ_thru))
+                    : "—";
+                champCells += `
+                <td style="${thruThF}font-size:${compact ? "0.68rem" : "0.85rem"};white-space:nowrap;${/\d:\d\d/.test(r.champ_thru || "") ? "color:var(--text-muted);" : "font-weight:600;"}">${thruTxt}</td>
+                <td style="${totalTh}font-weight:800;">${r.cup_total != null ? r.cup_total : prFmtReset(r.points_reset)}</td>`;
             }
-            return `<tr${r.customer_id ? ` data-cid="${r.customer_id}"` : ""} style="${bg}">
+            const expAttrs = cupChamp && r.customer_id
+                ? `${r.champ_points != null ? ` data-champ-pts="${escapeHtml(String(r.champ_points))}"` : ""}${r.champ_thru ? ` data-champ-thru="${escapeHtml(String(r.champ_thru))}"` : ""}${r.points_reset != null ? ` data-reset="${escapeHtml(String(r.points_reset))}"` : ""} data-pname="${escapeHtml(r.player_name || "")}"`
+                : "";
+            const expandableF = cupChamp && r.customer_id && (r.champ_points != null || r.champ_thru);
+            const chevF = expandableF
+                ? ' <span class="pr-chevron" style="color:var(--primary);font-size:0.85rem;" title="Round scorecards">&#9656;</span>'
+                : '';
+            return `<tr${r.customer_id ? ` data-cid="${r.customer_id}"` : ""}${expAttrs} style="${bg}${expandableF ? "cursor:pointer;" : ""}">
                 <td style="${rankTh}">${escapeHtml(r.rank)}${prRankMove(r.rank, r.prev_rank)}</td>
-                <td>${nameCell}${prChapterBadge(r.chapter)}${hcp}${prPayBadge(r)}</td>
+                <td>${nameCell}${prChapterBadge(r.chapter)}${hcp}${chevF}${prPayBadge(r)}</td>
                 <td style="${netTh}">${cityCell}</td>
                 <td style="${cupChamp ? resetThOv : resetTh}">${prFmtReset(r.points_reset)}</td>${champCells}
             </tr>`;
         }).join("");
 
-        $("pr-table-container").innerHTML = `
-            <table class="enrollment-table${compact ? " pr-compact" : ""}">
-                <thead><tr>
+        const theadF = cupChamp
+            ? `<tr>
+                    <th rowspan="2" style="${rankTh}">${compact ? "#" : "Rank"}</th><th rowspan="2" style="width:99%;">Player</th>
+                    <th rowspan="2" style="${netTh}line-height:1.25;" title="Rank in their chapter's City Points race">CITY<br>RANK</th>
+                    <th rowspan="2" style="${resetThOv}line-height:1.25;" title="Season points reset — the Cup's starting totals">POINTS<br>RESET</th>
+                    <th colspan="${cupBoardsF.length}" style="text-align:center;padding-left:6px;padding-right:6px;border-right:2px solid #cbd5e1;border-bottom:1px dashed #cbd5e1;font-size:${compact ? "0.6rem" : "0.72rem"};letter-spacing:0.06em;">TGF CHAMP</th>
+                    <th rowspan="2" style="${thruThF}" title="Holes completed today — or the tee time if they haven't started">THRU</th>
+                    <th rowspan="2" style="${totalTh}line-height:1.25;" title="Points reset + championship rounds — the Cup is decided on this number">CUP<br>TOTAL</th>
+                </tr>
+                <tr>${cupBoardsF.map(bl => `<th style="${roundTh}" title="${escapeHtml(bl)} championship points">${escapeHtml(compact ? bl.replace(/round\s*/i, "R") : bl.replace(/round\s*/i, "RD "))}</th>`).join("")}</tr>`
+            : `<tr>
                     <th style="${rankTh}">${compact ? "#" : "Rank"}</th><th style="width:99%;">Player</th>
                     <th style="${netTh}line-height:1.25;" title="Rank in their chapter's City Points race">CITY<br>RANK</th>
-                    <th style="${cupChamp ? resetThOv : resetTh}line-height:1.25;">${d.reset_official ? "" : `<span class="pr-proj" style="display:block;font-size:${compact ? "0.52rem" : "0.65rem"};font-weight:600;letter-spacing:0.03em;">(${compact ? "proj" : "Projected"})</span>`}POINTS<br>RESET</th>
-                    ${cupChamp ? `
-                    <th style="${champTh}line-height:1.25;" title="TGF Championship points — Day 1 + Day 2 (hover a cell for the per-day split)">TGF<br>CHAMP</th>
-                    <th style="${totalTh}line-height:1.25;" title="Points reset + championship points — the Cup is decided on this number">CUP<br>TOTAL</th>` : ""}
-                </tr></thead>
+                    <th style="${resetTh}line-height:1.25;">${d.reset_official ? "" : `<span class="pr-proj" style="display:block;font-size:${compact ? "0.52rem" : "0.65rem"};font-weight:600;letter-spacing:0.03em;">(${compact ? "proj" : "Projected"})</span>`}POINTS<br>RESET</th>
+                </tr>`;
+        $("pr-table-container").innerHTML = `
+            <table class="enrollment-table${compact ? " pr-compact" : ""}">
+                <thead>${theadF}</thead>
                 <tbody>${rows}</tbody>
             </table>`;
+        // Champ rows expand to the round scorecards (Kerry 2026-08-13:
+        // "exactly like City Championship specs"), with the Round 1 /
+        // Round 2 toggle handled inside prToggleDetail.
+        $("pr-table-container").dataset.live = cupChamp ? "1" : "0";
+        $("pr-table-container").dataset.champBoards = JSON.stringify(cupBoardsF);
+        if (cupChamp) {
+            $("pr-table-container").querySelectorAll("tr[data-cid]").forEach(tr => {
+                if (!("champPts" in tr.dataset) && !tr.dataset.champThru) return;
+                tr.addEventListener("click", ev => {
+                    if (ev.target.closest("a")) return;
+                    prToggleDetail(tr, "fellowship_cup");
+                });
+            });
+        }
     }
 
     // ── FALL NET previews (Kerry, 2026-07-10): a page per chapter that
@@ -6632,16 +6703,29 @@
                 + (_tabs ? _tabs.offsetHeight : 0) + 84) + "px";
             tr.scrollIntoView({behavior: "smooth", block: "start"});
             try {
-                const res = await fetch(`/api/season-contests/points-race/champ-card?race=${encodeURIComponent(raceKey)}&cid=${encodeURIComponent(tr.dataset.cid)}`, {cache: "no-store"});
-                const data = await res.json();
-                if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
-                if (tr.dataset.pname) data.player_name = tr.dataset.pname;
-                data._headline = true;
-                data._statline = prExpStatLine(tr);
+                // Per-round cards (Kerry 2026-08-13): when the race carries
+                // multiple championship boards, the expansion opens on
+                // TODAY'S round with Round 1 / Round 2 toggle pills.
+                const _cupBoards = JSON.parse(cont.dataset.champBoards || "[]");
+                const _fetchCard = async (bl) => {
+                    const res = await fetch(`/api/season-contests/points-race/champ-card?race=${encodeURIComponent(raceKey)}&cid=${encodeURIComponent(tr.dataset.cid)}${bl ? `&board=${encodeURIComponent(bl)}` : ""}`, {cache: "no-store"});
+                    const d2 = await res.json();
+                    if (!res.ok) throw new Error(d2.error || `HTTP ${res.status}`);
+                    if (tr.dataset.pname) d2.player_name = tr.dataset.pname;
+                    d2._headline = true;
+                    d2._statline = prExpStatLine(tr);
+                    return d2;
+                };
+                const _defBoard = _cupBoards.length ? _cupBoards[_cupBoards.length - 1] : null;
+                const data = await _fetchCard(_defBoard);
+                const _togglesHtml = _cupBoards.length > 1
+                    ? `<div class="pr-round-toggle" style="display:flex;gap:6px;margin-bottom:0.5rem;">${_cupBoards.map(bl => `<button type="button" data-board="${escapeHtml(bl)}" style="height:26px;padding:0 14px;border-radius:9999px;border:1px solid var(--border);font:700 10.5px/1 'Bitter',serif;letter-spacing:1px;text-transform:uppercase;cursor:pointer;${bl === _defBoard ? "background:#1B1B1B;color:#fff;" : "background:#F3F2EF;color:#4B5563;"}">${escapeHtml(bl)}</button>`).join("")}</div>`
+                    : "";
                 // Season history rides UNDER the card, collapsed (Kerry
                 // 2026-08-01) — one tap opens the usual counted/not-counted
                 // detail, lazy-loaded so the live card never waits on it.
-                cell.innerHTML = prRenderChampCard(data)
+                cell.innerHTML = _togglesHtml
+                    + `<div class="pr-champ-card-box">${prRenderChampCard(data)}</div>`
                     + `<div style="margin-top:0.55rem;">
                          <button type="button" class="pr-hist-toggle" style="display:inline-flex;align-items:center;gap:6px;height:26px;padding:0 12px;background:#F3F2EF;color:#4B5563;border:1px solid var(--border);border-radius:9999px;font:700 10.5px/1 'Bitter',serif;letter-spacing:1px;text-transform:uppercase;cursor:pointer;">Season history <span style="color:var(--primary);font-size:0.8rem;">&#9656;</span></button>
                          <a class="pr-spt-pill" href="${window.MEMBER_MODE ? "/member/spotlight" : "/spotlight"}?player=${tr.dataset.cid}" style="margin-left:6px;">Full Spotlight &rarr;</a>
@@ -6684,6 +6768,23 @@
                     } catch (e2) {
                         hBody.innerHTML = `<span style="color:#b91c1c;">${escapeHtml(e2.message)}</span>`;
                     }
+                });
+                // Round 1 / Round 2 card toggle (Kerry 2026-08-13)
+                cell.querySelectorAll(".pr-round-toggle button").forEach(btn => {
+                    btn.addEventListener("click", async ev => {
+                        ev.stopPropagation();
+                        cell.querySelectorAll(".pr-round-toggle button").forEach(b2 => {
+                            b2.style.background = "#F3F2EF"; b2.style.color = "#4B5563";
+                        });
+                        btn.style.background = "#1B1B1B"; btn.style.color = "#fff";
+                        const box = cell.querySelector(".pr-champ-card-box");
+                        box.innerHTML = `<span style="color:var(--text-muted);">Loading ${escapeHtml(btn.dataset.board)}…</span>`;
+                        try {
+                            box.innerHTML = prRenderChampCard(await _fetchCard(btn.dataset.board));
+                        } catch (e3) {
+                            box.innerHTML = `<span style="color:#b91c1c;">${escapeHtml(e3.message)}</span>`;
+                        }
+                    });
                 });
             } catch (e) {
                 cell.innerHTML = `<span style="color:#b91c1c;">Live card unavailable: ${escapeHtml(e.message)}</span>`;
