@@ -6212,6 +6212,13 @@
         const champStrip = champs.length
             ? `<div style="margin:0 0 0.6rem;padding:0.5rem 0.75rem;border-radius:8px;background:#FEF9EC;border:1px solid #F59E0B;color:#92400E;font-weight:700;font-size:${compact ? "0.78rem" : "0.88rem"};">&#127942; 2026 ${escapeHtml(d.chapter || "")} City ${coChamp ? "Co-Champions" : "Champion"}: ${champs.map(c => escapeHtml(c.player_name || "")).join(" &amp; ")} <span style="font-weight:600;color:#B45309;">&mdash; Lone Star Cup ${coChamp ? "Co-Captains" : "Captain"}</span></div>`
             : "";
+        // TEST PHASE strip (Kerry 2026-08-13: "Show leaderboard as in
+        // TEST PHASE while we look at all of this. In case members go
+        // there in the meantime") — driven by the gg_champ_test_phase
+        // dial so it drops without a deploy once setup is done.
+        const testStrip = (cupMode && d.champ_test_phase)
+            ? `<div style="margin:0 0 0.6rem;padding:0.55rem 0.75rem;border-radius:8px;background:repeating-linear-gradient(45deg,#FEF3C7,#FEF3C7 12px,#FDE68A 12px,#FDE68A 24px);border:2px dashed #D97706;color:#92400E;font-weight:800;font-size:${compact ? "0.8rem" : "0.9rem"};letter-spacing:0.03em;">&#9888;&#65039; TEST PHASE &mdash; championship scoring is being set up. Scores below are test data and will be cleared before Round 1.</div>`
+            : "";
         // CUP MODE header: a TGF CHAMP group header spans the per-round
         // columns (Kerry 2026-08-13: "TGF Champ header over Round 1 &
         // Round 2 columns").
@@ -6239,7 +6246,7 @@
                            ${showRounds ? `<th style="${rndStyle}" class="pr-rnd" title="Rounds">Rounds</th>` : ""}`}
                     ${showBuy ? `<th style="${buyStyle}" title="Buy-in">Buy-in</th>` : ""}
                 </tr>`;
-        $("pr-table-container").innerHTML = champStrip + `
+        $("pr-table-container").innerHTML = testStrip + champStrip + `
             <table class="enrollment-table${compact ? " pr-compact" : ""}">
                 <thead>${theadHtml}</thead>
                 <tbody>${bodyRows}</tbody>
@@ -6479,7 +6486,12 @@
                     <th style="${netTh}line-height:1.25;" title="Rank in their chapter's City Points race">CITY<br>RANK</th>
                     <th style="${resetTh}line-height:1.25;">${d.reset_official ? "" : `<span class="pr-proj" style="display:block;font-size:${compact ? "0.52rem" : "0.65rem"};font-weight:600;letter-spacing:0.03em;">(${compact ? "proj" : "Projected"})</span>`}POINTS<br>RESET</th>
                 </tr>`;
-        $("pr-table-container").innerHTML = `
+        // TEST PHASE strip (Kerry 2026-08-13) — same gg_champ_test_phase
+        // dial as the points-race boards; drops without a deploy.
+        const testStripF = (cupChamp && d.champ_test_phase)
+            ? `<div style="margin:0 0 0.6rem;padding:0.55rem 0.75rem;border-radius:8px;background:repeating-linear-gradient(45deg,#FEF3C7,#FEF3C7 12px,#FDE68A 12px,#FDE68A 24px);border:2px dashed #D97706;color:#92400E;font-weight:800;font-size:${compact ? "0.8rem" : "0.9rem"};letter-spacing:0.03em;">&#9888;&#65039; TEST PHASE &mdash; championship scoring is being set up. Scores below are test data and will be cleared before Round 1.</div>`
+            : "";
+        $("pr-table-container").innerHTML = testStripF + `
             <table class="enrollment-table${compact ? " pr-compact" : ""}">
                 <thead>${theadF}</thead>
                 <tbody>${rows}</tbody>

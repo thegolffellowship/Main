@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.236.0";
+window.TGF_VERSION = "2.236.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.236.1",
+    date: "2026-08-13",
+    changes: [
+      "TEST PHASE banner on the cup boards (Kerry: 'Show leaderboard as in TEST PHASE while we look at all of this. In case members go there in the meantime'): while the gg_champ_test_phase dial is on, THE FELLOWSHIP CUP and THE PLAYERS CUP wear a loud striped amber strip — 'TEST PHASE — championship scoring is being set up. Scores below are test data and will be cleared before Round 1.' Clearing the dial drops the banner instantly, no deploy needed; the runbook's Saturday checklist carries the reminder.",
+    ],
+  },
   {
     version: "2.236.0",
     date: "2026-08-13",

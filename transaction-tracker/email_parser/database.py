@@ -8154,7 +8154,12 @@ def get_points_race_live(race_key: str, force_refresh: bool = False,
             "champ_date": champ_date,
             "champ_courses": champ_courses,
             "champ_scoring": live.get("scoring", 0),
-            "champ_field": live.get("field", 0)}
+            "champ_field": live.get("field", 0),
+            # TEST PHASE dial (Kerry 2026-08-13) — see the fellowship
+            # payload's twin field; same setting drives both boards.
+            "champ_test_phase": (get_app_setting("gg_champ_test_phase",
+                                                 db_path=db_path) or "")
+                == "1"}
 
 
 # ── LIVE championship hole-by-hole card (Kerry's ask, built 2026-08-01) ──
@@ -9272,6 +9277,12 @@ def get_fellowship_cup_projection(force_refresh: bool = False,
         "champ_error": cup_live.get("error"),
         "champ_boards": cup_live.get("boards"),
         "champ_boards_pending": cup_boards_pending,
+        # TEST PHASE dial (Kerry 2026-08-13: "Show leaderboard as in
+        # TEST PHASE while we look at all of this") — members see a
+        # loud banner while setup/test scores are on the boards; clear
+        # the gg_champ_test_phase setting to drop it, no deploy needed.
+        "champ_test_phase": (get_app_setting("gg_champ_test_phase",
+                                             db_path=db_path) or "") == "1",
     }
 
 

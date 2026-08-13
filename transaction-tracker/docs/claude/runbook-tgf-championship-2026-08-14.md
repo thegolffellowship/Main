@@ -169,6 +169,11 @@ the 08-13 test boards (v2.234.1): every row reads reset + rounds exactly.
   Player | RESET | RD 1 | RD 2 | CUP TOTAL on one screen; CITY RANK is
   in the row expansion, THRU sits under the player's name, names wrap.
   Desktop keeps the full column set.
+- **TEST PHASE banner is ON** (`gg_champ_test_phase` = "1", v2.236.1 —
+  Kerry 2026-08-13, so members who wander in during setup know the
+  scores are test data). **SATURDAY MORNING before first tee: clear the
+  dial** (`scoring-setting-set` bridge, set to "0" or delete) — the
+  banner drops instantly, no deploy.
 - **SUNDAY MORNING (or Sat night, when GG releases round 1692725):**
   discover R2 tournament ids (probe
   `…/leagues/546813/widgets/tournament_results?shared=false&round=1692725`,
