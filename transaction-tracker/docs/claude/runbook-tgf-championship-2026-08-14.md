@@ -84,8 +84,35 @@ self-assigned from order notes; 0 unassigned):
 | COMBINED | **$1,060** | 40 × 27 − $20 Zapata Ind Net |
 
 Pre-fix these read $682 / $652 / $860 — the eleven unlinked orders were
-worth $270 / $150 / $200 of pool money. Per-game pots derive on the
-GAMES tab with Zapata's "1 opted out" notes on Team Net and Ind Net.
+worth $270 / $150 / $200 of pool money.
+
+## PAYOUT SCHEDULE OF RECORD (Kerry-ratified 2026-08-12: "Lock those.")
+
+**Robert Straiton runs the weekend** (Kerry is away — family). The GAMES
+tab on the event shows this same schedule live (the
+`event_payout_schedules` dial, v2.232.0), with a LOCKED banner.
+
+| Day | Game | Pot | Pays |
+|---|---|---:|---|
+| SAT | Skins (2 flights, capped $10/hole) | $360 | $180/flight ÷ skins won |
+| SAT | Team Net | $360 | 1st $240 / 2nd $120 (2/3–1/3) |
+| SAT | Closest to Pin ×4 | $232 | $58 per hole |
+| SUN | Skins (2 flights, capped $10/hole) | $360 | $180/flight ÷ skins won |
+| SUN | Team Net | $250 | winner-take-all |
+| SUN | Closest to Pin ×4 | $192 | $48 per hole |
+| COMB | Individual Net (2 flights) | $520 | per flight $260: $130/$78/$52 (50/30/20) |
+| COMB | Individual Gross (4 flights) | $540 | F1 $120/$60 (incl. $60 top-cut, 2/3–1/3) · F2–4 $80/$40 |
+
+**Weekend total $2,814** = the three bucket purses exactly. Up to 27
+fixed checks + variable skins. Zapata is OUT of Team Net (both days) and
+Ind Net; IN Skins/CTP/Ind Gross.
+
+The skins cap frees $216 SAT / $126 SUN from the uncapped derivation;
+the reallocation to Team Net (+$112 / +$42) and CTP (+$104 / +$84) is
+part of the lock. **Dollar figures are locked for the 08-12 field (32
+SAT / 27 SUN / 27 combined).** If anyone buys in or drops before
+Saturday, the bucket purses recompute — re-derive and re-confirm the
+per-game numbers with Kerry/Robert rather than assuming the ratios.
 
 ## Thursday (08-13) checklist
 

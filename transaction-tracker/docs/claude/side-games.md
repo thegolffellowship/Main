@@ -846,3 +846,17 @@ is the working model when it is built.
 - The money path for such a credit is `partial_credit_transaction` /
   `scoring-partial-credit` (no holes change, no package change), then set
   the dial, then re-run `scoring-champ-buckets` to re-derive purses.
+
+### 2026 TGF CHAMPIONSHIP — LOCKED payout schedule (Kerry, 2026-08-12: "Lock those.")
+
+Full table in `docs/claude/runbook-tgf-championship-2026-08-14.md`. Mechanism
+(v2.232.0): the `event_payout_schedules` app setting (keyed by event id →
+bucket → game) overlays the derived per-game pots in
+`get_event_bucket_accounts` — a lock REALLOCATES inside a bucket (skins
+capped $10/hole, freed money to Team Net + CTPs) but never changes the
+bucket's derived purse, and each game carries its payout lines onto the
+GAMES tab with a LOCKED banner. Headline numbers: SAT skins $360 / Team Net
+$360 ($240/$120) / CTP $58×4 · SUN skins $360 / Team Net $250 WTA / CTP
+$48×4 · COMBINED Ind Net 2 flights × ($130/$78/$52) / Ind Gross 4 flights,
+F1 $120/$60 (incl. $60 top-cut) F2–4 $80/$40. Total $2,814. Locked against
+the 08-12 field — field moves ⇒ re-derive + re-confirm.

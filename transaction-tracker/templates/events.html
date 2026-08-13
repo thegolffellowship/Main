@@ -6242,6 +6242,15 @@
         if (_buckets && _buckets.length) {
             let bh = '<div class="games-panel">';
             bh += `<div class="games-panel-header">SIDE-GAME POTS &mdash; per-bucket purses (regular games matrix does not apply to this event)</div>`;
+            // LOCKED payout schedule banner (Kerry-ratified via the
+            // event_payout_schedules dial) — the pots below are the locked
+            // reallocation, with payout lines per game.
+            const _lockedBucket = _buckets.find(b => b.locked);
+            if (_lockedBucket) {
+                bh += `<div style="margin-top:0.4rem;padding:0.45rem 0.6rem;background:#ecfdf5;border:1px solid #6ee7b7;border-radius:6px;font-size:0.78rem;color:#065f46;">
+                    <strong>PAYOUT SCHEDULE LOCKED</strong>${_lockedBucket.payout_note ? ` &mdash; ${escapeHtml(_lockedBucket.payout_note)}` : ""}
+                </div>`;
+            }
             bh += '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:0.6rem;padding:0.75rem 0;">';
             for (const b of _buckets) {
                 // sub-game pot breakdown (Kerry 2026-08-06): daily $30/head =
@@ -6253,6 +6262,10 @@
                         <span style="text-align:left;">${escapeHtml(g.label)}${g.note ? `<span style="color:var(--text-muted);"> (${escapeHtml(g.note)})</span>` : ""}</span>
                         <span style="font-weight:700;white-space:nowrap;">$${(+g.pot).toFixed(2)}</span>
                     </div>`;
+                    // Locked payout lines under the game (schedule of record)
+                    for (const pl of (g.payouts || [])) {
+                        gh += `<div style="font-size:0.72rem;color:var(--text-muted);text-align:left;padding:0 0 1px 0.6rem;">&rsaquo; ${escapeHtml(pl)}</div>`;
+                    }
                 }
                 bh += `<div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:0.75rem;text-align:center;">
                     <div style="font-size:0.7rem;font-weight:700;color:var(--text-muted);letter-spacing:0.05em;">${escapeHtml(b.bucket)}</div>

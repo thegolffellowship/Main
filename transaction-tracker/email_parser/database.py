@@ -15008,6 +15008,17 @@ def get_event_bucket_accounts(db_path=None) -> dict:
     """
     out: dict = {}
     optouts = _champ_subgame_optouts(db_path)
+    # LOCKED payout schedules (Kerry-ratified) — the `event_payout_schedules`
+    # app setting, keyed by event id. When present, a bucket's per-game pots
+    # come from the LOCKED schedule (which may reallocate within the bucket,
+    # e.g. the championship's $10/hole skins cap boosting Team Net + CTPs)
+    # and each game carries its payout lines. Bucket PURSES stay derived —
+    # a lock reallocates inside a bucket, never changes its total.
+    try:
+        _raw_sched = get_app_setting("event_payout_schedules", db_path=db_path)
+        schedules = json.loads(_raw_sched) if _raw_sched else {}
+    except Exception:
+        schedules = {}
     with _connect(db_path) as conn:
         by_prefix: dict = {}
         for r in conn.execute(
@@ -15025,8 +15036,31 @@ def get_event_bucket_accounts(db_path=None) -> dict:
             return out
         for e in conn.execute("SELECT id, item_name FROM events").fetchall():
             b = by_prefix.get((e["item_name"] or "").strip().lower())
-            if b:
-                out[str(e["id"])] = b
+            if not b:
+                continue
+            sched = schedules.get(str(e["id"]))
+            if sched:
+                b = [dict(bk) for bk in b]
+                for bk in b:
+                    bs = (sched.get("buckets") or {}).get(
+                        (bk["bucket"] or "").strip().upper())
+                    if not bs:
+                        continue
+                    bk["locked"] = True
+                    bk["payout_note"] = sched.get("note") or ""
+                    games = []
+                    for g in bk.get("games") or []:
+                        gs = bs.get(g["label"])
+                        if gs:
+                            g = dict(g)
+                            g["pot"] = float(gs.get("pot", g["pot"]))
+                            g["payouts"] = list(gs.get("lines") or [])
+                            # the auto note (derived flight split / opt-out
+                            # count) is superseded by the locked lines
+                            g["note"] = None
+                        games.append(g)
+                    bk["games"] = games
+            out[str(e["id"])] = b
     return out
 
 

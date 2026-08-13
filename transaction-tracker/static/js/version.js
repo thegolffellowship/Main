@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.231.1";
+window.TGF_VERSION = "2.232.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.232.0",
+    date: "2026-08-12",
+    changes: [
+      "The championship's LOCKED payout schedule is on the GAMES tab (Kerry-ratified 2026-08-12: 'Lock those.'). New event_payout_schedules app setting (rules-as-data, keyed by event id) overlays the derived bucket games: a lock reallocates money INSIDE a bucket — the $10/hole skins cap frees $216 Sat / $126 Sun into Team Net and Closest to Pins — while the bucket purses stay derived from the live field, and every game now shows its payout lines ($240/$120 Team Net Sat, $58- and $48-per-hole CTPs, Ind Net 2 flights at $130/$78/$52, Ind Gross 4 flights with the $60 top-cut folded into Flight 1's $120/$60). A LOCKED banner marks the schedule of record so Robert can run the weekend off the tracker page, not a chat thread.",
+    ],
+  },
   {
     version: "2.231.1",
     date: "2026-08-12",
