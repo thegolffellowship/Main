@@ -7385,6 +7385,97 @@ def _champ_final_board(race_key: str,
         return None
 
 
+_CHAMP_DISCOVER_ATTEMPTS: dict = {}
+
+
+def _champ_autodiscover_boards(race_key: str, entries: list,
+                               db_path: str | Path = DB_PATH) -> None:
+    """Resolve PENDING board entries by themselves (Kerry 2026-08-13:
+    "shouldn't it automatically update?"). An entry with no url but a
+    "discover" widget URL (the GG round's tournament_results listing)
+    plus a "match" name substring looks its own board up the moment GG
+    releases the round: the matching link's href becomes the entry's
+    url, persisted into gg_champ_points_boards AND mirrored into
+    gg_champ_scorecard_boards so the round's card toggle appears too —
+    no manual Sunday-morning step. Attempts are throttled to one per
+    300s per entry; a failed lookup leaves the entry pending exactly as
+    before. not_before still gates ACTIVATION independently, so a
+    round discovered early stays a blank column until its date."""
+    import time as _t
+    from golf_genius_sync import fetch_public_page, parse_page_structure
+    for b in entries:
+        if b.get("url") or not (b.get("discover") and b.get("match")):
+            continue
+        label = b.get("label") or "Pending"
+        ak = (race_key, label, b["discover"], b["match"])
+        last = _CHAMP_DISCOVER_ATTEMPTS.get(ak, 0.0)
+        if (_t.time() - last) < 300:
+            continue
+        _CHAMP_DISCOVER_ATTEMPTS[ak] = _t.time()
+        try:
+            page = fetch_public_page(b["discover"], xhr=False)
+            if page["status_code"] != 200:
+                continue
+            parsed = parse_page_structure(page["html"],
+                                          page.get("final_url") or b["discover"])
+            want = str(b["match"]).strip().lower()
+            hit = next((l for l in (parsed.get("links") or [])
+                        if want in (l.get("text") or "").strip().lower()
+                        and "/v2tournaments/" in (l.get("href") or "")), None)
+            if not hit:
+                continue        # round not released yet — stays pending
+            b["url"] = hit["href"]
+            logger.info("champ board auto-discovered: %s / %s -> %s",
+                        race_key, label, hit["href"])
+            _champ_persist_discovered(race_key, label, hit["href"],
+                                      db_path=db_path)
+        except Exception:
+            continue
+
+
+def _champ_persist_discovered(race_key: str, label: str, url: str,
+                              db_path: str | Path = DB_PATH) -> None:
+    """Write an auto-discovered board url into BOTH dials so it
+    survives restarts: the points entry gains its url (discover/match
+    kept for the audit trail), and the scorecard dial gains a matching
+    round entry if that label isn't there yet. Cup races hold LISTS in
+    both dials; a race whose scorecard config is a plain dict (the city
+    shape) is left alone."""
+    try:
+        raw = get_app_setting("gg_champ_points_boards", db_path=db_path)
+        cfg = json.loads(raw) if raw else {}
+        lst = cfg.get(race_key)
+        if isinstance(lst, list):
+            hitb = False
+            for e in lst:
+                if (isinstance(e, dict) and not e.get("url")
+                        and (e.get("label") or "Pending") == label):
+                    e["url"] = url
+                    hitb = True
+            if hitb:
+                set_app_setting("gg_champ_points_boards", json.dumps(cfg),
+                                db_path=db_path)
+    except Exception:
+        logger.exception("persisting discovered board url (points dial)")
+    try:
+        raw = get_app_setting("gg_champ_scorecard_boards", db_path=db_path)
+        cfg = json.loads(raw) if raw else {}
+        cur = cfg.get(race_key)
+        if cur is None:
+            cfg[race_key] = [{"label": label, "url": url}]
+        elif isinstance(cur, list):
+            if any(isinstance(e, dict) and (e.get("label") or "") == label
+                   for e in cur):
+                return
+            cur.append({"label": label, "url": url})
+        else:
+            return              # city-shape dict — not this race's concern
+        set_app_setting("gg_champ_scorecard_boards", json.dumps(cfg),
+                        db_path=db_path)
+    except Exception:
+        logger.exception("persisting discovered board url (scorecard dial)")
+
+
 def fetch_champ_points(race_key: str, max_age: float = 45.0,
                        db_path: str | Path = DB_PATH) -> dict:
     """LIVE championship points for one race, straight off the GG board.
@@ -7414,6 +7505,13 @@ def fetch_champ_points(race_key: str, max_age: float = 45.0,
     entries = [b for b in (board if isinstance(board, list)
                            else ([board] if board else []))
                if isinstance(b, dict)]
+    # Pending entries with a "discover" widget URL resolve themselves
+    # the moment GG releases their round (Kerry 2026-08-13: "shouldn't
+    # it automatically update?") — throttled, persisted, failure-safe.
+    try:
+        _champ_autodiscover_boards(race_key, entries, db_path=db_path)
+    except Exception:
+        pass
     from .timezone_utils import today_central_str
     _today = today_central_str()
     # A board with no url yet, or one date-gated by not_before, is

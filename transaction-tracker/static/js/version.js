@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.236.4";
+window.TGF_VERSION = "2.237.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.237.0",
+    date: "2026-08-13",
+    changes: [
+      "Championship rounds wire themselves up (Kerry: 'shouldn't it automatically update?'): a pending cup-board entry now carries a discover widget URL (GG's tournament_results listing for the round) plus a board-name match — the moment GG releases the round, the next leaderboard poll looks the board up, fills in its URL, persists it into the points dial AND mirrors a matching entry into the scorecard dial, so the RD 2 column fills and the Round 2 card toggle appears with zero manual steps. Lookups are throttled to one per 5 minutes and a miss leaves the entry pending exactly as before; not_before still date-gates activation independently, so a round discovered early stays a blank column until its day.",
+    ],
+  },
   {
     version: "2.236.4",
     date: "2026-08-13",
