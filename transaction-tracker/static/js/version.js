@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.232.0";
+window.TGF_VERSION = "2.233.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.233.0",
+    date: "2026-08-13",
+    changes: [
+      "The cups resolve at the TGF Championship like the City Championships did (Kerry: 'the points races will resolve like the City Championship... track Day 1 AND Day 2 totals to produce the winners'). Multi-board championship reads now SUM per player across boards — the old path was built for two DISJOINT city rosters and its id-keyed maps would have silently overwritten Day 1 with Day 2 for a same-field two-day event. Each player's per-day split rides along, thru follows the day being played, a plus player's give-back comes off EACH day they post (not once), and a board can carry not_before so Day 2 is staged in the dial midweek without Saturday's read failing on a board GG hasn't opened yet.",
+      "THE FELLOWSHIP CUP goes live at the championship: the Cup projection now carries a championship overlay of its own (dial key fellowship_cup) — every eligible player's row gains TGF CHAMP (points + thru, per-day split on hover) and CUP TOTAL (points reset + championship) columns, the standings re-rank on CUP TOTAL, and the LIVE badge follows the championship boards even though the city races are final. THE PLAYERS CUP uses the same machinery through its existing race overlay once its boards are pointed at the championship.",
+    ],
+  },
   {
     version: "2.232.0",
     date: "2026-08-12",

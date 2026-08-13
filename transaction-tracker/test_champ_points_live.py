@@ -472,6 +472,77 @@ check("a missing app_settings table falls back to the defaults, not a 500",
       "san_antonio_net" in db.champ_points_boards(db_path=":memory:"))
 os.unlink(_bp)
 
+
+print("\n== TWO-DAY boards SUM per player (Kerry 2026-08-13, TGF Championship) ==")
+# The Fellowship Cup / Players Cup resolve at the TGF Championship as
+# reset + Day 1 + Day 2. The old extend-only multi-board path was safe
+# for disjoint rosters (two cities); for the SAME field on both boards
+# the downstream cid-keyed maps overwrote — Day 2 would replace Day 1.
+import golf_genius_sync as _ggs
+_ORIG = (db.champ_points_boards, _ggs.fetch_public_page,
+         _ggs.parse_page_structure, db._resolve_gg_person,
+         db._champ_plus_adjustments)
+_DAY1 = [[["Pos.", "Player", "Stableford Points", "Thru"],
+          ["1", "BARNA, Kelly TGF Austin", "30 (15/15)", "F"],
+          [""],
+          ["2", "LARSON, Matt TGF Austin", "20 (10/10)", "F"],
+          [""],
+          ["", "SOUTH, Daniel TGF San Antonio", "-", "9:00 AM"]]]
+_DAY2 = [[["Pos.", "Player", "Stableford Points", "Thru"],
+          ["1", "BARNA, Kelly TGF Austin", "12 (6/6)", "7"],
+          [""],
+          ["", "SOUTH, Daniel TGF San Antonio", "-", "10:00 AM"]]]
+_PAGES = {"http://day1": _DAY1, "http://day2": _DAY2}
+_BOARDS = {"fellowship_cup": [
+    {"label": "Day 1", "url": "http://day1"},
+    {"label": "Day 2", "url": "http://day2"}]}
+db.champ_points_boards = lambda db_path=None: {k: list(v) if isinstance(v, list) else v for k, v in _BOARDS.items()}
+_ggs.fetch_public_page = lambda url, xhr=False: {"status_code": 200, "html": url, "final_url": url}
+_ggs.parse_page_structure = lambda html, url: {"tables": _PAGES[html]}
+db._resolve_gg_person = lambda conn, name: (None, "test")
+_larson_key = db._cmp_person_key("LARSON, Matt")
+db._champ_plus_adjustments = lambda rk, db_path=None: {"by_cid": {}, "by_key": {_larson_key: 1.0}}
+db._CHAMP_POINTS_CACHE.clear()
+out2 = db.fetch_champ_points("fellowship_cup", db_path=":memory:")
+_by = {p["name"]: p for p in out2["players"]}
+check("both days' rows merge to ONE row per player", len(out2["players"]) == 3,
+      str([p["name"] for p in out2["players"]]))
+check("points SUM across days (30 + 12 = 42)",
+      _by.get("BARNA, Kelly", {}).get("points") == 42.0, str(_by.get("BARNA, Kelly")))
+check("thru follows the LAST board (mid-Day-2 = '7')",
+      _by.get("BARNA, Kelly", {}).get("thru") == "7", str(_by.get("BARNA, Kelly")))
+check("per-day split rides along in days[]",
+      [d["points"] for d in _by.get("BARNA, Kelly", {}).get("days", [])] == [30.0, 12.0])
+check("a Day-1-only player keeps their Day 1 total",
+      _by.get("LARSON, Matt", {}).get("points") == 19.0, str(_by.get("LARSON, Matt")))
+check("plus deduction is PER SCORING DAY (1 day scored -> -1, not -2)",
+      _by.get("LARSON, Matt", {}).get("plus_adjustment") == 1.0, str(_by.get("LARSON, Matt")))
+check("a never-started player stays None across both days, never 0",
+      _by.get("SOUTH, Daniel", {}).get("points") is None, str(_by.get("SOUTH, Daniel")))
+check("scoring counts merged players once", out2["scoring"] == 2, str(out2["scoring"]))
+
+print("\n== not_before stages Day 2 without failing Day 1 (dial-only gate) ==")
+_BOARDS["fellowship_cup"] = [
+    {"label": "Day 1", "url": "http://day1"},
+    {"label": "Day 2", "url": "http://day2", "not_before": "2999-01-01"}]
+db._CHAMP_POINTS_CACHE.clear()
+out1 = db.fetch_champ_points("fellowship_cup", db_path=":memory:")
+_by1 = {p["name"]: p for p in out1["players"]}
+check("the future-dated board is skipped, Day 1 reads alone",
+      _by1.get("BARNA, Kelly", {}).get("points") == 30.0, str(_by1.get("BARNA, Kelly")))
+check("skipped board leaves one day entry",
+      len(_by1.get("BARNA, Kelly", {}).get("days", [])) == 1)
+_BOARDS["fellowship_cup"] = [
+    {"label": "Day 2", "url": "http://day2", "not_before": "2999-01-01"}]
+db._CHAMP_POINTS_CACHE.clear()
+outp = db.fetch_champ_points("fellowship_cup", db_path=":memory:")
+check("ALL boards future-dated -> unconfigured, quiet",
+      outp.get("configured") is False, str(outp))
+(db.champ_points_boards, _ggs.fetch_public_page,
+ _ggs.parse_page_structure, db._resolve_gg_person,
+ db._champ_plus_adjustments) = _ORIG
+db._CHAMP_POINTS_CACHE.clear()
+
 print("\n" + ("ALL PASS" if not F else f"{len(F)} FAILED"))
 for f in F: print("  -", f)
 sys.exit(1 if F else 0)

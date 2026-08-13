@@ -6334,6 +6334,14 @@
         // full-height 2px dividers + stacked titles ride on top of it.
         const netTh = `${window.TGF_STAT_COL(compact)}border-left:2px solid #cbd5e1;`;
         const resetTh = `${window.TGF_STAT_COL(compact)}font-weight:700;border-left:2px solid #cbd5e1;border-right:2px solid #cbd5e1;`;
+        // TGF Championship overlay (Kerry 2026-08-13): while champ boards
+        // are configured the Cup resolves live — reset + Day 1 + Day 2 —
+        // and two extra columns show the championship points (with thru)
+        // and the deciding CUP TOTAL.
+        const cupChamp = !!d.champ_overlay;
+        const resetThOv = `${window.TGF_STAT_COL(compact)}border-left:2px solid #cbd5e1;`;
+        const champTh = `${window.TGF_STAT_COL(compact)}border-left:2px solid #cbd5e1;`;
+        const totalTh = `${window.TGF_STAT_COL(compact)}font-weight:700;border-left:2px solid #cbd5e1;border-right:2px solid #cbd5e1;`;
         const rows = d.standings.map(r => {
             const bg = r.enrolled ? "background:#bbf7d0;"
                      : (r.customer_id ? "" : "background:#fffbeb;");
@@ -6350,11 +6358,27 @@
             const cityCell = r.customer_id
                 ? `<a href="#race=${cityRace}&player=${r.customer_id}" class="cell-link" title="See who's above and below on the ${cityRace === "austin" ? "Austin" : "San Antonio"} city board" onclick="prJumpToRaceRow('${cityRace}', ${r.customer_id}); return false;">${escapeHtml(String(r.net_rank))}</a>`
                 : escapeHtml(String(r.net_rank));
+            // Championship cells: points once posted, otherwise the thru
+            // cell (tee time before starting) — the not-started state must
+            // never read as zero. CUP TOTAL is the deciding figure.
+            let champCells = "";
+            if (cupChamp) {
+                const started = r.champ_points != null;
+                const champTxt = started
+                    ? `${r.champ_points}${r.champ_thru && String(r.champ_thru).toUpperCase() !== "F" ? ` <span style="color:var(--text-muted);font-size:0.8em;">(${escapeHtml(String(r.champ_thru))})</span>` : ""}`
+                    : (r.champ_thru ? `<span style="color:var(--text-muted);font-size:0.85em;">${escapeHtml(String(r.champ_thru))}</span>` : "—");
+                const champTitle = (r.champ_days || []).map(dd =>
+                    `${dd.board}: ${dd.points != null ? dd.points : "—"}${dd.thru ? ` (${dd.thru})` : ""}`).join(" · ")
+                    + (r.champ_plus ? ` · plus adj −${r.champ_plus}` : "");
+                champCells = `
+                <td style="${champTh}" title="${escapeHtml(champTitle)}">${champTxt}</td>
+                <td style="${totalTh}">${r.cup_total != null ? r.cup_total : prFmtReset(r.points_reset)}</td>`;
+            }
             return `<tr${r.customer_id ? ` data-cid="${r.customer_id}"` : ""} style="${bg}">
                 <td style="${rankTh}">${escapeHtml(r.rank)}${prRankMove(r.rank, r.prev_rank)}</td>
                 <td>${nameCell}${prChapterBadge(r.chapter)}${hcp}${prPayBadge(r)}</td>
                 <td style="${netTh}">${cityCell}</td>
-                <td style="${resetTh}">${prFmtReset(r.points_reset)}</td>
+                <td style="${cupChamp ? resetThOv : resetTh}">${prFmtReset(r.points_reset)}</td>${champCells}
             </tr>`;
         }).join("");
 
@@ -6363,7 +6387,10 @@
                 <thead><tr>
                     <th style="${rankTh}">${compact ? "#" : "Rank"}</th><th style="width:99%;">Player</th>
                     <th style="${netTh}line-height:1.25;" title="Rank in their chapter's City Points race">CITY<br>RANK</th>
-                    <th style="${resetTh}line-height:1.25;">${d.reset_official ? "" : `<span class="pr-proj" style="display:block;font-size:${compact ? "0.52rem" : "0.65rem"};font-weight:600;letter-spacing:0.03em;">(${compact ? "proj" : "Projected"})</span>`}POINTS<br>RESET</th>
+                    <th style="${cupChamp ? resetThOv : resetTh}line-height:1.25;">${d.reset_official ? "" : `<span class="pr-proj" style="display:block;font-size:${compact ? "0.52rem" : "0.65rem"};font-weight:600;letter-spacing:0.03em;">(${compact ? "proj" : "Projected"})</span>`}POINTS<br>RESET</th>
+                    ${cupChamp ? `
+                    <th style="${champTh}line-height:1.25;" title="TGF Championship points — Day 1 + Day 2 (hover a cell for the per-day split)">TGF<br>CHAMP</th>
+                    <th style="${totalTh}line-height:1.25;" title="Points reset + championship points — the Cup is decided on this number">CUP<br>TOTAL</th>` : ""}
                 </tr></thead>
                 <tbody>${rows}</tbody>
             </table>`;

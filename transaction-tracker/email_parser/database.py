@@ -7404,8 +7404,20 @@ def fetch_champ_points(race_key: str, max_age: float = 45.0,
     # BOTH cities' championship gross boards). A single dict stays the
     # common case; any board failing fails the whole read so a half-cup
     # overlay never renders.
+    #
+    # MULTI-DAY (Kerry 2026-08-13, the TGF Championship: "track Day 1 AND
+    # Day 2 totals to produce the winners"): a board may carry
+    # "not_before": "YYYY-MM-DD" — it is IGNORED until that Central date,
+    # so Day 2 can be staged in the dial on Wednesday without Saturday's
+    # read failing on a board GG hasn't turned on yet. From its date
+    # onward it participates fully, and a failure then IS a failure.
     blist = board if isinstance(board, list) else ([board] if board else [])
     blist = [b for b in blist if isinstance(b, dict) and b.get("url")]
+    if any(b.get("not_before") for b in blist):
+        from .timezone_utils import today_central_str
+        _today = today_central_str()
+        blist = [b for b in blist
+                 if not b.get("not_before") or str(b["not_before"]) <= _today]
     if not blist:
         return {"race": race_key, "configured": False, "players": []}
 
@@ -7418,13 +7430,16 @@ def fetch_champ_points(race_key: str, max_age: float = 45.0,
                                for b in blist),
            "url": blist[0]["url"], "players": [], "stale": False}
     try:
-        rows = []
+        board_rows = []
         for b in blist:
             page = fetch_public_page(b["url"], xhr=False)
             if page["status_code"] != 200:
                 raise RuntimeError(f"GG returned HTTP {page['status_code']}")
             struct = parse_page_structure(page["html"], b["url"])
-            rows.extend(_parse_champ_points_tables(struct.get("tables") or []))
+            board_rows.append((b.get("label") or "Championship Points",
+                               _parse_champ_points_tables(
+                                   struct.get("tables") or [])))
+        rows = [r for _, br in board_rows for r in br]
     except Exception as e:
         if hit:
             stale = dict(hit[1])
@@ -7465,14 +7480,45 @@ def fetch_champ_points(race_key: str, max_age: float = 45.0,
             _CHAMP_POINTS_CACHE[race_key] = (_t.time(), out)
             return out
 
+    # MERGE PER PLAYER across boards (the two-day fix, Kerry 2026-08-13).
+    # The old extend-only path was safe when a player appeared on exactly
+    # ONE board (the two-city Players Cup case) but the downstream maps
+    # keyed by customer_id OVERWROTE — a Day 2 row would have silently
+    # replaced Day 1 instead of adding to it. Points now SUM across the
+    # boards a player appears on (None + 3 = 3; all-None stays None so
+    # "hasn't started" survives), each day rides along in `days`, and
+    # `thru` follows the LAST configured board the player appears on —
+    # which during Day 1 is Day 1, and on Day 2 is Day 2, so the
+    # final-board detection upstream keeps meaning "today's round is
+    # done". Single-board races reduce to the old behaviour exactly.
     with _connect(db_path) as conn:
-        for r in rows:
-            cid = None
-            try:
-                cid, _how = _resolve_gg_person(conn, r["name"])
-            except Exception:
+        merged: dict = {}
+        order: list = []
+        for blabel, brows in board_rows:
+            for r in brows:
                 cid = None
-            out["players"].append({**r, "customer_id": cid})
+                try:
+                    cid, _how = _resolve_gg_person(conn, r["name"])
+                except Exception:
+                    cid = None
+                mkey = (("cid", cid) if cid
+                        else ("name", _cmp_person_key(r["name"])))
+                if mkey not in merged:
+                    merged[mkey] = {"name": r["name"], "customer_id": cid,
+                                    "points": None, "thru": r.get("thru"),
+                                    "days": []}
+                    order.append(mkey)
+                p = merged[mkey]
+                if cid and not p.get("customer_id"):
+                    p["customer_id"] = cid
+                p["days"].append({"board": blabel,
+                                  "points": r.get("points"),
+                                  "thru": r.get("thru")})
+                if r.get("points") is not None:
+                    p["points"] = (p["points"] or 0.0) + r["points"]
+                p["thru"] = r.get("thru")
+        out["players"] = [merged[k] for k in order]
+        out["boards"] = [bl for bl, _ in board_rows]
 
     # PLUS-HANDICAP DEDUCTION (Kerry, championship day 2026-08-01): the
     # plus values come off the companion scorecard board's
@@ -7493,9 +7539,15 @@ def fetch_champ_points(race_key: str, max_age: float = 45.0,
             else:
                 plus = adj["by_key"].get(_cmp_person_key(p["name"]))
             if plus and p.get("points") is not None:
+                # Multi-day: the give-back applies PER ROUND — a plus
+                # player's playing handicap comes off each day's points
+                # (Kerry's championship rule, generalized 2026-08-13), so
+                # the deduction is plus × the days they have posted on.
+                _sdays = max(1, sum(1 for d in p.get("days") or []
+                                    if d.get("points") is not None))
                 p["points_raw"] = p["points"]
-                p["plus_adjustment"] = plus
-                p["points"] = p["points"] - plus
+                p["plus_adjustment"] = plus * _sdays
+                p["points"] = p["points"] - plus * _sdays
     out["scoring"] = sum(1 for p in out["players"] if p["points"] is not None)
     out["field"] = len(out["players"])
 
@@ -9069,10 +9121,54 @@ def get_fellowship_cup_projection(force_refresh: bool = False,
                 "points_reset": r["points_reset"],
             })
 
-    combined.sort(key=lambda r: -r["points_reset"])
+    # TGF CHAMPIONSHIP overlay (Kerry 2026-08-13: "the points races will
+    # resolve like the City Championship... track Day 1 AND Day 2 totals
+    # to produce the winners"). The Cup's championship NET points come off
+    # the GG boards configured under the 'fellowship_cup' key of the
+    # gg_champ_points_boards dial — a two-board list (Day 1 + Day 2)
+    # summed per player by fetch_champ_points. While boards are live the
+    # standings order becomes reset + championship; without boards this
+    # whole block is a no-op and the pure reset projection stands.
+    cup_live = {}
+    cup_champ_scoring = cup_champ_field = 0
+    try:
+        cup_live = fetch_champ_points("fellowship_cup", db_path=db_path)
+    except Exception:
+        logger.warning("fellowship cup champ fetch failed", exc_info=True)
+        cup_live = {}
+    cup_overlay = bool(cup_live.get("configured") and cup_live.get("players"))
+    if cup_overlay:
+        by_cid = {p["customer_id"]: p for p in cup_live["players"]
+                  if p.get("customer_id")}
+        by_name: dict = {}
+        for p in cup_live["players"]:
+            for cand in _gg_name_candidates(p["name"]):
+                by_name.setdefault(cand.strip().lower(), p)
+        for r in combined:
+            hit = None
+            if r.get("customer_id") and r["customer_id"] in by_cid:
+                hit = by_cid[r["customer_id"]]
+            elif (r.get("player_name") or "").strip().lower() in by_name:
+                hit = by_name[(r["player_name"] or "").strip().lower()]
+            champ = (float(hit["points"])
+                     if hit and hit.get("points") is not None else None)
+            r["champ_points"] = champ
+            r["champ_thru"] = hit.get("thru") if hit else None
+            r["champ_days"] = hit.get("days") if hit else None
+            r["champ_plus"] = hit.get("plus_adjustment") if hit else None
+            r["cup_total"] = round((r["points_reset"] or 0.0) + (champ or 0.0), 2)
+        cup_champ_scoring = cup_live.get("scoring") or 0
+        cup_champ_field = cup_live.get("field") or 0
+
+    def _cup_key(r):
+        return (r.get("cup_total") if cup_overlay
+                else r["points_reset"]) or 0.0
+
+    combined.sort(key=lambda r: (-_cup_key(r), -(r["points_reset"] or 0.0),
+                                 (r.get("player_name") or "").lower()))
     for i, r in enumerate(combined):
         j = i
-        while j > 0 and combined[j - 1]["points_reset"] == r["points_reset"]:
+        while j > 0 and _cup_key(combined[j - 1]) == _cup_key(r):
             j -= 1
         r["_rank_num"] = j + 1
     tally: dict = {}
@@ -9094,6 +9190,13 @@ def get_fellowship_cup_projection(force_refresh: bool = False,
     live = (champ_scoring > 0 or champ_field > 0) and not all_final
     if all_final:
         champ_scoring = champ_field = 0
+    # The TGF Championship boards make the Cup live in their own right —
+    # the city races being final no longer ends the Cup's live life
+    # (Kerry 2026-08-13: the Cup is DECIDED at the TGF Championship).
+    if cup_champ_scoring or cup_champ_field:
+        live = True
+        champ_scoring += cup_champ_scoring
+        champ_field += cup_champ_field
     try:
         _apply_rank_movement_history(combined, "fellowship_cup",
                                      db_path=db_path, freeze=live)
@@ -9115,7 +9218,15 @@ def get_fellowship_cup_projection(force_refresh: bool = False,
         # the same fields the race payloads carry, summed across races
         "champ_scoring": champ_scoring,
         "champ_field": champ_field,
-        "champ": ({"label": "City Championships"} if live else None),
+        "champ": ({"label": (cup_live.get("label")
+                             or "TGF Championship")
+                   if (cup_champ_scoring or cup_champ_field)
+                   else "City Championships"} if live else None),
+        # TGF Championship overlay state (Kerry 2026-08-13): rows carry
+        # champ_points / champ_thru / champ_days / cup_total when active
+        "champ_overlay": cup_overlay,
+        "champ_error": cup_live.get("error"),
+        "champ_boards": cup_live.get("boards"),
     }
 
 
