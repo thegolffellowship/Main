@@ -6014,12 +6014,17 @@
         const cupMode = liveMode && (d.standings || []).some(r => r.cup_total != null);
         const cupBoards = (cupMode && d.champ && d.champ.boards && d.champ.boards.length)
             ? d.champ.boards : (cupMode ? ["Round 1"] : []);
+        // Pending boards (Round 2 before GG releases it) render as blank
+        // columns so members see it coming (Kerry 2026-08-13); toggles
+        // stay on the fetched boards only.
+        const cupPending = cupMode ? ((d.champ && d.champ.boards_pending) || []) : [];
+        const cupCols = cupBoards.concat(cupPending);
         const nCols = 6
             - (showBuy ? 0 : 1)
             - (liveMode || showRounds ? 0 : 1)
             - (liveMode && !showThru ? 1 : 0)
             + (liveMode ? 1 : 0)      // live adds the MOVE column (PGA-style)
-            + (cupMode ? cupBoards.length : 0);   // rounds replace TODAY, + CUP TOTAL
+            + (cupMode ? cupCols.length : 0);   // rounds replace TODAY, + CUP TOTAL
         // Fixed widths on every column but Player so the three race tabs
         // lay out identically regardless of content; phones get narrow
         // columns + short labels so the whole table fits on screen at once
@@ -6068,7 +6073,7 @@
                 : escapeHtml(r.player_name);
             const expandable = !!(r.member_card_id || r.customer_id);
             const chevron = expandable
-                ? ' <span class="pr-chevron" style="color:var(--primary);font-size:0.85rem;" title="Round-by-round points & imported scorecards">&#9656;</span>'
+                ? ' <span class="pr-chevron" style="color:var(--primary);font-size:1.15rem;line-height:1;vertical-align:-2px;" title="Round-by-round points & imported scorecards">&#9656;</span>'
                 : '';
             const hcp = r.handicap_index != null
                 ? ` <span style="color:var(--text-muted);font-size:0.82em;" title="Current 18-hole handicap index">(${r.handicap_index.toFixed(1)})</span>`
@@ -6113,7 +6118,7 @@
             // CUP MODE (Kerry 2026-08-13): TGF CHAMP rounds as their own
             // columns adding to POINTS RESET — Reset | Rd 1 | Rd 2 | Thru
             // | CUP TOTAL. The per-round split comes off champ_days.
-            const cupRoundCells = cupMode ? cupBoards.map(bl => {
+            const cupRoundCells = cupMode ? cupCols.map(bl => {
                 const dd = (r.champ_days || []).find(x => x.board === bl);
                 const pts = dd && dd.points != null ? dd.points : null;
                 return `<td style="${todayStyle}${pts != null ? "color:#BF5700;font-weight:800;" : "color:var(--text-muted);"}">${pts != null ? escapeHtml(String(pts % 1 ? pts.toFixed(1) : pts)) : (dd && dd.thru ? "" : "—")}</td>`;
@@ -6201,12 +6206,12 @@
                     <th rowspan="2" style="${mvStyle}" title="Day movement">&#8597;</th>
                     <th rowspan="2" style="width:99%;">Player</th>
                     <th rowspan="2" style="${ptsStyle}line-height:1.25;" title="Season points reset — the cups' starting totals">POINTS<br>RESET</th>
-                    <th colspan="${cupBoards.length}" style="text-align:center;${pad6}border-right:2px solid #cbd5e1;border-bottom:1px dashed #cbd5e1;font-size:${compact ? "0.6rem" : "0.72rem"};letter-spacing:0.06em;">TGF CHAMP</th>
+                    <th colspan="${cupCols.length}" style="text-align:center;${pad6}border-right:2px solid #cbd5e1;border-bottom:1px dashed #cbd5e1;font-size:${compact ? "0.6rem" : "0.72rem"};letter-spacing:0.06em;">TGF CHAMP</th>
                     ${showThru ? `<th rowspan="2" style="${thruStyle}" title="Holes completed today — or the tee time if they haven't started">THRU</th>` : ""}
                     <th rowspan="2" style="${statCol}line-height:1.25;border-right:2px solid #cbd5e1;" title="Points reset + championship rounds — the cup is decided on this number">CUP<br>TOTAL</th>
                     ${showBuy ? `<th rowspan="2" style="${buyStyle}" title="Buy-in">Buy-in</th>` : ""}
                 </tr>
-                <tr>${cupBoards.map(bl => `<th style="${todayStyle}" title="${escapeHtml(bl)} championship points">${escapeHtml(compact ? bl.replace(/round\s*/i, "R") : bl.replace(/round\s*/i, "RD "))}</th>`).join("")}</tr>`
+                <tr>${cupCols.map(bl => `<th style="${todayStyle}" title="${escapeHtml(bl)} championship points">${escapeHtml(compact ? bl.replace(/round\s*/i, "R") : bl.replace(/round\s*/i, "RD "))}</th>`).join("")}</tr>`
             : `<tr>
                     <th style="${rankStyle}">${compact ? "#" : "Rank"}</th>
                     ${liveMode ? `<th style="${mvStyle}" title="Day movement">&#8597;</th>` : ""}
@@ -6376,8 +6381,13 @@
         // spans one column per round, adding to POINTS RESET for the
         // deciding CUP TOTAL; champ rows expand to the round scorecards.
         const cupChamp = !!d.champ_overlay;
-        const cupBoardsF = cupChamp
+        const cupFetchedF = cupChamp
             ? ((d.champ_boards && d.champ_boards.length) ? d.champ_boards : ["Round 1"])
+            : [];
+        // Pending rounds render as blank columns (Kerry 2026-08-13);
+        // card toggles cover the fetched rounds only.
+        const cupBoardsF = cupChamp
+            ? cupFetchedF.concat(d.champ_boards_pending || [])
             : [];
         const resetThOv = `${window.TGF_STAT_COL(compact)}border-left:2px solid #cbd5e1;`;
         const roundTh = `${window.TGF_STAT_COL(compact)}border-right:2px solid #cbd5e1;`;
@@ -6421,7 +6431,7 @@
                 : "";
             const expandableF = cupChamp && r.customer_id && (r.champ_points != null || r.champ_thru);
             const chevF = expandableF
-                ? ' <span class="pr-chevron" style="color:var(--primary);font-size:0.85rem;" title="Round scorecards">&#9656;</span>'
+                ? ' <span class="pr-chevron" style="color:var(--primary);font-size:1.15rem;line-height:1;vertical-align:-2px;" title="Round scorecards">&#9656;</span>'
                 : '';
             return `<tr${r.customer_id ? ` data-cid="${r.customer_id}"` : ""}${expAttrs} style="${bg}${expandableF ? "cursor:pointer;" : ""}">
                 <td style="${rankTh}">${escapeHtml(r.rank)}${prRankMove(r.rank, r.prev_rank)}</td>
@@ -6455,7 +6465,7 @@
         // "exactly like City Championship specs"), with the Round 1 /
         // Round 2 toggle handled inside prToggleDetail.
         $("pr-table-container").dataset.live = cupChamp ? "1" : "0";
-        $("pr-table-container").dataset.champBoards = JSON.stringify(cupBoardsF);
+        $("pr-table-container").dataset.champBoards = JSON.stringify(cupFetchedF);
         if (cupChamp) {
             $("pr-table-container").querySelectorAll("tr[data-cid]").forEach(tr => {
                 if (!("champPts" in tr.dataset) && !tr.dataset.champThru) return;
@@ -6560,7 +6570,7 @@
                 ? `<a href="/customers?cid=${r.customer_id}" class="cell-link">${escapeHtml(r.player_name)}</a>`
                 : escapeHtml(r.player_name);
             const chevron = r.customer_id
-                ? ' <span class="pr-chevron" style="color:var(--primary);font-size:0.85rem;" title="This month&#39;s rounds & scorecards">&#9656;</span>'
+                ? ' <span class="pr-chevron" style="color:var(--primary);font-size:1.15rem;line-height:1;vertical-align:-2px;" title="This month&#39;s rounds & scorecards">&#9656;</span>'
                 : '';
             let purse = "";
             if (win) purse = `<strong>$${sel.winners[0].share}</strong>`;

@@ -390,8 +390,16 @@
         };
         const front = holes.filter(h => h.hole <= 9);
         const back = holes.filter(h => h.hole > 9);
-        // Play order (Kerry 2026-08-03): first_hole >= 10 → IN above OUT
-        const backFirst = (card.first_hole || 1) >= 10;
+        // Play order (Kerry 2026-08-03): first_hole >= 10 → IN above OUT.
+        // But the SCORES outrank the dial (Kerry 2026-08-13, the Rideout
+        // test card: a stale back-start flag from a prior shotgun event
+        // put an empty IN above a scored OUT): when every posted hole
+        // sits on one nine, that nine played first.
+        const played9 = played.length && played.every(h => h.hole <= 9);
+        const played18 = played.length && played.every(h => h.hole > 9);
+        const backFirst = played9 ? false
+            : played18 ? true
+            : (card.first_hole || 1) >= 10;
         const html = backFirst
             ? block("IN", back, false) + nineNote("IN") + block("OUT", front, true) + nineNote("OUT")
             : block("OUT", front, false) + nineNote("OUT") + block("IN", back, true) + nineNote("IN");

@@ -1,5 +1,15 @@
-window.TGF_VERSION = "2.234.1";
+window.TGF_VERSION = "2.235.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.235.0",
+    date: "2026-08-13",
+    changes: [
+      "Round 2 shows on the cup boards NOW, blank, ahead of GG releasing it (Kerry): a board entry without a url (or date-gated by not_before) is PENDING — its column renders with em-dashes under the TGF CHAMP header and joins the live math the moment its real URL lands in the dial. Card toggles stay on fetched rounds only.",
+      "The championship scorecards read the POINTS boards' own detail partials now, not ALL Net: on the tgf-champ26 portal the ALL Net event carries only front-nine strokes (holes 10-18 are literally blank cells in its partial — verified on Kerry's Rideout test card, gross 37 vs the board's full-18), while the FELLOWSHIP CUP / PLAYERS CUP partials hold all 18 holes plus GG's own per-hole Stableford. Dial repoint, no parser change.",
+      "Nines render scores-first (Kerry, the Rideout card: an empty IN sat above a scored OUT): when every posted hole is on one nine, that nine shows first — a stale back-start flag from a prior shotgun event can no longer flip a front-nine card. Full cards keep the play-order rule.",
+      "The row-expand chevron triangle is bigger (0.85rem to 1.15rem) on all three boards.",
+    ],
+  },
   {
     version: "2.234.1",
     date: "2026-08-13",

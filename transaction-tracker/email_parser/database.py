@@ -7411,15 +7411,22 @@ def fetch_champ_points(race_key: str, max_age: float = 45.0,
     # so Day 2 can be staged in the dial on Wednesday without Saturday's
     # read failing on a board GG hasn't turned on yet. From its date
     # onward it participates fully, and a failure then IS a failure.
-    blist = board if isinstance(board, list) else ([board] if board else [])
-    blist = [b for b in blist if isinstance(b, dict) and b.get("url")]
-    if any(b.get("not_before") for b in blist):
-        from .timezone_utils import today_central_str
-        _today = today_central_str()
-        blist = [b for b in blist
-                 if not b.get("not_before") or str(b["not_before"]) <= _today]
+    entries = [b for b in (board if isinstance(board, list)
+                           else ([board] if board else []))
+               if isinstance(b, dict)]
+    from .timezone_utils import today_central_str
+    _today = today_central_str()
+    # A board with no url yet, or one date-gated by not_before, is
+    # PENDING: it is not fetched, but its label still renders as a blank
+    # column so the members see Round 2 coming (Kerry 2026-08-13: "I'd
+    # like to see R2 show up now, even though it's blank").
+    blist = [b for b in entries if b.get("url")
+             and (not b.get("not_before") or str(b["not_before"]) <= _today)]
+    pending_labels = [(b.get("label") or "Pending")
+                      for b in entries if b not in blist]
     if not blist:
-        return {"race": race_key, "configured": False, "players": []}
+        return {"race": race_key, "configured": False, "players": [],
+                "boards_pending": pending_labels}
 
     hit = _CHAMP_POINTS_CACHE.get(race_key)
     if hit and (_t.time() - hit[0]) < max_age:
@@ -7428,7 +7435,8 @@ def fetch_champ_points(race_key: str, max_age: float = 45.0,
     out = {"race": race_key, "configured": True,
            "label": " + ".join((b.get("label") or "Championship Points")
                                for b in blist),
-           "url": blist[0]["url"], "players": [], "stale": False}
+           "url": blist[0]["url"], "players": [], "stale": False,
+           "boards_pending": pending_labels}
     try:
         board_rows = []
         for b in blist:
@@ -9168,6 +9176,7 @@ def get_fellowship_cup_projection(force_refresh: bool = False,
         logger.warning("fellowship cup champ fetch failed", exc_info=True)
         cup_live = {}
     cup_overlay = bool(cup_live.get("configured") and cup_live.get("players"))
+    cup_boards_pending = cup_live.get("boards_pending") or []
     if cup_overlay:
         by_cid = {p["customer_id"]: p for p in cup_live["players"]
                   if p.get("customer_id")}
@@ -9258,6 +9267,7 @@ def get_fellowship_cup_projection(force_refresh: bool = False,
         "champ_overlay": cup_overlay,
         "champ_error": cup_live.get("error"),
         "champ_boards": cup_live.get("boards"),
+        "champ_boards_pending": cup_boards_pending,
     }
 
 
