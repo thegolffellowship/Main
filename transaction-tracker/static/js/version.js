@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.235.1";
+window.TGF_VERSION = "2.236.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.236.0",
+    date: "2026-08-13",
+    changes: [
+      "SLIM phone cup boards (Kerry-ratified from Iowa: 'This mobile view REALLY needs some work'): cup mode had added four columns to the fixed-layout phone table, starving the Player column to ~90px — and since every table cell is no-wrap, names and badges painted straight over the neighbouring columns. Phones now keep # | Player | POINTS RESET | RD 1 | RD 2 | CUP TOTAL on one screen: CITY RANK folds into the row expansion, THRU rides under the player's name (tee time muted, holes/F green), day movement stacks under the rank number, and long names wrap to a second line instead of overlapping. Desktop is unchanged — on both THE FELLOWSHIP CUP and THE PLAYERS CUP.",
+    ],
+  },
   {
     version: "2.235.1",
     date: "2026-08-13",

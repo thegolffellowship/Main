@@ -5887,6 +5887,9 @@
     // the projected points reset the live table no longer shows.
     function prExpStatLine(tr) {
         const bits = [];
+        // Phones drop the Fellowship Cup's CITY RANK column (slim cup
+        // layout, Kerry-ratified 2026-08-13) — it lives here instead.
+        if (tr.dataset.cityRank) bits.push(`City rank <b>${escapeHtml(tr.dataset.cityRank)}</b>`);
         if (tr.dataset.proj) bits.push(`<span title="${escapeHtml(tr.dataset.projTitle || "")}">${prRaceFinal ? "Won" : "Projected"} <b style="color:#15803d;">${prFmtMoney(+tr.dataset.proj)}</b></span>`);
         // Once the reset is OFFICIAL the table's RESET column already
         // shows the figure and "Proj." is obsolete (Kerry 2026-08-03) —
@@ -6019,11 +6022,17 @@
         // stay on the fetched boards only.
         const cupPending = cupMode ? ((d.champ && d.champ.boards_pending) || []) : [];
         const cupCols = cupBoards.concat(cupPending);
+        // SLIM phone cup layout (Kerry-ratified 2026-08-13: the cup
+        // columns starved the fixed-layout Player column and names
+        // painted over their neighbours): phones keep # | Player |
+        // RESET | rounds | CUP TOTAL on one screen — MOVE folds under
+        // the rank, THRU moves under the player's name, names wrap.
+        const cupSlim = cupMode && compact;
         const nCols = 6
             - (showBuy ? 0 : 1)
             - (liveMode || showRounds ? 0 : 1)
-            - (liveMode && !showThru ? 1 : 0)
-            + (liveMode ? 1 : 0)      // live adds the MOVE column (PGA-style)
+            - (liveMode && (!showThru || cupSlim) ? 1 : 0)
+            + (liveMode && !cupSlim ? 1 : 0)  // live adds the MOVE column (PGA-style)
             + (cupMode ? cupCols.length : 0);   // rounds replace TODAY, + CUP TOTAL
         // Fixed widths on every column but Player so the three race tabs
         // lay out identically regardless of content; phones get narrow
@@ -6124,7 +6133,7 @@
                 return `<td style="${todayStyle}${pts != null ? "color:#BF5700;font-weight:800;" : "color:var(--text-muted);"}">${pts != null ? escapeHtml(String(pts % 1 ? pts.toFixed(1) : pts)) : (dd && dd.thru ? "" : "—")}</td>`;
             }).join("") : "";
             const midCells = cupMode
-                ? `${cupRoundCells}${thruCellHtml}
+                ? `${cupRoundCells}${cupSlim ? "" : thruCellHtml}
                    <td style="${statCol}font-weight:800;border-right:2px solid #cbd5e1;">${r.cup_total != null ? escapeHtml(String(r.cup_total % 1 ? r.cup_total.toFixed(1) : r.cup_total)) : ""}</td>`
                 : liveMode
                 ? `<td style="${todayStyle}${r.champ_points != null ? "color:#BF5700;font-weight:800;" : "color:var(--text-muted);"}">${r.champ_points != null ? escapeHtml(String(r.champ_points % 1 ? r.champ_points.toFixed(1) : r.champ_points)) : (r.champ_thru ? "" : "—")}</td>
@@ -6139,16 +6148,22 @@
                         ? `<a href="#race=tfc&player=${r.customer_id}" class="cell-link" title="See their spot on THE FELLOWSHIP CUP" onclick="event.stopPropagation(); prJumpToRaceRow('tfc', ${r.customer_id}); return false;">${prFmtReset(r.points_reset)}</a>`
                         : prFmtReset(r.points_reset)}</td>
                    ${showRounds ? `<td style="${rndStyle}" class="pr-rnd">${r.tournaments ?? ""}</td>` : ""}`;
-            const moveCell = liveMode
+            const moveCell = (liveMode && !cupSlim)
                 ? `<td style="${mvStyle}">${prDayMove(r.move) || '<span style="color:#cbd5e1;">&ndash;</span>'}</td>` : "";
+            // Slim phones: MOVE stacks under the rank number; THRU rides
+            // under the player's name (tee time muted, holes/F green).
+            const rankMoveSub = cupSlim
+                ? `<div style="line-height:1.1;">${prDayMove(r.move) || ""}</div>` : "";
+            const thruSub = (cupSlim && r.champ_thru)
+                ? `<div style="font-size:0.64rem;font-weight:600;line-height:1.4;${/\d:\d\d/.test(String(r.champ_thru)) ? "color:var(--text-muted);" : "color:#15803d;"}">${/\d:\d\d/.test(String(r.champ_thru)) ? "" : "THRU "}${escapeHtml(String(r.champ_thru).replace(/\s*([AaPp])\.?M\.?/, (_, g) => g.toLowerCase()))}</div>` : "";
             return `<tr style="${bg}${expandable ? 'cursor:pointer;' : ''}"${r.member_card_id ? ` data-card="${r.member_card_id}"` : ''}${r.customer_id ? ` data-cid="${r.customer_id}"` : ''}${champAttrs} data-pname="${escapeHtml(r.player_name || "")}">
-                <td style="${rankStyle}white-space:nowrap;">${escapeHtml(r._flightRank ?? r.rank)}${liveMode ? "" : prRankMove(r.rank, r.prev_rank)}</td>
+                <td style="${rankStyle}white-space:nowrap;">${escapeHtml(r._flightRank ?? r.rank)}${liveMode ? "" : prRankMove(r.rank, r.prev_rank)}${rankMoveSub}</td>
                 ${moveCell}
-                <td>${nameCell}${showChapter ? prChapterBadge(r.player_chapter) : ""}${hcp}${statusPill}${r.customer_id && champIds.has(r.customer_id)
+                <td${cupSlim ? ' style="white-space:normal;"' : ''}>${nameCell}${showChapter ? prChapterBadge(r.player_chapter) : ""}${hcp}${statusPill}${r.customer_id && champIds.has(r.customer_id)
                     ? (compact
                         ? ` <span title="${escapeHtml(champTitle)}" style="font-size:0.9em;vertical-align:1px;">&#127942;</span>`
                         : ` <span title="${escapeHtml(champTitle)}" style="display:inline-block;padding:1px 6px;border-radius:9999px;font-size:0.62rem;font-weight:700;letter-spacing:0.04em;background:#FEF3C7;color:#92400E;border:1px solid #F59E0B;vertical-align:1px;">&#127942; ${coChamp ? "CO-CHAMPION" : "CHAMPION"} &middot; LSC ${coChamp ? "CO-" : ""}CAPTAIN</span>`)
-                    : ""}${chevron}${compact && !prRaceFinal ? "" : prPayBadge(r)}</td>
+                    : ""}${chevron}${compact && !prRaceFinal ? "" : prPayBadge(r)}${thruSub}</td>
                 <td style="${ptsStyle}">${cupMode ? prFmtReset(r.points_reset) : (r.total_points ?? "")}</td>
                 ${midCells}
                 ${showBuy ? `<td style="${buyStyle}">${badge}</td>` : ""}
@@ -6203,11 +6218,11 @@
         const theadHtml = cupMode
             ? `<tr>
                     <th rowspan="2" style="${rankStyle}">${compact ? "#" : "Rank"}</th>
-                    <th rowspan="2" style="${mvStyle}" title="Day movement">&#8597;</th>
+                    ${cupSlim ? "" : `<th rowspan="2" style="${mvStyle}" title="Day movement">&#8597;</th>`}
                     <th rowspan="2" style="width:99%;">Player</th>
                     <th rowspan="2" style="${ptsStyle}line-height:1.25;" title="Season points reset — the cups' starting totals">POINTS<br>RESET</th>
                     <th colspan="${cupCols.length}" style="text-align:center;${pad6}border-right:2px solid #cbd5e1;border-bottom:1px dashed #cbd5e1;font-size:${compact ? "0.6rem" : "0.72rem"};letter-spacing:0.06em;">TGF CHAMP</th>
-                    ${showThru ? `<th rowspan="2" style="${thruStyle}" title="Holes completed today — or the tee time if they haven't started">THRU</th>` : ""}
+                    ${showThru && !cupSlim ? `<th rowspan="2" style="${thruStyle}" title="Holes completed today — or the tee time if they haven't started">THRU</th>` : ""}
                     <th rowspan="2" style="${statCol}line-height:1.25;border-right:2px solid #cbd5e1;" title="Points reset + championship rounds — the cup is decided on this number">CUP<br>TOTAL</th>
                     ${showBuy ? `<th rowspan="2" style="${buyStyle}" title="Buy-in">Buy-in</th>` : ""}
                 </tr>
@@ -6390,7 +6405,13 @@
             ? cupFetchedF.concat(d.champ_boards_pending || [])
             : [];
         const resetThOv = `${window.TGF_STAT_COL(compact)}border-left:2px solid #cbd5e1;border-right:2px solid #cbd5e1;`;
-        const roundTh = `${window.TGF_STAT_COL(compact)}border-right:2px solid #cbd5e1;`;
+        // SLIM phone cup layout (Kerry-ratified 2026-08-13): the four cup
+        // columns starved the fixed-layout Player column and names painted
+        // over their neighbours. Phones keep # | Player | RESET | rounds |
+        // CUP TOTAL on one screen — CITY RANK folds into the row
+        // expansion, THRU rides under the player's name, names wrap.
+        const cupSlimF = cupChamp && compact;
+        const roundTh = `${window.TGF_STAT_COL(compact)}${cupSlimF ? "width:40px;" : ""}border-right:2px solid #cbd5e1;`;
         const thruThF = (compact ? "width:46px;text-align:center;padding-left:6px;padding-right:6px;" : window.TGF_STAT_COL(compact)) + "border-right:2px solid #cbd5e1;";
         const totalTh = `${window.TGF_STAT_COL(compact)}font-weight:700;border-right:2px solid #cbd5e1;`;
         const rows = d.standings.map(r => {
@@ -6423,9 +6444,11 @@
                     ? escapeHtml(compact ? String(r.champ_thru).replace(/\s*([AaPp])\.?M\.?/, (_, g) => g.toLowerCase()) : String(r.champ_thru))
                     : "—";
                 champCells += `
-                <td style="${thruThF}font-size:${compact ? "0.68rem" : "0.85rem"};white-space:nowrap;${/\d:\d\d/.test(r.champ_thru || "") ? "color:var(--text-muted);" : "font-weight:600;"}">${thruTxt}</td>
+                ${cupSlimF ? "" : `<td style="${thruThF}font-size:${compact ? "0.68rem" : "0.85rem"};white-space:nowrap;${/\d:\d\d/.test(r.champ_thru || "") ? "color:var(--text-muted);" : "font-weight:600;"}">${thruTxt}</td>`}
                 <td style="${totalTh}font-weight:800;">${r.cup_total != null ? r.cup_total : prFmtReset(r.points_reset)}</td>`;
             }
+            const thruSubF = (cupSlimF && r.champ_thru)
+                ? `<div style="font-size:0.64rem;font-weight:600;line-height:1.4;${/\d:\d\d/.test(String(r.champ_thru)) ? "color:var(--text-muted);" : "color:#15803d;"}">${/\d:\d\d/.test(String(r.champ_thru)) ? "" : "THRU "}${escapeHtml(String(r.champ_thru).replace(/\s*([AaPp])\.?M\.?/, (_, g) => g.toLowerCase()))}</div>` : "";
             const expAttrs = cupChamp && r.customer_id
                 ? `${r.champ_points != null ? ` data-champ-pts="${escapeHtml(String(r.champ_points))}"` : ""}${r.champ_thru ? ` data-champ-thru="${escapeHtml(String(r.champ_thru))}"` : ""}${r.points_reset != null ? ` data-reset="${escapeHtml(String(r.points_reset))}"` : ""} data-pname="${escapeHtml(r.player_name || "")}"`
                 : "";
@@ -6433,10 +6456,10 @@
             const chevF = expandableF
                 ? ' <span class="pr-chevron" style="color:var(--primary);font-size:1.15rem;line-height:1;vertical-align:-2px;" title="Round scorecards">&#9656;</span>'
                 : '';
-            return `<tr${r.customer_id ? ` data-cid="${r.customer_id}"` : ""}${expAttrs} style="${bg}${expandableF ? "cursor:pointer;" : ""}">
+            return `<tr${r.customer_id ? ` data-cid="${r.customer_id}"` : ""}${expAttrs} data-city-rank="${escapeHtml(String(r.net_rank ?? ""))}" style="${bg}${expandableF ? "cursor:pointer;" : ""}">
                 <td style="${rankTh}">${escapeHtml(r.rank)}${prRankMove(r.rank, r.prev_rank)}</td>
-                <td>${nameCell}${prChapterBadge(r.chapter)}${hcp}${chevF}${prPayBadge(r)}</td>
-                <td style="${netTh}">${cityCell}</td>
+                <td${cupSlimF ? ' style="white-space:normal;"' : ''}>${nameCell}${prChapterBadge(r.chapter)}${hcp}${chevF}${prPayBadge(r)}${thruSubF}</td>
+                ${cupSlimF ? "" : `<td style="${netTh}">${cityCell}</td>`}
                 <td style="${cupChamp ? resetThOv : resetTh}">${prFmtReset(r.points_reset)}</td>${champCells}
             </tr>`;
         }).join("");
@@ -6444,10 +6467,10 @@
         const theadF = cupChamp
             ? `<tr>
                     <th rowspan="2" style="${rankTh}">${compact ? "#" : "Rank"}</th><th rowspan="2" style="width:99%;">Player</th>
-                    <th rowspan="2" style="${netTh}line-height:1.25;" title="Rank in their chapter's City Points race">CITY<br>RANK</th>
+                    ${cupSlimF ? "" : `<th rowspan="2" style="${netTh}line-height:1.25;" title="Rank in their chapter's City Points race">CITY<br>RANK</th>`}
                     <th rowspan="2" style="${resetThOv}line-height:1.25;" title="Season points reset — the Cup's starting totals">POINTS<br>RESET</th>
                     <th colspan="${cupBoardsF.length}" style="text-align:center;padding-left:6px;padding-right:6px;border-right:2px solid #cbd5e1;border-bottom:1px dashed #cbd5e1;font-size:${compact ? "0.6rem" : "0.72rem"};letter-spacing:0.06em;">TGF CHAMP</th>
-                    <th rowspan="2" style="${thruThF}" title="Holes completed today — or the tee time if they haven't started">THRU</th>
+                    ${cupSlimF ? "" : `<th rowspan="2" style="${thruThF}" title="Holes completed today — or the tee time if they haven't started">THRU</th>`}
                     <th rowspan="2" style="${totalTh}line-height:1.25;" title="Points reset + championship rounds — the Cup is decided on this number">CUP<br>TOTAL</th>
                 </tr>
                 <tr>${cupBoardsF.map(bl => `<th style="${roundTh}" title="${escapeHtml(bl)} championship points">${escapeHtml(compact ? bl.replace(/round\s*/i, "R") : bl.replace(/round\s*/i, "RD "))}</th>`).join("")}</tr>`
