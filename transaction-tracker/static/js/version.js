@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.236.1";
+window.TGF_VERSION = "2.236.2";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.236.2",
+    date: "2026-08-13",
+    changes: [
+      "The cup boards' round columns stop collapsing onto CUP TOTAL (Kerry's 6:12 screenshot — 'Not good enough'): with table-layout:fixed the browser binds column widths from the FIRST header row only, and the RD 1 / RD 2 widths were declared on the SECOND row under the TGF CHAMP group header — so the spanned columns got no width and their numbers painted over each other. Both cup tables now carry an explicit colgroup that pins every column's width regardless of the two-row header, phones and desktop alike.",
+    ],
+  },
   {
     version: "2.236.1",
     date: "2026-08-13",

@@ -6246,8 +6246,25 @@
                            ${showRounds ? `<th style="${rndStyle}" class="pr-rnd" title="Rounds">Rounds</th>` : ""}`}
                     ${showBuy ? `<th style="${buyStyle}" title="Buy-in">Buy-in</th>` : ""}
                 </tr>`;
+        // With table-layout:fixed, column widths bind from the FIRST
+        // header row only — the round ths under the TGF CHAMP colspan
+        // were ignored and the spanned columns collapsed onto CUP TOTAL.
+        // A colgroup pins every cup-mode column explicitly.
+        const colgroupCup = cupMode
+            ? `<colgroup>
+                <col style="width:${compact ? 28 : 56}px">
+                ${cupSlim ? "" : `<col style="width:${compact ? 24 : 44}px">`}
+                <col>
+                <col style="width:${compact ? 50 : 110}px">
+                ${cupCols.map(() => `<col style="width:${compact ? 34 : 110}px">`).join("")}
+                ${showThru && !cupSlim ? `<col style="width:${compact ? 46 : 110}px">` : ""}
+                <col style="width:${compact ? 50 : 110}px">
+                ${showBuy ? `<col style="width:110px">` : ""}
+            </colgroup>`
+            : "";
         $("pr-table-container").innerHTML = testStrip + champStrip + `
             <table class="enrollment-table${compact ? " pr-compact" : ""}">
+                ${colgroupCup}
                 <thead>${theadHtml}</thead>
                 <tbody>${bodyRows}</tbody>
             </table>${extra}`;
@@ -6491,8 +6508,25 @@
         const testStripF = (cupChamp && d.champ_test_phase)
             ? `<div style="margin:0 0 0.6rem;padding:0.55rem 0.75rem;border-radius:8px;background:repeating-linear-gradient(45deg,#FEF3C7,#FEF3C7 12px,#FDE68A 12px,#FDE68A 24px);border:2px dashed #D97706;color:#92400E;font-weight:800;font-size:${compact ? "0.8rem" : "0.9rem"};letter-spacing:0.03em;">&#9888;&#65039; TEST PHASE &mdash; championship scoring is being set up. Scores below are test data and will be cleared before Round 1.</div>`
             : "";
+        // With table-layout:fixed, column widths bind from the FIRST
+        // header row only — the round ths live on the SECOND row under
+        // the TGF CHAMP colspan, so the browser gave those columns no
+        // width and RD 1 / RD 2 / CUP TOTAL painted over each other
+        // (Kerry's 18:12 screenshot). A colgroup pins every column.
+        const colgroupF = cupChamp
+            ? `<colgroup>
+                <col style="width:${compact ? 28 : 56}px">
+                <col>
+                ${cupSlimF ? "" : `<col style="width:${compact ? 50 : 110}px">`}
+                <col style="width:${compact ? 50 : 110}px">
+                ${cupBoardsF.map(() => `<col style="width:${compact ? 40 : 110}px">`).join("")}
+                ${cupSlimF ? "" : `<col style="width:${compact ? 46 : 110}px">`}
+                <col style="width:${compact ? 50 : 110}px">
+            </colgroup>`
+            : "";
         $("pr-table-container").innerHTML = testStripF + `
             <table class="enrollment-table${compact ? " pr-compact" : ""}">
+                ${colgroupF}
                 <thead>${theadF}</thead>
                 <tbody>${rows}</tbody>
             </table>`;
