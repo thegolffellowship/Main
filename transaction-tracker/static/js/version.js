@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.236.3";
+window.TGF_VERSION = "2.236.4";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.236.4",
+    date: "2026-08-13",
+    changes: [
+      "Phone cup rows declutter (Kerry: 'You can hide projected money, handicap, and chapter badge in mobile view or put it in expanded view'): the collapsed rows now carry just rank, name, THRU and the numbers — chapter badge, handicap index, and the PROJECTED money all moved into the tap-to-expand stat line beside City rank. Desktop rows unchanged; both cup boards.",
+    ],
+  },
   {
     version: "2.236.3",
     date: "2026-08-13",

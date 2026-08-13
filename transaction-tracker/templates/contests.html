@@ -5887,8 +5887,12 @@
     // the projected points reset the live table no longer shows.
     function prExpStatLine(tr) {
         const bits = [];
-        // Phones drop the Fellowship Cup's CITY RANK column (slim cup
-        // layout, Kerry-ratified 2026-08-13) — it lives here instead.
+        // Phones drop the collapsed rows' chapter badge, handicap, CITY
+        // RANK and PROJECTED money on the cup boards (Kerry 2026-08-13:
+        // "hide … in mobile view or put it in expanded view") — they
+        // all live here instead.
+        if (tr.dataset.chapter) bits.push(prChapterBadge(tr.dataset.chapter).trim());
+        if (tr.dataset.hcp) bits.push(`Hcp <b>${escapeHtml(tr.dataset.hcp)}</b>`);
         if (tr.dataset.cityRank) bits.push(`City rank <b>${escapeHtml(tr.dataset.cityRank)}</b>`);
         if (tr.dataset.proj) bits.push(`<span title="${escapeHtml(tr.dataset.projTitle || "")}">${prRaceFinal ? "Won" : "Projected"} <b style="color:#15803d;">${prFmtMoney(+tr.dataset.proj)}</b></span>`);
         // Once the reset is OFFICIAL the table's RESET column already
@@ -6127,7 +6131,11 @@
                 + (r.champ_plus
                 ? ` data-champ-plus="${escapeHtml(String(r.champ_plus))}"` : "")
                 + (r._pay ? ` data-proj="${r._pay}" data-proj-title="${escapeHtml(r._payTitle || "")}"` : "")
-                + (r.points_reset != null ? ` data-reset="${escapeHtml(String(r.points_reset))}"` : "");
+                + (r.points_reset != null ? ` data-reset="${escapeHtml(String(r.points_reset))}"` : "")
+                // Slim cup rows hide the chapter badge + handicap — the
+                // expansion stat line re-serves them off these attrs.
+                + (cupSlim && showChapter && r.player_chapter ? ` data-chapter="${escapeHtml(r.player_chapter)}"` : "")
+                + (cupSlim && r.handicap_index != null ? ` data-hcp="${r.handicap_index.toFixed(1)}"` : "");
             // Live: MOVE gets its own column (PGA-style); the season view
             // keeps its inline last-event arrow in the rank cell.
             const thruCellHtml = showThru ? `<td style="${thruStyle}${thruFont}white-space:nowrap;${/\d:\d\d/.test(r.champ_thru || "") ? "color:var(--text-muted);" : "font-weight:600;"}">${escapeHtml(compact ? String(r.champ_thru || "—").replace(/\s*([AaPp])\.?M\.?/, (_, g) => g.toLowerCase()) : (r.champ_thru || "—"))}</td>` : "";
@@ -6166,7 +6174,7 @@
             return `<tr style="${bg}${expandable ? 'cursor:pointer;' : ''}"${r.member_card_id ? ` data-card="${r.member_card_id}"` : ''}${r.customer_id ? ` data-cid="${r.customer_id}"` : ''}${champAttrs} data-pname="${escapeHtml(r.player_name || "")}">
                 <td style="${rankStyle}white-space:nowrap;">${escapeHtml(r._flightRank ?? r.rank)}${liveMode ? "" : prRankMove(r.rank, r.prev_rank)}${rankMoveSub}</td>
                 ${moveCell}
-                <td${cupSlim ? ' style="white-space:normal;"' : ''}>${nameCell}${showChapter ? prChapterBadge(r.player_chapter) : ""}${hcp}${statusPill}${r.customer_id && champIds.has(r.customer_id)
+                <td${cupSlim ? ' style="white-space:normal;"' : ''}>${nameCell}${showChapter && !cupSlim ? prChapterBadge(r.player_chapter) : ""}${cupSlim ? "" : hcp}${statusPill}${r.customer_id && champIds.has(r.customer_id)
                     ? (compact
                         ? ` <span title="${escapeHtml(champTitle)}" style="font-size:0.9em;vertical-align:1px;">&#127942;</span>`
                         : ` <span title="${escapeHtml(champTitle)}" style="display:inline-block;padding:1px 6px;border-radius:9999px;font-size:0.62rem;font-weight:700;letter-spacing:0.04em;background:#FEF3C7;color:#92400E;border:1px solid #F59E0B;vertical-align:1px;">&#127942; ${coChamp ? "CO-CHAMPION" : "CHAMPION"} &middot; LSC ${coChamp ? "CO-" : ""}CAPTAIN</span>`)
@@ -6483,13 +6491,18 @@
             const expAttrs = cupChamp && r.customer_id
                 ? `${r.champ_points != null ? ` data-champ-pts="${escapeHtml(String(r.champ_points))}"` : ""}${r.champ_thru ? ` data-champ-thru="${escapeHtml(String(r.champ_thru))}"` : ""}${r.points_reset != null ? ` data-reset="${escapeHtml(String(r.points_reset))}"` : ""} data-pname="${escapeHtml(r.player_name || "")}"`
                 : "";
+            // Slim cup rows hide the chapter badge, handicap and the
+            // PROJECTED money — the expansion stat line re-serves them.
+            const slimAttrs = cupSlimF
+                ? `${r.chapter ? ` data-chapter="${escapeHtml(r.chapter)}"` : ""}${r.handicap_index != null ? ` data-hcp="${r.handicap_index.toFixed(1)}"` : ""}${r._pay ? ` data-proj="${r._pay}" data-proj-title="${escapeHtml(r._payTitle || "")}"` : ""}`
+                : "";
             const expandableF = cupChamp && r.customer_id && (r.champ_points != null || r.champ_thru);
             const chevF = expandableF
                 ? ' <span class="pr-chevron" style="color:var(--primary);font-size:1.15rem;line-height:1;vertical-align:-2px;" title="Round scorecards">&#9656;</span>'
                 : '';
-            return `<tr${r.customer_id ? ` data-cid="${r.customer_id}"` : ""}${expAttrs} data-city-rank="${escapeHtml(String(r.net_rank ?? ""))}" style="${bg}${expandableF ? "cursor:pointer;" : ""}">
+            return `<tr${r.customer_id ? ` data-cid="${r.customer_id}"` : ""}${expAttrs}${slimAttrs} data-city-rank="${escapeHtml(String(r.net_rank ?? ""))}" style="${bg}${expandableF ? "cursor:pointer;" : ""}">
                 <td style="${rankTh}">${escapeHtml(r.rank)}${prRankMove(r.rank, r.prev_rank)}</td>
-                <td${cupSlimF ? ' style="white-space:normal;"' : ''}>${nameCell}${prChapterBadge(r.chapter)}${hcp}${chevF}${prPayBadge(r)}${thruSubF}</td>
+                <td${cupSlimF ? ' style="white-space:normal;"' : ''}>${nameCell}${cupSlimF ? "" : prChapterBadge(r.chapter)}${cupSlimF ? "" : hcp}${chevF}${cupSlimF ? "" : prPayBadge(r)}${thruSubF}</td>
                 ${cupSlimF ? "" : `<td style="${netTh}">${cityCell}</td>`}
                 <td style="${cupChamp ? resetThOv : resetTh}">${prFmtReset(r.points_reset)}</td>${champCells}
             </tr>`;
