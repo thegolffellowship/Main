@@ -149,3 +149,39 @@ per-game numbers with Kerry/Robert rather than assuming the ratios.
   (including the Zapata opt-out and any late roster moves).
 - Sales tax filing due **08-20** — pricing skill certified 08-07,
   unblocked.
+
+## CUP RESOLUTION (wired + verified 2026-08-13 vs Kerry's test scores)
+
+Both cups resolve **POINTS RESET + Round 1 + Round 2** on the Contests
+page (grouped TGF CHAMP header, CUP TOTAL decides; champ rows expand to
+per-round hole-by-hole cards with Round toggles). Verified consistent on
+the 08-13 test boards (v2.234.1): every row reads reset + rounds exactly.
+
+- Boards (dedicated portal `tgf-champ26.golfgenius.com`, league 546813;
+  rounds: practice 1692726 · **R1 1692724** · **R2 1692725**):
+  `gg_champ_points_boards` → fellowship_cup 4749234 ("THE FELLOWSHIP
+  CUP"), players_cup_gross 4749239 ("THE PLAYERS CUP - Overall");
+  `gg_champ_scorecard_boards` → ALL Net 4749269 (ALL Gross twin 4749247).
+  All Round 1, `round_index=2`.
+- **SUNDAY MORNING (or Sat night, when GG releases round 1692725):**
+  discover R2 tournament ids (probe
+  `…/leagues/546813/widgets/tournament_results?shared=false&round=1692725`,
+  extract=links), then append `{"label": "Round 2", "url": …}` entries to
+  BOTH races in `gg_champ_points_boards` and to both keys in
+  `gg_champ_scorecard_boards` (scoring-setting-set bridge). The RD 2
+  column, summing, and the Round 2 card toggle then appear on their own.
+- **Do NOT award cup/season points in GG at close-out** — the Tracker owns
+  cup resolution (reset + rounds). The 08-06 emergency (double-added
+  Players Cup) is why the city boards' dial entries stay disabled. The
+  city-era absorption baseline is archived at
+  `gg_champ_absorb_baseline_players_cup_gross_2026city`; clear the
+  still-in-place `gg_champ_final_board_players_cup_gross` before ever
+  declaring players_cup_gross final.
+- **Plus handicaps (OPEN — needs Kerry/Robert):** the champ ALL Net board
+  exposes no PlayingHandicap column, so the tracker's per-day plus
+  deduction cannot fire. If GG's champ points games do NOT net out plus
+  give-backs (they did not at the city champs), Larson's (+) totals will
+  read high — rule it before payouts.
+- **Handicaps between rounds (Kerry 2026-08-13):** TGF handicaps are
+  already updated in GG; they will be re-updated AFTER Round 1 for
+  Round 2. Run the GG handicap CSV export/upload Saturday evening.
