@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.237.0";
+window.TGF_VERSION = "2.237.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.237.1",
+    date: "2026-08-13",
+    changes: [
+      "A per-round championship card compares against THAT round's board figure, not the two-day sum (caught on the Round 2 test card: the card's board reference read 103 = R1 56 + R2 47). When a board is named, the reference comes from that round's entry in the player's per-day split.",
+    ],
+  },
   {
     version: "2.237.0",
     date: "2026-08-13",

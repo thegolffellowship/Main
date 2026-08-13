@@ -8517,6 +8517,15 @@ def fetch_champ_player_card(race_key: str, customer_id: int,
                        if p.get("customer_id") == int(customer_id)), None)
             if bp:
                 board_points, board_thru = bp.get("points"), bp.get("thru")
+                # A per-round card compares against THAT round's board
+                # figure, not the multi-day sum (caught on the Round 2
+                # test card, 2026-08-13: board said 103 = R1 + R2).
+                if board_label:
+                    day = next((x for x in (bp.get("days") or [])
+                                if x.get("board") == board_label), None)
+                    if day:
+                        board_points = day.get("points")
+                        board_thru = day.get("thru") or board_thru
         except Exception:
             pass
 
