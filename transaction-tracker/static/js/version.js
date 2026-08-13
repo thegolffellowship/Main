@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.236.2";
+window.TGF_VERSION = "2.236.3";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.236.3",
+    date: "2026-08-13",
+    changes: [
+      "THE PLAYERS CUP actually renders in cup mode now: the live-mode gate required the points reset to NOT be official (written for the city championships, where close-out returns the board to the season view) — but the TGF Championship runs AFTER the official reset, so the Players Cup silently fell back to the season view with cup totals painted into the SEASON column. A board whose rows carry cup_total is live regardless of reset state; caught on a headless phone-viewport screenshot pass after Kerry's 'Not good enough'.",
+    ],
+  },
   {
     version: "2.236.2",
     date: "2026-08-13",

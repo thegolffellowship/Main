@@ -5987,7 +5987,14 @@
         // only the presentation returns to the season+reset view. When
         // the TGF Championship goes live this fall, its boards get their
         // own dial config — revisit this gate then.
-        const liveMode = !resetOfficial
+        // Post-reset cup boards (rows carry cup_total) are ALSO live —
+        // the !resetOfficial gate was written for the city championships,
+        // where close-out must return the board to the season view. The
+        // TGF Championship runs AFTER the official reset, so without this
+        // the Players Cup silently rendered the season view with cup
+        // totals in the SEASON column (caught on Kerry's phone 2026-08-13).
+        const cupSignal = (d.standings || []).some(r => r.cup_total != null);
+        const liveMode = (!resetOfficial || cupSignal)
             && ((d.champ_scoring || 0) > 0 || (d.champ_field || 0) > 0);
         const compact = prIsCompact();
         // Phones drop the Buy-in column (the green row already says who is
@@ -6014,7 +6021,7 @@
         // CUP MODE (Kerry 2026-08-13): post-reset races with live TGF
         // Championship boards resolve reset + Rd 1 + Rd 2 — grouped
         // TGF CHAMP header over per-round columns plus a CUP TOTAL.
-        const cupMode = liveMode && (d.standings || []).some(r => r.cup_total != null);
+        const cupMode = liveMode && cupSignal;
         const cupBoards = (cupMode && d.champ && d.champ.boards && d.champ.boards.length)
             ? d.champ.boards : (cupMode ? ["Round 1"] : []);
         // Pending boards (Round 2 before GG releases it) render as blank
