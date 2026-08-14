@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.237.3";
+window.TGF_VERSION = "2.237.4";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.237.4",
+    date: "2026-08-14",
+    changes: [
+      "TOURNAMENT MODE (Kerry: 'We can clear TEST and activate for tournament'): TEST PHASE banner cleared, test scores wiped, and Round 2 date-gated to Sunday — the RD 2 column shows blank/pending with its auto-discovered board URLs already in place, and activates itself on the 16th. Verified live on both cups: R1 active with tee times in THRU, cup totals = reset, no banner. Dial changes only — no code in this release.",
+    ],
+  },
   {
     version: "2.237.3",
     date: "2026-08-14",

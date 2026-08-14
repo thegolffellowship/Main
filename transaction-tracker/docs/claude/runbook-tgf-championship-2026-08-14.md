@@ -169,11 +169,12 @@ the 08-13 test boards (v2.234.1): every row reads reset + rounds exactly.
   Player | RESET | RD 1 | RD 2 | CUP TOTAL on one screen; CITY RANK is
   in the row expansion, THRU sits under the player's name, names wrap.
   Desktop keeps the full column set.
-- **TEST PHASE banner is ON** (`gg_champ_test_phase` = "1", v2.236.1 —
-  Kerry 2026-08-13, so members who wander in during setup know the
-  scores are test data). **SATURDAY MORNING before first tee: clear the
-  dial** (`scoring-setting-set` bridge, set to "0" or delete) — the
-  banner drops instantly, no deploy.
+- **TOURNAMENT MODE IS ACTIVE (2026-08-14, Kerry: "We can clear TEST
+  and activate for tournament")**: `gg_champ_test_phase` = "0" (banner
+  gone), test scores wiped by Kerry, both cups verified live — R1
+  active showing tee times in THRU, R2 a blank pending column. The
+  banner dial stays available if scoring ever needs to be flagged
+  mid-weekend (`scoring-setting-set:gg_champ_test_phase|1`).
 - **ROUND 2 IS AUTOMATIC (v2.237.0, tested live 2026-08-13 on Kerry's
   random R2 scores):** the R2 entries in `gg_champ_points_boards` carry
   `discover` (the round-1692725 tournament_results widget) + `match`
@@ -185,11 +186,12 @@ the 08-13 test boards (v2.234.1): every row reads reset + rounds exactly.
   4749243 (both `round_index=3`). Sunday needs only a VERIFY, not a
   wiring step. Per-round cards compare against their own round's board
   figure (v2.237.1).
-- **AFTER the 08-13 test** (when Kerry clears test scores / re-hides
-  R2): set `"not_before": "2026-08-16"` on both R2 points entries —
-  the column returns to a blank pending state and reactivates itself
-  by date on Sunday. Discovery is independent of not_before, so
-  nothing needs re-wiring.
+- **R2 IS DATE-GATED (done 2026-08-14):** both R2 points entries carry
+  the auto-discovered urls (4749235 / 4749243) plus
+  `"not_before": "2026-08-16"` — a blank pending RD 2 column until
+  Sunday Central date, then it activates itself. NOTHING to do Sunday
+  morning; verify only. Scorecard-dial R2 entries stay in place (used
+  only when the Round 2 toggle asks for that board).
 - **Do NOT award cup/season points in GG at close-out** — the Tracker owns
   cup resolution (reset + rounds). The 08-06 emergency (double-added
   Players Cup) is why the city boards' dial entries stay disabled. The
