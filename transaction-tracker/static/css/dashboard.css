@@ -2959,15 +2959,16 @@ div.mobile-card.row-rsvp-only {
    visible. Use the TGF Orange") ──
    Every expand/collapse indicator is the SAME solid triangle: ▶ (&#9654;)
    closed / ▼ (&#9660;) or a 90° rotation when open, TGF orange, ONE
-   size (Kerry 2026-08-14: "make all chevrons the same size everywhere"
-   — unified at the 1.15rem he ratified for the cup-board rows on
-   08-13). Apply .tgf-exp to the glyph element; each page's existing
-   open-state hook (rotate or glyph swap) rides on top. Do NOT restyle
-   arrows per-page — change the look HERE. */
+   size (Kerry 2026-08-14: "make all chevrons the same size everywhere",
+   then sized down the same day: "Let's go to 75% of that size as a
+   standard across the board. Perhaps .9rem"). Apply .tgf-exp to the
+   glyph element; each page's existing open-state hook (rotate or glyph
+   swap) rides on top. Do NOT restyle arrows per-page — change the look
+   HERE. */
 .tgf-exp {
     display: inline-block;
     color: var(--primary, #E87C3E);
-    font-size: 1.15rem;
+    font-size: 0.9rem;
     line-height: 1;
     vertical-align: -2px;
     font-style: normal;

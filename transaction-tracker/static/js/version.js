@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.238.5";
+window.TGF_VERSION = "2.238.6";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.238.6",
+    date: "2026-08-14",
+    changes: [
+      "The universal chevron standard sizes down to 0.9rem (Kerry: 'Let's go to 75% of that size as a standard across the board. Perhaps .9rem') — one line in dashboard.css .tgf-exp, inherited by every expand arrow app-wide.",
+    ],
+  },
   {
     version: "2.238.5",
     date: "2026-08-14",
