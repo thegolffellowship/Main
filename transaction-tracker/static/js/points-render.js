@@ -698,7 +698,7 @@
             // GG's row OUT of the counted list and move its points (and
             // date) onto the CITY CHAMPIONSHIP line. Counted section
             // only; the first short row is the section divider.
-            let _ccHarvested = "", _ccHarvestedDate = "";
+            let _ccHarvested = "", _ccHarvestedDate = "", _ccHarvestedPos = "";
             if (!opts.plain && evtCol > -1) {
                 const champRe = /championship[^|]*points|points[^|]*championship/i;
                 for (let bi = 0; bi < body.length; bi++) {
@@ -707,6 +707,12 @@
                     if (champRe.test(nb(r[evtCol] || ""))) {
                         if (ptsCol > -1) _ccHarvested = nb(r[ptsCol] || "").trim();
                         if (dateCol > -1) _ccHarvestedDate = nb(r[dateCol] || "").trim();
+                        // Position rides along too (Kerry 2026-08-14: "add
+                        // in position of points for that event") — GG's row
+                        // is the race's own table, so NET races carry the
+                        // championship NET position and the gross race the
+                        // GROSS position, per chapter automatically.
+                        if (posCol > -1) _ccHarvestedPos = nb(r[posCol] || "").trim();
                         body.splice(bi, 1);
                         break;
                     }
@@ -756,7 +762,7 @@
                 } else if (ci === ptsCol) {
                     ccCells.push(`<td style="text-align:center;font-weight:800;color:#BF5700;border-left:2px solid #cbd5e1;border-right:2px solid #cbd5e1;padding-left:6px;padding-right:6px;">${escapeHtml(_cc)}</td>`);
                 } else if (ci === posCol) {
-                    ccCells.push(`<td style="text-align:center;font-weight:700;color:#BF5700;padding-left:6px;padding-right:6px;">${opts.champPos ? escapeHtml(String(opts.champPos)) : ""}</td>`);
+                    ccCells.push(`<td style="text-align:center;font-weight:700;color:#BF5700;padding-left:6px;padding-right:6px;">${opts.champPos ? escapeHtml(String(opts.champPos)) : escapeHtml(_ccHarvestedPos)}</td>`);
                 } else {
                     ccCells.push("<td></td>");
                 }

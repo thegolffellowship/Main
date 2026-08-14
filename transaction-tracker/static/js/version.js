@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.238.6";
+window.TGF_VERSION = "2.238.7";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.238.7",
+    date: "2026-08-14",
+    changes: [
+      "The CITY CHAMPIONSHIP line in season history carries its POSITION (Kerry): harvested from GG's own championship row in the race's points table, so THE FELLOWSHIP CUP histories show the chapter's championship NET position and THE PLAYERS CUP the GROSS position — per chapter automatically, because each history reads its own race's table. Live positions (championship day) still take precedence.",
+      "Chevron standard settles at 0.75rem (Kerry: 'Still a hair big for my liking') — the one-line .tgf-exp dial.",
+    ],
+  },
   {
     version: "2.238.6",
     date: "2026-08-14",
