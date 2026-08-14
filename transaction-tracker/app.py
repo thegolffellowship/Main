@@ -399,6 +399,30 @@ def _no_store_api_responses(resp):
     return resp
 
 
+def _read_app_version() -> str:
+    """TGF_VERSION from static/js/version.js, read once at boot — the
+    cache-buster for versioned static includes (?v=...). Without it a
+    browser can keep serving a pre-deploy points-render.js for hours
+    (Kerry's 2026-08-14 screenshot showed a fix that was already live)."""
+    try:
+        import re as _re
+        p = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                         "static", "js", "version.js")
+        with open(p, encoding="utf-8") as f:
+            m = _re.search(r'TGF_VERSION\s*=\s*"([^"]+)"', f.read(2048))
+        return m.group(1) if m else "0"
+    except Exception:
+        return "0"
+
+
+_APP_VERSION = _read_app_version()
+
+
+@app.context_processor
+def _inject_app_version():
+    return {"app_version": _APP_VERSION}
+
+
 @app.context_processor
 def _inject_shell_flag():
     """Nav Shell v2 kill switch (nav-shell-070926, Kerry-ratified #58).

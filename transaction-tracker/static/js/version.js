@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.238.2";
+window.TGF_VERSION = "2.238.3";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.238.3",
+    date: "2026-08-14",
+    changes: [
+      "The season-history CITY CHAMPIONSHIP line stays historical on EVERY cup-mode row (Kerry: 'Tee time info and hole assignment should not be next to CITY CHAMPIONSHIP. That's not the event this weekend.') — the v2.238.1 fix covered only the Fellowship Cup board; the Players Cup rows kept overlaying the TGF Championship's tee time (and, once R1 scoring started, would have overlaid its live points). Cup-mode rows now carry a marker the history renderer honors on both boards.",
+      "Versioned cache-busting on the shared renderers: contests + customers load tgf-standards.js and points-render.js with ?v=<app version>, so a deploy actually reaches browsers instead of a cached pre-deploy copy serving for hours (Kerry's screenshot showed the unshortened city date from a script that had already been fixed live).",
+    ],
+  },
   {
     version: "2.238.2",
     date: "2026-08-14",
