@@ -6139,8 +6139,10 @@
                 // the season-history CITY CHAMPIONSHIP line must never
                 // wear it (Kerry 2026-08-14: "That's not the event this
                 // weekend"). The marker tells prToggleDetail's history
-                // fetch to keep the city line historical.
-                + (cupMode ? ` data-cup="1"` : "")
+                // fetch to keep the city line historical; cc-race is the
+                // player's CITY board so that line still expands to their
+                // city championship card.
+                + (cupMode ? ` data-cup="1" data-cc-race="${String(r.player_chapter || r.chapter || "").toLowerCase().includes("austin") ? "austin_net" : "san_antonio_net"}"` : "")
                 // Slim cup rows hide the chapter badge + handicap — the
                 // expansion stat line re-serves them off these attrs.
                 + (cupSlim && showChapter && r.player_chapter ? ` data-chapter="${escapeHtml(r.player_chapter)}"` : "")
@@ -6883,6 +6885,14 @@
                             champDate: tr.dataset.champDate || null,
                             champChapter: tr.dataset.champChapter || null,
                             champCourse: tr.dataset.champCourse || null,
+                            // The city line expands to the player's CITY
+                            // championship card (Kerry 2026-08-14: "isn't
+                            // expanding to show scorecard detail like the
+                            // others") — always via their CITY race: the
+                            // cup race keys' scorecard boards now point at
+                            // this weekend's TGF rounds.
+                            champRace: tr.dataset.histRace || tr.dataset.ccRace || (!_cupHist ? raceKey : null),
+                            champCid: tr.dataset.cid || null,
                             netRace: !/gross/.test(_histRace || ""),
                         }) : '<span style="color:var(--text-muted);">No season detail for this player yet.</span>');
                         hBody.dataset.loaded = "1";

@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.238.3";
+window.TGF_VERSION = "2.238.4";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.238.4",
+    date: "2026-08-14",
+    changes: [
+      "The season history's CITY CHAMPIONSHIP line expands to the scorecard again on cup rows (Kerry: 'isn't expanding to show scorecard detail like the others') — and it expands to the player's CITY race card specifically, because the cup race keys' scorecard boards now point at this weekend's TGF rounds. Fellowship rows use their city race; Players Cup rows derive it from the player's chapter.",
+    ],
+  },
   {
     version: "2.238.3",
     date: "2026-08-14",
