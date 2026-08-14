@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.237.4";
+window.TGF_VERSION = "2.237.5";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.237.5",
+    date: "2026-08-14",
+    changes: [
+      "The TGF CHAMP group header wears TGF black with white letters (Kerry) — the brand --surface-dark block over the RD 1 / RD 2 columns on both cup boards, desktop and phone.",
+    ],
+  },
   {
     version: "2.237.4",
     date: "2026-08-14",
