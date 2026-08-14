@@ -310,6 +310,12 @@
             return head + statline + plusNote + `<span style="color:var(--text-muted);">No holes posted yet.</span>`;
         }
         const compact = prIsCompact();
+        // Phones skip the empty PGA-style grids before the round starts
+        // (Kerry 2026-08-14, mobile pass) — the tee time + stat line say
+        // everything; the full dash grid stays the desktop treatment.
+        if (!played.length && compact) {
+            return head + statline + plusNote + `<span style="color:var(--text-muted);">Hole-by-hole card appears once scoring starts.</span>`;
+        }
         // ONE style standard for every hole-by-hole card (Kerry
         // 2026-08-03: "adopt the same style setting for the City
         // Championship scorecard display on everything, including the
@@ -740,7 +746,11 @@
                 if (ci === dateCol) {
                     // default cell padding so the date indents exactly
                     // like the regular event rows (Kerry 2026-08-03)
-                    ccCells.push(`<td style="white-space:nowrap;color:#BF5700;">${opts.champDate ? escapeHtml(prFmtAwardDate(opts.champDate, compact)) : escapeHtml(_ccHarvestedDate)}</td>`);
+                    // SHORT M/D everywhere (Kerry 2026-08-14: "Date for
+                    // city needs shortened everywhere") — matches the
+                    // season rows, and the harvested raw ISO date can no
+                    // longer overflow the phone date column.
+                    ccCells.push(`<td style="white-space:nowrap;color:#BF5700;">${escapeHtml(prFmtAwardDate(opts.champDate || _ccHarvestedDate, true))}</td>`);
                 } else if (ci === evtCol) {
                     ccCells.push(`<td class="pr-wrap" style="font-weight:800;color:#BF5700;">${_ccChev}${_ccLabel}${_ccThru}${_ccCourse}</td>`);
                 } else if (ci === ptsCol) {

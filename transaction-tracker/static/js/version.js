@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.237.6";
+window.TGF_VERSION = "2.238.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.238.0",
+    date: "2026-08-14",
+    changes: [
+      "CITY CHAMPIONSHIP dates shorten everywhere (Kerry): the championship line in every season-history drill-down renders M/D like the season rows — the raw 2026-08-15 was overflowing the phone date column and painting over the event name on cup-row expansions (which never passed a formatted date).",
+      "Phones skip the empty PGA-style scorecard grids before a player tees off: a zero-score championship card collapses to the tee time + stat line ('Hole-by-hole card appears once scoring starts'). Desktop keeps the full dash grid — the ratified Tour-app treatment.",
+      "A PAST round's posted nines no longer ride the live championship card: the adjusted-gross/differential lines are today-gated exactly like the back-nine-first dial (Kerry's screenshot caught an Aug-1 differential under an empty pre-round card).",
+    ],
+  },
   {
     version: "2.237.6",
     date: "2026-08-14",

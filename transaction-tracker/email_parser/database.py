@@ -8586,7 +8586,12 @@ def fetch_champ_player_card(race_key: str, customer_id: int,
                 # handicap diffs for each 18 hole regular season event,
                 # but not the City championships") — the POSTED two-nine
                 # handicap rows, same source as get_scorecard.
-                if _fh and _fh["tee_name"]:
+                # Same TODAY gate as first_hole (Kerry's 08-14 screenshot:
+                # an Aug-1 round's adjusted gross + differential rendered
+                # under an empty championship card) — a PAST round's
+                # posted nines never belong on the LIVE champ card.
+                if _fh and _fh["tee_name"] \
+                        and _fh["round_date"] == today_central_str():
                     _names = {_normalize_player_name(_fh["player_name"] or "")}
                     for lk in _c.execute(
                             "SELECT player_name FROM handicap_player_links "
