@@ -8395,8 +8395,9 @@ def _champ_stableford(net_vs_par, gross) -> "int | None":
     """Championship-scale Stableford for one hole (the ratified chart:
     triple/double 0, bogey 1, par 2, birdie 3, eagle 4, double eagle 5 —
     one above the regular scale in every category; a GROSS ace pays 9
-    regardless of net). The chart ENDS at 5: anything better than a net
-    double eagle still pays 5, which is also exactly how GG buckets it
+    regardless of net). The chart ENDS at 5 — KERRY-RATIFIED 2026-08-14:
+    "We need to max out at 5 for Net scoring which would be for double
+    eagle. Triple eagle net would be 5 too." Matches GG's own bucket
     (caught 2026-08-13 on a net 4-under test hole — we paid 6, GG's own
     per-hole row and board both paid 5, and the board is official)."""
     if net_vs_par is None:

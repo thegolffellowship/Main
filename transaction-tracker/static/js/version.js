@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.237.2";
+window.TGF_VERSION = "2.237.3";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.237.3",
+    date: "2026-08-14",
+    changes: [
+      "RATIFIED (Kerry): championship NET scoring maxes at 5 — double eagle pays 5, and anything rarer (a net triple eagle via handicap dots stacking on a gross eagle) also pays 5. This is the rule v2.237.2 shipped, now recorded as ratified in the side-games spec and the scale's docstring; the gross-ace 9 is unaffected. No behavior change.",
+    ],
+  },
   {
     version: "2.237.2",
     date: "2026-08-13",

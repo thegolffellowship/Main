@@ -387,6 +387,15 @@ category**. Net: Triple 0 · Double 0 · Bogey 1 · Par 2 · Birdie 3 ·
 Eagle 4 · Double Eagle 5 · HIO 9. (~+1 point per hole vs regular
 events — the championship weighting in the season race; see
 scoring.md points model.)
+**NET ceiling (Kerry-ratified 2026-08-14):** the net table MAXES at
+**5** — double eagle pays 5 and anything rarer (net triple eagle+,
+reachable only via handicap dots stacking on a gross eagle) ALSO pays
+5. Verbatim: "We need to max out at 5 for Net scoring which would be
+for double eagle. Triple eagle net would be 5 too." Matches GG's
+"Double Eagle or Better" bucket; surfaced on the 08-13 R2 test card
+(gross eagle + two dots on a par 5 = net 4-under — our formula paid 6,
+GG paid 5). `_champ_stableford` caps accordingly (v2.237.2); the
+GROSS-ace 9 is unaffected.
 
 **MVP vs POINTS structure (admin, 2026-07-05):** MVP is a per-event
 game restricted to NET buyers; the POINTS game is a SEPARATE GG game
