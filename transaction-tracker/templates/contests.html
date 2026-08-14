@@ -6500,7 +6500,7 @@
             const chevF = expandableF
                 ? ' <span class="pr-chevron" style="color:var(--primary);font-size:1.15rem;line-height:1;vertical-align:-2px;" title="Round scorecards">&#9656;</span>'
                 : '';
-            return `<tr${r.customer_id ? ` data-cid="${r.customer_id}"` : ""}${expAttrs}${slimAttrs} data-city-rank="${escapeHtml(String(r.net_rank ?? ""))}" style="${bg}${expandableF ? "cursor:pointer;" : ""}">
+            return `<tr${r.customer_id ? ` data-cid="${r.customer_id}"` : ""}${expAttrs}${slimAttrs}${r.member_card_id ? ` data-card="${escapeHtml(String(r.member_card_id))}"` : ""}${r.hist_race ? ` data-hist-race="${escapeHtml(r.hist_race)}"` : ""} data-city-rank="${escapeHtml(String(r.net_rank ?? ""))}" style="${bg}${expandableF ? "cursor:pointer;" : ""}">
                 <td style="${rankTh}">${escapeHtml(r.rank)}${prRankMove(r.rank, r.prev_rank)}</td>
                 <td${cupSlimF ? ' style="white-space:normal;"' : ''}>${nameCell}${cupSlimF ? "" : prChapterBadge(r.chapter)}${cupSlimF ? "" : hcp}${chevF}${cupSlimF ? "" : prPayBadge(r)}${thruSubF}</td>
                 ${cupSlimF ? "" : `<td style="${netTh}">${cityCell}</td>`}
@@ -6843,9 +6843,13 @@
                     if (hBody.dataset.loaded) return;
                     hBody.innerHTML = '<span style="color:var(--text-muted);">Loading season history…</span>';
                     try {
+                        // Cup rows carry their CITY race's member card
+                        // (data-hist-race) — the cup race key itself has
+                        // no season drill-down (Kerry 2026-08-13).
+                        const _histRace = tr.dataset.histRace || raceKey;
                         const [ptsTables, rounds] = await Promise.all([
                             tr.dataset.card
-                                ? fetch(`/api/season-contests/points-race/detail?race=${encodeURIComponent(raceKey)}&card=${encodeURIComponent(tr.dataset.card)}`)
+                                ? fetch(`/api/season-contests/points-race/detail?race=${encodeURIComponent(_histRace)}&card=${encodeURIComponent(tr.dataset.card)}`)
                                     .then(async r2 => { const d2 = await r2.json(); if (!r2.ok) throw new Error(d2.error || `HTTP ${r2.status}`); return d2.tables; })
                                 : Promise.resolve(null),
                             fetch(`/api/scoring/rounds?customer_id=${encodeURIComponent(tr.dataset.cid)}&limit=40`)
@@ -6860,7 +6864,7 @@
                             champDate: tr.dataset.champDate || null,
                             champChapter: tr.dataset.champChapter || null,
                             champCourse: tr.dataset.champCourse || null,
-                            netRace: !/gross/.test(raceKey || ""),
+                            netRace: !/gross/.test(_histRace || ""),
                         }) : '<span style="color:var(--text-muted);">No season detail for this player yet.</span>');
                         hBody.dataset.loaded = "1";
                         prBindScorecardToggles(hBody);

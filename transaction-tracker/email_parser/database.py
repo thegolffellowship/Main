@@ -8395,12 +8395,15 @@ def _champ_stableford(net_vs_par, gross) -> "int | None":
     """Championship-scale Stableford for one hole (the ratified chart:
     triple/double 0, bogey 1, par 2, birdie 3, eagle 4, double eagle 5 —
     one above the regular scale in every category; a GROSS ace pays 9
-    regardless of net)."""
+    regardless of net). The chart ENDS at 5: anything better than a net
+    double eagle still pays 5, which is also exactly how GG buckets it
+    (caught 2026-08-13 on a net 4-under test hole — we paid 6, GG's own
+    per-hole row and board both paid 5, and the board is official)."""
     if net_vs_par is None:
         return None
     if gross == 1:
         return 9
-    return max(0, 2 - int(net_vs_par))
+    return min(5, max(0, 2 - int(net_vs_par)))
 
 
 def fetch_champ_player_card(race_key: str, customer_id: int,
@@ -9274,6 +9277,13 @@ def get_fellowship_cup_projection(force_refresh: bool = False,
                 # the city flag for snapshots predating cup_enrolled
                 "enrolled": r.get("cup_enrolled", r["enrolled"]),
                 "points_reset": r["points_reset"],
+                # The player's CITY-race drill-down card + which race it
+                # belongs to — the Cup expansion's Season History reads
+                # the city board's member card (Kerry 2026-08-13:
+                # "Season History isn't populating" — Cup rows carried
+                # no card id at all, so the fetch was silently skipped)
+                "member_card_id": r.get("member_card_id"),
+                "hist_race": k,
             })
 
     # TGF CHAMPIONSHIP overlay (Kerry 2026-08-13: "the points races will

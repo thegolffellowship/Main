@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.237.1";
+window.TGF_VERSION = "2.237.2";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.237.2",
+    date: "2026-08-13",
+    changes: [
+      "The one-point card disagreement Kerry flagged is diagnosed to the hole and the rule: R2 #5, par 5, gross eagle + two handicap dots = NET 4-UNDER — a category the ratified championship chart never defines (it ends at double eagle = 5). Our code had implemented the chart as a formula (2 minus net-vs-par) and extrapolated to 6; GG implements it as buckets and saturates at 'double eagle or better' = 5. The formula now stops at the chart's end (5), matching GG; the gross-ace 9 stays. Standings were never exposed — cup totals always read GG's board column; only the card's independent audit recompute differed.",
+      "Season History populates on THE FELLOWSHIP CUP expansions (Kerry: 'Season History isn't populating'): cup rows carried no GG member-card id at all, so the history fetch silently skipped. Each cup row now carries its CITY race's card + race key, and the drill-down loads the player's city season detail exactly like the city boards.",
+    ],
+  },
   {
     version: "2.237.1",
     date: "2026-08-13",
