@@ -6096,7 +6096,7 @@
                 : escapeHtml(r.player_name);
             const expandable = !!(r.member_card_id || r.customer_id);
             const chevron = expandable
-                ? ' <span class="pr-chevron" style="color:var(--primary);font-size:1.15rem;line-height:1;vertical-align:-2px;" title="Round-by-round points & imported scorecards">&#9656;</span>'
+                ? ' <span class="pr-chevron tgf-exp" title="Round-by-round points & imported scorecards">&#9654;</span>'
                 : '';
             const hcp = r.handicap_index != null
                 ? ` <span style="color:var(--text-muted);font-size:0.82em;" title="Current 18-hole handicap index">(${r.handicap_index.toFixed(1)})</span>`
@@ -6327,7 +6327,7 @@
             const open = pre.classList.toggle("open");
             tog.setAttribute("aria-expanded", String(open));
             const ch = tog.querySelector(".pr-pre-chev");
-            if (ch) ch.innerHTML = open ? "&#9662;" : "&#9656;";
+            if (ch) ch.innerHTML = open ? "&#9660;" : "&#9654;";
         });
     })();
 
@@ -6512,7 +6512,7 @@
                 : "";
             const expandableF = cupChamp && r.customer_id && (r.champ_points != null || r.champ_thru);
             const chevF = expandableF
-                ? ' <span class="pr-chevron" style="color:var(--primary);font-size:1.15rem;line-height:1;vertical-align:-2px;" title="Round scorecards">&#9656;</span>'
+                ? ' <span class="pr-chevron tgf-exp" title="Round scorecards">&#9654;</span>'
                 : '';
             return `<tr${r.customer_id ? ` data-cid="${r.customer_id}"` : ""}${expAttrs}${slimAttrs}${r.member_card_id ? ` data-card="${escapeHtml(String(r.member_card_id))}"` : ""}${r.hist_race ? ` data-hist-race="${escapeHtml(r.hist_race)}"` : ""} data-city-rank="${escapeHtml(String(r.net_rank ?? ""))}" style="${bg}${expandableF ? "cursor:pointer;" : ""}">
                 <td style="${rankTh}">${escapeHtml(r.rank)}${prRankMove(r.rank, r.prev_rank)}</td>
@@ -6673,7 +6673,7 @@
                 ? `<a href="/customers?cid=${r.customer_id}" class="cell-link">${escapeHtml(r.player_name)}</a>`
                 : escapeHtml(r.player_name);
             const chevron = r.customer_id
-                ? ' <span class="pr-chevron" style="color:var(--primary);font-size:1.15rem;line-height:1;vertical-align:-2px;" title="This month&#39;s rounds & scorecards">&#9656;</span>'
+                ? ' <span class="pr-chevron tgf-exp" title="This month&#39;s rounds & scorecards">&#9654;</span>'
                 : '';
             let purse = "";
             if (win) purse = `<strong>$${sel.winners[0].share}</strong>`;
@@ -6731,17 +6731,17 @@
         const next = tr.nextElementSibling;
         if (next && next.classList.contains("pr-mo-detail")) {
             next.remove();
-            if (chev) chev.innerHTML = "&#9656;";
+            if (chev) chev.innerHTML = "&#9654;";
             return;
         }
         const cont = $("pr-table-container");
         cont.querySelectorAll("tr.pr-mo-detail").forEach(x => x.remove());
-        cont.querySelectorAll(".pr-chevron").forEach(c => c.innerHTML = "&#9656;");
+        cont.querySelectorAll(".pr-chevron").forEach(c => c.innerHTML = "&#9654;");
         const detail = document.createElement("tr");
         detail.className = "pr-mo-detail";
         detail.innerHTML = `<td colspan="${tr.children.length}" class="pr-wrap" style="background:#f8fafc;padding:${prIsCompact() ? "0.5rem 0" : "0.6rem 0"};color:var(--text-muted);">Loading rounds…</td>`;
         tr.after(detail);
-        if (chev) chev.innerHTML = "&#9662;";
+        if (chev) chev.innerHTML = "&#9660;";
         const cell = detail.firstElementChild;
         try {
             // GG points detail (chapter season page) and imported scorecards
@@ -6784,18 +6784,18 @@
         const next = tr.nextElementSibling;
         if (next && next.classList.contains("pr-detail-row")) {
             next.remove();
-            if (chev) chev.innerHTML = "&#9656;";
+            if (chev) chev.innerHTML = "&#9654;";
             return;
         }
         const cont = $("pr-table-container");
         cont.querySelectorAll("tr.pr-detail-row").forEach(x => x.remove());
-        cont.querySelectorAll(".pr-chevron").forEach(c => c.innerHTML = "&#9656;");
+        cont.querySelectorAll(".pr-chevron").forEach(c => c.innerHTML = "&#9654;");
 
         const detail = document.createElement("tr");
         detail.className = "pr-detail-row";
         detail.innerHTML = `<td colspan="${tr.children.length}" class="pr-wrap" style="background:#f8fafc;padding:${prIsCompact() ? "0.5rem 0" : "0.6rem 0"};color:var(--text-muted);">Loading player detail…</td>`;
         tr.after(detail);
-        if (chev) chev.innerHTML = "&#9662;";
+        if (chev) chev.innerHTML = "&#9660;";
         const cell = detail.firstElementChild;
 
         // LIVE championship expansion (Kerry 2026-08-01, PGA-style): while
@@ -6840,7 +6840,7 @@
                 cell.innerHTML = _togglesHtml
                     + `<div class="pr-champ-card-box">${prRenderChampCard(data)}</div>`
                     + `<div style="margin-top:0.55rem;">
-                         <button type="button" class="pr-hist-toggle" style="display:inline-flex;align-items:center;gap:6px;height:26px;padding:0 12px;background:#F3F2EF;color:#4B5563;border:1px solid var(--border);border-radius:9999px;font:700 10.5px/1 'Bitter',serif;letter-spacing:1px;text-transform:uppercase;cursor:pointer;">Season history <span style="color:var(--primary);font-size:0.8rem;">&#9656;</span></button>
+                         <button type="button" class="pr-hist-toggle" style="display:inline-flex;align-items:center;gap:6px;height:26px;padding:0 12px;background:#F3F2EF;color:#4B5563;border:1px solid var(--border);border-radius:9999px;font:700 10.5px/1 'Bitter',serif;letter-spacing:1px;text-transform:uppercase;cursor:pointer;">Season history <span class="tgf-exp">&#9654;</span></button>
                          <a class="pr-spt-pill" href="${window.MEMBER_MODE ? "/member/spotlight" : "/spotlight"}?player=${tr.dataset.cid}" style="margin-left:6px;">Full Spotlight &rarr;</a>
                        </div>
                        <div class="pr-hist-body" style="display:none;margin-top:0.5rem;"></div>`;
@@ -6849,11 +6849,11 @@
                 hTog.addEventListener("click", async () => {
                     if (hBody.style.display !== "none") {
                         hBody.style.display = "none";
-                        hTog.querySelector("span").innerHTML = "&#9656;";
+                        hTog.querySelector("span").innerHTML = "&#9654;";
                         return;
                     }
                     hBody.style.display = "block";
-                    hTog.querySelector("span").innerHTML = "&#9662;";
+                    hTog.querySelector("span").innerHTML = "&#9660;";
                     if (hBody.dataset.loaded) return;
                     hBody.innerHTML = '<span style="color:var(--text-muted);">Loading season history…</span>';
                     try {

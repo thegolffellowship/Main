@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.238.4";
+window.TGF_VERSION = "2.238.5";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.238.5",
+    date: "2026-08-14",
+    changes: [
+      "ONE chevron everywhere (Kerry: 'Can we make all chevrons the same size everywhere? I see three different sizes'): the .tgf-exp expand-arrow standard in dashboard.css is now the single source at 1.15rem — the size Kerry ratified for the cup boards on 08-13 — and the points-board row chevrons stop carrying their own inline size and small-triangle glyph (▸ 0.85-1.15rem drift) in favor of the standard solid ▶/▼. Season History pill, monthly rows, history event rows, city-championship line, handicaps and spotlight arrows all inherit the same glyph, color and size. Race-dropdown carets stay their own (different idiom).",
+    ],
+  },
   {
     version: "2.238.4",
     date: "2026-08-14",
