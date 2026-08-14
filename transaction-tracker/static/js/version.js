@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.238.0";
+window.TGF_VERSION = "2.238.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.238.1",
+    date: "2026-08-14",
+    changes: [
+      "The season history under a CUP row keeps its CITY CHAMPIONSHIP line historical: cup rows' live champ data describes the TGF Championship, and it was riding the city line — the 7/31 city row wore Saturday's tee time pre-round, and once R1 scoring started it would have swapped the harvested city points for live TGF points. The cup-row history now renders the city championship exactly as it finished; live TGF figures stay on the cup board and its card.",
+    ],
+  },
   {
     version: "2.238.0",
     date: "2026-08-14",

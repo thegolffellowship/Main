@@ -6863,10 +6863,17 @@
                                 .catch(() => []),
                         ]);
                         const claimed = new Set();
+                        // Cup rows' champ data describes the TGF
+                        // CHAMPIONSHIP — never overlay it on the season
+                        // history's CITY CHAMPIONSHIP line (it wore the
+                        // TGF tee time pre-round and would have swapped
+                        // the harvested city points for live TGF points
+                        // once Saturday scoring started).
+                        const _cupHist = !!tr.dataset.histRace;
                         hBody.innerHTML = (ptsTables ? prRenderDetailTables(ptsTables, rounds, claimed, {
-                            champPoints: tr.dataset.champPts != null ? tr.dataset.champPts : null,
-                            champThru: tr.dataset.champThru || null,
-                            champPos: tr.dataset.champPos || null,
+                            champPoints: !_cupHist && tr.dataset.champPts != null ? tr.dataset.champPts : null,
+                            champThru: (!_cupHist && tr.dataset.champThru) || null,
+                            champPos: (!_cupHist && tr.dataset.champPos) || null,
                             champDate: tr.dataset.champDate || null,
                             champChapter: tr.dataset.champChapter || null,
                             champCourse: tr.dataset.champCourse || null,
