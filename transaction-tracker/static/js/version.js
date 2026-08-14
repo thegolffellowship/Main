@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.237.5";
+window.TGF_VERSION = "2.237.6";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.237.6",
+    date: "2026-08-14",
+    changes: [
+      "The TGF CHAMP column group's OUTER edges are 50% darker (Kerry): the divider between POINTS RESET and RD 1 and the one closing the last round column step from #cbd5e1 to #64748b (same slate hue, half the lightness), full column height on both cup boards. The internal RD 1 / RD 2 divider keeps the standard light rule so the group reads as one framed block.",
+    ],
+  },
   {
     version: "2.237.5",
     date: "2026-08-14",
