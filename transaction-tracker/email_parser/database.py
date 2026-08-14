@@ -39697,7 +39697,18 @@ def get_event_financial_summary(event_name: str, db_path: str | Path | None = No
 
         parent_items = [i for i in all_items if not i.get("parent_item_id")]
         active_parents = [i for i in parent_items if i.get("transaction_status") not in ("credited", "refunded", "transferred")]
-        comp_count = sum(1 for i in active_parents if (i.get("email_uid") or "").startswith("manual-comp") and i.get("transaction_status") != "wd")
+        # A comp is a row that STAYED free — priced $0. The manual-comp
+        # uid alone is how the row was CREATED, and a player added via
+        # comp mode who then paid (price rewritten, payment recorded)
+        # is a paid player (Kerry 2026-08-14: Barstow's $420 Venmo entry
+        # counted as a comp on the championship because of the uid).
+        def _is_zero_price(i):
+            return (str(i.get("item_price") or "").strip().lower()
+                    in ("$0.00", "$0.00 (comp)", "$0", "0", ""))
+        comp_count = sum(1 for i in active_parents
+                         if (i.get("email_uid") or "").startswith("manual-comp")
+                         and _is_zero_price(i)
+                         and i.get("transaction_status") != "wd")
         rsvp_count = sum(1 for i in active_parents if i.get("transaction_status") == "rsvp_only")
         wd_count = sum(1 for i in active_parents if i.get("transaction_status") == "wd")
         paid_count = len(active_parents) - comp_count - rsvp_count - wd_count

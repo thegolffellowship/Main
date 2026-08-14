@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.238.1";
+window.TGF_VERSION = "2.238.2";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.238.2",
+    date: "2026-08-14",
+    changes: [
+      "A comp is a row that STAYED free: the event financial summary counted any player added through the comp-mode Add Player flow as a comp forever, even after their price was rewritten and a real payment recorded (Barstow's $420 Venmo championship entry read as one of '2 comps'). The comp count now also requires a $0 price, so the championship reads 32 paid / 1 comp (Straiton).",
+    ],
+  },
   {
     version: "2.238.1",
     date: "2026-08-14",
