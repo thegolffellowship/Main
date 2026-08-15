@@ -391,7 +391,7 @@
                 <tr><td style="${lbl}${sectTop}font-weight:700;">${L.gs}</td>${grossRow}<td style="${td}${sectTop}font-weight:700;background:#f1f5f9;">${sumOr(hs, "gross")}</td></tr>
                 ${grossMode ? "" : `<tr><td style="${lbl}${sectTop}font-weight:700;" title="Gross minus handicap strokes received on the hole">${L.ns}</td>${netRow}<td style="${td}${sectTop}font-weight:700;background:#f1f5f9;">${sumOr(hs, "net")}</td></tr>`}
                 <tr><td style="${lbl}${band}${sectBot}" title="Championship-scale stableford points per hole">${L.pts}</td>${ptsRow}<td style="${td}${band}${sectBot}">${sumOr(hs, "pts")}</td></tr>
-                ${isLast && pTot != null ? `<tr><td colspan="${hs.length + 1}" style="border:1px solid transparent;text-align:right;vertical-align:middle;font-weight:700;color:#BF5700;font-size:0.85em;line-height:1;letter-spacing:0.05em;padding:0 8px 0 0;white-space:nowrap;">CHAMPIONSHIP TOTAL</td><td style="${td}${band}font-weight:800;border:2px solid #BF5700;vertical-align:middle;" title="18-hole championship points total">${pTot}</td></tr>` : ""}
+                ${isLast && pTot != null ? `<tr><td colspan="${hs.length + 1}" style="border:1px solid transparent;text-align:right;vertical-align:middle;font-weight:700;color:#BF5700;font-size:0.85em;line-height:1;letter-spacing:0.05em;padding:0 8px 0 0;white-space:nowrap;">${/fellowship_cup|players_cup/.test(String(card.race || "")) ? "TGF" : "CITY"} CHAMPIONSHIP TOTAL</td><td style="${td}${band}font-weight:800;border:2px solid #BF5700;vertical-align:middle;" title="18-hole championship points total">${pTot}</td></tr>` : ""}
             </table>`;
         };
         const front = holes.filter(h => h.hole <= 9);

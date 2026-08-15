@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.238.7";
+window.TGF_VERSION = "2.238.8";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.238.8",
+    date: "2026-08-15",
+    changes: [
+      "The hole-by-hole card's total names its event (Kerry, R1 morning): TGF CHAMPIONSHIP TOTAL on the cup cards, CITY CHAMPIONSHIP TOTAL on the city cards — decided by the card's race key.",
+    ],
+  },
   {
     version: "2.238.7",
     date: "2026-08-14",
