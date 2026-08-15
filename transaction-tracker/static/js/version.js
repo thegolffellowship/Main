@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.240.2";
+window.TGF_VERSION = "2.240.3";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.240.3",
+    date: "2026-08-15",
+    changes: [
+      "Championship card header polish (Kerry, R1 live): the duplicate 'thru N' line under the course name is gone (the board row above already says THRU — the head line now appears only pre-round as 'tees off H:MM'); the TEES PLAYED ride to the right of the course name, straight off GG's tee header minus its '1 -' ordering prefix; the expanded stat line's Hcp label is now all-caps HCP; and the player's PLAYING handicap slots in right after it (e.g. HCP 4.2 · Playing 5), injected at card render since GG only reveals it with the scorecard.",
+    ],
+  },
   {
     version: "2.240.2",
     date: "2026-08-15",

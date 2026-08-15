@@ -5892,7 +5892,7 @@
         // "hide … in mobile view or put it in expanded view") — they
         // all live here instead.
         if (tr.dataset.chapter) bits.push(prChapterBadge(tr.dataset.chapter).trim());
-        if (tr.dataset.hcp) bits.push(`Hcp <b>${escapeHtml(tr.dataset.hcp)}</b>`);
+        if (tr.dataset.hcp) bits.push(`HCP <b>${escapeHtml(tr.dataset.hcp)}</b>`);
         if (tr.dataset.cityRank) bits.push(`City rank <b>${escapeHtml(tr.dataset.cityRank)}</b>`);
         if (tr.dataset.proj) bits.push(`<span title="${escapeHtml(tr.dataset.projTitle || "")}">${prRaceFinal ? "Won" : "Projected"} <b style="color:#15803d;">${prFmtMoney(+tr.dataset.proj)}</b></span>`);
         // Once the reset is OFFICIAL the table's RESET column already

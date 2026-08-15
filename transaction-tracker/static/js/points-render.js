@@ -293,16 +293,37 @@
         // The venue leads the card (Kerry 2026-08-15: "Where can we put
         // the course name") — GG's own tee-header course name, so TGF
         // cards read Lost Pines and city cards their city venue.
-        const venue = card.course
-            ? `<div style="margin:0 0 0.2rem;font:700 ${big ? "0.82rem" : "0.74rem"}/1.3 'Bitter',Georgia,serif;letter-spacing:0.04em;text-transform:uppercase;color:#4B5563;">${escapeHtml(card.course)}</div>`
+        // Tees played ride to the right of the course (Kerry 2026-08-15:
+        // "Add in tees played to the right of the course name") — GG's
+        // tee header minus its "1 - " ordering prefix.
+        const teeBit = card.tee
+            ? ` <span style="font-weight:600;color:#9CA3AF;">&middot;</span> <span style="font-weight:600;color:#6B7280;">${escapeHtml(card.tee)}</span>`
             : "";
-        const head = venue + (thruBit
+        const venue = card.course
+            ? `<div style="margin:0 0 0.2rem;font:700 ${big ? "0.82rem" : "0.74rem"}/1.3 'Bitter',Georgia,serif;letter-spacing:0.04em;text-transform:uppercase;color:#4B5563;">${escapeHtml(card.course)}${teeBit}</div>`
+            : "";
+        // Only the TEE TIME earns the head line (Kerry 2026-08-15:
+        // "Remove the 2nd thru" — the board row above already says THRU);
+        // pre-round the tee time is the collapsed card's whole story.
+        const head = venue + (thruBit && thruBit.indexOf("tees off") === 0
             ? `<div style="margin:0 0 0.45rem;font-size:${big ? "0.9rem" : "0.8rem"};font-weight:600;color:#9A5B2E;">${thruBit}</div>`
             : "");
         // Projected winnings / points reset ride here on phones (Kerry
-        // 2026-08-01 — the collapsed rows give that room back to names)
-        const statline = card._statline
-            ? `<div style="font-size:0.78rem;color:#4B5563;margin:-0.15rem 0 0.5rem;">${card._statline}</div>`
+        // 2026-08-01 — the collapsed rows give that room back to names).
+        // The PLAYING handicap slots in right after the HCP index (Kerry
+        // 2026-08-15) — it only exists once the card is fetched, so it is
+        // injected here rather than built with the row's stat line.
+        let statTxt = card._statline || "";
+        if (card.playing_handicap != null) {
+            const _ph = Number(card.playing_handicap);
+            const _fmt = v => (v % 1 ? v.toFixed(1) : String(v));
+            const phBit = `Playing <b>${_ph < 0 ? "+" + _fmt(-_ph) : _fmt(_ph)}</b>`;
+            statTxt = /HCP <b>[^<]*<\/b>/.test(statTxt)
+                ? statTxt.replace(/HCP <b>[^<]*<\/b>/, m => `${m} &middot; ${phBit}`)
+                : (statTxt ? `${phBit} &middot; ${statTxt}` : phBit);
+        }
+        const statline = statTxt
+            ? `<div style="font-size:0.78rem;color:#4B5563;margin:-0.15rem 0 0.5rem;">${statTxt}</div>`
             : "";
         // Plus-handicap deduction (Kerry, championship day 2026-08-01): a
         // plus player's playing handicap comes OFF their points total. The

@@ -8558,7 +8558,7 @@ def fetch_champ_player_card(race_key: str, customer_id: int,
             raise RuntimeError("scorecard partial held no player rows")
 
         pars, sis, ydss = {}, {}, {}
-        card_course = None
+        card_course = card_tee = None
         if player.get("net_id"):
             base = "https://" + urlparse(entry["url"]).netloc
             nurl = (f"{base}/tournaments2/nets/{player['net_id']}"
@@ -8580,6 +8580,12 @@ def fetch_champ_player_card(race_key: str, customer_id: int,
             # tee header, so it is always the round's actual venue.
             if tee and tee.get("course"):
                 card_course = str(tee["course"]).strip()
+            # Tees played ride the card too (Kerry 2026-08-15: "Add in
+            # tees played to the right of the course name") — GG's tee
+            # header minus its "1 - " ordering prefix.
+            if tee and tee.get("tee_name"):
+                card_tee = re.sub(r"^\s*\d+\s*-\s*", "",
+                                  str(tee["tee_name"]).strip()) or None
             pars = (tee or {}).get("par") or {}
             # GG's own tee block carries YARDS + HCP (stroke index) rows —
             # the live source of truth (Kerry 2026-08-03: "HCP row isn't
@@ -8744,6 +8750,7 @@ def fetch_champ_player_card(race_key: str, customer_id: int,
                "scoring": "gross" if gross_mode else "net",
                "first_hole": card_first_hole,
                "course": card_course,
+               "tee": card_tee,
                "nines": nines or None,
                "player_name": entry["name"], "customer_id": int(customer_id),
                "playing_handicap": player.get("playing_handicap"),
