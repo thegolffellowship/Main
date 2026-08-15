@@ -8455,6 +8455,7 @@ def fetch_champ_player_card(race_key: str, customer_id: int,
             raise RuntimeError("scorecard partial held no player rows")
 
         pars, sis, ydss = {}, {}, {}
+        card_course = None
         if player.get("net_id"):
             base = "https://" + urlparse(entry["url"]).netloc
             nurl = (f"{base}/tournaments2/nets/{player['net_id']}"
@@ -8471,6 +8472,11 @@ def fetch_champ_player_card(race_key: str, customer_id: int,
                 # 9 AM must not cost the card its pars for the whole round
                 if tee:
                     _CHAMP_TEE_CACHE[nurl] = tee
+            # The course name rides the card (Kerry 2026-08-15: "Where
+            # can we put the course name...") — straight off GG's own
+            # tee header, so it is always the round's actual venue.
+            if tee and tee.get("course"):
+                card_course = str(tee["course"]).strip()
             pars = (tee or {}).get("par") or {}
             # GG's own tee block carries YARDS + HCP (stroke index) rows —
             # the live source of truth (Kerry 2026-08-03: "HCP row isn't
@@ -8628,6 +8634,7 @@ def fetch_champ_player_card(race_key: str, customer_id: int,
         out = {"race": race_key, "configured": True,
                "scoring": "gross" if gross_mode else "net",
                "first_hole": card_first_hole,
+               "course": card_course,
                "nines": nines or None,
                "player_name": entry["name"], "customer_id": int(customer_id),
                "playing_handicap": player.get("playing_handicap"),

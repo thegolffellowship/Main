@@ -290,9 +290,15 @@
         // row above already names the player) — the 18-hole total renders
         // as a bold orange cell hanging under the last block's PTS sum
         // instead. During live play the thru bit still shows.
-        const head = thruBit
-            ? `<div style="margin:0 0 0.45rem;font-size:${big ? "0.9rem" : "0.8rem"};font-weight:600;color:#9A5B2E;">${thruBit}</div>`
+        // The venue leads the card (Kerry 2026-08-15: "Where can we put
+        // the course name") — GG's own tee-header course name, so TGF
+        // cards read Lost Pines and city cards their city venue.
+        const venue = card.course
+            ? `<div style="margin:0 0 0.2rem;font:700 ${big ? "0.82rem" : "0.74rem"}/1.3 'Bitter',Georgia,serif;letter-spacing:0.04em;text-transform:uppercase;color:#4B5563;">${escapeHtml(card.course)}</div>`
             : "";
+        const head = venue + (thruBit
+            ? `<div style="margin:0 0 0.45rem;font-size:${big ? "0.9rem" : "0.8rem"};font-weight:600;color:#9A5B2E;">${thruBit}</div>`
+            : "");
         // Projected winnings / points reset ride here on phones (Kerry
         // 2026-08-01 — the collapsed rows give that room back to names)
         const statline = card._statline

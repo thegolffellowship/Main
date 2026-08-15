@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.238.8";
+window.TGF_VERSION = "2.238.9";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.238.9",
+    date: "2026-08-15",
+    changes: [
+      "The hole-by-hole card leads with its VENUE (Kerry: 'Where can we put the course name for City Championships and... the TGF Championship?'): a Bitter uppercase course line at the top of every championship card — sourced from GG's own tee header, so the TGF cards read the Lost Pines course and each city card its city venue, on live cards and season-history cards alike.",
+    ],
+  },
   {
     version: "2.238.8",
     date: "2026-08-15",
