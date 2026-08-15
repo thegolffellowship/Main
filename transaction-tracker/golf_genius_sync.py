@@ -964,7 +964,11 @@ def parse_tee_block(fragment: str) -> dict | None:
     header = _unescape(" ".join(hm.group(1).split()))
     # "1 - Blue Tee / SLOPE®: 135 / Course Rating™: 36.6 / TPC San Antonio - Oaks"
     parts = [p.strip() for p in header.split("/")]
-    tee_name = parts[0] if parts else header
+    # Tee names can themselves contain '/' ("Blue/White Combo" at Lost
+    # Pines, Kerry 2026-08-15) — the tee name is everything BEFORE the
+    # SLOPE segment, never just the first '/'-piece.
+    nm = re.split(r"\s*/\s*(?=SLOPE)", header, maxsplit=1)
+    tee_name = nm[0].strip() if nm and nm[0].strip() else header
     slope = rating = None
     course = parts[-1] if len(parts) >= 4 else None
     sm = re.search(r"SLOPE[^:]*:\s*([0-9]+)", header)

@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.240.3";
+window.TGF_VERSION = "2.240.4";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.240.4",
+    date: "2026-08-15",
+    changes: [
+      "Tee names with a slash parse whole (Kerry, R1 live: 'They\\u2019re the BLUE/WHITE Combo Tees'): GG's tee header is slash-delimited ('1 - Blue/White Combo / SLOPE\\u00ae: ... / Course Rating\\u2122: ... / Lost Pines Golf Club') and the parser took only the first piece, truncating the combo tee to 'BLUE'. The tee name is now everything before the SLOPE segment, so the card reads BLUE/WHITE COMBO \\u2014 and any future combo tee at any course parses whole. Course-DB imports pick up the full name on future walks too; existing imported tee rows are left as they are (past events are frozen).",
+    ],
+  },
   {
     version: "2.240.3",
     date: "2026-08-15",
