@@ -382,6 +382,15 @@
             ? card.gross_total
             : (played.length ? holes.reduce((a, h) => a + (h.gross ?? 0), 0) : null);
         const pTot = card.computed_points != null ? card.computed_points : null;
+        // 18-hole SCORE total in the grid (Kerry, R1 live 2026-08-15:
+        // "show 18 hole gross total for the players cup and 18 hole net
+        // total for fellowship cup") — gross races total the GROSS row,
+        // net races the NET row, hanging above the championship points.
+        const nTot = grossMode ? null
+            : (holes.some(h => h.net != null)
+                ? holes.reduce((a, h) => a + (h.net ?? 0), 0) : null);
+        const scoreTot = grossMode ? gTot : nTot;
+        const scoreLbl = grossMode ? "18-HOLE GROSS TOTAL" : "18-HOLE NET TOTAL";
         const sepT = compact ? " · " : " &nbsp;·&nbsp; ";
         // CHAMP PTS band is the championship's faded-orange treatment
         // (Kerry 2026-08-03: match the CITY CHAMPIONSHIP Total row), not
@@ -432,6 +441,7 @@
                 <tr><td style="${lbl}${sectTop}font-weight:700;">${L.gs}</td>${grossRow}<td style="${td}${sectTop}font-weight:700;background:#f1f5f9;">${sumOr(hs, "gross")}</td></tr>
                 ${grossMode ? "" : `<tr><td style="${lbl}${sectTop}font-weight:700;" title="Gross minus handicap strokes received on the hole">${L.ns}</td>${netRow}<td style="${td}${sectTop}font-weight:700;background:#f1f5f9;">${sumOr(hs, "net")}</td></tr>`}
                 <tr><td style="${lbl}${band}${sectBot}" title="Championship-scale stableford points per hole">${L.pts}</td>${ptsRow}<td style="${td}${band}${sectBot}">${sumOr(hs, "pts")}</td></tr>
+                ${isLast && scoreTot != null ? `<tr><td colspan="${hs.length + 1}" style="border:1px solid transparent;text-align:right;vertical-align:middle;font-weight:700;color:#334155;font-size:0.85em;line-height:1;letter-spacing:0.05em;padding:0 8px 0 0;white-space:nowrap;">${scoreLbl}</td><td style="${td}font-weight:800;background:#f1f5f9;border:2px solid #334155;vertical-align:middle;" title="${grossMode ? "18-hole gross score" : "18-hole net score"}">${scoreTot}</td></tr>` : ""}
                 ${isLast && pTot != null ? `<tr><td colspan="${hs.length + 1}" style="border:1px solid transparent;text-align:right;vertical-align:middle;font-weight:700;color:#BF5700;font-size:0.85em;line-height:1;letter-spacing:0.05em;padding:0 8px 0 0;white-space:nowrap;">${/fellowship_cup|players_cup/.test(String(card.race || "")) ? "TGF" : "CITY"} CHAMPIONSHIP TOTAL</td><td style="${td}${band}font-weight:800;border:2px solid #BF5700;vertical-align:middle;" title="18-hole championship points total">${pTot}</td></tr>` : ""}
             </table>`;
         };
@@ -564,7 +574,14 @@
                 ? `<div style="font-size:${compact ? "0.66rem" : "0.76rem"};color:#334155;margin:-0.1rem 0 0.4rem;">${bits2.join(sep)}</div>`
                 : "";
         };
-        const tables = blocks.map(([label, hs]) => {
+        // 18-hole totals hang under the LAST nine when both nines posted
+        // (Kerry, 2026-08-15: "Other 18 hole events also need 18 hole
+        // totals") — gross and net, in the same hanging-cell treatment as
+        // the championship card's totals.
+        const g18 = blocks.length === 2 ? sum(holes, h => h.strokes) : null;
+        const n18 = blocks.length === 2 ? sumPts(holes, netOf) : null;
+        const tables = blocks.map(([label, hs], _bi) => {
+            const isLast = _bi === blocks.length - 1;
             const holeRow = hs.map(h => `<td style="${td}font-weight:700;background:#1B1B1B;color:#fff;">${h.hole_number}</td>`).join("");
             const info = "color:#1D4ED8;";
             const parRow = hs.map(h => `<td style="${td}${info}">${h.par ?? ""}</td>`).join("");
@@ -602,6 +619,8 @@
                 ${opts.hideGrossPts ? "" : `<tr><td style="${lbl}${grey}" title="Gross stableford points per hole">${L.gp}</td>${gpRow}<td ${totGP}>${sumPts(hs, h => h.stableford_gross)}</td></tr>`}
                 <tr><td style="${lbl}${sectTop}font-weight:700;" title="Gross strokes minus handicap strokes received on the hole">${L.ns}</td>${netRow}<td ${totN}>${sumPts(hs, netOf)}</td></tr>
                 <tr><td style="${lbl}${grey}${sectBot}" title="Net stableford points per hole (through the admin formula settings)">${L.np}</td>${npRow}<td ${totNP}>${sumPts(hs, h => h.stableford_net)}</td></tr>
+                ${isLast && g18 ? `<tr><td colspan="${hs.length + 1}" style="border:1px solid transparent;text-align:right;vertical-align:middle;font-weight:700;color:#334155;font-size:0.85em;line-height:1;letter-spacing:0.05em;padding:0 8px 0 0;white-space:nowrap;">18-HOLE GROSS TOTAL</td><td style="${td}font-weight:800;background:#f1f5f9;border:2px solid #334155;vertical-align:middle;" title="18-hole gross score">${g18}</td></tr>` : ""}
+                ${isLast && g18 && n18 !== "" && n18 != null ? `<tr><td colspan="${hs.length + 1}" style="border:1px solid transparent;text-align:right;vertical-align:middle;font-weight:700;color:#334155;font-size:0.85em;line-height:1;letter-spacing:0.05em;padding:0 8px 0 0;white-space:nowrap;">18-HOLE NET TOTAL</td><td style="${td}font-weight:800;background:#f1f5f9;border:2px solid #334155;vertical-align:middle;" title="18-hole net score">${n18}</td></tr>` : ""}
             </table>${nineNote(label)}`;
         }).join("");
 

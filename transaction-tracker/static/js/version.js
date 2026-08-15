@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.240.6";
+window.TGF_VERSION = "2.241.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.241.0",
+    date: "2026-08-15",
+    changes: [
+      "18-HOLE SCORE TOTALS on every 18-hole card (Kerry, R1 live): the championship cards gain a hanging total cell right above the CHAMPIONSHIP TOTAL — 18-HOLE GROSS TOTAL on THE PLAYERS CUP (gross) cards, 18-HOLE NET TOTAL on THE FELLOWSHIP CUP and city (net) cards — in the same hanging-cell treatment as the points total, slate-bordered so the orange points cell stays the hero. Season-history 18-hole scorecards get BOTH totals (gross and net) under their last nine whenever both nines are posted; 9-hole event cards are untouched.",
+    ],
+  },
   {
     version: "2.240.6",
     date: "2026-08-15",
