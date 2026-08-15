@@ -7512,27 +7512,40 @@ def _champ_points_fill_rows(race_key: str, fill_race: str, label: str,
         return rows
     if not roster.get("configured"):
         return rows
+    missing = []
     for cid, entry in (roster.get("by_cid") or {}).items():
+        nm = (entry or {}).get("name") or ""
+        if nm and _cmp_person_key(nm) not in have_keys:
+            missing.append((int(cid), nm))
+    if not missing:
+        return rows
+
+    def _one(cid: int, nm: str):
         try:
-            nm = entry.get("name") or ""
-            if not nm or _cmp_person_key(nm) in have_keys:
-                continue
-            card = fetch_champ_player_card(race_key, int(cid),
+            card = fetch_champ_player_card(race_key, cid,
                                            db_path=db_path,
                                            board_label=label,
                                            roster_race=fill_race)
             if not card.get("configured") or card.get("error"):
-                continue
+                return None
             played = sum(1 for h in (card.get("holes") or [])
                          if h.get("gross") is not None)
             pts = card.get("computed_points")
             thru = ("F" if played >= 18 else str(played)) if played else None
-            rows.append({"name": nm,
-                         "points": (float(pts) if pts is not None else None),
-                         "thru": thru,
-                         "computed": True})
+            return {"name": nm,
+                    "points": (float(pts) if pts is not None else None),
+                    "thru": thru,
+                    "computed": True}
         except Exception:
-            continue
+            return None
+
+    # ~15 missing players × several GG fetches each is too slow serially
+    # for a live-poll endpoint — walk them concurrently.
+    from concurrent.futures import ThreadPoolExecutor
+    with ThreadPoolExecutor(max_workers=min(6, len(missing))) as pool:
+        for row in pool.map(lambda a: _one(*a), missing):
+            if row:
+                rows.append(row)
     return rows
 
 
@@ -8606,24 +8619,30 @@ def fetch_champ_player_card(race_key: str, customer_id: int,
 
         # The champ board's own figure rides along so the card can say
         # when the two disagree (the board stays official).
+        # SKIPPED for compute-fill cards (roster_race set): those cards are
+        # requested FROM INSIDE fetch_champ_points' fill step, before its
+        # cache is written — calling back into fetch_champ_points here is a
+        # re-entrant recursion that hung the live board (2026-08-15, R1).
+        # A filled player has no board figure to compare against anyway.
         board_points = board_thru = None
-        try:
-            live = fetch_champ_points(race_key, db_path=db_path)
-            bp = next((p for p in live.get("players", [])
-                       if p.get("customer_id") == int(customer_id)), None)
-            if bp:
-                board_points, board_thru = bp.get("points"), bp.get("thru")
-                # A per-round card compares against THAT round's board
-                # figure, not the multi-day sum (caught on the Round 2
-                # test card, 2026-08-13: board said 103 = R1 + R2).
-                if board_label:
-                    day = next((x for x in (bp.get("days") or [])
-                                if x.get("board") == board_label), None)
-                    if day:
-                        board_points = day.get("points")
-                        board_thru = day.get("thru") or board_thru
-        except Exception:
-            pass
+        if roster_race is None:
+            try:
+                live = fetch_champ_points(race_key, db_path=db_path)
+                bp = next((p for p in live.get("players", [])
+                           if p.get("customer_id") == int(customer_id)), None)
+                if bp:
+                    board_points, board_thru = bp.get("points"), bp.get("thru")
+                    # A per-round card compares against THAT round's board
+                    # figure, not the multi-day sum (caught on the Round 2
+                    # test card, 2026-08-13: board said 103 = R1 + R2).
+                    if board_label:
+                        day = next((x for x in (bp.get("days") or [])
+                                    if x.get("board") == board_label), None)
+                        if day:
+                            board_points = day.get("points")
+                            board_thru = day.get("thru") or board_thru
+            except Exception:
+                pass
 
         # PLUS-HANDICAP DEDUCTION (Kerry 2026-08-01): the flat deduction
         # the board applies must show on the card too, or the card and the

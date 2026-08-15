@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.239.0";
+window.TGF_VERSION = "2.239.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.239.1",
+    date: "2026-08-15",
+    changes: [
+      "HOTFIX for the v2.239.0 compute-fill: enabling it hung the live fellowship board mid-Round-1. Root cause was re-entrant recursion — the fill asks fetch_champ_player_card for each missing player, and that card fetch called BACK into fetch_champ_points for its board-figure comparison before the points cache was written, looping points → fill → card → points forever. Fill cards (roster_race set) now skip the board-figure lookup entirely (a filled player has no board figure to compare against anyway), and the fill walks its ~15 missing players concurrently (6 workers) so the first uncached board build stays inside live-poll timeouts. The fill flag was pulled from the dial during the incident and is re-enabled with this deploy.",
+    ],
+  },
   {
     version: "2.239.0",
     date: "2026-08-15",
