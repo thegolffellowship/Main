@@ -237,3 +237,18 @@ the 08-13 test boards (v2.234.1): every row reads reset + rounds exactly.
   to `champ_all_net` in `gg_champ_scorecard_boards` — without it the R2
   fill has no card source (4749270 guessed and 404'd; id unknown until
   release).
+- **R1 HANDICAPS BANKED (2026-08-15 evening, Kerry-directed):** all 34
+  rounds posted as TWO 9-hole records each (68 records) via
+  `scoring-hcp-2nines:2026 TGF CHAMPIONSHIP|<per_nine>|apply`, per-nine
+  ratings off Kerry's GG tee sheets — Blue/White tee_id 8730
+  F(36.5/143) B(36.3/135); White 8729 F(36.3/133) B(35.9/133); Green
+  8742 F(34.7/127) B(34.1/124); Red(L) 8741 F(35.3/126) B(35.2/131).
+  Scorecards imported from the re-scoped ALL Net event 4749269 (event
+  3291). GOTCHAS hit on the day: (1) the ALL Net event was originally
+  front-9-scoped — Robert re-scoped to 18 and RE-RAN RESULTS, which
+  re-minted every aggregate id (rosters/caches pick the new ids up
+  automatically); the tracker cannot fix that side. (2) v2.241.1
+  hardened the GG parse against split-chunk partials while diagnosing.
+  R2 SUNDAY: same recipe — import ALL Net R2 scorecards, same per_nine
+  map (tee_ids stable), dry-run, apply. Remember the GG handicap CSV
+  export/upload for R2 uses TONIGHT'S post-R1 indexes.
