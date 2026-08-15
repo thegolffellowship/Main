@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.241.0";
+window.TGF_VERSION = "2.241.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.241.1",
+    date: "2026-08-15",
+    changes: [
+      "GG's split scorecard partials parse whole (found live at R1 close-out: fill players' cards and cup totals dropped to front-nine-only while GG's own page showed all 18). Two hardenings in the shared GG parse layer: the scorecard-details fetch now concatenates EVERY JS string chunk in the partial instead of keeping only the longest (GG can deliver the card as separate front/back chunks), and parse_scorecard_details merges multiple net-line rows for the SAME player into one card (strokes-bearing cells win; different players in a shared partial stay separate; an 18-hole merge recomputes gross as the sum of holes so a per-chunk nine total can't masquerade as the round). Benefits the live cup fill, the row-expansion cards, AND the scorecard import that feeds handicap banking.",
+    ],
+  },
   {
     version: "2.241.0",
     date: "2026-08-15",

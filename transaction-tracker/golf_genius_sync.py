@@ -873,6 +873,29 @@ def _unwrap_js_string(body: str) -> str | None:
                  .replace("\\t", "\t").replace("\\/", "/"))
 
 
+def _unwrap_js_strings(body: str) -> str | None:
+    """Like _unwrap_js_string but concatenates EVERY substantial JS string
+    literal in document order. GG's scorecard-details partial can deliver
+    its HTML as MULTIPLE string chunks (seen live at the 2026-08-15 TGF
+    Championship R1 close-out: the ALL Net aggregate split the card into
+    front-table and back-table chunks) — taking only the longest literal
+    silently dropped a whole nine. Concatenation is safe for the regex
+    parsers: stray non-markup literals match nothing."""
+    parts = []
+    for m in re.finditer(r'"((?:\\.|[^"\\])*)"', body, re.S):
+        s = m.group(1)
+        if len(s) < 50:
+            continue
+        s = s.replace("\\'", "'")
+        try:
+            import json as _json
+            parts.append(_json.loads('"' + s + '"'))
+        except ValueError:
+            parts.append(s.replace('\\"', '"').replace("\\n", "\n")
+                          .replace("\\t", "\t").replace("\\/", "/"))
+    return "\n".join(parts) if parts else None
+
+
 def parse_tournament_aggregates(html: str) -> list:
     """Aggregate (player-row) ids from a v2tournaments page."""
     return list(dict.fromkeys(re.findall(r"/tournaments2/details/(\d+)", html)))
@@ -952,7 +975,40 @@ def parse_scorecard_details(fragment: str) -> dict:
             "gross": _num("sum"),
             "net": _num("net_sum"),
         })
-    return {"flight": flight, "players": players}
+
+    # ONE row per player: GG can render a single player's card as SEVERAL
+    # net-line chunks (the split-chunk partial above) — merge same-name
+    # rows, strokes-bearing hole cells winning, scalars first-non-None.
+    # Different players in a shared partial (foursome details) are
+    # untouched — merging is strictly by name.
+    merged: dict = {}
+    order: list = []
+    for p in players:
+        key = re.sub(r"\s+", " ", (p.get("player_name") or "")).strip().lower()
+        if key and key in merged:
+            m0 = merged[key]
+            for n, h in (p.get("holes") or {}).items():
+                prev = (m0.get("holes") or {}).get(n)
+                if prev is None or (prev.get("strokes") is None
+                                    and h.get("strokes") is not None):
+                    m0.setdefault("holes", {})[n] = h
+            for k in ("playing_handicap", "net_id", "gg_event_id",
+                      "gg_profile_id", "sum_front", "sum_back", "net"):
+                if m0.get(k) is None and p.get(k) is not None:
+                    m0[k] = p[k]
+            # A per-chunk "Total" is that chunk's nine, not the round —
+            # once every hole carries strokes the true gross is their sum
+            hs = m0.get("holes") or {}
+            if all(hs.get(n, {}).get("strokes") is not None
+                   for n in range(1, 19)):
+                m0["gross"] = float(sum(hs[n]["strokes"] for n in range(1, 19)))
+            elif m0.get("gross") is None and p.get("gross") is not None:
+                m0["gross"] = p["gross"]
+        else:
+            if key:
+                merged[key] = p
+            order.append(p)
+    return {"flight": flight, "players": order}
 
 
 def parse_tee_block(fragment: str) -> dict | None:
@@ -1039,7 +1095,7 @@ def fetch_tournament_scorecards(tournament_url: str,
         url = f"{base}/tournaments2/details/{agg}"
         resp = fetch_public_page(url, xhr=True)
         raw.append((url, resp["html"]))
-        frag = _unwrap_js_string(resp["html"])
+        frag = _unwrap_js_strings(resp["html"])
         if not frag:
             continue
         parsed = parse_scorecard_details(frag)
@@ -1055,7 +1111,7 @@ def fetch_tournament_scorecards(tournament_url: str,
                             f"?event_id={p.get('gg_event_id') or ''}")
                     nresp = fetch_public_page(nurl, xhr=True)
                     raw.append((nurl, nresp["html"]))
-                    nfrag = _unwrap_js_string(nresp["html"])
+                    nfrag = _unwrap_js_strings(nresp["html"])
                     tee = parse_tee_block(nfrag) if nfrag else None
                     tee_cache[p["net_id"]] = tee
             p["tee"] = tee

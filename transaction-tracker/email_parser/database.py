@@ -8513,7 +8513,8 @@ def fetch_champ_player_card(race_key: str, customer_id: int,
     import time as _t
     from urllib.parse import urlparse
     from golf_genius_sync import (fetch_public_page, parse_scorecard_details,
-                                  parse_tee_block, _unwrap_js_string)
+                                  parse_tee_block, _unwrap_js_string,
+                                  _unwrap_js_strings)
 
     ck = (race_key, int(customer_id), board_label, roster_race)
     hit = _CHAMP_CARD_CACHE.get(ck)
@@ -8548,7 +8549,7 @@ def fetch_champ_player_card(race_key: str, customer_id: int,
         resp = fetch_public_page(entry["url"], xhr=True)
         if resp["status_code"] != 200:
             raise RuntimeError(f"GG returned HTTP {resp['status_code']}")
-        frag = _unwrap_js_string(resp["html"]) or resp["html"]
+        frag = _unwrap_js_strings(resp["html"]) or resp["html"]
         parsed = parse_scorecard_details(frag)
         want = _cmp_person_key(entry["name"])
         player = next((p for p in parsed["players"]
@@ -8567,7 +8568,7 @@ def fetch_champ_player_card(race_key: str, customer_id: int,
             if tee is None:
                 try:
                     nresp = fetch_public_page(nurl, xhr=True)
-                    nfrag = _unwrap_js_string(nresp["html"]) or ""
+                    nfrag = _unwrap_js_strings(nresp["html"]) or ""
                     tee = parse_tee_block(nfrag) if nfrag else None
                 except Exception:
                     tee = None      # pars are additive — the card still renders
