@@ -7476,6 +7476,66 @@ def _champ_persist_discovered(race_key: str, label: str, url: str,
         logger.exception("persisting discovered board url (scorecard dial)")
 
 
+def _champ_fill_source(race_key: str,
+                       db_path: str | Path = DB_PATH) -> "str | None":
+    """The race whose scorecard roster backfills players missing from
+    this race's points board — the 'fill_missing_from' flag on any of
+    the race's gg_champ_points_boards entries (rules-as-data)."""
+    try:
+        board = champ_points_boards(db_path=db_path).get(race_key)
+        for b in (board if isinstance(board, list)
+                  else ([board] if board else [])):
+            if isinstance(b, dict) and b.get("fill_missing_from"):
+                return str(b["fill_missing_from"])
+    except Exception:
+        pass
+    return None
+
+
+def _champ_points_fill_rows(race_key: str, fill_race: str, label: str,
+                            have_keys: set,
+                            db_path: str | Path = DB_PATH) -> list:
+    """COMPUTED board rows for field players missing from the points
+    board (Kerry, R1 live 2026-08-15: 'I know he's not in the Cup but I
+    want everyone's totals to calculate' — Option B). GG's FELLOWSHIP
+    CUP points game rosters only cup entrants, so everyone else's net
+    championship Stableford is computed from the fill race's scorecard
+    partials (THE PLAYERS CUP board carries the whole field, all 18
+    strokes + handicap dots) with _champ_stableford — the same scale
+    verified exact against GG's own cup-board totals. Any per-player
+    failure skips that player; the fill never fails the board."""
+    rows: list = []
+    try:
+        roster = _champ_card_roster(fill_race, db_path=db_path,
+                                    board_label=label)
+    except Exception:
+        return rows
+    if not roster.get("configured"):
+        return rows
+    for cid, entry in (roster.get("by_cid") or {}).items():
+        try:
+            nm = entry.get("name") or ""
+            if not nm or _cmp_person_key(nm) in have_keys:
+                continue
+            card = fetch_champ_player_card(race_key, int(cid),
+                                           db_path=db_path,
+                                           board_label=label,
+                                           roster_race=fill_race)
+            if not card.get("configured") or card.get("error"):
+                continue
+            played = sum(1 for h in (card.get("holes") or [])
+                         if h.get("gross") is not None)
+            pts = card.get("computed_points")
+            thru = ("F" if played >= 18 else str(played)) if played else None
+            rows.append({"name": nm,
+                         "points": (float(pts) if pts is not None else None),
+                         "thru": thru,
+                         "computed": True})
+        except Exception:
+            continue
+    return rows
+
+
 def fetch_champ_points(race_key: str, max_age: float = 45.0,
                        db_path: str | Path = DB_PATH) -> dict:
     """LIVE championship points for one race, straight off the GG board.
@@ -7542,9 +7602,21 @@ def fetch_champ_points(race_key: str, max_age: float = 45.0,
             if page["status_code"] != 200:
                 raise RuntimeError(f"GG returned HTTP {page['status_code']}")
             struct = parse_page_structure(page["html"], b["url"])
-            board_rows.append((b.get("label") or "Championship Points",
-                               _parse_champ_points_tables(
-                                   struct.get("tables") or [])))
+            blabel = b.get("label") or "Championship Points"
+            brows = _parse_champ_points_tables(struct.get("tables") or [])
+            # COMPUTE-FILL (Kerry, R1 live 2026-08-15): field players
+            # missing from this board get their points computed from the
+            # fill race's scorecards — see _champ_points_fill_rows.
+            if b.get("fill_missing_from"):
+                try:
+                    have = {_cmp_person_key(r["name"]) for r in brows}
+                    brows = brows + _champ_points_fill_rows(
+                        race_key, str(b["fill_missing_from"]), blabel,
+                        have, db_path=db_path)
+                except Exception:
+                    logger.warning("champ compute-fill failed for %s/%s",
+                                   race_key, blabel, exc_info=True)
+            board_rows.append((blabel, brows))
         rows = [r for _, br in board_rows for r in br]
     except Exception as e:
         if hit:
@@ -8410,7 +8482,8 @@ def _champ_stableford(net_vs_par, gross) -> "int | None":
 def fetch_champ_player_card(race_key: str, customer_id: int,
                             max_age: float = 45.0,
                             db_path: str | Path = DB_PATH,
-                            board_label: "str | None" = None) -> dict:
+                            board_label: "str | None" = None,
+                            roster_race: "str | None" = None) -> dict:
     """One player's LIVE championship hole-by-hole card, off GG.
 
     Per-hole gross + handicap dots come from the player's scorecard
@@ -8425,17 +8498,30 @@ def fetch_champ_player_card(race_key: str, customer_id: int,
     from golf_genius_sync import (fetch_public_page, parse_scorecard_details,
                                   parse_tee_block, _unwrap_js_string)
 
-    ck = (race_key, int(customer_id), board_label)
+    ck = (race_key, int(customer_id), board_label, roster_race)
     hit = _CHAMP_CARD_CACHE.get(ck)
     if hit and (_t.time() - hit[0]) < max_age:
         return hit[1]
 
     try:
-        roster = _champ_card_roster(race_key, db_path=db_path,
+        roster = _champ_card_roster(roster_race or race_key,
+                                    db_path=db_path,
                                     board_label=board_label)
         if not roster.get("configured"):
             return {"race": race_key, "configured": False, "holes": []}
         entry = roster["by_cid"].get(int(customer_id))
+        if not entry and not roster_race:
+            # COMPUTE-FILL players (Kerry, R1 live 2026-08-15) aren't on
+            # this race's own scorecard board — their card comes off the
+            # fill race's roster, so row expansions work for everyone.
+            _fs = _champ_fill_source(race_key, db_path=db_path)
+            if _fs:
+                try:
+                    _r2 = _champ_card_roster(_fs, db_path=db_path,
+                                             board_label=board_label)
+                    entry = (_r2.get("by_cid") or {}).get(int(customer_id))
+                except Exception:
+                    entry = None
         if not entry:
             out = {"race": race_key, "configured": True, "holes": [],
                    "error": "player not on the championship scorecard board"}

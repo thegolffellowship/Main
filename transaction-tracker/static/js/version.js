@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.238.10";
+window.TGF_VERSION = "2.239.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.239.0",
+    date: "2026-08-15",
+    changes: [
+      "EVERYONE'S cup totals calculate (Kerry, R1 live: 'I know he's not in the Cup but I want everyone's totals to calculate'): GG's FELLOWSHIP CUP points game rosters only the cup entrants, so the ~15 field players outside it (Young, Sharp, Lee Vasquez, ...) never appeared on the board the tracker reads. A compute-fill now takes those players' scorecards from THE PLAYERS CUP board (the whole field, all 18 holes + pops) and computes their net championship Stableford with the ratified scale — the same computation verified exact against GG's own cup-board totals — merging them into the R1/R2 columns, THRU, and CUP TOTAL. Driven by a fill_missing_from flag on the points-board dial (rules-as-data); a fill player's failure just leaves their row quiet, never the board. Their row expansions serve the same computed card. Cup MONEY is untouched — enrollment still decides the green rows, pot, and projections.",
+    ],
+  },
   {
     version: "2.238.10",
     date: "2026-08-15",
