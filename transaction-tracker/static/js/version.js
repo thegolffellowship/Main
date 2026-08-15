@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.238.9";
+window.TGF_VERSION = "2.238.10";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.238.10",
+    date: "2026-08-15",
+    changes: [
+      "Pops show on UNPLAYED holes too (Kerry, R1 live): the NET row's handicap-stroke dots render on every hole from the first posted score, so followers can see where a player gets strokes before those holes are played. GG's partial already carries the full-18 dot allocation; the card just stopped hiding it. Gross cards are unchanged (no dots by design).",
+    ],
+  },
   {
     version: "2.238.9",
     date: "2026-08-15",

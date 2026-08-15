@@ -385,8 +385,12 @@
             const grossRow = cells(h => h.gross == null
                 ? `<td style="${td}${sectTop}">${dash}</td>`
                 : `<td style="${td}${sectTop}font-weight:700;position:relative;">${grossMode ? dotsMark(h) : ""}${scoreSpan(h.gross, h.par != null ? h.gross - h.par : null)}</td>`);
+            // Unplayed holes still show their POPS (Kerry 2026-08-15,
+            // R1 live: "show the pops on the holes that haven't been
+            // played") — GG's partial carries the dots for all 18 from
+            // the first score, so followers see where strokes land.
             const netRow = grossMode ? "" : cells(h => h.net == null
-                ? `<td style="${td}${sectTop}">${dash}</td>`
+                ? `<td style="${td}${sectTop}position:relative;">${dotsMark(h)}${dash}</td>`
                 : `<td style="${td}${sectTop}font-weight:700;position:relative;">${dotsMark(h)}${scoreSpan(h.net, h.par != null ? h.net - h.par : null)}</td>`);
             const ptsRow = cells(h => `<td style="${td}${band}${sectBot}">${h.pts != null ? h.pts : dash}</td>`);
             return `<table style="border-collapse:collapse;font-size:${fs};margin:0.25rem 0;">
