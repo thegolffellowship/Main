@@ -207,3 +207,19 @@ the 08-13 test boards (v2.234.1): every row reads reset + rounds exactly.
 - **Handicaps between rounds (Kerry 2026-08-13):** TGF handicaps are
   already updated in GG; they will be re-updated AFTER Round 1 for
   Round 2. Run the GG handicap CSV export/upload Saturday evening.
+- **COMPUTE-FILL: everyone's cup totals calculate (R1 live, v2.239.0/.1
+  — Kerry's Option B):** GG's FELLOWSHIP CUP points game rosters only
+  the 19 cup entrants, so the other ~15 field players (Young, Sharp,
+  Lee Vasquez, ...) had no championship points on the tracker board.
+  `fill_missing_from: "players_cup_gross"` on both fellowship entries in
+  `gg_champ_points_boards` computes their net Stableford from the
+  PLAYERS CUP board's scorecard partials (full field, 18 strokes + dots)
+  via `_champ_points_fill_rows`. Cup MONEY is untouched — enrollment
+  still decides green rows/pot/projections. **Incident note:** the first
+  enable (v2.239.0) hung the live board — the fill's card fetches called
+  back into `fetch_champ_points` for the board-figure comparison before
+  its cache was written (re-entrant recursion). v2.239.1 skips that
+  lookup on fill cards (`roster_race` set) and walks the missing players
+  with a 6-worker pool; verified live at 34/34 scoring, ~6s first walk,
+  <1s cached. If the fellowship endpoint ever hangs again, pull the
+  `fill_missing_from` keys from the dial to instantly disable.
