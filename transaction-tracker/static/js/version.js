@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.240.4";
+window.TGF_VERSION = "2.240.5";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.240.5",
+    date: "2026-08-15",
+    changes: [
+      "Tee label pluralized on the championship card (Kerry: 'TEE should be TEES'): GG names its tees in the singular ('Blue/White Tee'), so the card normalizes a trailing 'Tee' to 'Tees' — BLUE/WHITE TEES, WHITE TEES — while names that don't end in Tee pass through untouched.",
+    ],
+  },
   {
     version: "2.240.4",
     date: "2026-08-15",

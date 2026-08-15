@@ -8582,10 +8582,13 @@ def fetch_champ_player_card(race_key: str, customer_id: int,
                 card_course = str(tee["course"]).strip()
             # Tees played ride the card too (Kerry 2026-08-15: "Add in
             # tees played to the right of the course name") — GG's tee
-            # header minus its "1 - " ordering prefix.
+            # header minus its "1 - " ordering prefix, pluralized
+            # (Kerry: "TEE should be TEES").
             if tee and tee.get("tee_name"):
                 card_tee = re.sub(r"^\s*\d+\s*-\s*", "",
                                   str(tee["tee_name"]).strip()) or None
+                if card_tee:
+                    card_tee = re.sub(r"([Tt][Ee][Ee])\s*$", r"\1s", card_tee)
             pars = (tee or {}).get("par") or {}
             # GG's own tee block carries YARDS + HCP (stroke index) rows —
             # the live source of truth (Kerry 2026-08-03: "HCP row isn't
