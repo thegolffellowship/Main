@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.240.0";
+window.TGF_VERSION = "2.240.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.240.1",
+    date: "2026-08-15",
+    changes: [
+      "Fellowship Cup round columns narrowed on mobile to match the Players Cup (Kerry, R1 live): the fellowship table pinned its RD 1 / RD 2 columns at 40px in compact mode while the Players Cup used 34px, leaving the fellowship board's player column slightly tighter for no reason. Both cup tables now share the same 34px round-column width on phones.",
+    ],
+  },
   {
     version: "2.240.0",
     date: "2026-08-15",
