@@ -295,9 +295,19 @@
         // cards read Lost Pines and city cards their city venue.
         // Tees played ride to the right of the course (Kerry 2026-08-15:
         // "Add in tees played to the right of the course name") — GG's
-        // tee header minus its "1 - " ordering prefix.
-        const teeBit = card.tee
-            ? ` <span style="font-weight:600;color:#9CA3AF;">&middot;</span> <span style="font-weight:600;color:#6B7280;">${escapeHtml(card.tee)}</span>`
+        // tee header minus its "1 - " ordering prefix. Color words paint
+        // themselves (Kerry: "Blue for blue. White is good. Green for
+        // green. Red for red") — WHITE keeps the line's muted gray since
+        // white-on-white would vanish.
+        const _TEE_COLORS = { blue: "#2563eb", red: "#dc2626",
+                              green: "#15803d", gold: "#b45309",
+                              black: "#1B1B1B" };
+        const teeHtml = card.tee
+            ? escapeHtml(card.tee).replace(/\b(blue|red|green|gold|black)\b/gi,
+                m => `<span style="color:${_TEE_COLORS[m.toLowerCase()]};">${m}</span>`)
+            : "";
+        const teeBit = teeHtml
+            ? ` <span style="font-weight:600;color:#9CA3AF;">&middot;</span> <span style="font-weight:600;color:#6B7280;">${teeHtml}</span>`
             : "";
         const venue = card.course
             ? `<div style="margin:0 0 0.2rem;font:700 ${big ? "0.82rem" : "0.74rem"}/1.3 'Bitter',Georgia,serif;letter-spacing:0.04em;text-transform:uppercase;color:#4B5563;">${escapeHtml(card.course)}${teeBit}</div>`

@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.240.5";
+window.TGF_VERSION = "2.240.6";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.240.6",
+    date: "2026-08-15",
+    changes: [
+      "Tee names color-code themselves (Kerry: 'Blue for blue. White is good. Green for green. Red for red'): each color word in the tee label paints in its own color — BLUE/WHITE TEES renders BLUE in blue with WHITE staying the line's muted gray (white-on-white would vanish). Blue, red, green, gold and black are mapped; any other word keeps the default gray. Applies to every championship and city card since they share the renderer.",
+    ],
+  },
   {
     version: "2.240.5",
     date: "2026-08-15",
