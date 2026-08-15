@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.240.1";
+window.TGF_VERSION = "2.240.2";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.240.2",
+    date: "2026-08-15",
+    changes: [
+      "Fill players' scorecards were mis-handicapped (Kerry, R1 live: 'hole HCPs aren\u2019t correct' on Jeff Young's card): the compute-fill read THE PLAYERS CUP gross board, whose GG detail partials carry no handicapping at all \u2014 a different odd-front/even-back HCP row from the gross tournament's own allocation, zero handicap dots, and no playing handicap \u2014 so every fill player's 'net' championship points were actually being scored GROSS. The fill source is now the championship's ALL Net event (full field, real net handicapping): Young's card corrected to the true championship stroke index (13/3/1... matching every cup entrant's card), his (2) playing handicap with pops on the SI 1 and SI 2 holes, and his net points recomputed (16 gross-scored became 19 net thru 11; Sharp/Lee Vasquez/Zapata rose similarly). Pure dial change \u2014 fill_missing_from now points at the new champ_all_net scorecard-board entry; Sunday needs the ALL Net Round 2 url added once GG releases the round (runbook updated).",
+    ],
+  },
   {
     version: "2.240.1",
     date: "2026-08-15",

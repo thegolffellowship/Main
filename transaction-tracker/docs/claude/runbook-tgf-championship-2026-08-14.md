@@ -223,3 +223,17 @@ the 08-13 test boards (v2.234.1): every row reads reset + rounds exactly.
   with a 6-worker pool; verified live at 34/34 scoring, ~6s first walk,
   <1s cached. If the fellowship endpoint ever hangs again, pull the
   `fill_missing_from` keys from the dial to instantly disable.
+- **FILL SOURCE CORRECTED MID-R1 (Kerry: "hole HCPs aren't correct")**:
+  the gross board's detail partials carry NO handicapping — an odd/even
+  HCP row from the gross tournament's own allocation, zero dots, no
+  "(n)" playing handicap — so fill players' "net" points were actually
+  gross-scored (Young read 16 when his true net was higher). Fill now
+  reads `champ_all_net` (ALL Net event 4749269: full field, real net
+  handicapping, correct championship stroke index; verified vs Young
+  "(2)" with dots on SI 1+2). Both dials updated, no deploy needed.
+  **SUNDAY CHECKLIST ADDITION:** once GG releases round 1692725, find
+  the ALL Net Round 2 tournament id in the round widget and append
+  `{"label": "Round 2", "url": ".../v2tournaments/<id>?player_stats_for_portal=true&round_index=3"}`
+  to `champ_all_net` in `gg_champ_scorecard_boards` — without it the R2
+  fill has no card source (4749270 guessed and 404'd; id unknown until
+  release).
