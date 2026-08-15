@@ -6813,6 +6813,10 @@ _GG_POINTS_RACES: dict = {
         # The cup restacks its combined cross-chapter list straight down
         # the ladder — no chapter proration, flights dismissed
         "reset_mode": "straight",
+        # CUP boards are members-only (Kerry 2026-08-15: "Hide guests and
+        # alumni from both cups") — the R4 show-everyone rule stays on the
+        # CITY boards; a bought-in row is never hidden, whatever the status
+        "cup_members_only": True,
     },
 }
 
@@ -8981,6 +8985,18 @@ def get_points_race_standings(race_key: str,
                                       else "guest")
             r["is_member"] = r["member_status"] == "member"
 
+        # CUP boards hide guests/alumni (Kerry 2026-08-15, R1 live: "Hide
+        # guests and alumni from both cups"). Race-flagged so the CITY
+        # boards keep the ratified R4 behavior (non-members stay visible,
+        # chipped with a join/renew path). A bought-in row is NEVER hidden
+        # whatever its status — money always shows. Hidden rows were all
+        # 0-total, non-enrolled, non-scoring, so pot counts, the reset
+        # ladder (already members-only), and payouts are untouched.
+        if race.get("cup_members_only"):
+            out_rows = [r for r in out_rows
+                        if r["member_status"] == "member"
+                        or r.get("enrolled") or r.get("cup_enrolled")]
+
         # Re-rank over the visible list — now EVERYONE (R4). GG's original
         # rank is kept as gg_rank for reference.
         for r in out_rows:
@@ -9385,6 +9401,14 @@ def get_fellowship_cup_projection(force_refresh: bool = False,
         for r in d["standings"]:
             if r.get("points_reset") is None:
                 continue  # not reset-eligible -> not in the cup projection
+            # Guests/alumni never ride into the Cup (Kerry 2026-08-15:
+            # "Hide guests and alumni from both cups"). Reset eligibility
+            # already excludes them today — this guard makes the rule
+            # explicit and holds if eligibility ever loosens. A bought-in
+            # row always stays.
+            if (r.get("member_status") in ("guest", "alumni")
+                    and not r.get("cup_enrolled", r.get("enrolled"))):
+                continue
             combined.append({
                 "player_name": r["player_name"],
                 "customer_id": r["customer_id"],

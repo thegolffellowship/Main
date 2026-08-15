@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.239.1";
+window.TGF_VERSION = "2.240.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.240.0",
+    date: "2026-08-15",
+    changes: [
+      "Cup boards hide guests and alumni (Kerry, R1 live: 'Hide guests and alumni from both cups'): THE PLAYERS CUP board carried 17 guest/alumni rows — every one 0.0, unenrolled, not in the championship — dead-ranked at the bottom (118–134). A cup_members_only flag on the players_cup_gross race config now drops non-member rows from that board, and the Fellowship Cup projection gains an explicit matching guard (reset eligibility already excluded them there — the guard makes the rule survive any future eligibility change). The CITY boards keep the ratified R4 behavior — guests/alumni stay visible and chipped with their join/rejoin path — and a bought-in row is NEVER hidden whatever its status, so pot counts, the reset ladder, and payouts are untouched.",
+    ],
+  },
   {
     version: "2.239.1",
     date: "2026-08-15",
