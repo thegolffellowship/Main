@@ -7496,6 +7496,52 @@ def _champ_fill_source(race_key: str,
     return None
 
 
+def _champ_fill_thru_map(fill_race: str, label: str,
+                         db_path: str | Path = DB_PATH) -> dict:
+    """person-key -> raw Thru cell off the fill race's own board page.
+
+    Pre-round that cell is the TEE TIME + hole assignment (Kerry
+    2026-08-15 evening: non-Cup players' RD 2 cells sat blank while cup
+    entrants showed '8:30 AM, Hole 18B'). The fill board (ALL Net) has
+    no points column so _parse_champ_points_tables skips it entirely —
+    this lighter parse wants only Player + Thru."""
+    from golf_genius_sync import fetch_public_page, parse_page_structure
+    board = champ_card_boards(db_path=db_path).get(fill_race)
+    blist = board if isinstance(board, list) else ([board] if board else [])
+    blist = [b for b in blist if isinstance(b, dict) and b.get("url")]
+    if label:
+        blist = [b for b in blist if (b.get("label") or "") == label]
+    out: dict = {}
+    for b in blist:
+        try:
+            page = fetch_public_page(b["url"], xhr=False)
+            if page["status_code"] != 200:
+                continue
+            struct = parse_page_structure(page["html"], b["url"])
+            for t in struct.get("tables") or []:
+                rows = t if isinstance(t, list) else (t.get("rows") or [])
+                hdr = None
+                for row in rows:
+                    cells = [re.sub(r"\s+", " ", (c or "")).strip()
+                             for c in row]
+                    low = [c.lower() for c in cells]
+                    if "player" in low and "thru" in low:
+                        hdr = {"player": low.index("player"),
+                               "thru": low.index("thru")}
+                        continue
+                    if hdr is None or len(cells) <= max(hdr.values()):
+                        continue
+                    nm, th = cells[hdr["player"]], cells[hdr["thru"]]
+                    if nm and th:
+                        k = _cmp_person_key(_strip_gg_affiliation(nm))
+                        if k[0] and k[1]:
+                            out.setdefault(k, th)
+        except Exception:
+            logger.warning("fill thru-map parse failed for %r/%r",
+                           fill_race, label, exc_info=True)
+    return out
+
+
 def _champ_points_fill_rows(race_key: str, fill_race: str, label: str,
                             have_keys: set,
                             db_path: str | Path = DB_PATH) -> list:
@@ -7550,6 +7596,19 @@ def _champ_points_fill_rows(race_key: str, fill_race: str, label: str,
         for row in pool.map(lambda a: _one(*a), missing):
             if row:
                 rows.append(row)
+    # Pre-round, a fill player's card has no holes so thru comes back
+    # empty — borrow the fill board's own Thru cell, which carries the
+    # TEE TIME + hole assignment until scoring starts (Kerry 2026-08-15
+    # evening: non-Cup rows must show Sunday tee times like everyone
+    # else). Card-derived thru always wins once they post a score.
+    if any(r.get("thru") is None for r in rows):
+        try:
+            tee_map = _champ_fill_thru_map(fill_race, label, db_path=db_path)
+            for r in rows:
+                if r.get("thru") is None:
+                    r["thru"] = tee_map.get(_cmp_person_key(r["name"]))
+        except Exception:
+            logger.warning("fill tee-time borrow failed", exc_info=True)
     return rows
 
 

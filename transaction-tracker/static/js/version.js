@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.241.1";
+window.TGF_VERSION = "2.241.2";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.241.2",
+    date: "2026-08-15",
+    changes: [
+      "Non-Cup players' RD 2 cells show Sunday tee times too (Kerry, Saturday evening: 'It's not updating those players who aren't in the cup races... with the tee times and holes'): the computed fill players' cards come off the ALL Net board, which yields scores but no tee-time column the points parser reads — so their pre-round RD 2 cells sat blank while cup entrants showed '8:30 AM, Hole 18B'. The fill now borrows the ALL Net board's own THRU cell (tee time + hole assignment, affiliation-stripped, keyed by person) whenever a fill player's card has no posted holes; the card-derived hole count always wins once they start scoring.",
+    ],
+  },
   {
     version: "2.241.1",
     date: "2026-08-15",
