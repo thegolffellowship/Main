@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.242.3";
+window.TGF_VERSION = "2.242.4";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.242.4",
+    date: "2026-08-16",
+    changes: [
+      "Champion plaque wears the TGF trophy mark (Kerry: 'use our new trophy icon on the whole left side and then align both rows just to the right of the trophy'): the star trophy icon renders gold-gradient at 56px spanning the plaque's left side, with the eyebrow + name rows in a column to its right; the emoji is gone. And THRU is retired from the finished cup boards (Kerry: 'Remove the Thru F everywhere. Event and season is complete') — once a race is final the THRU column, its header, and the slim rows' THRU F sub-lines all drop, on both cups; the WON money and champion treatment carry the story instead.",
+    ],
+  },
   {
     version: "2.242.3",
     date: "2026-08-16",

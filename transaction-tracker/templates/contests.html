@@ -1382,10 +1382,16 @@
            TGF-dark plaque, double gold frame, gold-gradient Bitter name,
            slow shine sweep. Shared by all champion banners. */
         .tgf-champ-plaque { position: relative; overflow: hidden; margin: 0 0 0.75rem;
+            display: flex; align-items: center; gap: 0.9rem;
             padding: 0.85rem 1rem 0.95rem; border-radius: 12px;
             background: linear-gradient(135deg, #1B1B1B 0%, #2E2414 55%, #1B1B1B 100%);
             border: 1px solid #D4A017;
             box-shadow: inset 0 0 0 3px #1B1B1B, inset 0 0 0 4px rgba(212,160,23,.55), 0 6px 18px rgba(212,160,23,.28); }
+        .tgf-champ-trophy { flex: 0 0 auto; width: 56px; height: 56px;
+            background: linear-gradient(160deg, #F7E7A0 0%, #FFD75E 45%, #E0A93C 100%);
+            -webkit-mask: url('/static/email/trophy-star-white.svg') no-repeat center / contain;
+            mask: url('/static/email/trophy-star-white.svg') no-repeat center / contain; }
+        .tgf-champ-text { min-width: 0; }
         .tgf-champ-eyebrow { font: 700 0.72rem/1.4 'Bitter', Georgia, serif;
             letter-spacing: 0.14em; text-transform: uppercase; color: #D4A017; }
         .tgf-champ-name { font-family: 'Bitter', Georgia, serif; font-weight: 800;
@@ -6227,7 +6233,7 @@
             // under the player's name (tee time muted, holes/F green).
             const rankMoveSub = cupSlim
                 ? `<div style="line-height:1.1;">${prDayMove(r.move) || ""}</div>` : "";
-            const thruSub = (cupSlim && r.champ_thru)
+            const thruSub = (cupSlim && r.champ_thru && !prRaceFinal)
                 ? `<div style="font-size:0.64rem;font-weight:600;line-height:1.4;${/\d:\d\d/.test(String(r.champ_thru)) ? "color:var(--text-muted);" : "color:#15803d;"}">${/\d:\d\d/.test(String(r.champ_thru)) ? "" : "THRU "}${escapeHtml(String(r.champ_thru).replace(/\s*([AaPp])\.?M\.?/, (_, g) => g.toLowerCase()))}</div>` : "";
             return `<tr style="${bg}${expandable ? 'cursor:pointer;' : ''}"${r.member_card_id ? ` data-card="${r.member_card_id}"` : ''}${r.customer_id ? ` data-cid="${r.customer_id}"` : ''}${champAttrs} data-pname="${escapeHtml(r.player_name || "")}">
                 <td style="${rankStyle}white-space:nowrap;">${escapeHtml(r._flightRank ?? r.rank)}${liveMode ? "" : prRankMove(r.rank, r.prev_rank)}${rankMoveSub}</td>
@@ -6284,8 +6290,8 @@
         // as the race is declared final and has a champion.
         const champStrip = champs.length
             ? (cupChampRace
-                ? `<div class="tgf-champ-plaque"><div class="tgf-champ-eyebrow">&#127942; 2026 THE PLAYERS CUP ${coChamp ? "Co-Champions" : "Champion"}</div><div class="tgf-champ-name" style="font-size:${compact ? "1.7rem" : "2.1rem"};">${champs.map(c => escapeHtml(prFirstLast(c.player_name))).join(" &amp; ")}</div></div>`
-                : `<div class="tgf-champ-plaque"><div class="tgf-champ-eyebrow">&#127942; 2026 ${escapeHtml(d.chapter || "")} City ${coChamp ? "Co-Champions" : "Champion"}</div><div class="tgf-champ-name" style="font-size:${compact ? "1.7rem" : "2.1rem"};">${champs.map(c => escapeHtml(prFirstLast(c.player_name))).join(" &amp; ")}</div><div class="tgf-champ-sub">Lone Star Cup ${coChamp ? "Co-Captains" : "Captain"}</div></div>`)
+                ? `<div class="tgf-champ-plaque"><div class="tgf-champ-trophy"></div><div class="tgf-champ-text"><div class="tgf-champ-eyebrow">2026 THE PLAYERS CUP ${coChamp ? "Co-Champions" : "Champion"}</div><div class="tgf-champ-name" style="font-size:${compact ? "1.7rem" : "2.1rem"};">${champs.map(c => escapeHtml(prFirstLast(c.player_name))).join(" &amp; ")}</div></div></div>`
+                : `<div class="tgf-champ-plaque"><div class="tgf-champ-trophy"></div><div class="tgf-champ-text"><div class="tgf-champ-eyebrow">2026 ${escapeHtml(d.chapter || "")} City ${coChamp ? "Co-Champions" : "Champion"}</div><div class="tgf-champ-name" style="font-size:${compact ? "1.7rem" : "2.1rem"};">${champs.map(c => escapeHtml(prFirstLast(c.player_name))).join(" &amp; ")}</div><div class="tgf-champ-sub">Lone Star Cup ${coChamp ? "Co-Captains" : "Captain"}</div></div></div>`)
             : "";
         // TEST PHASE strip (Kerry 2026-08-13: "Show leaderboard as in
         // TEST PHASE while we look at all of this. In case members go
@@ -6554,10 +6560,10 @@
                     ? escapeHtml(compact ? String(r.champ_thru).replace(/\s*([AaPp])\.?M\.?/, (_, g) => g.toLowerCase()) : String(r.champ_thru))
                     : "—";
                 champCells += `
-                ${cupSlimF ? "" : `<td style="${thruThF}font-size:${compact ? "0.68rem" : "0.85rem"};white-space:nowrap;${/\d:\d\d/.test(r.champ_thru || "") ? "color:var(--text-muted);" : "font-weight:600;"}">${thruTxt}</td>`}
+                ${(cupSlimF || prRaceFinal) ? "" : `<td style="${thruThF}font-size:${compact ? "0.68rem" : "0.85rem"};white-space:nowrap;${/\d:\d\d/.test(r.champ_thru || "") ? "color:var(--text-muted);" : "font-weight:600;"}">${thruTxt}</td>`}
                 <td style="${totalTh}font-weight:800;">${r.cup_total != null ? r.cup_total : prFmtReset(r.points_reset)}</td>`;
             }
-            const thruSubF = (cupSlimF && r.champ_thru)
+            const thruSubF = (cupSlimF && r.champ_thru && !prRaceFinal)
                 ? `<div style="font-size:0.64rem;font-weight:600;line-height:1.4;${/\d:\d\d/.test(String(r.champ_thru)) ? "color:var(--text-muted);" : "color:#15803d;"}">${/\d:\d\d/.test(String(r.champ_thru)) ? "" : "THRU "}${escapeHtml(String(r.champ_thru).replace(/\s*([AaPp])\.?M\.?/, (_, g) => g.toLowerCase()))}</div>` : "";
             const expAttrs = cupChamp && r.customer_id
                 ? `${r.champ_points != null ? ` data-champ-pts="${escapeHtml(String(r.champ_points))}"` : ""}${r.champ_thru ? ` data-champ-thru="${escapeHtml(String(r.champ_thru))}"` : ""}${r.points_reset != null ? ` data-reset="${escapeHtml(String(r.points_reset))}"` : ""} data-pname="${escapeHtml(r.player_name || "")}"`
@@ -6589,7 +6595,7 @@
                     ${cupSlimF ? "" : `<th rowspan="2" style="${netTh}line-height:1.25;" title="Rank in their chapter's City Points race">CITY<br>RANK</th>`}
                     <th rowspan="2" style="${resetThOv}line-height:1.25;" title="Season points reset — the Cup's starting totals">POINTS<br>RESET</th>
                     <th colspan="${cupBoardsF.length}" style="text-align:center;padding-left:6px;padding-right:6px;${champEdgeF}border-bottom:1px dashed #cbd5e1;font-size:${compact ? "0.6rem" : "0.72rem"};letter-spacing:0.06em;background:var(--surface-dark,#1B1B1B);color:#fff;">TGF CHAMP</th>
-                    ${cupSlimF ? "" : `<th rowspan="2" style="${thruThF}" title="Holes completed today — or the tee time if they haven't started">THRU</th>`}
+                    ${(cupSlimF || prRaceFinal) ? "" : `<th rowspan="2" style="${thruThF}" title="Holes completed today — or the tee time if they haven't started">THRU</th>`}
                     <th rowspan="2" style="${totalTh}line-height:1.25;" title="Points reset + championship rounds — the Cup is decided on this number">CUP<br>TOTAL</th>
                 </tr>
                 <tr>${cupBoardsF.map((bl, bi) => `<th style="${roundTh}${bi === cupBoardsF.length - 1 ? champEdgeF : ""}" title="${escapeHtml(bl)} championship points">${escapeHtml(compact ? bl.replace(/round\s*/i, "R") : bl.replace(/round\s*/i, "RD "))}</th>`).join("")}</tr>`
@@ -6615,12 +6621,12 @@
                 ${cupSlimF ? "" : `<col style="width:${compact ? 50 : 110}px">`}
                 <col style="width:${compact ? 50 : 110}px">
                 ${cupBoardsF.map(() => `<col style="width:${compact ? 34 : 110}px">`).join("")}
-                ${cupSlimF ? "" : `<col style="width:${compact ? 46 : 110}px">`}
+                ${(cupSlimF || prRaceFinal) ? "" : `<col style="width:${compact ? 46 : 110}px">`}
                 <col style="width:${compact ? 50 : 110}px">
             </colgroup>`
             : "";
         const fcStrip = fcChamps.length
-            ? `<div class="tgf-champ-plaque"><div class="tgf-champ-eyebrow">&#127942; 2026 THE FELLOWSHIP CUP ${fcCo ? "Co-Champions" : "Champion"}</div><div class="tgf-champ-name" style="font-size:${compact ? "1.7rem" : "2.1rem"};">${fcChamps.map(c => escapeHtml(prFirstLast(c.player_name))).join(" &amp; ")}</div></div>`
+            ? `<div class="tgf-champ-plaque"><div class="tgf-champ-trophy"></div><div class="tgf-champ-text"><div class="tgf-champ-eyebrow">2026 THE FELLOWSHIP CUP ${fcCo ? "Co-Champions" : "Champion"}</div><div class="tgf-champ-name" style="font-size:${compact ? "1.7rem" : "2.1rem"};">${fcChamps.map(c => escapeHtml(prFirstLast(c.player_name))).join(" &amp; ")}</div></div></div>`
             : "";
         $("pr-table-container").innerHTML = testStripF + fcStrip + `
             <table class="enrollment-table${compact ? " pr-compact" : ""}">
