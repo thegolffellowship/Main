@@ -6245,8 +6245,8 @@
         // as the race is declared final and has a champion.
         const champStrip = champs.length
             ? (cupChampRace
-                ? `<div style="margin:0 0 0.6rem;padding:0.5rem 0.75rem;border-radius:8px;background:#FEF9EC;border:1px solid #F59E0B;color:#92400E;font-weight:700;font-size:${compact ? "0.78rem" : "0.88rem"};">&#127942; 2026 THE PLAYERS CUP ${coChamp ? "Co-Champions" : "Champion"}: ${champs.map(c => escapeHtml(c.player_name || "")).join(" &amp; ")}</div>`
-                : `<div style="margin:0 0 0.6rem;padding:0.5rem 0.75rem;border-radius:8px;background:#FEF9EC;border:1px solid #F59E0B;color:#92400E;font-weight:700;font-size:${compact ? "0.78rem" : "0.88rem"};">&#127942; 2026 ${escapeHtml(d.chapter || "")} City ${coChamp ? "Co-Champions" : "Champion"}: ${champs.map(c => escapeHtml(c.player_name || "")).join(" &amp; ")} <span style="font-weight:600;color:#B45309;">&mdash; Lone Star Cup ${coChamp ? "Co-Captains" : "Captain"}</span></div>`)
+                ? `<div style="margin:0 0 0.6rem;padding:0.5rem 0.75rem;border-radius:8px;background:#FEF9EC;border:1px solid #F59E0B;color:#92400E;font-weight:700;font-size:${compact ? "0.78rem" : "0.88rem"};">&#127942; 2026 THE PLAYERS CUP ${coChamp ? "Co-Champions" : "Champion"}<div style="font:700 ${compact ? "1.56rem" : "1.76rem"}/1.2 'Bitter',Georgia,serif;margin-top:2px;">${champs.map(c => escapeHtml(c.player_name || "")).join(" &amp; ")}</div></div>`
+                : `<div style="margin:0 0 0.6rem;padding:0.5rem 0.75rem;border-radius:8px;background:#FEF9EC;border:1px solid #F59E0B;color:#92400E;font-weight:700;font-size:${compact ? "0.78rem" : "0.88rem"};">&#127942; 2026 ${escapeHtml(d.chapter || "")} City ${coChamp ? "Co-Champions" : "Champion"}<div style="font:700 ${compact ? "1.56rem" : "1.76rem"}/1.2 'Bitter',Georgia,serif;margin-top:2px;">${champs.map(c => escapeHtml(c.player_name || "")).join(" &amp; ")}</div><div style="font-weight:600;color:#B45309;">Lone Star Cup ${coChamp ? "Co-Captains" : "Captain"}</div></div>`)
             : "";
         // TEST PHASE strip (Kerry 2026-08-13: "Show leaderboard as in
         // TEST PHASE while we look at all of this. In case members go
@@ -6581,7 +6581,7 @@
             </colgroup>`
             : "";
         const fcStrip = fcChamps.length
-            ? `<div style="margin:0 0 0.6rem;padding:0.5rem 0.75rem;border-radius:8px;background:#FEF9EC;border:1px solid #F59E0B;color:#92400E;font-weight:700;font-size:${compact ? "0.78rem" : "0.88rem"};">&#127942; 2026 THE FELLOWSHIP CUP ${fcCo ? "Co-Champions" : "Champion"}: ${fcChamps.map(c => escapeHtml(c.player_name || "")).join(" &amp; ")}</div>`
+            ? `<div style="margin:0 0 0.6rem;padding:0.5rem 0.75rem;border-radius:8px;background:#FEF9EC;border:1px solid #F59E0B;color:#92400E;font-weight:700;font-size:${compact ? "0.78rem" : "0.88rem"};">&#127942; 2026 THE FELLOWSHIP CUP ${fcCo ? "Co-Champions" : "Champion"}<div style="font:700 ${compact ? "1.56rem" : "1.76rem"}/1.2 'Bitter',Georgia,serif;margin-top:2px;">${fcChamps.map(c => escapeHtml(c.player_name || "")).join(" &amp; ")}</div></div>`
             : "";
         $("pr-table-container").innerHTML = testStripF + fcStrip + `
             <table class="enrollment-table${compact ? " pr-compact" : ""}">

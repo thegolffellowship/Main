@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.242.0";
+window.TGF_VERSION = "2.242.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.242.1",
+    date: "2026-08-16",
+    changes: [
+      "Champion banners lead with the NAME (Kerry: 'Put name of champion on 2nd row and make twice as big'): all three champion strips — THE FELLOWSHIP CUP, THE PLAYERS CUP, and the city championship boards — now put the champion's name on its own second row at double size in Bitter serif (the large-numeral/heading tier of the ratified typography rule). The city strips keep their Lone Star Cup captaincy note as a smaller third line.",
+    ],
+  },
   {
     version: "2.242.0",
     date: "2026-08-16",
