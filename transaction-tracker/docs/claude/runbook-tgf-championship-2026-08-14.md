@@ -252,3 +252,12 @@ the 08-13 test boards (v2.234.1): every row reads reset + rounds exactly.
   R2 SUNDAY: same recipe — import ALL Net R2 scorecards, same per_nine
   map (tee_ids stable), dry-run, apply. Remember the GG handicap CSV
   export/upload for R2 uses TONIGHT'S post-R1 indexes.
+- **CHAMPIONS CROWNED (Sunday 2026-08-16, v2.242.0):** both cups declared
+  final via `gg_points_race_final` (fellowship_cup + players_cup_gross =
+  2026-08-16); the stale city-era `gg_champ_final_board_players_cup_gross`
+  was CLEARED FIRST so the durability snapshot captures the championship
+  boards, not the city board. 2026 THE FELLOWSHIP CUP Champion:
+  VASQUEZ, Gus (162). 2026 THE PLAYERS CUP Champion: YOUNG, Jeff (156.5).
+  Boards show gold champion rows + trophy pills + champions banner; money
+  reads WON incl. collapsed mobile rows. Remaining: record cup payouts
+  once Venmo'd, post-event mailbox digest, Lost Pines invoice true-up.
