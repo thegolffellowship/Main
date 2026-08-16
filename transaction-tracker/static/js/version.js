@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.242.1";
+window.TGF_VERSION = "2.242.2";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.242.2",
+    date: "2026-08-16",
+    changes: [
+      "Champion banner names read First Last (Kerry: 'Do it 1st name last name for the champions'): the big second-row name converts GG's 'LAST, First' to 'Jeff Young' / 'Gus Vasquez', title-casing the all-caps surname (Mc/Mac aware). Board rows and pills keep the GG standings style.",
+    ],
+  },
   {
     version: "2.242.1",
     date: "2026-08-16",
