@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.242.2";
+window.TGF_VERSION = "2.242.3";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.242.3",
+    date: "2026-08-16",
+    changes: [
+      "Champion banners upgraded from the flat amber card to a CHAMPIONSHIP PLAQUE (Kerry: 'the champion highlight is very boring in the amber. How can we really make it pop?'): TGF-dark surface with a double gold frame, a gold small-caps eyebrow line, the champion's name in a gold-gradient Bitter at ~2rem, and a slow shine sweeping across the plaque. One shared .tgf-champ-plaque treatment for THE FELLOWSHIP CUP, THE PLAYERS CUP, and the city championship banners (city keeps its Lone Star Cup captaincy subline in muted gold).",
+    ],
+  },
   {
     version: "2.242.2",
     date: "2026-08-16",

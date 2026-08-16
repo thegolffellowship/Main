@@ -1377,6 +1377,27 @@
         @media (max-width: 420px) {
             .top-tab { padding: 0.5rem 0.55rem; font-size: 0.76rem; letter-spacing: 0; }
         }
+        /* CHAMPION PLAQUE (Kerry 2026-08-16: "the champion highlight is
+           very boring in the amber. How can we really make it pop?") —
+           TGF-dark plaque, double gold frame, gold-gradient Bitter name,
+           slow shine sweep. Shared by all champion banners. */
+        .tgf-champ-plaque { position: relative; overflow: hidden; margin: 0 0 0.75rem;
+            padding: 0.85rem 1rem 0.95rem; border-radius: 12px;
+            background: linear-gradient(135deg, #1B1B1B 0%, #2E2414 55%, #1B1B1B 100%);
+            border: 1px solid #D4A017;
+            box-shadow: inset 0 0 0 3px #1B1B1B, inset 0 0 0 4px rgba(212,160,23,.55), 0 6px 18px rgba(212,160,23,.28); }
+        .tgf-champ-eyebrow { font: 700 0.72rem/1.4 'Bitter', Georgia, serif;
+            letter-spacing: 0.14em; text-transform: uppercase; color: #D4A017; }
+        .tgf-champ-name { font-family: 'Bitter', Georgia, serif; font-weight: 800;
+            line-height: 1.15; margin-top: 2px; color: #FFD75E;
+            background: linear-gradient(100deg, #F7E7A0 0%, #FFD75E 35%, #E0A93C 62%, #F7E7A0 100%);
+            -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; }
+        .tgf-champ-sub { font-weight: 600; font-size: 0.78rem; color: #C9A227; margin-top: 2px; }
+        .tgf-champ-plaque::after { content: ""; position: absolute; top: -60%; bottom: -60%;
+            width: 36%; left: -60%; transform: skewX(-20deg); pointer-events: none;
+            background: linear-gradient(75deg, transparent, rgba(255,255,255,.16), transparent);
+            animation: tgfChampShine 3.4s ease-in-out infinite; }
+        @keyframes tgfChampShine { 0% { left: -60%; } 55% { left: 135%; } 100% { left: 135%; } }
     </style>
 </head>
 <body>
@@ -6263,8 +6284,8 @@
         // as the race is declared final and has a champion.
         const champStrip = champs.length
             ? (cupChampRace
-                ? `<div style="margin:0 0 0.6rem;padding:0.5rem 0.75rem;border-radius:8px;background:#FEF9EC;border:1px solid #F59E0B;color:#92400E;font-weight:700;font-size:${compact ? "0.78rem" : "0.88rem"};">&#127942; 2026 THE PLAYERS CUP ${coChamp ? "Co-Champions" : "Champion"}<div style="font:700 ${compact ? "1.56rem" : "1.76rem"}/1.2 'Bitter',Georgia,serif;margin-top:2px;">${champs.map(c => escapeHtml(prFirstLast(c.player_name))).join(" &amp; ")}</div></div>`
-                : `<div style="margin:0 0 0.6rem;padding:0.5rem 0.75rem;border-radius:8px;background:#FEF9EC;border:1px solid #F59E0B;color:#92400E;font-weight:700;font-size:${compact ? "0.78rem" : "0.88rem"};">&#127942; 2026 ${escapeHtml(d.chapter || "")} City ${coChamp ? "Co-Champions" : "Champion"}<div style="font:700 ${compact ? "1.56rem" : "1.76rem"}/1.2 'Bitter',Georgia,serif;margin-top:2px;">${champs.map(c => escapeHtml(prFirstLast(c.player_name))).join(" &amp; ")}</div><div style="font-weight:600;color:#B45309;">Lone Star Cup ${coChamp ? "Co-Captains" : "Captain"}</div></div>`)
+                ? `<div class="tgf-champ-plaque"><div class="tgf-champ-eyebrow">&#127942; 2026 THE PLAYERS CUP ${coChamp ? "Co-Champions" : "Champion"}</div><div class="tgf-champ-name" style="font-size:${compact ? "1.7rem" : "2.1rem"};">${champs.map(c => escapeHtml(prFirstLast(c.player_name))).join(" &amp; ")}</div></div>`
+                : `<div class="tgf-champ-plaque"><div class="tgf-champ-eyebrow">&#127942; 2026 ${escapeHtml(d.chapter || "")} City ${coChamp ? "Co-Champions" : "Champion"}</div><div class="tgf-champ-name" style="font-size:${compact ? "1.7rem" : "2.1rem"};">${champs.map(c => escapeHtml(prFirstLast(c.player_name))).join(" &amp; ")}</div><div class="tgf-champ-sub">Lone Star Cup ${coChamp ? "Co-Captains" : "Captain"}</div></div>`)
             : "";
         // TEST PHASE strip (Kerry 2026-08-13: "Show leaderboard as in
         // TEST PHASE while we look at all of this. In case members go
@@ -6599,7 +6620,7 @@
             </colgroup>`
             : "";
         const fcStrip = fcChamps.length
-            ? `<div style="margin:0 0 0.6rem;padding:0.5rem 0.75rem;border-radius:8px;background:#FEF9EC;border:1px solid #F59E0B;color:#92400E;font-weight:700;font-size:${compact ? "0.78rem" : "0.88rem"};">&#127942; 2026 THE FELLOWSHIP CUP ${fcCo ? "Co-Champions" : "Champion"}<div style="font:700 ${compact ? "1.56rem" : "1.76rem"}/1.2 'Bitter',Georgia,serif;margin-top:2px;">${fcChamps.map(c => escapeHtml(prFirstLast(c.player_name))).join(" &amp; ")}</div></div>`
+            ? `<div class="tgf-champ-plaque"><div class="tgf-champ-eyebrow">&#127942; 2026 THE FELLOWSHIP CUP ${fcCo ? "Co-Champions" : "Champion"}</div><div class="tgf-champ-name" style="font-size:${compact ? "1.7rem" : "2.1rem"};">${fcChamps.map(c => escapeHtml(prFirstLast(c.player_name))).join(" &amp; ")}</div></div>`
             : "";
         $("pr-table-container").innerHTML = testStripF + fcStrip + `
             <table class="enrollment-table${compact ? " pr-compact" : ""}">
