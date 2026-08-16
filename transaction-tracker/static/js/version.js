@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.241.2";
+window.TGF_VERSION = "2.242.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.242.0",
+    date: "2026-08-16",
+    changes: [
+      "CHAMPIONS CROWNED (Kerry, championship Sunday: 'Event is over and champions are crowned'). Both cup boards now honor the race-final dial: THE FELLOWSHIP CUP page reads its own race_final flag (it was hardcoded to 'not final' from before the championship existed) and carries champions in its payload — the top-ranked ENROLLED row(s), same eligibility as the money. When final: the champion's row turns gold with a \\ud83c\\udfc6 CHAMPION pill (\\ud83c\\udfc6 alone on phones), a champions banner leads the board, money flips PROJECTED \\u2192 WON everywhere including the collapsed mobile rows (the slim layouts now keep the pay badge when final, matching the city races' rule), and the expansion line names the title. THE PLAYERS CUP crowns with TGF vocabulary — '2026 THE PLAYERS CUP Champion', no Lone Star Cup captaincy (that stays the city NET races' prize). City boards are untouched.",
+    ],
+  },
   {
     version: "2.241.2",
     date: "2026-08-15",

@@ -9582,9 +9582,16 @@ def get_fellowship_cup_projection(force_refresh: bool = False,
         logger.warning("fellowship cup rank history failed", exc_info=True)
 
     from . import season_payouts as _sp
+    # FINAL + champions (Kerry, championship Sunday 2026-08-16: "Event is
+    # over and champions are crowned") — same dial as the races
+    # (gg_points_race_final['fellowship_cup']); champions are the
+    # top-ranked ENROLLED row(s), same eligibility as the money.
+    _cup_final = _points_race_final("fellowship_cup", db_path=db_path)
     return {
         "label": "THE FELLOWSHIP CUP",
         "reset_official": _points_reset_official(db_path=db_path),
+        "race_final": _cup_final,
+        "champions": _race_champions(combined) if _cup_final else None,
         "standings": combined,
         "n_players": len(combined),
         "n_enrolled": cup_n,
