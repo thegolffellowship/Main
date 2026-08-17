@@ -1951,6 +1951,7 @@
     </div>
 
     <script>window.MATCHPLAY_V2 = {% if MATCHPLAY_V2 %}true{% else %}false{% endif %};</script>
+    {% if lsc_landing %}<script>window.LSC_LANDING = true;</script>{% endif %}
     {% if member_mode %}<script>window.MEMBER_MODE = true;</script><script src="/static/js/member-nudges.js" defer></script>
     <style>
         /* Member view: manager/admin controls can NEVER show, including
@@ -7071,8 +7072,12 @@
         // Refresh-in-place (Kerry, 2026-07-10): the selected race/tab lives
         // in the URL hash, so a reload restores the same page instead of
         // snapping back to SAN ANTONIO NET.
-        const hash = location.hash || "";
-        const raceMatch = hash.match(/race=([a-z_]+)/);
+        let hash = location.hash || "";
+        // /member/lonestarcup (Kerry 2026-08-17): the shareable LSC link
+        // lands straight on the Cup tab — synthesize the hash so the
+        // existing deep-link logic below does the rest. An explicit hash
+        // in the URL still wins (e.g. someone edits it to #race=net).
+        if (window.LSC_LANDING && !hash) hash = "#tab=lsc";
         const wantRace = raceMatch && document.querySelector(`.sub-tab[data-pr="${raceMatch[1]}"]`)
             ? raceMatch[1] : null;
         if (wantRace && wantRace !== (document.querySelector(".sub-tab[data-pr].active") || {}).dataset?.pr) {

@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.243.5";
+window.TGF_VERSION = "2.243.6";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.243.6",
+    date: "2026-08-17",
+    changes: [
+      "Shareable Lone Star Cup link: /member/lonestarcup renders the member Leaderboard landed directly on the Lone Star Cup tab (window.LSC_LANDING synthesizes the #tab=lsc deep link; an explicit hash still wins). Built because Kerry's roster-invitation texts hit iMessage's per-URL preview cache — the /member/contests card was cached from before the https og:image fix, so it showed the small icon instead of the navy trophy card. A brand-new URL gets a fresh preview fetch AND puts invitees on the Cup roster instead of the default Points Races. Renders in place (no redirect — preview scrapers won't follow one).",
+    ],
+  },
   {
     version: "2.243.5",
     date: "2026-08-17",

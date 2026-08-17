@@ -10422,6 +10422,19 @@ def member_contests():
                            MATCHPLAY_V2=_matchplay_v2_flag())
 
 
+@app.route("/member/lonestarcup")
+def member_lonestarcup():
+    """Shareable Lone Star Cup link (Kerry 2026-08-17): a distinct URL so
+    texted invitations get a FRESH link-preview fetch (iMessage caches
+    per-URL — the /member/contests card was cached before the https
+    og:image fix) AND land members directly on the LSC tab instead of
+    the default Points Races. Renders in place — a server-side redirect
+    would break preview scraping (see _og_meta.html)."""
+    return render_template("contests.html", member_mode=True,
+                           MATCHPLAY_V2=_matchplay_v2_flag(),
+                           lsc_landing=True)
+
+
 @app.route("/member/handicaps")
 def member_handicaps():
     return render_template("handicaps.html", member_mode=True)
