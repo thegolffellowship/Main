@@ -1356,7 +1356,18 @@
         .lsc-seat.captain { background: #FCF6EF; }
         .lsc-seat.captain .lsc-seat-label { color: #BF5700; }
         .lsc-player { font-size: 14px; color: #1B1B1B; font-weight: 600; }
-        .lsc-earn { display: block; font-size: 11px; color: #9CA3AF; font-weight: 400; }
+        /* Qualification sub-detail folds behind a chevron (Kerry
+           2026-08-17: "provide chevrons that are collapsed hiding the
+           subdetail for how they qualified") — collapsed by default,
+           tap the row to expand. */
+        .lsc-earn { display: none; font-size: 11px; color: #9CA3AF; font-weight: 400; }
+        .lsc-seat.open .lsc-earn { display: block; }
+        .lsc-seat.has-earn { cursor: pointer; }
+        .lsc-chev { flex: 0 0 auto; align-self: center; margin-left: auto;
+                    color: #9CA3AF; font-size: 11px; line-height: 1;
+                    transition: transform 0.15s; }
+        .lsc-seat.open .lsc-chev { transform: rotate(180deg); }
+        .lsc-seat .lsc-lock + .lsc-chev, .lsc-seat.secured .lsc-chev { margin-left: 8px; }
         .lsc-tbd { color: #9CA3AF; font-style: italic; font-weight: 500; font-size: 13px; }
         .lsc-pool-chip {
             display: inline-flex; margin-left: 6px; padding: 2px 7px; background: #FDF0E6;
@@ -2058,9 +2069,13 @@
                         who = `<span class="lsc-tbd">To be decided` +
                               `<span class="lsc-earn">${escapeHtml(seat.note || "")}</span></span>`;
                     }
-                    return `<div class="lsc-seat${cap ? " captain" : ""}${secured ? " secured" : ""}">` +
+                    // Chevron fold (Kerry 2026-08-17): qualification
+                    // sub-detail is collapsed by default; the row toggles.
+                    const hasEarn = !!(seat.earned_as || seat.note);
+                    return `<div class="lsc-seat${cap ? " captain" : ""}${secured ? " secured" : ""}${hasEarn ? " has-earn" : ""}">` +
                            `<span class="lsc-seat-label">${escapeHtml(seat.seat)}</span>${who}` +
                            (secured ? `<span class="lsc-lock">${LSC_LOCK_SVG}</span>` : "") +
+                           (hasEarn ? `<span class="lsc-chev">&#9662;</span>` : "") +
                            `</div>`;
                 }).join("");
                 const alts = (ch.alternates || []).map((a, i) =>
@@ -2084,13 +2099,16 @@
                 return `<div class="lsc-card" style="margin-top:16px;border-top:4px solid #B91C1C;">` +
                        `<div class="lsc-card-head" style="background:#B91C1C;">Declined Invitations<span style="color:#FECACA;">Admin view only</span></div>` +
                        dec.map(p =>
-                           `<div class="lsc-seat"><span class="lsc-seat-label" style="color:#B91C1C;">${escapeHtml((p.chapter || "").toUpperCase())}</span>` +
+                           `<div class="lsc-seat open"><span class="lsc-seat-label" style="color:#B91C1C;">${escapeHtml((p.chapter || "").toUpperCase())}</span>` +
                            `<span class="lsc-player">${escapeHtml(p.player_name)}` +
                            `<span class="lsc-earn">${escapeHtml(p.context || "")} &mdash; declined, removed from roster &amp; pool</span></span></div>`
                        ).join("") + `</div>`;
             })() + (d.gg_error
                 ? `<p style="color:var(--text-muted);font-size:12px;margin-top:0.5rem;">Standings feed note: ${escapeHtml(d.gg_error)}</p>`
                 : "");
+            // chevron fold: tap a seat row to reveal how they qualified
+            box.querySelectorAll(".lsc-seat.has-earn").forEach(el =>
+                el.addEventListener("click", () => el.classList.toggle("open")));
         } catch (err) {
             lscLoaded = false;
             box.innerHTML = `<p style="color:var(--text-muted);margin-top:1rem;">Couldn't load the projected rosters (${escapeHtml(err.message || String(err))}). Switch back to this tab to retry.</p>`;

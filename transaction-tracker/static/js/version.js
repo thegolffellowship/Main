@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.245.1";
+window.TGF_VERSION = "2.245.2";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.245.2",
+    date: "2026-08-17",
+    changes: [
+      "Lone Star Cup seat rows fold their qualification sub-detail behind a chevron (Kerry: 'provide chevrons that are collapsed hiding the subdetail for how they qualified'): collapsed by default, tap the row to expand; the chevron flips when open, secured rows keep the lock with the chevron beside it, and the admin Declined panel stays always-expanded so its context is never hidden. Todd McConahy's decline also recorded — the pool cascade moves everyone up automatically (that machinery already existed: a declined holder's seat refills from the ranked pool, sliding remaining players into the vacated order).",
+    ],
+  },
   {
     version: "2.245.1",
     date: "2026-08-17",
