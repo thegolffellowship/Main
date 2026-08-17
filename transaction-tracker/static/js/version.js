@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.245.0";
+window.TGF_VERSION = "2.245.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.245.1",
+    date: "2026-08-17",
+    changes: [
+      "HOTFIX on the open Austin alternates: enrolled pool players now outrank open (non-bought-in) ones for SEATS regardless of percentile — v2.245.0's first live run let the Doggett brothers' better cup percentiles displace Kyle Franz and Todd McConahy from seats they already held, which is not what 'add alternates' means. The open bench extends the pool for vacancies (Dow Floyd's declined seat) and the Next-Men-Up list; it never reshuffles bought-in holders.",
+    ],
+  },
   {
     version: "2.245.0",
     date: "2026-08-17",

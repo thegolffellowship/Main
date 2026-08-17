@@ -9869,14 +9869,18 @@ def get_lone_star_cup_projection(db_path: str | Path = DB_PATH) -> dict:
                 field = field_sizes[contest] or 1
                 pct = place / field
                 cur = pool_by_cid.get(cid)
-                if cur is None or pct < cur["pct"]:
+                if cur is None or (cur.get("open") and pct < cur["pct"]):
                     pool_by_cid[cid] = {
                         "cid": cid, "name": r["player_name"], "pct": pct,
                         "place": place, "field": field,
-                        "contest": contest_names[contest],
+                        "contest": contest_names[contest], "open": True,
                     }
+        # ENROLLED pool players outrank OPEN (non-bought-in) ones for
+        # seats regardless of percentile — the open bench extends the
+        # pool, it must never RESHUFFLE seats already held by bought-in
+        # players (first live run displaced Franz/McConahy — wrong).
         pool = sorted(pool_by_cid.values(),
-                      key=lambda c: (c["pct"],
+                      key=lambda c: (bool(c.get("open")), c["pct"],
                                      -events_by_cid.get(c["cid"], 0)))
 
         # Pass 4 — fill the 12 seats: contest keepers in standings order,
