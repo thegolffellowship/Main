@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.243.2";
+window.TGF_VERSION = "2.243.3";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.243.3",
+    date: "2026-08-17",
+    changes: [
+      "Compact payout pills go page-wide (Kerry: 'Make those changes across all as well'): the wave-1 40px mobile tap-target floor is reverted for the whole Payouts page — the event Player Pot Summary tables, season contests, and golfer views get the same dense Pay / Mark Paid / Zelle pills the work queues got in v2.243.2 (which made that scoped override redundant; it's removed). The handle-entry input keeps 16px font so iOS doesn't zoom on focus.",
+    ],
+  },
   {
     version: "2.243.2",
     date: "2026-08-17",

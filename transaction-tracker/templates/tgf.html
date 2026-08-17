@@ -187,14 +187,17 @@
         .add-venmo-save:disabled { opacity: 0.6; cursor: default; }
         .add-venmo-msg { font-size: 0.7rem; color: #dc2626; }
         @media (max-width: 768px) {
-            /* 40px tap-target floor on the payout action controls (mobile
-               audit wave 1) — the desktop pills are ~22px tall, well under
-               the iOS 44px / Android 48px guidance. Must stay AFTER the
-               desktop .venmo-btn/.add-venmo-* rules in source order. */
+            /* Mobile payout pills stay COMPACT page-wide (Kerry
+               2026-08-17: "This uses too much space… Make those changes
+               across all as well") — the wave-1 40px tap-target floor
+               inflated every payout row into a tall stacked block, so it
+               is reverted on this page; the ratified admin-console
+               density wins. Only the input keeps 16px font (stops iOS
+               focus-zoom). */
             .venmo-btn, .add-venmo-btn, .mark-paid-btn, .add-venmo-save {
-                min-height: 40px; padding: 8px 14px; font-size: 0.8rem;
+                padding: 4px 10px; font-size: 0.74rem;
             }
-            .add-venmo-input { min-height: 40px; font-size: 16px; }
+            .add-venmo-input { font-size: 16px; }
             /* Let the action cell stack its controls instead of one long
                nowrap run that truncates ("Mark Pa…") or forces a huge row. */
             .payout-table td.pay-cell { white-space: normal; }
@@ -456,19 +459,6 @@
                 white-space: normal; max-width: 128px;
             }
             #unpaid-main .queue-act .mark-paid-btn { margin-left: 0 !important; margin-top: 3px; }
-        }
-        /* Work queues stay DENSE on mobile (Kerry 2026-08-17: "This uses
-           too much space. It's different than what we've had before") —
-           the wave-1 40px tap-target floor is scoped OUT of the admin
-           queues, restoring the compact pills. Must follow the 768px
-           floor block in source order to win the cascade. */
-        @media (max-width: 768px) {
-            #unpaid-main .venmo-btn, #unpaid-main .mark-paid-btn,
-            #unpaid-main .add-venmo-btn,
-            #refunds-main .venmo-btn, #refunds-main .mark-paid-btn,
-            #refunds-main .add-venmo-btn {
-                min-height: 0; padding: 4px 10px; font-size: 0.74rem;
-            }
         }
         .ledger-back { display: none; }
         @media (max-width: 768px) {
