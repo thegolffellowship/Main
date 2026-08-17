@@ -286,3 +286,15 @@ the 08-13 test boards (v2.234.1): every row reads reset + rounds exactly.
   `scoring-season-payouts:net|players_cup_gross` overall-restack preview
   ($294.40/$211.60/…) was NOT used — Robert's published flight model
   supersedes it.
+- **AUDIT vs ROBERT'S SHEET + MVP REMOVAL (Monday 2026-08-17, v2.243.1):**
+  Robert's payout spreadsheet audited cell-by-cell against the GG boards —
+  penny-perfect on every line. Kerry ruled the auto-recorded Marroquin
+  City MVP $100 "should not have happened or been awarded": deleted via
+  `scoring-payout-delete:7521` (pending ledger row removed, aggregates
+  refreshed). Reconciled grand total now **$5,133.97** = Robert's sheet
+  exactly (championship $2,813.97 + Fellowship Cup $1,400 + Players Cup
+  $920). Cup Venmo memos carry the season-contest detail tail
+  (`scoring-champ-close:memos` rewrote descriptions to "<Cup> — <tail>";
+  Fellowship/Players Cup joined SEASON_MEMO_CATS). All 27 payees have
+  payment handles; Gus Vasquez pays by Zelle (phone), everyone else
+  Venmo. Payouts cleared to send.
