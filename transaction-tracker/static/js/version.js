@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.244.0";
+window.TGF_VERSION = "2.245.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.245.0",
+    date: "2026-08-17",
+    changes: [
+      "Lone Star Cup declines + open Austin alternates (Kerry): the new lsc_declined dial removes a player from every seat stream AND the alternates pool — their seat vacates and refills from the pool automatically (first decline recorded: Dow Floyd). Because Austin's enrolled pool had run dry, the Austin bench now also draws from the final Fellowship Cup / Players Cup standings REGARDLESS of buy-in ('add in Austin alternates… regardless of if they bought in' — Austin named explicitly, so SA keeps the enrolled-only pool), ranked by the same percentile rule; earned seats stay enrolled-only. And a red Declined Invitations panel renders under the team cards for ADMIN sessions only — the API strips the declined list from every non-admin payload, so the public member endpoint never carries it. Kyle Franz's acceptance also locked (lsc_accepted).",
+    ],
+  },
   {
     version: "2.244.0",
     date: "2026-08-17",

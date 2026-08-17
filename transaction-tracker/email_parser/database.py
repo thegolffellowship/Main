@@ -9691,17 +9691,23 @@ def get_lone_star_cup_projection(db_path: str | Path = DB_PATH) -> dict:
     cup = get_fellowship_cup_projection(db_path=db_path)
     errors = [e for e in (gross.get("gg_error"), cup.get("gg_error")) if e]
 
-    # Invitation acceptances (Kerry 2026-08-17: "We all accept our
-    # invitations") — the lsc_accepted dial is a JSON list of
-    # customer_ids whose holders have ACCEPTED their roster invitation;
-    # any seat they hold reads SECURED (same lock treatment as a
-    # declared-final champion). Set/extend via
-    # scoring-setting-set:lsc_accepted|[14,37,18].
-    try:
-        lsc_accepted = {int(x) for x in json.loads(
-            get_app_setting("lsc_accepted", db_path=db_path) or "[]")}
-    except Exception:
-        lsc_accepted = set()
+    # Invitation responses (Kerry 2026-08-17): two JSON-list-of-
+    # customer_id dials, set via scoring-setting-set:<key>|[…].
+    # lsc_accepted — holders have ACCEPTED their roster invitation; any
+    #   seat they hold reads SECURED (same lock as a declared champion).
+    # lsc_declined — holders have DECLINED ("Dow Floyd has declined.
+    #   Remove him."): they are excluded from every seat stream AND the
+    #   alternates pool, so their seat vacates and refills from the pool.
+    #   The declined names surface only in the admin-gated `declined`
+    #   list (the route strips it for non-admin sessions).
+    def _dial_ids(key: str) -> set:
+        try:
+            return {int(x) for x in json.loads(
+                get_app_setting(key, db_path=db_path) or "[]")}
+        except Exception:
+            return set()
+    lsc_accepted = _dial_ids("lsc_accepted")
+    lsc_declined = _dial_ids("lsc_declined")
 
     chapters_out = []
     for chapter, race_key in (("Austin", "austin_net"),
@@ -9724,6 +9730,8 @@ def get_lone_star_cup_projection(db_path: str | Path = DB_PATH) -> dict:
             out = []
             for r in rows:
                 if not r.get("enrolled") or not r.get("customer_id"):
+                    continue
+                if r["customer_id"] in lsc_declined:
                     continue
                 if chapter_field and (r.get(chapter_field) or "") != chapter:
                     continue
@@ -9776,6 +9784,8 @@ def get_lone_star_cup_projection(db_path: str | Path = DB_PATH) -> dict:
         except Exception:
             logger.warning("LSC: match play bracket read failed for %s",
                            chapter, exc_info=True)
+        if mp_champ and mp_champ.get("cid") in lsc_declined:
+            mp_champ = None
 
         # The earned 12, in seat order. Each seat draws the next unclaimed
         # player from its contest stream; a player already holding a
@@ -9836,6 +9846,34 @@ def get_lone_star_cup_projection(db_path: str | Path = DB_PATH) -> dict:
                         "cid": cand["cid"], "name": cand["name"],
                         "pct": pct, "place": cand["place"],
                         "field": field, "contest": contest_names[contest],
+                    }
+        # OPEN alternates for AUSTIN (Kerry 2026-08-17: "add in Austin
+        # alternates based on fellowship/players cup standings regardless
+        # of if they bought in" — the enrolled pool ran dry): the Austin
+        # bench also draws from the final Fellowship Cup / Players Cup
+        # standings WITHOUT the buy-in gate, ranked by the same percentile
+        # rule, so declined/vacated seats always have a next man up.
+        # Earned seats stay enrolled-only; only the pool opens. Austin
+        # named explicitly (rule 3d exception).
+        if chapter == "Austin":
+            open_rows = ([("fellowship", r) for r in cup["standings"]
+                          if (r.get("chapter") or "") == chapter]
+                         + [("players", r) for r in gross["standings"]
+                            if (r.get("player_chapter") or "") == chapter])
+            for contest, r in open_rows:
+                cid = r.get("customer_id")
+                place = pnum(r.get("rank"))
+                if not cid or place is None or cid in roster_ids \
+                        or cid in lsc_declined:
+                    continue
+                field = field_sizes[contest] or 1
+                pct = place / field
+                cur = pool_by_cid.get(cid)
+                if cur is None or pct < cur["pct"]:
+                    pool_by_cid[cid] = {
+                        "cid": cid, "name": r["player_name"], "pct": pct,
+                        "place": place, "field": field,
+                        "contest": contest_names[contest],
                     }
         pool = sorted(pool_by_cid.values(),
                       key=lambda c: (c["pct"],
@@ -9919,6 +9957,34 @@ def get_lone_star_cup_projection(db_path: str | Path = DB_PATH) -> dict:
             for c in pool if c["cid"] not in pool_used
         ][:8]
 
+        # Declined invitations (ADMIN-ONLY payload — the API route strips
+        # this key for non-admin sessions): who declined + their best
+        # standing in this chapter's streams, so the admin sees exactly
+        # what seat claim was given up.
+        declined_rows = []
+        if lsc_declined:
+            _dsrc = ([("captain", r) for r in net["standings"]]
+                     + [("fellowship", r) for r in cup["standings"]
+                        if (r.get("chapter") or "") == chapter]
+                     + [("players", r) for r in gross["standings"]
+                        if (r.get("player_chapter") or "") == chapter])
+            _dbest: dict = {}
+            for contest, r in _dsrc:
+                cid = r.get("customer_id")
+                if cid not in lsc_declined:
+                    continue
+                place = pnum(r.get("rank"))
+                if place is None:
+                    continue
+                pct = place / (field_sizes[contest] or 1)
+                if cid not in _dbest or pct < _dbest[cid]["pct"]:
+                    _dbest[cid] = {"player_name": r["player_name"],
+                                   "customer_id": cid, "pct": pct,
+                                   "context": (f"{_lsc_ordinal(place)} in "
+                                               f"{contest_names[contest]}")}
+            declined_rows = [{k: v for k, v in d.items() if k != "pct"}
+                             for d in _dbest.values()]
+
         chapters_out.append({
             "chapter": chapter,
             "seats": seats,
@@ -9926,6 +9992,7 @@ def get_lone_star_cup_projection(db_path: str | Path = DB_PATH) -> dict:
                                if r["status"] in ("projected", "secured")),
             "n_secured": sum(1 for r in seats if r["status"] == "secured"),
             "alternates": alternates,
+            "declined": declined_rows,
         })
 
     return {

@@ -2073,7 +2073,22 @@
                        seats +
                        `<div class="lsc-alt-head">Next Men Up &mdash; Alternates Pool</div>` + alts +
                        `</div>`;
-            }).join("")}</div>` + (d.gg_error
+            }).join("")}</div>` + (() => {
+                // DECLINED invitations (Kerry 2026-08-17, admin view
+                // only): the API includes `declined` ONLY for admin
+                // sessions, so this card simply never renders for
+                // members/managers — no client-side role check needed.
+                const dec = (d.chapters || []).flatMap(ch =>
+                    (ch.declined || []).map(p => ({ ...p, chapter: ch.chapter })));
+                if (!dec.length) return "";
+                return `<div class="lsc-card" style="margin-top:16px;border-top:4px solid #B91C1C;">` +
+                       `<div class="lsc-card-head" style="background:#B91C1C;">Declined Invitations<span style="color:#FECACA;">Admin view only</span></div>` +
+                       dec.map(p =>
+                           `<div class="lsc-seat"><span class="lsc-seat-label" style="color:#B91C1C;">${escapeHtml((p.chapter || "").toUpperCase())}</span>` +
+                           `<span class="lsc-player">${escapeHtml(p.player_name)}` +
+                           `<span class="lsc-earn">${escapeHtml(p.context || "")} &mdash; declined, removed from roster &amp; pool</span></span></div>`
+                       ).join("") + `</div>`;
+            })() + (d.gg_error
                 ? `<p style="color:var(--text-muted);font-size:12px;margin-top:0.5rem;">Standings feed note: ${escapeHtml(d.gg_error)}</p>`
                 : "");
         } catch (err) {
