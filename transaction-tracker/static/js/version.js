@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.245.4";
+window.TGF_VERSION = "2.245.5";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.245.5",
+    date: "2026-08-17",
+    changes: [
+      "LSC seat rows drop the POOL badge (Kerry: 'Do not show the POOL badge') — a seat is a seat; how it was earned (including an alternates-pool fill) still reads in the chevron-folded qualification line.",
+    ],
+  },
   {
     version: "2.245.4",
     date: "2026-08-17",

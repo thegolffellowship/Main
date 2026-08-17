@@ -2068,10 +2068,11 @@
                     const secured = seat.status === "secured";
                     let who;
                     if (seat.player_name) {
-                        const pool = seat.via_pool ? '<span class="lsc-pool-chip">Pool</span>' : "";
                         // First Last display (Kerry 2026-08-17) via the
-                        // shared prFirstLast converter
-                        who = `<span class="lsc-player">${escapeHtml(prFirstLast(seat.player_name))}${pool}` +
+                        // shared prFirstLast converter. No POOL badge
+                        // (Kerry, same day) — the pool origin still
+                        // reads in the folded qualification line.
+                        who = `<span class="lsc-player">${escapeHtml(prFirstLast(seat.player_name))}` +
                               `<span class="lsc-earn">${escapeHtml(seat.earned_as || "")}</span></span>`;
                     } else {
                         who = `<span class="lsc-tbd">To be decided` +
