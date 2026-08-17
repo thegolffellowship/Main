@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.242.4";
+window.TGF_VERSION = "2.242.5";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.242.5",
+    date: "2026-08-16",
+    changes: [
+      "Cup champion plaques drop the THE (Kerry): eyebrows now read 2026 FELLOWSHIP CUP CHAMPION and 2026 PLAYERS CUP CHAMPION. City plaques unchanged.",
+    ],
+  },
   {
     version: "2.242.4",
     date: "2026-08-16",
