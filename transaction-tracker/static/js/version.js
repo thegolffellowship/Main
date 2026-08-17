@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.243.6";
+window.TGF_VERSION = "2.243.7";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.243.7",
+    date: "2026-08-17",
+    changes: [
+      "og:url gets the same https rewrite as og:image (v2.243.5 fixed the image root but left request.base_url's http:// scheme in the canonical-URL tag) — consistency for preview scrapers that compare the two.",
+    ],
+  },
   {
     version: "2.243.6",
     date: "2026-08-17",
