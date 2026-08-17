@@ -2604,8 +2604,19 @@ def _scoring_dispatch(url: str, extract: str):
             # events deleted. Preview by default; ":apply" writes. The
             # winner table is a code-side mirror of GG's official money
             # boards — see _CHAMP_CLOSE_GAME_ROWS in database.py.
+            if arg.strip().lower() == "memos":
+                # one-shot: rewrite recorded cup descriptions to the
+                # memo-ready "<Cup> — <tail>" shape (idempotent)
+                return json.dumps(db.championship_close_memo_fix(),
+                                  indent=2, default=str)
             return json.dumps(db.championship_close_payouts(
                 apply=arg.strip().lower() == "apply"), indent=2, default=str)
+        if cmd == "scoring-payout-delete":
+            # delete ONE tgf_payouts row + its PENDING ledger entry and
+            # refresh the event's aggregates; refuses paid-linked rows.
+            # "scoring-payout-delete:<payout_id>"
+            return json.dumps(db.delete_tgf_payout_row(int(arg.strip())),
+                              indent=2, default=str)
         if cmd == "scoring-hcp-preview":
             # READ-ONLY: the handicap rounds we WOULD self-derive from our
             # scorecards for one event (differential + index impact per

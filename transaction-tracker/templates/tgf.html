@@ -732,7 +732,8 @@
         // talking about the season contests.") — event payouts keep the
         // ratified short memo; season rows read their description tail
         // ("Pool A winner bonus", "2nd place").
-        const SEASON_MEMO_CATS = { "City Net": 1, "Match Play": 1, "Match Play Pool": 1 };
+        const SEASON_MEMO_CATS = { "City Net": 1, "Match Play": 1, "Match Play Pool": 1,
+                                   "Fellowship Cup": 1, "Players Cup": 1 };
         function memoDetail(items) {
             const list = (items || []).filter(p => p && p.description);
             if (!list.length || !list.every(p => SEASON_MEMO_CATS[p.category])) return "";

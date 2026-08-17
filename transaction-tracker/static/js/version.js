@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.243.0";
+window.TGF_VERSION = "2.243.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.243.1",
+    date: "2026-08-17",
+    changes: [
+      "Payout audit follow-ups (Kerry): the Marroquin City MVP $100 'should not have happened or been awarded' — new scoring-payout-delete:<id> bridge command removes one payout row + its PENDING ledger entry and refreshes the event aggregates (refuses paid-linked rows); used to delete the MVP, bringing the championship total to Robert's reconciled $5,133.97. Cup Venmo memos now carry the season-contest detail tail (Kerry's 2026-08-02 memo rule): Fellowship Cup and Players Cup joined SEASON_MEMO_CATS and the recorded cup descriptions were rewritten to the memo-ready '<Cup> — <tail>' shape (scoring-champ-close:memos, idempotent), so a payment memo reads e.g. 'Gus Vasquez - Winnings for 2026 FELLOWSHIP CUP — Champion (1st place)'. Championship game rows keep the ratified short memo by design.",
+    ],
+  },
   {
     version: "2.243.0",
     date: "2026-08-17",

@@ -15738,24 +15738,28 @@ _CHAMP_CLOSE_GAME_ROWS = [
     ("SHARP, Matt", "individual_gross", 40.00, "Combined Ind Gross 4th Flight 2nd"),
 ]
 
+# Descriptions use the uniform "<Cup> — <tail>" shape so the Venmo memo
+# builder (tgf.html memoDetail, season-contest rule Kerry 2026-08-02) can
+# append the tail after the event: "Winnings for 2026 FELLOWSHIP CUP —
+# Champion (1st place)".
 _CHAMP_CLOSE_FELLOWSHIP_ROWS = [
-    ("VASQUEZ, Gus", 630.00, "Fellowship Cup Champion — 1st Place"),
-    ("STRAITON, Robert", 308.00, "Fellowship Cup 2nd Place"),
-    ("CALLAWAY, Rob", 196.00, "Fellowship Cup 3rd Place"),
-    ("JENKINS, Matt", 154.00, "Fellowship Cup 4th Place"),
-    ("WADE, John", 112.00, "Fellowship Cup 5th Place"),
+    ("VASQUEZ, Gus", 630.00, "Fellowship Cup — Champion (1st place)"),
+    ("STRAITON, Robert", 308.00, "Fellowship Cup — 2nd place"),
+    ("CALLAWAY, Rob", 196.00, "Fellowship Cup — 3rd place"),
+    ("JENKINS, Matt", 154.00, "Fellowship Cup — 4th place"),
+    ("WADE, John", 112.00, "Fellowship Cup — 5th place"),
 ]
 
 _CHAMP_CLOSE_PLAYERS_CUP_ROWS = [
     # Robert's posted flight model: F1 pot $299 (champion bonus), F2–F4 $207
-    ("STRAITON, Robert", 230.69, "Players Cup Champion & 1st Flight Winner"),
-    ("YOUNG, Jeff", 68.31, "Players Cup 1st Flight 2nd"),
-    ("BARNA, Kelly", 138.69, "Players Cup 2nd Flight 1st"),
-    ("HOGUE, Jay", 68.31, "Players Cup 2nd Flight 2nd"),
-    ("CALLAWAY, Rob", 138.69, "Players Cup 3rd Flight 1st"),
-    ("WADE, Mary", 68.31, "Players Cup 3rd Flight 2nd"),
-    ("McCONAHY, Todd", 138.69, "Players Cup 4th Flight 1st"),
-    ("RIDEOUT, Jeff", 68.31, "Players Cup 4th Flight 2nd"),
+    ("STRAITON, Robert", 230.69, "Players Cup — Champion & 1st Flight winner"),
+    ("YOUNG, Jeff", 68.31, "Players Cup — 1st Flight 2nd place"),
+    ("BARNA, Kelly", 138.69, "Players Cup — 2nd Flight winner"),
+    ("HOGUE, Jay", 68.31, "Players Cup — 2nd Flight 2nd place"),
+    ("CALLAWAY, Rob", 138.69, "Players Cup — 3rd Flight winner"),
+    ("WADE, Mary", 68.31, "Players Cup — 3rd Flight 2nd place"),
+    ("McCONAHY, Todd", 138.69, "Players Cup — 4th Flight winner"),
+    ("RIDEOUT, Jeff", 68.31, "Players Cup — 4th Flight 2nd place"),
 ]
 
 _CHAMP_CLOSE_CUP_EVENTS = {
@@ -15834,6 +15838,90 @@ def championship_close_payouts(apply: bool = False, db_path=None) -> dict:
         out["cup_events"][code]["result"] = record_season_contest_payouts(
             code, "TGF", payouts, append_category=cat, db_path=db_path)
     return out
+
+
+def championship_close_memo_fix(db_path=None) -> dict:
+    """One-shot: rewrite the already-recorded cup payout descriptions to
+    the memo-ready '<Cup> — <tail>' shape in _CHAMP_CLOSE_*_ROWS (the
+    first apply recorded pre-fix text). Matches rows by (event code,
+    category, exact amount + resolved name via description swap is
+    overkill — amount+old/new description equality is enough here since
+    each cup row is unique per player). Idempotent."""
+    changed, missed = [], []
+    with _connect(db_path) as conn:
+        for code, (cat, rows) in _CHAMP_CLOSE_CUP_EVENTS.items():
+            ev = conn.execute(
+                "SELECT id FROM tgf_events WHERE LOWER(code) = LOWER(?)",
+                (code,)).fetchone()
+            if not ev:
+                missed.append({"code": code, "why": "event absent"})
+                continue
+            for (name, amount, desc) in rows:
+                new_desc = f"auto: {desc}"
+                cid = _resolve_customer_for_payout(conn, name)
+                row = conn.execute(
+                    """SELECT id, description FROM tgf_payouts
+                       WHERE event_id = ? AND customer_id = ?
+                         AND category = ? AND ABS(amount - ?) < 0.005""",
+                    (ev["id"], cid, cat, amount)).fetchone()
+                if not row:
+                    missed.append({"code": code, "name": name,
+                                   "amount": amount, "why": "row not found"})
+                    continue
+                if row["description"] == new_desc:
+                    continue
+                conn.execute(
+                    "UPDATE tgf_payouts SET description = ? WHERE id = ?",
+                    (new_desc, row["id"]))
+                changed.append({"payout_id": row["id"], "name": name,
+                                "was": row["description"], "now": new_desc})
+        conn.commit()
+    return {"changed": changed, "missed": missed}
+
+
+def delete_tgf_payout_row(payout_id: int, db_path=None) -> dict:
+    """Delete ONE tgf_payouts row + its linked PENDING ledger entry, then
+    refresh the event's aggregates (Kerry 2026-08-17: 'The MARROQUIN MVP
+    should not have happened or been awarded. Remove that.'). Refuses when
+    the linked acct_transactions row is non-pending — a paid row must be
+    unwound through reconciliation, not deleted."""
+    with _connect(db_path) as conn:
+        r = conn.execute(
+            """SELECT p.id, p.event_id, p.customer_id, p.category, p.amount,
+                      p.description, p.acct_transaction_id,
+                      t.source AS acct_source
+               FROM tgf_payouts p
+               LEFT JOIN acct_transactions t ON t.id = p.acct_transaction_id
+               WHERE p.id = ?""", (payout_id,)).fetchone()
+        if not r:
+            return {"error": f"no tgf_payouts row {payout_id}"}
+        r = dict(r)
+        if r["acct_transaction_id"] and r["acct_source"] not in (None, "pending"):
+            return {"error": f"payout {payout_id} is linked to a "
+                             f"{r['acct_source']!r} ledger row (paid?) — "
+                             "refusing to delete"}
+        if r["acct_transaction_id"] and r["acct_source"] == "pending":
+            conn.execute("DELETE FROM acct_transactions WHERE id = ?",
+                         (r["acct_transaction_id"],))
+        conn.execute("DELETE FROM tgf_payouts WHERE id = ?", (payout_id,))
+        stats = conn.execute(
+            """SELECT COUNT(*) AS cnt, COALESCE(SUM(amount), 0) AS total,
+                      COUNT(DISTINCT customer_id) AS winners
+               FROM tgf_payouts WHERE event_id = ?""",
+            (r["event_id"],)).fetchone()
+        conn.execute(
+            "UPDATE tgf_events SET total_purse = ?, winners_count = ?, "
+            "payouts_count = ? WHERE id = ?",
+            (stats["total"], stats["winners"], stats["cnt"], r["event_id"]))
+        conn.commit()
+    return {"deleted": {k: r[k] for k in
+                        ("id", "event_id", "customer_id", "category",
+                         "amount", "description")},
+            "pending_ledger_row_deleted": bool(
+                r["acct_transaction_id"] and r["acct_source"] == "pending"),
+            "event_totals": {"total_purse": stats["total"],
+                             "winners": stats["winners"],
+                             "payouts": stats["cnt"]}}
 
 
 def reclass_championship_allocations(db_path=None) -> dict:
