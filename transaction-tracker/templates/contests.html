@@ -7078,6 +7078,7 @@
         // existing deep-link logic below does the rest. An explicit hash
         // in the URL still wins (e.g. someone edits it to #race=net).
         if (window.LSC_LANDING && !hash) hash = "#tab=lsc";
+        const raceMatch = hash.match(/race=([a-z_]+)/);
         const wantRace = raceMatch && document.querySelector(`.sub-tab[data-pr="${raceMatch[1]}"]`)
             ? raceMatch[1] : null;
         if (wantRace && wantRace !== (document.querySelector(".sub-tab[data-pr].active") || {}).dataset?.pr) {

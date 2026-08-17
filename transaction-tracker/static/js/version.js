@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.243.7";
+window.TGF_VERSION = "2.243.8";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.243.8",
+    date: "2026-08-17",
+    changes: [
+      "HOTFIX: v2.243.6's LSC-landing edit accidentally deleted the raceMatch declaration next to it, throwing a ReferenceError that killed the entire contests-page init — every visitor (not just the new link) saw permanent 'Loading…' and dead tabs. Declaration restored; /member/lonestarcup now actually lands on the Lone Star Cup tab and the Leaderboard loads normally again.",
+    ],
+  },
   {
     version: "2.243.7",
     date: "2026-08-17",
