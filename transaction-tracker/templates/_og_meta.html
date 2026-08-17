@@ -7,14 +7,19 @@
    redirect (all shell pages qualify — auth is the client-side PIN
    modal). Hash fragments (#tab=mp&mp=knockout) never reach the server,
    so all sub-links of a page share that page's card. #}
+{# Optional per-page card art (Kerry 2026-08-17): set og_image to a
+   ROOT-RELATIVE static path (e.g. "/static/og-lone-star-cup.png") to
+   replace the default app icon. A wide custom image also upgrades the
+   twitter card to summary_large_image so it renders full-bleed. #}
 {% set _og_root = (request.url_root.rstrip('/') if request is defined and request else '') %}
+{% set _og_img = _og_root ~ (og_image|default('/static/icon-512.png')) %}
 <meta property="og:site_name" content="The Golf Fellowship">
 <meta property="og:type" content="website">
 <meta property="og:title" content="{{ og_title|default('The Golf Fellowship') }}">
 <meta property="og:description" content="{{ og_desc|default('Golf, fellowship, and friendly competition — San Antonio & Austin.') }}">
-<meta property="og:image" content="{{ _og_root }}/static/icon-512.png">
+<meta property="og:image" content="{{ _og_img }}">
 {% if request is defined and request %}<meta property="og:url" content="{{ request.base_url }}">{% endif %}
-<meta name="twitter:card" content="summary">
+<meta name="twitter:card" content="{{ 'summary_large_image' if og_image is defined and og_image else 'summary' }}">
 <meta name="twitter:title" content="{{ og_title|default('The Golf Fellowship') }}">
 <meta name="twitter:description" content="{{ og_desc|default('Golf, fellowship, and friendly competition — San Antonio & Austin.') }}">
-<meta name="twitter:image" content="{{ _og_root }}/static/icon-512.png">
+<meta name="twitter:image" content="{{ _og_img }}">

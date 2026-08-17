@@ -14,8 +14,12 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
     <title>TGF — Contests</title>
-    {% set og_title = "TGF Leaderboards & Match Play" %}
-    {% set og_desc = "Season standings, points races, Match Play pools and knockout bracket, and the Lone Star Cup." %}
+    {# Lone Star Cup card (Kerry 2026-08-17): texted links to this page
+       preview as the navy trophy card — hash fragments (#tab=lsc) never
+       reach the server, so the whole contests page shares it. #}
+    {% set og_title = "The Lone Star Cup Qualifiers" %}
+    {% set og_desc = "Austin vs San Antonio — projected rosters live from today's standings, plus points races and Match Play." %}
+    {% set og_image = "/static/og-lone-star-cup.png" %}
     {% include "_og_meta.html" %}
     <link rel="stylesheet" href="/static/css/dashboard.css?v={{ app_version }}">
     <link rel="preconnect" href="https://fonts.googleapis.com">

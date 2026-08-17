@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.243.3";
+window.TGF_VERSION = "2.243.4";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.243.4",
+    date: "2026-08-17",
+    changes: [
+      "Texted links to the Leaderboard/Contests page now preview as a Lone Star Cup card (Kerry: 'change the url icon that shows up on text for this page to be The Lone Star Cup Qualifiers in that navy color with the trophy icon'): new 1200×630 og:image at /static/og-lone-star-cup.png — LSC banner navy #002868 with the orange top rule, the star-on-trophy mark, 'The Lone Star Cup' in Bitter with QUALIFIERS in TGF orange — wired via a new per-page og_image override in _og_meta.html (custom art also upgrades the twitter card to summary_large_image; every other page keeps the app-icon default). Hash tabs (#tab=lsc) never reach the server, so the whole contests page shares the card; message apps cache previews per-URL, so an already-texted link may take a while to refresh.",
+    ],
+  },
   {
     version: "2.243.3",
     date: "2026-08-17",
