@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.242.5";
+window.TGF_VERSION = "2.243.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.243.0",
+    date: "2026-08-17",
+    changes: [
+      "Championship payout close-out machinery (Kerry: 'work out all the payouts due… everything should go into one 2026 TGF Championship, then the fellowship cup and the players cup payouts should be in separate categories'): new gated bridge command scoring-champ-close (preview by default, :apply writes) records the full weekend's game money — SAT/SUN skins, team net, and CTPs plus the COMBINED Ind Net/Gross flights, 53 rows / $2,813.97 — onto the single 2026 TGF CHAMPIONSHIP payout event next to the existing $100 MVP row, creates 2026 FELLOWSHIP CUP ($1,400, 5 places) and 2026 PLAYERS CUP ($920, Robert's posted flight model incl. the champion bonus) as their own payout events, and deletes the three empty per-day bucket accounts. The winner table is transcribed verbatim from GG's official money boards (tournaments 4749222-4749259 + the 4800845-53 cup winner boards) and cross-foots GG's own purse summaries to the cent; double-record guards refuse a second apply.",
+    ],
+  },
   {
     version: "2.242.5",
     date: "2026-08-16",

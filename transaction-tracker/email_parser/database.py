@@ -15659,6 +15659,183 @@ def record_championship_bucket_accounts(db_path=None) -> dict:
             "no_bundle": b["no_bundle"]}
 
 
+# ── 2026 TGF CHAMPIONSHIP close-out (one-shot, Kerry directive 08-17:
+#    "Everything should go into one 2026 TGF Championship. Then the
+#    fellowship cup and the players cup payouts should be in separate
+#    categories.") ───────────────────────────────────────────────────────
+#
+# The winner table below is transcribed verbatim from GG's OFFICIAL money
+# boards on tgf-champ26 (fetched 2026-08-17): SAT skins 4749232 / team
+# 4749225 / CTP 4749252-57, SUN skins 4749233 / team 4749226 / CTP
+# 4749253-59, COMBINED net 4749222 / gross 4749227, and Robert's posted
+# "Fellowship Cup Winners" 4800845 + "Players Cup Winners" 4800846/51/52/53
+# flight boards. GG's own purse summaries reconcile: R1 $951.98 + R2
+# $3,122.00 + combined $1,059.99 = every pot below. DO NOT edit amounts
+# here without re-reading the boards — this is a mirror, not a source.
+
+_CHAMP_CLOSE_GAME_ROWS = [
+    # SAT Skins ($359.98 of $360 pot — GG largest-remainder rounding)
+    ("CLOER, Neal", "skins", 51.43, "SAT Skins LOW ×2 — Birdie 1, Birdie 12"),
+    ("DOGGETT, Hayden", "skins", 25.71, "SAT Skins LOW — Birdie 17"),
+    ("DOGGETT, Bryce", "skins", 25.71, "SAT Skins LOW — Birdie 14"),
+    ("YOUNG, Jeff", "skins", 25.71, "SAT Skins LOW — Birdie 13"),
+    ("LARSON, Matt", "skins", 25.71, "SAT Skins LOW — Par 2"),
+    ("MARQUES, Mike", "skins", 25.71, "SAT Skins LOW — Birdie 7"),
+    ("VASQUEZ, Gus", "skins", 90.00, "SAT Skins HIGH ×2 — Par 1, Par 10"),
+    ("VASQUEZ, Lee", "skins", 45.00, "SAT Skins HIGH — Birdie 5"),
+    ("MARROQUIN, Scott", "skins", 45.00, "SAT Skins HIGH — Par 9"),
+    # SAT Team Net ($360: 1st $240 / 2nd $120, $60/$30 per member; Ellis
+    # paid as the 2nd-place team's blind draw — GG-official)
+    ("CLOER, Neal", "team_net", 60.00, "SAT Team Net 1st (62)"),
+    ("SOUTH, Daniel", "team_net", 60.00, "SAT Team Net 1st (62)"),
+    ("WADE, John", "team_net", 60.00, "SAT Team Net 1st (62)"),
+    ("WILLIAMS, Yolanda", "team_net", 60.00, "SAT Team Net 1st (62)"),
+    ("DOGGETT, Hayden", "team_net", 30.00, "SAT Team Net 2nd (63)"),
+    ("McCORMICK, Sam", "team_net", 30.00, "SAT Team Net 2nd (63)"),
+    ("DOGGETT, Bryce", "team_net", 30.00, "SAT Team Net 2nd (63)"),
+    ("ELLIS, Gilbert", "team_net", 30.00, "SAT Team Net 2nd (63, blind draw)"),
+    # SAT CTP ($232 = 4 × $58)
+    ("CLOER, Neal", "closest_to_pin", 58.00, "SAT CTP #4"),
+    ("HOGUE, Jay", "closest_to_pin", 58.00, "SAT CTP #6"),
+    ("CLOER, Neal", "closest_to_pin", 58.00, "SAT CTP #12"),
+    ("YOUNG, Jeff", "closest_to_pin", 58.00, "SAT CTP #16"),
+    # SUN Skins ($360)
+    ("STRAITON, Robert", "skins", 72.00, "SUN Skins LOW ×2 — Birdie 3, Birdie 9"),
+    ("MAZANEC, Luke", "skins", 36.00, "SUN Skins LOW — Birdie 13"),
+    ("BARNA, Kelly", "skins", 36.00, "SUN Skins LOW — Birdie 16"),
+    ("JENKINS, Matt", "skins", 36.00, "SUN Skins LOW — Par 6"),
+    ("MCDONNELL, Kaleb", "skins", 45.00, "SUN Skins HIGH — Par 10"),
+    ("MARROQUIN, Scott", "skins", 45.00, "SUN Skins HIGH — Birdie 4"),
+    ("CALLAWAY, Rob", "skins", 45.00, "SUN Skins HIGH — Par 7"),
+    ("FEHLIS, Chuck", "skins", 45.00, "SUN Skins HIGH — Par 9"),
+    # SUN Team Net ($250 winner-take-all, $62.50 per member)
+    ("STRAITON, Robert", "team_net", 62.50, "SUN Team Net 1st (62, WTA)"),
+    ("CLOER, Neal", "team_net", 62.50, "SUN Team Net 1st (62, WTA)"),
+    ("VASQUEZ, Gus", "team_net", 62.50, "SUN Team Net 1st (62, WTA)"),
+    ("JENKINS, Matt", "team_net", 62.50, "SUN Team Net 1st (62, WTA)"),
+    # SUN CTP ($192 = 4 × $48)
+    ("MARROQUIN, Scott", "closest_to_pin", 48.00, "SUN CTP #4"),
+    ("WADE, Mary", "closest_to_pin", 48.00, "SUN CTP #6"),
+    ("BARNA, Kelly", "closest_to_pin", 48.00, "SUN CTP #12"),
+    ("BARNA, Kelly", "closest_to_pin", 48.00, "SUN CTP #16"),
+    # COMBINED Individual Net ($519.99 of $520 — 2 flights, 50/30/20)
+    ("VASQUEZ, Gus", "individual_net", 130.00, "Combined Ind Net LOW 1st"),
+    ("FEHLIS, Chuck", "individual_net", 65.00, "Combined Ind Net LOW T2"),
+    ("WADE, John", "individual_net", 65.00, "Combined Ind Net LOW T2"),
+    ("MARROQUIN, Scott", "individual_net", 130.00, "Combined Ind Net HIGH 1st"),
+    ("CALLAWAY, Rob", "individual_net", 78.00, "Combined Ind Net HIGH 2nd"),
+    ("MCDONNELL, Kaleb", "individual_net", 17.33, "Combined Ind Net HIGH T3"),
+    ("PALACIOS, Richard", "individual_net", 17.33, "Combined Ind Net HIGH T3"),
+    ("SHARP, Matt", "individual_net", 17.33, "Combined Ind Net HIGH T3"),
+    # COMBINED Individual Gross ($540 — 4 flights)
+    ("STRAITON, Robert", "individual_gross", 120.00, "Combined Ind Gross 1st Flight 1st"),
+    ("YOUNG, Jeff", "individual_gross", 60.00, "Combined Ind Gross 1st Flight 2nd"),
+    ("VASQUEZ, Gus", "individual_gross", 80.00, "Combined Ind Gross 2nd Flight 1st"),
+    ("BARNA, Kelly", "individual_gross", 40.00, "Combined Ind Gross 2nd Flight 2nd"),
+    ("MARROQUIN, Scott", "individual_gross", 80.00, "Combined Ind Gross 3rd Flight 1st"),
+    ("CALLAWAY, Rob", "individual_gross", 40.00, "Combined Ind Gross 3rd Flight 2nd"),
+    ("MCDONNELL, Kaleb", "individual_gross", 80.00, "Combined Ind Gross 4th Flight 1st"),
+    ("SHARP, Matt", "individual_gross", 40.00, "Combined Ind Gross 4th Flight 2nd"),
+]
+
+_CHAMP_CLOSE_FELLOWSHIP_ROWS = [
+    ("VASQUEZ, Gus", 630.00, "Fellowship Cup Champion — 1st Place"),
+    ("STRAITON, Robert", 308.00, "Fellowship Cup 2nd Place"),
+    ("CALLAWAY, Rob", 196.00, "Fellowship Cup 3rd Place"),
+    ("JENKINS, Matt", 154.00, "Fellowship Cup 4th Place"),
+    ("WADE, John", 112.00, "Fellowship Cup 5th Place"),
+]
+
+_CHAMP_CLOSE_PLAYERS_CUP_ROWS = [
+    # Robert's posted flight model: F1 pot $299 (champion bonus), F2–F4 $207
+    ("STRAITON, Robert", 230.69, "Players Cup Champion & 1st Flight Winner"),
+    ("YOUNG, Jeff", 68.31, "Players Cup 1st Flight 2nd"),
+    ("BARNA, Kelly", 138.69, "Players Cup 2nd Flight 1st"),
+    ("HOGUE, Jay", 68.31, "Players Cup 2nd Flight 2nd"),
+    ("CALLAWAY, Rob", 138.69, "Players Cup 3rd Flight 1st"),
+    ("WADE, Mary", 68.31, "Players Cup 3rd Flight 2nd"),
+    ("McCONAHY, Todd", 138.69, "Players Cup 4th Flight 1st"),
+    ("RIDEOUT, Jeff", 68.31, "Players Cup 4th Flight 2nd"),
+]
+
+_CHAMP_CLOSE_CUP_EVENTS = {
+    "2026 FELLOWSHIP CUP": ("Fellowship Cup", _CHAMP_CLOSE_FELLOWSHIP_ROWS),
+    "2026 PLAYERS CUP": ("Players Cup", _CHAMP_CLOSE_PLAYERS_CUP_ROWS),
+}
+
+
+def championship_close_payouts(apply: bool = False, db_path=None) -> dict:
+    """Record the 2026 TGF CHAMPIONSHIP weekend's payouts per Kerry's
+    consolidation directive: ALL game money (SAT/SUN/COMBINED) on the ONE
+    '2026 TGF CHAMPIONSHIP' payout event alongside the existing MVP row,
+    the two cups as their own events, and the three empty per-day bucket
+    events deleted. Preview by default; apply=True writes.
+
+    Guards: refuses to touch the championship event if it carries any
+    non-mvp rows already (double-record); bucket events are deleted only
+    while they hold zero payout rows; cup events go through
+    record_season_contest_payouts which refuses codes already carrying
+    their category."""
+    champ_code = "2026 TGF CHAMPIONSHIP"
+    bucket_codes = [f"{champ_code} — SATURDAY", f"{champ_code} — SUNDAY",
+                    f"{champ_code} — COMBINED"]
+    game_rows = [{"golferName": n, "category": c, "amount": a,
+                  "description": d}
+                 for (n, c, a, d) in _CHAMP_CLOSE_GAME_ROWS]
+    out: dict = {
+        "mode": "apply" if apply else "preview",
+        "champ_event": {"code": champ_code,
+                        "rows": len(game_rows),
+                        "total": round(sum(r["amount"] for r in game_rows), 2)},
+        "cup_events": {code: {"category": cat, "rows": len(rows),
+                              "total": round(sum(a for _, a, _ in rows), 2)}
+                       for code, (cat, rows) in _CHAMP_CLOSE_CUP_EVENTS.items()},
+        "delete_buckets": [],
+    }
+    with _connect(db_path) as conn:
+        ev = conn.execute(
+            "SELECT id FROM tgf_events WHERE LOWER(code) = LOWER(?)",
+            (champ_code,)).fetchone()
+        if not ev:
+            return {"error": f"no tgf_event {champ_code!r}"}
+        champ_id = ev["id"]
+        non_mvp = conn.execute(
+            "SELECT COUNT(*) FROM tgf_payouts WHERE event_id = ? "
+            "AND category != 'mvp'", (champ_id,)).fetchone()[0]
+        if non_mvp:
+            return {"error": f"{non_mvp} non-mvp payout row(s) already on "
+                             f"{champ_code!r} — already closed?"}
+        for code in bucket_codes:
+            b = conn.execute(
+                "SELECT id FROM tgf_events WHERE LOWER(code) = LOWER(?)",
+                (code,)).fetchone()
+            if not b:
+                out["delete_buckets"].append({"code": code, "state": "absent"})
+                continue
+            n = conn.execute(
+                "SELECT COUNT(*) FROM tgf_payouts WHERE event_id = ?",
+                (b["id"],)).fetchone()[0]
+            out["delete_buckets"].append(
+                {"code": code, "event_id": b["id"], "payout_rows": n,
+                 "state": ("blocked — has payout rows" if n else
+                           ("deleted" if apply else "will delete"))})
+            if apply and not n:
+                conn.execute("DELETE FROM tgf_events WHERE id = ?",
+                             (b["id"],))
+        if apply:
+            conn.commit()
+    if not apply:
+        return out
+    out["champ_event"]["result"] = import_tgf_payouts(
+        champ_id, game_rows, db_path=db_path)
+    for code, (cat, rows) in _CHAMP_CLOSE_CUP_EVENTS.items():
+        payouts = [{"golferName": n, "category": cat, "amount": a,
+                    "description": f"auto: {d}"} for (n, a, d) in rows]
+        out["cup_events"][code]["result"] = record_season_contest_payouts(
+            code, "TGF", payouts, append_category=cat, db_path=db_path)
+    return out
+
+
 def reclass_championship_allocations(db_path=None) -> dict:
     """Apply the #279-approved bundle reclass on event 3291 allocations.
 

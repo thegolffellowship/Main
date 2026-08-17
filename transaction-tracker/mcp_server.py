@@ -2597,6 +2597,15 @@ def _scoring_dispatch(url: str, extract: str):
         if cmd == "scoring-payouts-preview":
             # assemble without writing — inspect what would be recorded
             return json.dumps(db.assemble_event_game_payouts(arg), indent=2)
+        if cmd == "scoring-champ-close":
+            # 2026 TGF CHAMPIONSHIP close-out (Kerry 08-17 consolidation
+            # directive): all weekend game money onto the ONE championship
+            # payout event, cups as separate events, empty per-day bucket
+            # events deleted. Preview by default; ":apply" writes. The
+            # winner table is a code-side mirror of GG's official money
+            # boards — see _CHAMP_CLOSE_GAME_ROWS in database.py.
+            return json.dumps(db.championship_close_payouts(
+                apply=arg.strip().lower() == "apply"), indent=2, default=str)
         if cmd == "scoring-hcp-preview":
             # READ-ONLY: the handicap rounds we WOULD self-derive from our
             # scorecards for one event (differential + index impact per
