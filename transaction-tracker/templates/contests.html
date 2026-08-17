@@ -1393,6 +1393,17 @@
             .lsc-grid { grid-template-columns: 1fr; }
             .standings-section h4.lsc-title { font-size: 1.22rem; }
             .lsc-seat-label { flex-basis: 90px; }
+            /* Full-bleed cards on phones (Kerry 2026-08-17: "There's
+               room to widen the whole table… names are wrapping") — the
+               section's desktop 2rem gutters gave ~50px back to the
+               name column; row padding tightens too. !important beats
+               the section's inline desktop padding. */
+            #section-lone-star-cup .standings-section {
+                padding-left: 0.4rem !important;
+                padding-right: 0.4rem !important;
+            }
+            .lsc-seat { padding: 8px 10px; gap: 8px; }
+            .lsc-alt { padding: 6px 10px; }
         }
         /* three member top-tabs must fit a 390px phone without scroll */
         @media (max-width: 420px) {

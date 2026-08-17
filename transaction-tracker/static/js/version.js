@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.245.6";
+window.TGF_VERSION = "2.245.7";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.245.7",
+    date: "2026-08-17",
+    changes: [
+      "LSC cards go near-full-bleed on phones (Kerry: 'There's room to widen the whole table I don't like that player names are wrapping on mobile'): the section's desktop 2rem side gutters collapse to 0.4rem under 640px and seat/alternate row padding tightens, handing roughly 50px back to the name column so First Last names render on one line.",
+    ],
+  },
   {
     version: "2.245.6",
     date: "2026-08-17",
