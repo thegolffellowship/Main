@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.243.4";
+window.TGF_VERSION = "2.243.5";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.243.5",
+    date: "2026-08-17",
+    changes: [
+      "Link-preview URLs force https: Railway terminates TLS at its proxy, so Flask's request.url_root renders http:// into the og:image/og:url tags — some preview scrapers refuse non-https card images, which would silently drop the new Lone Star Cup card. _og_meta.html now rewrites the scheme (public traffic is always https).",
+    ],
+  },
   {
     version: "2.243.4",
     date: "2026-08-17",

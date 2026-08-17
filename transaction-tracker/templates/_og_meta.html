@@ -11,7 +11,10 @@
    ROOT-RELATIVE static path (e.g. "/static/og-lone-star-cup.png") to
    replace the default app icon. A wide custom image also upgrades the
    twitter card to summary_large_image so it renders full-bleed. #}
-{% set _og_root = (request.url_root.rstrip('/') if request is defined and request else '') %}
+{# Force https: Railway terminates TLS at the proxy, so Flask sees http
+   and url_root renders http:// — some preview scrapers refuse non-https
+   card images. Public traffic is always https. #}
+{% set _og_root = (request.url_root.rstrip('/')|replace('http://', 'https://') if request is defined and request else '') %}
 {% set _og_img = _og_root ~ (og_image|default('/static/icon-512.png')) %}
 <meta property="og:site_name" content="The Golf Fellowship">
 <meta property="og:type" content="website">
