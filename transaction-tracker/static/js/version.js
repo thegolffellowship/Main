@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.245.2";
+window.TGF_VERSION = "2.245.3";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.245.3",
+    date: "2026-08-17",
+    changes: [
+      "Declined Invitations panel widened to managers (Kerry: 'You can make declined viewable by managers too'): the API now includes the declined list for manager AND admin sessions — member, view-only, and anonymous payloads still never carry it — and the panel's badge reads 'Staff view only'.",
+    ],
+  },
   {
     version: "2.245.2",
     date: "2026-08-17",

@@ -9818,10 +9818,11 @@ def api_lone_star_cup():
                 get_app_setting("lsc_event_info") or "null")
         except Exception:
             d["event_info"] = None
-        # Declined invitations are ADMIN-ONLY (Kerry 2026-08-17: "Add a
-        # declined tab for Admin view only") — strip the key from every
-        # non-admin payload so the public member API never carries it.
-        if session.get("role") != "admin":
+        # Declined invitations are staff-only (Kerry 2026-08-17, widened
+        # same day: "You can make declined viewable by managers too") —
+        # strip the key from member/view-only/anonymous payloads so the
+        # public member API never carries it.
+        if session.get("role") not in ("admin", "manager"):
             for ch in d.get("chapters", []):
                 ch.pop("declined", None)
         return jsonify(d)

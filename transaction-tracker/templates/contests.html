@@ -2089,15 +2089,15 @@
                        `<div class="lsc-alt-head">Next Men Up &mdash; Alternates Pool</div>` + alts +
                        `</div>`;
             }).join("")}</div>` + (() => {
-                // DECLINED invitations (Kerry 2026-08-17, admin view
-                // only): the API includes `declined` ONLY for admin
-                // sessions, so this card simply never renders for
-                // members/managers — no client-side role check needed.
+                // DECLINED invitations (Kerry 2026-08-17, widened same
+                // day to managers): the API includes `declined` ONLY
+                // for manager/admin sessions, so this card simply never
+                // renders for members — no client-side role check needed.
                 const dec = (d.chapters || []).flatMap(ch =>
                     (ch.declined || []).map(p => ({ ...p, chapter: ch.chapter })));
                 if (!dec.length) return "";
                 return `<div class="lsc-card" style="margin-top:16px;border-top:4px solid #B91C1C;">` +
-                       `<div class="lsc-card-head" style="background:#B91C1C;">Declined Invitations<span style="color:#FECACA;">Admin view only</span></div>` +
+                       `<div class="lsc-card-head" style="background:#B91C1C;">Declined Invitations<span style="color:#FECACA;">Staff view only</span></div>` +
                        dec.map(p =>
                            `<div class="lsc-seat open"><span class="lsc-seat-label" style="color:#B91C1C;">${escapeHtml((p.chapter || "").toUpperCase())}</span>` +
                            `<span class="lsc-player">${escapeHtml(p.player_name)}` +
