@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.245.5";
+window.TGF_VERSION = "2.245.6";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.245.6",
+    date: "2026-08-17",
+    changes: [
+      "LSC seat labels drop the THE (Kerry, matching the champion-plaque ruling): the first column now reads FELLOWSHIP CUP · N and PLAYERS CUP · N — shorter labels that wrap less in the narrowed column.",
+    ],
+  },
   {
     version: "2.245.5",
     date: "2026-08-17",

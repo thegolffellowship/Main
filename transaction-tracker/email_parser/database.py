@@ -9799,11 +9799,11 @@ def get_lone_star_cup_projection(db_path: str | Path = DB_PATH) -> dict:
               "CAPTAIN" if n_cap == 1 else "CO-CAPTAIN",
               (f"{chapter} NET Champion" if n_cap == 1 else
                f"{chapter} NET Co-Champion (T1) — shares the captaincy"))] * n_cap
-            + [("fellowship", f"THE FELLOWSHIP CUP · {i + 1}",
+            + [("fellowship", f"FELLOWSHIP CUP · {i + 1}",
                 f"Final standings, top {n_fc} from the chapter")
                for i in range(n_fc)]
             + [("matchplay", f"{chapter.upper()} MATCH PLAY", "Knockout champion")]
-            + [("players", f"THE PLAYERS CUP · {i + 1}",
+            + [("players", f"PLAYERS CUP · {i + 1}",
                 "Final standings, top 4 from the chapter") for i in range(4)]
         )
 
