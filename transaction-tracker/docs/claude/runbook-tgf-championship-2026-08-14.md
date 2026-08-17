@@ -261,3 +261,28 @@ the 08-13 test boards (v2.234.1): every row reads reset + rounds exactly.
   Boards show gold champion rows + trophy pills + champions banner; money
   reads WON incl. collapsed mobile rows. Remaining: record cup payouts
   once Venmo'd, post-event mailbox digest, Lost Pines invoice true-up.
+- **PLAYERS CUP CHAMPION CORRECTION (Sunday night):** GG posted a score
+  correction (Young R2 back nine 26→25) that flipped the Players Cup to
+  STRAITON, Robert 156.0 over Young 156.5. Robert's subsequently posted
+  "Players Cup Winners" boards in GG (4800846/51/52/53) name Straiton
+  "Players Cup Champion & 1st Flight Winner" — that is the ruling of
+  record. The 2026-08-16 bullet above predates the correction.
+- **PAYOUT CLOSE-OUT (Monday 2026-08-17, v2.243.0, `scoring-champ-close`):**
+  all payouts due worked out from GG's official money boards and recorded
+  per Kerry's consolidation directive ("everything into one 2026 TGF
+  Championship; fellowship cup and players cup in separate categories"):
+  the ONE `2026 TGF CHAMPIONSHIP` payout event now carries 54 rows /
+  $2,913.97 (SAT skins $359.98 + team $360 + CTP $232; SUN skins $360 +
+  team $250 + CTP $192; COMBINED Ind Net $519.99 + Ind Gross $540; MVP
+  $100 Marroquin), `2026 FELLOWSHIP CUP` $1,400 (Vasquez 630 / Straiton
+  308 / Callaway 196 / Jenkins M 154 / Wade J 112), `2026 PLAYERS CUP`
+  $920 in Robert's posted FLIGHT model (F1 $299 incl. champion bonus:
+  Straiton 230.69 / Young 68.31; F2–F4 $207: Barna, Callaway, McConahy
+  138.69 / Hogue, Wade M, Rideout 68.31). The three empty per-day bucket
+  events (— SATURDAY/— SUNDAY/— COMBINED) were deleted. Every pot
+  cross-foots GG's purse summaries (R1 $951.98 + R2 $3,122.00 + combined
+  $1,059.99). All 38 payee-groups / $5,233.97 sit PENDING in the Unpaid
+  queue; Venmo receipts will auto-match them PAID. NOTE: the bridge's
+  `scoring-season-payouts:net|players_cup_gross` overall-restack preview
+  ($294.40/$211.60/…) was NOT used — Robert's published flight model
+  supersedes it.
