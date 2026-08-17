@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.243.8";
+window.TGF_VERSION = "2.244.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.244.0",
+    date: "2026-08-17",
+    changes: [
+      "Lone Star Cup invitation acceptances (Kerry: 'Lock both Mike Marques and Jay Hogue. Lock me as well… We all accept our invitations'): the new lsc_accepted dial holds the customer_ids of players who have ACCEPTED their roster invitation — any projected seat they hold flips to SECURED with the lock treatment, and its context line gains '— invitation accepted'. Champion/Match-Play-final seats keep their stronger secured context, TBD seats can't be accepted, and the secured counters in the team headers update automatically. First acceptances recorded: Marques + Hogue (Team Austin) and Kerry Niester (Team San Antonio).",
+    ],
+  },
   {
     version: "2.243.8",
     date: "2026-08-17",

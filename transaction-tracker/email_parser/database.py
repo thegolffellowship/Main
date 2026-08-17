@@ -9691,6 +9691,18 @@ def get_lone_star_cup_projection(db_path: str | Path = DB_PATH) -> dict:
     cup = get_fellowship_cup_projection(db_path=db_path)
     errors = [e for e in (gross.get("gg_error"), cup.get("gg_error")) if e]
 
+    # Invitation acceptances (Kerry 2026-08-17: "We all accept our
+    # invitations") — the lsc_accepted dial is a JSON list of
+    # customer_ids whose holders have ACCEPTED their roster invitation;
+    # any seat they hold reads SECURED (same lock treatment as a
+    # declared-final champion). Set/extend via
+    # scoring-setting-set:lsc_accepted|[14,37,18].
+    try:
+        lsc_accepted = {int(x) for x in json.loads(
+            get_app_setting("lsc_accepted", db_path=db_path) or "[]")}
+    except Exception:
+        lsc_accepted = set()
+
     chapters_out = []
     for chapter, race_key in (("Austin", "austin_net"),
                               ("San Antonio", "san_antonio_net")):
@@ -9887,6 +9899,16 @@ def get_lone_star_cup_projection(db_path: str | Path = DB_PATH) -> dict:
                     s["status"] = "secured"
                     s["earned_as"] = (f"{season} {chapter} NET "
                                       f"{'Co-' if n_cap > 1 else ''}Champion")
+
+        # Accepted invitations LOCK the held seat (Kerry 2026-08-17) —
+        # only a projected seat flips; champion/MP-final secured seats
+        # keep their stronger context, and TBD seats can't be accepted.
+        for s in seats:
+            if s.get("customer_id") in lsc_accepted \
+                    and s["status"] == "projected":
+                s["status"] = "secured"
+                if s.get("earned_as"):
+                    s["earned_as"] += " — invitation accepted"
 
         alternates = [
             {"player_name": c["name"], "customer_id": c["cid"],
