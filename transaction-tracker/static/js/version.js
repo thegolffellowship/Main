@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.243.1";
+window.TGF_VERSION = "2.243.2";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.243.2",
+    date: "2026-08-17",
+    changes: [
+      "Unpaid work queue back to its dense mobile layout (Kerry: 'This uses too much space. It's different than what we've had before'): the mobile-wave 40px tap-target floor inflated the Pay + Mark Paid pills into a tall stacked block on every queue row — that floor is now scoped OUT of the admin work queues (#unpaid-main / #refunds-main keep the compact 0.74rem pills; the rest of the Payouts page keeps the 40px touch targets), and the queue's event sub-line drops the redundant year (the event code already carries it) so '2026 FELLOWSHIP CUP · Aug 17' fits one line on a phone. Rows are roughly half their previous height.",
+    ],
+  },
   {
     version: "2.243.1",
     date: "2026-08-17",

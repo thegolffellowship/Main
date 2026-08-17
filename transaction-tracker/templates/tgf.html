@@ -457,6 +457,19 @@
             }
             #unpaid-main .queue-act .mark-paid-btn { margin-left: 0 !important; margin-top: 3px; }
         }
+        /* Work queues stay DENSE on mobile (Kerry 2026-08-17: "This uses
+           too much space. It's different than what we've had before") —
+           the wave-1 40px tap-target floor is scoped OUT of the admin
+           queues, restoring the compact pills. Must follow the 768px
+           floor block in source order to win the cascade. */
+        @media (max-width: 768px) {
+            #unpaid-main .venmo-btn, #unpaid-main .mark-paid-btn,
+            #unpaid-main .add-venmo-btn,
+            #refunds-main .venmo-btn, #refunds-main .mark-paid-btn,
+            #refunds-main .add-venmo-btn {
+                min-height: 0; padding: 4px 10px; font-size: 0.74rem;
+            }
+        }
         .ledger-back { display: none; }
         @media (max-width: 768px) {
             .ledger { flex-direction: column; min-height: 0; }
@@ -1125,11 +1138,16 @@
             // Event info stacks UNDER the name (Kerry 2026-07-22) so the
             // row fits a phone: name column stays narrow and the action
             // cell wraps instead of pushing the table off-screen.
+            // Short date (no year — the event code already carries it) so
+            // the sub-line fits one line on a phone (Kerry 2026-08-17).
+            const fmtDayShort = d => d
+                ? new Date(d + "T12:00:00").toLocaleDateString("en-US",
+                    { month: "short", day: "numeric" }) : "";
             list.forEach(({ev, g}) => {
                 rows += `
                     <tr>
                         <td><div style="font-weight:600;">${g.name}</div>
-                            <div class="queue-sub">${ev.code}${ev.event_date ? " · " + fmtDate(ev.event_date) : ""}</div></td>
+                            <div class="queue-sub">${ev.code}${ev.event_date ? " · " + fmtDayShort(ev.event_date) : ""}</div></td>
                         <td class="right total-amount" style="white-space:nowrap;">${fmt(g.total)}</td>
                         <td class="right queue-act">${payCellHtml(ev, g)}</td>
                     </tr>`;
