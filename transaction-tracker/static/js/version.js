@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.245.3";
+window.TGF_VERSION = "2.245.4";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.245.4",
+    date: "2026-08-17",
+    changes: [
+      "LSC seat-row polish (Kerry): the seat-label column narrows (170→112px, 90px on phones) and wraps so player names fit on one line; names read First Last via the shared prFirstLast converter (seats, Next Men Up, and the staff Declined panel alike); the fold chevron becomes the app-standard .tgf-exp glyph — the ratified 0.75rem TGF-orange triangle, ▶ closed rotating to ▼ open — and the lock rides tighter against it at the right edge.",
+    ],
+  },
   {
     version: "2.245.3",
     date: "2026-08-17",

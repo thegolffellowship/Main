@@ -1352,7 +1352,11 @@
         .lsc-card.sa .lsc-seat.secured .lsc-seat-label { color: #4B6274; }
         .lsc-card-head span { color: #9CA3AF; font: 600 10px/1 'Bitter', serif; letter-spacing: 0.8px; }
         .lsc-seat { display: flex; gap: 10px; padding: 8px 14px; border-top: 1px solid #F1F1EF; align-items: baseline; }
-        .lsc-seat-label { flex: 0 0 170px; font: 700 9.5px/1.45 'Bitter', serif; letter-spacing: 0.8px; color: #6B7280; text-transform: uppercase; }
+        /* Narrow, wrapping seat label (Kerry 2026-08-17: "wrap the first
+           column and make it narrower so names can fit without wrapping")
+           — the label folds to two lines so the name column stays wide
+           enough for one-line First Last names. */
+        .lsc-seat-label { flex: 0 0 112px; font: 700 9.5px/1.45 'Bitter', serif; letter-spacing: 0.8px; color: #6B7280; text-transform: uppercase; }
         .lsc-seat.captain { background: #FCF6EF; }
         .lsc-seat.captain .lsc-seat-label { color: #BF5700; }
         .lsc-player { font-size: 14px; color: #1B1B1B; font-weight: 600; }
@@ -1363,11 +1367,13 @@
         .lsc-earn { display: none; font-size: 11px; color: #9CA3AF; font-weight: 400; }
         .lsc-seat.open .lsc-earn { display: block; }
         .lsc-seat.has-earn { cursor: pointer; }
-        .lsc-chev { flex: 0 0 auto; align-self: center; margin-left: auto;
-                    color: #9CA3AF; font-size: 11px; line-height: 1;
-                    transition: transform 0.15s; }
-        .lsc-seat.open .lsc-chev { transform: rotate(180deg); }
-        .lsc-seat .lsc-lock + .lsc-chev, .lsc-seat.secured .lsc-chev { margin-left: 8px; }
+        /* Chevron is the app-standard .tgf-exp glyph (Kerry 2026-08-14
+           ratified 0.75rem TGF-orange triangle) — only positioning lives
+           here; ▶ rotates to ▼ when open. Lock rides just left of it
+           (Kerry 2026-08-17: "Move lock further right"). */
+        .lsc-chev { flex: 0 0 auto; align-self: center; margin-left: auto; }
+        .lsc-seat.open .lsc-chev { transform: rotate(90deg); }
+        .lsc-seat .lsc-lock + .lsc-chev, .lsc-seat.secured .lsc-chev { margin-left: 6px; }
         .lsc-tbd { color: #9CA3AF; font-style: italic; font-weight: 500; font-size: 13px; }
         .lsc-pool-chip {
             display: inline-flex; margin-left: 6px; padding: 2px 7px; background: #FDF0E6;
@@ -1386,7 +1392,7 @@
         @media (max-width: 768px) {
             .lsc-grid { grid-template-columns: 1fr; }
             .standings-section h4.lsc-title { font-size: 1.22rem; }
-            .lsc-seat-label { flex-basis: 128px; }
+            .lsc-seat-label { flex-basis: 90px; }
         }
         /* three member top-tabs must fit a 390px phone without scroll */
         @media (max-width: 420px) {
@@ -2063,7 +2069,9 @@
                     let who;
                     if (seat.player_name) {
                         const pool = seat.via_pool ? '<span class="lsc-pool-chip">Pool</span>' : "";
-                        who = `<span class="lsc-player">${escapeHtml(seat.player_name)}${pool}` +
+                        // First Last display (Kerry 2026-08-17) via the
+                        // shared prFirstLast converter
+                        who = `<span class="lsc-player">${escapeHtml(prFirstLast(seat.player_name))}${pool}` +
                               `<span class="lsc-earn">${escapeHtml(seat.earned_as || "")}</span></span>`;
                     } else {
                         who = `<span class="lsc-tbd">To be decided` +
@@ -2075,12 +2083,12 @@
                     return `<div class="lsc-seat${cap ? " captain" : ""}${secured ? " secured" : ""}${hasEarn ? " has-earn" : ""}">` +
                            `<span class="lsc-seat-label">${escapeHtml(seat.seat)}</span>${who}` +
                            (secured ? `<span class="lsc-lock">${LSC_LOCK_SVG}</span>` : "") +
-                           (hasEarn ? `<span class="lsc-chev">&#9662;</span>` : "") +
+                           (hasEarn ? `<span class="lsc-chev tgf-exp">&#9654;</span>` : "") +
                            `</div>`;
                 }).join("");
                 const alts = (ch.alternates || []).map((a, i) =>
                     `<div class="lsc-alt"><span class="n">${i + 1}</span>` +
-                    `<span class="who">${escapeHtml(a.player_name)}</span>` +
+                    `<span class="who">${escapeHtml(prFirstLast(a.player_name))}</span>` +
                     `<span class="ctx">${escapeHtml(a.context)} &middot; ${a.events} event${a.events === 1 ? "" : "s"}</span></div>`
                 ).join("") || '<div class="lsc-alt"><span class="ctx">No eligible alternates yet.</span></div>';
                 return `<div class="lsc-card ${/austin/i.test(ch.chapter || "") ? "austin" : "sa"}">` +
@@ -2100,7 +2108,7 @@
                        `<div class="lsc-card-head" style="background:#B91C1C;">Declined Invitations<span style="color:#FECACA;">Staff view only</span></div>` +
                        dec.map(p =>
                            `<div class="lsc-seat open"><span class="lsc-seat-label" style="color:#B91C1C;">${escapeHtml((p.chapter || "").toUpperCase())}</span>` +
-                           `<span class="lsc-player">${escapeHtml(p.player_name)}` +
+                           `<span class="lsc-player">${escapeHtml(prFirstLast(p.player_name))}` +
                            `<span class="lsc-earn">${escapeHtml(p.context || "")} &mdash; declined, removed from roster &amp; pool</span></span></div>`
                        ).join("") + `</div>`;
             })() + (d.gg_error
