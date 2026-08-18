@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.245.9";
+window.TGF_VERSION = "2.245.10";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.245.10",
+    date: "2026-08-18",
+    changes: [
+      "Events page mobile Actions dropdown no longer cut off (Kerry: 'Can't see all of actions drop down'): dashboard.css clips .mobile-card with overflow:hidden for its rounded corners, which truncated the absolutely-positioned ⚙ Actions menu at the card edge — only + Add Player was reachable. The events-page cards now allow visible overflow (their wide detail tables already live in their own overflow-x:auto wrappers, so nothing else leaks), and the full menu — Add Payment, Remind All, Message Players, Audit RSVPs, Edit, Merge, Cancel — renders past the card boundary.",
+    ],
+  },
   {
     version: "2.245.9",
     date: "2026-08-17",

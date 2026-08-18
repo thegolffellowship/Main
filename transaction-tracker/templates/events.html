@@ -583,6 +583,13 @@
         }
         /* Actions dropdown */
         .ev-actions-wrap { position: relative; display: inline-block; }
+        /* The event cards must NOT clip the absolutely-positioned menu
+           (Kerry 2026-08-18: "Can't see all of actions drop down") —
+           dashboard.css gives .mobile-card overflow:hidden for its
+           rounded corners, which cut the menu at the card edge. Wide
+           detail tables keep their own overflow-x:auto wrappers, so
+           visible is safe here. */
+        .events-mobile .mobile-card { overflow: visible; }
         .ev-actions-menu {
             display: none; position: absolute; top: calc(100% + 3px); left: 0;
             z-index: 300; background: #fff; border: 1px solid #e5e7eb;
