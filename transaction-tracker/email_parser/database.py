@@ -9848,34 +9848,35 @@ def get_lone_star_cup_projection(db_path: str | Path = DB_PATH,
                         "pct": pct, "place": cand["place"],
                         "field": field, "contest": contest_names[contest],
                     }
-        # OPEN alternates for AUSTIN (Kerry 2026-08-17: "add in Austin
-        # alternates based on fellowship/players cup standings regardless
-        # of if they bought in" — the enrolled pool ran dry): the Austin
-        # bench also draws from the final Fellowship Cup / Players Cup
-        # standings WITHOUT the buy-in gate, ranked by the same percentile
-        # rule, so declined/vacated seats always have a next man up.
-        # Earned seats stay enrolled-only; only the pool opens. Austin
-        # named explicitly (rule 3d exception).
-        if chapter == "Austin":
-            open_rows = ([("fellowship", r) for r in cup["standings"]
-                          if (r.get("chapter") or "") == chapter]
-                         + [("players", r) for r in gross["standings"]
-                            if (r.get("player_chapter") or "") == chapter])
-            for contest, r in open_rows:
-                cid = r.get("customer_id")
-                place = pnum(r.get("rank"))
-                if not cid or place is None or cid in roster_ids \
-                        or cid in lsc_declined:
-                    continue
-                field = field_sizes[contest] or 1
-                pct = place / field
-                cur = pool_by_cid.get(cid)
-                if cur is None or (cur.get("open") and pct < cur["pct"]):
-                    pool_by_cid[cid] = {
-                        "cid": cid, "name": r["player_name"], "pct": pct,
-                        "place": place, "field": field,
-                        "contest": contest_names[contest], "open": True,
-                    }
+        # OPEN alternates for EVERY chapter (Kerry 2026-08-17: "add in
+        # Austin alternates based on fellowship/players cup standings
+        # regardless of if they bought in", widened to San Antonio the
+        # same day when Pat Youngs — SA, unenrolled, T23 Players Cup —
+        # had no bench rank): each bench also draws from the final
+        # Fellowship Cup / Players Cup standings WITHOUT the buy-in
+        # gate, ranked by the same percentile rule, so declined/vacated
+        # seats always have a next man up. Earned seats stay
+        # enrolled-only; only the pool opens, and enrolled pool players
+        # still outrank open ones.
+        open_rows = ([("fellowship", r) for r in cup["standings"]
+                      if (r.get("chapter") or "") == chapter]
+                     + [("players", r) for r in gross["standings"]
+                        if (r.get("player_chapter") or "") == chapter])
+        for contest, r in open_rows:
+            cid = r.get("customer_id")
+            place = pnum(r.get("rank"))
+            if not cid or place is None or cid in roster_ids \
+                    or cid in lsc_declined:
+                continue
+            field = field_sizes[contest] or 1
+            pct = place / field
+            cur = pool_by_cid.get(cid)
+            if cur is None or (cur.get("open") and pct < cur["pct"]):
+                pool_by_cid[cid] = {
+                    "cid": cid, "name": r["player_name"], "pct": pct,
+                    "place": place, "field": field,
+                    "contest": contest_names[contest], "open": True,
+                }
         # ENROLLED pool players outrank OPEN (non-bought-in) ones for
         # seats regardless of percentile — the open bench extends the
         # pool, it must never RESHUFFLE seats already held by bought-in

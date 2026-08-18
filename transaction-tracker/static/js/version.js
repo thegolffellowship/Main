@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.245.8";
+window.TGF_VERSION = "2.245.9";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.245.9",
+    date: "2026-08-17",
+    changes: [
+      "Open LSC alternates for every chapter (Kerry — Pat Youngs, SA, unenrolled at T23 in The Players Cup, had no bench rank): the no-buy-in-required pool that Austin got earlier today now applies to San Antonio too, dropping the chapter gate. Same rules — earned seats stay enrolled-only, enrolled pool players outrank open ones, percentile ranking with events-played tiebreak.",
+    ],
+  },
   {
     version: "2.245.8",
     date: "2026-08-17",
