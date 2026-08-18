@@ -9641,7 +9641,8 @@ def _lsc_ordinal(n: int) -> str:
     return f"{n}{ {1: 'st', 2: 'nd', 3: 'rd'}.get(n % 10, 'th') }"
 
 
-def get_lone_star_cup_projection(db_path: str | Path = DB_PATH) -> dict:
+def get_lone_star_cup_projection(db_path: str | Path = DB_PATH,
+                                 alternates_cap: int = 8) -> dict:
     """LONE STAR CUP projected rosters per chapter (spec: mailbox #85–#88,
     Kerry-RATIFIED 2026-07-10).
 
@@ -9959,7 +9960,7 @@ def get_lone_star_cup_projection(db_path: str | Path = DB_PATH) -> dict:
                          f"{c['contest']}"),
              "events": events_by_cid.get(c["cid"], 0)}
             for c in pool if c["cid"] not in pool_used
-        ][:8]
+        ][:alternates_cap]
 
         # Declined invitations (ADMIN-ONLY payload — the API route strips
         # this key for non-admin sessions): who declined + their best

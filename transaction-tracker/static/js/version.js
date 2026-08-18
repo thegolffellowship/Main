@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.245.7";
+window.TGF_VERSION = "2.245.8";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.245.8",
+    date: "2026-08-17",
+    changes: [
+      "Full LSC alternates pool for staff (Kerry: 'Who are the next 10 alternates after Justin McCrary?'): get_lone_star_cup_projection takes an alternates_cap (default 8, unchanged for the member board) and the new scoring-lsc-pool bridge command returns each chapter's whole ranked remainder — name, customer_id, qualifying context, events played — for decline-cascade planning beyond the visible Next Men Up.",
+    ],
+  },
   {
     version: "2.245.7",
     date: "2026-08-17",

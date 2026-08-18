@@ -2611,6 +2611,18 @@ def _scoring_dispatch(url: str, extract: str):
                                   indent=2, default=str)
             return json.dumps(db.championship_close_payouts(
                 apply=arg.strip().lower() == "apply"), indent=2, default=str)
+        if cmd == "scoring-lsc-pool":
+            # FULL Lone Star Cup alternates pool per chapter (staff
+            # query, Kerry 2026-08-17: "Who are the next 10 alternates
+            # after Justin McCrary?") — the member board caps Next Men
+            # Up at 8; this returns the whole ranked remainder.
+            d = db.get_lone_star_cup_projection(alternates_cap=60)
+            return json.dumps({ch["chapter"]: [
+                {"n": i + 1, "name": a["player_name"],
+                 "cid": a["customer_id"], "context": a["context"],
+                 "events": a["events"]}
+                for i, a in enumerate(ch.get("alternates") or [])]
+                for ch in d.get("chapters", [])}, indent=2, default=str)
         if cmd == "scoring-payout-delete":
             # delete ONE tgf_payouts row + its PENDING ledger entry and
             # refresh the event's aggregates; refuses paid-linked rows.
