@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.245.10";
+window.TGF_VERSION = "2.245.11";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.245.11",
+    date: "2026-08-18",
+    changes: [
+      "LSC bench marks pre-confirmed alternates (Kerry: 'Can you mark them different somehow?'): Next Men Up rows whose player is in the lsc_accepted dial — confirmed they can go if a seat falls to them — show a green ✓ after the name (tooltip explains it). First marked: Gilbert Ellis, Justin McCrary, Doug Hamilton on the SA bench. When a seat cascades to a marked player it still arrives already SECURED, as before.",
+    ],
+  },
   {
     version: "2.245.10",
     date: "2026-08-18",

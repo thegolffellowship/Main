@@ -9954,12 +9954,16 @@ def get_lone_star_cup_projection(db_path: str | Path = DB_PATH,
                 if s.get("earned_as"):
                     s["earned_as"] += " — invitation accepted"
 
+        # accepted flag (Kerry 2026-08-17: "Can you mark them different
+        # somehow?"): bench players who have pre-confirmed they can go
+        # if a seat falls to them carry a check on the Next Men Up list.
         alternates = [
             {"player_name": c["name"], "customer_id": c["cid"],
              "percentile": round(c["pct"] * 100, 1),
              "context": (f"{_lsc_ordinal(c['place'])} of {c['field']} in "
                          f"{c['contest']}"),
-             "events": events_by_cid.get(c["cid"], 0)}
+             "events": events_by_cid.get(c["cid"], 0),
+             "accepted": c["cid"] in lsc_accepted}
             for c in pool if c["cid"] not in pool_used
         ][:alternates_cap]
 

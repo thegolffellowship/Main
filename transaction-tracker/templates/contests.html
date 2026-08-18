@@ -1388,6 +1388,8 @@
         .lsc-alt .n { flex: 0 0 18px; font-weight: 700; color: #9CA3AF; font-variant-numeric: tabular-nums; }
         .lsc-alt .who { font-weight: 600; color: #1B1B1B; }
         .lsc-alt .ctx { color: #9CA3AF; font-size: 11px; }
+        /* pre-confirmed bench player: green check after the name */
+        .lsc-ok { color: #15803D; font-weight: 800; font-size: 12px; }
         .lsc-foot { margin-top: 0.9rem; font-size: 12px; line-height: 1.55; color: #9CA3AF; }
         @media (max-width: 768px) {
             .lsc-grid { grid-template-columns: 1fr; }
@@ -2098,9 +2100,11 @@
                            (hasEarn ? `<span class="lsc-chev tgf-exp">&#9654;</span>` : "") +
                            `</div>`;
                 }).join("");
+                // Green check = pre-confirmed available if a seat falls
+                // to them (Kerry 2026-08-17: "mark them different somehow")
                 const alts = (ch.alternates || []).map((a, i) =>
                     `<div class="lsc-alt"><span class="n">${i + 1}</span>` +
-                    `<span class="who">${escapeHtml(prFirstLast(a.player_name))}</span>` +
+                    `<span class="who">${escapeHtml(prFirstLast(a.player_name))}${a.accepted ? ' <span class="lsc-ok" title="Confirmed available if a seat opens">&#10003;</span>' : ''}</span>` +
                     `<span class="ctx">${escapeHtml(a.context)} &middot; ${a.events} event${a.events === 1 ? "" : "s"}</span></div>`
                 ).join("") || '<div class="lsc-alt"><span class="ctx">No eligible alternates yet.</span></div>';
                 return `<div class="lsc-card ${/austin/i.test(ch.chapter || "") ? "austin" : "sa"}">` +
