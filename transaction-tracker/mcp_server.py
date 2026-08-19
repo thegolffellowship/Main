@@ -2634,10 +2634,11 @@ def _scoring_dispatch(url: str, extract: str):
             with db._connect() as conn:
                 for cid, info in deps.items():
                     row = conn.execute(
-                        "SELECT customer_name FROM customers "
-                        "WHERE customer_id = ?", (int(cid),)).fetchone()
+                        "SELECT first_name || ' ' || last_name AS n "
+                        "FROM customers WHERE customer_id = ?",
+                        (int(cid),)).fetchone()
                     out.append({"cid": int(cid),
-                                "name": row["customer_name"] if row else None,
+                                "name": row["n"] if row else None,
                                 "amount": info.get("amount"),
                                 "txns": info.get("txns")})
             out.sort(key=lambda r: (-(r["amount"] or 0), r["name"] or ""))

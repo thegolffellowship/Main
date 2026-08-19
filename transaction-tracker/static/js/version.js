@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.246.1";
+window.TGF_VERSION = "2.246.2";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.246.2",
+    date: "2026-08-19",
+    changes: [
+      "scoring-lsc-deposits name lookup fixed: customers has first_name/last_name, not a customer_name column — the bridge command errored on its first live call.",
+    ],
+  },
   {
     version: "2.246.1",
     date: "2026-08-19",
