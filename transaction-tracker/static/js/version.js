@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.247.2";
+window.TGF_VERSION = "2.247.3";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.247.3",
+    date: "2026-08-19",
+    changes: [
+      "LSC alternates split into their own rounded card (Kerry: 'create a small break between rosters and Next Men Up… add the curved corners above and below the breaks'): the roster card now closes with rounded corners after the bonus spots, a 10px break follows, and the alternates open a fresh chapter-branded card (team color bar on top). Renamed to 'Next Players Up — Alternates Pool' (Kerry: 'because there's women'), and its header matches the Bonus Spots band's dark ink.",
+    ],
+  },
   {
     version: "2.247.2",
     date: "2026-08-19",

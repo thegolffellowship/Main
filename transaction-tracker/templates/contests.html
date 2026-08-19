@@ -1382,8 +1382,17 @@
         }
         .lsc-alt-head {
             padding: 9px 14px 7px; background: #FBFAF8; border-top: 2px solid #1B1B1B;
-            font: 700 10px/1.3 'Bitter', serif; letter-spacing: 1.2px; color: #6B7280; text-transform: uppercase;
+            /* dark ink to match the Bonus Spots band (Kerry 2026-08-19) */
+            font: 700 10px/1.3 'Bitter', serif; letter-spacing: 1.2px; color: #1B1B1B; text-transform: uppercase;
         }
+        /* Alternates split into their OWN rounded card with a small
+           break below the roster (Kerry 2026-08-19: "create a small
+           break between rosters and Next Players Up... curved corners
+           above and below the breaks"). The chapter class carries the
+           team's 4px color bar to the new card's top edge, so the
+           header band's own rule would double it — drop it there. */
+        .lsc-alt-card { margin-top: 10px; }
+        .lsc-alt-card .lsc-alt-head { border-top: none; }
         /* DFW/HOUSTON bonus block (Kerry 2026-08-19: "highlight the
            DFW/HOUSTON slots slightly differently — a group boundary
            for each of those last two slots"): same band treatment as
@@ -2164,11 +2173,20 @@
                     `<span class="who">${escapeHtml(prNiceName(a.player_name))}${a.accepted ? ' <span class="lsc-ok" title="Confirmed available if a seat opens">&#10003;</span>' : ''}</span>` +
                     `<span class="ctx">${depBadge(a.customer_id)}${escapeHtml(a.context)} &middot; ${a.events} event${a.events === 1 ? "" : "s"}</span></div>`
                 ).join("") || '<div class="lsc-alt"><span class="ctx">No eligible alternates yet.</span></div>';
-                return `<div class="lsc-card ${/austin/i.test(ch.chapter || "") ? "austin" : "sa"}">` +
+                // Roster and alternates render as SEPARATE rounded cards
+                // with a small break between them (Kerry 2026-08-19:
+                // "create a small break between rosters and Next Men Up
+                // ... curved corners above and below the breaks"); the
+                // .lsc-col wrapper keeps both in one grid cell.
+                const cls = /austin/i.test(ch.chapter || "") ? "austin" : "sa";
+                return `<div class="lsc-col">` +
+                       `<div class="lsc-card ${cls}">` +
                        `<div class="lsc-card-head">Team ${escapeHtml((ch.chapter || "").toUpperCase())}<span>${ch.n_projected} of ${ch.n_seats || 12} projected${ch.n_secured ? ` &middot; ${ch.n_secured} secured` : ""}</span></div>` +
                        seats +
-                       `<div class="lsc-alt-head">Next Men Up &mdash; Alternates Pool</div>` + alts +
-                       `</div>`;
+                       `</div>` +
+                       `<div class="lsc-card ${cls} lsc-alt-card">` +
+                       `<div class="lsc-alt-head">Next Players Up &mdash; Alternates Pool</div>` + alts +
+                       `</div></div>`;
             }).join("")}</div>` + (() => {
                 // DECLINED invitations (Kerry 2026-08-17, widened same
                 // day to managers): the API includes `declined` ONLY
