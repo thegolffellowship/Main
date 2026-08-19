@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.247.6";
+window.TGF_VERSION = "2.248.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.248.0",
+    date: "2026-08-19",
+    changes: [
+      "Lone Star Cup LODGING tracker (Kerry: 'add some admin lodging tracking capabilities'): a staff-only Lodging card on the LSC tab shows the trip's rooms/beds with occupancy, each player's nights, and lodging payments as money pills — green when paid in full, amber '$paid of $cost' while short — linking to the underlying transaction like the seat deposits. Own-arrangements and not-staying lists, per-night headcounts, and collected-vs-expected totals round out the card, with the venue name linking to the listing. All data lives in the new lsc_lodging dial (venue/url, nights, units with bed counts, per-player assignment/nights/cost/paid/txn/own/out), Claude-maintained from Kerry's messages — no edit UI by design; names resolve via customer_id. New scoring-lsc-lodging bridge command reads the same payload. The public member API never carries lodging.",
+    ],
+  },
   {
     version: "2.247.6",
     date: "2026-08-19",

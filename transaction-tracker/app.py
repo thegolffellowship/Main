@@ -9827,6 +9827,15 @@ def api_lone_star_cup():
                 ch.pop("declined", None)
             # Deposit amounts are financial data — staff eyes only
             d.pop("deposits", None)
+        else:
+            # Lodging tracker (Kerry 2026-08-19) — attached only for
+            # staff sessions, so the public payload never carries it
+            try:
+                from email_parser.database import get_lsc_lodging
+                d["lodging"] = get_lsc_lodging()
+            except Exception:
+                logger.exception("LSC lodging payload failed")
+                d["lodging"] = None
         return jsonify(d)
     except Exception as e:
         logger.exception("Lone Star Cup projection failed")

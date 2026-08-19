@@ -2643,6 +2643,10 @@ def _scoring_dispatch(url: str, extract: str):
                                 "txns": info.get("txns")})
             out.sort(key=lambda r: (-(r["amount"] or 0), r["name"] or ""))
             return json.dumps(out, indent=2, default=str)
+        if cmd == "scoring-lsc-lodging":
+            # Lone Star Cup lodging tracker payload (staff card data) —
+            # READ-ONLY; edit via scoring-setting-set:lsc_lodging|{...}
+            return json.dumps(db.get_lsc_lodging(), indent=2, default=str)
         if cmd == "scoring-payout-delete":
             # delete ONE tgf_payouts row + its PENDING ledger entry and
             # refresh the event's aggregates; refuses paid-linked rows.

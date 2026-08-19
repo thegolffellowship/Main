@@ -1430,6 +1430,13 @@
         .lsc-dep { display: inline-block; margin-left: 6px; padding: 1px 7px; border-radius: 999px; background: #DCFCE7; color: #15803D; font-weight: 700; font-size: 10.5px; line-height: 1.5; text-decoration: none; vertical-align: 1px; font-variant-numeric: tabular-nums; }
         .lsc-dep:hover { background: #BBF7D0; text-decoration: none; }
         .lsc-alt .ctx .lsc-dep { margin-left: 0; margin-right: 6px; }
+        /* partial-payment variant of the money pill (lodging tracker) */
+        .lsc-dep-part { background: #FEF3C7; color: #92400E; }
+        .lsc-dep-part:hover { background: #FDE68A; }
+        /* Lodging tracker (Kerry 2026-08-19, staff-only card): unit
+           header rows — cabin name left, occupancy right */
+        .lsc-lodge-head { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; padding: 8px 14px 6px; background: #FBFAF8; border-top: 1px solid #E5E7EB; font: 700 10px/1.3 'Bitter', serif; letter-spacing: 1px; color: #1B1B1B; text-transform: uppercase; }
+        .lsc-lodge-head span { color: #6B7280; font-weight: 600; letter-spacing: 0.4px; }
         .lsc-foot { margin-top: 0.9rem; font-size: 12px; line-height: 1.55; color: #9CA3AF; }
         @media (max-width: 768px) {
             .lsc-grid { grid-template-columns: 1fr; }
@@ -2189,6 +2196,63 @@
                        `<div class="lsc-alt-head">Next Players Up &mdash; Alternates Pool</div>` + alts +
                        `</div></div>`;
             }).join("")}</div>` + (() => {
+                // LODGING tracker (Kerry 2026-08-19, staff-only — the
+                // API attaches `lodging` only for manager/admin
+                // sessions). Data lives in the lsc_lodging dial and is
+                // Claude-maintained; this card just displays it: units
+                // with bed occupancy, per-player nights, payment state
+                // (linked to the transaction like the deposit badges),
+                // own-arrangements / not-staying lists, per-night
+                // headcounts, and money collected vs expected.
+                const L = d.lodging;
+                if (!L) return "";
+                const payBadge = (p) => {
+                    if (!p.cost && !p.paid) return "";
+                    const full = p.cost && p.paid >= p.cost;
+                    const cls = full ? "lsc-dep" : "lsc-dep lsc-dep-part";
+                    const txt = full ? `$${p.cost}`
+                        : `$${p.paid || 0} of $${p.cost || 0}`;
+                    return p.txn
+                        ? `<a class="${cls}" href="/accounting?exp=${p.txn}" title="Tap to view the transaction" onclick="event.stopPropagation()">${txt}</a>`
+                        : `<span class="${cls}">${txt}</span>`;
+                };
+                const prow = (p, ctx) =>
+                    `<div class="lsc-alt"><span class="who">${escapeHtml(prNiceName(p.name || ""))}</span>` +
+                    `<span class="ctx">${escapeHtml(ctx !== undefined ? ctx : (p.nights || []).join(" · "))}` +
+                    `${p.note ? ` &middot; ${escapeHtml(p.note)}` : ""} ${payBadge(p)}</span></div>`;
+                const units = (L.units || []).map(u =>
+                    `<div class="lsc-lodge-head">${escapeHtml(u.name)}<span>${u.used}${u.beds ? ` of ${u.beds} beds` : ` assigned`}${u.note ? ` &middot; ${escapeHtml(u.note)}` : ""}</span></div>` +
+                    ((u.players || []).map(p => prow(p)).join("")
+                        || `<div class="lsc-alt"><span class="ctx">Empty</span></div>`)
+                ).join("");
+                const grp = (list, title, ctx) => (list || []).length
+                    ? `<div class="lsc-lodge-head">${title}<span>${list.length}</span></div>` +
+                      list.map(p => prow(p, ctx)).join("")
+                    : "";
+                const counts = (L.nights || []).map(n =>
+                    `${escapeHtml(n)}: <b>${(L.night_counts || {})[n] || 0}</b>`).join(" &middot; ");
+                const m = L.money || {};
+                const moneyTxt = (m.expected || m.collected)
+                    ? `Collected <b>$${m.collected || 0}</b> of $${m.expected || 0}` : "";
+                const foot = [counts, moneyTxt].filter(Boolean).join(" &nbsp;&middot;&nbsp; ");
+                const empty = !(L.units || []).length && !(L.unassigned || []).length
+                    && !(L.own_arrangements || []).length && !(L.not_staying || []).length;
+                const venue = L.venue
+                    ? (L.url
+                        ? ` &mdash; <a href="${escapeHtml(L.url)}" style="color:inherit;">${escapeHtml(L.venue)}</a>`
+                        : ` &mdash; ${escapeHtml(L.venue)}`)
+                    : "";
+                return `<div class="lsc-card" style="margin-top:16px;">` +
+                       `<div class="lsc-card-head">Lodging${venue}<span>Staff view only</span></div>` +
+                       (empty
+                           ? `<div class="lsc-alt"><span class="ctx">No lodging set up yet &mdash; tell Claude to add cabins, assignments, nights, and payments.</span></div>`
+                           : units +
+                             grp(L.unassigned, "Staying &mdash; no room yet") +
+                             grp(L.own_arrangements, "Own arrangements", "arranged own lodging") +
+                             grp(L.not_staying, "Not staying overnight", "")) +
+                       (foot ? `<div class="lsc-alt" style="background:#FBFAF8;"><span class="ctx">${foot}</span></div>` : "") +
+                       `</div>`;
+            })() + (() => {
                 // DECLINED invitations (Kerry 2026-08-17, widened same
                 // day to managers): the API includes `declined` ONLY
                 // for manager/admin sessions, so this card simply never

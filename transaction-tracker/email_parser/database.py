@@ -10146,6 +10146,95 @@ def get_lone_star_cup_projection(db_path: str | Path = DB_PATH,
     }
 
 
+def get_lsc_lodging(db_path: str = DB_PATH) -> dict | None:
+    """STAFF-ONLY Lone Star Cup lodging tracker (Kerry 2026-08-19:
+    "add some admin lodging tracking capabilities" — LSC/Hideout only,
+    room assignments + nights + payments, Claude-maintained data).
+
+    Everything lives in the `lsc_lodging` app-setting dial, edited via
+    scoring-setting-set on Kerry's instruction — no edit UI by design:
+      {"venue": "The Hideout",
+       "nights": ["Fri 10/9", "Sat 10/10"],       # display labels
+       "units": [{"id": "cabin1", "name": "Cabin 1",
+                  "beds": 6, "note": ""}],
+       "players": {"<customer_id>": {
+           "unit": "cabin1",            # units[].id, or absent
+           "nights": ["Fri 10/9"],      # default: all nights
+           "cost": 150, "paid": 150,    # lodging money, dollars
+           "txn": 2400,                 # expense_transactions id link
+           "note": "",
+           "own": true,                 # arranged own lodging
+           "out": true}}}               # not staying overnight
+    Names resolve from customers via customer_id (rule 6). Returns None
+    when the dial is unset so the card hides until lodging starts."""
+    try:
+        raw = get_app_setting("lsc_lodging", db_path=db_path)
+        if not raw:
+            return None
+        cfg = json.loads(raw)
+        if not isinstance(cfg, dict):
+            return None
+    except Exception:
+        return None
+    nights = [str(n) for n in (cfg.get("nights") or [])]
+    entries = []
+    try:
+        with _connect(db_path) as conn:
+            for cid_s, p in (cfg.get("players") or {}).items():
+                if not isinstance(p, dict):
+                    continue
+                try:
+                    cid = int(cid_s)
+                except Exception:
+                    continue
+                row = conn.execute(
+                    "SELECT first_name || ' ' || last_name AS n "
+                    "FROM customers WHERE customer_id = ?",
+                    (cid,)).fetchone()
+                own, out = bool(p.get("own")), bool(p.get("out"))
+                entries.append({
+                    "cid": cid,
+                    "name": ((row["n"] if row else None)
+                             or p.get("name") or f"#{cid}"),
+                    "unit": p.get("unit"),
+                    "nights": ([str(n) for n in (p.get("nights") or [])]
+                               or ([] if (own or out) else nights)),
+                    "cost": p.get("cost") or 0,
+                    "paid": p.get("paid") or 0,
+                    "txn": p.get("txn"),
+                    "note": p.get("note") or "",
+                    "own": own, "out": out,
+                })
+    except Exception:
+        logger.warning("LSC lodging: player resolve failed", exc_info=True)
+    entries.sort(key=lambda e: e["name"])
+    units = []
+    for u in (cfg.get("units") or []):
+        if not isinstance(u, dict):
+            continue
+        uid = u.get("id") or u.get("name")
+        members = [e for e in entries
+                   if e["unit"] == uid and not e["own"] and not e["out"]]
+        units.append({"id": uid, "name": u.get("name") or str(uid),
+                      "beds": u.get("beds"), "note": u.get("note") or "",
+                      "players": members, "used": len(members)})
+    assigned = {e["cid"] for u in units for e in u["players"]}
+    staying = [e for e in entries if not e["own"] and not e["out"]]
+    return {
+        "venue": cfg.get("venue"),
+        "url": cfg.get("url"),
+        "nights": nights,
+        "units": units,
+        "unassigned": [e for e in staying if e["cid"] not in assigned],
+        "own_arrangements": [e for e in entries if e["own"]],
+        "not_staying": [e for e in entries if e["out"]],
+        "night_counts": {n: sum(1 for e in staying if n in e["nights"])
+                         for n in nights},
+        "money": {"expected": round(sum(e["cost"] for e in entries), 2),
+                  "collected": round(sum(e["paid"] for e in entries), 2)},
+    }
+
+
 def derive_member_financial_status(conn: sqlite3.Connection,
                                    customer_id: int) -> str:
     """'member' | 'alumni' | 'guest' — from TRACKER FINANCIAL TRUTH.
