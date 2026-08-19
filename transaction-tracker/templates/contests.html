@@ -1376,6 +1376,17 @@
         .lsc-chev { flex: 0 0 auto; align-self: center; margin-left: auto; }
         .lsc-seat.open .lsc-chev { transform: rotate(90deg); }
         .lsc-seat .lsc-lock + .lsc-chev, .lsc-seat.secured .lsc-chev { margin-left: 6px; }
+        /* Lodging status icons on roster rows (Kerry 2026-08-19,
+           staff-only — driven by the lodging payload the API only
+           sends staff): green house = lodging through TGF, red
+           slashed house = no lodging needed, nothing = no response.
+           The icon takes over the right-push when it precedes the
+           lock/chevron, which then space normally. */
+        .lsc-lodge-ic { flex: 0 0 auto; align-self: center; margin-left: auto; line-height: 0; }
+        .lsc-hoy { color: #15803D; }
+        .lsc-hon { color: #B91C1C; }
+        .lsc-lodge-ic + .lsc-lock { margin-left: 8px; }
+        .lsc-lodge-ic + .lsc-chev { margin-left: 6px; }
         .lsc-tbd { color: #9CA3AF; font-style: italic; font-weight: 500; font-size: 13px; }
         .lsc-pool-chip {
             display: inline-flex; margin-left: 6px; padding: 2px 7px; background: #FDF0E6;
@@ -2130,6 +2141,25 @@
                        ` title="Deposit received — tap to view the transaction"` +
                        ` onclick="event.stopPropagation()">${amt}</a>`;
             };
+            // Lodging status icons (Kerry 2026-08-19): map cid -> yes/no
+            // from the staff-only lodging payload; members get no icons
+            // because d.lodging never reaches them. Staying (assigned OR
+            // waiting on a room) = green house; own arrangements / not
+            // staying = red slashed house; not in the dial = nothing.
+            const lodgeMap = {};
+            if (d.lodging) {
+                (d.lodging.units || []).forEach(u =>
+                    (u.players || []).forEach(p => { lodgeMap[p.cid] = "yes"; }));
+                (d.lodging.unassigned || []).forEach(p => { lodgeMap[p.cid] = "yes"; });
+                (d.lodging.own_arrangements || []).forEach(p => { lodgeMap[p.cid] = "no"; });
+                (d.lodging.not_staying || []).forEach(p => { lodgeMap[p.cid] = "no"; });
+            }
+            const LODGE_YES = '<span class="lsc-lodge-ic lsc-hoy" title="Lodging through TGF">' +
+                '<svg viewBox="0 0 24 24" width="16" height="16" aria-label="Lodging"><path d="M3 11.5 12 4l9 7.5" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/><path d="M5.5 10.5V20h13v-9.5" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linejoin="round"/><path d="M10 20v-5h4v5" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linejoin="round"/></svg></span>';
+            const LODGE_NO = '<span class="lsc-lodge-ic lsc-hon" title="No lodging needed">' +
+                '<svg viewBox="0 0 24 24" width="16" height="16" aria-label="No lodging"><circle cx="12" cy="12" r="9.5" fill="none" stroke="currentColor" stroke-width="2"/><path d="M8 11.2 12 8l4 3.2" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><path d="M9.3 11v4.8h5.4V11" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="M5.3 5.3 18.7 18.7" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></span>';
+            const lodgeIc = (cid) => lodgeMap[cid] === "yes" ? LODGE_YES
+                : lodgeMap[cid] === "no" ? LODGE_NO : "";
             box.innerHTML = `<div class="lsc-grid">${(d.chapters || []).map(ch => {
                 // Group boundary before the DFW/HOUSTON bonus block
                 // (Kerry 2026-08-19) — header band opens the group once,
@@ -2170,6 +2200,7 @@
                     return groupHead +
                            `<div class="lsc-seat${cap ? " captain" : ""}${bonus ? " bonus" : ""}${secured ? " secured" : ""}${hasEarn ? " has-earn" : ""}">` +
                            `<span class="lsc-seat-label">${escapeHtml(seat.seat)}</span>${who}` +
+                           lodgeIc(seat.customer_id) +
                            (secured ? `<span class="lsc-lock">${LSC_LOCK_SVG}</span>` : "") +
                            (hasEarn ? `<span class="lsc-chev tgf-exp">&#9654;</span>` : "") +
                            `</div>`;

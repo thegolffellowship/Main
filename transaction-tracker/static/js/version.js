@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.248.2";
+window.TGF_VERSION = "2.249.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.249.0",
+    date: "2026-08-19",
+    changes: [
+      "Lodging status icons on the LSC roster rows (Kerry: 'little house for lodging and a house in a no symbol for no lodging required. And simply nothing if they haven't responded'): staff sessions see a green house next to the lock for players staying through TGF (assigned or awaiting a room), a red circle-slash house for own-arrangements/not-staying players, and nothing for players not yet in the lodging tracker. Driven off the same staff-only lodging payload, so member views are untouched.",
+    ],
+  },
   {
     version: "2.248.2",
     date: "2026-08-19",
