@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.245.11";
+window.TGF_VERSION = "2.245.12";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.245.12",
+    date: "2026-08-18",
+    changes: [
+      "LSC bench polish (Kerry): alternate names never wrap — one row with the green ✓ right after the name, and the qualifying-context column is the one that folds instead. Standard case everywhere on the Lone Star Cup views via the new prNiceName converter (GG surnames with interior caps like McCRARY survive the all-caps-only normalizer — now recased Mc/Mac-aware, roman-numeral suffixes untouched), applied to seats, Next Men Up, and the staff Declined panel. Matt Sharp's acceptance also recorded — Austin PLAYERS CUP · 3 locks.",
+    ],
+  },
   {
     version: "2.245.11",
     date: "2026-08-18",

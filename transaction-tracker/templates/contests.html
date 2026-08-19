@@ -1386,8 +1386,12 @@
         }
         .lsc-alt { display: flex; gap: 8px; padding: 6px 14px; border-top: 1px solid #F1F1EF; font-size: 12.5px; align-items: baseline; }
         .lsc-alt .n { flex: 0 0 18px; font-weight: 700; color: #9CA3AF; font-variant-numeric: tabular-nums; }
-        .lsc-alt .who { font-weight: 600; color: #1B1B1B; }
-        .lsc-alt .ctx { color: #9CA3AF; font-size: 11px; }
+        /* Name never wraps, check rides right after it; the DETAILS
+           column is the one that folds (Kerry 2026-08-18: "Put names
+           all on one row with check after. Then you can wrap the
+           details column.") */
+        .lsc-alt .who { flex: 0 0 auto; font-weight: 600; color: #1B1B1B; white-space: nowrap; }
+        .lsc-alt .ctx { flex: 1; min-width: 0; color: #9CA3AF; font-size: 11px; }
         /* pre-confirmed bench player: green check after the name */
         .lsc-ok { color: #15803D; font-weight: 800; font-size: 12px; }
         .lsc-foot { margin-top: 0.9rem; font-size: 12px; line-height: 1.55; color: #9CA3AF; }
@@ -2085,7 +2089,7 @@
                         // shared prFirstLast converter. No POOL badge
                         // (Kerry, same day) — the pool origin still
                         // reads in the folded qualification line.
-                        who = `<span class="lsc-player">${escapeHtml(prFirstLast(seat.player_name))}` +
+                        who = `<span class="lsc-player">${escapeHtml(prNiceName(seat.player_name))}` +
                               `<span class="lsc-earn">${escapeHtml(seat.earned_as || "")}</span></span>`;
                     } else {
                         who = `<span class="lsc-tbd">To be decided` +
@@ -2104,7 +2108,7 @@
                 // to them (Kerry 2026-08-17: "mark them different somehow")
                 const alts = (ch.alternates || []).map((a, i) =>
                     `<div class="lsc-alt"><span class="n">${i + 1}</span>` +
-                    `<span class="who">${escapeHtml(prFirstLast(a.player_name))}${a.accepted ? ' <span class="lsc-ok" title="Confirmed available if a seat opens">&#10003;</span>' : ''}</span>` +
+                    `<span class="who">${escapeHtml(prNiceName(a.player_name))}${a.accepted ? ' <span class="lsc-ok" title="Confirmed available if a seat opens">&#10003;</span>' : ''}</span>` +
                     `<span class="ctx">${escapeHtml(a.context)} &middot; ${a.events} event${a.events === 1 ? "" : "s"}</span></div>`
                 ).join("") || '<div class="lsc-alt"><span class="ctx">No eligible alternates yet.</span></div>';
                 return `<div class="lsc-card ${/austin/i.test(ch.chapter || "") ? "austin" : "sa"}">` +
@@ -2124,7 +2128,7 @@
                        `<div class="lsc-card-head" style="background:#B91C1C;">Declined Invitations<span style="color:#FECACA;">Staff view only</span></div>` +
                        dec.map(p =>
                            `<div class="lsc-seat open"><span class="lsc-seat-label" style="color:#B91C1C;">${escapeHtml((p.chapter || "").toUpperCase())}</span>` +
-                           `<span class="lsc-player">${escapeHtml(prFirstLast(p.player_name))}` +
+                           `<span class="lsc-player">${escapeHtml(prNiceName(p.player_name))}` +
                            `<span class="lsc-earn">${escapeHtml(p.context || "")} &mdash; declined, removed from roster &amp; pool</span></span></div>`
                        ).join("") + `</div>`;
             })() + (d.gg_error
@@ -5990,6 +5994,22 @@
                 .replace(/\bMac([a-z])/g, (x, c) => "Mac" + c.toUpperCase());
         }
         return `${first} ${last}`;
+    }
+
+    // LSC standard case (Kerry 2026-08-18: "standard case for names
+    // everywhere for Lone Star Cup"): GG surnames with interior caps
+    // runs (McCRARY, DelCARMEN) survive prFirstLast's all-caps-only
+    // normalizer — recase any such word, Mc/Mac and roman numerals aware.
+    function prNiceName(nm) {
+        const fixWord = w => {
+            if (/^[IVX]+\.?$/.test(w)) return w;          // suffixes: III, IV
+            if (!/[A-Z]{2}/.test(w.slice(1))) return w;   // already normal
+            let x = w.toLowerCase();
+            x = x.charAt(0).toUpperCase() + x.slice(1);
+            return x.replace(/^(Ma?c)([a-z])/, (m, a, b) => a + b.toUpperCase())
+                    .replace(/(['-])([a-z])/g, (m, a, b) => a + b.toUpperCase());
+        };
+        return prFirstLast(nm).split(" ").map(fixWord).join(" ");
     }
 
     function prExpStatLine(tr) {
