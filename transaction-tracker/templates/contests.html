@@ -2242,8 +2242,11 @@
                         ? ` &mdash; <a href="${escapeHtml(L.url)}" style="color:inherit;">${escapeHtml(L.venue)}</a>`
                         : ` &mdash; ${escapeHtml(L.venue)}`)
                     : "";
+                // title + venue link wrapped in ONE flex item (inline
+                // font:inherit beats the muted .lsc-card-head span rule)
+                // so space-between doesn't strand the link mid-band
                 return `<div class="lsc-card" style="margin-top:16px;">` +
-                       `<div class="lsc-card-head">Lodging${venue}<span>Staff view only</span></div>` +
+                       `<div class="lsc-card-head"><span style="font:inherit;color:inherit;letter-spacing:inherit;">Lodging${venue}</span><span>Staff view only</span></div>` +
                        (empty
                            ? `<div class="lsc-alt"><span class="ctx">No lodging set up yet &mdash; tell Claude to add cabins, assignments, nights, and payments.</span></div>`
                            : units +

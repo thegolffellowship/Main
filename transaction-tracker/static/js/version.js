@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.248.0";
+window.TGF_VERSION = "2.248.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.248.1",
+    date: "2026-08-19",
+    changes: [
+      "Lodging card header: the venue link now sits directly after 'Lodging —' instead of stranded mid-band — the flexed card head treated the link as its own item under space-between; title + link are now one flex item.",
+    ],
+  },
   {
     version: "2.248.0",
     date: "2026-08-19",
