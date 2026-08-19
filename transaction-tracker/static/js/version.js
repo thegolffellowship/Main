@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.247.4";
+window.TGF_VERSION = "2.247.5";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.247.5",
+    date: "2026-08-19",
+    changes: [
+      "LSC section bands now FILL in each team's dark color with white text (Kerry: 'I'd like the fill colors to match the dark colors from each team with white text'): Bonus Spots and Next Players Up headers render burnt orange #BF5700 on Team Austin and steel-dark #4B6274 on Team San Antonio (the lock/secured accent — the light head steel can't carry white text), replacing the parchment fills and top rules.",
+    ],
+  },
   {
     version: "2.247.4",
     date: "2026-08-19",
