@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.248.1";
+window.TGF_VERSION = "2.248.2";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.248.2",
+    date: "2026-08-19",
+    changes: [
+      "Lodging sections split into separate rounded cards (Kerry: 'Need a little more differentiation between the three sections'): the Airbnb card (beds + nights/money footer), Staying — No Room Yet, Own Arrangements, and Not Staying Overnight each render as their own dark-headed card with the same 10px break as the roster/alternates split; the group cards carry their player count in the header.",
+    ],
+  },
   {
     version: "2.248.1",
     date: "2026-08-19",

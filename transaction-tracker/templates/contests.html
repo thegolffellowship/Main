@@ -2225,10 +2225,6 @@
                     ((u.players || []).map(p => prow(p)).join("")
                         || `<div class="lsc-alt"><span class="ctx">Empty</span></div>`)
                 ).join("");
-                const grp = (list, title, ctx) => (list || []).length
-                    ? `<div class="lsc-lodge-head">${title}<span>${list.length}</span></div>` +
-                      list.map(p => prow(p, ctx)).join("")
-                    : "";
                 const counts = (L.nights || []).map(n =>
                     `${escapeHtml(n)}: <b>${(L.night_counts || {})[n] || 0}</b>`).join(" &middot; ");
                 const m = L.money || {};
@@ -2242,19 +2238,31 @@
                         ? ` &mdash; <a href="${escapeHtml(L.url)}" style="color:inherit;">${escapeHtml(L.venue)}</a>`
                         : ` &mdash; ${escapeHtml(L.venue)}`)
                     : "";
-                // title + venue link wrapped in ONE flex item (inline
-                // font:inherit beats the muted .lsc-card-head span rule)
-                // so space-between doesn't strand the link mid-band
-                return `<div class="lsc-card" style="margin-top:16px;">` +
-                       `<div class="lsc-card-head"><span style="font:inherit;color:inherit;letter-spacing:inherit;">Lodging${venue}</span><span>Staff view only</span></div>` +
-                       (empty
-                           ? `<div class="lsc-alt"><span class="ctx">No lodging set up yet &mdash; tell Claude to add cabins, assignments, nights, and payments.</span></div>`
-                           : units +
-                             grp(L.unassigned, "Staying &mdash; no room yet") +
-                             grp(L.own_arrangements, "Own arrangements", "arranged own lodging") +
-                             grp(L.not_staying, "Not staying overnight", "")) +
-                       (foot ? `<div class="lsc-alt" style="background:#FBFAF8;"><span class="ctx">${foot}</span></div>` : "") +
-                       `</div>`;
+                // SEPARATE rounded cards per section (Kerry 2026-08-19:
+                // "Lodging AirBNB should be it's own card. Staying - No
+                // room yet it's own card and own arrangements it's own
+                // card") — same split-card break pattern as the
+                // roster/alternates. Title + venue link wrapped in ONE
+                // flex item (inline font:inherit beats the muted
+                // .lsc-card-head span rule) so space-between doesn't
+                // strand the link mid-band.
+                const card = (headHtml, right, body, first) =>
+                    `<div class="lsc-card" style="margin-top:${first ? 16 : 10}px;">` +
+                    `<div class="lsc-card-head"><span style="font:inherit;color:inherit;letter-spacing:inherit;">${headHtml}</span><span>${right}</span></div>` +
+                    body + `</div>`;
+                const grpCard = (list, title, ctx) => (list || []).length
+                    ? card(title, `${list.length}`,
+                           list.map(p => prow(p, ctx)).join(""))
+                    : "";
+                return card(`Lodging${venue}`, "Staff view only",
+                           (empty
+                               ? `<div class="lsc-alt"><span class="ctx">No lodging set up yet &mdash; tell Claude to add cabins, assignments, nights, and payments.</span></div>`
+                               : units) +
+                           (foot ? `<div class="lsc-alt" style="background:#FBFAF8;"><span class="ctx">${foot}</span></div>` : ""),
+                           true) +
+                       grpCard(L.unassigned, "Staying &mdash; No Room Yet") +
+                       grpCard(L.own_arrangements, "Own Arrangements", "arranged own lodging") +
+                       grpCard(L.not_staying, "Not Staying Overnight", "");
             })() + (() => {
                 // DECLINED invitations (Kerry 2026-08-17, widened same
                 // day to managers): the API includes `declined` ONLY
