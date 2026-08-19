@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.247.5";
+window.TGF_VERSION = "2.247.6";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.247.6",
+    date: "2026-08-19",
+    changes: [
+      "Team SAN ANTONIO card header darkened to the same steel-dark #4B6274 as its section bands, white text with a light-steel count (Kerry: 'update Team SAN ANTONIO header to be that same dark color') — replaces the light #D3DDE4 head, so both team cards now open with a dark chapter-color header.",
+    ],
+  },
   {
     version: "2.247.5",
     date: "2026-08-19",
