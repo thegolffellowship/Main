@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.247.0";
+window.TGF_VERSION = "2.247.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.247.1",
+    date: "2026-08-19",
+    changes: [
+      "DFW/HOUSTON bonus slots get their own group boundary (Kerry: 'highlight the DFW/HOUSTON slots slightly differently'): a 'Bonus Spots — DFW & Houston' band (same treatment as the alternates header, chapter-color rule) opens the block after PLAYERS CUP · 4, and unfilled bonus rows sit on a parchment tint with a national-gray label. Secured bonus rows keep the full chapter-color lock treatment.",
+      "SAN ANTONIO MATCH PLAY seat label shortened to SA MATCH PLAY so it reads on one line in the seat-label column (Kerry).",
+    ],
+  },
   {
     version: "2.247.0",
     date: "2026-08-19",

@@ -9885,7 +9885,12 @@ def get_lone_star_cup_projection(db_path: str | Path = DB_PATH,
             + [("fellowship", f"FELLOWSHIP CUP · {i + 1}",
                 f"Final standings, top {n_fc} from the chapter")
                for i in range(n_fc)]
-            + [("matchplay", f"{chapter.upper()} MATCH PLAY", "Knockout champion")]
+            + [("matchplay",
+                # "SA" not "SAN ANTONIO" (Kerry 2026-08-19: label must
+                # read on one line in the 112px seat-label column)
+                f"{'SA' if chapter == 'San Antonio' else chapter.upper()}"
+                " MATCH PLAY",
+                "Knockout champion")]
             + [("players", f"PLAYERS CUP · {i + 1}",
                 "Final standings, top 4 from the chapter") for i in range(4)]
         )
