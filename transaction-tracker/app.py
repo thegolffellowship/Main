@@ -9825,6 +9825,8 @@ def api_lone_star_cup():
         if session.get("role") not in ("admin", "manager"):
             for ch in d.get("chapters", []):
                 ch.pop("declined", None)
+            # Deposit amounts are financial data — staff eyes only
+            d.pop("deposits", None)
         return jsonify(d)
     except Exception as e:
         logger.exception("Lone Star Cup projection failed")

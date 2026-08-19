@@ -9710,6 +9710,62 @@ def get_lone_star_cup_projection(db_path: str | Path = DB_PATH,
     lsc_accepted = _dial_ids("lsc_accepted")
     lsc_declined = _dial_ids("lsc_declined")
 
+    # Deposit tracking (Kerry 2026-08-19): each invited player owes a
+    # $150 Venmo/Zelle deposit to lock their seat. Sum incoming
+    # venmo/zelle rows from expense_transactions since the ask date and
+    # attach them to customer_ids, so the admin UI can badge "$150 PAID"
+    # with a link to the underlying transaction. Dials:
+    #   lsc_deposit_since     — earliest transaction_date counted
+    #                           (default 2026-08-16, the day of the ask)
+    #   lsc_deposit_min       — minimum amount counted (default 100,
+    #                           so partials like $121.77 still surface)
+    #   lsc_deposit_overrides — {"<customer_id>": [expense_ids…]} manual
+    #                           attach for rows the classifier couldn't
+    #                           resolve (e.g. Gus's Zelle arrives under
+    #                           the raw bank name with no customer_id)
+    # STAFF-ONLY payload: the route strips `deposits` for non-staff.
+    lsc_deposits: dict = {}
+    try:
+        dep_since = get_app_setting("lsc_deposit_since",
+                                    db_path=db_path) or "2026-08-16"
+        dep_min = float(get_app_setting("lsc_deposit_min",
+                                        db_path=db_path) or 100)
+        try:
+            _ov = json.loads(get_app_setting("lsc_deposit_overrides",
+                                             db_path=db_path) or "{}")
+            oid_to_cid = {int(e): int(cid) for cid, eids in _ov.items()
+                          for e in (eids if isinstance(eids, list)
+                                    else [eids])}
+        except Exception:
+            oid_to_cid = {}
+        with _connect(db_path) as conn:
+            for r in conn.execute(
+                    """SELECT id, merchant, amount, transaction_date,
+                              source_type, customer_id
+                       FROM expense_transactions
+                       WHERE transaction_type = 'received'
+                         AND source_type IN ('venmo', 'zelle')
+                         AND COALESCE(review_status, '') != 'ignored'
+                         AND transaction_date >= ?
+                         AND amount >= ?""", (dep_since, dep_min)):
+                cid = oid_to_cid.get(r["id"]) or r["customer_id"]
+                if not cid:
+                    try:
+                        cid = _resolve_scoring_player(
+                            conn, r["merchant"] or "")
+                    except Exception:
+                        cid = None
+                if not cid:
+                    continue
+                d = lsc_deposits.setdefault(
+                    int(cid), {"amount": 0.0, "txns": []})
+                d["amount"] = round(d["amount"] + (r["amount"] or 0), 2)
+                d["txns"].append({"id": r["id"], "amount": r["amount"],
+                                  "date": r["transaction_date"],
+                                  "source": r["source_type"]})
+    except Exception:
+        lsc_deposits = {}
+
     chapters_out = []
     for chapter, race_key in (("Austin", "austin_net"),
                               ("San Antonio", "san_antonio_net")):
@@ -10008,6 +10064,7 @@ def get_lone_star_cup_projection(db_path: str | Path = DB_PATH,
     return {
         "season": season,
         "chapters": chapters_out,
+        "deposits": {str(k): v for k, v in lsc_deposits.items()},
         "rules_note": ("Projected from today's standings. Double-qualifiers "
                        "take the seat where they placed higher; open seats "
                        "fill from the alternates pool."),

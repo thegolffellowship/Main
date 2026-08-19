@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.245.13";
+window.TGF_VERSION = "2.246.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.246.0",
+    date: "2026-08-19",
+    changes: [
+      "Lone Star Cup deposit badges (Kerry: 'add an amount paid badge like $150 for what's been paid… ideally a link to the actual transactions'): staff sessions see a money-green pill next to any rostered or bench player whose $150 seat deposit has arrived, summed from incoming Venmo/Zelle rows in expense_transactions since the 8/16 ask (dials: lsc_deposit_since, lsc_deposit_min ≥$100 so partials like $121.77 surface, lsc_deposit_overrides to hand-attach rows the classifier couldn't resolve — first use: Gus Vasquez's Zelle under the raw bank name). Tapping the pill opens /accounting?exp=<id>, a new deep link that renders a highlight banner with that transaction's merchant, amount, source, date, and note. The deposits payload is stripped for non-staff sessions, so member views are unchanged.",
+    ],
+  },
   {
     version: "2.245.13",
     date: "2026-08-18",

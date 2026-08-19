@@ -1397,6 +1397,12 @@
         .lsc-alt .ctx { flex: 1; min-width: 0; color: #9CA3AF; font-size: 11px; text-align: left; }
         /* pre-confirmed bench player: green check after the name */
         .lsc-ok { color: #15803D; font-weight: 800; font-size: 12px; }
+        /* Deposit-paid pill (Kerry 2026-08-19, staff-only — the API only
+           sends `deposits` to manager/admin sessions): money-green
+           amount badge next to the name, linking to the transaction */
+        .lsc-dep { display: inline-block; margin-left: 6px; padding: 1px 7px; border-radius: 999px; background: #DCFCE7; color: #15803D; font-weight: 700; font-size: 10.5px; line-height: 1.5; text-decoration: none; vertical-align: 1px; font-variant-numeric: tabular-nums; }
+        .lsc-dep:hover { background: #BBF7D0; text-decoration: none; }
+        .lsc-alt .ctx .lsc-dep { margin-left: 0; margin-right: 6px; }
         .lsc-foot { margin-top: 0.9rem; font-size: 12px; line-height: 1.55; color: #9CA3AF; }
         @media (max-width: 768px) {
             .lsc-grid { grid-template-columns: 1fr; }
@@ -2074,6 +2080,21 @@
                     vc.textContent = [lscEv.venue, lscEv.city]
                         .filter(Boolean).join(" · ");
             }
+            // Deposit badge (Kerry 2026-08-19: "add an amount paid badge
+            // like '$150' … Ideally a link to the actual transactions").
+            // d.deposits is present ONLY for manager/admin sessions —
+            // {customer_id: {amount, txns:[{id,…}]}} — so members simply
+            // never render this. Links to /accounting?exp=<expense id>;
+            // stopPropagation keeps the tap from toggling the chevron.
+            const depBadge = (cid) => {
+                const dep = cid != null && d.deposits && d.deposits[cid];
+                if (!dep || !(dep.txns || []).length) return "";
+                const amt = dep.amount % 1 === 0
+                    ? `$${dep.amount}` : `$${dep.amount.toFixed(2)}`;
+                return `<a class="lsc-dep" href="/accounting?exp=${dep.txns[0].id}"` +
+                       ` title="Deposit received — tap to view the transaction"` +
+                       ` onclick="event.stopPropagation()">${amt}</a>`;
+            };
             box.innerHTML = `<div class="lsc-grid">${(d.chapters || []).map(ch => {
                 const seats = ch.seats.map(seat => {
                     const cap = /CAPTAIN/.test(seat.seat || "");
@@ -2093,6 +2114,7 @@
                         // (Kerry, same day) — the pool origin still
                         // reads in the folded qualification line.
                         who = `<span class="lsc-player">${escapeHtml(prNiceName(seat.player_name))}` +
+                              depBadge(seat.customer_id) +
                               `<span class="lsc-earn">${escapeHtml(seat.earned_as || "")}</span></span>`;
                     } else {
                         who = `<span class="lsc-tbd">To be decided` +
@@ -2112,7 +2134,7 @@
                 const alts = (ch.alternates || []).map((a, i) =>
                     `<div class="lsc-alt"><span class="n">${i + 1}</span>` +
                     `<span class="who">${escapeHtml(prNiceName(a.player_name))}${a.accepted ? ' <span class="lsc-ok" title="Confirmed available if a seat opens">&#10003;</span>' : ''}</span>` +
-                    `<span class="ctx">${escapeHtml(a.context)} &middot; ${a.events} event${a.events === 1 ? "" : "s"}</span></div>`
+                    `<span class="ctx">${depBadge(a.customer_id)}${escapeHtml(a.context)} &middot; ${a.events} event${a.events === 1 ? "" : "s"}</span></div>`
                 ).join("") || '<div class="lsc-alt"><span class="ctx">No eligible alternates yet.</span></div>';
                 return `<div class="lsc-card ${/austin/i.test(ch.chapter || "") ? "austin" : "sa"}">` +
                        `<div class="lsc-card-head">Team ${escapeHtml((ch.chapter || "").toUpperCase())}<span>${ch.n_projected} of 12 projected${ch.n_secured ? ` &middot; ${ch.n_secured} secured` : ""}</span></div>` +

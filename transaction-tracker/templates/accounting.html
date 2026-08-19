@@ -140,6 +140,12 @@
             <button class="acct-subtab" data-tab="rules">Rules</button>
         </div>
 
+        <!-- ?exp=<id> deep-link banner (Kerry 2026-08-19): the Lone Star
+             Cup deposit badges link here with an expense_transactions id;
+             the banner shows that row's facts without needing to hunt it
+             down in the ledger. Populated by the inline script below. -->
+        <div id="exp-deeplink-banner" style="display:none;"></div>
+
         <!-- ═══ DASHBOARD TAB ═══ -->
         <section class="acct-tab-panel" id="panel-dashboard">
             <!-- Summary Cards -->
@@ -1211,6 +1217,43 @@
     <script src="/static/js/acct-transactions.js"></script>
     <script src="/static/js/acct-manage.js"></script>
     <script src="/static/js/acct-init.js"></script>
+    <script>
+    // ?exp=<expense_transactions id> deep link (Kerry 2026-08-19) —
+    // used by the LSC deposit badges. Fetches the single row via the
+    // admin GET route and renders a highlight banner at the top.
+    (function () {
+        const expId = new URLSearchParams(location.search).get("exp");
+        if (!expId || !/^\d+$/.test(expId)) return;
+        const esc = (s) => String(s == null ? "" : s)
+            .replace(/&/g, "&amp;").replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+        fetch(`/api/accounting/expense-transactions/${expId}`)
+            .then(r => r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`)))
+            .then(t => {
+                const box = document.getElementById("exp-deeplink-banner");
+                if (!box || !t || t.error) return;
+                const amt = (t.amount != null)
+                    ? `$${Number(t.amount).toFixed(2)}` : "";
+                const dir = t.transaction_type === "received"
+                    ? "received" : (t.transaction_type || "");
+                const bits = [
+                    `<strong>${amt}</strong>`,
+                    esc((t.source_type || "").toUpperCase()),
+                    esc(dir),
+                    esc(t.transaction_date || ""),
+                    t.review_status ? `status: ${esc(t.review_status)}` : "",
+                ].filter(Boolean).join(" &middot; ");
+                box.innerHTML =
+                    `<div style="margin:0.75rem 0;padding:10px 14px;background:#DCFCE7;border:1px solid #86EFAC;border-left:4px solid #15803D;border-radius:8px;font-size:13px;color:#14532D;">` +
+                    `<div style="font-weight:700;">Transaction #${esc(t.id)} &mdash; ${esc(t.merchant || "(no merchant)")}</div>` +
+                    `<div style="margin-top:2px;">${bits}</div>` +
+                    (t.notes ? `<div style="margin-top:2px;color:#166534;">${esc(t.notes)}</div>` : "") +
+                    `</div>`;
+                box.style.display = "";
+            })
+            .catch(() => { /* not admin / row gone — banner just stays hidden */ });
+    })();
+    </script>
     <script src="/static/js/chat-widget.js"></script>
 </body>
 </html>
