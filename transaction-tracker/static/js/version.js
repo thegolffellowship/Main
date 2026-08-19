@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.247.3";
+window.TGF_VERSION = "2.247.4";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.247.4",
+    date: "2026-08-19",
+    changes: [
+      "'Next man up' phrasing swept from the remaining LSC copy — the Pool legend, the page footer, and the How-It-Works Seats & Alternates section all read 'next player up' now, matching the Next Players Up rename (Kerry: 'because there's women').",
+    ],
+  },
   {
     version: "2.247.3",
     date: "2026-08-19",
