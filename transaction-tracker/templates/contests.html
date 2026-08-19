@@ -1389,9 +1389,12 @@
         /* Name never wraps, check rides right after it; the DETAILS
            column is the one that folds (Kerry 2026-08-18: "Put names
            all on one row with check after. Then you can wrap the
-           details column.") */
-        .lsc-alt .who { flex: 0 0 auto; font-weight: 600; color: #1B1B1B; white-space: nowrap; }
-        .lsc-alt .ctx { flex: 1; min-width: 0; color: #9CA3AF; font-size: 11px; }
+           details column."), and it starts at the SAME x on every row
+           (Kerry, same day: "Left align details evenly in its own
+           column") — the name column has a fixed width sized to the
+           longest bench name + check. */
+        .lsc-alt .who { flex: 0 0 158px; font-weight: 600; color: #1B1B1B; white-space: nowrap; }
+        .lsc-alt .ctx { flex: 1; min-width: 0; color: #9CA3AF; font-size: 11px; text-align: left; }
         /* pre-confirmed bench player: green check after the name */
         .lsc-ok { color: #15803D; font-weight: 800; font-size: 12px; }
         .lsc-foot { margin-top: 0.9rem; font-size: 12px; line-height: 1.55; color: #9CA3AF; }

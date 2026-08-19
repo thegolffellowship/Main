@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.245.12";
+window.TGF_VERSION = "2.245.13";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.245.13",
+    date: "2026-08-18",
+    changes: [
+      "LSC bench details align as a true column (Kerry: 'Left align details evenly in its own column'): the name column takes a fixed 158px width sized to the longest bench name + check, so every row's qualifying context starts at the same x and its wrapped lines stack cleanly beneath it.",
+    ],
+  },
   {
     version: "2.245.12",
     date: "2026-08-18",
