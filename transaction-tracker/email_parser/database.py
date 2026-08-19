@@ -9723,6 +9723,10 @@ def get_lone_star_cup_projection(db_path: str | Path = DB_PATH,
     #                           attach for rows the classifier couldn't
     #                           resolve (e.g. Gus's Zelle arrives under
     #                           the raw bank name with no customer_id)
+    #   lsc_deposit_exclude   — [expense_ids…] that look like deposits
+    #                           but aren't (Kerry 2026-08-19: Ellis's
+    #                           $121.77 and Hamilton's $122 are Match
+    #                           Play finals money, not LSC deposits)
     # STAFF-ONLY payload: the route strips `deposits` for non-staff.
     lsc_deposits: dict = {}
     try:
@@ -9738,6 +9742,12 @@ def get_lone_star_cup_projection(db_path: str | Path = DB_PATH,
                                     else [eids])}
         except Exception:
             oid_to_cid = {}
+        try:
+            dep_exclude = {int(x) for x in json.loads(
+                get_app_setting("lsc_deposit_exclude",
+                                db_path=db_path) or "[]")}
+        except Exception:
+            dep_exclude = set()
         with _connect(db_path) as conn:
             for r in conn.execute(
                     """SELECT id, merchant, amount, transaction_date,
@@ -9748,6 +9758,8 @@ def get_lone_star_cup_projection(db_path: str | Path = DB_PATH,
                          AND COALESCE(review_status, '') != 'ignored'
                          AND transaction_date >= ?
                          AND amount >= ?""", (dep_since, dep_min)):
+                if r["id"] in dep_exclude:
+                    continue
                 cid = oid_to_cid.get(r["id"]) or r["customer_id"]
                 if not cid:
                     try:
@@ -9765,6 +9777,20 @@ def get_lone_star_cup_projection(db_path: str | Path = DB_PATH,
                                   "source": r["source_type"]})
     except Exception:
         lsc_deposits = {}
+
+    # BONUS seats (Kerry 2026-08-19): each team carries 2 bonus spots
+    # reserved for members of the FORMER TGF chapters (DFW & Houston).
+    # Dial `lsc_bonus_seats` maps chapter -> list of invitee entries
+    # {"cid": <customer_id>, "from": "DFW"|"Houston"}; unfilled spots
+    # render as open TBD rows. First holders: Bill Barstow (DFW) on
+    # Team Austin, Julius Jenkins (Houston) on Team San Antonio.
+    try:
+        lsc_bonus = json.loads(
+            get_app_setting("lsc_bonus_seats", db_path=db_path) or "{}")
+        if not isinstance(lsc_bonus, dict):
+            lsc_bonus = {}
+    except Exception:
+        lsc_bonus = {}
 
     chapters_out = []
     for chapter, race_key in (("Austin", "austin_net"),
@@ -9888,6 +9914,14 @@ def get_lone_star_cup_projection(db_path: str | Path = DB_PATH,
 
         roster_ids = set(kept)
 
+        # Bonus invitees hold their own seats — keep them out of the
+        # earned-seat streams' pool/alternates for this chapter
+        bonus_entries = [e for e in (lsc_bonus.get(chapter) or [])
+                         if isinstance(e, dict)]
+        for _be in bonus_entries:
+            if _be.get("cid"):
+                roster_ids.add(int(_be["cid"]))
+
         # Pass 3 — alternates pool: enrolled chapter players NOT on the
         # roster, ranked by best percentile finish, then events played
         pool_by_cid: dict = {}
@@ -10000,6 +10034,40 @@ def get_lone_star_cup_projection(db_path: str | Path = DB_PATH,
                     s["earned_as"] = (f"{season} {chapter} NET "
                                       f"{'Co-' if n_cap > 1 else ''}Champion")
 
+        # BONUS seats appended after the earned 12 (Kerry 2026-08-19):
+        # two per team for members of the former DFW & Houston chapters.
+        # Filled from the lsc_bonus_seats dial; the second spot renders
+        # open until Kerry names someone. Acceptance locking below
+        # applies to these rows the same as any earned seat.
+        for _bi in range(max(2, len(bonus_entries))):
+            _be = bonus_entries[_bi] if _bi < len(bonus_entries) else {}
+            _brow = {"seat": f"DFW/HOUSTON · {_bi + 1}",
+                     "note": ("Bonus spot — open to members of the "
+                              "former DFW & Houston chapters"),
+                     "player_name": None, "customer_id": None,
+                     "earned_as": None, "via_pool": False,
+                     "status": "tbd"}
+            _bcid = _be.get("cid")
+            _bname = _be.get("name")
+            if _bcid and not _bname:
+                try:
+                    with _connect(db_path) as _c:
+                        _br = _c.execute(
+                            "SELECT first_name || ' ' || last_name AS n "
+                            "FROM customers WHERE customer_id = ?",
+                            (int(_bcid),)).fetchone()
+                        _bname = _br["n"] if _br else None
+                except Exception:
+                    _bname = None
+            if _bcid or _bname:
+                _brow.update(
+                    player_name=_bname or "(unknown)",
+                    customer_id=int(_bcid) if _bcid else None,
+                    earned_as=(f"Former {_be.get('from') or 'DFW/Houston'}"
+                               " chapter — bonus invitation"),
+                    status="projected")
+            seats.append(_brow)
+
         # Accepted invitations LOCK the held seat (Kerry 2026-08-17) —
         # only a projected seat flips; champion/MP-final secured seats
         # keep their stronger context, and TBD seats can't be accepted.
@@ -10054,6 +10122,7 @@ def get_lone_star_cup_projection(db_path: str | Path = DB_PATH,
         chapters_out.append({
             "chapter": chapter,
             "seats": seats,
+            "n_seats": len(seats),
             "n_projected": sum(1 for r in seats
                                if r["status"] in ("projected", "secured")),
             "n_secured": sum(1 for r in seats if r["status"] == "secured"),

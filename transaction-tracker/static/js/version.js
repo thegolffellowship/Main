@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.246.2";
+window.TGF_VERSION = "2.247.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.247.0",
+    date: "2026-08-19",
+    changes: [
+      "Lone Star Cup grows to 14 seats per team (Kerry: 'Each team will have 2 bonus spots for members of former TGF Chapters DFW & Houston'): two DFW/HOUSTON bonus seats render after the earned 12 on each roster, driven by the new lsc_bonus_seats dial. First holders — Bill Barstow (DFW, accepted) on Team Austin and Julius Jenkins (Houston, accepted + $150 deposit paid) on Team San Antonio — land SECURED via the same acceptance lock as every earned seat; each team's second bonus spot renders open until named. Card headers and the How-It-Works qualification list now say 14 seats.",
+      "Deposit badge corrections (Kerry): Gilbert Ellis's $121.77 and Doug Hamilton's $122 are Match Play finals money, not Lone Star Cup deposits — a new lsc_deposit_exclude dial removes them (and any future look-alike) from the badge sweep.",
+    ],
+  },
   {
     version: "2.246.2",
     date: "2026-08-19",
