@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.247.1";
+window.TGF_VERSION = "2.247.2";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.247.2",
+    date: "2026-08-19",
+    changes: [
+      "Bonus Spots — DFW & Houston header darkened to full ink #1B1B1B (Kerry: 'better contrast… I don't like the lighter gray') — the band keeps its parchment background and chapter-color top rule.",
+    ],
+  },
   {
     version: "2.247.1",
     date: "2026-08-19",
