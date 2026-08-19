@@ -2623,6 +2623,25 @@ def _scoring_dispatch(url: str, extract: str):
                  "events": a["events"]}
                 for i, a in enumerate(ch.get("alternates") or [])]
                 for ch in d.get("chapters", [])}, indent=2, default=str)
+        if cmd == "scoring-lsc-deposits":
+            # Lone Star Cup seat-deposit ledger (Kerry 2026-08-19:
+            # "$150 to lock their spots") — the same staff-only
+            # `deposits` payload the roster badges render, with names
+            # resolved for readability. READ-ONLY.
+            d = db.get_lone_star_cup_projection(alternates_cap=60)
+            deps = d.get("deposits") or {}
+            out = []
+            with db._connect() as conn:
+                for cid, info in deps.items():
+                    row = conn.execute(
+                        "SELECT customer_name FROM customers "
+                        "WHERE customer_id = ?", (int(cid),)).fetchone()
+                    out.append({"cid": int(cid),
+                                "name": row["customer_name"] if row else None,
+                                "amount": info.get("amount"),
+                                "txns": info.get("txns")})
+            out.sort(key=lambda r: (-(r["amount"] or 0), r["name"] or ""))
+            return json.dumps(out, indent=2, default=str)
         if cmd == "scoring-payout-delete":
             # delete ONE tgf_payouts row + its PENDING ledger entry and
             # refresh the event's aggregates; refuses paid-linked rows.

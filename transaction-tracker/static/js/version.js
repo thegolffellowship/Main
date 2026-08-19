@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.246.0";
+window.TGF_VERSION = "2.246.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.246.1",
+    date: "2026-08-19",
+    changes: [
+      "New scoring-lsc-deposits bridge command: the staff-only Lone Star Cup deposit ledger (same payload the roster badges render) with customer names resolved — the on-demand 'who has paid their $150?' query, and the live verification path for the v2.246.0 badge data.",
+    ],
+  },
   {
     version: "2.246.0",
     date: "2026-08-19",
