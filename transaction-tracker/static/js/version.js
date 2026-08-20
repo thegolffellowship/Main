@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.249.0";
+window.TGF_VERSION = "2.250.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.250.0",
+    date: "2026-08-20",
+    changes: [
+      "Fall Points Race entries sold on FALL EVENT orders now enroll automatically (Kerry: 'adjust to be able to add those to the SA Fall Net and any subsequent Austin Fall Nets'): the parser extracts 'Add FALL Points Race?' answers from event items (previously nulled — the flag was gated to MEMBERSHIP/SEASON CONTESTS products), preserving the chapter in the answer ('YES, SAN ANTONIO' / 'YES, AUSTIN') so the buyer enrolls in THAT city's fall race — an Austin member can buy into the SA Fall NET; a bare YES falls back to their home chapter. sync_season_contests honors the flag on ANY active item (event rows can't create spring enrollments — those stay gated to contest products), and all three cleanup/reconciliation passes now treat a fall-flagged item as a valid backing purchase so event-sourced fall enrollments survive every sync. First live use: the 8/20 FALL KICKOFF | Landa Park orders.",
+    ],
+  },
   {
     version: "2.249.0",
     date: "2026-08-19",

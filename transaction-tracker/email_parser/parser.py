@@ -198,11 +198,16 @@ FIELD-SPECIFIC GUIDANCE:
   ONLY valid on TGF MEMBERSHIP or SEASON CONTESTS items. Null for all event items. \
   A match-play-format golf event (e.g. "Hill Country Matches") is NOT the same as the \
   City Match Play season contest — do not set this flag on event purchases.
-- "fall_net_points_race": "YES" or "NO" for the FALL NET points race option — \
-  any field mentioning FALL together with NET or Points (e.g. "Add FALL NET Points \
-  Race?", "FALL Points NET", "2026 FALL NET"). ONLY valid on TGF MEMBERSHIP or \
-  SEASON CONTESTS items; null for all event items. This is a SEPARATE flag from \
-  net_points_race (the spring/season race) — do not merge them.
+- "fall_net_points_race": the FALL points race option — any field mentioning FALL \
+  together with NET, Points, or Race (e.g. "Add FALL NET Points Race?", "Add FALL \
+  Points Race?", "FALL Points NET", "2026 FALL NET"). Valid on TGF MEMBERSHIP, \
+  SEASON CONTESTS, AND golf event items — Fall event orders sell this entry as an \
+  add-on question, so extract it wherever the order form explicitly asks it. Keep \
+  the FULL answer verbatim when it names a chapter (e.g. "YES, SAN ANTONIO" or \
+  "YES, AUSTIN" — the chapter selects which city's fall race they entered); a bare \
+  "YES" or "NO" stays as-is. Only set it from an explicit FALL race field; never \
+  infer it from the event's name. This is a SEPARATE flag from net_points_race \
+  (the spring/season race) — do not merge them.
 - "partner_request": If the player requested a specific playing partner, \
   extract the partner's name. Look for fields like "Playing Partner Request", \
   "Partner Request", "Who would you like to play with?", etc.
@@ -1032,7 +1037,12 @@ def parse_email(email_data: dict) -> list[dict]:
             "net_points_race": item.get("net_points_race") if _is_contest_item(_normalize_item_name(item.get("item_name"))) else None,
             "gross_points_race": item.get("gross_points_race") if _is_contest_item(_normalize_item_name(item.get("item_name"))) else None,
             "city_match_play": item.get("city_match_play") if _is_contest_item(_normalize_item_name(item.get("item_name"))) else None,
-            "fall_net_points_race": item.get("fall_net_points_race") if _is_contest_item(_normalize_item_name(item.get("item_name"))) else None,
+            # FALL NET is deliberately NOT gated to contest items (Kerry
+            # 2026-08-19): Fall event orders sell the Fall Points Race
+            # entry as an add-on question, so the flag is honored on any
+            # item type. Safe because the prompt only sets it from an
+            # explicit FALL+NET order-form field, never the event name.
+            "fall_net_points_race": item.get("fall_net_points_race"),
             "subject": subject,
             "from_addr": from_addr,
         })

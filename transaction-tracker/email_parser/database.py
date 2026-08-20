@@ -33623,10 +33623,12 @@ def sync_season_contests_from_items(db_path: str | Path | None = None) -> dict:
                       city_match_play, fall_net_points_race, item_name, order_date
                FROM items
                WHERE COALESCE(transaction_status, 'active') = 'active'
-                 AND (UPPER(item_name) = 'TGF MEMBERSHIP' OR UPPER(item_name) LIKE '%SEASON CONTEST%')
-                 AND (net_points_race = 'YES' OR gross_points_race = 'YES' OR city_match_play = 'YES'
-                      OR fall_net_points_race = 'YES'
-                      OR UPPER(item_name) LIKE '%SEASON CONTEST%')"""
+                 AND (
+                     ((UPPER(item_name) = 'TGF MEMBERSHIP' OR UPPER(item_name) LIKE '%SEASON CONTEST%')
+                      AND (net_points_race = 'YES' OR gross_points_race = 'YES' OR city_match_play = 'YES'
+                           OR UPPER(item_name) LIKE '%SEASON CONTEST%'))
+                     OR UPPER(COALESCE(fall_net_points_race, '')) LIKE 'YES%'
+                 )"""
         ).fetchall()
 
         for row in rows:
@@ -33637,19 +33639,40 @@ def sync_season_contests_from_items(db_path: str | Path | None = None) -> dict:
             season = order_date[:4] if len(order_date) >= 4 else ""
             item_id = row["id"]
             cid = row.get("customer_id")
+            # Spring-season contest flags only count on the contest
+            # products; the scan now also pulls in EVENT rows for the
+            # fall flag, and those must never create spring enrollments.
+            _name_u = (row.get("item_name") or "").upper()
+            _is_contest_product = (_name_u == "TGF MEMBERSHIP"
+                                   or "SEASON CONTEST" in _name_u)
 
-            if (row.get("net_points_race") or "").upper() == "YES":
-                _upsert(conn, customer, "NET Points Race", chapter, season, item_id, cid)
-            if (row.get("gross_points_race") or "").upper() == "YES":
-                _upsert(conn, customer, "GROSS Points Race", chapter, season, item_id, cid)
-            if (row.get("city_match_play") or "").upper() == "YES":
-                _upsert(conn, customer, "City Match Play", chapter, season, item_id, cid)
-            # FALL NET is a $50 option under the umbrella SEASON CONTESTS
-            # product (Kerry, 2026-07-10): same NET Points Race contest type,
-            # season "<year> Fall" — populates the fall pages immediately on
-            # receipt of new orders, like everything else.
-            if (row.get("fall_net_points_race") or "").upper() == "YES" and season:
-                _upsert(conn, customer, "NET Points Race", chapter,
+            if _is_contest_product:
+                if (row.get("net_points_race") or "").upper() == "YES":
+                    _upsert(conn, customer, "NET Points Race", chapter, season, item_id, cid)
+                if (row.get("gross_points_race") or "").upper() == "YES":
+                    _upsert(conn, customer, "GROSS Points Race", chapter, season, item_id, cid)
+                if (row.get("city_match_play") or "").upper() == "YES":
+                    _upsert(conn, customer, "City Match Play", chapter, season, item_id, cid)
+            # FALL NET began as a $50 option under the umbrella SEASON
+            # CONTESTS product (Kerry, 2026-07-10) and is now ALSO sold on
+            # Fall event orders (Kerry, 2026-08-19 — e.g. FALL KICKOFF |
+            # Landa Park carries "Add FALL Points Race?: YES, SAN ANTONIO"),
+            # so the flag is honored on ANY active item. Same NET Points
+            # Race contest type, season "<year> Fall". When the answer
+            # names a chapter ("YES, SAN ANTONIO" / "YES, AUSTIN") the
+            # player enrolls in THAT city's fall race — an Austin member
+            # can buy into the SA Fall NET; the canonical home chapter is
+            # only the fallback for a bare "YES".
+            _fall_val = (row.get("fall_net_points_race") or "").upper()
+            if _fall_val.startswith("YES") and season:
+                fall_chapter = chapter
+                if "," in _fall_val:
+                    _fsuffix = _fall_val.split(",", 1)[1]
+                    if "SAN" in _fsuffix:
+                        fall_chapter = "San Antonio"
+                    elif "AUSTIN" in _fsuffix:
+                        fall_chapter = "Austin"
+                _upsert(conn, customer, "NET Points Race", fall_chapter,
                         f"{season} Fall", item_id, cid)
 
         # Handle standalone "SEASON CONTESTS" items (fallback for items where the parser
@@ -33713,12 +33736,15 @@ def sync_season_contests_from_items(db_path: str | Path | None = None) -> dict:
 
         # Remove enrollments sourced from non-membership/contest items (e.g. Hill Country
         # Matches erroneously had city_match_play='YES' set by the parser).
+        # EXCEPT items carrying the FALL race flag — Fall event orders are
+        # legitimate Fall NET entry sources (Kerry 2026-08-19).
         conn.execute(
             """DELETE FROM season_contests
                WHERE source_item_id IN (
                    SELECT id FROM items
                    WHERE UPPER(item_name) != 'TGF MEMBERSHIP'
                      AND UPPER(item_name) NOT LIKE '%SEASON CONTEST%'
+                     AND UPPER(COALESCE(fall_net_points_race, '')) NOT LIKE 'YES%'
                )"""
         )
 
@@ -33748,15 +33774,21 @@ def sync_season_contests_from_items(db_path: str | Path | None = None) -> dict:
                      SELECT 1 FROM items i
                      WHERE i.customer_id = season_contests.customer_id
                        AND COALESCE(i.transaction_status, 'active') = 'active'
-                       AND (UPPER(i.item_name) = 'TGF MEMBERSHIP'
-                            OR UPPER(i.item_name) LIKE '%SEASON CONTEST%')
                        AND (
-                           (season_contests.contest_type = 'NET Points Race'
-                                AND i.net_points_race = 'YES')
-                           OR (season_contests.contest_type = 'GROSS Points Race'
-                                AND i.gross_points_race = 'YES')
-                           OR (season_contests.contest_type = 'City Match Play'
-                                AND i.city_match_play = 'YES')
+                           ((UPPER(i.item_name) = 'TGF MEMBERSHIP'
+                             OR UPPER(i.item_name) LIKE '%SEASON CONTEST%')
+                            AND (
+                                (season_contests.contest_type = 'NET Points Race'
+                                     AND i.net_points_race = 'YES')
+                                OR (season_contests.contest_type = 'GROSS Points Race'
+                                     AND i.gross_points_race = 'YES')
+                                OR (season_contests.contest_type = 'City Match Play'
+                                     AND i.city_match_play = 'YES')
+                            ))
+                           -- FALL race entries back a NET enrollment from
+                           -- ANY item type (fall event orders, Kerry 2026-08-19)
+                           OR (season_contests.contest_type = 'NET Points Race'
+                                AND UPPER(COALESCE(i.fall_net_points_race, '')) LIKE 'YES%')
                        )
                  )
                  AND NOT EXISTS (
@@ -33766,6 +33798,7 @@ def sync_season_contests_from_items(db_path: str | Path | None = None) -> dict:
                        AND (
                            (season_contests.contest_type = 'NET Points Race'
                                 AND (si.net_points_race = 'YES'
+                                     OR UPPER(COALESCE(si.fall_net_points_race, '')) LIKE 'YES%'
                                      OR (UPPER(si.item_name) LIKE '%SEASON CONTEST%'
                                          AND (UPPER(si.item_name) LIKE '%NET%'
                                               OR UPPER(COALESCE(si.notes, '')) LIKE '%NET%'))))
@@ -33795,15 +33828,19 @@ def sync_season_contests_from_items(db_path: str | Path | None = None) -> dict:
                      SELECT 1 FROM items i
                      WHERE LOWER(TRIM(i.customer)) = LOWER(TRIM(season_contests.customer_name))
                        AND COALESCE(i.transaction_status, 'active') = 'active'
-                       AND (UPPER(i.item_name) = 'TGF MEMBERSHIP'
-                            OR UPPER(i.item_name) LIKE '%SEASON CONTEST%')
                        AND (
-                           (season_contests.contest_type = 'NET Points Race'
-                                AND i.net_points_race = 'YES')
-                           OR (season_contests.contest_type = 'GROSS Points Race'
-                                AND i.gross_points_race = 'YES')
-                           OR (season_contests.contest_type = 'City Match Play'
-                                AND i.city_match_play = 'YES')
+                           ((UPPER(i.item_name) = 'TGF MEMBERSHIP'
+                             OR UPPER(i.item_name) LIKE '%SEASON CONTEST%')
+                            AND (
+                                (season_contests.contest_type = 'NET Points Race'
+                                     AND i.net_points_race = 'YES')
+                                OR (season_contests.contest_type = 'GROSS Points Race'
+                                     AND i.gross_points_race = 'YES')
+                                OR (season_contests.contest_type = 'City Match Play'
+                                     AND i.city_match_play = 'YES')
+                            ))
+                           OR (season_contests.contest_type = 'NET Points Race'
+                                AND UPPER(COALESCE(i.fall_net_points_race, '')) LIKE 'YES%')
                        )
                  )
                  AND NOT EXISTS (
@@ -33813,6 +33850,7 @@ def sync_season_contests_from_items(db_path: str | Path | None = None) -> dict:
                        AND (
                            (season_contests.contest_type = 'NET Points Race'
                                 AND (si.net_points_race = 'YES'
+                                     OR UPPER(COALESCE(si.fall_net_points_race, '')) LIKE 'YES%'
                                      OR (UPPER(si.item_name) LIKE '%SEASON CONTEST%'
                                          AND (UPPER(si.item_name) LIKE '%NET%'
                                               OR UPPER(COALESCE(si.notes, '')) LIKE '%NET%'))))
