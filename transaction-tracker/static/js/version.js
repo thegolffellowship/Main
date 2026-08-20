@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.250.0";
+window.TGF_VERSION = "2.250.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.250.1",
+    date: "2026-08-20",
+    changes: [
+      "Chapter-from-customer backfill actually runs now: the boot repair implementing Kerry's mailbox-#276 rule (derive a missing items.chapter from the CUSTOMER record, never the address) had joined on customers.id and selected chapters.id — neither column exists (PKs are customer_id / chapter_id) — so it threw 'no such column' on every boot since it shipped and never backfilled a row. Caught in the 2026-08-20 boot logs.",
+      "Contest enrollment audit recognizes FALL flags: Allen Wolin's converted duplicate-membership item (a SEASON CONTESTS row whose only selection is fall_net_points_race) warned 'NO recognizable contest selection' every boot — the audit only knew the three spring flags. A YES fall flag now counts as a valid selection.",
+    ],
+  },
   {
     version: "2.250.0",
     date: "2026-08-20",

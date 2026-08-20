@@ -20883,17 +20883,23 @@ def _backfill_chapter_from_customer(conn: sqlite3.Connection) -> int:
     record — never from the shipping/billing address. Also links chapter_id
     in the same pass so the dimension backfill doesn't lag a boot behind.
     """
+    # (v2.250.1: this joined on c.id / selected chapters.id — neither
+    # column exists (PKs are customer_id / chapter_id), so the backfill
+    # had thrown "no such column" on every boot since it shipped and the
+    # mailbox-#276 rule never actually ran. Caught in the 2026-08-20
+    # boot logs during the fall-entries deploy.)
     rows = conn.execute(
         """SELECT i.id, c.chapter
-           FROM items i JOIN customers c ON c.id = i.customer_id
+           FROM items i JOIN customers c ON c.customer_id = i.customer_id
            WHERE (i.chapter IS NULL OR i.chapter = '')
              AND c.chapter IS NOT NULL AND c.chapter != ''"""
     ).fetchall()
     if not rows:
         return 0
     chapter_ids = {
-        r["name"]: r["id"]
-        for r in conn.execute("SELECT id, name FROM chapters").fetchall()
+        r["name"]: r["chapter_id"]
+        for r in conn.execute(
+            "SELECT chapter_id, name FROM chapters").fetchall()
     }
     updated = 0
     for row in rows:
@@ -33355,7 +33361,8 @@ def _log_unenrolled_contest_purchases(conn: sqlite3.Connection) -> None:
     """
     rows = conn.execute(
         """SELECT id, customer, customer_id, item_name, notes, order_date, order_id,
-                  net_points_race, gross_points_race, city_match_play
+                  net_points_race, gross_points_race, city_match_play,
+                  fall_net_points_race
            FROM items
            WHERE COALESCE(transaction_status, 'active') = 'active'
              AND (UPPER(item_name) = 'TGF MEMBERSHIP'
@@ -33363,6 +33370,11 @@ def _log_unenrolled_contest_purchases(conn: sqlite3.Connection) -> None:
     ).fetchall()
     missing = 0
     for r in rows:
+        # A FALL flag is a valid selection too (v2.250.1 — Wolin's
+        # converted duplicate-membership item warned every boot because
+        # this audit only knew the three spring flags); fall enrollment
+        # itself is verified by the fall sync path, not this loop.
+        has_fall = (r["fall_net_points_race"] or "").upper().startswith("YES")
         expected = set()
         if (r["net_points_race"] or "").upper() == "YES":
             expected.add("NET Points Race")
@@ -33379,7 +33391,7 @@ def _log_unenrolled_contest_purchases(conn: sqlite3.Connection) -> None:
                 expected.add("GROSS Points Race")
             if "MATCH PLAY" in nm or "MATCH PLAY" in nt:
                 expected.add("City Match Play")
-            if not expected:
+            if not expected and not has_fall:
                 missing += 1
                 logger.warning(
                     "Contest enrollment audit: item %s (order %s, %r, %s) is a "
