@@ -10453,6 +10453,23 @@ def member_lonestarcup():
                            lsc_landing=True)
 
 
+@app.route("/member/matchplay/<chapter_slug>")
+def member_matchplay(chapter_slug):
+    """Chapter-specific shareable Match Play links (Kerry 2026-08-21:
+    'add a unique URL for San Antonio Match Play and Austin') — same
+    render-in-place pattern as /member/lonestarcup: distinct URLs get
+    fresh link previews AND land straight on that chapter's Match Play
+    tab. Slugs: san-antonio (also sa, sanantonio) and austin."""
+    slug = (chapter_slug or "").strip().lower()
+    chapter = ("San Antonio" if slug in ("san-antonio", "sa", "sanantonio")
+               else "Austin" if slug == "austin" else None)
+    if not chapter:
+        return redirect("/member/contests")
+    return render_template("contests.html", member_mode=True,
+                           MATCHPLAY_V2=_matchplay_v2_flag(),
+                           mp_landing=chapter)
+
+
 @app.route("/member/handicaps")
 def member_handicaps():
     return render_template("handicaps.html", member_mode=True)

@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.252.0";
+window.TGF_VERSION = "2.253.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.253.0",
+    date: "2026-08-21",
+    changes: [
+      "Chapter-specific Match Play links (Kerry: 'add a unique URL for San Antonio Match Play and Austin'): /member/matchplay/san-antonio and /member/matchplay/austin land straight on that chapter's Match Play tab — same render-in-place pattern as /member/lonestarcup so texted links get their own fresh preview. Under the hood they ride a new #tab=mp&ch=sa|austin hash deep link that also works on the regular contests page.",
+      "Match Play lands on SAN ANTONIO first (Kerry): the default chapter across every selector surface — cmpState, the chapter dropdown, the hidden legacy tabs, and the mobile tab menu — flips from Austin to San Antonio ahead of the SA finals day.",
+    ],
+  },
   {
     version: "2.252.0",
     date: "2026-08-21",

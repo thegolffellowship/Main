@@ -1577,8 +1577,8 @@
             <!-- On phones the chapter menu drops from the MATCH PLAY tab
                  (Kerry, 2026-07-10) — same pattern as the race menu -->
             <div class="shell-menu cmp-chapter-dd-menu" id="cmp-chapter-dd-menu" style="display:none;">
-                <button data-cmp-dd="Austin" class="active">Austin</button>
-                <button data-cmp-dd="San Antonio">San Antonio</button>
+                <button data-cmp-dd="San Antonio" class="active">San Antonio</button>
+                <button data-cmp-dd="Austin">Austin</button>
             </div>
             {% if MATCHPLAY_V2 %}
             <!-- D-MP-02 (#228): ratified selector pattern — chapter + season as
@@ -1586,14 +1586,14 @@
                  DOM (hidden) so the existing tab handler + the mobile .shell-menu
                  dropdown keep driving cmpState/cmpLoad unchanged. -->
             <div class="cmp-chapter-bar">
-                <button class="cmp-chapter-tab active" data-chapter="Austin" style="display:none;">Austin</button>
-                <button class="cmp-chapter-tab" data-chapter="San Antonio" style="display:none;">San Antonio</button>
+                <button class="cmp-chapter-tab active" data-chapter="San Antonio" style="display:none;">San Antonio</button>
+                <button class="cmp-chapter-tab" data-chapter="Austin" style="display:none;">Austin</button>
                 <div class="mp-selectors">
                     <div class="mp-select-field">
                         <label for="cmp-chapter-select">Chapter</label>
                         <select class="mp-select" id="cmp-chapter-select">
-                            <option value="Austin">Austin</option>
                             <option value="San Antonio">San Antonio</option>
+                            <option value="Austin">Austin</option>
                         </select>
                     </div>
                     <div class="mp-select-field">
@@ -1609,8 +1609,8 @@
             </div>
             {% else %}
             <div class="cmp-chapter-bar">
-                <button class="cmp-chapter-tab active" data-chapter="Austin">Austin</button>
-                <button class="cmp-chapter-tab" data-chapter="San Antonio">San Antonio</button>
+                <button class="cmp-chapter-tab active" data-chapter="San Antonio">San Antonio</button>
+                <button class="cmp-chapter-tab" data-chapter="Austin">Austin</button>
                 <div class="cmp-season-row">
                     <label for="cmp-season">Season</label>
                     <input type="text" id="cmp-season" value="2026">
@@ -2041,6 +2041,7 @@
 
     <script>window.MATCHPLAY_V2 = {% if MATCHPLAY_V2 %}true{% else %}false{% endif %};</script>
     {% if lsc_landing %}<script>window.LSC_LANDING = true;</script>{% endif %}
+    {% if mp_landing %}<script>window.MP_LANDING = {{ mp_landing|tojson }};</script>{% endif %}
     {% if member_mode %}<script>window.MEMBER_MODE = true;</script><script src="/static/js/member-nudges.js" defer></script>
     <style>
         /* Member view: manager/admin controls can NEVER show, including
@@ -2837,7 +2838,7 @@
     // ═══════════ MATCH PLAY ═══════════
 
     let cmpState = {
-        season: "2026", chapter: "Austin", pools: [], enrollees: [], bracket: [],
+        season: "2026", chapter: "San Antonio", pools: [], enrollees: [], bracket: [],   // SA lands first (Kerry 2026-08-21)
         handicapMap: {},        // lowercase name → { index_9, index_18 }
         customerIdToName: {},   // customer_id → canonical customer_name (for hcp fallback)
         events: [],             // [{id, item_name, event_date, chapter}, …] sorted newest first
@@ -7337,6 +7338,11 @@
         // existing deep-link logic below does the rest. An explicit hash
         // in the URL still wins (e.g. someone edits it to #race=net).
         if (window.LSC_LANDING && !hash) hash = "#tab=lsc";
+        // /member/matchplay/<chapter> (Kerry 2026-08-21): chapter-
+        // specific shareable Match Play links — same synthesized-hash
+        // trick as the LSC link, plus a ch= hash the block below reads.
+        if (window.MP_LANDING && !hash)
+            hash = "#tab=mp&ch=" + (/anto/i.test(window.MP_LANDING) ? "sa" : "austin");
         const raceMatch = hash.match(/race=([a-z_]+)/);
         const wantRace = raceMatch && document.querySelector(`.sub-tab[data-pr="${raceMatch[1]}"]`)
             ? raceMatch[1] : null;
@@ -7363,6 +7369,20 @@
             const mpSub = hash.match(/mp=(pools|knockout|payouts|setup)/);
             if (top === "match-play" && mpSub && window._mpShowPanel) {
                 window._mpShowPanel(mpSub[1], false);
+            }
+            // Chapter deep link (Kerry 2026-08-21): #tab=mp&ch=sa|austin
+            // — sync state + every selector surface; cmpLoad() below
+            // fetches the right chapter on first load.
+            const chM = hash.match(/ch=(sa|austin)/);
+            if (top === "match-play" && chM) {
+                const wantCh = chM[1] === "sa" ? "San Antonio" : "Austin";
+                cmpState.chapter = wantCh;
+                $$(".cmp-chapter-tab").forEach(b =>
+                    b.classList.toggle("active", b.dataset.chapter === wantCh));
+                document.querySelectorAll("[data-cmp-dd]").forEach(mi =>
+                    mi.classList.toggle("active", mi.dataset.cmpDd === wantCh));
+                const csel = $("cmp-chapter-select");
+                if (csel) csel.value = wantCh;
             }
         }
         // Points Races is the landing tab — load it immediately; Match Play
