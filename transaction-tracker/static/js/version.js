@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.255.4";
+window.TGF_VERSION = "2.255.5";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.255.5",
+    date: "2026-08-21",
+    changes: [
+      "The small 'THE GOLF FELLOWSHIP' site line is removed from all three link-preview cards (Kerry: 'Remove THE GOLF FELLOWSHIP from all 3') — the Lone Star Cup and Match Play cards now match the Leaderboard card: icon + title + colored subtitle only. Cache-buster bumped to ?v=402.",
+    ],
+  },
   {
     version: "2.255.4",
     date: "2026-08-21",
