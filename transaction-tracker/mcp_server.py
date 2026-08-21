@@ -3308,7 +3308,8 @@ def probe_golf_genius(url: str, extract: str = "summary", max_chars: int = 60000
 
 
 @mcp.tool()
-def import_gg_scorecards(tournament_url: str, event_code: str = "") -> str:
+def import_gg_scorecards(tournament_url: str, event_code: str = "",
+                         round_date: str = "", round_key: str = "") -> str:
     """Import every player's hole-by-hole scorecard from a Golf Genius
     tournament page into tracker-owned tables (scoring_rounds/scoring_holes,
     plus the course database which accretes from tee blocks). Idempotent —
@@ -3319,10 +3320,18 @@ def import_gg_scorecards(tournament_url: str, event_code: str = "") -> str:
             https://tgf-sa.golfgenius.com/v2tournaments/4739997?player_stats_for_portal=true&round_index=29
         event_code: Tracker event code to link rounds to (e.g. 's9.16') —
             resolves event_id and round_date from the events table
+        round_date: Explicit YYYY-MM-DD for THIS round — outranks the
+            event's date. Required for day 2+ of a multi-day event so
+            its rounds don't stamp day 1's date and dedupe-collide.
+        round_key: GG league round id scoping dedupe for multi-round
+            events (e.g. '1692725') — rounds from other league rounds
+            of the same event are then never treated as duplicates.
     """
     from email_parser.database import import_gg_scorecards as _imp
     try:
-        return json.dumps(_imp(tournament_url, event_code=event_code or None), indent=2)
+        return json.dumps(_imp(tournament_url, event_code=event_code or None,
+                               round_date=round_date or None,
+                               round_key=round_key or None), indent=2)
     except Exception as e:
         return json.dumps({"error": str(e)})
 

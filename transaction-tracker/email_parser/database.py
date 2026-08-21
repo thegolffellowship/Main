@@ -17387,7 +17387,13 @@ def import_gg_scorecards(tournament_url: str, event_code: str | None = None,
                        WHERE item_name LIKE ? ORDER BY id LIMIT 1""",
                     (event_code.strip() + " %",)).fetchone()
             if ev:
-                event_id, event_date = ev["id"], ev["event_date"]
+                # An EXPLICIT round_date outranks the event's own date —
+                # multi-DAY events (2026 TGF CHAMPIONSHIP, 8/15+8/16)
+                # carry one event_date, so a Round 2 import must be able
+                # to say "same event, Sunday's date" or its rounds (a)
+                # stamp Saturday's date and (b) dedupe-collide with R1.
+                event_id = ev["id"]
+                event_date = round_date or ev["event_date"]
 
         for url, body in data["raw"]:
             conn.execute("INSERT INTO gg_raw_archive (url, body_gz) VALUES (?, ?)",

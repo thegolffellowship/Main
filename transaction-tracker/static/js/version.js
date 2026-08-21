@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.250.1";
+window.TGF_VERSION = "2.250.2";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.250.2",
+    date: "2026-08-21",
+    changes: [
+      "Multi-day scorecard imports can now date their own round: an explicit round_date passed to the scorecard import outranks the event's single event_date (previously the event lookup overwrote it), and the import MCP tool exposes round_date + round_key. Needed to bank the 2026 TGF CHAMPIONSHIP's Sunday Round 2 — without it, R2 cards stamped Saturday's date and the duplicate check swallowed them as R1 copies.",
+    ],
+  },
   {
     version: "2.250.1",
     date: "2026-08-20",
