@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.255.5";
+window.TGF_VERSION = "2.255.6";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.255.6",
+    date: "2026-08-21",
+    changes: [
+      "THE GOLF FELLOWSHIP returns to all three link-preview cards as a bottom footer line at twice its original size (42px vs the old 21px), absolutely positioned so the existing centered icon/title/subtitle layouts are untouched. Cache-buster bumped to ?v=403.",
+    ],
+  },
   {
     version: "2.255.5",
     date: "2026-08-21",
