@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.255.1";
+window.TGF_VERSION = "2.255.2";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.255.2",
+    date: "2026-08-21",
+    changes: [
+      "The plain /member/contests link preview no longer renders as a huge square (Kerry: 'Way too big for one') — iMessage blows a square 512px og:image up into a giant card, so the generic fallback now serves a proper 1200×630 banner (/static/og-leaderboard.png: TGF orange, the official circle-G mark, 'TGF Leaderboard · LIVE STANDINGS'), the same compact banner shape as the Lone Star Cup and Match Play cards. All three member landing cards are now the same size, each with its own art.",
+    ],
+  },
   {
     version: "2.255.1",
     date: "2026-08-21",

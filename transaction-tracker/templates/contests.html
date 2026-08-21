@@ -31,6 +31,9 @@
     {% else %}
     {% set og_title = "TGF Leaderboard" %}
     {% set og_desc = "Points races, Match Play, and the Lone Star Cup — live standings for San Antonio & Austin." %}
+    {# Wide banner, not the bare app icon — iMessage renders a square
+       512px og:image as a huge card (Kerry 2026-08-21: "Way too big"). #}
+    {% set og_image = "/static/og-leaderboard.png" %}
     {% endif %}
     {% include "_og_meta.html" %}
     <link rel="stylesheet" href="/static/css/dashboard.css?v={{ app_version }}">
