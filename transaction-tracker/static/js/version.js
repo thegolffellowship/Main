@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.255.6";
+window.TGF_VERSION = "2.255.7";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.255.7",
+    date: "2026-08-21",
+    changes: [
+      "THE GOLF FELLOWSHIP flips from a footer line to a full-width contrasting header bar on all three link-preview cards (Kerry): black bar on the orange Leaderboard card, TGF-orange bar on the navy Lone Star Cup and black Match Play cards, white 42px Bitter text centered in the bar. The bar replaces the old thin top rule; the card art stays centered in the space below it. Cache-buster bumped to ?v=404.",
+    ],
+  },
   {
     version: "2.255.6",
     date: "2026-08-21",
