@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.255.8";
+window.TGF_VERSION = "2.255.9";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.255.9",
+    date: "2026-08-21",
+    changes: [
+      "Preview cards for the other member URLs (Kerry: 'create more preview cards for the other MEMBER facing URLs? Like Handicaps and Member Spotlight?'): /member/handicaps gets a slate card with a white flag-in-hole mark ('TGF Handicaps · INDEXES & TRENDS', orange header bar) and /member/spotlight gets a light card with an orange star ('Player Spotlight · YOUR SEASON', black header bar) — same 1200×350 strip and contrasting-bar rule as the Leaderboard/LSC/Match Play set. Both pages previously fell back to the app icon, which iMessage blows up into the giant square.",
+    ],
+  },
   {
     version: "2.255.8",
     date: "2026-08-21",
