@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.255.2";
+window.TGF_VERSION = "2.255.3";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.255.3",
+    date: "2026-08-21",
+    changes: [
+      "Link-preview cards slimmed from 1200×630 to 1200×400 (Kerry: '630 is way taller than it needs to be') — all three (Leaderboard, Lone Star Cup, Match Play) regenerated at the shorter strip height with proportionally tightened type. The Leaderboard card also drops the tiny 'THE GOLF FELLOWSHIP' site line ('the icon handles that'); LSC and Match Play keep theirs since their icons don't carry the TGF mark. og:image URLs carry a ?v=400 cache-buster so preview scrapers fetch the new art instead of their cached tall versions.",
+    ],
+  },
   {
     version: "2.255.2",
     date: "2026-08-21",

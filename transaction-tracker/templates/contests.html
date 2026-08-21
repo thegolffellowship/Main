@@ -23,17 +23,17 @@
     {% if lsc_landing %}
     {% set og_title = "The Lone Star Cup Qualifiers" %}
     {% set og_desc = "Austin vs San Antonio — projected rosters live from today's standings, plus points races and Match Play." %}
-    {% set og_image = "/static/og-lone-star-cup.png" %}
+    {% set og_image = "/static/og-lone-star-cup.png?v=400" %}
     {% elif mp_landing %}
     {% set og_title = "City Match Play — " ~ mp_landing %}
     {% set og_desc = "Follow the matches live — hole-by-hole scorecards, running margins, and the bracket." %}
-    {% set og_image = "/static/og-match-play.png" %}
+    {% set og_image = "/static/og-match-play.png?v=400" %}
     {% else %}
     {% set og_title = "TGF Leaderboard" %}
     {% set og_desc = "Points races, Match Play, and the Lone Star Cup — live standings for San Antonio & Austin." %}
     {# Wide banner, not the bare app icon — iMessage renders a square
        512px og:image as a huge card (Kerry 2026-08-21: "Way too big"). #}
-    {% set og_image = "/static/og-leaderboard.png" %}
+    {% set og_image = "/static/og-leaderboard.png?v=400" %}
     {% endif %}
     {% include "_og_meta.html" %}
     <link rel="stylesheet" href="/static/css/dashboard.css?v={{ app_version }}">
