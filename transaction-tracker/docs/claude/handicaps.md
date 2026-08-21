@@ -541,8 +541,12 @@ matching the chapter filter's existing behavior.
 ## Trend column + member table (v2.56.1, handoff contests-handicaps-071026)
 
 `get_all_handicap_players` returns `handicap_trend`: the index delta vs
-the index recomputed WITHOUT the most recent round (needs both pools
-computable, else null). Negative = improving (▼ success-green
+the index recomputed WITHOUT the most recent round **DATE** (v2.251.0,
+Kerry 2026-08-21: "do it based on previous day, rather than previous
+round which could be the 9 before on the same day" — a banked
+multi-nine day reads as one move; the prior pool refills to 20 scores
+from older rounds so both sides compare equal windows; needs both
+pools computable, else null). Negative = improving (▼ success-green
 #16A34A), positive = ▲ red, 0/null = — gray. The pinless member table
 renders the ratified 5-column view (chevron | Player | Index | Trend |
 Rounds, right-aligned numerics); admin/manager keep the full 9-column

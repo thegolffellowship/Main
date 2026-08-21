@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.250.2";
+window.TGF_VERSION = "2.251.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.251.0",
+    date: "2026-08-21",
+    changes: [
+      "Handicap trend arrow now compares against the PREVIOUS DAY, not the previous score (Kerry: 'do it based on previous day, rather than previous round which could be the 9 before on the same day'): a banked multi-nine day reads as one move — Callaway's championship Sunday now shows ▼0.4 (6.6 → 6.2) instead of the ▲0.2 the old per-score lens produced by catching only his rough back nine. The prior pool refills to a full 20 scores from older rounds so both sides of the comparison use equal windows; the 30-day staleness suppression is unchanged.",
+    ],
+  },
   {
     version: "2.250.2",
     date: "2026-08-21",

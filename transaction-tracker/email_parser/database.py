@@ -32046,10 +32046,12 @@ def get_all_handicap_players(db_path: str | Path | None = None) -> list[dict]:
             (cutoff_str,),
         ).fetchall()
 
-        # Fetch last 20 differentials within the lookback window for each player
+        # Fetch the last 40 differentials (with dates) per player within
+        # the lookback window: 20 for the live index, and enough older
+        # ones for the previous-day trend pool to refill back to 20.
         all_diffs = conn.execute(
             """
-            SELECT player_name, differential,
+            SELECT player_name, differential, round_date,
                    ROW_NUMBER() OVER (
                        PARTITION BY player_name
                        ORDER BY round_date DESC, id DESC
@@ -32061,21 +32063,28 @@ def get_all_handicap_players(db_path: str | Path | None = None) -> list[dict]:
             (cutoff_str,),
         ).fetchall()
 
-    player_diffs: dict[str, list[float]] = {}
+    player_diffs: dict[str, list] = {}
     for d in all_diffs:
-        if d["rn"] <= 20:
-            player_diffs.setdefault(d["player_name"], []).append(d["differential"])
+        if d["rn"] <= 40:
+            player_diffs.setdefault(d["player_name"], []).append(
+                (d["round_date"], d["differential"]))
 
     players = []
     for row in summary_rows:
         name = row["player_name"]
-        diffs = player_diffs.get(name, [])
+        rows_nf = player_diffs.get(name, [])   # newest-first (date, diff)
+        diffs = [df for _, df in rows_nf[:20]]
         index = compute_handicap_index(diffs, cfg)
-        # Trend (v2.56.1, design handoff contests-handicaps-071026 view 1a):
-        # the index as it stood BEFORE the most recent round — negative
-        # delta = improving. diffs are newest-first, so dropping [0]
-        # reconstructs the prior pool.
-        index_prev = compute_handicap_index(diffs[1:], cfg) if len(diffs) > 1 else None
+        # Trend vs the PREVIOUS DAY (Kerry 2026-08-21, supersedes the
+        # v2.56.1 previous-SCORE definition): the index as it stood
+        # before the most recent round DATE, so a banked multi-nine day
+        # (both nines of an 18, or a same-day posting) reads as ONE
+        # move instead of a per-nine flicker that can point the wrong
+        # way. The prior pool refills to 20 from older rounds so both
+        # sides compare equal windows. Negative delta = improving.
+        latest_date = rows_nf[0][0] if rows_nf else None
+        prior = [df for dt, df in rows_nf if dt != latest_date][:20]
+        index_prev = compute_handicap_index(prior, cfg) if prior else None
         trend = (round(index - index_prev, 1)
                  if index is not None and index_prev is not None else None)
         # Suppress the trend mark for players idle 30+ days (Kerry 2026-07-17):
