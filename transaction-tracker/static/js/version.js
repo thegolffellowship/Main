@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.254.1";
+window.TGF_VERSION = "2.254.2";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.254.2",
+    date: "2026-08-21",
+    changes: [
+      "Pool match cards with shotgun starts render the right nine again (Kerry: 'these pool matches are showing incorrectly all of a sudden'): a 9-hole match on a full-18 round card took 'the first 9 holes in play order', which bled across nines on a shotgun start — a hole-5 start rendered holes 5..13 with four blank columns instead of wrapping 5..9, 1..4. The match now keeps play order but stays on the one nine containing its start hole.",
+      "Semifinal 1's expanded card now matches the Semifinal 2 layout Kerry prefers: the Par row renders (Silverhorn's per-hole pars pulled from GG's tee detail into the cmp_match_scope dial), the stray in-card 'LIVE · thru 9' chip disappears once the match reads FINAL, and both finals-day headers carry SILVERHORN · 08/22 like Semifinal 2 carries Vaaler Creek.",
+    ],
+  },
   {
     version: "2.254.1",
     date: "2026-08-21",

@@ -3250,8 +3250,23 @@
         // parseable a9.x/s9.x code, so they never reach this fallback.
         const matchLen = mpMatchHoleCount(gg, o)
             || ((o && o.live && allH.length >= 9) ? allH.length : null);
-        const gh = matchLen ? allH.slice(0, matchLen)
-                            : allH.filter(h => h.p1_gross != null || h.p2_gross != null);
+        let gh;
+        if (matchLen === 9 && allH.length > 9) {
+            // A 9-hole match on a full-18 round card lives on the ONE
+            // nine containing the start hole — keep play order, drop
+            // the other nine. slice(0,9) used to bleed across nines on
+            // shotgun starts: a start at hole 5 rendered holes 5..13
+            // with four blank columns instead of wrapping 5..9,1..4
+            // (Kerry 2026-08-21: "these pool matches are showing
+            // incorrectly all of a sudden").
+            const sh = gg.start_hole || (allH[0] && allH[0].hole) || 1;
+            const lo = sh >= 10 ? 10 : 1, hi = lo + 8;
+            gh = allH.filter(h => h.hole >= lo && h.hole <= hi);
+            if (!gh.length) gh = allH.slice(0, matchLen);
+        } else {
+            gh = matchLen ? allH.slice(0, matchLen)
+                          : allH.filter(h => h.p1_gross != null || h.p2_gross != null);
+        }
         if (!gh.length) return null;
         const aIsP1 = mpPersonKey((gg.players && gg.players[0] && gg.players[0].name) || '') === mpPersonKey(o.aName);
         const closedAt = gg.closed_at_order || null;   // play-order pos of the clinch
@@ -3406,7 +3421,7 @@
         }
         // Winner margin stays on the winner's side (from the FROZEN record).
         let result = '';
-        if (o.live && o.liveLead) {
+        if (o.live && o.liveLead && !o.ggDecided) {
             const L = o.liveLead;
             const cls = L.side === 'A' ? 'a' : (L.side === 'B' ? 'b' : 'tie');
             const txt = (L.side && L.leaderName)
@@ -3556,7 +3571,11 @@
             : (decided && rem > 0 ? `${leadN}&${rem}` : `${leadN} UP`);
         return { ...detail, holes, thru: played, n_holes: holes.length,
                  gg_winner_idx: diff > 0 ? 1 : (diff < 0 ? 2 : null),
-                 gg_margin: margin, _scoped: nine, _decided: decided };
+                 gg_margin: margin, _scoped: nine, _decided: decided,
+                 // dial-provided pars feed the Par row when no tracker
+                 // event is linked (same slot the live payload's own
+                 // hole_pars would fill)
+                 hole_pars: detail.hole_pars || scope.pars || undefined };
     }
 
     // Course from an event name: the part after a " - "/" | " separator (City
@@ -3620,7 +3639,7 @@
             // Attach GG detail whenever we have it — for a RECORDED match too, so
             // the frozen result keeps GG's real hole-by-hole (scores + pops), not
             // a fabricated placeholder. `live` only gates the running-margin UI.
-            gg: liveGG || null, live, liveLead: lead,
+            gg: liveGG || null, live, liveLead: lead, ggDecided,
             eventName: eventName || null,
             seedKey: [s1.player_name || '', s2.player_name || '', roundKey, eventName || ''].join('|'),
             holesHint: (eventName || '') + ' ' + roundLabel
