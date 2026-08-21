@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.255.7";
+window.TGF_VERSION = "2.255.8";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.255.8",
+    date: "2026-08-21",
+    changes: [
+      "Preview cards tightened from 400px to 350px tall (Kerry: 'adjust the padding above and below the main body logo and text to reduce and balance') — the art stays centered under the header bar with roughly 20px of even breathing room around the tallest element instead of the previous looser margins. Cache-buster ?v=405.",
+    ],
+  },
   {
     version: "2.255.7",
     date: "2026-08-21",
