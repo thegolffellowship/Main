@@ -10754,6 +10754,22 @@ def api_cmp_get_config():
                     out["structure"]["consolation_skipped"] = True
             except Exception:
                 pass
+            # Nine-scoped knockout rounds (Kerry 2026-08-21, SA finals
+            # day: semifinal = front 9, final = back 9 of one round).
+            # Dial `cmp_match_scope`: {"<season>|<chapter>":
+            #   {"<round>": {"nine": "front|back",
+            #                "course": "...", "date": "YYYY-MM-DD"}}}
+            # course/date double as the card-header fallback when no
+            # tracker event is linked to the bracket row.
+            try:
+                from email_parser.database import get_app_setting
+                _scopes = json.loads(
+                    get_app_setting("cmp_match_scope") or "{}")
+                if f"{season}|{chapter}" in _scopes:
+                    out["structure"]["match_scope"] = \
+                        _scopes[f"{season}|{chapter}"]
+            except Exception:
+                pass
         except ValueError as e:
             out["structure_error"] = str(e)
     return jsonify(out)

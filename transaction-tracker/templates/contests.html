@@ -3524,6 +3524,41 @@
         return { side, bar, thru, margin: marg, leaderName };
     }
 
+    // ── Nine-scoped knockout rounds (Kerry 2026-08-21, SA finals day:
+    // semifinal = FRONT 9, final = BACK 9 of one round). The scope map
+    // arrives on /api/cmp/config as structure.match_scope (dial
+    // cmp_match_scope, per season|chapter): roundKey -> {nine, course,
+    // date}. Chapters without a dial entry behave exactly as before.
+    function mpRoundScope(roundKey) {
+        const ms = (cmpState.structure || {}).match_scope || {};
+        const e = ms[roundKey];
+        if (!e) return null;
+        return (typeof e === 'object') ? e : { nine: e };
+    }
+    // Filter a GG match detail to one nine and recompute the match state
+    // from the per-hole winners inside it: thru, leader, margin, and
+    // whether the match is mathematically DECIDED (lead > holes left).
+    function mpScopeDetail(detail, scope) {
+        const nine = scope && scope.nine;
+        if (!detail || !nine || !Array.isArray(detail.holes)) return detail;
+        const lo = /back/i.test(nine) ? 10 : 1, hi = lo + 8;
+        const holes = detail.holes.filter(h => h.hole >= lo && h.hole <= hi);
+        if (!holes.length) return detail;
+        let diff = 0, played = 0;
+        holes.forEach(h => {
+            if (h.p1_gross != null || h.p2_gross != null) played++;
+            if (h.winner === 1) diff++; else if (h.winner === 2) diff--;
+        });
+        const rem = holes.length - played;
+        const leadN = Math.abs(diff);
+        const decided = played > 0 && leadN > rem;
+        const margin = diff === 0 ? 'AS'
+            : (decided && rem > 0 ? `${leadN}&${rem}` : `${leadN} UP`);
+        return { ...detail, holes, thru: played, n_holes: holes.length,
+                 gg_winner_idx: diff > 0 ? 1 : (diff < 0 ? 2 : null),
+                 gg_margin: margin, _scoped: nine, _decided: decided };
+    }
+
     // Course from an event name: the part after a " - "/" | " separator (City
     // Champ Practice Round - Falconhead → Falconhead), else the name minus a
     // leading event code (a9.18 Forest Creek → Forest Creek).
@@ -3535,14 +3570,20 @@
         return s.replace(/^\s*[A-Za-z]?\d+(?:\.\d+)?\s+/, '').trim();
     }
     function mpMatchCardFromSlots(s1, s2, roundKey, eventName, eventDate, liveGG, matchNo, matchCount, courseHint) {
+        const scope = mpRoundScope(roundKey);
+        if (scope) {
+            if (liveGG) liveGG = mpScopeDetail(liveGG, scope);
+            if (!courseHint && !eventName && scope.course) courseHint = scope.course;
+            if (!eventDate && scope.date) eventDate = scope.date;
+        }
         const winner = s1.winner_name || s2.winner_name || null;
-        const margin = s1.margin || s2.margin || '';
+        let margin = s1.margin || s2.margin || '';
         const ml = (margin || '').toLowerCase();
         const bothPresent = !!(s1.player_name && s2.player_name);
         const tie = bothPresent && !winner && (ml === 'halved' || ml === 'all square' || ml === 'as');
         const inProgress = bothPresent && !winner && /thru/i.test(ml);
-        const aWin = !!(winner && winner === s1.player_name);
-        const bWin = !!(winner && winner === s2.player_name);
+        let aWin = !!(winner && winner === s1.player_name);
+        let bWin = !!(winner && winner === s2.player_name);
         // Numbered round label ("Semifinal 1"/"Semifinal 2") when the round has
         // more than one match; the header shows round + course (Kerry 2026-07-19).
         const rdef = ROUND_DEFS[roundKey] || {};
@@ -3558,8 +3599,18 @@
         // a winner is recorded.
         const live = !winner && !!liveGG;
         const lead = live ? mpLiveLead(liveGG, s1.player_name, s2.player_name) : null;
+        // A nine-scoped match GG can no longer flip reads FINAL before
+        // the manager records it (Kerry 2026-08-21: "Once a match is
+        // determined, it should update to FINAL") — display-level only;
+        // the recorded bracket stays authoritative for money and LSC.
+        const ggDecided = !!(live && liveGG && liveGG._decided && lead && lead.side);
+        if (ggDecided) {
+            if (lead.side === 'A') aWin = true; else bWin = true;
+            if (!margin) margin = liveGG.gg_margin || '';
+        }
         let status = winner ? 'FINAL' : (bothPresent ? '—' : 'TBD');
-        if (live && lead) status = `LIVE · thru ${lead.thru}`;
+        if (ggDecided) status = 'FINAL';
+        else if (live && lead) status = `LIVE · thru ${lead.thru}`;
         else if (inProgress) status = 'IN PROGRESS';
         const o = {
             aName: s1.player_name, bName: s2.player_name, aWin, bWin, tie, margin,
@@ -3590,6 +3641,15 @@
                 dataAttrs += ` data-live-winner="${escapeHtml(winner)}"`
                     + ` data-live-margin="${escapeHtml(margin || '')}"`;
             }
+        } else if (roundKey === 'final' && (s1.player_name || s2.player_name)) {
+            // One-sided final: tag it so a DECIDED semifinal can flow its
+            // winner in live (Kerry 2026-08-21: "the FINAL is dependent
+            // on who won ... he should show up there") — display-level;
+            // the slot fills officially when the result is recorded.
+            dataAttrs = ` data-final-pending="1"`
+                + ` data-final-have="${escapeHtml(s1.player_name || s2.player_name)}"`
+                + ` data-live-event="${escapeHtml(eventName || '')}"`
+                + ` data-live-date="${escapeHtml(eventDate || '')}"`;
         }
         // While an in-progress card hasn't gone live yet, show a small status
         // line (the poller updates it) so a stuck card explains itself instead
@@ -3642,6 +3702,7 @@
             }
         } catch (e) { err = 'network'; }
         if (!detail) { setStatus('Live scoring: ' + (err || 'unavailable') + ' — retrying'); return; }
+        detail = mpScopeDetail(detail, mpRoundScope(card.dataset.liveRound || ''));
         // No holes posted yet → nothing to show live; keep the scheduled card.
         const anyPlayed = (detail.holes || []).some(h => h.p1_gross != null || h.p2_gross != null);
         if (!anyPlayed) { setStatus('Live scoring connected — waiting for the first hole'); return; }
@@ -3674,6 +3735,28 @@
             if (head) head.setAttribute('aria-expanded', 'true');
         }
         card.replaceWith(fresh);
+        // Decided semifinal → flow the winner into a pending one-sided
+        // FINAL card and start polling its pair immediately.
+        if (detail._decided && (card.dataset.liveRound || '') === 'sf') {
+            const ld = mpLiveLead(detail, a, b);
+            if (ld && ld.leaderName) mpAutoAdvanceFinal(ld.leaderName);
+        }
+    }
+    function mpAutoAdvanceFinal(winnerName) {
+        const pend = document.querySelector('.mp-match-card[data-final-pending]');
+        if (!pend) return;
+        const have = pend.dataset.finalHave || '';
+        if (!have || mpPersonKey(have) === mpPersonKey(winnerName)) return;
+        const html = mpMatchCardFromSlots(
+            { player_name: have }, { player_name: winnerName }, 'final',
+            pend.dataset.liveEvent || '', pend.dataset.liveDate || '', null,
+            null, null, '');
+        const tmp = document.createElement('div');
+        tmp.innerHTML = html.trim();
+        const fresh = tmp.firstElementChild;
+        if (!fresh) return;
+        pend.replaceWith(fresh);
+        try { mpLivePollCard(fresh); } catch (_) {}
     }
     async function mpLivePollAll(container) {
         const cards = Array.from(container.querySelectorAll('.mp-match-card[data-live-a]'));

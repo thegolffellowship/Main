@@ -1,5 +1,15 @@
-window.TGF_VERSION = "2.253.1";
+window.TGF_VERSION = "2.254.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.254.0",
+    date: "2026-08-21",
+    changes: [
+      "Nine-scoped knockout rounds for SA finals day (Kerry: semifinal is a 9-hole match on the front, the final on the back): the new cmp_match_scope dial flows through /api/cmp/config, and live match cards scope GG's detail to that nine — 9 hole dots instead of 18, thru counted within the nine, and leader/margin recomputed from the nine's own hole winners so the final's card can never absorb semifinal scores.",
+      "A decided match reads FINAL before it's recorded (Kerry: 'Once a match is determined, it should update to FINAL'): when the lead exceeds the holes remaining in the match's scope, the card flips from LIVE to FINAL with the winner highlighted — display-level; the recorded bracket remains authoritative for money and the Lone Star Cup seat, and the manager's one-tap Record-from-GG button now also fires for 9-hole matches.",
+      "The semifinal winner flows into the FINAL card live (Kerry: 'the FINAL is dependent on who won... he should show up there and then the FINAL match show results'): a one-sided final card is tagged pending, and the moment the semifinal is decided the winner slots in and the final's back-9 scores start polling immediately.",
+      "Match cards without a linked tracker event now show the dial's course/date in the header (Kerry: 'show the course and date, just like SEMIFINAL 2 does') — SA finals day is stamped 08/22; course fills in as soon as Kerry names the venue.",
+    ],
+  },
   {
     version: "2.253.1",
     date: "2026-08-21",
