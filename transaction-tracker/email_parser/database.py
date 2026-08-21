@@ -34115,8 +34115,23 @@ def cmp_fetch_live_match(chapter: str, player_a: str, player_b: str,
             # verified live 2026-08-01), and next() walked only the first,
             # so the 3rd-place pair was never found while its players were
             # visibly scoring (Kerry).
+            # A knockout game qualifies when its name says "match play"
+            # OR when it carries BOTH players' surnames (Kerry names
+            # finals-day games "SEMIFINALS - ELLIS v HAMILTON" /
+            # "FINAL - Chandler v Ellis" with no MATCH PLAY in them —
+            # 2026-08-21, SA finals eve: "I've added test scores, but I
+            # don't see anything happening live"). Surname matching is
+            # pair-specific, so unrelated stroke-play games never hit;
+            # the pair check on the parsed card stays the final gate.
+            _surns = [n.split()[-1].lower()
+                      for n in (player_a, player_b) if n and n.split()]
+            def _mp_game(txt):
+                t = (txt or "").lower()
+                return (_re.search(r"match\s*play", t)
+                        or (len(_surns) == 2
+                            and all(s in t for s in _surns)))
             mps = [l for l in (struct.get("links") or [])
-                   if _re.search(r"match\s*play", l.get("text") or "", _re.I)
+                   if _mp_game(l.get("text"))
                    and "/v2tournaments/" in (l.get("href") or "")]
             if not mps:
                 continue

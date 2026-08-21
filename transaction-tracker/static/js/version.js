@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.253.0";
+window.TGF_VERSION = "2.253.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.253.1",
+    date: "2026-08-21",
+    changes: [
+      "Live match-play pickup no longer requires 'MATCH PLAY' in the GG game name (Kerry, SA finals eve: 'I've added test scores, but I don't see anything happening live'): the live fetch now also accepts a game whose name carries BOTH players' surnames — matching Kerry's finals-day naming ('SEMIFINALS - ELLIS v HAMILTON', 'FINAL - Chandler v Ellis'). Surname matching is pair-specific and the parsed-card pair check stays the final gate, so unrelated games can't slip in.",
+    ],
+  },
   {
     version: "2.253.0",
     date: "2026-08-21",
