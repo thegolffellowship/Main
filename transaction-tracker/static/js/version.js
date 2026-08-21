@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.255.0";
+window.TGF_VERSION = "2.255.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.255.1",
+    date: "2026-08-21",
+    changes: [
+      "Link-preview cards are now unique per URL (Kerry: the Lone Star Cup card 'should be unique to that. It shouldn't be the same for other URLs'): /member/lonestarcup keeps the navy trophy card, the /member/matchplay/<chapter> links get a new dark City Match Play card (slate-vs-clay tiles, 'LIVE SCORING', /static/og-match-play.png) titled with the chapter, and plain /member/contests falls back to a generic 'TGF Leaderboard' card with the app icon. Hash fragments (#tab=mp) never reach the server, so a texted /member/contests#... link previews as the generic card — share the chapter Match Play URL to get the match-play card. Message apps cache previews per URL, so an already-texted link may show the old card until their cache refreshes.",
+    ],
+  },
   {
     version: "2.255.0",
     date: "2026-08-21",

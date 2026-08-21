@@ -14,12 +14,24 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
     <title>TGF — Contests</title>
-    {# Lone Star Cup card (Kerry 2026-08-17): texted links to this page
-       preview as the navy trophy card — hash fragments (#tab=lsc) never
-       reach the server, so the whole contests page shares it. #}
+    {# Per-URL link-preview cards (Kerry 2026-08-21: the LSC card "should
+       be unique to that. It shouldn't be the same for other URLs") —
+       hash fragments (#tab=mp) never reach the server, so each landing
+       ROUTE carries its own card: /member/lonestarcup keeps the navy
+       trophy, /member/matchplay/<chapter> gets the dark VS card, and
+       plain /member/contests falls back to the generic TGF card. #}
+    {% if lsc_landing %}
     {% set og_title = "The Lone Star Cup Qualifiers" %}
     {% set og_desc = "Austin vs San Antonio — projected rosters live from today's standings, plus points races and Match Play." %}
     {% set og_image = "/static/og-lone-star-cup.png" %}
+    {% elif mp_landing %}
+    {% set og_title = "City Match Play — " ~ mp_landing %}
+    {% set og_desc = "Follow the matches live — hole-by-hole scorecards, running margins, and the bracket." %}
+    {% set og_image = "/static/og-match-play.png" %}
+    {% else %}
+    {% set og_title = "TGF Leaderboard" %}
+    {% set og_desc = "Points races, Match Play, and the Lone Star Cup — live standings for San Antonio & Austin." %}
+    {% endif %}
     {% include "_og_meta.html" %}
     <link rel="stylesheet" href="/static/css/dashboard.css?v={{ app_version }}">
     <link rel="preconnect" href="https://fonts.googleapis.com">
