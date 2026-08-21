@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.254.3";
+window.TGF_VERSION = "2.255.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.255.0",
+    date: "2026-08-21",
+    changes: [
+      "Match-play scorecards get light grid lines (Kerry: 'light scorecard lines would make it look a little better'): faint warm-gray column lines between holes and row lines between Par and each player row, a shade lighter than the standard border so the grid guides the eye without competing with the scores. The Hole header keeps its darker underline and the Tot column its darker divider.",
+      "A 9-hole match card no longer stretches its lone nine across the full card width — the grid compacts to about one-nine-of-an-18 width and centers, with the strokes bar and result chip centered under it. 18-hole cards are unchanged: nines side-by-side on desktop, stacked on mobile.",
+      "An unstarted live-wired match no longer reads 'LIVE · All square · thru 0' (Kerry: 'thru 0 is weird') — the card status and in-card chip now show the round's scheduled tee time (e.g. '9:10 AM TEE TIME') from a new optional 'tee' field on the cmp_match_scope dial, falling back to a plain dash when no tee time is set. The LIVE chip and running margin appear once the first hole is in.",
+    ],
+  },
   {
     version: "2.254.3",
     date: "2026-08-21",

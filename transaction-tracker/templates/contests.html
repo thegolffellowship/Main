@@ -954,6 +954,14 @@
         .mpv2 .mp-scorecard { border-top: 1px solid var(--border); padding: 0.75rem 0.7rem; background: #FCFCFB; }
         .mpv2 .mp-sc-nines { display: flex; flex-wrap: wrap; gap: 0.9rem 1.1rem; }
         .mpv2 .mp-sc-block { flex: 1 1 320px; min-width: 0; overflow-x: auto; }
+        /* A lone nine (9-hole match) shouldn't stretch the full card width —
+           compact it to one-nine-of-an-18 width and center it (Kerry
+           2026-08-21). 18-hole cards keep side-by-side nines on desktop /
+           stacked on mobile via the flex-wrap above. */
+        .mpv2 .mp-sc-block:only-child { flex: 0 1 480px; margin: 0 auto; }
+        .mpv2 .mp-scorecard:has(.mp-sc-block:only-child) .mp-sc-strokebar { justify-content: center; }
+        .mpv2 .mp-scorecard:has(.mp-sc-block:only-child) .mp-sc-resultwrap,
+        .mpv2 .mp-scorecard:has(.mp-sc-block:only-child) .mp-sc-caption { text-align: center; }
         .mpv2 .mp-sc-block-label {
             font: 700 0.56rem/1 'Bitter', Georgia, serif; letter-spacing: 0.08em;
             text-transform: uppercase; color: var(--text-placeholder, #9CA3AF); margin-bottom: 0.35rem;
@@ -961,12 +969,22 @@
         /* table-layout:fixed + equal hole columns so every hole is the same
            width (winner-circle cells don't push their column wider). */
         .mpv2 table.mp-sc { border-collapse: collapse; width: 100%; table-layout: fixed; font-variant-numeric: tabular-nums; }
+        /* Light scorecard grid (Kerry 2026-08-21): faint column lines between
+           holes + faint row lines between Par and each player row — a shade
+           lighter than --border so the grid guides the eye without competing
+           with the scores. The Hole header keeps its darker --border rule
+           (border-collapse lets the topmost cell's color win) and Tot keeps
+           its darker left divider. Pts rows stay glued to their player row
+           (no border-top), matching the padding-top:0 pairing below. */
         .mpv2 table.mp-sc th, .mpv2 table.mp-sc td {
             text-align: center; padding: 0.16rem 0.04rem; font-size: 0.66rem;
             color: var(--text-body, #4B5563); white-space: nowrap; border: none;
+            border-left: 1px solid #EEECE6;
             width: auto; overflow: hidden;
         }
-        .mpv2 table.mp-sc .mp-sc-rowlabel { text-align: left; font-weight: 700; padding-right: 0.2rem; width: 2rem; }
+        .mpv2 table.mp-sc tr.mp-sc-par th, .mpv2 table.mp-sc tr.mp-sc-par td,
+        .mpv2 table.mp-sc tr.mp-sc-strokes th, .mpv2 table.mp-sc tr.mp-sc-strokes td { border-top: 1px solid #EEECE6; }
+        .mpv2 table.mp-sc .mp-sc-rowlabel { text-align: left; font-weight: 700; padding-right: 0.2rem; width: 2rem; border-left: none; }
         .mpv2 table.mp-sc .mp-sc-tot { font-weight: 700; color: var(--text); border-left: 1px solid var(--border); width: 2.1rem; }
         .mpv2 table.mp-sc tr.mp-sc-hole th, .mpv2 table.mp-sc tr.mp-sc-hole td {
             /* Optical compensation (Kerry 2026-07-21): Bitter's digits
@@ -3423,11 +3441,17 @@
         let result = '';
         if (o.live && o.liveLead && !o.ggDecided) {
             const L = o.liveLead;
-            const cls = L.side === 'A' ? 'a' : (L.side === 'B' ? 'b' : 'tie');
-            const txt = (L.side && L.leaderName)
-                ? `${escapeHtml(mpFirstLast(L.leaderName).last)} ${escapeHtml(L.margin)} · thru ${L.thru}`
-                : `All square · thru ${L.thru}`;
-            result = `<span class="mp-sc-result ${cls}">LIVE · ${txt}</span>`;
+            if (L.thru > 0) {
+                const cls = L.side === 'A' ? 'a' : (L.side === 'B' ? 'b' : 'tie');
+                const txt = (L.side && L.leaderName)
+                    ? `${escapeHtml(mpFirstLast(L.leaderName).last)} ${escapeHtml(L.margin)} · thru ${L.thru}`
+                    : `All square · thru ${L.thru}`;
+                result = `<span class="mp-sc-result ${cls}">LIVE · ${txt}</span>`;
+            } else if (o.teeTime) {
+                // No holes played yet: "LIVE · All square · thru 0" is weird
+                // (Kerry 2026-08-21) — show the scheduled tee time instead.
+                result = `<span class="mp-sc-result tie">${escapeHtml(o.teeTime)} TEE TIME</span>`;
+            }
         }
         // A FINAL result is NOT restated here — the head arrow strip already
         // shows the winner + margin, so a second "Hogue 6&5" pill is redundant
@@ -3452,7 +3476,7 @@
                </div>`
             : '';
         return `${strokeBar}<div class="mp-sc-nines">${nines}</div>
-            <div>${result}</div>
+            <div class="mp-sc-resultwrap">${result}</div>
             ${caption ? `<div class="mp-sc-caption">${caption}</div>` : ''}`;
     }
 
@@ -3632,15 +3656,20 @@
         }
         let status = winner ? 'FINAL' : (bothPresent ? '—' : 'TBD');
         if (ggDecided) status = 'FINAL';
+        // Unstarted (thru 0): "LIVE · All square · thru 0" is weird (Kerry
+        // 2026-08-21) — show the round's tee time from the scope dial instead.
+        const teeTime = (scope && scope.tee) ? String(scope.tee) : null;
+        if (ggDecided) { /* status already FINAL */ }
         else if (live && lead) status = lead.thru > 0
-            ? `LIVE · thru ${lead.thru}` : '—';
+            ? `LIVE · thru ${lead.thru}`
+            : (teeTime ? `${teeTime} TEE TIME` : '—');
         else if (inProgress) status = 'IN PROGRESS';
         const o = {
             aName: s1.player_name, bName: s2.player_name, aWin, bWin, tie, margin,
             // Attach GG detail whenever we have it — for a RECORDED match too, so
             // the frozen result keeps GG's real hole-by-hole (scores + pops), not
             // a fabricated placeholder. `live` only gates the running-margin UI.
-            gg: liveGG || null, live, liveLead: lead, ggDecided,
+            gg: liveGG || null, live, liveLead: lead, ggDecided, teeTime,
             eventName: eventName || null,
             seedKey: [s1.player_name || '', s2.player_name || '', roundKey, eventName || ''].join('|'),
             holesHint: (eventName || '') + ' ' + roundLabel
