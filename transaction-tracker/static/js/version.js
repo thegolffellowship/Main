@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.251.0";
+window.TGF_VERSION = "2.251.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.251.1",
+    date: "2026-08-21",
+    changes: [
+      "New scoring-mp-bracket-slot bridge command: wire or update one knockout bracket slot (season|chapter|round|slot|player|opponent[|event_id]) through the same cmp_save_bracket_slot write the admin UI uses — ids resolve at write time. First use: pairing the SA Match Play semifinal (Ellis vs Hamilton, front 9) ahead of the 8/22 finals day, with Chandler waiting in the final on the back 9.",
+    ],
+  },
   {
     version: "2.251.0",
     date: "2026-08-21",

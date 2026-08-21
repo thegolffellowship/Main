@@ -1856,6 +1856,27 @@ def _scoring_dispatch(url: str, extract: str):
             _apply = len(_p) > 2 and _p[2].lower() == "apply"
             return json.dumps(db.cmp_lock_verified_results(
                 _season, _chapter, apply=_apply), indent=2, default=str)
+        if cmd == "scoring-mp-bracket-slot":
+            # Wire/update ONE knockout bracket slot (Kerry 2026-08-21:
+            # "wire up tomorrow's SEMIFINAL match ... as well as whoever
+            # wins vs Derek Chandler in the FINALS"). Same write the
+            # admin bracket UI uses (cmp_save_bracket_slot — ids resolve
+            # at write time, seed/WC chips survive occupant-preserving
+            # re-saves). arg:
+            # "<season>|<chapter>|<round>|<slot>|<player>|<opponent>[|<event_id>]"
+            # Empty player/opponent clears that side; round is the
+            # bracket's own vocabulary (e.g. 'sf', 'final').
+            _p = [x.strip() for x in arg.split("|")]
+            if len(_p) < 6:
+                return json.dumps({"error": "<season>|<chapter>|<round>|"
+                                            "<slot>|<player>|<opponent>"
+                                            "[|<event_id>]"})
+            _ev = int(_p[6]) if len(_p) > 6 and _p[6] else None
+            return json.dumps(db.cmp_save_bracket_slot(
+                _p[0], _p[1], _p[2], int(_p[3]),
+                player_name=_p[4] or None,
+                opponent_name=_p[5] or None,
+                event_id=_ev), indent=2, default=str)
         if cmd == "scoring-mp-lock-one":
             # Manual lock for a played match GG never published a card for
             # (no_gg_card class) — the result is Kerry-confirmed, not
