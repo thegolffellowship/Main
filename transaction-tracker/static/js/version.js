@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.254.2";
+window.TGF_VERSION = "2.254.3";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.254.3",
+    date: "2026-08-21",
+    changes: [
+      "Clearing a match's scores in GG now resets its card (Kerry: 'I cleared out scores, and FINAL reverted, but the SEMIFINAL 1 did not'): when GG returns an empty card the poller used to bail out and leave the stale cached render (with its FINAL chip and old dots) in place — it now drops the cache and renders the PRE-MATCH card instead: the full hole grid with par and the handicap pops visible, scores blank until real ones arrive, status back to scheduled. 'LIVE · thru 0' can no longer appear either.",
+    ],
+  },
   {
     version: "2.254.2",
     date: "2026-08-21",

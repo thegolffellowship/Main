@@ -3632,7 +3632,8 @@
         }
         let status = winner ? 'FINAL' : (bothPresent ? '—' : 'TBD');
         if (ggDecided) status = 'FINAL';
-        else if (live && lead) status = `LIVE · thru ${lead.thru}`;
+        else if (live && lead) status = lead.thru > 0
+            ? `LIVE · thru ${lead.thru}` : '—';
         else if (inProgress) status = 'IN PROGRESS';
         const o = {
             aName: s1.player_name, bName: s2.player_name, aWin, bWin, tie, margin,
@@ -3726,11 +3727,20 @@
         if (!detail) { setStatus('Live scoring: ' + (err || 'unavailable') + ' — retrying'); return; }
         if (!(card.dataset.liveEvent || '').trim())
             detail = mpScopeDetail(detail, mpRoundScope(card.dataset.liveRound || ''));
-        // No holes posted yet → nothing to show live; keep the scheduled card.
         const anyPlayed = (detail.holes || []).some(h => h.p1_gross != null || h.p2_gross != null);
-        if (!anyPlayed) { setStatus('Live scoring connected — waiting for the first hole'); return; }
-        // Persist the latest live detail so a reload paints instantly.
-        try { localStorage.setItem(mpLiveKey(chapter, a, b), JSON.stringify({ t: Date.now(), detail })); } catch (_) {}
+        if (!anyPlayed) {
+            // Not started — or the scores were CLEARED after a test/live
+            // run: drop the stale cache so nothing repaints old scores,
+            // then fall through and render the PRE-MATCH card — the full
+            // hole grid with par + handicap pops but blank scores
+            // (Kerry 2026-08-21: "I still want to see the scorecard ...
+            // to see where the pops lie, but there shouldn't be any
+            // scores (until there are)").
+            try { localStorage.removeItem(mpLiveKey(chapter, a, b)); } catch (_) {}
+        } else {
+            // Persist the latest live detail so a reload paints instantly.
+            try { localStorage.setItem(mpLiveKey(chapter, a, b), JSON.stringify({ t: Date.now(), detail })); } catch (_) {}
+        }
         // Manager one-tap: pre-fill + offer to record a decisive GG final
         // (only meaningful while the match is still unrecorded).
         if (!card.dataset.liveWinner) mpMaybeOfferRecord(card, detail, a, b);
