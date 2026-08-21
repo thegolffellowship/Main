@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.255.3";
+window.TGF_VERSION = "2.255.4";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.255.4",
+    date: "2026-08-21",
+    changes: [
+      "Link-preview cards regenerated with the full-size art on the 1200×400 strip (Kerry: 'reduce the padding ... specifically left and right') — the v2.255.3 slim-down had scaled the icons and type DOWN along with the canvas, leaving big empty side margins; the content is now back at its original size so it fills the strip. Cache-buster bumped to ?v=401 so scrapers refetch.",
+    ],
+  },
   {
     version: "2.255.3",
     date: "2026-08-21",
