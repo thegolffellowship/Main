@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.251.1";
+window.TGF_VERSION = "2.252.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.252.0",
+    date: "2026-08-21",
+    changes: [
+      "Match Play consolation (3rd place) can be skipped per chapter (Kerry: 'There will not be a 3rd place match for San Antonio like there was for Austin'): new cmp_skip_consolation dial ('<season>|<chapter>' entries) flows through /api/cmp/config as structure.consolation_skipped and hides the 3RD PLACE block on the knockout view. Money is untouched — the payout sheet's standing fallback already splits the semifinal losers' 3rd(+4th) place money evenly whenever no consolation result is recorded. Dial set for 2026 San Antonio; Austin keeps its played 3rd-place match.",
+    ],
+  },
   {
     version: "2.251.1",
     date: "2026-08-21",

@@ -5142,7 +5142,11 @@
             const fieldN = (cmpState.structure && cmpState.structure.n != null)
                 ? cmpState.structure.n
                 : (cmpState.enrollees || []).length;
-            const hasConsolation = fieldN >= 6;
+            // Per-chapter opt-out (Kerry 2026-08-21: no SA 3rd-place
+            // match) — cmp_skip_consolation dial via /api/cmp/config;
+            // sf losers' money splits evenly per the standing fallback.
+            const hasConsolation = fieldN >= 6
+                && !(cmpState.structure && cmpState.structure.consolation_skipped);
             let consolationHtml = '';
             if (hasConsolation) {
                 // Prefer the payout sheet's consolation block (authoritative sf

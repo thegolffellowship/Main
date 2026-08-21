@@ -10723,6 +10723,20 @@ def api_cmp_get_config():
         out["entrants"] = entrants
         try:
             out["structure"] = structure_for_n(active["config"], len(entrants))
+            # Consolation opt-out (Kerry 2026-08-21: "There will not be
+            # a 3rd place match for San Antonio like there was for
+            # Austin") — dial `cmp_skip_consolation` is a JSON list of
+            # "<season>|<chapter>" entries. Money is unaffected: the
+            # payout sheet already splits 3rd(+4th) evenly whenever no
+            # consolation result is recorded.
+            try:
+                from email_parser.database import get_app_setting
+                _skips = json.loads(
+                    get_app_setting("cmp_skip_consolation") or "[]")
+                if f"{season}|{chapter}" in _skips:
+                    out["structure"]["consolation_skipped"] = True
+            except Exception:
+                pass
         except ValueError as e:
             out["structure_error"] = str(e)
     return jsonify(out)
