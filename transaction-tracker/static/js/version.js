@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.254.0";
+window.TGF_VERSION = "2.254.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.254.1",
+    date: "2026-08-21",
+    changes: [
+      "Nine-scoping applies only to matches WITHOUT a linked tracker event: Semifinal 2 (Chandler d. Moreno over the full 18 at Vaaler Creek) briefly rendered as 9 dots because the round-wide scope caught it too — event-linked matches keep their complete card, and only the finals-day standalone nines get scoped.",
+    ],
+  },
   {
     version: "2.254.0",
     date: "2026-08-21",

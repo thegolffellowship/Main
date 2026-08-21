@@ -3570,10 +3570,13 @@
         return s.replace(/^\s*[A-Za-z]?\d+(?:\.\d+)?\s+/, '').trim();
     }
     function mpMatchCardFromSlots(s1, s2, roundKey, eventName, eventDate, liveGG, matchNo, matchCount, courseHint) {
-        const scope = mpRoundScope(roundKey);
+        // Scope applies only to matches WITHOUT a linked event — an
+        // event-linked match (Semifinal 2 at Vaaler, full 18) keeps its
+        // complete card; the finals-day standalone nines get scoped.
+        const scope = eventName ? null : mpRoundScope(roundKey);
         if (scope) {
             if (liveGG) liveGG = mpScopeDetail(liveGG, scope);
-            if (!courseHint && !eventName && scope.course) courseHint = scope.course;
+            if (!courseHint && scope.course) courseHint = scope.course;
             if (!eventDate && scope.date) eventDate = scope.date;
         }
         const winner = s1.winner_name || s2.winner_name || null;
@@ -3702,7 +3705,8 @@
             }
         } catch (e) { err = 'network'; }
         if (!detail) { setStatus('Live scoring: ' + (err || 'unavailable') + ' — retrying'); return; }
-        detail = mpScopeDetail(detail, mpRoundScope(card.dataset.liveRound || ''));
+        if (!(card.dataset.liveEvent || '').trim())
+            detail = mpScopeDetail(detail, mpRoundScope(card.dataset.liveRound || ''));
         // No holes posted yet → nothing to show live; keep the scheduled card.
         const anyPlayed = (detail.holes || []).some(h => h.p1_gross != null || h.p2_gross != null);
         if (!anyPlayed) { setStatus('Live scoring connected — waiting for the first hole'); return; }
