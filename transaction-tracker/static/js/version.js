@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.255.11";
+window.TGF_VERSION = "2.255.12";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.255.12",
+    date: "2026-08-22",
+    changes: [
+      "Nine-scoped knockout cards now anchor their play order to the DIAL's start hole instead of GG's start-hole mark (finals day: GG's FINAL game carried starting hole 15 while the match actually begins on 10 — the card read 'Started on hole 15' with holes 15..18,10..14).",
+      "Mis-slotted GG entries can no longer fake a live match: a score sitting beyond the first unplayed hole in play order is blanked in the scoped view (Kerry's extra-hole-9 scores landed on GG's hole 15 and showed the unstarted final as 'LIVE · All square · thru 1'). Self-heals as real scores fill in sequentially.",
+      "A decided nine-scoped card shows all 9 holes (Kerry: 'All 9 holes, par 36') — the 2&1 semifinal rendered only the 8 played columns with a par-32 total because the match-length fallback didn't recognize a scoped 9-hole detail.",
+    ],
+  },
   {
     version: "2.255.11",
     date: "2026-08-22",

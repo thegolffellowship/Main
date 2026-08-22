@@ -3282,6 +3282,10 @@
         // column count is the match length. 9-hole matches always carry a
         // parseable a9.x/s9.x code, so they never reach this fallback.
         const matchLen = mpMatchHoleCount(gg, o)
+            // A nine-scoped detail carries exactly its 9 holes — render
+            // ALL of them (hole 9 blank on a 2&1 card, par 36), not just
+            // the played 8 (Kerry 2026-08-22: "All 9 holes, par 36").
+            || (allH.length === 9 ? 9 : null)
             || ((o && o.live && allH.length >= 9) ? allH.length : null);
         let gh;
         if (matchLen === 9 && allH.length > 9) {
@@ -3596,8 +3600,28 @@
         const nine = scope && scope.nine;
         if (!detail || !nine || !Array.isArray(detail.holes)) return detail;
         const lo = /back/i.test(nine) ? 10 : 1, hi = lo + 8;
-        const holes = detail.holes.filter(h => h.hole >= lo && h.hole <= hi);
+        let holes = detail.holes.filter(h => h.hole >= lo && h.hole <= hi);
         if (!holes.length) return detail;
+        // Re-anchor play order to the DIAL's start hole (scope.start,
+        // default = the nine's first hole), overriding GG's own
+        // start-hole mark — finals day 2026-08-22: GG's FINAL game
+        // carried starting hole 15 while the match actually begins on
+        // 10 (Kerry: "Final match started on hole 10").
+        const startAt = Number(scope.start) || lo;
+        holes = holes.slice().sort((a, b) =>
+            ((a.hole - startAt + 18) % 18) - ((b.hole - startAt + 18) % 18));
+        // Contiguous-from-the-start guard: match-play scores arrive in
+        // play order, so a score sitting BEYOND the first unplayed hole
+        // is a mis-slotted GG entry (the same day: the extra-hole 9
+        // scores landed on GG's hole 15 and read as "LIVE thru 1"
+        // before the final had begun). Blank everything after the gap
+        // for this scoped view — it self-heals as real scores fill in.
+        let cut = holes.length;
+        for (let i = 0; i < holes.length; i++) {
+            if (holes[i].p1_gross == null && holes[i].p2_gross == null) { cut = i; break; }
+        }
+        holes = holes.map((h, i) => (i < cut ? { ...h, order: i + 1 }
+            : { ...h, order: i + 1, p1_gross: null, p2_gross: null, winner: null }));
         let diff = 0, played = 0;
         holes.forEach(h => {
             if (h.p1_gross != null || h.p2_gross != null) played++;
@@ -3609,6 +3633,7 @@
         const margin = diff === 0 ? 'AS'
             : (decided && rem > 0 ? `${leadN}&${rem}` : `${leadN} UP`);
         return { ...detail, holes, thru: played, n_holes: holes.length,
+                 start_hole: startAt,
                  gg_winner_idx: diff > 0 ? 1 : (diff < 0 ? 2 : null),
                  gg_margin: margin, _scoped: nine, _decided: decided,
                  // dial-provided pars feed the Par row when no tracker
