@@ -1880,19 +1880,26 @@ def _scoring_dispatch(url: str, extract: str):
             # admin bracket UI uses (cmp_save_bracket_slot — ids resolve
             # at write time, seed/WC chips survive occupant-preserving
             # re-saves). arg:
-            # "<season>|<chapter>|<round>|<slot>|<player>|<opponent>[|<event_id>]"
+            # "<season>|<chapter>|<round>|<slot>|<player>|<opponent>
+            #  [|<event_id>][|<winner>][|<margin>]"
             # Empty player/opponent clears that side; round is the
-            # bracket's own vocabulary (e.g. 'sf', 'final').
+            # bracket's own vocabulary (e.g. 'sf', 'final'). winner +
+            # margin (v2.255.11, finals day: "Semifinal was decided.
+            # 2&1 Ellis") record the RESULT on the slot — the same
+            # winner_name/margin columns the admin bracket UI writes.
             _p = [x.strip() for x in arg.split("|")]
             if len(_p) < 6:
                 return json.dumps({"error": "<season>|<chapter>|<round>|"
                                             "<slot>|<player>|<opponent>"
-                                            "[|<event_id>]"})
+                                            "[|<event_id>][|<winner>]"
+                                            "[|<margin>]"})
             _ev = int(_p[6]) if len(_p) > 6 and _p[6] else None
             return json.dumps(db.cmp_save_bracket_slot(
                 _p[0], _p[1], _p[2], int(_p[3]),
                 player_name=_p[4] or None,
                 opponent_name=_p[5] or None,
+                winner_name=(_p[7] or None) if len(_p) > 7 else None,
+                margin=(_p[8] or None) if len(_p) > 8 else None,
                 event_id=_ev), indent=2, default=str)
         if cmd == "scoring-mp-lock-one":
             # Manual lock for a played match GG never published a card for

@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.255.10";
+window.TGF_VERSION = "2.255.11";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.255.11",
+    date: "2026-08-22",
+    changes: [
+      "scoring-mp-bracket-slot can now record a RESULT, not just occupants: two new optional trailing args, winner and margin, write the same winner_name/margin columns the admin bracket UI saves — built on finals day so Kerry's texted result ('Semifinal was decided. 2&1 Ellis') could be recorded from the course without opening the admin UI.",
+    ],
+  },
   {
     version: "2.255.10",
     date: "2026-08-22",
