@@ -24889,6 +24889,7 @@ def add_player_to_event(event_name: str, customer: str, mode: str = "comp",
                         customer_email: str = "", customer_phone: str = "",
                         holes: str = "", order_date: str = "",
                         package_index=None,
+                        record_ledger_entry: bool = True,
                         db_path: str | Path | None = None) -> dict | None:
     """
     Add a player to an event.
@@ -24897,6 +24898,13 @@ def add_player_to_event(event_name: str, customer: str, mode: str = "comp",
       - 'comp': Manager comp ($0.00 price, full golf details)
       - 'rsvp': RSVP-only placeholder (name only, no price, no games)
       - 'paid_separately': Paid via Venmo/Zelle/Cash (custom price, full details)
+
+    record_ledger_entry: paid_separately only — pass False when the raw
+    payment receipt is ALREADY in acct_transactions (e.g. the Venmo email
+    parser promoted it before the registration was created), so the add
+    doesn't book the same income twice. The registration and its
+    allocation are still created; only the duplicate income entries are
+    skipped.
 
     package_index: on a package-config event, pin the new registration to
     this package (task #34 — one choice sets holes/games/price and the
@@ -24986,7 +24994,7 @@ def add_player_to_event(event_name: str, customer: str, mode: str = "comp",
                 _create_allocation_for_item(
                     item_for_alloc, conn,
                     payment_method=pay_method,
-                    create_txn=True,
+                    create_txn=record_ledger_entry,
                     txn_description=f"External payment ({payment_source}): {customer} — {event_name}",
                     txn_source="external_payment",
                     txn_category_name="External Payment",
@@ -25012,7 +25020,7 @@ def add_player_to_event(event_name: str, customer: str, mode: str = "comp",
                     source_ref=f"comp-{new_id}",
                     date=alloc_date,
                 )
-            elif mode == "paid_separately":
+            elif mode == "paid_separately" and record_ledger_entry:
                 pay_amount = _parse_dollar(payment_amount)
                 pay_method = (payment_source or "external").lower().replace(" ", "_")
                 if pay_method not in ("venmo", "cash", "zelle", "check"):

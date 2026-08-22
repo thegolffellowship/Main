@@ -887,8 +887,13 @@ def add_player(
     tee_choice: str = "",
     handicap: str = "",
     user_status: str = "",
+    mode: str = "comp",
+    payment_amount: str = "",
+    payment_source: str = "",
+    holes: str = "",
+    record_ledger_entry: bool = True,
 ) -> str:
-    """Add a comp'd player to an event (creates a $0 transaction).
+    """Add a player to an event — comp'd by default, or as a real payment.
 
     Args:
         event_name: The exact event name
@@ -897,13 +902,25 @@ def add_player(
         tee_choice: <50, 50-64, 65+, or Forward
         handicap: Numeric handicap value
         user_status: MEMBER, 1st TIMER, GUEST, MANAGER, etc.
+        mode: 'comp' ($0, COMP badge), 'rsvp' (placeholder), or
+              'paid_separately' (real price, merchant "Paid Separately (<src>)")
+        payment_amount: paid_separately only — e.g. "121.77"
+        payment_source: paid_separately only — Venmo, Zelle, Cash, Check
+        holes: 9 or 18
+        record_ledger_entry: paid_separately only — pass False when the raw
+              payment receipt is ALREADY booked in the ledger (Venmo email
+              parser promoted it), so the income isn't double-counted.
     """
     item = add_player_to_event(
-        event_name, customer, side_games=side_games, tee_choice=tee_choice,
-        handicap=handicap, user_status=user_status,
+        event_name, customer, mode=mode, side_games=side_games,
+        tee_choice=tee_choice, handicap=handicap, user_status=user_status,
+        payment_amount=payment_amount, payment_source=payment_source,
+        holes=holes, record_ledger_entry=record_ledger_entry,
     )
     _audit("add_player",
-           f"event={event_name!r} customer={customer!r} games={side_games!r} "
+           f"event={event_name!r} customer={customer!r} mode={mode!r} "
+           f"amount={payment_amount!r} src={payment_source!r} "
+           f"ledger={record_ledger_entry} games={side_games!r} "
            f"tee={tee_choice!r} hcp={handicap!r} status={user_status!r}",
            item_id=(item or {}).get("id"), outcome="ok" if item else "failed")
     if item:

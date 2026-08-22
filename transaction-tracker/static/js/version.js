@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.255.9";
+window.TGF_VERSION = "2.255.10";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.255.10",
+    date: "2026-08-22",
+    changes: [
+      "MCP add_player can now add a PAID player, not just a comp (Kerry: 'Chandler isn't comp. What?'): the tool gains mode ('comp'/'rsvp'/'paid_separately'), payment_amount, payment_source, and holes — the same three modes the roster's Add Player UI has had all along. It also gains record_ledger_entry=False for the case where the raw Venmo receipt is already booked in the ledger, so recording the registration doesn't double-count the income (the allocation is still created; only the duplicate income entries are skipped).",
+    ],
+  },
   {
     version: "2.255.9",
     date: "2026-08-21",
