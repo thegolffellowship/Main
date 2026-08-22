@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.255.12";
+window.TGF_VERSION = "2.255.13";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.255.13",
+    date: "2026-08-22",
+    changes: [
+      "Holes played out AFTER the clinch on a nine-scoped card now grey out like every other decided card: the scoped view computes its own closed-at position (the raw 18-hole parse never closes, so hole 9 of the 2&1 semifinal was drawing a winner circle and a colored dot as if it counted).",
+    ],
+  },
   {
     version: "2.255.12",
     date: "2026-08-22",

@@ -3622,10 +3622,15 @@
         }
         holes = holes.map((h, i) => (i < cut ? { ...h, order: i + 1 }
             : { ...h, order: i + 1, p1_gross: null, p2_gross: null, winner: null }));
-        let diff = 0, played = 0;
-        holes.forEach(h => {
+        let diff = 0, played = 0, closedAt = null;
+        holes.forEach((h, i) => {
             if (h.p1_gross != null || h.p2_gross != null) played++;
             if (h.winner === 1) diff++; else if (h.winner === 2) diff--;
+            // First play-order position where the lead exceeds the holes
+            // left is the clinch — holes played out beyond it render as
+            // "dead" (grey, no winner circle), e.g. hole 9 after a 2&1.
+            if (closedAt == null && Math.abs(diff) > holes.length - (i + 1))
+                closedAt = i + 1;
         });
         const rem = holes.length - played;
         const leadN = Math.abs(diff);
@@ -3633,7 +3638,7 @@
         const margin = diff === 0 ? 'AS'
             : (decided && rem > 0 ? `${leadN}&${rem}` : `${leadN} UP`);
         return { ...detail, holes, thru: played, n_holes: holes.length,
-                 start_hole: startAt,
+                 start_hole: startAt, closed_at_order: closedAt,
                  gg_winner_idx: diff > 0 ? 1 : (diff < 0 ? 2 : null),
                  gg_margin: margin, _scoped: nine, _decided: decided,
                  // dial-provided pars feed the Par row when no tracker
