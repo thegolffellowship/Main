@@ -2257,9 +2257,18 @@
                        `<div class="lsc-card-head">Team ${escapeHtml((ch.chapter || "").toUpperCase())}<span>${ch.n_projected} of ${ch.n_seats || 12} projected${ch.n_secured ? ` &middot; ${ch.n_secured} secured` : ""}</span></div>` +
                        seats +
                        `</div>` +
-                       `<div class="lsc-card ${cls} lsc-alt-card">` +
-                       `<div class="lsc-alt-head">Next Players Up &mdash; Alternates Pool</div>` + alts +
-                       `</div></div>`;
+                       // Alternates are STAFF-ONLY (Kerry 2026-08-24:
+                       // "hide the alternates lists from members") — the
+                       // member API strips the key entirely, so the whole
+                       // Next Players Up card is skipped when it's absent
+                       // (an empty-but-present array still renders the
+                       // "No eligible alternates yet" card for staff).
+                       (Array.isArray(ch.alternates)
+                        ? `<div class="lsc-card ${cls} lsc-alt-card">` +
+                          `<div class="lsc-alt-head">Next Players Up &mdash; Alternates Pool</div>` + alts +
+                          `</div>`
+                        : "") +
+                       `</div>`;
             }).join("")}</div>` + (() => {
                 // LODGING tracker (Kerry 2026-08-19, staff-only — the
                 // API attaches `lodging` only for manager/admin

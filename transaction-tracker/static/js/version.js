@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.255.17";
+window.TGF_VERSION = "2.255.18";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.255.18",
+    date: "2026-08-24",
+    changes: [
+      "The Lone Star Cup 'Next Players Up — Alternates Pool' lists are now STAFF-ONLY (Kerry: 'hide the alternates lists from members'): the member/anonymous API strips the alternates key like it already strips declined + deposits, and the page skips the whole card when the key is absent. Managers and admins see it unchanged. Roster ops the same day: Wade Winters out (declined dial); Will Peterson's PLAYERS CUP · 4 seat stands — his earlier yes-reply check was correct.",
+    ],
+  },
   {
     version: "2.255.17",
     date: "2026-08-24",

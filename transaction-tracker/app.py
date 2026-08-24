@@ -9825,6 +9825,11 @@ def api_lone_star_cup():
         if session.get("role") not in ("admin", "manager"):
             for ch in d.get("chapters", []):
                 ch.pop("declined", None)
+                # Alternates ("Next Players Up") are staff-only too
+                # (Kerry 2026-08-24: "hide the alternates lists from
+                # members") — invitation order is roster ops, not a
+                # member-facing standing.
+                ch.pop("alternates", None)
             # Deposit amounts are financial data — staff eyes only
             d.pop("deposits", None)
         else:
