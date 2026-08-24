@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.255.22";
+window.TGF_VERSION = "2.255.23";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.255.23",
+    date: "2026-08-24",
+    changes: [
+      "The min-events alternates rule now also filters the ENROLLED pool feed (Kerry: 'You're still showing some players on SA with less than 8') — the first deploy filtered only the open bench, so enrolled players under 8 events still showed on the Next Players Up cards. Accepted players remain exempt.",
+    ],
+  },
   {
     version: "2.255.22",
     date: "2026-08-24",

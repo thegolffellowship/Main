@@ -10014,6 +10014,13 @@ def get_lone_star_cup_projection(db_path: str | Path = DB_PATH,
             for cand in streams[contest]:
                 if cand["cid"] in roster_ids:
                     continue
+                # Same min-events rule as the open bench below (Kerry
+                # 2026-08-24) — the ENROLLED feed was missed on the
+                # first deploy, so sub-8-event enrolled players still
+                # showed on the SA bench. Accepted players stay exempt.
+                if (events_by_cid.get(cand["cid"], 0) < _alt_min_events
+                        and cand["cid"] not in lsc_accepted):
+                    continue
                 pct = cand["place"] / field
                 cur = pool_by_cid.get(cand["cid"])
                 if cur is None or pct < cur["pct"]:
