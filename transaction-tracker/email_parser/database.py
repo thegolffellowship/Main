@@ -10017,12 +10017,17 @@ def get_lone_star_cup_projection(db_path: str | Path = DB_PATH,
             place = pnum(r.get("rank"))
             if not cid or place is None or cid in roster_ids \
                     or cid in lsc_declined \
-                    or events_by_cid.get(cid, 0) < _alt_min_events:
+                    or (events_by_cid.get(cid, 0) < _alt_min_events
+                        and cid not in lsc_accepted):
                 # < N events (dial lsc_alternates_min_events, default 8,
                 # Kerry 2026-08-24: "remove anyone from those lists with
                 # anything less than 8 events as a rule") — not enough
                 # season participation to stand in the alternates pool
-                # or inherit a vacated seat.
+                # or inherit a vacated seat. ACCEPTED players are exempt:
+                # an invitation already accepted (and deposited) stands —
+                # the first deploy of this rule briefly unseated Matt
+                # Sharp's secured FC seat; the rule governs who gets the
+                # NEXT invitation, never who already said yes.
                 continue
             field = field_sizes[contest] or 1
             pct = place / field

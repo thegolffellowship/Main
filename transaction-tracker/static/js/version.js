@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.255.20";
+window.TGF_VERSION = "2.255.21";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.255.21",
+    date: "2026-08-24",
+    changes: [
+      "The min-events alternates rule EXEMPTS players who already accepted their invitation — v2.255.20 briefly unseated Matt Sharp's secured Austin FELLOWSHIP CUP · 6 seat (accepted + deposited, pool-derived, under 8 events). The rule governs who gets the NEXT invitation, never who already said yes.",
+    ],
+  },
   {
     version: "2.255.20",
     date: "2026-08-24",
