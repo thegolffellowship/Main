@@ -10031,14 +10031,23 @@ def get_lone_star_cup_projection(db_path: str | Path = DB_PATH,
                     # A recorded final is a FACT, not a projection — the
                     # seat is secured the same way a declared-final City
                     # NET captaincy is (Kerry 2026-08-01)
+                    # A recorded final SECURES the champion's seat (Kerry
+                    # 2026-08-01) — but a runner-up who INHERITED it via
+                    # the decline cascade still has to accept the
+                    # invitation like anyone else (Kerry 2026-08-24,
+                    # Ellis: "he still needs to confirm with the wife"),
+                    # so the cascade seat is only secured once accepted.
+                    _is_champ = mp_champ.get("place") == 1
                     row.update(player_name=mp_champ["name"],
                                customer_id=mp_champ["cid"],
                                earned_as=(f"{season} {chapter} Match Play "
                                           "Champion"
-                                          if mp_champ.get("place") == 1 else
+                                          if _is_champ else
                                           f"{season} {chapter} Match Play "
                                           "runner-up — champion declined"),
-                               status="secured")
+                               status=("secured" if _is_champ
+                                       or mp_champ.get("cid") in lsc_accepted
+                                       else "projected"))
                 else:
                     row["note"] = "Decided by the knockout bracket"
             elif keepers[contest]:

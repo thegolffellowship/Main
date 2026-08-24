@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.255.16";
+window.TGF_VERSION = "2.255.17";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.255.17",
+    date: "2026-08-24",
+    changes: [
+      "A cascade-inherited MATCH PLAY seat is secured only once the runner-up ACCEPTS the invitation (Kerry: Ellis 'still needs to confirm with the wife') — a true champion's recorded-final seat stays auto-secured per the 2026-08-01 rule. Roster ops the same day: Ellis unlocked pending confirmation, Matt Griffin (no reply) and Kelly Barna (out) excluded via the declined dial.",
+    ],
+  },
   {
     version: "2.255.16",
     date: "2026-08-24",
