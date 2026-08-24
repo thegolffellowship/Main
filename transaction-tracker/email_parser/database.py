@@ -9876,7 +9876,30 @@ def get_lone_star_cup_projection(db_path: str | Path = DB_PATH,
             logger.warning("LSC: match play bracket read failed for %s",
                            chapter, exc_info=True)
         if mp_champ and mp_champ.get("cid") in lsc_declined:
+            # Champion declined the Cup → the MATCH PLAY seat cascades to
+            # the final's RUNNER-UP (rule #88: winner → runner-up → pool;
+            # SA 2026: Chandler declined, Ellis inherits — Kerry
+            # 2026-08-24). A runner-up who also declined leaves the seat
+            # to the pool (mp_champ = None → TBD/pool refill).
             mp_champ = None
+            try:
+                f0 = finals[0] if finals else None
+                if f0:
+                    ru_name = (f0.get("opponent_name")
+                               if f0.get("winner_name") == f0.get("player_name")
+                               else f0.get("player_name"))
+                    ru_cid = (f0.get("opponent_id")
+                              if f0.get("winner_name") == f0.get("player_name")
+                              else f0.get("player_id"))
+                    if ru_name and not ru_cid:
+                        with _connect(db_path) as _c:
+                            ru_cid, _how = _resolve_gg_person(_c, ru_name)
+                    if ru_name and ru_cid not in lsc_declined:
+                        mp_champ = {"name": _lsc_standard_name(ru_name),
+                                    "cid": ru_cid, "place": 2}
+            except Exception:
+                logger.warning("LSC: MP runner-up cascade failed for %s",
+                               chapter, exc_info=True)
 
         # The earned 12, in seat order. Each seat draws the next unclaimed
         # player from its contest stream; a player already holding a
@@ -10011,7 +10034,10 @@ def get_lone_star_cup_projection(db_path: str | Path = DB_PATH,
                     row.update(player_name=mp_champ["name"],
                                customer_id=mp_champ["cid"],
                                earned_as=(f"{season} {chapter} Match Play "
-                                          "Champion"),
+                                          "Champion"
+                                          if mp_champ.get("place") == 1 else
+                                          f"{season} {chapter} Match Play "
+                                          "runner-up — champion declined"),
                                status="secured")
                 else:
                     row["note"] = "Decided by the knockout bracket"

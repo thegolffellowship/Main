@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.255.15";
+window.TGF_VERSION = "2.255.16";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.255.16",
+    date: "2026-08-24",
+    changes: [
+      "Lone Star Cup MATCH PLAY seat cascades to the final's runner-up when the champion has declined the Cup (rule #88: winner → runner-up → pool; SA 2026: Chandler declined, Gilbert Ellis inherits — his seat reads 'Match Play runner-up — champion declined'). A runner-up who also declined leaves the seat to the pool as before. Ellis moving up vacates his PLAYERS CUP · 4 seat, which refills from the alternates pool; Roberto Moreno (no reply to his alternate invitation — Kerry 2026-08-24) is excluded via the declined dial so the seat passes on.",
+    ],
+  },
   {
     version: "2.255.15",
     date: "2026-08-24",
