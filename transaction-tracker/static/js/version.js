@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.255.21";
+window.TGF_VERSION = "2.255.22";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.255.22",
+    date: "2026-08-24",
+    changes: [
+      "Events-played now counts DISTINCT EVENTS, per Kerry's ratified definition ('TGF Championship is ONE event. a Tuesday 9 is ONE event. A Saturday 18 is one event. The Hill Country Matches are ONE event') — computed from the season's active registrations (one per event_id), replacing GG's round-based Tournaments column, which inflated multi-round events like the two-round Championship. GG's number survives only as a fallback for players with no resolvable registrations. Feeds both the number shown on the staff alternates cards and the ≥8-events eligibility rule.",
+    ],
+  },
   {
     version: "2.255.21",
     date: "2026-08-24",

@@ -9730,6 +9730,30 @@ def get_lone_star_cup_projection(db_path: str | Path = DB_PATH,
                             db_path=db_path) or 8)
     except Exception:
         _alt_min_events = 8
+    # Events played = DISTINCT EVENTS with an active registration this
+    # season (Kerry-RATIFIED 2026-08-24: "TGF Championship is ONE event.
+    # a Tuesday 9 is ONE event. A Saturday 18 is one event. The Hill
+    # Country Matches are ONE event... Even if they only played one day
+    # at the TGF Championship that still counts as ONE event"). GG's
+    # points-race Tournaments column counts ROUNDS, so a multi-round
+    # event inflated it — it survives only as a fallback for players
+    # with no resolvable registrations.
+    _events_played: dict = {}
+    try:
+        with _connect(db_path) as _epc:
+            for _r in _epc.execute(
+                    """SELECT i.customer_id AS cid,
+                              COUNT(DISTINCT i.event_id) AS n
+                       FROM items i JOIN events e ON e.id = i.event_id
+                       WHERE i.customer_id IS NOT NULL
+                         AND i.transaction_status = 'active'
+                         AND e.event_date LIKE ?
+                       GROUP BY i.customer_id""",
+                    (f"{str(today_central().year)}-%",)):
+                _events_played[_r["cid"]] = _r["n"]
+    except Exception:
+        logger.warning("LSC: events-played registration count failed",
+                       exc_info=True)
 
     # Deposit tracking (Kerry 2026-08-19): each invited player owes a
     # $150 Venmo/Zelle deposit to lock their seat. Sum incoming
@@ -9861,12 +9885,11 @@ def get_lone_star_cup_projection(db_path: str | Path = DB_PATH,
             "fellowship": "The Fellowship Cup",
             "players": "The Players Cup",
         }
-        # Events played = GG's "Tournaments" column, taken as the MAX
-        # across all three boards (chapter NET, Fellowship Cup, Players
-        # Cup) — NET-only under-counted gross-side players. One 9-hole
-        # or 18-hole event = 1; a multi-ROUND event counts each posted
-        # round (the count lives at the ROUND level of the ratified
-        # Event → rounds → nines model).
+        # Events played: the season-wide DISTINCT-EVENTS registration
+        # count (Kerry's ratified definition, computed above) wins;
+        # GG's round-based Tournaments column (max across the three
+        # boards) fills in only for players with no counted
+        # registrations.
         events_by_cid: dict = {}
         for _st in (net["standings"], cup["standings"], gross["standings"]):
             for _r in _st:
@@ -9874,6 +9897,7 @@ def get_lone_star_cup_projection(db_path: str | Path = DB_PATH,
                 if _c:
                     events_by_cid[_c] = max(events_by_cid.get(_c, 0),
                                             _r.get("tournaments") or 0)
+        events_by_cid.update(_events_played)
 
         mp_champ = None
         try:
