@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.255.19";
+window.TGF_VERSION = "2.255.20";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.255.20",
+    date: "2026-08-24",
+    changes: [
+      "LSC alternates minimum-events rule (Kerry: 'remove anyone from those lists with anything less than 8 events as a rule'): a player with fewer than 8 events played can no longer stand in the Next Players Up pool or inherit a vacated seat. The threshold is a dial (lsc_alternates_min_events, default 8), not a hard-coded number.",
+      "The events-played count behind that rule (and the number shown on the alternates cards) is now the MAX of GG's Tournaments column across all three boards — chapter NET, Fellowship Cup, Players Cup — instead of chapter NET alone, which under-counted gross-side players. The count lives at the ROUND level of the Event → rounds → nines model: a 9-hole or 18-hole event counts 1; a multi-round event counts each posted round.",
+    ],
+  },
   {
     version: "2.255.19",
     date: "2026-08-24",

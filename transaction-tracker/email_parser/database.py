@@ -9720,6 +9720,16 @@ def get_lone_star_cup_projection(db_path: str | Path = DB_PATH,
             return set()
     lsc_accepted = _dial_ids("lsc_accepted")
     lsc_declined = _dial_ids("lsc_declined")
+    # Minimum events played to stand in the alternates pool (and inherit
+    # a vacated seat) — dial lsc_alternates_min_events, default 8
+    # (Kerry 2026-08-24: "remove anyone from those lists with anything
+    # less than 8 events as a rule").
+    try:
+        _alt_min_events = int(
+            get_app_setting("lsc_alternates_min_events",
+                            db_path=db_path) or 8)
+    except Exception:
+        _alt_min_events = 8
 
     # Deposit tracking (Kerry 2026-08-19): each invited player owes a
     # $150 Venmo/Zelle deposit to lock their seat. Sum incoming
@@ -9851,8 +9861,19 @@ def get_lone_star_cup_projection(db_path: str | Path = DB_PATH,
             "fellowship": "The Fellowship Cup",
             "players": "The Players Cup",
         }
-        events_by_cid = {r["customer_id"]: (r.get("tournaments") or 0)
-                         for r in net["standings"] if r.get("customer_id")}
+        # Events played = GG's "Tournaments" column, taken as the MAX
+        # across all three boards (chapter NET, Fellowship Cup, Players
+        # Cup) — NET-only under-counted gross-side players. One 9-hole
+        # or 18-hole event = 1; a multi-ROUND event counts each posted
+        # round (the count lives at the ROUND level of the ratified
+        # Event → rounds → nines model).
+        events_by_cid: dict = {}
+        for _st in (net["standings"], cup["standings"], gross["standings"]):
+            for _r in _st:
+                _c = _r.get("customer_id")
+                if _c:
+                    events_by_cid[_c] = max(events_by_cid.get(_c, 0),
+                                            _r.get("tournaments") or 0)
 
         mp_champ = None
         try:
@@ -9995,7 +10016,13 @@ def get_lone_star_cup_projection(db_path: str | Path = DB_PATH,
             cid = r.get("customer_id")
             place = pnum(r.get("rank"))
             if not cid or place is None or cid in roster_ids \
-                    or cid in lsc_declined:
+                    or cid in lsc_declined \
+                    or events_by_cid.get(cid, 0) < _alt_min_events:
+                # < N events (dial lsc_alternates_min_events, default 8,
+                # Kerry 2026-08-24: "remove anyone from those lists with
+                # anything less than 8 events as a rule") — not enough
+                # season participation to stand in the alternates pool
+                # or inherit a vacated seat.
                 continue
             field = field_sizes[contest] or 1
             pct = place / field
