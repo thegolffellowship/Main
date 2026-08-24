@@ -953,6 +953,14 @@ def parse_email(email_data: dict) -> list[dict]:
         logger.warning("Empty email body for subject=%s uid=%s", subject, email_data.get("uid", ""))
         return []
 
+    # Hallucination guard for contest flags (Kerry 2026-08-24, order
+    # R463318108): Haiku answered YES for a "City MATCH PLAY" field the
+    # order email doesn't contain, which auto-enrolled a player who never
+    # bought it. A contest flag is kept only when the contest is actually
+    # NAMED somewhere in the email text — real order confirmations always
+    # print the option label next to its answer.
+    _body_up = body.upper()
+
     parsed = _call_ai(body)
     if not parsed:
         logger.warning("AI returned no result for subject=%s uid=%s (body length=%d)",
@@ -1034,15 +1042,17 @@ def parse_email(email_data: dict) -> list[dict]:
             # items.  Null out these fields for all other item types (golf events, etc.)
             # so that a match-play tournament (e.g. Hill Country Matches) never creates
             # a spurious season contest enrollment.
-            "net_points_race": item.get("net_points_race") if _is_contest_item(_normalize_item_name(item.get("item_name"))) else None,
-            "gross_points_race": item.get("gross_points_race") if _is_contest_item(_normalize_item_name(item.get("item_name"))) else None,
-            "city_match_play": item.get("city_match_play") if _is_contest_item(_normalize_item_name(item.get("item_name"))) else None,
+            "net_points_race": item.get("net_points_race") if (_is_contest_item(_normalize_item_name(item.get("item_name"))) and "NET" in _body_up) else None,
+            "gross_points_race": item.get("gross_points_race") if (_is_contest_item(_normalize_item_name(item.get("item_name"))) and "GROSS" in _body_up) else None,
+            "city_match_play": item.get("city_match_play") if (_is_contest_item(_normalize_item_name(item.get("item_name"))) and "MATCH PLAY" in _body_up) else None,
             # FALL NET is deliberately NOT gated to contest items (Kerry
             # 2026-08-19): Fall event orders sell the Fall Points Race
             # entry as an add-on question, so the flag is honored on any
             # item type. Safe because the prompt only sets it from an
             # explicit FALL+NET order-form field, never the event name.
-            "fall_net_points_race": item.get("fall_net_points_race"),
+            # Same hallucination guard: the word FALL must appear in the
+            # email for the flag to survive.
+            "fall_net_points_race": item.get("fall_net_points_race") if "FALL" in _body_up else None,
             "subject": subject,
             "from_addr": from_addr,
         })

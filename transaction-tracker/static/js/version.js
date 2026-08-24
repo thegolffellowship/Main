@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.255.14";
+window.TGF_VERSION = "2.255.15";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.255.15",
+    date: "2026-08-24",
+    changes: [
+      "Parser hallucination guard for contest flags (Kerry: 'What he bought on 8/7 doesn't include Match Play. That parser is incorrect.'): a NET / GROSS / City Match Play / Fall flag now survives only when the contest is actually NAMED in the email text — Haiku answered YES for a City MATCH PLAY field that order R463318108 doesn't contain, auto-enrolling a player who never bought it. Real order confirmations always print the option label, so genuine flags are unaffected.",
+      "Event pricing modal: switching the format no longer leaves the previous format's auto-filled pricing behind (a9.22 Shadowglen was created as 18 Holes, flipped to 9, and saved with the stale $15 markup / $14 games) — a field still holding another format's default is cleared and re-seeded for the new format; hand-typed custom values are left alone. Shadowglen's row itself corrected to $8/$7.",
+    ],
+  },
   {
     version: "2.255.14",
     date: "2026-08-24",

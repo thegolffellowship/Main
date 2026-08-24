@@ -10250,6 +10250,26 @@
         }
     };
 
+    // A format SWITCH must not leave the previous format's auto-filled
+    // pricing behind (a9.22 Shadowglen was created as 18 Holes, flipped
+    // to 9 Holes, and saved with the stale $15/$14 — Kerry 2026-08-24:
+    // "showing 18 hole markup and included game pricing"). A field still
+    // holding ANOTHER format's default is an untouched auto-fill: clear
+    // it so the empty-field fill below re-seeds it for the new format.
+    // Hand-typed custom values match no default and are left alone.
+    function clearStalePricingDefaults(prefix, format) {
+        const defs = PRICING_DEFAULTS[format] || {};
+        const allDefaults = f => Object.values(PRICING_DEFAULTS)
+            .map(d => d[f]).filter(v => v != null);
+        [["tgf_markup", defs.tgf_markup], ["side_game_fee", defs.side_game_fee]]
+            .forEach(([f, want]) => {
+                const el = document.getElementById(prefix + "-event-" + f);
+                if (!el || !el.value) return;
+                const v = parseFloat(el.value);
+                if (v !== want && allDefaults(f).includes(v)) el.value = "";
+            });
+    }
+
     // ---- Pricing Calculation (single format) ----
     // Course cost rounds up first, then add markup + game fees
     function calcPricingLine(cc, mu, sg, tf) {
@@ -10492,6 +10512,7 @@
         singleEl.style.display = isCombo ? "none" : "";
         comboEl.style.display = isCombo ? "" : "none";
         togglePerGameAddonField("edit", format);
+        clearStalePricingDefaults("edit", format);
 
         // Auto-populate defaults if fields are empty
         const defaults = PRICING_DEFAULTS[format];
@@ -10535,6 +10556,7 @@
         if (singleEl) singleEl.style.display = isCombo ? "none" : "";
         if (comboEl) comboEl.style.display = isCombo ? "" : "none";
         togglePerGameAddonField("add", format);
+        clearStalePricingDefaults("add", format);
 
         // Render calculators if not yet rendered
         if (isCombo) {
