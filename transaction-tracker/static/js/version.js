@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.255.18";
+window.TGF_VERSION = "2.255.19";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.255.19",
+    date: "2026-08-24",
+    changes: [
+      "The staff-only Next Players Up list shows the next 12 alternates per chapter (was 8) — Kerry 2026-08-24, sized for the run of roster declines on cascade day.",
+    ],
+  },
   {
     version: "2.255.18",
     date: "2026-08-24",

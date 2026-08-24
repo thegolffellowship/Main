@@ -9650,7 +9650,10 @@ def _lsc_ordinal(n: int) -> str:
 
 
 def get_lone_star_cup_projection(db_path: str | Path = DB_PATH,
-                                 alternates_cap: int = 8) -> dict:
+                                 # 12 next-up alternates per chapter
+                                 # (Kerry 2026-08-24; the list itself is
+                                 # staff-only — the member API strips it)
+                                 alternates_cap: int = 12) -> dict:
     """LONE STAR CUP projected rosters per chapter (spec: mailbox #85–#88,
     Kerry-RATIFIED 2026-07-10).
 
