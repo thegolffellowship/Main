@@ -1446,19 +1446,19 @@
 
         // ── Summary band: the day's work before any scroll ──────
         // Outstanding + unpaid-event count use unpaid ROWS (partial
-        // groups count only their remainder); paid-this-month sums rows
-        // whose paid_at falls in the current calendar month.
+        // groups count only their remainder); paid-this-year sums rows
+        // whose paid_at falls in the current calendar YEAR (Kerry
+        // 2026-08-24: "show PAID THIS YEAR not PAID THIS MONTH").
         function renderPayoutsSummary() {
             const el = $("#payouts-summary");
             if (!el) return;
-            let outstanding = 0, unpaidEvents = 0, paidMonth = 0;
-            const now = new Date();
-            const ym = now.getFullYear() + "-" + String(now.getMonth() + 1).padStart(2, "0");
+            let outstanding = 0, unpaidEvents = 0, paidYear = 0;
+            const yr = String(new Date().getFullYear());
             (DATA.events || []).forEach(ev => {
                 let evDue = 0;
                 (ev.payouts || []).forEach(p => {
                     if (p.payment_status !== "paid") evDue += p.amount;
-                    else if ((p.paid_at || "").slice(0, 7) === ym) paidMonth += p.amount;
+                    else if ((p.paid_at || "").slice(0, 4) === yr) paidYear += p.amount;
                 });
                 if (evDue > 0.005) { outstanding += evDue; unpaidEvents++; }
             });
@@ -1473,8 +1473,8 @@
                     <div class="l">Unpaid event${unpaidEvents !== 1 ? "s" : ""}</div>
                 </div>
                 <div class="pay-stat">
-                    <div class="v">${fmt(paidMonth)}</div>
-                    <div class="l">Paid this month</div>
+                    <div class="v">${fmt(paidYear)}</div>
+                    <div class="l">Paid this year</div>
                 </div>`;
         }
 

@@ -7914,18 +7914,26 @@ def matchplay_final_payout_rows(chapter: str, placements: list,
     rows = []
     with _connect(db_path) as conn:
         for i, name in enumerate(placements):
-            try:
-                cid, _how = _resolve_gg_person(conn, name)
-            except Exception:
-                cid = None
-            canon = None
-            if cid:
-                c = conn.execute(
-                    "SELECT first_name || ' ' || last_name AS n "
-                    "FROM customers WHERE customer_id = ?", (cid,)).fetchone()
-                canon = (c["n"] or "").strip() if c else None
-            rows.append({"customer_id": cid, "golferName": canon or name,
-                         "rank": _ord[i], "amount_cents": amounts[i]})
+            # "A+B" splits one rung between co-placers (a chapter that
+            # skips the 3rd-place match splits that rung between the
+            # semifinal losers — SA 2026: Hamilton/Moreno $32 each).
+            # Even split in cents; any odd cent goes to the first name.
+            co = [p.strip() for p in name.split("+") if p.strip()] or [name]
+            base, rem = divmod(amounts[i], len(co))
+            for j, nm in enumerate(co):
+                try:
+                    cid, _how = _resolve_gg_person(conn, nm)
+                except Exception:
+                    cid = None
+                canon = None
+                if cid:
+                    c = conn.execute(
+                        "SELECT first_name || ' ' || last_name AS n "
+                        "FROM customers WHERE customer_id = ?", (cid,)).fetchone()
+                    canon = (c["n"] or "").strip() if c else None
+                rows.append({"customer_id": cid, "golferName": canon or nm,
+                             "rank": _ord[i],
+                             "amount_cents": base + (rem if j == 0 else 0)})
     return {"chapter": chapter, "season": season, "n": n,
             "pot_cents": structure["pot_cents"],
             "adjusted_pot_cents": structure["adjusted_pot_cents"],

@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.255.13";
+window.TGF_VERSION = "2.255.14";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.255.14",
+    date: "2026-08-24",
+    changes: [
+      "TGF Payouts summary band shows PAID THIS YEAR instead of PAID THIS MONTH (Kerry 2026-08-24) — sums paid rows whose paid_at falls in the current calendar year.",
+      "Match Play podium recorder supports split places: a placement written as 'A+B' divides that rung's money evenly between the co-placers — built for chapters that skip the 3rd-place match and split the rung between the semifinal losers (SA 2026: Hamilton/Moreno $32 each).",
+    ],
+  },
   {
     version: "2.255.13",
     date: "2026-08-22",
