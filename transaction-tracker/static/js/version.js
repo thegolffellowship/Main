@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.255.23";
+window.TGF_VERSION = "2.255.24";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.255.24",
+    date: "2026-08-24",
+    changes: [
+      "Rule #88's last hop implemented: when the Match Play champion AND runner-up have both declined the Cup, the MATCH PLAY seat falls to the alternates pool (SA 2026: Chandler then Ellis declined — 'Gilbert Ellis can't make it'). The seat reads 'Alternates pool — ... — finalists declined'; a pool player who already accepted secures immediately.",
+    ],
+  },
   {
     version: "2.255.23",
     date: "2026-08-24",

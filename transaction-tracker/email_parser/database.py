@@ -9900,10 +9900,12 @@ def get_lone_star_cup_projection(db_path: str | Path = DB_PATH,
         events_by_cid.update(_events_played)
 
         mp_champ = None
+        mp_final_recorded = False
         try:
             finals = [b for b in cmp_get_bracket(season, chapter,
                                                  db_path=db_path)
                       if b["round"] == "final" and b.get("winner_name")]
+            mp_final_recorded = bool(finals)
             if finals:
                 _wcid = finals[0].get("winner_id")
                 if not _wcid:
@@ -10114,6 +10116,25 @@ def get_lone_star_cup_projection(db_path: str | Path = DB_PATH,
                                status=("secured" if _is_champ
                                        or mp_champ.get("cid") in lsc_accepted
                                        else "projected"))
+                elif mp_final_recorded:
+                    # Final recorded but champion AND runner-up both
+                    # declined the Cup — rule #88's last hop: the seat
+                    # falls to the alternates pool (SA 2026: Chandler
+                    # then Ellis declined — Kerry 2026-08-24: "Gilbert
+                    # Ellis can't make it").
+                    nxt = next((c for c in pool_iter
+                                if c["cid"] not in pool_used), None)
+                    if nxt:
+                        pool_used.add(nxt["cid"])
+                        row.update(
+                            player_name=nxt["name"], customer_id=nxt["cid"],
+                            earned_as=(f"Alternates pool — "
+                                       f"{_lsc_ordinal(nxt['place'])} of "
+                                       f"{nxt['field']} in {nxt['contest']}"
+                                       " — finalists declined"),
+                            via_pool=True, status="projected")
+                    else:
+                        row["note"] = "Decided by the knockout bracket"
                 else:
                     row["note"] = "Decided by the knockout bracket"
             elif keepers[contest]:
