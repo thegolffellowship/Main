@@ -2863,6 +2863,60 @@ def _scoring_dispatch(url: str, extract: str):
             mode = arg.strip().lower()
             return json.dumps(db.ensure_courses_from_history(
                 dry_run=(mode != "apply")), indent=2, default=str)
+        if cmd == "scoring-price-audit":
+            # Order-price reconciliation sweep (Kerry 2026-08-26, after
+            # the Mazanec $140-vs-$190 parse error: "Makes me concerned
+            # you've screwed up elsewhere with money"). For every real
+            # GoDaddy order: the stored line-item prices must reconcile
+            # with the order's own stored Order Total —
+            # (sum(prices) − coupon) × 1.035 ≈ total_amount. A mismatch
+            # beyond 6¢ means the parser mis-stored a price (the
+            # Mazanec class) or a coupon/edit went unrecorded.
+            with db._connect(None) as _c:
+                rows = [dict(r) for r in _c.execute(
+                    """SELECT order_id, id, customer, item_name,
+                              item_price, total_amount, coupon_amount,
+                              transaction_fees, order_date,
+                              transaction_status, parent_item_id
+                         FROM items
+                        WHERE order_id IS NOT NULL AND order_id != ''
+                          AND merchant = 'The Golf Fellowship'
+                          AND email_uid NOT LIKE 'manual%'
+                          AND parent_item_id IS NULL""").fetchall()]
+            orders: dict = {}
+            for r in rows:
+                orders.setdefault(r["order_id"], []).append(r)
+            flags = []
+            for oid, its in orders.items():
+                total = max((db._parse_dollar(i.get("total_amount"))
+                             for i in its), default=0)
+                if not total:
+                    continue  # RSVP-style rows with no charged total
+                subtotal = sum(db._parse_dollar(i.get("item_price"))
+                               for i in its)
+                coupon = max((db._parse_dollar(i.get("coupon_amount"))
+                              for i in its), default=0)
+                expected = round((subtotal - coupon) * 1.035, 2)
+                if abs(expected - total) > 0.06:
+                    flags.append({
+                        "order_id": oid,
+                        "date": its[0].get("order_date"),
+                        "customer": its[0].get("customer"),
+                        "items": [{"id": i["id"],
+                                   "name": i.get("item_name"),
+                                   "price": i.get("item_price"),
+                                   "status": i.get("transaction_status")}
+                                  for i in its],
+                        "stored_subtotal": round(subtotal, 2),
+                        "coupon": coupon,
+                        "expected_total": expected,
+                        "stored_total": total,
+                        "gap": round(total - expected, 2)})
+            flags.sort(key=lambda f: -abs(f["gap"]))
+            return json.dumps({"orders_checked": len(orders),
+                               "flagged": len(flags),
+                               "flags": flags[:40]},
+                              indent=1, default=str)
         if cmd == "scoring-payouts-coverage":
             # Coverage audit (Kerry 2026-08-26: "$37,955 ... seems
             # lighter than it should be"): per-event payout totals from

@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.255.30";
+window.TGF_VERSION = "2.255.31";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.255.31",
+    date: "2026-08-26",
+    changes: [
+      "scoring-price-audit bridge sweep (Kerry, after the Mazanec $140-vs-$190 parse error: 'Makes me concerned you've screwed up elsewhere with money'): every real GoDaddy order's stored line-item prices are reconciled against its own stored Order Total — (sum − coupon) × 1.035 must match within 6¢. Flags the full mis-stored-price class in one pass.",
+    ],
+  },
   {
     version: "2.255.30",
     date: "2026-08-26",
