@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.255.28";
+window.TGF_VERSION = "2.255.29";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.255.29",
+    date: "2026-08-26",
+    changes: [
+      "Docs catch-up for the finals wave: state-of-the-tracker gains 'The August finals wave (v2.24x → v2.255.28)' (live MP knockout cards + dials, LSC rules-in-code incl. the ratified DISTINCT-EVENTS definition, parser hallucination guard, method-aware money surfaces, member link-preview cards); events.md documents the method-aware Refunds console + scoring-customer-payout / scoring-sc-removal-refund / scoring-payouts-coverage bridge commands; handicaps.md documents the MEMBERS bulk-send mode.",
+    ],
+  },
   {
     version: "2.255.28",
     date: "2026-08-26",

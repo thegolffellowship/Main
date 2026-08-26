@@ -1471,6 +1471,23 @@ layouts and all pay/mark-paid plumbing.
 
 ## REFUNDS console (v2.108.0, Kerry — "nothing falls thru the cracks")
 
+**Method-aware payouts (v2.255.25, Kerry: "Gus is a Zelle, so shouldn't
+show Venmo").** Outstanding rows carry `payment_method`/`payment_handle`
+from the customers table (same fields the GOLFERS pay links honor):
+Venmo renders the one-tap pill; Zelle/PayPal/Cash App render an
+identifying amount badge (no deep link — the receipt scan still
+completes the row). Set a customer's method via the bridge:
+`scoring-customer-payout:<cid>|<method>|<handle>` (a venmo method also
+fills venmo_username). Companion repair: a season-contest removal whose
+money moves through an ITEM credit must not ALSO carry refund_amount
+(it double-counts as its own outstanding row) —
+`scoring-sc-removal-refund:<removal_id>|clear` fixes it.
+
+**Coverage diagnostic (v2.255.27).** `scoring-payouts-coverage` (bridge)
+returns per-event payout totals, paid_at stamping stats, and the
+calendar events with no payout records — the tool that proved the
+PAID THIS YEAR figure was complete (seasonal pacing, not missing data).
+
 Admin **Refunds** top-tab on /tgf (right-aligned orange pill, next to
 Unpaid) consolidates every credit refund in one place, so the manager
 never has to hunt across 25 rows to see what's owed / paying / paid.

@@ -1,4 +1,4 @@
-# State of the Tracker — early August 2026 (Platform-facing brief)
+# State of the Tracker — late August 2026 (Platform-facing brief)
 
 Audience: the claude.ai "The Golf Fellowship" Project, where TGF Platform
 planning has lived for the past six months. Purpose: catch that planning
@@ -185,6 +185,48 @@ config, the one datum still trapped in GG).
   First live shadow: SA Championship, 2026-08-01 at The Quarry. Until parity
   reads clean across a meaningful sample of real events, GG stays official
   and none of this drives money. Championships remain on GG regardless.
+
+## The August finals wave (v2.24x → v2.255.28)
+
+The championships month, run live on the Tracker (mailbox digests #~320+
+and #333 carry the day-by-day; changelog v2.245–v2.255 is the full record):
+
+- **Live Match Play knockout cards** (contests page): 60s-poll GG match
+  detail, nine-scoped finals-day cards driven by the `cmp_match_scope`
+  dial (nine / start hole / date / course / pars / tee time per round —
+  the dial's start hole OVERRIDES GG's unreliable start-hole mark),
+  mis-slotted-entry guard (a score beyond the first unplayed hole in
+  play order is blanked), display-FINAL on mathematically decided,
+  winner auto-flow into the Final card, post-clinch holes greyed.
+  Champion recorded via `scoring-mp-bracket-slot` (now takes winner +
+  margin); podium money via `scoring-season-payouts:mp` (now supports
+  "A+B" split places for no-consolation chapters).
+- **Lone Star Cup rules moved from prose into code**, all Kerry-ratified:
+  champion-declined MATCH PLAY seat cascades winner → runner-up → pool
+  (rule #88 — exercised for real: both SA finalists declined); a
+  cascade-inherited seat secures only on acceptance; alternates
+  min-events rule as dial `lsc_alternates_min_events` (default 8,
+  accepted players exempt); **events-played = DISTINCT EVENTS from
+  registrations** (Kerry-RATIFIED: an Event may have many rounds/nines
+  but counts ONCE — GG's Tournaments column counts rounds and was
+  demoted to fallback); alternates lists are staff-only (member API
+  strips them) and 12 deep.
+- **Parser hallucination guard**: a NET/GROSS/Match Play/Fall contest
+  flag survives extraction only when the contest is NAMED in the email
+  text — Haiku invented a Match Play YES on an order that never
+  mentioned it, which auto-enrolled a player. Platform lesson: every
+  AI-extraction field needs presence-validation against source text.
+- **Money surfaces**: Refunds console is payment-method-aware
+  (customers.payment_method → Zelle/PayPal/CashApp badges vs Venmo
+  one-tap); TGF Payouts summary shows PAID THIS YEAR;
+  `scoring-payouts-coverage` diagnostic proved the payout ledger 100%
+  covered and dated (the "light" year figure was seasonal pacing);
+  Fall Points Race duplicate-purchase wave (an event-order add-on
+  option) resolved with partial credits and the store option removed.
+- **Member-facing**: per-URL link-preview cards (1200×400 header-bar
+  family) for Leaderboard / LSC / Match Play chapters / Handicaps /
+  Spotlight; chapter Match Play deep-link routes; MEMBERS bulk
+  handicap-card send mode; sticky Customers page head.
 
 ## Plan of record: native app + website
 

@@ -538,6 +538,17 @@ get_all_handicap_players returns `player_status` for this. The stats
 row (Players Tracked / Total Rounds / avg index) stays global,
 matching the chapter filter's existing behavior.
 
+## Email Handicap Cards — MEMBERS send mode (v2.255.27, Kerry)
+
+The bulk-send modal has three modes: **All Players | Members | By
+Event**. MEMBERS = current members only, using the SAME status set as
+the board's MEMBERS toggle above (customers.current_player_status IN
+('active_member', 'member_plus') via handicap_player_links); the
+chapter filter applies to All Players and Members alike. The send
+payload carries `members_only: true`; the endpoint
+(`/api/handicaps/send-bulk-email`) filters eligible rows through the
+links→customers join and reports `skipped_not_member` in the response.
+
 ## Trend column + member table (v2.56.1, handoff contests-handicaps-071026)
 
 `get_all_handicap_players` returns `handicap_trend`: the index delta vs
