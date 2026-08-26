@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.255.29";
+window.TGF_VERSION = "2.255.30";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.255.30",
+    date: "2026-08-26",
+    changes: [
+      "Sticky Customers head, take two (Kerry: 'See what the scroll is doing?'): v2.255.28's overflow-x:visible let the table's overflow columns (PACE, LAST ACTIVITY) escape the wrapper and float over the page header. The list now scrolls inside its own wrapper — vertical and horizontal — sized to fill the viewport below the pinned tabs/stats/filters, with the column-titles row stuck to the wrapper top. Wide columns are reachable again and nothing bleeds.",
+    ],
+  },
   {
     version: "2.255.29",
     date: "2026-08-26",

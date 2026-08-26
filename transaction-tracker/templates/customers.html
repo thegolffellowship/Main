@@ -162,11 +162,20 @@
                 position: sticky; z-index: 60;
                 background: #F8F8F8; display: flow-root;
             }
-            /* Sticky thead needs the wrapper NOT to be a scroll
-               container — desktop tables fit, so overflow relaxes. */
-            .customer-list-wrapper { overflow-x: visible; }
+            /* The LIST scrolls inside its own wrapper (vertical +
+               horizontal) with the thead pinned to the wrapper top —
+               v2.255.28's overflow-x:visible let the table's overflow
+               columns (PACE etc.) escape the wrapper and float over
+               the header (Kerry 2026-08-26: "See what the scroll is
+               doing?"). Wrapper height fills the viewport below the
+               sticky head, so column titles + everything above stay
+               visible while rows scroll. */
+            .customer-list-wrapper {
+                overflow: auto;
+                max-height: calc(100vh - var(--cust-thead-top, 220px) - 14px);
+            }
             .customer-list-table thead th {
-                position: sticky; top: var(--cust-thead-top, 0);
+                position: sticky; top: 0;
                 z-index: 55; box-shadow: 0 1px 0 var(--border);
             }
         }
