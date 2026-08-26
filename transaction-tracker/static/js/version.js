@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.255.33";
+window.TGF_VERSION = "2.255.34";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.255.34",
+    date: "2026-08-26",
+    changes: [
+      "Two referral-fee bridge repairs (Kerry 2026-08-26): scoring-referral-add creates an OWED fee row for a word-of-mouth referral neither the coupon nor receipt scan saw (Luke Youngs → Bella Luna's membership, no tracked $25 anywhere), and scoring-referral-edit corrects the ROLES on a row (the tgf-referral-luke coupon recorded 'Luke referred Pat' — Pat referred his son Luke's membership, and the coupon Pat redeemed was Pat's compensation).",
+    ],
+  },
   {
     version: "2.255.33",
     date: "2026-08-26",

@@ -2192,6 +2192,85 @@ def _scoring_dispatch(url: str, extract: str):
                 int(_p[0]), method=_p[1] if len(_p) > 1 and _p[1] else "Venmo",
                 paid_date=_p[2] if len(_p) > 2 and _p[2] else None,
                 note=_p[3] if len(_p) > 3 else ""), indent=2)
+        if cmd == "scoring-referral-add":
+            # "<referrer_cid>|<referred_cid>|<note>" — create a referral
+            # fee row (OWED) for a word-of-mouth referral the coupon and
+            # receipt scans never saw (Kerry 2026-08-26: Luke Youngs →
+            # Bella Luna's membership; no tracked $25 exists). Names
+            # resolve from customers; amount from the referral_fee_amount
+            # dial (default 25). Mark it paid with scoring-referral-paid.
+            _p = [x.strip() for x in arg.split("|")]
+            if len(_p) < 2 or not (_p[0].isdigit() and _p[1].isdigit()):
+                return json.dumps({"error": "<referrer_cid>|<referred_cid>"
+                                            "|<note>"})
+            _amt = 25.0
+            try:
+                _amt = float(db.get_app_setting("referral_fee_amount") or 25)
+            except Exception:
+                pass
+            with db._connect(None) as _c:
+                def _nm(cid):
+                    r = _c.execute(
+                        "SELECT TRIM(COALESCE(first_name,'') || ' ' || "
+                        "COALESCE(last_name,'')) AS n FROM customers "
+                        "WHERE customer_id = ?", (cid,)).fetchone()
+                    return (r["n"] or "").strip() if r else ""
+                _rn, _dn = _nm(int(_p[0])), _nm(int(_p[1]))
+                if not _rn or not _dn:
+                    return json.dumps({"error": "customer id not found"})
+                _c.execute(
+                    """INSERT INTO referral_fees
+                       (referrer_customer_id, referrer_name,
+                        referred_customer_id, referred_name, source,
+                        amount, status, note)
+                       VALUES (?, ?, ?, ?, 'manual', ?, 'owed', ?)""",
+                    (int(_p[0]), _rn, int(_p[1]), _dn, _amt,
+                     _p[2] if len(_p) > 2 else ""))
+                _fid = _c.execute(
+                    "SELECT last_insert_rowid() AS i").fetchone()["i"]
+                _c.commit()
+            _audit("scoring-referral-add",
+                   f"referrer={_p[0]} referred={_p[1]}", outcome="ok")
+            return json.dumps({"fee_id": _fid, "referrer": _rn,
+                               "referred": _dn, "amount": _amt,
+                               "status": "owed"}, indent=2)
+        if cmd == "scoring-referral-edit":
+            # "<fee_id>|<referrer_cid>|<referred_cid>|<note>" — correct
+            # the ROLES on a referral fee row (Kerry 2026-08-26: the
+            # tgf-referral-luke coupon row recorded 'Luke referred Pat',
+            # but Pat referred his son Luke's membership — the coupon
+            # Pat redeemed was PAT's compensation).
+            _p = [x.strip() for x in arg.split("|")]
+            if len(_p) < 3 or not all(x.isdigit() for x in _p[:3]):
+                return json.dumps({"error": "<fee_id>|<referrer_cid>"
+                                            "|<referred_cid>|<note>"})
+            with db._connect(None) as _c:
+                def _nm2(cid):
+                    r = _c.execute(
+                        "SELECT TRIM(COALESCE(first_name,'') || ' ' || "
+                        "COALESCE(last_name,'')) AS n FROM customers "
+                        "WHERE customer_id = ?", (cid,)).fetchone()
+                    return (r["n"] or "").strip() if r else ""
+                _rn, _dn = _nm2(int(_p[1])), _nm2(int(_p[2]))
+                if not _rn or not _dn:
+                    return json.dumps({"error": "customer id not found"})
+                _note_sql = ", note = ?" if len(_p) > 3 and _p[3] else ""
+                _params = [int(_p[1]), _rn, int(_p[2]), _dn]
+                if _note_sql:
+                    _params.append(_p[3])
+                _params.append(int(_p[0]))
+                _n = _c.execute(
+                    f"""UPDATE referral_fees
+                        SET referrer_customer_id = ?, referrer_name = ?,
+                            referred_customer_id = ?, referred_name = ?
+                            {_note_sql}
+                        WHERE id = ?""", _params).rowcount
+                _c.commit()
+            _audit("scoring-referral-edit",
+                   f"fee={_p[0]} referrer={_p[1]} referred={_p[2]}",
+                   outcome="ok" if _n else "no-op")
+            return json.dumps({"fee_id": int(_p[0]), "updated": _n,
+                               "referrer": _rn, "referred": _dn}, indent=2)
         if cmd == "scoring-refunds-overview":
             # READ-ONLY: the REFUNDS console payload (outstanding / in-flight
             # / completed) — incl. season-contest removal refunds.
