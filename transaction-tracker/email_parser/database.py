@@ -28300,12 +28300,16 @@ def sync_referral_fees(db_path: str | Path | None = None) -> dict:
             referred_name = (it["customer"] or "").strip()
             if not referred_name:
                 continue
+            # Dedup on the source item too: a role correction can flip a
+            # coupon row's referred person to someone other than the item's
+            # buyer (Pat/Luke Youngs, 2026-08-26) — without the item match,
+            # the sync would endlessly re-create the pre-correction row.
             dup = conn.execute(
                 """SELECT 1 FROM referral_fees
-                   WHERE referred_name = ? OR
+                   WHERE source_item_id = ? OR referred_name = ? OR
                          (referred_customer_id IS NOT NULL
                           AND referred_customer_id = ?)""",
-                (referred_name, it["customer_id"])).fetchone()
+                (it["id"], referred_name, it["customer_id"])).fetchone()
             if dup:
                 continue
             token = m.group(1).strip().replace("-", " ")

@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.255.34";
+window.TGF_VERSION = "2.255.35";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.255.35",
+    date: "2026-08-26",
+    changes: [
+      "Referral coupon sync no longer resurrects role-corrected rows: after the Pat/Luke Youngs role fix (v2.255.34) the next sync re-created the stale 'Luke referred Pat' row from the same coupon item, because dedup only matched on the referred person. The coupon scan now also dedups on source_item_id — one row per redeemed coupon item, regardless of later role edits. New bridge command scoring-referral-remove (<fee_id>|<reason>) deletes a stale/duplicate referral fee row; used to remove the resurrected duplicate (Kerry 2026-08-26: 'Luke needs to be updated/removed for that coupon').",
+    ],
+  },
   {
     version: "2.255.34",
     date: "2026-08-26",

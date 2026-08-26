@@ -2271,6 +2271,30 @@ def _scoring_dispatch(url: str, extract: str):
                    outcome="ok" if _n else "no-op")
             return json.dumps({"fee_id": int(_p[0]), "updated": _n,
                                "referrer": _rn, "referred": _dn}, indent=2)
+        if cmd == "scoring-referral-remove":
+            # "<fee_id>|<reason>" — DELETE a stale/duplicate referral fee
+            # row (e.g. the pre-role-correction duplicate the coupon sync
+            # re-created for the tgf-referral-luke coupon, 2026-08-26).
+            # The sync's source_item_id dedup keeps it from coming back.
+            _p = [x.strip() for x in arg.split("|")]
+            if not _p or not _p[0].isdigit():
+                return json.dumps({"error": "<fee_id>|<reason>"})
+            with db._connect(None) as _c:
+                _row = _c.execute(
+                    "SELECT * FROM referral_fees WHERE id = ?",
+                    (int(_p[0]),)).fetchone()
+                if not _row:
+                    return json.dumps({"error": f"fee {_p[0]} not found"})
+                _snap = dict(_row)
+                _c.execute("DELETE FROM referral_fees WHERE id = ?",
+                           (int(_p[0]),))
+                _c.commit()
+            _audit("scoring-referral-remove",
+                   f"fee={_p[0]} reason={_p[1] if len(_p) > 1 else ''}",
+                   outcome="ok")
+            return json.dumps({"deleted": _snap,
+                               "reason": _p[1] if len(_p) > 1 else None},
+                              indent=2, default=str)
         if cmd == "scoring-refunds-overview":
             # READ-ONLY: the REFUNDS console payload (outstanding / in-flight
             # / completed) — incl. season-contest removal refunds.
