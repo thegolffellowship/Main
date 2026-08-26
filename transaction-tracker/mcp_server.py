@@ -2863,6 +2863,54 @@ def _scoring_dispatch(url: str, extract: str):
             mode = arg.strip().lower()
             return json.dumps(db.ensure_courses_from_history(
                 dry_run=(mode != "apply")), indent=2, default=str)
+        if cmd == "scoring-customer-payout":
+            # "<customer_id>|<method>|<handle>" — set a customer's payout
+            # method + handle (venmo/zelle/paypal/cashapp; empty method
+            # clears both). A venmo method also stores venmo_username so
+            # every pay surface picks it up. (Kerry 2026-08-26: "Gus is a
+            # Zelle... I also gave you Scott Hammond's Venmo".)
+            _p = [x.strip() for x in arg.split("|")]
+            if not _p or not _p[0].isdigit():
+                return json.dumps({"error": "<customer_id>|<method>|<handle>"})
+            _cid = int(_p[0])
+            _m = (_p[1].lower() if len(_p) > 1 else "") or None
+            _h = (_p[2] if len(_p) > 2 else "") or None
+            with db._connect(None) as _c:
+                _c.execute("UPDATE customers SET payment_method = ?, "
+                           "payment_handle = ? WHERE customer_id = ?",
+                           (_m, _h, _cid))
+                if _m == "venmo" and _h:
+                    _c.execute("UPDATE customers SET venmo_username = ? "
+                               "WHERE customer_id = ?", (_h, _cid))
+                _row = _c.execute(
+                    "SELECT customer_id, first_name || ' ' || last_name AS n, "
+                    "payment_method, payment_handle, venmo_username "
+                    "FROM customers WHERE customer_id = ?", (_cid,)).fetchone()
+                _c.commit()
+            _audit("scoring-customer-payout", f"cid={_cid} method={_m!r} "
+                   f"handle={_h!r}", outcome="ok")
+            return json.dumps(dict(_row) if _row else
+                              {"error": f"customer {_cid} not found"}, indent=2)
+        if cmd == "scoring-sc-removal-refund":
+            # "<removal_id>|<amount|clear>" — fix the refund_amount on a
+            # season_contest_removals record (a removal whose money moves
+            # through an ITEM credit instead must not ALSO show as an
+            # outstanding removal refund — the Hammond $50/$20 double-count,
+            # Kerry 2026-08-26).
+            _rid, _, _amt = arg.partition("|")
+            if not _rid.strip().isdigit():
+                return json.dumps({"error": "<removal_id>|<amount|clear>"})
+            _val = None if _amt.strip().lower() in ("", "clear", "null") \
+                else float(_amt)
+            with db._connect(None) as _c:
+                _n = _c.execute(
+                    "UPDATE season_contest_removals SET refund_amount = ? "
+                    "WHERE id = ?", (_val, int(_rid))).rowcount
+                _c.commit()
+            _audit("scoring-sc-removal-refund",
+                   f"removal_id={_rid} refund_amount={_val}", outcome="ok")
+            return json.dumps({"removal_id": int(_rid),
+                               "refund_amount": _val, "updated": _n})
         if cmd == "scoring-unenroll":
             # Remove a season-contest enrollment + record the removal (same
             # flow as the Enrollment tab's remove): pot/N recompute from the

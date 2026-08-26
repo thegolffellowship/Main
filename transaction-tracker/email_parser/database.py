@@ -27908,14 +27908,16 @@ def get_refunds_overview(db_path: str | Path | None = None,
             # there... to allow me to refund"): handle + a memo in his
             # ratified shape, naming the ORIGIN event of the credit even
             # when it was applied elsewhere.
-            _vh = None
+            _vh, _pm, _ph = None, None, None
             if r.get("customer_id"):
                 _vrow = conn.execute(
-                    "SELECT venmo_username FROM customers WHERE customer_id = ? "
-                    "AND venmo_username IS NOT NULL AND venmo_username != ''",
+                    "SELECT venmo_username, payment_method, payment_handle "
+                    "FROM customers WHERE customer_id = ?",
                     (r["customer_id"],)).fetchone()
                 if _vrow:
-                    _vh = _vrow["venmo_username"]
+                    _vh = (_vrow["venmo_username"] or "").strip() or None
+                    _pm = (_vrow["payment_method"] or "").strip().lower() or None
+                    _ph = (_vrow["payment_handle"] or "").strip() or None
             try:
                 _full = dict(conn.execute(
                     "SELECT * FROM items WHERE id = ?", (r["id"],)).fetchone())
@@ -27934,6 +27936,11 @@ def get_refunds_overview(db_path: str | Path | None = None,
                 "age_days": _age(anchor),
                 "note": r.get("credit_note") or "",
                 "venmo_handle": _vh, "memo": _memo,
+                # Method-aware payout chip (Kerry 2026-08-26: "Gus is a
+                # Zelle, so shouldn't show Venmo. Payouts need to
+                # recognize that") — same customers.payment_method /
+                # payment_handle the GOLFERS pay links already honor.
+                "payment_method": _pm, "payment_handle": _ph,
             })
 
         # Season-contest removal refunds (Kerry 2026-07-20: "is it in overall
@@ -27952,7 +27959,9 @@ def get_refunds_overview(db_path: str | Path | None = None,
                       AND entry_type IN ('expense', 'contra')
                       AND COALESCE(status, 'active') = 'active'""").fetchall()]
             for rm in conn.execute(
-                """SELECT r.*, c.venmo_username
+                """SELECT r.*, c.venmo_username,
+                          c.payment_method AS c_payment_method,
+                          c.payment_handle AS c_payment_handle
                      FROM season_contest_removals r
                      LEFT JOIN customers c ON c.customer_id = r.customer_id
                     WHERE COALESCE(r.refund_amount, 0) > 0""").fetchall():
@@ -28014,6 +28023,10 @@ def get_refunds_overview(db_path: str | Path | None = None,
                         "kind": "contest_refund", "memo": memo,
                         "order_date": rm_day, "age_days": _age(rm_day),
                         "venmo_handle": rm.get("venmo_username"),
+                        "payment_method": (rm.get("c_payment_method")
+                                           or "").strip().lower() or None,
+                        "payment_handle": (rm.get("c_payment_handle")
+                                           or "").strip() or None,
                         "note": rm.get("note") or ""})
         except Exception:
             logger.exception("refunds overview: removal-refund merge failed")

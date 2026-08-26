@@ -1232,7 +1232,24 @@
                 // inbox and flips the row to COMPLETED on its own (Kerry
                 // 2026-07-20: "so I don't miss it").
                 let action;
-                if (r.venmo_handle) {
+                // Method-aware (Kerry 2026-08-26: "Gus is a Zelle, so
+                // shouldn't show Venmo") — honor customers.payment_method
+                // like the GOLFERS pay links do. Zelle has no deep link:
+                // render an identifying badge; the receipt scan still
+                // flips the row when the payment lands.
+                const meth = (r.payment_method
+                    || (r.venmo_handle ? "venmo" : "")).toLowerCase();
+                const moreLink = `<a href="/customers?cid=${r.customer_id || ""}" style="font-size:0.7rem;color:var(--link);text-decoration:none;margin-left:4px;">more…</a>`;
+                if (meth && meth !== "venmo") {
+                    const label = meth === "zelle" ? "Zelle"
+                        : meth === "paypal" ? "PayPal"
+                        : meth === "cashapp" ? "Cash App" : meth;
+                    const bg = meth === "zelle" ? "#6D1ED4"
+                        : meth === "paypal" ? "#003087"
+                        : meth === "cashapp" ? "#00D632" : "#374151";
+                    action = `<span title="${escR(r.payment_handle || "")}"
+                           style="display:inline-block;background:${bg};color:#fff;font-size:0.72rem;font-weight:600;padding:2px 9px;border-radius:12px;white-space:nowrap;">${label} ${fmt(r.amount)}</span>${moreLink}`;
+                } else if (r.venmo_handle) {
                     const memo = encodeURIComponent(r.memo || `TGF refund — ${r.event || "season contest"}`);
                     const amt = Number(r.amount || 0).toFixed(2);
                     const h = r.venmo_handle.replace(/^@/, "");

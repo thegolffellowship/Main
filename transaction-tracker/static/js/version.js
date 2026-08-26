@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.255.24";
+window.TGF_VERSION = "2.255.25";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.255.25",
+    date: "2026-08-26",
+    changes: [
+      "The Refunds console is method-aware (Kerry: 'Gus is a Zelle, so shouldn't show Venmo. Payouts need to recognize that'): outstanding rows honor customers.payment_method/payment_handle like the GOLFERS pay links already did — Zelle/PayPal/Cash App render an identifying amount badge (no deep link exists for Zelle; the receipt scan still completes the row), Venmo keeps its one-tap pill.",
+      "Two bridge repairs: scoring-customer-payout sets a customer's payout method + handle (a venmo method also fills venmo_username so every surface picks it up), and scoring-sc-removal-refund fixes a removal record's refund_amount — a removal whose money moves through an ITEM credit must not also count as an outstanding removal refund (the Hammond $50/$20 double-count).",
+    ],
+  },
   {
     version: "2.255.24",
     date: "2026-08-24",
