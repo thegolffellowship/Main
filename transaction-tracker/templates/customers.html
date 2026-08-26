@@ -54,6 +54,12 @@
             <a href="/accounting" class="admin-nav admin-tab" style="display:none;">Admin</a>
         </nav>
         {% endif %}
+    <!-- Sticky head (Kerry 2026-08-26: "Make column titles row and
+         everything above it sticky") — tabs + stats + controls pin
+         below the nav on desktop; the thead pins just under them.
+         Mobile keeps the slidable table (overflow-x) and skips sticky:
+         a horizontal scroll container can't viewport-stick its thead. -->
+    <div id="cust-sticky-head">
     <div class="sub-tabs"><nav class="segmented-control"><a class="seg-option active" href="/customers">Customers</a><a class="seg-option" href="/participation">Participation</a></nav></div>
 
         <!-- Stats cards -->
@@ -125,6 +131,46 @@
                 <button class="view-toggle-btn" data-view="cards">Cards</button>
             </div>
         </section>
+    </div><!-- /cust-sticky-head -->
+    <script>
+        // Offsets: the block pins below the (sticky) nav header; the
+        // thead pins below the block. Heights shift when stats populate
+        // and on resize, so recompute on both plus a settle pass.
+        function _setCustStickyTops() {
+            const head = document.getElementById('cust-sticky-head');
+            if (!head) return;
+            const nav = document.querySelector('header');
+            const top = nav ? nav.offsetHeight : 0;
+            head.style.top = top + 'px';
+            document.documentElement.style.setProperty(
+                '--cust-thead-top', (top + head.offsetHeight) + 'px');
+        }
+        document.addEventListener('DOMContentLoaded', _setCustStickyTops);
+        window.addEventListener('load', _setCustStickyTops);
+        window.addEventListener('resize', _setCustStickyTops);
+        setTimeout(_setCustStickyTops, 1500);
+        if (window.ResizeObserver) {
+            window.addEventListener('DOMContentLoaded', () => {
+                const el = document.getElementById('cust-sticky-head');
+                if (el) new ResizeObserver(_setCustStickyTops).observe(el);
+            });
+        }
+    </script>
+    <style>
+        @media (min-width: 900px) {
+            #cust-sticky-head {
+                position: sticky; z-index: 60;
+                background: #F8F8F8; display: flow-root;
+            }
+            /* Sticky thead needs the wrapper NOT to be a scroll
+               container — desktop tables fit, so overflow relaxes. */
+            .customer-list-wrapper { overflow-x: visible; }
+            .customer-list-table thead th {
+                position: sticky; top: var(--cust-thead-top, 0);
+                z-index: 55; box-shadow: 0 1px 0 var(--border);
+            }
+        }
+    </style>
 
         <!-- Customer list view (default) -->
         <section id="customer-list-view" class="customer-list-wrapper">

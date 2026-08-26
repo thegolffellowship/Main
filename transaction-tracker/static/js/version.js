@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.255.27";
+window.TGF_VERSION = "2.255.28";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.255.28",
+    date: "2026-08-26",
+    changes: [
+      "Customers page: the sub-tabs, stat cards, filter bar, and the column-titles row all pin below the nav while the list scrolls (Kerry: 'Make column titles row and everything above it sticky'). Desktop only — on phones the table stays horizontally slidable, and a horizontal scroll container can't viewport-stick its header row.",
+    ],
+  },
   {
     version: "2.255.27",
     date: "2026-08-26",
