@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.255.26";
+window.TGF_VERSION = "2.255.27";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.255.27",
+    date: "2026-08-26",
+    changes: [
+      "Email Handicap Cards gains a MEMBERS send mode between All Players and By Event (Kerry 2026-08-26): current members only — the same customers.current_player_status definition the board's MEMBERS toggle uses — with the chapter filter available; the send payload carries members_only and the response reports skipped_not_member.",
+      "New scoring-payouts-coverage bridge diagnostic: per-event payout totals, paid_at stamping stats, and the calendar events with NO payout records — built to explain the PAID THIS YEAR figure ($37,955 unchanged after the anchor fix, so the gap is coverage, not dating).",
+    ],
+  },
   {
     version: "2.255.26",
     date: "2026-08-26",

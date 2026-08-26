@@ -2863,6 +2863,54 @@ def _scoring_dispatch(url: str, extract: str):
             mode = arg.strip().lower()
             return json.dumps(db.ensure_courses_from_history(
                 dry_run=(mode != "apply")), indent=2, default=str)
+        if cmd == "scoring-payouts-coverage":
+            # Coverage audit (Kerry 2026-08-26: "$37,955 ... seems
+            # lighter than it should be"): per-event payout totals from
+            # the PAYOUTS console tables, paid_at stamping stats, and
+            # the calendar events (items-side) with NO payout event at
+            # all — the gaps that a paid-this-year sum can never see.
+            with db._connect(None) as _c:
+                per_event = [dict(r) for r in _c.execute(
+                    """SELECT e.code, e.event_date, e.chapter,
+                              COUNT(p.id)                    AS n_rows,
+                              ROUND(COALESCE(SUM(p.amount), 0), 2) AS total,
+                              ROUND(COALESCE(SUM(CASE
+                                  WHEN p.acct_transaction_id IS NOT NULL
+                                  THEN p.amount END), 0), 2)  AS paid,
+                              SUM(CASE WHEN p.acct_transaction_id
+                                       IS NOT NULL AND p.paid_at IS NULL
+                                       THEN 1 ELSE 0 END)     AS paid_no_date
+                         FROM tgf_events e
+                         LEFT JOIN tgf_payouts p ON p.event_id = e.id
+                        GROUP BY e.id
+                        ORDER BY e.event_date""")]
+                totals = dict(_c.execute(
+                    """SELECT ROUND(SUM(amount), 2) AS all_rows,
+                              ROUND(SUM(CASE WHEN acct_transaction_id
+                                    IS NOT NULL THEN amount END), 2) AS paid,
+                              ROUND(SUM(CASE WHEN acct_transaction_id
+                                    IS NOT NULL AND paid_at LIKE '2026%'
+                                    THEN amount END), 2) AS paid_dated_2026,
+                              ROUND(SUM(CASE WHEN acct_transaction_id
+                                    IS NOT NULL AND paid_at IS NULL
+                                    THEN amount END), 2) AS paid_undated
+                         FROM tgf_payouts""").fetchone())
+                have = {(r["code"] or "").strip().lower() for r in per_event}
+                missing = [dict(r) for r in _c.execute(
+                    """SELECT e.item_name, e.event_date, e.chapter,
+                              COUNT(i.id) AS registrations
+                         FROM events e
+                         LEFT JOIN items i ON i.event_id = e.id
+                              AND i.transaction_status = 'active'
+                        WHERE e.event_date IS NOT NULL
+                          AND e.event_date < date('now')
+                          AND e.event_date >= '2026-01-01'
+                        GROUP BY e.id ORDER BY e.event_date""")
+                    if (r["item_name"] or "").strip().lower() not in have]
+                return json.dumps({"totals": totals,
+                                   "events": per_event,
+                                   "no_payout_event": missing},
+                                  indent=1, default=str)
         if cmd == "scoring-customer-payout":
             # "<customer_id>|<method>|<handle>" — set a customer's payout
             # method + handle (venmo/zelle/paypal/cashapp; empty method

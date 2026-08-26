@@ -661,6 +661,11 @@
                             font-weight:600;cursor:pointer;background:#2563eb;color:#fff;">
                         All Players
                     </button>
+                    <button id="bulk-mode-members" class="bulk-mode-btn"
+                            onclick="setBulkMode('members')" style="flex:1;padding:8px;border:none;border-left:1px solid #d1d5db;
+                            font-size:0.85em;font-weight:600;cursor:pointer;background:#f8fafc;color:#475569;">
+                        Members
+                    </button>
                     <button id="bulk-mode-event" class="bulk-mode-btn"
                             onclick="setBulkMode('event')" style="flex:1;padding:8px;border:none;border-left:1px solid #d1d5db;
                             font-size:0.85em;font-weight:600;cursor:pointer;background:#f8fafc;color:#475569;">
@@ -2244,11 +2249,16 @@
 
     function setBulkMode(mode) {
         _bulkMode = mode;
-        document.getElementById('bulk-mode-all').style.background = mode === 'all' ? '#2563eb' : '#f8fafc';
-        document.getElementById('bulk-mode-all').style.color = mode === 'all' ? '#fff' : '#475569';
-        document.getElementById('bulk-mode-event').style.background = mode === 'event' ? '#2563eb' : '#f8fafc';
-        document.getElementById('bulk-mode-event').style.color = mode === 'event' ? '#fff' : '#475569';
-        document.getElementById('bulk-filter-chapter').style.display = mode === 'all' ? '' : 'none';
+        // MEMBERS mode (Kerry 2026-08-26) sits between All Players and
+        // By Event — current members only, chapter filter applies.
+        ['all', 'members', 'event'].forEach(m => {
+            const btn = document.getElementById('bulk-mode-' + m);
+            if (!btn) return;
+            btn.style.background = mode === m ? '#2563eb' : '#f8fafc';
+            btn.style.color = mode === m ? '#fff' : '#475569';
+        });
+        document.getElementById('bulk-filter-chapter').style.display =
+            (mode === 'all' || mode === 'members') ? '' : 'none';
         document.getElementById('bulk-filter-event').style.display = mode === 'event' ? '' : 'none';
         if (mode === 'event' && !_eventsList) loadEventsList();
         updateBulkSummary();
@@ -2307,21 +2317,26 @@
             return;
         }
 
-        // "All" mode
+        // "All" / "Members" mode — MEMBERS narrows to current members
+        // using the same status set as the board's MEMBERS toggle.
         const chapter = document.getElementById('bulk-email-chapter').value;
-        const eligible = allPlayers.filter(p =>
+        const pool = _bulkMode === 'members'
+            ? allPlayers.filter(p => HCP_MEMBER_STATUSES.has(p.player_status))
+            : allPlayers;
+        const eligible = pool.filter(p =>
             p.customer_name && p.handicap_index !== null
         );
-        const noIndex = allPlayers.filter(p =>
+        const noIndex = pool.filter(p =>
             p.customer_name && p.handicap_index === null
         ).length;
-        const noLink = allPlayers.filter(p => !p.customer_name).length;
+        const noLink = pool.filter(p => !p.customer_name).length;
+        const who = _bulkMode === 'members' ? 'current members' : 'players';
         if (chapter) {
-            summaryEl.innerHTML = `<strong>${eligible.length}</strong> players have a valid index and linked customer (all chapters). ` +
+            summaryEl.innerHTML = `<strong>${eligible.length}</strong> ${who} have a valid index and linked customer (all chapters). ` +
                 `Server will filter to <strong>${chapter}</strong> chapter only.<br>` +
                 `<span style="color:#64748b;font-size:0.9em;">${noIndex} skipped (no index) · ${noLink} skipped (not linked)</span>`;
         } else {
-            summaryEl.innerHTML = `<strong>${eligible.length}</strong> players have a valid index and linked customer.<br>` +
+            summaryEl.innerHTML = `<strong>${eligible.length}</strong> ${who} have a valid index and linked customer.<br>` +
                 `<span style="color:#64748b;font-size:0.9em;">${noIndex} skipped (no index) · ${noLink} skipped (not linked)</span>`;
         }
     }
@@ -2347,6 +2362,7 @@
         } else {
             const chapter = document.getElementById('bulk-email-chapter').value;
             if (chapter) body.chapter = chapter;
+            if (_bulkMode === 'members') body.members_only = true;
         }
 
         sendBtn.disabled = true;

@@ -9047,6 +9047,10 @@ def api_handicap_send_bulk_email():
     data = request.get_json(silent=True) or {}
     chapter = (data.get("chapter") or "").strip() or None
     event_name = (data.get("event_name") or "").strip() or None
+    # MEMBERS mode (Kerry 2026-08-26): current members only — the same
+    # customers.current_player_status definition the board's MEMBERS
+    # toggle uses (active_member / member_plus).
+    members_only = bool(data.get("members_only"))
 
     tenant_id = os.getenv("AZURE_TENANT_ID")
     client_id = os.getenv("AZURE_CLIENT_ID")
@@ -9058,6 +9062,27 @@ def api_handicap_send_bulk_email():
 
     export = get_handicap_export_data(chapter=chapter)
     eligible_rows = export.get("rows") or []
+
+    skipped_not_member = 0
+    if members_only:
+        conn = get_connection()
+        try:
+            member_names = {r["player_name"] for r in conn.execute(
+                """SELECT l.player_name
+                     FROM handicap_player_links l
+                     JOIN customers c
+                       ON (c.customer_id = l.customer_id
+                           OR (l.customer_id IS NULL
+                               AND c.first_name || ' ' || c.last_name
+                                   = l.customer_name))
+                    WHERE c.current_player_status
+                          IN ('active_member', 'member_plus')""")}
+        finally:
+            conn.close()
+        before = len(eligible_rows)
+        eligible_rows = [r for r in eligible_rows
+                         if r["player_name"] in member_names]
+        skipped_not_member = before - len(eligible_rows)
 
     # If filtering by event, restrict to players registered for that event
     # and compute event-specific skip counts
@@ -9172,6 +9197,7 @@ def api_handicap_send_bulk_email():
         "failed": failed,
         "skipped_no_email": skipped_no_email,
         "skipped_no_index": skipped_no_index,
+        "skipped_not_member": skipped_not_member,
         "total_eligible": len(eligible_rows),
         "errors": errors[:20],  # limit error details
     })
