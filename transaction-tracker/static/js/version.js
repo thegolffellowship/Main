@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.255.25";
+window.TGF_VERSION = "2.255.26";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.255.26",
+    date: "2026-08-26",
+    changes: [
+      "PAID THIS YEAR no longer under-counts (Kerry: '$37,955.02 ... seems lighter than it should be'): paid rows whose paid_at was never stamped (legacy any-ledger-link paid rows from before the receipt-watch flows) now anchor to their EVENT's date instead of silently dropping out of the yearly total.",
+    ],
+  },
   {
     version: "2.255.25",
     date: "2026-08-26",

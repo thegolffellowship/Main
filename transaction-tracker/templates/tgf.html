@@ -1475,7 +1475,14 @@
                 let evDue = 0;
                 (ev.payouts || []).forEach(p => {
                     if (p.payment_status !== "paid") evDue += p.amount;
-                    else if ((p.paid_at || "").slice(0, 4) === yr) paidYear += p.amount;
+                    // paid_at anchors the year; legacy paid rows never
+                    // got one stamped (any ledger link counts as paid),
+                    // so they fall back to the EVENT's date — without
+                    // this the spring's payouts vanish from PAID THIS
+                    // YEAR (Kerry 2026-08-26: "$37,955.02 ... seems
+                    // lighter than it should be").
+                    else if ((p.paid_at || ev.event_date || "").slice(0, 4) === yr)
+                        paidYear += p.amount;
                 });
                 if (evDue > 0.005) { outstanding += evDue; unpaidEvents++; }
             });
