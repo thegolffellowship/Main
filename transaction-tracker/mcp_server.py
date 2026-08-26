@@ -2863,6 +2863,75 @@ def _scoring_dispatch(url: str, extract: str):
             mode = arg.strip().lower()
             return json.dumps(db.ensure_courses_from_history(
                 dry_run=(mode != "apply")), indent=2, default=str)
+        if cmd == "scoring-coupon-sweep":
+            # "<YYYY-MM-DD>|<YYYY-MM-DD>" — re-read the window's order
+            # EMAILS via Graph and cross-check every "Coupon (code):
+            # -$X" line against the stored items (Kerry 2026-08-26:
+            # "If we don't have a way to resolve Coupons ... rerun
+            # audit on all GoDaddy payments"). Catches the one case the
+            # price audit can't: a post-coupon price stored with no
+            # coupon, where the totals accidentally balance. Run in
+            # month-sized windows to stay inside the request budget.
+            from datetime import datetime as _dt2
+            from email_parser.fetcher import fetch_transaction_emails
+            from email_parser.parser import _strip_html as _sh
+            _a, _, _b = arg.partition("|")
+            try:
+                _since = _dt2.strptime(_a.strip(), "%Y-%m-%d")
+                _until = _dt2.strptime(_b.strip(), "%Y-%m-%d")
+            except ValueError:
+                return json.dumps({"error": "<YYYY-MM-DD>|<YYYY-MM-DD>"})
+            emails = fetch_transaction_emails(
+                os.getenv("AZURE_TENANT_ID"), os.getenv("AZURE_CLIENT_ID"),
+                os.getenv("AZURE_CLIENT_SECRET"), os.getenv("EMAIL_ADDRESS"),
+                since_date=_since, until_date=_until)
+            _cre = re.compile(
+                r"Coupon\s*\(([^)]+)\)\s*:?\s*[−-]?\s*\$?\s*([\d,]+"
+                r"(?:\.\d{1,2})?)", re.I)
+            _ore = re.compile(r"#(R\d+)")
+            mism = []
+            checked = 0
+            with db._connect(None) as _c:
+                for e in emails:
+                    subj = e.get("subject") or ""
+                    if "new order" not in subj.lower():
+                        continue
+                    om = _ore.search(subj)
+                    if not om:
+                        continue
+                    oid = om.group(1)
+                    body = e.get("text") or _sh(e.get("html") or "")
+                    m = _cre.search(body or "")
+                    email_code = m.group(1).strip() if m else None
+                    email_amt = (float(m.group(2).replace(",", ""))
+                                 if m else 0.0)
+                    rows = [dict(r) for r in _c.execute(
+                        """SELECT id, customer, item_name, item_price,
+                                  coupon_code, coupon_amount
+                             FROM items WHERE order_id = ?
+                              AND email_uid NOT LIKE 'manual%'""",
+                        (oid,)).fetchall()]
+                    if not rows:
+                        continue
+                    checked += 1
+                    stored_amt = max((db._parse_dollar(r.get("coupon_amount"))
+                                      for r in rows), default=0.0)
+                    if abs(stored_amt - email_amt) > 0.01:
+                        mism.append({
+                            "order_id": oid,
+                            "customer": rows[0].get("customer"),
+                            "email_coupon": email_code,
+                            "email_amount": email_amt,
+                            "stored_amount": stored_amt,
+                            "items": [{"id": r["id"],
+                                       "name": r.get("item_name"),
+                                       "price": r.get("item_price")}
+                                      for r in rows]})
+            return json.dumps({"window": f"{_a.strip()}..{_b.strip()}",
+                               "emails_seen": len(emails),
+                               "orders_checked": checked,
+                               "coupon_mismatches": mism},
+                              indent=1, default=str)
         if cmd == "scoring-price-audit":
             # Order-price reconciliation sweep (Kerry 2026-08-26, after
             # the Mazanec $140-vs-$190 parse error: "Makes me concerned
@@ -2892,11 +2961,27 @@ def _scoring_dispatch(url: str, extract: str):
                              for i in its), default=0)
                 if not total:
                     continue  # RSVP-style rows with no charged total
+                # A transfer chain shares the order_id: the original
+                # (now 'transferred') row, its "(credit)" child, and the
+                # re-registration all represent ONE charge — count only
+                # the surviving non-credit rows (first sweep flagged six
+                # of these as false positives).
+                live = [i for i in its
+                        if i.get("transaction_status") != "transferred"
+                        and "(credit)" not in (i.get("item_price") or "")]
+                if not live:
+                    continue
                 subtotal = sum(db._parse_dollar(i.get("item_price"))
-                               for i in its)
+                               for i in live)
                 coupon = max((db._parse_dollar(i.get("coupon_amount"))
-                              for i in its), default=0)
+                              for i in live), default=0)
                 expected = round((subtotal - coupon) * 1.035, 2)
+                # Stored total EXACTLY equal to the subtotal = the
+                # fee-less-total metadata class (early parses stored the
+                # pre-fee subtotal as Order Total; prices are right and
+                # nobody is owed) — informational, not an error.
+                if abs(total - (subtotal - coupon)) < 0.01:
+                    continue
                 if abs(expected - total) > 0.06:
                     flags.append({
                         "order_id": oid,

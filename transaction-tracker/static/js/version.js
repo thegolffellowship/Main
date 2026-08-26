@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.255.31";
+window.TGF_VERSION = "2.255.32";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.255.32",
+    date: "2026-08-26",
+    changes: [
+      "Price audit learns the two benign classes from its first run: transfer chains count only the surviving non-credit rows (six false positives), and a stored total exactly equal to the subtotal is the known fee-less-total metadata quirk, skipped as informational. Future runs are pure signal.",
+      "New scoring-coupon-sweep bridge: re-reads a date window's order EMAILS via Graph and cross-checks every 'Coupon (code): -$X' line against the stored items — catches the one case the price audit can't see, a post-coupon price stored with no coupon where the totals accidentally balance (Kerry: 'If we don't have a way to resolve Coupons ... rerun audit on all GoDaddy payments').",
+    ],
+  },
   {
     version: "2.255.31",
     date: "2026-08-26",
