@@ -1564,6 +1564,12 @@ a flat fee via P2P with memo "Referral fee for <referred person>".
   code token, unresolved flagged in note); receipt scan => marks a
   matching OWED row PAID, or creates a paid row outright (the
   pre-tracking backfill: Atkinson/Aguilera, Atkinson/Decareaux).
+  **Coupon-scan dedup matches on `source_item_id` too (v2.255.35):**
+  a role correction (`scoring-referral-edit`) can flip a coupon row's
+  referred person away from the item's buyer — the Pat/Luke Youngs fix
+  did exactly that, and the next sync re-created the stale
+  pre-correction row from the same item. One row per redeemed coupon
+  item, regardless of later role edits.
 - Fee amount is rules-as-data: app_setting `referral_fee_amount`
   (default 25).
 - Owed rows render a Venmo deep link prefilled with the referrer's
@@ -1574,6 +1580,14 @@ a flat fee via P2P with memo "Referral fee for <referred person>".
 - Manual completion (cash / unreadable memo):
   `scoring-referral-paid:<id>|<method>|<date>|<note>` bridge or
   `mark_referral_fee_paid()`.
+- Bridge maintenance commands (v2.255.34–35):
+  `scoring-referral-add:<referrer_cid>|<referred_cid>|<note>` creates an
+  OWED row for a word-of-mouth referral neither scanner saw;
+  `scoring-referral-edit:<fee_id>|<referrer_cid>|<referred_cid>|<note>`
+  corrects the roles on a row;
+  `scoring-referral-remove:<fee_id>|<reason>` deletes a stale/duplicate
+  row (audited; the source_item_id dedup keeps a removed coupon row from
+  being re-created by the sync).
 
 ## Hole-In-One pot (v2.130.x, Kerry-ratified 2026-07-20)
 

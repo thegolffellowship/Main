@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.255.35";
+window.TGF_VERSION = "2.255.36";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.255.36",
+    date: "2026-08-26",
+    changes: [
+      "Session close-out (docs only): events.md referral section documents the v2.255.35 source_item_id dedup rule and the scoring-referral-add/-edit/-remove bridge command trio. Lost Pines recordation completed on the Hyatt $9,534.95 expense (category TGF Championship): final bill inv 34981811 reconciles to the Chase charge exactly, individually-paid rooming list on record (9 rooms/18 room-nights at the $299 group rate — the $4,784 attrition minimum was met despite Kerry's cancelled room), and the $63.07 quote-vs-billed delta reviewed with Kerry and dropped as immaterial. File closed.",
+    ],
+  },
   {
     version: "2.255.35",
     date: "2026-08-26",
