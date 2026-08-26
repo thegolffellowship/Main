@@ -33855,11 +33855,22 @@ def sync_season_contests_from_items(db_path: str | Path | None = None) -> dict:
 
         # Handle standalone "SEASON CONTESTS" items (fallback for items where the parser
         # didn't populate the individual flag fields).
+        # HARDENED (Kerry 2026-08-26): the name/notes keyword scan runs
+        # ONLY when ALL THREE flag columns are NULL — i.e. the parser
+        # truly expressed no opinion (legacy rows). When any flag is set
+        # (YES or NO), the flags are authoritative and free text must
+        # never add a contest: an admin NOTE that merely NAMED "City
+        # Match Play" re-enrolled Chuck Fehlis in a contest he never
+        # bought (2026-08-24), and the scan even stamped the flag back
+        # to YES over an explicit NO.
         bundle_rows = conn.execute(
             """SELECT id, customer, customer_id, item_name, notes, order_date
                FROM items
                WHERE UPPER(item_name) LIKE '%SEASON CONTEST%'
-                 AND COALESCE(transaction_status, 'active') = 'active'"""
+                 AND COALESCE(transaction_status, 'active') = 'active'
+                 AND net_points_race IS NULL
+                 AND gross_points_race IS NULL
+                 AND city_match_play IS NULL"""
         ).fetchall()
         for row in bundle_rows:
             row = dict(row)

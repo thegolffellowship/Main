@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.255.32";
+window.TGF_VERSION = "2.255.33";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.255.33",
+    date: "2026-08-26",
+    changes: [
+      "Enrollment sync hardened: the SEASON CONTESTS name/notes keyword fallback now runs ONLY on rows where the parser left all three contest flags NULL (true legacy rows). Explicit flags — YES or NO — are authoritative, so an admin note that merely names a contest can never enroll anyone or overwrite a flag again (the Fehlis resurrection, where a documentation note containing 'City Match Play' re-enrolled him over an explicit NO).",
+    ],
+  },
   {
     version: "2.255.32",
     date: "2026-08-26",
