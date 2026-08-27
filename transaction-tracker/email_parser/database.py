@@ -864,6 +864,65 @@ def _repair_crystal_falls_twin_event(conn: sqlite3.Connection) -> None:
     logger.info("Crystal Falls twin-event merge: 3267 -> 3263, moved %s", moved)
 
 
+def _repair_fall_kickoff_champ_mislink(conn: sqlite3.Connection) -> None:
+    """Kerry (2026-08-27): the SA CHAMPIONSHIP's GG round was coded
+    s18.10 in the portal, colliding with the STORE's 's18.10 FALL
+    KICKOFF | Landa Park' (event 3298, plays 8/29) — the 8/1 Quarry
+    scorecards (gg_event_ids 4779119/4779120), the GG-recorded game
+    winners, and the MVP marker all attached by code to the unplayed
+    event, whose GAMES tab then showed championship winners while
+    'TGF SAN ANTONIO CHAMPIONSHIP' (event 3289) sat with zero rounds.
+    Move it all home and restamp the true round date. Idempotent: the
+    gg_event_id guard and the pre-fall imported_at cutoff match only
+    championship-vintage rows, so real Landa Park data imported on/after
+    game day is never touched."""
+    kickoff = conn.execute(
+        "SELECT id FROM events WHERE id = 3298 "
+        "AND item_name LIKE 's18.10 FALL KICKOFF%'").fetchone()
+    champ = conn.execute(
+        "SELECT id FROM events WHERE id = 3289 "
+        "AND item_name = 'TGF SAN ANTONIO CHAMPIONSHIP'").fetchone()
+    if not kickoff or not champ:
+        return
+    moved = {}
+    try:
+        cur = conn.execute(
+            "UPDATE scoring_rounds SET event_id = 3289, round_date = '2026-08-01' "
+            "WHERE event_id = 3298 AND gg_event_id IN ('4779119', '4779120')")
+        if cur.rowcount:
+            moved["scoring_rounds"] = cur.rowcount
+    except sqlite3.Error as e:
+        logger.warning("FALL KICKOFF mislink repair: scoring_rounds not "
+                       "moved: %s", e)
+    for tbl, time_col in (("gg_game_results", "imported_at"),
+                          ("event_mvps", "imported_at"),
+                          ("gg_game_flights", "imported_at"),
+                          ("gg_game_recheck", "first_seen")):
+        try:
+            cur = conn.execute(
+                f"UPDATE {tbl} SET event_id = 3289 WHERE event_id = 3298 "
+                f"AND {time_col} < '2026-08-28'")
+            if cur.rowcount:
+                moved[tbl] = cur.rowcount
+        except sqlite3.Error as e:
+            logger.warning("FALL KICKOFF mislink repair: %s not moved: %s",
+                           tbl, e)
+    if moved:
+        # The City MVP flags travel on the moved rounds; the computed
+        # marker follows them. Gated on `moved` so a future genuine
+        # 3298 computation is never clobbered by a later boot.
+        try:
+            conn.execute("DELETE FROM mvp_computed_events WHERE event_id = 3298")
+            conn.execute("INSERT OR IGNORE INTO mvp_computed_events (event_id) "
+                         "VALUES (3289)")
+        except sqlite3.Error as e:
+            logger.warning("FALL KICKOFF mislink repair: mvp marker not "
+                           "moved: %s", e)
+        conn.commit()
+        logger.info("FALL KICKOFF mislink repair: 3298 -> 3289, moved %s",
+                    moved)
+
+
 # Pace-of-play ratings, Kerry-ratified 2026-07-14 (scale: 1 slowest → 3
 # fastest). Derived from SA shotgun/sequential staging history, then
 # adjusted by Kerry: Parch/Miller/Dealy stay unrated (= default 2),
@@ -3791,6 +3850,14 @@ def init_db(db_path: str | Path | None = None) -> None:
             _repair_crystal_falls_twin_event(conn)
         except Exception as e:
             logger.warning("Crystal Falls twin-event merge failed: %s", e)
+
+        # Always-run repair: move the SA CHAMPIONSHIP scorecards/winners
+        # that the s18.10 GG-round code collision attached to the unplayed
+        # FALL KICKOFF event (Kerry 2026-08-27) back to event 3289
+        try:
+            _repair_fall_kickoff_champ_mislink(conn)
+        except Exception as e:
+            logger.warning("FALL KICKOFF mislink repair failed: %s", e)
 
         # Always-run heal: align items.holes to the event's hole count on
         # single-format events (parser sometimes reads the '.18' sequence in
@@ -11886,10 +11953,14 @@ def import_gg_event_mvps(widget_url: str, db_path: str | Path = DB_PATH,
             "SELECT gg_round_id FROM mvp_import_rounds WHERE host = ?",
             (host,)).fetchall()}
         code_map = {}
-        for r in conn.execute("SELECT id, item_name FROM events").fetchall():
+        for r in conn.execute(
+                "SELECT id, item_name, event_date FROM events").fetchall():
             m = _GG_EVENT_CODE_COMPOUND_RE.match((r["item_name"] or "").strip())
             if m:
-                code_map.setdefault(m.group(1).lower(), (r["id"], r["item_name"]))
+                code_map.setdefault(m.group(1).lower(),
+                                    (r["id"], r["item_name"], r["event_date"]))
+        from .timezone_utils import today_central
+        _today = today_central()
 
         pending = [(rid, lbl) for rid, lbl in options if rid not in done]
         for rid, _lbl in pending:
@@ -11906,6 +11977,12 @@ def import_gg_event_mvps(widget_url: str, db_path: str | Path = DB_PATH,
             if m and m.group(1).lower() in code_map:
                 ev_code = m.group(1).lower()
                 ev_id = code_map[ev_code][0]
+                # Future-event guard (2026-08-27 s18.10 collision — see
+                # import_gg_game_results): never attach results by code
+                # to an event that hasn't been played yet.
+                _ev_date = str(code_map[ev_code][2] or "")[:10]
+                if _ev_date and _ev_date > str(_today):
+                    ev_id, ev_code = None, None
             elif "kickoff" in names_blob.lower() and "austin" in host:
                 ev_code = "a18.2"
                 ev_id = code_map.get("a18.2", (None,))[0]
@@ -12938,6 +13015,17 @@ def import_gg_game_results(widget_url: str, db_path: str | Path = DB_PATH,
             if m and m.group(1).lower() in code_map:
                 ev_code = m.group(1).lower()
                 ev_id = code_map[ev_code][0]
+                # GG's own round numbering can collide with a STORE code
+                # (2026-08-27: the championship's GG round said s18.10 and
+                # attached the 8/1 Quarry winners to the unplayed 8/29 FALL
+                # KICKOFF). Results can never belong to an event that
+                # hasn't been played — refuse a code attach to the future.
+                _ev_date = str(code_map[ev_code][2] or "")[:10]
+                if _ev_date and _ev_date > str(_today):
+                    result["notes"].append(
+                        f"round {rid}: code {ev_code} maps to future event "
+                        f"{code_map[ev_code][1]} ({_ev_date}) — not attached")
+                    ev_id, ev_code = None, None
             elif "kickoff" in names_blob.lower() and "austin" in host:
                 ev_code = "a18.2"
                 ev_id = code_map.get("a18.2", (None,))[0]
@@ -13232,10 +13320,14 @@ def import_gg_game_flights(widget_url: str, db_path: str | Path = DB_PATH,
             (host,)).fetchall()}
         done -= {rid for rid, _ in options[:rewalk_recent]}
         code_map = {}
-        for r in conn.execute("SELECT id, item_name FROM events").fetchall():
+        for r in conn.execute(
+                "SELECT id, item_name, event_date FROM events").fetchall():
             m = _GG_EVENT_CODE_COMPOUND_RE.match((r["item_name"] or "").strip())
             if m:
-                code_map.setdefault(m.group(1).lower(), (r["id"], r["item_name"]))
+                code_map.setdefault(m.group(1).lower(),
+                                    (r["id"], r["item_name"], r["event_date"]))
+        from .timezone_utils import today_central
+        _today = today_central()
 
         pending = [(rid, lbl) for rid, lbl in options if rid not in done]
         out_of_time = False
@@ -13251,6 +13343,12 @@ def import_gg_game_flights(widget_url: str, db_path: str | Path = DB_PATH,
             if m and m.group(1).lower() in code_map:
                 ev_code = m.group(1).lower()
                 ev_id = code_map[ev_code][0]
+                # Future-event guard (2026-08-27 s18.10 collision — see
+                # import_gg_game_results): a code that maps to an event
+                # not yet played is a GG-round-numbering collision.
+                _ev_date = str(code_map[ev_code][2] or "")[:10]
+                if _ev_date and _ev_date > str(_today):
+                    ev_id, ev_code = None, None
             if ev_id is None:
                 # No [sa]N.N code in the round's board names (championship
                 # events carry full names, not codes) — resolve through the
@@ -17517,6 +17615,22 @@ def import_gg_scorecards(tournament_url: str, event_code: str | None = None,
                        WHERE item_name LIKE ? ORDER BY id LIMIT 1""",
                     (event_code.strip() + " %",)).fetchone()
             if ev:
+                # Future-event guard (2026-08-27): the SA CHAMPIONSHIP's
+                # GG round was coded s18.10, colliding with the store's
+                # 's18.10 FALL KICKOFF | Landa Park' — 64 Quarry cards
+                # imported onto the unplayed 8/29 event. Scorecards can
+                # never belong to an event that hasn't been played; an
+                # explicit round_date is the deliberate override.
+                from .timezone_utils import today_central_str
+                if (not round_date and ev["event_date"]
+                        and str(ev["event_date"])[:10] > today_central_str()):
+                    return {"error": (
+                        f"event_code {event_code!r} resolves to a FUTURE "
+                        f"event dated {ev['event_date']} — refusing to "
+                        "import scorecards into an unplayed event (GG round "
+                        "codes can collide with store codes). Pass the "
+                        "correct event_code, or an explicit round_date to "
+                        "override.")}
                 # An EXPLICIT round_date outranks the event's own date —
                 # multi-DAY events (2026 TGF CHAMPIONSHIP, 8/15+8/16)
                 # carry one event_date, so a Round 2 import must be able

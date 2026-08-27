@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.255.36";
+window.TGF_VERSION = "2.256.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.256.0",
+    date: "2026-08-27",
+    changes: [
+      "FALL KICKOFF audit (Kerry 2026-08-27: 'Why are games showing winners when event hasn't been played?'): the unplayed s18.10 FALL KICKOFF | Landa Park (8/29, event 3298) was showing the SA CHAMPIONSHIP's winners — 64 Quarry scorecards (gg events 4779119/4779120, imported 8/1 evening), the GG-recorded CTP/TEAM Net winners, and the City MVP marker had all attached to it, while TGF SAN ANTONIO CHAMPIONSHIP (event 3289) sat with ZERO rounds. Root cause: the championship's GG round was coded s18.10 in the portal — SA's 10th 18-holer — colliding with the STORE's s18.10 FALL KICKOFF code that the round→event code maps and the scorecard import's code-prefix resolution both match on. Boot repair _repair_fall_kickoff_champ_mislink moves the rounds home (restamping the true 2026-08-01 round date), moves the pre-fall gg_game_results/event_mvps/gg_game_flights/gg_game_recheck rows, and carries the City MVP computed marker to 3289; guards (championship gg_event_ids + a pre-8/28 imported_at cutoff) mean real Landa Park data imported on game day is never touched. Pairings were checked and are already correct (the real 27-man field, 7 groups).",
+      "Future-event guard on every GG code attach: import_gg_scorecards refuses to import scorecards into an event whose event_date is still in the future (explicit round_date is the deliberate override), and the round→event code maps in import_gg_game_results / import_gg_event_mvps / import_gg_game_flights skip a code that resolves to an unplayed event (game-results pass notes the refusal). Results can never belong to an event that hasn't been played — this class of GG-round-number vs store-SKU collision can't silently recur.",
+    ],
+  },
   {
     version: "2.255.36",
     date: "2026-08-26",

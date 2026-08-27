@@ -101,6 +101,22 @@ linkage by code prefix → events.item_name (event_id + round_date).
 Idempotent on (gg_aggregate_id, player_name). `scoring_rounds.customer_id`
 is in `_CUSTOMER_FK_COLUMNS`.
 
+**Future-event guard (v2.256.0).** GG's own round numbering can collide
+with a STORE code: the 2026 SA CHAMPIONSHIP's GG round was coded
+`s18.10` (SA's 10th 18-holer), which matched the store's `s18.10 FALL
+KICKOFF | Landa Park` — 64 Quarry cards, the GG game winners, and the
+MVP marker all attached to the unplayed 8/29 event while the
+championship sat with zero rounds (boot repair
+`_repair_fall_kickoff_champ_mislink` moved them home). Since results
+can never belong to an event that hasn't been played,
+`import_gg_scorecards` now refuses an `event_code` that resolves to an
+event with a FUTURE `event_date` (an explicit `round_date` is the
+deliberate override, e.g. a multi-day championship's R2), and the
+round→event code maps in `import_gg_game_results`,
+`import_gg_event_mvps`, and `import_gg_game_flights` skip a code that
+resolves to an unplayed event (the game-results pass records the
+refusal in its `notes`).
+
 Archive imports (v2.74.0, GG-history Phase B): two extra params —
 `round_date` (explicit date when no Tracker events row exists; without
 it the cross-tournament dedupe can't scope and ALL Net + ALL Gross
