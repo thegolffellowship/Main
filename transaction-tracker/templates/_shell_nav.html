@@ -52,6 +52,9 @@
         <a href="/handicaps" class="{{ 'active' if SHELL_ACTIVE == 'handicaps' else '' }}">Handicaps</a>
         <a href="/transactions" class="{{ 'active' if SHELL_ACTIVE == 'transactions' else '' }}">Transactions</a>
         <a href="/customers" class="{{ 'active' if SHELL_ACTIVE == 'customers' else '' }}">Customers</a>
+        {# Leads queue (v2.257.2, mailbox #352): manager+ (no admin-nav
+           class → visible to managers, hidden from view-only). #}
+        <a href="/admin/leads" class="{{ 'active' if SHELL_ACTIVE == 'leads' else '' }}">Leads</a>
         <a href="/tgf" class="admin-nav {{ 'active' if SHELL_ACTIVE == 'tgf' else '' }}" style="display:none;">Payouts</a>
         {# Two Man Tour = sibling brand, admin-only: gold pill, deliberately
            NOT in TGF orange so it reads as a doorway out of the Tracker. #}
@@ -78,6 +81,7 @@
         <a href="/handicaps" class="{{ 'active' if SHELL_ACTIVE == 'handicaps' else '' }}">Handicaps</a>
         <a href="/transactions" class="{{ 'active' if SHELL_ACTIVE == 'transactions' else '' }}">Transactions</a>
         <a href="/customers" class="{{ 'active' if SHELL_ACTIVE == 'customers' else '' }}">Customers</a>
+        <a href="/admin/leads" class="{{ 'active' if SHELL_ACTIVE == 'leads' else '' }}">Leads</a>
         <a href="/tgf" class="admin-nav {{ 'active' if SHELL_ACTIVE == 'tgf' else '' }}" style="display:none;">Payouts <span class="shell-admin-pill shell-pill-inline">Admin</span></a>
         <a href="/accounting" class="admin-nav {{ 'active' if SHELL_ACTIVE == 'admin' else '' }}" style="display:none;">Admin</a>
         <a href="/twomantour" class="admin-nav shell-tmt-drawer" style="display:none;">Two Man Tour</a>

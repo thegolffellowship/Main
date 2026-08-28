@@ -460,7 +460,10 @@ def get_leads(status: str = "", limit: int = 200,
         try:
             from datetime import date
             y, m, d = (int(x) for x in stamp.split("-"))
-            r["days_since_arrival"] = (now.date() - date(y, m, d)).days
+            # arrived_at is UTC while `now` is Central — a lead arriving
+            # after 7 PM CT carries tomorrow's UTC date, which made a
+            # brand-new lead read "-1d". Clamp: never younger than today.
+            r["days_since_arrival"] = max(0, (now.date() - date(y, m, d)).days)
         except Exception:
             pass
     return rows

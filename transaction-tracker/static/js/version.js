@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.257.1";
+window.TGF_VERSION = "2.257.2";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.257.2",
+    date: "2026-08-27",
+    changes: [
+      "LEADS nav link (Kerry: 'is there a button?'): the New Leads queue is now in the shell nav and mobile drawer between Customers and Payouts, visible to manager+ (no admin-nav class → chapter managers see it, view-only doesn't). The leads page highlights it as active. Also: fixed the age column reading '-1d' on brand-new leads (arrived_at is UTC vs the Central clock — clamped to 0), and set the lead_notify_recipients dial live: Austin leads now also ping Robert Straiton; Kerry stays on every ping via the default. First live poll ran tonight: Will Wallace queued + notified, full form answers captured (plays both days, wants all of it, 'yes for San Antonio').",
+    ],
+  },
   {
     version: "2.257.1",
     date: "2026-08-27",
