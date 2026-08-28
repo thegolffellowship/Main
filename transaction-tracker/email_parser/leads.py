@@ -688,8 +688,21 @@ def get_leads(status: str = "", limit: int = 200,
             params = (status,)
         q += " ORDER BY COALESCE(arrived_at, first_seen_at) DESC LIMIT ?"
         rows = [dict(r) for r in conn.execute(q, params + (limit,)).fetchall()]
+    # "Existing customer" badge = the lead matches a customer with REAL
+    # purchase history — NOT the prospect row the lead pass itself
+    # created (Kerry 2026-08-28: "They are not members at all").
+    cids = [r["customer_id"] for r in rows if r.get("customer_id")]
+    with_history: set = set()
+    if cids:
+        ph = ",".join("?" * len(cids))
+        with db._connect(db_path) as conn:
+            with_history = {x[0] for x in conn.execute(
+                f"SELECT DISTINCT customer_id FROM items "
+                f"WHERE customer_id IN ({ph}) "
+                f"AND transaction_status = 'active'", cids)}
     now = now_central()
     for r in rows:
+        r["has_history"] = r.get("customer_id") in with_history
         try:
             r["payload"] = json.loads(r["payload"]) if r.get("payload") else None
         except Exception:

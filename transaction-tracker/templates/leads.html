@@ -213,7 +213,7 @@
                 (l.touched_by ? " <span style='font-size:10.5px;color:#6B7280'>by " + esc(l.touched_by) + "</span>" : "") +
                 (l.notes ? "<br><span style='font-size:10.5px;color:#6B7280;white-space:normal'>" + esc(l.notes) + "</span>" : "");
             rows.push(`<tr>
-                <td><b>${esc(name)}</b>${l.customer_id ? ' <span class="ld-existing">member</span>' : ""}
+                <td><b>${esc(name)}</b>${l.has_history ? ' <span class="ld-existing">existing customer</span>' : ""}
                     ${answersRow ? ` <span class="ld-toggle" onclick="toggleAns(${l.id})">▾</span>` : ""}</td>
                 <td>${emailLink}</td>
                 <td>${phoneLink}</td>
@@ -228,7 +228,7 @@
             </tr>` + answersRow);
             // Mobile: stacked card — big tap targets for call/email
             cards.push(`<div class="ld-mcard">
-                <div class="ld-mhead"><b>${esc(name)}</b>${l.customer_id ? ' <span class="ld-existing">member</span>' : ""}
+                <div class="ld-mhead"><b>${esc(name)}</b>${l.has_history ? ' <span class="ld-existing">existing customer</span>' : ""}
                     <span class="ld-mmeta ${late ? "ld-late" : ""}">${esc(l.chapter) || "unrouted"} · ${age}</span> ${statusHtml}</div>
                 ${l.phone ? `<a class="ld-mtap" href="tel:${esc(l.phone)}">📞 ${esc(l.phone)}</a>` : ""}
                 ${l.email ? `<a class="ld-mtap" href="mailto:${esc(l.email)}">✉️ ${esc(l.email)}</a>` : ""}

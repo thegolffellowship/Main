@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.257.12";
+window.TGF_VERSION = "2.257.13";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.257.13",
+    date: "2026-08-28",
+    changes: [
+      "Leads queue 'member' badge fixed (Kerry: 'They are not members at all'): the badge fired on every lead once the customer-id pass started creating prospect records for all of them. It now reads 'existing customer' and shows ONLY when the lead's customer has real purchase history (active items) — i.e., a past player filled out the lead form — never for the prospect row the lead itself created.",
+    ],
+  },
   {
     version: "2.257.12",
     date: "2026-08-28",
