@@ -335,10 +335,22 @@ def _link_or_create_customer(conn: sqlite3.Connection, lead: dict) -> int | None
     if not (first and last):
         return None
     try:
-        return db._resolve_or_create_customer(
+        cid = db._resolve_or_create_customer(
             conn, f"{first} {last}", lead.get("email"),
             phone=lead.get("phone"), chapter=lead.get("chapter"),
             first_name=first, last_name=last)
+        if cid:
+            # The resolver defaults acquisition_source to 'godaddy' —
+            # a lead-created prospect came from the Facebook campaign.
+            # Guarded to purchase-less rows so a matched real customer's
+            # source is never rewritten (idempotent backfill included).
+            conn.execute(
+                "UPDATE customers SET acquisition_source = 'facebook_lead' "
+                "WHERE customer_id = ? AND acquisition_source = 'godaddy' "
+                "AND NOT EXISTS (SELECT 1 FROM items i "
+                "                WHERE i.customer_id = customers.customer_id)",
+                (cid,))
+        return cid
     except Exception:
         logger.warning("Lead customer link failed for %s %s", first, last,
                        exc_info=True)
@@ -655,6 +667,16 @@ def check_new_leads(db_path: str | Path | None = None) -> dict:
             if cid:
                 conn.execute("UPDATE leads SET customer_id = ? WHERE id = ?",
                              (cid, r["id"]))
+        # Backfill: prospects created before the acquisition_source fix
+        # carry the resolver's 'godaddy' default — purchase-less
+        # lead-linked customers are Facebook acquisitions.
+        conn.execute(
+            "UPDATE customers SET acquisition_source = 'facebook_lead' "
+            "WHERE acquisition_source = 'godaddy' "
+            "AND customer_id IN (SELECT customer_id FROM leads "
+            "                    WHERE customer_id IS NOT NULL) "
+            "AND NOT EXISTS (SELECT 1 FROM items i "
+            "                WHERE i.customer_id = customers.customer_id)")
         for lid in new_ids:
             lead = dict(conn.execute(
                 "SELECT * FROM leads WHERE id = ?", (lid,)).fetchone())
