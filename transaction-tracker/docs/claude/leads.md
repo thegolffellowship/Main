@@ -79,12 +79,41 @@ identity. Creation requires a first AND last name (no shell profiles
 from half-named FB leads; fix the name via
 `scoring-lead-edit:<id>|last_name|<value>` and the next poll links it).
 
-## Lifecycle
+## Lifecycle (with undo — v2.257.12)
 
-`new` → (button/bridge) → `touched` (stamps `touched_at`, `touched_by`)
-→ `converted`; or `dismissed`. `notified_at` records the ping.
-`days_since_arrival` is computed server-side off `arrived_at`
-(HubSpot `createdate`); the queue paints `new` rows ≥2 days old red.
+`new` → `touched` (stamps `touched_at`/`touched_by`) → `converted`; or
+`dismissed`. Undo paths: converted → touched (stamp kept), touched →
+new (stamps cleared), dismissed → new (Restore). `mark_lead('edit')`
+corrects `touched_by`/`notes` without a status change. `notified_at`
+records the ping. `days_since_arrival` computes off `arrived_at`
+(HubSpot `createdate`, clamped ≥0); the queue paints `new` rows ≥2 days
+old red.
+
+## Queue display vocabulary (Kerry-ruled 2026-08-28)
+
+Columns: Lead / Email / Phone (tappable mailto:/tel:) / Chapter /
+**Availability** (Both · Saturdays · Tuesdays · None) / **Importance**
+(Golf · Competition · All of it!) / **Invitations** (Both · San Antonio
+· Austin) / Ad Set / Received (Central) / Age / Status. All headers
+click-sort (default Received, newest first). Mobile (≤768px) renders
+stacked cards with tap-to-call/email; its answers fold hides
+Campaign/Form rows. `chapter_interest` and `ad_variation` are hidden
+everywhere — form-baked constants (`austin_sa` / `city_newcomer` on
+every submission). The "existing customer" badge shows ONLY when the
+linked customer has active purchase history — never for the prospect
+row the lead itself created. Lead-created prospects carry
+`acquisition_source = 'facebook_lead'`.
+
+## MCP access for CA (platform-claude)
+
+- **`get_lead_center`** — one read: queue rows (decoded answers + ad
+  attribution), per-ad-set stats, status counts, and the live dials +
+  poll config. THE tool for "nuts and bolts".
+- `get_tracker_docs` doc='leads.md' — this design of record.
+- Ops via `probe_golf_genius` extract=: `scoring-leads[:status]`,
+  `scoring-lead-mark:<id>|<status>[|<by>][|<note>]`,
+  `scoring-lead-edit:<id>|<field>|<value>`, `scoring-leads-poll`.
+- Dials via `scoring-setting-get/-set` (see Config table above).
 
 ## Deliberate choices
 

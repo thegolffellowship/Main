@@ -3667,6 +3667,75 @@ def _scoring_dispatch(url: str, extract: str):
 
 
 @mcp.tool()
+def get_lead_center(status: str = "", limit: int = 50) -> str:
+    """The Lead Center's nuts and bolts in one read (mailbox #352-#355
+    build): queue rows with decoded form answers + ad attribution,
+    per-ad-set stats, and the live routing/notify/filter dials.
+
+    Leads are Facebook/Meta campaign submissions polled from HubSpot on
+    a timer; the 48-hour personal touch is tracked via status
+    (new/touched/converted/dismissed) with touched_by/touched_at. Every
+    lead carries a real customer_id (email-matched or created through
+    the save_items resolver). Design of record: get_tracker_docs
+    doc='leads.md'. Ops (via probe_golf_genius extract=): scoring-leads,
+    scoring-lead-mark, scoring-lead-edit, scoring-leads-poll.
+
+    Args:
+        status: Optional filter — new | touched | converted | dismissed
+        limit: Max rows (default 50)
+    """
+    from email_parser.leads import (get_leads, DEFAULT_SOURCE_FILTER,
+                                    DEFAULT_CITY_CHAPTERS)
+    from email_parser import database as db
+
+    leads = get_leads(status=status, limit=limit)
+    by_ad_set: dict = {}
+    counts: dict = {}
+    for l in leads:
+        counts[l["status"]] = counts.get(l["status"], 0) + 1
+        p = l.get("payload") or {}
+        key = p.get("ad_set_name") or p.get("ad_set_id") or "(no ad attribution)"
+        b = by_ad_set.setdefault(key, {"total": 0, "touched": 0, "converted": 0})
+        b["total"] += 1
+        if l["status"] in ("touched", "converted"):
+            b["touched"] += 1
+        if l["status"] == "converted":
+            b["converted"] += 1
+
+    def _dial(key, default=None):
+        try:
+            raw = db.get_app_setting(key)
+            return json.loads(raw) if raw else default
+        except Exception:
+            return default
+
+    return json.dumps({
+        "config": {
+            "poll_interval_minutes": int(os.getenv(
+                "LEAD_CHECK_INTERVAL_MINUTES", "45")),
+            "hubspot_token_set": bool(os.getenv("HUBSPOT_TOKEN")
+                                      or os.getenv("HUBSPOT_PRIVATE_APP_TOKEN")),
+            "watermark": db.get_app_setting("leads_hubspot_watermark"),
+            "routing_order": ["ad set clicked (lead_ad_set_chapters)",
+                              "Invitations/stay-in-the-loop answer",
+                              "city map (lead_city_chapters)"],
+            "dials": {
+                "lead_ad_set_names": _dial("lead_ad_set_names", {}),
+                "lead_ad_set_chapters": _dial("lead_ad_set_chapters", {}),
+                "lead_notify_recipients": _dial("lead_notify_recipients", {}),
+                "lead_source_filter": _dial("lead_source_filter",
+                                            DEFAULT_SOURCE_FILTER),
+                "lead_city_chapters": _dial("lead_city_chapters",
+                                            DEFAULT_CITY_CHAPTERS),
+            },
+        },
+        "status_counts": counts,
+        "by_ad_set": by_ad_set,
+        "leads": leads,
+    }, indent=2, default=str)
+
+
+@mcp.tool()
 def probe_golf_genius(url: str, extract: str = "summary", max_chars: int = 60000,
                       xhr: bool = False) -> str:
     """Fetch a PUBLIC Golf Genius portal page server-side and return its parsed

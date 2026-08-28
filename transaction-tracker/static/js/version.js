@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.257.14";
+window.TGF_VERSION = "2.257.15";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.257.15",
+    date: "2026-08-28",
+    changes: [
+      "New MCP tool get_lead_center (Kerry: 'an MCP tool for CA to read the nuts and bolts of the Lead Center') — one read returns the queue rows with decoded answers + ad attribution, per-ad-set stats, status counts, and the live config: poll interval, token-set flag, watermark, routing order, and all five lead dials. docs/claude/leads.md refreshed to the full 2.257.x state (undo lifecycle, display vocabulary, badge rule, acquisition_source) with an 'MCP access for CA' section.",
+    ],
+  },
   {
     version: "2.257.14",
     date: "2026-08-28",
