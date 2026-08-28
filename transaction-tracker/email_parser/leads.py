@@ -134,13 +134,11 @@ def route_chapter(city: str | None, city_map: dict | None = None) -> str | None:
 
 
 def route_chapter_from_payload(payload: dict | None) -> str | None:
-    """Chapter from the lead's OWN form answers (Kerry 2026-08-27) —
-    Facebook leads rarely carry a city, but the form asks. Priority:
-    (1) a chapter question ('chapter_interest': austin / san_antonio;
-    'austin_sa' means both, so it alone doesn't decide), then (2) the
-    stay-in-the-loop answer ('yes_for_san_antonio'). Substring matching
-    on values, with the SA check FIRST because 'san_antonio' contains
-    no 'austin' but 'austin_sa' contains both tokens."""
+    """Chapter from the lead's OWN form answers. Kerry-ruled 2026-08-27:
+    the STAY-IN-THE-LOOP answer ('yes_for_san_antonio') is the chapter
+    signal — chapter_interest is form boilerplate that always says
+    'austin_sa' and never decides. SA check FIRST because 'san_antonio'
+    contains no 'austin' but combined values contain both tokens."""
     if not isinstance(payload, dict):
         return None
 
@@ -157,9 +155,11 @@ def route_chapter_from_payload(payload: dict | None) -> str | None:
             return "Austin"
         return None
 
-    for keys in (("chapter_interest", "chapter"),
-                 ("stay_in_the_loop", "loop")):
+    for keys in (("stay_in_the_loop", "loop"),
+                 ("chapter",)):
         for k, v in payload.items():
+            if k == "chapter_interest":
+                continue         # static boilerplate — never decides
             if any(t in k.lower() for t in keys) and isinstance(v, str):
                 got = _chap(v)
                 if got:
@@ -254,7 +254,9 @@ _ANSWER_HIDE_PREFIXES = ("num_", "stripe_", "ad_campaign_id", "ad_set_id",
 _ANSWER_HIDE = {"lifecyclestage", "first_conversion_date",
                 "recent_conversion_date", "first_conversion_event_name",
                 "hs_object_source_label", "hs_analytics_first_url",
-                "hs_analytics_source", "hs_analytics_source_data_1"}
+                "hs_analytics_source", "hs_analytics_source_data_1",
+                # Kerry 2026-08-27: static boilerplate, always austin_sa
+                "chapter_interest"}
 _ANSWER_ATTR = {"ad_set_name": "Ad set", "ad_variation": "Ad variation",
                 "hs_analytics_source_data_2": "Campaign",
                 "recent_conversion_event_name": "Form"}
@@ -474,7 +476,6 @@ def _lead_email_html(lead: dict) -> str:
       <table style="border-collapse:collapse">
         {row("Email", lead.get("email"))}
         {row("Phone", lead.get("phone"))}
-        {row("City", lead.get("city"))}
         {row("Chapter", lead.get("chapter") or "unrouted")}
         {row("Source", lead.get("source_label") or lead.get("source"))}
         {row("Arrived", lead.get("arrived_at"))}

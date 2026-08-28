@@ -31,7 +31,6 @@
         .ld-btn.primary { background: var(--primary); border-color: var(--primary); color: #fff; }
         .ld-note { font-size: 12px; color: var(--text-muted); margin-top: 1rem; }
         .ld-existing { font-size: 10.5px; color: #1E40AF; font-weight: 700; }
-        .ld-chip { display: inline-block; margin: 2px 4px 0 0; padding: 1px 8px; border-radius: 99px; background: #FFF3EA; border: 1px solid #F3D5BD; color: #9A4E1C; font-size: 10.5px; font-weight: 600; white-space: normal; }
         .ld-answers td { background: #FAFAF8; font-size: 12px; white-space: normal; }
         .ld-answers .k { color: #6B7280; text-transform: capitalize; padding-right: 10px; }
         .ld-toggle { font-size: 10.5px; color: #2563eb; cursor: pointer; }
@@ -60,15 +59,18 @@
         <p id="ld-adset-line" style="font-size:12.5px;color:#4B5563;margin:-0.5rem 0 1rem;"></p>
         <div class="ld-scroll"><table class="ld-table">
             <thead><tr>
-                <th>Lead</th><th>Contact</th><th>City</th><th>Chapter</th>
-                <th>Source</th><th>Age</th><th>Status</th><th></th>
+                <th>Lead</th><th>Contact</th><th>Chapter</th>
+                <th>Plays</th><th>Wants</th><th>Stay in Loop</th>
+                <th>Ad Set</th><th>Age</th><th>Status</th><th></th>
             </tr></thead>
-            <tbody id="ld-body"><tr><td colspan="8">Loading…</td></tr></tbody>
+            <tbody id="ld-body"><tr><td colspan="10">Loading…</td></tr></tbody>
         </table></div>
-        <p class="ld-note">Leads arrive from the HubSpot poll (every 45 min).
+        <p class="ld-note">Leads arrive from the HubSpot poll (runs on a
+        timer — LEAD_CHECK_INTERVAL_MINUTES on Railway, currently 15).
         The 48-hour personal touch is the conversion gate — rows past 48
-        hours untouched go red. Touch owners: Kerry (San Antonio),
-        Robert Straiton (Austin).</p>
+        hours untouched go red. Chapter routes from the lead's
+        stay-in-the-loop answer, then the ad set they clicked. Touch
+        owners: Kerry (San Antonio), Robert Straiton (Austin).</p>
     </div>
     </main>
     <script src="/static/js/auth.js"></script>
@@ -80,7 +82,7 @@
     async function loadLeads() {
         const res = await fetch("/api/leads");
         if (!res.ok) { document.getElementById("ld-body").innerHTML =
-            "<tr><td colspan=8>Failed to load (need manager login).</td></tr>"; return; }
+            "<tr><td colspan=10>Failed to load (need manager login).</td></tr>"; return; }
         const data = await res.json();
         const leads = data.leads || [];
         const byAdSet = data.by_ad_set || {};
@@ -120,7 +122,8 @@
         const HIDE = new Set(["lifecyclestage", "first_conversion_date",
             "recent_conversion_date", "first_conversion_event_name",
             "hs_object_source_label", "hs_analytics_first_url",
-            "hs_analytics_source", "hs_analytics_source_data_1"]);
+            "hs_analytics_source", "hs_analytics_source_data_1",
+            "chapter_interest"]);  // boilerplate — always austin_sa (Kerry)
         function displayAnswers(payload) {
             const form = [], attr = [];
             for (const k of Object.keys(payload).sort()) {
@@ -132,24 +135,18 @@
             }
             return form.concat(attr);
         }
-        // Form answers (payload keys change per campaign): surface the
-        // headline three as chips, everything else behind "answers".
-        const CHIP_KEYS = [
-            [k => k.includes("play_tuesdays_or_saturdays"), "Plays"],
-            [k => k.includes("most_important"), "Wants"],
-            [k => k === "chapter_interest" || k.endsWith("chapter"), "Chapter"],
-            [k => k === "ad_set_name", "Ad Set"],
-        ];
+        // Key form answers render as plain COLUMNS (Kerry 2026-08-27:
+        // "just needs to be a table" — Events/Transactions style).
+        // Keys change per campaign, so columns match by pattern.
+        const colVal = (payload, match) => {
+            const key = Object.keys(payload).find(match);
+            return key ? esc(pretty(payload[key])) : "–";
+        };
         const rows = leads.map(l => {
             const payload = l.payload || {};
-            const chips = [];
-            for (const [match, label] of CHIP_KEYS) {
-                const key = Object.keys(payload).find(match);
-                if (key) chips.push(`<span class="ld-chip">${label}: ${esc(pretty(payload[key]))}</span>`);
-            }
             const extras = displayAnswers(payload);
             const answersRow = extras.length
-                ? `<tr class="ld-answers" id="ld-ans-${l.id}" style="display:none"><td colspan="8"><table>` +
+                ? `<tr class="ld-answers" id="ld-ans-${l.id}" style="display:none"><td colspan="10"><table>` +
                   extras.map(([label, v]) => `<tr><td class="k">${esc(label)}</td><td>${esc(v)}</td></tr>`).join("") +
                   `</table></td></tr>` : "";
             counts[l.status] = (counts[l.status] || 0) + 1;
@@ -165,21 +162,22 @@
                 : l.status === "touched"
                 ? `<button class="ld-btn" onclick="mark(${l.id},'converted')">Converted</button>` : "";
             return `<tr>
-                <td><b>${esc(name)}</b>${l.customer_id ? '<br><span class="ld-existing">existing customer</span>' : ""}
-                    ${chips.length ? "<br>" + chips.join("") : ""}
-                    ${answersRow ? `<br><span class="ld-toggle" onclick="toggleAns(${l.id})">answers ▾</span>` : ""}</td>
+                <td><b>${esc(name)}</b>${l.customer_id ? ' <span class="ld-existing">member</span>' : ""}
+                    ${answersRow ? ` <span class="ld-toggle" onclick="toggleAns(${l.id})">▾</span>` : ""}</td>
                 <td>${esc(l.email) || "–"}<br>${esc(l.phone) || ""}</td>
-                <td>${esc(l.city) || "–"}</td>
                 <td>${esc(l.chapter) || "unrouted"}</td>
-                <td>${esc(l.source_label || l.source)}</td>
+                <td>${colVal(payload, k => k.includes("play_tuesdays_or_saturdays"))}</td>
+                <td>${colVal(payload, k => k.includes("most_important"))}</td>
+                <td>${colVal(payload, k => k.includes("stay_in_the_loop") || k.includes("loop"))}</td>
+                <td>${colVal(payload, k => k === "ad_set_name")}</td>
                 <td class="${late ? "ld-late" : ""}">${age}</td>
                 <td><span class="ld-pill ld-${esc(l.status)}">${esc(l.status)}</span>
-                    ${l.touched_by ? "<br><span style='font-size:10.5px;color:#6B7280'>by " + esc(l.touched_by) + "</span>" : ""}</td>
+                    ${l.touched_by ? " <span style='font-size:10.5px;color:#6B7280'>by " + esc(l.touched_by) + "</span>" : ""}</td>
                 <td style="white-space:nowrap">${actions}</td>
             </tr>` + answersRow;
         });
         document.getElementById("ld-body").innerHTML =
-            rows.join("") || "<tr><td colspan=8>No leads yet.</td></tr>";
+            rows.join("") || "<tr><td colspan=10>No leads yet.</td></tr>";
         for (const k of ["new", "touched", "converted"])
             document.getElementById("ld-count-" + k).textContent = counts[k] || 0;
         document.getElementById("ld-count-late").textContent = counts.late || 0;

@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.257.5";
+window.TGF_VERSION = "2.257.6";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.257.6",
+    date: "2026-08-27",
+    changes: [
+      "Leads queue is a plain table (Kerry: 'just needs to be a table, not badges and table — similar to Events or Transactions'): the chips are gone; Plays / Wants / Stay in Loop / Ad Set are ordinary columns, with the ▾ toggle on the name for the full answers panel. City column removed (Kerry: not required — Facebook leads rarely carry one).",
+      "Chapter ruling (Kerry): chapter_interest is form boilerplate that always says austin_sa — it never routes and is hidden from display (still stored). The STAY-IN-THE-LOOP answer is the chapter signal, then the ad set clicked, then the city map. Notification email drops the City row to match.",
+    ],
+  },
   {
     version: "2.257.5",
     date: "2026-08-27",
