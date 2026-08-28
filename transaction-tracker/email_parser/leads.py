@@ -179,6 +179,47 @@ _PRETTY_MAP = {
 }
 
 
+def extract_ad_ids(payload: dict | None) -> dict:
+    """Meta attribution ids from the HubSpot first-URL (hsa_* params):
+    hsa_cam → ad_campaign_id, hsa_grp → ad_set_id, hsa_ad → ad_id.
+    The ad set is chapter-targeted (Kerry 2026-08-27: 'Austin - Fall
+    2026 Leads' / 'SA - Fall 2026 Leads'), so it doubles as a routing
+    signal and the per-ad-set stats dimension."""
+    if not isinstance(payload, dict):
+        return {}
+    url = payload.get("hs_analytics_first_url") or ""
+    if "hsa_" not in url:
+        return {}
+    try:
+        from urllib.parse import urlparse, parse_qs
+        qs = parse_qs(urlparse(url).query)
+        out = {}
+        for param, key in (("hsa_cam", "ad_campaign_id"),
+                           ("hsa_grp", "ad_set_id"),
+                           ("hsa_ad", "ad_id")):
+            v = (qs.get(param) or [None])[0]
+            if v:
+                out[key] = v
+        return out
+    except Exception:
+        return {}
+
+
+def enrich_payload(payload: dict | None, ad_set_names: dict | None = None,
+                   ) -> dict | None:
+    """Merge extracted ad ids + the human ad-set name (dial
+    lead_ad_set_names: {id: name}) into the payload. Idempotent."""
+    if not isinstance(payload, dict):
+        return payload
+    ids = extract_ad_ids(payload)
+    for k, v in ids.items():
+        payload.setdefault(k, v)
+    asid = payload.get("ad_set_id")
+    if asid and (ad_set_names or {}).get(str(asid)):
+        payload["ad_set_name"] = ad_set_names[str(asid)]
+    return payload
+
+
 def prettify_answer(value) -> str:
     if not isinstance(value, str):
         return str(value)
@@ -473,26 +514,40 @@ def check_new_leads(db_path: str | Path | None = None) -> dict:
         except Exception as e:
             logger.warning("HubSpot full-payload fetch failed: %s", e)
             payloads = {}
+        ad_set_names = _dial_json("lead_ad_set_names", {}, db_path=db_path)
+        ad_set_chapters = _dial_json("lead_ad_set_chapters", {},
+                                     db_path=db_path)
+
+        def _route(payload, city):
+            # Priority: the lead's OWN chapter answer, then the ad set
+            # they clicked (chapter-targeted), then the city map.
+            got = route_chapter_from_payload(payload)
+            if not got and isinstance(payload, dict):
+                got = ad_set_chapters.get(str(payload.get("ad_set_id") or ""))
+            return got or route_chapter(city, city_map)
+
         for c in passing:
-            c["payload"] = payloads.get(str(c["external_id"])) or None
-            # The form's own chapter answer beats city guessing —
-            # Facebook leads rarely carry a city at all.
-            c["chapter"] = (route_chapter_from_payload(c["payload"])
-                            or route_chapter(c.get("city"), city_map))
+            c["payload"] = enrich_payload(
+                payloads.get(str(c["external_id"])), ad_set_names) or None
+            c["chapter"] = _route(c["payload"], c.get("city"))
         new_ids = upsert_leads(conn, passing, city_map)
         result["queued"] = len(new_ids)
-        # Self-heal: unrouted rows queued before payload routing existed
-        # (or whose form answers arrived late) get another look.
+        # Self-heal: rows queued before payload routing / ad-id
+        # extraction existed (or whose dials changed) get another look.
         for r in conn.execute(
-                "SELECT id, payload FROM leads WHERE chapter IS NULL "
-                "AND payload IS NOT NULL").fetchall():
+                "SELECT id, city, chapter, payload FROM leads "
+                "WHERE payload IS NOT NULL").fetchall():
             try:
-                got = route_chapter_from_payload(json.loads(r["payload"]))
+                p = json.loads(r["payload"])
             except Exception:
-                got = None
-            if got:
-                conn.execute("UPDATE leads SET chapter = ? WHERE id = ?",
-                             (got, r["id"]))
+                continue
+            enriched = enrich_payload(dict(p), ad_set_names)
+            got = None if r["chapter"] else _route(enriched, r["city"])
+            if enriched != p or got:
+                conn.execute(
+                    "UPDATE leads SET payload = ?, "
+                    "chapter = COALESCE(chapter, ?) WHERE id = ?",
+                    (json.dumps(enriched), got, r["id"]))
         for lid in new_ids:
             lead = dict(conn.execute(
                 "SELECT * FROM leads WHERE id = ?", (lid,)).fetchone())

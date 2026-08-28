@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.257.3";
+window.TGF_VERSION = "2.257.4";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.257.4",
+    date: "2026-08-27",
+    changes: [
+      "Ad-set attribution on leads (Kerry: 'are you able to see which Ad Set it comes from?'): the hsa_cam/hsa_grp/hsa_ad params in HubSpot's first-URL are extracted onto each lead as ad_campaign_id / ad_set_id / ad_id, and the lead_ad_set_names dial maps ids to human names — seeded live with the Fall campaign's chapter-targeted sets ('Austin - Fall 2026 Leads', 'SA - Fall 2026 Leads'). The queue shows an Ad Set chip per lead plus a per-ad-set stats line (leads / touched / converted per set), and lead_ad_set_chapters makes the ad set a routing signal: the lead's own chapter answer still wins, then the ad set they clicked, then the city map. The poll's self-heal enriches already-stored payloads, so existing rows pick up their ad set retroactively.",
+    ],
+  },
   {
     version: "2.257.3",
     date: "2026-08-27",

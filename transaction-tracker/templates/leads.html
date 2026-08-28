@@ -57,6 +57,7 @@
             <div class="ld-card"><div class="lbl">Converted</div><div class="val" id="ld-count-converted">–</div></div>
             <div class="ld-card"><div class="lbl">Past 48h untouched</div><div class="val ld-late" id="ld-count-late">–</div></div>
         </div>
+        <p id="ld-adset-line" style="font-size:12.5px;color:#4B5563;margin:-0.5rem 0 1rem;"></p>
         <div class="ld-scroll"><table class="ld-table">
             <thead><tr>
                 <th>Lead</th><th>Contact</th><th>City</th><th>Chapter</th>
@@ -80,7 +81,15 @@
         const res = await fetch("/api/leads");
         if (!res.ok) { document.getElementById("ld-body").innerHTML =
             "<tr><td colspan=8>Failed to load (need manager login).</td></tr>"; return; }
-        const leads = (await res.json()).leads || [];
+        const data = await res.json();
+        const leads = data.leads || [];
+        const byAdSet = data.by_ad_set || {};
+        document.getElementById("ld-adset-line").innerHTML =
+            Object.entries(byAdSet).map(([name, s]) =>
+                `<b>${esc(name)}</b>: ${s.total} lead${s.total === 1 ? "" : "s"}` +
+                (s.touched + s.converted ? ` (${s.touched + s.converted} touched)` : "") +
+                (s.converted ? ` · ${s.converted} converted` : "")
+            ).join(" &nbsp;·&nbsp; ") || "";
         const counts = { new: 0, touched: 0, converted: 0, dismissed: 0, late: 0 };
         // Facebook option values are snake_case with the explanation
         // glued on after "_-_" — show the short head, humanized
@@ -100,7 +109,8 @@
         const CHIP_KEYS = [
             [k => k.includes("play_tuesdays_or_saturdays"), "Plays"],
             [k => k.includes("most_important"), "Wants"],
-            [k => k.includes("chapter"), "Chapter"],
+            [k => k === "chapter_interest" || k.endsWith("chapter"), "Chapter"],
+            [k => k === "ad_set_name", "Ad Set"],
         ];
         const rows = leads.map(l => {
             const payload = l.payload || {};

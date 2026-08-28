@@ -11152,7 +11152,19 @@ def leads_page():
 def api_leads():
     from email_parser.leads import get_leads
     status = (request.args.get("status") or "").strip()
-    return jsonify({"leads": get_leads(status=status)})
+    leads = get_leads(status=status)
+    # Per-ad-set stats (Kerry 2026-08-27: "help us track stats for
+    # each") — keyed on the human ad-set name when the dial knows it.
+    by_ad_set: dict = {}
+    for l in leads:
+        p = l.get("payload") or {}
+        key = p.get("ad_set_name") or p.get("ad_set_id") or "(no ad attribution)"
+        b = by_ad_set.setdefault(key, {"total": 0, "new": 0, "touched": 0,
+                                       "converted": 0, "dismissed": 0})
+        b["total"] += 1
+        if l.get("status") in b:
+            b[l["status"]] += 1
+    return jsonify({"leads": leads, "by_ad_set": by_ad_set})
 
 
 @app.route("/api/leads/<int:lead_id>/mark", methods=["POST"])
