@@ -450,9 +450,14 @@ def _notify_recipients(chapter: str | None, db_path=None) -> str:
     cfg = _dial_json("lead_notify_recipients", {}, db_path=db_path)
     default = cfg.get("default") or [a for a in [
         os.getenv("COO_EMAIL_TO") or os.getenv("EMAIL_ADDRESS")] if a]
-    if chapter and cfg.get(chapter):
-        addrs = list(default) + list(cfg[chapter])
+    if chapter:
+        # A routed chapter pings default + ITS OWN list only — a chapter
+        # with no list of its own (San Antonio rides the default) must
+        # not fan out to the other chapter's owner (Kerry 2026-08-28:
+        # SA leads go to Kerry alone).
+        addrs = list(default) + list(cfg.get(chapter) or [])
     else:
+        # Unrouted → everyone: better a double ping than a missed 48h.
         addrs = list(default)
         for key, lst in cfg.items():
             if key != "default" and isinstance(lst, list):

@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.257.9";
+window.TGF_VERSION = "2.257.10";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.257.10",
+    date: "2026-08-28",
+    changes: [
+      "Lead ping recipients fixed: a lead ROUTED to a chapter now pings default + that chapter's list ONLY. Previously a routed chapter with no list of its own (San Antonio rides the default) fell into the unrouted fan-out and pinged the other chapter's owner too — Robert received the four SA leads on 8/28 morning that were Kerry's alone. Unrouted leads (e.g. a 'Yes for both' Event Invites answer) still deliberately ping everyone.",
+    ],
+  },
   {
     version: "2.257.9",
     date: "2026-08-27",
