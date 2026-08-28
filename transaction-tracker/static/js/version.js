@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.257.16";
+window.TGF_VERSION = "2.258.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.258.0",
+    date: "2026-08-28",
+    changes: [
+      "Young-lead re-sync (mailbox #360, Kerry-ratified): the poll now re-fetches every lead first seen <48h and updates payload-if-changed — dual HubSpot pipelines (Privyr bare-form push vs Meta native sync) meant a Privyr-first lead was snapshotted without ad attribution, so Hicks/Solis/+1 read as 'organic' when they're paid. Attribution, form answers, and empty identity fields heal (a manual name fix is never clobbered); the standing self-heal then re-routes chapter and the per-ad-set stats correct themselves.",
+      "Lead Center mobile call-sheet (mailbox #361, Kerry-ratified — first brick of Tracker-as-CRM): always-visible badge chips (Tu+Sa / Tue only / Sat only · All of it / Golf / Competition / Community · SA invites / ATX invites / Both / No loop · ad-set short tag); action row with 💬 Text (sms: deep-link pre-filled from the lead_sms_template dial with {first_name} + {next_event} for the lead's chapter), 📞 Call, ✉️ Email, ➕ Note; per-lead NOTES LOG (new lead_notes table — timestamp, author, text; newest previews on the card, full history + form answers behind Details); status dot (green touched / red past-48h / orange converted) replaces the pill; stat tiles collapse to a sticky one-line summary on mobile; primary button + ⋯ overflow menu (Edit/Undo/Dismiss). Desktop table unchanged, with the newest note previewed under status. New: POST /api/leads/<id>/note, bridge scoring-lead-note:<id>|<author>|<text> (audited).",
+    ],
+  },
   {
     version: "2.257.16",
     date: "2026-08-28",

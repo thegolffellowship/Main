@@ -104,6 +104,28 @@ linked customer has active purchase history — never for the prospect
 row the lead itself created. Lead-created prospects carry
 `acquisition_source = 'facebook_lead'`.
 
+## Young-lead re-sync (#360)
+
+Two pipelines write leads into HubSpot: Privyr's bare-form push and
+Meta's native lead-ads sync. When Privyr wins the creation race, the
+first snapshot carries no ad attribution (native sync backfills ~15
+min later). Every poll therefore re-fetches leads first seen < 48h and
+updates payload-if-changed; EMPTY identity fields fill from HubSpot
+(a manual scoring-lead-edit fix is never clobbered), then the standing
+self-heals re-route chapter and re-derive stats.
+
+## Notes log + first-touch SMS (#361)
+
+`lead_notes` table (lead_id FK, author, note, timestamps) —
+`add_lead_note` / `POST /api/leads/<id>/note` / bridge
+`scoring-lead-note:<id>|<author>|<text>`. Newest note previews on the
+card and under the desktop status pill. The mobile card is a call
+sheet: badge chips (Availability/Importance/Invitations + ad-set tag),
+sms:/tel:/mailto: action row — the SMS body renders the
+`lead_sms_template` dial with `{first_name}` and `{next_event}` (next
+upcoming event for the lead's chapter; TGF events count for both) —
+status dot, sticky one-line summary, primary action + ⋯ overflow.
+
 ## MCP access for CA (platform-claude)
 
 - **`get_lead_center`** — one read: queue rows (decoded answers + ad

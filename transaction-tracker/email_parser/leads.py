@@ -107,6 +107,16 @@ def ensure_leads_table(conn: sqlite3.Connection) -> None:
         conn.execute("ALTER TABLE leads ADD COLUMN payload TEXT")
     except sqlite3.OperationalError:
         pass
+    # Per-lead notes log (mailbox #361 — first brick of Tracker-as-CRM):
+    # timestamped, authored; newest previews on the card.
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS lead_notes (
+            id         INTEGER PRIMARY KEY AUTOINCREMENT,
+            lead_id    INTEGER NOT NULL REFERENCES leads(id) ON DELETE CASCADE,
+            author     TEXT,
+            note       TEXT NOT NULL,
+            created_at TEXT DEFAULT (datetime('now'))
+        )""")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_leads_status "
                  "ON leads(status, arrived_at)")
 
@@ -460,18 +470,23 @@ def _build_payload(props: dict) -> dict:
     return out
 
 
-def _fetch_full_payloads(token: str, contact_ids: list[str]) -> dict[str, dict]:
-    """{contact_id: payload} — batch-read the NEW contacts with every
-    portal property, filtered down to the form answers + attribution."""
+def _fetch_full_payloads(token: str, contact_ids: list[str]
+                         ) -> tuple[dict[str, dict], dict[str, dict]]:
+    """({contact_id: payload}, {contact_id: identity}) — batch-read
+    contacts with every portal property. payload = form answers +
+    attribution; identity = first/last/email/phone/city for the
+    young-lead re-sync (#360: Privyr can win the creation race and the
+    Meta native sync backfills attribution ~15 min later)."""
     if not contact_ids:
-        return {}
+        return {}, {}
     try:
         names = _fetch_property_names(token)
     except Exception as e:
         logger.warning("HubSpot property list fetch failed (%s) — "
                        "capturing identity fields only", e)
-        return {}
-    out: dict[str, dict] = {}
+        return {}, {}
+    payloads: dict[str, dict] = {}
+    identities: dict[str, dict] = {}
     for i in range(0, len(contact_ids), 100):
         chunk = contact_ids[i:i + 100]
         resp = requests.post(
@@ -482,8 +497,16 @@ def _fetch_full_payloads(token: str, contact_ids: list[str]) -> dict[str, dict]:
                      "Content-Type": "application/json"})
         resp.raise_for_status()
         for c in resp.json().get("results", []):
-            out[str(c.get("id"))] = _build_payload(c.get("properties"))
-    return out
+            props = c.get("properties") or {}
+            payloads[str(c.get("id"))] = _build_payload(props)
+            identities[str(c.get("id"))] = {
+                "first_name": props.get("firstname"),
+                "last_name": props.get("lastname"),
+                "email": props.get("email"),
+                "phone": props.get("phone"),
+                "city": props.get("city"),
+            }
+    return payloads, identities
 
 
 def _notify_recipients(chapter: str | None, db_path=None) -> str:
@@ -622,11 +645,22 @@ def check_new_leads(db_path: str | Path | None = None) -> dict:
             "SELECT external_id FROM leads WHERE source = 'hubspot'")}
         fresh_ids = [str(c["external_id"]) for c in passing
                      if str(c["external_id"]) not in known]
+        # #360 (Kerry-ratified): dual pipelines write into HubSpot, and
+        # when Privyr's bare-form push wins the creation race the first
+        # snapshot has no ad attribution (Meta's native sync backfills
+        # ~15 min later). Re-fetch every lead first seen < 48h and
+        # update-if-changed, so attribution, names, and phones heal.
+        resync_rows = [dict(r) for r in conn.execute(
+            "SELECT * FROM leads WHERE source = 'hubspot' "
+            "AND first_seen_at >= datetime('now', '-48 hours')")]
+        resync_ids = [str(r["external_id"]) for r in resync_rows
+                      if str(r["external_id"]) not in fresh_ids]
         try:
-            payloads = _fetch_full_payloads(token, fresh_ids)
+            payloads, identities = _fetch_full_payloads(
+                token, fresh_ids + resync_ids)
         except Exception as e:
             logger.warning("HubSpot full-payload fetch failed: %s", e)
-            payloads = {}
+            payloads, identities = {}, {}
         ad_set_names = _dial_json("lead_ad_set_names", {}, db_path=db_path)
         ad_set_chapters = _dial_json("lead_ad_set_chapters", {},
                                      db_path=db_path)
@@ -647,6 +681,33 @@ def check_new_leads(db_path: str | Path | None = None) -> dict:
             c["chapter"] = _route(c["payload"], c.get("city"))
         new_ids = upsert_leads(conn, passing, city_map)
         result["queued"] = len(new_ids)
+        # Apply the young-lead re-sync: replace the stored payload with
+        # the fresh read (then re-enrich), fill EMPTY identity fields
+        # only — a manual name fix (scoring-lead-edit) is never
+        # clobbered. Chapter re-routes below via the standing self-heal.
+        result["resynced"] = 0
+        for r in resync_rows:
+            ext = str(r["external_id"])
+            if ext not in payloads:
+                continue
+            new_p = enrich_payload(dict(payloads[ext]), ad_set_names)
+            try:
+                old_p = json.loads(r["payload"]) if r.get("payload") else {}
+            except Exception:
+                old_p = {}
+            ident = identities.get(ext) or {}
+            fills = {k: v for k, v in ident.items()
+                     if v and not (r.get(k) or "").strip()}
+            if new_p != old_p or fills:
+                sets = ["payload = ?"]
+                vals: list = [json.dumps(new_p)]
+                for k, v in fills.items():
+                    sets.append(f"{k} = ?")
+                    vals.append(v)
+                vals.append(r["id"])
+                conn.execute(f"UPDATE leads SET {', '.join(sets)} "
+                             f"WHERE id = ?", vals)
+                result["resynced"] += 1
         # Self-heal: rows queued before payload routing / ad-id
         # extraction existed (or whose dials changed) get another look.
         for r in conn.execute(
@@ -744,8 +805,19 @@ def get_leads(status: str = "", limit: int = 200,
                 f"SELECT DISTINCT customer_id FROM items "
                 f"WHERE customer_id IN ({ph}) "
                 f"AND transaction_status = 'active'", cids)}
+    # Notes log (#361): newest first, attached per lead
+    notes_by_lead: dict = {}
+    with db._connect(db_path) as conn:
+        ensure_leads_table(conn)
+        for n in conn.execute(
+                "SELECT lead_id, author, note, created_at FROM lead_notes "
+                "ORDER BY id DESC"):
+            notes_by_lead.setdefault(n["lead_id"], []).append(
+                {"author": n["author"], "note": n["note"],
+                 "created_at": n["created_at"]})
     now = now_central()
     for r in rows:
+        r["notes_log"] = notes_by_lead.get(r["id"], [])
         r["has_history"] = r.get("customer_id") in with_history
         try:
             r["payload"] = json.loads(r["payload"]) if r.get("payload") else None
@@ -763,6 +835,26 @@ def get_leads(status: str = "", limit: int = 200,
         except Exception:
             pass
     return rows
+
+
+def add_lead_note(lead_id: int, note: str, author: str = "",
+                  db_path: str | Path | None = None) -> dict:
+    """Append to a lead's notes log (#361). Author is a short name or
+    initial; timestamped server-side."""
+    note = (note or "").strip()
+    if not note:
+        return {"error": "note text required"}
+    from . import database as db
+    with db._connect(db_path) as conn:
+        ensure_leads_table(conn)
+        if not conn.execute("SELECT 1 FROM leads WHERE id = ?",
+                            (lead_id,)).fetchone():
+            return {"error": f"lead {lead_id} not found"}
+        conn.execute(
+            "INSERT INTO lead_notes (lead_id, author, note) VALUES (?,?,?)",
+            (lead_id, (author or "").strip() or None, note))
+        conn.commit()
+    return {"lead_id": lead_id, "ok": True}
 
 
 def mark_lead(lead_id: int, status: str, touched_by: str = "",

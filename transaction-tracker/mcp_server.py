@@ -2092,6 +2092,18 @@ def _scoring_dispatch(url: str, extract: str):
                                 f"lead {_p[0]}: {_p[1]} -> {_val!r}")
             return json.dumps({"id": int(_p[0]), "field": _p[1],
                                "value": _val, "updated": n})
+        if cmd == "scoring-lead-note":
+            # "<id>|<author>|<note text>" — append to the lead's notes
+            # log (#361). Audited.
+            _p = arg.split("|", 2)
+            if len(_p) < 3 or not _p[2].strip():
+                return json.dumps({"error": "need <id>|<author>|<note>"})
+            from email_parser.leads import add_lead_note
+            res = add_lead_note(int(_p[0].strip()), _p[2],
+                                author=_p[1].strip())
+            db.log_agent_action("mcp-claude", "scoring-lead-note",
+                                f"lead {_p[0].strip()}: note by {_p[1].strip()}")
+            return json.dumps(res, indent=2)
         if cmd == "scoring-leads-poll":
             # On-demand HubSpot lead poll (scheduler runs it every 45 min;
             # no-ops with an error note until HUBSPOT_TOKEN is set).

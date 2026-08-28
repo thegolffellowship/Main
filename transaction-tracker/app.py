@@ -11164,7 +11164,46 @@ def api_leads():
         b["total"] += 1
         if l.get("status") in b:
             b[l["status"]] += 1
-    return jsonify({"leads": leads, "by_ad_set": by_ad_set})
+    # First-touch SMS template (#361) — editable dial; {first_name} and
+    # {next_event} placeholders are filled client-side per lead.
+    from email_parser.database import get_app_setting
+    from email_parser.timezone_utils import today_central_str
+    sms_template = (get_app_setting("lead_sms_template") or
+                    "Hey {first_name}, this is Kerry with The Golf "
+                    "Fellowship — great to see your interest! Our next "
+                    "event is {next_event}. Would love to have you out. "
+                    "Any questions, just reply here.")
+    next_events: dict = {}
+    try:
+        from email_parser.database import get_connection
+        conn = get_connection()
+        try:
+            for r in conn.execute(
+                    "SELECT item_name, event_date, chapter, course FROM events "
+                    "WHERE event_date >= ? ORDER BY event_date",
+                    (today_central_str(),)):
+                label = f"{r['course'] or r['item_name']} on {r['event_date']}"
+                for ch in ([r["chapter"]] if r["chapter"] != "TGF"
+                           else ["Austin", "San Antonio"]):
+                    next_events.setdefault(ch, label)
+                next_events.setdefault("default", label)
+        finally:
+            conn.close()
+    except Exception:
+        logger.warning("Lead next-event lookup failed", exc_info=True)
+    return jsonify({"leads": leads, "by_ad_set": by_ad_set,
+                    "sms_template": sms_template,
+                    "next_events": next_events})
+
+
+@app.route("/api/leads/<int:lead_id>/note", methods=["POST"])
+@require_role("manager")
+def api_lead_note(lead_id):
+    from email_parser.leads import add_lead_note
+    d = request.get_json(silent=True) or {}
+    res = add_lead_note(lead_id, (d.get("note") or "").strip(),
+                        author=(d.get("author") or "").strip())
+    return jsonify(res), (400 if res.get("error") else 200)
 
 
 @app.route("/api/leads/<int:lead_id>/mark", methods=["POST"])

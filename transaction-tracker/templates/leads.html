@@ -47,9 +47,27 @@
         .ld-mdetails .k { color: #6B7280; text-transform: capitalize; }
         .ld-mactions { margin-top: 8px; }
         .ld-mactions .ld-btn { padding: 7px 16px; font-size: 13px; }
+        /* #361 mobile call-sheet: status dot, badge chips, action row,
+           note preview, compressed sticky summary */
+        .ld-msummary { display: none; position: sticky; top: 0; z-index: 5; background: #F8F8F8; padding: 8px 2px; font-size: 13.5px; font-weight: 600; color: #1B1B1B; }
+        .ld-msummary .ld-late { margin: 0; }
+        .ld-dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 6px; vertical-align: baseline; }
+        .ld-dot-g { background: #059669; } .ld-dot-r { background: #DC2626; }
+        .ld-dot-o { background: #E87C3E; } .ld-dot-n { background: #9CA3AF; }
+        .ld-bchip { display: inline-block; margin: 3px 5px 0 0; padding: 2px 9px; border-radius: 99px; font-size: 11px; font-weight: 700; background: #EEF2F7; color: #374151; }
+        .ld-acts { display: flex; gap: 8px; margin: 8px 0 2px; }
+        .ld-act { flex: 1; text-align: center; padding: 9px 0; border: 1px solid var(--border); border-radius: 8px; font-size: 13px; font-weight: 600; color: var(--link, #2563eb); text-decoration: none; background: #fff; cursor: pointer; }
+        .ld-noteprev { font-size: 12px; color: #4B5563; margin-top: 5px; white-space: normal; }
+        .ld-noteprev b { color: #1B1B1B; }
+        .ld-menu-wrap { position: relative; display: inline-block; }
+        .ld-menu { position: absolute; right: 0; top: 110%; background: #fff; border: 1px solid var(--border); border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,.12); padding: 4px; display: none; z-index: 10; min-width: 110px; }
+        .ld-menu .ld-btn { display: block; width: 100%; margin: 2px 0; border: none; text-align: left; }
+        .ld-mnotes td { padding: 2px 6px; font-size: 12px; white-space: normal; }
         @media (max-width: 768px) {
             .ld-scroll { display: none; }
             #ld-mlist { display: block; }
+            .ld-cards { display: none; }
+            .ld-msummary { display: block; }
         }
     </style>
 </head>
@@ -73,6 +91,7 @@
             <div class="ld-card"><div class="lbl">Converted</div><div class="val" id="ld-count-converted">–</div></div>
             <div class="ld-card"><div class="lbl">Past 48h untouched</div><div class="val ld-late" id="ld-count-late">–</div></div>
         </div>
+        <div class="ld-msummary" id="ld-msummary"></div>
         <p id="ld-adset-line" style="font-size:12.5px;color:#4B5563;margin:-0.5rem 0 1rem;"></p>
         <div class="ld-scroll"><table class="ld-table">
             <thead><tr>
@@ -264,9 +283,11 @@
                    <button class="ld-btn" onclick="mark(${l.id},'touched','')">Undo</button>`
                 : l.status === "dismissed"
                 ? `<button class="ld-btn" onclick="mark(${l.id},'new')">Restore</button>` : "";
+            const latestNote = (l.notes_log || [])[0];
             const statusHtml = `<span class="ld-pill ld-${esc(l.status)}">${esc(l.status)}</span>` +
                 (l.touched_by ? " <span style='font-size:10.5px;color:#6B7280'>by " + esc(l.touched_by) + "</span>" : "") +
-                (l.notes ? "<br><span style='font-size:10.5px;color:#6B7280;white-space:normal'>" + esc(l.notes) + "</span>" : "");
+                (l.notes ? "<br><span style='font-size:10.5px;color:#6B7280;white-space:normal'>" + esc(l.notes) + "</span>" : "") +
+                (latestNote ? "<br><span style='font-size:10.5px;color:#6B7280;white-space:normal'>📝 " + esc(latestNote.note) + "</span>" : "");
             rows.push(`<tr>
                 <td><b>${esc(name)}</b>${l.has_history ? ' <span class="ld-existing">existing customer</span>' : ""}
                     ${answersRow ? ` <span class="ld-toggle" onclick="toggleAns(${l.id})">▾</span>` : ""}</td>
@@ -282,14 +303,72 @@
                 <td>${statusHtml}</td>
                 <td style="white-space:nowrap">${actions}</td>
             </tr>` + answersRow);
-            // Mobile: stacked card — big tap targets for call/email
+            // Mobile call-sheet card (#361): one-glance triage,
+            // two-tap contact. Badges always visible; sms:/tel:/mailto:
+            // deep-links; newest note previewed; overflow menu.
+            const rawOf = match => {
+                const k = Object.keys(payload).find(match);
+                return k ? String(payload[k]).toLowerCase() : "";
+            };
+            const availRaw = rawOf(k => k.includes("play_tuesdays_or_saturdays"));
+            const wantRaw = rawOf(k => k.includes("most_important"));
+            const loopRaw = rawOf(k => k.includes("stay_in_the_loop") || k.includes("loop"));
+            const badges = [];
+            if (availRaw) badges.push(availRaw.includes("both") ? "Tu+Sa"
+                : availRaw.includes("tuesdays") ? "Tue only"
+                : availRaw.includes("saturdays") ? "Sat only" : "No days");
+            if (wantRaw) badges.push(wantRaw.startsWith("all_of_it") ? "All of it"
+                : wantRaw.startsWith("golf") ? "Golf"
+                : wantRaw.startsWith("competition") ? "Competition"
+                : (wantRaw.startsWith("community") || wantRaw.startsWith("connection")
+                   || wantRaw.startsWith("fellowship")) ? "Community" : pretty(wantRaw));
+            if (loopRaw) badges.push(loopRaw === "yes_for_both" ? "Both"
+                : loopRaw.includes("san_antonio") ? "SA invites"
+                : loopRaw.includes("austin") ? "ATX invites" : "No loop");
+            const adSetShort = (payload.ad_set_name || "").includes("Austin") ? "ATX ad"
+                : (payload.ad_set_name || "").includes("SA") ? "SA ad" : "";
+            if (adSetShort) badges.push(adSetShort);
+            const dotCls = late ? "ld-dot-r" : l.status === "touched" ? "ld-dot-g"
+                : l.status === "converted" ? "ld-dot-o" : "ld-dot-n";
+            const smsBody = (ALL.sms_template || "")
+                .replace("{first_name}", l.first_name || "there")
+                .replace("{next_event}", (ALL.next_events || {})[l.chapter]
+                    || (ALL.next_events || {}).default || "one of our upcoming events");
+            const primary = l.status === "new"
+                ? `<button class="ld-btn primary" onclick="mark(${l.id},'touched')">Touched</button>`
+                : l.status === "touched"
+                ? `<button class="ld-btn primary" onclick="mark(${l.id},'converted')">Converted</button>` : "";
+            const menuItems = (l.status === "touched"
+                ? `<button class="ld-btn" onclick="editLead(${l.id})">Edit</button>
+                   <button class="ld-btn" onclick="mark(${l.id},'new')">Undo</button>
+                   <button class="ld-btn" onclick="mark(${l.id},'dismissed')">Dismiss</button>`
+                : l.status === "converted"
+                ? `<button class="ld-btn" onclick="editLead(${l.id})">Edit</button>
+                   <button class="ld-btn" onclick="mark(${l.id},'touched','')">Undo</button>`
+                : l.status === "dismissed"
+                ? `<button class="ld-btn" onclick="mark(${l.id},'new')">Restore</button>`
+                : `<button class="ld-btn" onclick="mark(${l.id},'dismissed')">Dismiss</button>`);
+            const notesList = (l.notes_log || []).map(n =>
+                `<tr><td class="k" style="white-space:nowrap">${esc((n.created_at || "").slice(5, 16))} ${esc((n.author || "")[0] || "")}</td><td>${esc(n.note)}</td></tr>`).join("");
             cards.push(`<div class="ld-mcard">
-                <div class="ld-mhead"><b>${esc(name)}</b>${l.has_history ? ' <span class="ld-existing">existing customer</span>' : ""}
-                    <span class="ld-mmeta ${late ? "ld-late" : ""}">${esc(l.chapter) || "unrouted"} · ${age}</span> ${statusHtml}</div>
-                ${l.phone ? `<a class="ld-mtap" href="tel:${esc(l.phone)}">📞 ${esc(l.phone)}</a>` : ""}
-                ${l.email ? `<a class="ld-mtap" href="mailto:${esc(l.email)}">✉️ ${esc(l.email)}</a>` : ""}
-                ${mextras.length ? `<details class="ld-mdetails"><summary>Form answers</summary><table>${mextras.map(([label, v]) => `<tr><td class="k">${esc(label)}</td><td>${esc(v)}</td></tr>`).join("")}</table></details>` : ""}
-                ${actions ? `<div class="ld-mactions">${actions}</div>` : ""}
+                <div class="ld-mhead"><span class="ld-dot ${dotCls}"></span><b>${esc(name)}</b>${l.has_history ? ' <span class="ld-existing">existing customer</span>' : ""}
+                    <span class="ld-mmeta ${late ? "ld-late" : ""}">${esc(l.chapter) || "unrouted"} · ${age}</span></div>
+                <div>${badges.map(b => `<span class="ld-bchip">${esc(b)}</span>`).join("")}</div>
+                <div class="ld-acts">
+                    ${l.phone ? `<a class="ld-act" href="sms:${esc(l.phone)}?&body=${encodeURIComponent(smsBody)}">💬 Text</a>
+                                 <a class="ld-act" href="tel:${esc(l.phone)}">📞 Call</a>` : ""}
+                    ${l.email ? `<a class="ld-act" href="mailto:${esc(l.email)}">✉️ Email</a>` : ""}
+                    <span class="ld-act" onclick="noteLead(${l.id})">➕ Note</span>
+                </div>
+                ${latestNote ? `<div class="ld-noteprev"><b>${esc((latestNote.author || "?")[0])}</b> · ${esc((latestNote.created_at || "").slice(5, 16))} — ${esc(latestNote.note)}</div>` : ""}
+                <details class="ld-mdetails"><summary>Details${(l.notes_log || []).length > 1 ? ` · ${l.notes_log.length} notes` : ""}</summary>
+                    ${notesList ? `<table class="ld-mnotes">${notesList}</table><hr style="border:none;border-top:1px solid #F3F2EF">` : ""}
+                    ${mextras.length ? `<table>${mextras.map(([label, v]) => `<tr><td class="k">${esc(label)}</td><td>${esc(v)}</td></tr>`).join("")}</table>` : ""}
+                </details>
+                <div class="ld-mactions">${primary}
+                    <span class="ld-menu-wrap"><button class="ld-btn" onclick="toggleMenu(${l.id})">⋯</button>
+                        <span class="ld-menu" id="ld-menu-${l.id}">${menuItems}</span></span>
+                </div>
             </div>`);
         });
         document.getElementById("ld-body").innerHTML =
@@ -299,6 +378,25 @@
         for (const k of ["new", "touched", "converted"])
             document.getElementById("ld-count-" + k).textContent = counts[k] || 0;
         document.getElementById("ld-count-late").textContent = counts.late || 0;
+        document.getElementById("ld-msummary").innerHTML =
+            `${counts.new || 0} new · ${counts.touched || 0} touched · ` +
+            `<span class="${counts.late ? "ld-late" : ""}">${counts.late || 0} overdue</span>` +
+            ` · ${counts.converted || 0} converted`;
+    }
+    function noteLead(id) {
+        const note = prompt("Note:") || "";
+        if (!note.trim()) return;
+        const author = prompt("Your name (K / R / …):") || "";
+        fetch(`/api/leads/${id}/note`, {
+            method: "POST", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ note, author }) }).then(loadLeads);
+    }
+    function toggleMenu(id) {
+        const el = document.getElementById("ld-menu-" + id);
+        if (!el) return;
+        const open = el.style.display === "block";
+        document.querySelectorAll(".ld-menu").forEach(m => m.style.display = "none");
+        el.style.display = open ? "none" : "block";
     }
     function toggleAns(id) {
         const el = document.getElementById("ld-ans-" + id);
