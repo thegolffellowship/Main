@@ -172,11 +172,16 @@ def route_chapter_from_payload(payload: dict | None) -> str | None:
 # Show the short head, humanized (Kerry 2026-08-27: "reduce down to the
 # initial part"). Special vocabulary for chapter tokens.
 _PRETTY_MAP = {
+    # Kerry-ruled decode vocabulary (2026-08-28)
     "austin_sa": "Austin + SA",
     "san_antonio": "San Antonio",
-    "yes_for_san_antonio": "Yes — San Antonio",
-    "yes_for_austin": "Yes — Austin",
-    "yes_-_i_can_play_both_tuesdays_or_saturdays": "Yes — both days",
+    "yes_for_san_antonio": "San Antonio",
+    "yes_for_austin": "Austin",
+    "yes_for_both": "Both",
+    "no": "None",
+    "yes_-_i_can_play_both_tuesdays_or_saturdays": "Both",
+    "yes_-_i_can_play_saturdays": "Saturdays",
+    "yes_-_i_can_play_tuesdays": "Tuesdays",
 }
 
 
@@ -267,10 +272,10 @@ _ANSWER_ATTR = {"ad_set_name": "Ad set",
 # Kerry-ruled short labels (2026-08-27) for the known form questions;
 # an unrecognized question falls back to its humanized key.
 _FORM_LABEL_PATTERNS = (
-    ("play_tuesdays_or_saturdays", "Can You Play"),
-    ("most_important", "Most Important"),
-    ("stay_in_the_loop", "Event Invites"),
-    ("loop", "Event Invites"),
+    ("play_tuesdays_or_saturdays", "Availability"),
+    ("most_important", "Importance"),
+    ("stay_in_the_loop", "Invitations"),
+    ("loop", "Invitations"),
 )
 
 

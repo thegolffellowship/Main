@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.257.13";
+window.TGF_VERSION = "2.257.14";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.257.14",
+    date: "2026-08-28",
+    changes: [
+      "Leads queue per Kerry: RECEIVED column (arrival timestamp, Central) next to Age; every column header click-sorts (arrow shows key + direction, default newest first). Columns renamed AVAILABILITY / IMPORTANCE / INVITATIONS with the answer vocabulary decoded — Availability: Both / Saturdays / Tuesdays / None; Invitations: Both / San Antonio / Austin. Same labels + decodes in the mobile card and notification email; footer note updated to the ad-set-first routing order.",
+    ],
+  },
   {
     version: "2.257.13",
     date: "2026-08-28",
