@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
+    <title>TGF — New Leads</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Bitter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/css/dashboard.css">
+    <link rel="stylesheet" href="/static/css/shell.css">
+    <link rel="icon" href="/static/icon.svg" type="image/svg+xml">
+    <link rel="apple-touch-icon" href="/static/icon-180.png">
+    <style>
+        .ld-wrap { padding: 1rem 1.5rem 2.5rem; max-width: 1100px; margin: 0 auto; }
+        .ld-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; margin: 0.75rem 0 1.25rem; }
+        .ld-card { background: #fff; border: 1px solid var(--border); border-radius: 12px; padding: 12px 16px; }
+        .ld-card .lbl { font: 700 9.5px/1 'Bitter', serif; letter-spacing: 1.5px; text-transform: uppercase; color: var(--text-muted); }
+        .ld-card .val { font: 700 24px/1 'Bitter', serif; color: var(--text); margin-top: 7px; font-variant-numeric: tabular-nums; }
+        .ld-scroll { overflow-x: auto; }
+        .ld-table { width: 100%; border-collapse: collapse; }
+        .ld-table th { text-align: left; font: 700 10px/1.3 'Bitter', serif; letter-spacing: 1px; text-transform: uppercase; color: #9CA3AF; padding: 8px 8px 6px; border-bottom: 1px solid var(--border); }
+        .ld-table td { padding: 7px 8px; border-bottom: 1px solid #F3F2EF; font-size: 13px; }
+        .ld-pill { display: inline-block; padding: 2px 10px; border-radius: 99px; font-size: 11px; font-weight: 700; }
+        .ld-new { background: #FEF3C7; color: #92400E; }
+        .ld-touched { background: #D1FAE5; color: #065F46; }
+        .ld-converted { background: #DBEAFE; color: #1E40AF; }
+        .ld-dismissed { background: #F3F4F6; color: #6B7280; }
+        .ld-late { color: #DC2626; font-weight: 700; }
+        .ld-btn { padding: 3px 12px; border-radius: 99px; border: 1px solid var(--border); background: #fff; cursor: pointer; font-size: 11.5px; font-weight: 600; }
+        .ld-btn.primary { background: var(--primary); border-color: var(--primary); color: #fff; }
+        .ld-note { font-size: 12px; color: var(--text-muted); margin-top: 1rem; }
+        .ld-existing { font-size: 10.5px; color: #1E40AF; font-weight: 700; }
+    </style>
+</head>
+<body>
+    {% if shell_v2 %}
+    {% set SHELL_TITLE = 'New Leads' %}{% set SHELL_ACTIVE = 'admin' %}
+    {% include '_shell_nav.html' %}
+    {% else %}
+    <header>
+        <div class="header-content">
+            <h1>TGF Transaction Tracker</h1>
+            <p class="subtitle">New Leads</p>
+        </div>
+    </header>
+    {% endif %}
+    <main>
+    <div class="ld-wrap">
+        <div class="ld-cards">
+            <div class="ld-card"><div class="lbl">New</div><div class="val" id="ld-count-new">–</div></div>
+            <div class="ld-card"><div class="lbl">Touched</div><div class="val" id="ld-count-touched">–</div></div>
+            <div class="ld-card"><div class="lbl">Converted</div><div class="val" id="ld-count-converted">–</div></div>
+            <div class="ld-card"><div class="lbl">Past 48h untouched</div><div class="val ld-late" id="ld-count-late">–</div></div>
+        </div>
+        <div class="ld-scroll"><table class="ld-table">
+            <thead><tr>
+                <th>Lead</th><th>Contact</th><th>City</th><th>Chapter</th>
+                <th>Source</th><th>Age</th><th>Status</th><th></th>
+            </tr></thead>
+            <tbody id="ld-body"><tr><td colspan="8">Loading…</td></tr></tbody>
+        </table></div>
+        <p class="ld-note">Leads arrive from the HubSpot poll (every 45 min).
+        The 48-hour personal touch is the conversion gate — rows past 48
+        hours untouched go red. Touch owners: Kerry (San Antonio),
+        Robert Straiton (Austin).</p>
+    </div>
+    </main>
+    <script src="/static/js/auth.js"></script>
+    <script src="/static/js/shell.js"></script>
+    <script>
+    initAuth();
+    const esc = s => (s == null ? "" : String(s).replace(/[&<>"']/g,
+        c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])));
+    async function loadLeads() {
+        const res = await fetch("/api/leads");
+        if (!res.ok) { document.getElementById("ld-body").innerHTML =
+            "<tr><td colspan=8>Failed to load (need manager login).</td></tr>"; return; }
+        const leads = (await res.json()).leads || [];
+        const counts = { new: 0, touched: 0, converted: 0, dismissed: 0, late: 0 };
+        const rows = leads.map(l => {
+            counts[l.status] = (counts[l.status] || 0) + 1;
+            const late = l.status === "new" && (l.days_since_arrival ?? 0) >= 2;
+            if (late) counts.late++;
+            const name = [l.first_name, l.last_name].filter(Boolean).join(" ") || "(no name)";
+            const age = l.days_since_arrival == null ? "–"
+                : l.days_since_arrival === 0 ? "today"
+                : l.days_since_arrival + "d";
+            const actions = l.status === "new"
+                ? `<button class="ld-btn primary" onclick="mark(${l.id},'touched')">Touched</button>
+                   <button class="ld-btn" onclick="mark(${l.id},'dismissed')">Dismiss</button>`
+                : l.status === "touched"
+                ? `<button class="ld-btn" onclick="mark(${l.id},'converted')">Converted</button>` : "";
+            return `<tr>
+                <td><b>${esc(name)}</b>${l.customer_id ? '<br><span class="ld-existing">existing customer</span>' : ""}</td>
+                <td>${esc(l.email) || "–"}<br>${esc(l.phone) || ""}</td>
+                <td>${esc(l.city) || "–"}</td>
+                <td>${esc(l.chapter) || "unrouted"}</td>
+                <td>${esc(l.source_label || l.source)}</td>
+                <td class="${late ? "ld-late" : ""}">${age}</td>
+                <td><span class="ld-pill ld-${esc(l.status)}">${esc(l.status)}</span>
+                    ${l.touched_by ? "<br><span style='font-size:10.5px;color:#6B7280'>by " + esc(l.touched_by) + "</span>" : ""}</td>
+                <td style="white-space:nowrap">${actions}</td>
+            </tr>`;
+        });
+        document.getElementById("ld-body").innerHTML =
+            rows.join("") || "<tr><td colspan=8>No leads yet.</td></tr>";
+        for (const k of ["new", "touched", "converted"])
+            document.getElementById("ld-count-" + k).textContent = counts[k] || 0;
+        document.getElementById("ld-count-late").textContent = counts.late || 0;
+    }
+    async function mark(id, status) {
+        let touched_by = "";
+        if (status === "touched")
+            touched_by = prompt("Who made the touch? (Kerry / Robert / …)") || "";
+        await fetch(`/api/leads/${id}/mark`, {
+            method: "POST", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ status, touched_by }) });
+        loadLeads();
+    }
+    loadLeads();
+    </script>
+</body>
+</html>

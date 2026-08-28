@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.256.0";
+window.TGF_VERSION = "2.257.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.257.0",
+    date: "2026-08-27",
+    changes: [
+      "NEW LEADS queue + Facebook lead notifications (mailbox #352/#353, Kerry-ratified 2026-08-27). The Fall Meta campaign's leads land in HubSpot (verified: first campaign lead arrived 8/27 evening as PAID_SOCIAL/FORM), so the Tracker now polls the HubSpot contacts API every 45 minutes (LEAD_CHECK_INTERVAL_MINUTES; inside Kerry's asked 30-60), queues passing contacts in the new `leads` table (dedup on HubSpot id; email-matched to existing customers via customer_emails), routes a chapter from the lead's city (lead_city_chapters dial), and emails Kerry + the chapter's touch owner immediately (lead_notify_recipients dial; Graph send). Queue UI at /admin/leads (manager+): name, contact, city, chapter, source, age, touched/not-touched with 48-hour-overdue rows in red — the 48-hour personal touch is now auditable. Bridge: scoring-leads, scoring-lead-mark (audited), scoring-leads-poll. IDLE until the HUBSPOT_TOKEN env var (private-app token, crm.objects.contacts.read) is set on Railway.",
+      "Source filter is rules-as-data (lead_source_filter dial): PAID_SOCIAL/SOCIAL_MEDIA analytics sources or FORM/IMPORT object sources queue; the store-sync INTEGRATION contacts (existing customers buying) deliberately do not ping.",
+    ],
+  },
   {
     version: "2.256.0",
     date: "2026-08-27",

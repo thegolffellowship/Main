@@ -2050,6 +2050,30 @@ def _scoring_dispatch(url: str, extract: str):
             # Live pot audit: full get_hio_pot payload (carry-in, per-event
             # lines with player counts, paid out, total).
             return json.dumps(db.get_hio_pot(), indent=2, default=str)
+        if cmd == "scoring-leads":
+            # "[:status]" — the New Leads queue (v2.257.0, mailbox #352):
+            # name/contact/city/chapter/source/age + touched state.
+            from email_parser.leads import get_leads
+            return json.dumps({"leads": get_leads(status=arg.strip())},
+                              indent=2, default=str)
+        if cmd == "scoring-lead-mark":
+            # "<id>|<status>[|<touched_by>][|<note>]" — status ∈ new |
+            # touched | converted | dismissed. Audited.
+            from email_parser.leads import mark_lead
+            _p = [x.strip() for x in arg.split("|")]
+            res = mark_lead(int(_p[0]), _p[1] if len(_p) > 1 else "",
+                            touched_by=_p[2] if len(_p) > 2 else "",
+                            notes=_p[3] if len(_p) > 3 else "")
+            db.log_agent_action(
+                "mcp-claude", "scoring-lead-mark",
+                f"lead {_p[0]} -> {_p[1] if len(_p) > 1 else '?'}"
+                + (f" by {_p[2]}" if len(_p) > 2 and _p[2] else ""))
+            return json.dumps(res, indent=2)
+        if cmd == "scoring-leads-poll":
+            # On-demand HubSpot lead poll (scheduler runs it every 45 min;
+            # no-ops with an error note until HUBSPOT_TOKEN is set).
+            from email_parser.leads import check_new_leads
+            return json.dumps(check_new_leads(), indent=2, default=str)
         if cmd == "scoring-setting-set":
             # "<key>|<value>" — write an app_settings dial ("stored as a
             # setting is our standard for everything" — Kerry).

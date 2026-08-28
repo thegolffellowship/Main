@@ -1597,6 +1597,26 @@ def start_scheduler():
     except Exception:
         logger.exception("Startup prune failed (non-fatal)")
 
+    # Facebook/HubSpot lead poll (mailbox #352/#353, Kerry-ratified
+    # 2026-08-27): scheduled pull is the ratified default. No-ops until
+    # HUBSPOT_TOKEN lands on Railway; 45 min sits inside Kerry's asked
+    # 30-60 min cadence.
+    lead_interval = int(os.getenv("LEAD_CHECK_INTERVAL_MINUTES", "45"))
+    if lead_interval > 0:
+        from email_parser.leads import check_new_leads
+        scheduler.add_job(
+            check_new_leads,
+            "interval",
+            minutes=lead_interval,
+            id="lead_poll",
+            replace_existing=True,
+        )
+        logger.info("HubSpot lead poll scheduled every %d minutes%s",
+                    lead_interval,
+                    "" if (os.getenv("HUBSPOT_TOKEN")
+                           or os.getenv("HUBSPOT_PRIVATE_APP_TOKEN"))
+                    else " (idle — HUBSPOT_TOKEN not set)")
+
     scheduler.start()
     logger.info("Scheduler started — checking inbox every %d minutes", interval)
 
@@ -11113,6 +11133,45 @@ def traffic_page():
     if session.get("role") != "admin":
         return redirect("/events")
     return render_template("traffic.html")
+
+
+# ── NEW LEADS QUEUE (v2.257.0, mailbox #352/#353 — Kerry-ratified) ──────
+# Facebook/Meta leads polled from HubSpot on a timer; the 48-hour
+# personal touch is audited here. Manager tier so chapter managers can
+# work their own leads.
+
+@app.route("/admin/leads")
+def leads_page():
+    if session.get("role") not in ("admin", "manager"):
+        return redirect("/events")
+    return render_template("leads.html")
+
+
+@app.route("/api/leads")
+@require_role("manager")
+def api_leads():
+    from email_parser.leads import get_leads
+    status = (request.args.get("status") or "").strip()
+    return jsonify({"leads": get_leads(status=status)})
+
+
+@app.route("/api/leads/<int:lead_id>/mark", methods=["POST"])
+@require_role("manager")
+def api_lead_mark(lead_id):
+    from email_parser.leads import mark_lead
+    d = request.get_json(silent=True) or {}
+    res = mark_lead(lead_id, (d.get("status") or "").strip(),
+                    touched_by=(d.get("touched_by") or "").strip(),
+                    notes=(d.get("notes") or "").strip())
+    return jsonify(res), (400 if res.get("error") else 200)
+
+
+@app.route("/api/leads/poll", methods=["POST"])
+@require_role("admin")
+def api_leads_poll():
+    """On-demand poll (the scheduler's 45-min cadence is the normal path)."""
+    from email_parser.leads import check_new_leads
+    return jsonify(check_new_leads())
 
 
 # ── GG History review (admin) — v2.74.x ──
