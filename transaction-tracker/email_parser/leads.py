@@ -96,10 +96,17 @@ def ensure_leads_table(conn: sqlite3.Connection) -> None:
             touched_by    TEXT,
             status        TEXT NOT NULL DEFAULT 'new',
             notes         TEXT,
+            payload       TEXT,
             customer_id   INTEGER REFERENCES customers(customer_id),
             UNIQUE (source, external_id)
         )
     """)
+    try:
+        # Flexible form-response capture (mailbox #355): questions change
+        # between campaigns, so answers live as JSON, not columns.
+        conn.execute("ALTER TABLE leads ADD COLUMN payload TEXT")
+    except sqlite3.OperationalError:
+        pass
     conn.execute("CREATE INDEX IF NOT EXISTS idx_leads_status "
                  "ON leads(status, arrived_at)")
 
@@ -161,12 +168,13 @@ def upsert_leads(conn: sqlite3.Connection, rows: list[dict],
         cur = conn.execute(
             """INSERT INTO leads (source, external_id, first_name, last_name,
                                   email, phone, city, chapter, source_label,
-                                  arrived_at, customer_id)
-               VALUES (?,?,?,?,?,?,?,?,?,?,?)""",
+                                  arrived_at, customer_id, payload)
+               VALUES (?,?,?,?,?,?,?,?,?,?,?,?)""",
             (r.get("source") or "hubspot", str(r.get("external_id")),
              r.get("first_name"), r.get("last_name"), r.get("email"),
              r.get("phone"), r.get("city"), chapter, r.get("source_label"),
-             r.get("arrived_at"), cid))
+             r.get("arrived_at"), cid,
+             json.dumps(r["payload"]) if r.get("payload") else None))
         new_ids.append(cur.lastrowid)
     conn.commit()
     return new_ids
@@ -205,6 +213,68 @@ def _fetch_hubspot_contacts(token: str, since_iso: str) -> list[dict]:
     return out
 
 
+# Identity fields already stored as columns — kept out of the payload.
+_PAYLOAD_EXCLUDE = {"firstname", "lastname", "email", "phone", "city",
+                    "createdate", "lastmodifieddate", "hs_object_id",
+                    "hs_full_name_or_email"}
+# hs_-prefixed properties are HubSpot internals and are dropped — except
+# the attribution set the touch owner actually wants (mailbox #355).
+_PAYLOAD_KEEP_HS = {"hs_analytics_source", "hs_analytics_source_data_1",
+                    "hs_analytics_source_data_2", "hs_analytics_first_url",
+                    "hs_object_source_label"}
+
+
+def _fetch_property_names(token: str) -> list[str]:
+    """Every contact property name in the portal — form questions arrive
+    as custom properties, so pulling the full list (cached per pass) is
+    what makes the capture survive campaign-to-campaign question
+    changes (mailbox #355: flexible key/value over hardcoded columns)."""
+    resp = requests.get(
+        "https://api.hubapi.com/crm/v3/properties/contacts", timeout=30,
+        headers={"Authorization": f"Bearer {token}"})
+    resp.raise_for_status()
+    return [p["name"] for p in resp.json().get("results", []) if p.get("name")]
+
+
+def _build_payload(props: dict) -> dict:
+    out = {}
+    for k, v in (props or {}).items():
+        if v in (None, ""):
+            continue
+        if k in _PAYLOAD_EXCLUDE:
+            continue
+        if k.startswith("hs_") and k not in _PAYLOAD_KEEP_HS:
+            continue
+        out[k] = v
+    return out
+
+
+def _fetch_full_payloads(token: str, contact_ids: list[str]) -> dict[str, dict]:
+    """{contact_id: payload} — batch-read the NEW contacts with every
+    portal property, filtered down to the form answers + attribution."""
+    if not contact_ids:
+        return {}
+    try:
+        names = _fetch_property_names(token)
+    except Exception as e:
+        logger.warning("HubSpot property list fetch failed (%s) — "
+                       "capturing identity fields only", e)
+        return {}
+    out: dict[str, dict] = {}
+    for i in range(0, len(contact_ids), 100):
+        chunk = contact_ids[i:i + 100]
+        resp = requests.post(
+            "https://api.hubapi.com/crm/v3/objects/contacts/batch/read",
+            json={"inputs": [{"id": c} for c in chunk], "properties": names},
+            timeout=30,
+            headers={"Authorization": f"Bearer {token}",
+                     "Content-Type": "application/json"})
+        resp.raise_for_status()
+        for c in resp.json().get("results", []):
+            out[str(c.get("id"))] = _build_payload(c.get("properties"))
+    return out
+
+
 def _notify_recipients(chapter: str | None, db_path=None) -> str:
     """Comma-separated recipient list for a lead's chapter. Unrouted
     leads go to every configured list (better a double ping than a
@@ -236,6 +306,20 @@ def _lead_email_html(lead: dict) -> str:
                                 lead.get("last_name")] if x) or "(no name)"
     existing = (" — <b>matches an existing customer</b>"
                 if lead.get("customer_id") else "")
+    # Form answers so the 48-hour touch is informed, not cold (#355)
+    payload = lead.get("payload")
+    if isinstance(payload, str):
+        try:
+            payload = json.loads(payload)
+        except Exception:
+            payload = None
+    answers = ""
+    if isinstance(payload, dict) and payload:
+        lines = "".join(
+            row(k.replace("_", " "), v) for k, v in sorted(payload.items()))
+        answers = (f"<h3 style='margin:14px 0 4px;font-size:13px;"
+                   f"color:#1B1B1B'>Form answers</h3>"
+                   f"<table style='border-collapse:collapse'>{lines}</table>")
     return f"""
     <div style="font-family:Helvetica,Arial,sans-serif;max-width:520px">
       <h2 style="color:#E87C3E;margin:0 0 4px">New lead: {name}</h2>
@@ -249,6 +333,7 @@ def _lead_email_html(lead: dict) -> str:
         {row("Source", lead.get("source_label") or lead.get("source"))}
         {row("Arrived", lead.get("arrived_at"))}
       </table>
+      {answers}
       <p style="margin:14px 0 0"><a
         href="https://tgf-tracker.up.railway.app/admin/leads"
         style="color:#2563eb">Open the New Leads queue</a> and mark it
@@ -315,6 +400,20 @@ def check_new_leads(db_path: str | Path | None = None) -> dict:
             result["skipped_filter"] += 1
 
     with db._connect(db_path) as conn:
+        ensure_leads_table(conn)
+        # Full form-response capture (mailbox #355) for the genuinely NEW
+        # contacts only — one extra batch read per poll at most.
+        known = {r["external_id"] for r in conn.execute(
+            "SELECT external_id FROM leads WHERE source = 'hubspot'")}
+        fresh_ids = [str(c["external_id"]) for c in passing
+                     if str(c["external_id"]) not in known]
+        try:
+            payloads = _fetch_full_payloads(token, fresh_ids)
+        except Exception as e:
+            logger.warning("HubSpot full-payload fetch failed: %s", e)
+            payloads = {}
+        for c in passing:
+            c["payload"] = payloads.get(str(c["external_id"])) or None
         new_ids = upsert_leads(conn, passing, city_map)
         result["queued"] = len(new_ids)
         for lid in new_ids:
@@ -352,6 +451,10 @@ def get_leads(status: str = "", limit: int = 200,
         rows = [dict(r) for r in conn.execute(q, params + (limit,)).fetchall()]
     now = now_central()
     for r in rows:
+        try:
+            r["payload"] = json.loads(r["payload"]) if r.get("payload") else None
+        except Exception:
+            r["payload"] = None
         r["days_since_arrival"] = None
         stamp = (r.get("arrived_at") or r.get("first_seen_at") or "")[:10]
         try:

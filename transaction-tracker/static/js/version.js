@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.257.0";
+window.TGF_VERSION = "2.257.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.257.1",
+    date: "2026-08-27",
+    changes: [
+      "Lead capture now stores EVERY Facebook form-response field (mailbox #355, Kerry-ratified): new leads get a second batch read against the full portal property list, and every non-internal, non-empty property — availability, priority interest, chapter opt-in, ad variation, plus the attribution set (hs_analytics_source/_data, first URL, conversion form name) — lands as JSON in leads.payload. Flexible key/value by design: form questions change between campaigns, so nothing is hardcoded. The queue shows headline chips (Plays / Wants / Chapter) with an expandable full-answers row, and the notification email includes the answers so the 48-hour touch is informed, not cold.",
+    ],
+  },
   {
     version: "2.257.0",
     date: "2026-08-27",

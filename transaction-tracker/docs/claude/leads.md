@@ -45,6 +45,22 @@ lists. Scheduled pull (not webhooks) is the ratified default.
 | dial | `lead_city_chapters` | lowercase city substring → chapter. Defaults cover Austin + SA metro; unmatched cities route NULL. |
 | dial | `lead_notify_recipients` | `{"San Antonio": [emails], "Austin": [emails], "default": [emails]}`. Default falls back to `COO_EMAIL_TO`/`EMAIL_ADDRESS`. An UNROUTED lead notifies every list — better a double ping than a missed 48-hour window. Set Robert's address here via `scoring-setting-set:lead_notify_recipients|{"Austin": ["robert@..."]}`. |
 
+## Form-response capture (#355)
+
+Facebook form answers arrive as HubSpot **custom contact properties**
+(e.g. `can_you_play_tuesdays_or_saturdays`, `which_is_most_important_to_you`,
+`chapter_interest`, `ad_variation`). For each genuinely NEW lead the poll
+does a batch read against the **full portal property list** and stores
+every non-empty property as JSON in `leads.payload` — excluding identity
+columns and `hs_`-internals except the attribution keep-set
+(`hs_analytics_source[_data_1/2]`, `hs_analytics_first_url`,
+`hs_object_source_label`; `recent_conversion_event_name` has no prefix
+and comes through naturally). Nothing is hardcoded to this campaign's
+questions — new form fields in future campaigns are captured
+automatically. The queue renders headline chips (Plays / Wants /
+Chapter) + an expandable full-answers row, and the notification email
+carries the answers table.
+
 ## Lifecycle
 
 `new` → (button/bridge) → `touched` (stamps `touched_at`, `touched_by`)
