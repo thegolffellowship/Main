@@ -82,6 +82,19 @@
             "<tr><td colspan=8>Failed to load (need manager login).</td></tr>"; return; }
         const leads = (await res.json()).leads || [];
         const counts = { new: 0, touched: 0, converted: 0, dismissed: 0, late: 0 };
+        // Facebook option values are snake_case with the explanation
+        // glued on after "_-_" — show the short head, humanized
+        // (mirrors prettify_answer in email_parser/leads.py).
+        const PRETTY_MAP = { "austin_sa": "Austin + SA", "san_antonio": "San Antonio",
+            "yes_for_san_antonio": "Yes — San Antonio", "yes_for_austin": "Yes — Austin" };
+        function pretty(v) {
+            if (typeof v !== "string") return String(v);
+            if (v.includes("://") || v.includes("@") || !/[a-z]/i.test(v)) return v;
+            let head = v.split("_-_")[0].replace(/_+$/, "").trim();
+            if (PRETTY_MAP[head.toLowerCase()]) return PRETTY_MAP[head.toLowerCase()];
+            const text = head.replace(/_/g, " ").trim();
+            return text ? text[0].toUpperCase() + text.slice(1) : v;
+        }
         // Form answers (payload keys change per campaign): surface the
         // headline three as chips, everything else behind "answers".
         const CHIP_KEYS = [
@@ -94,12 +107,12 @@
             const chips = [];
             for (const [match, label] of CHIP_KEYS) {
                 const key = Object.keys(payload).find(match);
-                if (key) chips.push(`<span class="ld-chip">${label}: ${esc(payload[key])}</span>`);
+                if (key) chips.push(`<span class="ld-chip">${label}: ${esc(pretty(payload[key]))}</span>`);
             }
             const extras = Object.entries(payload);
             const answersRow = extras.length
                 ? `<tr class="ld-answers" id="ld-ans-${l.id}" style="display:none"><td colspan="8"><table>` +
-                  extras.map(([k, v]) => `<tr><td class="k">${esc(k.replace(/_/g, " "))}</td><td>${esc(v)}</td></tr>`).join("") +
+                  extras.map(([k, v]) => `<tr><td class="k">${esc(k.replace(/_/g, " "))}</td><td>${esc(pretty(v))}</td></tr>`).join("") +
                   `</table></td></tr>` : "";
             counts[l.status] = (counts[l.status] || 0) + 1;
             const late = l.status === "new" && (l.days_since_arrival ?? 0) >= 2;

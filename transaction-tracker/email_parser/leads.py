@@ -133,6 +133,66 @@ def route_chapter(city: str | None, city_map: dict | None = None) -> str | None:
     return None
 
 
+def route_chapter_from_payload(payload: dict | None) -> str | None:
+    """Chapter from the lead's OWN form answers (Kerry 2026-08-27) —
+    Facebook leads rarely carry a city, but the form asks. Priority:
+    (1) a chapter question ('chapter_interest': austin / san_antonio;
+    'austin_sa' means both, so it alone doesn't decide), then (2) the
+    stay-in-the-loop answer ('yes_for_san_antonio'). Substring matching
+    on values, with the SA check FIRST because 'san_antonio' contains
+    no 'austin' but 'austin_sa' contains both tokens."""
+    if not isinstance(payload, dict):
+        return None
+
+    def _chap(val: str) -> str | None:
+        v = (val or "").lower()
+        has_sa = "san_antonio" in v or "san antonio" in v
+        has_atx = "austin" in v.replace("austin_sa", "") \
+            or v.strip() in ("austin", "austin_only", "yes_for_austin")
+        if v.strip() in ("austin_sa", "both", "either"):
+            return None          # explicitly both → let the next signal decide
+        if has_sa and not has_atx:
+            return "San Antonio"
+        if has_atx and not has_sa:
+            return "Austin"
+        return None
+
+    for keys in (("chapter_interest", "chapter"),
+                 ("stay_in_the_loop", "loop")):
+        for k, v in payload.items():
+            if any(t in k.lower() for t in keys) and isinstance(v, str):
+                got = _chap(v)
+                if got:
+                    return got
+    return None
+
+
+# Facebook option values arrive as snake_case with the explanation glued
+# on after '_-_' ("all_of_it!_-_enjoy_a_well-rounded_experience...").
+# Show the short head, humanized (Kerry 2026-08-27: "reduce down to the
+# initial part"). Special vocabulary for chapter tokens.
+_PRETTY_MAP = {
+    "austin_sa": "Austin + SA",
+    "san_antonio": "San Antonio",
+    "yes_for_san_antonio": "Yes — San Antonio",
+    "yes_for_austin": "Yes — Austin",
+}
+
+
+def prettify_answer(value) -> str:
+    if not isinstance(value, str):
+        return str(value)
+    v = value.strip()
+    if "://" in v or "@" in v or not any(c.isalpha() for c in v):
+        return v                     # URLs, emails, ids, dates — leave alone
+    head = v.split("_-_")[0].strip().rstrip("_")
+    mapped = _PRETTY_MAP.get(head.lower())
+    if mapped:
+        return mapped
+    text = head.replace("_", " ").strip()
+    return (text[:1].upper() + text[1:]) if text else v
+
+
 def lead_passes_filter(analytics_source: str | None, source_label: str | None,
                        flt: dict | None = None) -> bool:
     flt = flt if isinstance(flt, dict) else DEFAULT_SOURCE_FILTER
@@ -316,7 +376,8 @@ def _lead_email_html(lead: dict) -> str:
     answers = ""
     if isinstance(payload, dict) and payload:
         lines = "".join(
-            row(k.replace("_", " "), v) for k, v in sorted(payload.items()))
+            row(k.replace("_", " "), prettify_answer(v))
+            for k, v in sorted(payload.items()))
         answers = (f"<h3 style='margin:14px 0 4px;font-size:13px;"
                    f"color:#1B1B1B'>Form answers</h3>"
                    f"<table style='border-collapse:collapse'>{lines}</table>")
@@ -414,8 +475,24 @@ def check_new_leads(db_path: str | Path | None = None) -> dict:
             payloads = {}
         for c in passing:
             c["payload"] = payloads.get(str(c["external_id"])) or None
+            # The form's own chapter answer beats city guessing —
+            # Facebook leads rarely carry a city at all.
+            c["chapter"] = (route_chapter_from_payload(c["payload"])
+                            or route_chapter(c.get("city"), city_map))
         new_ids = upsert_leads(conn, passing, city_map)
         result["queued"] = len(new_ids)
+        # Self-heal: unrouted rows queued before payload routing existed
+        # (or whose form answers arrived late) get another look.
+        for r in conn.execute(
+                "SELECT id, payload FROM leads WHERE chapter IS NULL "
+                "AND payload IS NOT NULL").fetchall():
+            try:
+                got = route_chapter_from_payload(json.loads(r["payload"]))
+            except Exception:
+                got = None
+            if got:
+                conn.execute("UPDATE leads SET chapter = ? WHERE id = ?",
+                             (got, r["id"]))
         for lid in new_ids:
             lead = dict(conn.execute(
                 "SELECT * FROM leads WHERE id = ?", (lid,)).fetchone())

@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.257.2";
+window.TGF_VERSION = "2.257.3";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.257.3",
+    date: "2026-08-27",
+    changes: [
+      "Lead answers humanized (Kerry: 'reduce down to the initial part'): Facebook option values arrive snake_cased with the explanation glued on after '_-_' — the queue chips, answers panel, and notification email now show the short head, prettified ('All of it!', 'Yes', 'Austin + SA'); URLs/emails/dates left untouched. prettify_answer in leads.py, mirrored in leads.html.",
+      "Chapter routing now reads the lead's OWN form answers (route_chapter_from_payload): a chapter question decides first (austin / san_antonio; austin_sa means both so it alone doesn't), then the stay-in-the-loop answer ('yes_for_san_antonio'), then the city map as fallback — Facebook leads rarely carry a city. A self-heal pass re-routes unrouted rows with stored payloads on every poll, so Will Wallace flips to San Antonio automatically. Austin ping recipient updated to robert@thegolffellowship.com (Kerry's call).",
+    ],
+  },
   {
     version: "2.257.2",
     date: "2026-08-27",
