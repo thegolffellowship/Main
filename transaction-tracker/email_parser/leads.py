@@ -264,6 +264,24 @@ _ANSWER_ATTR = {"ad_set_name": "Ad set",
                 "recent_conversion_event_name": "Form"}
 
 
+# Kerry-ruled short labels (2026-08-27) for the known form questions;
+# an unrecognized question falls back to its humanized key.
+_FORM_LABEL_PATTERNS = (
+    ("play_tuesdays_or_saturdays", "Can You Play"),
+    ("most_important", "Most Important"),
+    ("stay_in_the_loop", "Event Invites"),
+    ("loop", "Event Invites"),
+)
+
+
+def _form_label(key: str) -> str:
+    kl = key.lower()
+    for frag, label in _FORM_LABEL_PATTERNS:
+        if frag in kl:
+            return label
+    return key.replace("_", " ").capitalize()
+
+
 def display_answers(payload: dict | None) -> list[tuple[str, str]]:
     """[(label, pretty_value)] — the lead's form answers first (that's
     what informs the touch), attribution after, plumbing hidden."""
@@ -279,7 +297,7 @@ def display_answers(payload: dict | None) -> list[tuple[str, str]]:
         if label:
             attr.append((label, pretty))
         else:
-            form.append((k.replace("_", " ").capitalize(), pretty))
+            form.append((_form_label(k), pretty))
     return form + attr
 
 

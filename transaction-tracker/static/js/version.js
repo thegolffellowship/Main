@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.257.8";
+window.TGF_VERSION = "2.257.9";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.257.9",
+    date: "2026-08-27",
+    changes: [
+      "Lead question labels abbreviated per Kerry: 'Can You Play' / 'Most Important' / 'Event Invites' — applied to the desktop column headers, the answers panels (desktop + mobile), and the notification email; an unrecognized future question falls back to its humanized key. Mobile card's Form answers fold hides the Campaign and Form attribution rows (desktop panel and storage keep them; Ad set stays on both).",
+    ],
+  },
   {
     version: "2.257.8",
     date: "2026-08-27",

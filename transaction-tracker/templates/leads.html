@@ -77,7 +77,7 @@
         <div class="ld-scroll"><table class="ld-table">
             <thead><tr>
                 <th>Lead</th><th>Email</th><th>Phone</th><th>Chapter</th>
-                <th>Plays</th><th>Wants</th><th>Stay in Loop</th>
+                <th>Can You Play</th><th>Most Important</th><th>Event Invites</th>
                 <th>Ad Set</th><th>Age</th><th>Status</th><th></th>
             </tr></thead>
             <tbody id="ld-body"><tr><td colspan="11">Loading…</td></tr></tbody>
@@ -143,6 +143,19 @@
             "hs_analytics_source", "hs_analytics_source_data_1",
             // form-baked constants — always austin_sa / city_newcomer
             "chapter_interest", "ad_variation"]);
+        // Kerry-ruled short labels for the known questions; unknown
+        // questions fall back to their humanized key.
+        const FORM_LABELS = [
+            ["play_tuesdays_or_saturdays", "Can You Play"],
+            ["most_important", "Most Important"],
+            ["stay_in_the_loop", "Event Invites"],
+            ["loop", "Event Invites"],
+        ];
+        const formLabel = k => {
+            const kl = k.toLowerCase();
+            const hit = FORM_LABELS.find(([frag]) => kl.includes(frag));
+            return hit ? hit[1] : human(k);
+        };
         function displayAnswers(payload) {
             const form = [], attr = [];
             for (const k of Object.keys(payload).sort()) {
@@ -150,7 +163,7 @@
                     HIDE_PREFIX.some(p => k.startsWith(p))) continue;
                 const val = pretty(payload[k]);
                 if (ATTR_LABELS[k]) attr.push([ATTR_LABELS[k], val]);
-                else form.push([human(k), val]);
+                else form.push([formLabel(k), val]);
             }
             return form.concat(attr);
         }
@@ -165,6 +178,10 @@
         leads.forEach(l => {
             const payload = l.payload || {};
             const extras = displayAnswers(payload);
+            // Mobile card hides Campaign/Form attribution (Kerry) —
+            // Ad set stays, it's the one that means something.
+            const mextras = extras.filter(([label]) =>
+                label !== "Campaign" && label !== "Form");
             const answersInner = extras.map(([label, v]) =>
                 `<tr><td class="k">${esc(label)}</td><td>${esc(v)}</td></tr>`).join("");
             const answersRow = extras.length
@@ -207,7 +224,7 @@
                     <span class="ld-mmeta ${late ? "ld-late" : ""}">${esc(l.chapter) || "unrouted"} · ${age}</span> ${statusHtml}</div>
                 ${l.phone ? `<a class="ld-mtap" href="tel:${esc(l.phone)}">📞 ${esc(l.phone)}</a>` : ""}
                 ${l.email ? `<a class="ld-mtap" href="mailto:${esc(l.email)}">✉️ ${esc(l.email)}</a>` : ""}
-                ${extras.length ? `<details class="ld-mdetails"><summary>Form answers</summary><table>${answersInner}</table></details>` : ""}
+                ${mextras.length ? `<details class="ld-mdetails"><summary>Form answers</summary><table>${mextras.map(([label, v]) => `<tr><td class="k">${esc(label)}</td><td>${esc(v)}</td></tr>`).join("")}</table></details>` : ""}
                 ${actions ? `<div class="ld-mactions">${actions}</div>` : ""}
             </div>`);
         });
