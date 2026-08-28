@@ -34,6 +34,23 @@
         .ld-answers td { background: #FAFAF8; font-size: 12px; white-space: normal; }
         .ld-answers .k { color: #6B7280; text-transform: capitalize; padding-right: 10px; }
         .ld-toggle { font-size: 10.5px; color: #2563eb; cursor: pointer; }
+        /* Mobile gets stacked cards with big tap targets; desktop gets
+           the plain table (Kerry 2026-08-27). */
+        #ld-mlist { display: none; }
+        .ld-mcard { background: #fff; border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; margin-bottom: 10px; }
+        .ld-mhead { margin-bottom: 6px; }
+        .ld-mhead b { font-size: 15px; }
+        .ld-mmeta { font-size: 12px; color: #6B7280; margin: 0 6px; }
+        .ld-mtap { display: block; padding: 9px 10px; margin: 6px 0; border: 1px solid var(--border); border-radius: 8px; font-size: 14.5px; color: var(--link, #2563eb); text-decoration: none; }
+        .ld-mdetails summary { font-size: 12px; color: #2563eb; cursor: pointer; padding: 4px 0; }
+        .ld-mdetails table td { padding: 3px 6px; font-size: 12px; white-space: normal; }
+        .ld-mdetails .k { color: #6B7280; text-transform: capitalize; }
+        .ld-mactions { margin-top: 8px; }
+        .ld-mactions .ld-btn { padding: 7px 16px; font-size: 13px; }
+        @media (max-width: 768px) {
+            .ld-scroll { display: none; }
+            #ld-mlist { display: block; }
+        }
     </style>
 </head>
 <body>
@@ -59,12 +76,13 @@
         <p id="ld-adset-line" style="font-size:12.5px;color:#4B5563;margin:-0.5rem 0 1rem;"></p>
         <div class="ld-scroll"><table class="ld-table">
             <thead><tr>
-                <th>Lead</th><th>Contact</th><th>Chapter</th>
+                <th>Lead</th><th>Email</th><th>Phone</th><th>Chapter</th>
                 <th>Plays</th><th>Wants</th><th>Stay in Loop</th>
                 <th>Ad Set</th><th>Age</th><th>Status</th><th></th>
             </tr></thead>
-            <tbody id="ld-body"><tr><td colspan="10">Loading…</td></tr></tbody>
+            <tbody id="ld-body"><tr><td colspan="11">Loading…</td></tr></tbody>
         </table></div>
+        <div id="ld-mlist"></div>
         <p class="ld-note">Leads arrive from the HubSpot poll (runs on a
         timer — LEAD_CHECK_INTERVAL_MINUTES on Railway, currently 15).
         The 48-hour personal touch is the conversion gate — rows past 48
@@ -82,7 +100,7 @@
     async function loadLeads() {
         const res = await fetch("/api/leads");
         if (!res.ok) { document.getElementById("ld-body").innerHTML =
-            "<tr><td colspan=10>Failed to load (need manager login).</td></tr>"; return; }
+            "<tr><td colspan=11>Failed to load (need manager login).</td></tr>"; return; }
         const data = await res.json();
         const leads = data.leads || [];
         const byAdSet = data.by_ad_set || {};
@@ -142,13 +160,14 @@
             const key = Object.keys(payload).find(match);
             return key ? esc(pretty(payload[key])) : "–";
         };
-        const rows = leads.map(l => {
+        const rows = [], cards = [];
+        leads.forEach(l => {
             const payload = l.payload || {};
             const extras = displayAnswers(payload);
+            const answersInner = extras.map(([label, v]) =>
+                `<tr><td class="k">${esc(label)}</td><td>${esc(v)}</td></tr>`).join("");
             const answersRow = extras.length
-                ? `<tr class="ld-answers" id="ld-ans-${l.id}" style="display:none"><td colspan="10"><table>` +
-                  extras.map(([label, v]) => `<tr><td class="k">${esc(label)}</td><td>${esc(v)}</td></tr>`).join("") +
-                  `</table></td></tr>` : "";
+                ? `<tr class="ld-answers" id="ld-ans-${l.id}" style="display:none"><td colspan="11"><table>${answersInner}</table></td></tr>` : "";
             counts[l.status] = (counts[l.status] || 0) + 1;
             const late = l.status === "new" && (l.days_since_arrival ?? 0) >= 2;
             if (late) counts.late++;
@@ -156,28 +175,45 @@
             const age = l.days_since_arrival == null ? "–"
                 : l.days_since_arrival === 0 ? "today"
                 : l.days_since_arrival + "d";
+            const emailLink = l.email
+                ? `<a class="cell-link" href="mailto:${esc(l.email)}">${esc(l.email)}</a>` : "–";
+            const phoneLink = l.phone
+                ? `<a class="cell-link" href="tel:${esc(l.phone)}">${esc(l.phone)}</a>` : "–";
             const actions = l.status === "new"
                 ? `<button class="ld-btn primary" onclick="mark(${l.id},'touched')">Touched</button>
                    <button class="ld-btn" onclick="mark(${l.id},'dismissed')">Dismiss</button>`
                 : l.status === "touched"
                 ? `<button class="ld-btn" onclick="mark(${l.id},'converted')">Converted</button>` : "";
-            return `<tr>
+            const statusHtml = `<span class="ld-pill ld-${esc(l.status)}">${esc(l.status)}</span>` +
+                (l.touched_by ? " <span style='font-size:10.5px;color:#6B7280'>by " + esc(l.touched_by) + "</span>" : "");
+            rows.push(`<tr>
                 <td><b>${esc(name)}</b>${l.customer_id ? ' <span class="ld-existing">member</span>' : ""}
                     ${answersRow ? ` <span class="ld-toggle" onclick="toggleAns(${l.id})">▾</span>` : ""}</td>
-                <td>${esc(l.email) || "–"}<br>${esc(l.phone) || ""}</td>
+                <td>${emailLink}</td>
+                <td>${phoneLink}</td>
                 <td>${esc(l.chapter) || "unrouted"}</td>
                 <td>${colVal(payload, k => k.includes("play_tuesdays_or_saturdays"))}</td>
                 <td>${colVal(payload, k => k.includes("most_important"))}</td>
                 <td>${colVal(payload, k => k.includes("stay_in_the_loop") || k.includes("loop"))}</td>
                 <td>${colVal(payload, k => k === "ad_set_name")}</td>
                 <td class="${late ? "ld-late" : ""}">${age}</td>
-                <td><span class="ld-pill ld-${esc(l.status)}">${esc(l.status)}</span>
-                    ${l.touched_by ? " <span style='font-size:10.5px;color:#6B7280'>by " + esc(l.touched_by) + "</span>" : ""}</td>
+                <td>${statusHtml}</td>
                 <td style="white-space:nowrap">${actions}</td>
-            </tr>` + answersRow;
+            </tr>` + answersRow);
+            // Mobile: stacked card — big tap targets for call/email
+            cards.push(`<div class="ld-mcard">
+                <div class="ld-mhead"><b>${esc(name)}</b>${l.customer_id ? ' <span class="ld-existing">member</span>' : ""}
+                    <span class="ld-mmeta ${late ? "ld-late" : ""}">${esc(l.chapter) || "unrouted"} · ${age}</span> ${statusHtml}</div>
+                ${l.phone ? `<a class="ld-mtap" href="tel:${esc(l.phone)}">📞 ${esc(l.phone)}</a>` : ""}
+                ${l.email ? `<a class="ld-mtap" href="mailto:${esc(l.email)}">✉️ ${esc(l.email)}</a>` : ""}
+                ${extras.length ? `<details class="ld-mdetails"><summary>Form answers</summary><table>${answersInner}</table></details>` : ""}
+                ${actions ? `<div class="ld-mactions">${actions}</div>` : ""}
+            </div>`);
         });
         document.getElementById("ld-body").innerHTML =
-            rows.join("") || "<tr><td colspan=10>No leads yet.</td></tr>";
+            rows.join("") || "<tr><td colspan=11>No leads yet.</td></tr>";
+        document.getElementById("ld-mlist").innerHTML =
+            cards.join("") || "<p style='color:#6B7280'>No leads yet.</p>";
         for (const k of ["new", "touched", "converted"])
             document.getElementById("ld-count-" + k).textContent = counts[k] || 0;
         document.getElementById("ld-count-late").textContent = counts.late || 0;

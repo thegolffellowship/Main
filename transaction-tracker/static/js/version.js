@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.257.6";
+window.TGF_VERSION = "2.257.7";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.257.7",
+    date: "2026-08-27",
+    changes: [
+      "Leads queue mobile layout + tappable contact (Kerry): phones get stacked cards instead of the crammed table — name/chapter/age/status up top, full-width tap targets for 📞 call and ✉️ email (tel:/mailto: hand off to the native apps), form answers behind a details fold, big Touched/Dismiss buttons. Desktop keeps the plain table, with Email and Phone split into their own columns as tappable links. Same data, one fetch; the ≤768px breakpoint swaps the views.",
+    ],
+  },
   {
     version: "2.257.6",
     date: "2026-08-27",
