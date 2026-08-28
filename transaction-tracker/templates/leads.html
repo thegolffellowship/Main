@@ -95,14 +95,42 @@
         // glued on after "_-_" — show the short head, humanized
         // (mirrors prettify_answer in email_parser/leads.py).
         const PRETTY_MAP = { "austin_sa": "Austin + SA", "san_antonio": "San Antonio",
-            "yes_for_san_antonio": "Yes — San Antonio", "yes_for_austin": "Yes — Austin" };
+            "yes_for_san_antonio": "Yes — San Antonio", "yes_for_austin": "Yes — Austin",
+            "yes_-_i_can_play_both_tuesdays_or_saturdays": "Yes — both days" };
+        const human = s => { const t = s.replace(/_/g, " ").trim();
+            return t ? t[0].toUpperCase() + t.slice(1) : ""; };
         function pretty(v) {
             if (typeof v !== "string") return String(v);
             if (v.includes("://") || v.includes("@") || !/[a-z]/i.test(v)) return v;
-            let head = v.split("_-_")[0].replace(/_+$/, "").trim();
+            if (PRETTY_MAP[v.toLowerCase()]) return PRETTY_MAP[v.toLowerCase()];
+            const i = v.indexOf("_-_");
+            const head = (i < 0 ? v : v.slice(0, i)).replace(/_+$/, "").trim();
+            const tail = i < 0 ? "" : v.slice(i + 3).trim();
             if (PRETTY_MAP[head.toLowerCase()]) return PRETTY_MAP[head.toLowerCase()];
-            const text = head.replace(/_/g, " ").trim();
-            return text ? text[0].toUpperCase() + text.slice(1) : v;
+            // A bare yes/no loses the option's substance — keep the tail
+            if (/^(yes|no)$/i.test(head) && tail)
+                return human(head) + " — " + human(tail).toLowerCase();
+            return human(head) || v;
+        }
+        // Mirror of display_answers in leads.py: form questions first,
+        // attribution after, plumbing hidden (all still stored).
+        const HIDE_PREFIX = ["num_", "stripe_", "ad_campaign_id", "ad_set_id", "ad_id"];
+        const ATTR_LABELS = { ad_set_name: "Ad set", ad_variation: "Ad variation",
+            hs_analytics_source_data_2: "Campaign", recent_conversion_event_name: "Form" };
+        const HIDE = new Set(["lifecyclestage", "first_conversion_date",
+            "recent_conversion_date", "first_conversion_event_name",
+            "hs_object_source_label", "hs_analytics_first_url",
+            "hs_analytics_source", "hs_analytics_source_data_1"]);
+        function displayAnswers(payload) {
+            const form = [], attr = [];
+            for (const k of Object.keys(payload).sort()) {
+                if ((HIDE.has(k) && !ATTR_LABELS[k]) ||
+                    HIDE_PREFIX.some(p => k.startsWith(p))) continue;
+                const val = pretty(payload[k]);
+                if (ATTR_LABELS[k]) attr.push([ATTR_LABELS[k], val]);
+                else form.push([human(k), val]);
+            }
+            return form.concat(attr);
         }
         // Form answers (payload keys change per campaign): surface the
         // headline three as chips, everything else behind "answers".
@@ -119,10 +147,10 @@
                 const key = Object.keys(payload).find(match);
                 if (key) chips.push(`<span class="ld-chip">${label}: ${esc(pretty(payload[key]))}</span>`);
             }
-            const extras = Object.entries(payload);
+            const extras = displayAnswers(payload);
             const answersRow = extras.length
                 ? `<tr class="ld-answers" id="ld-ans-${l.id}" style="display:none"><td colspan="8"><table>` +
-                  extras.map(([k, v]) => `<tr><td class="k">${esc(k.replace(/_/g, " "))}</td><td>${esc(pretty(v))}</td></tr>`).join("") +
+                  extras.map(([label, v]) => `<tr><td class="k">${esc(label)}</td><td>${esc(v)}</td></tr>`).join("") +
                   `</table></td></tr>` : "";
             counts[l.status] = (counts[l.status] || 0) + 1;
             const late = l.status === "new" && (l.days_since_arrival ?? 0) >= 2;

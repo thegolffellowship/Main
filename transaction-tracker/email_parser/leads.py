@@ -176,6 +176,7 @@ _PRETTY_MAP = {
     "san_antonio": "San Antonio",
     "yes_for_san_antonio": "Yes — San Antonio",
     "yes_for_austin": "Yes — Austin",
+    "yes_-_i_can_play_both_tuesdays_or_saturdays": "Yes — both days",
 }
 
 
@@ -226,12 +227,56 @@ def prettify_answer(value) -> str:
     v = value.strip()
     if "://" in v or "@" in v or not any(c.isalpha() for c in v):
         return v                     # URLs, emails, ids, dates — leave alone
-    head = v.split("_-_")[0].strip().rstrip("_")
+    mapped = _PRETTY_MAP.get(v.lower())
+    if mapped:
+        return mapped
+    head, _, tail = v.partition("_-_")
+    head = head.strip().rstrip("_")
     mapped = _PRETTY_MAP.get(head.lower())
     if mapped:
         return mapped
-    text = head.replace("_", " ").strip()
-    return (text[:1].upper() + text[1:]) if text else v
+
+    def _human(s):
+        t = s.replace("_", " ").strip()
+        return (t[:1].upper() + t[1:]) if t else ""
+    # A bare yes/no head loses the option's substance ("yes_-_i_can_play
+    # _both_tuesdays_or_saturdays" is not just "Yes") — keep the tail.
+    if head.lower() in ("yes", "no") and tail.strip():
+        return f"{_human(head)} — {_human(tail).lower()}"
+    return _human(head) or v
+
+
+# Answers-panel display rules (email + queue; JS mirror in leads.html).
+# Everything stays STORED — these only govern what renders. Form
+# questions first, ad/campaign attribution second, plumbing hidden.
+_ANSWER_HIDE_PREFIXES = ("num_", "stripe_", "ad_campaign_id", "ad_set_id",
+                         "ad_id")
+_ANSWER_HIDE = {"lifecyclestage", "first_conversion_date",
+                "recent_conversion_date", "first_conversion_event_name",
+                "hs_object_source_label", "hs_analytics_first_url",
+                "hs_analytics_source", "hs_analytics_source_data_1"}
+_ANSWER_ATTR = {"ad_set_name": "Ad set", "ad_variation": "Ad variation",
+                "hs_analytics_source_data_2": "Campaign",
+                "recent_conversion_event_name": "Form"}
+
+
+def display_answers(payload: dict | None) -> list[tuple[str, str]]:
+    """[(label, pretty_value)] — the lead's form answers first (that's
+    what informs the touch), attribution after, plumbing hidden."""
+    if not isinstance(payload, dict):
+        return []
+    hide = set(_ANSWER_HIDE) - set(_ANSWER_ATTR)
+    form, attr = [], []
+    for k in sorted(payload):
+        if k in hide or k.startswith(_ANSWER_HIDE_PREFIXES):
+            continue
+        label = _ANSWER_ATTR.get(k)
+        pretty = prettify_answer(payload[k])
+        if label:
+            attr.append((label, pretty))
+        else:
+            form.append((k.replace("_", " ").capitalize(), pretty))
+    return form + attr
 
 
 def lead_passes_filter(analytics_source: str | None, source_label: str | None,
@@ -415,10 +460,9 @@ def _lead_email_html(lead: dict) -> str:
         except Exception:
             payload = None
     answers = ""
-    if isinstance(payload, dict) and payload:
-        lines = "".join(
-            row(k.replace("_", " "), prettify_answer(v))
-            for k, v in sorted(payload.items()))
+    shown = display_answers(payload)
+    if shown:
+        lines = "".join(row(label, val) for label, val in shown)
         answers = (f"<h3 style='margin:14px 0 4px;font-size:13px;"
                    f"color:#1B1B1B'>Form answers</h3>"
                    f"<table style='border-collapse:collapse'>{lines}</table>")

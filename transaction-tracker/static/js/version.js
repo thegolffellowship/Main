@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.257.4";
+window.TGF_VERSION = "2.257.5";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.257.5",
+    date: "2026-08-27",
+    changes: [
+      "Answers panel reads like a briefing (Kerry: 'missing some of the detail'): nothing was missing from storage — the two W-questions sorted to the bottom under hs_/num_/stripe_ plumbing, and the yes/no prettify dropped the option's substance. display_answers (mirrored in JS + used by the notification email) now renders the FORM QUESTIONS first (Can you play → 'Yes — both days'; Which is most important → 'All of it!'; Stay in the loop → 'Yes — San Antonio'), then attribution as Ad set / Ad variation / Campaign / Form, and hides the plumbing rows (still stored). Generic rule: a bare yes/no head keeps its tail ('Yes — tuesdays only').",
+    ],
+  },
   {
     version: "2.257.4",
     date: "2026-08-27",
