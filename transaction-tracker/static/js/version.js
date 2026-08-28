@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.257.15";
+window.TGF_VERSION = "2.257.16";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.257.16",
+    date: "2026-08-28",
+    changes: [
+      "Prospect name sync in the lead self-heal: a lead-name correction (scoring-lead-edit) now flows into the purchase-less prospect customer the lead created — Facebook hands over business-page names like 'Marcus | Real Estate', which had minted customer 707 with that junk. Guarded to customers with zero purchase history. Applied for Jeremy Falkner (lead 13) and Marcus Galan (lead 11, first Austin ad-set lead); HubSpot contacts corrected to match.",
+    ],
+  },
   {
     version: "2.257.15",
     date: "2026-08-28",

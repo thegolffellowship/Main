@@ -672,6 +672,23 @@ def check_new_leads(db_path: str | Path | None = None) -> dict:
             if cid:
                 conn.execute("UPDATE leads SET customer_id = ? WHERE id = ?",
                              (cid, r["id"]))
+        # Prospect name sync: a lead-name correction (scoring-lead-edit)
+        # must reach the purchase-less prospect the lead created — e.g.
+        # Facebook handed over "Marcus | Real Estate" from a business
+        # page name. Never touches a customer with purchase history.
+        for r in conn.execute(
+                "SELECT l.customer_id AS cid, l.first_name AS fn, "
+                "       l.last_name AS ln "
+                "FROM leads l JOIN customers c ON c.customer_id = l.customer_id "
+                "WHERE l.first_name IS NOT NULL AND l.last_name IS NOT NULL "
+                "AND (COALESCE(c.first_name, '') != l.first_name "
+                "     OR COALESCE(c.last_name, '') != l.last_name) "
+                "AND NOT EXISTS (SELECT 1 FROM items i "
+                "                WHERE i.customer_id = c.customer_id)"
+                ).fetchall():
+            conn.execute(
+                "UPDATE customers SET first_name = ?, last_name = ? "
+                "WHERE customer_id = ?", (r["fn"], r["ln"], r["cid"]))
         # Backfill: prospects created before the acquisition_source fix
         # carry the resolver's 'godaddy' default — purchase-less
         # lead-linked customers are Facebook acquisitions.
