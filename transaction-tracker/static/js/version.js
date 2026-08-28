@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.257.10";
+window.TGF_VERSION = "2.257.11";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.257.11",
+    date: "2026-08-28",
+    changes: [
+      "Chapter routing priority per Kerry: (1) AD SET clicked — primary; (2) Event Invites answer; (3) city map. Previously the form answer outranked the ad set.",
+      "Leads get REAL customer_ids (Kerry: 'I believe we need to'): every poll links each lead by email or creates a customers row through _resolve_or_create_customer — the same resolver save_items uses — so a lead's later purchase lands on the same identity. Requires first AND last name (no shell profiles from half-named FB leads).",
+      "New bridge scoring-lead-edit:<id>|<field>|<value> (first_name/last_name/email/phone/chapter/notes, audited) — FB forms often deliver first-name-only; fixing the name lets the next poll create the customer.",
+    ],
+  },
   {
     version: "2.257.10",
     date: "2026-08-28",

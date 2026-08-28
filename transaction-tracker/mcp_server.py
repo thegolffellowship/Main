@@ -2069,6 +2069,29 @@ def _scoring_dispatch(url: str, extract: str):
                 f"lead {_p[0]} -> {_p[1] if len(_p) > 1 else '?'}"
                 + (f" by {_p[2]}" if len(_p) > 2 and _p[2] else ""))
             return json.dumps(res, indent=2)
+        if cmd == "scoring-lead-edit":
+            # "<id>|<field>|<value>" — fix a lead's identity fields
+            # (FB forms often give first-name-only). field ∈ first_name |
+            # last_name | email | phone | chapter | notes. Audited.
+            _p = [x.strip() for x in arg.split("|")]
+            if len(_p) < 3 or _p[1] not in ("first_name", "last_name",
+                                            "email", "phone", "chapter",
+                                            "notes"):
+                return json.dumps({"error": "need <id>|<field>|<value>; "
+                                            "field: first_name/last_name/"
+                                            "email/phone/chapter/notes"})
+            _val = "|".join(_p[2:])
+            with db._connect() as conn:
+                from email_parser.leads import ensure_leads_table
+                ensure_leads_table(conn)
+                n = conn.execute(
+                    f"UPDATE leads SET {_p[1]} = ? WHERE id = ?",
+                    (_val, int(_p[0]))).rowcount
+                conn.commit()
+            db.log_agent_action("mcp-claude", "scoring-lead-edit",
+                                f"lead {_p[0]}: {_p[1]} -> {_val!r}")
+            return json.dumps({"id": int(_p[0]), "field": _p[1],
+                               "value": _val, "updated": n})
         if cmd == "scoring-leads-poll":
             # On-demand HubSpot lead poll (scheduler runs it every 45 min;
             # no-ops with an error note until HUBSPOT_TOKEN is set).

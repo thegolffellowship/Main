@@ -319,6 +319,32 @@ def _match_customer_id(conn: sqlite3.Connection, email: str | None) -> int | Non
     return row["customer_id"] if row else None
 
 
+def _link_or_create_customer(conn: sqlite3.Connection, lead: dict) -> int | None:
+    """Real customer_id for a lead (Kerry 2026-08-28: 'I believe we need
+    to'). Email match first; otherwise create a customers row through
+    the SAME resolver save_items uses, so when the lead later buys, the
+    order lands on the same identity. Requires a first AND last name —
+    a half-named lead stays unlinked rather than minting a shell
+    profile (fix the name, the next poll links it)."""
+    from . import database as db
+    cid = _match_customer_id(conn, lead.get("email"))
+    if cid:
+        return cid
+    first = (lead.get("first_name") or "").strip()
+    last = (lead.get("last_name") or "").strip()
+    if not (first and last):
+        return None
+    try:
+        return db._resolve_or_create_customer(
+            conn, f"{first} {last}", lead.get("email"),
+            phone=lead.get("phone"), chapter=lead.get("chapter"),
+            first_name=first, last_name=last)
+    except Exception:
+        logger.warning("Lead customer link failed for %s %s", first, last,
+                       exc_info=True)
+        return None
+
+
 def upsert_leads(conn: sqlite3.Connection, rows: list[dict],
                  city_map: dict | None = None) -> list[int]:
     """Insert new lead rows (dedup on (source, external_id)); returns the
@@ -589,11 +615,13 @@ def check_new_leads(db_path: str | Path | None = None) -> dict:
                                      db_path=db_path)
 
         def _route(payload, city):
-            # Priority: the lead's OWN chapter answer, then the ad set
-            # they clicked (chapter-targeted), then the city map.
-            got = route_chapter_from_payload(payload)
-            if not got and isinstance(payload, dict):
+            # Kerry-ruled priority (2026-08-28): (1) the AD SET they
+            # clicked — chapter-targeted, primary; (2) the Event Invites
+            # (stay-in-the-loop) answer; (3) the city map.
+            got = None
+            if isinstance(payload, dict):
                 got = ad_set_chapters.get(str(payload.get("ad_set_id") or ""))
+            got = got or route_chapter_from_payload(payload)
             return got or route_chapter(city, city_map)
 
         for c in passing:
@@ -618,6 +646,15 @@ def check_new_leads(db_path: str | Path | None = None) -> dict:
                     "UPDATE leads SET payload = ?, "
                     "chapter = COALESCE(chapter, ?) WHERE id = ?",
                     (json.dumps(enriched), got, r["id"]))
+        # Every lead gets a REAL customer_id (Kerry 2026-08-28) — link
+        # by email or create through the save_items resolver. Runs each
+        # poll so a name fix (or a later signup) links retroactively.
+        for r in conn.execute(
+                "SELECT * FROM leads WHERE customer_id IS NULL").fetchall():
+            cid = _link_or_create_customer(conn, dict(r))
+            if cid:
+                conn.execute("UPDATE leads SET customer_id = ? WHERE id = ?",
+                             (cid, r["id"]))
         for lid in new_ids:
             lead = dict(conn.execute(
                 "SELECT * FROM leads WHERE id = ?", (lid,)).fetchone())

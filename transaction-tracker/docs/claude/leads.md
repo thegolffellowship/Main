@@ -61,6 +61,24 @@ automatically. The queue renders headline chips (Plays / Wants /
 Chapter) + an expandable full-answers row, and the notification email
 carries the answers table.
 
+## Chapter routing (Kerry-ruled 2026-08-28)
+
+1. **Ad set clicked** (`lead_ad_set_chapters` dial) — primary.
+2. **Event Invites answer** (stay-in-the-loop: `yes_for_san_antonio`) —
+   `chapter_interest` is form boilerplate and never decides.
+3. City map — last resort.
+"Yes for both" + no ad set = unrouted → pings every touch owner. Routed
+leads ping default + their own chapter's list only.
+
+## Real customer_ids (Kerry 2026-08-28: "I believe we need to")
+
+Every poll links every lead to a customers row: email match first,
+otherwise created through `_resolve_or_create_customer` — the SAME
+resolver save_items uses — so a later purchase lands on the same
+identity. Creation requires a first AND last name (no shell profiles
+from half-named FB leads; fix the name via
+`scoring-lead-edit:<id>|last_name|<value>` and the next poll links it).
+
 ## Lifecycle
 
 `new` → (button/bridge) → `touched` (stamps `touched_at`, `touched_by`)
