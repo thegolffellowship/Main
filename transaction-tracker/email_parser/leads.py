@@ -710,16 +710,36 @@ def get_leads(status: str = "", limit: int = 200,
 
 def mark_lead(lead_id: int, status: str, touched_by: str = "",
               notes: str = "", db_path: str | Path | None = None) -> dict:
-    if status not in ("new", "touched", "converted", "dismissed"):
+    """Status moves + corrections (Kerry 2026-08-28: undo converted,
+    change touched_by/notes after the fact).
+
+      new        — full undo/restore: clears touched_at + touched_by
+      touched    — mark touched; ALSO the undo of converted (keeps the
+                   original touched stamp)
+      converted / dismissed — as named
+      edit       — no status change; just update touched_by and/or notes
+    A non-empty touched_by/notes always overwrites the stored value."""
+    if status not in ("new", "touched", "converted", "dismissed", "edit"):
         return {"error": f"invalid status {status!r}"}
     from . import database as db
     with db._connect(db_path) as conn:
         ensure_leads_table(conn)
-        row = conn.execute("SELECT id FROM leads WHERE id = ?",
+        row = conn.execute("SELECT id, status FROM leads WHERE id = ?",
                            (lead_id,)).fetchone()
         if not row:
             return {"error": f"lead {lead_id} not found"}
-        if status in ("touched", "converted"):
+        if status == "edit":
+            conn.execute(
+                "UPDATE leads SET touched_by = COALESCE(NULLIF(?, ''), "
+                "touched_by), notes = COALESCE(NULLIF(?, ''), notes) "
+                "WHERE id = ?", (touched_by, notes, lead_id))
+            status = row["status"]
+        elif status == "new":
+            conn.execute(
+                "UPDATE leads SET status = 'new', touched_at = NULL, "
+                "touched_by = NULL, notes = COALESCE(NULLIF(?, ''), notes) "
+                "WHERE id = ?", (notes, lead_id))
+        elif status in ("touched", "converted"):
             conn.execute(
                 "UPDATE leads SET status = ?, touched_at = COALESCE(touched_at, "
                 "datetime('now')), touched_by = COALESCE(NULLIF(?, ''), "

@@ -201,9 +201,17 @@
                 ? `<button class="ld-btn primary" onclick="mark(${l.id},'touched')">Touched</button>
                    <button class="ld-btn" onclick="mark(${l.id},'dismissed')">Dismiss</button>`
                 : l.status === "touched"
-                ? `<button class="ld-btn" onclick="mark(${l.id},'converted')">Converted</button>` : "";
+                ? `<button class="ld-btn primary" onclick="mark(${l.id},'converted')">Converted</button>
+                   <button class="ld-btn" onclick="editLead(${l.id})">Edit</button>
+                   <button class="ld-btn" onclick="mark(${l.id},'new')">Undo</button>`
+                : l.status === "converted"
+                ? `<button class="ld-btn" onclick="editLead(${l.id})">Edit</button>
+                   <button class="ld-btn" onclick="mark(${l.id},'touched','')">Undo</button>`
+                : l.status === "dismissed"
+                ? `<button class="ld-btn" onclick="mark(${l.id},'new')">Restore</button>` : "";
             const statusHtml = `<span class="ld-pill ld-${esc(l.status)}">${esc(l.status)}</span>` +
-                (l.touched_by ? " <span style='font-size:10.5px;color:#6B7280'>by " + esc(l.touched_by) + "</span>" : "");
+                (l.touched_by ? " <span style='font-size:10.5px;color:#6B7280'>by " + esc(l.touched_by) + "</span>" : "") +
+                (l.notes ? "<br><span style='font-size:10.5px;color:#6B7280;white-space:normal'>" + esc(l.notes) + "</span>" : "");
             rows.push(`<tr>
                 <td><b>${esc(name)}</b>${l.customer_id ? ' <span class="ld-existing">member</span>' : ""}
                     ${answersRow ? ` <span class="ld-toggle" onclick="toggleAns(${l.id})">▾</span>` : ""}</td>
@@ -240,14 +248,21 @@
         const el = document.getElementById("ld-ans-" + id);
         if (el) el.style.display = el.style.display === "none" ? "" : "none";
     }
-    async function mark(id, status) {
-        let touched_by = "";
-        if (status === "touched")
+    async function mark(id, status, touched_by, notes) {
+        if (status === "touched" && touched_by === undefined)
             touched_by = prompt("Who made the touch? (Kerry / Robert / …)") || "";
         await fetch(`/api/leads/${id}/mark`, {
             method: "POST", headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ status, touched_by }) });
+            body: JSON.stringify({ status, touched_by: touched_by || "",
+                                   notes: notes || "" }) });
         loadLeads();
+    }
+    function editLead(id) {
+        // Correct touched_by / notes without changing status (blank
+        // keeps the stored value).
+        const by = prompt("Touched by (blank = keep current):") || "";
+        const note = prompt("Note (blank = keep current):") || "";
+        if (by || note) mark(id, "edit", by, note);
     }
     loadLeads();
     </script>

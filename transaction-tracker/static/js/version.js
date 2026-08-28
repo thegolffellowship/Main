@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.257.11";
+window.TGF_VERSION = "2.257.12";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.257.12",
+    date: "2026-08-28",
+    changes: [
+      "Lead status undo + corrections (Kerry): converted rows get Undo (back to touched, original touch stamp kept) and touched rows get Undo (back to new, stamps cleared — dismissed rows get Restore). New Edit button on touched/converted rows corrects touched_by and/or adds a note without changing status (mark_lead 'edit' pseudo-status; blank keeps the stored value); notes now display under the status pill. Works on desktop and mobile cards alike.",
+    ],
+  },
   {
     version: "2.257.11",
     date: "2026-08-28",
