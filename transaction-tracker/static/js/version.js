@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.257.7";
+window.TGF_VERSION = "2.257.8";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.257.8",
+    date: "2026-08-27",
+    changes: [
+      "ad_variation hidden from lead display (Kerry: 'why is it always city newcomer?'): it is a hidden tracking constant baked into the Facebook lead form itself — the HubSpot property's own label is 'city_newcomer' under 'Lead Ad Properties', same pattern as chapter_interest/austin_sa — so every submission of TGF Form v26.02 stamps the identical value. Treated like chapter_interest: hidden from the queue and email (still stored), and it resurfaces the moment a future campaign actually varies it. The SA/Austin split lives in the ad sets, which are tracked by id.",
+    ],
+  },
   {
     version: "2.257.7",
     date: "2026-08-27",

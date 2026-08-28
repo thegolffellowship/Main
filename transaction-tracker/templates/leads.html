@@ -135,13 +135,14 @@
         // Mirror of display_answers in leads.py: form questions first,
         // attribution after, plumbing hidden (all still stored).
         const HIDE_PREFIX = ["num_", "stripe_", "ad_campaign_id", "ad_set_id", "ad_id"];
-        const ATTR_LABELS = { ad_set_name: "Ad set", ad_variation: "Ad variation",
+        const ATTR_LABELS = { ad_set_name: "Ad set",
             hs_analytics_source_data_2: "Campaign", recent_conversion_event_name: "Form" };
         const HIDE = new Set(["lifecyclestage", "first_conversion_date",
             "recent_conversion_date", "first_conversion_event_name",
             "hs_object_source_label", "hs_analytics_first_url",
             "hs_analytics_source", "hs_analytics_source_data_1",
-            "chapter_interest"]);  // boilerplate — always austin_sa (Kerry)
+            // form-baked constants — always austin_sa / city_newcomer
+            "chapter_interest", "ad_variation"]);
         function displayAnswers(payload) {
             const form = [], attr = [];
             for (const k of Object.keys(payload).sort()) {

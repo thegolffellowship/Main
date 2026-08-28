@@ -255,9 +255,11 @@ _ANSWER_HIDE = {"lifecyclestage", "first_conversion_date",
                 "recent_conversion_date", "first_conversion_event_name",
                 "hs_object_source_label", "hs_analytics_first_url",
                 "hs_analytics_source", "hs_analytics_source_data_1",
-                # Kerry 2026-08-27: static boilerplate, always austin_sa
-                "chapter_interest"}
-_ANSWER_ATTR = {"ad_set_name": "Ad set", "ad_variation": "Ad variation",
+                # Kerry 2026-08-27: static boilerplate baked into the FB
+                # lead form's hidden fields — always austin_sa /
+                # city_newcomer on every submission of this form
+                "chapter_interest", "ad_variation"}
+_ANSWER_ATTR = {"ad_set_name": "Ad set",
                 "hs_analytics_source_data_2": "Campaign",
                 "recent_conversion_event_name": "Form"}
 
