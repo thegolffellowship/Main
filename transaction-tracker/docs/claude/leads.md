@@ -124,6 +124,14 @@ tag picker in desktop actions + mobile action row, orange pill display,
 `POST /api/leads/<id>/tag`, bridge `scoring-lead-tag:<id>|<tag>`
 (empty clears; audited), `set_lead_tag`/`get_tag_options` in leads.py.
 
+## Invite-list CSV export (Kerry 2026-08-28)
+
+`GET /api/leads/export-csv?chapter=San Antonio|Austin` (manager+) —
+First Name / Last Name / Email, handicap-export style, buttons on the
+Lead Center. Membership = the lead's Invitations opt-in (yes_for_<ch> /
+yes_for_both; no answer → routed chapter); excludes dismissed, Bad
+contact / Not now tags, and email-less rows. `get_lead_export_rows`.
+
 ## Notes log + first-touch SMS (#361)
 
 `lead_notes` table (lead_id FK, author, note, timestamps) —
