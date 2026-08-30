@@ -55,6 +55,8 @@
         .ld-dot-g { background: #059669; } .ld-dot-r { background: #DC2626; }
         .ld-dot-o { background: #E87C3E; } .ld-dot-n { background: #9CA3AF; }
         .ld-bchip { display: inline-block; margin: 3px 5px 0 0; padding: 2px 9px; border-radius: 99px; font-size: 11px; font-weight: 700; background: #EEF2F7; color: #374151; }
+        .ld-tag { display: inline-block; margin: 2px 0 0; padding: 2px 9px; border-radius: 99px; font-size: 11px; font-weight: 700; background: #FFF3EA; border: 1px solid #F3D5BD; color: #9A4E1C; }
+        .ld-tagsel { padding: 4px 6px; border: 1px solid var(--border); border-radius: 8px; font-size: 12px; background: #fff; color: #374151; max-width: 130px; }
         .ld-acts { display: flex; gap: 8px; margin: 8px 0 2px; }
         .ld-act { flex: 1; text-align: center; padding: 9px 0; border: 1px solid var(--border); border-radius: 8px; font-size: 13px; font-weight: 600; color: var(--link, #2563eb); text-decoration: none; background: #fff; cursor: pointer; }
         .ld-noteprev { font-size: 12px; color: #4B5563; margin-top: 5px; white-space: normal; }
@@ -284,7 +286,13 @@
                 : l.status === "dismissed"
                 ? `<button class="ld-btn" onclick="mark(${l.id},'new')">Restore</button>` : "";
             const latestNote = (l.notes_log || [])[0];
-            const statusHtml = `<span class="ld-pill ld-${esc(l.status)}">${esc(l.status)}</span>` +
+            const tagSel = `<select class="ld-tagsel" onchange="setTag(${l.id}, this.value)">` +
+                `<option value="">🏷 tag…</option>` +
+                (ALL.tag_options || []).map(t =>
+                    `<option value="${esc(t)}"${t === l.tag ? " selected" : ""}>${esc(t)}</option>`).join("") +
+                `</select>`;
+            const statusHtml = (l.tag ? `<span class="ld-tag">${esc(l.tag)}</span> ` : "") +
+                `<span class="ld-pill ld-${esc(l.status)}">${esc(l.status)}</span>` +
                 (l.touched_by ? " <span style='font-size:10.5px;color:#6B7280'>by " + esc(l.touched_by) + "</span>" : "") +
                 (l.notes ? "<br><span style='font-size:10.5px;color:#6B7280;white-space:normal'>" + esc(l.notes) + "</span>" : "") +
                 (latestNote ? "<br><span style='font-size:10.5px;color:#6B7280;white-space:normal'>📝 " + esc(latestNote.note) + "</span>" : "");
@@ -301,7 +309,7 @@
                 <td>${fmtReceived(l)}</td>
                 <td class="${late ? "ld-late" : ""}">${age}</td>
                 <td>${statusHtml}</td>
-                <td style="white-space:nowrap">${actions}</td>
+                <td style="white-space:nowrap">${actions} ${tagSel}</td>
             </tr>` + answersRow);
             // Mobile call-sheet card (#361): one-glance triage,
             // two-tap contact. Badges always visible; sms:/tel:/mailto:
@@ -353,7 +361,7 @@
             cards.push(`<div class="ld-mcard">
                 <div class="ld-mhead"><span class="ld-dot ${dotCls}"></span><b>${esc(name)}</b>${l.has_history ? ' <span class="ld-existing">existing customer</span>' : ""}
                     <span class="ld-mmeta ${late ? "ld-late" : ""}">${esc(l.chapter) || "unrouted"} · ${age}</span></div>
-                <div>${badges.map(b => `<span class="ld-bchip">${esc(b)}</span>`).join("")}</div>
+                <div>${badges.map(b => `<span class="ld-bchip">${esc(b)}</span>`).join("")}${l.tag ? `<span class="ld-tag">${esc(l.tag)}</span>` : ""}</div>
                 <div class="ld-acts">
                     ${l.phone ? `<a class="ld-act" href="sms:${esc(l.phone)}?&body=${encodeURIComponent(smsBody)}">💬 Text</a>
                                  <a class="ld-act" href="tel:${esc(l.phone)}">📞 Call</a>` : ""}
@@ -365,7 +373,7 @@
                     ${notesList ? `<table class="ld-mnotes">${notesList}</table><hr style="border:none;border-top:1px solid #F3F2EF">` : ""}
                     ${mextras.length ? `<table>${mextras.map(([label, v]) => `<tr><td class="k">${esc(label)}</td><td>${esc(v)}</td></tr>`).join("")}</table>` : ""}
                 </details>
-                <div class="ld-mactions">${primary}
+                <div class="ld-mactions">${primary} ${tagSel}
                     <span class="ld-menu-wrap"><button class="ld-btn" onclick="toggleMenu(${l.id})">⋯</button>
                         <span class="ld-menu" id="ld-menu-${l.id}">${menuItems}</span></span>
                 </div>
@@ -382,6 +390,11 @@
             `${counts.new || 0} new · ${counts.touched || 0} touched · ` +
             `<span class="${counts.late ? "ld-late" : ""}">${counts.late || 0} overdue</span>` +
             ` · ${counts.converted || 0} converted`;
+    }
+    function setTag(id, tag) {
+        fetch(`/api/leads/${id}/tag`, {
+            method: "POST", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ tag }) }).then(loadLeads);
     }
     function noteLead(id) {
         const note = prompt("Note:") || "";

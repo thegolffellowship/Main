@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.258.0";
+window.TGF_VERSION = "2.259.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.259.0",
+    date: "2026-08-28",
+    changes: [
+      "Lead disposition TAGS (Kerry: 'additional options for tagging leads, not just touched and converted'): one current tag per lead, orthogonal to the new/touched/converted/dismissed pipeline. Options are rules-as-data in the lead_tag_options dial — defaults: Left VM · Texted · No answer · Call back · Interested · Coming to event · Not now · Bad contact. Tag picker in the desktop actions column and the mobile card's action row (native select); the tag renders as an orange pill next to status / in the mobile chip row. Tagging a NEW lead auto-marks it touched (a tag means somebody acted). POST /api/leads/<id>/tag; audited bridge scoring-lead-tag:<id>|<tag> (empty clears); get_lead_center exposes the dial.",
+    ],
+  },
   {
     version: "2.258.0",
     date: "2026-08-28",

@@ -114,6 +114,16 @@ updates payload-if-changed; EMPTY identity fields fill from HubSpot
 (a manual scoring-lead-edit fix is never clobbered), then the standing
 self-heals re-route chapter and re-derive stats.
 
+## Disposition tags (Kerry 2026-08-28)
+
+One current `leads.tag` per lead, orthogonal to the status pipeline.
+Options are the `lead_tag_options` dial (JSON list; defaults Left VM ·
+Texted · No answer · Call back · Interested · Coming to event · Not
+now · Bad contact). Tagging a NEW lead auto-marks it touched. Surfaces:
+tag picker in desktop actions + mobile action row, orange pill display,
+`POST /api/leads/<id>/tag`, bridge `scoring-lead-tag:<id>|<tag>`
+(empty clears; audited), `set_lead_tag`/`get_tag_options` in leads.py.
+
 ## Notes log + first-touch SMS (#361)
 
 `lead_notes` table (lead_id FK, author, note, timestamps) —

@@ -107,6 +107,13 @@ def ensure_leads_table(conn: sqlite3.Connection) -> None:
         conn.execute("ALTER TABLE leads ADD COLUMN payload TEXT")
     except sqlite3.OperationalError:
         pass
+    try:
+        # Disposition tag (Kerry 2026-08-28: "additional options for
+        # tagging leads, not just touched and converted") — one current
+        # tag per lead, options from the lead_tag_options dial.
+        conn.execute("ALTER TABLE leads ADD COLUMN tag TEXT")
+    except sqlite3.OperationalError:
+        pass
     # Per-lead notes log (mailbox #361 — first brick of Tracker-as-CRM):
     # timestamped, authored; newest previews on the card.
     conn.execute("""
@@ -835,6 +842,47 @@ def get_leads(status: str = "", limit: int = 200,
         except Exception:
             pass
     return rows
+
+
+# Kerry-editable via the lead_tag_options dial (JSON list of strings);
+# these are the defaults. Tags are dispositions, orthogonal to the
+# new/touched/converted/dismissed pipeline.
+DEFAULT_TAG_OPTIONS = ["Left VM", "Texted", "No answer", "Call back",
+                       "Interested", "Coming to event", "Not now",
+                       "Bad contact"]
+
+
+def get_tag_options(db_path: str | Path | None = None) -> list[str]:
+    opts = _dial_json("lead_tag_options", [], db_path=db_path)
+    return [str(o) for o in opts] if opts else list(DEFAULT_TAG_OPTIONS)
+
+
+def set_lead_tag(lead_id: int, tag: str,
+                 db_path: str | Path | None = None) -> dict:
+    """Set (or clear with '') a lead's disposition tag. Tagging a NEW
+    lead marks it touched — a tag means somebody acted on it."""
+    from . import database as db
+    tag = (tag or "").strip()
+    if tag and tag not in get_tag_options(db_path):
+        return {"error": f"unknown tag {tag!r} — options: "
+                         f"{get_tag_options(db_path)} (edit the "
+                         "lead_tag_options dial to add one)"}
+    with db._connect(db_path) as conn:
+        ensure_leads_table(conn)
+        row = conn.execute("SELECT id, status FROM leads WHERE id = ?",
+                           (lead_id,)).fetchone()
+        if not row:
+            return {"error": f"lead {lead_id} not found"}
+        if tag and row["status"] == "new":
+            conn.execute(
+                "UPDATE leads SET tag = ?, status = 'touched', "
+                "touched_at = COALESCE(touched_at, datetime('now')) "
+                "WHERE id = ?", (tag, lead_id))
+        else:
+            conn.execute("UPDATE leads SET tag = ? WHERE id = ?",
+                         (tag or None, lead_id))
+        conn.commit()
+    return {"id": lead_id, "tag": tag or None, "ok": True}
 
 
 def add_lead_note(lead_id: int, note: str, author: str = "",

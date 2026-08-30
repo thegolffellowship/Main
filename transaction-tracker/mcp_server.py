@@ -2092,6 +2092,17 @@ def _scoring_dispatch(url: str, extract: str):
                                 f"lead {_p[0]}: {_p[1]} -> {_val!r}")
             return json.dumps({"id": int(_p[0]), "field": _p[1],
                                "value": _val, "updated": n})
+        if cmd == "scoring-lead-tag":
+            # "<id>|<tag>" — set a disposition tag (empty tag clears).
+            # Options live in the lead_tag_options dial. Audited.
+            _p = arg.split("|", 1)
+            from email_parser.leads import set_lead_tag
+            res = set_lead_tag(int(_p[0].strip()),
+                               _p[1].strip() if len(_p) > 1 else "")
+            db.log_agent_action("mcp-claude", "scoring-lead-tag",
+                                f"lead {_p[0].strip()} -> "
+                                f"{(_p[1].strip() if len(_p) > 1 else '(cleared)')!r}")
+            return json.dumps(res, indent=2)
         if cmd == "scoring-lead-note":
             # "<id>|<author>|<note text>" — append to the lead's notes
             # log (#361). Audited.
@@ -3739,6 +3750,7 @@ def get_lead_center(status: str = "", limit: int = 50) -> str:
                                             DEFAULT_SOURCE_FILTER),
                 "lead_city_chapters": _dial("lead_city_chapters",
                                             DEFAULT_CITY_CHAPTERS),
+                "lead_tag_options": _dial("lead_tag_options") or None,
             },
         },
         "status_counts": counts,

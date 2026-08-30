@@ -11191,9 +11191,20 @@ def api_leads():
             conn.close()
     except Exception:
         logger.warning("Lead next-event lookup failed", exc_info=True)
+    from email_parser.leads import get_tag_options
     return jsonify({"leads": leads, "by_ad_set": by_ad_set,
                     "sms_template": sms_template,
-                    "next_events": next_events})
+                    "next_events": next_events,
+                    "tag_options": get_tag_options()})
+
+
+@app.route("/api/leads/<int:lead_id>/tag", methods=["POST"])
+@require_role("manager")
+def api_lead_tag(lead_id):
+    from email_parser.leads import set_lead_tag
+    d = request.get_json(silent=True) or {}
+    res = set_lead_tag(lead_id, (d.get("tag") or "").strip())
+    return jsonify(res), (400 if res.get("error") else 200)
 
 
 @app.route("/api/leads/<int:lead_id>/note", methods=["POST"])
