@@ -844,6 +844,44 @@ def get_leads(status: str = "", limit: int = 200,
     return rows
 
 
+def get_lead_export_rows(chapter: str,
+                         db_path: str | Path | None = None) -> list[dict]:
+    """First/Last/Email rows for one chapter's invite-list CSV (Kerry
+    2026-08-28, handicap-export style). Membership criteria: the lead's
+    INVITATIONS opt-in answer ('yes_for_<chapter>' or 'yes_for_both');
+    a lead with no answer falls back to its routed chapter. Excluded:
+    dismissed leads, 'Bad contact'/'Not now' tags, rows without email."""
+    want_sa = chapter == "San Antonio"
+    out = []
+    for l in get_leads(limit=1000, db_path=db_path):
+        if l.get("status") == "dismissed":
+            continue
+        if (l.get("tag") or "") in ("Bad contact", "Not now"):
+            continue
+        email = (l.get("email") or "").strip()
+        if not email:
+            continue
+        loop_val = ""
+        for k, v in (l.get("payload") or {}).items():
+            if ("stay_in_the_loop" in k.lower() or "loop" in k.lower()) \
+                    and isinstance(v, str):
+                loop_val = v.lower()
+                break
+        if loop_val:
+            ok = (loop_val == "yes_for_both"
+                  or (want_sa and "san_antonio" in loop_val)
+                  or (not want_sa
+                      and "austin" in loop_val.replace("austin_sa", "")))
+        else:
+            ok = l.get("chapter") == chapter
+        if ok:
+            out.append({"first_name": l.get("first_name") or "",
+                        "last_name": l.get("last_name") or "",
+                        "email": email})
+    out.sort(key=lambda r: (r["last_name"].lower(), r["first_name"].lower()))
+    return out
+
+
 # Kerry-editable via the lead_tag_options dial (JSON list of strings);
 # these are the defaults. Tags are dispositions, orthogonal to the
 # new/touched/converted/dismissed pipeline.

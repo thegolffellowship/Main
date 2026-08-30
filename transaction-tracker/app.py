@@ -11198,6 +11198,36 @@ def api_leads():
                     "tag_options": get_tag_options()})
 
 
+@app.route("/api/leads/export-csv")
+@require_role("manager")
+def api_leads_export_csv():
+    """Invite-list CSV per chapter (Kerry 2026-08-28, handicap-export
+    style): First Name / Last Name / Email for leads whose Invitations
+    answer covers the chapter (fallback: routed chapter). ?chapter=
+    San Antonio | Austin."""
+    chapter = (request.args.get("chapter") or "").strip()
+    if chapter not in ("San Antonio", "Austin"):
+        return jsonify({"error": "chapter must be 'San Antonio' or 'Austin'"}), 400
+    from email_parser.leads import get_lead_export_rows
+    rows = get_lead_export_rows(chapter)
+
+    import io as _io, csv as _csv
+    buf = _io.StringIO()
+    writer = _csv.writer(buf)
+    writer.writerow(["First Name", "Last Name", "Email"])
+    for row in rows:
+        writer.writerow([row["first_name"], row["last_name"], row["email"]])
+
+    chapter_slug = chapter.lower().replace(" ", "_")
+    filename = (f"tgf_leads_{chapter_slug}_"
+                f"{datetime.now().strftime('%Y%m%d')}.csv")
+    return Response(
+        buf.getvalue(),
+        mimetype="text/csv",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
 @app.route("/api/leads/<int:lead_id>/tag", methods=["POST"])
 @require_role("manager")
 def api_lead_tag(lead_id):

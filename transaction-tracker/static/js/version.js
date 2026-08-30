@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.259.0";
+window.TGF_VERSION = "2.259.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.259.1",
+    date: "2026-08-28",
+    changes: [
+      "Lead invite-list CSV export (Kerry, handicap-export style): ⬇ SA CSV / ⬇ Austin CSV buttons on the Lead Center download First Name / Last Name / Email per chapter. Membership follows the lead's INVITATIONS opt-in ('Yes — San Antonio' / 'Yes — Austin' / 'Both'; a lead with no answer falls back to its routed chapter); excluded: dismissed leads, Bad contact / Not now tags, and rows without email. GET /api/leads/export-csv?chapter= (manager+), filename tgf_leads_<chapter>_<date>.csv.",
+    ],
+  },
   {
     version: "2.259.0",
     date: "2026-08-28",
