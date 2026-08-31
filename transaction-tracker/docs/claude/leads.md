@@ -185,7 +185,13 @@ respond immediately to new arrivals and hot conversations): tier 0 new
 touched · 3 quiet outreach (Texted / Left VM / Sent email / No answer) · 4
 converted · 5 dismissed; within a tier, newest activity (latest note,
 else touch, else arrival) first. Newest/Oldest/Name/Status sorts
-remain in the select.
+remain in the select. **Category bars, no status badges** (Kerry
+2026-08-31, v2.263.0): in priority view the desktop rows group under
+dark NEW LEADS / TOUCHED / CONVERTED / DISMISSED bars with counts —
+the bar carries the status, so the per-row status pill is gone and
+the left column is just age/owner + tag chip (rows max two lines).
+The pill returns only in flat sorts (Name/Newest/…) where there are
+no sections. Mobile call sheet unchanged.
 
 ## MCP access for CA (platform-claude)
 

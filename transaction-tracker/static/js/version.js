@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.262.1";
+window.TGF_VERSION = "2.263.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.263.0",
+    date: "2026-08-31",
+    changes: [
+      "Lead Center desktop: category bars replace status badges (Kerry: 'compress to two rows max… touched should automatically be posted at top under a category bar for NEW LEADS'). In the default priority view, rows group under dark NEW LEADS / TOUCHED / CONVERTED / DISMISSED section bars with counts — the bar states the status, so the per-row touched/converted pills are gone (converted is already conveyed by the tag selector + payment auto-detect) and the left column is just age/owner + tag chip. Rows now sit at two lines max. The status pill returns only in flat sorts (Name, Newest…) where sections don't exist; mobile call sheet unchanged.",
+    ],
+  },
   {
     version: "2.262.1",
     date: "2026-08-31",
