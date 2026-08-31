@@ -88,7 +88,13 @@ math.
 5. **Message History** — collapsible section
 
 ## Columns in registrations table
-Order: RSVP circle → Customer → HCP → Holes → Games → Tee → Status → Order → Price → Actions
+Order: RSVP circle → Customer → HCP → Holes → Games → Fall Race → Tee →
+Status → Order → Price → Actions. Fall Race (v2.270.0, Kerry
+2026-08-31): green YES when the player is enrolled in the current Fall
+NET Points Race — from `season_contests` via customer_id, served by
+`GET /api/season-contests/fall-net-ids` (view-only+; season =
+"<Central-time year> Fall", rolls forward automatically); sortable
+(enrollees first) and toggleable in the Columns menu.
 
 ## Status normalization
 The `user_status` field is cleaned at display time via `_cleanStatus()`:

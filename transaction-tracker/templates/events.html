@@ -2130,7 +2130,7 @@
     async function kickInitialLoad() {
         if (_bootLoadKicked) return;
         _bootLoadKicked = true;
-        await Promise.all([fetchItems(), fetchHandicapIndexMap(), fetchTgfPayoutData(), fetchCoursesForDatalist(), fetchCustomerRolesMap()]);
+        await Promise.all([fetchItems(), fetchHandicapIndexMap(), fetchTgfPayoutData(), fetchCoursesForDatalist(), fetchCustomerRolesMap(), fetchFallRaceIds()]);
         fetch("/api/events/sync", { method: "POST" }).then(() => fetchEvents()).catch(() => fetchEvents());
         fetchParseWarnings();
         fetchOrphanedItems();
@@ -3420,6 +3420,7 @@
         { key: "handicap", label: "HCP", default: true },
         { key: "holes", label: "Holes", default: true },
         { key: "side_games", label: "Games", default: true },
+        { key: "fall_race", label: "Fall Race", default: true },
         { key: "tee_choice", label: "Tee", default: true },
         { key: "user_status", label: "Status", default: true },
         { key: "order_date", label: "Order", default: true },
@@ -3450,6 +3451,11 @@
             if (detailSortField === "item_price") {
                 va = parseFloat((String(va) || "0").replace(/[$,]/g, "")) || 0;
                 vb = parseFloat((String(vb) || "0").replace(/[$,]/g, "")) || 0;
+                return asc ? va - vb : vb - va;
+            }
+            if (detailSortField === "fall_race") {
+                va = inFallRace(a) ? 0 : 1;
+                vb = inFallRace(b) ? 0 : 1;
                 return asc ? va - vb : vb - va;
             }
             if (detailSortField === "customer") {
@@ -4733,6 +4739,22 @@
             console.warn("Failed to load customer roles:", err);
         }
     }
+
+    // Fall NET Points Race enrollees (Kerry 2026-08-31: roster column
+    // showing who's in the Fall Points Race) — customer_id keyed.
+    let FALL_RACE_IDS = new Set();
+    async function fetchFallRaceIds() {
+        try {
+            const res = await fetch("/api/season-contests/fall-net-ids");
+            if (!res.ok) return;
+            const data = await res.json();
+            FALL_RACE_IDS = new Set((data.customer_ids || []).map(Number));
+        } catch (err) {
+            console.warn("Failed to load fall race ids:", err);
+        }
+    }
+    const inFallRace = r => !!(r && r.customer_id
+        && FALL_RACE_IDS.has(Number(r.customer_id)));
 
     // Derive a plain status label from transaction history alone (no profile needed).
     // Mirrors the logic in customers.html deriveStatus() but without roles/membership term.
@@ -7167,6 +7189,10 @@
                             html += `<td style="${style}">${escapeHtml(displayGames)}</td>`;
                         }
                     }
+                } else if (c.key === "fall_race") {
+                    html += `<td style="${style}">${inFallRace(r)
+                        ? '<span style="color:#059669;font-weight:700;">YES</span>'
+                        : '<span style="color:#9CA3AF;">\u2014</span>'}</td>`;
                 } else {
                     html += `<td style="${style}">${escapeHtml(r[c.key] || "\u2014")}</td>`;
                 }

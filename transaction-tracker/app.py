@@ -4281,6 +4281,21 @@ def api_sync_customer_roles():
     return jsonify({"status": "ok", "roles": roles})
 
 
+@app.route("/api/season-contests/fall-net-ids")
+@require_role("view-only")
+def api_fall_net_ids():
+    """customer_ids enrolled in the current Fall NET Points Race —
+    powers the Fall Race column on the Events roster (Kerry
+    2026-08-31). Season derives from the Central-time year."""
+    from email_parser.timezone_utils import today_central
+    from email_parser.database import get_season_contest_enrollments
+    season = f"{today_central().year} Fall"
+    rows = get_season_contest_enrollments(contest_type="NET Points Race",
+                                          season=season)
+    ids = sorted({r["customer_id"] for r in rows if r.get("customer_id")})
+    return jsonify({"season": season, "customer_ids": ids})
+
+
 @app.route("/api/customer-roles")
 @require_role("view-only")
 def api_customer_roles():

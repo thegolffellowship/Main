@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.269.1";
+window.TGF_VERSION = "2.270.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.270.0",
+    date: "2026-08-31",
+    changes: [
+      "Fall Race column on the Events roster (Kerry: 'let me know if they're in Fall Points Race'): a new sortable column between Games and Tee shows a green YES for players enrolled in the current Fall NET Points Race, from the authoritative season_contests table via customer_id (new read endpoint GET /api/season-contests/fall-net-ids; season derives from the Central-time year, so it rolls forward automatically). Toggleable in the Columns menu like the rest; sorting puts enrollees first.",
+    ],
+  },
   {
     version: "2.269.1",
     date: "2026-08-31",
