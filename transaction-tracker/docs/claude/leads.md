@@ -65,14 +65,20 @@ automatically. The queue renders headline chips (Plays / Wants /
 Chapter) + an expandable full-answers row, and the notification email
 carries the answers table.
 
-## Chapter routing (Kerry-ruled 2026-08-28)
+## Chapter routing (Kerry-ruled 2026-08-31, supersedes 2026-08-28)
 
-1. **Ad set clicked** (`lead_ad_set_chapters` dial) — primary.
-2. **Event Invites answer** (stay-in-the-loop: `yes_for_san_antonio`) —
-   `chapter_interest` is form boilerplate and never decides.
+1. **Event Invites answer** (stay-in-the-loop: `yes_for_san_antonio`)
+   when it names a SINGLE chapter — it OVERRIDES the ad set (Kerry
+   2026-08-31, the Renick case: SA ad set + Austin invites → Austin).
+   `chapter_interest` is form boilerplate and never decides;
+   'yes_for_both' carries no override.
+2. **Ad set clicked** (`lead_ad_set_chapters` dial).
 3. City map — last resort.
 "Yes for both" + no ad set = unrouted → pings every touch owner. Routed
-leads ping default + their own chapter's list only.
+leads ping default + their own chapter's list only. The poll's standing
+self-heal also RE-routes an already-routed lead whose single-chapter
+invites answer disagrees with its stored chapter, so existing leads
+flip within one poll cycle of a rule/dial change.
 
 ## Real customer_ids (Kerry 2026-08-28: "I believe we need to")
 

@@ -689,13 +689,16 @@ def check_new_leads(db_path: str | Path | None = None) -> dict:
                                      db_path=db_path)
 
         def _route(payload, city):
-            # Kerry-ruled priority (2026-08-28): (1) the AD SET they
-            # clicked — chapter-targeted, primary; (2) the Event Invites
-            # (stay-in-the-loop) answer; (3) the city map.
-            got = None
-            if isinstance(payload, dict):
+            # Kerry-ruled priority (2026-08-31 amendment, supersedes
+            # 2026-08-28: "If invites question overrides the Ad Set they
+            # come from, their chapter needs to switch" — the Renick
+            # case: SA ad set, Austin invites → Austin): (1) a
+            # SINGLE-chapter Event Invites answer; (2) the AD SET they
+            # clicked; (3) the city map. 'Both'/no answer carries no
+            # override, so the ad set still decides those.
+            got = route_chapter_from_payload(payload)
+            if not got and isinstance(payload, dict):
                 got = ad_set_chapters.get(str(payload.get("ad_set_id") or ""))
-            got = got or route_chapter_from_payload(payload)
             return got or route_chapter(city, city_map)
 
         for c in passing:
@@ -741,11 +744,19 @@ def check_new_leads(db_path: str | Path | None = None) -> dict:
             except Exception:
                 continue
             enriched = enrich_payload(dict(p), ad_set_names)
-            got = None if r["chapter"] else _route(enriched, r["city"])
+            # Invites override re-route (Kerry 2026-08-31): a definitive
+            # single-chapter invites answer wins even over an already-
+            # routed chapter, so existing ad-set-routed leads (Renick)
+            # flip on the next poll. Otherwise only NULL chapters route.
+            inv = route_chapter_from_payload(enriched)
+            if inv and inv != r["chapter"]:
+                got = inv
+            else:
+                got = None if r["chapter"] else _route(enriched, r["city"])
             if enriched != p or got:
                 conn.execute(
                     "UPDATE leads SET payload = ?, "
-                    "chapter = COALESCE(chapter, ?) WHERE id = ?",
+                    "chapter = COALESCE(?, chapter) WHERE id = ?",
                     (json.dumps(enriched), got, r["id"]))
         # Every lead gets a REAL customer_id (Kerry 2026-08-28) — link
         # by email or create through the save_items resolver. Runs each

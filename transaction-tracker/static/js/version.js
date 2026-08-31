@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.263.0";
+window.TGF_VERSION = "2.264.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.264.0",
+    date: "2026-08-31",
+    changes: [
+      "Chapter routing rule change (Kerry: 'If invites question overrides the Ad Set they come from, their chapter needs to switch' — Matt Renick: SA ad set, Austin invites → Austin): a single-chapter Invitations answer now outranks the ad set; 'Both'/no answer still routes by ad set, then city map. The poll's self-heal also re-routes ALREADY-routed leads whose invites answer disagrees with their stored chapter, so the rule applies retroactively within one poll cycle. Swept the live queue with the real routing code: Renick was the only conflict among 43 leads and was moved to Austin immediately.",
+    ],
+  },
   {
     version: "2.263.0",
     date: "2026-08-31",
