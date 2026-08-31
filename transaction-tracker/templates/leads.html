@@ -324,6 +324,16 @@
         document.getElementById("ld-showing").textContent =
             visible.length === leads.length ? `${leads.length} leads`
             : `${visible.length} of ${leads.length} leads`;
+        // Note timestamps are stored UTC (datetime('now')) — display in
+        // Central with AM/PM (Kerry 2026-08-31: "Timestamps aren't
+        // correct per my local computer… I don't want military time").
+        const fmtNoteTime = ts => {
+            if (!ts) return "";
+            const d = new Date(ts.includes("T") ? ts : ts.replace(" ", "T") + "Z");
+            return isNaN(d) ? ts : d.toLocaleString("en-US", {
+                timeZone: "America/Chicago", month: "numeric",
+                day: "numeric", hour: "numeric", minute: "2-digit" });
+        };
         const fmtReceived = l => {
             const iso = l.arrived_at || l.first_seen_at;
             if (!iso) return "–";
@@ -398,12 +408,12 @@
                 ? `<button class="ld-btn" onclick="mark(${l.id},'new')">Restore</button>`
                 : `<button class="ld-btn" onclick="mark(${l.id},'dismissed')">Dismiss</button>`);
             const notesList = (l.notes_log || []).map(n =>
-                `<tr><td class="k" style="white-space:nowrap">${esc((n.created_at || "").slice(5, 16))} ${esc((n.author || "")[0] || "")}</td><td>${esc(n.note)}</td></tr>`).join("");
+                `<tr><td class="k" style="white-space:nowrap">${esc(fmtNoteTime(n.created_at))} ${esc((n.author || "")[0] || "")}</td><td>${esc(n.note)}</td></tr>`).join("");
             // ---- Desktop work-list row: status first (Kerry 2026-08-31),
             // color-coded left edge, actions always on-screen.
             const edgeCls = late ? "ld-edge-late" : "ld-edge-" + esc(l.status);
             const notePrev = latestNote
-                ? `<div class="ld-dnote"><b>${esc((latestNote.author || "?")[0])}</b> · ${esc((latestNote.created_at || "").slice(5, 16))} — ${esc(latestNote.note)}</div>`
+                ? `<div class="ld-dnote"><b>${esc((latestNote.author || "?")[0])}</b> · ${esc(fmtNoteTime(latestNote.created_at))} — ${esc(latestNote.note)}</div>`
                 : l.notes ? `<div class="ld-dnote">${esc(l.notes)}</div>` : "";
             drows.push(`<div class="ld-drow ${edgeCls}">
                 <div class="ld-dstatus">
@@ -445,7 +455,7 @@
                     ${l.email ? `<a class="ld-act" href="mailto:${esc(l.email)}">✉️ Email</a>` : ""}
                     <span class="ld-act" onclick="noteLead(${l.id})">➕ Note</span>
                 </div>
-                ${latestNote ? `<div class="ld-noteprev"><b>${esc((latestNote.author || "?")[0])}</b> · ${esc((latestNote.created_at || "").slice(5, 16))} — ${esc(latestNote.note)}</div>` : ""}
+                ${latestNote ? `<div class="ld-noteprev"><b>${esc((latestNote.author || "?")[0])}</b> · ${esc(fmtNoteTime(latestNote.created_at))} — ${esc(latestNote.note)}</div>` : ""}
                 <details class="ld-mdetails"><summary>Details${(l.notes_log || []).length > 1 ? ` · ${l.notes_log.length} notes` : ""}</summary>
                     ${notesList ? `<table class="ld-mnotes">${notesList}</table><hr style="border:none;border-top:1px solid #F3F2EF">` : ""}
                     ${mextras.length ? `<table>${mextras.map(([label, v]) => `<tr><td class="k">${esc(label)}</td><td>${esc(v)}</td></tr>`).join("")}</table>` : ""}

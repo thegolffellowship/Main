@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.262.0";
+window.TGF_VERSION = "2.262.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.262.1",
+    date: "2026-08-31",
+    changes: [
+      "Lead note timestamps display in Central time with AM/PM (Kerry: 'Timestamps aren't correct per my local computer… I don't want military time'): note previews and the notes log were showing the raw stored UTC value in 24-hour form — '08-31 18:28' for a note made at 1:28 PM Central. All three display spots (desktop preview, mobile preview, notes log) now render '8/31, 1:28 PM' via the same America/Chicago conversion the Received column already used. Storage stays UTC per the timezone rule — display-side conversion only, and dates roll back correctly (a 02:15 UTC note shows as the prior evening).",
+    ],
+  },
   {
     version: "2.262.0",
     date: "2026-08-31",
