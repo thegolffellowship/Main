@@ -386,7 +386,8 @@
                 ? `<button class="ld-btn primary" onclick="mark(${l.id},'touched')">Touched</button>`
                 : l.status === "touched"
                 ? `<button class="ld-btn primary" onclick="mark(${l.id},'converted')">Converted</button>` : "";
-            const menuItems = (l.status === "touched"
+            const menuItems = `<button class="ld-btn" onclick="editName(${l.id})">Edit name</button>` +
+                (l.status === "touched"
                 ? `<button class="ld-btn" onclick="editLead(${l.id})">Edit</button>
                    <button class="ld-btn" onclick="mark(${l.id},'new')">Undo</button>
                    <button class="ld-btn" onclick="mark(${l.id},'dismissed')">Dismiss</button>`
@@ -474,6 +475,30 @@
         fetch(`/api/leads/${id}/tag`, {
             method: "POST", headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ tag }) }).then(loadLeads);
+    }
+    // FB forms often hand over a single name; the email local-part
+    // usually carries the surname (moralesaden69 -> Morales). The guess
+    // only PREFILLS the prompt — Kerry confirms or retypes.
+    function guessLastName(l) {
+        if (l.last_name || !l.email || !l.first_name) return "";
+        let local = (l.email.split("@")[0] || "").toLowerCase().replace(/[^a-z]/g, "");
+        const fn = l.first_name.toLowerCase().replace(/[^a-z]/g, "");
+        if (!fn || !local.includes(fn)) return "";
+        local = local.replace(fn, "");
+        if (local.length < 3 || local.length > 20) return "";
+        return local[0].toUpperCase() + local.slice(1);
+    }
+    function editName(id) {
+        const l = (ALL.leads || []).find(x => x.id === id);
+        if (!l) return;
+        const first = prompt("First name:", l.first_name || "");
+        if (first === null) return;
+        const last = prompt("Last name:", l.last_name || guessLastName(l));
+        if (last === null) return;
+        fetch(`/api/leads/${id}/edit`, {
+            method: "POST", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ first_name: first.trim(),
+                                   last_name: last.trim() }) }).then(loadLeads);
     }
     function noteLead(id) {
         const note = prompt("Note:") || "";

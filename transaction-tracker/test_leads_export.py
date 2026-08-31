@@ -60,10 +60,14 @@ def main():
     tmp.close()
     db_path = tmp.name
     with db._connect(db_path) as conn:
-        # items table only needs to exist for get_leads' history check
+        # items/customers only need to exist for the history check and
+        # the prospect-name sync
         conn.execute("CREATE TABLE IF NOT EXISTS items ("
                      "id INTEGER PRIMARY KEY, customer_id INTEGER, "
                      "transaction_status TEXT)")
+        conn.execute("CREATE TABLE IF NOT EXISTS customers ("
+                     "customer_id INTEGER PRIMARY KEY, "
+                     "first_name TEXT, last_name TEXT)")
         leads.ensure_leads_table(conn)
         plant_lead(conn, "OptOut", "optout@x.com", "San Antonio", "no")
         plant_lead(conn, "OptOutVariant", "optoutv@x.com", "Austin",
@@ -166,6 +170,50 @@ def main():
     check("normal tag on a NEW lead still auto-touches",
           (row["status"], row["tag"]) == ("touched", "Interested"),
           str(dict(row)))
+
+    # ---- Name edit + prospect sync (edit_lead_identity) ----
+    with db._connect(db_path) as conn:
+        conn.execute("INSERT INTO customers (customer_id, first_name, "
+                     "last_name) VALUES (901, 'Aden', NULL)")
+        conn.execute("INSERT INTO customers (customer_id, first_name, "
+                     "last_name) VALUES (902, 'Real', 'Buyer')")
+        conn.execute("INSERT INTO items (customer_id, transaction_status) "
+                     "VALUES (902, 'active')")
+        lid_pros = plant_lead(conn, "Aden", "moralesaden69@x.com",
+                              "San Antonio", "yes_for_both", status="new")
+        lid_buyr = plant_lead(conn, "Real", "real@x.com",
+                              "Austin", "yes_for_both", status="touched")
+        conn.execute("UPDATE leads SET customer_id = 901 WHERE id = ?",
+                     (lid_pros,))
+        conn.execute("UPDATE leads SET customer_id = 902 WHERE id = ?",
+                     (lid_buyr,))
+        conn.commit()
+    r1 = leads.edit_lead_identity(lid_pros, last_name="Morales",
+                                  db_path=db_path)
+    r2 = leads.edit_lead_identity(lid_buyr, first_name="Realname",
+                                  last_name="Changed", db_path=db_path)
+    with db._connect(db_path) as conn:
+        lead_row = conn.execute(
+            "SELECT first_name, last_name FROM leads WHERE id = ?",
+            (lid_pros,)).fetchone()
+        pros = conn.execute("SELECT first_name, last_name FROM customers "
+                            "WHERE customer_id = 901").fetchone()
+        buyr = conn.execute("SELECT first_name, last_name FROM customers "
+                            "WHERE customer_id = 902").fetchone()
+    check("edit_lead_identity updates the lead's name",
+          (lead_row["first_name"], lead_row["last_name"])
+          == ("Aden", "Morales"), str(dict(lead_row)))
+    check("purchase-less prospect customer synced",
+          r1.get("customer_synced") is True
+          and (pros["first_name"], pros["last_name"]) == ("Aden", "Morales"),
+          f"{r1} {dict(pros)}")
+    check("customer WITH purchase history untouched",
+          r2.get("customer_synced") is False
+          and (buyr["first_name"], buyr["last_name"]) == ("Real", "Buyer"),
+          f"{r2} {dict(buyr)}")
+    check("empty edit rejected",
+          leads.edit_lead_identity(lid_pros,
+                                   db_path=db_path).get("error") is not None)
 
     os.unlink(db_path)
     if FAILURES:

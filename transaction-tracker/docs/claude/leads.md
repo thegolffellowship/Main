@@ -25,8 +25,11 @@ lists. Scheduled pull (not webhooks) is the ratified default.
   `LEAD_CHECK_INTERVAL_MINUTES` (default 45; 0 disables). Safe no-op
   until `HUBSPOT_TOKEN` is set.
 - Routes: `/admin/leads` (page, manager+), `GET /api/leads`,
-  `POST /api/leads/<id>/mark`, `POST /api/leads/poll` (admin,
-  on-demand).
+  `POST /api/leads/<id>/mark`, `POST /api/leads/<id>/edit`
+  (v2.262.0 — first/last name fix via `edit_lead_identity`; syncs the
+  purchase-less prospect customer, never one with purchase history;
+  the UI prefills a surname guess from the email local-part),
+  `POST /api/leads/poll` (admin, on-demand).
 - Template `templates/leads.html` — stat cards (new / touched /
   converted / past-48h-untouched; clickable = status filter), filter
   toolbar (All | Austin | San Antonio chapter toggle + status chips +

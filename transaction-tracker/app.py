@@ -11249,6 +11249,17 @@ def api_lead_tag(lead_id):
     return jsonify(res), (400 if res.get("error") else 200)
 
 
+@app.route("/api/leads/<int:lead_id>/edit", methods=["POST"])
+@require_role("manager")
+def api_lead_edit(lead_id):
+    from email_parser.leads import edit_lead_identity
+    d = request.get_json(silent=True) or {}
+    res = edit_lead_identity(lead_id,
+                             first_name=d.get("first_name"),
+                             last_name=d.get("last_name"))
+    return jsonify(res), (400 if res.get("error") else 200)
+
+
 @app.route("/api/leads/<int:lead_id>/note", methods=["POST"])
 @require_role("manager")
 def api_lead_note(lead_id):

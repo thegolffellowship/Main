@@ -1001,6 +1001,51 @@ def set_lead_tag(lead_id: int, tag: str,
     return {"id": lead_id, "tag": tag or None, "ok": True}
 
 
+def edit_lead_identity(lead_id: int, first_name: str | None = None,
+                       last_name: str | None = None,
+                       db_path: str | Path | None = None) -> dict:
+    """Manager name fix from the Lead Center UI (Kerry 2026-08-31:
+    "Need ability to edit names too" — FB forms often hand over a
+    single name; the email local-part usually carries the surname).
+    Updates the lead and immediately syncs the purchase-less prospect
+    customer the lead created — mirroring the poll's prospect-name
+    sync, and like it NEVER touching a customer with purchase
+    history."""
+    from . import database as db
+    updates = {}
+    if first_name is not None and first_name.strip():
+        updates["first_name"] = first_name.strip()
+    if last_name is not None:
+        updates["last_name"] = last_name.strip() or None
+    if not updates:
+        return {"error": "nothing to update"}
+    with db._connect(db_path) as conn:
+        ensure_leads_table(conn)
+        row = conn.execute("SELECT * FROM leads WHERE id = ?",
+                           (lead_id,)).fetchone()
+        if not row:
+            return {"error": f"lead {lead_id} not found"}
+        sets = ", ".join(f"{k} = ?" for k in updates)
+        conn.execute(f"UPDATE leads SET {sets} WHERE id = ?",
+                     (*updates.values(), lead_id))
+        fn = updates.get("first_name", row["first_name"])
+        ln = updates.get("last_name", row["last_name"])
+        synced = False
+        cid = row["customer_id"]
+        if cid and fn and ln:
+            has_items = conn.execute(
+                "SELECT 1 FROM items WHERE customer_id = ? LIMIT 1",
+                (cid,)).fetchone()
+            if not has_items:
+                conn.execute(
+                    "UPDATE customers SET first_name = ?, last_name = ? "
+                    "WHERE customer_id = ?", (fn, ln, cid))
+                synced = True
+        conn.commit()
+    return {"id": lead_id, "first_name": fn, "last_name": ln,
+            "customer_synced": synced, "ok": True}
+
+
 def add_lead_note(lead_id: int, note: str, author: str = "",
                   db_path: str | Path | None = None) -> dict:
     """Append to a lead's notes log (#361). Author is a short name or

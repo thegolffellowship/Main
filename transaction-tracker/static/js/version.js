@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.261.2";
+window.TGF_VERSION = "2.262.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.262.0",
+    date: "2026-08-31",
+    changes: [
+      "Lead names are editable from the Lead Center (Kerry: 'need ability to edit names too' — Facebook forms often hand over a single name): 'Edit name' in every row's ⋯ menu (desktop + mobile) prompts for first/last, POST /api/leads/<id>/edit (manager+), edit_lead_identity in leads.py. The fix immediately syncs the purchase-less prospect customer the lead created — same guard as the poll's prospect-name sync, a customer with purchase history is never touched.",
+      "Surname guess from the email (Kerry: 'I think I can discern last names by looking at the email addresses'): when a lead has no last name, the Last-name prompt PREFILLS a guess derived from the email local-part minus the first name (moralesaden69 + Aden → Morales, jaredfarmer01 + Jared → Farmer); blank when it can't tell. Purely a prefill — the manager confirms or retypes, nothing is auto-saved.",
+    ],
+  },
   {
     version: "2.261.2",
     date: "2026-08-31",
