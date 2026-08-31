@@ -302,11 +302,16 @@
         // else arrival) first.
         const HOT_TAGS = ["Call back", "Interested", "Coming to event"];
         const QUIET_TAGS = ["Texted", "Left VM", "Sent email", "No answer"];
+        // A logged note counts as a response (Kerry 2026-08-31: "If
+        // there's a note added, they probably shouldn't be in no
+        // response") — notes record conversations.
+        const responded = l => HOT_TAGS.includes(l.tag || "")
+            || (l.notes_log || []).length > 0;
         const tier = l =>
             l.status === "dismissed" ? 5
             : l.status === "converted" ? 4
             : l.status === "new" ? 0
-            : HOT_TAGS.includes(l.tag || "") ? 1
+            : responded(l) ? 1
             : QUIET_TAGS.includes(l.tag || "") ? 3
             : 2;
         const lastActivity = l => (((l.notes_log || [])[0] || {}).created_at
@@ -358,7 +363,7 @@
             l.status === "new" ? "NEW LEADS"
             : l.status === "converted" ? "CONVERTED"
             : l.status === "dismissed" ? "DISMISSED"
-            : HOT_TAGS.includes(l.tag || "") ? "RESPONDED"
+            : responded(l) ? "RESPONDED"
             : "NO RESPONSE";
         const secCounts = {};
         visible.forEach(l => {

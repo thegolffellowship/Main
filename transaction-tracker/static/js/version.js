@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.265.0";
+window.TGF_VERSION = "2.265.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.265.1",
+    date: "2026-08-31",
+    changes: [
+      "A logged note counts as a response (Kerry: 'If there's a note added, they probably shouldn't be in no response since that most likely means they've replied'): a touched lead with ANY note in its log now lands in RESPONDED — and rises to the responded priority tier — even under an outreach tag like Texted. NO RESPONSE is now strictly note-less outreach.",
+    ],
+  },
   {
     version: "2.265.0",
     date: "2026-08-31",

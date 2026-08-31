@@ -195,8 +195,9 @@ remain in the select. **Category bars, no status badges** (Kerry
 2026-08-31, v2.263.0; TOUCHED split v2.265.0): in priority view the
 desktop rows group under dark NEW LEADS / RESPONDED / NO RESPONSE /
 CONVERTED / DISMISSED bars with counts — RESPONDED = touched with a
-hot tag (Call back / Interested / Coming to event), NO RESPONSE = the
-rest of touched (quiet outreach tags or untagged) —
+hot tag (Call back / Interested / Coming to event) OR any logged note
+(v2.265.1, Kerry: a note most likely means they replied); NO RESPONSE
+= the rest of touched (note-less outreach tags or untagged) —
 the bar carries the status, so the per-row status pill is gone and
 the left column is just age/owner + tag chip (rows max two lines).
 The pill returns only in flat sorts (Name/Newest/…) where there are
