@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.260.0";
+window.TGF_VERSION = "2.260.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.260.1",
+    date: "2026-08-31",
+    changes: [
+      "Registrations ⓘ info dropdown now shows the player's email and phone (Kerry: 'include email and phone number in the drop down, left of any transaction information') — contact sits FIRST in the panel, before Playing Partner / Fellowship / Notes, as tappable mailto:/tel: links. The ⓘ icon now appears on every row with contact on file, not only rows with notes/partner/fellowship.",
+    ],
+  },
   {
     version: "2.260.0",
     date: "2026-08-31",

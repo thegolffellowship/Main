@@ -6910,7 +6910,11 @@
             // changing email_uid, so transferred_from_id is the signal there.
             const isManualRow = isManualEmailUidRow || !!r.transferred_from_id;
             const isCompRow = (r.email_uid || "").startsWith("manual-comp");
-            const hasExtraInfo = !!(r.partner_request || r.fellowship || r.notes);
+            // Contact info counts too (Kerry 2026-08-31: email + phone in
+            // the info dropdown) — the icon shows whenever there is
+            // anything to reveal, not just notes/partner/fellowship.
+            const hasExtraInfo = !!(r.partner_request || r.fellowship || r.notes
+                || r.customer_email || r.customer_phone);
             let rowClasses = [];
             if (isRsvpOnly || isGgRsvp) rowClasses.push("row-rsvp-only");
             else if (txStatus !== "active") rowClasses.push(`row-${txStatus}`);
@@ -6995,7 +6999,7 @@
                     if (_dupItemIds.has(r.id)) {
                         tag += ` <span class="status-tag" style="background:#fef2f2;color:#991b1b;border:1px solid #fca5a5;font-size:0.65rem;padding:0.1rem 0.35rem;border-radius:4px;font-weight:700;" title="Duplicate active registration for this event">⚠ Dup</span>`;
                     }
-                    const infoIcon = hasExtraInfo ? '<span class="player-info-icon" title="Has notes / partner / fellowship info">i</span>' : '';
+                    const infoIcon = hasExtraInfo ? '<span class="player-info-icon" title="Contact info / notes / partner / fellowship">i</span>' : '';
                     html += `<td style="${style}"><a class="cell-link" href="/customers?name=${encodeURIComponent(r.customer || "")}">${escapeHtml(displayName(r.customer, r.user_status))}</a>${tag}${infoIcon}</td>`;
                 } else if (c.key === "item_price") {
                     // Under-covering credit flag (Kerry 2026-08-03, the
@@ -7173,6 +7177,13 @@
                 const colCount = DETAIL_COLUMNS.filter(c => detailVisibleColumns[c.key] !== false).length;
                 html += `<tr class="player-expand-row" data-expand-for="${r.id}"><td colspan="${colCount + 1}" style="padding:0;">`;
                 html += '<div class="player-detail-panel">';
+                // Contact first — left of any transaction info (Kerry 2026-08-31)
+                if (r.customer_email) {
+                    html += `<div class="player-detail-item"><div class="player-detail-label">Email</div><div class="player-detail-value"><a class="cell-link" href="mailto:${escapeHtml(r.customer_email)}">${escapeHtml(r.customer_email)}</a></div></div>`;
+                }
+                if (r.customer_phone) {
+                    html += `<div class="player-detail-item"><div class="player-detail-label">Phone</div><div class="player-detail-value"><a class="cell-link" href="tel:${escapeHtml(r.customer_phone)}">${escapeHtml(r.customer_phone)}</a></div></div>`;
+                }
                 if (r.partner_request) {
                     html += `<div class="player-detail-item"><div class="player-detail-label">Playing Partner</div><div class="player-detail-value">${escapeHtml(r.partner_request)}</div></div>`;
                 }
