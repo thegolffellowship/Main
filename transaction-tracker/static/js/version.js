@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.271.1";
+window.TGF_VERSION = "2.271.2";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.271.2",
+    date: "2026-08-31",
+    changes: [
+      "Joint TGF events get a BLACK chapter tab on the Events list (Kerry) — chapter 'TGF' (shared 18s, championships) shows #1B1B1B alongside Austin burnt orange and SA slate.",
+    ],
+  },
   {
     version: "2.271.1",
     date: "2026-08-31",
