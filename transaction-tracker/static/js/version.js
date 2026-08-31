@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.269.0";
+window.TGF_VERSION = "2.269.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.269.1",
+    date: "2026-08-31",
+    changes: [
+      "Lead Center columns hug their content (Kerry: 'columns don't need to be so wide for names and contact info… standardize based on widest of each, allow more room for notes'): the list container now owns the column tracks via CSS subgrid, so the name and contact columns size to the widest cell across ALL rows (capped so one long value can't blow the layout) and stay perfectly aligned; every pixel freed flows to the badges/notes column, which now shows roughly twice the note text. Browsers without subgrid keep the previous proportional layout.",
+    ],
+  },
   {
     version: "2.269.0",
     date: "2026-08-31",
