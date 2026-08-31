@@ -45,7 +45,7 @@
            One grid row per lead, STATUS FIRST, color-coded left edge,
            actions always visible, expandable details panel. */
         #ld-dlist { border: 1px solid var(--border); border-radius: 12px; background: #fff; overflow: hidden; }
-        .ld-drow { display: grid; grid-template-columns: 110px minmax(150px, 1.05fr) minmax(170px, 1fr) minmax(180px, 1.3fr) max-content; gap: 12px; align-items: center; padding: 10px 14px 10px 11px; border-bottom: 1px solid #F3F2EF; border-left: 3px solid #D1D5DB; }
+        .ld-drow { display: grid; grid-template-columns: 108px minmax(150px, 1.05fr) minmax(170px, 1fr) minmax(180px, 1.3fr) max-content; gap: 10px; align-items: center; padding: 5px 12px 5px 9px; border-bottom: 1px solid #F3F2EF; border-left: 3px solid #D1D5DB; }
         .ld-drow > div { min-width: 0; }
         .ld-drow:hover { background: #FCFCFA; }
         .ld-edge-new { border-left-color: #F59E0B; }
@@ -53,13 +53,16 @@
         .ld-edge-converted { border-left-color: #2563EB; }
         .ld-edge-dismissed { border-left-color: #D1D5DB; }
         .ld-edge-late { border-left-color: #DC2626; }
-        .ld-dstatus .ld-dsub { margin-top: 4px; }
-        .ld-dsub { font-size: 11.5px; color: #6B7280; }
-        .ld-dname b { font-size: 14px; }
-        .ld-dcontact a { display: block; font-size: 12.5px; line-height: 1.5; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-        .ld-dacts .ld-tagsel { max-width: 104px; }
-        .ld-dacts .ld-btn { white-space: nowrap; }
-        .ld-dnote { font-size: 12px; color: #4B5563; margin-top: 4px; white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+        .ld-dstatus .ld-dsub { margin-top: 2px; }
+        .ld-dsub { font-size: 11px; color: #6B7280; }
+        .ld-dname b { font-size: 13.5px; }
+        .ld-dcontact a { display: block; font-size: 12px; line-height: 1.35; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .ld-dacts .ld-tagsel { max-width: 104px; padding: 2px 5px; font-size: 11.5px; }
+        .ld-dacts .ld-btn { white-space: nowrap; padding: 2px 10px; }
+        .ld-drow .ld-bchip { margin: 1px 4px 1px 0; padding: 1px 7px; font-size: 10.5px; }
+        .ld-drow .ld-tag { padding: 1px 7px; font-size: 10.5px; }
+        .ld-drow .ld-pill { padding: 1px 9px; }
+        .ld-dnote { font-size: 11.5px; color: #4B5563; margin-top: 2px; white-space: normal; display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical; overflow: hidden; }
         .ld-dnote b { color: #1B1B1B; }
         .ld-dacts { display: flex; gap: 6px; align-items: center; justify-content: flex-end; }
         .ld-ddet { display: none; padding: 6px 14px 14px 28px; background: #FAFAF8; border-bottom: 1px solid #F3F2EF; border-left: 3px solid #D1D5DB; }
@@ -140,6 +143,7 @@
             <span class="ld-chip" data-f="dismissed" onclick="setStatusFilter('dismissed')">Dismissed</span>
             <span class="ld-chip" data-f="late" onclick="setStatusFilter('late')">Overdue</span>
             <select id="ld-sort" class="ld-tagsel ld-sortsel" onchange="setSort(this.value)">
+                <option value="priority:1">Priority (hot first)</option>
                 <option value="received:-1">Newest first</option>
                 <option value="received:1">Oldest first</option>
                 <option value="name:1">Name A–Z</option>
@@ -168,7 +172,10 @@
     const esc = s => (s == null ? "" : String(s).replace(/[&<>"']/g,
         c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])));
     let ALL = null;                       // last fetch, for client-side sort
-    let sortKey = "received", sortDir = -1;   // newest first by default
+    // Landing state is PRIORITY (Kerry 2026-08-31): brand-new leads and
+    // hot conversations on top, non-responsive outreach down, converted
+    // then dismissed at the bottom.
+    let sortKey = "priority", sortDir = 1;
     let statusFilter = "all", chapterFilter = "all";
     const isLate = l => l.status === "new" && (l.days_since_arrival ?? 0) >= 2;
     async function loadLeads() {
@@ -281,7 +288,24 @@
             received: l => l.arrived_at || l.first_seen_at || "",
             status: l => l.status || "",
         };
-        const acc = SORTERS[sortKey] || SORTERS.received;
+        // Priority tiers: 0 new (respond now) · 1 hot conversation
+        // (Call back / Interested / Coming to event) · 2 touched, no
+        // disposition yet · 3 outreach sent, no response (Texted /
+        // Left VM / No answer) · 4 converted (done) · 5 dismissed.
+        // Within a tier, most recent activity (newest note, else touch,
+        // else arrival) first.
+        const HOT_TAGS = ["Call back", "Interested", "Coming to event"];
+        const QUIET_TAGS = ["Texted", "Left VM", "No answer"];
+        const tier = l =>
+            l.status === "dismissed" ? 5
+            : l.status === "converted" ? 4
+            : l.status === "new" ? 0
+            : HOT_TAGS.includes(l.tag || "") ? 1
+            : QUIET_TAGS.includes(l.tag || "") ? 3
+            : 2;
+        const lastActivity = l => (((l.notes_log || [])[0] || {}).created_at
+            || l.touched_at || l.arrived_at || l.first_seen_at || "")
+            .replace("T", " ").replace("Z", "");
         // Filter (chapter toggle + status chips), then sort
         const visible = leads.filter(l => {
             if (chapterFilter !== "all" && (l.chapter || "") !== chapterFilter) return false;
@@ -289,7 +313,14 @@
             if (statusFilter === "late") return isLate(l);
             return l.status === statusFilter;
         });
-        visible.sort((a, b) => (acc(a) < acc(b) ? -1 : acc(a) > acc(b) ? 1 : 0) * sortDir);
+        if (sortKey === "priority") {
+            visible.sort((a, b) => tier(a) - tier(b)
+                || (lastActivity(a) < lastActivity(b) ? 1
+                    : lastActivity(a) > lastActivity(b) ? -1 : 0));
+        } else {
+            const acc = SORTERS[sortKey] || SORTERS.received;
+            visible.sort((a, b) => (acc(a) < acc(b) ? -1 : acc(a) > acc(b) ? 1 : 0) * sortDir);
+        }
         document.getElementById("ld-showing").textContent =
             visible.length === leads.length ? `${leads.length} leads`
             : `${visible.length} of ${leads.length} leads`;

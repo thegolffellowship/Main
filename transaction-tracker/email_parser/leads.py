@@ -889,13 +889,14 @@ def get_lead_export_rows(chapter: str,
     2026-08-28, handicap-export style). Membership criteria: the lead's
     INVITATIONS opt-in answer ('yes_for_<chapter>' or 'yes_for_both');
     a lead with no answer falls back to its routed chapter. Excluded:
-    dismissed leads, 'Bad contact'/'Not now' tags, rows without email."""
+    dismissed leads, 'Bad contact'/'Not now'/'Too expensive' tags,
+    rows without email."""
     want_sa = chapter == "San Antonio"
     out = []
     for l in get_leads(limit=1000, db_path=db_path):
         if l.get("status") == "dismissed":
             continue
-        if (l.get("tag") or "") in ("Bad contact", "Not now"):
+        if (l.get("tag") or "") in ("Bad contact", "Not now", "Too expensive"):
             continue
         email = (l.get("email") or "").strip()
         if not email:
@@ -925,8 +926,16 @@ def get_lead_export_rows(chapter: str,
 # these are the defaults. Tags are dispositions, orthogonal to the
 # new/touched/converted/dismissed pipeline.
 DEFAULT_TAG_OPTIONS = ["Left VM", "Texted", "No answer", "Call back",
-                       "Interested", "Coming to event", "Not now",
-                       "Bad contact", "Registered event", "Became member"]
+                       "Interested", "Coming to event", "Too expensive",
+                       "Not now", "Bad contact", "Registered event",
+                       "Became member"]
+
+# Tags that deactivate the lead on selection (Kerry 2026-08-31, the
+# Stetson Aaron case: "Too expensive right now" — don't delete, just
+# deactivate; "Bad contact should also deactivate"). Selecting one flips
+# status to dismissed: the row and its notes stay, it drops out of the
+# active queue and the invite-list CSV, and Restore brings it back.
+DEACTIVATING_TAGS = {"Too expensive", "Bad contact"}
 
 
 def get_tag_options(db_path: str | Path | None = None) -> list[str]:
@@ -950,7 +959,14 @@ def set_lead_tag(lead_id: int, tag: str,
                            (lead_id,)).fetchone()
         if not row:
             return {"error": f"lead {lead_id} not found"}
-        if tag and row["status"] == "new":
+        if tag in DEACTIVATING_TAGS and row["status"] != "converted":
+            # Deactivate, never delete: converted leads keep their status
+            # (the tag still records the disposition).
+            conn.execute(
+                "UPDATE leads SET tag = ?, status = 'dismissed', "
+                "touched_at = COALESCE(touched_at, datetime('now')) "
+                "WHERE id = ?", (tag, lead_id))
+        elif tag and row["status"] == "new":
             conn.execute(
                 "UPDATE leads SET tag = ?, status = 'touched', "
                 "touched_at = COALESCE(touched_at, datetime('now')) "

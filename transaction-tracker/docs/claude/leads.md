@@ -119,8 +119,14 @@ self-heals re-route chapter and re-derive stats.
 
 One current `leads.tag` per lead, orthogonal to the status pipeline.
 Options are the `lead_tag_options` dial (JSON list; defaults Left VM ·
-Texted · No answer · Call back · Interested · Coming to event · Not
-now · Bad contact). Tagging a NEW lead auto-marks it touched. Surfaces:
+Texted · No answer · Call back · Interested · Coming to event · Too
+expensive · Not now · Bad contact · Registered event · Became member).
+Tagging a NEW lead auto-marks it touched. **Deactivating tags**
+(`DEACTIVATING_TAGS`: Too expensive · Bad contact, Kerry 2026-08-31):
+selecting one flips the lead to dismissed — deactivated, never
+deleted; the row + notes stay, it leaves the invite CSV, Restore
+brings it back. A converted lead keeps its status (tag still records
+the disposition). CSV export also excludes the Too expensive tag. Surfaces:
 tag picker in desktop actions + mobile action row, orange pill display,
 `POST /api/leads/<id>/tag`, bridge `scoring-lead-tag:<id>|<tag>`
 (empty clears; audited), `set_lead_tag`/`get_tag_options` in leads.py.
@@ -162,10 +168,16 @@ mobile `ld-menu-<id>`). ▾ next to the name expands a details panel
 Filter toolbar shared by desktop + mobile: All | Austin | San Antonio
 segmented toggle with live counts, status chips (New / Touched /
 Converted / Dismissed / Overdue) — stat cards click-filter to the same
-state, click again to clear — and a sort select (Newest / Oldest /
-Name / By status) replacing column-header sorts. Counts on cards and
-the mobile sticky summary stay whole-queue regardless of filters; the
-toolbar shows "N of M leads" when filtered.
+state, click again to clear — and a sort select replacing
+column-header sorts. Counts on cards and the mobile sticky summary
+stay whole-queue regardless of filters; the toolbar shows "N of M
+leads" when filtered. **Landing sort is PRIORITY** (Kerry 2026-08-31:
+respond immediately to new arrivals and hot conversations): tier 0 new
+· 1 hot tags (Call back / Interested / Coming to event) · 2 untagged
+touched · 3 quiet outreach (Texted / Left VM / No answer) · 4
+converted · 5 dismissed; within a tier, newest activity (latest note,
+else touch, else arrival) first. Newest/Oldest/Name/Status sorts
+remain in the select.
 
 ## MCP access for CA (platform-claude)
 

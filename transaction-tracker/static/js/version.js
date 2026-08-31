@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.260.1";
+window.TGF_VERSION = "2.261.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.261.0",
+    date: "2026-08-31",
+    changes: [
+      "'Too expensive' added to the lead tag options (Kerry, on Stetson Aaron: 'don't necessarily want to delete, just want to deactivate'). Selecting it — or 'Bad contact' (Kerry: 'Bad contact should also deactivate') — now flips the lead to dismissed: DEACTIVATED, never deleted. The row and its notes stay in the DB, it drops out of the active queue and the invite-list CSVs, and Restore (⋯ menu on a dismissed row) brings it back anytime. Dismiss has always worked this way — it is a status flag, not a delete.",
+      "Lead Center lands on a PRIORITY sort (Kerry: 'landing state so we can respond immediately to those that have just come in and those that are hotter'): new leads first (newest up top), then hot conversations (Call back / Interested / Coming to event tags), then untagged touched, then quiet outreach awaiting a reply (Texted / Left VM / No answer), then converted, dismissed last. Within each tier the most recent activity (latest note, else touch, else arrival) floats up. Newest/Oldest/Name/Status sorts remain in the select; applies to desktop and mobile.",
+      "Desktop rows compacted (Kerry: 'seems like we could get even more compact') — roughly a third shorter: tighter row padding, smaller chips/pills/buttons, single-line note preview.",
+    ],
+  },
   {
     version: "2.260.1",
     date: "2026-08-31",
