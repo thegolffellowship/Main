@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.261.0";
+window.TGF_VERSION = "2.261.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.261.1",
+    date: "2026-08-31",
+    changes: [
+      "Invite-CSV opt-out made explicit (Kerry: 'make sure those that don't want invites don't get put on the CSV downloads'): a lead whose Invitations answer starts with 'no' (incl. any future 'no — …' form variant) is skipped outright and never rides the routed-chapter fallback. This was already the effective behavior — a 'no' matched none of the yes-checks — but it is now a first-class guard with regression tests (test_leads_export.py: 19 checks over every CSV inclusion/exclusion rule and the deactivating-tag flow).",
+      "Deactivating tags now self-heal (Kerry: 'Bad Contact is still persisting' — John Oscar was tagged before v2.261.0 deployed, and tag-time auto-dismiss only fires at selection): every lead read/write sweeps leads carrying a deactivating tag (Too expensive / Bad contact) but still active to dismissed. Idempotent, converted leads keep their status. John Oscar was also dismissed directly on live data so the fix is visible immediately.",
+    ],
+  },
   {
     version: "2.261.0",
     date: "2026-08-31",

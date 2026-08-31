@@ -126,6 +126,22 @@ def ensure_leads_table(conn: sqlite3.Connection) -> None:
         )""")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_leads_status "
                  "ON leads(status, arrived_at)")
+    # Heal (v2.261.1, Kerry: "Bad Contact is still persisting"): leads
+    # carrying a deactivating tag from BEFORE the tag auto-dismissed —
+    # or tagged during a deploy gap — flip to dismissed on every
+    # read/write path. Idempotent; converted keeps its status. Commits
+    # only when a row actually changed (ensure runs at the start of
+    # operations, so nothing else is pending on this connection).
+    try:
+        cur = conn.execute(
+            "UPDATE leads SET status = 'dismissed' "
+            f"WHERE tag IN ({','.join('?' * len(DEACTIVATING_TAGS))}) "
+            "AND status NOT IN ('dismissed', 'converted')",
+            tuple(sorted(DEACTIVATING_TAGS)))
+        if cur.rowcount:
+            conn.commit()
+    except sqlite3.OperationalError:
+        pass
 
 
 def _dial_json(key: str, default, db_path=None):
@@ -890,7 +906,9 @@ def get_lead_export_rows(chapter: str,
     INVITATIONS opt-in answer ('yes_for_<chapter>' or 'yes_for_both');
     a lead with no answer falls back to its routed chapter. Excluded:
     dismissed leads, 'Bad contact'/'Not now'/'Too expensive' tags,
-    rows without email."""
+    rows without email, and any explicit invitations opt-OUT (an
+    answer starting with 'no' — Kerry 2026-08-31: those that don't
+    want invites never go on the CSV)."""
     want_sa = chapter == "San Antonio"
     out = []
     for l in get_leads(limit=1000, db_path=db_path):
@@ -908,6 +926,11 @@ def get_lead_export_rows(chapter: str,
                 loop_val = v.lower()
                 break
         if loop_val:
+            # Explicit opt-out ('no', or any future 'no_-_…' variant)
+            # never rides the routed-chapter fallback — an answer that
+            # isn't a clear yes stays off the invite list.
+            if loop_val.startswith("no"):
+                continue
             ok = (loop_val == "yes_for_both"
                   or (want_sa and "san_antonio" in loop_val)
                   or (not want_sa

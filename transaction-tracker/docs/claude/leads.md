@@ -126,7 +126,12 @@ Tagging a NEW lead auto-marks it touched. **Deactivating tags**
 selecting one flips the lead to dismissed — deactivated, never
 deleted; the row + notes stay, it leaves the invite CSV, Restore
 brings it back. A converted lead keeps its status (tag still records
-the disposition). CSV export also excludes the Too expensive tag. Surfaces:
+the disposition). CSV export also excludes the Too expensive tag.
+`ensure_leads_table` self-heals on every read/write (v2.261.1): an
+active lead carrying a deactivating tag (tagged pre-feature or during
+a deploy gap) is swept to dismissed. The CSV also hard-skips any
+invitations answer starting with 'no' — an opt-out never rides the
+routed-chapter fallback. Regression suite: `test_leads_export.py`. Surfaces:
 tag picker in desktop actions + mobile action row, orange pill display,
 `POST /api/leads/<id>/tag`, bridge `scoring-lead-tag:<id>|<tag>`
 (empty clears; audited), `set_lead_tag`/`get_tag_options` in leads.py.
