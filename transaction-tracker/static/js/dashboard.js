@@ -423,8 +423,12 @@ async function checkConfig() {
         // only (Kerry, 2026-07-08: managers must not send the report)
         const reportBtn = document.getElementById("btn-send-report");
         if (reportBtn) {
+            // "" (not "inline-flex") — the shell-ops pill centers its
+            // label via line-height on the default button display;
+            // forcing inline-flex top-aligned the text against the 2px
+            // outline (the "SEND REPORT is messed up" bug, 2026-08-31).
             reportBtn.style.display = (data.daily_report && currentRole === "admin")
-                ? "inline-flex" : "none";
+                ? "" : "none";
         }
     } catch (err) {
         console.error("Failed to check config:", err);

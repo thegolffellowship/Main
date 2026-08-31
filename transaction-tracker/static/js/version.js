@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.270.2";
+window.TGF_VERSION = "2.270.3";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.270.3",
+    date: "2026-08-31",
+    changes: [
+      "SEND REPORT button un-mangled (Kerry: 'SEND REPORT is messed up'): dashboard.js revealed the admin-only button with display:'inline-flex', which turned the shell-ops pill into a flex container and top-aligned its label against the 2px outline. It now clears the inline style like the neighboring Expand Qty button does, so the pill centers its label via the shell's line-height as designed.",
+    ],
+  },
   {
     version: "2.270.2",
     date: "2026-08-31",
