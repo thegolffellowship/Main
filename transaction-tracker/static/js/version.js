@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.259.2";
+window.TGF_VERSION = "2.259.3";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.259.3",
+    date: "2026-08-31",
+    changes: [
+      "Conversion auto-detect split in two (Kerry: 'if they become a member or first play an event, there should be an auto update to their lead card'): a membership purchase (or a customer_memberships row — manual grants count) auto-tags 'Became member'; any other active purchase — an event registration — auto-tags 'Registered event'. Both flip the lead to converted; membership always outranks and upgrades a Registered-event lead when their membership lands later. Never resurrects a dismissed lead. 'Registered event' added to the tag vocabulary (dial + defaults).",
+    ],
+  },
   {
     version: "2.259.2",
     date: "2026-08-31",

@@ -757,20 +757,45 @@ def check_new_leads(db_path: str | Path | None = None) -> dict:
             conn.execute(
                 "UPDATE customers SET first_name = ?, last_name = ? "
                 "WHERE customer_id = ?", (r["fn"], r["ln"], r["cid"]))
-        # Became-member auto-detect (Kerry 2026-08-31, on the campaign's
-        # first real member): a lead whose customer now holds ACTIVE
-        # purchases has converted in the real world — mark converted,
-        # tag 'Became member', stop the 48h clock. Never resurrects a
-        # dismissed lead; idempotent.
-        conn.execute(
-            "UPDATE leads SET status = 'converted', tag = 'Became member', "
-            "touched_at = COALESCE(touched_at, datetime('now')) "
-            "WHERE status != 'dismissed' "
-            "AND (status != 'converted' OR COALESCE(tag, '') != 'Became member') "
-            "AND customer_id IS NOT NULL "
-            "AND EXISTS (SELECT 1 FROM items i "
-            "            WHERE i.customer_id = leads.customer_id "
-            "            AND i.transaction_status = 'active')")
+        # Conversion auto-detect (Kerry 2026-08-31: "if they become a
+        # member or first play an event, there should be an auto update
+        # to their lead card"). Two real-world outcomes, membership
+        # outranking event: a membership purchase (or a
+        # customer_memberships row — manual grants count) tags 'Became
+        # member'; any other active purchase tags 'Registered event'.
+        # Both flip status to converted and stop the 48h clock. Never
+        # resurrects a dismissed lead; idempotent; a Registered-event
+        # lead upgrades to Became member when the membership lands.
+        try:
+            conn.execute(
+                "UPDATE leads SET status = 'converted', "
+                "tag = 'Became member', "
+                "touched_at = COALESCE(touched_at, datetime('now')) "
+                "WHERE status != 'dismissed' "
+                "AND (status != 'converted' "
+                "     OR COALESCE(tag, '') != 'Became member') "
+                "AND customer_id IS NOT NULL "
+                "AND (EXISTS (SELECT 1 FROM customer_memberships m "
+                "             WHERE m.customer_id = leads.customer_id) "
+                "     OR EXISTS (SELECT 1 FROM items i "
+                "                WHERE i.customer_id = leads.customer_id "
+                "                AND i.transaction_status = 'active' "
+                "                AND UPPER(i.item_name) LIKE '%MEMBERSHIP%'))")
+            conn.execute(
+                "UPDATE leads SET status = 'converted', "
+                "tag = 'Registered event', "
+                "touched_at = COALESCE(touched_at, datetime('now')) "
+                "WHERE status != 'dismissed' "
+                "AND COALESCE(tag, '') != 'Became member' "
+                "AND (status != 'converted' "
+                "     OR COALESCE(tag, '') != 'Registered event') "
+                "AND customer_id IS NOT NULL "
+                "AND EXISTS (SELECT 1 FROM items i "
+                "            WHERE i.customer_id = leads.customer_id "
+                "            AND i.transaction_status = 'active' "
+                "            AND UPPER(i.item_name) NOT LIKE '%MEMBERSHIP%')")
+        except sqlite3.Error as e:
+            logger.warning("Lead conversion auto-detect failed: %s", e)
         # Backfill: prospects created before the acquisition_source fix
         # carry the resolver's 'godaddy' default — purchase-less
         # lead-linked customers are Facebook acquisitions.
@@ -901,7 +926,7 @@ def get_lead_export_rows(chapter: str,
 # new/touched/converted/dismissed pipeline.
 DEFAULT_TAG_OPTIONS = ["Left VM", "Texted", "No answer", "Call back",
                        "Interested", "Coming to event", "Not now",
-                       "Bad contact"]
+                       "Bad contact", "Registered event", "Became member"]
 
 
 def get_tag_options(db_path: str | Path | None = None) -> list[str]:
