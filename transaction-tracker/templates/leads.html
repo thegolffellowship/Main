@@ -329,6 +329,32 @@
         const lastActivity = l => (((l.notes_log || [])[0] || {}).created_at
             || l.touched_at || l.arrived_at || l.first_seen_at || "")
             .replace("T", " ").replace("Z", "");
+        // Kerry's 12-step availability × importance ladder (2026-08-31):
+        // within a tier, rank by form answers — after the previous
+        // parameters, before recency. Unlisted combos (no answer, "No
+        // days") fall to the bottom of their tier.
+        const FORM_RANK = {
+            "both|all": 1, "tue|all": 2, "both|comm": 3, "both|golf": 4,
+            "both|comp": 5, "tue|comm": 6, "tue|golf": 7, "tue|comp": 8,
+            "sat|all": 9, "sat|comm": 10, "sat|golf": 11, "sat|comp": 12 };
+        const formRank = l => {
+            const p = l.payload || {};
+            const raw = match => {
+                const k = Object.keys(p).find(match);
+                return k ? String(p[k]).toLowerCase() : "";
+            };
+            const a = raw(k => k.includes("play_tuesdays_or_saturdays"));
+            const w = raw(k => k.includes("most_important"));
+            const av = a.includes("both") ? "both"
+                : a.includes("tuesdays") ? "tue"
+                : a.includes("saturdays") ? "sat" : "";
+            const wa = w.startsWith("all_of_it") ? "all"
+                : w.startsWith("golf") ? "golf"
+                : w.startsWith("competition") ? "comp"
+                : (w.startsWith("community") || w.startsWith("connection")
+                   || w.startsWith("fellowship")) ? "comm" : "";
+            return FORM_RANK[av + "|" + wa] ?? 99;
+        };
         // Filter (chapter toggle + status chips), then sort
         const visible = leads.filter(l => {
             if (chapterFilter !== "all" && (l.chapter || "") !== chapterFilter) return false;
@@ -338,6 +364,7 @@
         });
         if (sortKey === "priority") {
             visible.sort((a, b) => tier(a) - tier(b)
+                || formRank(a) - formRank(b)
                 || (lastActivity(a) < lastActivity(b) ? 1
                     : lastActivity(a) > lastActivity(b) ? -1 : 0));
         } else {

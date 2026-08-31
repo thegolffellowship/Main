@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.266.0";
+window.TGF_VERSION = "2.267.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.267.0",
+    date: "2026-08-31",
+    changes: [
+      "Kerry's 12-step availability × importance ladder added to the priority sort ('add this to auto-ordering after previous parameters'): within each section/tier, leads now rank 1) Both+All of it, 2) Tue+All of it, 3) Both+Community, 4) Both+Golf, 5) Both+Competition, 6) Tue+Community, 7) Tue+Golf, 8) Tue+Competition, 9) Sat+All of it, 10) Sat+Community, 11) Sat+Golf, 12) Sat+Competition — decoded from the lead's form answers; combos not on the ladder (no answer, 'No days') fall below step 12. Recency remains the final tiebreak. Verified against all 12 combos scrambled: exact ladder order, sections still dominate.",
+    ],
+  },
   {
     version: "2.266.0",
     date: "2026-08-31",

@@ -189,8 +189,13 @@ leads" when filtered. **Landing sort is PRIORITY** (Kerry 2026-08-31:
 respond immediately to new arrivals and hot conversations): tier 0 new
 · 1 hot tags (Call back / Interested / Coming to event) · 2 untagged
 touched · 3 quiet outreach (Texted / Left VM / Sent email / No answer) · 4
-converted · 5 dismissed; within a tier, newest activity (latest note,
-else touch, else arrival) first. Newest/Oldest/Name/Status sorts
+converted · 5 dismissed; within a tier, Kerry's 12-step
+availability × importance ladder (v2.267.0, 2026-08-31) ranks next —
+1 Both+All · 2 Tue+All · 3 Both+Community · 4 Both+Golf ·
+5 Both+Competition · 6 Tue+Community · 7 Tue+Golf · 8 Tue+Competition
+· 9 Sat+All · 10 Sat+Community · 11 Sat+Golf · 12 Sat+Competition;
+unlisted combos (no answer / "No days") fall below 12 — then newest
+activity (latest note, else touch, else arrival) first. Newest/Oldest/Name/Status sorts
 remain in the select. **Category bars, no status badges** (Kerry
 2026-08-31, v2.263.0; TOUCHED split v2.265.0): in priority view the
 desktop rows group under dark NEW LEADS / RESPONDED / NO RESPONSE /
