@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.259.3";
+window.TGF_VERSION = "2.259.4";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.259.4",
+    date: "2026-08-31",
+    changes: [
+      "Action-items queue de-noised (Kerry: 'some of those should be easily resolved'): the Tracker's OWN notification emails (New-Lead pings, Daily Briefings) no longer boomerang into action items — the Lead Center is the system of record for lead touches, and the briefing summarizes this very queue. Skip happens at classification (emails still marked seen, cost-neutral). New audited bridges: scoring-action-complete:<id>|<note> and scoring-action-sweep-echoes (bulk-completes the ~23 existing echo items).",
+    ],
+  },
   {
     version: "2.259.3",
     date: "2026-08-31",

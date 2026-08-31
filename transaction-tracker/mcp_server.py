@@ -2092,6 +2092,48 @@ def _scoring_dispatch(url: str, extract: str):
                                 f"lead {_p[0]}: {_p[1]} -> {_val!r}")
             return json.dumps({"id": int(_p[0]), "field": _p[1],
                                "value": _val, "updated": n})
+        if cmd == "scoring-action-complete":
+            # "<id>|<note>" — complete one action item with a resolution
+            # note. Audited.
+            _p = arg.split("|", 1)
+            res = db.update_action_item(int(_p[0].strip()), {
+                "status": "completed",
+                "completed_at": __import__("datetime").datetime.utcnow()
+                .strftime("%Y-%m-%d %H:%M:%S"),
+                "completed_by": "tracker-claude",
+                "resolution_notes": (_p[1].strip() if len(_p) > 1 and
+                                     _p[1].strip() else
+                                     "Resolved via tracker-claude"),
+            })
+            db.log_agent_action("mcp-claude", "scoring-action-complete",
+                                f"action item {_p[0].strip()} completed")
+            return json.dumps({"id": res.get("id"),
+                               "status": res.get("status"),
+                               "subject": res.get("subject")}, indent=2)
+        if cmd == "scoring-action-sweep-echoes":
+            # Bulk-complete OPEN action items that are echoes of the
+            # Tracker's own notification emails (New-Lead pings tracked
+            # in the Lead Center; Daily Briefings that summarize this
+            # very queue). Kerry 2026-08-31. Audited.
+            with db._connect() as conn:
+                n = conn.execute(
+                    "UPDATE action_items SET status = 'completed', "
+                    "completed_at = datetime('now'), "
+                    "completed_by = 'tracker-claude', "
+                    "resolution_notes = 'Echo of the Tracker''s own "
+                    "notification email — the Lead Center is the system "
+                    "of record for lead touches; briefings summarize "
+                    "this queue' "
+                    "WHERE status = 'open' "
+                    "AND LOWER(COALESCE(from_email, '')) LIKE "
+                    "    '%thegolffellow%' "
+                    "AND (LOWER(subject) LIKE 'new tgf lead%' "
+                    "     OR LOWER(subject) LIKE 'tgf daily briefing%')"
+                ).rowcount
+                conn.commit()
+            db.log_agent_action("mcp-claude", "scoring-action-sweep-echoes",
+                                f"completed {n} echo action items")
+            return json.dumps({"completed": n})
         if cmd == "scoring-lead-tag":
             # "<id>|<tag>" — set a disposition tag (empty tag clears).
             # Options live in the lead_tag_options dial. Audited.

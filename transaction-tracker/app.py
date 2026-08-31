@@ -920,6 +920,18 @@ def check_expense_inbox(force=False, days_back=None):
                     processed += 1
 
             elif email_type == "action_required":
+                # Our own system notifications must not boomerang into
+                # action items (Kerry 2026-08-31): the New-Lead pings are
+                # tracked in the Lead Center (system of record for the
+                # 48h touch), and the Daily Briefing is itself a summary
+                # of this queue — echoing either back in is pure noise.
+                _subj = (email_data.get("subject") or "").strip().lower()
+                _sender = (email_data.get("from") or "").lower()
+                if ("thegolffellowship" in _sender
+                        and (_subj.startswith("new tgf lead")
+                             or _subj.startswith("tgf daily briefing"))):
+                    processed += 1
+                    continue
                 extracted = parse_action_required(
                     email_data.get("subject", ""),
                     email_data.get("from", ""),
