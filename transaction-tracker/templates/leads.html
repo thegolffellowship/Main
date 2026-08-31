@@ -349,13 +349,22 @@
                 hour: "numeric", minute: "2-digit" });
         };
         // Category bars replace per-row status badges in priority view
-        // (Kerry 2026-08-31): the sort keeps statuses contiguous, so a
+        // (Kerry 2026-08-31): the sort keeps sections contiguous, so a
         // bar drops in whenever the section changes. The status pill
         // only renders in flat sorts, where there are no sections.
-        const SECTION_LABEL = { new: "NEW LEADS", touched: "TOUCHED",
-            converted: "CONVERTED", dismissed: "DISMISSED" };
+        // TOUCHED splits into RESPONDED (hot tags — a conversation is
+        // going) and NO RESPONSE (outreach made / no disposition yet).
+        const sectionOf = l =>
+            l.status === "new" ? "NEW LEADS"
+            : l.status === "converted" ? "CONVERTED"
+            : l.status === "dismissed" ? "DISMISSED"
+            : HOT_TAGS.includes(l.tag || "") ? "RESPONDED"
+            : "NO RESPONSE";
         const secCounts = {};
-        visible.forEach(l => { secCounts[l.status] = (secCounts[l.status] || 0) + 1; });
+        visible.forEach(l => {
+            const s = sectionOf(l);
+            secCounts[s] = (secCounts[s] || 0) + 1;
+        });
         const showPill = sortKey !== "priority";
         let curSection = null;
         const drows = [], cards = [];
@@ -431,9 +440,9 @@
             const notePrev = latestNote
                 ? `<div class="ld-dnote"><b>${esc((latestNote.author || "?")[0])}</b> · ${esc(fmtNoteTime(latestNote.created_at))} — ${esc(latestNote.note)}</div>`
                 : l.notes ? `<div class="ld-dnote">${esc(l.notes)}</div>` : "";
-            if (!showPill && SECTION_LABEL[l.status] !== curSection) {
-                curSection = SECTION_LABEL[l.status];
-                drows.push(`<div class="ld-secbar">${curSection}<span class="n">· ${secCounts[l.status]}</span></div>`);
+            if (!showPill && sectionOf(l) !== curSection) {
+                curSection = sectionOf(l);
+                drows.push(`<div class="ld-secbar">${curSection}<span class="n">· ${secCounts[curSection]}</span></div>`);
             }
             drows.push(`<div class="ld-drow ${edgeCls}">
                 <div class="ld-dstatus">

@@ -192,8 +192,11 @@ touched · 3 quiet outreach (Texted / Left VM / Sent email / No answer) · 4
 converted · 5 dismissed; within a tier, newest activity (latest note,
 else touch, else arrival) first. Newest/Oldest/Name/Status sorts
 remain in the select. **Category bars, no status badges** (Kerry
-2026-08-31, v2.263.0): in priority view the desktop rows group under
-dark NEW LEADS / TOUCHED / CONVERTED / DISMISSED bars with counts —
+2026-08-31, v2.263.0; TOUCHED split v2.265.0): in priority view the
+desktop rows group under dark NEW LEADS / RESPONDED / NO RESPONSE /
+CONVERTED / DISMISSED bars with counts — RESPONDED = touched with a
+hot tag (Call back / Interested / Coming to event), NO RESPONSE = the
+rest of touched (quiet outreach tags or untagged) —
 the bar carries the status, so the per-row status pill is gone and
 the left column is just age/owner + tag chip (rows max two lines).
 The pill returns only in flat sorts (Name/Newest/…) where there are

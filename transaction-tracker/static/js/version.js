@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.264.0";
+window.TGF_VERSION = "2.265.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.265.0",
+    date: "2026-08-31",
+    changes: [
+      "TOUCHED section split into RESPONDED and NO RESPONSE (Kerry: 'break up TOUCHED into RESPONDED and NO RESPONSE… sections not badges'): the priority view's category bars are now NEW LEADS / RESPONDED / NO RESPONSE / CONVERTED / DISMISSED. RESPONDED = touched leads with a conversation tag (Call back / Interested / Coming to event); NO RESPONSE = the rest of touched — outreach tags (Texted / Left VM / Sent email / No answer) or no disposition yet. The split rides the existing priority tiers, so ordering is unchanged: responded conversations above outreach awaiting a reply.",
+    ],
+  },
   {
     version: "2.264.0",
     date: "2026-08-31",
