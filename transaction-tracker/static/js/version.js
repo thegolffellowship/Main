@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.271.0";
+window.TGF_VERSION = "2.271.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.271.1",
+    date: "2026-08-31",
+    changes: [
+      "Chapter color tabs on the Events list (Kerry: 'same color tabs for events page'): every event row carries the same left-edge chapter tab as the Lead Center — Austin burnt orange, San Antonio slate, unrouted gray. Just the color, no text.",
+    ],
+  },
   {
     version: "2.271.0",
     date: "2026-08-31",

@@ -50,6 +50,12 @@
         }
         .events-table tbody tr:last-child td { border-bottom: none; }
         .events-table tbody tr:hover { background: #f9fafb; }
+        /* Chapter color tab on the left end of each event row (Kerry
+           2026-08-31, TGF Platform style — same as the Lead Center):
+           Austin burnt orange, SA slate, unrouted gray. */
+        .events-table tbody tr.event-row-clickable > td:first-child { border-left: 8px solid #E5E7EB; }
+        .events-table tbody tr.ev-ch-austin > td:first-child { border-left-color: var(--chapter-austin, #BF5700); }
+        .events-table tbody tr.ev-ch-sa > td:first-child { border-left-color: var(--chapter-sa-alt, #8FA8B8); }
         .reg-count {
             display: inline-flex;
             align-items: center;
@@ -3303,7 +3309,7 @@
         filtered.forEach((ev, _evIdx) => {
             const isExpanded = expandedEventId === ev.id;
             html += `
-            <tr class="event-row-clickable ${isExpanded ? 'expanded' : ''}" data-id="${ev.id}" data-name="${escapeHtml(ev.item_name)}">
+            <tr class="event-row-clickable ${isExpanded ? 'expanded' : ''} ${ev.chapter === 'Austin' ? 'ev-ch-austin' : ev.chapter === 'San Antonio' ? 'ev-ch-sa' : ''}" data-id="${ev.id}" data-name="${escapeHtml(ev.item_name)}">
                 <td>
                     <strong>${escapeHtml(ev.item_name)}</strong>
                     ${(ev.status === 'cancelled') ? `<span style="margin-left:0.4rem; font-size:0.65rem; font-weight:700; background:#fee2e2; color:#dc2626; border:1px solid #fecaca; border-radius:4px; padding:1px 5px; vertical-align:middle; text-transform:uppercase;">${escapeHtml(ev.status_badge || 'Cancelled')}</span>` : ''}
