@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.265.1";
+window.TGF_VERSION = "2.266.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.266.0",
+    date: "2026-08-31",
+    changes: [
+      "MEMBERS get their own celebration (Kerry: 'if they're a MEMBER, that's the ultimate conversion, so it needs a separate section and color, with a cooler badge'): converted leads tagged 'Became member' now sit under a TGF-ORANGE MEMBERS section bar above plain CONVERTED, with an orange row edge and a filled ★ MEMBER badge replacing the tag chip (desktop + mobile).",
+      "Stat-card breakdowns (Kerry): the CONVERTED card shows 'N event guests · N members' under the total, and the TOUCHED card shows 'N responded · N no response' — same split as the section bars.",
+      "The 'existing customer' flag next to lead names now reads just 'customer' (Kerry).",
+    ],
+  },
   {
     version: "2.265.1",
     date: "2026-08-31",

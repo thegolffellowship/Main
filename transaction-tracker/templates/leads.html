@@ -18,6 +18,7 @@
         .ld-card.on { border-color: #1B1B1B; box-shadow: inset 0 0 0 1px #1B1B1B; }
         .ld-card .lbl { font: 700 9.5px/1 'Bitter', serif; letter-spacing: 1.5px; text-transform: uppercase; color: var(--text-muted); }
         .ld-card .val { font: 700 24px/1 'Bitter', serif; color: var(--text); margin-top: 7px; font-variant-numeric: tabular-nums; }
+        .ld-card .sub { font-size: 10.5px; color: #6B7280; margin-top: 3px; font-weight: 600; }
         .ld-pill { display: inline-block; padding: 2px 10px; border-radius: 99px; font-size: 11px; font-weight: 700; }
         .ld-new { background: #FEF3C7; color: #92400E; }
         .ld-touched { background: #D1FAE5; color: #065F46; }
@@ -50,6 +51,12 @@
            move under a TOUCHED bar) */
         .ld-secbar { background: #1B1B1B; color: #fff; font: 700 10px/1 'Bitter', serif; letter-spacing: 1.5px; text-transform: uppercase; padding: 6px 14px; }
         .ld-secbar .n { color: #9CA3AF; margin-left: 6px; letter-spacing: 0; }
+        /* MEMBERS: the ultimate conversion (Kerry 2026-08-31) — TGF
+           orange section, orange edge, filled star badge */
+        .ld-secbar.member { background: var(--primary, #E87C3E); }
+        .ld-secbar.member .n { color: #FFE3CF; }
+        .ld-edge-member { border-left-color: #E87C3E; }
+        .ld-mbadge { display: inline-block; margin: 2px 0 0; padding: 2px 10px; border-radius: 99px; font-size: 10.5px; font-weight: 800; letter-spacing: 0.4px; background: var(--primary, #E87C3E); color: #fff; }
         .ld-drow { display: grid; grid-template-columns: 108px minmax(150px, 1.05fr) minmax(170px, 1fr) minmax(180px, 1.3fr) max-content; gap: 10px; align-items: center; padding: 5px 12px 5px 9px; border-bottom: 1px solid #F3F2EF; border-left: 3px solid #D1D5DB; }
         .ld-drow > div { min-width: 0; }
         .ld-drow:hover { background: #FCFCFA; }
@@ -130,8 +137,8 @@
     <div class="ld-wrap">
         <div class="ld-cards">
             <div class="ld-card" data-f="new" onclick="setStatusFilter('new')"><div class="lbl">New</div><div class="val" id="ld-count-new">–</div></div>
-            <div class="ld-card" data-f="touched" onclick="setStatusFilter('touched')"><div class="lbl">Touched</div><div class="val" id="ld-count-touched">–</div></div>
-            <div class="ld-card" data-f="converted" onclick="setStatusFilter('converted')"><div class="lbl">Converted</div><div class="val" id="ld-count-converted">–</div></div>
+            <div class="ld-card" data-f="touched" onclick="setStatusFilter('touched')"><div class="lbl">Touched</div><div class="val" id="ld-count-touched">–</div><div class="sub" id="ld-touch-sub"></div></div>
+            <div class="ld-card" data-f="converted" onclick="setStatusFilter('converted')"><div class="lbl">Converted</div><div class="val" id="ld-count-converted">–</div><div class="sub" id="ld-conv-sub"></div></div>
             <div class="ld-card" data-f="late" onclick="setStatusFilter('late')"><div class="lbl">Past 48h untouched</div><div class="val ld-late" id="ld-count-late">–</div></div>
         </div>
         <div class="ld-msummary" id="ld-msummary"></div>
@@ -212,11 +219,24 @@
             ).join(" &nbsp;·&nbsp; ") || "";
         // Global counts over EVERY lead (summary cards + mobile sticky
         // summary stay whole-queue regardless of active filters).
-        const counts = { new: 0, touched: 0, converted: 0, dismissed: 0, late: 0 };
+        // Shared classifiers (used by counts, priority tiers, sections).
+        // A logged note counts as a response (Kerry 2026-08-31: "If
+        // there's a note added, they probably shouldn't be in no
+        // response") — notes record conversations. MEMBERS = the
+        // ultimate conversion: own section/color/badge.
+        const HOT_TAGS = ["Call back", "Interested", "Coming to event"];
+        const QUIET_TAGS = ["Texted", "Left VM", "Sent email", "No answer"];
+        const responded = l => HOT_TAGS.includes(l.tag || "")
+            || (l.notes_log || []).length > 0;
+        const isMember = l => l.status === "converted" && l.tag === "Became member";
+        const counts = { new: 0, touched: 0, converted: 0, dismissed: 0,
+            late: 0, member: 0, resp: 0, noresp: 0 };
         const chapCounts = { all: leads.length };
         leads.forEach(l => {
             counts[l.status] = (counts[l.status] || 0) + 1;
             if (isLate(l)) counts.late++;
+            if (isMember(l)) counts.member++;
+            if (l.status === "touched") counts[responded(l) ? "resp" : "noresp"]++;
             if (l.chapter) chapCounts[l.chapter] = (chapCounts[l.chapter] || 0) + 1;
         });
         // Reflect active filters on cards / chips / chapter toggle
@@ -294,22 +314,14 @@
             received: l => l.arrived_at || l.first_seen_at || "",
             status: l => l.status || "",
         };
-        // Priority tiers: 0 new (respond now) · 1 hot conversation
-        // (Call back / Interested / Coming to event) · 2 touched, no
-        // disposition yet · 3 outreach sent, no response (Texted /
-        // Left VM / No answer) · 4 converted (done) · 5 dismissed.
-        // Within a tier, most recent activity (newest note, else touch,
-        // else arrival) first.
-        const HOT_TAGS = ["Call back", "Interested", "Coming to event"];
-        const QUIET_TAGS = ["Texted", "Left VM", "Sent email", "No answer"];
-        // A logged note counts as a response (Kerry 2026-08-31: "If
-        // there's a note added, they probably shouldn't be in no
-        // response") — notes record conversations.
-        const responded = l => HOT_TAGS.includes(l.tag || "")
-            || (l.notes_log || []).length > 0;
+        // Priority tiers: 0 new (respond now) · 1 responded (hot tag or
+        // note) · 2 touched, no disposition yet · 3 outreach sent, no
+        // response · 4 member · 5 converted · 6 dismissed. Within a
+        // tier, most recent activity first.
         const tier = l =>
-            l.status === "dismissed" ? 5
-            : l.status === "converted" ? 4
+            l.status === "dismissed" ? 6
+            : isMember(l) ? 4
+            : l.status === "converted" ? 5
             : l.status === "new" ? 0
             : responded(l) ? 1
             : QUIET_TAGS.includes(l.tag || "") ? 3
@@ -361,6 +373,7 @@
         // going) and NO RESPONSE (outreach made / no disposition yet).
         const sectionOf = l =>
             l.status === "new" ? "NEW LEADS"
+            : isMember(l) ? "MEMBERS"
             : l.status === "converted" ? "CONVERTED"
             : l.status === "dismissed" ? "DISMISSED"
             : responded(l) ? "RESPONDED"
@@ -386,6 +399,9 @@
                 : l.days_since_arrival === 0 ? "today"
                 : l.days_since_arrival + "d";
             const latestNote = (l.notes_log || [])[0];
+            const tagHtml = !l.tag ? ""
+                : isMember(l) ? `<span class="ld-mbadge">★ MEMBER</span>`
+                : `<span class="ld-tag">${esc(l.tag)}</span>`;
             const tagSel = `<select class="ld-tagsel" onchange="setTag(${l.id}, this.value)">` +
                 `<option value="">🏷 tag…</option>` +
                 (ALL.tag_options || []).map(t =>
@@ -447,16 +463,16 @@
                 : l.notes ? `<div class="ld-dnote">${esc(l.notes)}</div>` : "";
             if (!showPill && sectionOf(l) !== curSection) {
                 curSection = sectionOf(l);
-                drows.push(`<div class="ld-secbar">${curSection}<span class="n">· ${secCounts[curSection]}</span></div>`);
+                drows.push(`<div class="ld-secbar${curSection === "MEMBERS" ? " member" : ""}">${curSection}<span class="n">· ${secCounts[curSection]}</span></div>`);
             }
             drows.push(`<div class="ld-drow ${edgeCls}">
                 <div class="ld-dstatus">
                     ${showPill ? `<span class="ld-pill ld-${esc(l.status)}">${esc(l.status)}</span>` : ""}
                     <div class="ld-dsub ${late ? "ld-late" : ""}">${age}${late ? " · overdue" : ""}${l.touched_by ? ` · by ${esc(l.touched_by)}` : ""}</div>
-                    ${l.tag ? `<div><span class="ld-tag">${esc(l.tag)}</span></div>` : ""}
+                    ${tagHtml ? `<div>${tagHtml}</div>` : ""}
                 </div>
                 <div class="ld-dname">
-                    <b>${esc(name)}</b>${l.has_history ? ' <span class="ld-existing">existing customer</span>' : ""}
+                    <b>${esc(name)}</b>${l.has_history ? ' <span class="ld-existing">customer</span>' : ""}
                     <span class="ld-toggle" onclick="toggleDet(${l.id})" title="Details">▾</span>
                     <div class="ld-dsub">${esc(l.chapter) || "unrouted"} · ${fmtReceived(l)}</div>
                 </div>
@@ -480,9 +496,9 @@
             // two-tap contact. Badges always visible; sms:/tel:/mailto:
             // deep-links; newest note previewed; overflow menu.
             cards.push(`<div class="ld-mcard">
-                <div class="ld-mhead"><span class="ld-dot ${dotCls}"></span><b>${esc(name)}</b>${l.has_history ? ' <span class="ld-existing">existing customer</span>' : ""}
+                <div class="ld-mhead"><span class="ld-dot ${dotCls}"></span><b>${esc(name)}</b>${l.has_history ? ' <span class="ld-existing">customer</span>' : ""}
                     <span class="ld-mmeta ${late ? "ld-late" : ""}">${esc(l.chapter) || "unrouted"} · ${age} · ${esc(l.status)}</span></div>
-                <div>${badgeHtml}${l.tag ? `<span class="ld-tag">${esc(l.tag)}</span>` : ""}</div>
+                <div>${badgeHtml}${tagHtml}</div>
                 <div class="ld-acts">
                     ${l.phone ? `<a class="ld-act" href="sms:${esc(l.phone)}?&body=${encodeURIComponent(smsBody)}">💬 Text</a>
                                  <a class="ld-act" href="tel:${esc(l.phone)}">📞 Call</a>` : ""}
@@ -510,6 +526,13 @@
         for (const k of ["new", "touched", "converted"])
             document.getElementById("ld-count-" + k).textContent = counts[k] || 0;
         document.getElementById("ld-count-late").textContent = counts.late || 0;
+        // Converted breakdown (Kerry 2026-08-31): total up top, Event
+        // Guests vs Members within it.
+        const evGuests = (counts.converted || 0) - counts.member;
+        document.getElementById("ld-conv-sub").textContent = counts.converted
+            ? `${evGuests} event guest${evGuests === 1 ? "" : "s"} · ${counts.member} member${counts.member === 1 ? "" : "s"}` : "";
+        document.getElementById("ld-touch-sub").textContent = counts.touched
+            ? `${counts.resp} responded · ${counts.noresp} no response` : "";
         document.getElementById("ld-msummary").innerHTML =
             `${counts.new || 0} new · ${counts.touched || 0} touched · ` +
             `<span class="${counts.late ? "ld-late" : ""}">${counts.late || 0} overdue</span>` +

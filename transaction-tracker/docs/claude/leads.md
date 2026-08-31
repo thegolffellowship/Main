@@ -194,10 +194,17 @@ else touch, else arrival) first. Newest/Oldest/Name/Status sorts
 remain in the select. **Category bars, no status badges** (Kerry
 2026-08-31, v2.263.0; TOUCHED split v2.265.0): in priority view the
 desktop rows group under dark NEW LEADS / RESPONDED / NO RESPONSE /
-CONVERTED / DISMISSED bars with counts — RESPONDED = touched with a
-hot tag (Call back / Interested / Coming to event) OR any logged note
-(v2.265.1, Kerry: a note most likely means they replied); NO RESPONSE
-= the rest of touched (note-less outreach tags or untagged) —
+MEMBERS / CONVERTED / DISMISSED bars with counts — RESPONDED = touched
+with a hot tag (Call back / Interested / Coming to event) OR any
+logged note (v2.265.1, Kerry: a note most likely means they replied);
+NO RESPONSE = the rest of touched (note-less outreach tags or
+untagged); MEMBERS (v2.266.0, "the ultimate conversion") = converted +
+'Became member' tag, rendered as a TGF-orange bar with orange row edge
+and a filled ★ MEMBER badge replacing the tag chip, above plain
+CONVERTED (event guests). The Touched and Converted stat cards carry
+sub-lines: "N responded · N no response" / "N event guests · N
+members". The history flag reads "customer" (was "existing
+customer") —
 the bar carries the status, so the per-row status pill is gone and
 the left column is just age/owner + tag chip (rows max two lines).
 The pill returns only in flat sorts (Name/Newest/…) where there are
