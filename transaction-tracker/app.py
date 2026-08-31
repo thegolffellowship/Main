@@ -1013,6 +1013,17 @@ def check_rsvp_inbox():
     except Exception:
         logger.exception("RSVP auto-audit failed (non-fatal)")
 
+    # Bridge RSVPs onto lead cards (Kerry 2026-08-31): a lead answering
+    # a GG invite — even Not Playing — gets an automatic note, which
+    # promotes them to RESPONDED in the Lead Center.
+    try:
+        from email_parser.leads import sync_lead_rsvp_notes
+        res = sync_lead_rsvp_notes()
+        if res.get("rsvp_notes_added"):
+            logger.info("Lead RSVP-note bridge: %s", res)
+    except Exception:
+        logger.exception("Lead RSVP-note bridge failed (non-fatal)")
+
     # Check for credited players who just RSVPd and send admin alert emails
     _send_rsvp_credit_alerts()
 

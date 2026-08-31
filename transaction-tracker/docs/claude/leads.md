@@ -215,6 +215,19 @@ the left column is just age/owner + tag chip (rows max two lines).
 The pill returns only in flat sorts (Name/Newest/…) where there are
 no sections. Mobile call sheet unchanged.
 
+## RSVP → lead-note bridge (Kerry 2026-08-31, v2.268.0)
+
+`sync_lead_rsvp_notes` in leads.py — the Alex Porter case: a lead
+answering a GG invite (even Not Playing) is a response signal. Each
+RSVP matching a lead (customer_id first per rule 6, else
+case-insensitive email) becomes one automatic note — author 'GG',
+text "RSVP'd Playing/Not Playing — <event>", created_at = the RSVP's
+received time — which promotes the lead to RESPONDED under the
+notes-count-as-response rule. Idempotent (dedup on exact note text
+per lead; a changed answer is new text → its own note). Runs after
+every RSVP inbox ingest (app.py check_rsvp_inbox) and as a sweep at
+the end of every leads poll (backfill + non-inbox paths).
+
 ## MCP access for CA (platform-claude)
 
 - **`get_lead_center`** — one read: queue rows (decoded answers + ad

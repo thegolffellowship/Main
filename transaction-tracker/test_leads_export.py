@@ -215,6 +215,56 @@ def main():
           leads.edit_lead_identity(lid_pros,
                                    db_path=db_path).get("error") is not None)
 
+    # ---- RSVP → lead-note bridge (sync_lead_rsvp_notes) ----
+    with db._connect(db_path) as conn:
+        conn.execute("CREATE TABLE IF NOT EXISTS rsvps ("
+                     "id INTEGER PRIMARY KEY, email_uid TEXT UNIQUE, "
+                     "player_name TEXT, player_email TEXT, "
+                     "gg_event_name TEXT, event_identifier TEXT, "
+                     "response TEXT, received_at TEXT, matched_event TEXT, "
+                     "customer_id INTEGER, created_at TEXT)")
+        lid_rsvp = plant_lead(conn, "Alexp", "Quality2068@Yahoo.com",
+                              "San Antonio", "yes_for_san_antonio",
+                              status="touched", tag="Texted")
+        lid_cid = plant_lead(conn, "CidMatch", "other@x.com",
+                             "Austin", "yes_for_austin", status="touched")
+        conn.execute("UPDATE leads SET customer_id = 903 WHERE id = ?",
+                     (lid_cid,))
+        conn.execute("INSERT INTO rsvps (email_uid, player_email, response, "
+                     "matched_event, received_at) VALUES ('u1', "
+                     "'quality2068@yahoo.com', 'NOT PLAYING', "
+                     "'s9.21 Canyon Springs', '2026-08-31T20:37:12Z')")
+        conn.execute("INSERT INTO rsvps (email_uid, player_email, response, "
+                     "event_identifier, customer_id, received_at) VALUES "
+                     "('u2', 'ggalias@x.com', 'PLAYING', 's18.10 Landa', "
+                     "903, '2026-08-30T15:00:00Z')")
+        conn.execute("INSERT INTO rsvps (email_uid, player_email, response, "
+                     "matched_event) VALUES ('u3', 'stranger@x.com', "
+                     "'PLAYING', 's9.21 Canyon Springs')")
+        conn.commit()
+    r_sync = leads.sync_lead_rsvp_notes(db_path=db_path)
+    r_again = leads.sync_lead_rsvp_notes(db_path=db_path)
+    with db._connect(db_path) as conn:
+        notes = {r["lead_id"]: (r["author"], r["note"], r["created_at"])
+                 for r in conn.execute(
+                     "SELECT lead_id, author, note, created_at "
+                     "FROM lead_notes WHERE author = 'GG'")}
+        n_total = conn.execute("SELECT COUNT(*) FROM lead_notes "
+                               "WHERE author = 'GG'").fetchone()[0]
+    check("RSVP bridge adds notes (email + customer_id matches)",
+          r_sync.get("rsvp_notes_added") == 2 and n_total == 2,
+          f"{r_sync} notes={notes}")
+    check("email match is case-insensitive, note text + RSVP timestamp",
+          notes.get(lid_rsvp) == ("GG", "RSVP'd Not Playing — s9.21 Canyon "
+                                  "Springs", "2026-08-31 20:37:12"),
+          str(notes.get(lid_rsvp)))
+    check("customer_id match works with different email",
+          notes.get(lid_cid) == ("GG", "RSVP'd Playing — s18.10 Landa",
+                                 "2026-08-30 15:00:00"),
+          str(notes.get(lid_cid)))
+    check("re-run is a no-op (idempotent)",
+          r_again.get("rsvp_notes_added") == 0, str(r_again))
+
     os.unlink(db_path)
     if FAILURES:
         print(f"\n{len(FAILURES)} FAILURE(S)")

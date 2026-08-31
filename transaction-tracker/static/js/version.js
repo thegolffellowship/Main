@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.267.0";
+window.TGF_VERSION = "2.268.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.268.0",
+    date: "2026-08-31",
+    changes: [
+      "RSVP → lead-note bridge (Kerry, on Alex Porter RSVPing Not Playing to s9.21 as a lead: 'that's a good sign… wire it up'): a GG RSVP matching a lead — by customer_id, else email — now drops an automatic note on the lead card ('GG · RSVP'd Not Playing — s9.21 Canyon Springs', stamped with the RSVP's own time), which promotes the lead to RESPONDED under the notes-count-as-response rule. Runs after every RSVP inbox ingest and as a sweep in every leads poll (so existing RSVPs like Porter's backfill on the first poll after deploy). Idempotent — re-sends dedup; a changed answer gets its own note.",
+    ],
+  },
   {
     version: "2.267.0",
     date: "2026-08-31",

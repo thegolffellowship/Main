@@ -842,6 +842,13 @@ def check_new_leads(db_path: str | Path | None = None) -> dict:
                 result["notified"] += 1
         conn.commit()
 
+    # RSVP → lead-note bridge sweep (own connection, after the poll's
+    # writes commit): backfills any RSVP the inbox-time bridge missed.
+    try:
+        sync_lead_rsvp_notes(db_path=db_path)
+    except Exception:
+        logger.warning("Lead RSVP-note sweep failed", exc_info=True)
+
     # Advance the watermark to the newest createdate seen (dedup by
     # external_id makes the re-read of boundary contacts harmless).
     newest = max((c.get("arrived_at") or "" for c in contacts), default="")
@@ -1010,6 +1017,52 @@ def set_lead_tag(lead_id: int, tag: str,
                          (tag or None, lead_id))
         conn.commit()
     return {"id": lead_id, "tag": tag or None, "ok": True}
+
+
+def sync_lead_rsvp_notes(db_path: str | Path | None = None) -> dict:
+    """Bridge GG RSVPs onto lead cards (Kerry 2026-08-31, the Alex
+    Porter case: a lead RSVPing — even Not Playing — is a response
+    signal worth surfacing). Each RSVP matching a lead becomes ONE
+    automatic note (author 'GG', stamped with the RSVP's received
+    time), which promotes the lead to RESPONDED under the
+    notes-count-as-response rule. Matches by customer_id first
+    (rule 6), then by email. Idempotent: dedup on exact note text per
+    lead, so re-runs and GG re-sends are no-ops; a changed answer
+    (Not Playing → Playing) is new text and gets its own note."""
+    from . import database as db
+    added = 0
+    with db._connect(db_path) as conn:
+        ensure_leads_table(conn)
+        try:
+            rows = conn.execute(
+                """SELECT DISTINCT l.id AS lead_id, r.response,
+                          COALESCE(r.matched_event, r.event_identifier,
+                                   r.gg_event_name) AS ev,
+                          COALESCE(r.received_at, r.created_at) AS at
+                   FROM rsvps r JOIN leads l
+                     ON (r.customer_id IS NOT NULL
+                         AND r.customer_id = l.customer_id)
+                     OR (COALESCE(r.player_email, '') != ''
+                         AND LOWER(r.player_email)
+                             = LOWER(COALESCE(l.email, '')))""").fetchall()
+        except Exception:
+            return {"rsvp_notes_added": 0}   # rsvps table absent (tests)
+        for r in rows:
+            resp = "Playing" if (r["response"] or "").upper() == "PLAYING" \
+                else "Not Playing"
+            note = f"RSVP'd {resp} — {r['ev'] or 'event'}"
+            if conn.execute("SELECT 1 FROM lead_notes WHERE lead_id = ? "
+                            "AND note = ?", (r["lead_id"], note)).fetchone():
+                continue
+            at = (r["at"] or "").replace("T", " ").replace("Z", "")[:19]
+            conn.execute(
+                "INSERT INTO lead_notes (lead_id, author, note, created_at) "
+                "VALUES (?, 'GG', ?, COALESCE(?, datetime('now')))",
+                (r["lead_id"], note, at or None))
+            added += 1
+        if added:
+            conn.commit()
+    return {"rsvp_notes_added": added}
 
 
 def edit_lead_identity(lead_id: int, first_name: str | None = None,
