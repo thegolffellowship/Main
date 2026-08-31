@@ -6046,9 +6046,15 @@
     async function hydrateGameDeterminations() {
         const spans = document.querySelectorAll('.game-det[data-event]:not([data-done])');
         if (!spans.length) return;
-        const keys = [...new Set([...spans].map(sp => `${sp.dataset.event}|${sp.dataset.game}|${sp.dataset.flights}`))];
+        // Key on a JSON tuple, never a pipe-joined string: event names can
+        // themselves contain "|" (e.g. "s18.10 FALL KICKOFF | Landa Park"),
+        // and the old pipe join sheared the name apart at split time — the
+        // API got a truncated event, returned nothing, and every flight/
+        // skins/gross winner row stayed hidden.
+        const _detKey = sp => JSON.stringify([sp.dataset.event, sp.dataset.game, sp.dataset.flights]);
+        const keys = [...new Set([...spans].map(_detKey))];
         for (const key of keys) {
-            const [evName, game, flights] = key.split("|");
+            const [evName, game, flights] = JSON.parse(key);
             if (!(key in _gameDetCache)) {
                 try {
                     const res = await fetch(`/api/events/game-results?event=${encodeURIComponent(evName)}&game=${encodeURIComponent(game)}&flights=${encodeURIComponent(flights)}`);
@@ -6057,7 +6063,7 @@
             }
             const det = _gameDetCache[key];
             document.querySelectorAll('.game-det[data-event]:not([data-done])').forEach(sp => {
-                if (`${sp.dataset.event}|${sp.dataset.game}|${sp.dataset.flights}` !== key) return;
+                if (_detKey(sp) !== key) return;
                 sp.dataset.done = "1";
                 sp.textContent = "";
                 // winner sub-rows render hidden; anything worth showing unhides them
@@ -6239,17 +6245,49 @@
     let _hioPotData = null;
     let _hioPotErr = null;
 
+    // Per-event HIO contributions for every event on the same DAY as ev
+    // (self included). A hole-in-one contest spans the whole day whatever
+    // the format, so the banner shows the combined day fund (Kerry
+    // 2026-08-31). Bucket-account events have no matrix row and drop out.
+    function getDayHioParts(ev) {
+        const mates = allEvents.filter(o => o.item_name === ev.item_name ||
+            (ev.event_date && o.event_date === ev.event_date));
+        const parts = [];
+        mates.forEach(o => {
+            const h = extractHolesType(o.item_name, o.format);
+            if (h !== 9 && h !== 18) return;
+            const m = h === 9 ? window.GAMES_MATRIX_9 : window.GAMES_MATRIX_18;
+            const stats = computeGameStats(getRegistrants(o.item_name), o.item_name);
+            const g = m && m[String(stats.players)];
+            const v = g && g.holeInOne;
+            if (v && v !== "NO_EVENT" && v !== "NO_GAME") parts.push({ event: o.item_name, amount: numVal(v) });
+        });
+        return parts;
+    }
+
     function _hioRunningText(eventName) {
         if (!_hioPotData) return '';
         const d = _hioPotData;
+        // Day-level view (Kerry 2026-08-31): on a multi-event day both
+        // events show the running pot through the WHOLE day, so the two
+        // banners agree instead of differing by the within-day ordering.
+        const me = allEvents.find(e => e.item_name === eventName);
+        const dayNames = (me && me.event_date)
+            ? new Set(allEvents.filter(e => e.event_date === me.event_date).map(e => e.item_name))
+            : new Set([eventName]);
+        const dayRows = (d.events || []).filter(e => dayNames.has(e.event) && e.running != null);
         const row = (d.events || []).find(e => e.event === eventName);
-        const thru = row && row.running != null ? row.running : d.pot;
+        let thru = row && row.running != null ? row.running : d.pot;
+        let label = String(eventName || '').split(' ')[0];
+        if (dayRows.length > 1) {
+            thru = Math.max(...dayRows.map(r => Number(r.running)));
+            label = dayRows.map(r => String(r.event || '').split(' ')[0]).join(' + ');
+        }
         if (thru == null) return '';
         const carry = Number(d.carry_in || 0);
         const carryBit = carry > 0
             ? ` <span style="font-weight:400;color:var(--text-muted);">(incl. $${carry.toFixed(2)} carried in)</span>`
             : '';
-        const label = String(eventName || '').split(' ')[0];
         return `Running pot thru ${escapeHtml(label)}: <strong>$${Number(thru).toFixed(2)}</strong>${carryBit}`;
     }
 
@@ -6363,7 +6401,17 @@
         // running cross-event pot THROUGH this event (Kerry 2026-07-20);
         // carry-in from 2025 rides the /api/hio-pot payload once set.
         if (gEvent && gEvent.holeInOne && gEvent.holeInOne !== "NO_EVENT" && gEvent.holeInOne !== "NO_GAME") {
-            html += `<div class="hole-in-one-banner"><div class="hio-line">Hole-in-One Pot: ${fmt$(gEvent.holeInOne)} <span class="gg-det" data-event="${escapeHtml(ev.item_name)}" data-game="hio"></span></div><div class="hio-line" data-hio-running="${escapeHtml(ev.item_name)}">${_hioRunningText(ev.item_name)}</div></div>`;
+            // Day-level HIO fund (Kerry 2026-08-31): the hole-in-one contest
+            // spans every event on the day, so the banner shows the COMBINED
+            // prize fund of all same-day events with a per-event breakdown —
+            // not just this event's slice. (Subtotal/TOTAL math below still
+            // excludes only this event's own contribution, unchanged.)
+            const hioParts = getDayHioParts(ev);
+            const hioDayTotal = hioParts.reduce((s, p) => s + p.amount, 0) || numVal(gEvent.holeInOne);
+            const hioBreakdown = hioParts.length > 1
+                ? ` <span style="font-weight:400;color:var(--text-muted);">(${hioParts.map(p => `${escapeHtml(String(p.event).split(' ')[0])} $${p.amount}`).join(' + ')})</span>`
+                : '';
+            html += `<div class="hole-in-one-banner"><div class="hio-line">Hole-in-One Pot: ${fmt$(hioDayTotal)}${hioBreakdown} <span class="gg-det" data-event="${escapeHtml(ev.item_name)}" data-game="hio"></span></div><div class="hio-line" data-hio-running="${escapeHtml(ev.item_name)}">${_hioRunningText(ev.item_name)}</div></div>`;
             refreshHioPot();
         }
 

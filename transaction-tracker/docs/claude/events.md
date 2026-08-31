@@ -1635,3 +1635,24 @@ live. The pot drains ONLY via `tgf_payouts` rows with `category = 'hio'`.
   item ("HOLE-IN-ONE: <player> — hole N") whenever an imported card has
   strokes = 1 on any hole. The fix path is: verify on GG, pay the player,
   record the payout with category 'hio'.
+- **Same-day banner (Kerry 2026-08-31, v2.272.0)**: the Games-tab HIO
+  banner shows the DAY's combined prize fund, not the event's own slice —
+  `getDayHioParts(ev)` (events.html) sums the matrix holeInOne of every
+  same-day event (any format) with a per-event breakdown, and
+  `_hioRunningText` shows the running pot through the WHOLE day (max of
+  the same-day events' running values) so both banners agree. Display
+  only — subtotal/TOTAL math still excludes just the event's own
+  contribution, and `get_hio_pot()` accrual is untouched.
+
+## Event names can contain "|" — never pipe-join keys (v2.272.0)
+
+"s18.10 FALL KICKOFF | Landa Park" broke TWO consumers that joined the
+event name into a pipe-delimited key/arg: the Games-tab
+`hydrateGameDeterminations` cache key (split gave a truncated event →
+API returned nothing → every Ind Net flight / Skins / Ind Gross winner
+row stayed hidden; now a JSON-tuple key) and the bridge
+`scoring-game-results:<event>|<game>|<flights>` (now parsed from the
+RIGHT — a trailing segment is consumed only when it's a digits flights
+count or a known game name; everything else stays part of the event).
+Any new bridge command or JS cache key that carries an event name must
+follow the same pattern (v2.129.x rpartition precedent).

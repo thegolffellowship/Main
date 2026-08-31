@@ -122,6 +122,14 @@ def ensure_leads_table(conn: sqlite3.Connection) -> None:
         conn.execute("ALTER TABLE leads ADD COLUMN follow_up_at TEXT")
     except sqlite3.OperationalError:
         pass
+    try:
+        # Due-day ping dedup (mailbox #370, Kerry-ratified 2026-08-31):
+        # stores the follow_up_at value that was pinged, so each due
+        # date emails exactly once and a re-snoozed lead re-arms for
+        # its new date automatically.
+        conn.execute("ALTER TABLE leads ADD COLUMN follow_up_notified_for TEXT")
+    except sqlite3.OperationalError:
+        pass
     # Per-lead notes log (mailbox #361 — first brick of Tracker-as-CRM):
     # timestamped, authored; newest previews on the card.
     conn.execute("""
@@ -630,12 +638,111 @@ def _send_lead_ping(lead: dict, db_path=None) -> bool:
         html_body=_lead_email_html(lead))
 
 
+def _followup_email_html(lead: dict, last_note: str | None) -> str:
+    def row(k, v):
+        return (f"<tr><td style='padding:4px 12px 4px 0;color:#6B7280;"
+                f"font-size:12px;text-transform:uppercase'>{k}</td>"
+                f"<td style='padding:4px 0;font-size:14px'>{v or '—'}</td></tr>")
+    name = " ".join(x for x in [lead.get("first_name"),
+                                lead.get("last_name")] if x) or "(no name)"
+    note = (f"<h3 style='margin:14px 0 4px;font-size:13px;color:#1B1B1B'>"
+            f"Latest note</h3><p style='margin:0;font-size:14px;"
+            f"color:#4B5563'>{last_note}</p>" if last_note else "")
+    return f"""
+    <div style="font-family:Helvetica,Arial,sans-serif;max-width:520px">
+      <h2 style="color:#E87C3E;margin:0 0 4px">Follow-up due: {name}</h2>
+      <p style="margin:0 0 12px;color:#4B5563">This lead's snooze is up —
+      today is the day you planned to reach back out.</p>
+      <table style="border-collapse:collapse">
+        {row("Follow-up date", lead.get("follow_up_at"))}
+        {row("Tag", lead.get("tag"))}
+        {row("Email", lead.get("email"))}
+        {row("Phone", lead.get("phone"))}
+        {row("Chapter", lead.get("chapter") or "unrouted")}
+      </table>
+      {note}
+      <p style="margin:14px 0 0"><a
+        href="https://tgf-tracker.up.railway.app/admin/leads"
+        style="color:#2563eb">Open the Lead Center</a> — the lead is
+        sitting under FOLLOW-UPS DUE at the top.</p>
+    </div>"""
+
+
+def check_followup_due_pings(db_path: str | Path | None = None) -> dict:
+    """Due-day follow-up pings (mailbox #370, Kerry-ratified 2026-08-31):
+    one email per lead on its follow-up due morning (Central) to the
+    routed chapter owner — same recipient dial as the new-lead ping
+    (default/Kerry + the chapter's own list; unrouted fans out).
+    Dedup via follow_up_notified_for (the due date that was pinged), so
+    each due date emails exactly once and a re-snoozed lead re-arms for
+    its new date. An overdue date never pinged (deploy gap, feature
+    predating it) still pings once rather than being swallowed."""
+    from . import database as db
+    from .timezone_utils import now_central
+    result = {"due": 0, "pinged": 0}
+    now = now_central()
+    if now.hour < 7:
+        # Morning delivery: the first poll after 7 AM Central sends;
+        # midnight-to-dawn polls leave the queue alone.
+        return result
+    today = now.strftime("%Y-%m-%d")
+    with db._connect(db_path) as conn:
+        ensure_leads_table(conn)
+        rows = [dict(r) for r in conn.execute(
+            "SELECT * FROM leads WHERE follow_up_at IS NOT NULL "
+            "AND follow_up_at <= ? AND status != 'dismissed' "
+            "AND COALESCE(follow_up_notified_for, '') != follow_up_at",
+            (today,)).fetchall()]
+        for lead in rows:
+            result["due"] += 1
+            nr = conn.execute(
+                "SELECT note FROM lead_notes WHERE lead_id = ? "
+                "ORDER BY created_at DESC, id DESC LIMIT 1",
+                (lead["id"],)).fetchone()
+            if _send_followup_ping(lead, nr["note"] if nr else None,
+                                   db_path=db_path):
+                conn.execute(
+                    "UPDATE leads SET follow_up_notified_for = follow_up_at "
+                    "WHERE id = ?", (lead["id"],))
+                result["pinged"] += 1
+        conn.commit()
+    return result
+
+
+def _send_followup_ping(lead: dict, last_note: str | None,
+                        db_path=None) -> bool:
+    from .fetcher import send_mail_graph
+    tenant_id = os.getenv("AZURE_TENANT_ID")
+    client_id = os.getenv("AZURE_CLIENT_ID")
+    client_secret = os.getenv("AZURE_CLIENT_SECRET")
+    from_addr = os.getenv("EMAIL_ADDRESS")
+    to = _notify_recipients(lead.get("chapter"), db_path=db_path)
+    if not all([tenant_id, client_id, client_secret, from_addr, to]):
+        logger.warning("Follow-up ping skipped — Graph creds or recipients "
+                       "missing")
+        return False
+    name = " ".join(x for x in [lead.get("first_name"),
+                                lead.get("last_name")] if x) or lead.get("email")
+    return send_mail_graph(
+        tenant_id=tenant_id, client_id=client_id,
+        client_secret=client_secret, from_address=from_addr, to_address=to,
+        subject=f"⏰ Follow-up due: {name}"
+                + (f" ({lead['chapter']})" if lead.get("chapter") else ""),
+        html_body=_followup_email_html(lead, last_note))
+
+
 def check_new_leads(db_path: str | Path | None = None) -> dict:
     """Scheduled poll: pull new HubSpot contacts past the watermark,
     queue the ones that pass the source filter, ping the touch owners.
     Safe no-op when HUBSPOT_TOKEN is unset."""
     from . import database as db
     result = {"fetched": 0, "queued": 0, "notified": 0, "skipped_filter": 0}
+    # Due-day follow-up sweep FIRST and independently, so a missing
+    # HubSpot token or a failed fetch can never swallow a due ping.
+    try:
+        result["followups"] = check_followup_due_pings(db_path=db_path)
+    except Exception:
+        logger.warning("Follow-up due-ping sweep failed", exc_info=True)
     token = _hubspot_token()
     if not token:
         result["error"] = "HUBSPOT_TOKEN not set"

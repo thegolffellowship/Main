@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.271.2";
+window.TGF_VERSION = "2.272.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.272.0",
+    date: "2026-08-31",
+    changes: [
+      "Landa Park missing winners ROOT-CAUSED AND FIXED: the Games tab's winner hydration keyed on `event|game|flights` and split on '|' — an event NAMED with a pipe ('s18.10 FALL KICKOFF | Landa Park') sheared the key apart, so the results API was queried with a truncated event and every Individual Net flight / Skins / Ind. Gross winner row stayed hidden. Keys are JSON tuples now; the bridge's scoring-game-results arg parsing got the same hardening (parse from the right, only consume a trailing segment that is a real flights count or game name).",
+      "Hole-in-One banner shows the DAY's combined prize fund on multi-event days (Kerry): both same-day events (a9.21 $12 + s9.21 $20 → $32 with per-event breakdown), and the running-pot line reads through the whole day so the two banners agree. Display only — event subtotals and the accrual math are unchanged.",
+      "Due-day follow-up ping SHIPPED (mailbox #370, Kerry-ratified): on each lead's follow-up due morning the leads poll emails the routed chapter owner once (same recipients dial as the new-lead ping; ≥7 AM Central delivery). Dedup via the new follow_up_notified_for column stores the exact due date pinged, so a re-snoozed lead re-arms automatically and an overdue date still pings once. Sweep runs before the HubSpot token check so a token outage can't swallow it. Tests in test_leads_export.py.",
+    ],
+  },
   {
     version: "2.271.2",
     date: "2026-08-31",

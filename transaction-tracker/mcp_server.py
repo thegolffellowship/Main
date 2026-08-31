@@ -2713,11 +2713,20 @@ def _scoring_dispatch(url: str, extract: str):
         if cmd == "scoring-game-results":
             # Verify the shadow-computed winners for one event+game:
             # "scoring-game-results:<event>|<game>|<flights>"
-            ev, _, rest = arg.partition("|")
-            game, _, fl = rest.partition("|")
+            # Event names can themselves contain "|" (s18.10 FALL KICKOFF |
+            # Landa Park), so parse from the RIGHT and only consume a
+            # trailing segment when it is a valid flights count / game name —
+            # everything else stays part of the event (v2.129.x precedent).
+            _games = ("individual_net", "individual_gross", "skins")
+            ev, game, fl = arg, "individual_net", 1
+            head, _, tail = ev.rpartition("|")
+            if head and tail.strip().isdigit():
+                fl, ev = int(tail.strip()), head
+            head, _, tail = ev.rpartition("|")
+            if head and tail.strip().lower() in _games:
+                game, ev = tail.strip().lower(), head
             return json.dumps(db.determine_event_game_results(
-                ev.strip(), game.strip() or "individual_net",
-                flights=int(fl or 1)), indent=2)
+                ev.strip(), game, flights=fl), indent=2)
         if cmd == "scoring-gg-results":
             # GG-recorded winners (CTP/LP/HIO/TEAM Net) for one event
             return json.dumps(db.get_gg_game_results(arg), indent=2)
