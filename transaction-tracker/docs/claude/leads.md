@@ -119,7 +119,7 @@ self-heals re-route chapter and re-derive stats.
 
 One current `leads.tag` per lead, orthogonal to the status pipeline.
 Options are the `lead_tag_options` dial (JSON list; defaults Left VM ·
-Texted · No answer · Call back · Interested · Coming to event · Too
+Texted · Sent email · No answer · Call back · Interested · Coming to event · Too
 expensive · Not now · Bad contact · Registered event · Became member).
 Tagging a NEW lead auto-marks it touched. **Deactivating tags**
 (`DEACTIVATING_TAGS`: Too expensive · Bad contact, Kerry 2026-08-31):
@@ -179,7 +179,7 @@ stay whole-queue regardless of filters; the toolbar shows "N of M
 leads" when filtered. **Landing sort is PRIORITY** (Kerry 2026-08-31:
 respond immediately to new arrivals and hot conversations): tier 0 new
 · 1 hot tags (Call back / Interested / Coming to event) · 2 untagged
-touched · 3 quiet outreach (Texted / Left VM / No answer) · 4
+touched · 3 quiet outreach (Texted / Left VM / Sent email / No answer) · 4
 converted · 5 dismissed; within a tier, newest activity (latest note,
 else touch, else arrival) first. Newest/Oldest/Name/Status sorts
 remain in the select.

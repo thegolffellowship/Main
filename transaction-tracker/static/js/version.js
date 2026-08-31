@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.261.1";
+window.TGF_VERSION = "2.261.2";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.261.2",
+    date: "2026-08-31",
+    changes: [
+      "'Sent email' added to the lead tag pulldown (Kerry), slotted after Texted in the outreach group — dial + defaults updated, and the live lead_tag_options dial was set directly so it's usable immediately. In the priority sort it joins the quiet-outreach tier (Texted / Left VM / No answer): outreach made, awaiting a reply.",
+    ],
+  },
   {
     version: "2.261.1",
     date: "2026-08-31",

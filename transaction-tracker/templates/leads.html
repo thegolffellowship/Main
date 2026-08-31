@@ -295,7 +295,7 @@
         // Within a tier, most recent activity (newest note, else touch,
         // else arrival) first.
         const HOT_TAGS = ["Call back", "Interested", "Coming to event"];
-        const QUIET_TAGS = ["Texted", "Left VM", "No answer"];
+        const QUIET_TAGS = ["Texted", "Left VM", "Sent email", "No answer"];
         const tier = l =>
             l.status === "dismissed" ? 5
             : l.status === "converted" ? 4
