@@ -3428,6 +3428,21 @@
         { key: "actions", label: "Actions", default: true },
     ];
 
+    // Column alignment (Kerry 2026-08-31): data centered from HCP on,
+    // Price right-aligned like accounting.
+    const COL_ALIGN = { handicap: "center", holes: "center",
+        side_games: "center", fall_race: "center", tee_choice: "center",
+        user_status: "center", order_date: "center", item_price: "right",
+        actions: "center" };
+    // "2026-08-30" → "8/30" (2-digit year appended only when it isn't
+    // the current year).
+    function fmtShortDate(d) {
+        const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(d || "");
+        if (!m) return d || "—";
+        const cur = String(new Date().getFullYear());
+        return +m[2] + "/" + +m[3] + (m[1] === cur ? "" : "/" + m[1].slice(2));
+    }
+
     let detailVisibleColumns = {};
 
     function loadDetailColumnPrefs() {
@@ -6864,7 +6879,7 @@
             // click still sorts; the active column shows in TGF orange
             // via .sort-active.
             const isActive = detailSortField === c.key;
-            html += `<th data-detail-sort="${c.key}" class="${isActive ? 'sort-active' : ''}${c.key === 'fall_race' ? ' fall-col' : ''}" style="cursor:pointer; ${vis ? '' : 'display:none;'}" title="Click to sort">${c.label}</th>`;
+            html += `<th data-detail-sort="${c.key}" class="${isActive ? 'sort-active' : ''}${c.key === 'fall_race' ? ' fall-col' : ''}" style="cursor:pointer; ${vis ? '' : 'display:none;'}${COL_ALIGN[c.key] ? `text-align:${COL_ALIGN[c.key]};` : ''}" title="Click to sort">${c.label}</th>`;
         });
         html += '</tr></thead><tbody>';
 
@@ -6957,7 +6972,8 @@
                     : isFirstTimerRow ? 'background-color:#fdba74;'
                     : isManualRow ? 'background-color:#dbeafe;'
                     : '';
-                const style = (vis ? '' : 'display:none;') + rowBg;
+                const style = (vis ? '' : 'display:none;') + rowBg
+                    + (COL_ALIGN[c.key] ? `text-align:${COL_ALIGN[c.key]};` : '');
                 if (c.key === "rsvp") {
                     html += `<td class="rsvp-col"><span class="rsvp-circle${circleClass}" data-item-id="${r.id}" data-event-name="${escapeHtml(ev.item_name)}" data-rsvp-state="${circleState}" data-circle-source="${circleSource}" data-player-email="${escapeHtml(r.customer_email || '')}" title="${circleTitle}"></span></td>`;
                 } else if (c.key === "customer") {
@@ -7086,7 +7102,17 @@
                             dueBadge = ` <span class="status-tag" style="background:#fef3c7;color:#92400e;border:1px solid #fcd34d;font-size:0.65rem;padding:0.1rem 0.35rem;border-radius:4px;font-weight:700;white-space:nowrap;" title="Credit covers $${_covered.toFixed(2)} of the $${_base.toFixed(2)} base price (before any side-game buy-ins) \u2014 collect the difference">&ge; $${(_base - _covered).toFixed(2)} due</span>`;
                         }
                     }
-                    html += `<td style="font-weight:600; font-variant-numeric:tabular-nums; ${style}">${escapeHtml(stripPriceSuffix(r.item_price) || "\u2014")}${dueBadge}</td>`;
+                    // "(comp)" collapses to a small green "c" badge left
+                    // of the amount (Kerry 2026-08-31).
+                    let _priceStr = stripPriceSuffix(r.item_price) || "\u2014";
+                    let _compBadge = "";
+                    if (isCompRow || /\(comp\)/i.test(_priceStr)) {
+                        _priceStr = _priceStr.replace(/\s*\(comp\)\s*/i, "").trim() || "$0.00";
+                        _compBadge = '<span class="comp-badge" title="Comp">c</span>';
+                    }
+                    html += `<td style="font-weight:600; font-variant-numeric:tabular-nums; ${style}">${_compBadge}${escapeHtml(_priceStr)}${dueBadge}</td>`;
+                } else if (c.key === "order_date") {
+                    html += `<td style="${style}" title="${escapeHtml(r.order_date || '')}">${escapeHtml(fmtShortDate(r.order_date))}</td>`;
                 } else if (c.key === "actions") {
                     // Build the row's action items as menu entries; collapsed
                     // into a single "⚙ ▾" dropdown for compactness.
@@ -7235,7 +7261,8 @@
                 html += `<tr class="child-payment-row" style="background:${childBg};${childSt !== 'active' ? 'opacity:0.6;' : ''}">`;
                 DETAIL_COLUMNS.forEach(c => {
                     const vis = detailVisibleColumns[c.key] !== false;
-                    const style = (vis ? '' : 'display:none;') + 'font-size:0.78rem;color:#6b7280;';
+                    const style = (vis ? '' : 'display:none;') + 'font-size:0.78rem;color:#6b7280;'
+                        + (COL_ALIGN[c.key] ? `text-align:${COL_ALIGN[c.key]};` : '');
                     if (c.key === "rsvp") {
                         html += `<td class="rsvp-col"></td>`;
                     } else if (c.key === "customer") {
@@ -7247,7 +7274,7 @@
                     } else if (c.key === "item_price") {
                         html += `<td style="${style}; font-weight:600; font-variant-numeric:tabular-nums;${isRefundRow ? ' color:#dc2626;' : ''}">${escapeHtml(stripPriceSuffix(child.item_price) || "\u2014")}</td>`;
                     } else if (c.key === "order_date") {
-                        html += `<td style="${style}">${escapeHtml(child.order_date || "\u2014")}</td>`;
+                        html += `<td style="${style}">${escapeHtml(fmtShortDate(child.order_date))}</td>`;
                     } else if (c.key === "actions") {
                         let childBtns = "";
                         const childStatus = child.transaction_status || "active";

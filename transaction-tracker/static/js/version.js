@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.270.1";
+window.TGF_VERSION = "2.270.2";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.270.2",
+    date: "2026-08-31",
+    changes: [
+      "Roster readability pass (Kerry): data centers in every column from HCP through Actions (headers match); PRICE right-aligns accounting-style with tabular numerals; ORDER dates shorten to 8/30 form (2-digit year appears only for non-current years, full date in the hover tooltip); and a '(comp)' price collapses to a small green 'c' badge left of the amount — comp rows are flagged either way, even if the suffix is missing. Customer column stays left.",
+    ],
+  },
   {
     version: "2.270.1",
     date: "2026-08-31",
