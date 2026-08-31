@@ -3420,7 +3420,7 @@
         { key: "handicap", label: "HCP", default: true },
         { key: "holes", label: "Holes", default: true },
         { key: "side_games", label: "Games", default: true },
-        { key: "fall_race", label: "Fall Race", default: true },
+        { key: "fall_race", label: "Fall", default: true },
         { key: "tee_choice", label: "Tee", default: true },
         { key: "user_status", label: "Status", default: true },
         { key: "order_date", label: "Order", default: true },
@@ -6859,11 +6859,12 @@
                 html += `<th style="${vis ? '' : 'display:none;'}">Actions</th>`;
                 return;
             }
+            // No sort arrows (Kerry 2026-08-31: "remove the up/down sort
+            // arrows for space savings, but keep the functionality") —
+            // click still sorts; the active column shows in TGF orange
+            // via .sort-active.
             const isActive = detailSortField === c.key;
-            const arrowHtml = isActive
-                ? (detailSortDir === "asc" ? "&#9650;" : "&#9660;")
-                : "&#9650;&#9660;";
-            html += `<th data-detail-sort="${c.key}" class="${isActive ? 'sort-active' : ''}" style="cursor:pointer; ${vis ? '' : 'display:none;'}">${c.label} <span class="sort-arrow">${arrowHtml}</span></th>`;
+            html += `<th data-detail-sort="${c.key}" class="${isActive ? 'sort-active' : ''}${c.key === 'fall_race' ? ' fall-col' : ''}" style="cursor:pointer; ${vis ? '' : 'display:none;'}" title="Click to sort">${c.label}</th>`;
         });
         html += '</tr></thead><tbody>';
 
@@ -7190,7 +7191,9 @@
                         }
                     }
                 } else if (c.key === "fall_race") {
-                    html += `<td style="${style}">${inFallRace(r)
+                    // fall-col class tints the column; inline row
+                    // backgrounds (1st-timer orange etc.) still win.
+                    html += `<td class="fall-col" style="${style}">${inFallRace(r)
                         ? '<span style="color:#059669;font-weight:700;">YES</span>'
                         : '<span style="color:#9CA3AF;">\u2014</span>'}</td>`;
                 } else {

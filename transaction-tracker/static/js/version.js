@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.270.0";
+window.TGF_VERSION = "2.270.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.270.1",
+    date: "2026-08-31",
+    changes: [
+      "Roster header slimmed (Kerry): the Fall Race column is now just 'Fall' with a subtle cream band down the column (row highlights like 1st-timer orange still win), and the ▲▼ sort arrows are gone from the registrations header — clicking a header still sorts, and the active sort column shows in TGF orange instead.",
+    ],
+  },
   {
     version: "2.270.0",
     date: "2026-08-31",

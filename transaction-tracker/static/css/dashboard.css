@@ -657,6 +657,12 @@ tr.txn-highlight {
 .registrants-table th[data-detail-sort] { cursor: pointer; user-select: none; }
 .registrants-table th[data-detail-sort] .sort-arrow { display: inline-block; opacity: 0.35; font-size: 0.6rem; margin-left: 0.2rem; vertical-align: middle; }
 .registrants-table th[data-detail-sort].sort-active .sort-arrow { opacity: 1; color: var(--primary); }
+/* v2.270.1: arrows removed from the registrations header for width —
+   the active sort column shows in TGF orange instead */
+.registrants-table th[data-detail-sort].sort-active { color: var(--primary); }
+/* Fall Points Race column band (Kerry 2026-08-31: "subtle background
+   color") — inline row backgrounds (1st-timer orange etc.) override it */
+.registrants-table .fall-col { background: #FBF3EA; }
 
 /* ---- Customer Row Expansion ---- */
 .cust-row-clickable {
