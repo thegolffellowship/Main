@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.259.1";
+window.TGF_VERSION = "2.259.2";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.259.2",
+    date: "2026-08-31",
+    changes: [
+      "Became-member on leads (Kerry, on the Fall campaign's FIRST member — Will Wallace): the mobile card now says the status word next to the dot (the Converted click registered but only the orange dot showed), 'Became member' added to the tag options dial, and the poll auto-detects real conversions: a lead whose linked customer gains active purchases flips to converted + 'Became member' automatically (never resurrects a dismissed lead). Will's row tagged; his membership purchase had already landed on customer 697 through the normal order pipeline — the lead→member funnel closed end to end.",
+    ],
+  },
   {
     version: "2.259.1",
     date: "2026-08-28",

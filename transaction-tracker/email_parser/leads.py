@@ -757,6 +757,20 @@ def check_new_leads(db_path: str | Path | None = None) -> dict:
             conn.execute(
                 "UPDATE customers SET first_name = ?, last_name = ? "
                 "WHERE customer_id = ?", (r["fn"], r["ln"], r["cid"]))
+        # Became-member auto-detect (Kerry 2026-08-31, on the campaign's
+        # first real member): a lead whose customer now holds ACTIVE
+        # purchases has converted in the real world — mark converted,
+        # tag 'Became member', stop the 48h clock. Never resurrects a
+        # dismissed lead; idempotent.
+        conn.execute(
+            "UPDATE leads SET status = 'converted', tag = 'Became member', "
+            "touched_at = COALESCE(touched_at, datetime('now')) "
+            "WHERE status != 'dismissed' "
+            "AND (status != 'converted' OR COALESCE(tag, '') != 'Became member') "
+            "AND customer_id IS NOT NULL "
+            "AND EXISTS (SELECT 1 FROM items i "
+            "            WHERE i.customer_id = leads.customer_id "
+            "            AND i.transaction_status = 'active')")
         # Backfill: prospects created before the acquisition_source fix
         # carry the resolver's 'godaddy' default — purchase-less
         # lead-linked customers are Facebook acquisitions.

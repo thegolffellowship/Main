@@ -364,7 +364,7 @@
                 `<tr><td class="k" style="white-space:nowrap">${esc((n.created_at || "").slice(5, 16))} ${esc((n.author || "")[0] || "")}</td><td>${esc(n.note)}</td></tr>`).join("");
             cards.push(`<div class="ld-mcard">
                 <div class="ld-mhead"><span class="ld-dot ${dotCls}"></span><b>${esc(name)}</b>${l.has_history ? ' <span class="ld-existing">existing customer</span>' : ""}
-                    <span class="ld-mmeta ${late ? "ld-late" : ""}">${esc(l.chapter) || "unrouted"} · ${age}</span></div>
+                    <span class="ld-mmeta ${late ? "ld-late" : ""}">${esc(l.chapter) || "unrouted"} · ${age} · ${esc(l.status)}</span></div>
                 <div>${badges.map(b => `<span class="ld-bchip">${esc(b)}</span>`).join("")}${l.tag ? `<span class="ld-tag">${esc(l.tag)}</span>` : ""}</div>
                 <div class="ld-acts">
                     ${l.phone ? `<a class="ld-act" href="sms:${esc(l.phone)}?&body=${encodeURIComponent(smsBody)}">💬 Text</a>
