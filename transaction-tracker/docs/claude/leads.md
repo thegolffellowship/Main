@@ -213,7 +213,11 @@ customer") —
 the bar carries the status, so the per-row status pill is gone and
 the left column is just age/owner + tag chip (rows max two lines).
 The pill returns only in flat sorts (Name/Newest/…) where there are
-no sections. Mobile call sheet unchanged.
+no sections. **Chapter tabs** (v2.271.0, Kerry, TGF Platform style):
+the row's left edge is now a plain 8px CHAPTER color tab — Austin
+`--chapter-austin` burnt orange, SA `--chapter-sa-alt` slate,
+unrouted gray — replacing the old status edge (sections carry status);
+mobile cards get a 6px version. Just the color, no text.
 
 ## Follow-up / snooze (mailbox #365, Kerry-ratified 2026-08-31, v2.269.0)
 

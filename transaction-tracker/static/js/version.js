@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.270.3";
+window.TGF_VERSION = "2.271.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.271.0",
+    date: "2026-08-31",
+    changes: [
+      "Chapter color tabs on the Lead Center (Kerry: 'left end chapter color tabs for each player… similar to our TGF Platform concepts — just the color tab'): every desktop row and mobile card now carries a plain color tab on its left edge — Austin burnt orange (--chapter-austin), San Antonio slate (--chapter-sa-alt), unrouted gray — for instant chapter recognition while scanning. It replaces the old status-colored edge, which had become redundant once the section bars took over status; the expanded details panel carries the same tab so it reads as part of its row.",
+    ],
+  },
   {
     version: "2.270.3",
     date: "2026-08-31",
