@@ -864,6 +864,35 @@ def _repair_crystal_falls_twin_event(conn: sqlite3.Connection) -> None:
     logger.info("Crystal Falls twin-event merge: 3267 -> 3263, moved %s", moved)
 
 
+def _resolve_formatting_only_phone_drift(conn: sqlite3.Connection) -> None:
+    """Boot heal (Kerry 2026-08-31): auto-resolve open PHONE_DRIFT
+    warnings whose two numbers are the SAME digits in different
+    formats — E.164 from the HubSpot lead pipeline vs GoDaddy's
+    '(NNN) NNN-NNNN'. Real digit differences stay open."""
+    try:
+        rows = conn.execute(
+            "SELECT id, message FROM parse_warnings "
+            "WHERE warning_code = 'PHONE_DRIFT' AND status = 'open'"
+        ).fetchall()
+    except sqlite3.Error:
+        return
+    healed = 0
+    for r in rows:
+        vals = re.findall(r"'([^']*)'", r["message"] or "")
+        if len(vals) < 2:
+            continue
+        da = re.sub(r"\D", "", vals[0])[-10:]
+        db_ = re.sub(r"\D", "", vals[1])[-10:]
+        if da and da == db_:
+            conn.execute("UPDATE parse_warnings SET status = 'resolved' "
+                         "WHERE id = ?", (r["id"],))
+            healed += 1
+    if healed:
+        conn.commit()
+        logger.info("Resolved %d formatting-only PHONE_DRIFT warnings",
+                    healed)
+
+
 def _repair_fall_kickoff_champ_mislink(conn: sqlite3.Connection) -> None:
     """Kerry (2026-08-27): the SA CHAMPIONSHIP's GG round was coded
     s18.10 in the portal, colliding with the STORE's 's18.10 FALL
@@ -3858,6 +3887,13 @@ def init_db(db_path: str | Path | None = None) -> None:
             _repair_fall_kickoff_champ_mislink(conn)
         except Exception as e:
             logger.warning("FALL KICKOFF mislink repair failed: %s", e)
+
+        # Always-run heal: formatting-only PHONE_DRIFT warnings (E.164
+        # vs (NNN) NNN-NNNN — same digits) auto-resolve
+        try:
+            _resolve_formatting_only_phone_drift(conn)
+        except Exception as e:
+            logger.warning("PHONE_DRIFT format heal failed: %s", e)
 
         # Always-run heal: align items.holes to the event's hole count on
         # single-format events (parser sometimes reads the '.18' sequence in
@@ -21340,6 +21376,16 @@ def save_items(rows: list[dict], db_path: str | Path | None = None,
                         _b = _can_val.lower() if _normalize_lower else _can_val
                         if _a == _b:
                             continue
+                        # The same phone in different clothing is NOT
+                        # drift (Kerry 2026-08-31): HubSpot leads store
+                        # E.164 ('+14054458465') while GoDaddy orders
+                        # send '(405) 445-8465'. Compare digits only,
+                        # last 10 (drops country code).
+                        if _code == "PHONE_DRIFT":
+                            _da = re.sub(r"\D", "", _order_val)[-10:]
+                            _db = re.sub(r"\D", "", _can_val)[-10:]
+                            if _da and _da == _db:
+                                continue
                         # Drift detected → warn + overwrite to canonical
                         try:
                             conn.execute(

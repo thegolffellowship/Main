@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.259.4";
+window.TGF_VERSION = "2.259.5";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.259.5",
+    date: "2026-08-31",
+    changes: [
+      "PHONE_DRIFT no longer fires on formatting (Kerry 2026-08-31): HubSpot-lead customers carry E.164 phones ('+14054458465') while GoDaddy orders send '(405) 445-8465' — the same number tripped a drift warning on every lead-turned-buyer (Wallace ×2, Angelone). The drift guard now compares digits only (last 10, country code dropped); real digit differences still warn. Boot heal auto-resolves existing open formatting-only PHONE_DRIFT warnings.",
+    ],
+  },
   {
     version: "2.259.4",
     date: "2026-08-31",
