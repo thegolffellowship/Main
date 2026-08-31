@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.259.5";
+window.TGF_VERSION = "2.260.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.260.0",
+    date: "2026-08-31",
+    changes: [
+      "Lead Center desktop redesign (Kerry: 'really not user friendly on Desktop… not functional'): the 12-column table scrolled sideways with the action buttons pushed off-screen. Replaced with a work list that fits the viewport — STATUS FIRST per Kerry ('first thing we need to see is status'): status pill + age + owner + tag lead every row, with a color-coded left edge (amber new / green touched / blue converted / red overdue / gray dismissed) for at-a-glance triage. Actions (primary button, ➕ Note — new to desktop, tag picker, ⋯ overflow) are always visible; ▾ expands notes log + full form answers inline.",
+      "Filter toolbar on both desktop and mobile: All | Austin | San Antonio segmented toggle with live counts (Kerry: 'we need an All | Austin | San Antonio toggle'), status chips (New / Touched / Converted / Dismissed / Overdue), and a sort select (Newest / Oldest / Name / By status) replacing the old column-header sorts. The four stat cards are now clickable status filters (click again to clear). Card counts and the mobile sticky summary stay whole-queue; the toolbar reads 'N of M leads' when filtered. Mobile call-sheet cards (#361) unchanged.",
+    ],
+  },
   {
     version: "2.259.5",
     date: "2026-08-31",

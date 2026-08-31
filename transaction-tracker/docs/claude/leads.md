@@ -28,8 +28,9 @@ lists. Scheduled pull (not webhooks) is the ratified default.
   `POST /api/leads/<id>/mark`, `POST /api/leads/poll` (admin,
   on-demand).
 - Template `templates/leads.html` — stat cards (new / touched /
-  converted / past-48h-untouched), queue table with red overdue rows,
-  Touched / Dismiss / Converted buttons.
+  converted / past-48h-untouched; clickable = status filter), filter
+  toolbar (All | Austin | San Antonio chapter toggle + status chips +
+  sort select), desktop work list + mobile call-sheet cards (below).
 - Bridge commands (`mcp_server.py`): `scoring-leads[:status]`,
   `scoring-lead-mark:<id>|<status>[|<by>][|<note>]` (agent-audited),
   `scoring-leads-poll`.
@@ -137,12 +138,34 @@ contact / Not now tags, and email-less rows. `get_lead_export_rows`.
 `lead_notes` table (lead_id FK, author, note, timestamps) —
 `add_lead_note` / `POST /api/leads/<id>/note` / bridge
 `scoring-lead-note:<id>|<author>|<text>`. Newest note previews on the
-card and under the desktop status pill. The mobile card is a call
+card and in the desktop row. The mobile card is a call
 sheet: badge chips (Availability/Importance/Invitations + ad-set tag),
 sms:/tel:/mailto: action row — the SMS body renders the
 `lead_sms_template` dial with `{first_name}` and `{next_event}` (next
 upcoming event for the lead's chapter; TGF events count for both) —
 status dot, sticky one-line summary, primary action + ⋯ overflow.
+
+## Desktop work list (Kerry 2026-08-31)
+
+The original desktop 12-column table overflowed sideways — action
+buttons off-screen ("not functional"). Replaced with a grid work list
+(no horizontal scroll): STATUS FIRST per Kerry ("first thing we need
+to see is status") — status pill + age + touched-by + tag in column 1,
+plus a color-coded left edge (amber new / green touched / blue
+converted / gray dismissed / red overdue). Then name + chapter +
+received, contact links (ellipsized, `min-width:0` guards the grid),
+the mobile call-sheet's triage badge chips + newest-note preview
+(2-line clamp), and always-visible actions (primary status button,
+➕ Note, tag picker, ⋯ overflow — desktop menu ids `ld-dmenu-<id>`,
+mobile `ld-menu-<id>`). ▾ next to the name expands a details panel
+(notes log + full decoded answers incl. Campaign/Form attribution).
+Filter toolbar shared by desktop + mobile: All | Austin | San Antonio
+segmented toggle with live counts, status chips (New / Touched /
+Converted / Dismissed / Overdue) — stat cards click-filter to the same
+state, click again to clear — and a sort select (Newest / Oldest /
+Name / By status) replacing column-header sorts. Counts on cards and
+the mobile sticky summary stay whole-queue regardless of filters; the
+toolbar shows "N of M leads" when filtered.
 
 ## MCP access for CA (platform-claude)
 

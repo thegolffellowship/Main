@@ -12,15 +12,12 @@
     <link rel="icon" href="/static/icon.svg" type="image/svg+xml">
     <link rel="apple-touch-icon" href="/static/icon-180.png">
     <style>
-        .ld-wrap { padding: 1rem 1.5rem 2.5rem; max-width: 1100px; margin: 0 auto; }
-        .ld-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; margin: 0.75rem 0 1.25rem; }
-        .ld-card { background: #fff; border: 1px solid var(--border); border-radius: 12px; padding: 12px 16px; }
+        .ld-wrap { padding: 1rem 1.5rem 2.5rem; margin: 0 auto; }
+        .ld-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; margin: 0.75rem 0 1rem; }
+        .ld-card { background: #fff; border: 1px solid var(--border); border-radius: 12px; padding: 12px 16px; cursor: pointer; }
+        .ld-card.on { border-color: #1B1B1B; box-shadow: inset 0 0 0 1px #1B1B1B; }
         .ld-card .lbl { font: 700 9.5px/1 'Bitter', serif; letter-spacing: 1.5px; text-transform: uppercase; color: var(--text-muted); }
         .ld-card .val { font: 700 24px/1 'Bitter', serif; color: var(--text); margin-top: 7px; font-variant-numeric: tabular-nums; }
-        .ld-scroll { overflow-x: auto; }
-        .ld-table { width: 100%; border-collapse: collapse; }
-        .ld-table th { text-align: left; font: 700 10px/1.3 'Bitter', serif; letter-spacing: 1px; text-transform: uppercase; color: #9CA3AF; padding: 8px 8px 6px; border-bottom: 1px solid var(--border); }
-        .ld-table td { padding: 7px 8px; border-bottom: 1px solid #F3F2EF; font-size: 13px; }
         .ld-pill { display: inline-block; padding: 2px 10px; border-radius: 99px; font-size: 11px; font-weight: 700; }
         .ld-new { background: #FEF3C7; color: #92400E; }
         .ld-touched { background: #D1FAE5; color: #065F46; }
@@ -31,17 +28,51 @@
         .ld-btn.primary { background: var(--primary); border-color: var(--primary); color: #fff; }
         .ld-note { font-size: 12px; color: var(--text-muted); margin-top: 1rem; }
         .ld-existing { font-size: 10.5px; color: #1E40AF; font-weight: 700; }
-        .ld-answers td { background: #FAFAF8; font-size: 12px; white-space: normal; }
-        .ld-answers .k { color: #6B7280; text-transform: capitalize; padding-right: 10px; }
-        .ld-toggle { font-size: 10.5px; color: #2563eb; cursor: pointer; }
-        /* Mobile gets stacked cards with big tap targets; desktop gets
-           the plain table (Kerry 2026-08-27). */
+        .ld-toggle { font-size: 11px; color: #2563eb; cursor: pointer; padding: 2px 4px; }
+        /* Filter toolbar: chapter segmented toggle (Kerry 2026-08-31:
+           "We need an All | Austin | San Antonio toggle") + status chips
+           + sort. Shared by desktop list and mobile call sheet. */
+        .ld-toolbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 0 0 0.75rem; }
+        .ld-seg { display: inline-flex; border: 1px solid var(--border); border-radius: 99px; overflow: hidden; background: #fff; }
+        .ld-seg button { border: none; background: none; padding: 6px 14px; font-size: 12px; font-weight: 700; cursor: pointer; color: #374151; font-variant-numeric: tabular-nums; }
+        .ld-seg button.on { background: #1B1B1B; color: #fff; }
+        .ld-chip { padding: 5px 13px; border-radius: 99px; border: 1px solid var(--border); background: #fff; font-size: 12px; font-weight: 600; color: #374151; cursor: pointer; }
+        .ld-chip.on { background: #1B1B1B; border-color: #1B1B1B; color: #fff; }
+        .ld-sortsel { margin-left: auto; }
+        .ld-showing { font-size: 12px; color: var(--text-muted); }
+        /* Desktop work list (Kerry 2026-08-31: the 12-column table was
+           "not functional" — actions off-screen, no quick status read).
+           One grid row per lead, STATUS FIRST, color-coded left edge,
+           actions always visible, expandable details panel. */
+        #ld-dlist { border: 1px solid var(--border); border-radius: 12px; background: #fff; overflow: hidden; }
+        .ld-drow { display: grid; grid-template-columns: 110px minmax(150px, 1.05fr) minmax(170px, 1fr) minmax(180px, 1.3fr) max-content; gap: 12px; align-items: center; padding: 10px 14px 10px 11px; border-bottom: 1px solid #F3F2EF; border-left: 3px solid #D1D5DB; }
+        .ld-drow > div { min-width: 0; }
+        .ld-drow:hover { background: #FCFCFA; }
+        .ld-edge-new { border-left-color: #F59E0B; }
+        .ld-edge-touched { border-left-color: #059669; }
+        .ld-edge-converted { border-left-color: #2563EB; }
+        .ld-edge-dismissed { border-left-color: #D1D5DB; }
+        .ld-edge-late { border-left-color: #DC2626; }
+        .ld-dstatus .ld-dsub { margin-top: 4px; }
+        .ld-dsub { font-size: 11.5px; color: #6B7280; }
+        .ld-dname b { font-size: 14px; }
+        .ld-dcontact a { display: block; font-size: 12.5px; line-height: 1.5; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .ld-dacts .ld-tagsel { max-width: 104px; }
+        .ld-dacts .ld-btn { white-space: nowrap; }
+        .ld-dnote { font-size: 12px; color: #4B5563; margin-top: 4px; white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+        .ld-dnote b { color: #1B1B1B; }
+        .ld-dacts { display: flex; gap: 6px; align-items: center; justify-content: flex-end; }
+        .ld-ddet { display: none; padding: 6px 14px 14px 28px; background: #FAFAF8; border-bottom: 1px solid #F3F2EF; border-left: 3px solid #D1D5DB; }
+        .ld-ddet table td { padding: 3px 8px; font-size: 12px; white-space: normal; }
+        .ld-ddet .k { color: #6B7280; text-transform: capitalize; padding-right: 10px; }
+        .ld-dempty { padding: 16px; color: #6B7280; font-size: 13px; }
+        /* Mobile gets stacked cards with big tap targets (ratified #361);
+           desktop gets the work list above. */
         #ld-mlist { display: none; }
         .ld-mcard { background: #fff; border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; margin-bottom: 10px; }
         .ld-mhead { margin-bottom: 6px; }
         .ld-mhead b { font-size: 15px; }
         .ld-mmeta { font-size: 12px; color: #6B7280; margin: 0 6px; }
-        .ld-mtap { display: block; padding: 9px 10px; margin: 6px 0; border: 1px solid var(--border); border-radius: 8px; font-size: 14.5px; color: var(--link, #2563eb); text-decoration: none; }
         .ld-mdetails summary { font-size: 12px; color: #2563eb; cursor: pointer; padding: 4px 0; }
         .ld-mdetails table td { padding: 3px 6px; font-size: 12px; white-space: normal; }
         .ld-mdetails .k { color: #6B7280; text-transform: capitalize; }
@@ -66,10 +97,12 @@
         .ld-menu .ld-btn { display: block; width: 100%; margin: 2px 0; border: none; text-align: left; }
         .ld-mnotes td { padding: 2px 6px; font-size: 12px; white-space: normal; }
         @media (max-width: 768px) {
-            .ld-scroll { display: none; }
+            #ld-dlist { display: none; }
             #ld-mlist { display: block; }
             .ld-cards { display: none; }
             .ld-msummary { display: block; }
+            .ld-toolbar { margin-top: 0.25rem; }
+            .ld-sortsel { margin-left: 0; }
         }
     </style>
 </head>
@@ -88,34 +121,37 @@
     <main>
     <div class="ld-wrap">
         <div class="ld-cards">
-            <div class="ld-card"><div class="lbl">New</div><div class="val" id="ld-count-new">–</div></div>
-            <div class="ld-card"><div class="lbl">Touched</div><div class="val" id="ld-count-touched">–</div></div>
-            <div class="ld-card"><div class="lbl">Converted</div><div class="val" id="ld-count-converted">–</div></div>
-            <div class="ld-card"><div class="lbl">Past 48h untouched</div><div class="val ld-late" id="ld-count-late">–</div></div>
+            <div class="ld-card" data-f="new" onclick="setStatusFilter('new')"><div class="lbl">New</div><div class="val" id="ld-count-new">–</div></div>
+            <div class="ld-card" data-f="touched" onclick="setStatusFilter('touched')"><div class="lbl">Touched</div><div class="val" id="ld-count-touched">–</div></div>
+            <div class="ld-card" data-f="converted" onclick="setStatusFilter('converted')"><div class="lbl">Converted</div><div class="val" id="ld-count-converted">–</div></div>
+            <div class="ld-card" data-f="late" onclick="setStatusFilter('late')"><div class="lbl">Past 48h untouched</div><div class="val ld-late" id="ld-count-late">–</div></div>
         </div>
         <div class="ld-msummary" id="ld-msummary"></div>
-        <p id="ld-adset-line" style="font-size:12.5px;color:#4B5563;margin:-0.5rem 0 0.5rem;"></p>
+        <p id="ld-adset-line" style="font-size:12.5px;color:#4B5563;margin:-0.25rem 0 0.5rem;"></p>
+        <div class="ld-toolbar">
+            <span class="ld-seg" id="ld-chapseg">
+                <button data-c="all" class="on" onclick="setChapterFilter('all')">All</button>
+                <button data-c="Austin" onclick="setChapterFilter('Austin')">Austin</button>
+                <button data-c="San Antonio" onclick="setChapterFilter('San Antonio')">San Antonio</button>
+            </span>
+            <span class="ld-chip" data-f="new" onclick="setStatusFilter('new')">New</span>
+            <span class="ld-chip" data-f="touched" onclick="setStatusFilter('touched')">Touched</span>
+            <span class="ld-chip" data-f="converted" onclick="setStatusFilter('converted')">Converted</span>
+            <span class="ld-chip" data-f="dismissed" onclick="setStatusFilter('dismissed')">Dismissed</span>
+            <span class="ld-chip" data-f="late" onclick="setStatusFilter('late')">Overdue</span>
+            <select id="ld-sort" class="ld-tagsel ld-sortsel" onchange="setSort(this.value)">
+                <option value="received:-1">Newest first</option>
+                <option value="received:1">Oldest first</option>
+                <option value="name:1">Name A–Z</option>
+                <option value="status:1">By status</option>
+            </select>
+            <span class="ld-showing" id="ld-showing"></span>
+        </div>
         <p style="margin:0 0 0.9rem;">
             <a class="ld-btn" style="text-decoration:none;display:inline-block;" href="/api/leads/export-csv?chapter=San%20Antonio">⬇ SA CSV</a>
             <a class="ld-btn" style="text-decoration:none;display:inline-block;" href="/api/leads/export-csv?chapter=Austin">⬇ Austin CSV</a>
         </p>
-        <div class="ld-scroll"><table class="ld-table">
-            <thead><tr>
-                <th data-sort="name" data-label="Lead" onclick="sortBy('name')" style="cursor:pointer">Lead</th>
-                <th data-sort="email" data-label="Email" onclick="sortBy('email')" style="cursor:pointer">Email</th>
-                <th data-sort="phone" data-label="Phone" onclick="sortBy('phone')" style="cursor:pointer">Phone</th>
-                <th data-sort="chapter" data-label="Chapter" onclick="sortBy('chapter')" style="cursor:pointer">Chapter</th>
-                <th data-sort="availability" data-label="Availability" onclick="sortBy('availability')" style="cursor:pointer">Availability</th>
-                <th data-sort="importance" data-label="Importance" onclick="sortBy('importance')" style="cursor:pointer">Importance</th>
-                <th data-sort="invitations" data-label="Invitations" onclick="sortBy('invitations')" style="cursor:pointer">Invitations</th>
-                <th data-sort="adset" data-label="Ad Set" onclick="sortBy('adset')" style="cursor:pointer">Ad Set</th>
-                <th data-sort="received" data-label="Received" onclick="sortBy('received')" style="cursor:pointer">Received</th>
-                <th>Age</th>
-                <th data-sort="status" data-label="Status" onclick="sortBy('status')" style="cursor:pointer">Status</th>
-                <th></th>
-            </tr></thead>
-            <tbody id="ld-body"><tr><td colspan="12">Loading…</td></tr></tbody>
-        </table></div>
+        <div id="ld-dlist"><div class="ld-dempty">Loading…</div></div>
         <div id="ld-mlist"></div>
         <p class="ld-note">Leads arrive from the HubSpot poll (runs on a
         timer — LEAD_CHECK_INTERVAL_MINUTES on Railway, currently 15).
@@ -133,16 +169,23 @@
         c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])));
     let ALL = null;                       // last fetch, for client-side sort
     let sortKey = "received", sortDir = -1;   // newest first by default
+    let statusFilter = "all", chapterFilter = "all";
+    const isLate = l => l.status === "new" && (l.days_since_arrival ?? 0) >= 2;
     async function loadLeads() {
         const res = await fetch("/api/leads");
-        if (!res.ok) { document.getElementById("ld-body").innerHTML =
-            "<tr><td colspan=12>Failed to load (need manager login).</td></tr>"; return; }
+        if (!res.ok) { document.getElementById("ld-dlist").innerHTML =
+            "<div class='ld-dempty'>Failed to load (need manager login).</div>"; return; }
         ALL = await res.json();
         renderLeads();
     }
-    function sortBy(key) {
-        if (sortKey === key) sortDir = -sortDir;
-        else { sortKey = key; sortDir = key === "received" ? -1 : 1; }
+    function setStatusFilter(s) {
+        statusFilter = statusFilter === s ? "all" : s;
+        renderLeads();
+    }
+    function setChapterFilter(c) { chapterFilter = c; renderLeads(); }
+    function setSort(v) {
+        const parts = v.split(":");
+        sortKey = parts[0]; sortDir = +parts[1];
         renderLeads();
     }
     function renderLeads() {
@@ -154,7 +197,24 @@
                 (s.touched + s.converted ? ` (${s.touched + s.converted} touched)` : "") +
                 (s.converted ? ` · ${s.converted} converted` : "")
             ).join(" &nbsp;·&nbsp; ") || "";
+        // Global counts over EVERY lead (summary cards + mobile sticky
+        // summary stay whole-queue regardless of active filters).
         const counts = { new: 0, touched: 0, converted: 0, dismissed: 0, late: 0 };
+        const chapCounts = { all: leads.length };
+        leads.forEach(l => {
+            counts[l.status] = (counts[l.status] || 0) + 1;
+            if (isLate(l)) counts.late++;
+            if (l.chapter) chapCounts[l.chapter] = (chapCounts[l.chapter] || 0) + 1;
+        });
+        // Reflect active filters on cards / chips / chapter toggle
+        document.querySelectorAll(".ld-card[data-f], .ld-chip[data-f]").forEach(el =>
+            el.classList.toggle("on", el.dataset.f === statusFilter));
+        document.querySelectorAll("#ld-chapseg button").forEach(b => {
+            b.classList.toggle("on", b.dataset.c === chapterFilter);
+            const base = b.dataset.c === "all" ? "All" : b.dataset.c;
+            const n = chapCounts[b.dataset.c];
+            b.textContent = n ? `${base} · ${n}` : base;
+        });
         // Facebook option values are snake_case with the explanation
         // glued on after "_-_" — decoded per Kerry's vocabulary
         // (mirrors prettify_answer in email_parser/leads.py).
@@ -214,38 +274,25 @@
             }
             return form.concat(attr);
         }
-        // Key form answers render as plain COLUMNS (Kerry 2026-08-27:
-        // "just needs to be a table" — Events/Transactions style).
-        // Keys change per campaign, so columns match by pattern.
-        const colVal = (payload, match) => {
-            const key = Object.keys(payload).find(match);
-            return key ? esc(pretty(payload[key])) : "–";
-        };
-        // Sort accessors per column key
+        // Sort accessors per key (sort select on the toolbar)
         const getName = l => ([l.first_name, l.last_name].filter(Boolean).join(" ") || "").toLowerCase();
-        const rawCol = (l, match) => {
-            const p = l.payload || {};
-            const k = Object.keys(p).find(match);
-            return k ? pretty(p[k]).toLowerCase() : "";
-        };
         const SORTERS = {
             name: getName,
-            email: l => (l.email || "").toLowerCase(),
-            phone: l => l.phone || "",
-            chapter: l => l.chapter || "zz",
-            availability: l => rawCol(l, k => k.includes("play_tuesdays_or_saturdays")),
-            importance: l => rawCol(l, k => k.includes("most_important")),
-            invitations: l => rawCol(l, k => k.includes("stay_in_the_loop") || k.includes("loop")),
-            adset: l => ((l.payload || {}).ad_set_name || "").toLowerCase(),
             received: l => l.arrived_at || l.first_seen_at || "",
             status: l => l.status || "",
         };
         const acc = SORTERS[sortKey] || SORTERS.received;
-        leads.sort((a, b) => (acc(a) < acc(b) ? -1 : acc(a) > acc(b) ? 1 : 0) * sortDir);
-        document.querySelectorAll(".ld-table th[data-sort]").forEach(th => {
-            th.textContent = th.dataset.label +
-                (th.dataset.sort === sortKey ? (sortDir > 0 ? " ▲" : " ▼") : "");
+        // Filter (chapter toggle + status chips), then sort
+        const visible = leads.filter(l => {
+            if (chapterFilter !== "all" && (l.chapter || "") !== chapterFilter) return false;
+            if (statusFilter === "all") return true;
+            if (statusFilter === "late") return isLate(l);
+            return l.status === statusFilter;
         });
+        visible.sort((a, b) => (acc(a) < acc(b) ? -1 : acc(a) > acc(b) ? 1 : 0) * sortDir);
+        document.getElementById("ld-showing").textContent =
+            visible.length === leads.length ? `${leads.length} leads`
+            : `${visible.length} of ${leads.length} leads`;
         const fmtReceived = l => {
             const iso = l.arrived_at || l.first_seen_at;
             if (!iso) return "–";
@@ -254,70 +301,27 @@
                 timeZone: "America/Chicago", month: "short", day: "numeric",
                 hour: "numeric", minute: "2-digit" });
         };
-        const rows = [], cards = [];
-        leads.forEach(l => {
+        const drows = [], cards = [];
+        visible.forEach(l => {
             const payload = l.payload || {};
             const extras = displayAnswers(payload);
             // Mobile card hides Campaign/Form attribution (Kerry) —
             // Ad set stays, it's the one that means something.
             const mextras = extras.filter(([label]) =>
                 label !== "Campaign" && label !== "Form");
-            const answersInner = extras.map(([label, v]) =>
-                `<tr><td class="k">${esc(label)}</td><td>${esc(v)}</td></tr>`).join("");
-            const answersRow = extras.length
-                ? `<tr class="ld-answers" id="ld-ans-${l.id}" style="display:none"><td colspan="12"><table>${answersInner}</table></td></tr>` : "";
-            counts[l.status] = (counts[l.status] || 0) + 1;
-            const late = l.status === "new" && (l.days_since_arrival ?? 0) >= 2;
-            if (late) counts.late++;
+            const late = isLate(l);
             const name = [l.first_name, l.last_name].filter(Boolean).join(" ") || "(no name)";
             const age = l.days_since_arrival == null ? "–"
                 : l.days_since_arrival === 0 ? "today"
                 : l.days_since_arrival + "d";
-            const emailLink = l.email
-                ? `<a class="cell-link" href="mailto:${esc(l.email)}">${esc(l.email)}</a>` : "–";
-            const phoneLink = l.phone
-                ? `<a class="cell-link" href="tel:${esc(l.phone)}">${esc(l.phone)}</a>` : "–";
-            const actions = l.status === "new"
-                ? `<button class="ld-btn primary" onclick="mark(${l.id},'touched')">Touched</button>
-                   <button class="ld-btn" onclick="mark(${l.id},'dismissed')">Dismiss</button>`
-                : l.status === "touched"
-                ? `<button class="ld-btn primary" onclick="mark(${l.id},'converted')">Converted</button>
-                   <button class="ld-btn" onclick="editLead(${l.id})">Edit</button>
-                   <button class="ld-btn" onclick="mark(${l.id},'new')">Undo</button>`
-                : l.status === "converted"
-                ? `<button class="ld-btn" onclick="editLead(${l.id})">Edit</button>
-                   <button class="ld-btn" onclick="mark(${l.id},'touched','')">Undo</button>`
-                : l.status === "dismissed"
-                ? `<button class="ld-btn" onclick="mark(${l.id},'new')">Restore</button>` : "";
             const latestNote = (l.notes_log || [])[0];
             const tagSel = `<select class="ld-tagsel" onchange="setTag(${l.id}, this.value)">` +
                 `<option value="">🏷 tag…</option>` +
                 (ALL.tag_options || []).map(t =>
                     `<option value="${esc(t)}"${t === l.tag ? " selected" : ""}>${esc(t)}</option>`).join("") +
                 `</select>`;
-            const statusHtml = (l.tag ? `<span class="ld-tag">${esc(l.tag)}</span> ` : "") +
-                `<span class="ld-pill ld-${esc(l.status)}">${esc(l.status)}</span>` +
-                (l.touched_by ? " <span style='font-size:10.5px;color:#6B7280'>by " + esc(l.touched_by) + "</span>" : "") +
-                (l.notes ? "<br><span style='font-size:10.5px;color:#6B7280;white-space:normal'>" + esc(l.notes) + "</span>" : "") +
-                (latestNote ? "<br><span style='font-size:10.5px;color:#6B7280;white-space:normal'>📝 " + esc(latestNote.note) + "</span>" : "");
-            rows.push(`<tr>
-                <td><b>${esc(name)}</b>${l.has_history ? ' <span class="ld-existing">existing customer</span>' : ""}
-                    ${answersRow ? ` <span class="ld-toggle" onclick="toggleAns(${l.id})">▾</span>` : ""}</td>
-                <td>${emailLink}</td>
-                <td>${phoneLink}</td>
-                <td>${esc(l.chapter) || "unrouted"}</td>
-                <td>${colVal(payload, k => k.includes("play_tuesdays_or_saturdays"))}</td>
-                <td>${colVal(payload, k => k.includes("most_important"))}</td>
-                <td>${colVal(payload, k => k.includes("stay_in_the_loop") || k.includes("loop"))}</td>
-                <td>${colVal(payload, k => k === "ad_set_name")}</td>
-                <td>${fmtReceived(l)}</td>
-                <td class="${late ? "ld-late" : ""}">${age}</td>
-                <td>${statusHtml}</td>
-                <td style="white-space:nowrap">${actions} ${tagSel}</td>
-            </tr>` + answersRow);
-            // Mobile call-sheet card (#361): one-glance triage,
-            // two-tap contact. Badges always visible; sms:/tel:/mailto:
-            // deep-links; newest note previewed; overflow menu.
+            // Triage badges (shared desktop + mobile): availability,
+            // importance, invitations, ad set — decoded to Kerry's shorthand.
             const rawOf = match => {
                 const k = Object.keys(payload).find(match);
                 return k ? String(payload[k]).toLowerCase() : "";
@@ -340,6 +344,7 @@
             const adSetShort = (payload.ad_set_name || "").includes("Austin") ? "ATX ad"
                 : (payload.ad_set_name || "").includes("SA") ? "SA ad" : "";
             if (adSetShort) badges.push(adSetShort);
+            const badgeHtml = badges.map(b => `<span class="ld-bchip">${esc(b)}</span>`).join("");
             const dotCls = late ? "ld-dot-r" : l.status === "touched" ? "ld-dot-g"
                 : l.status === "converted" ? "ld-dot-o" : "ld-dot-n";
             const smsBody = (ALL.sms_template || "")
@@ -362,10 +367,46 @@
                 : `<button class="ld-btn" onclick="mark(${l.id},'dismissed')">Dismiss</button>`);
             const notesList = (l.notes_log || []).map(n =>
                 `<tr><td class="k" style="white-space:nowrap">${esc((n.created_at || "").slice(5, 16))} ${esc((n.author || "")[0] || "")}</td><td>${esc(n.note)}</td></tr>`).join("");
+            // ---- Desktop work-list row: status first (Kerry 2026-08-31),
+            // color-coded left edge, actions always on-screen.
+            const edgeCls = late ? "ld-edge-late" : "ld-edge-" + esc(l.status);
+            const notePrev = latestNote
+                ? `<div class="ld-dnote"><b>${esc((latestNote.author || "?")[0])}</b> · ${esc((latestNote.created_at || "").slice(5, 16))} — ${esc(latestNote.note)}</div>`
+                : l.notes ? `<div class="ld-dnote">${esc(l.notes)}</div>` : "";
+            drows.push(`<div class="ld-drow ${edgeCls}">
+                <div class="ld-dstatus">
+                    <span class="ld-pill ld-${esc(l.status)}">${esc(l.status)}</span>
+                    <div class="ld-dsub ${late ? "ld-late" : ""}">${age}${late ? " · overdue" : ""}${l.touched_by ? ` · by ${esc(l.touched_by)}` : ""}</div>
+                    ${l.tag ? `<div><span class="ld-tag">${esc(l.tag)}</span></div>` : ""}
+                </div>
+                <div class="ld-dname">
+                    <b>${esc(name)}</b>${l.has_history ? ' <span class="ld-existing">existing customer</span>' : ""}
+                    <span class="ld-toggle" onclick="toggleDet(${l.id})" title="Details">▾</span>
+                    <div class="ld-dsub">${esc(l.chapter) || "unrouted"} · ${fmtReceived(l)}</div>
+                </div>
+                <div class="ld-dcontact">
+                    ${l.email ? `<a class="cell-link" href="mailto:${esc(l.email)}">${esc(l.email)}</a>` : ""}
+                    ${l.phone ? `<a class="cell-link" href="tel:${esc(l.phone)}">${esc(l.phone)}</a>` : ""}
+                </div>
+                <div>${badgeHtml}${notePrev}</div>
+                <div class="ld-dacts">${primary}
+                    <button class="ld-btn" onclick="noteLead(${l.id})">➕ Note</button>
+                    ${tagSel}
+                    <span class="ld-menu-wrap"><button class="ld-btn" onclick="toggleMenu('ld-dmenu-${l.id}')">⋯</button>
+                        <span class="ld-menu" id="ld-dmenu-${l.id}">${menuItems}</span></span>
+                </div>
+            </div>
+            <div class="ld-ddet ${edgeCls}" id="ld-det-${l.id}">
+                ${notesList ? `<table class="ld-mnotes">${notesList}</table><hr style="border:none;border-top:1px solid #E5E7EB">` : ""}
+                ${extras.length ? `<table>${extras.map(([label, v]) => `<tr><td class="k">${esc(label)}</td><td>${esc(v)}</td></tr>`).join("")}</table>` : "<span class='ld-dsub'>No form answers.</span>"}
+            </div>`);
+            // Mobile call-sheet card (#361): one-glance triage,
+            // two-tap contact. Badges always visible; sms:/tel:/mailto:
+            // deep-links; newest note previewed; overflow menu.
             cards.push(`<div class="ld-mcard">
                 <div class="ld-mhead"><span class="ld-dot ${dotCls}"></span><b>${esc(name)}</b>${l.has_history ? ' <span class="ld-existing">existing customer</span>' : ""}
                     <span class="ld-mmeta ${late ? "ld-late" : ""}">${esc(l.chapter) || "unrouted"} · ${age} · ${esc(l.status)}</span></div>
-                <div>${badges.map(b => `<span class="ld-bchip">${esc(b)}</span>`).join("")}${l.tag ? `<span class="ld-tag">${esc(l.tag)}</span>` : ""}</div>
+                <div>${badgeHtml}${l.tag ? `<span class="ld-tag">${esc(l.tag)}</span>` : ""}</div>
                 <div class="ld-acts">
                     ${l.phone ? `<a class="ld-act" href="sms:${esc(l.phone)}?&body=${encodeURIComponent(smsBody)}">💬 Text</a>
                                  <a class="ld-act" href="tel:${esc(l.phone)}">📞 Call</a>` : ""}
@@ -378,15 +419,18 @@
                     ${mextras.length ? `<table>${mextras.map(([label, v]) => `<tr><td class="k">${esc(label)}</td><td>${esc(v)}</td></tr>`).join("")}</table>` : ""}
                 </details>
                 <div class="ld-mactions">${primary} ${tagSel}
-                    <span class="ld-menu-wrap"><button class="ld-btn" onclick="toggleMenu(${l.id})">⋯</button>
+                    <span class="ld-menu-wrap"><button class="ld-btn" onclick="toggleMenu('ld-menu-${l.id}')">⋯</button>
                         <span class="ld-menu" id="ld-menu-${l.id}">${menuItems}</span></span>
                 </div>
             </div>`);
         });
-        document.getElementById("ld-body").innerHTML =
-            rows.join("") || "<tr><td colspan=12>No leads yet.</td></tr>";
+        const emptyMsg = leads.length
+            ? "No leads match the current filters."
+            : "No leads yet.";
+        document.getElementById("ld-dlist").innerHTML =
+            drows.join("") || `<div class="ld-dempty">${emptyMsg}</div>`;
         document.getElementById("ld-mlist").innerHTML =
-            cards.join("") || "<p style='color:#6B7280'>No leads yet.</p>";
+            cards.join("") || `<p style='color:#6B7280'>${emptyMsg}</p>`;
         for (const k of ["new", "touched", "converted"])
             document.getElementById("ld-count-" + k).textContent = counts[k] || 0;
         document.getElementById("ld-count-late").textContent = counts.late || 0;
@@ -409,15 +453,15 @@
             body: JSON.stringify({ note, author }) }).then(loadLeads);
     }
     function toggleMenu(id) {
-        const el = document.getElementById("ld-menu-" + id);
+        const el = document.getElementById(id);
         if (!el) return;
         const open = el.style.display === "block";
         document.querySelectorAll(".ld-menu").forEach(m => m.style.display = "none");
         el.style.display = open ? "none" : "block";
     }
-    function toggleAns(id) {
-        const el = document.getElementById("ld-ans-" + id);
-        if (el) el.style.display = el.style.display === "none" ? "" : "none";
+    function toggleDet(id) {
+        const el = document.getElementById("ld-det-" + id);
+        if (el) el.style.display = el.style.display === "block" ? "none" : "block";
     }
     async function mark(id, status, touched_by, notes) {
         if (status === "touched" && touched_by === undefined)
