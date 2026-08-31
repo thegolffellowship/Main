@@ -114,6 +114,14 @@ def ensure_leads_table(conn: sqlite3.Connection) -> None:
         conn.execute("ALTER TABLE leads ADD COLUMN tag TEXT")
     except sqlite3.OperationalError:
         pass
+    try:
+        # Follow-up / snooze date (mailbox #365, Kerry-ratified
+        # 2026-08-31): leads self-schedule for future events (Truchan →
+        # Silverhorn 9/8 etc.) — a future date snoozes the row out of
+        # the active view; a due date resurfaces it at the top.
+        conn.execute("ALTER TABLE leads ADD COLUMN follow_up_at TEXT")
+    except sqlite3.OperationalError:
+        pass
     # Per-lead notes log (mailbox #361 — first brick of Tracker-as-CRM):
     # timestamped, authored; newest previews on the card.
     conn.execute("""
@@ -1017,6 +1025,27 @@ def set_lead_tag(lead_id: int, tag: str,
                          (tag or None, lead_id))
         conn.commit()
     return {"id": lead_id, "tag": tag or None, "ok": True}
+
+
+def set_lead_followup(lead_id: int, date: str,
+                      db_path: str | Path | None = None) -> dict:
+    """Set (or clear with '') a lead's follow-up date (mailbox #365).
+    A future date SNOOZES the lead (drops from the active view); on or
+    before today it resurfaces under FOLLOW-UPS DUE at the top."""
+    import re as _re
+    from . import database as db
+    date = (date or "").strip()
+    if date and not _re.fullmatch(r"\d{4}-\d{2}-\d{2}", date):
+        return {"error": f"bad date {date!r} — need YYYY-MM-DD or blank"}
+    with db._connect(db_path) as conn:
+        ensure_leads_table(conn)
+        if not conn.execute("SELECT 1 FROM leads WHERE id = ?",
+                            (lead_id,)).fetchone():
+            return {"error": f"lead {lead_id} not found"}
+        conn.execute("UPDATE leads SET follow_up_at = ? WHERE id = ?",
+                     (date or None, lead_id))
+        conn.commit()
+    return {"id": lead_id, "follow_up_at": date or None, "ok": True}
 
 
 def sync_lead_rsvp_notes(db_path: str | Path | None = None) -> dict:

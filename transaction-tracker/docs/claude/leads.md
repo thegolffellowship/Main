@@ -215,6 +215,23 @@ the left column is just age/owner + tag chip (rows max two lines).
 The pill returns only in flat sorts (Name/Newest/…) where there are
 no sections. Mobile call sheet unchanged.
 
+## Follow-up / snooze (mailbox #365, Kerry-ratified 2026-08-31, v2.269.0)
+
+`leads.follow_up_at` (YYYY-MM-DD; boot ALTER migration) —
+`set_lead_followup` / `POST /api/leads/<id>/followup` / bridge
+`scoring-lead-edit:<id>|follow_up_at|<date>` (blank clears). ⏰ Follow
+up in every row's ⋯ menu; the prompt takes a date or days-from-now.
+A FUTURE date snoozes the lead into a gray SNOOZED section below
+CONVERTED; on/before today (Central) it resurfaces under a red
+FOLLOW-UPS DUE section at the VERY TOP, earliest date first. The
+freed pill slot shows a ⏰ m/d chip (red when due); mobile card meta
+carries the same chip. Dismissed leads never resurface. No due-ping
+yet (CA marked it optional — open item). Round-2 companions
+(v2.269.0): Converted demoted behind ⋯ + confirm (auto-detect handles
+real conversions), ➕ Note promoted to primary on touched rows, modal
+badge chips muted (Tu+Sa / All of it / SA invites / SA ad) so
+exceptions read as signal, toolbar search box (name/email/phone).
+
 ## RSVP → lead-note bridge (Kerry 2026-08-31, v2.268.0)
 
 `sync_lead_rsvp_notes` in leads.py — the Alex Porter case: a lead

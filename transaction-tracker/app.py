@@ -11271,6 +11271,15 @@ def api_lead_edit(lead_id):
     return jsonify(res), (400 if res.get("error") else 200)
 
 
+@app.route("/api/leads/<int:lead_id>/followup", methods=["POST"])
+@require_role("manager")
+def api_lead_followup(lead_id):
+    from email_parser.leads import set_lead_followup
+    d = request.get_json(silent=True) or {}
+    res = set_lead_followup(lead_id, (d.get("date") or "").strip())
+    return jsonify(res), (400 if res.get("error") else 200)
+
+
 @app.route("/api/leads/<int:lead_id>/note", methods=["POST"])
 @require_role("manager")
 def api_lead_note(lead_id):

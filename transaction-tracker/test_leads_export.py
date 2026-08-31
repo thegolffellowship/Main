@@ -265,6 +265,22 @@ def main():
     check("re-run is a no-op (idempotent)",
           r_again.get("rsvp_notes_added") == 0, str(r_again))
 
+    # ---- Follow-up / snooze (set_lead_followup, mailbox #365) ----
+    r_fu = leads.set_lead_followup(lid_pros, "2026-09-07", db_path=db_path)
+    r_bad = leads.set_lead_followup(lid_pros, "next week", db_path=db_path)
+    with db._connect(db_path) as conn:
+        fu = conn.execute("SELECT follow_up_at FROM leads WHERE id = ?",
+                          (lid_pros,)).fetchone()[0]
+    check("follow-up date sets", r_fu.get("ok") and fu == "2026-09-07",
+          f"{r_fu} {fu}")
+    check("bad follow-up date rejected (value kept)",
+          r_bad.get("error") is not None and fu == "2026-09-07", str(r_bad))
+    leads.set_lead_followup(lid_pros, "", db_path=db_path)
+    with db._connect(db_path) as conn:
+        fu2 = conn.execute("SELECT follow_up_at FROM leads WHERE id = ?",
+                           (lid_pros,)).fetchone()[0]
+    check("blank clears follow-up", fu2 is None, str(fu2))
+
     os.unlink(db_path)
     if FAILURES:
         print(f"\n{len(FAILURES)} FAILURE(S)")

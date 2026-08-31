@@ -1,5 +1,15 @@
-window.TGF_VERSION = "2.268.0";
+window.TGF_VERSION = "2.269.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.269.0",
+    date: "2026-08-31",
+    changes: [
+      "FOLLOW-UP / SNOOZE (Lead Center round 2, mailbox #365, Kerry-ratified — the anti-March mechanism looking forward): ⏰ Follow up in every lead's ⋯ menu sets a resurface date (type a date or days-from-now like '7'). A future date SNOOZES the lead into a gray SNOOZED section below CONVERTED — out of the active view; the day it's due (Central) it resurfaces under a red FOLLOW-UPS DUE section at the very top, earliest first, with a red ⏰ chip. Leads self-scheduling for future events (Truchan→Silverhorn 9/8) now convert off the bench automatically instead of living in Kerry's memory. New leads.follow_up_at column, POST /api/leads/<id>/followup, scoring-lead-edit accepts follow_up_at for CA.",
+      "Converted button demoted (mailbox #365: rarest action was most prominent, one accidental fire; payment auto-detect handles real conversions): it now lives behind the ⋯ menu with a confirm tap, and ➕ Note takes the primary slot on touched rows.",
+      "Badge chips read as signal, not texture: modal values (Tu+Sa / All of it / SA invites / SA ad) are muted gray; exceptions (Tue only / Sat only / Golf / Community / Competition / ATX) keep full contrast.",
+      "Search box in the toolbar — live name/email/phone filter, needed before the queue hits ~100 leads.",
+    ],
+  },
   {
     version: "2.268.0",
     date: "2026-08-31",

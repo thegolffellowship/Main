@@ -2076,10 +2076,11 @@ def _scoring_dispatch(url: str, extract: str):
             _p = [x.strip() for x in arg.split("|")]
             if len(_p) < 3 or _p[1] not in ("first_name", "last_name",
                                             "email", "phone", "chapter",
-                                            "notes"):
+                                            "notes", "follow_up_at"):
                 return json.dumps({"error": "need <id>|<field>|<value>; "
                                             "field: first_name/last_name/"
-                                            "email/phone/chapter/notes"})
+                                            "email/phone/chapter/notes/"
+                                            "follow_up_at"})
             _val = "|".join(_p[2:])
             with db._connect() as conn:
                 from email_parser.leads import ensure_leads_table
