@@ -6771,6 +6771,10 @@ def api_sunset():
     CHAPTER_COORDS = {
         "San Antonio": (29.4241, -98.4936),
         "Austin": (30.2672, -97.7431),
+        # Joint TGF events (shared 18s, championships) usually play the
+        # corridor between the cities — New Braunfels (Landa Park) as the
+        # midpoint, ±1 min of sun time from either city.
+        "TGF": (29.7030, -98.1245),
     }
 
     date_str = request.args.get("date")

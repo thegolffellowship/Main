@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.275.0";
+window.TGF_VERSION = "2.276.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.276.0",
+    date: "2026-09-01",
+    changes: [
+      "Tee Time Advisor status now anchors to SUNSET, not civil twilight (Kerry: 'biggest thing we need to avoid is not being able to see the ball before players are finished'): green = est. finish 30+ min before sunset, yellow = within 30 min, red = after sunset. The old rule (red when finishing within 20 min of civil twilight) only approximated the sunset line by coincidence; a legend under the header now states the tiers.",
+      "The mystery hollow squares WERE the yellow/green tier: the old markers used newer emoji codepoints missing from some Windows fonts, so the yellow circle and green check rendered as tofu boxes while the red circle displayed. All advisor status markers are CSS dots now — identical on every platform.",
+      "Tee sheets show a deeper-orange SUNSET band at the first tee time whose group finishes after sunset (Kerry), ahead of the existing Civil Twilight band; and joint TGF-chapter events get sun data too (New Braunfels midpoint coordinates — the sunset API previously only knew Austin and San Antonio, which ARE per-city: each chapter's events use that city's own sun times).",
+    ],
+  },
   {
     version: "2.275.0",
     date: "2026-09-01",

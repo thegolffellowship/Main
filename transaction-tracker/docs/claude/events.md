@@ -59,6 +59,24 @@ credit/transfer/WD (internal ledger moves); anything recording a REAL
 outbound payment (refund, partial-refund, payout-credit, payout
 recording, mark-paid) is admin-only.
 
+## Tee Time Advisor status rules (Kerry-ratified framing 2026-09-01, v2.276.0)
+
+The add/edit-event advisor (`renderAdvisor`/`buildTeeSheet` in
+events.html; sun data from `/api/sunset` — per-chapter coordinates:
+Austin, San Antonio, and TGF = New Braunfels midpoint for joint events,
+live from sunrise-sunset.org for the event date, Central-converted).
+Status anchors to **SUNSET** (Kerry: "biggest thing we need to avoid is
+not being able to see the ball before players are finished" — ball
+flight is unwatchable from sunset, ~25 min before civil twilight ends):
+green = est. finish 30+ min before sunset; yellow = within 30 min;
+red = after sunset. The pre-v2.276 rule measured margin to civil
+twilight (<20 min = red), which only approximated sunset by
+coincidence. Tee sheets show TWO bands: ☼ Sunset (deeper orange,
+`.sunset-row`) and ⚑ Civil Twilight (`.twilight-row`), plus a legend
+under the header. Status markers are CSS dots (`.tta-dot`), NEVER emoji
+— 🟢/🟡/✅ are newer emoji codepoints missing from some Windows fonts
+and rendered as hollow squares while 🔴 displayed.
+
 ## Pairings: fall races + manual-request binding (Kerry 2026-09-01, v2.275.0)
 
 - **Fall pairing races**: `_FALL_PAIRING_RACES` (san_antonio_fall_net /
