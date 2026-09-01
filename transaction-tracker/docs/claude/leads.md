@@ -235,6 +235,14 @@ real conversions), ➕ Note promoted to primary on touched rows, modal
 badge chips muted (Tu+Sa / All of it / SA invites / SA ad) so
 exceptions read as signal, toolbar search box (name/email/phone).
 
+## No-loop auto-dismiss (Kerry 2026-09-01, v2.278.0)
+
+`dismiss_no_loop_leads(conn)` runs every poll: a lead whose
+stay-in-the-loop answer starts with "no" (same key/value test the CSV
+invite exports use to exclude them) self-dismisses into the bottom
+DISMISSED section with an 'auto' note. Converted and already-dismissed
+rows are never touched.
+
 ## Conversion evidence excludes placeholders (v2.277.1)
 
 The 'Registered event' auto-detect requires an active item whose

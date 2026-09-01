@@ -737,6 +737,41 @@ def _followup_email_html(lead: dict, last_note: str | None) -> str:
     </div>"""
 
 
+def dismiss_no_loop_leads(conn: sqlite3.Connection) -> int:
+    """Auto-dismiss leads who answered NO to the stay-in-the-loop
+    question (Kerry 2026-09-01: no communication wanted → bottom
+    DISMISSED). Same key/value test the CSV invite exports already use
+    to exclude them. Never touches converted (a customer who opted out
+    of invites is still a customer) or already-dismissed rows; an
+    'auto' note records why. Returns rows dismissed."""
+    n = 0
+    for r in conn.execute(
+            "SELECT id, payload FROM leads WHERE payload IS NOT NULL "
+            "AND status NOT IN ('dismissed', 'converted')").fetchall():
+        try:
+            p = json.loads(r["payload"])
+        except Exception:
+            continue
+        optout = any(
+            ("stay_in_the_loop" in k.lower() or "loop" in k.lower())
+            and isinstance(v, str) and v.strip().lower().startswith("no")
+            for k, v in p.items())
+        if not optout:
+            continue
+        conn.execute("UPDATE leads SET status = 'dismissed' WHERE id = ?",
+                     (r["id"],))
+        if not conn.execute(
+                "SELECT 1 FROM lead_notes WHERE lead_id = ? "
+                "AND note LIKE 'Opted out of invites%'",
+                (r["id"],)).fetchone():
+            conn.execute(
+                "INSERT INTO lead_notes (lead_id, author, note) VALUES "
+                "(?, 'auto', 'Opted out of invites on the survey "
+                "(No loop) — auto-dismissed')", (r["id"],))
+        n += 1
+    return n
+
+
 def check_followup_due_pings(db_path: str | Path | None = None) -> dict:
     """Due-day follow-up pings (mailbox #370, Kerry-ratified 2026-08-31):
     one email per lead on its follow-up due morning (Central) to the
@@ -1062,6 +1097,13 @@ def check_new_leads(db_path: str | Path | None = None) -> dict:
                 PLACEHOLDER_MERCHANTS)
         except sqlite3.Error as e:
             logger.warning("Lead conversion auto-detect failed: %s", e)
+        # No-loop auto-dismiss (Kerry 2026-09-01: "If they're not wanting
+        # communication (No Loop) then they should probably go to bottom
+        # dismissed"). Runs every poll, idempotent.
+        try:
+            dismiss_no_loop_leads(conn)
+        except Exception:
+            logger.warning("No-loop auto-dismiss failed", exc_info=True)
         # Backfill: prospects created before the acquisition_source fix
         # carry the resolver's 'godaddy' default — purchase-less
         # lead-linked customers are Facebook acquisitions.

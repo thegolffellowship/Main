@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.277.1";
+window.TGF_VERSION = "2.278.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.278.0",
+    date: "2026-09-01",
+    changes: [
+      "No-loop leads auto-dismiss (Kerry: 'If they're not wanting communication (No Loop) then they should probably go to bottom dismissed'): answering NO to the stay-in-the-loop question — the same test the CSV invite exports already use to exclude them — now self-dismisses the lead into the bottom DISMISSED section on every poll, with an 'auto' note recording why. Converted leads are never touched (a customer who opted out of invites is still a customer). Catches Daniel Garza and Tanner Cannady immediately.",
+    ],
+  },
   {
     version: "2.277.1",
     date: "2026-09-01",

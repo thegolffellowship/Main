@@ -281,6 +281,28 @@ def main():
                            (lid_pros,)).fetchone()[0]
     check("blank clears follow-up", fu2 is None, str(fu2))
 
+    # ---- No-loop auto-dismiss (Kerry 2026-09-01) ----
+    with db._connect(db_path) as conn:
+        lid_noloop = plant_lead(conn, "Noloop", "noloop@x.com", "Austin",
+                                loop_answer="no", status="new")
+        lid_convno = plant_lead(conn, "Convno", "convno@x.com", "Austin",
+                                loop_answer="no", status="converted")
+        conn.commit()
+        n1 = leads.dismiss_no_loop_leads(conn)
+        n2 = leads.dismiss_no_loop_leads(conn)
+        conn.commit()
+        st = {r["id"]: r["status"] for r in conn.execute(
+            "SELECT id, status FROM leads WHERE id IN (?, ?)",
+            (lid_noloop, lid_convno))}
+        n_notes = conn.execute(
+            "SELECT COUNT(*) FROM lead_notes WHERE lead_id = ? "
+            "AND author = 'auto'", (lid_noloop,)).fetchone()[0]
+    check("No-loop lead auto-dismisses with ONE note (idempotent)",
+          st[lid_noloop] == "dismissed" and n_notes == 1 and n1 >= 1,
+          f"{st} notes={n_notes} n1={n1} n2={n2}")
+    check("converted no-loop lead untouched",
+          st[lid_convno] == "converted", str(st))
+
     # ---- Due-day follow-up pings (mailbox #370) ----
     sent = []
     real_send = leads._send_followup_ping
