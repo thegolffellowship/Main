@@ -300,7 +300,7 @@
         }
         // Mirror of display_answers in leads.py: form questions first,
         // attribution after, plumbing hidden (all still stored).
-        const HIDE_PREFIX = ["num_", "stripe_", "ad_campaign_id", "ad_set_id", "ad_id"];
+        const HIDE_PREFIX = ["_", "num_", "stripe_", "ad_campaign_id", "ad_set_id", "ad_id"];
         const ATTR_LABELS = { ad_set_name: "Ad set",
             hs_analytics_source_data_2: "Campaign", recent_conversion_event_name: "Form" };
         const HIDE = new Set(["lifecyclestage", "first_conversion_date",
@@ -323,15 +323,31 @@
             return hit ? hit[1] : human(k);
         };
         function displayAnswers(payload) {
-            const form = [], attr = [];
+            // Per-survey tagging (Kerry 2026-09-01): re-submitters carry
+            // BOTH surveys' properties. _answer_dates stamps when each
+            // answer was last set; anything set outside 3 days of the
+            // latest conversion is an EARLIER survey's answer and shows
+            // dated, below the current answers.
+            const dates = payload._answer_dates || null;
+            const latest = payload.recent_conversion_date || "";
+            const isCurrent = k => {
+                if (!dates || !dates[k] || !latest) return true;
+                return Math.abs(new Date(dates[k]) - new Date(latest)) < 3 * 864e5;
+            };
+            const eraDate = k => {
+                const d = new Date(dates[k]);
+                return isNaN(d) ? "" : ` · ${d.getMonth() + 1}/${d.getDate()}/${String(d.getFullYear()).slice(2)}`;
+            };
+            const form = [], older = [], attr = [];
             for (const k of Object.keys(payload).sort()) {
                 if ((HIDE.has(k) && !ATTR_LABELS[k]) ||
                     HIDE_PREFIX.some(p => k.startsWith(p))) continue;
                 const val = pretty(payload[k]);
                 if (ATTR_LABELS[k]) attr.push([ATTR_LABELS[k], val]);
+                else if (!isCurrent(k)) older.push([`${formLabel(k)} (earlier survey${eraDate(k)})`, val]);
                 else form.push([formLabel(k), val]);
             }
-            return form.concat(attr);
+            return form.concat(older).concat(attr);
         }
         // Sort accessors per key (sort select on the toolbar)
         const getName = l => ([l.first_name, l.last_name].filter(Boolean).join(" ") || "").toLowerCase();
@@ -478,9 +494,20 @@
                 const k = Object.keys(payload).find(match);
                 return k ? String(payload[k]).toLowerCase() : "";
             };
-            const availRaw = rawOf(k => k.includes("play_tuesdays_or_saturdays"));
-            const wantRaw = rawOf(k => k.includes("most_important"));
-            const loopRaw = rawOf(k => k.includes("stay_in_the_loop") || k.includes("loop"));
+            // CURRENT form's exact key first (Kerry 2026-09-01): a
+            // re-submitter's payload carries BOTH surveys' properties,
+            // and the fuzzy first-match could land on a stale earlier-
+            // campaign answer (Garza's 2025 "Yes" rendered "No loop").
+            const rawPref = (exact, match) => {
+                const v = payload[exact];
+                return (typeof v === "string" && v) ? v.toLowerCase() : rawOf(match);
+            };
+            const availRaw = rawPref("can_you_play_tuesdays_or_saturdays",
+                k => k.includes("play_tuesdays_or_saturdays"));
+            const wantRaw = rawPref("which_is_most_important_to_you",
+                k => k.includes("most_important"));
+            const loopRaw = rawPref("would_you_like_to_stay_in_the_loop_with_tgf_and_receive_event_invitations",
+                k => k.includes("stay_in_the_loop") || k.includes("loop"));
             const badges = [];
             if (availRaw) badges.push(availRaw.includes("both") ? "Tu+Sa"
                 : availRaw.includes("tuesdays") ? "Tue only"
@@ -492,7 +519,8 @@
                    || wantRaw.startsWith("fellowship")) ? "Community" : pretty(wantRaw));
             if (loopRaw) badges.push(loopRaw === "yes_for_both" ? "Both"
                 : loopRaw.includes("san_antonio") ? "SA invites"
-                : loopRaw.includes("austin") ? "ATX invites" : "No loop");
+                : loopRaw.includes("austin") ? "ATX invites"
+                : loopRaw.startsWith("no") ? "No loop" : pretty(loopRaw));
             const adSetShort = (payload.ad_set_name || "").includes("Austin") ? "ATX ad"
                 : (payload.ad_set_name || "").includes("SA") ? "SA ad" : "";
             if (adSetShort) badges.push(adSetShort);

@@ -235,6 +235,22 @@ real conversions), ➕ Note promoted to primary on touched rows, modal
 badge chips muted (Tu+Sa / All of it / SA invites / SA ad) so
 exceptions read as signal, toolbar search box (name/email/phone).
 
+## Re-submitter answer separation + real-customer badge (v2.278.1)
+
+HubSpot merges every form submission into one contact (per-property
+last-write; old questions keep old values), so a re-submitter's payload
+carries BOTH surveys' answers. Rules: (1) chips and the no-loop
+dismissal read the CURRENT form's exact keys first
+(`LOOP_QUESTION_KEY` etc.), fuzzy match only as fallback; (2)
+`_fetch_answer_dates` (propertiesWithHistory) stamps
+`payload._answer_dates` for re-submitters (+ a bounded poll backfill
+for HS-noted leads), and the card tags answers set >3 days before the
+latest conversion as "(earlier survey · date)"; (3) the loop chip shows
+"No loop" only for answers starting with "no" — a bare "Yes" from an
+old form rendered "No loop" before; (4) the `customer` badge
+(`has_history`) requires a non-placeholder active item — identity
+shells (Roster Import etc.) don't make someone a customer.
+
 ## No-loop auto-dismiss (Kerry 2026-09-01, v2.278.0)
 
 `dismiss_no_loop_leads(conn)` runs every poll: a lead whose

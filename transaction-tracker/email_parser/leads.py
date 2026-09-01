@@ -303,7 +303,7 @@ def prettify_answer(value) -> str:
 # Answers-panel display rules (email + queue; JS mirror in leads.html).
 # Everything stays STORED — these only govern what renders. Form
 # questions first, ad/campaign attribution second, plumbing hidden.
-_ANSWER_HIDE_PREFIXES = ("num_", "stripe_", "ad_campaign_id", "ad_set_id",
+_ANSWER_HIDE_PREFIXES = ("_", "num_", "stripe_", "ad_campaign_id", "ad_set_id",
                          "ad_id")
 _ANSWER_HIDE = {"lifecyclestage", "first_conversion_date",
                 "recent_conversion_date", "first_conversion_event_name",
@@ -482,12 +482,48 @@ def _fetch_hubspot_contacts(token: str, since_iso: str) -> list[dict]:
 PLACEHOLDER_MERCHANTS = ("Roster Import", "Customer Entry", "RSVP Import",
                          "RSVP Email Link", "Handicap Import")
 
+LOOP_QUESTION_KEY = ("would_you_like_to_stay_in_the_loop_with_tgf"
+                     "_and_receive_event_invitations")
+
 RECONV_WATERMARK_KEY = "leads_hubspot_reconv_watermark"
 # Current fall campaign start — the first reconversion sweep back-collects
 # this campaign's deduped re-submitters (Wilder, Hinojosa, O.Gonzalez,
 # M.Hernandez, D.Garza as of 2026-09-01).
 DEFAULT_RECONV_WATERMARK = "2026-08-27T00:00:00Z"
 
+
+
+
+def _fetch_answer_dates(token: str, contact_id: str,
+                        keys: list[str]) -> dict:
+    """{answer key: last-set ISO timestamp} via propertiesWithHistory —
+    lets the card split a deduped re-submitter's answers by SURVEY
+    (Kerry 2026-09-01: HubSpot merges submissions into one contact, so
+    earlier-campaign answers persist beside the new ones and the card
+    showed them mixed)."""
+    if not keys:
+        return {}
+    resp = requests.get(
+        f"https://api.hubapi.com/crm/v3/objects/contacts/{contact_id}",
+        params={"propertiesWithHistory": ",".join(keys[:40])}, timeout=30,
+        headers={"Authorization": f"Bearer {token}"})
+    resp.raise_for_status()
+    out = {}
+    for k, versions in (resp.json().get("propertiesWithHistory")
+                        or {}).items():
+        if versions:
+            out[k] = versions[0].get("timestamp")
+    return out
+
+
+def _answer_date_keys(payload: dict) -> list[str]:
+    return [k for k in (payload or {})
+            if not k.startswith(("hs_", "ad_", "_", "num_"))
+            and k not in ("lifecyclestage", "chapter_interest",
+                          "first_conversion_date",
+                          "first_conversion_event_name",
+                          "recent_conversion_date",
+                          "recent_conversion_event_name")]
 
 def _fetch_hubspot_reconversions(token: str, since_iso: str) -> list[dict]:
     """EXISTING HubSpot contacts who (re)submitted a Facebook Lead Ads
@@ -752,10 +788,18 @@ def dismiss_no_loop_leads(conn: sqlite3.Connection) -> int:
             p = json.loads(r["payload"])
         except Exception:
             continue
-        optout = any(
-            ("stay_in_the_loop" in k.lower() or "loop" in k.lower())
-            and isinstance(v, str) and v.strip().lower().startswith("no")
-            for k, v in p.items())
+        # CURRENT form's key first (Kerry 2026-09-01: a re-submitter's
+        # payload carries BOTH surveys' properties — the fuzzy match can
+        # land on a stale earlier-campaign answer). Same-key values are
+        # per-property last-write in HubSpot, so the exact key is always
+        # the latest submission's answer.
+        val = p.get(LOOP_QUESTION_KEY)
+        if not (isinstance(val, str) and val.strip()):
+            val = next((v for k, v in p.items()
+                        if ("stay_in_the_loop" in k.lower()
+                            or "loop" in k.lower())
+                        and isinstance(v, str) and v.strip()), "")
+        optout = val.strip().lower().startswith("no")
         if not optout:
             continue
         conn.execute("UPDATE leads SET status = 'dismissed' WHERE id = ?",
@@ -943,8 +987,41 @@ def check_new_leads(db_path: str | Path | None = None) -> dict:
             c["payload"] = enrich_payload(
                 payloads.get(str(c["external_id"])), ad_set_names) or None
             c["chapter"] = _route(c["payload"], c.get("city"))
+            # Re-submitters carry BOTH surveys' answers — stamp per-key
+            # last-set timestamps so the card can tag which survey each
+            # answer came from (Kerry 2026-09-01).
+            if c.get("_reconversion") and c.get("payload"):
+                try:
+                    c["payload"]["_answer_dates"] = _fetch_answer_dates(
+                        token, str(c["external_id"]),
+                        _answer_date_keys(c["payload"]))
+                except Exception as e:
+                    logger.warning("Answer-date fetch failed for contact "
+                                   "%s: %s", c.get("external_id"), e)
         new_ids = upsert_leads(conn, passing, city_map)
         result["queued"] = len(new_ids)
+        # Backfill answer dates for re-submitters inserted before the
+        # per-survey tagging existed (identified by their HS note);
+        # bounded per poll.
+        try:
+            for r in conn.execute(
+                    "SELECT l.id, l.external_id, l.payload FROM leads l "
+                    "WHERE l.payload IS NOT NULL "
+                    "AND l.payload NOT LIKE '%_answer_dates%' "
+                    "AND EXISTS (SELECT 1 FROM lead_notes n "
+                    "            WHERE n.lead_id = l.id AND n.author = 'HS') "
+                    "LIMIT 10").fetchall():
+                try:
+                    pl = json.loads(r["payload"])
+                    pl["_answer_dates"] = _fetch_answer_dates(
+                        token, str(r["external_id"]), _answer_date_keys(pl))
+                    conn.execute("UPDATE leads SET payload = ? WHERE id = ?",
+                                 (json.dumps(pl), r["id"]))
+                except Exception:
+                    logger.warning("Answer-date backfill failed for lead %s",
+                                   r["id"], exc_info=True)
+        except sqlite3.Error:
+            pass
         # Badge the re-submitters with a note so the card says WHY they
         # appeared without a fresh HubSpot contact (existing since <date>).
         _reconv_ext = {str(c.get("external_id")): c for c in reconv}
@@ -1168,10 +1245,16 @@ def get_leads(status: str = "", limit: int = 200,
     if cids:
         ph = ",".join("?" * len(cids))
         with db._connect(db_path) as conn:
+            # 'customer' badge = REAL purchase history only (Kerry
+            # 2026-09-01, the Daniel Garza case: a roster-import identity
+            # shell is not a customer) — placeholder rows excluded.
+            _php = ",".join("?" * len(PLACEHOLDER_MERCHANTS))
             with_history = {x[0] for x in conn.execute(
                 f"SELECT DISTINCT customer_id FROM items "
                 f"WHERE customer_id IN ({ph}) "
-                f"AND transaction_status = 'active'", cids)}
+                f"AND transaction_status = 'active' "
+                f"AND merchant NOT IN ({_php})",
+                cids + list(PLACEHOLDER_MERCHANTS))}
     # Notes log (#361): newest first, attached per lead
     notes_by_lead: dict = {}
     with db._connect(db_path) as conn:

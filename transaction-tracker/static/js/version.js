@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.278.0";
+window.TGF_VERSION = "2.278.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.278.1",
+    date: "2026-09-01",
+    changes: [
+      "Re-submitter cards no longer mix the two surveys' answers (Kerry caught it on Daniel Garza: his 2025 answers — 'Availability: Neither', an old weeknight question, a stale invitations value — displayed beside his 2026 ones, and the chips read the OLD survey). Chips now prefer the CURRENT form's exact question keys, and each answer on the expanded card that predates the latest submission is tagged '(earlier survey · date)' via HubSpot per-property history, fetched for re-submitters and backfilled for the five already queued.",
+      "The 'No loop' chip bug: a plain 'Yes' invitations answer from an older form fell through the chip ladder and rendered as 'No loop'. The ladder now shows 'No loop' only for answers actually starting with No; the auto-dismiss reads the current form's exact key the same way, so a stale earlier answer can never dismiss (or spare) a lead.",
+      "'customer' badge means REAL purchase history now (Kerry: 'Did he play an event? Why are we saying he's a customer?'): roster/RSVP/handicap-import identity rows no longer count — Garza and Oscar Gonzalez matched roster-import shells from 3/3 and have never played or paid, so their badges drop.",
+    ],
+  },
   {
     version: "2.278.0",
     date: "2026-09-01",
