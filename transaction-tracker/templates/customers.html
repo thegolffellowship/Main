@@ -2578,7 +2578,11 @@
                 html += secTitle(escapeHtml(c.race_label || c.race_key), `— ${bits.join(" · ")}`);
                 html += details[i] && details[i].length
                     ? prRenderDetailTables(details[i], rounds || [], claimed,
-                        {netRace: !/gross/.test(c.race_key || "")})
+                        {netRace: !/gross/.test(c.race_key || ""),
+                         // Fall races: no CITY CHAMPIONSHIP line, Best 6
+                         // + Fall Championship note (Kerry 2026-09-01)
+                         champLine: /fall_net/.test(c.race_key || "") ? false : undefined,
+                         countedNote: /fall_net/.test(c.race_key || "") ? "Best 6 + Fall Championship" : null})
                     : '<div style="color:var(--text-muted);font-size:0.8rem;">Round-by-round detail unavailable right now — try again in a minute.</div>';
             });
 

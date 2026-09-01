@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.283.0";
+window.TGF_VERSION = "2.283.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.283.1",
+    date: "2026-09-01",
+    changes: [
+      "Fall board drill-downs no longer show CITY CHAMPIONSHIP (Kerry off the live board): the fall races are Best 6 + the FALL Championship (Oct 31 at Kissing Tree), so the counted banner now reads '(Best 6 + Fall Championship)' on fall boards and the city-championship line is suppressed there — on the Contests page and the Customers Points tab both. The Fall Championship line gets wired when its GG boards exist closer to Oct 31.",
+      "Fixed the doubled championship band Kerry's screenshot exposed: an unguarded trailing render duplicated the band on any drill-down table with no 'not counted' section (the fall boards' short 2-event histories) — it now renders once everywhere.",
+    ],
+  },
   {
     version: "2.283.0",
     date: "2026-09-01",

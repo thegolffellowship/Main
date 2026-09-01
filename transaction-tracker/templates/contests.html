@@ -7507,15 +7507,21 @@
             // (data-champ-*) whenever the overlay endpoint served the
             // table; champCid/champRace arm the hole-by-hole expansion on
             // the CITY CHAMPIONSHIP line.
+            // FALL races (Kerry 2026-09-01): no CITY CHAMPIONSHIP line —
+            // the race is Best 6 + the FALL Championship (Oct 31, Kissing
+            // Tree), whose line gets wired when its boards exist.
+            const _isFallRace = /fall_net/.test(raceKey || "");
             let html = ptsTables ? prRenderDetailTables(ptsTables, rounds, claimed, {
-                champPoints: tr.dataset.champPts != null ? tr.dataset.champPts : null,
-                champThru: tr.dataset.champThru || null,
-                champPos: tr.dataset.champPos || null,
-                champDate: tr.dataset.champDate || null,
-                champChapter: tr.dataset.champChapter || null,
-                champCourse: tr.dataset.champCourse || null,
-                champRace: raceKey,
+                champPoints: !_isFallRace && tr.dataset.champPts != null ? tr.dataset.champPts : null,
+                champThru: (!_isFallRace && tr.dataset.champThru) || null,
+                champPos: (!_isFallRace && tr.dataset.champPos) || null,
+                champDate: (!_isFallRace && tr.dataset.champDate) || null,
+                champChapter: (!_isFallRace && tr.dataset.champChapter) || null,
+                champCourse: (!_isFallRace && tr.dataset.champCourse) || null,
+                champRace: _isFallRace ? null : raceKey,
                 champCid: tr.dataset.cid || null,
+                champLine: _isFallRace ? false : undefined,
+                countedNote: _isFallRace ? "Best 6 + Fall Championship" : null,
                 netRace: !/gross/.test(raceKey || ""),
             }) : "";
             // NON-POINTS EVENTS list removed (Kerry 2026-07-12): contests

@@ -675,7 +675,15 @@
     function prRenderDetailTables(tables, rounds, claimed, opts = {}) {
         // opts.monthFilter (YYYY-MM) keeps only rows awarded that month;
         // opts.plain skips the counted/not-counted sections and CITY row
-        // (the monthly race has no best-10 split)
+        // (the monthly race has no best-10 split);
+        // opts.champLine === false drops the CITY CHAMPIONSHIP line and
+        // its GG-row harvest entirely (the FALL races — Kerry 2026-09-01:
+        // "It should not be showing the CITY CHAMPIONSHIPS in the Fall
+        // Points Races"; their Fall Championship line comes with the
+        // Oct 31 Kissing Tree wiring);
+        // opts.countedNote overrides the counted banner's parenthetical
+        // (fall: "Best 6 + Fall Championship" vs the default
+        // "Best 10 + City Championship")
         if (!tables || !tables.length) {
             return '<span style="color:var(--text-muted);">No round-by-round detail available for this player.</span>';
         }
@@ -758,8 +766,9 @@
             // GG's row OUT of the counted list and move its points (and
             // date) onto the CITY CHAMPIONSHIP line. Counted section
             // only; the first short row is the section divider.
+            const _noCc = opts.champLine === false;
             let _ccHarvested = "", _ccHarvestedDate = "", _ccHarvestedPos = "";
-            if (!opts.plain && evtCol > -1) {
+            if (!opts.plain && !_noCc && evtCol > -1) {
                 const champRe = /championship[^|]*points|points[^|]*championship/i;
                 for (let bi = 0; bi < body.length; bi++) {
                     const r = body[bi];
@@ -836,10 +845,11 @@
             // "following points are not counted" sentence row)
             const secHdr = (label, bg, fg) => `<tr><td colspan="${totalCols}" class="pr-wrap" style="background:${bg};color:${fg};font:700 11px/1.5 'Bitter',serif;letter-spacing:1px;text-transform:uppercase;">${label}</td></tr>`;
             const parts = [];
-            if (order && !opts.plain) parts.push(secHdr(`${compact ? "COUNTED" : "POINTS COUNTED"} <span style="font-weight:400;text-transform:none;letter-spacing:0;color:#9CA3AF;font-family:'Helvetica Neue',Arial,sans-serif;">(Best 10 + City Championship)</span>`, "#1B1B1B", "#fff"));
+            if (order && !opts.plain) parts.push(secHdr(`${compact ? "COUNTED" : "POINTS COUNTED"} <span style="font-weight:400;text-transform:none;letter-spacing:0;color:#9CA3AF;font-family:'Helvetica Neue',Arial,sans-serif;">(${escapeHtml(opts.countedNote || "Best 10 + City Championship")})</span>`, "#1B1B1B", "#fff"));
             // Top of the counted list, immediately under the banner.
-            let ccPlaced = false;
-            if (!opts.plain) { parts.push(ccRow); ccPlaced = true; }
+            // champLine:false (fall races) never places the CITY row.
+            let ccPlaced = _noCc;
+            if (!opts.plain && !_noCc) { parts.push(ccRow); ccPlaced = true; }
             for (const r of body) {
                 if (r.length !== width) {
                     if (opts.plain) continue;
@@ -907,7 +917,11 @@
                     return `<td${i === evtCol ? ' class="pr-wrap"' : ""} style="${style}">${chev}${escapeHtml(val)}${badges}</td>`;
                 }).join("")}${spacer ? "<td></td>" : ""}</tr>`);
             }
-            if (counted && !opts.plain) parts.push(ccRow);
+            // Only if it hasn't been placed yet — the top-of-list push
+            // already handled the common case, and this unguarded trailing
+            // push was doubling the band on short all-counted tables
+            // (visible on the fall boards' 2-event histories).
+            if (counted && !opts.plain && !ccPlaced) parts.push(ccRow);
             // A month filter can empty a table entirely — skip it rather
             // than render a lone header row
             if (opts.plain && !parts.length) return "";
