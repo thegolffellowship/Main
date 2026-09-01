@@ -103,7 +103,10 @@
            2026-09-01: current vs earlier submission, separated) */
         .ld-era td { background: #1B1B1B; color: #fff;
             font: 700 10px/1.7 'Bitter', serif; letter-spacing: 1px;
-            text-transform: uppercase; padding: 3px 8px !important; }
+            text-transform: uppercase; padding: 3px 8px !important;
+            cursor: pointer; user-select: none; }
+        .ld-era .ld-era-ch { float: right; opacity: 0.75; }
+        tr.ld-secrow[hidden] { display: none; }
         .ld-dnote b { color: #1B1B1B; }
         .ld-dacts { display: flex; gap: 6px; align-items: center; justify-content: flex-end; }
         .ld-ddet { display: none; padding: 6px 14px 14px 28px; background: #FAFAF8; border-bottom: 1px solid #F3F2EF; border-left: 8px solid #E5E7EB; }
@@ -404,12 +407,19 @@
             return hit ? hit[1] : human(k);
         };
         function displayAnswers(payload) {
-            // Per-survey SECTIONS (Kerry 2026-09-01: "show side by side
-            // ... rather than combining. It's hard for me to tell what's
-            // the most recent response"): current answers under a
-            // "This survey" band, earlier-campaign answers under an
-            // "Earlier survey" band below — including the PREVIOUS value
-            // of any answer the new submission changed (_answers_prev).
+            // Per-survey SECTIONS, v2 (Kerry 2026-09-01: "it should auto
+            // open to THIS SURVEY (which should be CURRENT SURVEY) ...
+            // old ones just say SURVEY - [DATE]"):
+            //  - CURRENT SURVEY · date = the contact's CURRENT answers,
+            //    ALL of them. An answer unchanged since an older survey
+            //    is still the current answer — the old build classified
+            //    those by timestamp and left CURRENT looking empty
+            //    (Kerry's Craig Wilder card).
+            //  - SURVEY · date = one collapsed band PER earlier date:
+            //    the previous value of any changed answer plus the
+            //    answers last set by that submission. Scales to a 3rd+
+            //    survey automatically — newest non-current date first.
+            // Attribution rows stay at the bottom, outside the bands.
             const dates = payload._answer_dates || null;
             const prev = payload._answers_prev || {};
             const latest = payload.recent_conversion_date || "";
@@ -421,25 +431,67 @@
                 const d = new Date(t);
                 return isNaN(d) ? "" : `${d.getMonth() + 1}/${d.getDate()}/${String(d.getFullYear()).slice(2)}`;
             };
-            const cur = [], older = [], attr = [];
+            const cur = [], attr = [];
+            const olderByDate = {};   // "m/d/yy" -> {ts, rows: []}
+            const oldPush = (t, row) => {
+                const lbl = fmtD(t);
+                if (!lbl) return;
+                (olderByDate[lbl] = olderByDate[lbl]
+                    || { ts: +new Date(t) || 0, rows: [] }).rows.push(row);
+            };
             for (const k of Object.keys(payload).sort()) {
                 if ((HIDE.has(k) && !ATTR_LABELS[k]) ||
                     HIDE_PREFIX.some(p => k.startsWith(p))) continue;
                 const val = pretty(payload[k]);
-                if (ATTR_LABELS[k]) { attr.push([ATTR_LABELS[k], val]); continue; }
-                (isCurrent(k) ? cur : older).push([formLabel(k), val, dates && dates[k]]);
-                if (isCurrent(k) && prev[k])
-                    older.push([formLabel(k), pretty(prev[k].v), prev[k].t]);
+                if (ATTR_LABELS[k]) { attr.push([ATTR_LABELS[k], val, "attr"]); continue; }
+                cur.push([formLabel(k), val]);
+                if (!isCurrent(k) && dates && dates[k])
+                    oldPush(dates[k], [formLabel(k), val]);
+                if (prev[k]) oldPush(prev[k].t, [formLabel(k), pretty(prev[k].v)]);
             }
-            if (!dates || !older.length)
-                return cur.map(([l, v]) => [l, v]).concat(attr);
-            const oldDate = older.map(r => r[2]).filter(Boolean).sort().pop();
-            return [["__SEC__", `This survey · ${fmtD(latest)}`]]
-                .concat(cur.map(([l, v]) => [l, v]))
-                .concat([["__SEC__", `Earlier survey · ${fmtD(oldDate)}`]])
-                .concat(older.map(([l, v]) => [l, v]))
-                .concat(attr);
+            const oldLabels = Object.keys(olderByDate)
+                .sort((a, b) => olderByDate[b].ts - olderByDate[a].ts);
+            if (!dates || !oldLabels.length) return cur.concat(attr);
+            let out = [["__SEC__", `Current survey · ${fmtD(latest)}`]].concat(cur);
+            for (const lbl of oldLabels)
+                out = out.concat([["__SEC__", `Survey · ${lbl}`]],
+                                 olderByDate[lbl].rows);
+            return out.concat(attr);
         }
+        // Render an answers table with collapsible survey bands: the
+        // CURRENT SURVEY section opens by default, earlier SURVEY · date
+        // bands start collapsed; clicking a band toggles it. Attribution
+        // rows (marked "attr") always show, after the sections.
+        function renderAnswerTable(rows) {
+            if (!rows.length) return "";
+            let html = "", sec = -1, open = true;
+            for (const r of rows) {
+                if (r[0] === "__SEC__") {
+                    sec += 1; open = sec === 0;
+                    html += `<tr class="ld-era" data-sec="${sec}" data-open="${open ? 1 : 0}"><td colspan="2">${esc(r[1])} <span class="ld-era-ch">${open ? "&#9662;" : "&#9656;"}</span></td></tr>`;
+                } else if (r[2] === "attr" || sec < 0) {
+                    html += `<tr><td class="k">${esc(r[0])}</td><td>${esc(r[1])}</td></tr>`;
+                } else {
+                    html += `<tr class="ld-secrow" data-sec="${sec}"${open ? "" : " hidden"}><td class="k">${esc(r[0])}</td><td>${esc(r[1])}</td></tr>`;
+                }
+            }
+            return `<table>${html}</table>`;
+        }
+        // One delegated binder covers every card, desktop and mobile —
+        // the tables re-render constantly, so per-render listeners would
+        // leak or miss.
+        document.addEventListener("click", e => {
+            const band = e.target.closest("tr.ld-era[data-sec]");
+            if (!band) return;
+            const table = band.closest("table");
+            if (!table) return;
+            const nowOpen = band.dataset.open !== "1";
+            band.dataset.open = nowOpen ? "1" : "0";
+            const ch = band.querySelector(".ld-era-ch");
+            if (ch) ch.innerHTML = nowOpen ? "&#9662;" : "&#9656;";
+            table.querySelectorAll(`tr.ld-secrow[data-sec="${band.dataset.sec}"]`)
+                .forEach(tr => { tr.hidden = !nowOpen; });
+        });
         // Sort accessors per key (sort select on the toolbar)
         const getName = l => ([l.first_name, l.last_name].filter(Boolean).join(" ") || "").toLowerCase();
         const SORTERS = {
@@ -690,7 +742,7 @@
             </div>
             <div class="ld-ddet ${chCls}" id="ld-det-${l.id}">
                 ${notesList ? `<table class="ld-mnotes">${notesList}</table><hr style="border:none;border-top:1px solid #E5E7EB">` : ""}
-                ${extras.length ? `<table>${extras.map(([label, v]) => label === "__SEC__" ? `<tr class="ld-era"><td colspan="2">${esc(v)}</td></tr>` : `<tr><td class="k">${esc(label)}</td><td>${esc(v)}</td></tr>`).join("")}</table>` : "<span class='ld-dsub'>No form answers.</span>"}
+                ${extras.length ? renderAnswerTable(extras) : "<span class='ld-dsub'>No form answers.</span>"}
             </div>`);
             // Mobile call-sheet card (#361): one-glance triage,
             // two-tap contact. Badges always visible; sms:/tel:/mailto:
@@ -708,7 +760,7 @@
                 ${latestNote ? `<div class="ld-noteprev"><b>${esc((latestNote.author || "?")[0])}</b> · ${esc(fmtNoteTime(latestNote.created_at))} — ${esc(latestNote.note)}</div>` : ""}
                 <details class="ld-mdetails"><summary>Details${(l.notes_log || []).length > 1 ? ` · ${l.notes_log.length} notes` : ""}</summary>
                     ${notesList ? `<table class="ld-mnotes">${notesList}</table><hr style="border:none;border-top:1px solid #F3F2EF">` : ""}
-                    ${mextras.length ? `<table>${mextras.map(([label, v]) => label === "__SEC__" ? `<tr class="ld-era"><td colspan="2">${esc(v)}</td></tr>` : `<tr><td class="k">${esc(label)}</td><td>${esc(v)}</td></tr>`).join("")}</table>` : ""}
+                    ${mextras.length ? renderAnswerTable(mextras) : ""}
                 </details>
                 <div class="ld-mactions">${primary} ${tagSel}
                     <span class="ld-menu-wrap"><button class="ld-btn" onclick="toggleMenu('ld-menu-${l.id}')">⋯</button>

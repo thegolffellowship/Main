@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.282.0";
+window.TGF_VERSION = "2.283.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.283.0",
+    date: "2026-09-01",
+    changes: [
+      "Lead Center survey sections v2 (Kerry, off the Craig Wilder card): the bands are now clickable expand/collapse toggles — CURRENT SURVEY auto-opens, older ones start collapsed. Renamed per Kerry: 'THIS SURVEY' → 'CURRENT SURVEY · date', 'EARLIER SURVEY' → 'SURVEY · date'; a 3rd submission automatically becomes the new CURRENT SURVEY with each older date getting its own SURVEY · [date] band.",
+      "Fixed the empty CURRENT section: an answer unchanged between surveys kept its old HubSpot timestamp and fell entirely under the earlier band, leaving CURRENT SURVEY blank (Wilder's card). CURRENT SURVEY now always shows the contact's full current answers; the dated bands below show what that submission set — the previous value of anything changed, plus the answers last set then.",
+    ],
+  },
   {
     version: "2.282.0",
     date: "2026-09-01",
