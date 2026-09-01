@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.280.0";
+window.TGF_VERSION = "2.281.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.281.0",
+    date: "2026-09-01",
+    changes: [
+      "Roster→pairings sync (Kerry, after WD'ing Paul Reed): approving a WD, full credit, refund, or transfer now checks the event's SAVED pairings — if the player is still seated, a yes/no popup offers to remove them, and on yes the group re-seats per the TGF adjustment standard: intact cart pairs (seats 1&2 / 3&4) keep the front seats, the leftover single slides down. Removing seat 3 slides seat 4 into 3; removing seat 1 or 2 flips an intact 3&4 pair up to 1&2 with the leftover single dropping to 3. Partial refunds don't trigger the offer (the player still plays).",
+      "The pairings panel also self-audits: when the Tracker has an active roster for the event, any saved player who is no longer on it gets an amber 'Not on the roster' banner with a one-tap Remove & re-seat button — the catch-all for removals done elsewhere or popups declined. New endpoint POST /api/events/<id>/pairings/remove-player (manager) plus bridge command scoring-pairings-remove:<event>|<player>[|dry] for retroactive cleanups.",
+      "GG-imported pairing sheets now show handicaps (Kerry: 'why aren't handicaps showing there?'): the import stores no index, so every card read '—'. Saved pairings with a missing index are enriched at read time from the canonical handicap source (avg of the last ≤20 differentials in 12 months via handicap_player_links) — the same query the generator uses — without altering the saved rows.",
+    ],
+  },
   {
     version: "2.280.0",
     date: "2026-09-01",

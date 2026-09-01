@@ -5113,6 +5113,29 @@ def api_save_pairings(event_id):
         return jsonify({"error": str(e)}), 500
 
 
+@app.route("/api/events/<int:event_id>/pairings/remove-player", methods=["POST"])
+@require_role("manager")
+def api_pairings_remove_player(event_id):
+    """Remove one player from the event's saved pairings and re-seat the
+    group per Kerry's adjustment standard (intact cart pairs keep the
+    front seats; the leftover single slides down). dry_run=true reports
+    whether/where the player sits without changing anything — the UI uses
+    it to decide whether the yes/no popup is worth showing."""
+    data = request.get_json(silent=True) or {}
+    name = (data.get("name") or "").strip()
+    if not name:
+        return jsonify({"error": "name required"}), 400
+    try:
+        from email_parser.database import remove_player_from_pairings
+        res = remove_player_from_pairings(
+            event_id, name, dry_run=bool(data.get("dry_run")))
+        return jsonify(res)
+    except Exception as e:
+        logger.exception("Pairings removal failed for event %d / %s",
+                         event_id, name)
+        return jsonify({"error": str(e)}), 500
+
+
 @app.route("/api/events/<int:event_id>/pairings/gg-rounds")
 @require_role("manager")
 def api_pairings_gg_rounds(event_id):

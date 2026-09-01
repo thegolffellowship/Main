@@ -49981,6 +49981,44 @@ def get_event_pairings(event_id: int, db_path=None) -> dict:
             (event_id,),
         ).fetchall()
 
+        # GG-imported sheets store handicap_index NULL (the widget carries
+        # no index), so the pairing cards all read "—" (Kerry 2026-09-01:
+        # "why aren't handicaps showing there?"). Enrich at read time from
+        # the canonical source — handicap_rounds via handicap_player_links,
+        # same AVG-of-last-≤20-differentials-in-12-months the generator
+        # uses — without writing back, so the saved rows stay a faithful
+        # snapshot of what the import/save provided.
+        hcp_map: dict = {}
+        if any(r["handicap_index"] is None for r in rows):
+            try:
+                hcp_rows = conn.execute(
+                    """
+                    SELECT l.customer_name, p.handicap_index
+                    FROM (
+                        SELECT player_name,
+                               AVG(differential) as handicap_index
+                        FROM (
+                            SELECT player_name, differential,
+                                   ROW_NUMBER() OVER (
+                                       PARTITION BY player_name
+                                       ORDER BY round_date DESC, id DESC
+                                   ) as rn
+                            FROM handicap_rounds
+                            WHERE differential IS NOT NULL
+                              AND round_date >= date('now', '-12 months')
+                        )
+                        WHERE rn <= 20
+                        GROUP BY player_name
+                    ) p
+                    JOIN handicap_player_links l ON l.player_name = p.player_name
+                    WHERE l.customer_name IS NOT NULL
+                    """
+                ).fetchall()
+                hcp_map = {r["customer_name"].lower(): r["handicap_index"]
+                           for r in hcp_rows}
+            except Exception:
+                hcp_map = {}
+
     result: dict = {}
     for r in rows:
         h = r["holes"]
@@ -49992,13 +50030,108 @@ def get_event_pairings(event_id: int, db_path=None) -> dict:
         if grp is None:
             grp = {"group_num": r["group_num"], "slot_label": r["slot_label"], "players": []}
             grp_list.append(grp)
+        hi = r["handicap_index"]
+        if hi is None:
+            hi = hcp_map.get((r["player_name"] or "").lower())
         grp["players"].append({
             "name": r["player_name"],
             "cart_pos": r["cart_pos"],
             "tee_choice": r["tee_choice"],
-            "handicap_index": r["handicap_index"],
+            "handicap_index": hi,
         })
     return result
+
+
+def _reseat_group_after_removal(players: list) -> list:
+    """Re-seat a pairing group after one player was removed.
+
+    Kerry's adjustment standard (2026-09-01, verbatim examples): "he's in
+    spot 3. Kelly would simply move to 3 from 4. If he were in 1 or 2, and
+    there were players in both 3 and 4, then they would flip up to 1 and 2
+    and the single would move down to 3."
+
+    Rule as ratified: original cart pairs (seats 1&2 = Cart A, 3&4 = Cart B)
+    that are still INTACT stay together and take the front seats in their
+    original order; whoever is left single slides into the next seat down.
+
+    `players` is the remaining players still carrying their ORIGINAL
+    cart_pos values; returns them re-seated 1..n (mutates cart_pos).
+    """
+    ordered = sorted(players, key=lambda p: p.get("cart_pos") or 99)
+    # Normalize missing cart positions (defensive — imports always set 1..4)
+    seen = [p.get("cart_pos") for p in ordered]
+    if any(v is None for v in seen) or len(set(seen)) != len(seen):
+        for i, p in enumerate(ordered):
+            p["cart_pos"] = i + 1
+    by_pos = {p["cart_pos"]: p for p in ordered}
+    units: list = []
+    in_unit: set = set()
+    for lo, hi in ((1, 2), (3, 4)):
+        a, b = by_pos.get(lo), by_pos.get(hi)
+        if a is not None and b is not None:
+            units.append((a, b))
+            in_unit.add(id(a)); in_unit.add(id(b))
+    singles = [p for p in ordered if id(p) not in in_unit]
+    seat = 1
+    out = []
+    for a, b in units:
+        for p in (a, b):
+            p["cart_pos"] = seat; seat += 1; out.append(p)
+    for p in singles:
+        p["cart_pos"] = seat; seat += 1; out.append(p)
+    return out
+
+
+def remove_player_from_pairings(event_id: int, player_name: str,
+                                dry_run: bool = False, db_path=None) -> dict:
+    """Remove a player from an event's saved pairings and re-seat their
+    group(s) per Kerry's adjustment standard (_reseat_group_after_removal).
+
+    Built for the roster→pairings sync (Kerry 2026-09-01: WD/credit must
+    offer to pull the player from existing pairings). Matches by
+    _cmp_person_key with generational suffixes stripped first, so
+    'Paul Reed' finds 'Paul Reed III' too. dry_run=True reports what WOULD
+    happen without writing. Groups emptied by the removal are dropped;
+    remaining groups keep their slot labels/tee times.
+    """
+    def _rm_key(nm: str):
+        parts = (nm or "").strip().split()
+        while len(parts) > 1 and parts[-1].lower().rstrip(".") in (
+                "jr", "sr", "ii", "iii", "iv", "v"):
+            parts.pop()
+        return _cmp_person_key(" ".join(parts))
+
+    pairings = get_event_pairings(event_id, db_path=db_path)
+    want = _rm_key(player_name)
+    hits = []
+    for holes, groups in pairings.items():
+        for g in groups:
+            for p in list(g.get("players") or []):
+                if _rm_key(p.get("name") or "") == want:
+                    hits.append((holes, g, p))
+    if not hits:
+        return {"found": False, "removed": 0, "groups": []}
+
+    detail = []
+    for holes, g, p in hits:
+        remaining = [q for q in g["players"] if q is not p]
+        reseated = _reseat_group_after_removal(remaining)
+        g["players"] = reseated
+        detail.append({
+            "holes": holes,
+            "group_num": g["group_num"],
+            "slot_label": g.get("slot_label"),
+            "removed": p.get("name"),
+            "after": [{"name": q.get("name"), "cart_pos": q.get("cart_pos")}
+                      for q in reseated],
+        })
+
+    if not dry_run:
+        cleaned = {h: [g for g in groups if g.get("players")]
+                   for h, groups in pairings.items()}
+        save_event_pairings(event_id, cleaned, db_path=db_path)
+    return {"found": True, "removed": len(hits), "dry_run": bool(dry_run),
+            "groups": detail}
 
 
 def get_event_print_pack(event_id: int, db_path=None) -> dict | None:

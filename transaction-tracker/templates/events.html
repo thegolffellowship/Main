@@ -2094,6 +2094,64 @@
         return (last + ", " + parts.join(" ") + " " + suffix).toLowerCase().trim();
     }
 
+    /** JS twin of database._cmp_person_key: (surname, first-initial),
+     *  suffix-stripped — 'Paul Reed III' matches 'Paul Reed'. Used only
+     *  for the pairings stale-player banner; the server re-matches with
+     *  the real _cmp_person_key on removal. */
+    function pairPersonKey(name) {
+        const parts = String(name || "").trim().split(/\s+/).filter(Boolean);
+        const suffixes = new Set(["jr", "jr.", "sr", "sr.", "ii", "iii", "iv", "v"]);
+        while (parts.length > 1 && suffixes.has(parts[parts.length - 1].toLowerCase())) parts.pop();
+        if (!parts.length) return "";
+        const last = parts.length > 1 ? parts[parts.length - 1] : parts[0];
+        const first = parts.length > 1 ? parts[0] : "";
+        return last.toLowerCase() + "|" + (first[0] || "").toLowerCase();
+    }
+
+    /** Roster→pairings sync (Kerry 2026-09-01): after a WD / credit /
+     *  refund / transfer, ask whether to also pull the player from the
+     *  event's SAVED pairings. Dry-run first so the popup only appears
+     *  when the player is actually seated; on yes the server re-seats the
+     *  group per TGF standards (intact cart pairs keep the front seats,
+     *  the leftover single slides down). */
+    async function offerPairingRemoval(eventName, playerName) {
+        if (!eventName || !playerName) return;
+        const ev = allEvents.find(e => (e.item_name || "") === eventName);
+        if (!ev) return;
+        try {
+            const dryRes = await fetch(`/api/events/${ev.id}/pairings/remove-player`, {
+                method: "POST", headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ name: playerName, dry_run: true }),
+            });
+            if (!dryRes.ok) return;
+            const dry = await dryRes.json();
+            if (!dry.found) return;
+            const where = (dry.groups || [])
+                .map(g => g.slot_label || `Group ${g.group_num}`).join(", ");
+            const ok = confirm(
+                `${playerName} is still in the saved PAIRINGS for this event` +
+                (where ? ` (${where})` : "") +
+                `.\n\nRemove from pairings too? The group re-seats per TGF ` +
+                `standards (intact cart pairs keep the front seats; the ` +
+                `leftover single slides down).`);
+            if (!ok) return;
+            const res = await fetch(`/api/events/${ev.id}/pairings/remove-player`, {
+                method: "POST", headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ name: playerName }),
+            });
+            const r = await res.json();
+            if (!res.ok || r.error) {
+                alert("Pairings removal failed: " + (r.error || res.status));
+                return;
+            }
+            // Bust the cached panel state so the next open reloads the
+            // re-seated sheet from the server.
+            delete pairingsData[ev.id];
+        } catch (err) {
+            console.error("offerPairingRemoval", err);
+        }
+    }
+
     /** Format "First Last" → "Last, First" for display. Handles suffixes. */
     function isElevatedStatus(status) {
         if (!status) return false;
@@ -5678,6 +5736,35 @@
         } else if (!state.groups_9.length && !state.groups_18.length) {
             html += '<div style="padding:1.5rem;text-align:center;color:var(--text-muted);">No pairings yet. Hit <strong>Generate</strong> to create groups.</div>';
         } else {
+            // Leftover detection (Kerry 2026-09-01): saved pairings can
+            // hold a player who has since been WD'd/credited off the
+            // roster (e.g. the popup was declined, or the removal happened
+            // elsewhere). Only meaningful when the Tracker actually has a
+            // roster for this event — GG-imported sheets on roster-less
+            // events would flag everyone.
+            const activeRegs = state.event_players || [];
+            if (activeRegs.length) {
+                const activeKeys = new Set(activeRegs.map(p => pairPersonKey(p.name)));
+                const staleSeen = new Set();
+                const stale = [];
+                [...(state.groups_9 || []), ...(state.groups_18 || [])].forEach(g => {
+                    (g.players || []).forEach(p => {
+                        const k = pairPersonKey(p.name);
+                        if (k && !activeKeys.has(k) && !staleSeen.has(k)) {
+                            staleSeen.add(k);
+                            stale.push(p.name);
+                        }
+                    });
+                });
+                if (stale.length) {
+                    html += '<div class="pairings-stale-banner" style="margin:0.5rem 0;padding:0.55rem 0.75rem;background:#FEF3C7;border:1px solid #F59E0B;border-radius:8px;font-size:0.82rem;">';
+                    html += '<strong>⚠ Not on the roster:</strong> the saved pairings still seat ';
+                    html += stale.map(n =>
+                        `<strong>${escapeHtml(n)}</strong> <button type="button" class="pair-stale-remove" data-ev-id="${ev.id}" data-name="${escapeHtml(n)}" style="margin:0 0.35rem 0 0.15rem;padding:1px 8px;border:1px solid #B45309;border-radius:999px;background:#fff;color:#B45309;font-size:0.75rem;cursor:pointer;">Remove &amp; re-seat</button>`
+                    ).join(' ');
+                    html += '</div>';
+                }
+            }
             if (isCombo || !is18Only) {
                 html += renderPairingGroups(ev, state, '9', state.groups_9);
             }
@@ -8550,6 +8637,33 @@
         bindPairingKeys();
         const state = getPairingsState(ev.id);
 
+        // Stale-player banner: remove an off-roster player from the saved
+        // sheet and re-seat their group per TGF standards.
+        container.querySelectorAll(`.pair-stale-remove[data-ev-id="${ev.id}"]`).forEach(btn => {
+            btn.addEventListener('click', async e => {
+                e.stopPropagation();
+                const nm = btn.dataset.name || '';
+                if (!confirm(`Remove ${nm} from the saved pairings and re-seat the group per TGF standards?`)) return;
+                btn.disabled = true;
+                try {
+                    const res = await fetch(`/api/events/${ev.id}/pairings/remove-player`, {
+                        method: 'POST', headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ name: nm }),
+                    });
+                    const r = await res.json();
+                    if (!res.ok || r.error) throw new Error(r.error || res.status);
+                    if (!r.found) { alert(`${nm} was not found in the saved pairings.`); return; }
+                    delete pairingsData[ev.id];
+                    await loadPairings(ev.id);
+                    pairingsOpenForEvent[ev.id] = true;
+                    rerenderDetail(container, ev);
+                } catch (err) {
+                    alert('Pairings removal failed: ' + err.message);
+                    btn.disabled = false;
+                }
+            });
+        });
+
         // Match Play confirm/decline checkboxes (rule 8 panel)
         container.querySelectorAll(`.mp-confirm-chk[data-ev-id="${ev.id}"]`).forEach(chk => {
             chk.addEventListener('change', e => {
@@ -10162,9 +10276,22 @@
                 });
                 if (!res.ok) throw new Error((await res.json()).error || "Transfer failed");
             }
+            const _crItem = allItems.find(r => r.id === evCreditItemId);
+            const _crType = evCreditType;
+            const _pairCtx = {
+                ev: (_crItem && _crItem.item_name) || "",
+                name: (_crItem && _crItem.customer) || "",
+            };
             closeEvCreditModal();
             await fetchItems();
             await fetchEvents();
+            // Roster→pairings sync (Kerry 2026-09-01): a full credit,
+            // refund, or transfer takes the player off this event — offer
+            // to pull them from saved pairings too. A PARTIAL refund is a
+            // downgrade (they still play), so no offer there.
+            if (_crType !== "partial") {
+                await offerPairingRemoval(_pairCtx.ev, _pairCtx.name);
+            }
         } catch (err) { alert(err.message); }
     }
 
@@ -11092,9 +11219,17 @@
                 }),
             });
             if (!res.ok) throw new Error((await res.json()).error || "WD failed");
+            const _wdItem = allItems.find(r => r.id === wdItemId);
+            const _pairCtx = {
+                ev: wdEventName || (_wdItem && _wdItem.item_name) || "",
+                name: (_wdItem && _wdItem.customer) || "",
+            };
             closeWdModal();
             await fetchItems();
             await fetchEvents();
+            // Roster→pairings sync (Kerry 2026-09-01): if the WD'd player
+            // is still seated in saved pairings, offer the yes/no removal.
+            await offerPairingRemoval(_pairCtx.ev, _pairCtx.name);
         } catch (err) {
             alert(err.message);
             btn.disabled = false;

@@ -1711,6 +1711,9 @@ def _scoring_dispatch(url: str, extract: str):
                                    event (ALL Net → ALL Gross); refresh=
                                    force-replaces named players' stale cards;
                                    url = the portal widget
+      scoring-pairings-remove:<event>|<player>[|dry]  pull one player from
+                                   the saved pairings + re-seat the group
+                                   per the TGF adjustment standard
       scoring-facilities           facility census (course registry v1)
       scoring-partial-credit       JSON {"item_id","amount","new_holes"?,
                                    "package_index"?,"note"?} — partial CREDIT
@@ -3424,6 +3427,41 @@ def _scoring_dispatch(url: str, extract: str):
             # plus the 75% onboarding-rule validation.
             return json.dumps(db.ghin_comparison_analysis(),
                               indent=2, default=str)
+        if cmd == "scoring-pairings-remove":
+            # "<event>|<player>[|dry]" — pull one player from the event's
+            # SAVED pairings and re-seat the group per Kerry's adjustment
+            # standard (2026-09-01: intact cart pairs keep the front seats;
+            # the leftover single slides down). Player name is parsed from
+            # the RIGHT because event names contain "|" (s9.16 TPC lesson).
+            # Bridge twin of POST /pairings/remove-player, for retroactive
+            # cleanups like Paul Reed on the s9.21 sheet.
+            _rest = arg
+            _dry = False
+            if _rest.lower().endswith("|dry"):
+                _dry = True
+                _rest = _rest[:-4]
+            _evq, _sep, _player = _rest.rpartition("|")
+            if not _sep or not _evq.strip() or not _player.strip():
+                return json.dumps({"error": "<event>|<player>[|dry]"})
+            _evq, _player = _evq.strip(), _player.strip()
+            with db._connect() as _c:
+                _erows = _c.execute(
+                    "SELECT id, item_name FROM events "
+                    "WHERE item_name LIKE '%' || ? || '%' "
+                    "ORDER BY event_date DESC", (_evq,)).fetchall()
+            if not _erows:
+                return json.dumps({"error": f"no event matches '{_evq}'"})
+            if len(_erows) > 1 and not any(
+                    r["item_name"].lower() == _evq.lower() for r in _erows):
+                return json.dumps({"error": "ambiguous event",
+                                   "matches": [r["item_name"] for r in _erows]})
+            _ev = next((r for r in _erows
+                        if r["item_name"].lower() == _evq.lower()), _erows[0])
+            out = db.remove_player_from_pairings(
+                _ev["id"], _player, dry_run=_dry)
+            out["event"] = _ev["item_name"]
+            out["event_id"] = _ev["id"]
+            return json.dumps(out, indent=2, default=str)
         if cmd == "scoring-hcp-2nines":
             # "<event>|<per_nine_json>[|apply]" — post any 18-hole event as
             # TWO 9-hole handicap rounds per player (front + back), each

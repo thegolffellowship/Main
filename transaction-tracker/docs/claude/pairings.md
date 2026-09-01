@@ -861,3 +861,51 @@ lets them be flighted"). Not changed here; flagged for ratification.
   still inferred — confirm with Kerry.
 - Requests: one per person per event; mutual locking per rule 11;
   decline releases the lock.
+
+## Roster→pairings removal sync (v2.281.0, Kerry 2026-09-01)
+
+Kerry (after WD'ing + crediting Paul Reed off s9.21, medical): *"If I
+remove a player from the ROSTER, it needs to also be auto removed from
+the PAIRINGS. A pop-up needs to come up asking if I want to remove from
+Existing Pairings with a yes/no option. If yes, then remove, and follow
+the adjustment standards on the pairings."*
+
+**The adjustment standard (Kerry's verbatim examples, now code):**
+*"Like he's in spot 3. Kelly would simply move to 3 from 4. If he were
+in 1 or 2, and there were players in both 3 and 4, then they would flip
+up to 1 and 2 and the single would move down to 3."* Generalized rule:
+original cart pairs (seats 1&2 = Cart A, 3&4 = Cart B) that remain
+INTACT after the removal stay together and take the front seats in
+original order; leftover singles slide into the next seats down. The
+group keeps its slot label / tee time; a group emptied entirely is
+dropped from the sheet.
+
+**Pieces:**
+- `database._reseat_group_after_removal(players)` — the pure reseat
+  (unit-tested against every Kerry example incl. threesome/fivesome).
+- `database.remove_player_from_pairings(event_id, name, dry_run)` —
+  finds the player via `_cmp_person_key` with generational suffixes
+  stripped ('Paul Reed' ⇢ 'REED, Paul' / 'Paul Reed III'), reseats,
+  round-trips through `save_event_pairings` (pairing_history rebuilds).
+- `POST /api/events/<id>/pairings/remove-player` `{name, dry_run}`
+  (manager) in app.py.
+- events.html: `offerPairingRemoval(eventName, playerName)` fires after
+  a successful WD, full credit, refund, or transfer — dry-run first so
+  the confirm popup only appears when the player is actually seated.
+  PARTIAL refunds don't offer (a downgrade still plays).
+- Leftover self-audit: `renderPairingsPanel` shows an amber "Not on the
+  roster" banner (`.pairings-stale-banner`) listing any saved player
+  missing from the ACTIVE roster, each with a Remove & re-seat button.
+  Gated on `state.event_players.length` so GG-imported sheets on
+  roster-less events don't flag everyone.
+- Bridge: `scoring-pairings-remove:<event>|<player>[|dry]` — player name
+  parsed from the RIGHT (rpartition) because event names contain `|`.
+
+**Handicaps on GG-imported sheets (same release):** the GG tee-sheet
+import stores `handicap_index` NULL, so imported cards all rendered "—"
+(Kerry 2026-09-01: "why aren't handicaps showing there?").
+`get_event_pairings` now enriches NULL indexes at READ time from the
+canonical query (AVG of last ≤20 differentials in 12 months via
+`handicap_player_links`) without writing back — the saved rows stay a
+faithful snapshot of what the import provided. A stored index is never
+overwritten.
