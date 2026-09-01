@@ -312,3 +312,17 @@ backfills get their own bands. Match Play / LSC rows stay in CURRENT
 tabs); the "Starts Aug 29" placeholder is retired — it renders (as a
 LIVE-badged "play a fall event to get on the board" row) only for a
 fall buy-in with no board row yet.
+
+**Spotlight perf + stands completeness (v2.285.0, Kerry 2026-09-01):**
+`_spotlight_shared` gives the customer-INDEPENDENT reads (each race's
+`get_points_race_live`, the cup and LSC projections) a 120s in-process
+TTL cache keyed per db_path — profile clicks re-ran all of them (~9s
+measured live; warm loads now ~0.6s). WHERE THEY STAND additions: a
+MONTHLY POINTS row for the current month off the `monthly_points`
+gg_snapshot (one DB read; `on_board: false` renders a "play an event
+this month" nudge — every member is automatically in); Match Play
+carries `complete` (season's `cmp_bracket` final has a winner_name) and
+folds into PAST CONTESTS under its season year; THE FELLOWSHIP CUP's
+`final` now reads the `gg_points_race_final` dial (it was hardcoded
+False — the dial already said 2026-08-16). Rows inside PAST CONTESTS
+render no status badges (Kerry: the section says COMPLETED already).
