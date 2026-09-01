@@ -1324,7 +1324,12 @@
             const refOwedRows = (ref.owed || []).map(r => {
                 let action = "";
                 if (r.referrer_venmo) {
-                    const memo = encodeURIComponent(`Referral fee for ${r.referred_name || ""}`);
+                    // Payee name leads the memo, matching the standard
+                    // winnings format "Dan Stich - Winnings for …" (Kerry
+                    // 2026-09-01); the receipt matcher regex searches for
+                    // "Referral fee for <name>" anywhere, so the prefix is
+                    // auto-complete-safe.
+                    const memo = encodeURIComponent(`${r.referrer_name ? r.referrer_name + " - " : ""}Referral fee for ${r.referred_name || ""}`);
                     const amt = Number(r.amount || 0).toFixed(2);
                     const h = (r.referrer_venmo || "").replace(/^@/, "");
                     const href = isMobileUA

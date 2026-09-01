@@ -1,5 +1,15 @@
-window.TGF_VERSION = "2.274.0";
+window.TGF_VERSION = "2.275.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.275.0",
+    date: "2026-09-01",
+    changes: [
+      "Pairings now honor manager-ADDED partner requests (Kerry: 'The generated pairings did NOT follow the requests'): a manual match row only applied when the player's signup already carried request text, so an added request for a player who signed up with none was listed on the panel but silently ignored by the generator — exactly the three violated at s9.21 Canyon Springs. Match rows now bind unconditionally (suppression still wins); verified 5/5 generate runs seat the pair together.",
+      "Pairings coloring keys off the FALL Points Race (Kerry): new fall pairing races (SA/AUSTIN FALL NET) whose green 'in the race' band comes from fall-season buy-ins in season_contests; they become each chapter's default automatically while the current fall season has enrollments (and revert when the year rolls). Standings ORDER stays unavailable until the portals publish fall points pages — a standings-mode generate says so and falls back to ABCD.",
+      "Landa Park post-correction settlement (Kerry: 'Dan Stich is paid… disregard [Hogue]… note in ledger'): Jay Hogue's $4 overpayment WAIVED with the full explanation (results corrected after payout; nets against Stich's mirrored $4 underpayment — both were paid on the pre-correction split). New bridge scoring-payout-link:<expense_id>|<tolerance>[|<note>] links one stranded receipt with an admin-approved amount tolerance and records the signed variance in tgf_overpayments pre-WAIVED, so the ledger keeps the trail; scheduled sweeps never use the override.",
+      "Referral fee Venmo memos prefill payee-first — '<Referrer> - Referral fee for <referred>' — matching the standard winnings memo format (Kerry); the receipt auto-complete regex is prefix-safe.",
+    ],
+  },
   {
     version: "2.274.0",
     date: "2026-09-01",

@@ -29009,6 +29009,7 @@ def get_tgf_overpayments(db_path: str | Path | None = None) -> list[dict]:
 def auto_match_venmo_payouts_to_tgf(
     expense_ids: list[int] | None = None,
     db_path: str | Path | None = None,
+    memo_tolerance: float | None = None,
 ) -> dict:
     """Match OUTBOUND Venmo payment receipts to pending tgf_payouts and
     mark them PAID (Kerry, 2026-07-08: "use the Venmo transaction emails
@@ -29034,6 +29035,16 @@ def auto_match_venmo_payouts_to_tgf(
     Idempotent: an expense whose ledger entry already backs payout rows
     counts as already_matched. Returns
     {matched, ambiguous, no_candidate, already_matched, errors, matches}.
+
+    memo_tolerance (admin-directed, v2.275.0 — the scoring-payout-link
+    bridge): overrides the memo-resolved ±$3.00 amount tolerance for an
+    EXPLICIT expense id, for receipts stranded when a results correction
+    re-recorded the group after payment (Landa Park: Stich paid $180.85,
+    corrected group $184.85). The strong-evidence gate is unchanged —
+    the memo must still name the event — and any variance the override
+    links across is recorded in tgf_overpayments as WAIVED (signed:
+    positive = player owes back, negative = TGF underpaid) so the ledger
+    keeps the trail. Never used by the scheduled sweeps.
     """
     summary = {"matched": 0, "ambiguous": 0, "no_candidate": 0,
                "already_matched": 0, "errors": 0, "matches": []}
@@ -29236,7 +29247,9 @@ def auto_match_venmo_payouts_to_tgf(
                     # from our computed cents by a few dollars ($37 vs
                     # $39 class). Event from the pipeline guess only: ±$1.
                     # No event at all: exact match only (v2.50.1).
-                    tol = 3.00 if memo_resolved else (1.00 if tgf_event_id is not None else 0)
+                    tol = ((memo_tolerance if memo_tolerance is not None
+                            else 3.00) if memo_resolved
+                           else (1.00 if tgf_event_id is not None else 0))
                     close = ([g for g in cands if abs(g["total"] - amt) <= tol]
                              if tol else [])
                     if len(close) == 1:
@@ -29343,6 +29356,28 @@ def auto_match_venmo_payouts_to_tgf(
                     conn.execute(
                         "UPDATE tgf_payouts SET acct_transaction_id = ?, paid_at = ? WHERE id = ?",
                         (acct_id, paid_date, r["id"]))
+                # Admin-tolerance variance trail (v2.275.0): a link the
+                # memo_tolerance override carried across a >1¢ gap gets a
+                # pre-WAIVED tgf_overpayments row (signed) so the ledger
+                # records what was actually paid vs recorded — Kerry's
+                # "disregard it... just make note in ledger" (2026-09-01).
+                _variance = round(amt - pick["total"], 2)
+                if (memo_tolerance is not None and partial_rows is None
+                        and not overpay_delta and abs(_variance) > 0.01):
+                    _ensure_tgf_overpayments(conn)
+                    if not conn.execute(
+                            "SELECT 1 FROM tgf_overpayments WHERE expense_id = ?",
+                            (exp["id"],)).fetchone():
+                        conn.execute(
+                            """INSERT INTO tgf_overpayments
+                               (customer_id, event_id, acct_transaction_id,
+                                expense_id, amount, status, note, resolved_at)
+                               VALUES (?, ?, ?, ?, ?, 'waived', ?, date('now'))""",
+                            (cid, pick["tgf_event_id"], acct_id, exp["id"],
+                             _variance,
+                             f"receipt ${amt:.2f} vs recorded "
+                             f"${pick['total']:.2f} — linked by admin "
+                             f"tolerance; variance waived"))
                 if overpay_delta:
                     _ensure_tgf_overpayments(conn)
                     dup = conn.execute(
@@ -52383,7 +52418,14 @@ def generate_event_pairings(
             "WHERE event_id = ?", (event_id,)).fetchall()}
         for it in items:
             k = _pair_key_name(it.get("customer") or "")
-            if k in _matches and (it.get("partner_request") or "").strip():
+            if k in _matches:
+                # A match row binds UNCONDITIONALLY (Kerry 2026-09-01, "The
+                # generated pairings did NOT follow the requests"): it is
+                # both the fix for unresolved signup text AND the storage
+                # for a manager-ADDED request on a player who signed up
+                # with none. The old text-presence guard made the panel
+                # list ADDED requests the generator silently ignored —
+                # exactly the three violated at s9.21 Canyon Springs.
                 it["partner_request"] = _matches[k]
             if k in _suppressed:
                 it["partner_request"] = None
@@ -53225,15 +53267,70 @@ def _random_groups(
 
 FELLOWSHIP_CUP_RACE_KEY = "fellowship_cup"
 
+# ── FALL NET pairing races (Kerry 2026-09-01: "Coloring now needs to
+# show for Fall Points Race, not the fellowship cup.") ─────────────────
+# The fall races are LIVE (kicked off 8/29) but have no GG standings
+# page yet, so they exist here as PAIRING-level races: the "in the race"
+# coloring comes from season_contests fall-season buy-ins (the same rows
+# the Events roster's Fall column reads); standings ORDER stays
+# unavailable until the portals publish fall points pages — at which
+# point they graduate into _GG_POINTS_RACES like the city races.
+_FALL_PAIRING_RACES = {
+    "san_antonio_fall_net": {"label": "SA FALL NET", "chapter": "San Antonio"},
+    "austin_fall_net": {"label": "AUSTIN FALL NET", "chapter": "Austin"},
+}
+
+
+def _fall_season_str() -> str:
+    from .timezone_utils import today_central
+    return f"{today_central().year} Fall"
+
+
+def _fall_race_key_for(chapter: str | None) -> str | None:
+    ch = (chapter or "").strip().lower()
+    for k, cfg in _FALL_PAIRING_RACES.items():
+        if cfg["chapter"].lower() == ch:
+            return k
+    return None
+
+
+def _fall_enrollment(chapter: str | None, db_path=None) -> dict:
+    """{customer_id | name-key: True} for the chapter's CURRENT
+    fall-season NET Points Race buy-ins."""
+    out: dict = {}
+    try:
+        with _connect(db_path) as conn:
+            for r in conn.execute(
+                    "SELECT customer_id, customer_name FROM season_contests "
+                    "WHERE contest_type = 'NET Points Race' AND season = ? "
+                    "AND LOWER(COALESCE(chapter, '')) = ?",
+                    (_fall_season_str(),
+                     (chapter or "").strip().lower())).fetchall():
+                if r["customer_id"]:
+                    out[int(r["customer_id"])] = True
+                k = _pair_key_name(r["customer_name"] or "")
+                if k:
+                    out.setdefault(k, True)
+    except sqlite3.Error:
+        pass
+    return out
+
 
 def _default_pairing_race(chapter: str | None,
-                          event_name: str | None = None) -> str | None:
+                          event_name: str | None = None,
+                          db_path=None) -> str | None:
     """The race an event's pairings order by unless told otherwise.
 
-    A chapter event defaults to that chapter's own City NET race. Matching
-    on chapter alone would be wrong: players_cup_gross is also tagged
-    "San Antonio", so the NET check is what stops an SA field being paired
-    off the GROSS Players Cup.
+    FALL-FORWARD (Kerry 2026-09-01): once a chapter has CURRENT
+    fall-season buy-ins, its FALL NET race is the live one — pairings
+    color (and, once GG publishes fall standings, order) off it. This
+    reverts automatically when the year rolls over and the new fall
+    season has no enrollments yet.
+
+    Otherwise a chapter event defaults to that chapter's own City NET
+    race. Matching on chapter alone would be wrong: players_cup_gross is
+    also tagged "San Antonio", so the NET check is what stops an SA field
+    being paired off the GROSS Players Cup.
 
     ONLY THE TGF CHAMPIONSHIP defaults to THE FELLOWSHIP CUP (Kerry
     2026-07-30) — the combined reset standings both City NET races convert
@@ -53246,6 +53343,9 @@ def _default_pairing_race(chapter: str | None,
     "CHAMPIONSHIP" never reaches the Fellowship Cup branch.
     """
     ch = (chapter or "").strip().lower()
+    fk = _fall_race_key_for(chapter)
+    if fk and _fall_enrollment(chapter, db_path=db_path):
+        return fk
     for k, cfg in _GG_POINTS_RACES.items():
         if (cfg.get("contest_type") or "").upper().startswith("NET") and \
                 (cfg.get("chapter") or "").strip().lower() == ch and ch:
@@ -53257,7 +53357,8 @@ def _default_pairing_race(chapter: str | None,
 
 
 def pairing_race_options(chapter: str | None = None,
-                         event_name: str | None = None) -> list:
+                         event_name: str | None = None,
+                         db_path=None) -> list:
     """Season-contest standings a manager can order pairings by.
 
     Every configured race plus THE FELLOWSHIP CUP, with the chapter's
@@ -53265,8 +53366,16 @@ def pairing_race_options(chapter: str | None = None,
     right race is not always the chapter's own — the TGF Championship uses
     the Fellowship Cup.
     """
-    default = _default_pairing_race(chapter, event_name)
+    default = _default_pairing_race(chapter, event_name, db_path=db_path)
     out = []
+    for k, cfg in _FALL_PAIRING_RACES.items():
+        out.append({
+            "race_key": k,
+            "label": cfg["label"],
+            "chapter": cfg["chapter"],
+            "contest_type": "NET Points Race (Fall)",
+            "is_default": k == default,
+        })
     for k, cfg in _GG_POINTS_RACES.items():
         out.append({
             "race_key": k,
@@ -53337,12 +53446,25 @@ def _standings_rank_map(chapter: str | None, race_key: str | None = None,
     exactly the failure this refresh exists to prevent.
     """
     notes = []
-    key = race_key or _default_pairing_race(chapter, event_name)
+    key = race_key or _default_pairing_race(chapter, event_name,
+                                            db_path=db_path)
     if not key:
         notes.append(f"No points race found for chapter '{chapter}' — "
                      f"pairings fell back to random order.")
         return (({}, None, notes, {"points": {}, "enrolled": {}})
                 if _with_meta else ({}, None, notes))
+    if key in _FALL_PAIRING_RACES:
+        # Fall races (Kerry 2026-09-01): no GG standings page yet, so no
+        # rank order — but the fall BUY-INS still color the sheet, which
+        # is the point. Standings-mode generates fall back to ABCD via
+        # the empty rank map's existing fallback path.
+        cfg = _FALL_PAIRING_RACES[key]
+        enrolled = _fall_enrollment(cfg["chapter"], db_path=db_path)
+        notes.append(f"{cfg['label']}: colors show fall buy-ins; standings "
+                     "order isn't available until the portal publishes its "
+                     "fall points page.")
+        return (({}, key, notes, {"points": {}, "enrolled": enrolled})
+                if _with_meta else ({}, key, notes))
     try:
         if key == FELLOWSHIP_CUP_RACE_KEY:
             # TGF-wide combined reset standings — the TGF Championship is

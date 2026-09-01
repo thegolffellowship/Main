@@ -3686,6 +3686,35 @@ def _scoring_dispatch(url: str, extract: str):
             # Sweep outbound Venmo payout receipts (expense inbox) against
             # pending tgf_payouts and mark matches PAID (v2.50.0)
             return json.dumps(db.auto_match_venmo_payouts_to_tgf(), indent=2)
+        if cmd == "scoring-payout-link":
+            # "scoring-payout-link:<expense_id>|<tolerance>[|<note>]" —
+            # link ONE stranded P2P receipt to its pending payout group
+            # with an ADMIN-approved amount tolerance (v2.275.0, Kerry
+            # 2026-09-01 "Dan Stich is paid": a results correction
+            # re-recorded the group AFTER the payment went out, so the
+            # $180.85 receipt missed the ±$3 memo tolerance on the
+            # $184.85 group). The memo must still resolve the event
+            # (strong-evidence gate unchanged); the variance lands in
+            # tgf_overpayments pre-WAIVED, and <note> is appended to it.
+            _p = [x.strip() for x in arg.split("|")]
+            if not _p or not _p[0].isdigit():
+                return json.dumps(
+                    {"error": "<expense_id>|<tolerance>[|<note>]"})
+            _eid = int(_p[0])
+            _tol = float(_p[1]) if len(_p) > 1 and _p[1] else 3.00
+            _note = "|".join(_p[2:]).strip() if len(_p) > 2 else ""
+            res = db.auto_match_venmo_payouts_to_tgf(
+                expense_ids=[_eid], memo_tolerance=_tol)
+            if _note and res.get("matched"):
+                with db._connect() as _c:
+                    _c.execute(
+                        "UPDATE tgf_overpayments SET note = "
+                        "COALESCE(note || ' · ', '') || ? "
+                        "WHERE expense_id = ?", (_note, _eid))
+                    _c.commit()
+            _audit("scoring-payout-link",
+                   f"expense={_eid} tolerance={_tol}", outcome="ok")
+            return json.dumps(res, indent=2)
         if cmd == "scoring-monthly-payouts":
             # Record completed months' Monthly Points winners as SEASON
             # CONTEST payout accounts (v2.51.0); ":force" re-records

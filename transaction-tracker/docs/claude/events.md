@@ -59,6 +59,40 @@ credit/transfer/WD (internal ledger moves); anything recording a REAL
 outbound payment (refund, partial-refund, payout-credit, payout
 recording, mark-paid) is admin-only.
 
+## Pairings: fall races + manual-request binding (Kerry 2026-09-01, v2.275.0)
+
+- **Fall pairing races**: `_FALL_PAIRING_RACES` (san_antonio_fall_net /
+  austin_fall_net) are PAIRING-level races — "in the race" coloring
+  comes from season_contests fall-season buy-ins (`_fall_enrollment`,
+  season "{year} Fall" via today_central); standings ORDER is
+  unavailable until the portals publish fall points pages, so a
+  standings-mode generate falls back to ABCD with a note. FALL-FORWARD
+  default: `_default_pairing_race` returns the chapter's fall race
+  whenever the CURRENT fall season has buy-ins (reverts automatically
+  when the year rolls); the plain pairings GET passes no race_key, so
+  load-time coloring keys off this default for both chapters.
+- **Manual ADDED requests bind unconditionally**: a
+  pairing_request_matches row used to apply only when the roster row
+  already carried signup text — the requests panel listed manager-ADDED
+  requests (players who signed up with none) that the generator
+  silently ignored (three violated at s9.21 Canyon Springs). The
+  text-presence guard is gone; suppression still wins.
+
+## Payouts: admin-tolerance receipt link (v2.275.0, Kerry 2026-09-01)
+
+A results correction can re-record a group AFTER its payment went out
+(Landa Park GG-purse re-record: Stich paid $180.85, corrected group
+$184.85 — outside the ±$3 memo tolerance; Hogue the $4 mirror,
+overpaid). Bridge `scoring-payout-link:<expense_id>|<tolerance>[|<note>]`
+runs the venmo matcher for ONE receipt with an explicit tolerance
+(`auto_match_venmo_payouts_to_tgf(memo_tolerance=…)`; strong-evidence
+memo gate unchanged; never used by scheduled sweeps) and records the
+variance in tgf_overpayments pre-WAIVED (signed: negative = TGF
+underpaid) with the note appended. Overpaid mirrors resolve with
+`scoring-overpay-resolve:<id>|waived||<date>|<note>`. Referral Venmo
+memos prefill "<Referrer> - Referral fee for <referred>" (payee-first
+standard format; the receipt regex searches, so the prefix is safe).
+
 ## GG-purse-wins on Ind Net / Ind Gross (Kerry-ratified 2026-08-31, v2.273.0)
 
 Extends Kerry's 2026-08-02 "GG-posted purse wins over the matrix" rule
