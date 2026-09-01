@@ -11370,12 +11370,36 @@ def get_player_spotlight(customer_id: int,
     #    standing off the persisted snapshot (daily scheduler + Refresh
     #    keep it warm), so it costs one DB read, not a GG walk. ──
     monthly = None
+    monthly_past = []
     try:
         _msnap = load_gg_snapshot("monthly_points", db_path) or {}
         _cur_mo = None
         for _m in (_msnap.get("months") or []):
             if not _m.get("complete"):
                 _cur_mo = _m   # months come sorted; last incomplete = current
+                continue
+            # Completed months the player actually posted in feed the
+            # PAST CONTESTS list (Kerry 2026-09-01: "show past monthly
+            # results in PAST CONTESTS, but below all the majors from
+            # latest to earliest").
+            _mr = next((r for r in (_m.get("standings") or [])
+                        if r.get("customer_id") == customer_id), None)
+            if not _mr:
+                continue
+            _won = any(w.get("customer_id") == customer_id
+                       for w in (_m.get("winners") or []))
+            monthly_past.append({
+                "month": _m.get("name"),
+                "key": _m.get("month") or "",
+                "rank": _mr.get("rank_label") or _mr.get("rank"),
+                "points": _mr.get("points"),
+                "rounds": _mr.get("rounds"),
+                "n_players": len(_m.get("standings") or []),
+                "won": _won,
+                "share": next((w.get("share") for w in (_m.get("winners") or [])
+                               if w.get("customer_id") == customer_id), None),
+            })
+        monthly_past.sort(key=lambda m: m["key"], reverse=True)
         if _cur_mo:
             _mrow = next((r for r in (_cur_mo.get("standings") or [])
                           if r.get("customer_id") == customer_id), None)
@@ -11660,6 +11684,7 @@ def get_player_spotlight(customer_id: int,
         "fall_buyins": fall,
         "match_play": match_play,
         "monthly": monthly,
+        "monthly_past": monthly_past,
         "lone_star_cup": lsc,
         "recent_payouts": recent_payouts,
         "recent_events": recent_events,

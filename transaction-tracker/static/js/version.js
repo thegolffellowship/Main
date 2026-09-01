@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.285.0";
+window.TGF_VERSION = "2.285.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.285.1",
+    date: "2026-09-01",
+    changes: [
+      "PAST CONTESTS now includes completed MONTHLY results (Kerry): each finished month the player posted in shows rank of field, points, rounds, and a 🏆 with the winnings share for months they won — listed BELOW all the majors within each year group, latest month to earliest. Reads the persisted monthly snapshot, so it adds no load time.",
+    ],
+  },
   {
     version: "2.285.0",
     date: "2026-09-01",

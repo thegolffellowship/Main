@@ -595,14 +595,33 @@
                     null,
                     `<span class="spt-badge live">Live</span>`));
             });
+            // Completed MONTHLY results also live in PAST CONTESTS —
+            // below all the majors, latest month to earliest (Kerry
+            // 2026-09-01). Server sends monthly_past sorted newest-first.
+            const pastMoByYear = {};
+            (d.monthly_past || []).forEach(m => {
+                const y = String(m.key || "").slice(0, 4) || String(new Date().getFullYear());
+                const meta = [`${m.points ?? 0} pts`,
+                              m.rounds != null ? `${m.rounds} rounds` : null,
+                              m.won ? `won${m.share != null ? " $" + m.share : ""} 🏆` : null]
+                    .filter(Boolean).join(" · ");
+                (pastMoByYear[y] = pastMoByYear[y] || []).push(standRow(
+                    esc(String(m.rank ?? "—")), "#1B1B1B", `of ${m.n_players}`,
+                    `Monthly Points · ${String(m.month || "")}`, meta, pillIn,
+                    `${contestsBase}#race=monthly`));
+            });
             // PAST CONTESTS: collapsed by default, newest year first, a
-            // year band over each group so history scales (Kerry 2026-09-01).
-            const pastYears = Object.keys(pastByYear).sort((a, b) => b - a);
-            const nPast = pastYears.reduce((n, y) => n + pastByYear[y].length, 0);
+            // year band over each group (majors first, then that year's
+            // monthly results) so history scales (Kerry 2026-09-01).
+            const pastYears = [...new Set([...Object.keys(pastByYear), ...Object.keys(pastMoByYear)])]
+                .sort((a, b) => b - a);
+            const nPast = pastYears.reduce((n, y) =>
+                n + (pastByYear[y] || []).length + (pastMoByYear[y] || []).length, 0);
             const pastHtml = nPast
                 ? `<details class="spt-past"><summary class="spt-stand-band">Past Contests` +
                   `<span class="spt-past-n">· ${nPast}</span><span class="spt-past-ch">&rsaquo;</span></summary>` +
-                  pastYears.map(y => `<div class="spt-past-year">${esc(y)}</div>${pastByYear[y].join("")}`).join("") +
+                  pastYears.map(y => `<div class="spt-past-year">${esc(y)}</div>` +
+                      (pastByYear[y] || []).join("") + (pastMoByYear[y] || []).join("")).join("") +
                   `</details>`
                 : "";
             const stands = (rows.length || nPast)
