@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.278.1";
+window.TGF_VERSION = "2.278.2";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.278.2",
+    date: "2026-09-01",
+    changes: [
+      "'Days don't work' added to the lead tag dropdown (Kerry — the Daniel Garza disposition: only available W–F). Set live in the lead_tag_options dial and in the seed; it does NOT auto-dismiss (unlike Too expensive / Bad contact) since a schedule mismatch can change with the calendar — say the word if it should deactivate too.",
+    ],
+  },
   {
     version: "2.278.1",
     date: "2026-09-01",

@@ -1338,8 +1338,8 @@ def get_lead_export_rows(chapter: str,
 # new/touched/converted/dismissed pipeline.
 DEFAULT_TAG_OPTIONS = ["Left VM", "Texted", "Sent email", "No answer",
                        "Call back", "Interested", "Coming to event",
-                       "Too expensive", "Not now", "Bad contact",
-                       "Registered event", "Became member"]
+                       "Too expensive", "Days don't work", "Not now",
+                       "Bad contact", "Registered event", "Became member"]
 
 # Tags that deactivate the lead on selection (Kerry 2026-08-31, the
 # Stetson Aaron case: "Too expensive right now" — don't delete, just
