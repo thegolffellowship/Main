@@ -12853,6 +12853,14 @@ _GG_GAME_PATTERNS = [
     ("longest_putt", r"LONGEST\s+PUTT"),
     ("hio", r"HOLE\s*[- ]?\s*IN\s*[- ]?\s*ONE|\bHIO\b"),
     ("team_net", r"\b(?:TEAM|CART)\s+NET\b"),
+    # GG-purse-wins extension (Kerry-ratified 2026-08-31, extending his
+    # 2026-08-02 "allow me to adjust GAMES money" rule from Team Net/CTP
+    # to the computed games): capture the Ind Net / Ind Gross boards'
+    # posted purses so Kerry's GG purse config (e.g. Landa Park's
+    # 40/30/30 gross flight split) flows into the Payouts assembly.
+    # "ALL Net/Gross" boards don't match (no INDIVIDUAL prefix).
+    ("individual_net", r"INDIVIDUAL\s+NET"),
+    ("individual_gross", r"INDIVIDUAL\s+GROSS"),
 ]
 
 
@@ -12894,52 +12902,94 @@ def _ensure_gg_game_results_tables(conn: sqlite3.Connection) -> None:
                  "ON gg_game_results(event_id, game)")
 
 
-def _game_winners_from_table(table: list) -> list[dict]:
-    """Winner rows from a GG proxies/team result table.
+def _split_board_sections(table: list) -> list[tuple]:
+    """[(section_label|None, rows)] — a FLIGHTED GG board renders as ONE
+    table whose flights are separated by single-cell label rows ("LOW
+    Flight") each followed by that flight's own header row. Spacer rows,
+    &nbsp; expand placeholders, and the "Total Purse Allocated" footer
+    drop out. An unsectioned table comes back as [(None, table)] so the
+    single-header parse path is byte-for-byte what it was."""
+    sections: list = []
+    cur_label, cur_rows = None, []
+    saw_label = False
+    for r in table:
+        vals = [(c or "").replace("\xa0", " ").strip() for c in r]
+        non_empty = [v for v in vals if v]
+        if not non_empty:
+            continue
+        if len(vals) == 1:
+            txt = non_empty[0]
+            if re.search(r"total\s+purse", txt, re.I):
+                continue
+            saw_label = True
+            if cur_rows:
+                sections.append((cur_label, cur_rows))
+            cur_label, cur_rows = txt, []
+            continue
+        cur_rows.append(r)
+    if cur_rows:
+        sections.append((cur_label, cur_rows))
+    if not saw_label:
+        return [(None, table)]
+    return sections
 
-    Returns [{player, chapter, position, detail, purse, is_team}].
+
+def _game_winners_from_table(table: list) -> list[dict]:
+    """Winner rows from a GG game-result board table.
+
+    Returns [{player, chapter, position, detail, purse, is_team, section}].
     Winners = rows with purse > 0; if no purse column/values, rows at
-    position 1 (incl. "T1" ties). Blank/notice rows (len mismatch) skip.
+    position 1 (incl. "T1" ties) — evaluated PER SECTION, since flighted
+    boards (Ind Net / Ind Gross) pack every flight into one table and
+    each flight has its own winner. Blank/notice rows (len mismatch)
+    skip. Unsectioned tables (CTP / Team Net / proxies) parse exactly as
+    before, with section = None.
     """
     if not table or not table[0]:
         return []
-    head = [(c or "").strip().lower() for c in table[0]]
-
-    def col(*names):
-        for n in names:
-            for i, h in enumerate(head):
-                if n in h:
-                    return i
-        return -1
-
-    pos_i = col("pos")
-    player_i = col("player", "foursome", "team", "twosome", "cart")
-    purse_i = col("purse")
-    detail_i = col("detail")
-    if player_i < 0:
-        return []
-    is_team = 1 if "player" not in head[player_i] else 0
-    rows = []
-    for r in table[1:]:
-        if len(r) != len(head):
+    winners: list = []
+    for section, sec_rows in _split_board_sections(table):
+        if not sec_rows or not sec_rows[0]:
             continue
-        raw = (r[player_i] or "").strip()
-        if not raw:
+        head = [(c or "").strip().lower() for c in sec_rows[0]]
+
+        def col(*names):
+            for n in names:
+                for i, h in enumerate(head):
+                    if n in h:
+                        return i
+            return -1
+
+        pos_i = col("pos")
+        player_i = col("player", "foursome", "team", "twosome", "cart")
+        purse_i = col("purse")
+        detail_i = col("detail")
+        if player_i < 0:
             continue
-        m = re.search(r"\s+TGF\s+([A-Za-z .'-]+)$", raw)
-        chapter = m.group(1).strip() if m else None
-        name = raw[:m.start()].strip() if m else raw
-        rows.append({
-            "player": name, "chapter": chapter,
-            "position": (r[pos_i] or "").strip() if pos_i > -1 else "",
-            "detail": (r[detail_i] or "").strip() if detail_i > -1 else None,
-            "purse": _parse_money(r[purse_i]) if purse_i > -1 else 0.0,
-            "is_team": is_team,
-        })
-    winners = [r for r in rows if r["purse"] > 0]
-    if not winners:
-        winners = [r for r in rows
-                   if re.fullmatch(r"t?1\.?", r["position"].lower())]
+        is_team = 1 if "player" not in head[player_i] else 0
+        rows = []
+        for r in sec_rows[1:]:
+            if len(r) != len(head):
+                continue
+            raw = (r[player_i] or "").strip()
+            if not raw:
+                continue
+            m = re.search(r"\s+TGF\s+([A-Za-z .'-]+)$", raw)
+            chapter = m.group(1).strip() if m else None
+            name = raw[:m.start()].strip() if m else raw
+            rows.append({
+                "player": name, "chapter": chapter,
+                "position": (r[pos_i] or "").strip() if pos_i > -1 else "",
+                "detail": (r[detail_i] or "").strip() if detail_i > -1 else None,
+                "purse": _parse_money(r[purse_i]) if purse_i > -1 else 0.0,
+                "is_team": is_team,
+                "section": section,
+            })
+        sec_winners = [r for r in rows if r["purse"] > 0]
+        if not sec_winners:
+            sec_winners = [r for r in rows
+                           if re.fullmatch(r"t?1\.?", r["position"].lower())]
+        winners.extend(sec_winners)
     return winners
 
 
@@ -12976,7 +13026,8 @@ def import_gg_game_results(widget_url: str, db_path: str | Path = DB_PATH,
     from time import monotonic
     from datetime import date as _date, timedelta as _timedelta
     from urllib.parse import urlparse, parse_qs, urlencode, urlunparse
-    from golf_genius_sync import fetch_public_page, parse_page_structure
+    from golf_genius_sync import (fetch_public_page, parse_page_structure,
+                                  _unwrap_js_string)
     from .timezone_utils import today_central
 
     started = monotonic()
@@ -13088,7 +13139,15 @@ def import_gg_game_results(widget_url: str, db_path: str | Path = DB_PATH,
                     continue
                 if href.startswith("/"):
                     href = f"https://{host}{href}"
-                tstruct = parse_page_structure(fetch(href), href)
+                raw_html = fetch(href)
+                tstruct = parse_page_structure(raw_html, href)
+                if not (tstruct.get("tables") or []):
+                    # Ind Net / Ind Gross boards answer as a JS partial
+                    # (window.glg…toggleEvent("<escaped html>")) — unwrap
+                    # and re-parse, same trick as the flights walker.
+                    unwrapped = _unwrap_js_string(raw_html)
+                    if unwrapped:
+                        tstruct = parse_page_structure(unwrapped, href)
                 tid = tid_m.group(1)
                 fresh: list = []
                 for table in tstruct.get("tables") or []:
@@ -13127,7 +13186,11 @@ def import_gg_game_results(widget_url: str, db_path: str | Path = DB_PATH,
                                          event_id = COALESCE(excluded.event_id, gg_game_results.event_id)""",
                         (ev_id, ev_code, rid, tid, game, text,
                          cid, w["player"], w["is_team"], w["chapter"],
-                         w["position"], w["detail"], w["purse"]))
+                         w["position"],
+                         # Flighted boards: the section label (LOW Flight /
+                         # FLIGHT 2 | HDCP 6 - 12) rides in detail so the
+                         # payout description can name the flight.
+                         w["detail"] or w.get("section"), w["purse"]))
                     result["winners_recorded"] += 1
                 # REPLACE semantics per tournament (v2.126.3): drop rows a
                 # previous walk stored that are NOT in the current winner
@@ -48146,11 +48209,44 @@ def assemble_event_game_payouts(event_name: str, db_path=None) -> dict:
                     notes.append("TGF MVP pot paid to the sole City MVP "
                                  "(linked event produced no MVP)")
 
-    # ── Individual Net (per-flight ladders, tie splits) ──
+    # GG-purse-wins for the computed games (Kerry-ratified 2026-08-31,
+    # extending his 2026-08-02 Team Net/CTP rule): when the Ind Net /
+    # Ind Gross GG board carries posted purses, those ARE the payouts —
+    # Kerry tunes place money and flight splits directly on GG (Landa
+    # Park gross paid 40/30/30 across flights; no lever mode reproduces
+    # that). The matrix ladder + shadow determination stay the fallback
+    # for boards with no purse posted.
+    def _gg_purse_rows(game_key, prefix):
+        picked = [r for r in gg_rows if r["game"] == game_key
+                  and (r.get("purse") or 0) > 0]
+        out_rows = []
+        for r in picked:
+            pos = (r.get("position") or "").strip()
+            pm = re.search(r"(\d+)", pos)
+            suffix = ""
+            if pm:
+                n = int(pm.group(1))
+                suffix = {1: "1st", 2: "2nd", 3: "3rd"}.get(n, f"{n}th")
+                if pos.upper().startswith("T"):
+                    suffix += " (T)"
+            fl = (r.get("detail") or "").strip()
+            desc = " ".join(x for x in [prefix, fl, suffix] if x) + " (GG $)"
+            out_rows.append({"golferName": r["player_name"],
+                             "category": game_key,
+                             "amount": round(float(r["purse"]), 2),
+                             "description": desc})
+        return out_rows
+
+    # ── Individual Net (GG purses first; per-flight ladders, tie splits) ──
     net_flights = int(_matrix_num(g_net.get("netFlights")) or 1)
     if _matrix_num(g_net.get("individualNet")) > 0 and counts["net"] >= 2:
-        d = determine_event_game_results(ev["item_name"], "individual_net",
-                                         flights=net_flights, db_path=db_path)
+        _gg_net = _gg_purse_rows("individual_net", "Ind Net")
+        if _gg_net:
+            rows.extend(_gg_net)
+            d = {"status": "gg_purse"}
+        else:
+            d = determine_event_game_results(ev["item_name"], "individual_net",
+                                             flights=net_flights, db_path=db_path)
         if d.get("status") == "determined":
             if holes == 18:
                 # Multi-event 18-hole day (Kerry-ratified 2026-07-31, mirrors
@@ -48187,7 +48283,7 @@ def assemble_event_game_payouts(event_name: str, db_path=None) -> dict:
                 rows.extend(_rows_from_place_ladder(
                     fl.get("ranking") or [], flight_amounts[i] if i < len(flight_amounts) else [],
                     "individual_net", f"Ind Net {fl['flight']}"))
-        else:
+        elif d.get("status") != "gg_purse":
             notes.append(f"Individual Net: {d.get('status', 'unknown')} — skipped")
 
     # ── Skins (gross; ½-net rule pending below 8 gross buyers on 9h) ──
@@ -48230,11 +48326,16 @@ def assemble_event_game_payouts(event_name: str, db_path=None) -> dict:
             else:
                 notes.append(f"Skins: {d.get('status', 'unknown')} — skipped")
 
-    # ── Individual Gross (per flight) ──
+    # ── Individual Gross (GG purses first; per flight) ──
     if _matrix_num(g_gross.get("individualGross")) > 0:
         g_flights = max(1, int(_matrix_num(g_gross.get("grossFlights")) or 1))
-        d = determine_event_game_results(ev["item_name"], "individual_gross",
-                                         flights=g_flights, db_path=db_path)
+        _gg_gross = _gg_purse_rows("individual_gross", "Ind Gross")
+        if _gg_gross:
+            rows.extend(_gg_gross)
+            d = {"status": "gg_purse"}
+        else:
+            d = determine_event_game_results(ev["item_name"], "individual_gross",
+                                             flights=g_flights, db_path=db_path)
         if d.get("status") == "determined":
             # Flight-pot LEVER (Kerry 2026-07-22 — INTERIM, final rule
             # pending his ratification): app_setting
@@ -48291,7 +48392,7 @@ def assemble_event_game_payouts(event_name: str, db_path=None) -> dict:
                 rows.extend(_rows_from_place_ladder(
                     fl.get("ranking") or [], amts,
                     "individual_gross", f"Ind Gross {fl['flight']}"))
-        else:
+        elif d.get("status") != "gg_purse":
             notes.append(f"Ind. Gross: {d.get('status', 'unknown')} — skipped")
 
     notes.append("Hole-in-One is an accruing cross-event pot — never auto-recorded")

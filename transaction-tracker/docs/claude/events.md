@@ -59,6 +59,25 @@ credit/transfer/WD (internal ledger moves); anything recording a REAL
 outbound payment (refund, partial-refund, payout-credit, payout
 recording, mark-paid) is admin-only.
 
+## GG-purse-wins on Ind Net / Ind Gross (Kerry-ratified 2026-08-31, v2.273.0)
+
+Extends Kerry's 2026-08-02 "GG-posted purse wins over the matrix" rule
+(live for Team Net + CTP since v2.188.x) to the computed games.
+`import_gg_game_results` now also walks the INDIVIDUAL Net / INDIVIDUAL
+Gross boards (added to `_GG_GAME_PATTERNS`): these boards answer as JS
+partials (unwrap fallback via `_unwrap_js_string`) and pack every
+flight into ONE table with single-cell label rows, so
+`_game_winners_from_table` is section-aware (`_split_board_sections`;
+the flight label rides in `gg_game_results.detail`). In
+`assemble_event_game_payouts`, when a game's board carries posted
+purses (> 0), those rows ARE the payouts — descriptions end "(GG $)" —
+and the matrix ladder + shadow determination stay the fallback for
+boards with no purse posted. Why: Kerry tunes place money and flight
+splits directly on GG (Landa Park's Ind Gross paid flights 40/30/30 —
+$48/$36/$36 — which neither `gross_flight_pot_mode` lever mode can
+reproduce). The hourly games-results re-walk keeps his GG edits flowing
+into re-recorded payouts. Tests: `test_gg_purse_wins.py`.
+
 ## Events list ordering (v2.46.0)
 Default date sort per bucket: Upcoming soonest-first; Past AND All
 Events most-recent-first (Kerry). An explicit column-header sort

@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.272.0";
+window.TGF_VERSION = "2.273.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.273.0",
+    date: "2026-08-31",
+    changes: [
+      "GG-purse-wins extended to Individual Net + Individual Gross (Kerry-ratified, completing his 2026-08-02 'adjust GAMES money on GG' rule that already governed Team Net/CTP): the games-results walker now reads the INDIVIDUAL boards too — they answer as JS partials (unwrap fallback) and pack all flights into one table with label rows, so the winner parser is section-aware and stores the flight in the detail column. When a board carries posted purses, the payout assembly pays exactly those rows (descriptions marked 'GG $'); the matrix ladder stays the fallback for boards with no purse posted. Fixes the Landa Park Ind Gross $48/$36/$36 vs lever $48/$40/$32 gap; Kerry's GG purse edits now flow through the hourly re-walk automatically. Tests in test_gg_purse_wins.py.",
+      "Straiton's Landa Park handicap differentials re-posted from his corrected card (Front 9 → 1.3, Back 9 → −2.0, index 0.7 → 0.1): the card refresh had correctly deleted his two bridged handicap_rounds rows along with the stale scorecard, and the 2nines re-run re-posted ONLY his (108 other nine-records skipped as already posted).",
+    ],
+  },
   {
     version: "2.272.0",
     date: "2026-08-31",
