@@ -235,6 +235,15 @@ real conversions), ➕ Note promoted to primary on touched rows, modal
 badge chips muted (Tu+Sa / All of it / SA invites / SA ad) so
 exceptions read as signal, toolbar search box (name/email/phone).
 
+## Drill-down triage filters (Kerry 2026-09-01, v2.280.0)
+
+Second toolbar row: AVAILABILITY (Both|Tue|Sat|None), IMPORTANCE
+(All|Golf|Competition|Community), INVITES (Both|Austin|SA|None) —
+single-select per group with click-again-to-clear, ANDed together and
+with chapter/status/search. `triageOf(l)` classifies off the CURRENT
+form's answers (rawPref exact-key rule); unanswered questions match
+only when that group is unfiltered.
+
 ## Re-submitter answer separation + real-customer badge (v2.278.1)
 
 HubSpot merges every form submission into one contact (per-property

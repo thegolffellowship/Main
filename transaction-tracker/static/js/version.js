@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.279.0";
+window.TGF_VERSION = "2.280.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.280.0",
+    date: "2026-09-01",
+    changes: [
+      "Lead Center drill-down filters (Kerry): a second toolbar row with three labeled toggle groups — AVAILABILITY (Both | Tue | Sat | None), IMPORTANCE (All | Golf | Competition | Community), INVITES (Both | Austin | SA | None) — that AND together and with the existing chapter/status/search filters. Click a chip to filter, click it again to clear; values classify off each lead's CURRENT survey answers (same exact-key-first rule as the row chips), and leads who didn't answer a question only appear when that group is unfiltered.",
+    ],
+  },
   {
     version: "2.279.0",
     date: "2026-09-01",

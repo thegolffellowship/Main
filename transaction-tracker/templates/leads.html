@@ -39,6 +39,12 @@
         .ld-seg button.on { background: #1B1B1B; color: #fff; }
         .ld-chip { padding: 5px 13px; border-radius: 99px; border: 1px solid var(--border); background: #fff; font-size: 12px; font-weight: 600; color: #374151; cursor: pointer; }
         .ld-chip.on { background: #1B1B1B; border-color: #1B1B1B; color: #fff; }
+        /* Drill-down triage filters (Kerry 2026-09-01): three labeled
+           groups that AND together and with chapter/status/search */
+        .ld-tri { gap: 6px; row-gap: 6px; margin-top: -0.4rem; }
+        .ld-trilab { font: 700 9.5px/1 'Bitter', serif; letter-spacing: 1px;
+            text-transform: uppercase; color: #9CA3AF; margin-left: 6px; }
+        .ld-tri .ld-seg button { padding: 4px 10px; font-size: 11.5px; }
         .ld-sortsel { margin-left: auto; }
         .ld-showing { font-size: 12px; color: var(--text-muted); }
         /* Desktop work list (Kerry 2026-08-31: the 12-column table was
@@ -187,6 +193,29 @@
             </select>
             <span class="ld-showing" id="ld-showing"></span>
         </div>
+        <div class="ld-toolbar ld-tri">
+            <span class="ld-trilab">Availability</span>
+            <span class="ld-seg" id="ld-tri-avail">
+                <button data-v="both" onclick="setTriFilter('avail','both')">Both</button>
+                <button data-v="tue" onclick="setTriFilter('avail','tue')">Tue</button>
+                <button data-v="sat" onclick="setTriFilter('avail','sat')">Sat</button>
+                <button data-v="none" onclick="setTriFilter('avail','none')">None</button>
+            </span>
+            <span class="ld-trilab">Importance</span>
+            <span class="ld-seg" id="ld-tri-want">
+                <button data-v="all" onclick="setTriFilter('want','all')">All</button>
+                <button data-v="golf" onclick="setTriFilter('want','golf')">Golf</button>
+                <button data-v="competition" onclick="setTriFilter('want','competition')">Competition</button>
+                <button data-v="community" onclick="setTriFilter('want','community')">Community</button>
+            </span>
+            <span class="ld-trilab">Invites</span>
+            <span class="ld-seg" id="ld-tri-loop">
+                <button data-v="both" onclick="setTriFilter('loop','both')">Both</button>
+                <button data-v="austin" onclick="setTriFilter('loop','austin')">Austin</button>
+                <button data-v="sa" onclick="setTriFilter('loop','sa')">SA</button>
+                <button data-v="none" onclick="setTriFilter('loop','none')">None</button>
+            </span>
+        </div>
         <p style="margin:0 0 0.9rem;">
             <a class="ld-btn" style="text-decoration:none;display:inline-block;" href="/api/leads/export-csv?chapter=San%20Antonio">⬇ SA CSV</a>
             <a class="ld-btn" style="text-decoration:none;display:inline-block;" href="/api/leads/export-csv?chapter=Austin">⬇ Austin CSV</a>
@@ -214,6 +243,47 @@
     // then dismissed at the bottom.
     let sortKey = "priority", sortDir = 1;
     let statusFilter = "all", chapterFilter = "all", searchQ = "";
+    // Drill-down triage filters (Kerry 2026-09-01) — null = any; the
+    // three groups AND together and with chapter/status/search. Values
+    // classify off the CURRENT form's answers (rawPref rule).
+    let fAvail = null, fWant = null, fLoop = null;
+    function triageOf(l) {
+        const payload = l.payload || {};
+        const rawOf = match => {
+            const k = Object.keys(payload).find(match);
+            return k ? String(payload[k]).toLowerCase() : "";
+        };
+        const rawPref = (exact, match) => {
+            const v = payload[exact];
+            return (typeof v === "string" && v) ? v.toLowerCase() : rawOf(match);
+        };
+        const a = rawPref("can_you_play_tuesdays_or_saturdays",
+            k => k.includes("play_tuesdays_or_saturdays"));
+        const w = rawPref("which_is_most_important_to_you",
+            k => k.includes("most_important"));
+        const lo = rawPref("would_you_like_to_stay_in_the_loop_with_tgf_and_receive_event_invitations",
+            k => k.includes("stay_in_the_loop") || k.includes("loop"));
+        return {
+            avail: !a ? null : a.includes("both") ? "both"
+                : a.includes("tuesdays") ? "tue"
+                : a.includes("saturdays") ? "sat" : "none",
+            want: !w ? null : w.startsWith("all_of_it") ? "all"
+                : w.startsWith("golf") ? "golf"
+                : w.startsWith("competition") ? "competition"
+                : (w.startsWith("community") || w.startsWith("connection")
+                   || w.startsWith("fellowship")) ? "community" : "other",
+            loop: !lo ? null : lo === "yes_for_both" ? "both"
+                : lo.includes("austin") ? "austin"
+                : lo.includes("san_antonio") ? "sa"
+                : lo.startsWith("no") ? "none" : "other",
+        };
+    }
+    function setTriFilter(group, val) {
+        if (group === "avail") fAvail = fAvail === val ? null : val;
+        else if (group === "want") fWant = fWant === val ? null : val;
+        else if (group === "loop") fLoop = fLoop === val ? null : val;
+        renderLeads();
+    }
     const isLate = l => l.status === "new" && (l.days_since_arrival ?? 0) >= 2;
     async function loadLeads() {
         const res = await fetch("/api/leads");
@@ -273,6 +343,12 @@
         // Reflect active filters on cards / chips / chapter toggle
         document.querySelectorAll(".ld-card[data-f], .ld-chip[data-f]").forEach(el =>
             el.classList.toggle("on", el.dataset.f === statusFilter));
+        document.querySelectorAll("#ld-tri-avail button").forEach(b =>
+            b.classList.toggle("on", b.dataset.v === fAvail));
+        document.querySelectorAll("#ld-tri-want button").forEach(b =>
+            b.classList.toggle("on", b.dataset.v === fWant));
+        document.querySelectorAll("#ld-tri-loop button").forEach(b =>
+            b.classList.toggle("on", b.dataset.v === fLoop));
         document.querySelectorAll("#ld-chapseg button").forEach(b => {
             b.classList.toggle("on", b.dataset.c === chapterFilter);
             const base = b.dataset.c === "all" ? "All" : b.dataset.c;
@@ -417,6 +493,12 @@
         // Filter (chapter toggle + status chips), then sort
         const visible = leads.filter(l => {
             if (chapterFilter !== "all" && (l.chapter || "") !== chapterFilter) return false;
+            if (fAvail || fWant || fLoop) {
+                const t = triageOf(l);
+                if (fAvail && t.avail !== fAvail) return false;
+                if (fWant && t.want !== fWant) return false;
+                if (fLoop && t.loop !== fLoop) return false;
+            }
             if (searchQ) {
                 const hay = `${l.first_name || ""} ${l.last_name || ""} ${l.email || ""} ${l.phone || ""}`.toLowerCase();
                 if (!hay.includes(searchQ.toLowerCase())) return false;
