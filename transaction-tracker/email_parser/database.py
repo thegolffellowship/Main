@@ -6892,6 +6892,33 @@ _GG_POINTS_RACES: dict = {
         "reset_mode": "prorated",
         "reset_group": "net",
     },
+    # ── FALL NET races (Kerry 2026-09-01: "wire the two Fall Points
+    # Races like we did the previous City Net Points Races"). Standalone
+    # chapter contests — best 6 + Fall Championship, NO points reset and
+    # no cup conversion, so no reset_mode/reset_group. enroll_season
+    # "fall" scopes the buy-in join to '<year> Fall' season_contests rows
+    # (the exact rows the main-season boards exclude). Page ids are the
+    # portals' fall points pages published 2026-09-01.
+    "san_antonio_fall_net": {
+        "label": "SAN ANTONIO Fall Net 2026",
+        "host": "tgf-sa.golfgenius.com",
+        "league_id": "514047",
+        "page_id": "6201199",
+        "contest_type": "NET Points Race",
+        "chapter": "San Antonio",
+        "enroll_chapter": "San Antonio",
+        "enroll_season": "fall",
+    },
+    "austin_fall_net": {
+        "label": "AUSTIN Fall Net 2026",
+        "host": "tgf-austin.golfgenius.com",
+        "league_id": "514705",
+        "page_id": "6201227",
+        "contest_type": "NET Points Race",
+        "chapter": "Austin",
+        "enroll_chapter": "Austin",
+        "enroll_season": "fall",
+    },
     "players_cup_gross": {
         "label": "THE PLAYERS CUP 2026",
         "host": "tgf-sa.golfgenius.com",
@@ -9011,13 +9038,16 @@ def get_points_race_standings(race_key: str,
 
         clauses = ["contest_type = ?"]
         params: list = [race["contest_type"]]
-        # Main-season boards only (Kerry 2026-08-06, "Still showing in on
-        # Austin Net 2026"): every configured race is a main-season board,
-        # and a '<year> Fall' enrollment must not light its pill or count
-        # in its pot — John Wade's Austin Fall NET buy-in did exactly that
-        # because this query had no season scoping. Fall boards get their
-        # own configs (and their own season filter) when they exist.
-        clauses.append("COALESCE(season, '') NOT LIKE '%Fall'")
+        # Season scoping (Kerry 2026-08-06, "Still showing in on Austin
+        # Net 2026"): a '<year> Fall' enrollment must not light a
+        # main-season board's pill or count in its pot (John Wade's
+        # Austin Fall NET buy-in did exactly that before this filter) —
+        # and symmetrically, the FALL boards (wired 2026-09-01) count
+        # ONLY the fall-season buy-ins.
+        if race.get("enroll_season") == "fall":
+            clauses.append("COALESCE(season, '') LIKE '%Fall'")
+        else:
+            clauses.append("COALESCE(season, '') NOT LIKE '%Fall'")
         if race.get("enroll_chapter"):
             clauses.append("(chapter = ? OR chapter IS NULL OR chapter = '')")
             params.append(race["enroll_chapter"])
@@ -9264,9 +9294,15 @@ def get_points_race_standings(race_key: str,
     from . import season_payouts as _sp
     _n_pot = (sum(1 for r in out_rows if r["enrolled"])
               + len(enrolled_not_ranked))
-    projected_payouts = (
-        _sp.players_cup_payouts(_n_pot) if race.get("flights")
-        else _sp.city_net_payouts(_n_pot))
+    if race.get("enroll_season") == "fall":
+        # Fall payout ladder isn't ratified yet (rule 3b — money): the
+        # boards show standings + buy-in pills, but no projected payout
+        # strip until Kerry confirms the fall structure.
+        projected_payouts = None
+    else:
+        projected_payouts = (
+            _sp.players_cup_payouts(_n_pot) if race.get("flights")
+            else _sp.city_net_payouts(_n_pot))
 
     _final_flag = _points_race_final(race_key, db_path=db_path)
     return {
@@ -53684,6 +53720,8 @@ def pairing_race_options(chapter: str | None = None,
     default = _default_pairing_race(chapter, event_name, db_path=db_path)
     out = []
     for k, cfg in _FALL_PAIRING_RACES.items():
+        if k in _GG_POINTS_RACES:
+            continue  # graduated to a real GG standings board below
         out.append({
             "race_key": k,
             "label": cfg["label"],
@@ -53768,11 +53806,12 @@ def _standings_rank_map(chapter: str | None, race_key: str | None = None,
                      f"pairings fell back to random order.")
         return (({}, None, notes, {"points": {}, "enrolled": {}})
                 if _with_meta else ({}, None, notes))
-    if key in _FALL_PAIRING_RACES:
-        # Fall races (Kerry 2026-09-01): no GG standings page yet, so no
-        # rank order — but the fall BUY-INS still color the sheet, which
-        # is the point. Standings-mode generates fall back to ABCD via
-        # the empty rank map's existing fallback path.
+    if key in _FALL_PAIRING_RACES and key not in _GG_POINTS_RACES:
+        # A fall race with no GG standings page yet: no rank order — but
+        # the fall BUY-INS still color the sheet, which is the point.
+        # Once a fall race graduates into _GG_POINTS_RACES (both did
+        # 2026-09-01) it takes the normal standings path below and
+        # pairings can ORDER off it too.
         cfg = _FALL_PAIRING_RACES[key]
         enrolled = _fall_enrollment(cfg["chapter"], db_path=db_path)
         notes.append(f"{cfg['label']}: colors show fall buy-ins; standings "
@@ -53829,6 +53868,14 @@ def _standings_rank_map(chapter: str | None, race_key: str | None = None,
                 enrolled_map.setdefault(k, enr)
                 if pts is not None:
                     points_map.setdefault(k, pts)
+    # Fall boards list only players who have POSTED — a paid fall buy-in
+    # who hasn't played yet has no standings row, but their sheet color
+    # must still show them IN the race. Merge the enrollment map in.
+    if _GG_POINTS_RACES.get(key, {}).get("enroll_season") == "fall":
+        for ek, ev in _fall_enrollment(
+                _GG_POINTS_RACES[key].get("chapter"),
+                db_path=db_path).items():
+            enrolled_map.setdefault(ek, bool(ev))
     if not rank_map:
         notes.append(f"The {key} standings are empty — pairings fell back "
                      f"to random order.")

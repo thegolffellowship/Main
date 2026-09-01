@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.281.0";
+window.TGF_VERSION = "2.282.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.282.0",
+    date: "2026-09-01",
+    changes: [
+      "The two FALL Points Races are WIRED LIVE (Kerry: 'wire the two Fall Points Races like we did the previous City Net Points Races'): the portals published their fall points pages today, so san_antonio_fall_net and austin_fall_net are now full GG-backed races — the Contests page fall tabs load real standings (Fall Kickoff points already on the boards), buy-in pills read the '2026 Fall' season enrollments only (main-season boards symmetrically exclude them), and Spotlight/member summaries include the fall races automatically.",
+      "Fall races are standalone: no points reset and no cup conversion, so the POINTS RESET column drops from their boards entirely, and no projected-payout strip shows until Kerry ratifies the fall payout ladder (rule 3b — money).",
+      "Pairings graduate with them: the FALL races can now ORDER a tee sheet by live standings (previously colors-only), with paid fall buy-ins who haven't posted yet still colored IN via the enrollment merge. The launch preview remains only as the fallback if a fall board can't be read.",
+    ],
+  },
   {
     version: "2.281.0",
     date: "2026-09-01",

@@ -6082,7 +6082,13 @@
 
     // ═══════════ POINTS RACE STANDINGS — persisted GG snapshot + buy-in ═══════════
 
-    const PR_RACE_BY_TAB = { net: "san_antonio_net", austin: "austin_net", gross: "players_cup_gross" };
+    const PR_RACE_BY_TAB = {
+        net: "san_antonio_net", austin: "austin_net", gross: "players_cup_gross",
+        // Fall boards went LIVE 2026-09-01 (the portals published their
+        // fall points pages) — the tabs load real standings now instead
+        // of the pre-launch preview.
+        fall_sa: "san_antonio_fall_net", fall_austin: "austin_fall_net",
+    };
 
     // Deep-link to a customer profile by id — the Customers page matches
     // cid exactly, while GG-format names ("Rob Callaway") don't match the
@@ -6125,11 +6131,11 @@
 
     async function prLoadStandings(force = false) {
         const kind = (document.querySelector(".sub-tab[data-pr].active") || {}).dataset?.pr || "tfc";
-        // monthly swaps the header refresh button for an inline one;
-        // fall previews have nothing to refresh yet
-        $("pr-refresh-btn").style.display =
-            (kind === "monthly" || kind.startsWith("fall")) ? "none" : "";
-        if (kind.startsWith("fall")) return prRenderFallPreview(kind);
+        // monthly swaps the header refresh button for an inline one
+        $("pr-refresh-btn").style.display = kind === "monthly" ? "none" : "";
+        // Fall boards are LIVE (2026-09-01): they load through the normal
+        // standings path below via PR_RACE_BY_TAB. prRenderFallPreview
+        // stays only as the fallback when the board can't be read.
         if (kind === "tfc") return prLoadFellowship(force);
         if (kind === "monthly") return prLoadMonthly(force);
         const race = PR_RACE_BY_TAB[kind];
@@ -6177,6 +6183,9 @@
             prRenderLiveBanner(data);
             prScheduleLivePoll(kind, data);
         } catch (e) {
+            // A fall board that can't be read falls back to the launch
+            // preview (buy-in roster + explainer) instead of a bare error.
+            if (kind.startsWith("fall")) return prRenderFallPreview(kind);
             cont.innerHTML = `<div style="padding:1rem;color:#b91c1c;">${escapeHtml(e.message)}</div>`;
         }
     }
@@ -6486,6 +6495,13 @@
 
         const hasFlights = !!(d.flights && d.flights.length);
         const showChapter = !!d.cross_chapter;
+        // The FALL boards are standalone races with NO points reset
+        // (no cup conversion), so the RESET column drops entirely
+        // instead of rendering a dash column. Data-driven: any race
+        // whose payload carries reset_info or per-row reset values
+        // keeps the column.
+        const showReset = !!(d.reset_info)
+            || (d.standings || []).some(r => r.points_reset != null);
         // LIVE championship mode reads like a PGA leaderboard (Kerry
         // 2026-08-01): day movement on the rank, TODAY's points, and THRU
         // (hole count, F, or the tee time before they start). RESET and
@@ -6687,7 +6703,7 @@
                 : liveMode
                 ? `<td style="${todayStyle}${r.champ_points != null ? "color:#BF5700;font-weight:800;" : "color:var(--text-muted);"}">${r.champ_points != null ? escapeHtml(String(r.champ_points % 1 ? r.champ_points.toFixed(1) : r.champ_points)) : (r.champ_thru ? "" : "—")}</td>
                    ${thruCellHtml}`
-                : `<td style="${resetStyle}">${
+                : `${showReset ? `<td style="${resetStyle}">${
                     // City NET reset values feed THE FELLOWSHIP CUP — link
                     // straight to the player's cup row, centered + pulsed
                     // (Kerry 2026-08-03). Gross/monthly resets seed other
@@ -6695,7 +6711,7 @@
                     (r.customer_id && r.points_reset != null
                         && (d.race_key === "san_antonio_net" || d.race_key === "austin_net"))
                         ? `<a href="#race=tfc&player=${r.customer_id}" class="cell-link" title="See their spot on THE FELLOWSHIP CUP" onclick="event.stopPropagation(); prJumpToRaceRow('tfc', ${r.customer_id}); return false;">${prFmtReset(r.points_reset)}</a>`
-                        : prFmtReset(r.points_reset)}</td>
+                        : prFmtReset(r.points_reset)}</td>` : ""}
                    ${showRounds ? `<td style="${rndStyle}" class="pr-rnd">${r.tournaments ?? ""}</td>` : ""}`;
             const moveCell = (liveMode && !cupSlim)
                 ? `<td style="${mvStyle}">${prDayMove(r.move) || '<span style="color:#cbd5e1;">&ndash;</span>'}</td>` : "";
@@ -6793,7 +6809,7 @@
                     ${liveMode
                         ? `<th style="${todayStyle}" title="Championship points earned today">${compact ? "TDY" : "TODAY"}</th>
                            ${showThru ? `<th style="${thruStyle}" title="Holes completed today — or the tee time if they haven't started">THRU</th>` : ""}`
-                        : `<th style="${resetStyle}line-height:1.25;">${resetOfficial ? "" : `<span class="pr-proj" style="display:block;font-size:${compact ? "0.52rem" : "0.65rem"};font-weight:600;letter-spacing:0.03em;">(${compact ? "proj" : "Projected"})</span>`}POINTS<br>RESET</th>
+                        : `${showReset ? `<th style="${resetStyle}line-height:1.25;">${resetOfficial ? "" : `<span class="pr-proj" style="display:block;font-size:${compact ? "0.52rem" : "0.65rem"};font-weight:600;letter-spacing:0.03em;">(${compact ? "proj" : "Projected"})</span>`}POINTS<br>RESET</th>` : ""}
                            ${showRounds ? `<th style="${rndStyle}" class="pr-rnd" title="Rounds">Rounds</th>` : ""}`}
                     ${showBuy ? `<th style="${buyStyle}" title="Buy-in">Buy-in</th>` : ""}
                 </tr>`;
