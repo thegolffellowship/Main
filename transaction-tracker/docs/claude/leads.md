@@ -255,10 +255,18 @@ dismissal read the CURRENT form's exact keys first
 explicitly — never trust API element order) stamps
 `payload._answer_dates` + `_answers_prev` (the earlier survey's value
 for keys the new submission changed) for re-submitters, with a bounded
-poll backfill keyed on the `_hist_v: 2` marker; the card renders TWO
-sections — a dark "THIS SURVEY · date" band with current answers, then
-"EARLIER SURVEY · date" with the previous campaign's (including
-changed answers' old values); (3) the loop chip shows
+poll backfill keyed on the `_hist_v: 2` marker; the card renders
+COLLAPSIBLE per-survey sections (v2.283.0, Kerry off the Craig Wilder
+card): a dark "CURRENT SURVEY · date" band — open by default, showing
+the contact's FULL current answers (an answer unchanged between
+surveys keeps its old HubSpot timestamp; classifying by timestamp
+alone left CURRENT empty on Wilder) — then one collapsed
+"SURVEY · date" band per earlier submission date with what that
+submission set (changed answers' previous values + old-stamped keys);
+bands are click-to-toggle (`renderAnswerTable` + one delegated
+listener), attribution rows stay below the bands, always visible, and
+a 3rd+ submission automatically becomes the new CURRENT with each
+older date keeping its own band; (3) the loop chip shows
 "No loop" only for answers starting with "no" — a bare "Yes" from an
 old form rendered "No loop" before; (4) the `customer` badge
 (`has_history`) requires a non-placeholder active item — identity

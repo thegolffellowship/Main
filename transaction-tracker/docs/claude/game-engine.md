@@ -229,9 +229,26 @@ customer — fall pages populate on receipt of new orders like
 everything else. `scoring-fall-enroll:<customer_id>[:<item_id>]`
 remains as the manual fallback (Kerry/no-purchase cases);
 manually_enrolled=1 rows are cleanup-protected. First three: Luke
-Mazanec (item 2258), Kerry Niester (manual), Adam Baker (item 2259). Wire the GG
-league/page ids into _GG_POINTS_RACES when the fall races are created
-and the preview pages inherit standings/payouts automatically.
+Mazanec (item 2258), Kerry Niester (manual), Adam Baker (item 2259).
+
+**WIRED LIVE v2.282.0 (Kerry 2026-09-01: "wire the two Fall Points
+Races like we did the previous City Net Points Races"):** the portals
+published their fall points pages, so `san_antonio_fall_net`
+(tgf-sa page 6201199) and `austin_fall_net` (tgf-austin page 6201227)
+are full `_GG_POINTS_RACES` entries with `enroll_season: "fall"` — the
+enrollment join in get_points_race_standings scopes to
+season LIKE '%Fall' for them (and NOT LIKE for every main-season
+board, the John Wade filter, now symmetric). No reset_mode/flights, so
+they're excluded from every prorated/Fellowship-Cup loop; their boards
+drop the POINTS RESET column (data-driven `showReset` in
+contests.html) and serve `projected_payouts: None` until Kerry
+ratifies the fall payout ladder (rule 3b). The CONTESTS fall tabs load
+real standings through the normal path (PR_RACE_BY_TAB); the launch
+preview remains only as the read-failure fallback. Pairings graduated
+too: `_standings_rank_map`'s colors-only fall branch is bypassed for
+graduated keys, so fall races ORDER tee sheets off live standings,
+with `_fall_enrollment` merged in so a paid-but-unposted buy-in still
+colors IN; `pairing_race_options` de-dupes graduated keys.
 
 ## Wallet/refund contract notes (mailbox ids 22/24, Kerry-ratified 2026-07-06)
 
