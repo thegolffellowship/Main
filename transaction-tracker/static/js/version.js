@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.283.1";
+window.TGF_VERSION = "2.284.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.284.0",
+    date: "2026-09-01",
+    changes: [
+      "Spotlight WHERE THEY STAND split into CURRENT and PAST CONTESTS (Kerry): live contests sit under a CURRENT band; completed races (SAN ANTONIO NET 2026, THE PLAYERS CUP) fold into a collapsed, expandable PAST CONTESTS section grouped by year — so when 2027 arrives this year's contests become the 2026 group automatically, and historical backfills get their own year bands.",
+      "The stale 'SA FALL NET · Starts Aug 29 · Lights up when fall races begin' placeholder is retired: players on a fall board show the real standings row (now deep-linking to the fall tab), and a buy-in who hasn't posted yet gets a LIVE-badged row reading 'Bought in — play a fall event to get on the board'.",
+    ],
+  },
   {
     version: "2.283.1",
     date: "2026-09-01",

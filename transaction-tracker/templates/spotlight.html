@@ -152,6 +152,22 @@
            used app-wide; inset ring instead of border so pill size is
            identical to the IN pill. */
         .spt-pill.out { color: #92400E; background: #FEF3C7; box-shadow: inset 0 0 0 1px #FCD34D; }
+        /* CURRENT / PAST CONTESTS split (Kerry 2026-09-01): live contests
+           under a CURRENT band; completed ones fold into an expandable
+           PAST CONTESTS section, grouped by year so history scales when
+           2027 hits and older records populate. */
+        .spt-stand-band { display: block; background: #1B1B1B; color: #fff;
+            font: 700 10px/1.7 'Bitter', serif; letter-spacing: 1px;
+            text-transform: uppercase; padding: 4px 14px; }
+        details.spt-past > summary { cursor: pointer; list-style: none; user-select: none; }
+        details.spt-past > summary::-webkit-details-marker { display: none; }
+        details.spt-past > summary .spt-past-n { font-weight: 400; opacity: 0.7; margin-left: 6px; }
+        details.spt-past > summary .spt-past-ch { float: right; opacity: 0.75; }
+        details.spt-past[open] > summary .spt-past-ch { transform: rotate(90deg); display: inline-block; float: right; }
+        .spt-past-year { background: #E8E5E0; color: #6B675F;
+            font: 700 9px/1.7 'Bitter', serif; letter-spacing: 1px;
+            text-transform: uppercase; padding: 3px 14px; }
+        .spt-past .spt-stand:first-of-type { border-top: none; }
 
         /* winnings rows */
         .spt-win { display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-top: 1px solid #F0EEE9; }
@@ -414,7 +430,8 @@
             // (#race=… / #tab=mp restore-in-place, Kerry 2026-07-12)
             const contestsBase = window.MEMBER_MODE ? "/member/contests" : "/contests";
             const RACE_HASH = { san_antonio_net: "net", austin_net: "austin",
-                                players_cup_gross: "gross", fellowship_cup: "tfc" };
+                                players_cup_gross: "gross", fellowship_cup: "tfc",
+                                san_antonio_fall_net: "fall_sa", austin_fall_net: "fall_austin" };
             // pill: prebuilt status html. BUY IN chips were REMOVED from
             // these rows (Kerry 2026-07-13 evening): a per-row commerce chip
             // competed with the row's leaderboard deep-link — the rows stay
@@ -436,9 +453,23 @@
             const statusBadge = r => r.final
                 ? `<span class="spt-badge done">Completed</span>`
                 : (r.status_note ? `<span class="spt-badge live">${esc(r.status_note)}</span>` : "");
+            // CURRENT vs PAST CONTESTS (Kerry 2026-09-01: "show a CURRENT
+            // bar with what he's in and is live and then an expandable
+            // PAST CONTESTS section with contests that are complete...
+            // sections for past years can show as well"). `rows` holds
+            // the live contests; completed races land in pastByYear,
+            // grouped by the year parsed from the race label (falls back
+            // to the current year) so 2026 folds away when 2027 arrives
+            // and historical backfills get their own year bands.
             const rows = [];
+            const pastByYear = {};
+            const pastPush = (label, html) => {
+                const y = (String(label || "").match(/20\d\d/) || [String(new Date().getFullYear())])[0];
+                (pastByYear[y] = pastByYear[y] || []).push(html);
+            };
             // display order (Kerry 2026-07-12): Fellowship Cup above Players Cup
-            const RACE_ORDER = { san_antonio_net: 0, austin_net: 1, fellowship_cup: 2, players_cup_gross: 3 };
+            const RACE_ORDER = { san_antonio_net: 0, austin_net: 1, fellowship_cup: 2,
+                                 players_cup_gross: 3, san_antonio_fall_net: 4, austin_fall_net: 5 };
             const orderedRaces = (d.races || []).slice()
                 .sort((a, b) => (RACE_ORDER[a.key] ?? 9) - (RACE_ORDER[b.key] ?? 9));
             orderedRaces.forEach(r => {
@@ -463,7 +494,7 @@
                     metaBits.push(`${r.wins} win${r.wins === 1 ? "" : "s"}`);
                 }
                 if (r.points_reset != null && r.key !== "fellowship_cup") metaBits.push(`reset ${r.points_reset}`);
-                rows.push(standRow(
+                (r.final ? (h => pastPush(r.label, h)) : (h => rows.push(h)))(standRow(
                     esc(String(r.rank)), pc ? "#BF5700" : "#1B1B1B", `of ${r.n_players}`,
                     r.label + (r.flight ? ` · ${r.flight}` : ""),
                     metaBits.join(" · "),
@@ -520,20 +551,33 @@
                     `<div class="mid"><div class="race">&#127942; LONE STAR CUP</div><div class="meta">${esc(meta)}</div></div>` +
                     pill + `<span class="spt-go">&rsaquo;</span></a>`);
             }
-            // dormant fall placeholder LAST — active competitions outrank
-            // a race that hasn't started (Kerry 2026-07-13)
+            // Fall buy-in placeholder LAST — only for a buy-in with no
+            // fall board row yet (the races are LIVE as of 2026-09-01, so
+            // anyone who has posted shows the real standings row instead).
             (d.fall_buyins || []).forEach(f => {
+                const fallKey = f.chapter === "Austin" ? "austin_fall_net" : "san_antonio_fall_net";
+                if ((d.races || []).some(r => r.key === fallKey)) return;
                 rows.push(standRow("—", "#C6C2BA", "",
                     (f.chapter === "Austin" ? "Austin" : "SA") + " Fall NET",
-                    "Lights up when fall races begin", pillIn,
+                    "Bought in — play a fall event to get on the board", pillIn,
                     `${contestsBase}#race=${f.chapter === "Austin" ? "fall_austin" : "fall_sa"}`,
                     null,
-                    `<span class="spt-badge soon">Starts Aug 29</span>`));
+                    `<span class="spt-badge live">Live</span>`));
             });
-            const stands = rows.length
+            // PAST CONTESTS: collapsed by default, newest year first, a
+            // year band over each group so history scales (Kerry 2026-09-01).
+            const pastYears = Object.keys(pastByYear).sort((a, b) => b - a);
+            const nPast = pastYears.reduce((n, y) => n + pastByYear[y].length, 0);
+            const pastHtml = nPast
+                ? `<details class="spt-past"><summary class="spt-stand-band">Past Contests` +
+                  `<span class="spt-past-n">· ${nPast}</span><span class="spt-past-ch">&rsaquo;</span></summary>` +
+                  pastYears.map(y => `<div class="spt-past-year">${esc(y)}</div>${pastByYear[y].join("")}`).join("") +
+                  `</details>`
+                : "";
+            const stands = (rows.length || nPast)
                 ? `<div><div class="spt-sec-head"><span class="t">Where ${esc((d.name || "").split(" ")[0] || "They")} Stands</span>` +
                   `<span class="s" style="color:var(--primary, #E87C3E);font-style:italic;">(Click for Standings)</span></div>` +
-                  `<div class="spt-panel">${rows.join("")}</div></div>`
+                  `<div class="spt-panel">${rows.length ? `<div class="spt-stand-band">Current</div>` : ""}${rows.join("")}${pastHtml}</div></div>`
                 : `<p class="spt-empty">No race appearances yet &mdash; standings show up after their first event.</p>`;
 
             // One row per EVENT with the total; expand for the games

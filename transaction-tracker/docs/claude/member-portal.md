@@ -299,3 +299,16 @@ least inform managers.
 - **R5:** member CTA "Enter Events & Contests" opens a two-button chooser
   sheet (`_shell_nav.html` member branch + shell.css/shell.js;
   contests.html mobile banner opens it via `.shell-cta-open`).
+
+**CURRENT / PAST CONTESTS split (v2.284.0, Kerry 2026-09-01):** WHERE
+THEY STAND now renders live contests under a dark CURRENT band and
+folds every race whose payload says `final` into a collapsed
+`<details>` PAST CONTESTS section, grouped by year bands (year parsed
+from the race label, current-year fallback) — newest year first, so
+2026 folds away automatically when 2027 races appear and historical
+backfills get their own bands. Match Play / LSC rows stay in CURRENT
+(no final flag yet). Fall races: RACE_HASH/RACE_ORDER carry
+`san_antonio_fall_net` / `austin_fall_net` (rows deep-link to the fall
+tabs); the "Starts Aug 29" placeholder is retired — it renders (as a
+LIVE-badged "play a fall event to get on the board" row) only for a
+fall buy-in with no board row yet.
