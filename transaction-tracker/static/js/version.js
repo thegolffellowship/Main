@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.285.1";
+window.TGF_VERSION = "2.285.2";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.285.2",
+    date: "2026-09-01",
+    changes: [
+      "Champion designation everywhere now wears the TGF standard star-on-trophy mark instead of the generic 🏆 emoji (Kerry): new app-wide .tgf-troph class in dashboard.css (CD's trophy-star SVG, text-sized, currentColor fill with a .gold plaque-gradient variant). Converted: Spotlight past-monthly wins and the LONE STAR CUP row, the Contests CHAMPION/CO-CHAMPION pills and compact trophies on the city and cup boards, the expanded-row champion line, monthly-board and Customers monthly-strip winner marks, and the Events game-results 1st-place label. Rule of record: never use the trophy emoji for champion designation.",
+    ],
+  },
   {
     version: "2.285.1",
     date: "2026-09-01",

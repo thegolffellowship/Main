@@ -11,7 +11,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Bitter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="/static/css/dashboard.css">
+    <link rel="stylesheet" href="/static/css/dashboard.css?v={{ app_version }}">
     <link rel="stylesheet" href="/static/css/shell.css">
     {% if member_mode %}<link rel="manifest" href="/static/manifest-member.json">{% else %}<link rel="manifest" href="/static/manifest.json">{% endif %}
     <link rel="icon" href="/static/icon.svg" type="image/svg+xml">
@@ -579,7 +579,7 @@
                 rows.push(
                     `<a href="${contestsBase}#tab=lsc" class="spt-stand spt-stand-lsc">` +
                     `<div class="rk"><div class="r">${esc(String(rk))}</div><div class="f">${fld}</div></div>` +
-                    `<div class="mid"><div class="race">&#127942; LONE STAR CUP</div><div class="meta">${esc(meta)}</div></div>` +
+                    `<div class="mid"><div class="race"><span class="tgf-troph gold"></span> LONE STAR CUP</div><div class="meta">${esc(meta)}</div></div>` +
                     pill + `<span class="spt-go">&rsaquo;</span></a>`);
             }
             // Fall buy-in placeholder LAST — only for a buy-in with no
@@ -603,12 +603,15 @@
                 const y = String(m.key || "").slice(0, 4) || String(new Date().getFullYear());
                 const meta = [`${m.points ?? 0} pts`,
                               m.rounds != null ? `${m.rounds} rounds` : null,
-                              m.won ? `won${m.share != null ? " $" + m.share : ""} 🏆` : null]
+                              m.won ? `won${m.share != null ? " $" + m.share : ""}` : null]
                     .filter(Boolean).join(" · ");
                 (pastMoByYear[y] = pastMoByYear[y] || []).push(standRow(
                     esc(String(m.rank ?? "—")), "#1B1B1B", `of ${m.n_players}`,
                     `Monthly Points · ${String(m.month || "")}`, meta, pillIn,
-                    `${contestsBase}#race=monthly`));
+                    `${contestsBase}#race=monthly`, null,
+                    // TGF standard trophy mark, not the generic emoji
+                    // (Kerry 2026-09-01) — badge slot renders raw html.
+                    m.won ? ' <span class="tgf-troph gold" title="Month won"></span>' : ""));
             });
             // PAST CONTESTS: collapsed by default, newest year first, a
             // year band over each group (majors first, then that year's

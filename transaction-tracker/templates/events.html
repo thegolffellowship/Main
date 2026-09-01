@@ -6125,7 +6125,9 @@
             const grp = byPos[pos];
             const names = grp.map(r => escapeHtml(r.player)).join(" & ");
             const score = grp[0].score_shown;
-            const label = pos === 1 ? "&#x1F3C6;" : pos + (pos === 2 ? "nd:" : pos === 3 ? "rd:" : "th:");
+            // TGF standard trophy mark for the winner, never the generic
+            // emoji (Kerry 2026-09-01)
+            const label = pos === 1 ? '<span class="tgf-troph gold" title="1st"></span>' : pos + (pos === 2 ? "nd:" : pos === 3 ? "rd:" : "th:");
             parts.push(`${label} ${names} (${score}${grp.length > 1 ? ", T" : ""})`);
         });
         return parts.join(" &middot; ");
