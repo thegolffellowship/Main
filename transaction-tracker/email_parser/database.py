@@ -10991,6 +10991,28 @@ _PAYOUT_CAT_LABELS = {
 }
 
 
+# Spotlight shares the expensive, customer-INDEPENDENT reads (each
+# race's live board, the cup and LSC projections) across profile views
+# for a short TTL — clicking through players re-ran get_points_race_live
+# for every configured race per click (now 5 races + 2 projections),
+# which is where Kerry's "long load time on Player Profiles"
+# (2026-09-01) went. 120s is well inside "standings only change after
+# events" territory; the CONTESTS page's own reads are untouched.
+_SPOTLIGHT_SHARED_CACHE: dict = {}
+_SPOTLIGHT_SHARED_TTL = 120.0
+
+
+def _spotlight_shared(name: str, builder, db_path) -> object:
+    import time as _t
+    ck = (name, str(db_path))
+    hit = _SPOTLIGHT_SHARED_CACHE.get(ck)
+    if hit and _t.time() - hit[0] < _SPOTLIGHT_SHARED_TTL:
+        return hit[1]
+    val = builder()
+    _SPOTLIGHT_SHARED_CACHE[ck] = (_t.time(), val)
+    return val
+
+
 def get_player_spotlight(customer_id: int,
                          db_path: str | Path = DB_PATH) -> dict:
     """PLAYER SPOTLIGHT payload (v1, admin preview — Kerry directed
@@ -11193,8 +11215,12 @@ def get_player_spotlight(customer_id: int,
             # LIVE path, same as the CONTESTS page (Kerry 2026-08-03:
             # "WHERE PLAYER STANDS is not all updated") — the base
             # snapshots lag championship points and the reset
-            # re-projection; the live read carries both.
-            d = get_points_race_live(key, db_path=db_path)
+            # re-projection; the live read carries both. TTL-shared
+            # across profile views (see _spotlight_shared).
+            d = _spotlight_shared(
+                f"live:{key}",
+                lambda k=key: get_points_race_live(k, db_path=db_path),
+                db_path)
             if key == "players_cup_gross":
                 gross_d = d
         except Exception as e:
@@ -11257,7 +11283,9 @@ def get_player_spotlight(customer_id: int,
             row["rank"], bool(row.get("enrolled")), races[-1]["in_reach"],
             (pp or {}).get("pot_cents"))
     try:
-        cup = get_fellowship_cup_projection(db_path=db_path)
+        cup = _spotlight_shared(
+            "cup", lambda: get_fellowship_cup_projection(db_path=db_path),
+            db_path)
         cup_d = cup
         pp = cup.get("projected_payouts")
         race_pots["fellowship_cup"] = {
@@ -11274,7 +11302,11 @@ def get_player_spotlight(customer_id: int,
                 "total_points": crow.get("points_reset"),
                 "tournaments": None, "wins": None,
                 "enrolled": bool(crow.get("enrolled")),
-                "final": False,
+                # Dial-driven like the city races (Kerry 2026-09-01:
+                # "The Fellowship Cup ... are over") — flip
+                # gg_points_race_final.fellowship_cup to complete it.
+                "final": _points_race_final("fellowship_cup",
+                                            db_path=db_path),
                 "status_note": _race_status_notes.get("fellowship_cup"),
                 "flight": None, "points_reset": crow.get("points_reset"),
                 "in_reach": in_reach_for(crow, cup["standings"], pp,
@@ -11305,8 +11337,23 @@ def get_player_spotlight(customer_id: int,
                 (r for r in rows
                  if (r.get("customer_name") or r.get("player_name") or "")
                  .strip().lower() == name.strip().lower()), None)
+            # Season complete when the knockout FINAL has a recorded
+            # winner (Kerry 2026-09-01: "City Match Plays are over") —
+            # data-driven, so next season's fresh bracket reads live
+            # again without a flag flip.
+            mp_done = False
+            try:
+                with _connect(db_path) as _mc:
+                    mp_done = bool(_mc.execute(
+                        "SELECT 1 FROM cmp_bracket WHERE season = ? "
+                        "AND chapter = ? AND round = 'final' "
+                        "AND winner_name IS NOT NULL LIMIT 1",
+                        (season, mp_enr["chapter"])).fetchone())
+            except sqlite3.Error:
+                pass
             match_play = {
                 "chapter": mp_enr["chapter"], "enrolled": True,
+                "season": season, "complete": mp_done,
                 "pool": (mrow or {}).get("pool_name"),
                 "wins": (mrow or {}).get("wins"),
                 "losses": (mrow or {}).get("losses"),
@@ -11315,7 +11362,34 @@ def get_player_spotlight(customer_id: int,
             }
         except Exception as e:
             errors.append(f"match play: {e}")
-            match_play = {"chapter": mp_enr["chapter"], "enrolled": True}
+            match_play = {"chapter": mp_enr["chapter"], "enrolled": True,
+                          "season": season, "complete": False}
+
+    # ── MONTHLY points row (Kerry 2026-09-01: "Should also show Monthly
+    #    Points Races in WHERE [PLAYER] STANDS") — current month's
+    #    standing off the persisted snapshot (daily scheduler + Refresh
+    #    keep it warm), so it costs one DB read, not a GG walk. ──
+    monthly = None
+    try:
+        _msnap = load_gg_snapshot("monthly_points", db_path) or {}
+        _cur_mo = None
+        for _m in (_msnap.get("months") or []):
+            if not _m.get("complete"):
+                _cur_mo = _m   # months come sorted; last incomplete = current
+        if _cur_mo:
+            _mrow = next((r for r in (_cur_mo.get("standings") or [])
+                          if r.get("customer_id") == customer_id), None)
+            monthly = {
+                "month": _cur_mo.get("name"),
+                "rank": ((_mrow or {}).get("rank_label")
+                         or (_mrow or {}).get("rank")),
+                "points": (_mrow or {}).get("points"),
+                "rounds": (_mrow or {}).get("rounds"),
+                "n_players": len(_cur_mo.get("standings") or []),
+                "on_board": bool(_mrow),
+            }
+    except Exception as e:
+        errors.append(f"monthly: {e}")
 
     # ── LONE STAR CUP line (Kerry 2026-08-03): every player sees it until
     #    the selection deadline (dial lsc_selection_deadline, default
@@ -11338,7 +11412,9 @@ def get_player_spotlight(customer_id: int,
         enrolled_any = bool((crow_ and crow_.get("enrolled"))
                             or (grow_ and grow_.get("enrolled")))
 
-        proj = get_lone_star_cup_projection(db_path=db_path)
+        proj = _spotlight_shared(
+            "lsc", lambda: get_lone_star_cup_projection(db_path=db_path),
+            db_path)
         for ch in proj["chapters"]:
             seat = next((r for r in ch["seats"]
                          if r.get("customer_id") == customer_id), None)
@@ -11583,6 +11659,7 @@ def get_player_spotlight(customer_id: int,
         "race_pots": race_pots,
         "fall_buyins": fall,
         "match_play": match_play,
+        "monthly": monthly,
         "lone_star_cup": lsc,
         "recent_payouts": recent_payouts,
         "recent_events": recent_events,

@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.284.0";
+window.TGF_VERSION = "2.285.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.285.0",
+    date: "2026-09-01",
+    changes: [
+      "Player Profile load time fixed (Kerry: 'Long load time on Player Profiles'): every profile click re-ran the live standings read for all 5 configured races plus the cup and Lone Star Cup projections (~9s measured). Those customer-independent reads now share a 120-second in-process cache across profile views — the first view warms it, every following profile renders near-instantly, and the Contests page's own reads are untouched.",
+      "WHERE THEY STAND additions per Kerry: a MONTHLY POINTS row shows the current month's standing (from the persisted snapshot — every member is automatically in; players without a posted round this month see 'Play an event this month to post points'). City Match Play folds into PAST CONTESTS once the season's bracket final has a recorded winner. THE FELLOWSHIP CUP's completion is now dial-driven like the city races (gg_points_race_final.fellowship_cup — flipped live per Kerry: 'The Fellowship Cup and City Match Plays are over').",
+      "Badges dropped inside PAST CONTESTS (Kerry: 'Badges for COMPLETED can go away once it's in PAST') — the section header already says it.",
+    ],
+  },
   {
     version: "2.284.0",
     date: "2026-09-01",

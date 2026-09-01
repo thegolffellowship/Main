@@ -506,18 +506,49 @@
                     // Re-enable only after the server computes a true money-line
                     // gap (points to the last paying position on the ladder).
                     null,
-                    statusBadge(r)));
+                    // No badge inside PAST CONTESTS (Kerry 2026-09-01:
+                    // "Badges for COMPLETED can go away once it's in
+                    // PAST") — the section says it already.
+                    r.final ? "" : statusBadge(r)));
             });
+            // MONTHLY POINTS — current month's standing (Kerry 2026-09-01:
+            // "Should also show Monthly Points Races"). No buy-in: every
+            // member is automatically in the running.
+            if (d.monthly) {
+                const mo = d.monthly;
+                const moName = esc(String(mo.month || "").toUpperCase());
+                rows.push(mo.on_board
+                    ? standRow(esc(String(mo.rank ?? "—")), "#1B1B1B",
+                        `of ${mo.n_players}`, `Monthly Points · ${moName}`,
+                        [`${mo.points ?? 0} pts`,
+                         mo.rounds != null ? `${mo.rounds} rounds` : null]
+                            .filter(Boolean).join(" · "),
+                        pillIn, `${contestsBase}#race=monthly`)
+                    : standRow("—", "#C6C2BA", "", `Monthly Points · ${moName}`,
+                        "Play an event this month to post points", pillIn,
+                        `${contestsBase}#race=monthly`));
+            }
             if (d.match_play) {
                 const mp = d.match_play;
-                rows.push(mp.pool
-                    ? standRow(`${mp.wins ?? 0}–${mp.losses ?? 0}${mp.draws ? "–" + mp.draws : ""}`,
-                        "#1B1B1B", mp.pool, `City Match Play · ${mp.chapter}`,
-                        mp.stableford != null ? `${mp.stableford} Stableford pts · pool play in progress`
-                                              : "Pool play in progress", pillIn,
-                        `${contestsBase}#tab=mp`)
-                    : standRow("—", "#C6C2BA", "", `City Match Play · ${mp.chapter}`,
-                        "Pools not drawn yet", pillIn, `${contestsBase}#tab=mp`));
+                if (mp.complete) {
+                    // Season decided (bracket final has a winner) — the
+                    // record folds into PAST CONTESTS under its year.
+                    pastPush(mp.season || "",
+                        standRow(`${mp.wins ?? 0}–${mp.losses ?? 0}${mp.draws ? "–" + mp.draws : ""}`,
+                            "#1B1B1B", mp.pool || "", `City Match Play · ${mp.chapter}`,
+                            mp.stableford != null ? `${mp.stableford} Stableford pts · season complete`
+                                                  : "Season complete", pillIn,
+                            `${contestsBase}#tab=mp`));
+                } else {
+                    rows.push(mp.pool
+                        ? standRow(`${mp.wins ?? 0}–${mp.losses ?? 0}${mp.draws ? "–" + mp.draws : ""}`,
+                            "#1B1B1B", mp.pool, `City Match Play · ${mp.chapter}`,
+                            mp.stableford != null ? `${mp.stableford} Stableford pts · pool play in progress`
+                                                  : "Pool play in progress", pillIn,
+                            `${contestsBase}#tab=mp`)
+                        : standRow("—", "#C6C2BA", "", `City Match Play · ${mp.chapter}`,
+                            "Pools not drawn yet", pillIn, `${contestsBase}#tab=mp`));
+                }
             }
             // LONE STAR CUP row — navy, links to the projections page
             // (Kerry 2026-08-03): seat/alternate holders see their spot;
