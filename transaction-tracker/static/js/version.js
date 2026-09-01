@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.273.0";
+window.TGF_VERSION = "2.274.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.274.0",
+    date: "2026-09-01",
+    changes: [
+      "Fall NET races moved to the forefront of Points Races (Kerry: 'they have started and the others, beside monthly, are over'): pill order is now SA Fall NET · Austin Fall NET · Monthly, then the decided races (Fellowship Cup, Players Cup, city NETs); SA Fall NET is the landing race (Austin chapter managers land on Austin Fall NET), and the mobile race dropdown mirrors the new order and syncs its label with whatever race actually lands. Supersedes the 2026-08-02 cups-first landing.",
+      "Fall race panel updated for live play: green 'LIVE — kicked off Aug 29' chip replaces 'Starts Saturday, August 29', copy now says standings land once the chapter portal publishes its Fall points page (neither portal has one yet — wiring live fall standings needs those GG pages), buy-in CTA retained. The cups' 'Regular Season' phase chip starts hidden since the landing race is a fall race.",
+    ],
+  },
   {
     version: "2.273.0",
     date: "2026-08-31",

@@ -1238,8 +1238,9 @@
         .pr-race-chips .sub-tab.active[data-pr="tfc"],
         .pr-race-chips .sub-tab.active[data-pr="gross"],
         .pr-race-chips .sub-tab.active[data-pr="monthly"] { background: var(--surface-dark); border-color: var(--surface-dark); color: #fff; }
-        /* Upcoming fall races: burnt-orange family so they read as
-           "coming, not live" (Kerry, 2026-07-10) */
+        /* Fall races: burnt-orange family chips (originally the "coming,
+           not live" treatment, Kerry 2026-07-10; kept as the fall family
+           color now they're live and lead the row, Kerry 2026-08-31) */
         .pr-race-chips .sub-tab.pr-fall { background: #FDF0E6; color: #BF5700; }
         .pr-race-chips .sub-tab.active.pr-fall,
         .pr-race-chips .sub-tab.active[data-pr="fall_sa"],
@@ -1794,32 +1795,35 @@
                 <!-- L3 race selector (contests-handicaps-071026 view 1a/1e):
                      pill chips on desktop, .shell-menu dropdown on mobile -->
                 <div class="pr-race-row">
-                    <!-- Cups first + The Fellowship Cup is the landing race
-                         (Kerry 2026-08-02, post-reset: "the fellowship cup
-                         needs to be the landing page for contests and I'd
-                         like to move the two cups section to the top") -->
+                    <!-- LIVE races first: the Fall NETs have started and the
+                         cups/city races are decided, so SA Fall NET is the
+                         landing race with Monthly (still live) beside it and
+                         the finished races behind (Kerry 2026-08-31: "move
+                         FALL NET Games to the forefront now since they have
+                         started and the others, beside monthly, are over").
+                         Supersedes the 2026-08-02 cups-first landing. -->
                     <div class="pr-race-chips">
-                        <button class="sub-tab active" data-pr="tfc">The Fellowship Cup</button>
+                        <button class="sub-tab active pr-fall" data-pr="fall_sa">SA Fall NET</button>
+                        <button class="sub-tab pr-fall" data-pr="fall_austin">Austin Fall NET</button>
+                        <button class="sub-tab" data-pr="monthly">Monthly</button>
+                        <button class="sub-tab" data-pr="tfc">The Fellowship Cup</button>
                         <button class="sub-tab" data-pr="gross">The Players Cup</button>
                         <button class="sub-tab" data-pr="net">San Antonio NET</button>
                         <button class="sub-tab" data-pr="austin">Austin NET</button>
-                        <button class="sub-tab" data-pr="monthly">Monthly</button>
-                        <button class="sub-tab pr-fall" data-pr="fall_sa">SA Fall NET</button>
-                        <button class="sub-tab pr-fall" data-pr="fall_austin">Austin Fall NET</button>
                     </div>
                     <div class="pr-race-dd" id="pr-race-dd">
-                        <button class="pr-race-dd-btn" id="pr-race-dd-btn" aria-haspopup="listbox">The Fellowship Cup <span style="margin-left:auto;">&#9662;</span></button>
+                        <button class="pr-race-dd-btn" id="pr-race-dd-btn" aria-haspopup="listbox">SA Fall NET <span style="margin-left:auto;">&#9662;</span></button>
                         <div class="shell-menu pr-race-dd-menu" id="pr-race-dd-menu" style="display:none;">
-                            <button data-pr-dd="tfc" class="active">The Fellowship Cup</button>
+                            <button data-pr-dd="fall_sa" class="active pr-fall">SA Fall NET</button>
+                            <button data-pr-dd="fall_austin" class="pr-fall">Austin Fall NET</button>
+                            <div class="pr-dd-divider"></div>
+                            <button data-pr-dd="monthly">Monthly</button>
+                            <div class="pr-dd-divider"></div>
+                            <button data-pr-dd="tfc">The Fellowship Cup</button>
                             <button data-pr-dd="gross">The Players Cup</button>
                             <div class="pr-dd-divider"></div>
                             <button data-pr-dd="net">San Antonio NET</button>
                             <button data-pr-dd="austin">Austin NET</button>
-                            <div class="pr-dd-divider"></div>
-                            <button data-pr-dd="monthly">Monthly</button>
-                            <div class="pr-dd-divider"></div>
-                            <button data-pr-dd="fall_sa" class="pr-fall">SA Fall NET</button>
-                            <button data-pr-dd="fall_austin" class="pr-fall">Austin Fall NET</button>
                         </div>
                     </div>
                 </div>
@@ -1828,7 +1832,9 @@
                     <div style="display:flex;align-items:center;gap:0.75rem;flex-wrap:wrap;">
                         <h4 id="pr-standings-title"></h4>
                         <button id="pr-hiw-btn" class="pr-hiw-link" type="button">How It Works</button>
-                        <span id="pr-phase-chip" style="margin-left:auto;display:inline-flex;align-items:center;gap:8px;height:30px;padding:0 14px;background:#FDF0E6;color:#BF5700;border-radius:9999px;font:700 11px/1 'Bitter',serif;letter-spacing:1px;text-transform:uppercase;">&#9679;&nbsp;Regular Season &middot; best 10 + City Championship</span>
+                        <!-- starts hidden: the landing race is a Fall NET (chip is for the
+     season cups/city races; race clicks + deep links toggle it) -->
+                        <span id="pr-phase-chip" style="margin-left:auto;display:none;align-items:center;gap:8px;height:30px;padding:0 14px;background:#FDF0E6;color:#BF5700;border-radius:9999px;font:700 11px/1 'Bitter',serif;letter-spacing:1px;text-transform:uppercase;">&#9679;&nbsp;Regular Season &middot; best 10 + City Championship</span>
                         <button class="btn manager-only" id="pr-refresh-btn" style="font-size:0.78rem;">&#8635; Refresh from Golf Genius</button>
                     </div>
                     <!-- Mobile: everything between the race name and the
@@ -7125,7 +7131,7 @@
         $("pr-table-container").innerHTML = `
             <div style="padding:0.4rem 0 1rem;">
                 <div style="display:flex;flex-wrap:wrap;gap:8px;">
-                    <span style="display:inline-flex;align-items:center;gap:8px;height:30px;padding:0 14px;background:#FDF0E6;color:#BF5700;border-radius:9999px;font:700 11px/1 'Bitter',serif;letter-spacing:1px;text-transform:uppercase;">&#9679;&nbsp;Starts Saturday, August 29</span>
+                    <span style="display:inline-flex;align-items:center;gap:8px;height:30px;padding:0 14px;background:#ECFDF5;color:#065F46;border-radius:9999px;font:700 11px/1 'Bitter',serif;letter-spacing:1px;text-transform:uppercase;">&#9679;&nbsp;LIVE &middot; kicked off Aug 29</span>
                     <span style="display:inline-flex;align-items:center;gap:8px;height:30px;padding:0 14px;background:#FDF0E6;color:#BF5700;border-radius:9999px;font:700 11px/1 'Bitter',serif;letter-spacing:1px;text-transform:uppercase;">Best 6 + Fall Championship</span>
                 </div>
                 <p style="margin:0.8rem 0 1rem;color:var(--text-body,#4B5563);font-size:13.5px;line-height:1.5;max-width:560px;">
@@ -7133,8 +7139,9 @@
                     earn points on every hole at fall events. Your season total is your
                     <b>best 6 event totals + the Fall Championship</b>, and that's the
                     whole race: a standalone chapter contest with <b>no points reset</b>
-                    and no tie to the cups or the TGF Championship. Buy in to compete
-                    for the pot; standings appear here once play begins.
+                    and no tie to the cups or the TGF Championship. Play is underway —
+                    standings land here as soon as the chapter portal publishes its
+                    Fall points page. Not in yet? You can still buy in.
                 </p>
                 <div class="fall-cta-row" style="max-width:420px;">
                     <a class="contest-cta" style="border-radius:9999px;padding:0.8rem 1.6rem;text-align:center;"
@@ -7519,13 +7526,18 @@
     async function onAuthReady() {
         const role = typeof currentRole !== "undefined" ? currentRole : null;
         applyRole(role);
-        // chapter managers land on their own chapter's points race (Kerry)
+        // chapter managers land on their own chapter's points race (Kerry).
+        // With SA Fall NET as the landing race (2026-08-31), an Austin
+        // manager lands on Austin Fall NET; the legacy net→austin flip
+        // stays for any future default change back to a city race.
         if (typeof currentChapter !== "undefined" && currentChapter === "Austin") {
             const cur = document.querySelector(".sub-tab[data-pr].active");
-            const aus = document.querySelector(".sub-tab[data-pr='austin']");
-            if (cur && aus && cur.dataset.pr === "net") {
+            const flipTo = cur && cur.dataset.pr === "fall_sa" ? "fall_austin"
+                : cur && cur.dataset.pr === "net" ? "austin" : null;
+            const tgt = flipTo && document.querySelector(`.sub-tab[data-pr='${flipTo}']`);
+            if (cur && tgt) {
                 cur.classList.remove("active");
-                aus.classList.add("active");
+                tgt.classList.add("active");
             }
         }
         // Refresh-in-place (Kerry, 2026-07-10): the selected race/tab lives
@@ -7583,6 +7595,16 @@
                 const csel = $("cmp-chapter-select");
                 if (csel) csel.value = wantCh;
             }
+        }
+        // Sync the mobile race dropdown (label + checkmark) with whatever
+        // race actually landed — the chapter flip and deep links above can
+        // both move it off the HTML default.
+        const _landed = document.querySelector(".sub-tab[data-pr].active");
+        if (_landed) {
+            const ddb = $("pr-race-dd-btn");
+            if (ddb) ddb.innerHTML = `${escapeHtml(_landed.textContent.trim())} <span style="margin-left:auto;">&#9662;</span>`;
+            document.querySelectorAll("[data-pr-dd]").forEach(mi =>
+                mi.classList.toggle("active", mi.dataset.prDd === _landed.dataset.pr));
         }
         // Points Races is the landing tab — load it immediately; Match Play
         // still warms in the background so switching to it stays instant
