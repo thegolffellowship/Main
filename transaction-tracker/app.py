@@ -859,6 +859,16 @@ def check_expense_inbox(force=False, days_back=None):
                         except Exception:
                             logger.warning("inbound balance-due auto-match failed for exp %s",
                                            saved.get("id"), exc_info=True)
+                        # Manual add-on pass (Kerry 2026-09-01, Mary Wade
+                        # NET-games case): link the receipt to the Add
+                        # Payment entry already booked for it, so approving
+                        # the receipt can't double-book the income.
+                        try:
+                            from email_parser.database import auto_match_venmo_inbound_to_addons
+                            auto_match_venmo_inbound_to_addons([saved["id"]])
+                        except Exception:
+                            logger.warning("inbound add-on auto-match failed for exp %s",
+                                           saved.get("id"), exc_info=True)
                         # Overpayment returns ride the same inbound receipt —
                         # "Overpaid winnings for <code>" memos close the open
                         # tgf_overpayments row the REQUEST button created
@@ -958,6 +968,18 @@ def check_expense_inbox(force=False, days_back=None):
     conn.close()
     if processed:
         logger.info("Expense email processing: %d items saved from %d emails", processed, len(new_emails))
+    # Unmatched-inbound watch (Kerry 2026-09-01: "If it can't be matched,
+    # I need to know too") — one COO action item per incoming P2P payment
+    # that neither the balance-due nor the add-on matcher could place
+    # after a 30-min grace window. Every 2-min sweep; email_uid dedup
+    # makes repeats free.
+    try:
+        from email_parser.database import alert_unmatched_venmo_inbound
+        _ua = alert_unmatched_venmo_inbound()
+        if _ua.get("checked"):
+            logger.info("Unmatched inbound P2P watch: %s", _ua)
+    except Exception:
+        logger.warning("Unmatched-inbound alert sweep failed", exc_info=True)
     return {"fetched": len(emails), "new": len(new_emails), "processed": processed}
 
 

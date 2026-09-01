@@ -165,6 +165,27 @@ an expense is set to `review_status IN ('approved', 'corrected')`.
 - `_backfill_approved_expenses_to_ledger(conn)` runs at startup in `init_db()` to promote
   any already-approved expenses that were missing a ledger row (one-time catch-up).
 
+## Inbound P2P matchers + unmatched alert (v2.277.0, Kerry 2026-09-01)
+
+Every inbound (received/income) P2P receipt runs two matchers at
+ingest, in order:
+1. `auto_match_venmo_inbound_to_balance_due` — open credit-transfer
+   balance-due items (creates the +PAY child itself on match).
+2. `auto_match_venmo_inbound_to_addons` — manual Add Payment child
+   items already booked (the Mary Wade case: the modal books the income
+   immediately, so the receipt must LINK, not re-book). Handle-first
+   payer resolution, exact-cents amount, ±14-day window, unique-only;
+   stamps `matched_item_id` (which the received-promotion backfill
+   skips) and points `acct_transaction_id` at the existing
+   `addon-<item_id>` ledger row — single income entry, no Duplicate
+   Detective cleanup needed.
+Then `alert_unmatched_venmo_inbound` (end of every expense sweep):
+one COO action item per inbound payment neither matcher placed after a
+30-min grace (dedup `email_uid = 'venmo-in-unmatched-<id>'`; only
+payments on/after the `venmo_inbound_alert_since` dial, default
+2026-09-01, so history doesn't flood). Bridge:
+`scoring-inbound-match[:<expense_id>]` runs all three on demand.
+
 ## Vendor / Customer Typeahead on Expense Modal
 The expense review modal has the same Vendor/Customer typeahead as the income/ledger modal.
 IDs use `exp-*` prefix (`#exp-customer-id`, `#exp-customer-search`, `#exp-customer-dropdown`).

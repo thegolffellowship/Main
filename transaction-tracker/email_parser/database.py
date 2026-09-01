@@ -29869,6 +29869,188 @@ def auto_match_venmo_inbound_to_balance_due(
     return summary
 
 
+def auto_match_venmo_inbound_to_addons(
+    expense_ids: list[int] | None = None,
+    db_path: str | Path | None = None,
+) -> dict:
+    """Link incoming P2P payments to manual Add Payment rows already
+    booked for them (Kerry-ratified 2026-09-01, the Mary Wade NET-games
+    case: the Add Payment modal books the income immediately, then the
+    player's Venmo receipt arrives with nothing to attach to and its
+    approval would promote a DUPLICATE income entry).
+
+    For each unmatched inbound (received/income) P2P expense:
+      - resolve the payer handle-first, same rule as the balance-due
+        matcher (customers.venmo_username is authoritative; display
+        name only when no handle resolves)
+      - find that customer's manual add-on child items
+        (parent_item_id set, merchant 'Manual Entry (%)') whose amount
+        matches to the cent and whose order_date is within ±14 days of
+        the payment
+      - on a UNIQUE match: stamp expense.matched_item_id (which makes
+        the received-promotion backfill skip it — single ledger entry)
+        and point expense.acct_transaction_id at the add-on's EXISTING
+        'addon-<id>' ledger row; auto-approve a pending row.
+
+    Run AFTER auto_match_venmo_inbound_to_balance_due — an inbound that
+    cleared a balance due never reaches this pass (matched_item_id set).
+    Returns {matched, ambiguous, no_candidate, already_matched, errors,
+    matches}. alert_unmatched_venmo_inbound() is the companion that
+    tells Kerry about payments NEITHER pass could place.
+    """
+    summary = {"matched": 0, "ambiguous": 0, "no_candidate": 0,
+               "already_matched": 0, "errors": 0, "matches": []}
+    with _connect(db_path) as conn:
+        params: list = []
+        sql = (
+            "SELECT * FROM expense_transactions "
+            "WHERE source_type IN ('venmo', 'paypal', 'cashapp', 'zelle') "
+            "AND transaction_type IN ('received', 'income') "
+            "AND review_status IN ('approved', 'pending') "
+            "AND COALESCE(matched_item_id, 0) = 0"
+        )
+        if expense_ids:
+            sql += " AND id IN (%s)" % ",".join(["?"] * len(expense_ids))
+            params.extend(expense_ids)
+        expenses = [dict(r) for r in conn.execute(sql, params).fetchall()]
+
+        for exp in expenses:
+            try:
+                amt = round(float(exp.get("amount") or 0), 2)
+                if amt <= 0:
+                    summary["no_candidate"] += 1
+                    continue
+                # payer: handle first, display name only as fallback
+                cid = exp.get("customer_id")
+                if not cid:
+                    handle = (exp.get("other_party_handle") or "").lstrip("@").lower()
+                    if handle:
+                        row = conn.execute(
+                            """SELECT customer_id FROM customers
+                               WHERE LOWER(REPLACE(COALESCE(venmo_username,''), '@', '')) = ?
+                               LIMIT 1""", (handle,)).fetchone()
+                        cid = row["customer_id"] if row else None
+                if not cid:
+                    cid = _lookup_customer_id(
+                        conn, (exp.get("merchant") or "").strip(), None)
+                if not cid:
+                    summary["no_candidate"] += 1
+                    continue
+
+                pay_date = (str(exp.get("transaction_date") or "")[:10]
+                            or today_central_str())
+                cands = []
+                for it in conn.execute(
+                        """SELECT id, item_price, order_date, item_name
+                           FROM items
+                           WHERE customer_id = ? AND parent_item_id IS NOT NULL
+                             AND merchant LIKE 'Manual Entry%'
+                             AND COALESCE(transaction_status, 'active') = 'active'
+                             AND order_date BETWEEN date(?, '-14 days')
+                                                AND date(?, '+14 days')""",
+                        (cid, pay_date, pay_date)).fetchall():
+                    if abs(_parse_dollar(it["item_price"]) - amt) > 0.01:
+                        continue
+                    # skip an add-on whose ledger row a receipt already claimed
+                    acct = conn.execute(
+                        "SELECT id FROM acct_transactions WHERE source_ref = ? "
+                        "AND COALESCE(status, 'active') = 'active' LIMIT 1",
+                        (f"addon-{it['id']}",)).fetchone()
+                    if acct and conn.execute(
+                            "SELECT 1 FROM expense_transactions "
+                            "WHERE acct_transaction_id = ? LIMIT 1",
+                            (acct["id"],)).fetchone():
+                        continue
+                    cands.append({"item": dict(it),
+                                  "acct_id": acct["id"] if acct else None})
+                if not cands:
+                    summary["no_candidate"] += 1
+                    continue
+                if len(cands) > 1:
+                    summary["ambiguous"] += 1
+                    continue
+                pick = cands[0]
+                conn.execute(
+                    """UPDATE expense_transactions
+                       SET matched_item_id = ?,
+                           acct_transaction_id = COALESCE(?, acct_transaction_id),
+                           review_status = CASE WHEN review_status = 'pending'
+                                                THEN 'approved'
+                                                ELSE review_status END
+                       WHERE id = ?""",
+                    (pick["item"]["id"], pick["acct_id"], exp["id"]))
+                summary["matched"] += 1
+                summary["matches"].append({
+                    "expense_id": exp["id"], "customer_id": cid,
+                    "item_id": pick["item"]["id"],
+                    "event": pick["item"]["item_name"], "amount": amt,
+                    "acct_transaction_id": pick["acct_id"],
+                })
+                logger.info("venmo inbound matched manual add-on: exp %s "
+                            "$%.2f -> item %s (%s)", exp["id"], amt,
+                            pick["item"]["id"], pick["item"]["item_name"])
+            except Exception:
+                logger.exception("inbound addon match failed for exp %s",
+                                 exp.get("id"))
+                summary["errors"] += 1
+        conn.commit()
+    return summary
+
+
+def alert_unmatched_venmo_inbound(db_path: str | Path | None = None) -> dict:
+    """Kerry 2026-09-01: "If it can't be matched, I need to know too."
+    Raise ONE COO action item per inbound P2P payment that neither the
+    balance-due nor the manual-add-on matcher could place after a
+    30-minute grace window (both matchers get their shot first — the
+    expense sweep runs every 2 minutes). Dedup rides
+    action_items.email_uid = 'venmo-in-unmatched-<expense_id>'.
+    Only payments dated on/after the 'venmo_inbound_alert_since' dial
+    (default 2026-09-01) alert — months of already-settled history must
+    not flood the queue on first deploy."""
+    since = (get_app_setting("venmo_inbound_alert_since",
+                             db_path=db_path) or "2026-09-01").strip()
+    out = {"alerted": 0, "checked": 0}
+    with _connect(db_path) as conn:
+        rows = [dict(r) for r in conn.execute(
+            """SELECT * FROM expense_transactions
+               WHERE source_type IN ('venmo', 'paypal', 'cashapp', 'zelle')
+                 AND transaction_type IN ('received', 'income')
+                 AND review_status IN ('approved', 'pending', 'corrected')
+                 AND COALESCE(matched_item_id, 0) = 0
+                 AND COALESCE(transaction_date, '') >= ?
+                 AND created_at <= datetime('now', '-30 minutes')""",
+            (since,)).fetchall()]
+    out["checked"] = len(rows)
+    for exp in rows:
+        try:
+            amt = float(exp.get("amount") or 0)
+            if amt <= 0:
+                continue
+            who = (exp.get("merchant") or "unknown payer").strip()
+            memo = (exp.get("notes") or "").strip()
+            save_action_item({
+                "email_uid": f"venmo-in-unmatched-{exp['id']}",
+                "subject": f"Unmatched incoming {exp.get('source_type', 'P2P')}: "
+                           f"${amt:.2f} from {who}",
+                "summary": ("An incoming payment matched no open balance due "
+                            "and no manual add-on entry — it may be an "
+                            "add-on that was never entered, or money with "
+                            "no home. Memo: "
+                            + (memo[:180] or "(none)")
+                            + ". Review it in the expense queue; approving "
+                              "it unlinked books it as standalone income."),
+                "urgency": "medium",
+                "category": "bookkeeping",
+                "email_date": str(exp.get("transaction_date") or ""),
+                "confidence": 1,
+            }, db_path=db_path)
+            out["alerted"] += 1
+        except Exception:
+            logger.warning("unmatched-inbound alert failed for exp %s",
+                           exp.get("id"), exc_info=True)
+    return out
+
+
 def reconcile_orphan_venmo_payments(
     db_path: str | Path | None = None,
     max_days_back: int = 14,

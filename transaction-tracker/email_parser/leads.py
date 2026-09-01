@@ -473,6 +473,66 @@ def _fetch_hubspot_contacts(token: str, since_iso: str) -> list[dict]:
     return out
 
 
+RECONV_WATERMARK_KEY = "leads_hubspot_reconv_watermark"
+# Current fall campaign start — the first reconversion sweep back-collects
+# this campaign's deduped re-submitters (Wilder, Hinojosa, O.Gonzalez,
+# M.Hernandez, D.Garza as of 2026-09-01).
+DEFAULT_RECONV_WATERMARK = "2026-08-27T00:00:00Z"
+
+
+def _fetch_hubspot_reconversions(token: str, since_iso: str) -> list[dict]:
+    """EXISTING HubSpot contacts who (re)submitted a Facebook Lead Ads
+    form on/after the watermark (Kerry 2026-09-01: "add on this list
+    people who filled out this Facebook Ad survey that were duplicates
+    in HubSpot"). The createdate poll can never see them: HubSpot dedups
+    the submission into the existing contact, so createdate stays old
+    while recent_conversion_date moves. Filtered by the CONVERSION EVENT
+    ('Facebook Lead Ads: …') rather than analytics source — a years-old
+    contact's original source is whatever brought them in back then and
+    would wrongly fail the ad-source filter. Contacts whose createdate
+    equals the conversion are genuinely NEW and ride the normal poll."""
+    payload = {
+        "filterGroups": [{"filters": [
+            {"propertyName": "recent_conversion_date", "operator": "GTE",
+             "value": since_iso}]}],
+        "properties": LEAD_PROPERTIES + ["recent_conversion_date",
+                                         "recent_conversion_event_name"],
+        "sorts": [{"propertyName": "recent_conversion_date",
+                   "direction": "ASCENDING"}],
+        "limit": 100,
+    }
+    resp = requests.post(
+        HUBSPOT_SEARCH_URL, json=payload, timeout=30,
+        headers={"Authorization": f"Bearer {token}",
+                 "Content-Type": "application/json"})
+    resp.raise_for_status()
+    out = []
+    for c in resp.json().get("results", []):
+        p = c.get("properties") or {}
+        ev = (p.get("recent_conversion_event_name") or "")
+        if not ev.startswith("Facebook Lead Ads:"):
+            continue
+        conv = (p.get("recent_conversion_date") or "").strip()
+        created = (p.get("createdate") or "").strip()
+        if created and conv and created[:16] == conv[:16]:
+            continue        # new contact — the createdate poll owns it
+        out.append({
+            "source": "hubspot",
+            "external_id": c.get("id"),
+            "first_name": p.get("firstname"),
+            "last_name": p.get("lastname"),
+            "email": p.get("email"),
+            "phone": p.get("phone"),
+            "city": p.get("city"),
+            "arrived_at": conv,
+            "analytics_source": p.get("hs_analytics_source"),
+            "source_label": p.get("hs_object_source_label"),
+            "_reconversion": True,
+            "_hs_created": created,
+        })
+    return out
+
+
 # Identity fields already stored as columns — kept out of the payload.
 _PAYLOAD_EXCLUDE = {"firstname", "lastname", "email", "phone", "city",
                     "createdate", "lastmodifieddate", "hs_object_id",
@@ -775,6 +835,25 @@ def check_new_leads(db_path: str | Path | None = None) -> dict:
         else:
             result["skipped_filter"] += 1
 
+    # Deduped re-submitters (Kerry 2026-09-01): existing HubSpot contacts
+    # who filled the FB survey never cross the createdate watermark —
+    # sweep them by recent_conversion_date instead. They bypass the
+    # source filter (the conversion EVENT is the filter) and dedup in
+    # upsert_leads by external_id like everyone else.
+    reconv: list = []
+    try:
+        r_wm = None
+        try:
+            r_wm = db.get_app_setting(RECONV_WATERMARK_KEY)
+        except Exception:
+            pass
+        reconv = _fetch_hubspot_reconversions(
+            token, (r_wm or DEFAULT_RECONV_WATERMARK).strip())
+    except Exception as e:
+        logger.warning("HubSpot reconversion sweep failed: %s", e)
+    result["reconversions"] = len(reconv)
+    passing.extend(reconv)
+
     with db._connect(db_path) as conn:
         ensure_leads_table(conn)
         # Full form-response capture (mailbox #355) for the genuinely NEW
@@ -822,6 +901,22 @@ def check_new_leads(db_path: str | Path | None = None) -> dict:
             c["chapter"] = _route(c["payload"], c.get("city"))
         new_ids = upsert_leads(conn, passing, city_map)
         result["queued"] = len(new_ids)
+        # Badge the re-submitters with a note so the card says WHY they
+        # appeared without a fresh HubSpot contact (existing since <date>).
+        _reconv_ext = {str(c.get("external_id")): c for c in reconv}
+        if _reconv_ext and new_ids:
+            ph = ",".join("?" * len(new_ids))
+            for r in conn.execute(
+                    f"SELECT id, external_id FROM leads WHERE id IN ({ph})",
+                    new_ids).fetchall():
+                c = _reconv_ext.get(str(r["external_id"]))
+                if c:
+                    conn.execute(
+                        "INSERT INTO lead_notes (lead_id, author, note) "
+                        "VALUES (?, 'HS', ?)",
+                        (r["id"],
+                         "Re-submitted the FB survey — existing HubSpot "
+                         f"contact since {str(c.get('_hs_created') or '')[:10]}"))
         # Apply the young-lead re-sync: replace the stored payload with
         # the fresh read (then re-enrich), fill EMPTY identity fields
         # only — a manual name fix (scoring-lead-edit) is never
@@ -972,6 +1067,12 @@ def check_new_leads(db_path: str | Path | None = None) -> dict:
             db.set_app_setting("leads_hubspot_watermark", newest)
         except Exception:
             logger.warning("Lead watermark update failed", exc_info=True)
+    newest_rc = max((c.get("arrived_at") or "" for c in reconv), default="")
+    if newest_rc:
+        try:
+            db.set_app_setting(RECONV_WATERMARK_KEY, newest_rc)
+        except Exception:
+            logger.warning("Reconversion watermark update failed", exc_info=True)
     return result
 
 

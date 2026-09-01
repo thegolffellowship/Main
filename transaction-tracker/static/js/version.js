@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.276.1";
+window.TGF_VERSION = "2.277.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.277.0",
+    date: "2026-09-01",
+    changes: [
+      "Incoming Venmo payments now auto-link to manual Add Payment entries (Kerry-ratified — the Mary Wade $16 NET-games case): a second inbound matcher runs after the balance-due pass, resolves the payer handle-first, and on a unique exact-cents match within ±14 days stamps the receipt onto the add-on's EXISTING ledger row — one income entry, receipt approved automatically, no Duplicate Detective cleanup. Bridge scoring-inbound-match[:<expense_id>] runs the matchers on demand.",
+      "Unmatched-inbound watch (Kerry: 'If it can't be matched, I need to know too'): after a 30-minute grace, any incoming P2P payment neither matcher could place raises ONE COO action item (payer, amount, memo) — deduped per receipt; only payments from 2026-09-01 forward alert so history doesn't flood the queue (venmo_inbound_alert_since dial).",
+      "Lead Center now catches FB-survey re-submitters HubSpot deduped into existing contacts (Kerry: 'add on this list people who filled out this Facebook Ad survey that were duplicates in HubSpot'): a second poll sweep keys on recent_conversion_date + the 'Facebook Lead Ads:' conversion event instead of createdate, badges each with an HS note ('existing HubSpot contact since <date>'), and back-collects this campaign's five on first run (Wilder, Hinojosa, O. Gonzalez, M. Hernandez, D. Garza). Existing customers among them auto-convert on arrival, as designed.",
+    ],
+  },
   {
     version: "2.276.1",
     date: "2026-09-01",

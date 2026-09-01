@@ -3686,6 +3686,20 @@ def _scoring_dispatch(url: str, extract: str):
             # Sweep outbound Venmo payout receipts (expense inbox) against
             # pending tgf_payouts and mark matches PAID (v2.50.0)
             return json.dumps(db.auto_match_venmo_payouts_to_tgf(), indent=2)
+        if cmd == "scoring-inbound-match":
+            # "[<expense_id>]" — run the inbound matchers (balance-due,
+            # then manual add-on) for one expense or ALL unmatched
+            # inbound P2P rows, then the unmatched-inbound alert sweep
+            # (v2.277.0, Kerry 2026-09-01: auto-link Add Payment
+            # receipts; "If it can't be matched, I need to know too").
+            _ids = [int(arg)] if arg.strip().isdigit() else None
+            return json.dumps({
+                "balance_due": db.auto_match_venmo_inbound_to_balance_due(
+                    expense_ids=_ids),
+                "addons": db.auto_match_venmo_inbound_to_addons(
+                    expense_ids=_ids),
+                "alerts": db.alert_unmatched_venmo_inbound(),
+            }, indent=2, default=str)
         if cmd == "scoring-payout-link":
             # "scoring-payout-link:<expense_id>|<tolerance>[|<note>]" —
             # link ONE stranded P2P receipt to its pending payout group

@@ -235,6 +235,26 @@ real conversions), ➕ Note promoted to primary on touched rows, modal
 badge chips muted (Tu+Sa / All of it / SA invites / SA ad) so
 exceptions read as signal, toolbar search box (name/email/phone).
 
+## Deduped re-submitter sweep (Kerry 2026-09-01, v2.277.0)
+
+`_fetch_hubspot_reconversions` in leads.py, run inside every poll: an
+EXISTING HubSpot contact who fills the FB survey never crosses the
+createdate watermark (HubSpot dedups the submission into the old
+contact), so a second sweep keys on `recent_conversion_date` >
+`leads_hubspot_reconv_watermark` (default 2026-08-27, the fall
+campaign) and keeps only contacts whose
+`recent_conversion_event_name` starts "Facebook Lead Ads:" AND whose
+createdate ≠ conversion date (genuinely-new contacts ride the normal
+poll). These bypass `lead_source_filter` — the conversion event IS the
+filter; their years-old original analytics source would wrongly fail
+it. They enter the queue with arrived_at = the conversion time, dedup
+by external_id as usual, and get an author-'HS' note "Re-submitted the
+FB survey — existing HubSpot contact since <date>". Existing customers
+among them immediately auto-convert (Registered event / Became member)
+per the standing conversion detect, which is the desired display.
+First live sweep back-collects the 2026 fall campaign's five: Wilder,
+Hinojosa, O. Gonzalez, M. Hernandez, D. Garza.
+
 ## Due-day ping (mailbox #370, Kerry-ratified 2026-08-31, v2.272.0)
 
 `check_followup_due_pings` in leads.py — runs at the TOP of every
