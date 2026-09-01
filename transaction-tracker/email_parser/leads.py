@@ -473,6 +473,15 @@ def _fetch_hubspot_contacts(token: str, since_iso: str) -> list[dict]:
     return out
 
 
+# Identity-record placeholders (mirror of dashboard.js
+# PLACEHOLDER_MERCHANTS): rows that put a PERSON in the system, not a
+# purchase. They must never count as conversion evidence — the Oscar
+# Gonzalez / Daniel Garza case (Kerry 2026-09-01): both carried one
+# 'Roster Import' row from 3/3 and the auto-detect read it as
+# "Registered event" even though neither has ever played or paid.
+PLACEHOLDER_MERCHANTS = ("Roster Import", "Customer Entry", "RSVP Import",
+                         "RSVP Email Link", "Handicap Import")
+
 RECONV_WATERMARK_KEY = "leads_hubspot_reconv_watermark"
 # Current fall campaign start — the first reconversion sweep back-collects
 # this campaign's deduped re-submitters (Wilder, Hinojosa, O.Gonzalez,
@@ -1018,6 +1027,7 @@ def check_new_leads(db_path: str | Path | None = None) -> dict:
                 "                WHERE i.customer_id = leads.customer_id "
                 "                AND i.transaction_status = 'active' "
                 "                AND UPPER(i.item_name) LIKE '%MEMBERSHIP%'))")
+            _ph = ",".join("?" * len(PLACEHOLDER_MERCHANTS))
             conn.execute(
                 "UPDATE leads SET status = 'converted', "
                 "tag = 'Registered event', "
@@ -1030,7 +1040,26 @@ def check_new_leads(db_path: str | Path | None = None) -> dict:
                 "AND EXISTS (SELECT 1 FROM items i "
                 "            WHERE i.customer_id = leads.customer_id "
                 "            AND i.transaction_status = 'active' "
-                "            AND UPPER(i.item_name) NOT LIKE '%MEMBERSHIP%')")
+                f"           AND i.merchant NOT IN ({_ph}) "
+                "            AND UPPER(i.item_name) NOT LIKE '%MEMBERSHIP%')",
+                PLACEHOLDER_MERCHANTS)
+            # Heal (v2.277.1): leads the OLD rule auto-converted off a
+            # placeholder row revert to the queue — auto-tagged rows only
+            # ('Registered event'), with no REAL purchase and no
+            # membership. touched fields stay as they are (a manual touch
+            # that preceded the wrong flip must survive).
+            conn.execute(
+                "UPDATE leads SET status = 'new', tag = NULL "
+                "WHERE status = 'converted' "
+                "AND COALESCE(tag, '') = 'Registered event' "
+                "AND customer_id IS NOT NULL "
+                "AND NOT EXISTS (SELECT 1 FROM items i "
+                "                WHERE i.customer_id = leads.customer_id "
+                "                AND i.transaction_status = 'active' "
+                f"               AND i.merchant NOT IN ({_ph})) "
+                "AND NOT EXISTS (SELECT 1 FROM customer_memberships m "
+                "                WHERE m.customer_id = leads.customer_id)",
+                PLACEHOLDER_MERCHANTS)
         except sqlite3.Error as e:
             logger.warning("Lead conversion auto-detect failed: %s", e)
         # Backfill: prospects created before the acquisition_source fix

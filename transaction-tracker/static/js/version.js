@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.277.0";
+window.TGF_VERSION = "2.277.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.277.1",
+    date: "2026-09-01",
+    changes: [
+      "Lead conversion auto-detect no longer counts PLACEHOLDER rows as purchases (Kerry caught it: Oscar Gonzalez and Daniel Garza showed 'Registered event' though neither has ever played or paid — their only item is a 3/3 Roster Import identity record). The 'Registered event' rule now requires a real merchant (Roster/Customer/RSVP/Handicap import rows excluded), and a poll-time heal reverts auto-converted leads with no real purchase and no membership back to NEW.",
+    ],
+  },
   {
     version: "2.277.0",
     date: "2026-09-01",

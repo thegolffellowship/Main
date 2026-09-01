@@ -235,6 +235,18 @@ real conversions), ➕ Note promoted to primary on touched rows, modal
 badge chips muted (Tu+Sa / All of it / SA invites / SA ad) so
 exceptions read as signal, toolbar search box (name/email/phone).
 
+## Conversion evidence excludes placeholders (v2.277.1)
+
+The 'Registered event' auto-detect requires an active item whose
+merchant is NOT in `PLACEHOLDER_MERCHANTS` (leads.py mirror of
+dashboard.js: Roster Import / Customer Entry / RSVP Import / RSVP
+Email Link / Handicap Import) — those rows put a PERSON in the system,
+not a purchase. The Oscar Gonzalez / Daniel Garza case: one 3/3
+'Roster Import' row each read as a conversion though neither ever
+played or paid. A poll-time heal reverts auto-tagged 'Registered
+event' leads with no real purchase and no membership to status 'new'
+(touched fields untouched).
+
 ## Deduped re-submitter sweep (Kerry 2026-09-01, v2.277.0)
 
 `_fetch_hubspot_reconversions` in leads.py, run inside every poll: an
