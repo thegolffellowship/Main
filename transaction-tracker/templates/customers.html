@@ -2594,7 +2594,7 @@
                 if (!row) return;
                 const win = m.complete && (m.winners || []).some(w => w.customer_id === customerId);
                 moRows.push(`<tr${win ? ' style="background:#fde68a;"' : ""}>
-                    <td${win ? ' style="font-weight:700;"' : ""}>${escapeHtml(m.name)}${win ? ' <span class="tgf-troph gold" title="Month won"></span>' : ""}</td>
+                    <td${win ? ' style="font-weight:700;"' : ""}>${escapeHtml(m.name)}${win ? ' <span class="tgf-troph" title="Month won"></span>' : ""}</td>
                     <td style="text-align:center;">${row.rounds ?? ""}</td>
                     <td style="text-align:center;font-weight:700;border-left:2px solid #cbd5e1;border-right:2px solid #cbd5e1;">${row.points}</td>
                     <td style="text-align:center;">${escapeHtml(String(row.rank_label ?? row.rank ?? ""))}</td>

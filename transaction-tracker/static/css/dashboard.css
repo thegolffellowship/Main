@@ -2997,18 +2997,23 @@ div.mobile-card.row-rsvp-only {
    element; each page's existing open-state hook (rotate or glyph swap)
    rides on top. Do NOT restyle arrows per-page — change the look
    HERE. */
-/* TGF standard trophy mark (Kerry 2026-09-01: "Use the new standard
-   trophy icon we're using, not that generic one, for champion
-   designation") — CD's star-on-trophy, inline at text size. Default
-   fill is currentColor so it matches surrounding text (e.g. the amber
-   CHAMPION pills); add .gold for the plaque's gold-gradient treatment.
+/* TGF standard trophy mark (Kerry 2026-09-01) — the PLAIN outline
+   trophy (no star), inline at text size, currentColor fill so it reads
+   as a black outline on light surfaces and matches badge text in the
+   amber pills. THE STAR VARIANT (.star, CD's star-on-trophy) IS
+   RESERVED FOR THE LONE STAR CUP — Kerry: "Star symbol is for the
+   Lone Star Cup." .gold applies the plaque gradient where wanted.
    Never use the 🏆 emoji for champion designation. */
 .tgf-troph {
     display: inline-block; width: 1em; height: 1em;
     vertical-align: -0.12em;
     background: currentColor;
-    -webkit-mask: url('/static/email/trophy-star-white.svg') no-repeat center / contain;
-    mask: url('/static/email/trophy-star-white.svg') no-repeat center / contain;
+    -webkit-mask: url('/static/email/trophy-plain-white.svg') no-repeat center / contain;
+    mask: url('/static/email/trophy-plain-white.svg') no-repeat center / contain;
+}
+.tgf-troph.star {
+    -webkit-mask-image: url('/static/email/trophy-star-white.svg');
+    mask-image: url('/static/email/trophy-star-white.svg');
 }
 .tgf-troph.gold {
     background: linear-gradient(160deg, #F7E7A0 0%, #FFD75E 45%, #E0A93C 100%);

@@ -6426,7 +6426,7 @@
         // Plus-handicap deduction (Kerry, championship day 2026-08-01):
         // the TODAY figure already carries it — say so where there's room.
         if (tr.dataset.champPlus) bits.push(`Plus hcp <b>&minus;${escapeHtml(tr.dataset.champPlus)}</b> pts applied`);
-        if (tr.dataset.champion) bits.push(`<span class="tgf-troph gold"></span> <b style="color:#92400E;">${tr.dataset.championTitle ? escapeHtml(tr.dataset.championTitle) : `2026 City ${tr.dataset.champion === "co" ? "Co-" : ""}Champion &mdash; Lone Star Cup ${tr.dataset.champion === "co" ? "Co-" : ""}Captain`}</b>`);
+        if (tr.dataset.champion) bits.push(`<span class="tgf-troph"></span> <b style="color:#92400E;">${tr.dataset.championTitle ? escapeHtml(tr.dataset.championTitle) : `2026 City ${tr.dataset.champion === "co" ? "Co-" : ""}Champion &mdash; Lone Star Cup ${tr.dataset.champion === "co" ? "Co-" : ""}Captain`}</b>`);
         return bits.join(" &middot; ");
     }
 
@@ -6726,7 +6726,7 @@
                 ${moveCell}
                 <td${cupSlim ? ' style="white-space:normal;"' : ''}>${nameCell}${showChapter && !cupSlim ? prChapterBadge(r.player_chapter) : ""}${cupSlim ? "" : hcp}${statusPill}${r.customer_id && champIds.has(r.customer_id)
                     ? (compact
-                        ? ` <span title="${escapeHtml(champTitle)}" class="tgf-troph gold" style="vertical-align:-1px;"></span>`
+                        ? ` <span title="${escapeHtml(champTitle)}" class="tgf-troph" style="vertical-align:-1px;"></span>`
                         : ` <span title="${escapeHtml(champTitle)}" style="display:inline-block;padding:1px 6px;border-radius:9999px;font-size:0.62rem;font-weight:700;letter-spacing:0.04em;background:#FEF3C7;color:#92400E;border:1px solid #F59E0B;vertical-align:1px;"><span class="tgf-troph"></span> ${coChamp ? "CO-CHAMPION" : "CHAMPION"}${cupChampRace ? "" : ` &middot; LSC ${coChamp ? "CO-" : ""}CAPTAIN`}</span>`)
                     : ""}${chevron}${compact && !prRaceFinal ? "" : prPayBadge(r)}${thruSub}</td>
                 <td style="${ptsStyle}${cupMode ? champEdge : ""}">${cupMode ? prFmtReset(r.points_reset) : (r.total_points ?? "")}</td>
@@ -7067,7 +7067,7 @@
                 <td style="${rankTh}">${escapeHtml(r.rank)}${prRankMove(r.rank, r.prev_rank)}</td>
                 <td${cupSlimF ? ' style="white-space:normal;"' : ''}>${nameCell}${r.customer_id && fcChampIds.has(r.customer_id)
                     ? (cupSlimF
-                        ? ` <span title="${escapeHtml(fcChampTitle)}" class="tgf-troph gold" style="vertical-align:-1px;"></span>`
+                        ? ` <span title="${escapeHtml(fcChampTitle)}" class="tgf-troph" style="vertical-align:-1px;"></span>`
                         : ` <span title="${escapeHtml(fcChampTitle)}" style="display:inline-block;padding:1px 6px;border-radius:9999px;font-size:0.62rem;font-weight:700;letter-spacing:0.04em;background:#FEF3C7;color:#92400E;border:1px solid #F59E0B;vertical-align:1px;"><span class="tgf-troph"></span> ${fcCo ? "CO-CHAMPION" : "CHAMPION"}</span>`)
                     : ""}${cupSlimF ? "" : prChapterBadge(r.chapter)}${cupSlimF ? "" : hcp}${chevF}${cupSlimF && !prRaceFinal ? "" : prPayBadge(r)}${thruSubF}</td>
                 ${cupSlimF ? "" : `<td style="${netTh}">${cityCell}</td>`}
@@ -7238,7 +7238,7 @@
                 purse = `<span style="color:var(--text-muted);" title="Projected — month in progress">$${sel.purse}</span>`;
             return `<tr${r.customer_id ? ` data-cid="${r.customer_id}"` : ""}${r.member_card_id ? ` data-card="${escapeHtml(String(r.member_card_id))}" data-race="${race}"` : ""} style="${bg}${r.customer_id ? "cursor:pointer;" : ""}">
                 <td style="${rankStyle}${win ? "font-weight:700;" : ""}">${escapeHtml(r.rank_label)}</td>
-                <td class="pr-wrap"${win ? ' style="font-weight:700;"' : ""}>${name}${prChapterBadge(r.chapter)}${win ? ' <span class="tgf-troph gold" title="Month won"></span>' : ""}${chevron}</td>
+                <td class="pr-wrap"${win ? ' style="font-weight:700;"' : ""}>${name}${prChapterBadge(r.chapter)}${win ? ' <span class="tgf-troph" title="Month won"></span>' : ""}${chevron}</td>
                 <td style="${rndStyle}">${r.rounds ?? ""}</td>
                 <td style="${ptsStyle}">${r.points}</td>
                 <td style="${purseStyle}">${purse}</td>

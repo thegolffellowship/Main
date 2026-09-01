@@ -516,15 +516,17 @@
             // member is automatically in the running.
             if (d.monthly) {
                 const mo = d.monthly;
+                // "[MONTH] POINTS" (Kerry 2026-09-01 — not "MONTHLY
+                // POINTS · SEPTEMBER")
                 const moName = esc(String(mo.month || "").toUpperCase());
                 rows.push(mo.on_board
                     ? standRow(esc(String(mo.rank ?? "—")), "#1B1B1B",
-                        `of ${mo.n_players}`, `Monthly Points · ${moName}`,
+                        `of ${mo.n_players}`, `${moName} Points`,
                         [`${mo.points ?? 0} pts`,
                          mo.rounds != null ? `${mo.rounds} rounds` : null]
                             .filter(Boolean).join(" · "),
                         pillIn, `${contestsBase}#race=monthly`)
-                    : standRow("—", "#C6C2BA", "", `Monthly Points · ${moName}`,
+                    : standRow("—", "#C6C2BA", "", `${moName} Points`,
                         "Play an event this month to post points", pillIn,
                         `${contestsBase}#race=monthly`));
             }
@@ -579,7 +581,7 @@
                 rows.push(
                     `<a href="${contestsBase}#tab=lsc" class="spt-stand spt-stand-lsc">` +
                     `<div class="rk"><div class="r">${esc(String(rk))}</div><div class="f">${fld}</div></div>` +
-                    `<div class="mid"><div class="race"><span class="tgf-troph gold"></span> LONE STAR CUP</div><div class="meta">${esc(meta)}</div></div>` +
+                    `<div class="mid"><div class="race"><span class="tgf-troph star gold"></span> LONE STAR CUP</div><div class="meta">${esc(meta)}</div></div>` +
                     pill + `<span class="spt-go">&rsaquo;</span></a>`);
             }
             // Fall buy-in placeholder LAST — only for a buy-in with no
@@ -605,13 +607,16 @@
                               m.rounds != null ? `${m.rounds} rounds` : null,
                               m.won ? `won${m.share != null ? " $" + m.share : ""}` : null]
                     .filter(Boolean).join(" · ");
+                // A month WON shows the plain trophy IN the rank column
+                // (Kerry 2026-09-01: "when they've placed first at the
+                // end, I want the trophy icon to show there in that left
+                // column where you're showing their ranking").
                 (pastMoByYear[y] = pastMoByYear[y] || []).push(standRow(
-                    esc(String(m.rank ?? "—")), "#1B1B1B", `of ${m.n_players}`,
-                    `Monthly Points · ${String(m.month || "")}`, meta, pillIn,
-                    `${contestsBase}#race=monthly`, null,
-                    // TGF standard trophy mark, not the generic emoji
-                    // (Kerry 2026-09-01) — badge slot renders raw html.
-                    m.won ? ' <span class="tgf-troph gold" title="Month won"></span>' : ""));
+                    m.won ? '<span class="tgf-troph" title="Month won"></span>'
+                          : esc(String(m.rank ?? "—")),
+                    "#1B1B1B", `of ${m.n_players}`,
+                    `${esc(String(m.month || ""))} Points`, meta, pillIn,
+                    `${contestsBase}#race=monthly`));
             });
             // PAST CONTESTS: collapsed by default, newest year first, a
             // year band over each group (majors first, then that year's

@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.285.2";
+window.TGF_VERSION = "2.285.3";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.285.3",
+    date: "2026-09-01",
+    changes: [
+      "Trophy mark corrected per Kerry: the standard champion/winner icon is the PLAIN outline trophy (new /static/email/trophy-plain-white.svg — the same cup, handles and base, NO star), rendered as a black outline via currentColor. THE STAR-ON-TROPHY IS RESERVED FOR THE LONE STAR CUP ('Star symbol is for the Lone Star Cup') — a .star variant keeps it on the Spotlight LSC row; every other mark from v2.285.2 switched to the plain outline.",
+      "Spotlight monthly rows renamed to '[MONTH] POINTS' (was 'MONTHLY POINTS · SEPTEMBER'), and a month WON now shows the trophy IN the left rank column where the ranking normally sits, per Kerry's spec — replacing the small badge next to the race name.",
+    ],
+  },
   {
     version: "2.285.2",
     date: "2026-09-01",
