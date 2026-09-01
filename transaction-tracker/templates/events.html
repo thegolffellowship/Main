@@ -12690,21 +12690,19 @@
         return 150;
     }
 
-    // Status tiers anchored to SUNSET, not civil twilight (Kerry
-    // 2026-09-01: "biggest thing we need to avoid is not being able to
-    // see the ball before players are finished" \u2014 ball flight is
-    // unwatchable once the sun is down, ~25 min before civil twilight
-    // ends). The old rule measured margin to twilight (red < 20 min),
-    // which only approximated sunset by coincidence; this states it.
-    //   green  = est. finish 30+ min before sunset
-    //   yellow = est. finish within 30 min before sunset (tight)
-    //   red    = est. finish after sunset (can't see the ball)
+    // Status tiers \u2014 Kerry's ruling 2026-09-01 (supersedes the same-day
+    // sunset-margin draft and the original twilight-margin rule):
+    //   green  = est. finish BEFORE SUNSET (the 2:30/5:00 round
+    //            durations already carry the buffer)
+    //   yellow = est. finish between sunset and civil twilight (warning)
+    //   red    = est. finish AFTER CIVIL TWILIGHT (STOP/DON'T)
+    // The tee-sheet bands and the dots share the same two lines.
     // Rendered as CSS dots, never emoji: \ud83d\udfe2/\ud83d\udfe1/\u2705 are newer emoji
     // codepoints missing from some Windows fonts \u2014 they showed as
     // hollow "tofu" squares while \ud83d\udd34 rendered (Kerry's screenshot).
-    function _ttaTier(finishMins, sunsetMins) {
-        if (finishMins > sunsetMins) return "red";
-        if (finishMins > sunsetMins - 30) return "yellow";
+    function _ttaTier(finishMins, sunsetMins, twilightMins) {
+        if (finishMins > twilightMins) return "red";
+        if (finishMins > sunsetMins) return "yellow";
         return "green";
     }
 
@@ -12712,15 +12710,15 @@
         return `<span class="tta-dot ${tier}"></span>`;
     }
 
-    function trafficLight(finishMins, sunsetMins) {
-        const tier = _ttaTier(finishMins, sunsetMins);
+    function trafficLight(finishMins, sunsetMins, twilightMins) {
+        const tier = _ttaTier(finishMins, sunsetMins, twilightMins);
         return { icon: _ttaDot(tier), cls: tier,
-                 text: tier === "red" ? "Finishes after sunset"
-                     : tier === "yellow" ? "Cutting it close" : "" };
+                 text: tier === "red" ? "Finishes after civil twilight \u2014 don't"
+                     : tier === "yellow" ? "Finishes after sunset" : "" };
     }
 
-    function statusIcon(finishMins, sunsetMins) {
-        return _ttaDot(_ttaTier(finishMins, sunsetMins));
+    function statusIcon(finishMins, sunsetMins, twilightMins) {
+        return _ttaDot(_ttaTier(finishMins, sunsetMins, twilightMins));
     }
 
     async function fetchSunData(date, chapter) {
@@ -12813,8 +12811,8 @@
 
         const finish9 = last9 + 150;
         const finish18 = last18 + 300;
-        const tl9 = trafficLight(finish9, sunsetMins);
-        const tl18 = trafficLight(finish18, sunsetMins);
+        const tl9 = trafficLight(finish9, sunsetMins, twilightMins);
+        const tl18 = trafficLight(finish18, sunsetMins, twilightMins);
 
         let html = `
         <div class="advisor-header">
@@ -12823,9 +12821,9 @@
             <span><span class="sun-label">Civil Twilight Ends:</span> ${sunData.civil_twilight_end}</span>
         </div>
         <div class="advisor-legend">
-            <span>${_ttaDot("green")} finishes 30+ min before sunset</span>
-            <span>${_ttaDot("yellow")} within 30 min of sunset</span>
-            <span>${_ttaDot("red")} after sunset — can't see the ball</span>
+            <span>${_ttaDot("green")} finishes before sunset</span>
+            <span>${_ttaDot("yellow")} between sunset &amp; civil twilight</span>
+            <span>${_ttaDot("red")} after civil twilight — don't</span>
         </div>
         <div class="advisor-recs">
             <div class="advisor-rec">
@@ -12871,7 +12869,7 @@
                 const s9 = timeToMinutes(cur9);
                 const f9 = s9 + 150;
                 html += `<div class="shotgun-estimate">
-                    <div>9-hole shotgun est. finish: <strong>${minutesToTime12(f9)}</strong> ${statusIcon(f9, sunsetMins)}</div>
+                    <div>9-hole shotgun est. finish: <strong>${minutesToTime12(f9)}</strong> ${statusIcon(f9, sunsetMins, twilightMins)}</div>
                 </div>`;
             }
             // 18-hole shotgun estimate
@@ -12879,7 +12877,7 @@
                 const s18 = timeToMinutes(cur18);
                 const f18 = s18 + 300;
                 html += `<div class="shotgun-estimate">
-                    <div>18-hole shotgun est. finish: <strong>${minutesToTime12(f18)}</strong> ${statusIcon(f18, sunsetMins)}</div>
+                    <div>18-hole shotgun est. finish: <strong>${minutesToTime12(f18)}</strong> ${statusIcon(f18, sunsetMins, twilightMins)}</div>
                 </div>`;
             }
             // Combo tee sheets (only for groups using Tee Times)
@@ -12898,7 +12896,7 @@
             if (inputs.startType === "Shotgun" && cur9) {
                 const dur = singleFormatDurationMins(inputs.format);
                 const f = timeToMinutes(cur9) + dur;
-                html += `<div class="shotgun-estimate">All groups estimated finish: <strong>${minutesToTime12(f)}</strong> ${statusIcon(f, sunsetMins)}</div>`;
+                html += `<div class="shotgun-estimate">All groups estimated finish: <strong>${minutesToTime12(f)}</strong> ${statusIcon(f, sunsetMins, twilightMins)}</div>`;
             }
             // Single format: tee sheet
             if (inputs.startType === "Tee Times" && inputs.teeInterval > 0 && cur9 && inputs.teeCount > 0) {
@@ -12947,7 +12945,7 @@
                 twilightRowInserted = true;
             }
 
-            const si = statusIcon(row.finishMins, sheetSunsetMins);
+            const si = statusIcon(row.finishMins, sheetSunsetMins, twilightMins);
             html += `<tr><td>${minutesToTime12(row.teeMins)}</td><td>${minutesToTime12(row.finishMins)}</td><td>${si}</td></tr>`;
         }
 

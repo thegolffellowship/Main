@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.276.0";
+window.TGF_VERSION = "2.276.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.276.1",
+    date: "2026-09-01",
+    changes: [
+      "Tee Time Advisor tiers per Kerry's ruling (supersedes the v2.276.0 sunset-margin draft): GREEN = est. finish before sunset (the 2:30/5:00 round durations already carry the buffer), YELLOW = between sunset and civil twilight (warning), RED = after civil twilight (STOP/DON'T). The dots and the two tee-sheet bands now share the same lines — on the s9.21 sheet, 7:44/7:52 finishes read yellow, not red.",
+    ],
+  },
   {
     version: "2.276.0",
     date: "2026-09-01",
