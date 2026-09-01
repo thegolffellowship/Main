@@ -93,6 +93,11 @@
         .ld-drow .ld-tag { padding: 1px 7px; font-size: 10.5px; }
         .ld-drow .ld-pill { padding: 1px 9px; }
         .ld-dnote { font-size: 11.5px; color: #4B5563; margin-top: 2px; white-space: normal; display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical; overflow: hidden; }
+        /* Survey-section band inside the answers table (Kerry
+           2026-09-01: current vs earlier submission, separated) */
+        .ld-era td { background: #1B1B1B; color: #fff;
+            font: 700 10px/1.7 'Bitter', serif; letter-spacing: 1px;
+            text-transform: uppercase; padding: 3px 8px !important; }
         .ld-dnote b { color: #1B1B1B; }
         .ld-dacts { display: flex; gap: 6px; align-items: center; justify-content: flex-end; }
         .ld-ddet { display: none; padding: 6px 14px 14px 28px; background: #FAFAF8; border-bottom: 1px solid #F3F2EF; border-left: 8px solid #E5E7EB; }
@@ -323,31 +328,41 @@
             return hit ? hit[1] : human(k);
         };
         function displayAnswers(payload) {
-            // Per-survey tagging (Kerry 2026-09-01): re-submitters carry
-            // BOTH surveys' properties. _answer_dates stamps when each
-            // answer was last set; anything set outside 3 days of the
-            // latest conversion is an EARLIER survey's answer and shows
-            // dated, below the current answers.
+            // Per-survey SECTIONS (Kerry 2026-09-01: "show side by side
+            // ... rather than combining. It's hard for me to tell what's
+            // the most recent response"): current answers under a
+            // "This survey" band, earlier-campaign answers under an
+            // "Earlier survey" band below — including the PREVIOUS value
+            // of any answer the new submission changed (_answers_prev).
             const dates = payload._answer_dates || null;
+            const prev = payload._answers_prev || {};
             const latest = payload.recent_conversion_date || "";
             const isCurrent = k => {
                 if (!dates || !dates[k] || !latest) return true;
-                return Math.abs(new Date(dates[k]) - new Date(latest)) < 3 * 864e5;
+                return new Date(dates[k]) >= (new Date(latest) - 3 * 864e5);
             };
-            const eraDate = k => {
-                const d = new Date(dates[k]);
-                return isNaN(d) ? "" : ` · ${d.getMonth() + 1}/${d.getDate()}/${String(d.getFullYear()).slice(2)}`;
+            const fmtD = t => {
+                const d = new Date(t);
+                return isNaN(d) ? "" : `${d.getMonth() + 1}/${d.getDate()}/${String(d.getFullYear()).slice(2)}`;
             };
-            const form = [], older = [], attr = [];
+            const cur = [], older = [], attr = [];
             for (const k of Object.keys(payload).sort()) {
                 if ((HIDE.has(k) && !ATTR_LABELS[k]) ||
                     HIDE_PREFIX.some(p => k.startsWith(p))) continue;
                 const val = pretty(payload[k]);
-                if (ATTR_LABELS[k]) attr.push([ATTR_LABELS[k], val]);
-                else if (!isCurrent(k)) older.push([`${formLabel(k)} (earlier survey${eraDate(k)})`, val]);
-                else form.push([formLabel(k), val]);
+                if (ATTR_LABELS[k]) { attr.push([ATTR_LABELS[k], val]); continue; }
+                (isCurrent(k) ? cur : older).push([formLabel(k), val, dates && dates[k]]);
+                if (isCurrent(k) && prev[k])
+                    older.push([formLabel(k), pretty(prev[k].v), prev[k].t]);
             }
-            return form.concat(older).concat(attr);
+            if (!dates || !older.length)
+                return cur.map(([l, v]) => [l, v]).concat(attr);
+            const oldDate = older.map(r => r[2]).filter(Boolean).sort().pop();
+            return [["__SEC__", `This survey · ${fmtD(latest)}`]]
+                .concat(cur.map(([l, v]) => [l, v]))
+                .concat([["__SEC__", `Earlier survey · ${fmtD(oldDate)}`]])
+                .concat(older.map(([l, v]) => [l, v]))
+                .concat(attr);
         }
         // Sort accessors per key (sort select on the toolbar)
         const getName = l => ([l.first_name, l.last_name].filter(Boolean).join(" ") || "").toLowerCase();
@@ -593,7 +608,7 @@
             </div>
             <div class="ld-ddet ${chCls}" id="ld-det-${l.id}">
                 ${notesList ? `<table class="ld-mnotes">${notesList}</table><hr style="border:none;border-top:1px solid #E5E7EB">` : ""}
-                ${extras.length ? `<table>${extras.map(([label, v]) => `<tr><td class="k">${esc(label)}</td><td>${esc(v)}</td></tr>`).join("")}</table>` : "<span class='ld-dsub'>No form answers.</span>"}
+                ${extras.length ? `<table>${extras.map(([label, v]) => label === "__SEC__" ? `<tr class="ld-era"><td colspan="2">${esc(v)}</td></tr>` : `<tr><td class="k">${esc(label)}</td><td>${esc(v)}</td></tr>`).join("")}</table>` : "<span class='ld-dsub'>No form answers.</span>"}
             </div>`);
             // Mobile call-sheet card (#361): one-glance triage,
             // two-tap contact. Badges always visible; sms:/tel:/mailto:
@@ -611,7 +626,7 @@
                 ${latestNote ? `<div class="ld-noteprev"><b>${esc((latestNote.author || "?")[0])}</b> · ${esc(fmtNoteTime(latestNote.created_at))} — ${esc(latestNote.note)}</div>` : ""}
                 <details class="ld-mdetails"><summary>Details${(l.notes_log || []).length > 1 ? ` · ${l.notes_log.length} notes` : ""}</summary>
                     ${notesList ? `<table class="ld-mnotes">${notesList}</table><hr style="border:none;border-top:1px solid #F3F2EF">` : ""}
-                    ${mextras.length ? `<table>${mextras.map(([label, v]) => `<tr><td class="k">${esc(label)}</td><td>${esc(v)}</td></tr>`).join("")}</table>` : ""}
+                    ${mextras.length ? `<table>${mextras.map(([label, v]) => label === "__SEC__" ? `<tr class="ld-era"><td colspan="2">${esc(v)}</td></tr>` : `<tr><td class="k">${esc(label)}</td><td>${esc(v)}</td></tr>`).join("")}</table>` : ""}
                 </details>
                 <div class="ld-mactions">${primary} ${tagSel}
                     <span class="ld-menu-wrap"><button class="ld-btn" onclick="toggleMenu('ld-menu-${l.id}')">⋯</button>

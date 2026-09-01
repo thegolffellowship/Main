@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.278.2";
+window.TGF_VERSION = "2.279.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.279.0",
+    date: "2026-09-01",
+    changes: [
+      "Re-submitter cards now show the two surveys as SEPARATE sections (Kerry: 'show side by side or a tab to toggle between submittals... hard for me to tell what's the most recent response'): a dark 'THIS SURVEY · date' band with the current answers on top, then 'EARLIER SURVEY · date' with the previous campaign's answers — including what a changed answer USED to say (from HubSpot per-property version history). Attribution rows stay at the bottom.",
+      "Fixed the history-ordering bug Kerry's Wilder card exposed: v2.278.1 read HubSpot's version list from the wrong end and stamped every answer with its FIRST-ever set date, tagging even current answers as 'earlier survey'. Versions are now sorted explicitly; the five queued re-submitters re-backfill to the corrected format on the next poll.",
+    ],
+  },
   {
     version: "2.278.2",
     date: "2026-09-01",

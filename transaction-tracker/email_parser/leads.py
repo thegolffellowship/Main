@@ -494,26 +494,57 @@ DEFAULT_RECONV_WATERMARK = "2026-08-27T00:00:00Z"
 
 
 
-def _fetch_answer_dates(token: str, contact_id: str,
-                        keys: list[str]) -> dict:
-    """{answer key: last-set ISO timestamp} via propertiesWithHistory —
-    lets the card split a deduped re-submitter's answers by SURVEY
-    (Kerry 2026-09-01: HubSpot merges submissions into one contact, so
-    earlier-campaign answers persist beside the new ones and the card
-    showed them mixed)."""
+def _hist_ts(v):
+    from datetime import datetime as _dt
+    try:
+        return _dt.fromisoformat(str(v).replace("Z", "+00:00"))
+    except (ValueError, TypeError):
+        return None
+
+
+def _fetch_answer_history(token: str, contact_id: str, keys: list[str],
+                          latest_conv: str = "") -> tuple[dict, dict]:
+    """(dates, prev) via propertiesWithHistory, splitting a deduped
+    re-submitter's answers by SURVEY (Kerry 2026-09-01: HubSpot merges
+    submissions into one contact, so earlier-campaign answers persist
+    beside the new ones and the card showed them mixed).
+
+    dates = {key: LAST-set ISO timestamp}. Versions are sorted HERE —
+    the v2.278.1 draft trusted the API's element order, read the wrong
+    end, and stamped every answer with its FIRST-ever set date, tagging
+    even current answers "earlier survey" (Kerry's Wilder card).
+
+    prev = {key: {"v": value, "t": ts}} — for a key the CURRENT survey
+    overwrote, the newest version set before the latest-conversion
+    window, i.e. the EARLIER survey's answer. Lets the card show a
+    changed answer in BOTH sections (new value on top, what it used to
+    be below)."""
     if not keys:
-        return {}
+        return {}, {}
+    from datetime import timedelta as _td
     resp = requests.get(
         f"https://api.hubapi.com/crm/v3/objects/contacts/{contact_id}",
         params={"propertiesWithHistory": ",".join(keys[:40])}, timeout=30,
         headers={"Authorization": f"Bearer {token}"})
     resp.raise_for_status()
-    out = {}
+    cutoff = _hist_ts(latest_conv)
+    if cutoff:
+        cutoff = cutoff - _td(days=3)
+    dates, prev = {}, {}
     for k, versions in (resp.json().get("propertiesWithHistory")
                         or {}).items():
-        if versions:
-            out[k] = versions[0].get("timestamp")
-    return out
+        vs = [(_hist_ts(v.get("timestamp")), v) for v in (versions or [])]
+        vs = sorted([x for x in vs if x[0]], key=lambda x: x[0],
+                    reverse=True)
+        if not vs:
+            continue
+        dates[k] = vs[0][1].get("timestamp")
+        if cutoff and vs[0][0] >= cutoff:
+            older = next((v for t, v in vs if t < cutoff
+                          and v.get("value") not in (None, "")), None)
+            if older is not None and older.get("value") != vs[0][1].get("value"):
+                prev[k] = {"v": older["value"], "t": older.get("timestamp")}
+    return dates, prev
 
 
 def _answer_date_keys(payload: dict) -> list[str]:
@@ -992,11 +1023,17 @@ def check_new_leads(db_path: str | Path | None = None) -> dict:
             # answer came from (Kerry 2026-09-01).
             if c.get("_reconversion") and c.get("payload"):
                 try:
-                    c["payload"]["_answer_dates"] = _fetch_answer_dates(
+                    _d, _pv = _fetch_answer_history(
                         token, str(c["external_id"]),
-                        _answer_date_keys(c["payload"]))
+                        _answer_date_keys(c["payload"]),
+                        latest_conv=c["payload"].get(
+                            "recent_conversion_date") or "")
+                    c["payload"]["_answer_dates"] = _d
+                    if _pv:
+                        c["payload"]["_answers_prev"] = _pv
+                    c["payload"]["_hist_v"] = 2
                 except Exception as e:
-                    logger.warning("Answer-date fetch failed for contact "
+                    logger.warning("Answer-history fetch failed for contact "
                                    "%s: %s", c.get("external_id"), e)
         new_ids = upsert_leads(conn, passing, city_map)
         result["queued"] = len(new_ids)
@@ -1007,19 +1044,26 @@ def check_new_leads(db_path: str | Path | None = None) -> dict:
             for r in conn.execute(
                     "SELECT l.id, l.external_id, l.payload FROM leads l "
                     "WHERE l.payload IS NOT NULL "
-                    "AND l.payload NOT LIKE '%_answer_dates%' "
+                    "AND l.payload NOT LIKE '%\"_hist_v\": 2%' "
                     "AND EXISTS (SELECT 1 FROM lead_notes n "
                     "            WHERE n.lead_id = l.id AND n.author = 'HS') "
                     "LIMIT 10").fetchall():
                 try:
                     pl = json.loads(r["payload"])
-                    pl["_answer_dates"] = _fetch_answer_dates(
-                        token, str(r["external_id"]), _answer_date_keys(pl))
+                    _d, _pv = _fetch_answer_history(
+                        token, str(r["external_id"]),
+                        _answer_date_keys(pl),
+                        latest_conv=pl.get("recent_conversion_date") or "")
+                    pl["_answer_dates"] = _d
+                    pl.pop("_answers_prev", None)
+                    if _pv:
+                        pl["_answers_prev"] = _pv
+                    pl["_hist_v"] = 2
                     conn.execute("UPDATE leads SET payload = ? WHERE id = ?",
                                  (json.dumps(pl), r["id"]))
                 except Exception:
-                    logger.warning("Answer-date backfill failed for lead %s",
-                                   r["id"], exc_info=True)
+                    logger.warning("Answer-history backfill failed for lead "
+                                   "%s", r["id"], exc_info=True)
         except sqlite3.Error:
             pass
         # Badge the re-submitters with a note so the card says WHY they
