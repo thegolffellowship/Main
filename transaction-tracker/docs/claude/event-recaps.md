@@ -97,3 +97,20 @@ the rules live. This is the voice and rulebook of record.
     good vibes language. Fall race framing: "the baby brother of the
     summer City Net races — best 6 + Fall Championship instead of best
     10; more of a sprint than a marathon."
+
+## Sent template of record (Kerry's final s9.21 send, 2026-09-02)
+
+Kerry's shipped version added structure to keep in every draft:
+- **Subject**: `TGF Results | <WINNER-SURNAME CAPS> <verb phrase>` —
+  e.g. "TGF Results | RIDEOUT Sweeps the First Tuesday Night at the
+  Springs!"
+- **Section order**: lede/results grafs → **FULL EVENT RESULTS**
+  (button/link to GG results) → Fall Points Race graf with BUY IN HERE
+  link → **CURRENT STANDINGS** (button/link) → September/monthly points
+  one-liner → **Hole-in-One pot teaser** ("BTW... Our HOLE-IN-ONE Pot
+  is reaching monumental heights at $X,XXX!!!" — pull the CURRENT
+  accrued pot value fresh each time; it's a cross-event accruing pot)
+  → NEW FACES → fellowship close → UP NEXT (linked, both chapters) →
+  signature block (Kerry Niester / The Golf Fellowship / 210.838.3948).
+- Draft with placeholders for the FULL EVENT RESULTS / CURRENT
+  STANDINGS links (Kerry wires the GG URLs in his email tool).
