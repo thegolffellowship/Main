@@ -64,3 +64,13 @@ the rules live. This is the voice and rulebook of record.
 - Quiet on WDs and medical situations unless Kerry says otherwise.
 - The recap goes out under Kerry's name to real members — when unsure
   whether a detail flatters or embarrasses, ask or omit.
+
+9. **Get the season arc right before framing (Kerry 2026-09-02, second
+   correction on the s9.21 draft).** Count actual EVENTS, never GG's
+   "tournaments" column — an 18-hole event posts as TWO GG point
+   rounds, so "tournaments: 3" after the Fall Kickoff + one Tuesday is
+   really event #2. Match the narrative energy to where the season
+   truly stands: early season = "the race is on / leaders emerge",
+   never "the race tightens / chased down"; late season inverts.
+   Anchor the timeline in the lede ("three days after the Kickoff,
+   the fall's first Tuesday night...").
