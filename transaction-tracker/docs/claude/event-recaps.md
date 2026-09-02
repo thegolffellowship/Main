@@ -227,3 +227,15 @@ city + date bolded (Cedar Creek confirmed the URL pattern:
 /shop/ols/products/s18-11-cedar-creek); no course-condition asides.
 Brevo's editor wraps merge fields in `rte-personalized-node` spans —
 that's its own representation, not something to paste as raw HTML.
+
+18. **Every event named in the lede links to its GG RESULTS page**
+    (Kerry 2026-09-02: "Realized we didn't have any event results
+    links!!!") — orange bold "RESULTS" in parentheses after the
+    bolded event, e.g. "<b>San Antonio at Canyon Springs</b> (RESULTS)".
+    URL shape: SA `tgf-sa.golfgenius.com/pages/5783307?round_id=<id>`,
+    Austin `tgf-austin.golfgenius.com/pages/5790752?round_id=<id>`;
+    the id is the GG LEAGUE ROUND id (what the tournament_results
+    widget's round selector uses and gg_game_results_rounds records),
+    not the tournament id on scoring_rounds. Applies to the member GG
+    recaps too (the FULL EVENT RESULTS button). "Lede" = the opening
+    paragraph under the headline (newsroom spelling).

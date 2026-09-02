@@ -17,7 +17,12 @@
 <p style="margin:0 0 6px;font-size:12px;letter-spacing:2px;text-transform:uppercase;color:#e2773d;font-weight:bold;">{{EYEBROW}}</p>
 <h1 style="margin:0 0 16px;font-size:27px;line-height:1.2;color:#1b1b1b;">{{HEADLINE}}</h1>
 <p style="margin:0 0 14px;font-size:16px;line-height:1.55;">Hey {{ contact.FIRSTNAME }},</p>
-<p style="margin:0 0 14px;font-size:16px;line-height:1.55;">{{LEDE}}</p>
+<!-- LEDE: every event mentioned links to its GG RESULTS page (Kerry 9/2/26):
+     SA  = https://tgf-sa.golfgenius.com/pages/5783307?round_id=<round_id>
+     AUS = https://tgf-austin.golfgenius.com/pages/5790752?round_id=<round_id>
+     round_id = the GG league round id (gg_game_results_rounds / the results widget), NOT the tournament id -->
+<p style="margin:0 0 14px;font-size:16px;line-height:1.55;">{{LEDE_WITH_RESULTS_LINKS}}</p>
+<!-- example: The fall season kicked off <strong>Saturday at Landa Park</strong> (<a href="{{SA_RESULTS_URL}}" style="color:#e2773d;font-weight:bold;">RESULTS</a>) in New Braunfels, and Tuesday night both of our cities were back on the tee — <strong>San Antonio at Canyon Springs</strong> (<a href="..." style="color:#e2773d;font-weight:bold;">RESULTS</a>), <strong>Austin at Star Ranch</strong> (<a href="..." style="color:#e2773d;font-weight:bold;">RESULTS</a>). Three things happened that say more about TGF than any brochure could. -->
 </td></tr>
 
 <!-- BLOCK 2: 3-beat story box -->
