@@ -2175,6 +2175,21 @@ def _scoring_dispatch(url: str, extract: str):
             db.log_agent_action("mcp-claude", "scoring-lead-note",
                                 f"lead {_p[0].strip()}: note by {_p[1].strip()}")
             return json.dumps(res, indent=2)
+        if cmd == "scoring-lead-sms":
+            # "<id>[|<preset>][|closer]" — the ratified first-touch SMS
+            # (#388/#389) rendered for one lead: the auto-picked preset
+            # (or the one named: p1..p4, p6, p7, p7b, p8, custom) with
+            # the #389 both-cities add-on and, with "closer", the offer
+            # line. Read-only; nothing is sent.
+            _p = [x.strip() for x in arg.split("|")]
+            if not _p or not _p[0].isdigit():
+                return json.dumps({"error": "need <id>[|<preset>][|closer]"})
+            from email_parser.leads import lead_sms_text
+            _preset = _p[1] if len(_p) > 1 and _p[1] != "closer" else ""
+            _closer = "closer" in [x.lower() for x in _p[1:]]
+            return json.dumps(lead_sms_text(int(_p[0]), preset=_preset,
+                                            closer=_closer),
+                              indent=2, default=str)
         if cmd == "scoring-brevo-status":
             # Brevo key present / account reachable / last sync summary.
             from email_parser.brevo import brevo_status
@@ -3872,7 +3887,8 @@ def get_lead_center(status: str = "", limit: int = 50) -> str:
     lead carries a real customer_id (email-matched or created through
     the save_items resolver). Design of record: get_tracker_docs
     doc='leads.md'. Ops (via probe_golf_genius extract=): scoring-leads,
-    scoring-lead-mark, scoring-lead-edit, scoring-leads-poll.
+    scoring-lead-mark, scoring-lead-edit, scoring-leads-poll,
+    scoring-lead-sms.
 
     Args:
         status: Optional filter — new | touched | converted | dismissed

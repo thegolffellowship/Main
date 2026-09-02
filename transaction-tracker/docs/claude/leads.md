@@ -48,6 +48,8 @@ lists. Scheduled pull (not webhooks) is the ratified default.
 | dial | `lead_source_filter` | `{"analytics_sources": [...], "object_source_labels": [...]}` — queue when either matches. Default PAID_SOCIAL/SOCIAL_MEDIA + FORM/IMPORT; store-sync INTEGRATION contacts deliberately excluded. |
 | dial | `lead_city_chapters` | lowercase city substring → chapter. Defaults cover Austin + SA metro; unmatched cities route NULL. |
 | dial | `lead_notify_recipients` | `{"San Antonio": [emails], "Austin": [emails], "default": [emails]}`. Default falls back to `COO_EMAIL_TO`/`EMAIL_ADDRESS`. An UNROUTED lead notifies every list — better a double ping than a missed 48-hour window. Set Robert's address here via `scoring-setting-set:lead_notify_recipients|{"Austin": ["robert@..."]}`. |
+| dial | `lead_sms_presets` | JSON preset copy merged per key over the ratified defaults (P1–P4 carry `tue`/`sat`/`both`, others `text`; plus `closer` and `p9`). |
+| dial | `lead_touch_owners` | `{"San Antonio": "Kerry", "Austin": "Robert", "default": "Kerry"}` — the `{owner}` voice per chapter. |
 
 ## Form-response capture (#355)
 
@@ -153,17 +155,47 @@ Lead Center. Membership = the lead's Invitations opt-in (yes_for_<ch> /
 yes_for_both; no answer → routed chapter); excludes dismissed, Bad
 contact / Not now tags, and email-less rows. `get_lead_export_rows`.
 
-## Notes log + first-touch SMS (#361)
+## Notes log + first-touch SMS (#361, presets #383 → #388/#389)
 
 `lead_notes` table (lead_id FK, author, note, timestamps) —
 `add_lead_note` / `POST /api/leads/<id>/note` / bridge
 `scoring-lead-note:<id>|<author>|<text>`. Newest note previews on the
 card and in the desktop row. The mobile card is a call
 sheet: badge chips (Availability/Importance/Invitations + ad-set tag),
-sms:/tel:/mailto: action row — the SMS body renders the
-`lead_sms_template` dial with `{first_name}` and `{next_event}` (next
-upcoming event for the lead's chapter; TGF events count for both) —
-status dot, sticky one-line summary, primary action + ⋯ overflow.
+sms:/tel:/mailto: action row, status dot, sticky one-line summary,
+primary action + ⋯ overflow.
+
+**SMS presets (Kerry-ratified 2026-09-02 evening, reviewed one by
+one — mailbox #388, add-on #389; v2.291.0).** The 💬 Text deep-link is
+pre-filled from a preset SET keyed on the survey answers the card
+already badges, picked server-side per lead (`select_sms_preset`) and
+switchable from the ▾ next to 💬 Text (mobile action row and the
+desktop contact column): preview of the exact text, the preset list,
+and a ☐ Add offer line toggle.
+
+| Preset | Fires when | Slot |
+|---|---|---|
+| P1 Competition · P2 Golf · P3 Community · P4 All of it | Importance answer (blank → P4) | Availability: Tue → "Tuesday nights"/`{next_tue}`; Sat → "Saturday 18s"/`{next_sat}`; Both → "Tuesday 9s and a Saturday 18 each month"/`{next_event}`; blank → Tue |
+| P6 No days | Availability "Neither, still interested" — regardless of importance | none |
+| P7 Second touch · P7b (4+ days) | status touched, no human reply (no hot tag, no note by a person — HS/GG/auto notes don't count) 2+ / 4+ days after `touched_at` | none |
+| P8 Re-submitter | HS "Re-submitted the FB survey" note, or a customer with real purchase history | none |
+| P9 both-cities add-on | NOT a preset (#389): appended as its own line after the closer question of whichever P1–P4 / P8 fires when Invitations = Both cities | — |
+| Offer line | optional append, verbatim: "$25 off your first event, plus a drink on us." | — |
+
+Standing copy rules: no em-dashes anywhere in text-voice copy (period
+or "..." instead); `{owner}` = the routed touch owner's first name
+(Kerry on San Antonio, Robert on Austin — `lead_touch_owners` dial);
+`{next_tue}` = the chapter's next s9./a9. event, `{next_sat}` = its
+next s18./a18. (borrowing the other chapter's, tagged, when its own is
+more than 3 weeks out), `{next_event}` = the next event of any kind;
+TGF-chapter events count for both. Labels read "Tuesday 9/8 at
+Silverhorn". Copy lives in the `lead_sms_presets` dial (JSON merged per
+key over `DEFAULT_SMS_PRESETS` in `leads.py` — `{"p6": "text"}` or
+`{"p1": {"sat": "..."}}`) so edits never need a deploy; a legacy
+`lead_sms_template` value, if set, rides along as the "custom" preset.
+Bridge: `scoring-lead-sms:<id>[|<preset>][|closer]` renders the picked
+(or named) text for one lead with the selection reason. Test:
+`python3 test_lead_sms_presets.py`.
 
 ## Desktop work list (Kerry 2026-08-31)
 

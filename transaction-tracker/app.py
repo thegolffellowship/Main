@@ -11267,37 +11267,35 @@ def api_leads():
         b["total"] += 1
         if l.get("status") in b:
             b[l["status"]] += 1
-    # First-touch SMS template (#361) — editable dial; {first_name} and
-    # {next_event} placeholders are filled client-side per lead.
-    from email_parser.database import get_app_setting
-    from email_parser.timezone_utils import today_central_str
-    sms_template = (get_app_setting("lead_sms_template") or
-                    "Hey {first_name}, this is Kerry with The Golf "
-                    "Fellowship — great to see your interest! Our next "
-                    "event is {next_event}. Would love to have you out. "
-                    "Any questions, just reply here.")
-    next_events: dict = {}
-    try:
-        from email_parser.database import get_connection
-        conn = get_connection()
+    # First-touch SMS presets (#383 → #388/#389, Kerry-ratified
+    # 2026-09-02): the ratified preset SET keyed on the survey answers,
+    # picked server-side per lead (preset + slot + #389 add-on) and
+    # filled client-side so the ▾ picker can switch without a refetch.
+    from email_parser.leads import (get_sms_presets, get_touch_owners,
+                                    next_event_labels, select_sms_preset,
+                                    sms_vars_for, sms_preset_order)
+    sms_presets = get_sms_presets()
+    owners = get_touch_owners()
+    nexts = next_event_labels()
+    for l in leads:
         try:
-            for r in conn.execute(
-                    "SELECT item_name, event_date, chapter, course FROM events "
-                    "WHERE event_date >= ? ORDER BY event_date",
-                    (today_central_str(),)):
-                label = f"{r['course'] or r['item_name']} on {r['event_date']}"
-                for ch in ([r["chapter"]] if r["chapter"] != "TGF"
-                           else ["Austin", "San Antonio"]):
-                    next_events.setdefault(ch, label)
-                next_events.setdefault("default", label)
-        finally:
-            conn.close()
-    except Exception:
-        logger.warning("Lead next-event lookup failed", exc_info=True)
-    from email_parser.leads import get_tag_options, get_answer_options
+            l["sms"] = select_sms_preset(l)
+            l["sms"]["vars"] = sms_vars_for(l, owners, nexts)
+        except Exception:
+            logger.warning("Lead SMS preset pick failed", exc_info=True)
+            l["sms"] = None
+    # Kept for older clients: the picked-by-default single template
+    # shape + the next-event map.
+    sms_template = sms_presets["p4"]["tue"]
+    next_events = dict(nexts.get("any") or {})
+    from email_parser.leads import (get_tag_options, get_answer_options,
+                                    SMS_P9_PRESETS)
     return jsonify({"leads": leads, "by_ad_set": by_ad_set,
                     "sms_template": sms_template,
                     "next_events": next_events,
+                    "sms_presets": sms_presets,
+                    "sms_order": sms_preset_order(sms_presets),
+                    "sms_p9_presets": sorted(SMS_P9_PRESETS),
                     "tag_options": get_tag_options(),
                     "answer_options": get_answer_options()})
 

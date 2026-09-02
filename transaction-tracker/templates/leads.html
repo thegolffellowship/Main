@@ -147,6 +147,15 @@
         .ld-menu-wrap { position: relative; display: inline-block; }
         .ld-menu { position: absolute; right: 0; top: 110%; background: #fff; border: 1px solid var(--border); border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,.12); padding: 4px; display: none; z-index: 10; min-width: 110px; }
         .ld-menu .ld-btn { display: block; width: 100%; margin: 2px 0; border: none; text-align: left; }
+        /* First-touch SMS preset picker (#388/#389) */
+        .ld-smswrap { display: inline-flex; align-items: center; gap: 4px; }
+        .ld-dcontact .ld-smswrap a { display: inline; white-space: nowrap; }
+        .ld-smspk { font-size: 11px; font-weight: 600; color: #6B7280; cursor: pointer; padding: 1px 6px; border: 1px solid var(--border); border-radius: 6px; background: #fff; white-space: nowrap; }
+        .ld-acts .ld-smspk { flex: 0 0 auto; padding: 9px 10px; font-size: 13px; color: var(--link, #2563eb); border-radius: 8px; }
+        .ld-smsmenu { left: 0; right: auto; min-width: 260px; max-width: 92vw; }
+        .ld-smsprev { font-size: 12px; line-height: 1.35; color: #374151; white-space: pre-wrap; background: #F9FAFB; border: 1px solid var(--border); border-radius: 6px; padding: 6px 8px; margin: 2px 0 6px; max-height: 9.5em; overflow: auto; }
+        .ld-smsmenu .ld-btn.sel { font-weight: 700; background: #EEF2FF; }
+        .ld-smswhy { font-size: 11px; color: #6B7280; padding: 0 4px 4px; }
         .ld-mnotes td { padding: 2px 6px; font-size: 12px; white-space: normal; }
         @media (max-width: 768px) {
             #ld-dlist { display: none; }
@@ -701,10 +710,9 @@
                 ? `<span class="ld-fu${fuDue(l) ? " due" : ""}" title="Follow up ${esc(l.follow_up_at)}">⏰ ${fmtFu(l.follow_up_at)}</span>` : "";
             const dotCls = late ? "ld-dot-r" : l.status === "touched" ? "ld-dot-g"
                 : l.status === "converted" ? "ld-dot-o" : "ld-dot-n";
-            const smsBody = (ALL.sms_template || "")
-                .replace("{first_name}", l.first_name || "there")
-                .replace("{next_event}", (ALL.next_events || {})[l.chapter]
-                    || (ALL.next_events || {}).default || "one of our upcoming events");
+            // First-touch SMS (#388/#389): server picked the preset; the
+            // ▾ picker switches presets / toggles the offer line locally.
+            const smsBody = smsTextFor(l);
             // Converted demoted behind ⋯ + confirm (mailbox #365 item 2:
             // rarest action was most prominent, one accidental fire;
             // auto-detect handles real conversions). Note is primary.
@@ -751,7 +759,8 @@
                 </div>
                 <div class="ld-dcontact">
                     ${l.email ? `<a class="cell-link" href="mailto:${esc(l.email)}">${esc(l.email)}</a>` : ""}
-                    ${l.phone ? `<a class="cell-link" href="tel:${esc(l.phone)}">${esc(l.phone)}</a>` : ""}
+                    ${l.phone ? `<a class="cell-link" href="tel:${esc(l.phone)}">${esc(l.phone)}</a>
+                    <span class="ld-menu-wrap ld-smswrap"><a class="cell-link" id="ld-sms-d-${l.id}" href="sms:${esc(l.phone)}?&body=${encodeURIComponent(smsBody)}" title="${esc(smsBody)}">💬 Text</a><span class="ld-smspk" id="ld-smspk-d-${l.id}" onclick="toggleMenu('ld-smsmenu-d-${l.id}')">${esc(smsPickLabel(l, false))}</span><span class="ld-menu ld-smsmenu" id="ld-smsmenu-d-${l.id}">${smsMenuHtml(l)}</span></span>` : ""}
                 </div>
                 <div>${badgeHtml}${notePrev}</div>
                 <div class="ld-dacts">${primary}
@@ -774,7 +783,7 @@
                     <span class="ld-mmeta ${late ? "ld-late" : ""}">${esc(l.chapter) || "unrouted"} · ${age} · ${esc(l.status)}</span>${fuChip}</div>
                 <div>${badgeHtml}${tagHtml}</div>
                 <div class="ld-acts">
-                    ${l.phone ? `<a class="ld-act" href="sms:${esc(l.phone)}?&body=${encodeURIComponent(smsBody)}">💬 Text</a>
+                    ${l.phone ? `<a class="ld-act" id="ld-sms-m-${l.id}" href="sms:${esc(l.phone)}?&body=${encodeURIComponent(smsBody)}" title="${esc(smsBody)}">💬 Text</a><span class="ld-menu-wrap"><span class="ld-act ld-smspk" id="ld-smspk-m-${l.id}" onclick="toggleMenu('ld-smsmenu-m-${l.id}')">${esc(smsPickLabel(l, true))}</span><span class="ld-menu ld-smsmenu" id="ld-smsmenu-m-${l.id}">${smsMenuHtml(l)}</span></span>
                                  <a class="ld-act" href="tel:${esc(l.phone)}">📞 Call</a>` : ""}
                     ${l.email ? `<a class="ld-act" href="mailto:${esc(l.email)}">✉️ Email</a>` : ""}
                     <span class="ld-act" onclick="noteLead(${l.id})">➕ Note</span>
@@ -864,6 +873,74 @@
         fetch(`/api/leads/${id}/note`, {
             method: "POST", headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ note, author }) }).then(loadLeads);
+    }
+    // ---- First-touch SMS presets (mailbox #383 → #388/#389, Kerry-
+    // ratified 2026-09-02). The server picks per lead (l.sms = {preset,
+    // slot, addons, why, vars}); SMS_PICK holds Kerry's local override
+    // (preset + offer-line toggle) until the next reload.
+    const SMS_PICK = {};
+    const smsState = l => {
+        const auto = l.sms || {};
+        const st = SMS_PICK[l.id] || {};
+        return { key: st.key || auto.preset || "p4", closer: !!st.closer,
+                 slot: auto.slot || "tue", addons: auto.addons || [],
+                 vars: auto.vars || {}, why: auto.why || "" };
+    };
+    const SLOT_KEYS = { p1: 1, p2: 1, p3: 1, p4: 1 };
+    function smsTextFor(l, key, closer) {
+        const st = smsState(l);
+        key = key || st.key;
+        closer = closer === undefined ? st.closer : closer;
+        const presets = ALL.sms_presets || {};
+        const p = presets[key] || {};
+        let text = SLOT_KEYS[key] || (p.tue && !p.text)
+            ? (p[st.slot] || p.tue || p.text || "") : (p.text || "");
+        const lines = text ? [text] : [];
+        if ((ALL.sms_p9_presets || []).includes(key))
+            st.addons.forEach(a => { const t = (presets[a] || {}).text; if (t) lines.push(t); });
+        if (closer && (presets.closer || {}).text) lines.push(presets.closer.text);
+        let out = lines.join("\n");
+        const vars = Object.assign({ first_name: l.first_name || "there",
+            owner: "Kerry", next_tue: "Tuesday night", next_sat: "our next Saturday 18",
+            next_event: "one of our upcoming events" }, st.vars);
+        for (const k of Object.keys(vars)) out = out.split("{" + k + "}").join(vars[k]);
+        return out;
+    }
+    function smsPickLabel(l, short) {
+        const st = smsState(l);
+        const lbl = ((ALL.sms_presets || {})[st.key] || {}).label || st.key;
+        return short ? `${st.key.toUpperCase()} ▾` : `${st.key.toUpperCase()} ${lbl} ▾`;
+    }
+    function smsMenuHtml(l) {
+        const st = smsState(l);
+        const presets = ALL.sms_presets || {};
+        const rows = (ALL.sms_order || []).map(k =>
+            `<button class="ld-btn${k === st.key ? " sel" : ""}" onclick="pickSms(${l.id},'${k}')">${k === st.key ? "✓ " : ""}${esc(k.toUpperCase())} · ${esc((presets[k] || {}).label || k)}</button>`).join("");
+        const why = st.why ? `<div class="ld-smswhy">auto-pick: ${esc(st.why)}${st.addons.includes("p9") ? " · + both-cities line" : ""}</div>` : "";
+        return `<div class="ld-smsprev">${esc(smsTextFor(l))}</div>${why}${rows}
+            <button class="ld-btn" onclick="toggleSmsCloser(${l.id})">${st.closer ? "☑" : "☐"} Add offer line</button>`;
+    }
+    function renderSms(id) {
+        const l = ((ALL || {}).leads || []).find(x => x.id === id);
+        if (!l) return;
+        const body = smsTextFor(l);
+        for (const side of ["m", "d"]) {
+            const a = document.getElementById(`ld-sms-${side}-${id}`);
+            if (a) { a.href = `sms:${l.phone}?&body=${encodeURIComponent(body)}`; a.title = body; }
+            const pk = document.getElementById(`ld-smspk-${side}-${id}`);
+            if (pk) pk.textContent = smsPickLabel(l, side === "m");
+            const menu = document.getElementById(`ld-smsmenu-${side}-${id}`);
+            if (menu) menu.innerHTML = smsMenuHtml(l);
+        }
+    }
+    function pickSms(id, key) {
+        SMS_PICK[id] = Object.assign({}, SMS_PICK[id] || {}, { key });
+        renderSms(id);
+    }
+    function toggleSmsCloser(id) {
+        const cur = SMS_PICK[id] || {};
+        SMS_PICK[id] = Object.assign({}, cur, { closer: !cur.closer });
+        renderSms(id);
     }
     function toggleMenu(id) {
         const el = document.getElementById(id);

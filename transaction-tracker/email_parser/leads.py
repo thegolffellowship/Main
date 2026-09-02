@@ -1789,3 +1789,458 @@ def set_lead_answers(lead_id: int, answers: dict | None = None,
         pass
     return {"id": lead_id, "ok": True, "changes": changes,
             "chapter": new_chapter}
+
+
+# ── FIRST-TOUCH SMS PRESETS (mailbox #383 → #388/#389, Kerry-ratified
+#    2026-09-02 evening, reviewed one by one) ─────────────────────────
+# One preset SET keyed on the survey answers the card already badges:
+# Importance picks the OPENER (P1 Competition / P2 Golf / P3 Community /
+# P4 All of it, P4 when blank); Availability picks the EVENT SLOT on
+# P1–P4 (Tue → "Tuesday nights"/{next_tue}; Sat → "Saturday 18s"/
+# {next_sat}; Both → "our events... Tuesday 9s and a Saturday 18 each
+# month"/{next_event}); "No days" → P6 regardless; touched with no reply
+# 2+ days → P7 (4+ days → P7b); a re-submitter / existing contact → P8.
+# P9 is NOT a preset: it is an add-on line appended to whichever first
+# touch fires (P1–P4, P8) when Invitations = Both cities (#389). The
+# offer closer is an optional append, verbatim (#381 offer continuity).
+# STANDING RULES: no em-dashes anywhere in text-voice copy (period or
+# "..." instead); {owner} = the routed touch owner's first name (Robert
+# speaks as Robert on Austin). Copy lives in the `lead_sms_presets`
+# dial (JSON, merged over these defaults per key) so edits never need
+# a deploy; `lead_touch_owners` maps chapter → first name.
+
+DEFAULT_TOUCH_OWNERS = {"San Antonio": "Kerry", "Austin": "Robert",
+                        "default": "Kerry"}
+
+DEFAULT_SMS_PRESETS: dict = {
+    "p1": {
+        "label": "Competition",
+        "tue": ("Hey {first_name}, {owner} with The Golf Fellowship. Good "
+                "to see a competitor. Our Tuesday nights are fair, fun, and "
+                "legit... gross and net games, scratch players to high "
+                "handicaps, and a crew you'll actually want to play with. "
+                "Next one's {next_tue}. Want a spot?"),
+        "sat": ("Hey {first_name}, {owner} with The Golf Fellowship. Good "
+                "to see a competitor. Our Saturday 18s are fair, fun, and "
+                "legit... gross and net games, scratch players to high "
+                "handicaps, and a crew you'll actually want to play with. "
+                "Next one's {next_sat}. Want a spot?"),
+        "both": ("Hey {first_name}, {owner} with The Golf Fellowship. Good "
+                 "to see a competitor. Our events are fair, fun, and "
+                 "legit... gross and net games, scratch players to high "
+                 "handicaps, and a crew you'll actually want to play with. "
+                 "Tuesday 9s and a Saturday 18 each month. Next one's "
+                 "{next_event}. Want a spot?"),
+    },
+    "p2": {
+        "label": "Golf",
+        "tue": ("Hey {first_name}, {owner} with The Golf Fellowship. You "
+                "said you're in it for the golf. Different course every "
+                "week, 9 after work on Tuesdays and a Saturday 18 each "
+                "month, all set up for you so you just sign up, show up, "
+                "and play. Next one's {next_tue}. Want a spot?"),
+        "sat": ("Hey {first_name}, {owner} with The Golf Fellowship. You "
+                "said you're in it for the golf. Different course every "
+                "time, a Saturday 18 each month and 9 after work on "
+                "Tuesdays whenever you can, all set up for you so you just "
+                "sign up, show up, and play. Next one's {next_sat}. Want a "
+                "spot?"),
+        "both": ("Hey {first_name}, {owner} with The Golf Fellowship. You "
+                 "said you're in it for the golf. Different course every "
+                 "week, 9 after work on Tuesdays and a Saturday 18 each "
+                 "month, all set up for you so you just sign up, show up, "
+                 "and play. Next one's {next_event}. Want a spot?"),
+    },
+    "p3": {
+        "label": "Community",
+        "tue": ("Hey {first_name}, {owner} with The Golf Fellowship. Saw "
+                "community is what you're looking for. That's the heart of "
+                "what we do. Tuesday night is 9 holes with good people and "
+                "a drink after, and I'll pair you up so you're not walking "
+                "in cold. Next one's {next_tue}. Want to come meet "
+                "everybody?"),
+        "sat": ("Hey {first_name}, {owner} with The Golf Fellowship. Saw "
+                "community is what you're looking for. That's the heart of "
+                "what we do. Saturday 18s are a full round with good people "
+                "and a drink after, and I'll pair you up so you're not "
+                "walking in cold. Next one's {next_sat}. Want to come meet "
+                "everybody?"),
+        "both": ("Hey {first_name}, {owner} with The Golf Fellowship. Saw "
+                 "community is what you're looking for. That's the heart "
+                 "of what we do. Our events are good golf with good people "
+                 "and a drink after... Tuesday 9s and a Saturday 18 each "
+                 "month, and I'll pair you up so you're not walking in "
+                 "cold. Next one's {next_event}. Want to come meet "
+                 "everybody?"),
+    },
+    "p4": {
+        "label": "All of it",
+        "tue": ("Hey {first_name}, {owner} with The Golf Fellowship. Good "
+                "courses, fair competition, good people... you basically "
+                "described what we've been building for twenty seasons. "
+                "Tuesday 9s every week, a Saturday 18 each month, all set "
+                "up for you. Next one's {next_tue}. Want to try it out?"),
+        "sat": ("Hey {first_name}, {owner} with The Golf Fellowship. Good "
+                "courses, fair competition, good people... you basically "
+                "described what we've been building for twenty seasons. "
+                "A Saturday 18 each month, Tuesday 9s every week if you "
+                "ever can, all set up for you. Next one's {next_sat}. Want "
+                "to try it out?"),
+        "both": ("Hey {first_name}, {owner} with The Golf Fellowship. Good "
+                 "courses, fair competition, good people... you basically "
+                 "described what we've been building for twenty seasons. "
+                 "Tuesday 9s every week, a Saturday 18 each month, all set "
+                 "up for you. Next one's {next_event}. Want to try it "
+                 "out?"),
+    },
+    "p6": {
+        "label": "No days",
+        "text": ("Hey {first_name}, {owner} with The Golf Fellowship. Glad "
+                 "you're interested even if Tuesdays and Saturdays don't "
+                 "fit right now. Zero pressure. When does golf usually "
+                 "work for you? If enough people want those days, we add "
+                 "events."),
+    },
+    "p7": {
+        "label": "Second touch",
+        "text": ("Hey {first_name}, {owner} again. No reply, no problem. "
+                 "Quick one: what's holding you back? Time, money, or "
+                 "weird people? I've got an answer for all three. "
+                 "{next_event} is coming up. Want in?"),
+    },
+    "p7b": {
+        "label": "Second touch, 4+ days",
+        "text": ("Hey {first_name}, {owner} again. If the timing's off, "
+                 "just say \"later\" and I'll circle back next season. If "
+                 "it's first-night nerves, that's what the free drink's "
+                 "for. {next_event}. Want a spot?"),
+    },
+    "p8": {
+        "label": "Re-submitter",
+        "text": ("Hey {first_name}, {owner} with The Golf Fellowship. Good "
+                 "to see your name pop up again. Everything's à la carte, "
+                 "so you can jump in any week, no catching up required. "
+                 "{next_event} is next up. Ready to give it a go?"),
+    },
+    # Optional closer (append, verbatim from the ad / welcome email).
+    "closer": {
+        "label": "Offer line",
+        "text": "$25 off your first event, plus a drink on us.",
+    },
+    # #389: add-on line, never a standalone preset. Rides on P1–P4 / P8
+    # when Invitations = Both cities; an Invitations edit from the reply
+    # re-routes the chapter per the standing rules.
+    "p9": {
+        "label": "Both cities add-on",
+        "text": ("BTW, you marked both San Antonio and Austin. Do you "
+                 "bounce between the two, or should I focus you on one?"),
+    },
+}
+SMS_PRESET_ORDER = ["p1", "p2", "p3", "p4", "p6", "p7", "p7b", "p8"]
+SMS_SLOT_PRESETS = {"p1", "p2", "p3", "p4"}       # carry tue/sat/both
+SMS_P9_PRESETS = {"p1", "p2", "p3", "p4", "p8"}   # #389 add-on rides here
+SMS_SYSTEM_NOTE_AUTHORS = {"HS", "GG", "auto"}     # not a human reply
+SMS_HOT_TAGS = {"Call back", "Interested", "Coming to event"}
+SMS_SECOND_TOUCH_DAYS = 2
+SMS_SECOND_TOUCH_ALT_DAYS = 4
+SMS_SAT_BORROW_DAYS = 21
+
+
+def get_touch_owners(db_path=None) -> dict:
+    """chapter → first name for {owner}; dial `lead_touch_owners` over
+    DEFAULT_TOUCH_OWNERS."""
+    out = dict(DEFAULT_TOUCH_OWNERS)
+    cfg = _dial_json("lead_touch_owners", {}, db_path=db_path)
+    for k, v in cfg.items():
+        if isinstance(v, str) and v.strip():
+            out[k] = v.strip()
+    return out
+
+
+def get_sms_presets(db_path=None) -> dict:
+    """The preset set: defaults merged per key with the `lead_sms_presets`
+    dial (a dict of {key: {label/tue/sat/both/text}} or {key: "text"}).
+    A legacy `lead_sms_template` dial, when set, rides along as the
+    'custom' preset so nothing Kerry typed there is lost."""
+    from . import database as db
+    out = {k: dict(v) for k, v in DEFAULT_SMS_PRESETS.items()}
+    cfg = _dial_json("lead_sms_presets", {}, db_path=db_path)
+    for k, v in cfg.items():
+        if isinstance(v, str):
+            base = out.setdefault(k, {"label": k.upper()})
+            if k in SMS_SLOT_PRESETS:
+                base.update({"tue": v, "sat": v, "both": v})
+            else:
+                base["text"] = v
+        elif isinstance(v, dict):
+            base = out.setdefault(k, {"label": k.upper()})
+            base.update({kk: vv for kk, vv in v.items()
+                         if isinstance(vv, str)})
+    try:
+        legacy = (db.get_app_setting("lead_sms_template", db_path=db_path)
+                  if db_path else db.get_app_setting("lead_sms_template"))
+    except Exception:
+        legacy = None
+    if legacy and legacy.strip():
+        out["custom"] = {"label": "Custom (lead_sms_template)",
+                         "text": legacy.strip()}
+    return out
+
+
+def sms_preset_order(presets: dict) -> list[str]:
+    order = [k for k in SMS_PRESET_ORDER if k in presets]
+    order += sorted(k for k in presets
+                    if k not in order and k not in ("closer", "p9"))
+    return order
+
+
+def _event_label(row) -> str:
+    """'Tuesday 9/8 at Silverhorn' from an events row."""
+    from datetime import date
+    name = (row["course"] or row["item_name"] or "").strip()
+    try:
+        y, m, d = (int(x) for x in str(row["event_date"])[:10].split("-"))
+        dt = date(y, m, d)
+        return f"{dt.strftime('%A')} {m}/{d} at {name}"
+    except Exception:
+        return f"{name} on {row['event_date']}"
+
+
+def next_event_labels(db_path=None, today: str | None = None) -> dict:
+    """{'any': {chapter: label}, 'tue': {...}, 'sat': {...}} for the
+    {next_event}/{next_tue}/{next_sat} placeholders. Tuesday 9s are the
+    s9./a9. events, Saturday 18s the s18./a18. events (weekday-checked
+    when the code prefix is missing); TGF-chapter events count for both.
+    {next_sat} borrows the other chapter's Saturday when the lead's own
+    chapter has none inside SMS_SAT_BORROW_DAYS (#383)."""
+    from . import database as db
+    from .timezone_utils import today_central_str
+    from datetime import date, timedelta
+    today = today or today_central_str()
+    out: dict = {"any": {}, "tue": {}, "sat": {}}
+    sat_dates: dict = {}
+    try:
+        with db._connect(db_path) as conn:
+            rows = conn.execute(
+                "SELECT item_name, event_date, chapter, course FROM events "
+                "WHERE event_date >= ? AND COALESCE(event_type, 'event') "
+                "= 'event' ORDER BY event_date, item_name",
+                (today,)).fetchall()
+    except Exception:
+        logger.warning("Lead next-event lookup failed", exc_info=True)
+        return out
+    for r in rows:
+        name = (r["item_name"] or "").lower()
+        try:
+            y, m, d = (int(x) for x in str(r["event_date"])[:10].split("-"))
+            wd = date(y, m, d).weekday()
+        except Exception:
+            wd = None
+        is_tue = (name.startswith("s9.") or name.startswith("a9.")
+                  or (wd == 1 and not name.startswith(("s18.", "a18."))))
+        is_sat = (name.startswith("s18.") or name.startswith("a18.")
+                  or (wd == 5 and not name.startswith(("s9.", "a9."))))
+        label = _event_label(r)
+        chapters = ([r["chapter"]] if r["chapter"] and r["chapter"] != "TGF"
+                    else ["Austin", "San Antonio"])
+        for ch in chapters:
+            out["any"].setdefault(ch, label)
+            if is_tue:
+                out["tue"].setdefault(ch, label)
+            if is_sat and ch not in out["sat"]:
+                out["sat"][ch] = label
+                sat_dates[ch] = str(r["event_date"])[:10]
+        out["any"].setdefault("default", label)
+        if is_tue:
+            out["tue"].setdefault("default", label)
+        if is_sat:
+            out["sat"].setdefault("default", label)
+    # Saturday borrow: own chapter has no 18 inside the window → the
+    # other chapter's next one, tagged with its chapter.
+    try:
+        limit = (date.fromisoformat(today)
+                 + timedelta(days=SMS_SAT_BORROW_DAYS)).isoformat()
+    except Exception:
+        limit = None
+    for ch in ("Austin", "San Antonio"):
+        other = "San Antonio" if ch == "Austin" else "Austin"
+        own = sat_dates.get(ch)
+        if (own is None or (limit and own > limit)) and other in out["sat"]:
+            if own is None or sat_dates[other] < own:
+                out["sat"][ch] = f"{out['sat'][other]} ({other})"
+    return out
+
+
+def _lead_answer(lead: dict, field: str) -> str:
+    """Lowercased raw answer for availability / importance / invitations,
+    the CURRENT form's exact key first (the Garza rule), fuzzy after."""
+    payload = lead.get("payload") or {}
+    if not isinstance(payload, dict):
+        return ""
+    exact = MANUAL_ANSWER_KEYS[field]
+    v = payload.get(exact)
+    if isinstance(v, str) and v:
+        return v.lower()
+    frag = {"availability": "play_tuesdays_or_saturdays",
+            "importance": "most_important",
+            "invitations": "stay_in_the_loop"}[field]
+    for k, val in payload.items():
+        if frag in k and isinstance(val, str) and val:
+            return val.lower()
+    return ""
+
+
+def sms_slot_for(lead: dict) -> str:
+    """'tue' / 'sat' / 'both' / 'none' / '' from the Availability answer."""
+    a = _lead_answer(lead, "availability")
+    if not a:
+        return ""
+    if "both" in a:
+        return "both"
+    if "tuesdays" in a:
+        return "tue"
+    if "saturdays" in a:
+        return "sat"
+    return "none"
+
+
+def _is_resubmitter(lead: dict) -> bool:
+    if lead.get("has_history"):
+        return True
+    for n in lead.get("notes_log") or []:
+        if (n.get("author") == "HS"
+                and str(n.get("note") or "").startswith("Re-submitted")):
+            return True
+    return False
+
+
+def _days_since(stamp: str | None, now) -> int | None:
+    from datetime import date
+    if not stamp:
+        return None
+    try:
+        y, m, d = (int(x) for x in str(stamp)[:10].split("-"))
+        return max(0, (now.date() - date(y, m, d)).days)
+    except Exception:
+        return None
+
+
+def select_sms_preset(lead: dict, now=None) -> dict:
+    """The ratified selection logic → {preset, slot, addons, why}.
+    Second touch first (touched, no human reply, 2+ days; 4+ → P7b),
+    then P8 for a re-submitter / existing contact, P6 for "No days",
+    else Importance → P1–P4 (blank → P4) with the Availability slot
+    (blank → tue, the ratified default shown). P9 rides on P1–P4 / P8
+    when Invitations = Both cities."""
+    from .timezone_utils import now_central
+    now = now or now_central()
+    slot = sms_slot_for(lead)
+    invites = _lead_answer(lead, "invitations")
+    addons: list = []
+
+    def _pick(key, why, slot_used=""):
+        if key in SMS_P9_PRESETS and invites == "yes_for_both":
+            addons.append("p9")
+        return {"preset": key, "slot": slot_used, "addons": addons,
+                "why": why}
+
+    if lead.get("status") == "touched":
+        human_reply = ((lead.get("tag") or "") in SMS_HOT_TAGS
+                       or any((n.get("author") or "") not in
+                              SMS_SYSTEM_NOTE_AUTHORS
+                              for n in lead.get("notes_log") or []))
+        days = _days_since(lead.get("touched_at"), now)
+        if not human_reply and days is not None:
+            if days >= SMS_SECOND_TOUCH_ALT_DAYS:
+                return _pick("p7b", f"touched {days}d ago, no reply")
+            if days >= SMS_SECOND_TOUCH_DAYS:
+                return _pick("p7", f"touched {days}d ago, no reply")
+    if _is_resubmitter(lead):
+        return _pick("p8", "re-submitted survey / existing contact")
+    if slot == "none":
+        return _pick("p6", "no days")
+    imp = _lead_answer(lead, "importance")
+    key = ("p2" if imp.startswith("golf")
+           else "p1" if imp.startswith("competition")
+           else "p3" if imp.startswith(("community", "connection",
+                                        "fellowship"))
+           else "p4")
+    why = {"p1": "competition", "p2": "golf", "p3": "community",
+           "p4": "all of it" if imp else "importance blank"}[key]
+    slot_used = slot or "tue"
+    return _pick(key, f"{why} · {slot_used}", slot_used)
+
+
+def sms_vars_for(lead: dict, owners: dict | None = None,
+                 nexts: dict | None = None) -> dict:
+    """Placeholder values for one lead."""
+    owners = owners or DEFAULT_TOUCH_OWNERS
+    nexts = nexts or {"any": {}, "tue": {}, "sat": {}}
+    ch = lead.get("chapter") or ""
+
+    def _n(kind, fallback):
+        m = nexts.get(kind) or {}
+        return m.get(ch) or m.get("default") or fallback
+
+    return {
+        "first_name": (lead.get("first_name") or "").strip() or "there",
+        "owner": owners.get(ch) or owners.get("default") or "Kerry",
+        "next_tue": _n("tue", "Tuesday night"),
+        "next_sat": _n("sat", "our next Saturday 18"),
+        "next_event": _n("any", "one of our upcoming events"),
+    }
+
+
+def render_sms(presets: dict, key: str, lead: dict, sms_vars: dict,
+               slot: str = "", addons: list | None = None,
+               closer: bool = False) -> str:
+    """Fill a preset for a lead: body (slot variant for P1–P4), then the
+    #389 add-on line, then the optional offer closer, each on its own
+    line. Unknown keys render empty."""
+    p = presets.get(key) or {}
+    if key in SMS_SLOT_PRESETS or ("tue" in p and "text" not in p):
+        text = p.get(slot or "tue") or p.get("tue") or p.get("text") or ""
+    else:
+        text = p.get("text") or ""
+    lines = [text] if text else []
+    for a in addons or []:
+        t = (presets.get(a) or {}).get("text")
+        if t:
+            lines.append(t)
+    if closer:
+        t = (presets.get("closer") or {}).get("text")
+        if t:
+            lines.append(t)
+    out = "\n".join(lines)
+    for k, v in sms_vars.items():
+        out = out.replace("{" + k + "}", str(v))
+    return out
+
+
+def lead_sms_text(lead_id: int, preset: str = "", closer: bool = False,
+                  db_path: str | Path | None = None) -> dict:
+    """Bridge helper: the picked (or requested) preset rendered for one
+    lead, plus the selection reason and the full picker."""
+    rows = [r for r in get_leads(limit=5000, db_path=db_path)
+            if r["id"] == lead_id]
+    if not rows:
+        return {"error": f"lead {lead_id} not found"}
+    lead = rows[0]
+    presets = get_sms_presets(db_path)
+    pick = select_sms_preset(lead)
+    key = preset or pick["preset"]
+    if key not in presets:
+        return {"error": f"unknown preset '{key}'",
+                "presets": sms_preset_order(presets)}
+    vars_ = sms_vars_for(lead, get_touch_owners(db_path),
+                         next_event_labels(db_path))
+    addons = pick["addons"] if key in SMS_P9_PRESETS else []
+    return {"lead_id": lead_id, "name": f"{lead.get('first_name') or ''} "
+            f"{lead.get('last_name') or ''}".strip(),
+            "phone": lead.get("phone"), "chapter": lead.get("chapter"),
+            "picked": pick, "preset": key,
+            "label": presets[key].get("label"),
+            "text": render_sms(presets, key, lead, vars_,
+                               slot=pick["slot"], addons=addons,
+                               closer=closer),
+            "vars": vars_, "presets": sms_preset_order(presets)}

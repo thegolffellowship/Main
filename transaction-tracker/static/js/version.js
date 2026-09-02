@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.290.1";
+window.TGF_VERSION = "2.291.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.291.0",
+    date: "2026-09-02",
+    changes: [
+      "Lead Center first-touch SMS presets, Kerry-ratified with CA one by one (mailbox #388, add-on #389): the 💬 Text deep-link now pre-fills the preset the lead's own survey answers call for. Importance picks the opener (P1 Competition / P2 Golf / P3 Community / P4 All of it, P4 when blank); Availability picks the event slot (Tuesday nights + {next_tue}, Saturday 18s + {next_sat}, or both days + {next_event}); 'No days' gets P6; a touched lead with no human reply after 2 days gets the P7 second touch (P7b after 4); a survey re-submitter or existing customer gets P8. When the lead marked BOTH cities for invitations, the P9 line ('BTW, you marked both San Antonio and Austin...') rides on P1–P4 / P8 as its own line after the closer question. A ▾ next to 💬 Text (mobile action row + desktop contact column) previews the exact text, switches presets, and toggles the verbatim offer line ('$25 off your first event, plus a drink on us.'). {owner} speaks as the routed touch owner (Robert on Austin) via the lead_touch_owners dial; copy lives in the lead_sms_presets dial (merged per key over the defaults) so edits never need a deploy. No em-dashes anywhere in text-voice copy. Bridge: scoring-lead-sms:<id>[|<preset>][|closer]. Test: test_lead_sms_presets.py.",
+    ],
+  },
   {
     version: "2.290.1",
     date: "2026-09-02",
