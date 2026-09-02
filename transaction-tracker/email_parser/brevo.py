@@ -67,8 +67,8 @@ def brevo_status(db_path: str | Path | None = None) -> dict:
     from . import database as db
     out = {"api_key_set": bool(_api_key()), "account": None,
            "last_sync": None,
-           "create_missing": _dial(db, "brevo_sync_create_missing",
-                                   db_path) == "1"}
+           "create_missing": _create_scope(
+               _dial(db, "brevo_sync_create_missing", db_path))}
     try:
         raw = db.get_app_setting("brevo_last_sync", db_path=db_path) \
             if db_path else db.get_app_setting("brevo_last_sync")
@@ -111,16 +111,19 @@ def tracker_contact_targets(db_path: str | Path | None = None) -> dict:
     try:
         conn.row_factory = __import__("sqlite3").Row
         rows = conn.execute(
-            """SELECT ce.email, ce.customer_id, c.chapter
+            """SELECT ce.email, ce.customer_id, ce.is_primary, c.chapter,
+                      c.first_name, c.last_name
                FROM customer_emails ce
                JOIN customers c ON c.customer_id = ce.customer_id
                WHERE ce.email IS NOT NULL AND ce.email <> ''
-                 AND c.account_status <> 'banned'""").fetchall()
+                 AND c.account_status <> 'banned'
+               ORDER BY ce.customer_id, ce.is_primary DESC, ce.email_id""").fetchall()
         cids = sorted({r["customer_id"] for r in rows})
         derived = db.derive_member_financial_status_bulk(conn, cids)
     finally:
         conn.close()
     out: dict = {}
+    seen_cust: set = set()
     for r in rows:
         email = (r["email"] or "").strip().lower()
         if "@" not in email:
@@ -130,12 +133,21 @@ def tracker_contact_targets(db_path: str | Path | None = None) -> dict:
         chapter = (r["chapter"] or "").strip()
         if chapter.upper() == "TGF":
             chapter = ""
+        # One import address per customer (primary first) so a person
+        # with three known emails never becomes three Brevo contacts.
+        importable = r["customer_id"] not in seen_cust
+        seen_cust.add(r["customer_id"])
         cur = out.get(email)
         if cur is None or _STATUS_RANK[status] > _STATUS_RANK[cur["status"]]:
             out[email] = {"status": status, "chapter": chapter or (
-                cur["chapter"] if cur else "")}
-        elif cur and not cur["chapter"] and chapter:
-            cur["chapter"] = chapter
+                cur["chapter"] if cur else ""),
+                "first_name": (r["first_name"] or "").strip(),
+                "last_name": (r["last_name"] or "").strip(),
+                "importable": importable or bool(cur and cur["importable"])}
+        else:
+            if not cur["chapter"] and chapter:
+                cur["chapter"] = chapter
+            cur["importable"] = cur["importable"] or importable
     return out
 
 
@@ -203,6 +215,30 @@ def _attrs_for(target: dict) -> dict:
     if target["chapter"]:
         attrs[CHAPTER_ATTR] = target["chapter"]
     return attrs
+
+
+def _import_attrs_for(target: dict) -> dict:
+    """A NEW Brevo contact also gets the name (the recap greets by
+    FIRSTNAME); updates never touch names Brevo already holds."""
+    attrs = _attrs_for(target)
+    if target.get("first_name"):
+        attrs["FIRSTNAME"] = target["first_name"]
+    if target.get("last_name"):
+        attrs["LASTNAME"] = target["last_name"]
+    return attrs
+
+
+def _create_scope(dial_value: str | None) -> str:
+    """brevo_sync_create_missing: '' / '0' → never create; 'active' →
+    create missing ACTIVE MEMBERS only (Kerry 2026-09-02: 'adding those
+    active members into Brevo that aren't in there currently'); '1' /
+    'all' → every Tracker customer with an email."""
+    v = (dial_value or "").strip().lower()
+    if v in ("1", "all", "true", "yes"):
+        return "all"
+    if v in ("active", "members", "active_member"):
+        return "active"
+    return "none"
 
 
 def _update_batch(key: str, batch: list[dict], errors: list) -> int:
@@ -294,11 +330,16 @@ def sync_member_status(db_path: str | Path | None = None,
         return result
     result["brevo_contacts"] = len(brevo)
 
+    scope = _create_scope(_dial(db, "brevo_sync_create_missing", db_path))
+    result["create_scope"] = scope
     updates, missing = [], []
     for email, target in targets.items():
         bc = brevo.get(email)
         if bc is None:
-            missing.append({"email": email, "attributes": _attrs_for(target)})
+            if target.get("importable", True):
+                missing.append({"email": email,
+                                "attributes": _import_attrs_for(target),
+                                "_status": target["status"]})
             continue
         result["matched"] += 1
         if _needs_update(bc["attributes"], target):
@@ -312,11 +353,18 @@ def sync_member_status(db_path: str | Path | None = None,
             result["updated"] += _update_batch(
                 key, updates[i:i + BATCH_SIZE], result["errors"])
             time.sleep(_PAUSE)
-        if _dial(db, "brevo_sync_create_missing", db_path) == "1" and missing:
+        to_create = [m for m in missing
+                     if scope == "all"
+                     or (scope == "active" and m["_status"] == "active_member")]
+        result["to_create"] = len(to_create)
+        if to_create:
             list_id = int(_dial(db, "brevo_sync_list_id", db_path)
                           or DEFAULT_LIST_ID)
-            result["created"] = _import_missing(key, missing, list_id,
+            rows = [{"email": m["email"], "attributes": m["attributes"]}
+                    for m in to_create]
+            result["created"] = _import_missing(key, rows, list_id,
                                                 result["errors"])
+            result["sample_created"] = rows[:5]
     result["seconds"] = round(time.time() - started, 1)
     result["errors"] = result["errors"][:25]
 

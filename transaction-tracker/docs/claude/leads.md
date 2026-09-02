@@ -383,9 +383,13 @@ Tracker→Brevo API brick:
   contacts whose stamp differs (POST /v3/contacts/batch, 100/call; a
   batch rejection falls back to per-contact PUT). A blank Tracker
   chapter never wipes a Brevo chapter. Tracker emails missing from
-  Brevo are counted, and only imported into list 3 when the
-  `brevo_sync_create_missing` dial is "1" (`brevo_sync_list_id`
-  overrides the list). Summary persisted to `brevo_last_sync`.
+  Brevo are counted; the `brevo_sync_create_missing` dial scopes what
+  gets CREATED (v2.288.0): blank/"0" never, "active" = missing active
+  members only (Kerry 2026-09-02), "1"/"all" = every customer with an
+  email. New contacts go to list 3 (`brevo_sync_list_id` overrides)
+  with FIRSTNAME/LASTNAME/status/chapter; one import address per
+  customer (primary email first) so multi-email players never become
+  duplicate contacts. Summary persisted to `brevo_last_sync`.
 - Scheduler: `nightly_brevo_sync` cron 09:10 UTC (4:10 AM Central);
   `BREVO_SYNC_DISABLED=1` skips scheduling. No-op until
   `BREVO_API_KEY` is set on Railway (Brevo → profile → SMTP & API →

@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.287.1";
+window.TGF_VERSION = "2.288.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.288.0",
+    date: "2026-09-02",
+    changes: [
+      "Brevo sync can now CREATE the contacts the Tracker knows and Brevo doesn't (Kerry: 'adding those active members into Brevo that aren't in there currently... for our transition to all Brevo emails once GG is behind us'). The brevo_sync_create_missing dial is now a scope — 'active' imports missing ACTIVE MEMBERS only, '1'/'all' imports every Tracker customer with an email, blank/'0' never creates. New contacts land in TGF CONTACTS with FIRSTNAME / LASTNAME / TGF_MEMBER_STATUS / TGF_CHAPTER; one import address per customer (primary email first) so a player with three known emails never becomes three Brevo contacts; updates still never touch names Brevo already holds.",
+    ],
+  },
   {
     version: "2.287.1",
     date: "2026-09-02",
