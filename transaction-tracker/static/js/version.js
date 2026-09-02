@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.287.0";
+window.TGF_VERSION = "2.287.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.287.1",
+    date: "2026-09-02",
+    changes: [
+      "Brevo sync went live (BREVO_API_KEY set by Kerry 2026-09-02): first run stamped 396 matched contacts (of 1,318 in Brevo / 697 Tracker emails; 301 Tracker emails have no Brevo contact, left alone by the create-missing dial). Brevo reports a pre-existing attribute as 'Attribute name must be unique' rather than 'already exists' — the ensure step now treats both as 'exists' instead of logging it as an error.",
+    ],
+  },
   {
     version: "2.287.0",
     date: "2026-09-02",

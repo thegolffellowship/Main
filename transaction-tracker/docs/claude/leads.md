@@ -391,6 +391,10 @@ Tracker→Brevo API brick:
   `BREVO_API_KEY` is set on Railway (Brevo → profile → SMTP & API →
   API Keys → new key "TGF Tracker").
 - Bridge: `scoring-brevo-status`, `scoring-brevo-sync[:dry]`.
+- First live run (2026-09-02 4:07 PM, key set by Kerry): 697 Tracker
+  emails (141 active / 291 former / 265 prospect), 1,318 Brevo
+  contacts, 396 matched and stamped, 301 Tracker emails absent from
+  Brevo (untouched — dial off), 0 errors, 10.5 s.
 - Brevo side (Kerry, UI): segment "Active members" =
   TGF_MEMBER_STATUS equals active_member; the public campaign sends to
   list 3 minus that segment. Segments are UI-only in Brevo's API.

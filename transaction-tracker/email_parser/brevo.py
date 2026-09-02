@@ -177,7 +177,11 @@ def ensure_attributes(key: str) -> dict:
                 json={"type": "text"}, headers=_headers(key), timeout=20)
             if r.status_code in (200, 201, 204):
                 out[name] = "created"
-            elif r.status_code == 400 and "exist" in r.text.lower():
+            elif r.status_code == 400 and ("exist" in r.text.lower()
+                                            or "unique" in r.text.lower()):
+                # Brevo says "Attribute name must be unique" for a
+                # pre-existing attribute (seen on TGF_CHAPTER, first
+                # live run 2026-09-02).
                 out[name] = "exists"
             else:
                 out[name] = f"HTTP {r.status_code}: {r.text[:120]}"
