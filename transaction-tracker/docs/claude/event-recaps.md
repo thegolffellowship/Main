@@ -126,3 +126,33 @@ Kerry's shipped version added structure to keep in every draft:
 17. **Date sanity**: cross-check every event date against the Tracker
     calendar (list_events) — Kerry noted he'd been typing Oct for
     September; the draft is the backstop.
+
+## Public (Brevo) variant — v1 drafted 2026-09-02, approach pending CA + Kerry
+
+Kerry: a version "more towards the public rather than membership...
+putting the carrot out there to get people to try it out." Drafted
+directly in Brevo as campaign **#13** (DRAFT — Kerry sends), list 3
+"TGF CONTACTS" (~1,316; ~1,200 delivered, 45–61% opens historically),
+sender id 1 kerry@. CA consulted via mailbox #380 (topic
+`platform-public-recap`) on joint-vs-per-city, the money hook, brand
+guardrails, and cadence — fold its reply in before v2.
+
+Working rules (v1):
+- ONE joint email for both cities, ~40% the length of the member recap,
+  two CTAs (SA / Austin next Tuesday, linked) + Saturday 18s + calendar.
+- Lead with the human carrot, not the leaderboard: first-timer cashes
+  in his first round; guest joins on the spot; a PAR won money in both
+  cities; "half the field / nearly two-thirds went home with money".
+- No member vocabulary (Fall Points Race, MVP, Best-6) without a
+  translating clause — mostly cut. Echo the proven kickoff voice:
+  "Connect. Compete. Celebrate." / "Your Golf Crew. Zero Hassle." /
+  "New to TGF? Show up, play, and see what everyone's talking about."
+- NO dollar prices (tgf-pricing rule: figures only from the master
+  document) — say "first-timers get a discounted rate" and link.
+- Brand tokens from the best-performing sent campaign (#10): logo
+  img 69986bc3ae141cb2ac450cf1.png on #1b1b1b, TGF orange #e2773d
+  pill buttons (radius 25px, white text), light bg #eff2f7, SA slate
+  #d3dde4, Arial, {{ contact.FIRSTNAME }} greeting, {{ unsubscribe }}
+  + {{ update_profile }} in the footer.
+- Brevo MCP can CREATE draft campaigns (htmlContent inline) but has no
+  campaign test-send tool — Kerry previews/tests in the Brevo UI.
