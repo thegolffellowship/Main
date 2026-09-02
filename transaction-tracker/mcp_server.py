@@ -3331,6 +3331,13 @@ def _scoring_dispatch(url: str, extract: str):
             # flow as the Enrollment tab's remove): pot/N recompute from the
             # remaining entrants. "scoring-unenroll:<enrollment_id>|<reason>
             # |<refund_amount>|<refund_method>|<note>" — trailing parts optional.
+            # ⚠ refund_amount is a PROMISE TO PAY: the Refunds console lists
+            # it OUTSTANDING until a matching Venmo receipt lands on/after
+            # the removal date. If the money ALREADY moved through an item
+            # credit (partial credit etc.), leave refund_amount EMPTY and
+            # put the payment history in the note — recording it re-creates
+            # the Hammond double-count (2026-08-26, repeated 2026-09-02;
+            # scoring-sc-removal-refund:<id>|clear is the undo).
             parts = [p.strip() for p in arg.split("|")]
             if not parts or not parts[0].isdigit():
                 return json.dumps({"error": "enrollment_id|reason|refund_amount|refund_method|note"})
