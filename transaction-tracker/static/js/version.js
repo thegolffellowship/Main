@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.285.4";
+window.TGF_VERSION = "2.286.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.286.0",
+    date: "2026-09-02",
+    changes: [
+      "GG SKINS boards now ingest (Kerry, off the s9.21 board: 'Not sure why you're not seeing skins. The results are there'): the games importer's board classifier gains a SKINS pattern (matches 'SKINS Gross $' and 'SKINS ½ Net $' alike), and the Payouts assembly takes GG's posted skins purses FIRST under the same GG-purse-wins doctrine as Ind Net/Gross — the engine-computed gross-skins path is now the fallback, and the '½ Net rule pending' manual note only fires when GG hasn't posted a skins board.",
+      "Fall unenroll fixed (the Scott Hammond loop — refunded 8/26, still enrolled 9/2): removing a fall-season NET Points Race enrollment now clears items.fall_net_points_race instead of the main-season column, so the contest sync can no longer silently re-enroll a removed fall player.",
+      "The fall tabs' ENROLLED PLAYERS roster section is retired (Kerry: 'they're already highlighted') — the live standings' green bought-in rows carry the same information.",
+    ],
+  },
   {
     version: "2.285.4",
     date: "2026-09-01",

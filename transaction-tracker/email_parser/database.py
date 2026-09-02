@@ -12999,6 +12999,12 @@ _GG_GAME_PATTERNS = [
     # "ALL Net/Gross" boards don't match (no INDIVIDUAL prefix).
     ("individual_net", r"INDIVIDUAL\s+NET"),
     ("individual_gross", r"INDIVIDUAL\s+GROSS"),
+    # SKINS boards (Kerry 2026-09-02, s9.21: "Not sure why you're not
+    # seeing skins. The results are there."): GG posts skins winners
+    # with per-player purses (Player | Skins | Purse | Details) — same
+    # GG-purse-wins doctrine as Ind Net/Gross. Matches "SKINS Gross $"
+    # and "SKINS 1/2 Net $" board titles alike.
+    ("skins", r"\bSKINS\b"),
 ]
 
 
@@ -33412,6 +33418,15 @@ def remove_season_contest_enrollment(enrollment_id: int,
         row = conn.execute(
             "SELECT * FROM season_contests WHERE id = ?", (enrollment_id,)
         ).fetchone()
+        # FALL enrollments share contest_type 'NET Points Race' but are
+        # sourced from items.fall_net_points_race — clearing the
+        # main-season column would leave the fall flag set and the next
+        # sync would silently re-enroll (the Scott Hammond loop, Kerry
+        # 2026-09-02: refunded 8/26, still showing enrolled 9/2).
+        if row and (row["season"] or "").endswith("Fall") \
+                and row["contest_type"] == "NET Points Race":
+            flag_cols = dict(flag_cols)
+            flag_cols["NET Points Race"] = "fall_net_points_race"
         if not row:
             return None
         row = dict(row)
@@ -48641,11 +48656,17 @@ def assemble_event_game_payouts(event_name: str, db_path=None) -> dict:
         elif d.get("status") != "gg_purse":
             notes.append(f"Individual Net: {d.get('status', 'unknown')} — skipped")
 
-    # ── Skins (gross; ½-net rule pending below 8 gross buyers on 9h) ──
+    # ── Skins (GG purses first — Kerry 2026-09-02; else gross engine;
+    #    ½-net below 8 gross buyers on 9h stays manual when GG hasn't
+    #    posted its board) ──
     skins_total = _matrix_num(g_gross.get("skinsTotal"))
     if skins_total > 0:
-        if holes == 9 and counts["gross"] < 8:
-            notes.append("Skins ½ Net: rule pending — record manually")
+        _gg_skins = _gg_purse_rows("skins", "Skins")
+        if _gg_skins:
+            rows.extend(_gg_skins)
+        elif holes == 9 and counts["gross"] < 8:
+            notes.append("Skins ½ Net: rule pending — record manually "
+                         "(no GG skins board ingested yet)")
         else:
             skins_flights = int(_matrix_num(g_gross.get("skinsFlights")) or 1)
             d = determine_event_game_results(ev["item_name"], "skins",

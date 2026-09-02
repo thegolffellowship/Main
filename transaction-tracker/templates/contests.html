@@ -2790,26 +2790,14 @@
         // 2026-07-10) — in-progress races already show buy-in status on
         // every standings row, and Monthly's explainer lives in the
         // How It Works popup.
+        // The fall ENROLLED PLAYERS roster is retired (Kerry 2026-09-02:
+        // "I don't think that we need the list of who's in the Fall
+        // Points at the bottom, because they're already highlighted") —
+        // now that the fall boards are live GG standings, the green
+        // bought-in rows carry the same information.
         const rosterSec = $("pr-roster-section");
-        if (rosterSec) rosterSec.style.display = kind.startsWith("fall") ? "" : "none";
-        if (!kind.startsWith("fall")) return;
-        if (kind.startsWith("fall")) {
-            const fallChapter = kind === "fall_austin" ? "Austin" : "San Antonio";
-            $("pr-roster-title").textContent =
-                `${fallChapter.toUpperCase()} FALL NET — Enrolled Players`;
-            try {
-                const res = await fetch(`/api/season-contests?contest_type=${encodeURIComponent("NET Points Race")}&season=${encodeURIComponent("2026 Fall")}&chapter=${encodeURIComponent(fallChapter)}`);
-                const rows = res.ok ? await res.json() : [];
-                $("pr-roster").innerHTML = rows.length
-                    ? '<div style="display:flex;flex-wrap:wrap;gap:6px;">'
-                      + rows.map(r => `<span style="display:inline-flex;align-items:center;height:28px;padding:0 12px;background:#bbf7d0;color:#14532D;border-radius:9999px;font-size:12.5px;font-weight:600;">${escapeHtml(r.customer_name)}</span>`).join("")
-                      + `</div><p style="color:var(--text-muted);font-size:0.8rem;margin-top:0.6rem;">${rows.length} bought in so far — the pot grows with every entry.</p>`
-                    : '<p style="color:var(--text-muted);font-size:0.85rem;">No fall buy-ins yet — be the first.</p>';
-            } catch (e) {
-                $("pr-roster").innerHTML = '<p style="color:var(--text-muted);font-size:0.85rem;">Fall buy-ins will appear here.</p>';
-            }
-            return;
-        }
+        if (rosterSec) rosterSec.style.display = "none";
+        if (kind.startsWith("fall")) return;
         if (kind === "monthly") {
             $("pr-roster-title").textContent = "MONTHLY POINTS — how it works";
             $("pr-roster").innerHTML = '<p style="color:var(--text-muted);font-size:0.85rem;">'
