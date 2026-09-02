@@ -127,7 +127,7 @@ Kerry's shipped version added structure to keep in every draft:
     calendar (list_events) — Kerry noted he'd been typing Oct for
     September; the draft is the backstop.
 
-## Public (Brevo) variant — v1 drafted 2026-09-02, approach pending CA + Kerry
+## Public (Brevo) variant — v2 in Brevo (#14), CA/Kerry-ratified 2026-09-02 (mailbox #381)
 
 Kerry: a version "more towards the public rather than membership...
 putting the carrot out there to get people to try it out." Drafted
@@ -156,3 +156,38 @@ Working rules (v1):
   + {{ update_profile }} in the footer.
 - Brevo MCP can CREATE draft campaigns (htmlContent inline) but has no
   campaign test-send tool — Kerry previews/tests in the Brevo UI.
+
+**Ratified by Kerry via CA (#381) — supersedes the v1 working rules where they differ:**
+- JOINT email (agreed). WEEKLY through Oct 31, biweekly off-season.
+  Fatigue defense = brevity: ≤2-min read, one story box, one CTA block;
+  watch unsubscribes (<0.5%/send is fine).
+- Money is PROOF, not the promise: headline = belonging/fairness ("You
+  don't have to be the best golfer out here to get paid"); "% cashed" is
+  one proof line inside the story box; never "come get paid/yours".
+- Guardrails: never "league" as self-description (golf club/community);
+  POT not purse; count seasons; no TGF Plus; no DFW/Houston.
+- Names in PUBLIC sends: guests/new members = first name + last
+  initial (Kannon B., Justin A.).
+- Offer, verbatim, same as ad/text/welcome email: "$25 off your first
+  event, plus a drink on us."
+- Signature: Founder (not Co-Founder). Buttons: two lines — CHAPTER /
+  course · date. Calendar = two links (SA / Austin GG schedule pages).
+  Saturday 18s as a bold lead-in + list. Celebrate block: "It's the best
+  part, and it's yours if you want it" (never "not optional").
+- Close box: jump-in-anytime + à la carte (no mandatory events, games,
+  or contests) + "See what our 150+ members are talking about."
+- Fixed 5-block template: story headline → 3-beat highlight box →
+  EVERGREEN Connect/Compete/Celebrate (static) → Try a Tuesday CTAs
+  (auto from next events) → close box.
+- SEGMENTATION: send to everyone EXCEPT active members (they get the
+  GG recap); alumni ride in the general send (alumni variant = v2
+  experiment). BUILD (Kerry-assigned): Brevo attribute TGF_MEMBER_STATUS
+  {active_member, former_member, prospect} pushed nightly from
+  derive_member_financial_status via Brevo API; "Active members"
+  segment excluded from the public campaign. First Tracker→Brevo API
+  brick (HubSpot decommission path). Gated on BREVO_API_KEY env.
+- PROCESS (ratified): Wednesday AM auto-draft from Tracker data into
+  Brevo as DRAFT + ping Kerry; he approves/edits on phone; sends
+  Wednesday afternoon. Kerry's weekly effort target: 5 minutes.
+- Brevo API has no campaign update/delete — revisions are new drafts;
+  superseded drafts are deleted in the UI.
