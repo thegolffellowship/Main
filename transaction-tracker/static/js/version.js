@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.289.0";
+window.TGF_VERSION = "2.289.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.289.1",
+    date: "2026-09-02",
+    changes: [
+      "Brevo sync: TGF_CHAPTER now falls back to the chapter the Lead Center routed a lead to when the customer record has none (Kerry built chapter × availability × importance segments in Brevo for targeting; fresh ad leads like Jaden Tippett and Cohen Graning had no chapter stamp because a lead's prospect record carries no purchase history). Lead Center chapter edits therefore flow into the Brevo chapter segments on the next nightly run.",
+    ],
+  },
   {
     version: "2.289.0",
     date: "2026-09-02",

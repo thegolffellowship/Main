@@ -157,8 +157,18 @@ def tracker_contact_targets(db_path: str | Path | None = None) -> dict:
     conn = db.get_connection(db_path) if db_path else db.get_connection()
     try:
         conn.row_factory = __import__("sqlite3").Row
+        # Chapter: the customer's home chapter, else the chapter the
+        # Lead Center routed their lead to (Kerry 2026-09-02: the
+        # chapter segments in Brevo are targeting tools — a fresh ad
+        # lead has no purchase history, so its routed chapter is the
+        # only chapter signal we hold).
         rows = conn.execute(
-            """SELECT ce.email, ce.customer_id, ce.is_primary, c.chapter,
+            """SELECT ce.email, ce.customer_id, ce.is_primary,
+                      COALESCE(NULLIF(TRIM(c.chapter), ''),
+                               (SELECT l.chapter FROM leads l
+                                 WHERE l.customer_id = c.customer_id
+                                   AND l.chapter IS NOT NULL
+                                 ORDER BY l.id DESC LIMIT 1)) AS chapter,
                       c.first_name, c.last_name
                FROM customer_emails ce
                JOIN customers c ON c.customer_id = ce.customer_id
