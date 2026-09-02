@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.285.3";
+window.TGF_VERSION = "2.285.4";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.285.4",
+    date: "2026-09-01",
+    changes: [
+      "Lead card attribution rows (Ad Set / Campaign / Form) moved INSIDE the CURRENT SURVEY section (Kerry, off the Shane Winter card: 'Past survey info shouldn't show as Survey from new one'): they describe the submission that just arrived, but rendered after the last band so they read as the older survey's source. Also hid the HubSpot activity-meta rows that leaked onto merged-contact cards (Notes Last Contacted/Updated, HubSpot owner fields) — they're CRM bookkeeping, not survey answers.",
+    ],
+  },
   {
     version: "2.285.3",
     date: "2026-09-01",

@@ -392,7 +392,11 @@
             "hs_object_source_label", "hs_analytics_first_url",
             "hs_analytics_source", "hs_analytics_source_data_1",
             // form-baked constants — always austin_sa / city_newcomer
-            "chapter_interest", "ad_variation"]);
+            "chapter_interest", "ad_variation",
+            // HubSpot activity meta — not survey answers (leaked onto
+            // merged-contact cards, Kerry's Shane Winter screenshot)
+            "notes_last_contacted", "notes_last_updated",
+            "hubspot_owner_assigneddate", "hubspot_owner_id"]);
         // Kerry-ruled short labels for the known questions; unknown
         // questions fall back to their humanized key.
         const FORM_LABELS = [
@@ -452,11 +456,17 @@
             const oldLabels = Object.keys(olderByDate)
                 .sort((a, b) => olderByDate[b].ts - olderByDate[a].ts);
             if (!dates || !oldLabels.length) return cur.concat(attr);
-            let out = [["__SEC__", `Current survey · ${fmtD(latest)}`]].concat(cur);
+            // Attribution (Ad Set / Campaign / Form) describes the
+            // submission that JUST arrived — it renders inside CURRENT
+            // SURVEY, never trailing under an older survey's band where
+            // it reads as that survey's source (Kerry 2026-09-01, the
+            // Shane Winter card).
+            let out = [["__SEC__", `Current survey · ${fmtD(latest)}`]]
+                .concat(cur).concat(attr.map(([l, v]) => [l, v]));
             for (const lbl of oldLabels)
                 out = out.concat([["__SEC__", `Survey · ${lbl}`]],
                                  olderByDate[lbl].rows);
-            return out.concat(attr);
+            return out;
         }
         // Render an answers table with collapsible survey bands: the
         // CURRENT SURVEY section opens by default, earlier SURVEY · date
