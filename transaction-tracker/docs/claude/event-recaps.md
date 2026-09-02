@@ -74,3 +74,26 @@ the rules live. This is the voice and rulebook of record.
    never "the race tightens / chased down"; late season inverts.
    Anchor the timeline in the lede ("three days after the Kickoff,
    the fall's first Tuesday night...").
+
+10. **Every buy-in or event mention carries its store LINK** (Kerry
+    2026-09-02): season contests →
+    https://thegolffellowship.com/shop/ols/products/season-contests ;
+    events use their product URL (pattern:
+    /shop/ols/products/<code-with-dashes>, e.g. s9-22-silverhorn,
+    a18-5-forest-creek). A nudge without a link is a wasted nudge.
+11. **The closer promotes the road ahead, both chapters**: next
+    same-chapter event (linked), plus the next 18s — including the
+    OTHER chapter's ("join the Austin crew for a little road trip...").
+12. **Accuracy guardrails**: never call the Blues "the tips" (a longer
+    set exists that's outside the under-50 parameters); a scratch
+    player's gross IS their net — describe it that way (37/37 (+1),
+    "all gross, no strokes"); "doubled up" style claims must carry the
+    combined dollar total (Mary Wade's $46.83 night); introduce guests
+    as guests on first mention.
+13. **TGF MVP is a head-to-head — name the other city's MVP with their
+    points and course** ("held off Austin's John Wade — 10 points at
+    Star Ranch — 11 to 10"). Source: determine_tgf_mvp.
+14. **Tone**: no "trash talk"; the fellowship close uses celebration /
+    good vibes language. Fall race framing: "the baby brother of the
+    summer City Net races — best 6 + Fall Championship instead of best
+    10; more of a sprint than a marathon."
