@@ -28,6 +28,7 @@ Before working on a specific area, Read the relevant sub-doc:
 - `docs/claude/twomantour-flight-board.md` (admin-only `/twomantour` Flight Board for the **Two Man Tour sibling brand** — unknowngolf live-scoring proxy + draggable flight lines; deliberately shares nothing with TGF surfaces)
 - `docs/claude/handicap-projection.md` (Task #16 — self-computed playing handicap from index + selected tee; SHADOW/parity-validated 100% vs GG allocation, awaiting Kerry+CA ratification; `handicap_calc.py`)
 - `docs/claude/leads.md` (NEW LEADS queue — Facebook/Meta leads polled from HubSpot every 45 min, 48-hour-touch audit at `/admin/leads`, email pings to Kerry + chapter manager; `email_parser/leads.py`; idle until `HUBSPOT_TOKEN` env is set)
+- `docs/claude/event-recaps.md` (**news-reporter event recaps for the GG roster blast — Kerry's house style of record**: comparative highlighting, MVP-money-only dollars + "% cashed" angle, Gross/Net(±) score format, humor-borne buy-in nudges, new-member spotlights, fellowship close. Read BEFORE writing any recap)
 
 ## Guiding Principles
 
