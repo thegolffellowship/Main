@@ -213,3 +213,17 @@ Working rules (v1):
 SMTP & API → "API Keys" tab → Generate a new API key, name it
 "TGF Tracker" → copy it once → Railway → tgf-tracker service →
 Variables → add BREVO_API_KEY → Deploy. Code ships idle-until-set.
+
+**TEMPLATE OF RECORD (Kerry's final edit of v3, 2026-09-02):**
+`docs/claude/templates/public-recap-template.html` — his sent
+structure with `{{PLACEHOLDER}}` slots for the Wednesday auto-draft
+(EYEBROW, HEADLINE, LEDE, BEAT_1..3 lead/body, HIO_POT, CELEBRATE_PROOF,
+SA/AUS next-event URL+label, SATURDAY_18_ITEMS, CLOSE_LEAD). Kerry's
+changes over my v3, now standard: no rule under the white-bg logo; the
+HOLE-IN-ONE block is a big centered orange "Hole-In-One Pot = $X,XXX"
+(36px) over the one-paragraph explainer ("...11 have won over our 20
+years. Join and you could be next!"); Saturday 18s each LINKED with
+city + date bolded (Cedar Creek confirmed the URL pattern:
+/shop/ols/products/s18-11-cedar-creek); no course-condition asides.
+Brevo's editor wraps merge fields in `rte-personalized-node` spans —
+that's its own representation, not something to paste as raw HTML.
