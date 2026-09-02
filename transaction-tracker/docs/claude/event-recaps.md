@@ -114,3 +114,15 @@ Kerry's shipped version added structure to keep in every draft:
   signature block (Kerry Niester / The Golf Fellowship / 210.838.3948).
 - Draft with placeholders for the FULL EVENT RESULTS / CURRENT
   STANDINGS links (Kerry wires the GG URLs in his email tool).
+
+15. **Never infer a player's gender from their name** (Kerry 2026-09-02:
+    "Kelly Barna is a guy"). Verify from the customers row (`gender`)
+    or write around the pronoun. A wrong pronoun in a roster email is
+    worse than no pronoun.
+16. **Lead with titles when a member headlines the standings** —
+    "Austin Manager and now two-time Players Cup Champion Robert
+    Straiton has the early lead..." Chapter managers, cup champions,
+    city champions / LSC captains all get their billing.
+17. **Date sanity**: cross-check every event date against the Tracker
+    calendar (list_events) — Kerry noted he'd been typing Oct for
+    September; the draft is the backstop.
