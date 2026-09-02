@@ -297,6 +297,18 @@ def _import_attrs_for(target: dict) -> dict:
     return attrs
 
 
+def _city_chapter(brevo_attrs: dict, city_map: dict) -> str | None:
+    """Chapter from a Brevo contact's CITY attribute via the Lead
+    Center's city→chapter map (Kerry 2026-09-02: 'fill the chapter from
+    CITY' for the ~800 Brevo-only contacts the Tracker has never seen).
+    Only used when the Tracker holds no chapter for the contact."""
+    city = (brevo_attrs.get("CITY") or "").strip()
+    if not city:
+        return None
+    from .leads import route_chapter
+    return route_chapter(city, city_map)
+
+
 def _create_scope(dial_value: str | None) -> str:
     """brevo_sync_create_missing: '' / '0' → never create; 'active' →
     create missing ACTIVE MEMBERS only; 'recent' → active members PLUS
@@ -413,6 +425,9 @@ def sync_member_status(db_path: str | Path | None = None,
 
     scope = _create_scope(_dial(db, "brevo_sync_create_missing", db_path))
     result["create_scope"] = scope
+    from .leads import _dial_json, DEFAULT_CITY_CHAPTERS
+    city_map = _dial_json("lead_city_chapters", DEFAULT_CITY_CHAPTERS,
+                          db_path=db_path)
     updates, missing = [], []
     for email, target in targets.items():
         bc = brevo.get(email)
@@ -423,8 +438,22 @@ def sync_member_status(db_path: str | Path | None = None,
                                 "_in_scope": _in_scope(scope, target)})
             continue
         result["matched"] += 1
+        if not target["chapter"] and not (bc["attributes"].get(CHAPTER_ATTR) or ""):
+            # Tracker knows the person but not their chapter — the
+            # Brevo CITY is the next-best signal.
+            target = dict(target, chapter=_city_chapter(bc["attributes"],
+                                                        city_map) or "")
         if _needs_update(bc["attributes"], target):
             updates.append({"email": email, "attributes": _attrs_for(target)})
+    # Brevo-only contacts (never a Tracker customer): chapter from CITY.
+    result["city_routed"] = 0
+    for email, bc in brevo.items():
+        if email in targets or (bc["attributes"].get(CHAPTER_ATTR) or ""):
+            continue
+        ch = _city_chapter(bc["attributes"], city_map)
+        if ch:
+            updates.append({"email": email, "attributes": {CHAPTER_ATTR: ch}})
+            result["city_routed"] += 1
     result["to_update"] = len(updates)
     result["missing_in_brevo"] = len(missing)
     result["sample_updates"] = updates[:5]

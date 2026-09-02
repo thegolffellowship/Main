@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.289.1";
+window.TGF_VERSION = "2.290.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.290.0",
+    date: "2026-09-02",
+    changes: [
+      "Brevo sync fills TGF_CHAPTER from a contact's CITY (Kerry: 'fill the chapter from CITY for those') for the ~800 Brevo-only contacts the Tracker has never seen — and for Tracker customers with no chapter of their own — using the same city→chapter map the Lead Center routes with (lead_city_chapters dial over the built-in defaults). An existing chapter stamp is never overwritten, and a city the map doesn't know leaves the contact unrouted; CITY-only routing sets chapter alone, never member status.",
+    ],
+  },
   {
     version: "2.289.1",
     date: "2026-09-02",

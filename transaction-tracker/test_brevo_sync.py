@@ -169,6 +169,25 @@ class BrevoSyncTests(unittest.TestCase):
         f = [r for r in imp[0][2]["jsonBody"] if r["email"] == "f@x.com"][0]
         self.assertEqual(f["attributes"]["TGF_LAST_PLAYED"], "2026-06-14")
 
+    def test_city_fallback_routes_brevo_only_contacts(self):
+        fake = FakeBrevo({
+            "lead1@x.com": {"CITY": "Round Rock"},               # → Austin
+            "lead2@x.com": {"CITY": "New Braunfels"},            # → San Antonio
+            "lead3@x.com": {"CITY": "Denver"},                   # unmapped
+            "lead4@x.com": {"CITY": "Austin", "TGF_CHAPTER": "San Antonio"},  # keeps
+            "c@x.com": {"CITY": "Boerne"},                       # Tracker prospect, no chapter
+        })
+        res = self._run(fake)
+        self.assertEqual(res["city_routed"], 2)
+        self.assertEqual(fake.contacts["lead1@x.com"]["TGF_CHAPTER"], "Austin")
+        self.assertEqual(fake.contacts["lead2@x.com"]["TGF_CHAPTER"], "San Antonio")
+        self.assertNotIn("TGF_CHAPTER", fake.contacts["lead3@x.com"])
+        self.assertNotIn("TGF_MEMBER_STATUS", fake.contacts["lead1@x.com"])
+        self.assertEqual(fake.contacts["lead4@x.com"]["TGF_CHAPTER"], "San Antonio")
+        # Tracker-known contact with no Tracker chapter also routes by CITY
+        self.assertEqual(fake.contacts["c@x.com"]["TGF_CHAPTER"], "San Antonio")
+        self.assertEqual(fake.contacts["c@x.com"]["TGF_MEMBER_STATUS"], "prospect")
+
     def test_last_played_stamp_triggers_update(self):
         fake = FakeBrevo({"g@x.com": {"TGF_MEMBER_STATUS": "former_member",
                                       "TGF_CHAPTER": "Austin"}})

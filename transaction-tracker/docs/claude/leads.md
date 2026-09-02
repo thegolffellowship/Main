@@ -394,6 +394,13 @@ Tracker→Brevo API brick:
   with FIRSTNAME/LASTNAME/status/chapter; one import address per
   customer (primary email first) so multi-email players never become
   duplicate contacts. Summary persisted to `brevo_last_sync`.
+- Chapter fallback chain (v2.289.1/v2.290.0): customers.chapter →
+  the lead's routed chapter → the Brevo CITY attribute through the
+  Lead Center's `route_chapter` map (`lead_city_chapters` dial over
+  `DEFAULT_CITY_CHAPTERS`). Brevo-only contacts (never a Tracker
+  customer) get ONLY TGF_CHAPTER from CITY, never a status; an
+  existing chapter stamp is never overwritten. `city_routed` in the
+  run summary counts them.
 - Scheduler: `nightly_brevo_sync` cron 09:10 UTC (4:10 AM Central);
   `BREVO_SYNC_DISABLED=1` skips scheduling. No-op until
   `BREVO_API_KEY` is set on Railway (Brevo → profile → SMTP & API →
