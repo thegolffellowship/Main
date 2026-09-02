@@ -228,7 +228,7 @@ city + date bolded (Cedar Creek confirmed the URL pattern:
 Brevo's editor wraps merge fields in `rte-personalized-node` spans —
 that's its own representation, not something to paste as raw HTML.
 
-18. **Every event named in the lede links to its GG RESULTS page**
+18. **Every event named in the lede links to its GG RESULTS page; the header logo links to thegolffellowship.com** (Kerry 2026-09-02)
     (Kerry 2026-09-02: "Realized we didn't have any event results
     links!!!") — orange bold "RESULTS" in parentheses after the
     bolded event, e.g. "<b>San Antonio at Canyon Springs</b> (RESULTS)".
