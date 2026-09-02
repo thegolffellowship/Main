@@ -191,3 +191,25 @@ Working rules (v1):
   Wednesday afternoon. Kerry's weekly effort target: 5 minutes.
 - Brevo API has no campaign update/delete — revisions are new drafts;
   superseded drafts are deleted in the UI.
+
+**v3 fixes (Kerry, off the Brevo preview 2026-09-02) — template rules:**
+- The Season-20 logo (69986bc3…png) is BLACK INK — header band must be
+  WHITE (with a dark rule under it), never #1b1b1b (v2 rendered black
+  on black).
+- One body size everywhere: 16px / line-height 1.55 / #1b1b1b for every
+  paragraph, list, and close-box line (v2 drifted 15→17px around the
+  Try-a-Tuesday block). Only the eyebrow (12px) and footer (12px) differ.
+- Connect line reads "You sign up, show up, and play with a group
+  that's rooting for you."
+- HOLE-IN-ONE block belongs in the public template too (Kerry): a dark
+  callout after the story box — what it is (every entrant kicks in $1
+  per 9 / $2 per 18, accrues until won, a MEMBER who jars one at a TGF
+  event takes it all; guests pay in but can't win — say "a member")
+  + where it stands (live pot value; $3,295 on 9/2/26).
+- Campaign lineage: #13 (v1) → #14 (v2) → #15 (v3). Brevo API has no
+  update/delete; Kerry deletes superseded drafts in the UI.
+
+**Tracker→Brevo sync — setup Kerry performs:** Brevo → profile menu →
+SMTP & API → "API Keys" tab → Generate a new API key, name it
+"TGF Tracker" → copy it once → Railway → tgf-tracker service →
+Variables → add BREVO_API_KEY → Deploy. Code ships idle-until-set.
