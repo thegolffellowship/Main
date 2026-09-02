@@ -73,6 +73,11 @@
         /* Left-end CHAPTER tab (Kerry 2026-08-31, TGF Platform style):
            Austin burnt orange / SA slate / unrouted gray. Replaces the
            old status edge — the section bars carry status now. */
+        .ld-selform { background: #FFFBEB; border: 1px solid #FDE68A; border-radius: 8px; padding: 8px 10px; margin-bottom: 8px; }
+        .ld-selgrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 8px; }
+        .ld-selgrid label { display: flex; flex-direction: column; font-size: 0.72rem; color: #6B7280; gap: 2px; }
+        .ld-selgrid select, .ld-selgrid input { font-size: 0.85rem; padding: 4px 6px; border: 1px solid #D1D5DB; border-radius: 6px; }
+        .ld-selacts { display: flex; gap: 8px; align-items: center; margin-top: 8px; flex-wrap: wrap; }
         .ld-drow { display: grid; grid-template-columns: 106px minmax(150px, 1.05fr) minmax(170px, 1fr) minmax(180px, 1.3fr) max-content; gap: 10px; align-items: center; padding: 5px 12px 5px 9px; border-bottom: 1px solid #F3F2EF; border-left: 8px solid #E5E7EB; }
         .ld-ch-austin { border-left-color: var(--chapter-austin, #BF5700) !important; }
         .ld-ch-sa { border-left-color: var(--chapter-sa-alt, #8FA8B8) !important; }
@@ -446,8 +451,13 @@
             for (const k of Object.keys(payload).sort()) {
                 if ((HIDE.has(k) && !ATTR_LABELS[k]) ||
                     HIDE_PREFIX.some(p => k.startsWith(p))) continue;
-                const val = pretty(payload[k]);
+                let val = pretty(payload[k]);
                 if (ATTR_LABELS[k]) { attr.push([ATTR_LABELS[k], val, "attr"]); continue; }
+                // Manager-edited selection (Kerry 2026-09-02): say so,
+                // and keep HubSpot's original answer visible.
+                const mm = (payload._manual_meta || {})[k];
+                if (mm) val += ` · edited by ${mm.by || "manager"} ${mm.at ? mm.at.slice(5, 10).replace("-", "/") : ""}` +
+                    (mm.was ? ` (was ${pretty(mm.was)})` : "");
                 cur.push([formLabel(k), val]);
                 if (!isCurrent(k) && dates && dates[k])
                     oldPush(dates[k], [formLabel(k), val]);
@@ -701,6 +711,7 @@
             const primary = l.status === "new"
                 ? `<button class="ld-btn primary" onclick="mark(${l.id},'touched')">Touched</button>` : "";
             const menuItems = `<button class="ld-btn" onclick="editName(${l.id})">Edit name</button>
+                <button class="ld-btn" onclick="editSelections(${l.id})">Edit selections</button>
                 <button class="ld-btn" onclick="followUp(${l.id})">⏰ Follow up</button>` +
                 (l.status === "touched"
                 ? `<button class="ld-btn" onclick="if(confirm('Mark as CONVERTED?')) mark(${l.id},'converted')">Converted</button>
@@ -751,6 +762,7 @@
                 </div>
             </div>
             <div class="ld-ddet ${chCls}" id="ld-det-${l.id}">
+                <div class="ld-selform" id="ld-sel-${l.id}" hidden></div>
                 ${notesList ? `<table class="ld-mnotes">${notesList}</table><hr style="border:none;border-top:1px solid #E5E7EB">` : ""}
                 ${extras.length ? renderAnswerTable(extras) : "<span class='ld-dsub'>No form answers.</span>"}
             </div>`);
@@ -768,7 +780,8 @@
                     <span class="ld-act" onclick="noteLead(${l.id})">➕ Note</span>
                 </div>
                 ${latestNote ? `<div class="ld-noteprev"><b>${esc((latestNote.author || "?")[0])}</b> · ${esc(fmtNoteTime(latestNote.created_at))} — ${esc(latestNote.note)}</div>` : ""}
-                <details class="ld-mdetails"><summary>Details${(l.notes_log || []).length > 1 ? ` · ${l.notes_log.length} notes` : ""}</summary>
+                <details class="ld-mdetails" id="ld-mdet-${l.id}"><summary>Details${(l.notes_log || []).length > 1 ? ` · ${l.notes_log.length} notes` : ""}</summary>
+                    <div class="ld-selform" id="ld-msel-${l.id}" hidden></div>
                     ${notesList ? `<table class="ld-mnotes">${notesList}</table><hr style="border:none;border-top:1px solid #F3F2EF">` : ""}
                     ${mextras.length ? renderAnswerTable(mextras) : ""}
                 </details>
@@ -871,6 +884,67 @@
             body: JSON.stringify({ status, touched_by: touched_by || "",
                                    notes: notes || "" }) });
         loadLeads();
+    }
+    // Edit selections (Kerry 2026-09-02, the Mick Hernandez card: lives
+    // in SA, plays Austin occasionally, asked off the Austin invites —
+    // his FB answer said "Both"). Availability / Importance /
+    // Invitations use the exact Facebook option values so every badge,
+    // filter and CSV rule keeps working; City + Chapter ride along.
+    // Changing Invitations re-routes the chapter like a fresh answer.
+    function editSelections(id) {
+        const l = (ALL.leads || []).find(x => x.id === id);
+        if (!l) return;
+        const opts = ALL.answer_options || {};
+        const payload = l.payload || {};
+        const isMobile = window.matchMedia("(max-width: 720px)").matches;
+        const box = document.getElementById((isMobile ? "ld-msel-" : "ld-sel-") + id);
+        if (!box) return;
+        if (isMobile) { const d = document.getElementById("ld-mdet-" + id); if (d) d.open = true; }
+        else { const det = document.getElementById("ld-det-" + id); if (det) det.style.display = "block"; }
+        const sel = (field, label) => {
+            const o = opts[field] || {}; const cur = payload[o.key] || "";
+            const known = (o.options || []).some(x => x.value === cur);
+            return `<label>${label}<select data-f="${field}">
+                <option value="">— unchanged —</option>
+                ${(o.options || []).map(x => `<option value="${esc(x.value)}"${x.value === cur ? " selected" : ""}>${esc(x.label)}</option>`).join("")}
+                ${cur && !known ? `<option value="" selected>${esc(pretty(cur))} (current)</option>` : ""}
+            </select></label>`;
+        };
+        box.innerHTML = `<div class="ld-selgrid">
+            ${sel("availability", "Availability")}
+            ${sel("importance", "Importance")}
+            ${sel("invitations", "Invitations")}
+            <label>City<input type="text" data-f="city" value="${esc(l.city || "")}" placeholder="e.g. San Antonio"></label>
+            <label>Chapter<select data-f="chapter">
+                <option value=""${!l.chapter ? " selected" : ""}>auto (from invites / city)</option>
+                <option value="San Antonio"${l.chapter === "San Antonio" ? " selected" : ""}>San Antonio</option>
+                <option value="Austin"${l.chapter === "Austin" ? " selected" : ""}>Austin</option>
+            </select></label>
+            </div>
+            <div class="ld-selacts"><button class="ld-btn primary" onclick="saveSelections(${id})">Save</button>
+            <button class="ld-btn" onclick="document.getElementById('${box.id}').hidden = true">Cancel</button>
+            <span class="ld-dsub">Invitations “No” dismisses the lead on the next poll.</span></div>`;
+        box.hidden = false;
+    }
+    function saveSelections(id) {
+        const l = (ALL.leads || []).find(x => x.id === id);
+        const box = [...document.querySelectorAll(`#ld-sel-${id}, #ld-msel-${id}`)].find(b => !b.hidden);
+        if (!box || !l) return;
+        const answers = {};
+        box.querySelectorAll("select[data-f]").forEach(s => {
+            if (["availability", "importance", "invitations"].includes(s.dataset.f) && s.value)
+                answers[s.dataset.f] = s.value;
+        });
+        const city = box.querySelector("input[data-f=city]").value.trim();
+        const chapter = box.querySelector("select[data-f=chapter]").value;
+        const body = { answers, author: "Kerry" };
+        if (city !== (l.city || "")) body.city = city;
+        if (chapter !== (l.chapter || "")) body.chapter = chapter;
+        fetch(`/api/leads/${id}/answers`, {
+            method: "POST", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(body) })
+            .then(r => r.json().then(j => ({ ok: r.ok, j })))
+            .then(({ ok, j }) => { if (!ok) alert(j.error || "Save failed"); loadLeads(); });
     }
     function editLead(id) {
         // Correct touched_by / notes without changing status (blank

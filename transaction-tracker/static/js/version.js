@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.286.0";
+window.TGF_VERSION = "2.287.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.287.0",
+    date: "2026-09-02",
+    changes: [
+      "Lead Center: EDIT SELECTIONS (Kerry, off the Mick Hernandez card — lives in SA, plays Austin occasionally, asked off the Austin invite list while his FB answer still said 'Both'): every lead's ⋯ menu gains Edit selections — Availability / Importance / Invitations pick from the exact Facebook option values (so badges, filters and the invite-list CSV keep working), plus City and Chapter. An Invitations change re-routes the chapter like a fresh answer would; 'No invitations' hands the lead to the standing no-loop auto-dismiss. Edits are stored as payload overrides that ride across the 48-hour HubSpot re-sync and every self-heal pass, the card marks the row 'edited by Kerry 9/2 (was Both)', and an auto note records the change. Bridge: scoring-lead-edit now accepts city / availability / importance / invitations.",
+      "Tracker → Brevo member-status sync (mailbox #381, Kerry-ratified): new email_parser/brevo.py stamps TGF_MEMBER_STATUS (active_member / former_member / prospect, from the same member/alumni/guest derivation the boards use) and TGF_CHAPTER onto every Brevo contact the Tracker knows by email — nightly at 4:10 AM Central, or on demand via scoring-brevo-sync (':dry' previews). Updates existing contacts only; the brevo_sync_create_missing dial ('1') lets it import Tracker-only emails into TGF CONTACTS. Idle until BREVO_API_KEY lands on Railway; scoring-brevo-status reports key/account/last-sync. This is the segment key for excluding active members from the public TGF Insider send.",
+    ],
+  },
   {
     version: "2.286.0",
     date: "2026-09-02",

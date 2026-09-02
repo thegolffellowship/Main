@@ -1096,6 +1096,10 @@ def check_new_leads(db_path: str | Path | None = None) -> dict:
                 old_p = json.loads(r["payload"]) if r.get("payload") else {}
             except Exception:
                 old_p = {}
+            # Manager-edited selections (Kerry 2026-09-02, the Mick
+            # Hernandez card) ride across the fresh read — a re-sync
+            # must never put HubSpot's stale answer back.
+            new_p = apply_manual_answers(new_p, old_p)
             ident = identities.get(ext) or {}
             fills = {k: v for k, v in ident.items()
                      if v and not (r.get(k) or "").strip()}
@@ -1118,7 +1122,8 @@ def check_new_leads(db_path: str | Path | None = None) -> dict:
                 p = json.loads(r["payload"])
             except Exception:
                 continue
-            enriched = enrich_payload(dict(p), ad_set_names)
+            enriched = apply_manual_answers(
+                enrich_payload(dict(p), ad_set_names), p)
             # Invites override re-route (Kerry 2026-08-31): a definitive
             # single-chapter invites answer wins even over an already-
             # routed chapter, so existing ad-set-routed leads (Renick)
@@ -1608,3 +1613,161 @@ def mark_lead(lead_id: int, status: str, touched_by: str = "",
                 "notes) WHERE id = ?", (status, notes, lead_id))
         conn.commit()
     return {"id": lead_id, "status": status, "ok": True}
+
+
+# ── Manager-edited selections (Kerry 2026-09-02) ─────────────────────
+# "I need to be able to edit Lead selections" — Mick Hernandez lives in
+# SA, plays Austin occasionally, and asked off the Austin invite list;
+# his FB answer still said "Both". The three survey answers (+ city and
+# chapter) are editable from the card. Edits live in payload["_manual"]
+# and are re-applied over every HubSpot re-sync / self-heal pass, so a
+# young lead's 48-hour re-fetch can't put the stale answer back.
+# Routing follows the edited Invitations answer exactly like a fresh
+# submission would (single-chapter answer → that chapter).
+MANUAL_ANSWER_KEYS = {
+    "availability": "can_you_play_tuesdays_or_saturdays",
+    "importance": "which_is_most_important_to_you",
+    "invitations": LOOP_QUESTION_KEY,
+}
+# Raw Facebook option values (exact — every decoder/badge/CSV rule
+# keys on these strings) with their card labels.
+MANUAL_ANSWER_OPTIONS = {
+    "availability": [
+        ("yes_-_i_can_play_both_tuesdays_or_saturdays", "Both (Tue + Sat)"),
+        ("yes_-_i_can_play_tuesdays", "Tuesdays only"),
+        ("yes_-_i_can_play_saturdays", "Saturdays only"),
+        ("neither_-_but_i'm_still_interested", "Neither, still interested"),
+    ],
+    "importance": [
+        ("all_of_it!_-_enjoy_a_well-rounded_experience_with_top-notch_"
+         "courses,_fair_competition,_and_meaningful_connections", "All of it"),
+        ("golf_-_explore_a_variety_of_courses_and_play_as_much_as_possible",
+         "Golf"),
+        ("competition_-_test_yourself_in_individual_&_team_formats_with_"
+         "fairness_for_all_skill_levels", "Competition"),
+        ("community_-_connect_with_fellow_golfers,_forge_new_friendships,"
+         "_and_foster_camaraderie", "Community"),
+    ],
+    "invitations": [
+        ("yes_for_both", "Both chapters"),
+        ("yes_for_san_antonio", "San Antonio only"),
+        ("yes_for_austin", "Austin only"),
+        ("no", "No invitations"),
+    ],
+}
+
+
+def get_answer_options() -> dict:
+    """{field: {question_key, options: [{value, label}]}} for the UI."""
+    return {f: {"key": MANUAL_ANSWER_KEYS[f],
+                "options": [{"value": v, "label": lbl}
+                            for v, lbl in MANUAL_ANSWER_OPTIONS[f]]}
+            for f in MANUAL_ANSWER_KEYS}
+
+
+def apply_manual_answers(payload: dict | None,
+                         previous: dict | None = None) -> dict | None:
+    """Overlay payload['_manual'] (carried from `previous` when the new
+    payload lacks it) onto the answer keys. Idempotent."""
+    if not isinstance(payload, dict):
+        return payload
+    manual = payload.get("_manual")
+    meta = payload.get("_manual_meta")
+    if not isinstance(manual, dict) and isinstance(previous, dict):
+        manual = previous.get("_manual")
+        meta = previous.get("_manual_meta")
+    if not isinstance(manual, dict) or not manual:
+        return payload
+    payload["_manual"] = dict(manual)
+    if isinstance(meta, dict):
+        payload["_manual_meta"] = dict(meta)
+    for k, v in manual.items():
+        payload[k] = v
+    return payload
+
+
+def set_lead_answers(lead_id: int, answers: dict | None = None,
+                     city: str | None = None, chapter: str | None = None,
+                     author: str = "", db_path: str | Path | None = None,
+                     ) -> dict:
+    """Edit a lead's survey selections / city / chapter from the card.
+    answers: {availability|importance|invitations: raw option value}.
+    chapter: 'San Antonio' | 'Austin' | '' (clear → re-route from the
+    invites answer / city). Invitations 'no' leaves the lead to the
+    standing no-loop auto-dismiss on the next poll. Audited via an
+    auto note."""
+    from . import database as db
+    from .timezone_utils import now_central
+    answers = {k: v for k, v in (answers or {}).items() if v is not None}
+    for f, v in answers.items():
+        if f not in MANUAL_ANSWER_KEYS:
+            return {"error": f"unknown field {f!r}"}
+        if v not in {o for o, _ in MANUAL_ANSWER_OPTIONS[f]}:
+            return {"error": f"{f}: {v!r} is not a survey option"}
+    if chapter is not None and chapter.strip() not in ("", "San Antonio",
+                                                       "Austin"):
+        return {"error": "chapter must be San Antonio, Austin, or blank"}
+    if not answers and city is None and chapter is None:
+        return {"error": "nothing to update"}
+    changes: list[str] = []
+    with db._connect(db_path) as conn:
+        ensure_leads_table(conn)
+        row = conn.execute("SELECT * FROM leads WHERE id = ?",
+                           (lead_id,)).fetchone()
+        if not row:
+            return {"error": f"lead {lead_id} not found"}
+        try:
+            payload = json.loads(row["payload"]) if row["payload"] else {}
+        except Exception:
+            payload = {}
+        if not isinstance(payload, dict):
+            payload = {}
+        stamp = now_central().strftime("%Y-%m-%d %H:%M")
+        manual = dict(payload.get("_manual") or {})
+        meta = dict(payload.get("_manual_meta") or {})
+        for f, v in answers.items():
+            key = MANUAL_ANSWER_KEYS[f]
+            old = payload.get(key)
+            if old == v:
+                continue
+            manual[key] = v
+            meta[key] = {"by": (author or "manager").strip(), "at": stamp,
+                         "was": old}
+            payload[key] = v
+            changes.append(f"{f.capitalize()}: {prettify_answer(old) if old else '—'}"
+                           f" → {prettify_answer(v)}")
+        payload["_manual"] = manual
+        payload["_manual_meta"] = meta
+        sets, vals = ["payload = ?"], [json.dumps(payload)]
+        if city is not None and (city or "").strip() != (row["city"] or ""):
+            sets.append("city = ?")
+            vals.append(city.strip() or None)
+            changes.append(f"City: {row['city'] or '—'} → {city.strip() or '—'}")
+        new_chapter = row["chapter"]
+        if chapter is not None:
+            new_chapter = chapter.strip() or None
+        elif "invitations" in answers:
+            routed = route_chapter_from_payload(payload)
+            if routed:
+                new_chapter = routed
+        if new_chapter != row["chapter"]:
+            sets.append("chapter = ?")
+            vals.append(new_chapter)
+            changes.append(f"Chapter: {row['chapter'] or 'unrouted'} → "
+                           f"{new_chapter or 'unrouted'}")
+        vals.append(lead_id)
+        conn.execute(f"UPDATE leads SET {', '.join(sets)} WHERE id = ?", vals)
+        if changes:
+            conn.execute(
+                "INSERT INTO lead_notes (lead_id, author, note) VALUES (?, ?, ?)",
+                (lead_id, "auto", f"Selections edited by "
+                 f"{(author or 'manager').strip()}: " + "; ".join(changes)))
+        conn.commit()
+    try:
+        db.log_agent_action("lead-center", "lead-answers-edit",
+                            f"lead {lead_id}: " + ("; ".join(changes) or
+                                                   "no change"))
+    except Exception:
+        pass
+    return {"id": lead_id, "ok": True, "changes": changes,
+            "chapter": new_chapter}

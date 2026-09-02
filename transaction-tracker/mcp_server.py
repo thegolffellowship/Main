@@ -2079,12 +2079,26 @@ def _scoring_dispatch(url: str, extract: str):
             _p = [x.strip() for x in arg.split("|")]
             if len(_p) < 3 or _p[1] not in ("first_name", "last_name",
                                             "email", "phone", "chapter",
-                                            "notes", "follow_up_at"):
+                                            "city", "notes", "follow_up_at",
+                                            "availability", "importance",
+                                            "invitations"):
                 return json.dumps({"error": "need <id>|<field>|<value>; "
                                             "field: first_name/last_name/"
-                                            "email/phone/chapter/notes/"
-                                            "follow_up_at"})
+                                            "email/phone/chapter/city/notes/"
+                                            "follow_up_at/availability/"
+                                            "importance/invitations"})
             _val = "|".join(_p[2:])
+            if _p[1] in ("availability", "importance", "invitations",
+                         "city"):
+                # Survey selections + city go through the same editor
+                # the card uses (re-sync-proof overrides, auto note,
+                # chapter re-route on an invites change).
+                from email_parser.leads import set_lead_answers
+                return json.dumps(set_lead_answers(
+                    int(_p[0]),
+                    answers=({_p[1]: _val} if _p[1] != "city" else {}),
+                    city=(_val if _p[1] == "city" else None),
+                    author="CC"), indent=2)
             with db._connect() as conn:
                 from email_parser.leads import ensure_leads_table
                 ensure_leads_table(conn)
@@ -2161,6 +2175,23 @@ def _scoring_dispatch(url: str, extract: str):
             db.log_agent_action("mcp-claude", "scoring-lead-note",
                                 f"lead {_p[0].strip()}: note by {_p[1].strip()}")
             return json.dumps(res, indent=2)
+        if cmd == "scoring-brevo-status":
+            # Brevo key present / account reachable / last sync summary.
+            from email_parser.brevo import brevo_status
+            return json.dumps(brevo_status(), indent=2, default=str)
+        if cmd == "scoring-brevo-sync":
+            # ":dry" previews (counts + sample) without writing to Brevo.
+            # Real run stamps TGF_MEMBER_STATUS / TGF_CHAPTER (mailbox
+            # #381); the scheduler does the same nightly.
+            from email_parser.brevo import sync_member_status
+            _dry = arg.strip().lower() in ("dry", "preview")
+            res = sync_member_status(dry_run=_dry)
+            if not _dry:
+                db.log_agent_action("mcp-claude", "scoring-brevo-sync",
+                                    f"updated={res.get('updated')} "
+                                    f"matched={res.get('matched')} "
+                                    f"missing={res.get('missing_in_brevo')}")
+            return json.dumps(res, indent=2, default=str)
         if cmd == "scoring-leads-poll":
             # On-demand HubSpot lead poll (scheduler runs it every 45 min;
             # no-ops with an error note until HUBSPOT_TOKEN is set).

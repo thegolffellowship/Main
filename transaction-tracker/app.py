@@ -1662,6 +1662,22 @@ def start_scheduler():
                            or os.getenv("HUBSPOT_PRIVATE_APP_TOKEN"))
                     else " (idle — HUBSPOT_TOKEN not set)")
 
+    # Tracker → Brevo member-status sync (mailbox #381, Kerry-ratified
+    # 2026-09-02): nightly stamp of TGF_MEMBER_STATUS / TGF_CHAPTER so
+    # the public "TGF Insider" send can exclude active members. Idle
+    # until BREVO_API_KEY lands on Railway. 09:10 UTC = 4:10 AM Central.
+    if os.getenv("BREVO_SYNC_DISABLED", "") != "1":
+        from email_parser.brevo import nightly_brevo_sync
+        scheduler.add_job(
+            nightly_brevo_sync,
+            "cron", hour=9, minute=10,
+            id="brevo_sync",
+            replace_existing=True,
+        )
+        logger.info("Brevo member-status sync scheduled nightly 09:10 UTC%s",
+                    "" if os.getenv("BREVO_API_KEY")
+                    else " (idle — BREVO_API_KEY not set)")
+
     scheduler.start()
     logger.info("Scheduler started — checking inbox every %d minutes", interval)
 
@@ -11278,11 +11294,12 @@ def api_leads():
             conn.close()
     except Exception:
         logger.warning("Lead next-event lookup failed", exc_info=True)
-    from email_parser.leads import get_tag_options
+    from email_parser.leads import get_tag_options, get_answer_options
     return jsonify({"leads": leads, "by_ad_set": by_ad_set,
                     "sms_template": sms_template,
                     "next_events": next_events,
-                    "tag_options": get_tag_options()})
+                    "tag_options": get_tag_options(),
+                    "answer_options": get_answer_options()})
 
 
 @app.route("/api/leads/export-csv")
@@ -11332,6 +11349,21 @@ def api_lead_edit(lead_id):
     res = edit_lead_identity(lead_id,
                              first_name=d.get("first_name"),
                              last_name=d.get("last_name"))
+    return jsonify(res), (400 if res.get("error") else 200)
+
+
+@app.route("/api/leads/<int:lead_id>/answers", methods=["POST"])
+@require_role("manager")
+def api_lead_answers(lead_id):
+    """Edit a lead's survey selections / city / chapter from the card
+    (Kerry 2026-09-02, the Mick Hernandez case). Body: {answers:
+    {availability|importance|invitations: raw option}, city, chapter,
+    author}. Edits survive the HubSpot re-sync (payload._manual)."""
+    from email_parser.leads import set_lead_answers
+    d = request.get_json(silent=True) or {}
+    res = set_lead_answers(lead_id, answers=d.get("answers") or {},
+                           city=d.get("city"), chapter=d.get("chapter"),
+                           author=(d.get("author") or "").strip())
     return jsonify(res), (400 if res.get("error") else 200)
 
 

@@ -343,6 +343,61 @@ per lead; a changed answer is new text → its own note). Runs after
 every RSVP inbox ingest (app.py check_rsvp_inbox) and as a sweep at
 the end of every leads poll (backfill + non-inbox paths).
 
+## Edit selections (Kerry 2026-09-02, v2.287.0)
+
+"I need to be able to edit Lead selections" — Mick Hernandez (lead 63)
+lives in SA, plays Austin occasionally, and asked off the Austin
+invites; his FB answer still said "Both", so the Austin invite CSV
+kept him. ⋯ → **Edit selections** on every card (desktop details panel
+/ mobile Details): Availability, Importance, Invitations as selects
+over the EXACT Facebook option values (`MANUAL_ANSWER_OPTIONS` in
+leads.py — every badge, filter and CSV rule keys on those strings),
+plus City (free text) and Chapter (auto / SA / Austin). `POST
+/api/leads/<id>/answers` → `set_lead_answers`:
+- overrides are stored in `payload["_manual"]` (+ `_manual_meta`
+  {by, at, was}) and re-applied by `apply_manual_answers` inside the
+  <48h re-sync AND the standing self-heal, so HubSpot's stale answer
+  never comes back;
+- an Invitations change re-routes the chapter via
+  `route_chapter_from_payload` (single-chapter answer → that chapter;
+  "Both" leaves the current chapter); an explicit Chapter pick wins;
+  "No invitations" is left to the no-loop auto-dismiss on the next poll;
+- the card shows "· edited by Kerry 9/2 (was Both)" on the row and an
+  `auto` note records every change; agent action log
+  `lead-answers-edit`.
+Bridge: `scoring-lead-edit:<id>|availability|<raw option>` (also
+importance / invitations / city) goes through the same editor.
+
+## Brevo member-status sync (mailbox #381, v2.287.0)
+
+Kerry-ratified via CA: the public "TGF Insider" recap goes to everyone
+in Brevo EXCEPT active members. `email_parser/brevo.py` is the first
+Tracker→Brevo API brick:
+- `tracker_contact_targets` — every `customer_emails` row (non-banned)
+  → {email: status, chapter}; status from
+  `derive_member_financial_status_bulk` mapped member→`active_member`,
+  alumni→`former_member`, guest→`prospect`; a shared email keeps the
+  strongest status; chapter "TGF" is treated as blank.
+- `sync_member_status(dry_run)` — inventories Brevo (GET /v3/contacts,
+  1000/page), ensures the TGF_MEMBER_STATUS attribute, and updates only
+  contacts whose stamp differs (POST /v3/contacts/batch, 100/call; a
+  batch rejection falls back to per-contact PUT). A blank Tracker
+  chapter never wipes a Brevo chapter. Tracker emails missing from
+  Brevo are counted, and only imported into list 3 when the
+  `brevo_sync_create_missing` dial is "1" (`brevo_sync_list_id`
+  overrides the list). Summary persisted to `brevo_last_sync`.
+- Scheduler: `nightly_brevo_sync` cron 09:10 UTC (4:10 AM Central);
+  `BREVO_SYNC_DISABLED=1` skips scheduling. No-op until
+  `BREVO_API_KEY` is set on Railway (Brevo → profile → SMTP & API →
+  API Keys → new key "TGF Tracker").
+- Bridge: `scoring-brevo-status`, `scoring-brevo-sync[:dry]`.
+- Brevo side (Kerry, UI): segment "Active members" =
+  TGF_MEMBER_STATUS equals active_member; the public campaign sends to
+  list 3 minus that segment. Segments are UI-only in Brevo's API.
+Next bricks (not built): campaign recipient export (who clicked what)
+onto the customer timeline; Wednesday-AM auto-draft of the public
+recap (docs/claude/event-recaps.md).
+
 ## MCP access for CA (platform-claude)
 
 - **`get_lead_center`** — one read: queue rows (decoded answers + ad
