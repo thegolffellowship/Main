@@ -297,16 +297,44 @@ def _import_attrs_for(target: dict) -> dict:
     return attrs
 
 
+# Legacy-chapter metros, BREVO-ONLY (never used for Lead Center routing —
+# a fresh ad lead from Plano must stay unrouted for a human, not land
+# on a chapter with no manager). Feeds Kerry's DFW / Houston segments.
+LEGACY_CITY_CHAPTERS = {
+    "dallas": "DFW", "fort worth": "DFW", "ft worth": "DFW", "ft. worth": "DFW",
+    "plano": "DFW", "frisco": "DFW", "mckinney": "DFW", "allen": "DFW",
+    "richardson": "DFW", "garland": "DFW", "irving": "DFW", "arlington": "DFW",
+    "grand prairie": "DFW", "mansfield": "DFW", "euless": "DFW",
+    "bedford": "DFW", "hurst": "DFW", "grapevine": "DFW", "southlake": "DFW",
+    "coppell": "DFW", "carrollton": "DFW", "lewisville": "DFW",
+    "flower mound": "DFW", "denton": "DFW", "argyle": "DFW", "keller": "DFW",
+    "watauga": "DFW", "saginaw": "DFW", "north richland": "DFW",
+    "farmers branch": "DFW", "rockwall": "DFW", "wylie": "DFW",
+    "little elm": "DFW", "prosper": "DFW", "the colony": "DFW",
+    "houston": "Houston", "spring": "Houston", "cypress": "Houston",
+    "katy": "Houston", "humble": "Houston", "kingwood": "Houston",
+    "conroe": "Houston", "magnolia": "Houston", "the woodlands": "Houston",
+    "woodlands": "Houston", "tomball": "Houston", "pearland": "Houston",
+    "sugar land": "Houston", "sugarland": "Houston", "missouri city": "Houston",
+    "league city": "Houston", "pasadena": "Houston", "baytown": "Houston",
+    "richmond": "Houston", "friendswood": "Houston", "bellaire": "Houston",
+    "porter": "Houston", "montgomery": "Houston", "willis": "Houston",
+}
+
+
 def _city_chapter(brevo_attrs: dict, city_map: dict) -> str | None:
-    """Chapter from a Brevo contact's CITY attribute via the Lead
-    Center's city→chapter map (Kerry 2026-09-02: 'fill the chapter from
-    CITY' for the ~800 Brevo-only contacts the Tracker has never seen).
-    Only used when the Tracker holds no chapter for the contact."""
+    """Chapter from a Brevo contact's CITY attribute (Kerry 2026-09-02:
+    'fill the chapter from CITY' for the Brevo-only contacts the Tracker
+    has never seen). The Lead Center's SA/Austin map is tried FIRST, so
+    'JBSA Ft. Sam Houston' resolves to San Antonio before the legacy
+    metro map ever sees the word Houston. Only used when the Tracker
+    holds no chapter for the contact."""
     city = (brevo_attrs.get("CITY") or "").strip()
     if not city:
         return None
     from .leads import route_chapter
-    return route_chapter(city, city_map)
+    return (route_chapter(city, city_map)
+            or route_chapter(city, LEGACY_CITY_CHAPTERS))
 
 
 def _create_scope(dial_value: str | None) -> str:

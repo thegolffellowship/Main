@@ -174,11 +174,17 @@ class BrevoSyncTests(unittest.TestCase):
             "lead1@x.com": {"CITY": "Round Rock"},               # → Austin
             "lead2@x.com": {"CITY": "New Braunfels"},            # → San Antonio
             "lead3@x.com": {"CITY": "Denver"},                   # unmapped
+            "dfw@x.com": {"CITY": "Flower Mound"},               # legacy DFW
+            "hou@x.com": {"CITY": "NW Houston"},                 # legacy Houston
+            "jbsa@x.com": {"CITY": "JBSA Ft. Sam Houston"},      # SA, not Houston
             "lead4@x.com": {"CITY": "Austin", "TGF_CHAPTER": "San Antonio"},  # keeps
             "c@x.com": {"CITY": "Boerne"},                       # Tracker prospect, no chapter
         })
         res = self._run(fake)
-        self.assertEqual(res["city_routed"], 2)
+        self.assertEqual(res["city_routed"], 5)
+        self.assertEqual(fake.contacts["dfw@x.com"]["TGF_CHAPTER"], "DFW")
+        self.assertEqual(fake.contacts["hou@x.com"]["TGF_CHAPTER"], "Houston")
+        self.assertEqual(fake.contacts["jbsa@x.com"]["TGF_CHAPTER"], "San Antonio")
         self.assertEqual(fake.contacts["lead1@x.com"]["TGF_CHAPTER"], "Austin")
         self.assertEqual(fake.contacts["lead2@x.com"]["TGF_CHAPTER"], "San Antonio")
         self.assertNotIn("TGF_CHAPTER", fake.contacts["lead3@x.com"])

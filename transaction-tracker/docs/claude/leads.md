@@ -397,10 +397,13 @@ Tracker→Brevo API brick:
 - Chapter fallback chain (v2.289.1/v2.290.0): customers.chapter →
   the lead's routed chapter → the Brevo CITY attribute through the
   Lead Center's `route_chapter` map (`lead_city_chapters` dial over
-  `DEFAULT_CITY_CHAPTERS`). Brevo-only contacts (never a Tracker
-  customer) get ONLY TGF_CHAPTER from CITY, never a status; an
-  existing chapter stamp is never overwritten. `city_routed` in the
-  run summary counts them.
+  `DEFAULT_CITY_CHAPTERS`, then `brevo.LEGACY_CITY_CHAPTERS` for the
+  DFW / Houston metros — Brevo-only, never Lead Center routing).
+  Brevo-only contacts (never a Tracker customer) get ONLY TGF_CHAPTER
+  from CITY, never a status; an existing chapter stamp is never
+  overwritten. `city_routed` in the run summary counts them. After the
+  2026-09-02 sweeps ~427 contacts remain chapterless with no CITY at
+  all (2025 HubSpot imports carrying only a name + SMS).
 - Scheduler: `nightly_brevo_sync` cron 09:10 UTC (4:10 AM Central);
   `BREVO_SYNC_DISABLED=1` skips scheduling. No-op until
   `BREVO_API_KEY` is set on Railway (Brevo → profile → SMTP & API →

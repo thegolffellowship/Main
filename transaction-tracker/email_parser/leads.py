@@ -68,6 +68,24 @@ DEFAULT_CITY_CHAPTERS = {
     "seguin": "San Antonio", "boerne": "San Antonio",
     "converse": "San Antonio", "helotes": "San Antonio",
     "cibolo": "San Antonio", "universal city": "San Antonio",
+    # Brevo CITY sweep additions (2026-09-02) — real chapter suburbs
+    # seen on chapterless contacts. Longer/base-specific keys sit
+    # BEFORE anything they could be confused with ("jbsa" / "ft. sam"
+    # before a legacy "houston" key in the Brevo-only metro map).
+    "jbsa": "San Antonio", "ft. sam": "San Antonio", "fort sam": "San Antonio",
+    "lackland": "San Antonio", "randolph": "San Antonio",
+    "bulverde": "San Antonio", "spring branch": "San Antonio",
+    "garden ridge": "San Antonio", "selma": "San Antonio",
+    "live oak": "San Antonio", "windcrest": "San Antonio",
+    "alamo heights": "San Antonio", "castle hills": "San Antonio",
+    "fair oaks": "San Antonio", "canyon lake": "San Antonio",
+    "comfort": "San Antonio", "floresville": "San Antonio",
+    "castroville": "San Antonio", "leon valley": "San Antonio",
+    "lago vista": "Austin", "dripping springs": "Austin", "bee cave": "Austin",
+    "wimberley": "Austin", "elgin": "Austin", "bastrop": "Austin",
+    "taylor": "Austin", "liberty hill": "Austin", "jonestown": "Austin",
+    "spicewood": "Austin", "marble falls": "Austin", "westlake": "Austin",
+    "west lake hills": "Austin", "sunset valley": "Austin",
 }
 
 

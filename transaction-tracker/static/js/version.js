@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.290.0";
+window.TGF_VERSION = "2.290.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.290.1",
+    date: "2026-09-02",
+    changes: [
+      "City map widened after the first CITY sweep left 164 chapterless Brevo contacts with a city the map didn't know: the shared Lead Center map gains the common SA suburbs (Bulverde, Spring Branch, Selma, Live Oak, Windcrest, Alamo Heights, Fair Oaks, Canyon Lake, Comfort, the JBSA bases) and Austin ones (Lago Vista, Dripping Springs, Bee Cave, Wimberley, Bastrop, Elgin, Taylor, Liberty Hill, Spicewood, Marble Falls), and the Brevo sync gains a BREVO-ONLY legacy metro map (Dallas–Fort Worth suburbs → DFW, Houston suburbs → Houston) so those contacts land in Kerry's DFW / Houston segments. The legacy map is never used for Lead Center routing — an ad lead from Plano still stays unrouted for a human. SA/Austin keys are checked first, so 'JBSA Ft. Sam Houston' is San Antonio, not Houston.",
+    ],
+  },
   {
     version: "2.290.0",
     date: "2026-09-02",
