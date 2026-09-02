@@ -384,9 +384,13 @@ Tracker→Brevo API brick:
   batch rejection falls back to per-contact PUT). A blank Tracker
   chapter never wipes a Brevo chapter. Tracker emails missing from
   Brevo are counted; the `brevo_sync_create_missing` dial scopes what
-  gets CREATED (v2.288.0): blank/"0" never, "active" = missing active
-  members only (Kerry 2026-09-02), "1"/"all" = every customer with an
-  email. New contacts go to list 3 (`brevo_sync_list_id` overrides)
+  gets CREATED (v2.288.0/v2.289.0): blank/"0" never, "active" =
+  missing active members only, "recent" = active members + anyone who
+  played within 365 days (Kerry 2026-09-02, the running setting),
+  "1"/"all" = every customer with an email. "Played" reuses the
+  Participation definition (`last_played_by_customer`), and every
+  synced contact is also stamped TGF_LAST_PLAYED (Brevo date
+  attribute) for played-within-N-months segments. New contacts go to list 3 (`brevo_sync_list_id` overrides)
   with FIRSTNAME/LASTNAME/status/chapter; one import address per
   customer (primary email first) so multi-email players never become
   duplicate contacts. Summary persisted to `brevo_last_sync`.

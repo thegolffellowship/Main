@@ -44,6 +44,8 @@ logger = logging.getLogger(__name__)
 BREVO_API = "https://api.brevo.com/v3"
 STATUS_ATTR = "TGF_MEMBER_STATUS"
 CHAPTER_ATTR = "TGF_CHAPTER"
+LAST_PLAYED_ATTR = "TGF_LAST_PLAYED"     # date, YYYY-MM-DD
+RECENT_DAYS = 365
 STATUS_MAP = {"member": "active_member", "alumni": "former_member",
               "guest": "prospect"}
 _STATUS_RANK = {"active_member": 3, "former_member": 2, "prospect": 1}
@@ -102,6 +104,51 @@ def _dial(db, key: str, db_path) -> str | None:
 
 # ── Tracker side ────────────────────────────────────────────────────
 
+def last_played_by_customer(conn) -> dict:
+    """{customer_id: 'YYYY-MM-DD'} — the most recent EVENT DATE each
+    customer actually played. Same definition as the Participation page
+    (docs/claude/participation.md): active or rsvp_only items, not a
+    membership or season-contest row, not a child payment row, joined to
+    an events row by event_id first (name match fallback) with a real
+    event_date on or before today."""
+    from .timezone_utils import today_central_str
+    today = today_central_str()
+    out: dict = {}
+    try:
+        rows = conn.execute(
+            """SELECT i.customer_id, MAX(e.event_date) AS last
+               FROM items i
+               JOIN events e
+                 ON (i.event_id IS NOT NULL AND e.id = i.event_id)
+                 OR (i.event_id IS NULL
+                     AND TRIM(e.item_name) = TRIM(i.item_name) COLLATE NOCASE)
+               WHERE i.customer_id IS NOT NULL
+                 AND COALESCE(i.transaction_status, 'active')
+                     IN ('active', 'rsvp_only')
+                 AND UPPER(COALESCE(i.item_name, '')) NOT LIKE '%MEMBERSHIP%'
+                 AND UPPER(COALESCE(i.item_name, '')) NOT LIKE '%SEASON CONTEST%'
+                 AND i.parent_item_id IS NULL
+                 AND e.event_date IS NOT NULL AND e.event_date <= ?
+               GROUP BY i.customer_id""", (today,)).fetchall()
+        for r in rows:
+            if r["last"]:
+                out[r["customer_id"]] = str(r["last"])[:10]
+    except Exception:
+        logger.warning("Brevo last-played query failed", exc_info=True)
+    return out
+
+
+def _played_within(last: str | None, days: int = RECENT_DAYS) -> bool:
+    from .timezone_utils import today_central
+    import datetime as _dt
+    if not last:
+        return False
+    try:
+        return (today_central() - _dt.date.fromisoformat(last[:10])).days <= days
+    except ValueError:
+        return False
+
+
 def tracker_contact_targets(db_path: str | Path | None = None) -> dict:
     """{email_lower: {"status": ..., "chapter": ...}} for every customer
     email the Tracker knows. A shared email across customers keeps the
@@ -120,6 +167,7 @@ def tracker_contact_targets(db_path: str | Path | None = None) -> dict:
                ORDER BY ce.customer_id, ce.is_primary DESC, ce.email_id""").fetchall()
         cids = sorted({r["customer_id"] for r in rows})
         derived = db.derive_member_financial_status_bulk(conn, cids)
+        played = last_played_by_customer(conn)
     finally:
         conn.close()
     out: dict = {}
@@ -133,6 +181,7 @@ def tracker_contact_targets(db_path: str | Path | None = None) -> dict:
         chapter = (r["chapter"] or "").strip()
         if chapter.upper() == "TGF":
             chapter = ""
+        last = played.get(r["customer_id"])
         # One import address per customer (primary first) so a person
         # with three known emails never becomes three Brevo contacts.
         importable = r["customer_id"] not in seen_cust
@@ -143,10 +192,14 @@ def tracker_contact_targets(db_path: str | Path | None = None) -> dict:
                 cur["chapter"] if cur else ""),
                 "first_name": (r["first_name"] or "").strip(),
                 "last_name": (r["last_name"] or "").strip(),
+                "last_played": max(filter(None, [last, cur and cur.get("last_played")]),
+                                   default=None),
                 "importable": importable or bool(cur and cur["importable"])}
         else:
             if not cur["chapter"] and chapter:
                 cur["chapter"] = chapter
+            if last and (not cur.get("last_played") or last > cur["last_played"]):
+                cur["last_played"] = last
             cur["importable"] = cur["importable"] or importable
     return out
 
@@ -182,11 +235,12 @@ def ensure_attributes(key: str) -> dict:
     TGF_CHAPTER already exists in the account; creating an existing
     attribute is a 400 we treat as fine."""
     out = {}
-    for name in (STATUS_ATTR, CHAPTER_ATTR):
+    for name, typ in ((STATUS_ATTR, "text"), (CHAPTER_ATTR, "text"),
+                      (LAST_PLAYED_ATTR, "date")):
         try:
             r = requests.post(
                 f"{BREVO_API}/contacts/attributes/normal/{name}",
-                json={"type": "text"}, headers=_headers(key), timeout=20)
+                json={"type": typ}, headers=_headers(key), timeout=20)
             if r.status_code in (200, 201, 204):
                 out[name] = "created"
             elif r.status_code == 400 and ("exist" in r.text.lower()
@@ -206,14 +260,19 @@ def ensure_attributes(key: str) -> dict:
 def _needs_update(brevo_attrs: dict, target: dict) -> bool:
     if (brevo_attrs.get(STATUS_ATTR) or "") != target["status"]:
         return True
-    return bool(target["chapter"]) and \
-        (brevo_attrs.get(CHAPTER_ATTR) or "") != target["chapter"]
+    if target["chapter"] and \
+            (brevo_attrs.get(CHAPTER_ATTR) or "") != target["chapter"]:
+        return True
+    lp = target.get("last_played")
+    return bool(lp) and str(brevo_attrs.get(LAST_PLAYED_ATTR) or "")[:10] != lp
 
 
 def _attrs_for(target: dict) -> dict:
     attrs = {STATUS_ATTR: target["status"]}
     if target["chapter"]:
         attrs[CHAPTER_ATTR] = target["chapter"]
+    if target.get("last_played"):
+        attrs[LAST_PLAYED_ATTR] = target["last_played"]
     return attrs
 
 
@@ -230,15 +289,27 @@ def _import_attrs_for(target: dict) -> dict:
 
 def _create_scope(dial_value: str | None) -> str:
     """brevo_sync_create_missing: '' / '0' → never create; 'active' →
-    create missing ACTIVE MEMBERS only (Kerry 2026-09-02: 'adding those
-    active members into Brevo that aren't in there currently'); '1' /
-    'all' → every Tracker customer with an email."""
+    create missing ACTIVE MEMBERS only; 'recent' → active members PLUS
+    anyone who played within the last 12 months (Kerry 2026-09-02:
+    'only include current members, but also add anyone who has played
+    within the last 12 months'); '1' / 'all' → every Tracker customer
+    with an email."""
     v = (dial_value or "").strip().lower()
     if v in ("1", "all", "true", "yes"):
         return "all"
+    if v in ("recent", "played", "active+recent"):
+        return "recent"
     if v in ("active", "members", "active_member"):
         return "active"
     return "none"
+
+
+def _in_scope(scope: str, target: dict) -> bool:
+    if scope == "all":
+        return True
+    if target["status"] == "active_member" and scope in ("active", "recent"):
+        return True
+    return scope == "recent" and _played_within(target.get("last_played"))
 
 
 def _update_batch(key: str, batch: list[dict], errors: list) -> int:
@@ -339,7 +410,7 @@ def sync_member_status(db_path: str | Path | None = None,
             if target.get("importable", True):
                 missing.append({"email": email,
                                 "attributes": _import_attrs_for(target),
-                                "_status": target["status"]})
+                                "_in_scope": _in_scope(scope, target)})
             continue
         result["matched"] += 1
         if _needs_update(bc["attributes"], target):
@@ -353,9 +424,7 @@ def sync_member_status(db_path: str | Path | None = None,
             result["updated"] += _update_batch(
                 key, updates[i:i + BATCH_SIZE], result["errors"])
             time.sleep(_PAUSE)
-        to_create = [m for m in missing
-                     if scope == "all"
-                     or (scope == "active" and m["_status"] == "active_member")]
+        to_create = [m for m in missing if m["_in_scope"]]
         result["to_create"] = len(to_create)
         if to_create:
             list_id = int(_dial(db, "brevo_sync_list_id", db_path)

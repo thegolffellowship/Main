@@ -79,6 +79,10 @@ TARGETS = {
                 "first_name": "Eve", "last_name": "Ng"},      # not in Brevo
     "e2@x.com": {"status": "active_member", "chapter": "Austin",
                  "importable": False},                        # Eve's 2nd email
+    "f@x.com": {"status": "prospect", "chapter": "San Antonio",
+                "last_played": "2026-06-14"},                 # recent guest
+    "g@x.com": {"status": "former_member", "chapter": "Austin",
+                "last_played": "2024-03-02"},                 # stale alumni
 }
 
 
@@ -115,7 +119,7 @@ class BrevoSyncTests(unittest.TestCase):
         self.assertEqual(res["matched"], 3)
         self.assertEqual(res["to_update"], 2)        # a is already right
         self.assertEqual(res["updated"], 2)
-        self.assertEqual(res["missing_in_brevo"], 2)   # d + e (e2 not importable)
+        self.assertEqual(res["missing_in_brevo"], 4)   # d e f g (e2 not importable)
         self.assertEqual(res["created"], 0)          # dial off
         self.assertEqual(fake.contacts["b@x.com"],
                          {"TGF_MEMBER_STATUS": "former_member",
@@ -125,7 +129,7 @@ class BrevoSyncTests(unittest.TestCase):
         self.assertEqual(fake.contacts["c@x.com"]["TGF_MEMBER_STATUS"], "prospect")
         self.assertNotIn("TGF_MEMBER_STATUS", fake.contacts["z@x.com"])
         self.assertEqual(res["by_status"],
-                         {"active_member": 3, "former_member": 1, "prospect": 2})
+                         {"active_member": 3, "former_member": 2, "prospect": 3})
         self.assertFalse(res["errors"])
 
     def test_dry_run_writes_nothing(self):
@@ -148,12 +152,29 @@ class BrevoSyncTests(unittest.TestCase):
         res = self._run(fake, create_missing="1")
         imp = [c for c in fake.calls if c[1].endswith("/contacts/import")]
         self.assertEqual(len(imp), 1)
-        self.assertEqual(res["created"], 4)          # b c d e — never e2
+        self.assertEqual(res["created"], 6)          # b c d e f g — never e2
         self.assertEqual(imp[0][2]["listIds"], [3])
         self.assertFalse(imp[0][2]["emptyContactsAttributes"])
         eve = [r for r in imp[0][2]["jsonBody"] if r["email"] == "e@x.com"][0]
         self.assertEqual(eve["attributes"]["FIRSTNAME"], "Eve")
         self.assertEqual(eve["attributes"]["TGF_MEMBER_STATUS"], "active_member")
+
+    def test_create_missing_dial_recent(self):
+        fake = FakeBrevo({"a@x.com": {}})
+        res = self._run(fake, create_missing="recent")
+        imp = [c for c in fake.calls if c[1].endswith("/contacts/import")]
+        self.assertEqual(res["create_scope"], "recent")
+        self.assertEqual(sorted(r["email"] for r in imp[0][2]["jsonBody"]),
+                         ["e@x.com", "f@x.com"])      # active + played ≤12mo
+        f = [r for r in imp[0][2]["jsonBody"] if r["email"] == "f@x.com"][0]
+        self.assertEqual(f["attributes"]["TGF_LAST_PLAYED"], "2026-06-14")
+
+    def test_last_played_stamp_triggers_update(self):
+        fake = FakeBrevo({"g@x.com": {"TGF_MEMBER_STATUS": "former_member",
+                                      "TGF_CHAPTER": "Austin"}})
+        res = self._run(fake)
+        self.assertEqual(res["updated"], 1)
+        self.assertEqual(fake.contacts["g@x.com"]["TGF_LAST_PLAYED"], "2024-03-02")
 
     def test_create_missing_dial_active_only(self):
         fake = FakeBrevo({"a@x.com": {}})

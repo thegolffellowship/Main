@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.288.0";
+window.TGF_VERSION = "2.289.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.289.0",
+    date: "2026-09-02",
+    changes: [
+      "Brevo sync create scope 'recent' (Kerry: 'only include current members, but also add anyone who has played within the last 12 months'): imports missing active members PLUS anyone whose last played event date is inside 365 days, using the Participation page's definition of played (active or RSVP-only event rows, not memberships/contests/child payments, joined to a real event date on or before today). Every synced contact also gets a new TGF_LAST_PLAYED date attribute (YYYY-MM-DD) so Brevo can build 'played in the last N months' segments for the GG-to-Brevo email transition.",
+    ],
+  },
   {
     version: "2.288.0",
     date: "2026-09-02",
