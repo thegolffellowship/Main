@@ -239,3 +239,9 @@ that's its own representation, not something to paste as raw HTML.
     not the tournament id on scoring_rounds. Applies to the member GG
     recaps too (the FULL EVENT RESULTS button). "Lede" = the opening
     paragraph under the headline (newsroom spelling).
+
+19. **Subject-line series (Kerry 2026-09-02):** public/Brevo sends are
+    `TGF Insider | <hook>` (e.g. "TGF Insider | A par won money this
+    week. In both cities."); member/GG recaps stay `TGF Results |
+    <WINNER-SURNAME CAPS> <verb phrase>`. Keep the hook inside ~45
+    characters after the prefix so it survives mobile truncation.
