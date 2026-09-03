@@ -191,6 +191,15 @@ def main():
     check("unknown filename is refused",
           backups.mirror_docs_to_onedrive(dry_run=True, only="nope.md").get("error"))
 
+    check("folder auto-creation exists (Graph does not make parents)",
+          hasattr(backups, "_ensure_folder"))
+    import inspect
+    src = inspect.getsource(backups.mirror_docs_to_onedrive)
+    check("the mirror ensures every target folder before uploading",
+          "_ensure_folder" in src)
+    check("the backup run ensures its folder too",
+          "_ensure_folder" in inspect.getsource(backups.run_backup))
+
     shutil.rmtree(tmp, ignore_errors=True)
     print()
     if FAILURES:

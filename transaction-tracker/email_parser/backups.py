@@ -194,6 +194,40 @@ def _upload(token: str, user: str, folder: str, name: str,
         return cr.json() if cr.content else {"name": name}
 
 
+def _ensure_folder(token: str, user: str, path: str) -> bool:
+    """Create a OneDrive folder path if it does not exist, one segment at
+    a time. Graph's path-based upload does NOT create intermediate
+    folders — a PUT into a missing folder 404s — so without this a
+    freshly-pointed dial (or a folder Kerry has not made yet) fails
+    every single file with no obvious cause."""
+    parent = ""
+    for segment in [p for p in path.split("/") if p]:
+        target = f"{parent}/{segment}" if parent else segment
+        probe = requests.get(
+            f"{GRAPH_BASE}/users/{user}/drive/root:/{target}",
+            headers={"Authorization": f"Bearer {token}"}, timeout=30)
+        if probe.status_code == 200:
+            parent = target
+            continue
+        if probe.status_code != 404:
+            logger.warning("folder probe %s returned %d", target,
+                           probe.status_code)
+            return False
+        base = (f"{GRAPH_BASE}/users/{user}/drive/root:/{parent}:/children"
+                if parent else f"{GRAPH_BASE}/users/{user}/drive/root/children")
+        made = requests.post(base,
+                             headers={"Authorization": f"Bearer {token}"},
+                             json={"name": segment, "folder": {},
+                                   "@microsoft.graph.conflictBehavior": "replace"},
+                             timeout=30)
+        if made.status_code not in (200, 201):
+            logger.warning("could not create folder %s: %d %s", target,
+                           made.status_code, made.text[:200])
+            return False
+        parent = target
+    return True
+
+
 def list_remote_backups(token: str, user: str, folder: str) -> list[dict]:
     r = requests.get(
         f"{GRAPH_BASE}/users/{user}/drive/root:/{folder}:/children"
@@ -305,6 +339,7 @@ def run_backup(db_path: str | Path | None = None, prune: bool = True,
         if not token:
             raise RuntimeError("could not acquire a Graph token")
         folder = _folder(db_path)
+        _ensure_folder(token, creds["user"], folder)
         _upload(token, creds["user"], folder, name, gz)
         res["uploaded"] = True
         res["folder"] = folder
@@ -553,6 +588,8 @@ def mirror_docs_to_onedrive(db_path: str | Path | None = None,
         res["errors"].append("could not acquire a Graph token")
         return res
 
+    for folder in {_folder_for(d.name, targets) for d in docs}:
+        _ensure_folder(token, creds["user"], folder)
     for d in docs:
         size = d.stat().st_size
         if size > SIMPLE_UPLOAD_LIMIT:
