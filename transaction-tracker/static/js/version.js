@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.295.1";
+window.TGF_VERSION = "2.296.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.296.0",
+    date: "2026-09-03",
+    changes: [
+      "Nightly off-site database backups (Kerry, high priority: the whole business is one SQLite file on one Railway volume, and the only existing backup wrote a copy to that SAME volume using a plain file copy of a database the scheduler is actively writing to — a file that can look fine and fail on restore). Now: a consistent VACUUM INTO snapshot that must pass SQLite's own integrity check before it goes anywhere, gzipped and uploaded to OneDrive via Microsoft Graph using the AZURE_* credentials the Tracker already holds for mail, so there is no new vendor, no new secret and no new bill. Grandfather-father-son retention (7 daily, 4 weekly, 12 monthly) that never deletes a filename it cannot parse. Every run recorded in backup_runs; a failure emails Kerry, throttled, and never takes the scheduler down. The restore drill is automated: scoring-backup-verify pulls the newest backup back down, decompresses it, integrity-checks it and compares row counts against live. Runs 08:15 UTC nightly, idle until the Azure app is granted Files.ReadWrite.All. Bridge: scoring-backup-run[:dry], scoring-backup-verify, scoring-backup-status. Test: test_backups.py.",
+    ],
+  },
   {
     version: "2.295.1",
     date: "2026-09-03",

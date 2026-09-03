@@ -2267,6 +2267,28 @@ def _scoring_dispatch(url: str, extract: str):
                 db.log_agent_action("mcp-claude", "scoring-lead-unmerge",
                                     f"restored lead {arg.strip()}")
             return json.dumps(res, indent=2, default=str)
+        if cmd == "scoring-backup-run":
+            # Take a backup NOW: consistent snapshot -> gzip -> OneDrive
+            # -> prune. ":dry" snapshots and verifies integrity without
+            # uploading. Audited.
+            from email_parser.backups import run_backup
+            _dry = arg.strip().lower() in ("dry", "preview")
+            res = run_backup(dry_run=_dry)
+            if not _dry:
+                db.log_agent_action("mcp-claude", "scoring-backup-run",
+                                    f"ok={res.get('ok')} {res.get('name') or ''}"
+                                    f" {res.get('error') or ''}"[:200])
+            return json.dumps(res, indent=2, default=str)
+        if cmd == "scoring-backup-verify":
+            # THE RESTORE DRILL: pull the newest backup back down, open
+            # it, run SQLite's integrity check, compare row counts to
+            # live. Until this passes once, we do not have backups.
+            from email_parser.backups import verify_latest_backup
+            return json.dumps(verify_latest_backup(), indent=2, default=str)
+        if cmd == "scoring-backup-status":
+            # Is it configured, and did the last runs succeed?
+            from email_parser.backups import backup_status
+            return json.dumps(backup_status(), indent=2, default=str)
         if cmd == "scoring-brevo-status":
             # Brevo key present / account reachable / last sync summary.
             from email_parser.brevo import brevo_status

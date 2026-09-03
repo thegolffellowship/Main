@@ -15,6 +15,24 @@ can.
 
 ---
 
+## 0. Files.ReadWrite.All on the existing Azure app — NIGHTLY BACKUPS
+
+**Not a new variable. One permission on an app registration you already
+have.** Unblocks the nightly off-site database backup (v2.296.0), which
+is built and idle until this is granted.
+
+Azure Portal → App registrations → the app already used for TGF mail →
+**API permissions** → Add a permission → Microsoft Graph → **Application
+permissions** → `Files.ReadWrite.All` → Add → **Grant admin consent**.
+
+`AZURE_TENANT_ID`, `AZURE_CLIENT_ID`, `AZURE_CLIENT_SECRET` and
+`EMAIL_ADDRESS` are already on Railway, so nothing else changes.
+
+Then run `scoring-backup-run` and `scoring-backup-verify`. Until verify
+passes once, we do not have backups.
+
+---
+
 ## Already set (no action)
 
 | Variable | Powers |

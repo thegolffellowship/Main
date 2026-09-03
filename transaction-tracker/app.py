@@ -1692,6 +1692,33 @@ def start_scheduler():
                 "" if os.getenv("META_ACCESS_TOKEN")
                 else " (idle — META_ACCESS_TOKEN not set)")
 
+    # ── Nightly off-site database backup (Kerry 2026-09-03, HIGH
+    #    PRIORITY). The whole business is one SQLite file on one Railway
+    #    volume; before this the only "backup" wrote to that same volume.
+    #    Consistent snapshot (VACUUM INTO) → gzip → OneDrive via the
+    #    Graph creds we already hold. 08:15 UTC = 3:15 AM Central, after
+    #    the day's events are recorded and before anyone is working.
+    if os.getenv("DB_BACKUP_DISABLED", "") != "1":
+        def nightly_backup_job():
+            from email_parser.backups import run_backup
+            res = run_backup()
+            if res.get("ok"):
+                logger.info("DB backup OK — %s (%.1f MB gz, %d pruned)",
+                            res.get("name"),
+                            (res.get("bytes_gz") or 0) / 1048576,
+                            res.get("pruned", 0))
+            else:
+                logger.error("DB backup FAILED: %s", res.get("error"))
+        scheduler.add_job(
+            nightly_backup_job,
+            "cron", hour=8, minute=15,
+            id="db_backup",
+            replace_existing=True,
+        )
+        logger.info("Nightly DB backup scheduled 08:15 UTC (03:15 Central)%s",
+                    "" if os.getenv("AZURE_TENANT_ID")
+                    else " (idle — AZURE_* creds not set)")
+
     scheduler.start()
     logger.info("Scheduler started — checking inbox every %d minutes", interval)
 

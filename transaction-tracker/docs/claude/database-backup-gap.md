@@ -39,24 +39,54 @@ financial records, the membership history, the money owed and paid.
 
 ---
 
-## The fix (proposed — small, and it should not wait)
+## The fix — BUILT, v2.296.0 (2026-09-03)
 
-1. **Nightly job**, alongside the existing scheduler entries.
-2. **`VACUUM INTO` / `Connection.backup()`**, never a file copy, so the
-   snapshot is consistent even mid-write.
-3. **Ship it OFF Railway.** Cheapest correct target is Supabase Storage
-   — the TGF Event Images project is already ACTIVE and reachable, so
-   there is no new vendor and no new bill. S3 or OneDrive also work.
-4. **Retention:** 7 daily, 4 weekly, 12 monthly. Small files; storage is
-   not the constraint.
-5. **Report it.** A line in the COO digest saying the backup ran and how
-   big it was. A silent backup that has been failing for a month is the
-   classic version of this failure.
-6. **Restore drill.** Pull last night's file, load it locally, confirm
-   row counts and the latest transaction. **Until that is done once,
-   this item is not closed.**
+`email_parser/backups.py`. Nightly at 08:15 UTC (03:15 Central).
+Idle until the Azure app gains one permission; see "What Kerry
+must do" below.
 
-Rough size: an hour of work, no new dependency, no new cost.
+### As built
+
+1. **Consistent snapshot** — `VACUUM INTO`, SQLite's own mechanism,
+   which is valid even taken mid-write. The snapshot then has to pass
+   `PRAGMA integrity_check` **before** it is shipped anywhere; a corrupt
+   backup is worse than an obviously missing one. Falls back to the
+   online backup API on older SQLite.
+2. **Gzipped and shipped OFF Railway** to OneDrive through Microsoft
+   Graph — reusing the `AZURE_*` credentials the Tracker already holds
+   for mail. **No new vendor, no new secret, no new bill.** (Supabase
+   Storage was the other candidate; OneDrive won because it needed zero
+   new credentials.) Chunked upload session above 4 MB.
+3. **Retention:** grandfather-father-son — 7 daily, 4 weekly, 12
+   monthly. A file whose name cannot be parsed is **never** deleted.
+4. **It speaks when it breaks.** Every run is recorded in `backup_runs`;
+   a failure emails Kerry, throttled to one per 12 hours. `run_backup`
+   never raises — a backup failure must not take the scheduler down.
+5. **The restore drill is automated.** `verify_latest_backup()` pulls
+   the newest file back from OneDrive, decompresses it, runs SQLite's
+   integrity check, and compares row counts against live.
+
+Bridge: `scoring-backup-run[:dry]`, `scoring-backup-verify`,
+`scoring-backup-status`. Disable with `DB_BACKUP_DISABLED=1`. Folder via
+the `backup_onedrive_folder` dial (default `TGF-Tracker-Backups`).
+Test: `test_backups.py` — exercises the snapshot against a real database
+with an open uncommitted write, round-trips through gzip, and checks all
+5,000 rows survive.
+
+### What Kerry must do (one permission, no new secret)
+
+Azure Portal → App registrations → the app already used for TGF mail →
+**API permissions** → Add → Microsoft Graph → **Application permissions**
+→ `Files.ReadWrite.All` → Add → then **Grant admin consent**.
+
+Nothing else. No new environment variable, because `AZURE_TENANT_ID`,
+`AZURE_CLIENT_ID`, `AZURE_CLIENT_SECRET` and `EMAIL_ADDRESS` are already
+set on Railway.
+
+### Not closed until the drill passes
+
+Run `scoring-backup-run`, then `scoring-backup-verify`. **Until verify
+returns ok once, we do not have backups — we believe we do.**
 
 ---
 
