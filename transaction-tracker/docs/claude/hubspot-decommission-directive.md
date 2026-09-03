@@ -164,8 +164,9 @@ means not yet:
 
 1. The full raw archive exists, is verified per §A4, and is stored
    somewhere that is backed up.
-2. The reconciliation report is published and Kerry has ruled on the
-   contacts unknown to both systems.
+2. The reconciliation report is published, the ambiguous queue is
+   worked, and **Kerry has personally ruled on every uncertain match**
+   (§10, §11). No match was ever decided by us.
 3. Notes, calls, tasks, and attribution are imported and visible in the
    Tracker.
 4. Meta-direct ingest has dual-run with zero unexplained divergence for
@@ -197,28 +198,141 @@ two different times.
 
 ## 8. Sequence
 
-1. **After Sep 6** (campaign close — do not touch the pipe while it is
-   carrying live leads).
-2. CA scopes A1-A4 in detail and gets Kerry's ratification.
-3. Export + reconciliation report. **Gate: verification signed off.**
-4. Import notes / calls / tasks / attribution.
-5. Build Meta-direct ingest behind a dial, idle until the token lands.
-6. Dual-run and reconcile.
-7. HubSpot pipe off; portal read-only.
-8. Grace period, then Kerry decides on cancellation.
+**Revised per Kerry's rulings (§9) — the two workstreams decouple.**
+
+*Extraction track, starts after Sep 6 and does not wait for anything
+else:*
+1. CA details A1-A4 and gets ratification.
+2. Full raw export. **Gate: verification signed off.**
+3. Reconciliation: the three buckets in §11.
+4. Kerry works the ambiguous queue. His answers are the decisions.
+5. Import confident matches; archive the rest. No customers created for
+   unmatched contacts.
+
+*Pipe track, gated on the next live campaign:*
+6. Build Meta-direct ingest behind a dial, idle until the token lands.
+7. Prove the plumbing with Meta's Lead Ads testing tool.
+8. **Next campaign:** dual-run and reconcile daily.
+9. HubSpot pipe off; portal read-only.
+10. Grace period, then Kerry decides on cancellation (~$45/month).
 
 ---
 
-## 9. Open questions for Kerry
+## 9. Kerry's rulings (2026-09-03, answering the open questions)
 
-1. **The unknown contacts.** If several hundred of the 1,453 are in
-   neither the Tracker nor Brevo, is that an archive or a reactivation
-   list? (Ties to #391 item 5.)
-2. **How long a dual-run** before we trust Meta-direct? One week of
-   leads, or two?
-3. **Plan and cost** — what is HubSpot billing today?
-4. **Meetings and companies** — archive-only, or is anything in there
-   worth operating on?
+**1. The unknown contacts: ARCHIVE, not reactivation.** And more than
+that — *"See if they match up with any customers we already have in your
+records. One customer, one record... so merge. Ask for clarification on
+ones that seem like they could be a match but are not positive."*
+
+This makes the extraction a **customer identity reconciliation**, not a
+data dump, and it is the biggest single piece of Workstream A. See §11.
+
+**2. Dual-run: explained, and it hits a scheduling problem.** See §12 —
+the Fall campaign closes Sep 6, and a side-by-side comparison proves
+nothing when no leads are flowing.
+
+**3. Cost: about $45/month.** ~$540/year. Real, but small next to the
+conversion gate. It buys us the right to be unhurried about the *pipe*
+half; it does not slow the *extraction* half, which can start now.
+
+**4. Meetings and companies: archive only — but attribute to customers.**
+*"Don't need any speculations though."*
+
+---
+
+## 10. The standing rule this creates
+
+Kerry said it twice, about two different things: **"ask for
+clarification on ones that seem like they could be a match but are not
+positive"** and **"don't need any speculations."**
+
+So, across every part of this migration:
+
+> **Confident matches merge. Uncertain matches go to Kerry. Nothing is
+> ever guessed.**
+
+A wrong merge is worse than no merge: it silently fuses two people's
+histories and there is no clean way to find it later. An unmatched
+record costs nothing but a row in the archive.
+
+---
+
+## 11. Customer identity reconciliation (Workstream A, expanded)
+
+Every one of the 1,453 HubSpot contacts is sorted into exactly one of
+three buckets.
+
+**CONFIDENT MATCH → merge into the existing customer.** The bar is an
+exact match on normalized email, or on the last 10 digits of a phone
+number, against `customer_emails` / customer contacts. Same rule the
+lead de-duplicator already uses (v2.295.0).
+
+"Merge" here means the contact's history folds into the customer that
+already exists — **it never creates a second customer record**:
+- notes, calls, tasks, meetings, emails → the customer's timeline,
+  original author and timestamp preserved, source-marked as imported;
+- original-source attribution and lifecycle history → the customer;
+- any email or phone the customer does not already carry → added to
+  their contact records.
+
+**AMBIGUOUS → a review queue for Kerry, never an automatic decision.**
+Everything that smells like a match without proving it:
+- the name matches but neither email nor phone does;
+- a nickname or spelling variant (Mike / Michael, Bob / Robert);
+- one HubSpot contact matching **more than one** Tracker customer —
+  which also means the *Tracker* holds duplicate customers, and there is
+  existing repair machinery for that (`docs/claude/customer-merge-repair.md`,
+  `merge_customers()`);
+- same name, different contact details (two real people, or one person
+  with a new phone — Kerry knows, we do not).
+
+Present these as a worklist: the HubSpot record, the candidate
+customer(s), what matches and what does not, and a one-tap Merge / Not
+the same person / Skip. **Kerry's answer is the decision. We never
+break a tie ourselves.**
+
+**NO MATCH → archive only.** Per Kerry's ruling: archived, **not**
+reactivated, and **no customer record is created**. Roughly speaking, if
+several hundred of the 1,453 land here, that is several hundred rows we
+deliberately do not import. The archive keeps them; the operating system
+stays clean.
+
+**Companies and meetings** follow the same rule: archive them, attribute
+them to a customer **only** where the match is certain, and speculate
+about nothing.
+
+---
+
+## 12. Dual-run, in plain terms — and the timing problem it exposes
+
+**What a dual-run is.** For a while, both lead pipes run at the same
+time. A new Facebook lead arrives through HubSpot *and* through the
+direct Meta connection. Every day we compare the two lists. If they
+match exactly, the new pipe is proven. If a lead shows up in one and not
+the other, we find out why *before* anything is switched off. Only after
+a clean stretch does the HubSpot pipe get turned off. Nothing is
+switched over on a hope.
+
+**The problem.** A side-by-side comparison needs leads to compare. The
+Fall campaign closes **Sep 6**, and once the ads stop, lead flow drops to
+near zero. A dual-run over a dead pipe proves nothing at all.
+
+**Therefore, split the sequence** (proposed; Kerry to confirm):
+
+- **Workstream A (extraction + reconciliation) starts now.** It has no
+  dependency on lead flow. This is where all the irreplaceable data is
+  and all the real risk.
+- **Workstream B (Meta-direct ingest) is BUILT now but VALIDATED against
+  the next live campaign.** Meta's own Lead Ads testing tool can prove
+  the plumbing end to end without real traffic; the real dual-run rides
+  the next campaign's first days.
+- **HubSpot stays live until then.** At ~$45/month, waiting for a real
+  campaign costs about $45–90. Getting the lead pipe wrong costs the
+  48-hour window on every lead we miss. That is not a close call.
+
+**Open for Kerry:** when is the next ad campaign expected? That date,
+not a calendar guess, is what schedules the cutover.
 
 ---
 
