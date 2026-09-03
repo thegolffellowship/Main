@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.292.0";
+window.TGF_VERSION = "2.292.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.292.1",
+    date: "2026-09-03",
+    changes: [
+      "Lead Center header decluttered (Kerry: 'way too much going on up top, especially on mobile'): the per-ad-set breakdown line between the stat cards and the filter tabs is gone from the queue; the same numbers now live as an Ad sets table inside 📊 Stats.",
+    ],
+  },
   {
     version: "2.292.0",
     date: "2026-09-03",

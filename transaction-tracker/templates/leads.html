@@ -204,7 +204,6 @@
             <div class="ld-card" data-f="late" onclick="setStatusFilter('late')"><div class="lbl">Past 48h untouched</div><div class="val ld-late" id="ld-count-late">–</div></div>
         </div>
         <div class="ld-msummary" id="ld-msummary"></div>
-        <p id="ld-adset-line" style="font-size:12.5px;color:#4B5563;margin:-0.25rem 0 0.5rem;"></p>
         <div class="ld-toolbar">
             <span class="ld-seg" id="ld-chapseg">
                 <button data-c="all" class="on" onclick="setChapterFilter('all')">All</button>
@@ -341,13 +340,8 @@
     }
     function renderLeads() {
         const leads = (ALL.leads || []).slice();
-        const byAdSet = ALL.by_ad_set || {};
-        document.getElementById("ld-adset-line").innerHTML =
-            Object.entries(byAdSet).map(([name, s]) =>
-                `<b>${esc(name)}</b>: ${s.total} lead${s.total === 1 ? "" : "s"}` +
-                (s.touched + s.converted ? ` (${s.touched + s.converted} touched)` : "") +
-                (s.converted ? ` · ${s.converted} converted` : "")
-            ).join(" &nbsp;·&nbsp; ") || "";
+        // Per-ad-set breakdown moved off the queue header into 📊 Stats
+        // (Kerry 2026-09-03: "way too much going on up top").
         // Global counts over EVERY lead (summary cards + mobile sticky
         // summary stay whole-queue regardless of active filters).
         // Shared classifiers (used by counts, priority tiers, sections).
@@ -1062,12 +1056,17 @@
             <div class="ld-foot">Player = registered any event or became a member (counts once). Trailing counts conversions through ${STATS.trailing_days} days after the last spend day · ${esc(win)}.</div></div>`;
         const chapPanel = `<div class="ld-panel" style="grid-column:1/-1"><h3>Per chapter</h3>
             <div style="overflow-x:auto"><table class="ld-costtbl"><thead><tr><th>Chapter</th><th>Leads</th><th>Touched</th><th>Responded</th><th>Resp %</th><th>Interested</th><th>Players</th><th>Members</th><th>Dismissed</th></tr></thead><tbody>${chapRows || "<tr><td colspan=9>No leads.</td></tr>"}</tbody></table></div></div>`;
+        const adRows = Object.entries((ALL && ALL.by_ad_set) || {}).map(([name, a]) =>
+            `<tr><td>${esc(name)}</td><td>${a.total}</td><td>${a.touched + a.converted}</td><td>${a.converted}</td><td>${a.dismissed}</td></tr>`).join("");
+        const adPanel = adRows ? `<div class="ld-panel" style="grid-column:1/-1"><h3>Ad sets</h3>
+            <div style="overflow-x:auto"><table class="ld-costtbl"><thead><tr><th>Ad set</th><th>Leads</th><th>Touched</th><th>Converted</th><th>Dismissed</th></tr></thead><tbody>${adRows}</tbody></table></div>
+            <div class="ld-foot">Whole queue, from each lead's Meta attribution (ad-set names via the lead_ad_set_names dial).</div></div>` : "";
         const list = campaignFilter === "all" && (STATS.campaigns || []).length
             ? `<div class="ld-panel" style="grid-column:1/-1"><h3>Campaigns</h3><div style="overflow-x:auto"><table class="ld-costtbl"><thead><tr><th>Campaign</th><th>Dates</th><th>Spend</th><th>Leads</th><th>Players</th><th>Members</th><th>CPL</th><th>CPP</th><th>CPMem</th></tr></thead><tbody>
                 ${STATS.campaigns.map(x => `<tr><td><a href="#" onclick="setCampaignFilter('${x.id}');document.getElementById('ld-campsel').value='${x.id}';return false;">${esc(x.name)}</a></td><td>${fmtD(x.start_date)}–${fmtD(x.end_date)}</td><td>${money(x.spend)}</td><td>${x.funnel.leads}</td><td>${x.funnel.players}</td><td>${x.funnel.members}</td><td>${money(x.cost.cpl)}</td><td>${money(x.cost.cpp)}</td><td>${money(x.cost.cpmem)}</td></tr>`).join("")}
                 <tr><td>Unattributed / organic</td><td></td><td>—</td><td>${STATS.unattributed.funnel.leads}</td><td>${STATS.unattributed.funnel.players}</td><td>${STATS.unattributed.funnel.members}</td><td>—</td><td>—</td><td>—</td></tr>
               </tbody></table></div></div>` : "";
-        document.getElementById("ld-stats").innerHTML = head + `<div class="ld-panels">${metaPanel}${funnelPanel}${chapPanel}${list}</div>`;
+        document.getElementById("ld-stats").innerHTML = head + `<div class="ld-panels">${metaPanel}${funnelPanel}${chapPanel}${adPanel}${list}</div>`;
     }
     async function setSpend(id, cur) {
         const v = prompt("Ad spend to date for this campaign (manual, used until the Meta token exists):", cur == null ? "" : cur);
