@@ -183,16 +183,22 @@ two different times.
 
 ## 7. What Kerry provisions
 
-- **Meta Page access token with lead-retrieval permission**, and the
-  webhook subscription on the lead-form page. Same shape as the insights
-  token in #391 — worth doing both at once.
-- **HubSpot private-app token scoped for the export**: read on contacts,
-  companies, notes, calls, tasks, meetings, emails, lists, plus
-  associations and property history. The current token is contacts-read
-  only and will not cover the archive.
-- **A decision on the HubSpot plan and its cost.** Sarah's question: what
-  are we paying today, and does dropping to free during the grace period
-  save it without losing the archive?
+Kerry, 2026-09-03: *"Biggest thing I think is to get all the necessary
+APIs setup thru Railway that you need."*
+
+**Full step-by-step checklist: `docs/claude/railway-api-setup.md`** —
+what each variable unlocks, which token type, exact permissions and
+scopes, and the order to do them in. Summary:
+
+| Variable | Unlocks |
+|---|---|
+| `HUBSPOT_EXPORT_TOKEN` | the archive. **Highest priority — the only irreplaceable data here.** The current token reads contacts only; notes, calls, tasks and emails are invisible to it. |
+| `META_ACCESS_TOKEN` | live campaign stats + the historical backfill (§9A). |
+| `META_PAGE_TOKEN` | direct lead rows. |
+| `META_APP_SECRET` + `META_WEBHOOK_VERIFY_TOKEN` | real-time lead delivery. |
+
+The three Meta values come from one System User — one sitting in
+Business Settings, not three. Cost is settled: ~$45/month.
 
 ---
 
@@ -238,6 +244,58 @@ half; it does not slow the *extraction* half, which can start now.
 
 **4. Meetings and companies: archive only — but attribute to customers.**
 *"Don't need any speculations though."*
+
+---
+
+## 9A. Historical advertising history (Kerry, 2026-09-03 — NEW REQUIREMENT)
+
+> "One of the things we need to make sure and capture from HubSpot is
+> historical Lead Campaign data and if we can, connect with Facebook for
+> those old campaign stats to populate that data to be able to see those
+> campaigns isolated and everything altogether for our historical
+> advertising efforts."
+
+**Answer: yes, Meta still has all of it.** Verified live 2026-09-03 via
+the Meta connector against `act_2353186181735308`: **34 campaigns back
+to April 2025, ~$2,897.61 of spend**, every one still returning full
+lifetime insights. This is no longer a hypothetical — it promotes #391
+item 4 from "deferred" to a funded piece of this project.
+
+**The six lead campaigns, worst CPL to best:**
+
+| Campaign | Ran | Spend | Leads | CPL |
+|---|---|---:|---:|---:|
+| 6/11/25 | Jun 2025 | $357.17 | 87 | $4.11 |
+| 4/24/25 | Apr 2025 | $181.25 | 45 | $4.03 |
+| Season 20 Kickoff | Feb–Mar 2026 | $345.00 | 91 | $3.79 |
+| 8/18/25 | Aug 2025 | $132.49 | 39 | $3.40 |
+| 9/11/25 v3 | Sep 2025 | $246.09 | 85 | $2.90 |
+| **Fall 2026 Leads** | **Aug–Sep 2026** | **$128.35** | **85** | **$1.51** |
+
+**$1,390.35 across 432 leads, blended CPL $3.22.** The remaining
+~$1,507 is event, landing-page and brand promotion — Kerry said
+"historical advertising efforts," so those belong in the picture too,
+even though only lead campaigns produce CPL / CPP / CPMem.
+
+**What to build:**
+1. **Backfill campaign rows from Meta**, not by hand — name, id, dates
+   and spend all come from the insights call. `source='meta'`.
+2. **Attach historical leads to them.** HubSpot's `hs_analytics_first_url`
+   carries `hsa_cam` (campaign), `hsa_grp` (ad set) and `hsa_ad` — the
+   same fields the auto-linker already reads. So every historical lead
+   in the HubSpot export self-attributes to its campaign with the
+   existing logic. This is why the export must keep `hs_analytics_*`.
+3. **Isolated and combined views** — the stats view already does both
+   ("All campaigns" versus one). Backfilled rows just appear.
+4. **Non-lead campaigns** are spend-and-reach only; their funnel columns
+   should read as not-applicable rather than as zeros, or they will drag
+   the blended numbers into nonsense.
+
+**Caveat to verify, not assume:** insights for old campaigns are
+retrievable today, but Meta's *lead-row* retention is a different and
+shorter thing. The historical **stats** come from Meta; the historical
+**lead rows** come from the HubSpot export. Both halves are needed and
+they come from different places.
 
 ---
 
@@ -292,15 +350,44 @@ customer(s), what matches and what does not, and a one-tap Merge / Not
 the same person / Skip. **Kerry's answer is the decision. We never
 break a tie ourselves.**
 
-**NO MATCH → archive only.** Per Kerry's ruling: archived, **not**
-reactivated, and **no customer record is created**. Roughly speaking, if
-several hundred of the 1,453 land here, that is several hundred rows we
-deliberately do not import. The archive keeps them; the operating system
-stays clean.
+**NO MATCH → still becomes a customer record, marked not-active.**
 
-**Companies and meetings** follow the same rule: archive them, attribute
-them to a customer **only** where the match is certain, and speculate
-about nothing.
+*(Kerry corrected an earlier reading of this on 2026-09-03. The first
+version of this document said unmatched contacts would be archived
+WITHOUT creating a customer. That was wrong.)* His words:
+
+> "No, I think archived DOES have a customer record. Considering that
+> we're bringing in more and more historical records from Golf Genius
+> and eventually will go back to the beginning in 2007, I want to match
+> up everything possible into single customer entities. So 'archived'
+> really just means not active, or they opted out or whatever. We may
+> also have some like Paul Wuerdeman and Bob North that we have 'banned'
+> from participation."
+
+**The customer table is the single identity spine for TGF, back to
+2007.** Not a list of currently-active people. Golf Genius history is
+still arriving and will keep arriving; every person who has ever touched
+TGF should exist exactly once, and "archived" is a *state on that
+record*, not a reason to withhold it.
+
+**The schema already supports this** — no new concept required:
+- `customers.account_status` — CHECK constraint on `active` / `inactive`
+  / `banned`. Paul Wuerdeman and Bob North are the `banned` case, and it
+  is already honored: the Brevo sync and other outbound paths exclude
+  banned rows today.
+- `customers.acquisition_source` — the existing home for HubSpot's
+  original-source attribution. No new column needed.
+- `customers.current_player_status` — `active_member` / `expired_member`
+  / `active_guest` / `inactive` / `first_timer`.
+
+**For CA to settle with Kerry:** whether "archived" and "opted out"
+should be distinct `account_status` values or both map to `inactive`.
+Opted-out is a *consent* fact with real consequences for Brevo sends,
+so it probably deserves its own value rather than being folded into
+inactive. Propose, do not assume.
+
+**Companies and meetings** are archive-only, but attributed to a
+customer wherever the match is certain — same no-speculation rule.
 
 ---
 
@@ -331,8 +418,39 @@ near zero. A dual-run over a dead pipe proves nothing at all.
   campaign costs about $45–90. Getting the lead pipe wrong costs the
   48-hour window on every lead we miss. That is not a close call.
 
-**Open for Kerry:** when is the next ad campaign expected? That date,
-not a calendar guess, is what schedules the cutover.
+**Kerry's answer (2026-09-03), and he is right:** *"because Facebook is
+the source, I don't see a real need, as long as we're definitely
+capturing the full detail that Facebook currently APIs to HubSpot."*
+
+Correct, and it reframes the test. Facebook is upstream of both paths,
+so there is no second source of truth that could *disagree* with the
+first. Two systems reading one origin cannot diverge on the facts. The
+only real risk is **field completeness** — that Meta-direct silently
+hands us less than HubSpot was handing us.
+
+**So the gate is a FIELD PARITY PROOF, not a duration.** Before
+cutover, take a set of leads that already arrived through HubSpot, pull
+the same leads directly from Meta, and diff them field by field. Every
+field any downstream rule depends on must be present and identical:
+- the three survey answers, at their exact raw option values (the
+  routing, badges, CSV filters and SMS preset selection all key on those
+  exact strings);
+- identity: first name, last name, email, phone, city;
+- attribution: campaign id, ad set id, ad id, form name, submission
+  timestamp;
+- anything else in the payload a rule reads.
+
+**Any field HubSpot carries that Meta-direct cannot reproduce gets named
+before we build, not discovered after.** That diff is the deliverable
+that ends this workstream.
+
+**Timing is no longer a blocker.** Kerry: *"The plan is to start a new
+campaign with new creative when this one ends."* The Fall campaign
+closes Sep 6 and a new one begins straight after, so live leads keep
+flowing. The new campaign's first days give a free side-by-side overlap
+— Kerry sees a week as reasonable but not strictly needed. Run both
+pipes through it because it costs nothing, and let the parity proof, not
+the calendar, decide when HubSpot's pipe goes off.
 
 ---
 
