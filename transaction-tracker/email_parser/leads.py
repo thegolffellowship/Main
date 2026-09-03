@@ -141,6 +141,14 @@ def ensure_leads_table(conn: sqlite3.Connection) -> None:
     except sqlite3.OperationalError:
         pass
     try:
+        # Duplicate-lead merge (Kerry 2026-09-03): the loser points at
+        # the keeper and drops out of every queue read. Never deleted —
+        # its external_id must stay or the next poll re-creates it.
+        conn.execute("ALTER TABLE leads ADD COLUMN merged_into INTEGER "
+                     "REFERENCES leads(id)")
+    except sqlite3.OperationalError:
+        pass
+    try:
         # 48-hour outreach alarm (Kerry 2026-09-03): when he tags an
         # outreach action (Texted / Sent email / Left VM) the wait for a
         # reply starts here, and follow_up_at is auto-set 2 days out.
@@ -1323,10 +1331,11 @@ def get_leads(status: str = "", limit: int = 200,
         except Exception:
             logger.warning("campaign auto-link failed", exc_info=True)
         q = ("SELECT l.*, c.name AS campaign_name FROM leads l "
-             "LEFT JOIN lead_campaigns c ON c.id = l.campaign_id")
+             "LEFT JOIN lead_campaigns c ON c.id = l.campaign_id "
+             "WHERE l.merged_into IS NULL")
         params: tuple = ()
         if status:
-            q += " WHERE l.status = ?"
+            q += " AND l.status = ?"
             params = (status,)
         q += " ORDER BY COALESCE(l.arrived_at, l.first_seen_at) DESC LIMIT ?"
         rows = [dict(r) for r in conn.execute(q, params + (limit,)).fetchall()]
@@ -2363,3 +2372,205 @@ def lead_sms_text(lead_id: int, preset: str = "", closer: bool = False,
                                slot=pick["slot"], addons=addons,
                                closer=closer),
             "vars": vars_, "presets": sms_preset_order(presets)}
+
+
+# ── DUPLICATE LEADS + MERGE (Kerry 2026-09-03) ───────────────────────
+# "I see we have two Shane Winters. Those need to be merged. I thought
+# we already merged them on HubSpot side."
+#
+# WHY IT HAPPENS: the Tracker dedups on (source, external_id) — the
+# HubSpot contact id. When the SAME person submits the survey twice
+# before HubSpot dedups them, or when Kerry merges two contacts in
+# HubSpot AFTER the Tracker already polled both, the Tracker is left
+# holding two rows with different external_ids. A HubSpot-side merge
+# does not propagate back, so it will keep happening.
+#
+# THE MERGE never deletes the loser: its external_id has to stay in the
+# table or the next poll re-inserts it as a brand-new lead. Instead the
+# loser is marked merged_into + dismissed and filtered out of every
+# queue read, so the row survives as the dedup key and as an audit
+# trail.
+STATUS_RANK = {"dismissed": 0, "new": 1, "touched": 2, "converted": 3}
+
+
+def _norm_email(v) -> str:
+    return (v or "").strip().lower()
+
+
+def _norm_phone(v) -> str:
+    d = "".join(c for c in str(v or "") if c.isdigit())
+    return d[-10:] if len(d) >= 10 else ""
+
+
+def _norm_name(first, last) -> str:
+    return " ".join(f"{first or ''} {last or ''}".lower().split())
+
+
+def find_duplicate_leads(db_path: str | Path | None = None) -> dict:
+    """Groups of live lead rows that are the same person: same email,
+    same last-10 phone digits, or same full name. Compact by design —
+    enough to decide a merge without reading the whole queue."""
+    from . import database as db
+    with db._connect(db_path) as conn:
+        ensure_leads_table(conn)
+        rows = [dict(r) for r in conn.execute(
+            "SELECT id, first_name, last_name, email, phone, chapter, status, "
+            "tag, external_id, customer_id, arrived_at, touched_at, "
+            "follow_up_at, campaign_id, "
+            "(SELECT COUNT(*) FROM lead_notes n WHERE n.lead_id = leads.id) "
+            "AS notes FROM leads WHERE merged_into IS NULL "
+            "ORDER BY id").fetchall()]
+    buckets: dict = {}
+    for r in rows:
+        for kind, key in (("email", _norm_email(r["email"])),
+                          ("phone", _norm_phone(r["phone"])),
+                          ("name", _norm_name(r["first_name"], r["last_name"]))):
+            if key:
+                buckets.setdefault((kind, key), []).append(r["id"])
+    by_id = {r["id"]: r for r in rows}
+    seen: set = set()
+    groups: list = []
+    for (kind, key), ids in buckets.items():
+        if len(ids) < 2:
+            continue
+        sig = tuple(sorted(ids))
+        if sig in seen:
+            continue
+        seen.add(sig)
+        matched = [k for (k, kk), vv in buckets.items()
+                   if tuple(sorted(vv)) == sig]
+        groups.append({
+            "matched_on": sorted(matched), "lead_ids": list(sig),
+            "suggested_keep": _suggest_keep([by_id[i] for i in sig]),
+            "leads": [by_id[i] for i in sig],
+        })
+    groups.sort(key=lambda g: g["lead_ids"])
+    return {"duplicate_groups": len(groups), "live_leads": len(rows),
+            "groups": groups,
+            "how_to_merge": "scoring-lead-merge:<keep_id>|<drop_id>[|dry]"}
+
+
+def _suggest_keep(rows: list[dict]) -> int:
+    """Keep the row carrying the most work: strongest status, then most
+    notes, then a real customer link, then the earliest arrival."""
+    return sorted(rows, key=lambda r: (
+        -STATUS_RANK.get(r["status"], 0), -(r["notes"] or 0),
+        0 if r["customer_id"] else 1,
+        r["arrived_at"] or "9999"))[0]["id"]
+
+
+def merge_leads(keep_id: int, drop_id: int, dry_run: bool = False,
+                author: str = "", db_path: str | Path | None = None) -> dict:
+    """Fold `drop_id` into `keep_id`. Notes move across, the strongest
+    status and the earliest dates win, and any field blank on the keeper
+    is filled from the loser (including payload answers, so an earlier
+    survey is never lost). The loser is marked merged_into + dismissed,
+    never deleted — its external_id has to stay put or the next HubSpot
+    poll re-creates it."""
+    from . import database as db
+    if keep_id == drop_id:
+        return {"error": "keep and drop are the same lead"}
+    with db._connect(db_path) as conn:
+        ensure_leads_table(conn)
+        keep = conn.execute("SELECT * FROM leads WHERE id = ?",
+                            (keep_id,)).fetchone()
+        drop = conn.execute("SELECT * FROM leads WHERE id = ?",
+                            (drop_id,)).fetchone()
+        if not keep:
+            return {"error": f"lead {keep_id} not found"}
+        if not drop:
+            return {"error": f"lead {drop_id} not found"}
+        keep, drop = dict(keep), dict(drop)
+        if drop["merged_into"]:
+            return {"error": f"lead {drop_id} is already merged into "
+                             f"{drop['merged_into']}"}
+        if keep["merged_into"]:
+            return {"error": f"lead {keep_id} is itself merged into "
+                             f"{keep['merged_into']} — merge into that one"}
+
+        changes: dict = {}
+        # Strongest status, and the tag that goes with it.
+        if STATUS_RANK.get(drop["status"], 0) > STATUS_RANK.get(keep["status"], 0):
+            changes["status"] = drop["status"]
+            if drop["tag"]:
+                changes["tag"] = drop["tag"]
+        elif not keep["tag"] and drop["tag"]:
+            changes["tag"] = drop["tag"]
+        # Earliest real dates (the true first arrival / first touch).
+        for col in ("arrived_at", "first_seen_at", "touched_at",
+                    "converted_at", "outreach_at"):
+            a, b = keep.get(col), drop.get(col)
+            if b and (not a or str(b) < str(a)):
+                changes[col] = b
+        # Fill blanks from the loser.
+        for col in ("first_name", "last_name", "email", "phone", "city",
+                    "chapter", "customer_id", "campaign_id", "follow_up_at",
+                    "touched_by", "notes", "source_label"):
+            if not keep.get(col) and drop.get(col):
+                changes[col] = drop[col]
+        # Payload: keeper's answers win, loser's fill the gaps.
+        try:
+            kp = json.loads(keep["payload"] or "{}")
+            dp = json.loads(drop["payload"] or "{}")
+        except Exception:
+            kp, dp = {}, {}
+        added = [k for k in dp if k not in kp]
+        if added:
+            merged_payload = dict(dp)
+            merged_payload.update(kp)
+            changes["payload"] = json.dumps(merged_payload)
+
+        note_count = conn.execute(
+            "SELECT COUNT(*) FROM lead_notes WHERE lead_id = ?",
+            (drop_id,)).fetchone()[0]
+        summary = {
+            "keep": keep_id, "drop": drop_id,
+            "keep_name": _norm_name(keep["first_name"], keep["last_name"]),
+            "drop_name": _norm_name(drop["first_name"], drop["last_name"]),
+            "notes_moved": note_count,
+            "payload_keys_recovered": sorted(added),
+            "fields_changed": {k: v for k, v in changes.items()
+                               if k != "payload"},
+            "dry_run": bool(dry_run),
+        }
+        if dry_run:
+            return summary
+
+        if changes:
+            cols = ", ".join(f"{c} = ?" for c in changes)
+            conn.execute(f"UPDATE leads SET {cols} WHERE id = ?",
+                         list(changes.values()) + [keep_id])
+        conn.execute("UPDATE lead_notes SET lead_id = ? WHERE lead_id = ?",
+                     (keep_id, drop_id))
+        conn.execute(
+            "UPDATE leads SET merged_into = ?, status = 'dismissed' "
+            "WHERE id = ?", (keep_id, drop_id))
+        conn.execute(
+            "INSERT INTO lead_notes (lead_id, author, note) VALUES (?, 'auto', ?)",
+            (keep_id, f"Merged duplicate lead #{drop_id} "
+                      f"(HubSpot {drop['external_id']}) into this record by "
+                      f"{(author or 'manager').strip()}"
+                      + (f"; {note_count} note(s) moved" if note_count else "")))
+        conn.commit()
+    summary["ok"] = True
+    return summary
+
+
+def unmerge_lead(drop_id: int, db_path: str | Path | None = None) -> dict:
+    """Undo the row-level half of a merge: the loser returns to the
+    queue. Fields already folded into the keeper stay there — this is an
+    escape hatch for a merge aimed at the wrong pair, not a full undo."""
+    from . import database as db
+    with db._connect(db_path) as conn:
+        ensure_leads_table(conn)
+        row = conn.execute("SELECT merged_into FROM leads WHERE id = ?",
+                           (drop_id,)).fetchone()
+        if not row:
+            return {"error": f"lead {drop_id} not found"}
+        if not row["merged_into"]:
+            return {"error": f"lead {drop_id} is not merged"}
+        conn.execute("UPDATE leads SET merged_into = NULL, status = 'touched' "
+                     "WHERE id = ?", (drop_id,))
+        conn.commit()
+    return {"id": drop_id, "restored": True, "ok": True,
+            "note": "notes and folded fields stay on the keeper"}

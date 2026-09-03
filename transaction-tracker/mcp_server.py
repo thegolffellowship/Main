@@ -2235,6 +2235,38 @@ def _scoring_dispatch(url: str, extract: str):
             from email_parser.campaigns import refresh_meta_insights
             return json.dumps(refresh_meta_insights(force=True), indent=2,
                               default=str)
+        if cmd == "scoring-lead-dupes":
+            # Live lead rows that are the same person (same email, same
+            # last-10 phone digits, or same full name) — Kerry's two
+            # Shane Winters. Read-only; compact by design.
+            from email_parser.leads import find_duplicate_leads
+            return json.dumps(find_duplicate_leads(), indent=2, default=str)
+        if cmd == "scoring-lead-merge":
+            # "<keep_id>|<drop_id>[|dry]" — fold the loser into the
+            # keeper: notes move, strongest status and earliest dates
+            # win, blanks fill from the loser. The loser is marked
+            # merged_into + dismissed, NEVER deleted (its external_id
+            # has to stay or the next poll re-creates it). Audited.
+            from email_parser.leads import merge_leads
+            _p = [x.strip() for x in arg.split("|")]
+            if len(_p) < 2 or not _p[0].isdigit() or not _p[1].isdigit():
+                return json.dumps({"error": "need <keep_id>|<drop_id>[|dry]"})
+            _dry = len(_p) > 2 and _p[2].lower() in ("dry", "preview")
+            res = merge_leads(int(_p[0]), int(_p[1]), dry_run=_dry,
+                              author="mcp-claude")
+            if not _dry and not res.get("error"):
+                db.log_agent_action("mcp-claude", "scoring-lead-merge",
+                                    f"kept {_p[0]}, merged {_p[1]}")
+            return json.dumps(res, indent=2, default=str)
+        if cmd == "scoring-lead-unmerge":
+            # "<drop_id>" — put a merged row back in the queue (escape
+            # hatch for a merge aimed at the wrong pair).
+            from email_parser.leads import unmerge_lead
+            res = unmerge_lead(int(arg.strip()))
+            if not res.get("error"):
+                db.log_agent_action("mcp-claude", "scoring-lead-unmerge",
+                                    f"restored lead {arg.strip()}")
+            return json.dumps(res, indent=2, default=str)
         if cmd == "scoring-brevo-status":
             # Brevo key present / account reachable / last sync summary.
             from email_parser.brevo import brevo_status
@@ -3934,7 +3966,8 @@ def get_lead_center(status: str = "", limit: int = 50) -> str:
     doc='leads.md'. Ops (via probe_golf_genius extract=): scoring-leads,
     scoring-lead-mark, scoring-lead-edit, scoring-leads-poll,
     scoring-lead-sms, scoring-campaigns, scoring-campaign-set,
-    scoring-lead-campaign, scoring-campaign-refresh.
+    scoring-lead-campaign, scoring-campaign-refresh, scoring-lead-dupes,
+    scoring-lead-merge, scoring-lead-unmerge.
 
     Args:
         status: Optional filter — new | touched | converted | dismissed

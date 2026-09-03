@@ -359,6 +359,38 @@ per the standing conversion detect, which is the desired display.
 First live sweep back-collects the 2026 fall campaign's five: Wilder,
 Hinojosa, O. Gonzalez, M. Hernandez, D. Garza.
 
+## Duplicate leads + merge (Kerry 2026-09-03, v2.295.0)
+
+> "I see we have two Shane Winters. Those need to be merged. I thought
+> we already merged them on HubSpot side."
+
+**Why it happens, and why it will recur.** The Tracker dedups on
+`(source, external_id)` = the HubSpot contact id. Two rows appear when
+the same person submits the survey twice before HubSpot dedups them, or
+when Kerry merges two HubSpot contacts **after** the Tracker already
+polled both. **A HubSpot-side merge does not propagate back** — nothing
+tells the Tracker those two contact ids are now one person.
+
+`find_duplicate_leads()` groups live rows by **email** (case/whitespace
+normalized), **phone** (last 10 digits, so `+1` and `(210) 875-4541`
+match), and **full name**, and names a suggested keeper: strongest
+status, then most notes, then a real customer link, then earliest
+arrival. Bridge `scoring-lead-dupes` — compact by design, no payloads.
+
+`merge_leads(keep, drop, dry_run)` folds the loser into the keeper:
+notes move across, the **strongest status** and its tag win, the
+**earliest** arrival / touch / conversion dates win (the true first
+contact), any field blank on the keeper fills from the loser, and
+payload keys the keeper lacks are recovered so **an earlier survey's
+answers are never lost** (the keeper's own answer still wins a
+conflict). An auto note records the merge on the keeper.
+
+**The loser is never deleted.** It is marked `merged_into` + dismissed
+and filtered out of every queue read (`get_leads` requires
+`merged_into IS NULL`). Deleting it would free its `external_id` and the
+next poll would re-create the duplicate. `scoring-lead-merge:<keep>|<drop>[|dry]`,
+`scoring-lead-unmerge:<drop>`. Test: `test_lead_merge.py` (28 checks).
+
 ## 48-hour outreach alarm (Kerry 2026-09-03, v2.294.0)
 
 > "Need a timestamp with alarm set when I click Texted or Emailed for

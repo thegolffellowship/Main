@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.294.0";
+window.TGF_VERSION = "2.295.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.295.0",
+    date: "2026-09-03",
+    changes: [
+      "Duplicate-lead detection and merge (Kerry: 'I see we have two Shane Winters. Those need to be merged. I thought we already merged them on HubSpot side'). The Tracker dedups on the HubSpot contact id, so a HubSpot-side merge never propagates back and leaves two rows behind — this will recur until the lead source changes. scoring-lead-dupes groups live leads by email, by phone (last 10 digits, so formatting differences match), and by full name, and suggests which row to keep. scoring-lead-merge folds the loser into the keeper: notes move across, the strongest status and its tag win, the earliest arrival and touch dates win, blank fields fill from the loser, and payload keys the keeper lacks are recovered so an earlier survey's answers are never lost. The loser is marked merged_into and dismissed but never deleted, because freeing its external_id would let the next poll re-create the duplicate; merged rows drop out of every queue read. scoring-lead-unmerge is the escape hatch. Test: test_lead_merge.py.",
+    ],
+  },
   {
     version: "2.294.0",
     date: "2026-09-03",
