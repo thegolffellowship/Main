@@ -2285,6 +2285,22 @@ def _scoring_dispatch(url: str, extract: str):
             # live. Until this passes once, we do not have backups.
             from email_parser.backups import verify_latest_backup
             return json.dumps(verify_latest_backup(), indent=2, default=str)
+        if cmd == "scoring-docs-mirror":
+            # Push CLAUDE.md + docs/claude/*.md into OneDrive. The Claude
+            # M365 connector is read-only by design (its Entra app has no
+            # write scope), but the TRACKER holds Files.ReadWrite.All, so
+            # the repo stays source of truth and OneDrive gets a mirror.
+            # ":dry" lists what would go where. Audited.
+            from email_parser.backups import mirror_docs_to_onedrive
+            _a = arg.strip()
+            _dry = _a.lower() in ("dry", "preview")
+            res = mirror_docs_to_onedrive(
+                dry_run=_dry, only="" if _dry or not _a else _a)
+            if not _dry:
+                db.log_agent_action("mcp-claude", "scoring-docs-mirror",
+                                    f"uploaded={res.get('uploaded')} "
+                                    f"errors={len(res.get('errors') or [])}")
+            return json.dumps(res, indent=2, default=str)
         if cmd == "scoring-backup-status":
             # Is it configured, and did the last runs succeed?
             from email_parser.backups import backup_status

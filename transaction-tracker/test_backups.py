@@ -164,6 +164,33 @@ def main():
           {"status", "remote_name", "bytes_gz", "error", "finished_at"} <= cols,
           cols)
 
+    print("Doc mirror routing")
+    t = {"docs": "7_Web & App Development/TGF Transaction Tracker/Tracker Docs",
+         "fragments": "06_STRATEGY/Update_Fragments"}
+    check("update fragments route to Kerry's fragments folder",
+          backups._folder_for("Update_Fragment_2026-09-03_X.md", t)
+          == t["fragments"])
+    check("everything else routes to the tracker docs folder",
+          backups._folder_for("state-of-the-tracker.md", t) == t["docs"])
+    check("CLAUDE.md routes to the docs folder",
+          backups._folder_for("CLAUDE.md", t) == t["docs"])
+    dry = backups.mirror_docs_to_onedrive(dry_run=True)
+    check("dry run finds the real repo docs", dry["found"] > 20, dry.get("found"))
+    names = {f["name"] for f in dry["files"]}
+    check("CLAUDE.md is included", "CLAUDE.md" in names)
+    check("the session context file is included",
+          "TGF_Tracker_LeadCenter_Context_v1_0.md" in names)
+    frag = [f for f in dry["files"] if f["name"].startswith("Update_Fragment")]
+    check("the update fragment is routed to 06_STRATEGY/Update_Fragments",
+          frag and all(f["folder"] == t["fragments"] for f in frag),
+          [f["folder"] for f in frag])
+    check("dry run uploads nothing", dry["uploaded"] == 0)
+    one = backups.mirror_docs_to_onedrive(dry_run=True, only="leads.md")
+    check("dry run honors a single-file selection",
+          one["found"] == 1 and one["files"][0]["name"] == "leads.md", one)
+    check("unknown filename is refused",
+          backups.mirror_docs_to_onedrive(dry_run=True, only="nope.md").get("error"))
+
     shutil.rmtree(tmp, ignore_errors=True)
     print()
     if FAILURES:

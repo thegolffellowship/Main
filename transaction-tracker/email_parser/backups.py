@@ -477,3 +477,96 @@ def backup_status(db_path: str | Path | None = None) -> dict:
     out["healthy"] = bool(last_ok) and (out["runs"][0].get("status") == "ok"
                                         if out["runs"] else False)
     return out
+
+
+# ── DOC MIRROR TO ONEDRIVE (Kerry 2026-09-03) ────────────────────────
+# The Claude M365 connector is READ-ONLY by design — its Entra app
+# requests Files.Read / Files.Read.All and no write scope at all, so a
+# session cannot save anything to OneDrive no matter who consents.
+#
+# The Tracker can, because its own app registration was granted
+# Files.ReadWrite.All for the nightly backup. So the repo stays the
+# source of truth and the Tracker pushes a MIRROR into OneDrive: every
+# doc Claude writes lands in Kerry's folders without anyone remembering
+# to drag a file. Kerry: "Nothing can fall thru the cracks."
+#
+# Routing follows his existing filing system rather than inventing one:
+#   Update_Fragment_*.md  → 06_STRATEGY/Update_Fragments
+#   everything else       → 7_Web & App Development/TGF Transaction Tracker/Tracker Docs
+DOCS_FOLDER_DEFAULT = "7_Web & App Development/TGF Transaction Tracker/Tracker Docs"
+FRAGMENTS_FOLDER_DEFAULT = "06_STRATEGY/Update_Fragments"
+
+
+def _doc_targets(db_path=None) -> dict:
+    from . import database as db
+    def _dial(key, default):
+        try:
+            v = (db.get_app_setting(key, db_path=db_path) if db_path
+                 else db.get_app_setting(key))
+        except Exception:
+            v = None
+        return (v or default).strip("/")
+    return {"docs": _dial("onedrive_docs_folder", DOCS_FOLDER_DEFAULT),
+            "fragments": _dial("onedrive_fragments_folder",
+                               FRAGMENTS_FOLDER_DEFAULT)}
+
+
+def _folder_for(name: str, targets: dict) -> str:
+    return targets["fragments"] if name.startswith("Update_Fragment") \
+        else targets["docs"]
+
+
+def mirror_docs_to_onedrive(db_path: str | Path | None = None,
+                            dry_run: bool = False,
+                            only: str = "") -> dict:
+    """Push the Tracker's living docs (CLAUDE.md + docs/claude/*.md) into
+    OneDrive. Idempotent — every run replaces, so it is safe to schedule
+    and safe to re-run. `only` uploads a single filename."""
+    root = Path(__file__).resolve().parent.parent
+    docs: list[Path] = []
+    claude_md = root / "CLAUDE.md"
+    if claude_md.is_file():
+        docs.append(claude_md)
+    docs_dir = root / "docs" / "claude"
+    if docs_dir.is_dir():
+        docs.extend(sorted(docs_dir.glob("*.md")))
+    if only:
+        docs = [d for d in docs if d.name == only]
+        if not docs:
+            return {"error": f"no doc named {only!r}"}
+
+    targets = _doc_targets(db_path)
+    res: dict = {"targets": targets, "found": len(docs), "uploaded": 0,
+                 "skipped_too_big": [], "errors": [], "files": []}
+    if dry_run:
+        res["files"] = [{"name": d.name, "folder": _folder_for(d.name, targets),
+                         "bytes": d.stat().st_size} for d in docs]
+        res["dry_run"] = True
+        return res
+
+    creds = _graph_creds()
+    if not creds:
+        res["errors"].append("Graph credentials missing")
+        return res
+    token = _token(creds)
+    if not token:
+        res["errors"].append("could not acquire a Graph token")
+        return res
+
+    for d in docs:
+        size = d.stat().st_size
+        if size > SIMPLE_UPLOAD_LIMIT:
+            # Docs are markdown; anything over 4 MB is not a doc.
+            res["skipped_too_big"].append(d.name)
+            continue
+        folder = _folder_for(d.name, targets)
+        try:
+            _upload(token, creds["user"], folder, d.name, d)
+            res["uploaded"] += 1
+            res["files"].append({"name": d.name, "folder": folder,
+                                 "bytes": size})
+        except Exception as e:
+            logger.warning("doc mirror failed for %s: %s", d.name, e)
+            res["errors"].append(f"{d.name}: {e}")
+    res["ok"] = not res["errors"]
+    return res

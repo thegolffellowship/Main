@@ -1709,6 +1709,17 @@ def start_scheduler():
                             res.get("pruned", 0))
             else:
                 logger.error("DB backup FAILED: %s", res.get("error"))
+            # Mirror the living docs into Kerry's OneDrive folders in the
+            # same pass (Kerry 2026-09-03: "nothing can fall thru the
+            # cracks"). The Claude M365 connector is read-only, so the
+            # Tracker is the only thing that can put these there.
+            try:
+                from email_parser.backups import mirror_docs_to_onedrive
+                m = mirror_docs_to_onedrive()
+                logger.info("Doc mirror: %d uploaded, %d error(s)",
+                            m.get("uploaded", 0), len(m.get("errors") or []))
+            except Exception:
+                logger.warning("Doc mirror failed (non-fatal)", exc_info=True)
         scheduler.add_job(
             nightly_backup_job,
             "cron", hour=8, minute=15,

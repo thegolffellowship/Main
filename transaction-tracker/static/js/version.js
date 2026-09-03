@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.296.1";
+window.TGF_VERSION = "2.297.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.297.0",
+    date: "2026-09-03",
+    changes: [
+      "The Tracker now mirrors its own living docs into Kerry's OneDrive (Kerry: 'nothing can fall thru the cracks'). Discovered while trying to save session documentation: the Claude M365 connector is READ-ONLY by design — its Entra app requests Files.Read and Files.Read.All and no write scope at all, so no amount of admin consent lets a Claude session save to OneDrive. The Tracker's own app registration does hold Files.ReadWrite.All (granted for the nightly backup), so the repo stays the source of truth and the Tracker pushes the mirror: CLAUDE.md plus every docs/claude/*.md, replaced on each run so it is safe to repeat. Routing follows Kerry's existing filing system rather than inventing one — Update_Fragment_*.md land in 06_STRATEGY/Update_Fragments, everything else in 7_Web & App Development/TGF Transaction Tracker/Tracker Docs, both overridable by dial. Runs nightly right after the backup, or on demand via scoring-docs-mirror[:dry|:filename].",
+    ],
+  },
   {
     version: "2.296.1",
     date: "2026-09-03",

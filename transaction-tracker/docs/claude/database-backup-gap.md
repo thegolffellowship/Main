@@ -126,3 +126,32 @@ prohibits commercial use. Nothing enforces it today, but when the TGF
 Platform serves real members on it, that is a terms violation whose
 failure mode is the project being pulled rather than an invoice. Pro is
 $20/month. Fix before launch, not after.
+
+
+---
+
+## Doc mirror to OneDrive (v2.297.0, Kerry 2026-09-03)
+
+**Finding:** the Claude M365 connector is **read-only by design.** Its
+Entra app ("M365 MCP Server for Claude") holds 27 delegated Graph
+permissions and every one is a read scope — `Files.Read`,
+`Files.Read.All`, `Mail.Read`, `Sites.Read.All`. There is no write scope
+to consent to, so **no Claude session can save anything to OneDrive**,
+regardless of tenant admin rights. Do not send Kerry hunting for a
+consent that cannot exist.
+
+**But the Tracker can.** Its own app registration holds
+`Files.ReadWrite.All` (granted for the nightly backup). So the repo
+stays the source of truth and the Tracker pushes a mirror:
+
+- `CLAUDE.md` + every `docs/claude/*.md`
+- `Update_Fragment_*.md` → `06_STRATEGY/Update_Fragments`
+- everything else → `7_Web & App Development/TGF Transaction Tracker/Tracker Docs`
+- dials: `onedrive_docs_folder`, `onedrive_fragments_folder`
+- replaces on every run, so it is safe to schedule and safe to re-run
+- runs nightly right after the backup; on demand via
+  `scoring-docs-mirror[:dry|:filename]`
+
+**Why this matters beyond convenience:** every doc a session writes now
+reaches Kerry's OneDrive without anyone remembering to drag a file.
+Session documentation stops depending on a human step.
