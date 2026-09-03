@@ -1453,13 +1453,31 @@ MCP_CLIENT_SECRET=TGFmcpSecret2026Railway
 
 ## Scheduled Jobs
 
-| Job | Schedule | Description |
+| Job id | Schedule | Description |
 |-----|----------|-------------|
-| Transaction inbox check | Every 15 min (configurable) | Fetch + parse new transaction emails |
-| RSVP inbox check | Every 15 min | Fetch + parse Golf Genius RSVP emails |
-| Daily report | Daily at 7:00 AM (configurable) | Email summary of last 24 hours |
+| `inbox_check` | Every `CHECK_INTERVAL_MINUTES` (15) | Fetch + parse new transaction emails |
+| `rsvp_inbox_check` | Every 15 min | Fetch + parse Golf Genius RSVP emails |
+| `expense_inbox_check` | Every `EXPENSE_CHECK_INTERVAL_MINUTES` | Fetch + classify CC/bank alert emails |
+| `lead_poll` | Every `LEAD_CHECK_INTERVAL_MINUTES` (15) | Facebook/Meta leads from HubSpot; idle without `HUBSPOT_TOKEN` |
+| `daily_report` | Daily, `DAILY_REPORT_HOUR` (7 AM) | Email summary of last 24 hours |
+| `coo_daily_email` | Daily 7 AM | COO digest |
+| `membership_reminders` | Daily 9 AM | Membership renewal reminders |
+| `monthly_points_snapshot` | Daily 05:30 Central | Refresh monthly points |
+| `monthly_points_bootstrap` | Daily 3 AM | Backfill monthly points |
+| `auto_gg_results_sync` | Hourly, noon–11 PM Central | Pull GG results + payouts; `AUTO_GG_SYNC=0` disables |
+| `auto_pairings_grab` | Daily 3 AM | Import GG pairing sheets |
+| `auto_rsvp_audit` | Daily 3 AM | RSVP reconciliation |
+| `auto_payment_reminders` | Daily | Balance-due nudges |
+| `brevo_sync` | Daily 09:10 UTC (4:10 AM Central) | Stamp member status / chapter / last-played onto Brevo; idle without `BREVO_API_KEY` |
+| `meta_insights` | **Hourly** | Refresh Meta campaign insights for the Lead Center stats view; idle without `META_ACCESS_TOKEN` |
+| `db_backup` | **Daily 08:15 UTC (03:15 Central)** | Consistent snapshot → gzip → OneDrive; `DB_BACKUP_DISABLED=1` disables |
+| `prune_processed_emails` | Daily | Drop processed-email records older than 90 days |
 
 All scheduled via APScheduler. Only one Gunicorn worker runs the scheduler (env-based guard).
+
+**Every integration job is idle-until-configured** — a missing API key
+logs a note at startup and the job no-ops rather than erroring, so an
+unset credential never breaks a deploy.
 
 ---
 
@@ -1498,6 +1516,24 @@ MANAGER_PIN=0000                 # View + edit only
 
 # Database (for Railway persistent volume)
 DATABASE_PATH=/data/transactions.db
+
+# Lead Center — Facebook/Meta leads via HubSpot
+HUBSPOT_TOKEN=pat-na2-...        # HubSpot service key (9 read scopes)
+LEAD_CHECK_INTERVAL_MINUTES=15   # Lead poll cadence; 0 disables
+
+# Brevo (email marketing sync)
+BREVO_API_KEY=...                # Nightly member-status / chapter stamp
+
+# Meta Marketing API (campaign stats — Lead Center 📊 Stats view)
+META_ACCESS_TOKEN=...            # System User token, non-expiring,
+                                 # ads_read + pages_read_engagement +
+                                 # pages_show_list. Idle if unset.
+
+# Off-site database backups (nightly)
+# Uses the AZURE_* creds above; the app registration needs the
+# Files.ReadWrite.All APPLICATION permission with admin consent.
+# BACKUP_ONEDRIVE_USER=...       # Optional: defaults to EMAIL_ADDRESS
+# DB_BACKUP_DISABLED=1           # Turn the nightly backup off
 
 # MCP OAuth (for Claude.ai custom connector)
 MCP_CLIENT_ID=tgf-mcp-client       # OAuth client ID

@@ -1,4 +1,4 @@
-# State of the Tracker — late August 2026 (Platform-facing brief)
+# State of the Tracker — early September 2026 (Platform-facing brief)
 
 Audience: the claude.ai "The Golf Fellowship" Project, where TGF Platform
 planning has lived for the past six months. Purpose: catch that planning
@@ -9,7 +9,7 @@ for session-by-session updates after this brief.
 
 ## What the Tracker is now
 
-Flask + SQLite on Railway (tgf-tracker.up.railway.app), version 2.176.x,
+Flask + SQLite on Railway (tgf-tracker.up.railway.app), version 2.296.x,
 ~200+ routes, 61+ MCP tools. Started as a GoDaddy order-email parser;
 now runs most of TGF's operations:
 
@@ -227,6 +227,50 @@ and #333 carry the day-by-day; changelog v2.245–v2.255 is the full record):
   family) for Leaderboard / LSC / Match Play chapters / Handicaps /
   Spotlight; chapter Match Play deep-link routes; MEMBERS bulk
   handicap-card send mode; sticky Customers page head.
+
+## The September 1-3 wave (v2.257 → v2.296) — Lead Center + data safety
+
+**The Lead Center became a measured acquisition funnel, and the Tracker
+got its first real backup.**
+
+- **Campaign entity + live Meta stats** (v2.292.0). `lead_campaigns`
+  table, leads auto-linked from their Meta attribution, and a 📊 Stats
+  view with a META panel (spend/impressions/reach/CTR/CPM straight from
+  the Marketing API, hourly) and a FUNNEL panel carrying Kerry's
+  ratified metrics: **CPL** = spend/leads, **CPP** = spend/players
+  (registered any event OR became a member, counted once), **CPMem** =
+  spend/members — each **current and 30-day trailing**, because
+  conversions keep arriving after spend stops.
+- **Measured finding: ~7% of leads lose campaign attribution in the
+  HubSpot hop.** Meta reports 85 form leads for Fall 2026; the Tracker
+  holds 79 attributed + 6 "organic" = exactly 85. The `hsa_*` params do
+  not survive the trip. True CPL is $1.52, not $1.63.
+- **Duplicate-lead merge** (v2.295.x). The Tracker dedups on HubSpot's
+  contact id, so a HubSpot-side merge never propagates back — Kerry's
+  two Shane Winters. Detection by email / last-10 phone / name, merge
+  that folds notes and recovers payload keys, and a loser that is
+  **marked merged, never deleted** (freeing its external_id would let
+  the next poll re-create it).
+- **48-hour outreach alarm** (v2.294.0) riding the existing follow-up
+  rails, and **multi-select triage filters** (v2.293.0).
+- **Nightly off-site backups** (v2.296.0). Before this, the entire
+  business was one SQLite file on one Railway volume whose only "backup"
+  wrote a copy **to the same volume** using a plain file copy of a live
+  database. Now: `VACUUM INTO` snapshot → integrity check → gzip →
+  OneDrive via the Graph creds already held for mail. **Restore drill
+  passed 2026-09-03**: pulled back, decompressed, row counts matched
+  live on every table.
+
+**Directives issued this wave** (all in `docs/claude/`, all posted to
+the mailbox): `hubspot-decommission-directive.md` (extraction as a hard
+gate, field-parity cutover), `ux-directive-work-surfaces.md` (Lead
+Center UX to CA + CD — mobile is the PRIMARY surface because `sms:`
+only works on Kerry's iPhone), `railway-api-setup.md`,
+`database-backup-gap.md`.
+
+**Live credentials now set:** `META_ACCESS_TOKEN` (non-expiring System
+User, read-only), HubSpot service key widened to 9 scopes, and
+`Files.ReadWrite.All` consented on the Azure app.
 
 ## Plan of record: native app + website
 

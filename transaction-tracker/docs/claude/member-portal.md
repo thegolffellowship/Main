@@ -145,6 +145,68 @@ Sequencing against the real calendar: championships live standings
 (website, GG-tap) → member portal M2/M3 → PWA + shadow-mode live
 scoring pilots at regular events → Capacitor + TestFlight → stores.
 
+### Amendments from the 2026-09-03 session (Kerry-ruled)
+
+Four things settled while building the Lead Center and data-safety work
+that constrain the Platform build. They belong here because each one is
+cheaper to honor from day one than to retrofit.
+
+**1. Consent is a first-class Platform concern, per channel.** Kerry:
+*"opted out relates to communication correspondence that we absolutely
+need to honor for our TGF Platform build and future consolidated
+communications, so I think it needs it's own thing."*
+
+**Archived is a STATE (ours to change). Opted-out is a PROMISE (theirs,
+and it survives every migration.)** Consent must NOT live on
+`account_status` — a single status column cannot express "active member
+who does not want the newsletter," and folding it in means a routine
+status change silently revokes a promise. The Platform consolidates
+email, SMS and portal messaging, so model consent **per channel, with
+the date and source of each opt-out recorded**.
+
+**PARKED at Kerry's direction, do not decide in passing:** whether an
+active member can fully opt out. The real line is **transactional**
+(your tee time moved, your payment failed) versus **marketing** — the
+former is arguably not opt-out-able while someone is a member, and that
+distinction is also what keeps a business on the right side of consent
+law. This needs its own conversation.
+
+**2. The customer table is the identity spine, back to 2007.** Not a
+list of currently-active people. Golf Genius history keeps arriving and
+will eventually reach the beginning. Every person who has ever touched
+TGF exists **exactly once**; "archived", "inactive" and "banned" are
+states on that record, never reasons to withhold one. The Platform's
+member model inherits this — one customer, one record, forever.
+
+Standing rule for any identity matching, anywhere: **confident matches
+merge, uncertain matches go to Kerry, nothing is ever guessed.** A wrong
+merge silently fuses two people's histories with no clean way to find it
+later; an unmatched record costs one row.
+
+**3. The stack is IMPLIED, not decided.** Supabase is scoped above, and
+a Supabase project named "TGF Platform" (Postgres 17) exists — but it is
+**INACTIVE/paused**, created January 2026 and never built on. Vercel
+holds five projects including `v0-golf-event-platform` and
+`v0-golf-fellowship-design-system`. The tooling points at
+TypeScript/React on Vercel over Supabase, but **no one ever made that
+call explicitly.** Marcus should decide it deliberately before the first
+line is written, rather than inheriting it by accident.
+
+**4. Vercel is on the HOBBY plan, which prohibits commercial use.**
+Nothing enforces it today. The moment the Platform serves real members
+it is a terms violation, and the failure mode is the project being
+pulled rather than an invoice arriving. Pro is $20/month. **Fix before
+launch, not after.**
+
+### Data-safety precedent the Platform inherits
+
+The Tracker's nightly backup (v2.296.0) established three rules worth
+carrying forward: take a **consistent** snapshot rather than copying a
+live database; **verify integrity before shipping** a backup anywhere;
+and treat a backup as unproven **until a restore has actually been
+performed**. The Platform's Postgres will get this from Supabase's
+managed backups, but the restore-drill discipline is ours to keep.
+
 Related: live points standings during events (GG live scoring tapped
 and converted to provisional race points — points = net Stableford
 floored at 0, verified 2026-07-05 against member details) and the
