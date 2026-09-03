@@ -391,6 +391,13 @@ and filtered out of every queue read (`get_leads` requires
 next poll would re-create the duplicate. `scoring-lead-merge:<keep>|<drop>[|dry]`,
 `scoring-lead-unmerge:<drop>`. Test: `test_lead_merge.py` (28 checks).
 
+**Merged rows and campaign stats (v2.295.1).** A merged loser keeps its
+`campaign_id`, so every campaign read must skip it or one person counts
+as two leads (inflating leads, deflating CPL). The funnel query, the
+campaign list's `lead_count`, and the auto-linker all filter
+`merged_into IS NULL`. Every other queue path is already safe because
+merged rows are also dismissed. Locked in `test_lead_campaigns.py`.
+
 ## 48-hour outreach alarm (Kerry 2026-09-03, v2.294.0)
 
 > "Need a timestamp with alarm set when I click Texted or Emailed for

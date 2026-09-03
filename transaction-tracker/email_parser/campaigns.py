@@ -131,7 +131,8 @@ def link_leads_to_campaigns(conn: sqlite3.Connection) -> int:
         return 0
     n = 0
     for r in conn.execute("SELECT id, payload FROM leads "
-                          "WHERE campaign_id IS NULL AND payload IS NOT NULL"
+                          "WHERE campaign_id IS NULL AND payload IS NOT NULL "
+                          "AND merged_into IS NULL"
                           ).fetchall():
         try:
             p = json.loads(r["payload"] or "{}")
@@ -153,7 +154,8 @@ def list_campaigns(db_path: str | Path | None = None) -> list[dict]:
         ensure_campaigns_table(conn)
         rows = [dict(r) for r in conn.execute(
             "SELECT c.*, (SELECT COUNT(*) FROM leads l "
-            "             WHERE l.campaign_id = c.id) AS lead_count, "
+            "             WHERE l.campaign_id = c.id "
+            "             AND l.merged_into IS NULL) AS lead_count, "
             "i.fetched_at AS insights_fetched_at, i.payload AS insights, "
             "i.error AS insights_error "
             "FROM lead_campaigns c "
@@ -433,7 +435,12 @@ def campaign_stats(db_path: str | Path | None = None,
             "l.converted_at, l.arrived_at, "
             "(SELECT COUNT(*) FROM lead_notes n WHERE n.lead_id = l.id "
             " AND COALESCE(n.author, '') NOT IN ('HS', 'GG', 'auto')) "
-            "AS note_count FROM leads l").fetchall()]
+            "AS note_count FROM leads l "
+            # A merged duplicate keeps its campaign link (and its
+            # external_id) but is NOT a second lead — counting it would
+            # inflate leads and deflate CPL (v2.295.1, the Shane Winter
+            # merge).
+            "WHERE l.merged_into IS NULL").fetchall()]
     by_campaign: dict = {}
     for l in leads:
         by_campaign.setdefault(l.get("campaign_id"), []).append(l)

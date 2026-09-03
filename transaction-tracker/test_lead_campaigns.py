@@ -178,6 +178,32 @@ def main():
         row = conn.execute("SELECT converted_at FROM leads WHERE id = ?", (nid,)).fetchone()
     check("mark_lead(converted) stamps converted_at", bool(row["converted_at"]), dict(row))
 
+    print("Merged duplicates never double-count (v2.295.1)")
+    before = campaigns.campaign_stats(db_path, today="2026-09-03")["campaigns"][0]
+    with db._connect(db_path) as conn:
+        dupe = plant(conn, "DupeOfP1", "San Antonio", "touched", "Texted", META)
+        conn.commit()
+    mid = campaigns.campaign_stats(db_path, today="2026-09-03")["campaigns"][0]
+    check("a second row for the same person counts while it is live",
+          mid["funnel"]["leads"] == before["funnel"]["leads"] + 1,
+          (before["funnel"]["leads"], mid["funnel"]["leads"]))
+    keep = [l for l in leads.get_leads(limit=200, db_path=db_path)
+            if l["first_name"] == "P1"][0]["id"]
+    leads.merge_leads(keep, dupe, author="test", db_path=db_path)
+    after = campaigns.campaign_stats(db_path, today="2026-09-03")["campaigns"][0]
+    check("after the merge it is counted ONCE again (leads back to the "
+          "pre-duplicate figure)",
+          after["funnel"]["leads"] == before["funnel"]["leads"],
+          (before["funnel"]["leads"], after["funnel"]["leads"]))
+    check("CPL is not deflated by the merged row",
+          after["cost"]["cpl"] == before["cost"]["cpl"],
+          (before["cost"]["cpl"], after["cost"]["cpl"]))
+    lst_after = [c for c in campaigns.list_campaigns(db_path)
+                 if c["id"] == cid][0]
+    check("the campaign list's lead_count excludes merged rows too",
+          lst_after["lead_count"] == before["funnel"]["leads"],
+          (lst_after["lead_count"], before["funnel"]["leads"]))
+
     print("Campaign CRUD")
     r = campaigns.set_campaign(name="Historical 2025", source="historical", db_path=db_path)
     check("historical campaign row creatable (design for reactivation)", r.get("ok") and r["source"] == "historical", r)

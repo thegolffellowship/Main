@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.295.0";
+window.TGF_VERSION = "2.295.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.295.1",
+    date: "2026-09-03",
+    changes: [
+      "Campaign stats no longer count a merged duplicate twice. A merged loser keeps its campaign link (and must keep its external_id, or the next poll re-creates it), so once both rows carried campaign_id the same person would have been counted as two leads — inflating the lead count and deflating CPL. Found while previewing the Shane Winter merge, where the duplicate row was the one carrying the ad-set attribution. The funnel query, the campaign list's lead_count, and the auto-linker now all skip merged rows.",
+    ],
+  },
   {
     version: "2.295.0",
     date: "2026-09-03",
