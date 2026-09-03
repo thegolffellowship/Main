@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.296.0";
+window.TGF_VERSION = "2.296.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.296.1",
+    date: "2026-09-03",
+    changes: [
+      "Docs: the first public TGF Insider recap (Brevo #15) 24-hour results recorded in docs/claude/event-recaps.md as the baseline for the weekly cadence — 29.6% opens (10.4% trackable once Apple MPP auto-opens are set aside), 76 unique clicks with MEMBERSHIP the top link, 0.24% unsubscribes.",
+    ],
+  },
   {
     version: "2.296.0",
     date: "2026-09-03",

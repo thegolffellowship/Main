@@ -209,6 +209,25 @@ Working rules (v1):
 - Campaign lineage: #13 (v1) → #14 (v2) → #15 (v3). Brevo API has no
   update/delete; Kerry deletes superseded drafts in the UI.
 
+**#15 RESULTS at +24h (sent Wed 2026-09-02 2:18 PM CDT, whole list 3 —
+the Active-members exclusion didn't exist yet; read 2026-09-03 2:30 PM,
+mailbox #397):** 1,274 sent / 1,245 delivered / 24 soft + 5 hard
+bounces / 0 complaints. Opens 368 unique = 29.6% Brevo opens rate, of
+which 281 are Apple Mail Privacy Protection auto-opens — trackable
+views 95 (10.4%), Brevo-estimated real views 129. Prior sends on the
+same opens-rate basis: 45.3% / 47.3% / 61.5%. Clicks 76 unique / 91
+total (Season 20 Kickoff: 209 unique); clickers by device Windows 14,
+iPhone 10, Android 5, Mac 3, iPad 1. Unsubscribes 3 = 0.24% (threshold
+0.5%). Link ranking: MEMBERSHIP 10 (top), Landa Park RESULTS 7, Canyon
+Springs RESULTS 4, Star Ranch RESULTS 4, SA calendar 3, Silverhorn
+(SA Tue) 3, Austin calendar 1, Forest Creek 18 1, Cedar Creek 18 1,
+homepage 1, ShadowGlen (Austin Tue) 0. Read: money-as-proof pulled
+readers to RESULTS and then to MEMBERSHIP; Austin's Tuesday button
+drew nothing. Going forward: compare TRACKABLE views, not the
+MPP-inflated rate; send #2 to list 3 minus segment #2 (Active
+members); mid-afternoon Wednesday is the baseline send window, a
+Thursday-morning A/B is the open question.
+
 **Tracker→Brevo sync — setup Kerry performs:** Brevo → profile menu →
 SMTP & API → "API Keys" tab → Generate a new API key, name it
 "TGF Tracker" → copy it once → Railway → tgf-tracker service →
