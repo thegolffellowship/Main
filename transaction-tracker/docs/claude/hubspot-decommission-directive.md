@@ -380,11 +380,38 @@ record*, not a reason to withhold it.
 - `customers.current_player_status` — `active_member` / `expired_member`
   / `active_guest` / `inactive` / `first_timer`.
 
-**For CA to settle with Kerry:** whether "archived" and "opted out"
-should be distinct `account_status` values or both map to `inactive`.
-Opted-out is a *consent* fact with real consequences for Brevo sends,
-so it probably deserves its own value rather than being folded into
-inactive. Propose, do not assume.
+**RULED (Kerry, 2026-09-03): opted-out is its own thing, not a flavor of
+inactive.** His reasoning: *"opted out relates to communication
+correspondence that we absolutely need to honor for our TGF Platform
+build and future consolidated communications, so I think it needs it's
+own thing."*
+
+The distinction that makes it load-bearing: **archived is a state,
+opted-out is a promise.** Archived describes where someone stands with
+TGF and can be changed by us. Opted-out is something a person told us,
+it survives every future migration and platform rewrite, and honoring it
+is not optional. Folding it into `inactive` would eventually get it
+overwritten by a status change nobody thought twice about.
+
+**Design implication:** consent should not live on `account_status` at
+all. A single status column cannot express "active member who does not
+want the newsletter." Consent is orthogonal to standing, so it wants its
+own field(s) — and the Platform will consolidate communications across
+email, SMS and the member portal, so it likely wants consent **per
+channel**, with the date and source of the opt-out recorded.
+
+**PARKED — Kerry, explicitly for another day:** *"An active member
+should not be able to completely opt out of communications...I
+think...that's for another day to decide."*
+
+Real question, correctly deferred. There is a genuine difference between
+**transactional** messages a member cannot opt out of and still be a
+member (your tee time moved, your payment failed, the event is
+cancelled) and **marketing** messages anyone may refuse at any time.
+That split is also what keeps a business on the right side of consent
+law. **Do not design this in passing** — it needs its own conversation,
+and the extraction only has to capture whatever HubSpot already records
+about consent so the decision has data behind it when Kerry takes it up.
 
 **Companies and meetings** are archive-only, but attributed to a
 customer wherever the match is certain — same no-speculation rule.
