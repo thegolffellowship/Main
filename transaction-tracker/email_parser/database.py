@@ -864,6 +864,146 @@ def _repair_crystal_falls_twin_event(conn: sqlite3.Connection) -> None:
     logger.info("Crystal Falls twin-event merge: 3267 -> 3263, moved %s", moved)
 
 
+# ── KNOWN CONTACT VARIANTS (Kerry 2026-09-03) ────────────────────────
+# The drift warning has always ended with "capture as alias" — but there
+# was never an alias to capture into, so a member whose order carries a
+# permanently wrong number (John "Jdub" Wade types 817-155-9708 where his
+# real number is 817-455-9708) re-raised the SAME action item on EVERY
+# order, forever. Kerry: "it's getting annoying that we're not able to
+# deal with this automatically."
+#
+# Recording a variant once tells the Tracker "yes, this is that person,
+# and yes, the canonical value still wins" — so the drift is silently
+# handled instead of asked about again. Canonical behaviour does not
+# change: the order value is still ignored and the customer record still
+# rules. The only thing that changes is whether Kerry is interrupted.
+CONTACT_ALIAS_FIELDS = ("phone", "email")
+
+
+def ensure_contact_alias_table(conn: sqlite3.Connection) -> None:
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS contact_aliases (
+            id          INTEGER PRIMARY KEY AUTOINCREMENT,
+            customer_id INTEGER NOT NULL
+                        REFERENCES customers(customer_id) ON DELETE CASCADE,
+            field       TEXT NOT NULL CHECK(field IN ('phone', 'email')),
+            value_norm  TEXT NOT NULL,
+            raw_value   TEXT,
+            note        TEXT,
+            created_at  TEXT DEFAULT (datetime('now')),
+            UNIQUE(customer_id, field, value_norm)
+        )""")
+
+
+def normalize_contact_value(field: str, value: str) -> str:
+    """Phones compare on their last 10 digits (so formatting and country
+    code never matter); emails compare lowercased."""
+    v = (value or "").strip()
+    if field == "phone":
+        return re.sub(r"\D", "", v)[-10:]
+    return v.lower()
+
+
+def is_known_contact_alias(conn: sqlite3.Connection, customer_id: int,
+                           field: str, value: str) -> bool:
+    if not customer_id or field not in CONTACT_ALIAS_FIELDS:
+        return False
+    norm = normalize_contact_value(field, value)
+    if not norm:
+        return False
+    try:
+        ensure_contact_alias_table(conn)
+        return conn.execute(
+            "SELECT 1 FROM contact_aliases WHERE customer_id = ? "
+            "AND field = ? AND value_norm = ?",
+            (customer_id, field, norm)).fetchone() is not None
+    except sqlite3.Error:
+        return False
+
+
+def add_contact_alias(customer_id: int, field: str, value: str,
+                      note: str = "", db_path: str | Path | None = None
+                      ) -> dict:
+    """Record a known-bad variant for a customer and clear any open drift
+    warnings it explains. Idempotent."""
+    field = (field or "").strip().lower()
+    if field in ("customer_phone", "phone"):
+        field = "phone"
+    elif field in ("customer_email", "email"):
+        field = "email"
+    else:
+        return {"error": f"field must be phone or email, got {field!r}"}
+    norm = normalize_contact_value(field, value)
+    if not norm:
+        return {"error": f"cannot normalize {value!r} for {field}"}
+    with _connect(db_path) as conn:
+        ensure_contact_alias_table(conn)
+        if not conn.execute("SELECT 1 FROM customers WHERE customer_id = ?",
+                            (customer_id,)).fetchone():
+            return {"error": f"customer {customer_id} not found"}
+        conn.execute(
+            "INSERT OR IGNORE INTO contact_aliases "
+            "(customer_id, field, value_norm, raw_value, note) "
+            "VALUES (?,?,?,?,?)",
+            (customer_id, field, norm, (value or "").strip(), note or None))
+        conn.commit()
+        cleared = _resolve_warnings_matching_aliases(conn)
+        conn.commit()
+    return {"customer_id": customer_id, "field": field, "value_norm": norm,
+            "warnings_cleared": cleared, "ok": True}
+
+
+def list_contact_aliases(customer_id: int | None = None,
+                         db_path: str | Path | None = None) -> list[dict]:
+    with _connect(db_path) as conn:
+        ensure_contact_alias_table(conn)
+        q = ("SELECT a.*, c.first_name, c.last_name FROM contact_aliases a "
+             "LEFT JOIN customers c ON c.customer_id = a.customer_id")
+        params: tuple = ()
+        if customer_id:
+            q += " WHERE a.customer_id = ?"
+            params = (customer_id,)
+        return [dict(r) for r in conn.execute(q + " ORDER BY a.id", params)]
+
+
+_DRIFT_MSG_RE = re.compile(
+    r"Order customer_(email|phone) '([^']*)' differs from canonical")
+
+
+def parse_drift_warning(message: str) -> tuple[str, str] | None:
+    """('phone'|'email', order_value) from a drift warning message."""
+    m = _DRIFT_MSG_RE.search(message or "")
+    return (m.group(1), m.group(2)) if m else None
+
+
+def _resolve_warnings_matching_aliases(conn: sqlite3.Connection) -> int:
+    """Close every open drift warning whose variant is now a known alias.
+    Runs at boot and after an alias is added, so recording one variant
+    also cleans up the history it already generated."""
+    try:
+        ensure_contact_alias_table(conn)
+        rows = conn.execute(
+            "SELECT id, customer_id, message FROM parse_warnings "
+            "WHERE warning_code IN ('EMAIL_DRIFT', 'PHONE_DRIFT') "
+            "AND status = 'open'").fetchall()
+    except sqlite3.Error:
+        return 0
+    n = 0
+    for r in rows:
+        parsed = parse_drift_warning(r["message"])
+        if not parsed or not r["customer_id"]:
+            continue
+        field, order_val = parsed
+        if is_known_contact_alias(conn, r["customer_id"], field, order_val):
+            conn.execute(
+                "UPDATE parse_warnings SET status = 'resolved' WHERE id = ?",
+                (r["id"],))
+            n += 1
+    if n:
+        logger.info("Contact aliases resolved %d drift warning(s)", n)
+    return n
+
+
 def _resolve_formatting_only_phone_drift(conn: sqlite3.Connection) -> None:
     """Boot heal (Kerry 2026-08-31): auto-resolve open PHONE_DRIFT
     warnings whose two numbers are the SAME digits in different
@@ -3892,6 +4032,9 @@ def init_db(db_path: str | Path | None = None) -> None:
         # vs (NNN) NNN-NNNN — same digits) auto-resolve
         try:
             _resolve_formatting_only_phone_drift(conn)
+            # Same pass: close drift warnings whose variant Kerry has
+            # already recorded as a known alias (2026-09-03).
+            _resolve_warnings_matching_aliases(conn)
         except Exception as e:
             logger.warning("PHONE_DRIFT format heal failed: %s", e)
 
@@ -21593,6 +21736,16 @@ def save_items(rows: list[dict], db_path: str | Path | None = None,
                             _db = re.sub(r"\D", "", _can_val)[-10:]
                             if _da and _da == _db:
                                 continue
+                        # A variant Kerry has already told us about is not
+                        # news (2026-09-03, the John Wade case). Canonical
+                        # still wins below; we just do not interrupt him
+                        # about it a fourth time.
+                        if is_known_contact_alias(
+                                conn, _drift_cid,
+                                "phone" if _code == "PHONE_DRIFT" else "email",
+                                _order_val):
+                            row[_field] = _canonical
+                            continue
                         # Drift detected → warn + overwrite to canonical
                         try:
                             conn.execute(

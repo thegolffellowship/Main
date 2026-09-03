@@ -2301,6 +2301,26 @@ def _scoring_dispatch(url: str, extract: str):
                                     f"uploaded={res.get('uploaded')} "
                                     f"errors={len(res.get('errors') or [])}")
             return json.dumps(res, indent=2, default=str)
+        if cmd == "scoring-contact-alias":
+            # "<customer_id>|<phone|email>|<value>[|note]" — record a
+            # known-bad contact variant so drift warnings stop asking
+            # about it (Kerry 2026-09-03, the John Wade case). Canonical
+            # still wins on the record; this only stops the interruption.
+            _p = [x.strip() for x in arg.split("|")]
+            if len(_p) < 3 or not _p[0].isdigit():
+                return json.dumps({
+                    "error": "need <customer_id>|<phone|email>|<value>[|note]"})
+            res = db.add_contact_alias(int(_p[0]), _p[1], _p[2],
+                                       note=_p[3] if len(_p) > 3 else "")
+            if not res.get("error"):
+                db.log_agent_action("mcp-claude", "scoring-contact-alias",
+                                    f"cid={_p[0]} {_p[1]}={_p[2]}")
+            return json.dumps(res, indent=2, default=str)
+        if cmd == "scoring-contact-aliases":
+            # "[<customer_id>]" — list recorded variants.
+            _cid = arg.strip()
+            return json.dumps(db.list_contact_aliases(
+                int(_cid) if _cid.isdigit() else None), indent=2, default=str)
         if cmd == "scoring-backup-status":
             # Is it configured, and did the last runs succeed?
             from email_parser.backups import backup_status

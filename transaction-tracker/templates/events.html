@@ -12430,6 +12430,16 @@
                 actionBtns += `<button class="btn btn-primary" style="font-size:0.72rem; padding:0.25rem 0.65rem;"
                         data-pw-assign-guest="${w.item_id}" data-buyer-name="${escapeHtml(w.customer || "")}">Assign Name</button>`;
             }
+            // Drift warnings get "Always ignore" (Kerry 2026-09-03, the
+            // John Wade case): Dismiss silences THIS order, Always ignore
+            // records the variant so the same mismatch never asks again.
+            const isDrift = w.code === "PHONE_DRIFT"
+                || w.code === "EMAIL_DRIFT";
+            if (w.pw_id && isDrift && w.customer_id) {
+                actionBtns += `<button class="btn btn-secondary" style="font-size:0.72rem; padding:0.25rem 0.65rem;"
+                        title="Record this value as a known variant for ${escapeHtml(w.customer || "this customer")} — the canonical record still wins, you just stop being asked"
+                        data-pw-always="${w.pw_id}">Always ignore</button>`;
+            }
             if (w.pw_id) {
                 actionBtns += `<button class="btn btn-secondary" style="font-size:0.72rem; padding:0.25rem 0.65rem;"
                         data-pw-dismiss="${w.pw_id}">Dismiss</button>`;
@@ -12459,6 +12469,32 @@
                     renderParseWarningBanner();
                 } catch (err) {
                     alert("Failed to dismiss warning.");
+                }
+            });
+        });
+
+        // Attach always-ignore handlers
+        list.querySelectorAll("[data-pw-always]").forEach(btn => {
+            btn.addEventListener("click", async () => {
+                const id = btn.dataset.pwAlways;
+                btn.disabled = true;
+                try {
+                    const r = await fetch(
+                        `/api/parse-warnings/${id}/always-ignore`,
+                        { method: "POST" });
+                    const d = await r.json();
+                    if (!r.ok) { alert(d.error || "Failed."); btn.disabled = false; return; }
+                    // The alias may have closed sibling warnings too.
+                    const cleared = d.warnings_cleared || 1;
+                    parseWarnings = parseWarnings.filter(w => String(w.pw_id) !== String(id));
+                    renderParseWarningBanner();
+                    if (cleared > 1) {
+                        alert(`Recorded. ${cleared} matching action items cleared — `
+                            + `refresh to see the rest.`);
+                    }
+                } catch (err) {
+                    alert("Failed to record the variant.");
+                    btn.disabled = false;
                 }
             });
         });

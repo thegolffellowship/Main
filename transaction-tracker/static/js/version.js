@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.297.0";
+window.TGF_VERSION = "2.298.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.298.0",
+    date: "2026-09-03",
+    changes: [
+      "Known contact variants — the fix for the recurring John Wade action item (Kerry: 'it's getting annoying that we're not able to deal with this automatically'). The drift warning has always ended with 'capture as alias', but there was never an alias to capture into, so a member whose orders carry a permanently wrong number re-raised the SAME item on every single order. Drift warnings now show an 'Always ignore' button beside Dismiss: it records that value as a known variant for that customer, closes the warnings it already generated, and stops the mismatch ever asking again. The canonical record still wins exactly as before — the alias changes who gets interrupted, never whose number is right. Phones match on their last 10 digits so formatting and country code are irrelevant; emails match case-insensitively; an alias never leaks to another customer or to the other field. New contact_aliases table, a boot heal that closes any open warning a recorded alias explains, and bridge commands scoring-contact-alias / scoring-contact-aliases. Test: test_contact_aliases.py.",
+    ],
+  },
   {
     version: "2.297.0",
     date: "2026-09-03",

@@ -1096,3 +1096,40 @@ docs/claude/handicaps.md → public-portal probe for the fetch layer).
   (manager role), cached 10 min per (race, card). The GG bundle handler
   that revealed the endpoint: `window.glg.standings.init_info` →
   `window.season_points_more_info_path`.
+
+
+## Known contact variants (Kerry 2026-09-03, v2.298.0)
+
+> "This is a recurring thing with John Wade (Jdub Wade) and it's getting
+> annoying that we're not able to deal with this automatically."
+
+**The bug was in the wording.** The EMAIL_DRIFT / PHONE_DRIFT warning has
+always ended *"...or capture as alias"* — but no alias mechanism existed.
+So a member whose orders carry a permanently wrong value (John types
+817-**155**-9708; his real number is 817-**455**-9708) re-raised the same
+action item on **every order, forever**. Dismiss only silenced that one.
+
+`contact_aliases` (customer_id, field ∈ phone|email, value_norm,
+raw_value, note) records a variant once:
+
+- **The canonical record still wins.** The order value is ignored and the
+  customer record is kept, exactly as before. An alias changes *who gets
+  interrupted*, never *whose value is right*.
+- **Matching is forgiving in the right way:** phones on the last 10
+  digits (formatting and country code irrelevant), emails lowercased.
+- **Scoped tightly:** an alias never leaks to another customer, and a
+  phone alias never silences email drift. A genuinely NEW wrong value
+  still raises — which is the point.
+- **Retroactive:** recording a variant closes the warnings it already
+  produced, and a boot heal (`_resolve_warnings_matching_aliases`) does
+  the same on every start.
+
+**UI:** drift action items now show **Always ignore** beside Dismiss.
+Dismiss silences this order; Always ignore silences this variant. The
+button only appears when the warning actually has a customer_id to
+attach to.
+
+Bridge: `scoring-contact-alias:<customer_id>|<phone|email>|<value>[|note]`,
+`scoring-contact-aliases[:<customer_id>]`. Route:
+`POST /api/parse-warnings/<id>/always-ignore`. Test:
+`test_contact_aliases.py`.

@@ -6976,6 +6976,10 @@ def api_notification_action_items():
             "order_id": w.get("order_id"),
             "item_id": w.get("item_id"),
             "code": w.get("warning_code"),
+            # Needed by the "Always ignore" affordance (2026-09-03) — the
+            # alias attaches to a customer, so the button only shows when
+            # the warning actually has one.
+            "customer_id": w.get("customer_id"),
             "created_at": w.get("created_at"),
         })
 
@@ -7025,6 +7029,48 @@ def api_dismiss_parse_warning(warning_id):
     if dismiss_parse_warning(warning_id):
         return jsonify({"status": "ok"})
     return jsonify({"error": "Warning not found."}), 404
+
+
+@app.route("/api/parse-warnings/<int:warning_id>/always-ignore",
+           methods=["POST"])
+@require_role("manager")
+def api_parse_warning_always_ignore(warning_id):
+    """"Always ignore" on a drift action item (Kerry 2026-09-03, the John
+    Wade case): record the order's variant as a KNOWN alias for that
+    customer so the same mismatch never raises again, and clear the
+    warnings it already produced. Canonical still wins on the record —
+    this only stops the interruption."""
+    from email_parser.database import (_connect, add_contact_alias,
+                                       parse_drift_warning)
+    with _connect() as conn:
+        row = conn.execute(
+            "SELECT id, customer, customer_id, message, warning_code "
+            "FROM parse_warnings WHERE id = ?", (warning_id,)).fetchone()
+    if not row:
+        return jsonify({"error": "Warning not found."}), 404
+    if not row["customer_id"]:
+        return jsonify({"error": "That warning has no customer linked, so "
+                                 "there is nothing to attach the alias to."}), 400
+    parsed = parse_drift_warning(row["message"])
+    if not parsed:
+        return jsonify({"error": "Only email/phone drift warnings can be "
+                                 "ignored this way."}), 400
+    field, order_val = parsed
+    res = add_contact_alias(
+        row["customer_id"], field, order_val,
+        note=f"Always-ignore from action item #{warning_id} "
+             f"({row['customer'] or 'unknown'})")
+    if res.get("error"):
+        return jsonify(res), 400
+    try:
+        from email_parser.database import log_agent_action
+        log_agent_action(session.get("user") or "manager",
+                         "parse-warning-always-ignore",
+                         f"cid={row['customer_id']} {field}={order_val}")
+    except Exception:
+        pass
+    return jsonify({"status": "ok", "field": field, "value": order_val,
+                    "warnings_cleared": res.get("warnings_cleared", 0)})
 
 
 @app.route("/api/parse-warnings/<int:warning_id>/resolve", methods=["POST"])
