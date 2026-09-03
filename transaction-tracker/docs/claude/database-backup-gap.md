@@ -83,10 +83,39 @@ Nothing else. No new environment variable, because `AZURE_TENANT_ID`,
 `AZURE_CLIENT_ID`, `AZURE_CLIENT_SECRET` and `EMAIL_ADDRESS` are already
 set on Railway.
 
-### Not closed until the drill passes
+### CLOSED — the drill passed, 2026-09-03 19:49 UTC
 
-Run `scoring-backup-run`, then `scoring-backup-verify`. **Until verify
-returns ok once, we do not have backups — we believe we do.**
+Kerry granted `Files.ReadWrite.All` and consented. First real run:
+
+| | |
+|---|---|
+| Snapshot | `VACUUM INTO`, integrity **ok** |
+| Size | 198.1 MB raw → **134.8 MB** gzipped |
+| Uploaded | OneDrive `/TGF-Tracker-Backups/tracker_20260903_194856.db.gz` |
+
+`scoring-backup-verify` then pulled that file back out of OneDrive,
+decompressed it, integrity-checked it, and compared row counts to live.
+**Every table matched exactly:**
+
+items 2,033 · customers 719 · events 85 · acct_transactions 8,756 ·
+customer_memberships 259 · leads 86
+
+That is the difference between believing we have backups and knowing it.
+Nightly from here at 03:15 Central.
+
+### Honest limits of this setup
+
+- **One destination, and it is inside the same Microsoft tenant** as
+  TGF's email. A compromise of that M365 account could reach both. This
+  is enormously better than a copy on the same Railway volume, but it is
+  not a second provider. A true 3-2-1 posture would add one — worth
+  revisiting, not urgent.
+- **Size to watch:** 135 MB per backup, up to 23 retained, so roughly
+  3 GB of OneDrive at steady state. Fine against the 1 TB an M365
+  Business seat carries, but it grows with the database.
+- **198 MB is a large SQLite file** for this business. Worth
+  understanding what dominates it (GG snapshots? stored email bodies?)
+  before it becomes a performance issue rather than after.
 
 ---
 
