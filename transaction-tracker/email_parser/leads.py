@@ -141,6 +141,16 @@ def ensure_leads_table(conn: sqlite3.Connection) -> None:
     except sqlite3.OperationalError:
         pass
     try:
+        # 48-hour outreach alarm (Kerry 2026-09-03): when he tags an
+        # outreach action (Texted / Sent email / Left VM) the wait for a
+        # reply starts here, and follow_up_at is auto-set 2 days out.
+        # A NON-NULL outreach_at is what marks a follow-up date as the
+        # AUTO alarm — a date Kerry set by hand has outreach_at NULL and
+        # is never cleared by a note or a status change.
+        conn.execute("ALTER TABLE leads ADD COLUMN outreach_at TEXT")
+    except sqlite3.OperationalError:
+        pass
+    try:
         # Due-day ping dedup (mailbox #370, Kerry-ratified 2026-08-31):
         # stores the follow_up_at value that was pinged, so each due
         # date emails exactly once and a re-snoozed lead re-arms for
@@ -1416,6 +1426,49 @@ def get_lead_export_rows(chapter: str,
     return out
 
 
+# ── 48-HOUR OUTREACH ALARM (Kerry 2026-09-03) ────────────────────────
+# "Need a timestamp with alarm set when I click Texted or Emailed for
+# someone for the first time. That should auto set a 48 hour alarm that
+# resets when I change status or add a note, which probably signifies
+# that there's been a response."
+#
+# Tagging an OUTREACH action stamps outreach_at and sets follow_up_at to
+# +2 days, which rides the follow-up rails that already exist: the ⏰
+# chip, the FOLLOW-UPS DUE section at the top of the queue, and the
+# due-day email ping (#370). No second notification system.
+#
+# The alarm CLEARS on a response signal — any status change, any tag
+# that is not itself outreach, or any note that is not system
+# bookkeeping. A note from a person, a GG RSVP, or a HubSpot
+# re-submission all mean the lead did something; only author 'auto'
+# (campaign set, selections edited) is bookkeeping and leaves it armed.
+#
+# "For the first time" = the alarm only arms when no follow-up date is
+# already pending, so re-tagging never pushes the date out, and a date
+# Kerry set BY HAND (outreach_at NULL) is never touched by any of this.
+DEFAULT_OUTREACH_TAGS = ["Texted", "Sent email", "Left VM"]
+OUTREACH_FOLLOWUP_DAYS = 2                    # 48 hours
+BOOKKEEPING_NOTE_AUTHORS = {"auto"}           # never counts as a response
+
+
+def get_outreach_tags(db_path: str | Path | None = None) -> list[str]:
+    """Tags that START the 48-hour clock; `lead_outreach_tags` dial over
+    the defaults (Kerry named Texted and Sent email; Left VM is the same
+    "reached out, now waiting" case, so it ships armed too)."""
+    opts = _dial_json("lead_outreach_tags", [], db_path=db_path)
+    return [str(o) for o in opts] if opts else list(DEFAULT_OUTREACH_TAGS)
+
+
+def _clear_outreach_alarm(conn, lead_id: int) -> bool:
+    """Disarm the AUTO alarm (outreach_at NOT NULL). A hand-set
+    follow-up date is left exactly as Kerry set it."""
+    cur = conn.execute(
+        "UPDATE leads SET follow_up_at = NULL, follow_up_notified_for = NULL, "
+        "outreach_at = NULL WHERE id = ? AND outreach_at IS NOT NULL",
+        (lead_id,))
+    return bool(cur.rowcount)
+
+
 # Kerry-editable via the lead_tag_options dial (JSON list of strings);
 # these are the defaults. Tags are dispositions, orthogonal to the
 # new/touched/converted/dismissed pipeline.
@@ -1468,8 +1521,39 @@ def set_lead_tag(lead_id: int, tag: str,
         else:
             conn.execute("UPDATE leads SET tag = ? WHERE id = ?",
                          (tag or None, lead_id))
+        # 48-hour outreach alarm (Kerry 2026-09-03).
+        from datetime import timedelta
+        from .timezone_utils import now_central
+        alarm = None
+        if tag and tag in get_outreach_tags(db_path):
+            pending = conn.execute(
+                "SELECT follow_up_at FROM leads WHERE id = ?",
+                (lead_id,)).fetchone()["follow_up_at"]
+            if not pending:                      # "for the first time"
+                now = now_central()
+                due = (now + timedelta(days=OUTREACH_FOLLOWUP_DAYS)
+                       ).strftime("%Y-%m-%d")
+                # outreach_at is stored UTC like every other datetime
+                # column (the UI's fmtNoteTime converts to Central); the
+                # note text below is written in Central for the human.
+                conn.execute(
+                    "UPDATE leads SET outreach_at = datetime('now'), "
+                    "follow_up_at = ?, follow_up_notified_for = NULL "
+                    "WHERE id = ?", (due, lead_id))
+                conn.execute(
+                    "INSERT INTO lead_notes (lead_id, author, note) "
+                    "VALUES (?, 'auto', ?)",
+                    (lead_id, f"{tag} {now.strftime('%-m/%-d, %-I:%M %p')} "
+                              f"— 48-hour follow-up set for "
+                              f"{due[5:7].lstrip('0')}/{due[8:10].lstrip('0')}"))
+                alarm = due
+        elif tag:
+            # Any non-outreach tag is a disposition he only reaches for
+            # after hearing something (Interested, Call back, Not now...).
+            _clear_outreach_alarm(conn, lead_id)
         conn.commit()
-    return {"id": lead_id, "tag": tag or None, "ok": True}
+    return {"id": lead_id, "tag": tag or None, "follow_up_at": alarm,
+            "ok": True}
 
 
 def set_lead_followup(lead_id: int, date: str,
@@ -1600,8 +1684,14 @@ def add_lead_note(lead_id: int, note: str, author: str = "",
         conn.execute(
             "INSERT INTO lead_notes (lead_id, author, note) VALUES (?,?,?)",
             (lead_id, (author or "").strip() or None, note))
+        # A note means something happened (Kerry 2026-09-03: adding a note
+        # "probably signifies that there's been a response") — disarm the
+        # 48-hour alarm. Bookkeeping notes leave it armed.
+        cleared = False
+        if (author or "").strip().lower() not in BOOKKEEPING_NOTE_AUTHORS:
+            cleared = _clear_outreach_alarm(conn, lead_id)
         conn.commit()
-    return {"lead_id": lead_id, "ok": True}
+    return {"lead_id": lead_id, "alarm_cleared": cleared, "ok": True}
 
 
 def mark_lead(lead_id: int, status: str, touched_by: str = "",
@@ -1651,8 +1741,15 @@ def mark_lead(lead_id: int, status: str, touched_by: str = "",
             conn.execute(
                 "UPDATE leads SET status = ?, notes = COALESCE(NULLIF(?, ''), "
                 "notes) WHERE id = ?", (status, notes, lead_id))
+        # A real status change disarms the 48-hour alarm (Kerry
+        # 2026-09-03). Re-marking the status it already had changed
+        # nothing, so it leaves the clock running.
+        alarm_cleared = False
+        if status != row["status"]:
+            alarm_cleared = _clear_outreach_alarm(conn, lead_id)
         conn.commit()
-    return {"id": lead_id, "status": status, "ok": True}
+    return {"id": lead_id, "status": status, "alarm_cleared": alarm_cleared,
+            "ok": True}
 
 
 # ── Manager-edited selections (Kerry 2026-09-02) ─────────────────────

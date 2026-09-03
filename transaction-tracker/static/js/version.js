@@ -1,5 +1,19 @@
-window.TGF_VERSION = "2.292.1";
+window.TGF_VERSION = "2.294.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.294.0",
+    date: "2026-09-03",
+    changes: [
+      "48-hour outreach alarm (Kerry: 'need a timestamp with alarm set when I click Texted or Emailed for someone for the first time... that resets when I change status or add a note, which probably signifies that there's been a response'). Tagging Texted, Sent email, or Left VM now stamps the exact time on the lead and sets its follow-up date 48 hours out, with an auto note recording both — so the alarm rides the rails that already exist: the ⏰ chip, the FOLLOW-UPS DUE section, and the due-day email ping. It arms only when no follow-up is already pending, so re-tagging never pushes the date out and a date Kerry set by hand is never touched. It clears the moment there is a response signal: any real status change, any non-outreach tag, or any note from a person, a GG RSVP, or a HubSpot re-submission. Bookkeeping notes (author 'auto') and re-marking a status it already had leave the clock running. Texting again after a reply starts a fresh 48 hours. Outreach tags are the lead_outreach_tags dial; locked by test_lead_outreach_alarm.py.",
+    ],
+  },
+  {
+    version: "2.293.0",
+    date: "2026-09-03",
+    changes: [
+      "Lead Center triage filters are multi-select (Kerry: 'allow the toggle filters to include multiple selections so like with AVAILABILITY I could push both Sat and BOTH so that I could see all players available for Saturdays'). Picks inside a group now OR together while the three groups still AND with each other and with chapter/status/search, so Availability Sat + Both is every Saturday-available lead, and Importance Golf + Competition is both. Tapping a selected pick removes just that one; a Clear button appears at the end of the row whenever any pick is active, and the 'N of M leads' count reflects the combination. Locked by test_lead_triage_filters.js, which runs the page's own triageOf against Kerry's Saturday case.",
+    ],
+  },
   {
     version: "2.292.1",
     date: "2026-09-03",

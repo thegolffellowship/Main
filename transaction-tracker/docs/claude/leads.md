@@ -50,6 +50,7 @@ lists. Scheduled pull (not webhooks) is the ratified default.
 | dial | `lead_notify_recipients` | `{"San Antonio": [emails], "Austin": [emails], "default": [emails]}`. Default falls back to `COO_EMAIL_TO`/`EMAIL_ADDRESS`. An UNROUTED lead notifies every list — better a double ping than a missed 48-hour window. Set Robert's address here via `scoring-setting-set:lead_notify_recipients|{"Austin": ["robert@..."]}`. |
 | dial | `lead_sms_presets` | JSON preset copy merged per key over the ratified defaults (P1–P4 carry `tue`/`sat`/`both`, others `text`; plus `closer` and `p9`). |
 | Railway env | `META_ACCESS_TOKEN` | Marketing API token for the campaign stats META panel (hourly insights); until set, the campaign's manual spend drives CPL / CPP / CPMem. |
+| dial | `lead_outreach_tags` | Tags that arm the 48-hour alarm. Default Texted / Sent email / Left VM. |
 | dial | `lead_touch_owners` | `{"San Antonio": "Kerry", "Austin": "Robert", "default": "Kerry"}` — the `{owner}` voice per chapter. |
 
 ## Form-response capture (#355)
@@ -268,14 +269,27 @@ real conversions), ➕ Note promoted to primary on touched rows, modal
 badge chips muted (Tu+Sa / All of it / SA invites / SA ad) so
 exceptions read as signal, toolbar search box (name/email/phone).
 
-## Drill-down triage filters (Kerry 2026-09-01, v2.280.0)
+## Drill-down triage filters (Kerry 2026-09-01, v2.280.0; MULTI-SELECT 2026-09-03, v2.293.0)
 
 Second toolbar row: AVAILABILITY (Both|Tue|Sat|None), IMPORTANCE
-(All|Golf|Competition|Community), INVITES (Both|Austin|SA|None) —
-single-select per group with click-again-to-clear, ANDed together and
-with chapter/status/search. `triageOf(l)` classifies off the CURRENT
-form's answers (rawPref exact-key rule); unanswered questions match
-only when that group is unfiltered.
+(All|Golf|Competition|Community), INVITES (Both|Austin|SA|None).
+`triageOf(l)` classifies off the CURRENT form's answers (rawPref
+exact-key rule); unanswered questions match only when that group is
+unfiltered.
+
+**Multi-select (Kerry 2026-09-03: "allow the toggle filters to include
+multiple selections so like with AVAILABILITY I could push both Sat and
+BOTH so that I could see all players available for Saturdays").** Each
+group is a `Set` — empty = any; picks **inside** one group OR together;
+the three groups still **AND** with each other and with
+chapter/status/search. Tapping a selected pick removes just that one. A
+**Clear** button appears at the end of the row whenever any triage pick
+is active (multi-select needs a one-tap way out). The header count
+("N of M leads") reflects the combination.
+
+The load-bearing case: Availability **Sat + Both** = everyone who can
+play Saturdays, since "Both" also means Saturday-available. Same shape
+for Tue + Both. Locked by `test_lead_triage_filters.js`.
 
 ## Re-submitter answer separation + real-customer badge (v2.278.1)
 
@@ -344,6 +358,49 @@ among them immediately auto-convert (Registered event / Became member)
 per the standing conversion detect, which is the desired display.
 First live sweep back-collects the 2026 fall campaign's five: Wilder,
 Hinojosa, O. Gonzalez, M. Hernandez, D. Garza.
+
+## 48-hour outreach alarm (Kerry 2026-09-03, v2.294.0)
+
+> "Need a timestamp with alarm set when I click Texted or Emailed for
+> someone for the first time. That should auto set a 48 hour alarm that
+> resets when I change status or add a note, which probably signifies
+> that there's been a response."
+
+Tagging an **outreach** action stamps `leads.outreach_at` (new column,
+the precise Central timestamp) and sets `follow_up_at` to **+2 days**,
+so the alarm rides the follow-up rails that already exist — the ⏰ chip,
+the FOLLOW-UPS DUE section at the top of the queue, and the due-day
+email ping (#370). **No second notification system.** An auto note
+records it: *"Texted 9/3, 3:45 PM — 48-hour follow-up set for 9/5."*
+The chip's hover text distinguishes an auto alarm from a hand-set date.
+
+**Outreach tags** — `lead_outreach_tags` dial over
+`DEFAULT_OUTREACH_TAGS` = Texted · Sent email · **Left VM**. Kerry named
+Texted and Emailed; Left VM is the same "reached out, now waiting" case
+so it ships armed, and the dial drops it in one edit.
+
+**"For the first time"** — the alarm arms only when **no follow-up date
+is already pending**, so re-tagging never pushes the date out. A date
+Kerry set **by hand** has `outreach_at` NULL and is never armed over,
+and never cleared by any of the resets below. `outreach_at NOT NULL` is
+precisely what marks a date as the auto alarm.
+
+**Resets (a response happened) — `_clear_outreach_alarm`:**
+
+| Trigger | Clears? | Why |
+|---|---|---|
+| Any **real status change** (`mark_lead`, old ≠ new) | yes | he acted on it |
+| Re-marking the status it already had | **no** | nothing changed |
+| A **note by a person** | yes | Kerry's stated signal |
+| A **GG** note (RSVP) | yes | a real member action (the RSVP bridge exists for exactly this) |
+| An **HS** note (re-submitted the survey) | yes | they re-engaged |
+| An **`auto`** note (campaign set, selections edited) | **no** | bookkeeping, not a response |
+| A **non-outreach tag** (Interested, Call back, Not now…) | yes | a disposition he only reaches for after hearing something |
+| A **hand-set** follow-up date | never | his own intent |
+
+After a reset, tagging Texted again arms a fresh 48 hours. Locked by
+`test_lead_outreach_alarm.py` (21 checks, including that an armed lead
+is picked up by `check_followup_due_pings` on its due day).
 
 ## Due-day ping (mailbox #370, Kerry-ratified 2026-08-31, v2.272.0)
 

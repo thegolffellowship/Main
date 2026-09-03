@@ -249,6 +249,7 @@
                 <button data-v="sa" onclick="setTriFilter('loop','sa')">SA</button>
                 <button data-v="none" onclick="setTriFilter('loop','none')">None</button>
             </span>
+            <button class="ld-btn" id="ld-tri-clear" style="display:none" onclick="clearTriFilters()">Clear</button>
         </div>
         <p style="margin:0 0 0.9rem;">
             <a class="ld-btn" style="text-decoration:none;display:inline-block;" href="/api/leads/export-csv?chapter=San%20Antonio">⬇ SA CSV</a>
@@ -279,10 +280,15 @@
     let sortKey = "priority", sortDir = 1;
     let statusFilter = "all", chapterFilter = "all", searchQ = "";
     let campaignFilter = "all", statsOn = false, STATS = null;
-    // Drill-down triage filters (Kerry 2026-09-01) — null = any; the
-    // three groups AND together and with chapter/status/search. Values
-    // classify off the CURRENT form's answers (rawPref rule).
-    let fAvail = null, fWant = null, fLoop = null;
+    // Drill-down triage filters (Kerry 2026-09-01; MULTI-SELECT
+    // 2026-09-03) — each group is a Set: empty = any, and picks inside
+    // one group OR together while the three groups still AND with each
+    // other and with chapter/status/search. Kerry's case: Availability
+    // Sat + Both = everyone who can play Saturdays. Values classify off
+    // the CURRENT form's answers (rawPref rule).
+    let fAvail = new Set(), fWant = new Set(), fLoop = new Set();
+    const TRI_SETS = { avail: () => fAvail, want: () => fWant, loop: () => fLoop };
+    const triActive = () => fAvail.size + fWant.size + fLoop.size;
     function triageOf(l) {
         const payload = l.payload || {};
         const rawOf = match => {
@@ -315,9 +321,13 @@
         };
     }
     function setTriFilter(group, val) {
-        if (group === "avail") fAvail = fAvail === val ? null : val;
-        else if (group === "want") fWant = fWant === val ? null : val;
-        else if (group === "loop") fLoop = fLoop === val ? null : val;
+        const set = (TRI_SETS[group] || (() => null))();
+        if (!set) return;
+        if (set.has(val)) set.delete(val); else set.add(val);
+        renderLeads();
+    }
+    function clearTriFilters() {
+        fAvail.clear(); fWant.clear(); fLoop.clear();
         renderLeads();
     }
     const isLate = l => l.status === "new" && (l.days_since_arrival ?? 0) >= 2;
@@ -375,11 +385,14 @@
         document.querySelectorAll(".ld-card[data-f], .ld-chip[data-f]").forEach(el =>
             el.classList.toggle("on", el.dataset.f === statusFilter));
         document.querySelectorAll("#ld-tri-avail button").forEach(b =>
-            b.classList.toggle("on", b.dataset.v === fAvail));
+            b.classList.toggle("on", fAvail.has(b.dataset.v)));
         document.querySelectorAll("#ld-tri-want button").forEach(b =>
-            b.classList.toggle("on", b.dataset.v === fWant));
+            b.classList.toggle("on", fWant.has(b.dataset.v)));
         document.querySelectorAll("#ld-tri-loop button").forEach(b =>
-            b.classList.toggle("on", b.dataset.v === fLoop));
+            b.classList.toggle("on", fLoop.has(b.dataset.v)));
+        // Multi-select needs a one-tap way out (2026-09-03).
+        const triClear = document.getElementById("ld-tri-clear");
+        if (triClear) triClear.style.display = triActive() ? "inline-block" : "none";
         document.querySelectorAll("#ld-chapseg button").forEach(b => {
             b.classList.toggle("on", b.dataset.c === chapterFilter);
             const base = b.dataset.c === "all" ? "All" : b.dataset.c;
@@ -603,11 +616,11 @@
                 const cid = l.campaign_id == null ? "none" : String(l.campaign_id);
                 if (cid !== campaignFilter) return false;
             }
-            if (fAvail || fWant || fLoop) {
+            if (triActive()) {
                 const t = triageOf(l);
-                if (fAvail && t.avail !== fAvail) return false;
-                if (fWant && t.want !== fWant) return false;
-                if (fLoop && t.loop !== fLoop) return false;
+                if (fAvail.size && !fAvail.has(t.avail)) return false;
+                if (fWant.size && !fWant.has(t.want)) return false;
+                if (fLoop.size && !fLoop.has(t.loop)) return false;
             }
             if (searchQ) {
                 const hay = `${l.first_name || ""} ${l.last_name || ""} ${l.email || ""} ${l.phone || ""}`.toLowerCase();
@@ -735,8 +748,14 @@
             // (mailbox #365 item 3): mute the defaults.
             const MUTED_CHIPS = { "Tu+Sa": 1, "All of it": 1, "SA invites": 1, "SA ad": 1 };
             const badgeHtml = badges.map(b => `<span class="ld-bchip${MUTED_CHIPS[b] ? " muted" : ""}">${esc(b)}</span>`).join("");
+            // ⏰ chip. An auto 48-hour outreach alarm (outreach_at set,
+            // Kerry 2026-09-03) says so on hover; a hand-set follow-up
+            // keeps the original wording.
+            const fuTitle = l.outreach_at
+                ? `48-hour follow-up — reached out ${fmtNoteTime(l.outreach_at)}. Clears when they respond.`
+                : `Follow up ${l.follow_up_at}`;
             const fuChip = l.follow_up_at
-                ? `<span class="ld-fu${fuDue(l) ? " due" : ""}" title="Follow up ${esc(l.follow_up_at)}">⏰ ${fmtFu(l.follow_up_at)}</span>` : "";
+                ? `<span class="ld-fu${fuDue(l) ? " due" : ""}" title="${esc(fuTitle)}">⏰ ${fmtFu(l.follow_up_at)}</span>` : "";
             const dotCls = late ? "ld-dot-r" : l.status === "touched" ? "ld-dot-g"
                 : l.status === "converted" ? "ld-dot-o" : "ld-dot-n";
             // First-touch SMS (#388/#389): server picked the preset; the
