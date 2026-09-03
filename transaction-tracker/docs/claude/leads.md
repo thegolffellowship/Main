@@ -49,6 +49,7 @@ lists. Scheduled pull (not webhooks) is the ratified default.
 | dial | `lead_city_chapters` | lowercase city substring → chapter. Defaults cover Austin + SA metro; unmatched cities route NULL. |
 | dial | `lead_notify_recipients` | `{"San Antonio": [emails], "Austin": [emails], "default": [emails]}`. Default falls back to `COO_EMAIL_TO`/`EMAIL_ADDRESS`. An UNROUTED lead notifies every list — better a double ping than a missed 48-hour window. Set Robert's address here via `scoring-setting-set:lead_notify_recipients|{"Austin": ["robert@..."]}`. |
 | dial | `lead_sms_presets` | JSON preset copy merged per key over the ratified defaults (P1–P4 carry `tue`/`sat`/`both`, others `text`; plus `closer` and `p9`). |
+| Railway env | `META_ACCESS_TOKEN` | Marketing API token for the campaign stats META panel (hourly insights); until set, the campaign's manual spend drives CPL / CPP / CPMem. |
 | dial | `lead_touch_owners` | `{"San Antonio": "Kerry", "Austin": "Robert", "default": "Kerry"}` — the `{owner}` voice per chapter. |
 
 ## Form-response capture (#355)
@@ -399,6 +400,67 @@ plus City (free text) and Chapter (auto / SA / Austin). `POST
   `lead-answers-edit`.
 Bridge: `scoring-lead-edit:<id>|availability|<raw option>` (also
 importance / invitations / city) goes through the same editor.
+
+## Campaign entity + campaign stats view (mailbox #391, Kerry-ratified 2026-09-03, v2.292.0)
+
+`email_parser/campaigns.py`. **Entity:** `lead_campaigns` (name UNIQUE,
+source ∈ meta/organic/manual/historical, meta_campaign_id, start_date,
+end_date, spend_manual, notes) + `leads.campaign_id` +
+`leads.converted_at`; `lead_campaign_insights` caches the Meta pull per
+campaign. Seeded once with the current campaign **Fall 2026 Leads**
+(Meta 120253511733060195, 8/27–9/6). Leads auto-link from the
+payload's `ad_campaign_id` (hsa_cam) on every read; organic /
+unattributed leads are assignable from the ⋯ menu (**Campaign…**) or
+`scoring-lead-campaign:<lead>|<campaign|none>` (auto note). A manual
+assignment is never overwritten by the auto-link.
+
+**Metric definitions (Kerry's, verbatim):** CPL = ad spend / leads ·
+CPP = Cost Per Player = ad spend / unique leads who became a PLAYER
+(registered any event OR became a member; counts once) · CPMem = Cost
+Per Member = ad spend / leads who became members (never "CPM"). Each
+reported CURRENT and **30-DAY TRAILING**: conversions counted through
+`end_date + 30` (the honest read 30 days after the last dollar); while
+that window is open the trailing figure equals current and the panel
+says when it closes. `converted_at` stamps on every conversion path
+(auto-detect + `mark_lead`), backfilled from `touched_at` for rows
+converted before the column existed.
+
+**Funnel vocabulary:** touched = touched + converted; responded = hot
+tag / human note / converted (HS/GG/auto notes don't count);
+interested = tag Interested or Coming to event; players = converted;
+members = converted + Became member; per-chapter split (SA / Austin /
+unrouted).
+
+**META panel:** spend, impressions, reach, frequency, link clicks, CTR,
+CPM, leads (with Meta's own form-lead count beside the Tracker's),
+CPL — from the Marketing API insights edge (`/{campaign}/insights`,
+`date_preset=maximum`, act_2353186181735308) once `META_ACCESS_TOKEN`
+lands on Railway (hourly job `meta_insights`, cache 60 min, ↻ Refresh
+Meta forces). **Fallback until then: the campaign row's manual spend**
+(Set spend on the stats view, or `scoring-campaign-set:{"id":1,
+"spend_manual":127.64}`) so CPL / CPP / CPMem work from day one.
+
+**UI:** campaign `<select>` on the queue toolbar (All · each campaign ·
+Unattributed / organic, with counts) filters alongside chapter/status;
+**📊 Stats** toggles the queue into the stats view for the selected
+campaign or all-time — META panel, FUNNEL panel with the CPL/CPP/CPMem
+current + trailing table, per-chapter table, and (on All) the campaign
+list. ＋ Campaign creates a row (name, Meta id, source).
+
+Routes: `GET /api/leads/campaigns[?refresh=1]` (manager; refresh =
+admin), `POST /api/leads/campaigns` (admin; create/update),
+`POST /api/leads/<id>/campaign` (manager). Bridge:
+`scoring-campaigns`, `scoring-campaign-set:<json>`,
+`scoring-lead-campaign:<lead>|<campaign|none>`,
+`scoring-campaign-refresh`. Test: `python3 test_lead_campaigns.py`.
+
+**Deferred by design (not built):** (4) 2024–2025 backfill — create
+rows with `source='historical'` + the Meta ids (Season 20 Kickoff,
+9/11/25, 8/18/25, 6/11/25, 4/24/25), spend from Meta once the token
+exists, leads matched from HubSpot history and assigned via
+`scoring-lead-campaign`; (5) reactivation — a "Historical" campaign
+row holds never-converted prior leads so they flow through the same
+queue and the P8 / P7b presets. No schema change needed for either.
 
 ## Brevo member-status sync (mailbox #381, v2.287.0)
 

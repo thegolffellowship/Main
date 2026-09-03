@@ -1678,6 +1678,20 @@ def start_scheduler():
                     "" if os.getenv("BREVO_API_KEY")
                     else " (idle — BREVO_API_KEY not set)")
 
+    # Meta campaign insights (mailbox #391): hourly refresh of the
+    # campaign stats view's META panel. Safe no-op (manual spend rules)
+    # until META_ACCESS_TOKEN lands on Railway.
+    from email_parser.campaigns import refresh_meta_insights
+    scheduler.add_job(
+        refresh_meta_insights,
+        "interval", minutes=60,
+        id="meta_insights",
+        replace_existing=True,
+    )
+    logger.info("Meta campaign insights refresh scheduled hourly%s",
+                "" if os.getenv("META_ACCESS_TOKEN")
+                else " (idle — META_ACCESS_TOKEN not set)")
+
     scheduler.start()
     logger.info("Scheduler started — checking inbox every %d minutes", interval)
 
@@ -11250,6 +11264,18 @@ def leads_page():
     return render_template("leads.html")
 
 
+
+def _lead_campaign_options() -> list:
+    """[{id, name, source}] for the queue's campaign filter (#391)."""
+    try:
+        from email_parser.campaigns import list_campaigns
+        return [{"id": c["id"], "name": c["name"], "source": c["source"],
+                 "lead_count": c["lead_count"]} for c in list_campaigns()]
+    except Exception:
+        logger.warning("campaign options failed", exc_info=True)
+        return []
+
+
 @app.route("/api/leads")
 @require_role("manager")
 def api_leads():
@@ -11296,6 +11322,7 @@ def api_leads():
                     "sms_presets": sms_presets,
                     "sms_order": sms_preset_order(sms_presets),
                     "sms_p9_presets": sorted(SMS_P9_PRESETS),
+                    "campaigns": _lead_campaign_options(),
                     "tag_options": get_tag_options(),
                     "answer_options": get_answer_options()})
 
@@ -11328,6 +11355,73 @@ def api_leads_export_csv():
         mimetype="text/csv",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
+
+
+# ── CAMPAIGN ENTITY + STATS VIEW (mailbox #391, Kerry-ratified
+#    2026-09-03): campaigns table, lead↔campaign link, Meta insights
+#    (or manual spend) + funnel with CPL / CPP / CPMem current and
+#    30-day trailing. ──
+
+@app.route("/api/leads/campaigns")
+@require_role("manager")
+def api_lead_campaigns():
+    """Stats view payload: every campaign + unattributed + all-time.
+    ?refresh=1 (admin) pulls fresh Meta insights first."""
+    from email_parser.campaigns import campaign_stats, refresh_meta_insights
+    refreshed = None
+    if request.args.get("refresh") == "1" and session.get("role") == "admin":
+        refreshed = refresh_meta_insights(force=True)
+    else:
+        try:
+            refreshed = refresh_meta_insights()   # cache-aware, no-op w/o token
+        except Exception:
+            logger.warning("Meta insights refresh failed", exc_info=True)
+    out = campaign_stats()
+    out["refresh"] = refreshed
+    out["is_admin"] = session.get("role") == "admin"
+    return jsonify(out)
+
+
+@app.route("/api/leads/campaigns", methods=["POST"])
+@require_role("admin")
+def api_lead_campaign_set():
+    """Create (no id) or update a campaign: {id?, name?, source?,
+    meta_campaign_id?, start_date?, end_date?, spend_manual?, notes?}."""
+    from email_parser.campaigns import set_campaign
+    d = request.get_json(silent=True) or {}
+    spend = d.get("spend_manual")
+    if spend is not None:
+        try:
+            spend = float(str(spend).replace("$", "").replace(",", ""))
+        except ValueError:
+            return jsonify({"error": "spend_manual must be a number"}), 400
+    res = set_campaign(campaign_id=d.get("id"), name=d.get("name"),
+                       source=d.get("source"),
+                       meta_campaign_id=d.get("meta_campaign_id"),
+                       start_date=d.get("start_date"),
+                       end_date=d.get("end_date"), spend_manual=spend,
+                       notes=d.get("notes"))
+    if not res.get("error"):
+        try:
+            from email_parser.database import log_agent_action
+            log_agent_action(session.get("user") or "admin",
+                             "lead-campaign-set", json.dumps(d)[:300])
+        except Exception:
+            pass
+    return jsonify(res), (400 if res.get("error") else 200)
+
+
+@app.route("/api/leads/<int:lead_id>/campaign", methods=["POST"])
+@require_role("manager")
+def api_lead_campaign(lead_id):
+    """Assign / clear a lead's campaign by hand: {campaign_id: int|null}."""
+    from email_parser.campaigns import set_lead_campaign
+    d = request.get_json(silent=True) or {}
+    cid = d.get("campaign_id")
+    res = set_lead_campaign(lead_id, int(cid) if cid not in (None, "", 0)
+                            else None,
+                            author=session.get("user") or "manager")
+    return jsonify(res), (400 if res.get("error") else 200)
 
 
 @app.route("/api/leads/<int:lead_id>/tag", methods=["POST"])

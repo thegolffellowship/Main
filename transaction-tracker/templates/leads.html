@@ -156,6 +156,22 @@
         .ld-smsprev { font-size: 12px; line-height: 1.35; color: #374151; white-space: pre-wrap; background: #F9FAFB; border: 1px solid var(--border); border-radius: 6px; padding: 6px 8px; margin: 2px 0 6px; max-height: 9.5em; overflow: auto; }
         .ld-smsmenu .ld-btn.sel { font-weight: 700; background: #EEF2FF; }
         .ld-smswhy { font-size: 11px; color: #6B7280; padding: 0 4px 4px; }
+        /* Campaign stats view (#391) */
+        .ld-statsbtn.on { background: #1B1B1B; color: #fff; border-color: #1B1B1B; }
+        #ld-stats { display: none; }
+        .ld-stats-head { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 0 0 0.75rem; }
+        .ld-panels { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 14px; }
+        .ld-panel { background: #fff; border: 1px solid var(--border); border-radius: 12px; padding: 12px 16px; }
+        .ld-panel h3 { margin: 0 0 8px; font: 700 10px/1 'Bitter', serif; letter-spacing: 1.5px; text-transform: uppercase; color: var(--text-muted); }
+        .ld-metrics { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 8px 12px; }
+        .ld-metric .lbl { font-size: 10px; font-weight: 700; color: #6B7280; letter-spacing: .6px; text-transform: uppercase; }
+        .ld-metric .val { font: 700 20px/1.1 'Bitter', serif; font-variant-numeric: tabular-nums; margin-top: 2px; }
+        .ld-metric .sub { font-size: 10.5px; color: #6B7280; margin-top: 2px; }
+        .ld-costtbl { width: 100%; border-collapse: collapse; font-size: 12.5px; margin-top: 8px; }
+        .ld-costtbl th, .ld-costtbl td { text-align: right; padding: 4px 6px; border-top: 1px solid #F3F2EF; font-variant-numeric: tabular-nums; }
+        .ld-costtbl th:first-child, .ld-costtbl td:first-child { text-align: left; }
+        .ld-costtbl thead th { border-top: none; font-size: 10px; letter-spacing: .6px; text-transform: uppercase; color: #6B7280; }
+        .ld-panel .ld-foot { font-size: 11px; color: #6B7280; margin-top: 8px; }
         .ld-mnotes td { padding: 2px 6px; font-size: 12px; white-space: normal; }
         @media (max-width: 768px) {
             #ld-dlist { display: none; }
@@ -208,6 +224,8 @@
                 <option value="name:1">Name A–Z</option>
                 <option value="status:1">By status</option>
             </select>
+            <select id="ld-campsel" class="ld-tagsel" onchange="setCampaignFilter(this.value)"><option value="all">All campaigns</option></select>
+            <button class="ld-btn ld-statsbtn" id="ld-statsbtn" onclick="toggleStats()">📊 Stats</button>
             <span class="ld-showing" id="ld-showing"></span>
         </div>
         <div class="ld-toolbar ld-tri">
@@ -237,6 +255,7 @@
             <a class="ld-btn" style="text-decoration:none;display:inline-block;" href="/api/leads/export-csv?chapter=San%20Antonio">⬇ SA CSV</a>
             <a class="ld-btn" style="text-decoration:none;display:inline-block;" href="/api/leads/export-csv?chapter=Austin">⬇ Austin CSV</a>
         </p>
+        <div id="ld-stats"></div>
         <div id="ld-dlist"><div class="ld-dempty">Loading…</div></div>
         <div id="ld-mlist"></div>
         <p class="ld-note">Leads arrive from the HubSpot poll (runs on a
@@ -260,6 +279,7 @@
     // then dismissed at the bottom.
     let sortKey = "priority", sortDir = 1;
     let statusFilter = "all", chapterFilter = "all", searchQ = "";
+    let campaignFilter = "all", statsOn = false, STATS = null;
     // Drill-down triage filters (Kerry 2026-09-01) — null = any; the
     // three groups AND together and with chapter/status/search. Values
     // classify off the CURRENT form's answers (rawPref rule).
@@ -372,6 +392,17 @@
             const n = chapCounts[b.dataset.c];
             b.textContent = n ? `${base} · ${n}` : base;
         });
+        // Campaign filter options (#391): each campaign + unattributed.
+        const campSel = document.getElementById("ld-campsel");
+        if (campSel) {
+            const noneN = leads.filter(l => l.campaign_id == null).length;
+            const opts = [`<option value="all">All campaigns · ${leads.length}</option>`]
+                .concat((ALL.campaigns || []).map(c =>
+                    `<option value="${c.id}">${esc(c.name)} · ${leads.filter(l => l.campaign_id === c.id).length}</option>`))
+                .concat([`<option value="none">Unattributed / organic · ${noneN}</option>`]);
+            campSel.innerHTML = opts.join("");
+            campSel.value = campaignFilter;
+        }
         // Facebook option values are snake_case with the explanation
         // glued on after "_-_" — decoded per Kerry's vocabulary
         // (mirrors prettify_answer in email_parser/leads.py).
@@ -574,6 +605,10 @@
         // Filter (chapter toggle + status chips), then sort
         const visible = leads.filter(l => {
             if (chapterFilter !== "all" && (l.chapter || "") !== chapterFilter) return false;
+            if (campaignFilter !== "all") {
+                const cid = l.campaign_id == null ? "none" : String(l.campaign_id);
+                if (cid !== campaignFilter) return false;
+            }
             if (fAvail || fWant || fLoop) {
                 const t = triageOf(l);
                 if (fAvail && t.avail !== fAvail) return false;
@@ -720,6 +755,7 @@
                 ? `<button class="ld-btn primary" onclick="mark(${l.id},'touched')">Touched</button>` : "";
             const menuItems = `<button class="ld-btn" onclick="editName(${l.id})">Edit name</button>
                 <button class="ld-btn" onclick="editSelections(${l.id})">Edit selections</button>
+                <button class="ld-btn" onclick="assignCampaign(${l.id})">Campaign${l.campaign_name ? `: ${esc(l.campaign_name)}` : "…"}</button>
                 <button class="ld-btn" onclick="followUp(${l.id})">⏰ Follow up</button>` +
                 (l.status === "touched"
                 ? `<button class="ld-btn" onclick="if(confirm('Mark as CONVERTED?')) mark(${l.id},'converted')">Converted</button>
@@ -941,6 +977,132 @@
         const cur = SMS_PICK[id] || {};
         SMS_PICK[id] = Object.assign({}, cur, { closer: !cur.closer });
         renderSms(id);
+    }
+    // ---- Campaign entity + stats view (mailbox #391, Kerry-ratified
+    // 2026-09-03). Filter on the queue; 📊 Stats swaps the queue for
+    // the META + FUNNEL panels of the selected campaign (or all).
+    function setCampaignFilter(v) {
+        campaignFilter = v;
+        if (statsOn) renderStats(); else renderLeads();
+    }
+    async function toggleStats(force) {
+        statsOn = force === undefined ? !statsOn : !!force;
+        document.getElementById("ld-statsbtn").classList.toggle("on", statsOn);
+        for (const id of ["ld-dlist", "ld-mlist"])
+            document.getElementById(id).style.display = statsOn ? "none" : "";
+        document.querySelector(".ld-cards").style.display = statsOn ? "none" : "";
+        document.querySelector(".ld-tri").style.display = statsOn ? "none" : "";
+        document.getElementById("ld-stats").style.display = statsOn ? "block" : "none";
+        if (statsOn) {
+            document.getElementById("ld-stats").innerHTML = "<div class='ld-dempty'>Loading stats…</div>";
+            await loadStats();
+        } else renderLeads();
+    }
+    async function loadStats(refresh) {
+        const res = await fetch("/api/leads/campaigns" + (refresh ? "?refresh=1" : ""));
+        if (!res.ok) { document.getElementById("ld-stats").innerHTML =
+            "<div class='ld-dempty'>Failed to load stats.</div>"; return; }
+        STATS = await res.json();
+        renderStats();
+    }
+    const money = v => v == null ? "—" : "$" + Number(v).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    const num = v => v == null ? "—" : Number(v).toLocaleString("en-US");
+    const fmtD = d => d ? (+d.slice(5, 7)) + "/" + (+d.slice(8, 10)) : "";
+    function renderStats() {
+        if (!STATS) return;
+        const b = campaignFilter === "all" ? STATS.all
+            : campaignFilter === "none" ? STATS.unattributed
+            : (STATS.campaigns || []).find(c => String(c.id) === campaignFilter) || STATS.all;
+        const m = b.meta || {};
+        const f = b.funnel || {};
+        const c = b.cost || {};
+        const isCamp = b.id != null;
+        const spendNote = b.spend_source === "meta" ? `Meta insights · fetched ${esc((b.insights_fetched_at || "").slice(0, 16))} UTC`
+            : b.spend_source === "manual" ? "manual spend (META_ACCESS_TOKEN not set) — tap Set spend to update"
+            : b.spend_source === "sum" ? "sum of campaign spend"
+            : "no spend recorded — Set spend to unlock CPL / CPP / CPMem";
+        const metric = (lbl, val, sub) => `<div class="ld-metric"><div class="lbl">${lbl}</div><div class="val">${val}</div>${sub ? `<div class="sub">${sub}</div>` : ""}</div>`;
+        const win = b.trailing_cutoff
+            ? (b.trailing_window_open ? `window open until ${fmtD(b.trailing_cutoff)}` : `window closed ${fmtD(b.trailing_cutoff)}`)
+            : "no end date · trailing = current";
+        const chapRows = Object.entries(b.chapters || {}).map(([ch, cf]) =>
+            `<tr><td>${esc(ch)}</td><td>${cf.leads}</td><td>${cf.touched}</td><td>${cf.responded}</td><td>${cf.response_pct == null ? "—" : cf.response_pct + "%"}</td><td>${cf.interested}</td><td>${cf.players}</td><td>${cf.members}</td><td>${cf.dismissed}</td></tr>`).join("");
+        const head = `<div class="ld-stats-head">
+            <b style="font-size:15px">${esc(b.name)}</b>
+            ${isCamp ? `<span class="ld-dsub">${esc(b.source || "")}${b.start_date ? ` · ${fmtD(b.start_date)}–${fmtD(b.end_date || "")}` : ""}${b.meta_campaign_id ? ` · Meta ${esc(b.meta_campaign_id)}` : ""}</span>` : ""}
+            ${isCamp && (STATS.is_admin !== false) ? `<button class="ld-btn" onclick="setSpend(${b.id}, ${b.spend_manual == null ? "null" : b.spend_manual})">Set spend</button>` : ""}
+            <button class="ld-btn" onclick="loadStats(true)">↻ Refresh Meta</button>
+            <button class="ld-btn" onclick="newCampaign()">＋ Campaign</button>
+        </div>`;
+        const metaPanel = `<div class="ld-panel"><h3>Meta</h3><div class="ld-metrics">
+            ${metric("Spend", money(b.spend))}
+            ${metric("Impressions", num(m.impressions))}
+            ${metric("Reach", num(m.reach))}
+            ${metric("Frequency", m.frequency == null ? "—" : Number(m.frequency).toFixed(2))}
+            ${metric("Link clicks", num(m.link_clicks))}
+            ${metric("CTR", m.ctr == null ? "—" : Number(m.ctr).toFixed(2) + "%")}
+            ${metric("CPM", money(m.cpm))}
+            ${metric("Leads", num(f.leads), m.meta_leads != null ? `Meta counts ${num(m.meta_leads)}` : "")}
+            ${metric("CPL", money(c.cpl))}
+            </div><div class="ld-foot">${esc(spendNote)}${b.insights_error ? ` · <span class="ld-late">${esc(b.insights_error)}</span>` : ""}</div></div>`;
+        const funnelPanel = `<div class="ld-panel"><h3>Funnel</h3><div class="ld-metrics">
+            ${metric("Leads", num(f.leads))}
+            ${metric("Touched", num(f.touched), f.new ? `${f.new} still new` : "")}
+            ${metric("Responded", num(f.responded), f.response_pct == null ? "" : `${f.response_pct}% of touched`)}
+            ${metric("Interested", num(f.interested))}
+            ${metric("Players", num(f.players))}
+            ${metric("Members", num(f.members))}
+            ${metric("Dismissed", num(f.dismissed))}
+            </div>
+            <table class="ld-costtbl"><thead><tr><th></th><th>Current</th><th>30-day trailing</th></tr></thead><tbody>
+            <tr><td>CPL <span class="ld-dsub">spend / leads</span></td><td>${money(c.cpl)}</td><td>${money(c.cpl)}</td></tr>
+            <tr><td>CPP <span class="ld-dsub">spend / players</span></td><td>${money(c.cpp)}<span class="ld-dsub"> /${f.players}</span></td><td>${money(c.cpp_trailing)}<span class="ld-dsub"> /${f.players_trailing}</span></td></tr>
+            <tr><td>CPMem <span class="ld-dsub">spend / members</span></td><td>${money(c.cpmem)}<span class="ld-dsub"> /${f.members}</span></td><td>${money(c.cpmem_trailing)}<span class="ld-dsub"> /${f.members_trailing}</span></td></tr>
+            </tbody></table>
+            <div class="ld-foot">Player = registered any event or became a member (counts once). Trailing counts conversions through ${STATS.trailing_days} days after the last spend day · ${esc(win)}.</div></div>`;
+        const chapPanel = `<div class="ld-panel" style="grid-column:1/-1"><h3>Per chapter</h3>
+            <div style="overflow-x:auto"><table class="ld-costtbl"><thead><tr><th>Chapter</th><th>Leads</th><th>Touched</th><th>Responded</th><th>Resp %</th><th>Interested</th><th>Players</th><th>Members</th><th>Dismissed</th></tr></thead><tbody>${chapRows || "<tr><td colspan=9>No leads.</td></tr>"}</tbody></table></div></div>`;
+        const list = campaignFilter === "all" && (STATS.campaigns || []).length
+            ? `<div class="ld-panel" style="grid-column:1/-1"><h3>Campaigns</h3><div style="overflow-x:auto"><table class="ld-costtbl"><thead><tr><th>Campaign</th><th>Dates</th><th>Spend</th><th>Leads</th><th>Players</th><th>Members</th><th>CPL</th><th>CPP</th><th>CPMem</th></tr></thead><tbody>
+                ${STATS.campaigns.map(x => `<tr><td><a href="#" onclick="setCampaignFilter('${x.id}');document.getElementById('ld-campsel').value='${x.id}';return false;">${esc(x.name)}</a></td><td>${fmtD(x.start_date)}–${fmtD(x.end_date)}</td><td>${money(x.spend)}</td><td>${x.funnel.leads}</td><td>${x.funnel.players}</td><td>${x.funnel.members}</td><td>${money(x.cost.cpl)}</td><td>${money(x.cost.cpp)}</td><td>${money(x.cost.cpmem)}</td></tr>`).join("")}
+                <tr><td>Unattributed / organic</td><td></td><td>—</td><td>${STATS.unattributed.funnel.leads}</td><td>${STATS.unattributed.funnel.players}</td><td>${STATS.unattributed.funnel.members}</td><td>—</td><td>—</td><td>—</td></tr>
+              </tbody></table></div></div>` : "";
+        document.getElementById("ld-stats").innerHTML = head + `<div class="ld-panels">${metaPanel}${funnelPanel}${chapPanel}${list}</div>`;
+    }
+    async function setSpend(id, cur) {
+        const v = prompt("Ad spend to date for this campaign (manual, used until the Meta token exists):", cur == null ? "" : cur);
+        if (v === null) return;
+        const res = await fetch("/api/leads/campaigns", { method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ id, spend_manual: v.trim() === "" ? null : v }) });
+        const d = await res.json();
+        if (d.error) { alert(d.error); return; }
+        loadStats();
+    }
+    async function newCampaign() {
+        const name = prompt("New campaign name (e.g. 'Historical 2025' or 'Spring 2027 Leads'):");
+        if (!name) return;
+        const meta = prompt("Meta campaign id (blank for organic / manual / historical):", "") || "";
+        const source = meta ? "meta" : (prompt("Source: organic / manual / historical", "manual") || "manual");
+        const res = await fetch("/api/leads/campaigns", { method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ name, source, meta_campaign_id: meta || null }) });
+        const d = await res.json();
+        if (d.error) { alert(d.error); return; }
+        await loadLeads(); loadStats();
+    }
+    async function assignCampaign(id) {
+        const l = ((ALL || {}).leads || []).find(x => x.id === id);
+        const opts = (ALL.campaigns || []).map(c => `${c.id} = ${c.name}`).join("\n");
+        const v = prompt(`Campaign for ${l ? l.first_name : "lead"} — enter an id, or 0 to clear:\n${opts}`,
+            l && l.campaign_id != null ? String(l.campaign_id) : "");
+        if (v === null) return;
+        const res = await fetch(`/api/leads/${id}/campaign`, { method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ campaign_id: v.trim() === "0" || v.trim() === "" ? null : +v }) });
+        const d = await res.json();
+        if (d.error) { alert(d.error); return; }
+        loadLeads();
     }
     function toggleMenu(id) {
         const el = document.getElementById(id);

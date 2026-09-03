@@ -2190,6 +2190,51 @@ def _scoring_dispatch(url: str, extract: str):
             return json.dumps(lead_sms_text(int(_p[0]), preset=_preset,
                                             closer=_closer),
                               indent=2, default=str)
+        if cmd == "scoring-campaigns":
+            # Campaign stats view payload (mailbox #391): per campaign +
+            # unattributed + all — META panel (insights or manual spend)
+            # and FUNNEL with CPL / CPP / CPMem current + 30-day trailing.
+            from email_parser.campaigns import campaign_stats
+            return json.dumps(campaign_stats(), indent=2, default=str)
+        if cmd == "scoring-campaign-set":
+            # JSON {id?, name?, source?, meta_campaign_id?, start_date?,
+            # end_date?, spend_manual?, notes?} — create (no id) or
+            # update a campaign; spend_manual is the fallback spend until
+            # META_ACCESS_TOKEN exists. Audited.
+            from email_parser.campaigns import set_campaign
+            try:
+                _d = json.loads(arg)
+            except Exception:
+                return json.dumps({"error": "need a JSON object"})
+            res = set_campaign(campaign_id=_d.get("id"), name=_d.get("name"),
+                               source=_d.get("source"),
+                               meta_campaign_id=_d.get("meta_campaign_id"),
+                               start_date=_d.get("start_date"),
+                               end_date=_d.get("end_date"),
+                               spend_manual=_d.get("spend_manual"),
+                               notes=_d.get("notes"))
+            if not res.get("error"):
+                db.log_agent_action("mcp-claude", "scoring-campaign-set",
+                                    arg[:300])
+            return json.dumps(res, indent=2, default=str)
+        if cmd == "scoring-lead-campaign":
+            # "<lead_id>|<campaign_id|none>" — hand-assign a lead's
+            # campaign (organic / historical). Audited via auto note.
+            from email_parser.campaigns import set_lead_campaign
+            _p = [x.strip() for x in arg.split("|")]
+            if len(_p) < 2 or not _p[0].isdigit():
+                return json.dumps({"error": "need <lead_id>|<campaign_id|none>"})
+            _cid = None if _p[1].lower() in ("none", "null", "") else int(_p[1])
+            res = set_lead_campaign(int(_p[0]), _cid, author="mcp-claude")
+            db.log_agent_action("mcp-claude", "scoring-lead-campaign",
+                                f"lead {_p[0]} → campaign {_p[1]}")
+            return json.dumps(res, indent=2, default=str)
+        if cmd == "scoring-campaign-refresh":
+            # Force a Meta insights pull for every campaign with a meta
+            # id (no-op note without META_ACCESS_TOKEN).
+            from email_parser.campaigns import refresh_meta_insights
+            return json.dumps(refresh_meta_insights(force=True), indent=2,
+                              default=str)
         if cmd == "scoring-brevo-status":
             # Brevo key present / account reachable / last sync summary.
             from email_parser.brevo import brevo_status
@@ -3888,7 +3933,8 @@ def get_lead_center(status: str = "", limit: int = 50) -> str:
     the save_items resolver). Design of record: get_tracker_docs
     doc='leads.md'. Ops (via probe_golf_genius extract=): scoring-leads,
     scoring-lead-mark, scoring-lead-edit, scoring-leads-poll,
-    scoring-lead-sms.
+    scoring-lead-sms, scoring-campaigns, scoring-campaign-set,
+    scoring-lead-campaign, scoring-campaign-refresh.
 
     Args:
         status: Optional filter — new | touched | converted | dismissed

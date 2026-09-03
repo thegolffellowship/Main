@@ -160,6 +160,13 @@ def ensure_leads_table(conn: sqlite3.Connection) -> None:
         )""")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_leads_status "
                  "ON leads(status, arrived_at)")
+    # Campaign entity (mailbox #391): lead_campaigns + leads.campaign_id
+    # + leads.converted_at, seeded with the current campaign.
+    try:
+        from .campaigns import ensure_campaigns_table
+        ensure_campaigns_table(conn)
+    except Exception:
+        logger.warning("campaigns schema ensure failed", exc_info=True)
     # Heal (v2.261.1, Kerry: "Bad Contact is still persisting"): leads
     # carrying a deactivating tag from BEFORE the tag auto-dismissed —
     # or tagged during a deploy gap — flip to dismissed on every
@@ -1195,7 +1202,8 @@ def check_new_leads(db_path: str | Path | None = None) -> dict:
             conn.execute(
                 "UPDATE leads SET status = 'converted', "
                 "tag = 'Became member', "
-                "touched_at = COALESCE(touched_at, datetime('now')) "
+                "touched_at = COALESCE(touched_at, datetime('now')), "
+                "converted_at = COALESCE(converted_at, datetime('now')) "
                 "WHERE status != 'dismissed' "
                 "AND (status != 'converted' "
                 "     OR COALESCE(tag, '') != 'Became member') "
@@ -1210,7 +1218,8 @@ def check_new_leads(db_path: str | Path | None = None) -> dict:
             conn.execute(
                 "UPDATE leads SET status = 'converted', "
                 "tag = 'Registered event', "
-                "touched_at = COALESCE(touched_at, datetime('now')) "
+                "touched_at = COALESCE(touched_at, datetime('now')), "
+                "converted_at = COALESCE(converted_at, datetime('now')) "
                 "WHERE status != 'dismissed' "
                 "AND COALESCE(tag, '') != 'Became member' "
                 "AND (status != 'converted' "
@@ -1297,12 +1306,19 @@ def get_leads(status: str = "", limit: int = 200,
     from .timezone_utils import now_central
     with db._connect(db_path) as conn:
         ensure_leads_table(conn)
-        q = "SELECT * FROM leads"
+        try:
+            from .campaigns import link_leads_to_campaigns
+            if link_leads_to_campaigns(conn):
+                conn.commit()
+        except Exception:
+            logger.warning("campaign auto-link failed", exc_info=True)
+        q = ("SELECT l.*, c.name AS campaign_name FROM leads l "
+             "LEFT JOIN lead_campaigns c ON c.id = l.campaign_id")
         params: tuple = ()
         if status:
-            q += " WHERE status = ?"
+            q += " WHERE l.status = ?"
             params = (status,)
-        q += " ORDER BY COALESCE(arrived_at, first_seen_at) DESC LIMIT ?"
+        q += " ORDER BY COALESCE(l.arrived_at, l.first_seen_at) DESC LIMIT ?"
         rows = [dict(r) for r in conn.execute(q, params + (limit,)).fetchall()]
     # "Existing customer" badge = the lead matches a customer with REAL
     # purchase history — NOT the prospect row the lead pass itself
@@ -1625,6 +1641,12 @@ def mark_lead(lead_id: int, status: str, touched_by: str = "",
                 "datetime('now')), touched_by = COALESCE(NULLIF(?, ''), "
                 "touched_by), notes = COALESCE(NULLIF(?, ''), notes) "
                 "WHERE id = ?", (status, touched_by, notes, lead_id))
+            if status == "converted":
+                # Conversion date drives the 30-day trailing CPP/CPMem
+                # (mailbox #391); first conversion stamp wins.
+                conn.execute(
+                    "UPDATE leads SET converted_at = COALESCE(converted_at, "
+                    "datetime('now')) WHERE id = ?", (lead_id,))
         else:
             conn.execute(
                 "UPDATE leads SET status = ?, notes = COALESCE(NULLIF(?, ''), "

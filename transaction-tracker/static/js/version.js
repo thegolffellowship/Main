@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.291.0";
+window.TGF_VERSION = "2.292.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.292.0",
+    date: "2026-09-03",
+    changes: [
+      "Lead Center campaign entity + campaign stats view (mailbox #391, Kerry-ratified): a lead_campaigns table (name, source meta/organic/manual/historical, Meta campaign id, dates, manual spend) seeded with Fall 2026 Leads; leads auto-link from their Meta attribution and organic leads are assignable from the ⋯ menu. A campaign select on the toolbar filters the queue alongside chapter/status, and 📊 Stats swaps the queue for two panels per campaign or all-time: META (spend, impressions, reach, frequency, link clicks, CTR, CPM, leads, CPL from the Marketing API once META_ACCESS_TOKEN is set; the campaign's manual spend until then) and FUNNEL (leads, touched, responded + response %, interested, players, members, dismissed, per-chapter split) with Kerry's CPL / CPP (Cost Per Player: registered any event or became a member, counts once) / CPMem (Cost Per Member) reported CURRENT and 30-DAY TRAILING (conversions counted through 30 days after the last spend day; the panel says when the window closes). New leads.converted_at stamps every conversion. Bridge: scoring-campaigns, scoring-campaign-set, scoring-lead-campaign, scoring-campaign-refresh. Historical backfill and the reactivation campaign are designed for (source='historical' rows + manual assignment) but not built.",
+    ],
+  },
   {
     version: "2.291.0",
     date: "2026-09-02",
