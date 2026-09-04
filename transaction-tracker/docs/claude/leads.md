@@ -508,6 +508,40 @@ campaign list's `lead_count`, and the auto-linker all filter
 `merged_into IS NULL`. Every other queue path is already safe because
 merged rows are also dismissed. Locked in `test_lead_campaigns.py`.
 
+## The blank-page incident (v2.300.0 → v2.303.x, 2026-09-04)
+
+**The Lead Center rendered EMPTY on mobile for a day.** v2.300.0
+collapsed P1–P4 from per-slot keys (`tue`/`sat`/`both`) to a single
+`text`, and a legacy line in `/api/leads` kept indexing `["tue"]`. The
+KeyError 500'd the whole route — every lead, every filter.
+
+Three separate things kept it invisible, and each has a standing rule:
+
+1. **The bad line sat outside the per-lead try/except.** One stale key
+   took down the entire payload rather than one message preview.
+   *Anything that can fail per lead is guarded per lead.*
+2. **The page wrote its error banner only into `#ld-dlist`**, which is
+   `display:none` under 768px. On the phone Kerry actually works from,
+   a 500 rendered as a blank page with no error at all. *A failure must
+   be visible on the surface it happened on* — the banner now writes to
+   both containers and says whether it is a login problem or a bug.
+3. **Nothing outside a browser could see the payload.** An
+   unauthenticated probe returns 401 whether the body works or raises,
+   so "is the Lead Center up?" had no answer short of asking Kerry.
+   `lead_center_payload()` now builds it in `leads.py` and
+   `scoring-leads-payload` reads it on production (counts and shape, no
+   PII).
+
+**And nine green suites sat on top of a dead screen**, because nothing
+exercised the page. `test_leads_page_render.js` runs the Lead Center's
+own script headless against real-shaped leads — one backfilled with the
+48-hour alarm, one fresh, one converted member, and one whose
+server-side SMS pick failed — and asserts the MOBILE container is
+populated.
+
+**Never index a preset by a slot key.** Preset bodies are read with
+`.get("text")` and fallbacks, everywhere.
+
 ## Morning follow-up digest (Kerry 2026-09-03, v2.302.0)
 
 > "Yes should be part of morning digest."
