@@ -3808,6 +3808,25 @@ def init_db(db_path: str | Path | None = None) -> None:
             )
             """
         )
+        # UNDELIVERABLE addresses (Kerry 2026-09-04, Hayden Cooper:
+        # "Remove hayden's email. I guess it could be an alias, but not
+        # something that he'd ever be sent an email thru. He doesn't work
+        # there anymore."). A work address dies when someone changes
+        # jobs. DELETING the row would lose the match for his historical
+        # GoDaddy orders and Golf Genius rows; leaving it costs him a
+        # renewal notice into a dead mailbox. So the address stays for
+        # MATCHING and is barred from SENDING. Distinct from opting out,
+        # which is the member's choice about being contacted at all —
+        # this is the mailbox being gone.
+        for _col, _type in (("undeliverable", "INTEGER NOT NULL DEFAULT 0"),
+                            ("undeliverable_at", "TIMESTAMP"),
+                            ("undeliverable_reason", "TEXT")):
+            try:
+                conn.execute(f"ALTER TABLE customer_emails "
+                             f"ADD COLUMN {_col} {_type}")
+            except sqlite3.OperationalError:
+                pass
+
         conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_customer_emails_customer "
             "ON customer_emails(customer_id)"
@@ -42191,6 +42210,85 @@ def _resolve_lookup_customer_id(conn, item_or_id, name_hint: str = "") -> int | 
     return int(row["customer_id"]) if row else None
 
 
+def set_email_undeliverable(customer_id: int, email: str,
+                            reason: str = "", undo: bool = False,
+                            db_path=None) -> dict:
+    """Bar an address from every SEND path while keeping it for MATCHING
+    (Kerry 2026-09-04, Hayden Cooper's dead work address).
+
+    Deleting the row would break the match on his historical GoDaddy and
+    Golf Genius rows; leaving it live keeps mailing a dead mailbox. So
+    the row stays and stops being deliverable. `is_primary` is cleared
+    at the same time — the resolver's promote-to-primary step would
+    otherwise pick it straight back up — and, when another live address
+    exists, one of those is promoted in its place.
+
+    NOT the same as opting out. Opting out is the member's choice about
+    being contacted; this is the mailbox no longer existing.
+    """
+    email = (email or "").strip()
+    if not customer_id or not email:
+        return {"error": "need customer_id and email"}
+    with _connect(db_path) as conn:
+        row = conn.execute(
+            "SELECT email_id, email, is_primary FROM customer_emails "
+            "WHERE customer_id = ? AND LOWER(email) = LOWER(?)",
+            (customer_id, email)).fetchone()
+        if not row:
+            return {"error": f"{email} is not on customer {customer_id}"}
+        if undo:
+            conn.execute(
+                "UPDATE customer_emails SET undeliverable = 0, "
+                "undeliverable_at = NULL, undeliverable_reason = NULL "
+                "WHERE email_id = ?", (row["email_id"],))
+        else:
+            conn.execute(
+                "UPDATE customer_emails SET undeliverable = 1, "
+                "is_primary = 0, undeliverable_at = datetime('now'), "
+                "undeliverable_reason = ? WHERE email_id = ?",
+                (reason or None, row["email_id"]))
+        # Promote a surviving live address so the member is still
+        # reachable; report it when there is none left.
+        live = conn.execute(
+            "SELECT email_id, email FROM customer_emails "
+            "WHERE customer_id = ? AND COALESCE(undeliverable, 0) = 0 "
+            "AND email IS NOT NULL AND TRIM(email) != '' "
+            "ORDER BY is_primary DESC, email_id ASC LIMIT 1",
+            (customer_id,)).fetchone()
+        if live:
+            conn.execute("UPDATE customer_emails SET is_primary = 1 "
+                         "WHERE email_id = ?", (live["email_id"],))
+        conn.commit()
+        name = conn.execute(
+            "SELECT TRIM(COALESCE(first_name,'')||' '||COALESCE(last_name,'')) "
+            "AS n FROM customers WHERE customer_id = ?",
+            (customer_id,)).fetchone()
+        name = (name["n"] if name else "") or f"customer {customer_id}"
+        if not undo and not live:
+            # Nothing left to reach them on. Say so loudly, or the member
+            # silently stops receiving renewal notices and nobody knows.
+            subject = f"NO EMAIL ON FILE: {name}"
+            if not conn.execute(
+                    "SELECT 1 FROM action_items WHERE subject = ? "
+                    "AND status IN ('open', 'in_progress') LIMIT 1",
+                    (subject,)).fetchone():
+                conn.execute(
+                    """INSERT INTO action_items
+                           (subject, from_name, summary, urgency, category)
+                       VALUES (?, 'Contact watch', ?, 'medium', 'customers')""",
+                    (subject,
+                     f"{email} was marked undeliverable"
+                     + (f" ({reason})" if reason else "")
+                     + f" and {name} has no other address on file. Renewal "
+                       "notices, entry confirmations and event email will "
+                       "SKIP them until a new address is added. Ask for one."))
+                conn.commit()
+    return {"customer_id": customer_id, "email": email,
+            "undeliverable": not undo, "reason": reason or None,
+            "now_primary": live["email"] if live else None,
+            "no_deliverable_address": (not undo) and not live, "ok": True}
+
+
 def resolve_player_email(item, conn=None, db_path=None) -> str:
     """customer_emails.is_primary first; any email on file second; items.customer_email last."""
     conn, owns = _resolve_db(conn, db_path)
@@ -42199,7 +42297,8 @@ def resolve_player_email(item, conn=None, db_path=None) -> str:
         if cid:
             # 1. Primary email (designated send-to address)
             row = conn.execute(
-                "SELECT email FROM customer_emails WHERE customer_id = ? AND is_primary = 1 LIMIT 1",
+                "SELECT email FROM customer_emails WHERE customer_id = ? "
+                "AND is_primary = 1 AND COALESCE(undeliverable, 0) = 0 LIMIT 1",
                 (cid,),
             ).fetchone()
             if row and row["email"]:
@@ -42208,6 +42307,7 @@ def resolve_player_email(item, conn=None, db_path=None) -> str:
             row = conn.execute(
                 """SELECT email FROM customer_emails
                    WHERE customer_id = ? AND email IS NOT NULL AND TRIM(email) != ''
+                     AND COALESCE(undeliverable, 0) = 0
                    ORDER BY email_id ASC LIMIT 1""",
                 (cid,),
             ).fetchone()
@@ -42215,7 +42315,9 @@ def resolve_player_email(item, conn=None, db_path=None) -> str:
                 # Opportunistically promote to primary so future lookups hit immediately
                 try:
                     conn.execute(
-                        "UPDATE customer_emails SET is_primary = 1 WHERE customer_id = ? AND LOWER(email) = LOWER(?)",
+                        "UPDATE customer_emails SET is_primary = 1 "
+                        "WHERE customer_id = ? AND LOWER(email) = LOWER(?) "
+                        "AND COALESCE(undeliverable, 0) = 0",
                         (cid, row["email"].strip()),
                     )
                     if owns:
@@ -42231,6 +42333,7 @@ def resolve_player_email(item, conn=None, db_path=None) -> str:
                 """SELECT ce.email FROM customer_emails ce
                    JOIN customers c ON c.customer_id = ce.customer_id
                    WHERE ce.is_primary = 1
+                     AND COALESCE(ce.undeliverable, 0) = 0
                      AND LOWER(TRIM(c.first_name || ' ' || c.last_name)) = LOWER(?)
                    LIMIT 1""",
                 (name,),
@@ -42244,6 +42347,7 @@ def resolve_player_email(item, conn=None, db_path=None) -> str:
                    JOIN customer_aliases ca
                      ON LOWER(TRIM(c.first_name || ' ' || c.last_name)) = LOWER(TRIM(ca.customer_name))
                    WHERE ce.is_primary = 1
+                     AND COALESCE(ce.undeliverable, 0) = 0
                      AND ca.alias_type = 'name'
                      AND LOWER(ca.alias_value) = LOWER(?)
                    LIMIT 1""",

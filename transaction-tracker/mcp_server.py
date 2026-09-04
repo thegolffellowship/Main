@@ -2331,6 +2331,23 @@ def _scoring_dispatch(url: str, extract: str):
                 db.log_agent_action("mcp-claude", "scoring-outreach-backfill",
                                     f"updated={res.get('updated')}")
             return json.dumps(res, indent=2, default=str)
+        if cmd == "scoring-email-undeliverable":
+            # "<customer_id>|<email>[|reason][|undo]" — bar an address
+            # from every SEND path while keeping it for MATCHING (a work
+            # address after someone changes jobs).
+            _p = [x.strip() for x in arg.split("|")]
+            if len(_p) < 2 or not _p[0].isdigit():
+                return json.dumps({
+                    "error": "need <customer_id>|<email>[|reason][|undo]"})
+            _undo = "undo" in [x.lower() for x in _p[2:]]
+            _reason = _p[2] if len(_p) > 2 and _p[2].lower() != "undo" else ""
+            res = db.set_email_undeliverable(int(_p[0]), _p[1],
+                                             reason=_reason, undo=_undo)
+            if not res.get("error"):
+                db.log_agent_action(
+                    "mcp-claude", "scoring-email-undeliverable",
+                    f"cid={_p[0]} {_p[1]} undo={_undo}")
+            return json.dumps(res, indent=2, default=str)
         if cmd == "scoring-leads-payload":
             # A health read of exactly what /api/leads hands the Lead
             # Center page — the thing that silently 500'd for a day.

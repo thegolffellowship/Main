@@ -820,6 +820,7 @@ def preview_notice(
               FROM customers c
               LEFT JOIN customer_emails ce
                      ON ce.customer_id = c.customer_id AND ce.is_primary = 1
+                    AND COALESCE(ce.undeliverable, 0) = 0
              WHERE c.customer_id = ?
             """,
             (term["customer_id"],),
@@ -950,6 +951,7 @@ def _send_confirmation(conn: sqlite3.Connection, term: dict, send_email: Callabl
           FROM customers c
           LEFT JOIN customer_emails ce
                  ON ce.customer_id = c.customer_id AND ce.is_primary = 1
+                    AND COALESCE(ce.undeliverable, 0) = 0
          WHERE c.customer_id = ?
         """,
         (term["customer_id"],),
@@ -1070,6 +1072,7 @@ def apply_roster_choice(token: str, send_email: Optional[Callable] = None) -> di
               FROM customers c
               LEFT JOIN customer_emails ce
                      ON ce.customer_id = c.customer_id AND ce.is_primary = 1
+                    AND COALESCE(ce.undeliverable, 0) = 0
              WHERE c.customer_id = ?
             """,
             (customer_id,),
@@ -1185,6 +1188,7 @@ def daily_membership_job(send_email: Callable) -> dict:
                   JOIN customers c ON c.customer_id = m.customer_id
                   LEFT JOIN customer_emails ce
                          ON ce.customer_id = m.customer_id AND ce.is_primary = 1
+                        AND COALESCE(ce.undeliverable, 0) = 0
                  WHERE m.expires_at = ?
                    AND m.{col} IS NULL
                 """,
@@ -1237,6 +1241,7 @@ def daily_membership_job(send_email: Callable) -> dict:
               JOIN customers c ON c.customer_id = m.customer_id
               LEFT JOIN customer_emails ce
                      ON ce.customer_id = m.customer_id AND ce.is_primary = 1
+                        AND COALESCE(ce.undeliverable, 0) = 0
              WHERE m.notice_lapsed_sent_at IS NOT NULL
                AND DATE(m.notice_lapsed_sent_at) <= ?
                AND m.roster_choice IS NULL

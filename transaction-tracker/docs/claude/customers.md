@@ -59,6 +59,45 @@ block — every `owns=True` resolver call then hit "Cannot operate on a closed d
 on its first `.execute()` and bubbled out of `api_send_messages` as a 500. Always open
 the connection directly in resolver helpers.
 
+## Undeliverable email addresses (Kerry 2026-09-04, v2.307.0)
+
+> "Remove hayden's email. I guess it could be an alias, but not
+> something that he'd ever be sent an email thru. He doesn't work there
+> anymore. He didn't provide me with a new one."
+
+A work address dies when someone changes jobs, and neither obvious move
+is right: **deleting** the row loses the match on their historical
+GoDaddy and Golf Genius records, while **leaving it** keeps mailing a
+dead mailbox. So the address stays for MATCHING and is barred from
+SENDING — `customer_emails.undeliverable` (+ `undeliverable_at`,
+`undeliverable_reason`).
+
+`set_email_undeliverable(customer_id, email, reason, undo=False)` sets
+the flag, clears `is_primary`, and promotes a surviving live address in
+its place. Bridge: `scoring-email-undeliverable:<cid>|<email>[|reason][|undo]`.
+
+**Every SEND path filters it; matching and display do not.**
+`resolve_player_email` skips flagged rows at all four steps — including
+its promote-to-primary step, which would otherwise pick a dead address
+straight back up — and every `customer_emails` join in
+`memberships.py` carries `AND COALESCE(ce.undeliverable, 0) = 0`. The
+drift check and the customers-list query deliberately do **not** filter:
+the address is still canonical for matching and Kerry should still see
+it on the record.
+
+**With nothing deliverable left, an action item is raised** ("NO EMAIL
+ON FILE: <name>"), because otherwise the member silently stops receiving
+renewal notices and nobody finds out until they lapse. Deduped on the
+subject.
+
+**This is NOT opting out.** Opting out is the member's choice about
+being contacted at all (Kerry 2026-09-03: it "needs its own thing").
+This is the mailbox no longer existing. Keep the two separate — a
+rebuilt address should not resurrect an opt-out, and an opt-out should
+not read as a bounce.
+
+Test: `test_undeliverable_email.py`.
+
 ## Identity Self-Healing at Boot
 
 Three idempotent migrations run in `init_db()` so the `items` snapshot stays consistent

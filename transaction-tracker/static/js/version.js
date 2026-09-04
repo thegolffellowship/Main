@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.306.0";
+window.TGF_VERSION = "2.307.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.307.0",
+    date: "2026-09-04",
+    changes: [
+      "Email addresses can be marked UNDELIVERABLE (Kerry, after a renewal notice went to Hayden Cooper's old work address: 'not something that he'd ever be sent an email thru. He doesn't work there anymore'). Neither obvious move was right — deleting the row loses the match on his historical GoDaddy and Golf Genius records, leaving it keeps mailing a dead mailbox. The address now stays for MATCHING and is barred from SENDING. Every send path filters it, including the resolver's promote-to-primary step, which would otherwise pick a dead address straight back up. The drift check and the customer record deliberately still show it, because it is still canonical for matching.",
+      "When a member has nothing deliverable left, an action item is raised rather than nothing happening. Renewal notices, entry confirmations and event email all skip silently when there is no address, so without the item a member stops hearing from TGF and nobody finds out until they lapse. This is deliberately NOT the same as opting out — opting out is the member's choice about being contacted; this is the mailbox being gone.",
+    ],
+  },
   {
     version: "2.306.0",
     date: "2026-09-04",
