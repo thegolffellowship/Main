@@ -1050,6 +1050,14 @@
                             Adds &ldquo;range balls&rdquo; to what the 1st Time rate covers in Lead Center texts. Leave off and they aren&rsquo;t mentioned.
                         </div>
                     </div>
+                    <div id="edit-registration-url" style="margin-top:0.75rem;">
+                        <label style="display:block; font-weight:600; font-size:0.82rem; margin-bottom:0.2rem;">Registration link</label>
+                        <input type="url" id="edit-event-registration_url" class="modal-input" placeholder="https://..." style="width:100%;">
+                        <div style="font-size:0.75rem; color:var(--text-muted); margin-top:0.2rem;">
+                            The sign-up URL the Lead Center follow-up texts send. Leave blank and the text drops the link sentence rather than sending a broken one.
+                        </div>
+                    </div>
+
                 </div><!-- end PRICING tab -->
 
                 <!-- PACKAGES tab (Kerry 2026-08-04: "an Event Creator that
@@ -1868,6 +1876,14 @@
                             Adds &ldquo;range balls&rdquo; to what the 1st Time rate covers in Lead Center texts. Leave off and they aren&rsquo;t mentioned.
                         </div>
                     </div>
+                    <div id="add-registration-url" style="margin-top:0.75rem;">
+                        <label style="display:block; font-weight:600; font-size:0.82rem; margin-bottom:0.2rem;">Registration link</label>
+                        <input type="url" id="add-event-registration_url" class="modal-input" placeholder="https://..." style="width:100%;">
+                        <div style="font-size:0.75rem; color:var(--text-muted); margin-top:0.2rem;">
+                            The sign-up URL the Lead Center follow-up texts send. Leave blank and the text drops the link sentence rather than sending a broken one.
+                        </div>
+                    </div>
+
                 </div><!-- end add-tab-pricing -->
 
                 <!-- PACKAGES tab for Add Event (Kerry 2026-08-04: build the
@@ -11723,6 +11739,8 @@
             payload.allow_fivesomes = addFiveEl && addFiveEl.checked ? 1 : 0;
             const addRbEl = document.getElementById("add-event-range_balls_included");
             payload.range_balls_included = addRbEl && addRbEl.checked ? 1 : 0;
+            const addUrlEl = document.getElementById("add-event-registration_url");
+            if (addUrlEl && addUrlEl.value.trim()) payload.registration_url = addUrlEl.value.trim();
             // Pricing fields
             if (isCombo) {
                 // Combo pricing from calculators
@@ -12501,6 +12519,8 @@
         if (editFive) editFive.checked = !!Number(ev.allow_fivesomes);
         const editRangeBalls = document.getElementById("edit-event-range_balls_included");
         if (editRangeBalls) editRangeBalls.checked = !!Number(ev.range_balls_included);
+        const editRegUrl = document.getElementById("edit-event-registration_url");
+        if (editRegUrl) editRegUrl.value = ev.registration_url || "";
 
         // Pricing fields — single format
         document.getElementById("edit-event-tgf_markup").value = ev.tgf_markup != null ? ev.tgf_markup : "";
@@ -12646,6 +12666,12 @@
         const rbEl = document.getElementById("edit-event-range_balls_included");
         const rbVal = rbEl && rbEl.checked ? 1 : 0;
         if (rbVal !== (Number(ev.range_balls_included) ? 1 : 0)) changes.range_balls_included = rbVal;
+
+        const regUrlEl = document.getElementById("edit-event-registration_url");
+        if (regUrlEl) {
+            const urlVal = regUrlEl.value.trim();
+            if (urlVal !== (ev.registration_url || "")) changes.registration_url = urlVal;
+        }
 
         // Pricing fields — depends on format
         if (isCombo) {

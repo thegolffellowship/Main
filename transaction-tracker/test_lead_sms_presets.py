@@ -333,6 +333,98 @@ def main():
               for k in pay["sms_order"]), pay["sms_order"])
     os.unlink(_t.name)
 
+    # ── WAVE 2 (#417) ────────────────────────────────────────────
+    print("Wave 2: the follow-ups carry the link, not a price recap")
+    LINKED = dict(SILVERHORN, registration_url="https://tgf.example/s9-22")
+    rows_l = {"any": {"San Antonio": LINKED}, "tue": {"San Antonio": LINKED},
+              "sat": {"San Antonio": CEDAR}}
+    l7 = lead(first="Jeff", chapter="San Antonio", imp="Golf",
+              avail="Tuesdays only", inv="San Antonio only")
+    v7 = leads.sms_vars_for(l7, ow, {}, rows_l, "tue")
+    t7 = leads.render_sms(presets, "p7", l7, v7, slot="tue")
+    check("P7 carries the actual link", "https://tgf.example/s9-22" in t7, t7)
+    check("P7 tells them to click 1st Timer",
+          "just click 1st Timer for the discount" in t7, t7)
+    check("P7 names the event and why it was picked",
+          "at Silverhorn is up next based on your availability" in t7, t7)
+    check("P7 gives the deadline a reason, not just a date",
+          "so we can get the groups set" in t7, t7)
+    check("P7 keeps Kerry's joke about encountering weird people",
+          "whether there's weird people" in t7, t7)
+    check("P7 drops the salesman setup line",
+          "answer for all three" not in t7, t7)
+    check("P7 leaves no placeholder", "{" not in t7, t7)
+
+    # Kerry's rule: Tuesday events close two days before, weekend 18s
+    # three, rendered as that evening.
+    check("a Tuesday event closes Sunday evening",
+          "Sign ups close Sunday evening" in t7, t7)
+    l7c = lead(first="Jason", chapter="San Antonio", imp="Golf",
+               avail="Saturdays only", inv="San Antonio only")
+    rows_c = {"any": {"San Antonio": dict(CEDAR, registration_url="https://x/y")},
+              "tue": {}, "sat": {"San Antonio": dict(CEDAR, registration_url="https://x/y")}}
+    v7c = leads.sms_vars_for(l7c, ow, {}, rows_c, "sat")
+    t7c = leads.render_sms(presets, "p7", l7c, v7c, slot="sat")
+    check("a Saturday 18 closes Wednesday evening",
+          "Sign ups close Wednesday evening" in t7c, t7c)
+
+    # The valve: an event with no URL must not send a dangling offer.
+    v7n = leads.sms_vars_for(l7, ow, {}, {"any": {"San Antonio": SILVERHORN},
+                                          "tue": {"San Antonio": SILVERHORN},
+                                          "sat": {}}, "tue")
+    t7n = leads.render_sms(presets, "p7", l7, v7n, slot="tue")
+    check("with no URL the link sentence vanishes entirely",
+          "Here's the link" not in t7n and "http" not in t7n, t7n)
+    check("and the message still ends like a message",
+          t7n.rstrip().endswith("Ready to give it a shot?"), t7n)
+    check("no placeholder is left where the link was", "{" not in t7n, t7n)
+
+    print("Wave 2: P7b names the last ask and never mentions a drink")
+    t7b = leads.render_sms(presets, "p7b", l7, v7, slot="tue")
+    check("P7b says it is the last one, which is honest and lifts replies",
+          "this is my last one for now" in t7b, t7b)
+    check("P7b answers nerves with the net Team Best Ball game",
+          "your foursome is actually rooting for you" in t7b, t7b)
+    # Kerry: the free-drink line "comes across potentially like we're a
+    # drinking league". It is removed and must not come back.
+    check("P7b NEVER offers a drink as the answer to nerves",
+          "drink" not in t7b.lower(), t7b)
+    check("P7b offers a real out with no season promise",
+          "check back when it fits" in t7b and "next season" not in t7b, t7b)
+    check("P7b carries the link", "https://tgf.example/s9-22" in t7b, t7b)
+    t7bn = leads.render_sms(presets, "p7b", l7, v7n, slot="tue")
+    check("and drops 'Link's below' when there is no link",
+          "Link's below" not in t7bn and "http" not in t7bn, t7bn)
+
+    print("Wave 2: P6 states the decision rule, P8 asks the real question")
+    t6 = leads.render_sms(presets, "p6", l7, v7, slot="tue")
+    check("P6 no longer promises events TGF might not add",
+          "we add events" not in t6, t6)
+    check("P6 states how the decision is actually made",
+          "how we decide what to add" in t6, t6)
+    check("P6 sounds like Kerry, not a marketer",
+          "No pressure at all" in t6 and "Zero pressure" not in t6, t6)
+
+    t8 = leads.render_sms(presets, "p8", l7, v7, slot="tue")
+    check("P8 names the pattern instead of assuming they missed something",
+          "You keep circling back" in t8, t8)
+    check("P8 does not answer a question nobody asked",
+          "no catching up required" not in t8, t8)
+    check("P8 asks exactly one question",
+          t8.count("?") == 1, t8)
+    check("P8 quotes the 1st Timer price", "as a 1st Timer" in t8, t8)
+    v8n = leads.sms_vars_for(l7, ow, {}, {"any": {"San Antonio": NOCOST},
+                                          "tue": {"San Antonio": NOCOST},
+                                          "sat": {}}, "tue")
+    t8n = leads.render_sms(presets, "p8", l7, v8n, slot="tue")
+    check("and drops the price tail when the price is unknown",
+          "1st Timer" not in t8n and "{" not in t8n, t8n)
+
+    print("Wave 2: no em-dashes anywhere in the ratified copy")
+    for k in ("p1", "p2", "p3", "p4", "p6", "p7", "p7b", "p8", "p9"):
+        body = (presets.get(k) or {}).get("text") or ""
+        check(f"{k} has no em-dash", "\u2014" not in body, k)
+
     print("Selection logic still holds")
     r = pick(lead(imp="Competition", avail="Tuesdays only"))
     check("Competition -> P1", r["preset"] == "p1", r)

@@ -6696,6 +6696,11 @@ def api_create_event():
         # create_event's 30-argument signature one flag at a time.
         extras = {k: 1 for k in ("allow_fivesomes", "range_balls_included")
                   if data.get(k)}
+        # #417 build ask D: the registration URL the follow-up presets
+        # link to. A string, not a flag, so it rides alongside.
+        _url = (data.get("registration_url") or "").strip()
+        if _url:
+            extras["registration_url"] = _url
         if extras and event.get("id"):
             try:
                 update_event(event["id"], extras)

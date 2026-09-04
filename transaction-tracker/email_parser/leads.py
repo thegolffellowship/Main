@@ -2258,34 +2258,59 @@ DEFAULT_SMS_PRESETS: dict = {
                  "at {course}{start_phrase}.{price_block}\n\n"
                  "Want to try it out?"),
     },
+    # ── WAVE 2 (mailbox #417, Kerry-ratified 2026-09-04) ──────────
+    # P6 / P7 / P7b / P8 REPLACE the #388 versions. The structural change
+    # driving the wave: THE FOLLOW-UPS CARRY THE LINK, NOT A PRICE RECAP.
+    # The prospect already saw price and inclusions on the first touch;
+    # what they are missing two days later is one tap. Kerry raised the
+    # objection himself — is it presumptuous to send a link to someone
+    # who has not replied? — and answered it: requiring a reply first
+    # makes HIM the gate, and some people do not text back because they
+    # are busy, not because they are uninterested.
+    #
+    #   NEVER MAKE THE HUMAN THE BARRIER TO REGISTRATION.
+    #
+    # The {..._block} fragments are the #403/#406 valve: a sentence that
+    # depends on a value we may not have renders as nothing rather than
+    # sending a stranger a text with a hole in it.
     "p6": {
         "label": "No days",
-        "text": ("Hey {first_name}, {owner} with The Golf Fellowship. Glad "
-                 "you're interested even if Tuesdays and Saturdays don't "
-                 "fit right now. Zero pressure. When does golf usually "
-                 "work for you? If enough people want those days, we add "
-                 "events."),
+        "text": ("Hey {first_name}, {owner} with The Golf Fellowship. "
+                 "Thanks for the interest!\n\n"
+                 "Sounds like Tuesdays and Saturdays don't work right now. "
+                 "No pressure at all.\n\n"
+                 "When does golf usually fit for you? Enough people asking "
+                 "for a day is how we decide what to add."),
     },
     "p7": {
         "label": "Second touch",
-        "text": ("Hey {first_name}, {owner} again. No reply, no problem. "
-                 "Quick one: what's holding you back? Time, money, or "
-                 "weird people? I've got an answer for all three. "
-                 "{next_event} is coming up. Want in?"),
+        "text": ("Hey {first_name}, {owner} again. No reply, no problem.\n\n"
+                 "Anything I can answer? Cost, timing, or whether there's "
+                 "weird people...\n\n"
+                 "{when} at {course} is up next based on your "
+                 "availability.{deadline_block}{link_offer} Ready to give "
+                 "it a shot?{link_line}"),
     },
     "p7b": {
         "label": "Second touch, 4+ days",
-        "text": ("Hey {first_name}, {owner} again. If the timing's off, "
-                 "just say \"later\" and I'll circle back next season. If "
-                 "it's first-night nerves, that's what the free drink's "
-                 "for. {next_event}. Want a spot?"),
+        "text": ("Hey {first_name}, {owner} again, and this is my last one "
+                 "for now.\n\n"
+                 "If the timing's just off, say \"later\" and I'll check "
+                 "back when it fits. If it's first timer nerves, a net "
+                 "Team Best Ball game is included, so your foursome is "
+                 "actually rooting for you. Nobody's judging your swing, "
+                 "they need it.\n\n"
+                 "{when} at {course} if you want it.{link_below}"),
     },
     "p8": {
         "label": "Re-submitter",
         "text": ("Hey {first_name}, {owner} with The Golf Fellowship. Good "
-                 "to see your name pop up again. Everything's \u00e0 la carte, "
-                 "so you can jump in any week, no catching up required. "
-                 "{next_event} is next up. Ready to give it a go?"),
+                 "to see your name pop up again!\n\n"
+                 "You keep circling back, so I figure you actually want to "
+                 "do this. What's been getting in the way? Whatever it is, "
+                 "we're here to welcome you whenever you're ready.\n\n"
+                 "{when} at {course}{start_phrase} is next up if the "
+                 "timing works{first_timer_tail}."),
     },
     "closer": {
         "label": "Offer line",
@@ -2298,6 +2323,29 @@ DEFAULT_SMS_PRESETS: dict = {
         "text": ("BTW, you marked both San Antonio and Austin. Do you "
                  "bounce between the two, or should I focus you on one?"
                  "{other_chapter_event}"),
+    },
+    # #417 fragments. Each one depends on a value that may be missing, so
+    # each renders or vanishes as a unit — same valve as price_block.
+    "deadline_block": {
+        "label": "Sign-up deadline sentence",
+        "text": " Sign ups close {deadline} so we can get the groups set.",
+    },
+    "link_offer": {
+        "label": "Link offer sentence",
+        "text": (" Here's the link if you want in, just click 1st Timer "
+                 "for the discount."),
+    },
+    "link_line": {
+        "label": "The link itself",
+        "text": "\n\n{link}",
+    },
+    "link_below": {
+        "label": "Link's below + the link (P7b)",
+        "text": " Link's below.\n\n{link}",
+    },
+    "first_timer_tail": {
+        "label": "1st Timer price tail (P8)",
+        "text": ", {first_timer_price} as a 1st Timer",
     },
     # The two ratified price sentences, held together so they render or
     # vanish as one unit.
@@ -2522,6 +2570,37 @@ def event_holes(event: dict) -> int:
     return 9
 
 
+def signup_deadline_phrase(event: dict) -> str:
+    """{deadline} — a SOCIAL deadline, derived, never stored (#417 ask E).
+
+    Kerry's rule: Tuesday events and weekday evening 9s / 9-18 combos
+    close two days before; standard weekend 18s close three. Rendered as
+    that evening, so a Tuesday event reads "Sunday evening" and a
+    Saturday event reads "Wednesday evening".
+
+    CRITICAL, and easy to get wrong. Kerry, verbatim: "those aren't
+    actual hard deadlines (see TGF Platform deadline, registration close
+    time, rules), they're a preference for management and a little
+    urgency." This function exists ONLY to render a sentence. It is
+    deliberately not exported to, reconciled against, or consulted by any
+    registration-close logic, and a late signup must never be blocked by
+    it. If you find yourself importing this into a gate, stop.
+    """
+    from datetime import date as _date, timedelta as _td
+    raw = (event or {}).get("event_date") or ""
+    try:
+        d = _date.fromisoformat(str(raw)[:10])
+    except (ValueError, TypeError):
+        return ""
+    # Monday=0 … Saturday=5, Sunday=6. A "standard weekend 18" is the
+    # only three-day case; everything else — Tuesday nights, weekday
+    # evening 9s, 9-18 combos — is two.
+    is_weekend = d.weekday() >= 5
+    is_18 = str(event_holes(event)) == "18"
+    days = 3 if (is_weekend and is_18) else 2
+    return (d - _td(days=days)).strftime("%A") + " evening"
+
+
 def first_timer_price(event: dict) -> float | None:
     """The 1st Timer player total, using the SAME arithmetic the Edit
     Event screen shows (course cost rounds UP first, then markup + game
@@ -2615,7 +2694,9 @@ def get_sms_presets(db_path=None) -> dict:
 
 # Not presets — fragments other presets embed. They must never appear in
 # the ▾ picker as something Kerry can send on its own.
-_SMS_FRAGMENTS = ("closer", "p9", "price_block")
+_SMS_FRAGMENTS = ("closer", "p9", "price_block", "deadline_block",
+                  "link_offer", "link_line", "link_below",
+                  "first_timer_tail")
 
 
 def sms_preset_order(presets: dict) -> list[str]:
@@ -2881,6 +2962,9 @@ def sms_vars_for(lead: dict, owners: dict | None = None,
         "course": short_course_name(ev.get("course") or "") if ev else "",
         "start_phrase": start_phrase(ev),
         "first_timer_price": money(price),
+        # #417: the follow-ups carry the link, not a price recap.
+        "link": (ev.get("registration_url") or "").strip() if ev else "",
+        "deadline": signup_deadline_phrase(ev) if ev else "",
         "range_balls": ", range balls" if rb else "",
         "gross_bundle": GROSS_BUNDLE.get(holes, GROSS_BUNDLE[9]),
         "other_chapter_event": other_phrase,
@@ -2915,6 +2999,23 @@ def render_sms(presets: dict, key: str, lead: dict, sms_vars: dict,
         if t:
             lines.append(t)
     out = "\n".join(lines)
+
+    # #417 fragments, assembled before the rest so a missing value takes
+    # its whole sentence with it. A follow-up whose event has no
+    # registration URL sends WITHOUT the link sentence rather than with a
+    # dangling "Here's the link" and nothing after it.
+    _frag_ok = {
+        "deadline_block": bool(sms_vars.get("deadline")),
+        "link_offer": bool(sms_vars.get("link")),
+        "link_line": bool(sms_vars.get("link")),
+        "link_below": bool(sms_vars.get("link")),
+        "first_timer_tail": bool(sms_vars.get("_price_known")),
+    }
+    for _k, _ok in _frag_ok.items():
+        tok = "{" + _k + "}"
+        if tok in out:
+            out = out.replace(
+                tok, ((presets.get(_k) or {}).get("text") or "") if _ok else "")
 
     # Assemble the price block before substituting the rest.
     if "{price_block}" in out:

@@ -3656,6 +3656,17 @@ def init_db(db_path: str | Path | None = None) -> None:
         except sqlite3.OperationalError:
             pass
 
+        # Registration URL (mailbox #417 build ask D, Kerry-ratified
+        # 2026-09-04: "need to add these to the event pages so it can
+        # auto pull these in too"). The {link} the follow-up presets
+        # carry. NULL means we do not have one, and the presets then drop
+        # the link sentence rather than send a text with a hole in it.
+        try:
+            conn.execute("ALTER TABLE events ADD COLUMN "
+                         "registration_url TEXT")
+        except sqlite3.OperationalError:
+            pass
+
         # Support feedback — bug reports and feature requests from the chat widget
         conn.execute(
             """
@@ -22963,6 +22974,7 @@ def update_event(event_id: int, fields: dict, db_path: str | Path | None = None)
                 "tee_time_count", "tee_time_interval", "start_time_18", "start_type_18",
                 "tee_time_count_18", "event_type", "tee_direction", "tee_direction_18",
                 "nine_side", "allow_fivesomes", "range_balls_included",
+                "registration_url",
                 "pairing_mode", "pairing_race_key",
                 "course_cost", "tgf_markup", "side_game_fee", "transaction_fee_pct",
                 "course_cost_9", "course_cost_18", "tgf_markup_9", "tgf_markup_18",

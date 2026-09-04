@@ -1,5 +1,17 @@
-window.TGF_VERSION = "2.320.0";
+window.TGF_VERSION = "2.321.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.321.0",
+    date: "2026-09-04",
+    changes: [
+      "SMS PRESET WAVE 2 (mailbox #417, Kerry-ratified): P6, P7, P7b and P8 replace the #388 versions. The structural change is that THE FOLLOW-UPS NOW CARRY THE LINK, not a price recap. The prospect already saw price and inclusions on the first touch; two days later what they are missing is one tap. Kerry raised the objection himself \u2014 is it presumptuous to send a link to someone who hasn't replied \u2014 and answered it: requiring a reply first makes HIM the gate, and some people don't text back because they're busy, not because they're uninterested. Never make the human the barrier to registration.",
+      "P7b no longer answers first-timer nerves with a free drink. Kerry: it 'comes across potentially like we're a drinking league.' The replacement is better than the joke was \u2014 the net Team Best Ball game means your foursome is actively rooting for you, which is the most reassuring true fact about a TGF event and one no first timer would guess. It also names itself as the last ask, which is honest and lifts reply rates.",
+      "P6 no longer promises events TGF might not add ('if enough people want those days, we add events'); it states the actual decision rule instead, which makes the answer feel consequential without committing to an outcome. P8 stops answering a question nobody asked and instead names the pattern \u2014 a re-submission IS the signal that they want to come and something is stopping them \u2014 then asks what.",
+      "Events gain a REGISTRATION LINK field on both the create and edit modals (#417 ask D). It is what the follow-ups link to. An event without one sends the text WITHOUT the link sentence rather than with a dangling 'Here's the link' and nothing after it \u2014 the same valve the price block already uses.",
+      "Sign-up deadlines in the text are DERIVED, never stored: Tuesday events and weekday evening 9s close two days before, standard weekend 18s three, rendered as that evening. Kerry, emphatically: 'those aren't actual hard deadlines, they're a preference for management and a little urgency.' So this is wired to nothing \u2014 it cannot block a late signup and is never reconciled against the Platform's real registration-close rules. It exists only inside the sentence.",
+      "Follow-ups stay persona-neutral for now. Importance selects the OPENER only; Kerry is holding granular segmentation until Twilio makes real two-way conversation data available to segment on.",
+    ],
+  },
   {
     version: "2.320.0",
     date: "2026-09-04",
