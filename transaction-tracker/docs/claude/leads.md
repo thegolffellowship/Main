@@ -617,6 +617,16 @@ from `note_count` too, so the Stats view's response rate is stricter
 than the queue's. Flagged to CA rather than changed unilaterally — it
 is a reported metric.
 
+**TRAP — a saved dial beats the code defaults.** `lead_tag_options` was
+already set in `app_settings`, so adding "Followed up" to
+`DEFAULT_TAG_OPTIONS` did **nothing** on production: the dropdown kept
+serving the stored 13. Caught by `scoring-leads-payload` reporting
+`tag_options: 13` after the deploy, and fixed with
+`scoring-setting-set:lead_tag_options|[…]`. **Any change to a
+`DEFAULT_*` list that has a live dial needs the dial updated too** —
+check the payload count after shipping, don't assume the default is
+what ships.
+
 **Outreach tags** — `lead_outreach_tags` dial over
 `DEFAULT_OUTREACH_TAGS` = Texted · Sent email · **Left VM**. Kerry named
 Texted and Emailed; Left VM is the same "reached out, now waiting" case
