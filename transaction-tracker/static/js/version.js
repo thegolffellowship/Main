@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.314.0";
+window.TGF_VERSION = "2.314.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.314.1",
+    date: "2026-09-04",
+    changes: [
+      "scoring-margin-audit returns the same per-player rows behind TGF MARGIN, so the arithmetic can be checked outside the browser — including by whoever is asked to verify it next.",
+    ],
+  },
   {
     version: "2.314.0",
     date: "2026-09-04",

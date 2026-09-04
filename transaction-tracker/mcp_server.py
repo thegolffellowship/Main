@@ -2211,6 +2211,20 @@ def _scoring_dispatch(url: str, extract: str):
                               "duplicate_leads":
                                   (_b.get("value") or {}).get("duplicate_leads")})
             return json.dumps({"campaigns": _rows}, indent=2, default=str)
+        if cmd == "scoring-margin-audit":
+            # The rows behind TGF MARGIN, so the arithmetic can be
+            # checked outside the browser too.
+            from email_parser.campaigns import campaign_stats as _cs2
+            _b = (_cs2().get("campaigns") or [{}])[0]
+            _v = _b.get("value") or {}
+            return json.dumps({
+                "campaign": _b.get("name"),
+                "margin": _v.get("margin"),
+                "collected": _v.get("collected"),
+                "rows_reconcile": _v.get("rows_reconcile"),
+                "residual_total": _v.get("residual_total"),
+                "rows": _v.get("rows"),
+            }, indent=2, default=str)
         if cmd == "scoring-campaigns":
             # Campaign stats view payload (mailbox #391): per campaign +
             # unattributed + all — META panel (insights or manual spend)
