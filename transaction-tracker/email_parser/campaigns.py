@@ -450,14 +450,19 @@ def campaign_value(customer_ids: list[int], conn,
         return out
     ph = ",".join("?" * len(customer_ids))
     rows = conn.execute(
-        f"SELECT i.id, i.order_id, COALESCE(i.item_price, 0) AS price "
+        # CAST, not COALESCE alone: SQLite is dynamically typed and some
+        # item_price values are stored as TEXT, so summing them in
+        # Python blew up with "unsupported operand type(s) for +: 'int'
+        # and 'str'" and took the whole Stats view down.
+        f"SELECT i.id, i.order_id, "
+        f"CAST(COALESCE(i.item_price, 0) AS REAL) AS price "
         f"FROM items i WHERE i.customer_id IN ({ph}) "
         f"AND COALESCE(i.transaction_status, 'active') = 'active' "
         f"AND i.parent_item_id IS NULL "
         f"AND i.merchant NOT IN ({','.join(repr(m) for m in PLACEHOLDER_MERCHANTS)})",
         tuple(customer_ids)).fetchall()
     out["items"] = len(rows)
-    out["collected"] = round(sum(r["price"] for r in rows), 2)
+    out["collected"] = round(sum(float(r["price"] or 0) for r in rows), 2)
     orders = sorted({r["order_id"] for r in rows if r["order_id"]})
     out["orders"] = len(orders)
     if not orders:
@@ -488,7 +493,7 @@ def campaign_value(customer_ids: list[int], conn,
 
     agg = conn.execute(
         f"SELECT COUNT(DISTINCT a.order_id) AS n, "
-        f"       COALESCE(SUM(a.tgf_operating), 0) AS margin "
+        f"       COALESCE(SUM(CAST(a.tgf_operating AS REAL)), 0) AS margin "
         f"FROM acct_allocations a WHERE a.order_id IN ({oph})",
         tuple(orders)).fetchone()
     out["allocated_orders"] = agg["n"] or 0

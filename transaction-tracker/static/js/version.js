@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.312.0";
+window.TGF_VERSION = "2.312.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.312.1",
+    date: "2026-09-04",
+    changes: [
+      "FIX: the Stats view went down the moment v2.312.0 deployed — 'unsupported operand type(s) for +: int and str'. SQLite is dynamically typed and real item_price values are stored as TEXT on some rows, so summing them in Python threw. Every fixture used floats, so the tests were green over a broken page. Now cast in SQL and coerced in Python, with a TEXT price in the test.",
+    ],
+  },
   {
     version: "2.312.0",
     date: "2026-09-04",

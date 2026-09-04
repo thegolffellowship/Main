@@ -276,6 +276,20 @@ def main():
     val = st2["campaigns"][0]["value"]
     check("collected sums what those customers actually paid",
           val["collected"] == 278.0, val)
+    # SQLite is dynamically typed and real rows DO hold item_price as
+    # TEXT. Summing those in Python took the whole Stats view down on
+    # production with "unsupported operand type(s) for +: 'int' and
+    # 'str'" — the fixtures were all floats, so nothing caught it.
+    with db._connect(db_path) as conn:
+        conn.execute("INSERT INTO items (customer_id, transaction_status, "
+                     "merchant, item_name, item_price, order_id) "
+                     "VALUES (9002, 'active', 'GoDaddy', 's9.23 Quarry', "
+                     "'58.00', 'O-5')")
+        conn.commit()
+    check("a TEXT item_price does not blow up the sum",
+          campaigns.campaign_stats(db_path, today="2026-09-03",
+                                   gap_fill_seconds=0)["campaigns"][0]
+          ["value"]["collected"] == 336.0)
     check("it counts orders, not just items", val["orders"] == 3, val)
     roi = st2["campaigns"][0]["roi"]
     check("ROI is reported once there is spend", roi is not None, roi)
