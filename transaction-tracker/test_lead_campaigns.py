@@ -519,6 +519,27 @@ def main():
           lst_after["lead_count"] == before["funnel"]["leads"],
           (lst_after["lead_count"], before["funnel"]["leads"]))
 
+    # v2.318.1: the stats view reads lead columns, so it must run the
+    # lead migrations itself rather than assuming another page got there
+    # first. v2.317.0 shipped without this and took the whole stats view
+    # down on deploy with "no such column: l.replied_at" — green tests
+    # never saw it, because every test builds its DB through
+    # ensure_leads_table.
+    print("Stats survives a database that has not been migrated yet")
+    with db._connect(db_path) as conn:
+        conn.execute("ALTER TABLE leads DROP COLUMN replied_at")
+        conn.commit()
+        cols = {r[1] for r in conn.execute("PRAGMA table_info(leads)")}
+    check("the column really is gone (the pre-upgrade shape)",
+          "replied_at" not in cols)
+    healed = campaigns.campaign_stats(db_path, today="2026-09-03",
+                                      gap_fill_seconds=0)
+    check("stats still answers instead of 500ing",
+          isinstance(healed.get("campaigns"), list) and healed["campaigns"])
+    check("and it migrated the column back on the way through",
+          "replied" in healed["campaigns"][0]["funnel"],
+          healed["campaigns"][0]["funnel"])
+
     print("Campaign CRUD")
     r = campaigns.set_campaign(name="Historical 2025", source="historical", db_path=db_path)
     check("historical campaign row creatable (design for reactivation)", r.get("ok") and r["source"] == "historical", r)

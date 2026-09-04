@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.318.0";
+window.TGF_VERSION = "2.318.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.318.1",
+    date: "2026-09-04",
+    changes: [
+      "Fix: the stats view went down the moment v2.317.0 deployed \u2014 'no such column: l.replied_at'. It reads lead columns but never ran the lead migrations itself, assuming some other page had already been visited on that container. It now runs them. Caught on production within a minute of the deploy, before anyone opened the page; the tests could not catch it because every test builds its database through the migration, so there is now one that deliberately does not.",
+    ],
+  },
   {
     version: "2.318.0",
     date: "2026-09-04",

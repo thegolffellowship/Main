@@ -684,11 +684,16 @@ def campaign_stats(db_path: str | Path | None = None,
     META panel (insights or manual spend), FUNNEL panel with CPL / CPP /
     CPMem current + 30-day trailing, per-chapter split."""
     from . import database as db
-    from .leads import _REPLY_EXCLUDE_SQL
+    from .leads import _REPLY_EXCLUDE_SQL, ensure_leads_table
     from .timezone_utils import today_central_str
     today_d = date.fromisoformat(today or today_central_str())
     campaigns = list_campaigns(db_path)
     with db._connect(db_path) as conn:
+        # Stats reads lead columns, so the lead MIGRATIONS have to have
+        # run — this entry point cannot assume some other page got there
+        # first. Skipping it is how `no such column: l.replied_at` took
+        # the stats view down the moment v2.317.0 deployed.
+        ensure_leads_table(conn)
         ensure_campaigns_table(conn)
         link_leads_to_campaigns(conn)
         conn.commit()
