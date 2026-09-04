@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.313.0";
+window.TGF_VERSION = "2.314.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.314.0",
+    date: "2026-09-04",
+    changes: [
+      "The TGF MARGIN figure is now clickable and shows its own arithmetic (Kerry: 'I want to make sure your math is correct'). Every allocation behind the number, one row per player: what they bought, what they paid, and where it went — course, prize pool, card processor, TGF. The TGF column foots to the headline figure.",
+      "The Checks column is the control, not decoration. Every dollar a player paid goes exactly four places, so paid minus course minus prizes minus processor minus TGF must be zero. A row that does not reconcile turns red and says the allocation is wrong rather than the display — a number that quietly averages away a discrepancy is worse than one that admits it. A deliberately broken allocation is in the test suite to prove the flag fires.",
+      "Sales tax reserve is shown but not deducted: it is 8.25% of what TGF kept and comes out of TGF's share later, so subtracting it here would double-count it. Margin-based ROI ratified by Kerry.",
+    ],
+  },
   {
     version: "2.313.0",
     date: "2026-09-04",

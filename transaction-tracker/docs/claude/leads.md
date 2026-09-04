@@ -670,11 +670,28 @@ people have paid, including before and after the campaign ran. For a
 lead campaign that is the honest read — the ad bought the relationship,
 not one transaction.
 
-**OPEN FOR RATIFICATION (rule 3b):** margin-based ROI is my judgement,
-not a Kerry-ratified definition. The alternatives are gross-based (much
-flatterier, arguably meaningless here) or margin-net-of-tax-reserve
-(stricter — `tax_reserve` is 8.25% of `tgf_operating` and is owed to the
-state, so arguably not TGF's). Flagged to Kerry and CA.
+**RATIFIED (Kerry 2026-09-04): "Margin-based is right, keep it."**
+The alternatives were gross-based (flattering, near-meaningless here)
+and margin-net-of-tax-reserve (stricter — `tax_reserve` is 8.25% of
+`tgf_operating` and is owed to the state). Margin stands.
+
+**The margin is auditable.** Kerry: *"I want to make sure your math is
+correct."* Clicking the TGF MARGIN tile opens a per-allocation table —
+player, what they bought, date, paid, course, prizes, processor, TGF
+kept — that foots to the headline figure.
+
+The **Checks** column is the real control, not decoration. Every dollar
+a player paid goes exactly four places (course, prize pool, processor,
+TGF), so `collected − course − surcharge − prizes − fee − margin` must
+be **0**. A non-zero residual means the ALLOCATION is wrong, not the
+display, and the row turns red rather than being smoothed over;
+`rows_reconcile` carries the same verdict for the whole set. Locked in
+`test_lead_campaigns.py`, including a deliberately broken allocation
+that must be flagged.
+
+`tax_reserve` is shown but NOT deducted — it comes out of TGF's share
+later, so deducting it here would double-count against the ratified
+margin definition.
 
 ## Morning follow-up digest (Kerry 2026-09-03, v2.302.0)
 

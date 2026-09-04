@@ -57,6 +57,9 @@
            move under a TOUCHED bar) */
         .ld-secbar { background: #1B1B1B; color: #fff; font: 700 10px/1 'Bitter', serif; letter-spacing: 1.5px; text-transform: uppercase; padding: 6px 14px; }
         .ld-secbar .n { color: #9CA3AF; margin-left: 6px; letter-spacing: 0; }
+        .ld-mclick { cursor: pointer; border-radius: 6px; }
+        .ld-mclick:hover { background: #FCFCFA; outline: 1px solid var(--border); }
+        .ld-mlink { color: #2563eb; font-weight: 600; }
         .ld-secbar { cursor: pointer; user-select: none; }
         .ld-secbar:hover { filter: brightness(1.25); }
         .ld-secch { display: inline-block; width: 10px; margin-right: 6px;
@@ -284,6 +287,8 @@
     // hot conversations on top, non-responsive outreach down, converted
     // then dismissed at the bottom.
     let sortKey = "priority", sortDir = 1;
+    let marginOpen = false;
+    function toggleMarginDetail() { marginOpen = !marginOpen; renderStats(); }
     let statusFilter = "all", chapterFilter = "all", searchQ = "";
     let campaignFilter = "all", statsOn = false, STATS = null;
     // Drill-down triage filters (Kerry 2026-09-01; MULTI-SELECT
@@ -1166,6 +1171,47 @@
             <tr><td>CPMem <span class="ld-dsub">spend / members</span></td><td>${money(c.cpmem)}<span class="ld-dsub"> /${f.members}</span></td><td>${money(c.cpmem_trailing)}<span class="ld-dsub"> /${f.members_trailing}</span></td></tr>
             </tbody></table>
             <div class="ld-foot">Player = registered any event or became a member (counts once). Trailing counts conversions through ${STATS.trailing_days} days after the last spend day · ${esc(win)}.</div></div>`;
+        // The audit trail behind TGF MARGIN (Kerry 2026-09-04: "I want
+        // to make sure your math is correct"). Every allocation row that
+        // makes up the number, per person, with the four destinations
+        // the money splits into. RESIDUAL is the real check: collected
+        // minus course minus prizes minus processor minus TGF should be
+        // zero, so a non-zero row means the allocation is wrong — not
+        // the display. Shown, never smoothed over.
+        function marginTable(v) {
+            const rows = v.rows || [];
+            if (!rows.length) return "";
+            const tot = k => rows.reduce((a, x) => a + (x[k] || 0), 0);
+            const cell = (x, cls) => `<td${cls ? ` class="${cls}"` : ""}>${money(x)}</td>`;
+            const body = rows.map(x => `<tr>
+                <td>${esc(x.player)}</td>
+                <td class="ld-dsub">${esc(x.item_name || x.event_name || "")}</td>
+                <td class="ld-dsub">${esc((x.allocation_date || "").slice(0, 10))}</td>
+                ${cell(x.collected)}${cell(x.course + x.surcharge)}${cell(x.prizes)}${cell(x.fee)}
+                <td><b>${money(x.margin)}</b></td>
+                <td class="${Math.abs(x.residual) >= 0.01 ? "ld-late" : "ld-dsub"}">${Math.abs(x.residual) < 0.01 ? "✓" : money(x.residual)}</td>
+            </tr>`).join("");
+            return `<div style="margin-top:0.75rem; overflow-x:auto">
+              <table class="ld-costtbl"><thead><tr>
+                <th style="text-align:left">Player</th><th style="text-align:left">Bought</th><th style="text-align:left">Date</th>
+                <th>Paid</th><th>Course</th><th>Prizes</th><th>Processor</th><th>TGF kept</th><th>Checks</th>
+              </tr></thead><tbody>${body}</tbody>
+              <tfoot><tr style="border-top:2px solid #1B1B1B; font-weight:700">
+                <td colspan="3">${rows.length} allocation${rows.length === 1 ? "" : "s"}</td>
+                ${cell(tot("collected"))}
+                ${cell(rows.reduce((a, x) => a + x.course + x.surcharge, 0))}
+                ${cell(tot("prizes"))}${cell(tot("fee"))}
+                <td>${money(tot("margin"))}</td>
+                <td class="${v.rows_reconcile ? "" : "ld-late"}">${v.rows_reconcile ? "✓" : money(v.residual_total)}</td>
+              </tr></tfoot></table>
+              <div class="ld-foot">
+                Every dollar a player paid goes exactly four places: the course, the prize pool, the card processor, and TGF.
+                <b>Checks</b> is that subtraction — a ✓ means the row adds up to the penny${v.rows_reconcile ? " (all of them do)" : ", and a figure means it does NOT and the allocation is wrong, not the display"}.
+                The TGF kept column sums to the ${money(tot("margin"))} above.
+                Sales tax reserve (8.25% of TGF kept) is ${money(tot("tax"))} and is NOT deducted here &mdash; it comes out of TGF's share later.
+              </div></div>`;
+        }
+
         // Return on ad spend (Kerry 2026-09-04). Two revenue numbers,
         // because the difference between them is the whole point: most
         // of an entry fee passes through to the course and the prize
@@ -1177,7 +1223,9 @@
             <div class="ld-metrics">
             ${metric("Ad spend", money(r.spend))}
             ${metric("Collected", money(r.collected), "gross, lifetime")}
-            ${metric("TGF margin", money(r.margin), "what TGF kept")}
+            ${(v.rows || []).length
+                ? `<div class="ld-metric ld-mclick" onclick="toggleMarginDetail()" title="Show the per-player breakdown behind this number"><div class="lbl">TGF margin</div><div class="val">${money(r.margin)}</div><div class="sub">what TGF kept · <span class="ld-mlink">${marginOpen ? "hide" : "show"} the math</span></div></div>`
+                : metric("TGF margin", money(r.margin), "what TGF kept")}
             ${metric("Net", money(r.net), r.net >= 0 ? "ahead" : "behind")}
             ${metric("ROAS", r.roas_margin == null ? "—" : `${r.roas_margin}×`, "margin per $1 spent")}
             ${metric("ROI", r.pct == null ? "—" : `${r.pct > 0 ? "+" : ""}${r.pct}%`, "on margin")}
@@ -1190,7 +1238,9 @@
               ${v.coverage_pct != null && v.coverage_pct < 100
                 ? `<span class="ld-late">Margin is known for ${v.coverage_pct}% of their ${num(v.orders)} orders${v.coverage_pending ? ` (${num(v.coverage_pending)} still to allocate — reopen Stats to continue)` : ""}, so it is a FLOOR.</span>`
                 : `Margin covers all ${num(v.orders)} of their orders.`}
-            </div></div>`;
+            </div>
+            ${marginOpen ? marginTable(v) : ""}
+            </div>`;
         const chapPanel = `<div class="ld-panel" style="grid-column:1/-1"><h3>Per chapter</h3>
             <div style="overflow-x:auto"><table class="ld-costtbl"><thead><tr><th>Chapter</th><th>Leads</th><th>Touched</th><th>Responded</th><th>Resp %</th><th>Interested</th><th>Players</th><th>Members</th><th>Dismissed</th></tr></thead><tbody>${chapRows || "<tr><td colspan=9>No leads.</td></tr>"}</tbody></table></div></div>`;
         const adRows = Object.entries((ALL && ALL.by_ad_set) || {}).map(([name, a]) =>

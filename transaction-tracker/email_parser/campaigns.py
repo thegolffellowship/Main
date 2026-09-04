@@ -480,6 +480,9 @@ def campaign_value(lead_rows: list[dict], conn,
     out["items"] = len(rows)
     orders = sorted({r["order_id"] for r in rows if r["order_id"]})
     out["orders"] = len(orders)
+    out["rows"] = []
+    out["residual_total"] = 0.0
+    out["rows_reconcile"] = True
     if not orders:
         return out
 
@@ -515,8 +518,45 @@ def campaign_value(lead_rows: list[dict], conn,
     out["allocated_orders"] = agg["n"] or 0
     out["margin"] = round(agg["margin"] or 0.0, 2)
     out["collected"] = round(agg["collected"] or 0.0, 2)
+
+    # The audit trail (Kerry 2026-09-04: "I want to make sure your math
+    # is correct"). Every allocation row behind the margin, per person,
+    # with the buckets it splits into. The four destinations sum to what
+    # the player paid — course, prizes, processor, TGF — so `residual`
+    # is a genuine self-check: anything but ~0 means the allocation
+    # itself is wrong, not the display.
+    out["rows"] = []
+    for r in conn.execute(
+            f"SELECT a.order_id, a.event_name, a.allocation_date, "
+            f"       a.allocation_status, a.notes, "
+            f"       CAST(COALESCE(a.total_collected,0) AS REAL) AS collected, "
+            f"       CAST(COALESCE(a.course_payable,0) AS REAL) AS course, "
+            f"       CAST(COALESCE(a.course_surcharge,0) AS REAL) AS surcharge, "
+            f"       CAST(COALESCE(a.prize_pool,0) AS REAL) AS prizes, "
+            f"       CAST(COALESCE(a.godaddy_fee,0) AS REAL) AS fee, "
+            f"       CAST(COALESCE(a.tax_reserve,0) AS REAL) AS tax, "
+            f"       CAST(COALESCE(a.tgf_operating,0) AS REAL) AS margin, "
+            f"       i.item_name, "
+            f"       TRIM(COALESCE(c.first_name,'')||' '||"
+            f"            COALESCE(c.last_name,'')) AS player "
+            f"FROM acct_allocations a "
+            f"LEFT JOIN items i ON i.id = a.item_id "
+            f"LEFT JOIN customers c ON c.customer_id = i.customer_id "
+            f"WHERE a.order_id IN ({oph}) "
+            f"ORDER BY a.allocation_date, a.order_id",
+            tuple(orders)).fetchall():
+        d = dict(r)
+        d["player"] = (d.get("player") or "").strip() or "(unknown)"
+        d["residual"] = round(d["collected"] - d["course"] - d["surcharge"]
+                              - d["prizes"] - d["fee"] - d["margin"], 2)
+        for k in ("collected", "course", "surcharge", "prizes", "fee",
+                  "tax", "margin"):
+            d[k] = round(d[k], 2)
+        out["rows"].append(d)
+    out["residual_total"] = round(sum(r["residual"] for r in out["rows"]), 2)
     out["coverage_pct"] = (round(100.0 * out["allocated_orders"]
                                  / out["orders"], 1) if out["orders"] else None)
+    out["rows_reconcile"] = abs(out["residual_total"]) < 0.05
     return out
 
 

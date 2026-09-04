@@ -246,6 +246,11 @@ def main():
              (9003, "active", "GoDaddy", "TGF MEMBERSHIP", 75.0, "O-3"),
              # A roster import puts a PERSON in the system, not a sale.
              (9003, "active", "Roster Import", "s9.22 Silverhorn", 0.0, "O-4")])
+        conn.executemany(
+            "INSERT INTO customers (customer_id, first_name, last_name) "
+            "VALUES (?,?,?)",
+            [(9001, "Mem", "Player"), (9002, "Just", "Player"),
+             (9003, "Just", "Member")])
         conn.commit()
     st2 = campaigns.campaign_stats(db_path, today="2026-09-03",
                                gap_fill_seconds=0)
@@ -343,6 +348,49 @@ def main():
           abs(st3["campaigns"][0]["roi"]["roas_margin"]
               - 36.0 / st3["campaigns"][0]["spend"]) < 0.01,
           st3["campaigns"][0]["roi"])
+
+    print("Margin audit trail (Kerry 2026-09-04: \"make sure your math is correct\")")
+    with db._connect(db_path) as conn:
+        conn.execute("DELETE FROM acct_allocations")
+        # A clean event allocation: what the player paid splits four
+        # ways — course, prizes, processor, TGF.
+        conn.execute("INSERT INTO acct_allocations (order_id, item_id, "
+                     "event_name, allocation_date, total_collected, "
+                     "course_payable, course_surcharge, prize_pool, "
+                     "godaddy_fee, tax_reserve, tgf_operating) VALUES "
+                     "('O-2', 3, 's9.22 Silverhorn', '2026-09-02', "
+                     " 64.00, 34.00, 0.00, 14.00, 2.00, 1.16, 14.00)")
+        conn.commit()
+    v = campaigns.campaign_stats(db_path, today="2026-09-03",
+                                 gap_fill_seconds=0)["campaigns"][0]["value"]
+    check("the breakdown returns a row per allocation", len(v["rows"]) == 1, v["rows"])
+    row = v["rows"][0]
+    check("it names the player, not just the order",
+          row["player"] == "Just Player", row)
+    check("it carries every bucket the money splits into",
+          (row["collected"], row["course"], row["prizes"], row["fee"],
+           row["margin"]) == (64.0, 34.0, 14.0, 2.0, 14.0), row)
+    check("the buckets reconcile to what the player paid — residual 0",
+          row["residual"] == 0.0 and v["rows_reconcile"] is True, row)
+    check("the rows sum to the headline margin",
+          round(sum(r["margin"] for r in v["rows"]), 2) == v["margin"], v)
+    check("and to the headline collected",
+          round(sum(r["collected"] for r in v["rows"]), 2) == v["collected"], v)
+
+    # A BROKEN allocation must be visible as broken, not averaged away.
+    with db._connect(db_path) as conn:
+        conn.execute("UPDATE acct_allocations SET prize_pool = 5.00 "
+                     "WHERE order_id = 'O-2'")
+        conn.commit()
+    v2 = campaigns.campaign_stats(db_path, today="2026-09-03",
+                                  gap_fill_seconds=0)["campaigns"][0]["value"]
+    check("an allocation that does not add up is FLAGGED, not hidden",
+          v2["rows_reconcile"] is False and v2["rows"][0]["residual"] == 9.0,
+          v2["rows"][0])
+    with db._connect(db_path) as conn:
+        conn.execute("UPDATE acct_allocations SET prize_pool = 14.00 "
+                     "WHERE order_id = 'O-2'")
+        conn.commit()
 
     print("Closed window + converted_at stamp")
     st = campaigns.campaign_stats(db_path, today="2026-10-30", gap_fill_seconds=0)
