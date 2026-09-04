@@ -55,7 +55,9 @@ global.currentRole = "admin"; global.shellApplyRole = () => {};
 let render, setALL;
 try {
     eval(js + "\nglobal.__render = renderLeads; global.__setALL = v => { ALL = v; };"
-            + "\nglobal.__F = { toggleSection };");
+            + "\nglobal.__F = { toggleSection,"
+            + " setSearch: v => { searchQ = v; renderLeads(); },"
+            + " setStatus: v => { statusFilter = v; renderLeads(); } };");
     render = global.__render; setALL = global.__setALL;
     console.log("  PASS  the page script evaluates");
 } catch (e) {
@@ -183,11 +185,27 @@ check("mobile gets section bars too, not just desktop",
 
 const hiddenRows = h => (h.match(/class="ld-(?:drow|mcard)[^"]*"[^>]*hidden/g) || []).length;
 const allRows = h => (h.match(/class="ld-(?:drow|mcard)[^"]*"/g) || []).length;
-check("every section starts COLLAPSED",
-      hiddenRows(mob) === allRows(mob) && allRows(mob) > 0,
-      hiddenRows(mob) + "/" + allRows(mob));
+const secOf = h => [...h.matchAll(/class="ld-mcard[^"]*"\s+data-sec="([^"]+)"([^>]*)>/g)]
+    .map(m => ({ sec: m[1], hidden: /hidden/.test(m[2]) }));
+const LANDING = ["NEW LEADS", "FOLLOW-UPS DUE"];
+check("the queue LANDS with New Leads and Follow-Ups Due open",
+      secOf(mob).every(r => r.hidden === !LANDING.includes(r.sec)),
+      JSON.stringify(secOf(mob)));
+check("everything else lands collapsed",
+      secOf(mob).some(r => r.hidden), JSON.stringify(secOf(mob)));
 check("the collapsed bars still carry their counts",
       /class="n">· \d+/.test(mob), mob.slice(0, 200));
+
+// "Then I'll collapse them if necessary" — closing one must not take
+// the other with it.
+F.toggleSection("NEW LEADS");
+check("closing one landing section leaves the other open",
+      secOf(store["ld-mlist"].innerHTML)
+          .every(r => r.hidden === (r.sec !== "FOLLOW-UPS DUE")),
+      JSON.stringify(secOf(store["ld-mlist"].innerHTML)));
+F.toggleSection("FOLLOW-UPS DUE");
+check("closing both leaves everything collapsed",
+      secOf(store["ld-mlist"].innerHTML).every(r => r.hidden));
 
 F.toggleSection("NEW LEADS");
 const openMob = store["ld-mlist"].innerHTML;
@@ -215,6 +233,27 @@ const reclosed = [...store["ld-mlist"].innerHTML
     .map(m => /hidden/.test(m[2]));
 check("clicking the open section closes it again",
       reclosed.length > 0 && reclosed.every(Boolean), reclosed);
+
+// A search that finds people and then hides them behind collapsed bars
+// is worse than no search at all.
+setALL({ ...ALL, leads });
+render();
+F.toggleSection("NEW LEADS");            // land on a mostly-collapsed queue
+F.toggleSection("NEW LEADS");
+F.setSearch("bruno");
+const searched = secOf(store["ld-mlist"].innerHTML);
+check("a search opens every section that survived it",
+      searched.length > 0 && searched.every(r => !r.hidden),
+      JSON.stringify(searched));
+F.setSearch("");
+check("clearing the search restores the collapse state, not everything",
+      secOf(store["ld-mlist"].innerHTML).some(r => r.hidden),
+      JSON.stringify(secOf(store["ld-mlist"].innerHTML)));
+F.setStatus("touched");
+check("a status filter opens them too — the same trap",
+      secOf(store["ld-mlist"].innerHTML).every(r => !r.hidden),
+      JSON.stringify(secOf(store["ld-mlist"].innerHTML)));
+F.setStatus("all");
 
 // Empty queue must say so rather than render blank.
 setALL({ ...ALL, leads: [] });

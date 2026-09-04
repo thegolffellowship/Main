@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.310.0";
+window.TGF_VERSION = "2.311.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.311.0",
+    date: "2026-09-04",
+    changes: [
+      "Searching now opens the sections holding the results (Kerry, after a search for 'logan' returned two people behind two collapsed bars: 'If I'm running a search, those leads need to open so I can see them'). Any filter that narrows the queue does it — the status chips, chapter, campaign and the triage filters hit the exact same trap, not just the search box. The collapse state itself is left alone, so clearing the filter puts the queue back the way it was rather than leaving everything open.",
+      "The queue lands with NEW LEADS and FOLLOW-UPS DUE expanded ('keep leads and follow ups expanded for landing. Then I'll collapse them if necessary'), everything else closed. Closing one of them now leaves the other open — a strict accordion would have meant collapsing New Leads silently took Follow-Ups Due with it. Opening a closed section still collapses whatever else was open.",
+    ],
+  },
   {
     version: "2.310.0",
     date: "2026-09-04",

@@ -336,13 +336,21 @@
         fAvail.clear(); fWant.clear(); fLoop.clear();
         renderLeads();
     }
-    // At most ONE section open at a time (Kerry 2026-09-04). Null means
-    // everything collapsed, which is how every load starts — the queue
-    // opens as a short list of headings with counts rather than a wall
-    // of leads.
-    let openSection = null;
+    // Which sections are expanded (Kerry 2026-09-04). The queue LANDS
+    // with the two he actually works — "keep leads and follow ups
+    // expanded for landing. Then I'll collapse them if necessary" —
+    // and everything else closed.
+    const LANDING_SECTIONS = ["NEW LEADS", "FOLLOW-UPS DUE"];
+    let openSections = new Set(LANDING_SECTIONS);
+
+    // Opening a CLOSED section makes it the only one open (his original
+    // rule: "when another is expanded, auto-collapse any that are
+    // currently expanded"). Closing an OPEN one just closes it, leaving
+    // the rest alone — otherwise collapsing New Leads on landing would
+    // silently take Follow-Ups Due with it.
     function toggleSection(name) {
-        openSection = openSection === name ? null : name;
+        if (openSections.has(name)) openSections.delete(name);
+        else openSections = new Set([name]);
         renderLeads();
     }
 
@@ -728,14 +736,22 @@
             secCounts[s] = (secCounts[s] || 0) + 1;
         });
         const showPill = sortKey !== "priority";
-        // Sections collapse (Kerry 2026-09-04: "start out the sections
-        // collapsed with ability to expand. When another is expanded,
-        // auto-collapse any that are currently expanded") — a strict
-        // accordion, at most one section open. openSection lives outside
-        // renderLeads so tagging a lead does not slam the section shut
-        // under him, but it is NOT persisted: every load starts closed,
-        // which is what "start out collapsed" means.
+        // Collapsible sections (Kerry 2026-09-04). openSections lives
+        // outside renderLeads so tagging a lead does not slam the
+        // section shut under him, and is NOT persisted — every load
+        // lands on NEW LEADS + FOLLOW-UPS DUE open, the two he works.
         const useSections = !showPill;
+        // A search that finds two people and then hides both behind
+        // collapsed bars is worse than no search (Kerry 2026-09-04: "If
+        // I'm running a search, those leads need to open so I can see
+        // them"). Any filter that NARROWS the queue opens every section
+        // that survived it — the same trap applies to the status chips
+        // and the triage filters, not just the search box. The collapse
+        // state is untouched, so clearing the filter puts it back.
+        const narrowing = !!searchQ || statusFilter !== "all"
+            || chapterFilter !== "all" || campaignFilter !== "all"
+            || triActive() > 0;
+        const secOpen = sec => !useSections || narrowing || openSections.has(sec);
         let curSection = null;
         const drows = [], cards = [];
         visible.forEach(l => {
@@ -844,12 +860,12 @@
             const sec = sectionOf(l);
             if (useSections && sec !== curSection) {
                 curSection = sec;
-                const isOpen = openSection === sec;
+                const isOpen = secOpen(sec);
                 const bar = `<div class="ld-secbar${SEC_CLASS[sec] || ""}${isOpen ? " open" : ""}" data-sec="${esc(sec)}" onclick="toggleSection(this.dataset.sec)" title="${isOpen ? "Collapse" : "Expand"}"><span class="ld-secch">${isOpen ? "&#9662;" : "&#9656;"}</span>${sec}<span class="n">· ${secCounts[sec]}</span></div>`;
                 drows.push(bar);
                 cards.push(bar);
             }
-            const secHidden = useSections && openSection !== sec ? " hidden" : "";
+            const secHidden = secOpen(sec) ? "" : " hidden";
             drows.push(`<div class="ld-drow ${chCls}" data-sec="${esc(sec)}"${secHidden}>
                 <div class="ld-dstatus">
                     ${showPill ? `<span class="ld-pill ld-${esc(l.status)}">${esc(l.status)}</span>` : ""}

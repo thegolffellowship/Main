@@ -589,13 +589,27 @@ disagreement between the two doesn't reorder anything — it splits one
 section into two bars with the same name. Both were changed together and
 a test asserts each section appears exactly once.
 
-**Strict accordion, at most one section open, all closed on load.**
-`openSection` lives outside `renderLeads` so tagging a lead doesn't slam
-the section shut mid-task, but it is deliberately **not persisted** —
-"start out collapsed" means every load starts collapsed. Rows, detail
-blocks and mobile cards all carry `data-sec` and are hidden when their
-section isn't the open one; `[hidden]` needs `!important` because
+**Lands on NEW LEADS + FOLLOW-UPS DUE open** (Kerry, same day: *"keep
+leads and follow ups expanded for landing. Then I'll collapse them if
+necessary"*), everything else closed. `openSections` lives outside
+`renderLeads` so tagging a lead doesn't slam the section shut mid-task,
+and is deliberately **not persisted** — every load lands the same way.
+Rows, detail blocks and mobile cards all carry `data-sec` and are hidden
+when their section is closed; `[hidden]` needs `!important` because
 `.ld-drow` and `.ld-mcard` set `display` themselves.
+
+**Toggle rule.** Opening a CLOSED section makes it the only one open
+(his original rule). Closing an OPEN one only closes that one — a strict
+accordion would mean collapsing New Leads on landing silently took
+Follow-Ups Due with it.
+
+**Any narrowing filter opens every surviving section.** Kerry, on a
+search returning two people behind two collapsed bars: *"If I'm running
+a search, those leads need to open so I can see them."* Search text,
+status chip, chapter, campaign and the triage filters all count — the
+trap is identical for each, not just the search box. The collapse state
+itself is untouched, so clearing the filter restores it rather than
+leaving everything open.
 
 **Mobile gained section bars for the first time** in this change. They
 only ever rendered into the desktop list, so there was nothing to
