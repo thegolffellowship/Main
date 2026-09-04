@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.302.0";
+window.TGF_VERSION = "2.302.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.302.1",
+    date: "2026-09-04",
+    changes: [
+      "scoring-followups-due[:brief] — read what the 7 AM morning digest will list, at any hour, and optionally render the whole COO Daily Briefing to prove a change to it works before it runs unattended. Added because the follow-ups section only executes once a day at an hour nobody is watching, which is the worst place to find out something throws.",
+    ],
+  },
   {
     version: "2.302.0",
     date: "2026-09-04",

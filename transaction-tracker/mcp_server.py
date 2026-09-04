@@ -2331,6 +2331,23 @@ def _scoring_dispatch(url: str, extract: str):
                 db.log_agent_action("mcp-claude", "scoring-outreach-backfill",
                                     f"updated={res.get('updated')}")
             return json.dumps(res, indent=2, default=str)
+        if cmd == "scoring-followups-due":
+            # What the 7 AM morning digest will list, checkable at any
+            # hour. ":brief" also renders the COO Daily Briefing so a
+            # change to it can be proven before it runs unattended.
+            from email_parser.leads import followups_due
+            _rows = followups_due()
+            _out = {"count": len(_rows),
+                    "overdue": sum(1 for r in _rows if r["days_over"] > 0),
+                    "leads": _rows}
+            if arg.strip().lower() in ("brief", "briefing"):
+                from email_parser.coo_email import build_coo_email_html
+                _subj, _html = build_coo_email_html()
+                _out["briefing_subject"] = _subj
+                _out["briefing_has_section"] = "Follow-ups Due" in _html
+                _out["briefing_bytes"] = len(_html)
+                _out.pop("leads", None)
+            return json.dumps(_out, indent=2, default=str)
         if cmd == "scoring-backup-status":
             # Is it configured, and did the last runs succeed?
             from email_parser.backups import backup_status
