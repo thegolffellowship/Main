@@ -942,8 +942,7 @@
         closer = closer === undefined ? st.closer : closer;
         const presets = ALL.sms_presets || {};
         const p = presets[key] || {};
-        let text = SLOT_KEYS[key] || (p.tue && !p.text)
-            ? (p[st.slot] || p.tue || p.text || "") : (p.text || "");
+        let text = p.text || (SLOT_KEYS[key] ? (p[st.slot] || p.tue || "") : "");
         const lines = text ? [text] : [];
         if ((ALL.sms_p9_presets || []).includes(key))
             st.addons.forEach(a => { const t = (presets[a] || {}).text; if (t) lines.push(t); });
@@ -952,8 +951,20 @@
         const vars = Object.assign({ first_name: l.first_name || "there",
             owner: "Kerry", next_tue: "Tuesday night", next_sat: "our next Saturday 18",
             next_event: "one of our upcoming events" }, st.vars);
-        for (const k of Object.keys(vars)) out = out.split("{" + k + "}").join(vars[k]);
-        return out;
+        // {price_block} holds the two ratified price sentences and drops
+        // out entirely when the first-timer price can't be computed —
+        // better no price than a text with a hole in it (#406).
+        if (out.includes("{price_block}")) {
+            const pb = presets.price_block || {};
+            const block = vars._price_known
+                ? ((key === "p3" ? pb.no_games : pb.text) || "") : "";
+            out = out.split("{price_block}").join(block);
+        }
+        for (const k of Object.keys(vars)) {
+            if (k.startsWith("_")) continue;
+            out = out.split("{" + k + "}").join(vars[k]);
+        }
+        return out.replace(/[ \t]{2,}/g, " ").trim();
     }
     function smsPickLabel(l, short) {
         const st = smsState(l);

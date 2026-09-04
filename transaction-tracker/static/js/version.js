@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.299.0";
+window.TGF_VERSION = "2.300.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.300.0",
+    date: "2026-09-04",
+    changes: [
+      "SMS preset revision wave 1 wired (CA #406, Kerry-ratified). P1-P4 replace the morning's copy after Kerry rewrote the ratified text live against five real prospects: 'it was too AI and not human enough.' Eight rules now render automatically — course main name only (Silverhorn, not Silverhorn Golf Club of Texas), day names inside a week and never 9/19, both owner names whenever a lead touches Austin, cadence ordered by what they picked without ever dropping the other option, the here-in-SA callout only on both-cities leads, and Team Net game and Closest to Pins instead of anything reading like terms and conditions. Start phrase comes from the event's own format (5:30p shotgun vs tee times starting at 8:30a) and a new range_balls_included event setting fills the inclusions line. {first_timer_price} is computed with the same arithmetic the Edit Event screen uses and reproduces CA's verified figures exactly (Silverhorn 64/74/49). Crucially the two price sentences render as one block that DROPS OUT ENTIRELY when course cost is unknown, because an uncontracted course like Forest Creek has no knowable price until tee times are bought and a text to a stranger with a hole where the price goes is worse than one that quotes nothing. P3's 'ambassadors' is replaced at Kerry's direction with 'someone who will welcome you and show you the ropes' — the old wording named a role that does not exist and would have created an obligation somebody had to keep on a Tuesday night. P9 now also names the other chapter's next event.",
+    ],
+  },
   {
     version: "2.299.0",
     date: "2026-09-04",

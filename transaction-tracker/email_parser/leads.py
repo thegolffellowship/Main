@@ -1949,86 +1949,72 @@ def set_lead_answers(lead_id: int, answers: dict | None = None,
 DEFAULT_TOUCH_OWNERS = {"San Antonio": "Kerry", "Austin": "Robert",
                         "default": "Kerry"}
 
+# ── PRESET COPY, REVISION WAVE 1 (platform-claude #406, Kerry-ratified
+#    2026-09-03 evening). P1-P4 REPLACE the #388 versions.
+#
+# Kerry sent five real openers today and rewrote the ratified copy live
+# every time: "it was too AI and not human enough." The core sentences
+# survived; the scaffolding did not.
+#
+# {price_block} is OURS, not CA's: it holds the two price sentences
+# exactly as ratified, and renders EMPTY when first-timer price cannot be
+# computed (an uncontracted course like Forest Creek has no knowable cost
+# until tee times are bought). Quoting "$ is our 1st Time rate" with a
+# hole in it, to a stranger, is worse than not quoting a price. When the
+# price IS available the output is byte-identical to the ratified copy.
+#
+# "Ambassadors" was replaced at Kerry's direction 2026-09-04. It named a
+# role that does not exist, which would have made the text a promise
+# somebody had to keep on a Tuesday night. His wording: "I'll pair you up
+# with someone who will welcome you and show you the ropes."
 DEFAULT_SMS_PRESETS: dict = {
     "p1": {
         "label": "Competition",
-        "tue": ("Hey {first_name}, {owner} with The Golf Fellowship. Good "
-                "to see a competitor. Our Tuesday nights are fair, fun, and "
-                "legit... gross and net games, scratch players to high "
-                "handicaps, and a crew you'll actually want to play with. "
-                "Next one's {next_tue}. Want a spot?"),
-        "sat": ("Hey {first_name}, {owner} with The Golf Fellowship. Good "
-                "to see a competitor. Our Saturday 18s are fair, fun, and "
-                "legit... gross and net games, scratch players to high "
-                "handicaps, and a crew you'll actually want to play with. "
-                "Next one's {next_sat}. Want a spot?"),
-        "both": ("Hey {first_name}, {owner} with The Golf Fellowship. Good "
-                 "to see a competitor. Our events are fair, fun, and "
-                 "legit... gross and net games, scratch players to high "
-                 "handicaps, and a crew you'll actually want to play with. "
-                 "Tuesday 9s and a Saturday 18 each month. Next one's "
-                 "{next_event}. Want a spot?"),
+        "text": ("Hey {first_name}, {owner} with The Golf Fellowship. "
+                 "Thanks for the interest! Good to see a fellow competitor.\n\n"
+                 "Our events are fair, fun, and legit... gross and net games, "
+                 "scratch players to high handicaps, and a crew you'll "
+                 "actually want to play with.\n\n"
+                 "Tuesday 9s and a Saturday 18 each month. Next one's {when} "
+                 "at {course}{start_phrase}.{price_block} Want a spot?"),
     },
     "p2": {
         "label": "Golf",
-        "tue": ("Hey {first_name}, {owner} with The Golf Fellowship. You "
-                "said you're in it for the golf. Different course every "
-                "week, 9 after work on Tuesdays and a Saturday 18 each "
-                "month, all set up for you so you just sign up, show up, "
-                "and play. Next one's {next_tue}. Want a spot?"),
-        "sat": ("Hey {first_name}, {owner} with The Golf Fellowship. You "
-                "said you're in it for the golf. Different course every "
-                "time, a Saturday 18 each month and 9 after work on "
-                "Tuesdays whenever you can, all set up for you so you just "
-                "sign up, show up, and play. Next one's {next_sat}. Want a "
-                "spot?"),
-        "both": ("Hey {first_name}, {owner} with The Golf Fellowship. You "
-                 "said you're in it for the golf. Different course every "
-                 "week, 9 after work on Tuesdays and a Saturday 18 each "
-                 "month, all set up for you so you just sign up, show up, "
-                 "and play. Next one's {next_event}. Want a spot?"),
+        "text": ("Hey {first_name}, {owner} with The Golf Fellowship. "
+                 "Thanks for your interest!\n\n"
+                 "You said you're in it for the golf. We play a different "
+                 "course every time, {cadence}, all set up for you so you "
+                 "just sign up, show up, and play.\n\n"
+                 "Next one{chapter} is {when} at {course}{start_phrase}."
+                 "{price_block}\n\n"
+                 "Would you like to try TGF out that day? We'd love to have "
+                 "you play!"),
     },
     "p3": {
         "label": "Community",
-        "tue": ("Hey {first_name}, {owner} with The Golf Fellowship. Saw "
-                "community is what you're looking for. That's the heart of "
-                "what we do. Tuesday night is 9 holes with good people and "
-                "a drink after, and I'll pair you up so you're not walking "
-                "in cold. Next one's {next_tue}. Want to come meet "
-                "everybody?"),
-        "sat": ("Hey {first_name}, {owner} with The Golf Fellowship. Saw "
-                "community is what you're looking for. That's the heart of "
-                "what we do. Saturday 18s are a full round with good people "
-                "and a drink after, and I'll pair you up so you're not "
-                "walking in cold. Next one's {next_sat}. Want to come meet "
-                "everybody?"),
-        "both": ("Hey {first_name}, {owner} with The Golf Fellowship. Saw "
-                 "community is what you're looking for. That's the heart "
-                 "of what we do. Our events are good golf with good people "
-                 "and a drink after... Tuesday 9s and a Saturday 18 each "
-                 "month, and I'll pair you up so you're not walking in "
-                 "cold. Next one's {next_event}. Want to come meet "
-                 "everybody?"),
+        # Deliberately carries NO optional-gross-games line: skins is a
+        # competitor's pitch and lands wrong on a community lead (#406).
+        "text": ("Hey {first_name}, {owner} with The Golf Fellowship. "
+                 "Thanks for the interest!\n\n"
+                 "Saw community is what you're looking for. We're all about "
+                 "connecting people thru the game. We mix you in with "
+                 "different members each time so you play with as many "
+                 "people as possible, and I'll pair you up with someone who "
+                 "will welcome you and show you the ropes.\n\n"
+                 "{cadence}, with fellowship after. Next one{chapter} is "
+                 "{when} at {course}{start_phrase}.{price_block}\n\n"
+                 "Want to come meet everybody?"),
     },
     "p4": {
         "label": "All of it",
-        "tue": ("Hey {first_name}, {owner} with The Golf Fellowship. Good "
-                "courses, fair competition, good people... you basically "
-                "described what we've been building for twenty seasons. "
-                "Tuesday 9s every week, a Saturday 18 each month, all set "
-                "up for you. Next one's {next_tue}. Want to try it out?"),
-        "sat": ("Hey {first_name}, {owner} with The Golf Fellowship. Good "
-                "courses, fair competition, good people... you basically "
-                "described what we've been building for twenty seasons. "
-                "A Saturday 18 each month, Tuesday 9s every week if you "
-                "ever can, all set up for you. Next one's {next_sat}. Want "
-                "to try it out?"),
-        "both": ("Hey {first_name}, {owner} with The Golf Fellowship. Good "
-                 "courses, fair competition, good people... you basically "
-                 "described what we've been building for twenty seasons. "
-                 "Tuesday 9s every week, a Saturday 18 each month, all set "
-                 "up for you. Next one's {next_event}. Want to try it "
-                 "out?"),
+        "text": ("Hey {first_name}, {owner} with The Golf Fellowship. "
+                 "Thanks for the interest! Good to see someone who wants "
+                 "the whole thing.\n\n"
+                 "Good courses, fair competition, good people. We've been "
+                 "chasing that mix for twenty seasons.\n\n"
+                 "{cadence}, all set up for you. Next one{chapter} is {when} "
+                 "at {course}{start_phrase}.{price_block}\n\n"
+                 "Want to try it out?"),
     },
     "p6": {
         "label": "No days",
@@ -2055,26 +2041,38 @@ DEFAULT_SMS_PRESETS: dict = {
     "p8": {
         "label": "Re-submitter",
         "text": ("Hey {first_name}, {owner} with The Golf Fellowship. Good "
-                 "to see your name pop up again. Everything's à la carte, "
+                 "to see your name pop up again. Everything's \u00e0 la carte, "
                  "so you can jump in any week, no catching up required. "
                  "{next_event} is next up. Ready to give it a go?"),
     },
-    # Optional closer (append, verbatim from the ad / welcome email).
     "closer": {
         "label": "Offer line",
         "text": "$25 off your first event, plus a drink on us.",
     },
-    # #389: add-on line, never a standalone preset. Rides on P1–P4 / P8
-    # when Invitations = Both cities; an Invitations edit from the reply
-    # re-routes the chapter per the standing rules.
+    # #406: P9 now also carries the OTHER chapter's event. This replaces
+    # listing two events inside the opener — the close stays single.
     "p9": {
         "label": "Both cities add-on",
         "text": ("BTW, you marked both San Antonio and Austin. Do you "
-                 "bounce between the two, or should I focus you on one?"),
+                 "bounce between the two, or should I focus you on one?"
+                 "{other_chapter_event}"),
+    },
+    # The two ratified price sentences, held together so they render or
+    # vanish as one unit.
+    "price_block": {
+        "label": "Price sentences",
+        "text": (" {first_timer_price} is our 1st Time rate ($25 off guest "
+                 "rate), includes a free drink, cart{range_balls}, and "
+                 "entry into Team Net game and Closest to Pins. Optional "
+                 "gross games (skins and Individual Gross, preflighted by "
+                 "handicaps) are {gross_bundle} more."),
+        "no_games": (" {first_timer_price} is our 1st Time rate ($25 off "
+                     "guest rate), includes a free drink, cart{range_balls}, "
+                     "and entry into Team Net game and Closest to Pins."),
     },
 }
 SMS_PRESET_ORDER = ["p1", "p2", "p3", "p4", "p6", "p7", "p7b", "p8"]
-SMS_SLOT_PRESETS = {"p1", "p2", "p3", "p4"}       # carry tue/sat/both
+SMS_SLOT_PRESETS: set = set()   # #406: cadence is a placeholder now, not variants
 SMS_P9_PRESETS = {"p1", "p2", "p3", "p4", "p8"}   # #389 add-on rides here
 SMS_SYSTEM_NOTE_AUTHORS = {"HS", "GG", "auto"}     # not a human reply
 SMS_HOT_TAGS = {"Call back", "Interested", "Coming to event"}
@@ -2145,6 +2143,176 @@ def backfill_outreach_alarms(dry_run: bool = False,
     return out
 
 
+# ── PLACEHOLDER RENDERING, revision wave 1 (#406) ────────────────────
+# Every rule here is Kerry's, from comparing the ratified copy against
+# what he actually typed to five real prospects.
+GROSS_BUNDLE = {9: "$16", 18: "$30"}
+FIRST_TIMER_DISCOUNT = 25          # 1st Timer = Guest - $25
+GUEST_SURCHARGE = {9: 10, 18: 15, 27: 25}   # over Member; 27h has no 1st tier
+_COURSE_SUFFIXES = (
+    " golf club of texas", " golf club", " golf course", " golf links",
+    " country club", " golf & country club", " cc", " gc",
+)
+
+
+def short_course_name(name: str) -> str:
+    """Rule 1: main name only. Kerry: "Nobody says that." """
+    n = (name or "").strip()
+    low = n.lower()
+    for suf in _COURSE_SUFFIXES:
+        if low.endswith(suf):
+            return n[: len(n) - len(suf)].strip()
+    return n
+
+
+def when_phrase(event_date: str, today=None) -> str:
+    """Rule 2: inside 7 days -> day name. 8-10 days -> "next Saturday,
+    Sep 12". Beyond -> "Sep 19". NEVER "9/19"."""
+    from datetime import date as _d
+    from .timezone_utils import now_central
+    today = today or now_central().date()
+    try:
+        y, m, dd = (int(x) for x in str(event_date)[:10].split("-"))
+        ev = _d(y, m, dd)
+    except Exception:
+        return ""
+    days = (ev - today).days
+    if 0 <= days <= 7:
+        return ev.strftime("%A")
+    if 8 <= days <= 10:
+        return f"next {ev.strftime('%A')}, {ev.strftime('%b')} {ev.day}"
+    return f"{ev.strftime('%b')} {ev.day}"
+
+
+def _fmt_time(t: str) -> str:
+    """'17:30' -> '5:30p'; '08:30' -> '8:30a'."""
+    raw = (t or "").strip()
+    if not raw:
+        return ""
+    try:
+        hh, mm = (int(x) for x in raw.split(":")[:2])
+    except Exception:
+        return raw
+    ap = "a" if hh < 12 else "p"
+    h12 = hh % 12 or 12
+    return f"{h12}:{mm:02d}{ap}" if mm else f"{h12}{ap}"
+
+
+def start_phrase(event: dict) -> str:
+    """Build ask B (#406): Kerry phrases by FORMAT, not clock.
+    Shotgun -> ", 5:30p shotgun". Tee times -> " with tee times starting
+    at 8:30a". Unknown -> empty, never a guess."""
+    if not event:
+        return ""
+    t = _fmt_time(event.get("start_time") or "")
+    kind = (event.get("start_type") or "").strip().lower()
+    if not t:
+        return ""
+    if kind.startswith("shotgun"):
+        return f", {t} shotgun"
+    if kind.startswith("tee"):
+        return f" with tee times starting at {t}"
+    return ""
+
+
+def cadence_phrase(slot: str) -> str:
+    """Rule 4: order follows AVAILABILITY and NEVER drops the other
+    option. Kerry: "I would always lead with weekly Tuesdays if they
+    selected Tuesday's or both and wouldn't uninclude the other." The
+    "whenever you can" softener rides on the NON-selected day only."""
+    if slot == "sat":
+        return ("a Saturday 18 each month and 9 after work on Tuesdays "
+                "whenever you can")
+    return "9 after work on Tuesdays weekly and a Saturday 18 each month"
+
+
+def chapter_phrase(invitations: str, chapter: str) -> str:
+    """Rule 5: the "here in SA" callout ONLY when Invitations = Both."""
+    if (invitations or "").lower() != "yes_for_both":
+        return ""
+    if chapter == "San Antonio":
+        return " here in SA"
+    if chapter == "Austin":
+        return " here in Austin"
+    return ""
+
+
+def owner_phrase(chapter: str, invitations: str, owners: dict) -> str:
+    """Rule 3: BOTH names whenever the lead touches Austin (Austin-only
+    OR both cities). Kerry: "I accidentally didn't include Robert on a
+    couple. I like the inclusion." SA-only gets the sender alone."""
+    owners = owners or DEFAULT_TOUCH_OWNERS
+    inv = (invitations or "").lower()
+    touches_austin = chapter == "Austin" or inv in ("yes_for_austin",
+                                                    "yes_for_both")
+    sa = owners.get("San Antonio") or owners.get("default") or "Kerry"
+    atx = owners.get("Austin") or "Robert"
+    if touches_austin and atx and atx != sa:
+        return f"{sa} and {atx}"
+    return owners.get(chapter) or sa
+
+
+def event_holes(event: dict) -> int:
+    """9 or 18 from the event code/format. TGF codes are s9.x / a18.x."""
+    name = (event.get("item_name") or "").lower()
+    fmt = (event.get("format") or "").lower()
+    if "27" in fmt:
+        return 27
+    if name.startswith(("s18.", "a18.")) or "18" in fmt:
+        return 18
+    return 9
+
+
+def first_timer_price(event: dict) -> float | None:
+    """The 1st Timer player total, using the SAME arithmetic the Edit
+    Event screen shows (course cost rounds UP first, then markup + game
+    fee, then the whole charge rounds up, then the transaction fee).
+
+    Guest = Member + $10 (9h/combo), +$15 (standalone 18h), +$25 (27h).
+    1st Timer = Guest - $25, and 27-hole events have NO 1st Timer tier.
+
+    Returns None when course_cost is unknown — an uncontracted course
+    like Forest Creek has no knowable price until tee times are bought
+    (#403/#404), and a blank in a text to a stranger is worse than no
+    price at all."""
+    if not event:
+        return None
+    holes = event_holes(event)
+    if holes == 27:
+        return None
+    cc = event.get("course_cost")
+    if cc is None and holes == 18:
+        cc = event.get("course_cost_18")
+    if cc is None and holes == 9:
+        cc = event.get("course_cost_9")
+    mu = event.get("tgf_markup")
+    if mu is None:
+        mu = event.get(f"tgf_markup_{holes}")
+    if cc is None or mu is None:
+        return None
+    sg = event.get("side_game_fee")
+    if sg is None:
+        sg = event.get(f"side_game_fee_{holes}") or 0
+    try:
+        import math
+        ft_markup = float(mu) + GUEST_SURCHARGE[holes] - FIRST_TIMER_DISCOUNT
+        # The EVENT CHARGE, which is the number the Edit Event screen
+        # shows and the number CA verified against it (Silverhorn 64/74/49,
+        # Forest Creek 143/158/133). The card transaction fee is added at
+        # checkout and is deliberately NOT quoted here — Kerry says "$49
+        # is our 1st Time rate", not $50.72.
+        return float(math.ceil(math.ceil(float(cc)) + ft_markup + float(sg)))
+    except Exception:
+        logger.warning("first_timer_price failed", exc_info=True)
+        return None
+
+
+def money(v) -> str:
+    if v is None:
+        return ""
+    return f"${v:,.0f}" if float(v) == int(float(v)) else f"${v:,.2f}"
+
+
 def get_touch_owners(db_path=None) -> dict:
     """chapter → first name for {owner}; dial `lead_touch_owners` over
     DEFAULT_TOUCH_OWNERS."""
@@ -2203,6 +2371,45 @@ def _event_label(row) -> str:
         return f"{dt.strftime('%A')} {m}/{d} at {name}"
     except Exception:
         return f"{name} on {row['event_date']}"
+
+
+def next_event_rows(db_path=None, today: str | None = None) -> dict:
+    """{'any'|'tue'|'sat': {chapter: full event row}} — the presets need
+    course, start time, format and pricing, not just a label."""
+    from . import database as db
+    from .timezone_utils import today_central_str
+    from datetime import date
+    today = today or today_central_str()
+    out: dict = {"any": {}, "tue": {}, "sat": {}}
+    try:
+        with db._connect(db_path) as conn:
+            rows = [dict(r) for r in conn.execute(
+                "SELECT * FROM events WHERE event_date >= ? "
+                "AND COALESCE(event_type, 'event') = 'event' "
+                "ORDER BY event_date, item_name", (today,)).fetchall()]
+    except Exception:
+        logger.warning("next_event_rows failed", exc_info=True)
+        return out
+    for r in rows:
+        name = (r.get("item_name") or "").lower()
+        try:
+            y, m, d = (int(x) for x in str(r["event_date"])[:10].split("-"))
+            wd = date(y, m, d).weekday()
+        except Exception:
+            wd = None
+        is_tue = (name.startswith(("s9.", "a9."))
+                  or (wd == 1 and not name.startswith(("s18.", "a18."))))
+        is_sat = (name.startswith(("s18.", "a18."))
+                  or (wd == 5 and not name.startswith(("s9.", "a9."))))
+        chapters = ([r.get("chapter")] if r.get("chapter")
+                    and r["chapter"] != "TGF" else ["Austin", "San Antonio"])
+        for ch in chapters:
+            out["any"].setdefault(ch, r)
+            if is_tue:
+                out["tue"].setdefault(ch, r)
+            if is_sat:
+                out["sat"].setdefault(ch, r)
+    return out
 
 
 def next_event_labels(db_path=None, today: str | None = None) -> dict:
@@ -2371,36 +2578,69 @@ def select_sms_preset(lead: dict, now=None) -> dict:
 
 
 def sms_vars_for(lead: dict, owners: dict | None = None,
-                 nexts: dict | None = None) -> dict:
-    """Placeholder values for one lead."""
+                 nexts: dict | None = None, rows: dict | None = None,
+                 slot: str = "") -> dict:
+    """Every placeholder for one lead, per the #406 rules."""
     owners = owners or DEFAULT_TOUCH_OWNERS
     nexts = nexts or {"any": {}, "tue": {}, "sat": {}}
+    rows = rows or {"any": {}, "tue": {}, "sat": {}}
     ch = lead.get("chapter") or ""
+    invitations = _lead_answer(lead, "invitations")
+    slot = slot or sms_slot_for(lead) or "tue"
 
     def _n(kind, fallback):
         m = nexts.get(kind) or {}
         return m.get(ch) or m.get("default") or fallback
 
+    # The event this text is actually about: the one matching their day.
+    kind = "sat" if slot == "sat" else ("tue" if slot in ("tue", "both") else "any")
+    ev = (rows.get(kind) or {}).get(ch) or (rows.get("any") or {}).get(ch) or {}
+    holes = event_holes(ev) if ev else 9
+    price = first_timer_price(ev) if ev else None
+
+    # P9 (#406) now names the OTHER chapter's next event.
+    other = "San Antonio" if ch == "Austin" else "Austin"
+    other_ev = (rows.get("any") or {}).get(other)
+    other_phrase = ""
+    if invitations == "yes_for_both" and other_ev:
+        other_phrase = (f" Our {other} group is playing "
+                        f"{short_course_name(other_ev.get('course') or '')} "
+                        f"{when_phrase(other_ev.get('event_date'))}.")
+
+    rb = ev.get("range_balls_included") if ev else None
     return {
         "first_name": (lead.get("first_name") or "").strip() or "there",
-        "owner": owners.get(ch) or owners.get("default") or "Kerry",
+        "owner": owner_phrase(ch, invitations, owners),
+        "cadence": cadence_phrase(slot),
+        "chapter": chapter_phrase(invitations, ch),
+        "when": when_phrase(ev.get("event_date")) if ev else "",
+        "course": short_course_name(ev.get("course") or "") if ev else "",
+        "start_phrase": start_phrase(ev),
+        "first_timer_price": money(price),
+        "range_balls": ", range balls" if rb else "",
+        "gross_bundle": GROSS_BUNDLE.get(holes, GROSS_BUNDLE[9]),
+        "other_chapter_event": other_phrase,
+        # kept for P7 / P7b / P8, which still use the #388 text
         "next_tue": _n("tue", "Tuesday night"),
         "next_sat": _n("sat", "our next Saturday 18"),
         "next_event": _n("any", "one of our upcoming events"),
+        "_price_known": price is not None,
     }
 
 
 def render_sms(presets: dict, key: str, lead: dict, sms_vars: dict,
                slot: str = "", addons: list | None = None,
                closer: bool = False) -> str:
-    """Fill a preset for a lead: body (slot variant for P1–P4), then the
-    #389 add-on line, then the optional offer closer, each on its own
-    line. Unknown keys render empty."""
+    """Fill a preset. {price_block} carries the two ratified price
+    sentences and renders EMPTY when the first-timer price is unknown —
+    an uncontracted course has no knowable cost until tee times are
+    bought, and a text to a stranger with a hole where the price goes is
+    worse than one that simply does not quote a price (#403/#406)."""
+    import re
     p = presets.get(key) or {}
-    if key in SMS_SLOT_PRESETS or ("tue" in p and "text" not in p):
-        text = p.get(slot or "tue") or p.get("tue") or p.get("text") or ""
-    else:
-        text = p.get("text") or ""
+    text = p.get("text") or ""
+    if not text and (key in SMS_SLOT_PRESETS or "tue" in p):
+        text = p.get(slot or "tue") or p.get("tue") or ""
     lines = [text] if text else []
     for a in addons or []:
         t = (presets.get(a) or {}).get("text")
@@ -2411,9 +2651,24 @@ def render_sms(presets: dict, key: str, lead: dict, sms_vars: dict,
         if t:
             lines.append(t)
     out = "\n".join(lines)
+
+    # Assemble the price block before substituting the rest.
+    if "{price_block}" in out:
+        block = ""
+        if sms_vars.get("_price_known"):
+            pb = presets.get("price_block") or {}
+            # P3 deliberately omits the optional-gross-games sentence:
+            # skins is a competitor's pitch and lands wrong on a
+            # community lead (#406).
+            block = (pb.get("no_games") if key == "p3" else pb.get("text")) or ""
+        out = out.replace("{price_block}", block)
+
     for k, v in sms_vars.items():
+        if k.startswith("_"):
+            continue
         out = out.replace("{" + k + "}", str(v))
-    return out
+    # Tidy any double spaces a dropped block leaves behind.
+    return re.sub(r"[ \t]{2,}", " ", out).strip()
 
 
 def lead_sms_text(lead_id: int, preset: str = "", closer: bool = False,
@@ -2432,7 +2687,8 @@ def lead_sms_text(lead_id: int, preset: str = "", closer: bool = False,
         return {"error": f"unknown preset '{key}'",
                 "presets": sms_preset_order(presets)}
     vars_ = sms_vars_for(lead, get_touch_owners(db_path),
-                         next_event_labels(db_path))
+                         next_event_labels(db_path),
+                         next_event_rows(db_path), pick["slot"])
     addons = pick["addons"] if key in SMS_P9_PRESETS else []
     return {"lead_id": lead_id, "name": f"{lead.get('first_name') or ''} "
             f"{lead.get('last_name') or ''}".strip(),

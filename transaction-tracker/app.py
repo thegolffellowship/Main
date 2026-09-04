@@ -11382,15 +11382,18 @@ def api_leads():
     # picked server-side per lead (preset + slot + #389 add-on) and
     # filled client-side so the ▾ picker can switch without a refetch.
     from email_parser.leads import (get_sms_presets, get_touch_owners,
-                                    next_event_labels, select_sms_preset,
+                                    next_event_labels, next_event_rows,
+                                    select_sms_preset,
                                     sms_vars_for, sms_preset_order)
     sms_presets = get_sms_presets()
     owners = get_touch_owners()
     nexts = next_event_labels()
+    rows = next_event_rows()
     for l in leads:
         try:
             l["sms"] = select_sms_preset(l)
-            l["sms"]["vars"] = sms_vars_for(l, owners, nexts)
+            l["sms"]["vars"] = sms_vars_for(l, owners, nexts, rows,
+                                            l["sms"]["slot"])
         except Exception:
             logger.warning("Lead SMS preset pick failed", exc_info=True)
             l["sms"] = None

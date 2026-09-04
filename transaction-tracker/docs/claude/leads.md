@@ -359,6 +359,54 @@ per the standing conversion detect, which is the desired display.
 First live sweep back-collects the 2026 fall campaign's five: Wilder,
 Hinojosa, O. Gonzalez, M. Hernandez, D. Garza.
 
+## SMS presets — revision wave 1 (CA #406, Kerry-ratified, v2.300.0)
+
+P1-P4 **replace** the #388 copy. Kerry rewrote the ratified text live
+against five real prospects and told CA why: *"it was too AI and not
+human enough."* The core sentences survived; the scaffolding did not.
+
+**Rendered rules** (all automatic, all from #406): course **main name
+only** · day name inside 7 days, "next Saturday, Sep 12" at 8-10, "Sep
+19" beyond, **never** "9/19" · **both owner names** whenever the lead
+touches Austin · cadence ordered by their Availability and **never
+dropping the other day** (the "whenever you can" softener rides the
+non-selected day) · the `here in SA` callout **only** when Invitations =
+Both · "Team Net game and Closest to Pins" · "weekly", not "every week".
+
+**New data the copy needs:** `{start_phrase}` from the event's own
+`start_type` + `start_time` (", 5:30p shotgun" / " with tee times
+starting at 8:30a"), and **`events.range_balls_included`** (build ask A)
+— NULL renders nothing rather than claiming either way.
+
+**`{first_timer_price}` uses the same arithmetic as the Edit Event
+screen:** course cost rounds up, plus markup, plus the included-games
+fee, then the whole charge rounds up. Guest = Member +$10 (9h) / +$15
+(standalone 18h) / +$25 (27h); **1st Timer = Guest − $25**; 27-hole
+events have no 1st Timer tier. The card transaction fee is **not**
+quoted — Kerry says "$49 is our 1st Time rate", not $50.72. Verified
+against the live Silverhorn row: 64 / 74 / 49, matching CA exactly.
+
+**`{price_block}` is ours, not CA's, and it is the safety valve.** It
+holds the two ratified price sentences and renders **empty** when the
+first-timer price cannot be computed. An uncontracted course (Forest
+Creek is dynamic online tee pricing, #403/#404) has no knowable cost
+until tee times are bought, and a text to a stranger with a hole where
+the price goes is worse than one that quotes no price. When the price
+exists, output is byte-identical to the ratified copy. P3 uses the
+`no_games` variant — skins is a competitor's pitch and lands wrong on a
+community lead.
+
+**"Ambassadors" is gone** (Kerry, 2026-09-04). It named a role that does
+not exist, which would have made the copy a promise somebody had to keep
+on a Tuesday night. His wording: *"I'll pair you up with someone who
+will welcome you and show you the ropes."*
+
+**P9** now also names the other chapter's next event, replacing the
+practice of listing two events inside the opener.
+
+**Not wired, per #406:** P6's open ruling, and P7 / P7b / P8 still carry
+the #388 text.
+
 ## Backfill + attribution fixes (platform-claude #405, v2.299.0)
 
 **MIGRATION GAP in v2.294.0.** The 48-hour alarm only arms on a NEW

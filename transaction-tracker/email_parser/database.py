@@ -3404,6 +3404,17 @@ def init_db(db_path: str | Path | None = None) -> None:
             """
         )
 
+        # Build ask A (platform-claude #406): whether range balls are
+        # included is an EVENT setting the SMS presets read, because
+        # Kerry already varies it by hand — Cedar Creek included them,
+        # Forest Creek did not. NULL means "not stated", which renders
+        # nothing rather than claiming either way.
+        try:
+            conn.execute("ALTER TABLE events ADD COLUMN "
+                         "range_balls_included INTEGER")
+        except sqlite3.OperationalError:
+            pass
+
         # Support feedback — bug reports and feature requests from the chat widget
         conn.execute(
             """
