@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.298.0";
+window.TGF_VERSION = "2.299.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.299.0",
+    date: "2026-09-04",
+    changes: [
+      "Backfill for the 48-hour outreach alarm, closing a migration gap CA found in v2.294.0 (#405). The alarm only armed on a NEW tagging, so every lead already texted before that release got nothing — 27 personally-contacted leads were sitting outside the very conversion gate the release exists to enforce, which is the exact failure mode it was built to prevent. scoring-outreach-backfill[:dry] applies the same rule retroactively (outreach_at = touched_at, follow_up_at = touched_at + 2 days, with an auto note), never overwrites a hand-set date, and is idempotent. Standing rule added to CLAUDE.md: any feature that arms state going forward needs a backfill for rows that predate it. Also fixed touched_by being NULL on every lead — the Touched button prompts for a name but Kerry works the queue by tagging, and the tag path never captured one; it now fills from the logged-in user automatically, which is the attribution the chapter-manager compensation model needs.",
+    ],
+  },
   {
     version: "2.298.0",
     date: "2026-09-03",

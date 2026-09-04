@@ -2321,6 +2321,16 @@ def _scoring_dispatch(url: str, extract: str):
             _cid = arg.strip()
             return json.dumps(db.list_contact_aliases(
                 int(_cid) if _cid.isdigit() else None), indent=2, default=str)
+        if cmd == "scoring-outreach-backfill":
+            # ":dry" previews. Applies the v2.294.0 48-hour alarm rule
+            # retroactively to leads tagged before that release (#405).
+            from email_parser.leads import backfill_outreach_alarms
+            _dry = arg.strip().lower() in ("dry", "preview")
+            res = backfill_outreach_alarms(dry_run=_dry)
+            if not _dry:
+                db.log_agent_action("mcp-claude", "scoring-outreach-backfill",
+                                    f"updated={res.get('updated')}")
+            return json.dumps(res, indent=2, default=str)
         if cmd == "scoring-backup-status":
             # Is it configured, and did the last runs succeed?
             from email_parser.backups import backup_status

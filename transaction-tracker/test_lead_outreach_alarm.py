@@ -29,6 +29,12 @@ os.environ.setdefault("DATABASE_PATH", ":memory:")
 
 from email_parser import database as db  # noqa: E402
 from email_parser import leads  # noqa: E402
+from email_parser.timezone_utils import now_central  # noqa: E402
+
+# ONE reference date for the whole run, on the SAME clock the code stamps
+# with. Reading date.today() (UTC) per assertion made this suite fail if a
+# run straddled midnight Central — which it did, 2026-09-03 23:59 UTC.
+TODAY = now_central().date()
 
 FAILURES = []
 
@@ -80,7 +86,7 @@ def main():
         conn.execute("CREATE TABLE IF NOT EXISTS app_settings (key TEXT PRIMARY "
                      "KEY, value TEXT, updated_at TEXT)")
         conn.commit()
-    due2 = (date.today() + timedelta(days=2)).isoformat()
+    due2 = (TODAY + timedelta(days=2)).isoformat()
 
     print("Arming")
     a = plant(p, "Texted")
@@ -186,7 +192,7 @@ def main():
     leads.set_lead_tag(i, "Texted", db_path=p)
     with db._connect(p) as conn:            # pretend the 48 hours elapsed
         conn.execute("UPDATE leads SET follow_up_at = ? WHERE id = ?",
-                     (date.today().isoformat(), i))
+                     (TODAY.isoformat(), i))
         conn.commit()
     sent = {}
     orig = leads._send_followup_ping
@@ -214,6 +220,87 @@ def main():
     leads.set_lead_tag(j, "Left VM", db_path=p)
     check("a tag dropped from the dial no longer arms",
           row(p, j)["follow_up_at"] is None, row(p, j))
+
+    print("Backfill for leads tagged before the release (#405)")
+    from datetime import timedelta as _td
+    # The Dial section above narrowed lead_outreach_tags to ["Texted"];
+    # restore the default or "Sent email" and "Left VM" silently fail to
+    # match here. Test isolation, not a code behaviour.
+    with db._connect(p_db) as conn:
+        conn.execute("DELETE FROM app_settings WHERE key = 'lead_outreach_tags'")
+        conn.commit()
+    pre = []
+    for i, (name, tag, day) in enumerate([
+            ("PreA", "Texted", 2), ("PreB", "Texted", 2),
+            ("PreC", "Sent email", 1), ("PreD", "Left VM", 0)]):
+        lid = plant(p_db, name, status="touched")
+        stamp = (TODAY - _td(days=day)).isoformat() + " 14:00:00"
+        with db._connect(p_db) as conn:
+            conn.execute("UPDATE leads SET tag = ?, touched_at = ? WHERE id = ?",
+                         (tag, stamp, lid))
+            conn.commit()
+        pre.append((lid, day))
+    # a hand-set follow-up must survive untouched
+    hand = plant(p_db, "HandSet", status="touched")
+    hand_date = (TODAY + _td(days=10)).isoformat()
+    with db._connect(p_db) as conn:
+        conn.execute("UPDATE leads SET tag = 'Texted', touched_at = ?, "
+                     "follow_up_at = ? WHERE id = ?",
+                     ((TODAY - _td(days=2)).isoformat() + " 09:00:00",
+                      hand_date, hand))
+        conn.commit()
+    # a non-outreach tag must be left alone
+    hot = plant(p_db, "HotTag", status="touched")
+    with db._connect(p_db) as conn:
+        conn.execute("UPDATE leads SET tag = 'Interested', touched_at = ? "
+                     "WHERE id = ?",
+                     ((TODAY - _td(days=2)).isoformat() + " 09:00:00", hot))
+        conn.commit()
+
+    dry = leads.backfill_outreach_alarms(dry_run=True, db_path=p_db)
+    dry_ids = {l["id"] for l in dry["leads"]}
+    check("dry run finds every pre-release outreach lead",
+          {lid for lid, _ in pre} <= dry_ids, sorted(dry_ids))
+    check("dry run excludes the hand-set and non-outreach leads",
+          hand not in dry_ids and hot not in dry_ids, sorted(dry_ids))
+    check("dry run changes nothing",
+          row(p_db, pre[0][0])["follow_up_at"] is None)
+    check("dry run reports a due date for each",
+          all(l.get("due") for l in dry["leads"]), dry["leads"][:2])
+    res = leads.backfill_outreach_alarms(db_path=p_db)
+    check("backfill updated what the dry run previewed",
+          res["updated"] == dry["found"], (res.get("updated"), dry.get("found")))
+    for lid, day in pre:
+        r = row(p_db, lid)
+        want = (TODAY - _td(days=day) + _td(days=2)).isoformat()
+        check(f"lead touched {day}d ago is due {want}",
+              r["follow_up_at"] == want and r["outreach_at"] is not None,
+              (r["follow_up_at"], want))
+    check("a HAND-SET follow-up date is never overwritten",
+          row(p_db, hand)["follow_up_at"] == hand_date, row(p_db, hand))
+    check("a non-outreach tag is left alone",
+          row(p_db, hot)["follow_up_at"] is None, row(p_db, hot))
+    check("backfill is idempotent — a second run finds nothing",
+          leads.backfill_outreach_alarms(db_path=p_db)["updated"] == 0)
+    n = notes(p_db, pre[0][0])
+    check("each backfilled lead gets an auto note explaining it",
+          any("backfilled" in x["note"] for x in n), n)
+
+    print("Tag path attributes the toucher (#405)")
+    t = plant(p_db, "Attrib")
+    leads.set_lead_tag(t, "Texted", db_path=p_db, author="kerry")
+    with db._connect(p_db) as conn:
+        tb = conn.execute("SELECT touched_by, status FROM leads WHERE id = ?",
+                          (t,)).fetchone()
+    check("tagging a NEW lead records who did it",
+          tb["touched_by"] == "kerry" and tb["status"] == "touched", dict(tb))
+    t2 = plant(p_db, "NoAuthor")
+    leads.set_lead_tag(t2, "Texted", db_path=p_db)
+    with db._connect(p_db) as conn:
+        tb2 = conn.execute("SELECT touched_by FROM leads WHERE id = ?",
+                           (t2,)).fetchone()
+    check("no author supplied leaves it NULL rather than blank",
+          tb2["touched_by"] is None, dict(tb2))
 
     os.unlink(p)
     print()

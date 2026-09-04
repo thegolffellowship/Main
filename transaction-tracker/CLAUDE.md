@@ -39,6 +39,8 @@ Before working on a specific area, Read the relevant sub-doc:
 
 ## Guiding Principles
 
+**Release checklist — backfill rule (platform-claude #405, 2026-09-03):** any feature that arms state on an event GOING FORWARD needs a backfill for the rows that predate it. v2.294.0's 48-hour alarm shipped without one and left 27 already-contacted leads outside the gate it exists to enforce — a feature can silently under-cover exactly the population it was built for.
+
 These are durable design principles that apply to **every** feature in this app and to the future TGF Platform. When in doubt, default to these.
 
 1. **Automate toward 0% manual input.** The ultimate TGF Platform is the goal; this Tracker is the live sandbox/bridge that preps for it. Every feature should drive manual user input as close to zero as possible by encoding behavior in rules, defaults, and auto-derived data. Manager-side screens should compute, not collect. If a value can be derived (from rules, from event type, from player count, from history) — derive it, don't ask for it.

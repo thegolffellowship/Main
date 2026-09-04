@@ -1500,9 +1500,17 @@ def get_tag_options(db_path: str | Path | None = None) -> list[str]:
 
 
 def set_lead_tag(lead_id: int, tag: str,
-                 db_path: str | Path | None = None) -> dict:
+                 db_path: str | Path | None = None,
+                 author: str = "") -> dict:
     """Set (or clear with '') a lead's disposition tag. Tagging a NEW
-    lead marks it touched — a tag means somebody acted on it."""
+    lead marks it touched — a tag means somebody acted on it.
+
+    `author` records WHO (platform-claude #405): touched_by was NULL on
+    every row because the Touched button prompts for a name but Kerry
+    works the queue by tagging instead, and the tag path never captured
+    one. That is the data the chapter-manager compensation model needs,
+    so it is filled automatically from the session rather than by asking
+    him for a name he already implied by being logged in."""
     from . import database as db
     tag = (tag or "").strip()
     if tag and tag not in get_tag_options(db_path):
@@ -1525,8 +1533,9 @@ def set_lead_tag(lead_id: int, tag: str,
         elif tag and row["status"] == "new":
             conn.execute(
                 "UPDATE leads SET tag = ?, status = 'touched', "
-                "touched_at = COALESCE(touched_at, datetime('now')) "
-                "WHERE id = ?", (tag, lead_id))
+                "touched_at = COALESCE(touched_at, datetime('now')), "
+                "touched_by = COALESCE(NULLIF(touched_by, ''), NULLIF(?, '')) "
+                "WHERE id = ?", (tag, (author or "").strip(), lead_id))
         else:
             conn.execute("UPDATE leads SET tag = ? WHERE id = ?",
                          (tag or None, lead_id))
@@ -2072,6 +2081,68 @@ SMS_HOT_TAGS = {"Call back", "Interested", "Coming to event"}
 SMS_SECOND_TOUCH_DAYS = 2
 SMS_SECOND_TOUCH_ALT_DAYS = 4
 SMS_SAT_BORROW_DAYS = 21
+
+
+def backfill_outreach_alarms(dry_run: bool = False,
+                             db_path: str | Path | None = None) -> dict:
+    """MIGRATION GAP FIX (platform-claude #405, Kerry-approved 2026-09-03).
+
+    The 48-hour alarm (v2.294.0) only arms on a NEW tagging, so every
+    lead Kerry had already texted before the release got nothing — 27
+    people personally contacted and sitting outside the very conversion
+    gate the release exists to enforce. That is the exact failure mode
+    the feature was built to prevent.
+
+    Applies the SAME rule retroactively: outreach-tagged, touched, and no
+    follow-up pending → outreach_at = touched_at, follow_up_at =
+    touched_at + 2 days. A hand-set date is never overwritten (the
+    `follow_up_at IS NULL` guard is what protects it).
+
+    THE FORWARD LESSON, worth keeping: any feature that arms state on an
+    event going forward needs a backfill for the rows that predate it,
+    or it silently under-covers exactly the population it was built for.
+    """
+    from . import database as db
+    tags = get_outreach_tags(db_path)
+    ph = ",".join("?" * len(tags))
+    out: dict = {"dry_run": bool(dry_run), "outreach_tags": tags}
+    with db._connect(db_path) as conn:
+        ensure_leads_table(conn)
+        rows = [dict(r) for r in conn.execute(
+            f"SELECT id, first_name, last_name, tag, touched_at, status "
+            f"FROM leads WHERE status = 'touched' AND tag IN ({ph}) "
+            f"AND follow_up_at IS NULL AND outreach_at IS NULL "
+            f"AND touched_at IS NOT NULL AND merged_into IS NULL "
+            f"ORDER BY touched_at", tuple(tags))]
+        by_due: dict = {}
+        for r in rows:
+            due = conn.execute(
+                "SELECT date(?, '+' || ? || ' days')",
+                (r["touched_at"], OUTREACH_FOLLOWUP_DAYS)).fetchone()[0]
+            r["due"] = due
+            by_due[due] = by_due.get(due, 0) + 1
+        out["found"] = len(rows)
+        out["by_due_date"] = dict(sorted(by_due.items()))
+        out["leads"] = [{"id": r["id"],
+                         "name": f"{r['first_name'] or ''} "
+                                 f"{r['last_name'] or ''}".strip(),
+                         "tag": r["tag"], "touched_at": r["touched_at"],
+                         "due": r["due"]} for r in rows]
+        if dry_run:
+            return out
+        for r in rows:
+            conn.execute(
+                "UPDATE leads SET outreach_at = touched_at, follow_up_at = ? "
+                "WHERE id = ? AND follow_up_at IS NULL", (r["due"], r["id"]))
+            conn.execute(
+                "INSERT INTO lead_notes (lead_id, author, note) "
+                "VALUES (?, 'auto', ?)",
+                (r["id"], f"48-hour follow-up backfilled from the "
+                          f"{r['tag']} tag ({str(r['touched_at'])[:10]}) "
+                          f"— due {r['due']}"))
+        conn.commit()
+        out["updated"] = len(rows)
+    return out
 
 
 def get_touch_owners(db_path=None) -> dict:

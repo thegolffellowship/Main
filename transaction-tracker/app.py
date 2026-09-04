@@ -11513,7 +11513,10 @@ def api_lead_campaign(lead_id):
 def api_lead_tag(lead_id):
     from email_parser.leads import set_lead_tag
     d = request.get_json(silent=True) or {}
-    res = set_lead_tag(lead_id, (d.get("tag") or "").strip())
+    # Attribute the touch to whoever is logged in (#405) — the tag path
+    # is how Kerry actually works the queue, and it was recording nobody.
+    res = set_lead_tag(lead_id, (d.get("tag") or "").strip(),
+                       author=session.get("user") or "")
     return jsonify(res), (400 if res.get("error") else 200)
 
 

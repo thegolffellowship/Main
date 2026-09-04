@@ -359,6 +359,33 @@ per the standing conversion detect, which is the desired display.
 First live sweep back-collects the 2026 fall campaign's five: Wilder,
 Hinojosa, O. Gonzalez, M. Hernandez, D. Garza.
 
+## Backfill + attribution fixes (platform-claude #405, v2.299.0)
+
+**MIGRATION GAP in v2.294.0.** The 48-hour alarm only arms on a NEW
+tagging, so every lead already texted before that release got nothing.
+CA found 27 personally-contacted leads sitting **outside the very
+conversion gate the release exists to enforce** — the exact failure mode
+the feature was built to prevent.
+
+`backfill_outreach_alarms(dry_run)` applies the same rule retroactively:
+outreach-tagged + touched + no follow-up pending → `outreach_at =
+touched_at`, `follow_up_at = touched_at + 2 days`, plus an auto note
+saying it was backfilled. **A hand-set date is never overwritten** (the
+`follow_up_at IS NULL` guard is what protects it). Idempotent. Bridge:
+`scoring-outreach-backfill[:dry]`.
+
+**THE FORWARD RULE, and it belongs in the release checklist:** any
+feature that arms state on an event *going forward* needs a backfill for
+the rows that predate it, or it silently under-covers exactly the
+population it was built for.
+
+**`touched_by` was NULL on every row.** Not a write bug — the Touched
+button prompts for a name, but Kerry works the queue by **tagging**, and
+`set_lead_tag` never captured one. It now fills from the session user
+automatically (`author=session["user"]` from the tag route), so
+attribution costs nobody a prompt. This is the data the chapter-manager
+compensation model needs.
+
 ## Duplicate leads + merge (Kerry 2026-09-03, v2.295.0)
 
 > "I see we have two Shane Winters. Those need to be merged. I thought
