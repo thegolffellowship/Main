@@ -1,5 +1,15 @@
-window.TGF_VERSION = "2.318.1";
+window.TGF_VERSION = "2.319.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.319.0",
+    date: "2026-09-04",
+    changes: [
+      "MONEY IN is now the actual deposit, not the sticker price \u2014 and following Kerry's rule exposed a real bug. Kerry: 'Logan isn't $60 in. It's $62.10 in minus GoDaddy transaction fees. Whatever that is, that's the actual money in.' That sentence is the formula. godaddy_order_splits.transaction_fee is written from the parser's per-item field, and on a MULTI-ITEM order the parser stamps the ORDER's whole fee onto every item row, so summing it per item counts one fee twice. Michele McCormick's order (Silverhorn $64 + membership $50) carries $3.99 on BOTH rows; the order fee is $3.99, not $7.98. The campaign margin was overstated by exactly that.",
+      "The margin now reads acct_transactions.net_deposit \u2014 what GoDaddy actually paid for the order \u2014 and apportions it across the order's items by what each charged. It is impossible to double-count a fee you never add up. Both fee legs are still reported per row so the processor spread stays visible; they no longer feed the margin. New per-row `money_in` and `money_in_source` say which figure was used.",
+      "The same double-count is present in the Monthly Money Flow report's RETAINED line, which sums transaction_fee across splits. Not changed here \u2014 that is a live financial report and the root cause is at write time, where the stored split rows are money records other reports read. Flagged to Kerry and CA rather than fixed quietly.",
+      "New read-only bridge command scoring-schema:<table> \u2014 the live CREATE statement, columns and indexes for one table, so a schema decision can be made against what production actually has rather than what the source declares.",
+    ],
+  },
   {
     version: "2.318.1",
     date: "2026-09-04",

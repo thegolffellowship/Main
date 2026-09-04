@@ -71,6 +71,9 @@ def main():
             id INTEGER PRIMARY KEY AUTOINCREMENT, transaction_id INTEGER,
             item_id INTEGER, event_name TEXT, customer TEXT,
             split_type TEXT NOT NULL, amount REAL NOT NULL, created_at TEXT)""")
+        conn.execute("""CREATE TABLE IF NOT EXISTS acct_transactions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT, order_id TEXT,
+            net_deposit REAL, merchant_fee REAL)""")
         conn.execute("""CREATE TABLE IF NOT EXISTS acct_allocations (
             id INTEGER PRIMARY KEY AUTOINCREMENT, order_id TEXT NOT NULL,
             item_id INTEGER, event_name TEXT, chapter TEXT,
@@ -457,29 +460,99 @@ def main():
           disc["rows"][0]["margin_booked"] == 8.0
           and disc["rows"][0]["margin_actual"] == -6.12, disc["rows"][0])
 
-    # Kerry 2026-09-04: the customer PAYS the 3.5% and GoDaddy takes its
-    # actual cut — two different numbers, and TGF keeps the difference.
-    # Dropping both (my second attempt) was as wrong as subtracting one.
-    with db._connect(db_path) as conn:
-        conn.executemany(
-            "INSERT INTO godaddy_order_splits (item_id, split_type, amount) "
-            "VALUES (?,?,?)",
-            [(3, "transaction_fee", 1.93), (3, "merchant_fee", -1.90)])
-        conn.commit()
-    fee = campaigns.campaign_stats(db_path, today="2026-09-03",
-                                   gap_fill_seconds=0)["campaigns"][0]["value"]
-    fr = fee["rows"][0]
-    check("the fee the customer paid is added back",
-          fr["fee_in"] == 1.93, fr)
-    check("what GoDaddy actually took is subtracted",
-          fr["fee_out"] == 1.9, fr)
-    check("TGF keeps the difference, and it moves margin_actual",
-          fr["fee_net"] == 0.03 and fr["margin_actual"] == -6.09, fr)
     check("the overstatement is quantified, per row and in total",
           disc["rows"][0]["overstated"] == 14.12
           and disc["overstated"] == 14.12, disc)
     check("and the headline is marked as not reconciling",
           disc["rows_reconcile"] is False, disc)
+
+    # Kerry 2026-09-04: "Logan isn't $60 in. It's $62.10 in minus GoDaddy
+    # transaction fees. Whatever that is, that's the actual money in."
+    # MONEY IN is the deposit, not the sticker price. The fee legs are
+    # still reported per row so the processor spread stays visible, but
+    # they no longer feed the margin.
+    with db._connect(db_path) as conn:
+        conn.execute("INSERT INTO acct_transactions "
+                     "(id, order_id, net_deposit, merchant_fee) "
+                     "VALUES (900, 'O-2', 54.98, 1.94)")
+        conn.executemany(
+            "INSERT INTO godaddy_order_splits "
+            "(transaction_id, item_id, split_type, amount) VALUES (?,?,?,?)",
+            [(900, 3, "registration", 55.00),
+             (900, 3, "transaction_fee", 1.92),
+             (900, 3, "merchant_fee", -1.94)])
+        conn.commit()
+    fee = campaigns.campaign_stats(db_path, today="2026-09-03",
+                                   gap_fill_seconds=0)["campaigns"][0]["value"]
+    fr = fee["rows"][0]
+    check("money in is the DEPOSIT, not the sticker price",
+          fr["money_in"] == 54.98 and fr["money_in_source"] == "deposit", fr)
+    check("both fee legs are still reported",
+          (fr["fee_in"], fr["fee_out"], fr["fee_net"]) == (1.92, 1.94, -0.02), fr)
+    check("margin is deposit minus course and prizes",
+          fr["margin_actual"] == -6.14, fr)
+
+    # THE BUG Kerry's correction exposed. On a MULTI-ITEM order the
+    # parser stamps the ORDER's whole transaction fee onto every item
+    # row, so summing it per item counts one fee twice. Michele
+    # McCormick's real order is this shape: $64 event + $50 membership,
+    # $3.99 of fee on BOTH rows, but the order fee is $3.99. Reading the
+    # deposit instead of reconstructing from fee legs makes it impossible
+    # to get wrong.
+    print("A multi-item order's fee is counted ONCE")
+    with db._connect(db_path) as conn:
+        conn.execute("INSERT INTO acct_allocations "
+                     "(order_id, item_id, event_name, allocation_date, "
+                     " course_payable, prize_pool, tgf_operating, "
+                     " total_collected, allocation_status) "
+                     "VALUES ('O-9', 91, 'MULTI EVENT', '2026-09-02', "
+                     "        48.71, 7.00, 8.00, 64.00, 'complete')")
+        conn.execute("INSERT INTO acct_allocations "
+                     "(order_id, item_id, event_name, allocation_date, "
+                     " course_payable, prize_pool, tgf_operating, "
+                     " total_collected, allocation_status) "
+                     "VALUES ('O-9', 92, 'TGF MEMBERSHIP', '2026-09-02', "
+                     "        0, 6.00, 44.00, 50.00, 'complete')")
+        # deposit = 114.00 charged + 3.99 fee - 3.72 GoDaddy took
+        conn.execute("INSERT INTO acct_transactions "
+                     "(id, order_id, net_deposit, merchant_fee) "
+                     "VALUES (901, 'O-9', 114.27, 3.72)")
+        conn.executemany(
+            "INSERT INTO godaddy_order_splits "
+            "(transaction_id, item_id, split_type, amount) VALUES (?,?,?,?)",
+            [(901, 91, "registration", 64.00),
+             (901, 91, "transaction_fee", 3.99),      # the ORDER's fee...
+             (901, 91, "merchant_fee", -2.07),
+             (901, 92, "registration", 50.00),
+             (901, 92, "transaction_fee", 3.99),      # ...stamped again
+             (901, 92, "merchant_fee", -1.65)])
+        conn.execute("INSERT INTO items (id, customer_id, transaction_status, "
+                     " merchant, item_name, item_price, order_id, order_date) "
+                     "VALUES (91, 9002, 'active', 'GoDaddy', 'MULTI EVENT', "
+                     " 64.0, 'O-9', '2026-09-02')")
+        conn.execute("INSERT INTO items (id, customer_id, transaction_status, "
+                     " merchant, item_name, item_price, order_id, order_date) "
+                     "VALUES (92, 9002, 'active', 'GoDaddy', 'TGF MEMBERSHIP', "
+                     " 50.0, 'O-9', '2026-09-02')")
+        conn.commit()
+    multi = campaigns.campaign_stats(db_path, today="2026-09-03",
+                                     gap_fill_seconds=0)["campaigns"][0]["value"]
+    rows = {r["item_id"]: r for r in multi["rows"]}
+    ev, mem = rows.get(91), rows.get(92)
+    check("both rows of the order are present", ev and mem, list(rows))
+    if ev and mem:
+        check("the deposit splits across the two items, summing to itself",
+              round(ev["money_in"] + mem["money_in"], 2) == 114.27,
+              (ev["money_in"], mem["money_in"]))
+        check("neither row claims the whole $3.99 as its own money",
+              ev["money_in"] < 64.00 + 3.99 and mem["money_in"] < 50.00 + 3.99,
+              (ev["money_in"], mem["money_in"]))
+        # The old fee-leg formula would have produced 64 + 3.99 - 2.07 = 65.92
+        # and 50 + 3.99 - 1.65 = 52.34, summing to 118.26 — $3.99 of money
+        # that was never deposited.
+        check("and the pair does not invent the $3.99 the old maths did",
+              round(ev["money_in"] + mem["money_in"], 2) != 118.26,
+              (ev["money_in"], mem["money_in"]))
 
     print("Closed window + converted_at stamp")
     st = campaigns.campaign_stats(db_path, today="2026-10-30", gap_fill_seconds=0)

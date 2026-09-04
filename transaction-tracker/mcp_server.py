@@ -2434,6 +2434,32 @@ def _scoring_dispatch(url: str, extract: str):
                 _out["briefing_bytes"] = len(_html)
                 _out.pop("leads", None)
             return json.dumps(_out, indent=2, default=str)
+        if cmd == "scoring-schema":
+            # Read-only: the LIVE CREATE statement + columns + indexes for
+            # one table. Added 2026-09-04 because the alias-table merge
+            # turns on whether the production table actually carries the
+            # CHECK constraint the code declares — a table created before
+            # a CHECK was added to the source does not have it, and
+            # guessing either way risks losing rows.
+            _t = (arg or "").strip()
+            if not _t or not _t.replace("_", "").isalnum():
+                return json.dumps({"error": "usage scoring-schema:<table>"})
+            with db._connect() as _c:
+                _sql = _c.execute(
+                    "SELECT sql FROM sqlite_master WHERE type='table' "
+                    "AND name = ?", (_t,)).fetchone()
+                if not _sql:
+                    return json.dumps({"error": f"no table {_t!r}"})
+                _cols = [dict(r) for r in _c.execute(
+                    f"PRAGMA table_info({_t})")]
+                _idx = [dict(r) for r in _c.execute(
+                    "SELECT name, sql FROM sqlite_master WHERE type='index' "
+                    "AND tbl_name = ?", (_t,))]
+                _n = _c.execute(f"SELECT COUNT(*) AS n FROM {_t}").fetchone()["n"]
+            return json.dumps({"table": _t, "rows": _n,
+                               "create_sql": _sql["sql"],
+                               "columns": _cols, "indexes": _idx},
+                              indent=2, default=str)
         if cmd == "scoring-backup-status":
             # Is it configured, and did the last runs succeed?
             from email_parser.backups import backup_status

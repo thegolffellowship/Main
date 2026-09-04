@@ -533,37 +533,73 @@ def campaign_value(lead_rows: list[dict], conn,
     #
     # Hence two figures per row:
     #   margin_booked  — tgf_operating, what the books say.
-    #   margin_actual  — collected - course - surcharge - prizes, what
+    #   margin_actual  — money_in - course - surcharge - prizes, what
     #                    was genuinely left over.
-    # BOTH fee legs belong in margin_actual (Kerry 2026-09-04: "I don't
-    # think the Will Wallace example is correct either when you consider
-    # 3.5% transaction fees plus the $55 minus the GoDaddy fees"). My
-    # first version subtracted the fee from collected — wrong, it would
-    # have called every membership broken. My second dropped it
-    # entirely — also wrong, because the customer PAYS the 3.5% and
-    # GoDaddy takes its actual cut, and those are two different numbers.
-    # godaddy_order_splits holds both at item grain:
-    #   + transaction_fee   what the customer paid on top
-    #   - merchant_fee      what GoDaddy actually took (stored signed)
-    # TGF keeps the difference, which is usually small and occasionally
-    # negative.
-    # Both fee legs per item, from the splits table the money-flow
-    # report treats as authoritative for fees.
+    #
+    # Getting `money_in` right took three tries and two corrections from
+    # Kerry, so the wrong turns are recorded here rather than repeated:
+    #   1. collected MINUS the processor fee — wrong; would have called
+    #      every membership broken.
+    #   2. collected, fee dropped entirely — also wrong: the customer
+    #      PAYS the 3.5% on top and GoDaddy takes its own cut, and those
+    #      are two different numbers.
+    #   3. collected + transaction_fee - merchant_fee — right in shape,
+    #      wrong in data, because transaction_fee is duplicated across
+    #      the items of a multi-item order (see below).
+    #   4. this one: the order's actual DEPOSIT, apportioned per item.
+    # fee_in / fee_out are still reported per row so the processor spread
+    # stays visible, but they no longer feed the margin.
+    #
+    # CORRECTION, Kerry 2026-09-04: "Logan isn't $60 in. It's $62.10 in
+    # minus GoDaddy transaction fees. Whatever that is, that's the actual
+    # money in."
+    #
+    # That sentence is the formula, and following it exposed a real bug.
+    # `godaddy_order_splits.transaction_fee` is written from the PARSER's
+    # per-item `transaction_fees` field, and on a MULTI-ITEM order the
+    # parser stamps the ORDER's whole fee onto every item row. Summing it
+    # per item therefore counts one fee two, three, four times. Michele
+    # McCormick's order (Silverhorn $64 + membership $50) carries $3.99 on
+    # BOTH rows; the order fee is $3.99, not $7.98. `merchant_fee` does not
+    # have the problem — the writer pro-rates it at insert time.
+    #
+    # So stop reconstructing money-in from fee legs and read what actually
+    # landed: `acct_transactions.net_deposit` is the deposit GoDaddy made
+    # for the order, i.e. exactly "charged minus what GoDaddy took". Split
+    # it across the order's items in proportion to what each item charged.
+    #
+    # Read-side on purpose. The root cause is at WRITE time and the stored
+    # split rows are money records that other reports read; rewriting them
+    # is a migration, not a bug fix, and needs its own ratification.
+    money_in: dict = {}
     fees: dict = {}
     try:
         for fr in conn.execute(
-                f"SELECT item_id, "
-                f"  SUM(CASE WHEN split_type = 'transaction_fee' "
-                f"           THEN ABS(amount) ELSE 0 END) AS fee_in, "
-                f"  SUM(CASE WHEN split_type = 'merchant_fee' "
-                f"           THEN ABS(amount) ELSE 0 END) AS fee_out "
-                f"FROM godaddy_order_splits WHERE item_id IS NOT NULL "
-                f"GROUP BY item_id").fetchall():
+                "SELECT s.item_id, t.net_deposit, "
+                "  SUM(CASE WHEN s.split_type = 'registration' "
+                "           THEN s.amount ELSE 0 END) AS reg, "
+                "  SUM(CASE WHEN s.split_type = 'transaction_fee' "
+                "           THEN ABS(s.amount) ELSE 0 END) AS fee_in, "
+                "  SUM(CASE WHEN s.split_type = 'merchant_fee' "
+                "           THEN ABS(s.amount) ELSE 0 END) AS fee_out, "
+                "  (SELECT SUM(s2.amount) FROM godaddy_order_splits s2 "
+                "   WHERE s2.transaction_id = s.transaction_id "
+                "   AND s2.split_type = 'registration') AS order_reg "
+                "FROM godaddy_order_splits s "
+                "LEFT JOIN acct_transactions t ON t.id = s.transaction_id "
+                "WHERE s.item_id IS NOT NULL "
+                "GROUP BY s.item_id").fetchall():
+            _reg = float(fr["reg"] or 0)
+            _order_reg = float(fr["order_reg"] or 0)
+            _net = fr["net_deposit"]
             fees[fr["item_id"]] = (float(fr["fee_in"] or 0),
                                    float(fr["fee_out"] or 0))
+            if _net is not None and _order_reg > 0:
+                money_in[fr["item_id"]] = round(
+                    float(_net) * (_reg / _order_reg), 2)
     except Exception:
-        logger.warning("fee splits unavailable — margin_actual will omit "
-                       "the fee legs", exc_info=True)
+        logger.warning("fee splits unavailable — margin_actual falls back "
+                       "to the collected amount", exc_info=True)
 
     out["rows"] = []
     for r in conn.execute(
@@ -591,14 +627,19 @@ def campaign_value(lead_rows: list[dict], conn,
         d["fee_in"] = round(fees.get(d.get("item_id"), (0.0, 0.0))[0], 2)
         d["fee_out"] = round(fees.get(d.get("item_id"), (0.0, 0.0))[1], 2)
         d["fee_net"] = round(d["fee_in"] - d["fee_out"], 2)
-        d["margin_actual"] = round(d["collected"] + d["fee_in"] - d["fee_out"]
-                                   - d["course"] - d["surcharge"]
-                                   - d["prizes"], 2)
+        # MONEY IN = this item's share of what GoDaddy actually deposited
+        # for the order (Kerry's rule, above). `collected` is the sticker
+        # price and is kept for display, but it is not what arrived.
+        _mi = money_in.get(d.get("item_id"))
+        d["money_in"] = _mi if _mi is not None else d["collected"]
+        d["money_in_source"] = "deposit" if _mi is not None else "collected"
+        d["margin_actual"] = round(d["money_in"] - d["course"]
+                                   - d["surcharge"] - d["prizes"], 2)
         # Positive = the books claim more than was actually left over.
         d["overstated"] = round(d["margin_booked"] - d["margin_actual"], 2)
         for k in ("collected", "course", "surcharge", "prizes", "fee",
                   "tax", "margin", "margin_booked", "margin_actual",
-                  "overstated", "fee_in", "fee_out", "fee_net"):
+                  "overstated", "fee_in", "fee_out", "fee_net", "money_in"):
             d[k] = round(d[k], 2)
         out["rows"].append(d)
     out["margin_actual"] = round(sum(r["margin_actual"] for r in out["rows"]), 2)
