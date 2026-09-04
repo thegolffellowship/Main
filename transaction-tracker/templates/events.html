@@ -999,6 +999,22 @@
                         </div>
                     </div>
 
+                    <!-- Range balls (#406 build ask A). What the entry price
+                         covers varies by course — Cedar Creek included range
+                         balls, Forest Creek did not — so it lives with the
+                         price, not with the logistics. The Lead Center's
+                         1st-timer texts read this: off simply means they don't
+                         mention range balls, never that the course withholds
+                         them. -->
+                    <div id="edit-range-balls" style="margin-top:1rem; border-top:1px solid var(--border); padding-top:0.75rem;">
+                        <label style="display:flex; align-items:center; gap:0.45rem; font-weight:600; font-size:0.82rem; cursor:pointer;">
+                            <input type="checkbox" id="edit-event-range_balls_included" style="cursor:pointer;">
+                            Range balls included
+                        </label>
+                        <div style="font-size:0.75rem; color:var(--text-muted); margin-top:0.2rem;">
+                            Adds &ldquo;range balls&rdquo; to what the 1st Time rate covers in Lead Center texts. Leave off and they aren&rsquo;t mentioned.
+                        </div>
+                    </div>
                 </div><!-- end PRICING tab -->
 
                 <!-- PACKAGES tab (Kerry 2026-08-04: "an Event Creator that
@@ -1799,6 +1815,22 @@
                         </div>
                         <div id="add-pricing-preview-combo" style="margin-top:0.5rem; padding:0.5rem; background:#f9fafb; border:1px solid var(--border); border-radius:6px; font-size:0.78rem;">
                             <div id="add-pricing-summary-combo"></div>
+                        </div>
+                    </div>
+                    <!-- Range balls (#406 build ask A). What the entry price
+                         covers varies by course — Cedar Creek included range
+                         balls, Forest Creek did not — so it lives with the
+                         price, not with the logistics. The Lead Center's
+                         1st-timer texts read this: off simply means they don't
+                         mention range balls, never that the course withholds
+                         them. -->
+                    <div id="add-range-balls" style="margin-top:1rem; border-top:1px solid var(--border); padding-top:0.75rem;">
+                        <label style="display:flex; align-items:center; gap:0.45rem; font-weight:600; font-size:0.82rem; cursor:pointer;">
+                            <input type="checkbox" id="add-event-range_balls_included" style="cursor:pointer;">
+                            Range balls included
+                        </label>
+                        <div style="font-size:0.75rem; color:var(--text-muted); margin-top:0.2rem;">
+                            Adds &ldquo;range balls&rdquo; to what the 1st Time rate covers in Lead Center texts. Leave off and they aren&rsquo;t mentioned.
                         </div>
                     </div>
                 </div><!-- end add-tab-pricing -->
@@ -11260,6 +11292,8 @@
         document.querySelectorAll('input[name="add-event-nine_side"]').forEach(r => r.checked = (r.value === "Front"));
         const addFiveReset = document.getElementById("add-event-allow_fivesomes");
         if (addFiveReset) addFiveReset.checked = false;
+        const addRangeBallsReset = document.getElementById("add-event-range_balls_included");
+        if (addRangeBallsReset) addRangeBallsReset.checked = false;
         document.getElementById("add-start-type-single").style.display = "";
         document.getElementById("add-start-type-combo").style.display = "none";
         document.getElementById("add-tee-count").value = "";
@@ -11373,6 +11407,8 @@
             payload.nine_side = addNsEl ? addNsEl.value : "Front";
             const addFiveEl = document.getElementById("add-event-allow_fivesomes");
             payload.allow_fivesomes = addFiveEl && addFiveEl.checked ? 1 : 0;
+            const addRbEl = document.getElementById("add-event-range_balls_included");
+            payload.range_balls_included = addRbEl && addRbEl.checked ? 1 : 0;
             // Pricing fields
             if (isCombo) {
                 // Combo pricing from calculators
@@ -12149,6 +12185,8 @@
         });
         const editFive = document.getElementById("edit-event-allow_fivesomes");
         if (editFive) editFive.checked = !!Number(ev.allow_fivesomes);
+        const editRangeBalls = document.getElementById("edit-event-range_balls_included");
+        if (editRangeBalls) editRangeBalls.checked = !!Number(ev.range_balls_included);
 
         // Pricing fields — single format
         document.getElementById("edit-event-tgf_markup").value = ev.tgf_markup != null ? ev.tgf_markup : "";
@@ -12291,6 +12329,9 @@
         const fiveEl = document.getElementById("edit-event-allow_fivesomes");
         const fiveVal = fiveEl && fiveEl.checked ? 1 : 0;
         if (fiveVal !== (Number(ev.allow_fivesomes) ? 1 : 0)) changes.allow_fivesomes = fiveVal;
+        const rbEl = document.getElementById("edit-event-range_balls_included");
+        const rbVal = rbEl && rbEl.checked ? 1 : 0;
+        if (rbVal !== (Number(ev.range_balls_included) ? 1 : 0)) changes.range_balls_included = rbVal;
 
         // Pricing fields — depends on format
         if (isCombo) {

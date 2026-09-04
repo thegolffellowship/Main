@@ -34,3 +34,31 @@ def today_central() -> date:
 def today_central_str() -> str:
     """Current US/Central date as 'YYYY-MM-DD'."""
     return now_central().strftime("%Y-%m-%d")
+
+
+def to_central(value) -> datetime | None:
+    """Read a STORED timestamp (naive UTC, the way every datetime column in
+    this database is written) as US/Central wall-clock, naive.
+
+    For deriving a user-facing DAY from a stored timestamp. Kerry texts
+    prospects in the evening, so a 10 PM Central touch is stored as the
+    next day in UTC — taking date() straight off the stored value puts
+    the follow-up a day late. Accepts a datetime or a 'YYYY-MM-DD
+    HH:MM:SS' string; returns None for anything unparseable.
+    """
+    if value is None:
+        return None
+    if isinstance(value, datetime):
+        dt = value
+    else:
+        text = str(value).strip().replace("T", " ")[:19]
+        for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M", "%Y-%m-%d"):
+            try:
+                dt = datetime.strptime(text, fmt)
+                break
+            except ValueError:
+                continue
+        else:
+            return None
+    return (pytz.utc.localize(dt.replace(tzinfo=None))
+            .astimezone(CENTRAL).replace(tzinfo=None))

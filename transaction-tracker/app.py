@@ -6692,15 +6692,17 @@ def api_create_event():
         per_game_addon=data.get("per_game_addon"),
     )
     if event:
-        # allow_fivesomes rides on update_event rather than widening
-        # create_event's 30-argument signature for one boolean.
-        if data.get("allow_fivesomes") and event.get("id"):
+        # The booleans ride on update_event rather than widening
+        # create_event's 30-argument signature one flag at a time.
+        extras = {k: 1 for k in ("allow_fivesomes", "range_balls_included")
+                  if data.get(k)}
+        if extras and event.get("id"):
             try:
-                update_event(event["id"],
-                             {"allow_fivesomes": 1 if data["allow_fivesomes"] else 0})
-                event["allow_fivesomes"] = 1
+                update_event(event["id"], extras)
+                event.update(extras)
             except Exception:
-                logger.exception("Could not set allow_fivesomes on new event")
+                logger.exception("Could not set %s on new event",
+                                 ", ".join(extras))
         return jsonify({"status": "ok", "event": event}), 201
     return jsonify({"error": "Event already exists with that name."}), 409
 

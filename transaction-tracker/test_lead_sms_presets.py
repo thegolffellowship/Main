@@ -238,6 +238,28 @@ def main():
     check("not stated renders nothing",
           leads.sms_vars_for(l, ow, {}, rows, "tue")["range_balls"] == "")
 
+    # The checkbox on the Edit Event screen is only useful if the field
+    # survives the save — update_event drops anything outside its allowed
+    # set silently, which is exactly how a checkbox becomes a no-op.
+    tmp = tempfile.NamedTemporaryFile(suffix=".db", delete=False)
+    tmp.close()
+    with db._connect(tmp.name) as conn:
+        conn.execute("CREATE TABLE events (id INTEGER PRIMARY KEY, "
+                     "item_name TEXT, range_balls_included INTEGER)")
+        conn.execute("INSERT INTO events (id, item_name) VALUES (1, 's9.22')")
+        conn.commit()
+    db.update_event(1, {"range_balls_included": 1}, db_path=tmp.name)
+    with db._connect(tmp.name) as conn:
+        got = conn.execute("SELECT range_balls_included FROM events "
+                           "WHERE id = 1").fetchone()[0]
+    check("update_event persists range_balls_included", got == 1, got)
+    db.update_event(1, {"range_balls_included": 0}, db_path=tmp.name)
+    with db._connect(tmp.name) as conn:
+        got = conn.execute("SELECT range_balls_included FROM events "
+                           "WHERE id = 1").fetchone()[0]
+    check("unchecking clears it", got == 0, got)
+    os.unlink(tmp.name)
+
     print("Selection logic still holds")
     r = pick(lead(imp="Competition", avail="Tuesdays only"))
     check("Competition -> P1", r["preset"] == "p1", r)

@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.300.0";
+window.TGF_VERSION = "2.301.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.301.0",
+    date: "2026-09-04",
+    changes: [
+      "Range balls is now a checkbox on the event's PRICING tab, in both Add Event and Edit Event. v2.300.0 added the setting the 1st-timer texts read but no way for Kerry to set it, which made the ask a no-op — the column existed and only a bridge command could write it. It sits with the price rather than the logistics because it is part of what the entry fee covers, and off means the texts simply do not mention range balls, never that the course withholds them.",
+      "Fixed the outreach backfill computing its due date in UTC while the alarm it backfills computes in Central. touched_at is stored UTC, so a text sent at 9 PM Central is stored on the NEXT calendar day — and taking date() straight off the stored value armed those follow-ups a day late. That is most of them: the production dry run shows the majority of Kerry's outreach happening after 7 PM Central. The due day now comes from the Central wall-clock day of the touch, identical to the live arming path. New timezone_utils.to_central() reads a stored naive-UTC timestamp as Central wall clock, for deriving a user-facing DAY from a stored timestamp.",
+    ],
+  },
   {
     version: "2.300.0",
     date: "2026-09-04",

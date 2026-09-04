@@ -286,6 +286,28 @@ def main():
     check("each backfilled lead gets an auto note explaining it",
           any("backfilled" in x["note"] for x in n), n)
 
+    # Kerry texts prospects at night. touched_at is stored UTC, so a 9 PM
+    # Central text is stored on the NEXT calendar day — reading date()
+    # straight off the stored value armed those alarms a day late, which
+    # is most of them. The due day is Central, same as the live path.
+    evening = plant(p_db, "EveningText", status="touched")
+    with db._connect(p_db) as conn:
+        conn.execute("UPDATE leads SET tag = 'Texted', touched_at = ?, "
+                     "follow_up_at = NULL, outreach_at = NULL WHERE id = ?",
+                     ("2026-08-30 02:13:53", evening))   # 8/29 9:13 PM CT
+        conn.commit()
+    ev = leads.backfill_outreach_alarms(dry_run=True, db_path=p_db)
+    ev_row = next(l for l in ev["leads"] if l["id"] == evening)
+    check("a 9 PM Central text is due 2 days from THAT day, not UTC's",
+          ev_row["due"] == "2026-08-31", ev_row)
+    leads.backfill_outreach_alarms(db_path=p_db)
+    check("the evening lead is written with the Central due date",
+          row(p_db, evening)["follow_up_at"] == "2026-08-31",
+          row(p_db, evening))
+    check("its note names the Central day it was texted",
+          any("2026-08-29" in x["note"] for x in notes(p_db, evening)),
+          notes(p_db, evening))
+
     print("Tag path attributes the toucher (#405)")
     t = plant(p_db, "Attrib")
     leads.set_lead_tag(t, "Texted", db_path=p_db, author="kerry")

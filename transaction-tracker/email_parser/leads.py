@@ -2100,7 +2100,9 @@ def backfill_outreach_alarms(dry_run: bool = False,
     event going forward needs a backfill for the rows that predate it,
     or it silently under-covers exactly the population it was built for.
     """
+    from datetime import timedelta
     from . import database as db
+    from .timezone_utils import to_central
     tags = get_outreach_tags(db_path)
     ph = ",".join("?" * len(tags))
     out: dict = {"dry_run": bool(dry_run), "outreach_tags": tags}
@@ -2114,11 +2116,19 @@ def backfill_outreach_alarms(dry_run: bool = False,
             f"ORDER BY touched_at", tuple(tags))]
         by_due: dict = {}
         for r in rows:
-            due = conn.execute(
-                "SELECT date(?, '+' || ? || ' days')",
-                (r["touched_at"], OUTREACH_FOLLOWUP_DAYS)).fetchone()[0]
+            # The due DAY is Central, exactly like the live arming path
+            # (which stamps now_central() + 2). touched_at is stored UTC,
+            # so an evening text — most of them — reads as the next day
+            # in UTC and would land the alarm a day late.
+            touched_ct = to_central(r["touched_at"])
+            if touched_ct is None:
+                continue
+            due = (touched_ct + timedelta(days=OUTREACH_FOLLOWUP_DAYS)
+                   ).strftime("%Y-%m-%d")
             r["due"] = due
+            r["touched_day"] = touched_ct.strftime("%Y-%m-%d")
             by_due[due] = by_due.get(due, 0) + 1
+        rows = [r for r in rows if r.get("due")]
         out["found"] = len(rows)
         out["by_due_date"] = dict(sorted(by_due.items()))
         out["leads"] = [{"id": r["id"],
@@ -2136,7 +2146,7 @@ def backfill_outreach_alarms(dry_run: bool = False,
                 "INSERT INTO lead_notes (lead_id, author, note) "
                 "VALUES (?, 'auto', ?)",
                 (r["id"], f"48-hour follow-up backfilled from the "
-                          f"{r['tag']} tag ({str(r['touched_at'])[:10]}) "
+                          f"{r['tag']} tag ({r['touched_day']}) "
                           f"— due {r['due']}"))
         conn.commit()
         out["updated"] = len(rows)

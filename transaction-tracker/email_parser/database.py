@@ -22682,7 +22682,7 @@ def update_event(event_id: int, fields: dict, db_path: str | Path | None = None)
     allowed = {"item_name", "event_date", "course", "chapter", "format", "start_type", "start_time",
                 "tee_time_count", "tee_time_interval", "start_time_18", "start_type_18",
                 "tee_time_count_18", "event_type", "tee_direction", "tee_direction_18",
-                "nine_side", "allow_fivesomes",
+                "nine_side", "allow_fivesomes", "range_balls_included",
                 "pairing_mode", "pairing_race_key",
                 "course_cost", "tgf_markup", "side_game_fee", "transaction_fee_pct",
                 "course_cost_9", "course_cost_18", "tgf_markup_9", "tgf_markup_18",
