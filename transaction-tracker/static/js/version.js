@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.317.0";
+window.TGF_VERSION = "2.318.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.318.0",
+    date: "2026-09-04",
+    changes: [
+      "An alias added on the Customer Info form now silences the matching drift action item, which it did not before. Kerry added Logan Billeaud's personal address by hand and asked whether the item would stay gone \u2014 it would not have. There are two alias lists: 'Always ignore' on the item writes one, the form's +Add writes the other, and the drift check only read the first. So the address matched to the right person (the valuable half) but the check still called it news and would have raised the item again on the next re-parse of that order. From Kerry's seat both are the same sentence, 'this address is also his', so both now count. Read-side, so it covers every alias ever added by hand, not just new ones.",
+      "Dismiss on an action item only hides that one row \u2014 it does not stop the same mismatch being raised again. Recording the alias is what makes it permanent, and that is now true whichever of the two places he records it.",
+    ],
+  },
   {
     version: "2.317.0",
     date: "2026-09-04",

@@ -913,12 +913,39 @@ def is_known_contact_alias(conn: sqlite3.Connection, customer_id: int,
         return False
     try:
         ensure_contact_alias_table(conn)
-        return conn.execute(
-            "SELECT 1 FROM contact_aliases WHERE customer_id = ? "
-            "AND field = ? AND value_norm = ?",
-            (customer_id, field, norm)).fetchone() is not None
+        if conn.execute(
+                "SELECT 1 FROM contact_aliases WHERE customer_id = ? "
+                "AND field = ? AND value_norm = ?",
+                (customer_id, field, norm)).fetchone():
+            return True
     except sqlite3.Error:
         return False
+    # TWO alias lists, one human intention (Kerry 2026-09-04, the Logan
+    # Billeaud case). `contact_aliases` is written by "Always ignore" on
+    # a drift item and suppresses the interruption; `customer_aliases` is
+    # written by +Add on the Customer Info form and makes a stray value
+    # MATCH to the right person. Kerry added loganrbo@yahoo.com on the
+    # form and reasonably expected the action item to stop coming back —
+    # but only the first list was being read here, so the drift check
+    # still called it news and would have raised it again on the next
+    # re-parse of that order.
+    #
+    # From his seat both are the same sentence: "this address is also
+    # his." So both count. Read-side on purpose: it needs no migration
+    # and it covers every alias he has ever added by hand, including the
+    # ones added before this existed.
+    try:
+        rows = conn.execute(
+            "SELECT alias_value FROM customer_aliases WHERE customer_id = ? "
+            "AND LOWER(COALESCE(alias_type, '')) = ?",
+            (customer_id, field)).fetchall()
+    except sqlite3.Error:
+        return False
+    # Normalized in Python, not SQL: a phone alias is stored however it
+    # was typed ("(614) 581-1495"), and normalize_contact_value is the
+    # one definition of "the same number" — SQLite cannot express it.
+    return any(normalize_contact_value(field, r["alias_value"]) == norm
+               for r in rows)
 
 
 def add_contact_alias(customer_id: int, field: str, value: str,

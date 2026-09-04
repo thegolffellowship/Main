@@ -207,6 +207,37 @@ def main():
     check("a bad field is refused",
           "error" in db.adopt_drift_value(1, "nickname", "x", db_path=p))
 
+    # Kerry 2026-09-04: he added Logan Billeaud's personal address on the
+    # Customer Info form and asked whether the action item would stay
+    # gone. It would not have: the form writes `customer_aliases` (so the
+    # value MATCHES to the right person) while the drift check read only
+    # `contact_aliases` (so it still called the value news). Two lists,
+    # one human intention — the check now reads both.
+    print("An alias added on the Customer Info form also silences the drift item")
+    with db._connect(p) as conn:
+        conn.execute("""CREATE TABLE customer_aliases (
+            id INTEGER PRIMARY KEY AUTOINCREMENT, customer_name TEXT,
+            alias_type TEXT, alias_value TEXT, customer_id INTEGER)""")
+        conn.execute("INSERT INTO customer_aliases "
+                     "(customer_name, alias_type, alias_value, customer_id) "
+                     "VALUES ('Logan Billeaud', 'email', "
+                     "'loganrbo@yahoo.com', 2)")
+        # typed with the formatting a person actually uses
+        conn.execute("INSERT INTO customer_aliases "
+                     "(customer_name, alias_type, alias_value, customer_id) "
+                     "VALUES ('Logan Billeaud', 'phone', "
+                     "'+1 (512) 555-8899', 2)")
+        conn.commit()
+        check("an email alias from the form now counts",
+              db.is_known_contact_alias(conn, 2, "email", "LoganRBO@yahoo.com"))
+        check("a phone alias counts on its digits, however it was typed",
+              db.is_known_contact_alias(conn, 2, "phone", "5125558899"))
+        check("somebody else's alias still does not count",
+              not db.is_known_contact_alias(conn, 1, "email",
+                                            "loganrbo@yahoo.com"))
+        check("and an unrelated value is still news",
+              not db.is_known_contact_alias(conn, 2, "email", "nope@x.com"))
+
     os.unlink(p)
     print()
     if FAILURES:
