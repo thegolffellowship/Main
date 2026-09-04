@@ -2204,7 +2204,12 @@ def _scoring_dispatch(url: str, extract: str):
                               "leads": (_b.get("funnel") or {}).get("leads"),
                               "registered": (_b.get("funnel") or {}).get("registered"),
                               "members": (_b.get("funnel") or {}).get("members"),
-                              "orders": (_b.get("value") or {}).get("orders")})
+                              "orders": (_b.get("value") or {}).get("orders"),
+                              "people": (_b.get("value") or {}).get("customers"),
+                              "leads_without_customer":
+                                  (_b.get("value") or {}).get("leads_without_customer"),
+                              "duplicate_leads":
+                                  (_b.get("value") or {}).get("duplicate_leads")})
             return json.dumps({"campaigns": _rows}, indent=2, default=str)
         if cmd == "scoring-campaigns":
             # Campaign stats view payload (mailbox #391): per campaign +

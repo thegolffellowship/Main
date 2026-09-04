@@ -416,7 +416,7 @@ def _roll_up_insights(rows: list[dict]) -> dict | None:
     return agg
 
 
-def campaign_value(customer_ids: list[int], conn,
+def campaign_value(lead_rows: list[dict], conn,
                    db_path: str | Path | None = None,
                    gap_fill_seconds: float = 8.0) -> dict:
     """What a set of campaign leads has actually been worth to TGF.
@@ -451,7 +451,18 @@ def campaign_value(customer_ids: list[int], conn,
     """
     from . import database as db
     import time as _t
-    out = {"customers": len(customer_ids), "collected": 0.0, "margin": 0.0,
+    # WHY THE PEOPLE COUNT IS LOWER THAN THE LEAD COUNT (Kerry
+    # 2026-09-04: "Why not all 103 people from campaign? Why only 97?").
+    # Value is per PERSON and a lead is not a person: some leads have no
+    # customer record yet, and one person can submit the form twice. The
+    # panel has to say which, or the gap looks like lost money.
+    ids = [r["customer_id"] for r in lead_rows if r.get("customer_id")]
+    customer_ids = sorted(set(ids))
+    out = {"leads": len(lead_rows), "customers": len(customer_ids),
+           "leads_without_customer": sum(1 for r in lead_rows
+                                         if not r.get("customer_id")),
+           "duplicate_leads": len(ids) - len(customer_ids),
+           "collected": 0.0, "margin": 0.0,
            "items": 0, "orders": 0, "allocated_orders": 0,
            "coverage_pct": None, "allocated_now": 0, "coverage_pending": 0}
     if not customer_ids:
@@ -654,11 +665,6 @@ def campaign_stats(db_path: str | Path | None = None,
                 "value": value, "roi": roi,
                 "chapters": chapters}
 
-    # One customer can hold several leads (a re-submitter). Value is
-    # per PERSON, so dedupe before summing what they have paid.
-    def _cids(rows):
-        return sorted({r["customer_id"] for r in rows if r.get("customer_id")})
-
     out_campaigns = []
     total_spend = 0.0
     any_spend = False
@@ -678,8 +684,7 @@ def campaign_stats(db_path: str | Path | None = None,
             latest_end = c["end_date"]
         _rows = by_campaign.get(c["id"], [])
         with db._connect(db_path) as _vc:
-            _val = campaign_value(_cids(_rows), _vc, db_path,
-                                  gap_fill_seconds)
+            _val = campaign_value(_rows, _vc, db_path, gap_fill_seconds)
         b = _bucket(c["name"], _rows, spend,
                     spend_source, c.get("end_date"), ins, c["id"], _val)
         b.update({"source": c.get("source"),
@@ -695,8 +700,7 @@ def campaign_stats(db_path: str | Path | None = None,
                            None)
     all_ins = _roll_up_insights(campaigns)
     with db._connect(db_path) as _vc:
-        _all_val = campaign_value(_cids(leads), _vc, db_path,
-                                  gap_fill_seconds)
+        _all_val = campaign_value(leads, _vc, db_path, gap_fill_seconds)
     all_bucket = _bucket("All campaigns", leads,
                          total_spend if any_spend else None,
                          "meta" if all_ins else ("sum" if any_spend

@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.312.3";
+window.TGF_VERSION = "2.313.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.313.0",
+    date: "2026-09-04",
+    changes: [
+      "The ROI panel now explains why the people count is lower than the lead count (Kerry: 'Why not all 103 people from campaign? Why only 97?'). Value is per PERSON and a lead is not a person — some leads have no customer record yet, and one person can submit the form twice. The panel now shows both numbers and which of the two reasons accounts for the gap, because an unexplained 103 vs 97 reads as lost money.",
+      "The gross-vs-margin gap is now computed from the actual figures instead of asserting 'about six times'. On this campaign it is 2.7x, not 6x — memberships are almost entirely margin, so a campaign that converts members is far less pass-through than the event-heavy months the 6x came from. A stated multiple that is wrong for the campaign in front of you is worse than none.",
+    ],
+  },
   {
     version: "2.312.3",
     date: "2026-09-04",

@@ -1185,7 +1185,8 @@
             </div>
             <div class="ld-foot">
               Lifetime: every dollar these ${num(v.customers)} people have paid TGF, not just during the campaign.
-              <b>ROI is on MARGIN, not gross</b> — course fees go to the course and prize pools go to the winners, so ROI on collected would read about six times better than the business did.
+              ${v.customers < (v.leads || 0) ? `<span class="ld-dsub">(${num(v.leads)} leads, ${num(v.customers)} people${v.leads_without_customer ? ` &mdash; ${num(v.leads_without_customer)} with no customer record yet` : ""}${v.duplicate_leads ? `, ${num(v.duplicate_leads)} duplicate submission${v.duplicate_leads === 1 ? "" : "s"}` : ""})</span>` : ""}
+              <b>ROI is on MARGIN, not gross</b> — course fees go to the course and prize pools go to the winners${r.roas_collected && r.roas_margin ? `, so ROI on collected would read ${Math.round((r.roas_collected / r.roas_margin) * 10) / 10}× better than the business did` : ""}.
               ${v.coverage_pct != null && v.coverage_pct < 100
                 ? `<span class="ld-late">Margin is known for ${v.coverage_pct}% of their ${num(v.orders)} orders${v.coverage_pending ? ` (${num(v.coverage_pending)} still to allocate — reopen Stats to continue)` : ""}, so it is a FLOOR.</span>`
                 : `Margin covers all ${num(v.orders)} of their orders.`}

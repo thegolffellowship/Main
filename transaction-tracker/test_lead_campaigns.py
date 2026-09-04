@@ -301,6 +301,23 @@ def main():
           v2["collected"] == 139.0 and v2["margin"] == 21.0, v2)
     check("a TEXT amount does not blow up the sum", v2["collected"] == 139.0)
     check("it counts orders, not just items", val["orders"] == 3, val)
+    # Kerry 2026-09-04: "Why not all 103 people from campaign? Why only
+    # 97?" Value is per PERSON and a lead is not a person. The panel has
+    # to say WHICH — no customer record yet, or the same person twice —
+    # or the gap reads as lost money.
+    check("it reports leads and people separately",
+          val["leads"] > val["customers"], val)
+    check("and says how many leads have no customer record",
+          val["leads_without_customer"] > 0, val)
+    with db._connect(db_path) as conn:
+        dupe = plant(conn, "SamePerson", "San Antonio", "touched", None, META)
+        conn.execute("UPDATE leads SET customer_id = 9002 WHERE id = ?", (dupe,))
+        conn.commit()
+    v_d = campaigns.campaign_stats(db_path, today="2026-09-03",
+                                   gap_fill_seconds=0)["campaigns"][0]["value"]
+    check("two leads for one person count as ONE person, and say so",
+          v_d["duplicate_leads"] == 1
+          and v_d["customers"] == val["customers"], v_d)
     roi = st2["campaigns"][0]["roi"]
     check("ROI is reported once there is spend", roi is not None, roi)
     check("ROI is computed on MARGIN, not gross collected",
