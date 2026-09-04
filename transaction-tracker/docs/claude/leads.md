@@ -542,6 +542,37 @@ populated.
 **Never index a preset by a slot key.** Preset bodies are read with
 `.get("text")` and fallbacks, everywhere.
 
+## ALL CAMPAIGNS Meta roll-up (Kerry 2026-09-04, v2.305.0)
+
+> "Looks like META data is not updating."
+
+It was updating. The **All campaigns** bucket carried spend and nothing
+else — impressions, reach, frequency, link clicks, CTR and CPM all read
+`—` because `_bucket()` was called with `insights=None` for the roll-up.
+Per-campaign the panel was fine, so the data looked broken only on the
+default view.
+
+`_roll_up_insights()` sums what is additive (spend, impressions,
+link clicks, meta_leads) and **derives** the ratios — CTR from
+clicks/impressions, CPM from spend/impressions, frequency from
+impressions/reach. Averaging rates across campaigns would be wrong the
+moment two campaigns differ in size. One campaign rolls up to itself
+exactly.
+
+**Reach is flagged approximate above one campaign.** Reach is *people*,
+and the same person reached by two campaigns is counted twice in a sum,
+so the derived frequency reads low. The panel says so rather than
+hiding it — the number is still the best available.
+
+**Worth knowing when reading CPL:** the All view's CPL is **lower** than
+the campaign's ($1.43 vs $1.52) because it divides campaign spend by
+every lead including the "organic" ones. Those are not really organic:
+Meta reports 102 leads and the Tracker holds 96 attributed + 6
+unattributed = exactly 102. They are campaign leads that lost their
+attribution tag, so **the All figure is the accurate one** and the
+per-campaign CPL understates by excluding them. The Leads tile's "Meta
+counts N" sub-label is the check.
+
 ## Morning follow-up digest (Kerry 2026-09-03, v2.302.0)
 
 > "Yes should be part of morning digest."

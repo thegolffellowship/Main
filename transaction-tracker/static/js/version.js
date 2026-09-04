@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.304.0";
+window.TGF_VERSION = "2.305.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.305.0",
+    date: "2026-09-04",
+    changes: [
+      "FIX: the ALL CAMPAIGNS Meta panel showed spend and dashes for everything else (Kerry: 'Looks like META data is not updating'). The insights were live and fresh the whole time — impressions 16,134, reach 7,611, 448 link clicks, 6.32% CTR, fetched hourly — but the roll-up bucket was built with no insights attached, so the default view looked dead while each individual campaign looked fine. The All view now carries real Meta metrics.",
+      "The roll-up sums what is additive and DERIVES the ratios: CTR from clicks over impressions, CPM from spend over impressions, frequency from impressions over reach. Averaging rates across campaigns would go wrong the moment two campaigns differ in size. Above one campaign, reach is labelled approximate — reach is people, and someone reached by two campaigns is counted twice in a sum, which also makes the derived frequency read low. Said out loud in the panel rather than hidden, because the number is still the best available.",
+    ],
+  },
   {
     version: "2.304.0",
     date: "2026-09-04",

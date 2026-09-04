@@ -162,6 +162,47 @@ def main():
     c = st["campaigns"][0]
     check("insights spend wins over manual", c["spend_source"] == "meta" and c["spend"] == 127.64, (c["spend_source"], c["spend"]))
     check("META panel carried", c["meta"]["cpm"] == 8.9 and c["meta"]["reach"] == 6866, c["meta"])
+
+    # ALL CAMPAIGNS carried spend but NO Meta metrics — every other tile
+    # read "—" while the insights were live and fresh (Kerry 2026-09-04:
+    # "Looks like META data is not updating"). The roll-up bucket simply
+    # never got any.
+    allb = st["all"]
+    check("the ALL view carries Meta metrics, not just spend",
+          (allb.get("meta") or {}).get("impressions") == 14346, allb.get("meta"))
+    check("with ONE campaign the roll-up is that campaign, exactly",
+          allb["meta"]["cpm"] == 8.9 and allb["meta"]["reach"] == 6866
+          and not allb["meta"].get("reach_approx"), allb["meta"])
+    check("and it is labelled as Meta rather than a bare sum",
+          allb["spend_source"] == "meta" and allb.get("insights_fetched_at"),
+          (allb["spend_source"], allb.get("insights_fetched_at")))
+
+    # Two campaigns: sum what is additive, DERIVE the ratios. Averaging
+    # rates would be wrong the moment the campaigns differ in size.
+    two = campaigns._roll_up_insights([
+        {"insights": {"spend": 100.0, "impressions": 10000, "reach": 5000,
+                      "link_clicks": 200, "meta_leads": 50,
+                      "date_start": "2026-08-01", "date_stop": "2026-08-10"}},
+        {"insights": {"spend": 50.0, "impressions": 10000, "reach": 4000,
+                      "link_clicks": 100, "meta_leads": 30,
+                      "date_start": "2026-08-05", "date_stop": "2026-08-20"}},
+    ])
+    check("roll-up sums spend, impressions, clicks and leads",
+          (two["spend"], two["impressions"], two["link_clicks"],
+           two["meta_leads"]) == (150.0, 20000, 300, 80), two)
+    check("CTR is derived from the totals, not averaged",
+          round(two["ctr"], 4) == 1.5, two["ctr"])
+    check("CPM is derived from the totals, not averaged",
+          round(two["cpm"], 2) == 7.5, two["cpm"])
+    check("frequency comes from the totals too",
+          round(two["frequency"], 4) == round(20000 / 9000, 4), two["frequency"])
+    check("reach is flagged approximate — one person, two campaigns",
+          two.get("reach_approx") is True and two["campaigns"] == 2, two)
+    check("the date span covers both campaigns",
+          (two["date_start"], two["date_stop"]) == ("2026-08-01", "2026-08-20"),
+          (two["date_start"], two["date_stop"]))
+    check("no insights at all rolls up to nothing",
+          campaigns._roll_up_insights([{"insights": None}]) is None)
     os.environ.pop("META_ACCESS_TOKEN", None)
     r = campaigns.refresh_meta_insights(db_path)
     check("refresh is a no-op without META_ACCESS_TOKEN", r["token"] is False and r["refreshed"] == 0, r)

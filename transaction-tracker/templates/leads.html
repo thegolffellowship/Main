@@ -1081,14 +1081,14 @@
         const metaPanel = `<div class="ld-panel"><h3>Meta</h3><div class="ld-metrics">
             ${metric("Spend", money(b.spend))}
             ${metric("Impressions", num(m.impressions))}
-            ${metric("Reach", num(m.reach))}
-            ${metric("Frequency", m.frequency == null ? "—" : Number(m.frequency).toFixed(2))}
+            ${metric("Reach", num(m.reach), m.reach_approx ? "approx · see note" : "")}
+            ${metric("Frequency", m.frequency == null ? "—" : Number(m.frequency).toFixed(2), m.reach_approx ? "approx" : "")}
             ${metric("Link clicks", num(m.link_clicks))}
             ${metric("CTR", m.ctr == null ? "—" : Number(m.ctr).toFixed(2) + "%")}
             ${metric("CPM", money(m.cpm))}
             ${metric("Leads", num(f.leads), m.meta_leads != null ? `Meta counts ${num(m.meta_leads)}` : "")}
             ${metric("CPL", money(c.cpl))}
-            </div><div class="ld-foot">${esc(spendNote)}${b.insights_error ? ` · <span class="ld-late">${esc(b.insights_error)}</span>` : ""}</div></div>`;
+            </div><div class="ld-foot">${esc(spendNote)}${m.campaigns ? ` · rolled up across ${m.campaigns} campaigns — reach and frequency are approximate, because one person reached by two campaigns is counted twice` : ""}${b.insights_error ? ` · <span class="ld-late">${esc(b.insights_error)}</span>` : ""}</div></div>`;
         const funnelPanel = `<div class="ld-panel"><h3>Funnel</h3><div class="ld-metrics">
             ${metric("Leads", num(f.leads))}
             ${metric("Touched", num(f.touched), f.new ? `${f.new} still new` : "")}

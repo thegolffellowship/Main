@@ -376,6 +376,42 @@ def _ratio(spend, n):
     return round(spend / n, 2)
 
 
+# ALL CAMPAIGNS carried spend but no Meta metrics — every other tile
+# read "—" (Kerry 2026-09-04: "Looks like META data is not
+# updating"). The insights were live and fresh the whole time; the
+# roll-up bucket simply never got any. Sum what is additive and
+# DERIVE the ratios, rather than averaging rates, which would be
+# wrong the moment two campaigns differ in size.
+def _roll_up_insights(rows: list[dict]) -> dict | None:
+    ins = [c["insights"] for c in rows
+           if c.get("insights") and c["insights"].get("spend") is not None]
+    if not ins:
+        return None
+    if len(ins) == 1:
+        return dict(ins[0])
+    agg: dict = {"campaigns": len(ins)}
+    for k in ("spend", "impressions", "reach", "link_clicks",
+              "meta_leads"):
+        vals = [i.get(k) for i in ins if i.get(k) is not None]
+        agg[k] = sum(vals) if vals else None
+    starts = [i.get("date_start") for i in ins if i.get("date_start")]
+    stops = [i.get("date_stop") for i in ins if i.get("date_stop")]
+    agg["date_start"] = min(starts) if starts else None
+    agg["date_stop"] = max(stops) if stops else None
+    imp, reach = agg.get("impressions"), agg.get("reach")
+    # REACH IS PEOPLE, and the same person can be reached by two
+    # campaigns, so a summed reach double-counts and the frequency
+    # derived from it reads low. Flagged rather than hidden — the
+    # number is still the best available.
+    agg["frequency"] = (imp / reach) if imp and reach else None
+    agg["reach_approx"] = True
+    agg["ctr"] = (100.0 * agg["link_clicks"] / imp) \
+        if imp and agg.get("link_clicks") is not None else None
+    agg["cpm"] = (1000.0 * agg["spend"] / imp) \
+        if imp and agg.get("spend") is not None else None
+    return agg
+
+
 def _funnel(leads: list[dict], today: date, cutoff: date | None) -> dict:
     """Counts for one bucket. cutoff = the trailing-window end (campaign
     end + 30d); None = no window (organic / undated)."""
@@ -505,9 +541,17 @@ def campaign_stats(db_path: str | Path | None = None,
     organic = by_campaign.get(None, [])
     unattributed = _bucket("Unattributed / organic", organic, None, "none",
                            None)
+    all_ins = _roll_up_insights(campaigns)
     all_bucket = _bucket("All campaigns", leads,
                          total_spend if any_spend else None,
-                         "sum" if any_spend else "none", latest_end)
+                         "meta" if all_ins else ("sum" if any_spend
+                                                else "none"),
+                         latest_end, all_ins)
+    if all_ins:
+        # so the panel can date-stamp the roll-up like a single campaign
+        all_bucket["insights_fetched_at"] = max(
+            (c.get("insights_fetched_at") or "" for c in campaigns),
+            default="") or None
     return {"today": today_d.isoformat(), "meta_token": bool(_meta_token()),
             "trailing_days": TRAILING_DAYS,
             "definitions": {
