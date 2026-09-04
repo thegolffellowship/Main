@@ -145,6 +145,27 @@ check("no unsubstituted placeholder leaks into a message",
       !/\{(first_name|owner|cadence|price_block|first_timer_price)\}/.test(mob),
       (mob.match(/\{[a-z_]+\}/g) || []).slice(0, 5).join(" "));
 
+// An 'auto' note is BOOKKEEPING, not a reply. Counting it made every
+// lead the 48-hour alarm ever armed read as RESPONDED, and the v2.301.x
+// backfill flipped 49 people at once on the screen Kerry uses to decide
+// who still needs chasing.
+const touchSub = () => store["ld-touch-sub"].textContent || "";
+check("a lead whose only note is 'auto' is NOT counted as responded",
+      /0 responded/.test(touchSub()), touchSub());
+const withHuman = leads.map(l => l.id !== 3 ? l : { ...l,
+    notes_log: [...l.notes_log, { author: "K", note: "he called back", created_at: "2026-09-04 01:00:00" }] });
+setALL({ ...ALL, leads: withHuman });
+render();
+check("a human note DOES count as responded",
+      /1 responded/.test(touchSub()), touchSub());
+const withGG = leads.map(l => l.id !== 3 ? l : { ...l,
+    notes_log: [...l.notes_log, { author: "GG", note: "RSVPd", created_at: "2026-09-04 01:00:00" }] });
+setALL({ ...ALL, leads: withGG });
+render();
+check("a GG RSVP counts too — that is the person acting",
+      /1 responded/.test(touchSub()), touchSub());
+setALL(ALL); render();
+
 // Empty queue must say so rather than render blank.
 setALL({ ...ALL, leads: [] });
 try { render(); } catch (e) { check("empty queue renders", false, e.message); }

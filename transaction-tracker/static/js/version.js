@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.303.1";
+window.TGF_VERSION = "2.304.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.304.0",
+    date: "2026-09-04",
+    changes: [
+      "New 'Followed up' tag that resets the 48-hour timer (Kerry: 'Need something like a Followed Up option that resets the timer'). The ordinary outreach tags arm only on a FIRST touch, so re-tapping Texted on a lead whose alarm had already fired did nothing at all — the chip stayed red at its original date while Kerry kept working the person. Followed up always restarts the clock, re-stamps the timestamp, and re-arms the morning digest for the new date. It is the one thing that overrides a date Kerry set by hand, and being explicit is what makes that safe: a mis-tap on Texted must never push a lead out of sight, but choosing Followed up says exactly that. The auto note records the date it replaced so nothing deliberate disappears silently.",
+      "FIX: 'auto' notes were counting as a response. The queue's RESPONDED vs NO RESPONSE split counted any note at all, so every lead the 48-hour alarm ever armed read as having replied — and yesterday's backfill flipped 49 people at once, on the exact screen used to decide who still needs chasing. The page now applies the same rule the alarm already used server-side: auto is bookkeeping, while a GG RSVP or a HubSpot re-submission still counts, because those are the person acting.",
+    ],
+  },
   {
     version: "2.303.1",
     date: "2026-09-04",

@@ -1607,10 +1607,28 @@ def _clear_outreach_alarm(conn, lead_id: int) -> bool:
     return bool(cur.rowcount)
 
 
+# Tags that ALWAYS restart the 48-hour clock, even when one is already
+# pending (Kerry 2026-09-03: "Need something like a Followed Up option
+# that resets the timer"). The other outreach tags arm only on a FIRST
+# touch, so re-tapping Texted on a lead whose alarm already fired did
+# nothing at all — the chip just stayed red while Kerry kept working
+# the person. This is the explicit "I reached out again" action, and
+# being explicit is what makes overriding the pending date safe:
+# a mis-tap on Texted must never push a lead out of sight, but choosing
+# Followed up says exactly that.
+DEFAULT_REARM_TAGS = ["Followed up"]
+
+
+def get_rearm_tags(db_path: str | Path | None = None) -> list[str]:
+    opts = _dial_json("lead_rearm_tags", [], db_path=db_path)
+    return [str(o) for o in opts] if opts else list(DEFAULT_REARM_TAGS)
+
+
 # Kerry-editable via the lead_tag_options dial (JSON list of strings);
 # these are the defaults. Tags are dispositions, orthogonal to the
 # new/touched/converted/dismissed pipeline.
-DEFAULT_TAG_OPTIONS = ["Left VM", "Texted", "Sent email", "No answer",
+DEFAULT_TAG_OPTIONS = ["Left VM", "Texted", "Sent email", "Followed up",
+                       "No answer",
                        "Call back", "Interested", "Coming to event",
                        "Too expensive", "Days don't work", "Not now",
                        "Bad contact", "Registered event", "Became member"]
@@ -1672,11 +1690,14 @@ def set_lead_tag(lead_id: int, tag: str,
         from datetime import timedelta
         from .timezone_utils import now_central
         alarm = None
-        if tag and tag in get_outreach_tags(db_path):
+        rearm = bool(tag) and tag in get_rearm_tags(db_path)
+        if tag and (rearm or tag in get_outreach_tags(db_path)):
             pending = conn.execute(
                 "SELECT follow_up_at FROM leads WHERE id = ?",
                 (lead_id,)).fetchone()["follow_up_at"]
-            if not pending:                      # "for the first time"
+            # "For the first time" for the ordinary outreach tags; a
+            # RE-ARM tag restarts the clock whatever is pending.
+            if rearm or not pending:
                 now = now_central()
                 due = (now + timedelta(days=OUTREACH_FOLLOWUP_DAYS)
                        ).strftime("%Y-%m-%d")
@@ -1687,12 +1708,20 @@ def set_lead_tag(lead_id: int, tag: str,
                     "UPDATE leads SET outreach_at = datetime('now'), "
                     "follow_up_at = ?, follow_up_notified_for = NULL "
                     "WHERE id = ?", (due, lead_id))
+                _md = (f"{due[5:7].lstrip('0')}/{due[8:10].lstrip('0')}")
+                # A re-arm can replace a date Kerry set BY HAND, so the
+                # note says what it replaced — nothing deliberate
+                # disappears without a record of it.
+                _was = ""
+                if rearm and pending and pending != due:
+                    _was = (f" (was {pending[5:7].lstrip('0')}"
+                            f"/{pending[8:10].lstrip('0')})")
+                _verb = "reset to" if (rearm and pending) else "set for"
                 conn.execute(
                     "INSERT INTO lead_notes (lead_id, author, note) "
                     "VALUES (?, 'auto', ?)",
                     (lead_id, f"{tag} {now.strftime('%-m/%-d, %-I:%M %p')} "
-                              f"— 48-hour follow-up set for "
-                              f"{due[5:7].lstrip('0')}/{due[8:10].lstrip('0')}"))
+                              f"— 48-hour follow-up {_verb} {_md}{_was}"))
                 alarm = due
         elif tag:
             # Any non-outreach tag is a disposition he only reaches for

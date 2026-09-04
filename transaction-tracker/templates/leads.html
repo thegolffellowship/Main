@@ -370,9 +370,19 @@
         // response") — notes record conversations. MEMBERS = the
         // ultimate conversion: own section/color/badge.
         const HOT_TAGS = ["Call back", "Interested", "Coming to event"];
-        const QUIET_TAGS = ["Texted", "Left VM", "Sent email", "No answer"];
+        const QUIET_TAGS = ["Texted", "Left VM", "Sent email",
+                            "Followed up", "No answer"];
+        // 'auto' notes are BOOKKEEPING, not a reply — the same rule the
+        // alarm uses server-side (BOOKKEEPING_NOTE_AUTHORS). Counting
+        // them made every lead the 48-hour alarm ever armed read as
+        // RESPONDED, and the v2.301.x backfill flipped 49 people at once
+        // — inflating the responded count on the exact screen Kerry uses
+        // to decide who still needs chasing. GG (an RSVP) and HS (a
+        // re-submission) DO count: those are the person acting.
+        const humanNotes = l => (l.notes_log || [])
+            .filter(n => (n.author || "") !== "auto");
         const responded = l => HOT_TAGS.includes(l.tag || "")
-            || (l.notes_log || []).length > 0;
+            || humanNotes(l).length > 0;
         const isMember = l => l.status === "converted" && l.tag === "Became member";
         // Follow-up / snooze (mailbox #365, Kerry-ratified 2026-08-31):
         // a future follow_up_at snoozes the lead below the active work;

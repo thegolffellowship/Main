@@ -586,6 +586,37 @@ digest (#370, reshaped v2.302.0). **No second notification system.** An auto not
 records it: *"Texted 9/3, 3:45 PM — 48-hour follow-up set for 9/5."*
 The chip's hover text distinguishes an auto alarm from a hand-set date.
 
+**"Followed up" resets the clock (Kerry 2026-09-03, v2.304.0).**
+
+> "Need something like a Followed Up option that resets the timer."
+
+The ordinary outreach tags arm only on a FIRST touch, so re-tapping
+Texted on a lead whose alarm had already fired did **nothing at all** —
+the chip stayed red at its original date while Kerry kept working the
+person. `lead_rearm_tags` (default `["Followed up"]`) is the explicit
+"I reached out again" action: it always restarts the 48 hours, whatever
+is pending, re-stamps `outreach_at`, and clears
+`follow_up_notified_for` so the morning digest picks up the new date.
+
+**It is the one thing that overrides a HAND-SET date**, and being
+explicit is what makes that safe — a mis-tap on Texted must never push
+a lead out of sight, but choosing Followed up says exactly that in so
+many words. The auto note records what it replaced (*"Followed up 9/3,
+9:55 PM — 48-hour follow-up reset to 9/5 (was 8/30)"*), so nothing
+deliberate disappears without a record.
+
+**`auto` notes do not count as a response (same release).** The queue's
+RESPONDED/NO RESPONSE split counted *any* note, so every lead the alarm
+ever armed read as responded — and the v2.301.x backfill flipped 49
+people at once, on the exact screen Kerry uses to decide who still
+needs chasing. The page now applies the server's rule
+(`BOOKKEEPING_NOTE_AUTHORS`): `auto` is bookkeeping; **GG** (an RSVP)
+and **HS** (a re-submission) still count, because those are the person
+acting. NOTE the divergence: `campaigns._funnel` excludes GG and HS
+from `note_count` too, so the Stats view's response rate is stricter
+than the queue's. Flagged to CA rather than changed unilaterally — it
+is a reported metric.
+
 **Outreach tags** — `lead_outreach_tags` dial over
 `DEFAULT_OUTREACH_TAGS` = Texted · Sent email · **Left VM**. Kerry named
 Texted and Emailed; Left VM is the same "reached out, now waiting" case

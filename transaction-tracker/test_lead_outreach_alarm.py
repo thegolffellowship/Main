@@ -320,6 +320,53 @@ def main():
           and row(p_db, future)["follow_up_at"] is not None,
           row(p_db, future))
 
+    print('"Followed up" resets the timer (Kerry 2026-09-03)')
+    # "Need something like a Followed Up option that resets the timer."
+    # The ordinary outreach tags arm only on a FIRST touch, so re-tapping
+    # Texted on a lead whose alarm already fired did nothing at all and
+    # the chip stayed red while Kerry kept working the person.
+    fu = plant(p_db, "FollowUp")
+    leads.set_lead_tag(fu, "Texted", db_path=p_db)
+    with db._connect(p_db) as conn:                 # let it go overdue
+        conn.execute("UPDATE leads SET follow_up_at = ? WHERE id = ?",
+                     ((TODAY - _td(days=3)).isoformat(), fu))
+        conn.commit()
+    check("re-tapping Texted still does NOT move an overdue date",
+          (leads.set_lead_tag(fu, "Texted", db_path=p_db)
+           .get("follow_up_at")) is None
+          and row(p_db, fu)["follow_up_at"] == (TODAY - _td(days=3)).isoformat(),
+          row(p_db, fu))
+    res = leads.set_lead_tag(fu, "Followed up", db_path=p_db)
+    r = row(p_db, fu)
+    check("Followed up restarts the 48-hour clock",
+          r["follow_up_at"] == due2 and res.get("follow_up_at") == due2, (r, res))
+    check("it re-stamps outreach_at, so the chip reads as an auto alarm",
+          bool(r["outreach_at"]) and r["tag"] == "Followed up", r)
+    check("and re-arms the digest ping for the new date",
+          r["follow_up_notified_for"] is None, r)
+    n = notes(p_db, fu)[-1]
+    check("the note says it was RESET and what it replaced",
+          "reset to" in n["note"] and "was " in n["note"], n)
+
+    # A date Kerry set BY HAND is deliberate, so replacing it must be
+    # deliberate too: an ordinary tag still never touches it, but
+    # choosing Followed up says "I just reached out" in so many words.
+    hand2 = plant(p_db, "HandThenFollow")
+    hand2_date = (TODAY + _td(days=20)).isoformat()
+    leads.set_lead_followup(hand2, hand2_date, db_path=p_db)
+    leads.set_lead_tag(hand2, "Texted", db_path=p_db)
+    check("an ordinary outreach tag still never overrides a hand-set date",
+          row(p_db, hand2)["follow_up_at"] == hand2_date, row(p_db, hand2))
+    leads.set_lead_tag(hand2, "Followed up", db_path=p_db)
+    check("Followed up does override it — explicitly",
+          row(p_db, hand2)["follow_up_at"] == due2, row(p_db, hand2))
+    check("and the note records the date it replaced, so nothing is lost",
+          "was " in notes(p_db, hand2)[-1]["note"], notes(p_db, hand2)[-1])
+
+    check("Followed up is offered in the tag list",
+          "Followed up" in leads.get_tag_options(p_db),
+          leads.get_tag_options(p_db))
+
     print("Morning digest routing (Kerry 2026-09-03)")
     # Kerry's copy rides the COO Daily Briefing, so the digest mail must
     # go ONLY to a chapter's own list — otherwise he gets the same names
