@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.301.1";
+window.TGF_VERSION = "2.301.2";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.301.2",
+    date: "2026-09-04",
+    changes: [
+      "Backfill silence extended to dates already reached, not just past ones. A backfill is a migration, not an event: the corrected production dry run has 13 leads due TODAY, and at 7:49 PM Central the next poll would have mailed all 13 at once about texts sent on Tuesday. Every one of them still shows in FOLLOW-UPS DUE, which is where the work happens. Dates that arrive after the backfill ping normally on their own morning.",
+    ],
+  },
   {
     version: "2.301.1",
     date: "2026-09-04",

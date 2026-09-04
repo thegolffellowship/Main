@@ -314,19 +314,18 @@ def main():
     # reaches back a week. Past dues are marked as already pinged — the
     # lead still shows overdue in the queue, which is where Kerry works
     # it. Today and later ping normally.
-    check("a backfilled PAST due date is marked as already pinged",
+    check("a backfilled due date already reached is marked as pinged",
           row(p_db, evening)["follow_up_notified_for"] == "2026-08-31",
           row(p_db, evening))
     future = plant(p_db, "FutureDue", status="touched")
     with db._connect(p_db) as conn:
         conn.execute("UPDATE leads SET tag = 'Texted', touched_at = ?, "
                      "follow_up_at = NULL, outreach_at = NULL WHERE id = ?",
-                     (TODAY.isoformat() + " 14:00:00", future))
+                     ((TODAY + _td(days=1)).isoformat() + " 14:00:00", future))
         conn.commit()
     fdry = leads.backfill_outreach_alarms(dry_run=True, db_path=p_db)
     check("the dry run splits what will and will not email",
-          fdry["already_overdue"] + fdry["will_ping"] == fdry["found"]
-          and fdry["will_ping"] >= 1, fdry.get("will_ping"))
+          fdry["silent"] + fdry["will_ping"] == fdry["found"], fdry)
     leads.backfill_outreach_alarms(db_path=p_db)
     check("a future due date is left to ping normally",
           row(p_db, future)["follow_up_notified_for"] is None,

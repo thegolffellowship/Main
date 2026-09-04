@@ -2132,8 +2132,8 @@ def backfill_outreach_alarms(dry_run: bool = False,
         out["found"] = len(rows)
         out["by_due_date"] = dict(sorted(by_due.items()))
         _today = today_central_str()
-        out["already_overdue"] = sum(1 for r in rows if r["due"] < _today)
-        out["will_ping"] = len(rows) - out["already_overdue"]
+        out["silent"] = sum(1 for r in rows if r["due"] <= _today)
+        out["will_ping"] = len(rows) - out["silent"]
         out["leads"] = [{"id": r["id"],
                          "name": f"{r['first_name'] or ''} "
                                  f"{r['last_name'] or ''}".strip(),
@@ -2141,21 +2141,23 @@ def backfill_outreach_alarms(dry_run: bool = False,
                          "due": r["due"]} for r in rows]
         if dry_run:
             return out
-        # A due date ALREADY PAST is marked as though its ping had gone
-        # out. check_followup_due_pings sends ONE EMAIL PER LEAD, and it
-        # deliberately still pings an overdue date it never pinged — a
-        # sane rule for the handful of leads a deploy gap strands, and a
-        # 39-email blast when a backfill reaches back a week. The lead
-        # still lands in the overdue queue, which is where Kerry works
-        # them; he just doesn't get mail about a Saturday that passed.
-        # Anything due today or later pings normally.
+        # A due date ALREADY REACHED is marked as though its ping had
+        # gone out. check_followup_due_pings sends ONE EMAIL PER LEAD and
+        # deliberately still pings an overdue date it never pinged — the
+        # right rule for the handful of leads a deploy gap strands, and a
+        # 39-email blast when a backfill reaches back a week. A BACKFILL
+        # IS A MIGRATION, NOT AN EVENT: it should populate the queue, not
+        # announce a week of history. Every one of these leads still shows
+        # in FOLLOW-UPS DUE, which is where Kerry actually works them.
+        # Dates that arrive AFTER the backfill ping normally on their own
+        # morning, which is the feature behaving as designed.
         today = today_central_str()
         for r in rows:
             conn.execute(
                 "UPDATE leads SET outreach_at = touched_at, follow_up_at = ?, "
                 "follow_up_notified_for = ? "
                 "WHERE id = ? AND follow_up_at IS NULL",
-                (r["due"], r["due"] if r["due"] < today else None, r["id"]))
+                (r["due"], r["due"] if r["due"] <= today else None, r["id"]))
             conn.execute(
                 "INSERT INTO lead_notes (lead_id, author, note) "
                 "VALUES (?, 'auto', ?)",

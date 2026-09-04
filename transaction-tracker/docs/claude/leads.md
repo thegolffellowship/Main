@@ -376,7 +376,13 @@ Both · "Team Net game and Closest to Pins" · "weekly", not "every week".
 **New data the copy needs:** `{start_phrase}` from the event's own
 `start_type` + `start_time` (", 5:30p shotgun" / " with tee times
 starting at 8:30a"), and **`events.range_balls_included`** (build ask A)
-— NULL renders nothing rather than claiming either way.
+— off renders nothing rather than claiming either way. Set it from the
+**Range balls included** checkbox on the PRICING tab of Add Event /
+Edit Event (v2.301.0). It lives with the price because it is part of
+what the entry fee covers. v2.300.0 shipped the column without the
+checkbox, which made the ask a no-op — only a bridge command could
+write it. `update_event` drops any field outside its allowed set
+**silently**, so the round trip is covered by a test.
 
 **`{first_timer_price}` uses the same arithmetic as the Edit Event
 screen:** course cost rounds up, plus markup, plus the included-games
@@ -421,6 +427,39 @@ touched_at`, `follow_up_at = touched_at + 2 days`, plus an auto note
 saying it was backfilled. **A hand-set date is never overwritten** (the
 `follow_up_at IS NULL` guard is what protects it). Idempotent. Bridge:
 `scoring-outreach-backfill[:dry]`.
+
+**Two corrections found dry-running it against production (v2.301.x),
+both of which only appear at real-data scale:**
+
+*The due day is Central, not UTC.* `touched_at` is stored UTC like every
+other datetime column, and the original backfill took
+`date(touched_at, '+2 days')` straight off it. Kerry texts prospects in
+the evening — the production dry run shows most outreach after 7 PM
+Central — and an evening touch is stored on the **next** calendar day in
+UTC, so those alarms armed a day late. The due day now comes from
+`to_central(touched_at)`, matching the live arming path exactly. New
+helper `timezone_utils.to_central()` reads a stored naive-UTC timestamp
+as Central wall clock, for deriving a user-facing DAY from a stored
+timestamp.
+
+*A backfilled date already reached does not email.*
+`check_followup_due_pings` sends **one email per lead** and deliberately
+still pings an overdue date it never pinged — right for the handful of
+leads a deploy gap strands, a 39-email blast when a backfill reaches
+back a week. **A backfill is a migration, not an event** — it should
+populate the queue, not announce a week of history. Any due date at or
+before today is stamped `follow_up_notified_for = due` as though the
+ping had gone out; the lead still shows in **FOLLOW-UPS DUE**, which is
+where the work happens. Dates arriving *after* the backfill ping
+normally on their own morning. The dry run reports `silent` /
+`will_ping` so the volume is visible before the run, not after.
+
+**Counts.** CA's #405 estimate was 12 / 9 / 6 due 09-03 / 09-04 / 09-05.
+The production dry run found **49** spanning 08-30 through 09-05, of
+which 09-04 matched CA exactly at 9. The gap is not a disagreement: CA
+counted the forward window, the backfill reaches back to the first
+untagged touch on **08-28**, and leads texted after v2.294.0 shipped are
+correctly **excluded** because the live path already armed them.
 
 **THE FORWARD RULE, and it belongs in the release checklist:** any
 feature that arms state on an event *going forward* needs a backfill for
@@ -481,7 +520,8 @@ merged rows are also dismissed. Locked in `test_lead_campaigns.py`.
 > that there's been a response."
 
 Tagging an **outreach** action stamps `leads.outreach_at` (new column,
-the precise Central timestamp) and sets `follow_up_at` to **+2 days**,
+the precise timestamp, stored **UTC** like every other datetime column —
+the UI converts for display; the DAY arithmetic is Central) and sets `follow_up_at` to **+2 days**,
 so the alarm rides the follow-up rails that already exist — the ⏰ chip,
 the FOLLOW-UPS DUE section at the top of the queue, and the due-day
 email ping (#370). **No second notification system.** An auto note
