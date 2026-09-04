@@ -2190,6 +2190,22 @@ def _scoring_dispatch(url: str, extract: str):
             return json.dumps(lead_sms_text(int(_p[0]), preset=_preset,
                                             closer=_closer),
                               indent=2, default=str)
+        if cmd == "scoring-campaign-roi":
+            # Just the money: spend, lifetime value and return, per
+            # campaign. The full scoring-campaigns payload is too big to
+            # read when all you want is whether the ads are paying.
+            from email_parser.campaigns import campaign_stats as _cs
+            _st = _cs()
+            _rows = []
+            for _b in (_st.get("campaigns") or []) + [_st.get("all") or {}]:
+                if not _b.get("roi"):
+                    continue
+                _rows.append({"name": _b.get("name"), **_b["roi"],
+                              "leads": (_b.get("funnel") or {}).get("leads"),
+                              "registered": (_b.get("funnel") or {}).get("registered"),
+                              "members": (_b.get("funnel") or {}).get("members"),
+                              "orders": (_b.get("value") or {}).get("orders")})
+            return json.dumps({"campaigns": _rows}, indent=2, default=str)
         if cmd == "scoring-campaigns":
             # Campaign stats view payload (mailbox #391): per campaign +
             # unattributed + all — META panel (insights or manual spend)

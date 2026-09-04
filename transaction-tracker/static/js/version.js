@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.312.2";
+window.TGF_VERSION = "2.312.3";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.312.3",
+    date: "2026-09-04",
+    changes: [
+      "scoring-campaign-roi — the money in one short read: spend, collected, margin, net, ROAS, ROI% and the lead/registered/member counts per campaign. The full campaign payload is thousands of lines, which made verifying the ROI figures on production harder than it should be.",
+    ],
+  },
   {
     version: "2.312.2",
     date: "2026-09-04",
