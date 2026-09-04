@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.311.0";
+window.TGF_VERSION = "2.312.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.312.0",
+    date: "2026-09-04",
+    changes: [
+      "The Converted card now reads 'N registered events · M members' and the two OVERLAP on purpose (Kerry: 'Registered event guests should show total unique leads from this campaign who have registered for events, including those who have become members'). A lead's tag can only hold one value and membership outranks event, so anyone who played and then joined was counted only as a member and vanished from the guest figure. The count now asks the items table instead of the tag, so a member who plays appears in both — which means the two no longer sum to Converted, and shouldn't.",
+      "New Return On Ad Spend panel in Stats, with the lifetime value of the campaign: ad spend, gross collected, TGF margin, net, ROAS, ROI % and value per lead. ROI is computed on MARGIN — what TGF actually kept — not on gross collected. Most of an entry fee passes straight through to the course and the prize pool, so ROI on gross would read roughly six times better than the business did, which is the exact number nobody should set an ad budget from. Gross sits beside it so the two can be compared rather than confused, and 'lifetime' means every dollar those people have ever paid TGF, since the ad bought the relationship rather than one transaction.",
+      "Margin is only known for orders that have been allocated, and those rows are written lazily, so the panel gap-fills through the same allocator the Money Flow report uses and states its coverage. Below full coverage it says the margin is a FLOOR instead of quietly under-reporting the return.",
+    ],
+  },
   {
     version: "2.311.0",
     date: "2026-09-04",

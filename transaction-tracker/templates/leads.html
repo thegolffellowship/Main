@@ -416,12 +416,13 @@
         const fuSnoozed = l => !!l.follow_up_at && l.follow_up_at > todayC && l.status !== "dismissed";
         const fmtFu = d => +d.slice(5, 7) + "/" + +d.slice(8, 10);
         const counts = { new: 0, touched: 0, converted: 0, dismissed: 0,
-            late: 0, member: 0, resp: 0, noresp: 0 };
+            late: 0, member: 0, registered: 0, resp: 0, noresp: 0 };
         const chapCounts = { all: leads.length };
         leads.forEach(l => {
             counts[l.status] = (counts[l.status] || 0) + 1;
             if (isLate(l)) counts.late++;
             if (isMember(l)) counts.member++;
+            if ((l.event_regs || 0) > 0) counts.registered++;
             if (l.status === "touched") counts[responded(l) ? "resp" : "noresp"]++;
             if (l.chapter) chapCounts[l.chapter] = (chapCounts[l.chapter] || 0) + 1;
         });
@@ -933,9 +934,17 @@
         document.getElementById("ld-count-late").textContent = counts.late || 0;
         // Converted breakdown (Kerry 2026-08-31): total up top, Event
         // Guests vs Members within it.
-        const evGuests = (counts.converted || 0) - counts.member;
+        // Kerry 2026-09-04: "Registered event guests should show total
+        // unique leads from this campaign who have registered for
+        // events, INCLUDING those who have become members." The tag can
+        // only say one thing and membership outranks event, so a member
+        // who also plays was counted only as a member and vanished from
+        // the guest figure. counts.registered comes from the ITEMS
+        // table, so the two overlap on purpose and no longer sum to
+        // Converted.
+        const evGuests = counts.registered;
         document.getElementById("ld-conv-sub").textContent = counts.converted
-            ? `${evGuests} event guest${evGuests === 1 ? "" : "s"} · ${counts.member} member${counts.member === 1 ? "" : "s"}` : "";
+            ? `${evGuests} registered event${evGuests === 1 ? "" : "s"} · ${counts.member} member${counts.member === 1 ? "" : "s"}` : "";
         document.getElementById("ld-touch-sub").textContent = counts.touched
             ? `${counts.resp} responded · ${counts.noresp} no response` : "";
         document.getElementById("ld-msummary").innerHTML =
@@ -1147,6 +1156,7 @@
             ${metric("Responded", num(f.responded), f.response_pct == null ? "" : `${f.response_pct}% of touched`)}
             ${metric("Interested", num(f.interested))}
             ${metric("Players", num(f.players))}
+            ${metric("Registered", num(f.registered), "events played")}
             ${metric("Members", num(f.members))}
             ${metric("Dismissed", num(f.dismissed))}
             </div>
@@ -1156,6 +1166,30 @@
             <tr><td>CPMem <span class="ld-dsub">spend / members</span></td><td>${money(c.cpmem)}<span class="ld-dsub"> /${f.members}</span></td><td>${money(c.cpmem_trailing)}<span class="ld-dsub"> /${f.members_trailing}</span></td></tr>
             </tbody></table>
             <div class="ld-foot">Player = registered any event or became a member (counts once). Trailing counts conversions through ${STATS.trailing_days} days after the last spend day · ${esc(win)}.</div></div>`;
+        // Return on ad spend (Kerry 2026-09-04). Two revenue numbers,
+        // because the difference between them is the whole point: most
+        // of an entry fee passes through to the course and the prize
+        // pool. ROI is computed on MARGIN — what TGF actually kept —
+        // and the gross figure sits beside it so the two can never be
+        // read as the same thing.
+        const v = b.value || {}, r = b.roi;
+        const roiPanel = !r ? "" : `<div class="ld-panel" style="grid-column:1/-1"><h3>Return on ad spend</h3>
+            <div class="ld-metrics">
+            ${metric("Ad spend", money(r.spend))}
+            ${metric("Collected", money(r.collected), "gross, lifetime")}
+            ${metric("TGF margin", money(r.margin), "what TGF kept")}
+            ${metric("Net", money(r.net), r.net >= 0 ? "ahead" : "behind")}
+            ${metric("ROAS", r.roas_margin == null ? "—" : `${r.roas_margin}×`, "margin per $1 spent")}
+            ${metric("ROI", r.pct == null ? "—" : `${r.pct > 0 ? "+" : ""}${r.pct}%`, "on margin")}
+            ${metric("Value / lead", money(r.value_per_lead), "margin ÷ leads")}
+            </div>
+            <div class="ld-foot">
+              Lifetime: every dollar these ${num(v.customers)} people have paid TGF, not just during the campaign.
+              <b>ROI is on MARGIN, not gross</b> — course fees go to the course and prize pools go to the winners, so ROI on collected would read about six times better than the business did.
+              ${v.coverage_pct != null && v.coverage_pct < 100
+                ? `<span class="ld-late">Margin is known for ${v.coverage_pct}% of their ${num(v.orders)} orders${v.coverage_pending ? ` (${num(v.coverage_pending)} still to allocate — reopen Stats to continue)` : ""}, so it is a FLOOR.</span>`
+                : `Margin covers all ${num(v.orders)} of their orders.`}
+            </div></div>`;
         const chapPanel = `<div class="ld-panel" style="grid-column:1/-1"><h3>Per chapter</h3>
             <div style="overflow-x:auto"><table class="ld-costtbl"><thead><tr><th>Chapter</th><th>Leads</th><th>Touched</th><th>Responded</th><th>Resp %</th><th>Interested</th><th>Players</th><th>Members</th><th>Dismissed</th></tr></thead><tbody>${chapRows || "<tr><td colspan=9>No leads.</td></tr>"}</tbody></table></div></div>`;
         const adRows = Object.entries((ALL && ALL.by_ad_set) || {}).map(([name, a]) =>
@@ -1168,7 +1202,7 @@
                 ${STATS.campaigns.map(x => `<tr><td><a href="#" onclick="setCampaignFilter('${x.id}');document.getElementById('ld-campsel').value='${x.id}';return false;">${esc(x.name)}</a></td><td>${fmtD(x.start_date)}–${fmtD(x.end_date)}</td><td>${money(x.spend)}</td><td>${x.funnel.leads}</td><td>${x.funnel.players}</td><td>${x.funnel.members}</td><td>${money(x.cost.cpl)}</td><td>${money(x.cost.cpp)}</td><td>${money(x.cost.cpmem)}</td></tr>`).join("")}
                 <tr><td>Unattributed / organic</td><td></td><td>—</td><td>${STATS.unattributed.funnel.leads}</td><td>${STATS.unattributed.funnel.players}</td><td>${STATS.unattributed.funnel.members}</td><td>—</td><td>—</td><td>—</td></tr>
               </tbody></table></div></div>` : "";
-        document.getElementById("ld-stats").innerHTML = head + `<div class="ld-panels">${metaPanel}${funnelPanel}${chapPanel}${adPanel}${list}</div>`;
+        document.getElementById("ld-stats").innerHTML = head + `<div class="ld-panels">${metaPanel}${funnelPanel}${roiPanel}${chapPanel}${adPanel}${list}</div>`;
     }
     async function setSpend(id, cur) {
         const v = prompt("Ad spend to date for this campaign (manual, used until the Meta token exists):", cur == null ? "" : cur);

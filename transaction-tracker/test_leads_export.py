@@ -64,7 +64,8 @@ def main():
         # the prospect-name sync
         conn.execute("CREATE TABLE IF NOT EXISTS items ("
                      "id INTEGER PRIMARY KEY, customer_id INTEGER, "
-                     "transaction_status TEXT)")
+                     "transaction_status TEXT, merchant TEXT, "
+                     "item_name TEXT, parent_item_id INTEGER)")
         conn.execute("CREATE TABLE IF NOT EXISTS customers ("
                      "customer_id INTEGER PRIMARY KEY, "
                      "first_name TEXT, last_name TEXT)")

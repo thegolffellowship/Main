@@ -619,6 +619,55 @@ worst.
 Flat sorts (anything other than Priority) have no sections, so no
 collapsing applies there.
 
+## Registered-events count + campaign ROI (Kerry 2026-09-04, v2.312.0)
+
+**"Registered event guests should show total unique leads from this
+campaign who have registered for events, including those who have become
+members."**
+
+`leads.tag` can only hold ONE value and the conversion auto-detect ranks
+membership above event, so a lead who played and then joined was tagged
+`Became member` and disappeared from the guest figure. `event_regs` now
+counts real rows in `items` (active, no parent, non-placeholder merchant,
+not a membership) — the same predicate the auto-detect uses. It is on
+every lead in `/api/leads` and in the campaign funnel as `registered`.
+
+**`registered` and `members` OVERLAP on purpose.** They no longer sum to
+Converted, and they shouldn't: a member who plays belongs in both.
+
+**ROI (`campaign_value()` + the `roi` block).** Two revenue numbers,
+because the gap between them is the point:
+
+| | |
+|---|---|
+| `collected` | every dollar these customers have paid TGF, ever |
+| `margin` | `acct_allocations.tgf_operating` — what TGF **kept** |
+
+**ROI is on MARGIN.** Most of an entry fee passes through to the course
+and the prize pool (the Money Flow waterfall put TGF's keep near 17% of
+collected in June), so ROI on gross would read roughly **six times**
+better than the business did — the exact number nobody should set an ad
+budget from. `roas_collected` is carried too, purely so the two can be
+compared rather than confused.
+
+**Coverage matters.** `acct_allocations` rows are written LAZILY, so
+margin is only known for allocated orders. `campaign_value` gap-fills
+through the same allocator the money-flow report uses (idempotent, 8s
+budget, `gap_fill_seconds=0` reads without writing) and reports
+`coverage_pct`. Below 100% the panel says the margin is a **floor**,
+rather than quietly under-reporting ROI.
+
+**Lifetime, not campaign-window.** The value is every dollar those
+people have paid, including before and after the campaign ran. For a
+lead campaign that is the honest read — the ad bought the relationship,
+not one transaction.
+
+**OPEN FOR RATIFICATION (rule 3b):** margin-based ROI is my judgement,
+not a Kerry-ratified definition. The alternatives are gross-based (much
+flatterier, arguably meaningless here) or margin-net-of-tax-reserve
+(stricter — `tax_reserve` is 8.25% of `tgf_operating` and is owed to the
+state, so arguably not TGF's). Flagged to Kerry and CA.
+
 ## Morning follow-up digest (Kerry 2026-09-03, v2.302.0)
 
 > "Yes should be part of morning digest."

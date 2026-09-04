@@ -1459,13 +1459,27 @@ def get_leads(status: str = "", limit: int = 200,
                 conn.commit()
         except Exception:
             logger.warning("campaign auto-link failed", exc_info=True)
-        q = ("SELECT l.*, c.name AS campaign_name FROM leads l "
+        # event_regs: REAL event registrations off the items table
+        # (Kerry 2026-09-04). The tag can only say one thing and
+        # membership outranks event, so a member who also plays was
+        # invisible in the event count. Same predicate the conversion
+        # auto-detect uses.
+        _ph = ",".join("?" * len(PLACEHOLDER_MERCHANTS))
+        q = ("SELECT l.*, c.name AS campaign_name, "
+             "(SELECT COUNT(*) FROM items i "
+             " WHERE i.customer_id = l.customer_id "
+             " AND COALESCE(i.transaction_status, 'active') = 'active' "
+             " AND i.parent_item_id IS NULL "
+             f" AND i.merchant NOT IN ({_ph}) "
+             " AND UPPER(COALESCE(i.item_name, '')) NOT LIKE '%MEMBERSHIP%'"
+             ") AS event_regs "
+             "FROM leads l "
              "LEFT JOIN lead_campaigns c ON c.id = l.campaign_id "
              "WHERE l.merged_into IS NULL")
-        params: tuple = ()
+        params: tuple = tuple(PLACEHOLDER_MERCHANTS)
         if status:
             q += " AND l.status = ?"
-            params = (status,)
+            params = params + (status,)
         q += " ORDER BY COALESCE(l.arrived_at, l.first_seen_at) DESC LIMIT ?"
         rows = [dict(r) for r in conn.execute(q, params + (limit,)).fetchall()]
     # "Existing customer" badge = the lead matches a customer with REAL

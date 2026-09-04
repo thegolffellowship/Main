@@ -285,6 +285,9 @@ def main():
     _t.close()
     with db._connect(_t.name) as conn:
         leads.ensure_leads_table(conn)
+        conn.execute("CREATE TABLE IF NOT EXISTS items (id INTEGER PRIMARY "
+                     "KEY, customer_id INTEGER, transaction_status TEXT, "
+                     "merchant TEXT, item_name TEXT, parent_item_id INTEGER)")
         conn.execute("CREATE TABLE IF NOT EXISTS app_settings (key TEXT "
                      "PRIMARY KEY, value TEXT, updated_at TEXT)")
         conn.execute("CREATE TABLE IF NOT EXISTS events (id INTEGER PRIMARY "

@@ -42,6 +42,10 @@ import requests
 
 logger = logging.getLogger(__name__)
 
+# The same rows the lead pipeline treats as "puts a PERSON in the
+# system, not a purchase" — never an event registration.
+from .leads import PLACEHOLDER_MERCHANTS  # noqa: E402
+
 META_AD_ACCOUNT_ID = "2353186181735308"
 META_GRAPH_VERSION = "v21.0"
 META_INSIGHT_FIELDS = ("spend,impressions,reach,frequency,"
@@ -412,12 +416,94 @@ def _roll_up_insights(rows: list[dict]) -> dict | None:
     return agg
 
 
+def campaign_value(customer_ids: list[int], conn,
+                   db_path: str | Path | None = None,
+                   gap_fill_seconds: float = 8.0) -> dict:
+    """What a set of campaign leads has actually been worth to TGF.
+
+    TWO different numbers, and the difference is the whole point:
+
+      collected  — every dollar these customers have paid TGF, ever.
+      margin     — what TGF KEPT of it (tgf_operating, the same bucket
+                   the Monthly Money Flow waterfall calls TGF gross
+                   margin), after course fees go to the course and prize
+                   pools go to the winners.
+
+    Most of an entry fee is pass-through. ROI computed on `collected`
+    would read roughly six times better than the business actually did,
+    which is exactly the number nobody should base an ad budget on. ROI
+    here is margin-based; `collected` is reported alongside so the two
+    are never confused.
+
+    `acct_allocations` rows are written LAZILY, so margin is only known
+    for orders that have been allocated. Rather than quietly under-report,
+    this gap-fills the missing orders through the same allocator the
+    money-flow report uses (idempotent), under a time budget, and returns
+    `coverage_pct` so a partial answer is visible as partial.
+    """
+    from . import database as db
+    import time as _t
+    out = {"customers": len(customer_ids), "collected": 0.0, "margin": 0.0,
+           "items": 0, "orders": 0, "allocated_orders": 0,
+           "coverage_pct": None, "allocated_now": 0, "coverage_pending": 0}
+    if not customer_ids:
+        return out
+    ph = ",".join("?" * len(customer_ids))
+    rows = conn.execute(
+        f"SELECT i.id, i.order_id, COALESCE(i.item_price, 0) AS price "
+        f"FROM items i WHERE i.customer_id IN ({ph}) "
+        f"AND COALESCE(i.transaction_status, 'active') = 'active' "
+        f"AND i.parent_item_id IS NULL "
+        f"AND i.merchant NOT IN ({','.join(repr(m) for m in PLACEHOLDER_MERCHANTS)})",
+        tuple(customer_ids)).fetchall()
+    out["items"] = len(rows)
+    out["collected"] = round(sum(r["price"] for r in rows), 2)
+    orders = sorted({r["order_id"] for r in rows if r["order_id"]})
+    out["orders"] = len(orders)
+    if not orders:
+        return out
+
+    oph = ",".join("?" * len(orders))
+    have = {r["order_id"] for r in conn.execute(
+        f"SELECT DISTINCT order_id FROM acct_allocations "
+        f"WHERE order_id IN ({oph})", tuple(orders)).fetchall()}
+    # gap_fill_seconds <= 0 reads what is already allocated and writes
+    # nothing — the escape hatch if the allocator ever misbehaves on a
+    # big campaign, and what the tests use.
+    missing = [o for o in orders if o not in have] if gap_fill_seconds > 0 else []
+    deadline = _t.monotonic() + gap_fill_seconds
+    for n, oid in enumerate(missing):
+        if _t.monotonic() > deadline:
+            out["coverage_pending"] = len(missing) - n
+            break
+        try:
+            # db_path MUST ride along — without it the allocator writes
+            # to the default database, which is silently wrong anywhere
+            # but production.
+            if db.calculate_order_allocation(oid, db_path=db_path):
+                out["allocated_now"] += 1
+        except Exception:
+            logger.warning("campaign value: allocation failed for %s", oid,
+                           exc_info=True)
+
+    agg = conn.execute(
+        f"SELECT COUNT(DISTINCT a.order_id) AS n, "
+        f"       COALESCE(SUM(a.tgf_operating), 0) AS margin "
+        f"FROM acct_allocations a WHERE a.order_id IN ({oph})",
+        tuple(orders)).fetchone()
+    out["allocated_orders"] = agg["n"] or 0
+    out["margin"] = round(agg["margin"] or 0.0, 2)
+    out["coverage_pct"] = (round(100.0 * out["allocated_orders"]
+                                 / out["orders"], 1) if out["orders"] else None)
+    return out
+
+
 def _funnel(leads: list[dict], today: date, cutoff: date | None) -> dict:
     """Counts for one bucket. cutoff = the trailing-window end (campaign
     end + 30d); None = no window (organic / undated)."""
     f = {"leads": len(leads), "touched": 0, "responded": 0, "interested": 0,
-         "players": 0, "members": 0, "dismissed": 0, "new": 0,
-         "players_trailing": 0, "members_trailing": 0}
+         "players": 0, "members": 0, "registered": 0, "dismissed": 0,
+         "new": 0, "players_trailing": 0, "members_trailing": 0}
     for l in leads:
         st = l.get("status")
         tag = l.get("tag") or ""
@@ -428,6 +514,11 @@ def _funnel(leads: list[dict], today: date, cutoff: date | None) -> dict:
             if tag in HOT_TAGS or (l.get("note_count") or 0) > 0 \
                     or st == "converted":
                 f["responded"] += 1
+        # UNIQUE leads who have registered for an event, members
+        # included — a member who also plays belongs in both counts, so
+        # this deliberately overlaps `members` rather than partitioning.
+        if (l.get("event_regs") or 0) > 0:
+            f["registered"] += 1
         if tag in INTERESTED_TAGS:
             f["interested"] += 1
         if st == "dismissed":
@@ -454,7 +545,8 @@ def _funnel(leads: list[dict], today: date, cutoff: date | None) -> dict:
 
 
 def campaign_stats(db_path: str | Path | None = None,
-                   today: str | None = None) -> dict:
+                   today: str | None = None,
+                   gap_fill_seconds: float = 8.0) -> dict:
     """Per-campaign + all-time stats for the Lead Center stats view:
     META panel (insights or manual spend), FUNNEL panel with CPL / CPP /
     CPMem current + 30-day trailing, per-chapter split."""
@@ -468,10 +560,24 @@ def campaign_stats(db_path: str | Path | None = None,
         conn.commit()
         leads = [dict(r) for r in conn.execute(
             "SELECT l.id, l.status, l.tag, l.chapter, l.campaign_id, "
-            "l.converted_at, l.arrived_at, "
+            "l.customer_id, l.converted_at, l.arrived_at, "
             "(SELECT COUNT(*) FROM lead_notes n WHERE n.lead_id = l.id "
             " AND COALESCE(n.author, '') NOT IN ('HS', 'GG', 'auto')) "
-            "AS note_count FROM leads l "
+            "AS note_count, "
+            # Kerry 2026-09-04: "Registered event guests should show
+            # total unique leads from this campaign who have registered
+            # for events, INCLUDING those who have become members." The
+            # tag can only say one thing and membership outranks event,
+            # so a member who also plays was invisible in the event
+            # count. This asks the items table instead of the tag. Same
+            # predicate the conversion auto-detect uses.
+            "(SELECT COUNT(*) FROM items i WHERE i.customer_id = "
+            " l.customer_id AND COALESCE(i.transaction_status,'active') "
+            " = 'active' AND i.parent_item_id IS NULL "
+            f"AND i.merchant NOT IN ({','.join(repr(m) for m in PLACEHOLDER_MERCHANTS)}) "
+            " AND UPPER(COALESCE(i.item_name,'')) NOT LIKE '%MEMBERSHIP%') "
+            "AS event_regs "
+            "FROM leads l "
             # A merged duplicate keeps its campaign link (and its
             # external_id) but is NOT a second lead — counting it would
             # inflate leads and deflate CPL (v2.295.1, the Shane Winter
@@ -482,7 +588,7 @@ def campaign_stats(db_path: str | Path | None = None,
         by_campaign.setdefault(l.get("campaign_id"), []).append(l)
 
     def _bucket(name, rows, spend, spend_source, end_date, insights=None,
-                cid=None):
+                cid=None, value=None):
         cutoff = None
         window_open = None
         if end_date:
@@ -504,12 +610,43 @@ def campaign_stats(db_path: str | Path | None = None,
             "cpp_trailing": _ratio(spend, f["players_trailing"]),
             "cpmem_trailing": _ratio(spend, f["members_trailing"]),
         }
+        # ROI on MARGIN, never on gross collected (Kerry 2026-09-04:
+        # "a calculated ROI on the stats, that includes the lifetime
+        # value of the campaign"). Most of an entry fee passes straight
+        # through to the course and the prize pool, so ROI on collected
+        # would flatter the number by roughly 6x.
+        roi = None
+        if value and spend:
+            roi = {
+                "spend": round(spend, 2),
+                "collected": value.get("collected"),
+                "margin": value.get("margin"),
+                "net": round((value.get("margin") or 0) - spend, 2),
+                # 1.0 = broke even. 2.4 = every ad dollar came back as
+                # $2.40 of TGF margin.
+                "roas_margin": (round((value.get("margin") or 0) / spend, 2)
+                                if spend else None),
+                "roas_collected": (round((value.get("collected") or 0) / spend, 2)
+                                   if spend else None),
+                "pct": (round(100.0 * ((value.get("margin") or 0) - spend)
+                              / spend, 1) if spend else None),
+                "value_per_lead": (round((value.get("margin") or 0)
+                                         / f["leads"], 2) if f["leads"] else None),
+                "coverage_pct": value.get("coverage_pct"),
+                "coverage_pending": value.get("coverage_pending"),
+            }
         return {"id": cid, "name": name, "spend": spend,
                 "spend_source": spend_source, "end_date": end_date,
                 "trailing_cutoff": cutoff.isoformat() if cutoff else None,
                 "trailing_window_open": window_open,
                 "meta": insights, "funnel": f, "cost": cost,
+                "value": value, "roi": roi,
                 "chapters": chapters}
+
+    # One customer can hold several leads (a re-submitter). Value is
+    # per PERSON, so dedupe before summing what they have paid.
+    def _cids(rows):
+        return sorted({r["customer_id"] for r in rows if r.get("customer_id")})
 
     out_campaigns = []
     total_spend = 0.0
@@ -528,8 +665,12 @@ def campaign_stats(db_path: str | Path | None = None,
         if c.get("end_date") and (latest_end is None
                                   or c["end_date"] > latest_end):
             latest_end = c["end_date"]
-        b = _bucket(c["name"], by_campaign.get(c["id"], []), spend,
-                    spend_source, c.get("end_date"), ins, c["id"])
+        _rows = by_campaign.get(c["id"], [])
+        with db._connect(db_path) as _vc:
+            _val = campaign_value(_cids(_rows), _vc, db_path,
+                                  gap_fill_seconds)
+        b = _bucket(c["name"], _rows, spend,
+                    spend_source, c.get("end_date"), ins, c["id"], _val)
         b.update({"source": c.get("source"),
                   "meta_campaign_id": c.get("meta_campaign_id"),
                   "start_date": c.get("start_date"),
@@ -542,11 +683,14 @@ def campaign_stats(db_path: str | Path | None = None,
     unattributed = _bucket("Unattributed / organic", organic, None, "none",
                            None)
     all_ins = _roll_up_insights(campaigns)
+    with db._connect(db_path) as _vc:
+        _all_val = campaign_value(_cids(leads), _vc, db_path,
+                                  gap_fill_seconds)
     all_bucket = _bucket("All campaigns", leads,
                          total_spend if any_spend else None,
                          "meta" if all_ins else ("sum" if any_spend
                                                 else "none"),
-                         latest_end, all_ins)
+                         latest_end, all_ins, None, _all_val)
     if all_ins:
         # so the panel can date-stamp the roll-up like a single campaign
         all_bucket["insights_fetched_at"] = max(

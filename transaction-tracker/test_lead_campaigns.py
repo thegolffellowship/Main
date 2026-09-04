@@ -62,7 +62,21 @@ def main():
     META = "120253511733060195"
     with db._connect(db_path) as conn:
         conn.execute("CREATE TABLE IF NOT EXISTS items (id INTEGER PRIMARY KEY, "
-                     "customer_id INTEGER, transaction_status TEXT, merchant TEXT)")
+                     "customer_id INTEGER, transaction_status TEXT, merchant TEXT,"
+                     " item_name TEXT, item_price REAL, order_id TEXT,"
+                     " parent_item_id INTEGER, order_date TEXT, item_index INTEGER,"
+                     " customer TEXT, chapter TEXT, holes TEXT, side_games TEXT,"
+                     " user_status TEXT, quantity INTEGER)")
+        conn.execute("""CREATE TABLE IF NOT EXISTS acct_allocations (
+            id INTEGER PRIMARY KEY AUTOINCREMENT, order_id TEXT NOT NULL,
+            item_id INTEGER, event_name TEXT, chapter TEXT,
+            allocation_date TEXT, player_count INTEGER DEFAULT 1,
+            course_payable REAL DEFAULT 0, course_surcharge REAL DEFAULT 0,
+            prize_pool REAL DEFAULT 0, tgf_operating REAL DEFAULT 0,
+            godaddy_fee REAL DEFAULT 0, tax_reserve REAL DEFAULT 0,
+            total_collected REAL DEFAULT 0,
+            allocation_status TEXT DEFAULT 'pending', notes TEXT,
+            created_at TEXT, UNIQUE(order_id, item_id))""")
         conn.execute("CREATE TABLE IF NOT EXISTS customers (customer_id INTEGER "
                      "PRIMARY KEY, first_name TEXT, last_name TEXT)")
         conn.execute("CREATE TABLE IF NOT EXISTS app_settings (key TEXT PRIMARY KEY, "
@@ -112,7 +126,7 @@ def main():
     print("Spend + stats (manual spend fallback)")
     r = campaigns.set_campaign(campaign_id=cid, spend_manual=127.16, db_path=db_path)
     check("manual spend set", r.get("ok") and r["spend_manual"] == 127.16, r)
-    st = campaigns.campaign_stats(db_path, today="2026-09-03")
+    st = campaigns.campaign_stats(db_path, today="2026-09-03", gap_fill_seconds=0)
     c = st["campaigns"][0]
     f, cost = c["funnel"], c["cost"]
     check("spend source = manual without insights", c["spend_source"] == "manual" and c["spend"] == 127.16, c["spend_source"])
@@ -143,7 +157,7 @@ def main():
         conn.execute("UPDATE leads SET status = 'touched', tag = NULL, converted_at = NULL "
                      "WHERE first_name = 'OldConv'")
         conn.commit()
-    st = campaigns.campaign_stats(db_path, today="2026-09-03")
+    st = campaigns.campaign_stats(db_path, today="2026-09-03", gap_fill_seconds=0)
     cost = st["campaigns"][0]["cost"]
     check("CPP = 127.16 / 5 = 25.43 (Kerry's example)", cost["cpp"] == 25.43, cost)
 
@@ -158,7 +172,7 @@ def main():
         conn.execute("INSERT INTO lead_campaign_insights (campaign_id, fetched_at, payload) "
                      "VALUES (?, datetime('now'), ?)", (cid, json.dumps(n)))
         conn.commit()
-    st = campaigns.campaign_stats(db_path, today="2026-09-03")
+    st = campaigns.campaign_stats(db_path, today="2026-09-03", gap_fill_seconds=0)
     c = st["campaigns"][0]
     check("insights spend wins over manual", c["spend_source"] == "meta" and c["spend"] == 127.64, (c["spend_source"], c["spend"]))
     check("META panel carried", c["meta"]["cpm"] == 8.9 and c["meta"]["reach"] == 6866, c["meta"])
@@ -207,8 +221,90 @@ def main():
     r = campaigns.refresh_meta_insights(db_path)
     check("refresh is a no-op without META_ACCESS_TOKEN", r["token"] is False and r["refreshed"] == 0, r)
 
+    print("Registered-events count includes members (Kerry 2026-09-04)")
+    # The tag can only say ONE thing and membership outranks event, so a
+    # member who also plays was invisible in the event count. The count
+    # asks the items table instead: "total unique leads from this
+    # campaign who have registered for events, INCLUDING those who have
+    # become members."
+    with db._connect(db_path) as conn:
+        mem_player = plant(conn, "MemAndPlayer", "San Antonio", "converted",
+                           "Became member", META)
+        just_player = plant(conn, "JustPlayer", "San Antonio", "converted",
+                            "Registered event", META)
+        just_member = plant(conn, "JustMember", "Austin", "converted",
+                            "Became member", META)
+        conn.execute("UPDATE leads SET customer_id = 9001 WHERE id = ?", (mem_player,))
+        conn.execute("UPDATE leads SET customer_id = 9002 WHERE id = ?", (just_player,))
+        conn.execute("UPDATE leads SET customer_id = 9003 WHERE id = ?", (just_member,))
+        conn.executemany(
+            "INSERT INTO items (customer_id, transaction_status, merchant, "
+            "item_name, item_price, order_id) VALUES (?,?,?,?,?,?)",
+            [(9001, "active", "GoDaddy", "s9.22 Silverhorn", 64.0, "O-1"),
+             (9001, "active", "GoDaddy", "TGF MEMBERSHIP", 75.0, "O-1"),
+             (9002, "active", "GoDaddy", "s9.22 Silverhorn", 64.0, "O-2"),
+             (9003, "active", "GoDaddy", "TGF MEMBERSHIP", 75.0, "O-3"),
+             # A roster import puts a PERSON in the system, not a sale.
+             (9003, "active", "Roster Import", "s9.22 Silverhorn", 0.0, "O-4")])
+        conn.commit()
+    st2 = campaigns.campaign_stats(db_path, today="2026-09-03",
+                               gap_fill_seconds=0)
+    fn = st2["campaigns"][0]["funnel"]
+    check("a member who ALSO played counts as registered",
+          fn["registered"] == 2, fn)
+    check("a member who never played does not",
+          fn["members"] >= 2 and fn["registered"] == 2, fn)
+    # The overlap, proven by removing it: drop the member's event items
+    # and the count falls to the one lead who is ONLY a player.
+    with db._connect(db_path) as conn:
+        conn.execute("UPDATE items SET transaction_status = 'refunded' "
+                     "WHERE customer_id = 9001 AND item_name NOT LIKE "
+                     "'%MEMBERSHIP%'")
+        conn.commit()
+    check("without the member's registration the count drops to 1",
+          campaigns.campaign_stats(db_path, today="2026-09-03",
+                                   gap_fill_seconds=0)["campaigns"][0]
+          ["funnel"]["registered"] == 1)
+    with db._connect(db_path) as conn:
+        conn.execute("UPDATE items SET transaction_status = 'active' "
+                     "WHERE customer_id = 9001")
+        conn.commit()
+    check("a Roster Import row is not a registration",
+          fn["registered"] == 2, fn)
+
+    print("Lifetime value + ROI")
+    val = st2["campaigns"][0]["value"]
+    check("collected sums what those customers actually paid",
+          val["collected"] == 278.0, val)
+    check("it counts orders, not just items", val["orders"] == 3, val)
+    roi = st2["campaigns"][0]["roi"]
+    check("ROI is reported once there is spend", roi is not None, roi)
+    check("ROI is computed on MARGIN, not gross collected",
+          roi["roas_margin"] != roi["roas_collected"]
+          or roi["margin"] == roi["collected"], roi)
+    check("gross is carried alongside so the two are never confused",
+          roi["collected"] == val["collected"]
+          and roi["margin"] == val["margin"], roi)
+    check("net is margin minus spend",
+          abs(roi["net"] - (roi["margin"] - roi["spend"])) < 0.01, roi)
+    check("coverage says how much of it is actually allocated",
+          "coverage_pct" in roi, roi)
+    with db._connect(db_path) as conn:
+        conn.execute("INSERT INTO acct_allocations (order_id, item_id, "
+                     "tgf_operating, total_collected) VALUES ('O-2', 3, 15.0, 64.0)")
+        conn.commit()
+    st3 = campaigns.campaign_stats(db_path, today="2026-09-03",
+                               gap_fill_seconds=0)
+    check("an allocated order feeds the margin",
+          st3["campaigns"][0]["value"]["margin"] == 15.0,
+          st3["campaigns"][0]["value"])
+    check("ROAS on margin is margin over spend",
+          abs(st3["campaigns"][0]["roi"]["roas_margin"]
+              - 15.0 / st3["campaigns"][0]["spend"]) < 0.01,
+          st3["campaigns"][0]["roi"])
+
     print("Closed window + converted_at stamp")
-    st = campaigns.campaign_stats(db_path, today="2026-10-30")
+    st = campaigns.campaign_stats(db_path, today="2026-10-30", gap_fill_seconds=0)
     c = st["campaigns"][0]
     check("window closed after 10/6", c["trailing_window_open"] is False, c["trailing_window_open"])
     with db._connect(db_path) as conn:
@@ -220,18 +316,18 @@ def main():
     check("mark_lead(converted) stamps converted_at", bool(row["converted_at"]), dict(row))
 
     print("Merged duplicates never double-count (v2.295.1)")
-    before = campaigns.campaign_stats(db_path, today="2026-09-03")["campaigns"][0]
+    before = campaigns.campaign_stats(db_path, today="2026-09-03", gap_fill_seconds=0)["campaigns"][0]
     with db._connect(db_path) as conn:
         dupe = plant(conn, "DupeOfP1", "San Antonio", "touched", "Texted", META)
         conn.commit()
-    mid = campaigns.campaign_stats(db_path, today="2026-09-03")["campaigns"][0]
+    mid = campaigns.campaign_stats(db_path, today="2026-09-03", gap_fill_seconds=0)["campaigns"][0]
     check("a second row for the same person counts while it is live",
           mid["funnel"]["leads"] == before["funnel"]["leads"] + 1,
           (before["funnel"]["leads"], mid["funnel"]["leads"]))
     keep = [l for l in leads.get_leads(limit=200, db_path=db_path)
             if l["first_name"] == "P1"][0]["id"]
     leads.merge_leads(keep, dupe, author="test", db_path=db_path)
-    after = campaigns.campaign_stats(db_path, today="2026-09-03")["campaigns"][0]
+    after = campaigns.campaign_stats(db_path, today="2026-09-03", gap_fill_seconds=0)["campaigns"][0]
     check("after the merge it is counted ONCE again (leads back to the "
           "pre-duplicate figure)",
           after["funnel"]["leads"] == before["funnel"]["leads"],
