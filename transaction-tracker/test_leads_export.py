@@ -303,11 +303,12 @@ def main():
     check("converted no-loop lead untouched",
           st[lid_convno] == "converted", str(st))
 
-    # ---- Due-day follow-up pings (mailbox #370) ----
+    # ---- Morning follow-up digest (#370, reshaped Kerry 2026-09-03:
+    #      "should be part of morning digest") ----
     sent = []
-    real_send = leads._send_followup_ping
-    leads._send_followup_ping = lambda lead, note, db_path=None: (
-        sent.append((lead["id"], lead.get("follow_up_at"), note)) or True)
+    real_send = leads._send_digest_mail
+    leads._send_digest_mail = lambda to, rows, heading: (
+        sent.append((to, [r["id"] for r in rows], heading)) or True)
     import email_parser.timezone_utils as tzu
     real_now = tzu.now_central
     from datetime import datetime as _dt
@@ -323,33 +324,36 @@ def main():
                          (lid_pros,))
             conn.commit()
         _FakeNow.val = _dt(2026, 9, 7, 5, 0, 0)
-        r_early = leads.check_followup_due_pings(db_path=db_path)
-        check("pre-7AM poll leaves the queue alone",
-              r_early == {"due": 0, "pinged": 0} and not sent, str(r_early))
+        r_early = leads.send_followup_digests(db_path=db_path)
+        check("pre-7AM sweep leaves the queue alone",
+              r_early["due"] == 0 and not sent, str(r_early))
+
         _FakeNow.val = _dt(2026, 9, 7, 9, 0, 0)
-        r_due = leads.check_followup_due_pings(db_path=db_path)
-        r_dup = leads.check_followup_due_pings(db_path=db_path)
-        check("due-day ping fires once with latest note",
-              r_due.get("pinged") == 1 and r_dup.get("due") == 0
-              and sent == [(lid_pros, "2026-09-07",
-                            "ping me for Silverhorn")],
-              f"{r_due} {r_dup} {sent}")
-        leads.set_lead_followup(lid_pros, "2026-09-14", db_path=db_path)
-        _FakeNow.val = _dt(2026, 9, 15, 9, 0, 0)
-        r_rearm = leads.check_followup_due_pings(db_path=db_path)
-        check("re-snoozed lead re-arms (overdue still pings once)",
-              r_rearm.get("pinged") == 1 and len(sent) == 2, str(r_rearm))
+        r_due = leads.send_followup_digests(db_path=db_path)
+        check("the due lead is picked up", r_due["due"] >= 1, str(r_due))
+        rows = leads.followups_due(db_path=db_path)
+        me = [r for r in rows if r["id"] == lid_pros]
+        check("the digest row carries the latest note",
+              len(me) == 1 and me[0]["last_note"] == "ping me for Silverhorn",
+              str(me))
+
+        # A lead that stays overdue is listed AGAIN tomorrow — the whole
+        # point of a digest, and the opposite of the old one-shot ping.
+        _FakeNow.val = _dt(2026, 9, 9, 9, 0, 0)
+        again = leads.followups_due(db_path=db_path)
+        me2 = [r for r in again if r["id"] == lid_pros]
+        check("an unresolved follow-up appears again, now marked overdue",
+              len(me2) == 1 and me2[0]["days_over"] == 2, str(me2))
+
         with db._connect(db_path) as conn:
             conn.execute("UPDATE leads SET status = 'dismissed' "
                          "WHERE id = ?", (lid_pros,))
-            conn.execute("UPDATE leads SET follow_up_notified_for = NULL "
-                         "WHERE id = ?", (lid_pros,))
             conn.commit()
-        r_dis = leads.check_followup_due_pings(db_path=db_path)
-        check("dismissed lead never pings", r_dis.get("due") == 0,
-              str(r_dis))
+        check("a dismissed lead drops out of the digest",
+              not any(r["id"] == lid_pros
+                      for r in leads.followups_due(db_path=db_path)))
     finally:
-        leads._send_followup_ping = real_send
+        leads._send_digest_mail = real_send
         tzu.now_central = real_now
 
     os.unlink(db_path)

@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.301.2";
+window.TGF_VERSION = "2.302.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.302.0",
+    date: "2026-09-04",
+    changes: [
+      "Follow-ups moved into the morning digest (Kerry: 'Yes should be part of morning digest'), replacing one email per lead. The COO Daily Briefing at 7:00 Central now carries an assertive Follow-ups Due section above Memberships, with the overdue count in the subject line so it is visible without opening anything — the 48-hour touch is the conversion gate, and these are people who reached out and are waiting. Chapter owners who are not on the briefing keep their notice as a single per-chapter digest rather than a stream, so Robert still gets Austin and Kerry never gets the same names twice.",
+      "The real change is that the list is live state and marks nothing: a follow-up that stays unresolved is listed AGAIN every morning until it is dealt with. The old ping fired once on the due day and then went silent forever, which is the opposite of what a conversion gate should do. follow_up_notified_for is no longer consulted for sending, and the backfill's ping-suppression guard from v2.301.1/.2 is gone with it — a backfill of any size now costs one line in tomorrow's list instead of an inbox full of mail.",
+    ],
+  },
   {
     version: "2.301.2",
     date: "2026-09-04",

@@ -15,15 +15,17 @@ Throwaway SQLite database; checks:
   - author 'auto' bookkeeping notes leave it armed;
   - re-marking the status it already had leaves it armed;
   - after a response clears it, texting again arms a fresh clock;
-  - the armed lead rides the EXISTING follow-up rails: it is picked up by
-    check_followup_due_pings on its due day.
+  - the armed lead rides the EXISTING follow-up rails: it shows up in the
+    morning digest's due list on its due day, and the digest mail goes only
+    to a chapter's own list (Kerry's copy is the COO Daily Briefing).
 
 Run: python3 test_lead_outreach_alarm.py
 """
 
+import json
 import os
 import tempfile
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 
 os.environ.setdefault("DATABASE_PATH", ":memory:")
 
@@ -194,20 +196,9 @@ def main():
         conn.execute("UPDATE leads SET follow_up_at = ? WHERE id = ?",
                      (TODAY.isoformat(), i))
         conn.commit()
-    sent = {}
-    orig = leads._send_followup_ping
-    leads._send_followup_ping = lambda lead, note, db_path=None: sent.setdefault(
-        lead["id"], True) or True
-    try:
-        from email_parser import timezone_utils as tz
-        res = leads.check_followup_due_pings(db_path=p)
-    finally:
-        leads._send_followup_ping = orig
-    if tz.now_central().hour < 7:
-        print("  SKIP  due-day ping (before 7 AM Central, job holds by design)")
-    else:
-        check("the armed lead is picked up by the due-day ping job",
-              i in sent and res["pinged"] >= 1, (res, list(sent)))
+    due_ids = {r["id"] for r in leads.followups_due(db_path=p)}
+    check("the armed lead shows up in the morning digest's due list",
+          i in due_ids, sorted(due_ids))
 
     print("Dial")
     with db._connect(p) as conn:
@@ -308,14 +299,11 @@ def main():
           any("2026-08-29" in x["note"] for x in notes(p_db, evening)),
           notes(p_db, evening))
 
-    # check_followup_due_pings sends ONE EMAIL PER LEAD and deliberately
-    # still pings an overdue date it never pinged. Correct for a handful
-    # of leads stranded by a deploy gap; a 39-email blast when a backfill
-    # reaches back a week. Past dues are marked as already pinged — the
-    # lead still shows overdue in the queue, which is where Kerry works
-    # it. Today and later ping normally.
-    check("a backfilled due date already reached is marked as pinged",
-          row(p_db, evening)["follow_up_notified_for"] == "2026-08-31",
+    # The old ping-suppression guard is gone with the per-lead ping: a
+    # backfill of any size costs one line in the morning digest, so a
+    # backfilled lead is left plainly due like any other.
+    check("a backfilled lead is left plainly due, not pre-silenced",
+          row(p_db, evening)["follow_up_notified_for"] is None,
           row(p_db, evening))
     future = plant(p_db, "FutureDue", status="touched")
     with db._connect(p_db) as conn:
@@ -324,12 +312,62 @@ def main():
                      ((TODAY + _td(days=1)).isoformat() + " 14:00:00", future))
         conn.commit()
     fdry = leads.backfill_outreach_alarms(dry_run=True, db_path=p_db)
-    check("the dry run splits what will and will not email",
-          fdry["silent"] + fdry["will_ping"] == fdry["found"], fdry)
+    check("the dry run reports how many are already due",
+          fdry["already_due"] <= fdry["found"], fdry)
     leads.backfill_outreach_alarms(db_path=p_db)
-    check("a future due date is left to ping normally",
-          row(p_db, future)["follow_up_notified_for"] is None,
+    check("a future due date is armed and left alone",
+          row(p_db, future)["follow_up_notified_for"] is None
+          and row(p_db, future)["follow_up_at"] is not None,
           row(p_db, future))
+
+    print("Morning digest routing (Kerry 2026-09-03)")
+    # Kerry's copy rides the COO Daily Briefing, so the digest mail must
+    # go ONLY to a chapter's own list — otherwise he gets the same names
+    # twice every morning, which is the noise this replaced.
+    import os as _os
+    aus = plant(p_db, "AustinDue", status="touched")
+    with db._connect(p_db) as conn:
+        conn.execute("UPDATE leads SET chapter = 'Austin', tag = 'Texted', "
+                     "follow_up_at = ? WHERE id = ?",
+                     ((TODAY - _td(days=1)).isoformat(), aus))
+        conn.execute(
+            "INSERT OR REPLACE INTO app_settings (key, value) VALUES "
+            "('lead_notify_recipients', ?)",
+            (json.dumps({"default": ["kerry@tgf.com"],
+                         "Austin": ["robert@tgf.com"]}),))
+        conn.commit()
+    posted = []
+    real = leads._send_digest_mail
+    leads._send_digest_mail = lambda to, rows, heading: (
+        posted.append((to, [r["id"] for r in rows])) or True)
+    prev_coo = _os.environ.get("COO_EMAIL_TO")
+    _os.environ["COO_EMAIL_TO"] = "kerry@tgf.com"
+    try:
+        import email_parser.timezone_utils as _tz
+        real_now = _tz.now_central
+        _tz.now_central = lambda: datetime(TODAY.year, TODAY.month,
+                                           TODAY.day, 9, 0, 0)
+        try:
+            res = leads.send_followup_digests(db_path=p_db)
+            check("one digest, to the chapter's own list only",
+                  len(posted) == 1 and posted[0][0] == "robert@tgf.com",
+                  posted)
+            check("it carries that chapter's leads",
+                  posted and aus in posted[0][1], posted)
+            check("Kerry is not mailed separately — his copy is the briefing",
+                  all("kerry@tgf.com" not in t for t, _ in posted), posted)
+            posted.clear()
+            leads.send_followup_digests(db_path=p_db)
+            check("a second sweep the same day does not re-send",
+                  posted == [], posted)
+        finally:
+            _tz.now_central = real_now
+    finally:
+        leads._send_digest_mail = real
+        if prev_coo is None:
+            _os.environ.pop("COO_EMAIL_TO", None)
+        else:
+            _os.environ["COO_EMAIL_TO"] = prev_coo
 
     print("Tag path attributes the toucher (#405)")
     t = plant(p_db, "Attrib")

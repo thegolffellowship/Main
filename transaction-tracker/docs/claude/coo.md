@@ -25,6 +25,13 @@ migration check in `init_db()` (see "vigilant analyst" check pattern).
 Located in `database.py`, generates a text briefing from 10+ modules for the AI.
 All sections wrapped in try/except with `logger.warning()` logging.
 
+**⏰ Follow-ups Due** (v2.302.0, Kerry: *"should be part of morning
+digest"*) sits above Memberships and is built from
+`leads.followups_due()` — live state, nothing marked, so an unresolved
+follow-up is listed again every morning until it is dealt with. The
+overdue count also rides the subject line. This replaced one email per
+lead; see `docs/claude/leads.md` → **Morning follow-up digest**.
+
 **Section 2 — Events & Operations (key data):**
 - **Upcoming events:** player counts (9/18 split), revenue (includes add-on payments),
   pricing structure (course_cost, markup, side_game_fee for 9h and 18h variants)

@@ -817,36 +817,6 @@ def _send_lead_ping(lead: dict, db_path=None) -> bool:
         html_body=_lead_email_html(lead))
 
 
-def _followup_email_html(lead: dict, last_note: str | None) -> str:
-    def row(k, v):
-        return (f"<tr><td style='padding:4px 12px 4px 0;color:#6B7280;"
-                f"font-size:12px;text-transform:uppercase'>{k}</td>"
-                f"<td style='padding:4px 0;font-size:14px'>{v or '—'}</td></tr>")
-    name = " ".join(x for x in [lead.get("first_name"),
-                                lead.get("last_name")] if x) or "(no name)"
-    note = (f"<h3 style='margin:14px 0 4px;font-size:13px;color:#1B1B1B'>"
-            f"Latest note</h3><p style='margin:0;font-size:14px;"
-            f"color:#4B5563'>{last_note}</p>" if last_note else "")
-    return f"""
-    <div style="font-family:Helvetica,Arial,sans-serif;max-width:520px">
-      <h2 style="color:#E87C3E;margin:0 0 4px">Follow-up due: {name}</h2>
-      <p style="margin:0 0 12px;color:#4B5563">This lead's snooze is up —
-      today is the day you planned to reach back out.</p>
-      <table style="border-collapse:collapse">
-        {row("Follow-up date", lead.get("follow_up_at"))}
-        {row("Tag", lead.get("tag"))}
-        {row("Email", lead.get("email"))}
-        {row("Phone", lead.get("phone"))}
-        {row("Chapter", lead.get("chapter") or "unrouted")}
-      </table>
-      {note}
-      <p style="margin:14px 0 0"><a
-        href="https://tgf-tracker.up.railway.app/admin/leads"
-        style="color:#2563eb">Open the Lead Center</a> — the lead is
-        sitting under FOLLOW-UPS DUE at the top.</p>
-    </div>"""
-
-
 def dismiss_no_loop_leads(conn: sqlite3.Connection) -> int:
     """Auto-dismiss leads who answered NO to the stay-in-the-loop
     question (Kerry 2026-09-01: no communication wanted → bottom
@@ -890,67 +860,164 @@ def dismiss_no_loop_leads(conn: sqlite3.Connection) -> int:
     return n
 
 
-def check_followup_due_pings(db_path: str | Path | None = None) -> dict:
-    """Due-day follow-up pings (mailbox #370, Kerry-ratified 2026-08-31):
-    one email per lead on its follow-up due morning (Central) to the
-    routed chapter owner — same recipient dial as the new-lead ping
-    (default/Kerry + the chapter's own list; unrouted fans out).
-    Dedup via follow_up_notified_for (the due date that was pinged), so
-    each due date emails exactly once and a re-snoozed lead re-arms for
-    its new date. An overdue date never pinged (deploy gap, feature
-    predating it) still pings once rather than being swallowed."""
+def followups_due(db_path: str | Path | None = None) -> list[dict]:
+    """Every lead whose follow-up date has arrived or passed, most
+    overdue first. Live state — nothing is marked or consumed by
+    reading it, which is what lets the morning digest show the same
+    lead every day until it is actually dealt with.
+    """
     from . import database as db
     from .timezone_utils import now_central
-    result = {"due": 0, "pinged": 0}
-    now = now_central()
-    if now.hour < 7:
-        # Morning delivery: the first poll after 7 AM Central sends;
-        # midnight-to-dawn polls leave the queue alone.
-        return result
-    today = now.strftime("%Y-%m-%d")
+    today = now_central().strftime("%Y-%m-%d")
+    out: list[dict] = []
     with db._connect(db_path) as conn:
         ensure_leads_table(conn)
         rows = [dict(r) for r in conn.execute(
             "SELECT * FROM leads WHERE follow_up_at IS NOT NULL "
             "AND follow_up_at <= ? AND status != 'dismissed' "
-            "AND COALESCE(follow_up_notified_for, '') != follow_up_at",
+            "AND merged_into IS NULL ORDER BY follow_up_at, id",
             (today,)).fetchall()]
         for lead in rows:
-            result["due"] += 1
             nr = conn.execute(
                 "SELECT note FROM lead_notes WHERE lead_id = ? "
                 "ORDER BY created_at DESC, id DESC LIMIT 1",
                 (lead["id"],)).fetchone()
-            if _send_followup_ping(lead, nr["note"] if nr else None,
-                                   db_path=db_path):
-                conn.execute(
-                    "UPDATE leads SET follow_up_notified_for = follow_up_at "
-                    "WHERE id = ?", (lead["id"],))
-                result["pinged"] += 1
-        conn.commit()
+            days = 0
+            try:
+                from datetime import date as _date
+                y, m, d = (int(x) for x in str(lead["follow_up_at"])[:10].split("-"))
+                ty, tm, td = (int(x) for x in today.split("-"))
+                days = (_date(ty, tm, td) - _date(y, m, d)).days
+            except Exception:
+                pass
+            out.append({
+                "id": lead["id"],
+                "name": " ".join(x for x in [lead.get("first_name"),
+                                             lead.get("last_name")] if x)
+                        or lead.get("email") or "(no name)",
+                "chapter": lead.get("chapter"),
+                "tag": lead.get("tag"),
+                "email": lead.get("email"),
+                "phone": lead.get("phone"),
+                "due": lead.get("follow_up_at"),
+                "days_over": days,
+                "last_note": nr["note"] if nr else None,
+                "customer_id": lead.get("customer_id"),
+            })
+    out.sort(key=lambda r: (-r["days_over"], r["name"]))
+    return out
+
+
+def _followup_digest_html(rows: list[dict], heading: str) -> str:
+    """One list, not one email per lead."""
+    def line(r):
+        over = ("<span style='color:#dc2626;font-weight:600'>"
+                f"{r['days_over']}d overdue</span>" if r["days_over"] > 0
+                else "<span style='color:#059669;font-weight:600'>due today</span>")
+        bits = " · ".join(x for x in [r.get("tag"), r.get("chapter"),
+                                      r.get("phone")] if x)
+        note = (f"<div style='font-size:12px;color:#6B7280;margin-top:2px'>"
+                f"{r['last_note']}</div>" if r.get("last_note") else "")
+        return (f"<div style='padding:8px 12px;margin-top:6px;background:#fff;"
+                f"border:1px solid #e5e7eb;border-left:4px solid "
+                f"{'#dc2626' if r['days_over'] > 0 else '#059669'};"
+                f"border-radius:6px;font-size:13px'>"
+                f"<strong>{r['name']}</strong> — {over}"
+                f"<div style='font-size:12px;color:#6B7280'>{bits}</div>"
+                f"{note}</div>")
+    return f"""
+    <div style="font-family:Helvetica,Arial,sans-serif;max-width:560px">
+      <h2 style="color:#E87C3E;margin:0 0 4px">{heading}</h2>
+      <p style="margin:0 0 12px;color:#4B5563">These are the people whose
+      48-hour window is up. They are waiting on you, not the other way
+      round.</p>
+      {''.join(line(r) for r in rows)}
+      <p style="margin:14px 0 0"><a
+        href="https://tgf-tracker.up.railway.app/admin/leads"
+        style="color:#2563eb">Open the Lead Center</a> — they are sitting
+        under FOLLOW-UPS DUE at the top.</p>
+    </div>"""
+
+
+def send_followup_digests(db_path: str | Path | None = None) -> dict:
+    """ONE morning digest per chapter owner, replacing the one-email-
+    per-lead ping (Kerry 2026-09-03: "should be part of morning
+    digest").
+
+    Kerry's own copy rides the 7 AM COO Daily Briefing, which is his
+    morning digest and already lands in his inbox. This sends only to
+    recipients the briefing does NOT reach — a chapter's own list, like
+    Robert on Austin — so a chapter manager keeps their notice without
+    Kerry getting the same list twice.
+
+    Dedup is PER DAY, not per lead: a lead that stays overdue appears
+    again tomorrow, which is the point of a digest and the opposite of
+    the old ping, which fired once and then went quiet forever.
+    """
+    from . import database as db
+    from .timezone_utils import now_central
+    now = now_central()
+    result = {"due": 0, "digests": 0, "recipients": []}
+    if now.hour < 7:
+        # Morning delivery: the first sweep after 7 AM Central sends.
+        return result
+    today = now.strftime("%Y-%m-%d")
+    rows = followups_due(db_path=db_path)
+    result["due"] = len(rows)
+    if not rows:
+        return result
+
+    cfg = _dial_json("lead_notify_recipients", {}, db_path=db_path)
+    # The briefing covers the default list only when it actually runs.
+    covered = set()
+    if os.getenv("COO_EMAIL_TO"):
+        for a in (cfg.get("default") or [os.getenv("COO_EMAIL_TO")]):
+            if a:
+                covered.add(a.strip().lower())
+
+    sent_for = _dial_json("leads_followup_digest_sent", {}, db_path=db_path)
+    for chapter, addrs in cfg.items():
+        if chapter == "default" or not isinstance(addrs, list):
+            continue
+        to = [a for a in addrs if a and a.strip().lower() not in covered]
+        if not to:
+            continue
+        mine = [r for r in rows if r.get("chapter") == chapter]
+        if not mine:
+            continue
+        if sent_for.get(chapter) == today:
+            continue
+        if _send_digest_mail(", ".join(to), mine,
+                             f"{chapter} follow-ups due"):
+            sent_for[chapter] = today
+            result["digests"] += 1
+            result["recipients"].append(chapter)
+    if result["digests"]:
+        try:
+            db.set_app_setting("leads_followup_digest_sent",
+                               json.dumps(sent_for), db_path=db_path)
+        except Exception:
+            logger.warning("Could not record digest send state",
+                           exc_info=True)
     return result
 
 
-def _send_followup_ping(lead: dict, last_note: str | None,
-                        db_path=None) -> bool:
+def _send_digest_mail(to: str, rows: list[dict], heading: str) -> bool:
     from .fetcher import send_mail_graph
     tenant_id = os.getenv("AZURE_TENANT_ID")
     client_id = os.getenv("AZURE_CLIENT_ID")
     client_secret = os.getenv("AZURE_CLIENT_SECRET")
     from_addr = os.getenv("EMAIL_ADDRESS")
-    to = _notify_recipients(lead.get("chapter"), db_path=db_path)
     if not all([tenant_id, client_id, client_secret, from_addr, to]):
-        logger.warning("Follow-up ping skipped — Graph creds or recipients "
-                       "missing")
+        logger.warning("Follow-up digest skipped — Graph creds or "
+                       "recipients missing")
         return False
-    name = " ".join(x for x in [lead.get("first_name"),
-                                lead.get("last_name")] if x) or lead.get("email")
+    n = len(rows)
     return send_mail_graph(
         tenant_id=tenant_id, client_id=client_id,
         client_secret=client_secret, from_address=from_addr, to_address=to,
-        subject=f"⏰ Follow-up due: {name}"
-                + (f" ({lead['chapter']})" if lead.get("chapter") else ""),
-        html_body=_followup_email_html(lead, last_note))
+        subject=f"\u23f0 {n} follow-up{'s' if n != 1 else ''} due — {heading}",
+        html_body=_followup_digest_html(rows, heading))
 
 
 def check_new_leads(db_path: str | Path | None = None) -> dict:
@@ -960,9 +1027,9 @@ def check_new_leads(db_path: str | Path | None = None) -> dict:
     from . import database as db
     result = {"fetched": 0, "queued": 0, "notified": 0, "skipped_filter": 0}
     # Due-day follow-up sweep FIRST and independently, so a missing
-    # HubSpot token or a failed fetch can never swallow a due ping.
+    # HubSpot token or a failed fetch can never swallow a due digest.
     try:
-        result["followups"] = check_followup_due_pings(db_path=db_path)
+        result["followups"] = send_followup_digests(db_path=db_path)
     except Exception:
         logger.warning("Follow-up due-ping sweep failed", exc_info=True)
     token = _hubspot_token()
@@ -2132,8 +2199,7 @@ def backfill_outreach_alarms(dry_run: bool = False,
         out["found"] = len(rows)
         out["by_due_date"] = dict(sorted(by_due.items()))
         _today = today_central_str()
-        out["silent"] = sum(1 for r in rows if r["due"] <= _today)
-        out["will_ping"] = len(rows) - out["silent"]
+        out["already_due"] = sum(1 for r in rows if r["due"] <= _today)
         out["leads"] = [{"id": r["id"],
                          "name": f"{r['first_name'] or ''} "
                                  f"{r['last_name'] or ''}".strip(),
@@ -2141,23 +2207,15 @@ def backfill_outreach_alarms(dry_run: bool = False,
                          "due": r["due"]} for r in rows]
         if dry_run:
             return out
-        # A due date ALREADY REACHED is marked as though its ping had
-        # gone out. check_followup_due_pings sends ONE EMAIL PER LEAD and
-        # deliberately still pings an overdue date it never pinged — the
-        # right rule for the handful of leads a deploy gap strands, and a
-        # 39-email blast when a backfill reaches back a week. A BACKFILL
-        # IS A MIGRATION, NOT AN EVENT: it should populate the queue, not
-        # announce a week of history. Every one of these leads still shows
-        # in FOLLOW-UPS DUE, which is where Kerry actually works them.
-        # Dates that arrive AFTER the backfill ping normally on their own
-        # morning, which is the feature behaving as designed.
-        today = today_central_str()
+        # No ping-suppression guard here any more. It existed because
+        # the old sweep sent ONE EMAIL PER LEAD, so a backfill reaching
+        # back a week was a 39-email blast. The morning digest is one
+        # email listing whatever is currently due, so a backfill of any
+        # size costs exactly one line in tomorrow's list.
         for r in rows:
             conn.execute(
-                "UPDATE leads SET outreach_at = touched_at, follow_up_at = ?, "
-                "follow_up_notified_for = ? "
-                "WHERE id = ? AND follow_up_at IS NULL",
-                (r["due"], r["due"] if r["due"] <= today else None, r["id"]))
+                "UPDATE leads SET outreach_at = touched_at, follow_up_at = ? "
+                "WHERE id = ? AND follow_up_at IS NULL", (r["due"], r["id"]))
             conn.execute(
                 "INSERT INTO lead_notes (lead_id, author, note) "
                 "VALUES (?, 'auto', ?)",

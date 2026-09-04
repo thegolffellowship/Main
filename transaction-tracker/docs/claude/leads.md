@@ -442,17 +442,13 @@ helper `timezone_utils.to_central()` reads a stored naive-UTC timestamp
 as Central wall clock, for deriving a user-facing DAY from a stored
 timestamp.
 
-*A backfilled date already reached does not email.*
-`check_followup_due_pings` sends **one email per lead** and deliberately
-still pings an overdue date it never pinged — right for the handful of
-leads a deploy gap strands, a 39-email blast when a backfill reaches
-back a week. **A backfill is a migration, not an event** — it should
-populate the queue, not announce a week of history. Any due date at or
-before today is stamped `follow_up_notified_for = due` as though the
-ping had gone out; the lead still shows in **FOLLOW-UPS DUE**, which is
-where the work happens. Dates arriving *after* the backfill ping
-normally on their own morning. The dry run reports `silent` /
-`will_ping` so the volume is visible before the run, not after.
+*The blast it would have caused killed the per-lead ping entirely.*
+The old sweep sent **one email per lead** and deliberately still pinged
+an overdue date it never pinged — right for the handful of leads a
+deploy gap strands, a 39-email blast when a backfill reaches back a
+week. Kerry's call: *"should be part of morning digest."* See **Morning
+follow-up digest** below. The backfill now needs no ping guard at all,
+because a backfill of any size costs one line in tomorrow's list.
 
 **Counts.** CA's #405 estimate was 12 / 9 / 6 due 09-03 / 09-04 / 09-05.
 The production dry run found **49** spanning 08-30 through 09-05, of
@@ -512,6 +508,34 @@ campaign list's `lead_count`, and the auto-linker all filter
 `merged_into IS NULL`. Every other queue path is already safe because
 merged rows are also dismissed. Locked in `test_lead_campaigns.py`.
 
+## Morning follow-up digest (Kerry 2026-09-03, v2.302.0)
+
+> "Yes should be part of morning digest."
+
+Replaces `check_followup_due_pings` — one email per lead, once, then
+silence forever — which was fine at organic pace and wrong the moment a
+batch arrived.
+
+**Kerry's copy is the COO Daily Briefing** (07:00 Central, the morning
+digest he already gets). New **⏰ Follow-ups Due** section above
+Memberships, because the 48-hour touch is the conversion gate: these are
+people who reached out and are waiting. Overdue count also rides the
+subject line, so it is visible without opening anything. `detail_cap`
+rows in full, the rest as "+N more" into the Lead Center.
+
+**Chapter owners get their own one-email digest.** `send_followup_digests()`
+sends to a chapter's own `lead_notify_recipients` list ONLY — the default
+list is already covered by the briefing, so Robert keeps his Austin notice
+and Kerry never gets the same names twice. Dedup is per DAY, in the
+`leads_followup_digest_sent` dial. Skips before 7 AM Central; rides the
+existing lead poll so a missing HubSpot token can't swallow it.
+
+**`followups_due()` is live state and marks nothing.** That is the real
+change: a lead that stays overdue is listed **again tomorrow**, and every
+morning until it is dealt with. The old ping fired once and went quiet,
+which is the opposite of what a conversion gate should do.
+`follow_up_notified_for` is no longer consulted for sending.
+
 ## 48-hour outreach alarm (Kerry 2026-09-03, v2.294.0)
 
 > "Need a timestamp with alarm set when I click Texted or Emailed for
@@ -523,8 +547,8 @@ Tagging an **outreach** action stamps `leads.outreach_at` (new column,
 the precise timestamp, stored **UTC** like every other datetime column —
 the UI converts for display; the DAY arithmetic is Central) and sets `follow_up_at` to **+2 days**,
 so the alarm rides the follow-up rails that already exist — the ⏰ chip,
-the FOLLOW-UPS DUE section at the top of the queue, and the due-day
-email ping (#370). **No second notification system.** An auto note
+the FOLLOW-UPS DUE section at the top of the queue, and the morning
+digest (#370, reshaped v2.302.0). **No second notification system.** An auto note
 records it: *"Texted 9/3, 3:45 PM — 48-hour follow-up set for 9/5."*
 The chip's hover text distinguishes an auto alarm from a hand-set date.
 

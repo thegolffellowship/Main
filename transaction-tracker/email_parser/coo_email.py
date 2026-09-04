@@ -93,10 +93,22 @@ def build_coo_email_html() -> tuple[str, str]:
     except Exception:
         detail_cap = 10
 
+    try:
+        from email_parser.leads import followups_due
+        fups = followups_due()
+    except Exception:
+        logger.warning("Follow-ups section failed (non-fatal)", exc_info=True)
+        fups = []
+    _fups_over = [f for f in fups if f["days_over"] > 0]
+
     # Subject
     action_count = len(action_items)
     subject = (f"TGF Daily Briefing \u2014 {day_str} | "
                f"{len(new_items)} new \u00b7 {action_count} open")
+    # The 48-hour touch is the conversion gate, so overdue follow-ups
+    # belong where Kerry sees them without opening anything.
+    if _fups_over:
+        subject += f" \u00b7 {len(_fups_over)} follow-up{'s' if len(_fups_over) != 1 else ''} overdue"
     if new_warnings > 0:
         subject = f"\u26a0\ufe0f {subject} ({new_warnings} new parse warning{'s' if new_warnings != 1 else ''})"
 
@@ -186,6 +198,30 @@ def build_coo_email_html() -> tuple[str, str]:
             html += f"""<div style="font-size:12px;color:{_GRAY};margin-bottom:6px;">+{len(money["overdue"]) - 4} more overdue payout groups in the Unpaid queue</div>"""
         for line in ai.get("quick_wins", []):
             html += f"""<div style="padding:8px 14px;margin-bottom:6px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:6px;font-size:13px;line-height:1.5;">{line}</div>"""
+        html += _section_end()
+
+    # ── Section 0b2: Follow-ups due (Kerry 2026-09-03: "should be part
+    # of morning digest"). This replaced one email per lead, which was
+    # fine at organic pace and a 39-email blast the moment a backfill
+    # ran. It sits above Memberships because the 48-hour touch is the
+    # conversion gate: these are people who reached out and are waiting.
+    # Unlike the old ping, a lead that stays overdue is listed again
+    # tomorrow — the whole point of a digest.
+    if fups:
+        _over = _fups_over
+        html += _section_header(
+            f"\u23f0 Follow-ups Due ({len(fups)}"
+            + (f", {len(_over)} overdue" if _over else "") + ")")
+        for f in fups[:detail_cap]:
+            _when = (f"<span style=\"color:{_RED};font-weight:600;\">"
+                     f"{f['days_over']}d overdue</span>" if f["days_over"] > 0
+                     else f"<span style=\"color:{_GREEN};font-weight:600;\">"
+                          f"due today</span>")
+            _bits = " \u00b7 ".join(x for x in [f.get("tag"), f.get("chapter"),
+                                               f.get("phone")] if x)
+            html += f"""<div style="padding:8px 12px;margin-bottom:6px;background:#fff;border:1px solid #e5e7eb;border-left:4px solid {_RED if f["days_over"] > 0 else _GREEN};border-radius:6px;font-size:13px;line-height:1.5;"><strong>{f["name"]}</strong> — {_when} &nbsp;<a href="{_BASE_URL}/admin/leads" style="font-size:12px;color:#2563eb;text-decoration:none;">Open &rarr;</a><div style="font-size:12px;color:{_GRAY};">{_bits}</div></div>"""
+        if len(fups) > detail_cap:
+            html += f"""<div style="font-size:12px;color:{_GRAY};margin-bottom:6px;">+{len(fups) - detail_cap} more under FOLLOW-UPS DUE in the <a href="{_BASE_URL}/admin/leads" style="color:#2563eb;text-decoration:none;">Lead Center</a></div>"""
         html += _section_end()
 
     # ── Section 0c: Memberships ──
