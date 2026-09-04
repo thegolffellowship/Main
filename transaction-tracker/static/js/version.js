@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.301.0";
+window.TGF_VERSION = "2.301.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.301.1",
+    date: "2026-09-04",
+    changes: [
+      "The backfill no longer emails about follow-ups whose due date already passed. check_followup_due_pings sends ONE EMAIL PER LEAD and deliberately still pings an overdue date it never pinged — the right rule for the handful of leads a deploy gap strands, and a 39-email blast into Kerry's inbox within minutes when a backfill reaches back a week. A backfilled date already in the past is now stamped as though its ping had gone out: the lead still lands in the overdue queue, which is where Kerry actually works it, he just doesn't get mail about a Saturday that already passed. Anything due today or later pings normally, and the dry run reports the split so the blast is visible before it happens rather than after.",
+    ],
+  },
   {
     version: "2.301.0",
     date: "2026-09-04",

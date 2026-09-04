@@ -2102,7 +2102,7 @@ def backfill_outreach_alarms(dry_run: bool = False,
     """
     from datetime import timedelta
     from . import database as db
-    from .timezone_utils import to_central
+    from .timezone_utils import to_central, today_central_str
     tags = get_outreach_tags(db_path)
     ph = ",".join("?" * len(tags))
     out: dict = {"dry_run": bool(dry_run), "outreach_tags": tags}
@@ -2131,6 +2131,9 @@ def backfill_outreach_alarms(dry_run: bool = False,
         rows = [r for r in rows if r.get("due")]
         out["found"] = len(rows)
         out["by_due_date"] = dict(sorted(by_due.items()))
+        _today = today_central_str()
+        out["already_overdue"] = sum(1 for r in rows if r["due"] < _today)
+        out["will_ping"] = len(rows) - out["already_overdue"]
         out["leads"] = [{"id": r["id"],
                          "name": f"{r['first_name'] or ''} "
                                  f"{r['last_name'] or ''}".strip(),
@@ -2138,10 +2141,21 @@ def backfill_outreach_alarms(dry_run: bool = False,
                          "due": r["due"]} for r in rows]
         if dry_run:
             return out
+        # A due date ALREADY PAST is marked as though its ping had gone
+        # out. check_followup_due_pings sends ONE EMAIL PER LEAD, and it
+        # deliberately still pings an overdue date it never pinged — a
+        # sane rule for the handful of leads a deploy gap strands, and a
+        # 39-email blast when a backfill reaches back a week. The lead
+        # still lands in the overdue queue, which is where Kerry works
+        # them; he just doesn't get mail about a Saturday that passed.
+        # Anything due today or later pings normally.
+        today = today_central_str()
         for r in rows:
             conn.execute(
-                "UPDATE leads SET outreach_at = touched_at, follow_up_at = ? "
-                "WHERE id = ? AND follow_up_at IS NULL", (r["due"], r["id"]))
+                "UPDATE leads SET outreach_at = touched_at, follow_up_at = ?, "
+                "follow_up_notified_for = ? "
+                "WHERE id = ? AND follow_up_at IS NULL",
+                (r["due"], r["due"] if r["due"] < today else None, r["id"]))
             conn.execute(
                 "INSERT INTO lead_notes (lead_id, author, note) "
                 "VALUES (?, 'auto', ?)",
