@@ -279,6 +279,57 @@ def main():
     check("every ORDERED preset actually exists in the set",
           all(k in presets for k in order), order)
 
+    print("lead_center_payload — the exact thing /api/leads returns")
+    import tempfile as _tf
+    _t = _tf.NamedTemporaryFile(suffix=".db", delete=False)
+    _t.close()
+    with db._connect(_t.name) as conn:
+        leads.ensure_leads_table(conn)
+        conn.execute("CREATE TABLE IF NOT EXISTS app_settings (key TEXT "
+                     "PRIMARY KEY, value TEXT, updated_at TEXT)")
+        conn.execute("CREATE TABLE IF NOT EXISTS events (id INTEGER PRIMARY "
+                     "KEY, item_name TEXT, event_date TEXT, course TEXT, "
+                     "chapter TEXT, format TEXT, start_type TEXT, "
+                     "start_time TEXT, course_cost REAL, tgf_markup REAL, "
+                     "side_game_fee REAL, transaction_fee_pct REAL, "
+                     "range_balls_included INTEGER, event_type TEXT, "
+                     "status_badge TEXT)")
+        conn.execute(
+            "INSERT INTO leads (source, external_id, first_name, last_name, "
+            "email, chapter, status, arrived_at, payload) VALUES "
+            "('hubspot', 'x1', 'Bruno', 'Ramos', 'b@x.com', 'San Antonio', "
+            "'new', datetime('now'), ?)",
+            (json.dumps({AVAIL: BY_LABEL["availability"]["Both (Tue + Sat)"],
+                         IMP: BY_LABEL["importance"]["Golf"],
+                         "ad_set_name": "SA - Fall 2026 Leads"}),))
+        conn.execute(
+            "INSERT INTO events (item_name, event_date, course, chapter, "
+            "format, start_type, start_time, course_cost, tgf_markup, "
+            "side_game_fee, transaction_fee_pct, event_type) VALUES "
+            "(?,?,?,?,?,?,?,?,?,?,?,'event')",
+            ("s9.22 Silverhorn", SILVERHORN["event_date"],
+             SILVERHORN["course"], "San Antonio", "9 Holes", "Shotgun",
+             "17:30", 48.71, 8.0, 7.0, 3.5))
+        conn.commit()
+    pay = leads.lead_center_payload(db_path=_t.name)
+    check("it returns every key the page reads",
+          {"leads", "by_ad_set", "sms_template", "next_events",
+           "sms_presets", "sms_order", "sms_p9_presets", "campaigns",
+           "tag_options", "answer_options"} <= set(pay), sorted(pay))
+    check("the lead comes back with a server-picked preset",
+          len(pay["leads"]) == 1 and pay["leads"][0].get("sms"),
+          pay["leads"][0].get("sms") if pay["leads"] else None)
+    check("sms_template resolves to a real body (the v2.300.0 KeyError)",
+          isinstance(pay["sms_template"], str) and pay["sms_template"],
+          repr(pay["sms_template"])[:60])
+    check("ad-set stats are keyed on the human name",
+          "SA - Fall 2026 Leads" in pay["by_ad_set"], pay["by_ad_set"])
+    check("every ordered preset is present and sendable",
+          all(pay["sms_presets"].get(k, {}).get("text")
+              or pay["sms_presets"].get(k, {}).get("tue")
+              for k in pay["sms_order"]), pay["sms_order"])
+    os.unlink(_t.name)
+
     print("Selection logic still holds")
     r = pick(lead(imp="Competition", avail="Tuesdays only"))
     check("Competition -> P1", r["preset"] == "p1", r)

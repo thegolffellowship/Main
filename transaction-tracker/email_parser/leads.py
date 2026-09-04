@@ -860,6 +860,68 @@ def dismiss_no_loop_leads(conn: sqlite3.Connection) -> int:
     return n
 
 
+def lead_center_payload(status: str = "", campaigns: list | None = None,
+                        db_path: str | Path | None = None) -> dict:
+    """Everything the Lead Center page renders from, in one place.
+
+    Lives here rather than inline in the route so it can be exercised by
+    a test and read on production through `scoring-leads-payload`.
+    v2.300.0 broke this payload on a single stale preset key and the
+    page came up BLANK on mobile for a day, with every suite green,
+    because nothing outside a browser could see what the route produced.
+
+    NEVER index a preset by a slot key here. P1-P4 carried tue/sat/both
+    until v2.300.0 and now carry one `text`; anything reading a preset
+    body goes through .get() with fallbacks.
+    """
+    leads = get_leads(status=status, db_path=db_path)
+
+    # Per-ad-set stats (Kerry 2026-08-27: "help us track stats for
+    # each") — keyed on the human ad-set name when the dial knows it.
+    by_ad_set: dict = {}
+    for l in leads:
+        p = l.get("payload") or {}
+        key = (p.get("ad_set_name") or p.get("ad_set_id")
+               or "(no ad attribution)")
+        b = by_ad_set.setdefault(key, {"total": 0, "new": 0, "touched": 0,
+                                       "converted": 0, "dismissed": 0})
+        b["total"] += 1
+        if l.get("status") in b:
+            b[l["status"]] += 1
+
+    # First-touch SMS presets (#383 → #388/#389, Kerry-ratified
+    # 2026-09-02): picked server-side per lead (preset + slot + the #389
+    # add-on) and filled client-side so the ▾ picker switches without a
+    # refetch. Per-lead so ONE bad lead can never blank the queue.
+    sms_presets = get_sms_presets(db_path)
+    owners = get_touch_owners(db_path)
+    nexts = next_event_labels(db_path)
+    rows = next_event_rows(db_path)
+    for l in leads:
+        try:
+            l["sms"] = select_sms_preset(l)
+            l["sms"]["vars"] = sms_vars_for(l, owners, nexts, rows,
+                                            l["sms"]["slot"])
+        except Exception:
+            logger.warning("Lead SMS preset pick failed for lead %s",
+                           l.get("id"), exc_info=True)
+            l["sms"] = None
+
+    # Kept for older clients: the default template body + next-event map.
+    _p4 = sms_presets.get("p4") or {}
+    sms_template = (_p4.get("text") or _p4.get("tue")
+                    or _p4.get("both") or "")
+    return {"leads": leads, "by_ad_set": by_ad_set,
+            "sms_template": sms_template,
+            "next_events": dict(nexts.get("any") or {}),
+            "sms_presets": sms_presets,
+            "sms_order": sms_preset_order(sms_presets),
+            "sms_p9_presets": sorted(SMS_P9_PRESETS),
+            "campaigns": campaigns if campaigns is not None else [],
+            "tag_options": get_tag_options(db_path),
+            "answer_options": get_answer_options()}
+
+
 def followups_due(db_path: str | Path | None = None) -> list[dict]:
     """Every lead whose follow-up date has arrived or passed, most
     overdue first. Live state — nothing is marked or consumed by

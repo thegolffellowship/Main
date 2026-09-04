@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.303.0";
+window.TGF_VERSION = "2.303.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.303.1",
+    date: "2026-09-04",
+    changes: [
+      "The Lead Center's payload now lives in leads.lead_center_payload() instead of inline in the route, and scoring-leads-payload reads it on production. The v2.300.0 outage lasted a day because nothing outside a browser could see what /api/leads actually produced — an unauthenticated probe returns 401 either way, so a 500 in the body was invisible to every check available. Shape and counts only, no PII. Covered by a test that builds the payload against a throwaway database with a real event, so the KeyError class of bug now fails in the suite rather than on Kerry's phone.",
+    ],
+  },
   {
     version: "2.303.0",
     date: "2026-09-04",

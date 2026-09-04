@@ -2331,6 +2331,24 @@ def _scoring_dispatch(url: str, extract: str):
                 db.log_agent_action("mcp-claude", "scoring-outreach-backfill",
                                     f"updated={res.get('updated')}")
             return json.dumps(res, indent=2, default=str)
+        if cmd == "scoring-leads-payload":
+            # A health read of exactly what /api/leads hands the Lead
+            # Center page — the thing that silently 500'd for a day.
+            # Shape and counts only; the lead rows themselves come from
+            # scoring-leads, so this stays PII-free.
+            from email_parser.leads import lead_center_payload
+            _pl = lead_center_payload()
+            return json.dumps({
+                "ok": True,
+                "leads": len(_pl.get("leads") or []),
+                "with_sms": sum(1 for l in _pl["leads"] if l.get("sms")),
+                "sms_pick_failed": sum(1 for l in _pl["leads"]
+                                       if not l.get("sms")),
+                "sms_order": _pl.get("sms_order"),
+                "sms_template_chars": len(_pl.get("sms_template") or ""),
+                "ad_sets": sorted((_pl.get("by_ad_set") or {}).keys()),
+                "tag_options": len(_pl.get("tag_options") or []),
+            }, indent=2, default=str)
         if cmd == "scoring-followups-due":
             # What the 7 AM morning digest will list, checkable at any
             # hour. ":brief" also renders the COO Daily Briefing so a

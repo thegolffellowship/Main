@@ -11365,64 +11365,16 @@ def _lead_campaign_options() -> list:
 @app.route("/api/leads")
 @require_role("manager")
 def api_leads():
-    from email_parser.leads import get_leads
+    """The Lead Center's whole payload. The BUILDING of it lives in
+    leads.lead_center_payload() so the exact thing the page receives can
+    be exercised by a test and read on production through the bridge —
+    v2.300.0 broke this route on a stale preset key and the Lead Center
+    was blank on mobile for a day with every suite green, because
+    nothing could see what the route actually produced."""
+    from email_parser.leads import lead_center_payload
     status = (request.args.get("status") or "").strip()
-    leads = get_leads(status=status)
-    # Per-ad-set stats (Kerry 2026-08-27: "help us track stats for
-    # each") — keyed on the human ad-set name when the dial knows it.
-    by_ad_set: dict = {}
-    for l in leads:
-        p = l.get("payload") or {}
-        key = p.get("ad_set_name") or p.get("ad_set_id") or "(no ad attribution)"
-        b = by_ad_set.setdefault(key, {"total": 0, "new": 0, "touched": 0,
-                                       "converted": 0, "dismissed": 0})
-        b["total"] += 1
-        if l.get("status") in b:
-            b[l["status"]] += 1
-    # First-touch SMS presets (#383 → #388/#389, Kerry-ratified
-    # 2026-09-02): the ratified preset SET keyed on the survey answers,
-    # picked server-side per lead (preset + slot + #389 add-on) and
-    # filled client-side so the ▾ picker can switch without a refetch.
-    from email_parser.leads import (get_sms_presets, get_touch_owners,
-                                    next_event_labels, next_event_rows,
-                                    select_sms_preset,
-                                    sms_vars_for, sms_preset_order)
-    sms_presets = get_sms_presets()
-    owners = get_touch_owners()
-    nexts = next_event_labels()
-    rows = next_event_rows()
-    for l in leads:
-        try:
-            l["sms"] = select_sms_preset(l)
-            l["sms"]["vars"] = sms_vars_for(l, owners, nexts, rows,
-                                            l["sms"]["slot"])
-        except Exception:
-            logger.warning("Lead SMS preset pick failed", exc_info=True)
-            l["sms"] = None
-    # Kept for older clients: the picked-by-default single template
-    # shape + the next-event map.
-    # v2.300.0 collapsed P1-P4 from per-slot keys (tue/sat/both) to a
-    # single `text`, and this legacy line kept indexing ["tue"] — a hard
-    # KeyError that 500'd the whole route, so the Lead Center rendered
-    # EMPTY on mobile (the desktop error banner lives in a container
-    # that is display:none under 768px, which is why it failed silently
-    # on the phone Kerry actually works from). Never index a preset key
-    # directly again.
-    _p4 = sms_presets.get("p4") or {}
-    sms_template = (_p4.get("text") or _p4.get("tue")
-                    or _p4.get("both") or "")
-    next_events = dict(nexts.get("any") or {})
-    from email_parser.leads import (get_tag_options, get_answer_options,
-                                    SMS_P9_PRESETS)
-    return jsonify({"leads": leads, "by_ad_set": by_ad_set,
-                    "sms_template": sms_template,
-                    "next_events": next_events,
-                    "sms_presets": sms_presets,
-                    "sms_order": sms_preset_order(sms_presets),
-                    "sms_p9_presets": sorted(SMS_P9_PRESETS),
-                    "campaigns": _lead_campaign_options(),
-                    "tag_options": get_tag_options(),
-                    "answer_options": get_answer_options()})
+    return jsonify(lead_center_payload(status=status,
+                                       campaigns=_lead_campaign_options()))
 
 
 @app.route("/api/leads/export-csv")
