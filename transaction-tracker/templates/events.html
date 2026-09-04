@@ -63,6 +63,30 @@
         .ev-start-leg, .ev-price-cell .ev-start-leg {
             display: inline-block; min-width: 1.1em; font-size: 0.68em; font-weight: 700;
             color: var(--text-placeholder); margin-right: 3px; }
+        /* Every real column sits at its natural width, packed LEFT
+           (Kerry 2026-09-04: "Allow all columns to align left"). The
+           table is still width:100%, so without a filler the browser
+           spreads the slack across the columns and the row reads as
+           scattered islands. The filler eats the slack instead. */
+        .events-table thead th:not(.ev-filler),
+        .events-table tbody tr.event-row-clickable > td:not(.ev-filler) {
+            width: 1px; white-space: nowrap; }
+        .events-table th.ev-filler, .events-table td.ev-filler {
+            width: auto; padding: 0; border-left: none; }
+        .events-table thead th.ev-th-drag { cursor: grab; }
+        .events-table thead th.ev-th-drag:active { cursor: grabbing; }
+        .ev-th-dragging { opacity: 0.45; }
+        .ev-th-over-l { box-shadow: inset 3px 0 0 0 var(--primary); }
+        .ev-th-over-r { box-shadow: inset -3px 0 0 0 var(--primary); }
+        .ev-col-row { display: flex; align-items: center; gap: 0.4rem; }
+        .ev-col-row .ev-col-name { flex: 1; }
+        .ev-col-fixed { color: var(--text-placeholder); width: 13px; display: inline-block; }
+        .ev-col-move {
+            border: 1px solid var(--border); background: #fff; border-radius: 4px;
+            font-size: 0.62rem; line-height: 1; padding: 2px 4px; cursor: pointer;
+            color: var(--text-muted); }
+        .ev-col-move:hover:not(:disabled) { border-color: var(--primary); color: var(--primary); }
+        .ev-col-move:disabled { opacity: 0.3; cursor: default; }
         .ev-price-cell { font-size: 0.82rem; font-weight: 600; }
         .ev-p-m  { color: #166534; }
         .ev-p-g  { color: #1e40af; }
@@ -752,16 +776,10 @@
         <section class="events-table-wrapper">
             <table class="events-table">
                 <thead>
-                    <tr id="events-header-row">
-                        <th data-col="item_name" data-sort="item_name">Event Name <span class="sort-arrow">&#9650;&#9660;</span></th>
-                        <th data-col="event_date" data-sort="event_date">Date <span class="sort-arrow">&#9650;&#9660;</span></th>
-                        <th data-col="start" data-sort="start_time">Start <span class="sort-arrow">&#9650;&#9660;</span></th>
-                        <th data-col="course" data-sort="course">Course <span class="sort-arrow">&#9650;&#9660;</span></th>
-                        <th data-col="chapter" data-sort="chapter">Chapter <span class="sort-arrow">&#9650;&#9660;</span></th>
-                        <th data-col="pricing" title="Event Only base charge — what the Edit Event screen shows. Member | Guest | 1st Timer.">Pricing <span style="font-weight:400; color:var(--text-muted);">M&nbsp;|&nbsp;G&nbsp;|&nbsp;1st</span></th>
-                        <th data-col="registrations" data-sort="registrations">Registrations <span class="sort-arrow">&#9650;&#9660;</span></th>
-                        <th data-col="actions">Actions</th>
-                    </tr>
+                    <!-- Rendered by renderEvHeader() so the order is
+                         Kerry's, not the file's (v2.308.0 drag to
+                         reorder). -->
+                    <tr id="events-header-row"></tr>
                 </thead>
                 <tbody id="events-body">
                     <tr><td colspan="8" class="empty-msg">Loading...</td></tr>
@@ -2273,15 +2291,149 @@
 
     // Column definitions for Events table
     const EVENT_COLUMNS = [
-        { key: "item_name", label: "Event Name", default: true },
-        { key: "event_date", label: "Date", default: true },
-        { key: "start", label: "Start", default: true },
-        { key: "course", label: "Course", default: true },
-        { key: "chapter", label: "Chapter", default: true },
-        { key: "pricing", label: "Pricing (M | G | 1st)", default: true },
-        { key: "registrations", label: "Registrations", default: true },
+        { key: "item_name", label: "Event Name", default: true, sort: "item_name" },
+        { key: "event_date", label: "Date", default: true, sort: "event_date" },
+        { key: "start", label: "Start", default: true, sort: "start_time" },
+        { key: "course", label: "Course", default: true, sort: "course" },
+        { key: "chapter", label: "Chapter", default: true, sort: "chapter" },
+        { key: "pricing", label: "Pricing (M | G | 1st)", default: true,
+          head: 'Pricing <span style="font-weight:400; color:var(--text-muted);">M&nbsp;|&nbsp;G&nbsp;|&nbsp;1st</span>',
+          title: "Event Only base charge — what the Edit Event screen shows. Member | Guest | 1st Timer." },
+        { key: "registrations", label: "Registrations", default: true, sort: "registrations" },
         { key: "actions", label: "Actions", default: true },
     ];
+
+    // Kerry's column ORDER, his to rearrange (v2.308.0: "give me the
+    // ability to drag and drop rearrange columns"). Stored by key, not
+    // index — a saved order from before a new column shipped simply
+    // doesn't mention it, and orderedEvColumns() appends the newcomer
+    // rather than dropping it or throwing the order away.
+    let evColumnOrder = [];
+
+    function loadEvColumnOrder() {
+        try {
+            const saved = JSON.parse(
+                localStorage.getItem("tgf_ev_column_order") || "[]");
+            if (Array.isArray(saved)) evColumnOrder = saved.filter(k => typeof k === "string");
+        } catch (e) { evColumnOrder = []; }
+    }
+
+    function saveEvColumnOrder() {
+        try {
+            localStorage.setItem("tgf_ev_column_order",
+                JSON.stringify(orderedEvColumns().map(c => c.key)));
+        } catch (e) {}
+    }
+
+    function orderedEvColumns() {
+        const byKey = new Map(EVENT_COLUMNS.map(c => [c.key, c]));
+        const out = [];
+        evColumnOrder.forEach(k => {
+            if (byKey.has(k)) { out.push(byKey.get(k)); byKey.delete(k); }
+        });
+        // Anything the saved order predates keeps its catalogue position.
+        EVENT_COLUMNS.forEach(c => { if (byKey.has(c.key)) out.push(c); });
+        return out;
+    }
+
+    function visibleEvColumns() {
+        return orderedEvColumns().filter(c => evVisibleColumns[c.key] !== false);
+    }
+
+    function moveEvColumn(fromKey, toKey, after) {
+        if (!fromKey || fromKey === toKey) return false;
+        const keys = orderedEvColumns().map(c => c.key);
+        const from = keys.indexOf(fromKey);
+        if (from < 0) return false;
+        keys.splice(from, 1);
+        let to = toKey ? keys.indexOf(toKey) : keys.length;
+        if (to < 0) to = keys.length;
+        keys.splice(after ? to + 1 : to, 0, fromKey);
+        evColumnOrder = keys;
+        saveEvColumnOrder();
+        return true;
+    }
+
+    function renderEvHeader() {
+        const row = document.getElementById("events-header-row");
+        if (!row) return;
+        row.innerHTML = orderedEvColumns().map(c => {
+            const hidden = evVisibleColumns[c.key] === false ? ' style="display:none"' : "";
+            const sortAttr = c.sort ? ` data-sort="${c.sort}"` : "";
+            const title = c.title ? ` title="${c.title.replace(/"/g, "&quot;")}"` : "";
+            const label = c.head || c.label;
+            const arrow = c.sort ? ' <span class="sort-arrow">&#9650;&#9660;</span>' : "";
+            return `<th data-col="${c.key}"${sortAttr}${title}${hidden} draggable="true" class="ev-th-drag">${label}${arrow}</th>`;
+        }).join("") + '<th class="ev-filler" aria-hidden="true"></th>';
+        attachEvHeaderBehaviour();
+        updateEvSortArrows();
+    }
+
+    // One drag implementation, two ways in: dragging a header on a
+    // desktop, and the ▲▼ buttons in the Columns menu — HTML5 drag and
+    // drop does not work on iOS Safari at all, and the phone is where
+    // Kerry does much of this.
+    let _evDragKey = null;
+    let _evDragged = false;
+
+    function attachEvHeaderBehaviour() {
+        document.querySelectorAll("#events-header-row th[data-col]").forEach(th => {
+            th.addEventListener("dragstart", e => {
+                _evDragKey = th.dataset.col;
+                _evDragged = false;
+                th.classList.add("ev-th-dragging");
+                try {
+                    e.dataTransfer.effectAllowed = "move";
+                    e.dataTransfer.setData("text/plain", _evDragKey);
+                } catch (err) {}
+            });
+            th.addEventListener("dragend", () => {
+                th.classList.remove("ev-th-dragging");
+                document.querySelectorAll(".ev-th-over-l, .ev-th-over-r")
+                    .forEach(x => x.classList.remove("ev-th-over-l", "ev-th-over-r"));
+                _evDragKey = null;
+                // Let the click that ends a drag pass without sorting.
+                setTimeout(() => { _evDragged = false; }, 0);
+            });
+            th.addEventListener("dragover", e => {
+                if (!_evDragKey || th.dataset.col === _evDragKey) return;
+                e.preventDefault();
+                const r = th.getBoundingClientRect();
+                const after = (e.clientX - r.left) > r.width / 2;
+                th.classList.toggle("ev-th-over-r", after);
+                th.classList.toggle("ev-th-over-l", !after);
+            });
+            th.addEventListener("dragleave", () => {
+                th.classList.remove("ev-th-over-l", "ev-th-over-r");
+            });
+            th.addEventListener("drop", e => {
+                e.preventDefault();
+                const r = th.getBoundingClientRect();
+                const after = (e.clientX - r.left) > r.width / 2;
+                th.classList.remove("ev-th-over-l", "ev-th-over-r");
+                if (moveEvColumn(_evDragKey, th.dataset.col, after)) {
+                    _evDragged = true;
+                    renderEvents();
+                }
+            });
+        });
+        // Sorting rides on the same header, so a drop must not sort.
+        document.querySelectorAll("#events-header-row th[data-sort]").forEach(th => {
+            th.style.cursor = "pointer";
+            th.style.userSelect = "none";
+            th.addEventListener("click", () => {
+                if (_evDragged) { _evDragged = false; return; }
+                const field = th.dataset.sort;
+                if (eventSortField === field) {
+                    eventSortDir = eventSortDir === "asc" ? "desc" : "asc";
+                } else {
+                    eventSortField = field;
+                    eventSortDir = "asc";
+                }
+                renderEvents();
+            });
+        });
+    }
 
     let evVisibleColumns = {};
 
@@ -2299,12 +2451,24 @@
 
     function buildEvColumnToggle() {
         const dropdown = document.getElementById("ev-col-toggle-dropdown");
-        dropdown.innerHTML = EVENT_COLUMNS
-            .filter(c => c.key !== "actions")
-            .map(c => {
-                const checked = evVisibleColumns[c.key] !== false ? "checked" : "";
-                return `<label><input type="checkbox" data-col="${c.key}" ${checked}> ${c.label}</label>`;
-            }).join("");
+        const cols = orderedEvColumns();
+        dropdown.innerHTML = cols.map((c, i) => {
+            const checked = evVisibleColumns[c.key] !== false ? "checked" : "";
+            const canToggle = c.key !== "actions";
+            const box = canToggle
+                ? `<input type="checkbox" data-col="${c.key}" ${checked}>`
+                : `<span class="ev-col-fixed" title="Always shown">&#10003;</span>`;
+            // Header drag is the fast path; these are the way to
+            // reorder on a phone, where HTML5 drag and drop does not
+            // work at all.
+            return `<label class="ev-col-row">${box}
+                <span class="ev-col-name">${c.label}</span>
+                <button type="button" class="ev-col-move" data-move="up"
+                    data-col="${c.key}" title="Move left"${i === 0 ? " disabled" : ""}>&#9650;</button>
+                <button type="button" class="ev-col-move" data-move="down"
+                    data-col="${c.key}" title="Move right"${i === cols.length - 1 ? " disabled" : ""}>&#9660;</button>
+            </label>`;
+        }).join("");
         dropdown.querySelectorAll("input[type=checkbox]").forEach(cb => {
             cb.addEventListener("change", () => {
                 evVisibleColumns[cb.dataset.col] = cb.checked;
@@ -2312,18 +2476,45 @@
                 applyEvColumnVisibility();
             });
         });
+        dropdown.querySelectorAll(".ev-col-move").forEach(btn => {
+            btn.addEventListener("click", e => {
+                // The dropdown lives inside a <label>; without this the
+                // click toggles the checkbox as well as moving.
+                e.preventDefault();
+                e.stopPropagation();
+                const keys = orderedEvColumns().map(c => c.key);
+                const i = keys.indexOf(btn.dataset.col);
+                const j = btn.dataset.move === "up" ? i - 1 : i + 1;
+                if (i < 0 || j < 0 || j >= keys.length) return;
+                moveEvColumn(btn.dataset.col, keys[j],
+                             btn.dataset.move === "down");
+                renderEvents();
+            });
+        });
+    }
+
+    // The filler column absorbs the leftover width so every real column
+    // sits at its natural size, packed LEFT (Kerry 2026-09-04: "Allow
+    // all columns to align left") instead of being stretched apart by
+    // the table's width:100%.
+    function evColspan() {
+        return visibleEvColumns().length + 1;
     }
 
     function applyEvColumnVisibility() {
-        EVENT_COLUMNS.forEach((col, idx) => {
+        // BY KEY, not by index — with a reorderable table the nth cell
+        // is not the nth column.
+        EVENT_COLUMNS.forEach(col => {
             const visible = evVisibleColumns[col.key] !== false;
             const th = document.querySelector(`#events-header-row th[data-col="${col.key}"]`);
             if (th) th.style.display = visible ? "" : "none";
-            // Body cells by column index (only event rows and detail rows)
-            document.querySelectorAll("#events-body .event-row-clickable").forEach(tr => {
-                const tds = tr.querySelectorAll("td");
-                if (tds[idx]) tds[idx].style.display = visible ? "" : "none";
-            });
+            document.querySelectorAll(
+                `#events-body .event-row-clickable td[data-col="${col.key}"]`
+            ).forEach(td => { td.style.display = visible ? "" : "none"; });
+        });
+        document.querySelectorAll("#events-body .event-detail-row > td, "
+            + "#events-body .ev-past-divider > td").forEach(td => {
+            td.setAttribute("colspan", evColspan());
         });
     }
 
@@ -3404,7 +3595,7 @@
         updateEvClearButton();
 
         if (!filtered.length) {
-            tbody.innerHTML = '<tr><td colspan="8" class="empty-msg">No events found. Click "Sync Events" to scan transactions.</td></tr>';
+            tbody.innerHTML = `<tr><td colspan="${evColspan()}" class="empty-msg">No events found. Click "Sync Events" to scan transactions.</td></tr>`;
             return;
         }
 
@@ -3420,37 +3611,45 @@
         }
         filtered.forEach((ev, _evIdx) => {
             const isExpanded = expandedEventId === ev.id;
-            html += `
-            <tr class="event-row-clickable ${isExpanded ? 'expanded' : ''} ${ev.chapter === 'Austin' ? 'ev-ch-austin' : ev.chapter === 'San Antonio' ? 'ev-ch-sa' : (ev.chapter || '').toUpperCase() === 'TGF' ? 'ev-ch-tgf' : ''}" data-id="${ev.id}" data-name="${escapeHtml(ev.item_name)}">
-                <td>
+            // Cells are built BY KEY and emitted in Kerry's order. The
+            // old positional list meant column order lived in three
+            // places at once (catalogue, header, row) and adding one
+            // column meant lining up three index positions by hand.
+            const cells = {
+                item_name: `<td data-col="item_name">
                     <strong>${escapeHtml(ev.item_name)}</strong>
                     ${(ev.status === 'cancelled') ? `<span style="margin-left:0.4rem; font-size:0.65rem; font-weight:700; background:#fee2e2; color:#dc2626; border:1px solid #fecaca; border-radius:4px; padding:1px 5px; vertical-align:middle; text-transform:uppercase;">${escapeHtml(ev.status_badge || 'Cancelled')}</span>` : ''}
                     ${(ev.status === 'postponed') ? `<span style="margin-left:0.4rem; font-size:0.65rem; font-weight:700; background:#fef3c7; color:#d97706; border:1px solid #fde68a; border-radius:4px; padding:1px 5px; vertical-align:middle; text-transform:uppercase;">${escapeHtml(ev.status_badge || 'Postponed')}</span>` : ''}
-                </td>
-                <td>${escapeHtml(ev.event_date || "\u2014")}</td>
-                <td class="ev-start-cell">${evStartCell(ev)}</td>
-                <td>${escapeHtml(ev.course || "\u2014")}</td>
-                <td>${escapeHtml(ev.chapter || "\u2014")}</td>
-                <td class="ev-price-cell">${evPriceCell(ev)}</td>
-                <td><span class="reg-count">${getEventTotalPlayers(ev)}/${ev.registrations || 0}</span></td>
-                <td>
+                </td>`,
+                event_date: `<td data-col="event_date">${escapeHtml(ev.event_date || "\u2014")}</td>`,
+                start: `<td data-col="start" class="ev-start-cell">${evStartCell(ev)}</td>`,
+                course: `<td data-col="course">${escapeHtml(ev.course || "\u2014")}</td>`,
+                chapter: `<td data-col="chapter">${escapeHtml(ev.chapter || "\u2014")}</td>`,
+                pricing: `<td data-col="pricing" class="ev-price-cell">${evPriceCell(ev)}</td>`,
+                registrations: `<td data-col="registrations"><span class="reg-count">${getEventTotalPlayers(ev)}/${ev.registrations || 0}</span></td>`,
+                actions: `<td data-col="actions">
                     <button class="btn btn-edit" data-edit-event="${ev.id}">Edit</button>
                     ${currentRole === "admin" ? `<button class="btn btn-edit" data-merge-event="${ev.id}" title="Merge into another event">Merge</button>` : ''}
                     ${currentRole === "admin" ? `<button class="btn btn-danger" data-delete-event="${ev.id}" title="Delete">&times;</button>` : ''}
-                </td>
+                </td>`,
+            };
+            html += `
+            <tr class="event-row-clickable ${isExpanded ? 'expanded' : ''} ${ev.chapter === 'Austin' ? 'ev-ch-austin' : ev.chapter === 'San Antonio' ? 'ev-ch-sa' : (ev.chapter || '').toUpperCase() === 'TGF' ? 'ev-ch-tgf' : ''}" data-id="${ev.id}" data-name="${escapeHtml(ev.item_name)}">
+                ${orderedEvColumns().map(c => cells[c.key] || `<td data-col="${c.key}"></td>`).join("")}
+                <td class="ev-filler"></td>
             </tr>`;
 
             // Detail row (always rendered, visibility toggled via CSS)
             html += `
             <tr class="event-detail-row ${isExpanded ? 'visible' : ''}" data-detail-for="${ev.id}">
-                <td colspan="8">
+                <td colspan="${evColspan()}">
                     <div class="event-detail-content" id="detail-content-${ev.id}">
                         ${isExpanded ? renderDetailContent(ev) : ''}
                     </div>
                 </td>
             </tr>`;
             if (_evIdx === dividerAfterIdx) {
-                html += `<tr class="ev-past-divider"><td colspan="8"><span>PAST EVENTS</span></td></tr>`;
+                html += `<tr class="ev-past-divider"><td colspan="${evColspan()}"><span>PAST EVENTS</span></td></tr>`;
             }
         });
 
@@ -3483,6 +3682,8 @@
             }
         }
 
+        renderEvHeader();
+        buildEvColumnToggle();
         applyEvColumnVisibility();
 
         // Render mobile view
@@ -13404,6 +13605,7 @@
         await initAuth();
 
         loadEvColumnPrefs();
+        loadEvColumnOrder();
         loadDetailColumnPrefs();
         buildEvColumnToggle();
 
@@ -13743,21 +13945,9 @@
             });
         });
 
-        // Column header sorting
-        document.querySelectorAll("#events-header-row th[data-sort]").forEach(th => {
-            th.style.cursor = "pointer";
-            th.style.userSelect = "none";
-            th.addEventListener("click", () => {
-                const field = th.dataset.sort;
-                if (eventSortField === field) {
-                    eventSortDir = eventSortDir === "asc" ? "desc" : "asc";
-                } else {
-                    eventSortField = field;
-                    eventSortDir = "asc";
-                }
-                renderEvents();
-            });
-        });
+        // Column header sorting is attached by renderEvHeader() —
+        // the header is rebuilt on every render now, so binding it once
+        // at init would bind to elements that no longer exist.
 
         // Edit event modal
         document.getElementById("edit-event-form").addEventListener("submit", handleEditEventSubmit);

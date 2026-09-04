@@ -33,6 +33,17 @@ const grab = (name, kind) => {
     }
     return html.slice(at, end);
 };
+// EVENT_COLUMNS is an array literal, so it brace-matches on [ ] not { }.
+const grabArray = (name) => {
+    const at = html.search(new RegExp("const\\s+" + name + "\\b"));
+    if (at < 0) throw new Error("not found: " + name);
+    let end = html.indexOf("[", at), depth = 0;
+    for (; end < html.length; end++) {
+        if (html[end] === "[") depth++;
+        else if (html[end] === "]") { depth--; if (!depth) { end++; break; } }
+    }
+    return html.slice(at, end) + ";";
+};
 const SRC = ["calcPricingLine", "getPlayerMarkups", "_evShortTime",
              "_evStartKind", "_evStartLeg", "evStartCell", "_evPriceTrio",
              "_evPriceTrioHtml", "evPriceCell"].map(n => grab(n)).join("\n");
@@ -99,6 +110,62 @@ const comboCell = evPriceCell({ format: "9/18 Combo", course_cost_9: 48.71,
 check("a combo prices both legs separately",
       comboCell.includes(">9<") && comboCell.includes(">18<")
       && comboCell.includes("$64") && comboCell.includes("$120"), comboCell);
+
+// ---- column ORDER (v2.308.0 drag to reorder) -----------------------
+console.log("Column order");
+const ORD = (() => {
+    const store = {};
+    global.localStorage = { getItem: k => store[k] ?? null,
+        setItem: (k, v) => { store[k] = v; }, removeItem: k => { delete store[k]; } };
+    const cat = grabArray("EVENT_COLUMNS");
+    const src = [cat, grab("loadEvColumnOrder"), grab("saveEvColumnOrder"),
+                 grab("orderedEvColumns"), grab("visibleEvColumns"),
+                 grab("moveEvColumn")].join("\n");
+    return new Function("localStorage", "let evColumnOrder = []; let evVisibleColumns = {};\n"
+        + src + "\nreturn {loadEvColumnOrder, saveEvColumnOrder, orderedEvColumns,"
+        + " visibleEvColumns, moveEvColumn, keys: () => orderedEvColumns().map(c => c.key),"
+        + " hide: k => { evVisibleColumns[k] = false; },"
+        + " store: () => localStorage.getItem('tgf_ev_column_order')};")(global.localStorage);
+})();
+
+const DEFAULT_ORDER = ["item_name", "event_date", "start", "course",
+                       "chapter", "pricing", "registrations", "actions"];
+check("with nothing saved the catalogue order stands",
+      JSON.stringify(ORD.keys()) === JSON.stringify(DEFAULT_ORDER), ORD.keys());
+
+ORD.moveEvColumn("pricing", "event_date", false);   // drop LEFT of Date
+check("a column can be dragged left",
+      JSON.stringify(ORD.keys()) ===
+      JSON.stringify(["item_name", "pricing", "event_date", "start", "course",
+                      "chapter", "registrations", "actions"]), ORD.keys());
+check("the move is persisted", (ORD.store() || "").includes("pricing"), ORD.store());
+
+ORD.moveEvColumn("item_name", "actions", true);     // drop RIGHT of Actions
+check("and dragged all the way right",
+      ORD.keys()[ORD.keys().length - 1] === "item_name", ORD.keys());
+check("nothing is lost or duplicated in the process",
+      ORD.keys().length === DEFAULT_ORDER.length
+      && new Set(ORD.keys()).size === DEFAULT_ORDER.length, ORD.keys());
+
+check("dropping a column on itself is a no-op",
+      ORD.moveEvColumn("start", "start", false) === false);
+check("an unknown key is refused rather than reshuffling",
+      ORD.moveEvColumn("nope", "start", false) === false);
+
+// A saved order that predates a new column must not hide the newcomer.
+const stale = new Function("localStorage",
+    "let evColumnOrder = ['registrations','item_name']; let evVisibleColumns = {};\n"
+    + [grabArray("EVENT_COLUMNS"), grab("orderedEvColumns"), grab("visibleEvColumns")].join("\n")
+    + "\nreturn {keys: () => orderedEvColumns().map(c => c.key)};")(global.localStorage);
+check("a saved order from before a new column still shows every column",
+      stale.keys().length === DEFAULT_ORDER.length
+      && stale.keys()[0] === "registrations" && stale.keys()[1] === "item_name"
+      && stale.keys().includes("pricing"), stale.keys());
+
+ORD.hide("chapter");
+check("hidden columns drop out of the visible set but keep their place",
+      !ORD.visibleEvColumns().map(c => c.key).includes("chapter")
+      && ORD.keys().includes("chapter"), ORD.visibleEvColumns().map(c => c.key));
 
 console.log("");
 if (FAILURES.length) { console.log(FAILURES.length + " FAILURE(S): " + FAILURES.join(", ")); process.exit(1); }

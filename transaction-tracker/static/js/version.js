@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.307.0";
+window.TGF_VERSION = "2.308.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.308.0",
+    date: "2026-09-04",
+    changes: [
+      "Events columns pack LEFT and can be dragged into any order (Kerry: 'Allow all columns to align left, and give me the ability to drag and drop rearrange columns'). The table was width:100%, so the browser spread the leftover width across the columns and a row read as scattered islands with big gaps; a filler column now absorbs the slack and every real column sits at its natural width. Drag any header to reorder, with an insertion line showing where it will land. The order saves per browser and survives reloads.",
+      "The Columns menu now lists columns in the order they appear, each with move-left and move-right buttons — HTML5 drag and drop does not work on iOS Safari at all, and the phone is where a lot of this gets read. Same reorder underneath, two ways in.",
+      "Under the hood, row cells are now built BY KEY and emitted in the saved order. Column order previously lived in three places at once — the catalogue, the static header, and the positional list of table cells — so adding a column meant lining up three index positions by hand, and column visibility toggled cells by index, which a reorderable table breaks outright. A saved order made before a new column ships simply does not mention it, and the newcomer keeps its catalogue position rather than vanishing.",
+    ],
+  },
   {
     version: "2.307.0",
     date: "2026-09-04",
