@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.305.0";
+window.TGF_VERSION = "2.306.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.306.0",
+    date: "2026-09-04",
+    changes: [
+      "Two new Events-table columns (Kerry: 'I need a quicker visual on that'). PRICING shows the Event Only base charge as Member | Guest | 1st Timer, colour-coded to match the cards on the Edit Event screen. START shows the time and the type in Kerry's own shorthand — s for shotgun, tt for tee times, minutes dropped on the hour so 5:30p and 8p read fast down a dense column. Both default on and both toggle from the Columns menu like every other column.",
+      "The pricing cell calls the Edit Event screen's OWN calcPricingLine and getPlayerMarkups rather than reimplementing the arithmetic, so the column can never quietly disagree with the screen prices are verified on. Locked to the real production Silverhorn row in a test — course cost 48.71, markup 8, games 7 gives member $64 / guest $74 / 1st Timer $49, the figures CA verified. 27-hole events show an em dash in the 1st Timer slot because that tier does not exist, and an event with no course cost yet (an uncontracted course like Forest Creek) shows a dash rather than a $0 somebody might quote. A 9/18 combo prices and times both legs on their own labelled lines.",
+    ],
+  },
   {
     version: "2.305.0",
     date: "2026-09-04",

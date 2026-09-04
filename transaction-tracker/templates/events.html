@@ -54,6 +54,21 @@
            2026-08-31, TGF Platform style — same as the Lead Center):
            Austin burnt orange, SA slate, unrouted gray. */
         .events-table tbody tr.event-row-clickable > td:first-child { border-left: 8px solid #E5E7EB; }
+        /* Start + Pricing columns (Kerry 2026-09-04: "a quicker visual").
+           Tabular numerals so the money lines up down the column, and the
+           whole cell nowrap so a price trio never wraps mid-figure. */
+        .ev-start-cell, .ev-price-cell { white-space: nowrap; font-variant-numeric: tabular-nums; }
+        .ev-start-kind { font-size: 0.72em; font-weight: 700; color: var(--text-muted);
+                         text-transform: uppercase; margin-left: 1px; }
+        .ev-start-leg, .ev-price-cell .ev-start-leg {
+            display: inline-block; min-width: 1.1em; font-size: 0.68em; font-weight: 700;
+            color: var(--text-placeholder); margin-right: 3px; }
+        .ev-price-cell { font-size: 0.82rem; font-weight: 600; }
+        .ev-p-m  { color: #166534; }
+        .ev-p-g  { color: #1e40af; }
+        .ev-p-ft { color: #854d0e; }
+        .ev-p-sep { color: #D1D5DB; margin: 0 3px; font-weight: 400; }
+        .ev-p-na { color: var(--text-placeholder); font-weight: 400; }
         .events-table tbody tr.ev-ch-austin > td:first-child { border-left-color: var(--chapter-austin, #BF5700); }
         .events-table tbody tr.ev-ch-sa > td:first-child { border-left-color: var(--chapter-sa-alt, #8FA8B8); }
         /* Joint TGF events (chapter 'TGF' — shared 18s, championships)
@@ -740,14 +755,16 @@
                     <tr id="events-header-row">
                         <th data-col="item_name" data-sort="item_name">Event Name <span class="sort-arrow">&#9650;&#9660;</span></th>
                         <th data-col="event_date" data-sort="event_date">Date <span class="sort-arrow">&#9650;&#9660;</span></th>
+                        <th data-col="start" data-sort="start_time">Start <span class="sort-arrow">&#9650;&#9660;</span></th>
                         <th data-col="course" data-sort="course">Course <span class="sort-arrow">&#9650;&#9660;</span></th>
                         <th data-col="chapter" data-sort="chapter">Chapter <span class="sort-arrow">&#9650;&#9660;</span></th>
+                        <th data-col="pricing" title="Event Only base charge — what the Edit Event screen shows. Member | Guest | 1st Timer.">Pricing <span style="font-weight:400; color:var(--text-muted);">M&nbsp;|&nbsp;G&nbsp;|&nbsp;1st</span></th>
                         <th data-col="registrations" data-sort="registrations">Registrations <span class="sort-arrow">&#9650;&#9660;</span></th>
                         <th data-col="actions">Actions</th>
                     </tr>
                 </thead>
                 <tbody id="events-body">
-                    <tr><td colspan="6" class="empty-msg">Loading...</td></tr>
+                    <tr><td colspan="8" class="empty-msg">Loading...</td></tr>
                 </tbody>
             </table>
         </section>
@@ -2258,8 +2275,10 @@
     const EVENT_COLUMNS = [
         { key: "item_name", label: "Event Name", default: true },
         { key: "event_date", label: "Date", default: true },
+        { key: "start", label: "Start", default: true },
         { key: "course", label: "Course", default: true },
         { key: "chapter", label: "Chapter", default: true },
+        { key: "pricing", label: "Pricing (M | G | 1st)", default: true },
         { key: "registrations", label: "Registrations", default: true },
         { key: "actions", label: "Actions", default: true },
     ];
@@ -3385,7 +3404,7 @@
         updateEvClearButton();
 
         if (!filtered.length) {
-            tbody.innerHTML = '<tr><td colspan="6" class="empty-msg">No events found. Click "Sync Events" to scan transactions.</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="8" class="empty-msg">No events found. Click "Sync Events" to scan transactions.</td></tr>';
             return;
         }
 
@@ -3409,8 +3428,10 @@
                     ${(ev.status === 'postponed') ? `<span style="margin-left:0.4rem; font-size:0.65rem; font-weight:700; background:#fef3c7; color:#d97706; border:1px solid #fde68a; border-radius:4px; padding:1px 5px; vertical-align:middle; text-transform:uppercase;">${escapeHtml(ev.status_badge || 'Postponed')}</span>` : ''}
                 </td>
                 <td>${escapeHtml(ev.event_date || "\u2014")}</td>
+                <td class="ev-start-cell">${evStartCell(ev)}</td>
                 <td>${escapeHtml(ev.course || "\u2014")}</td>
                 <td>${escapeHtml(ev.chapter || "\u2014")}</td>
+                <td class="ev-price-cell">${evPriceCell(ev)}</td>
                 <td><span class="reg-count">${getEventTotalPlayers(ev)}/${ev.registrations || 0}</span></td>
                 <td>
                     <button class="btn btn-edit" data-edit-event="${ev.id}">Edit</button>
@@ -3422,14 +3443,14 @@
             // Detail row (always rendered, visibility toggled via CSS)
             html += `
             <tr class="event-detail-row ${isExpanded ? 'visible' : ''}" data-detail-for="${ev.id}">
-                <td colspan="6">
+                <td colspan="8">
                     <div class="event-detail-content" id="detail-content-${ev.id}">
                         ${isExpanded ? renderDetailContent(ev) : ''}
                     </div>
                 </td>
             </tr>`;
             if (_evIdx === dividerAfterIdx) {
-                html += `<tr class="ev-past-divider"><td colspan="6"><span>PAST EVENTS</span></td></tr>`;
+                html += `<tr class="ev-past-divider"><td colspan="8"><span>PAST EVENTS</span></td></tr>`;
             }
         });
 
@@ -10616,6 +10637,98 @@
         }
         if (format === "27 Holes") return 27;
         return (format === "18 Holes") ? 30 : 16;
+    }
+
+    // ── Events-table cells: Start and Pricing (Kerry 2026-09-04, "I need
+    //    a quicker visual on that"). Both read the SAME functions the
+    //    Edit Event screen uses — calcPricingLine + getPlayerMarkups —
+    //    so the column can never quietly disagree with the screen Kerry
+    //    verifies prices on. Never reimplement the arithmetic here.
+    function _evShortTime(t) {
+        // "17:30" -> "5:30p"; "08:30" -> "8:30a". Minutes dropped on the
+        // hour, because "5p" reads faster than "5:00p" in a dense table.
+        const m = /^(\d{1,2}):(\d{2})/.exec(String(t || "").trim());
+        if (!m) return "";
+        let h = +m[1];
+        const mins = m[2];
+        const ap = h >= 12 ? "p" : "a";
+        h = h % 12 || 12;
+        return mins === "00" ? `${h}${ap}` : `${h}:${mins}${ap}`;
+    }
+
+    function _evStartKind(type) {
+        const t = String(type || "").toLowerCase();
+        if (t.includes("shotgun")) return "s";
+        if (t.includes("tee")) return "tt";
+        return "";
+    }
+
+    function _evStartLeg(time, type) {
+        const t = _evShortTime(time);
+        const k = _evStartKind(type);
+        if (!t && !k) return "";
+        return `${t}${t && k ? " " : ""}${k ? `<span class="ev-start-kind">${k}</span>` : ""}`;
+    }
+
+    function evStartCell(ev) {
+        const fmt = String(ev.format || "");
+        const isCombo = fmt.toLowerCase().includes("combo")
+            || fmt.includes("9/18");
+        if (isCombo) {
+            // Two legs, two clocks — label them or the pair is a riddle.
+            const a = _evStartLeg(ev.start_time, ev.start_type);
+            const b = _evStartLeg(ev.start_time_18, ev.start_type_18);
+            const parts = [];
+            if (a) parts.push(`<span class="ev-start-leg">9</span>${a}`);
+            if (b) parts.push(`<span class="ev-start-leg">18</span>${b}`);
+            return parts.length ? parts.join("<br>") : "\u2014";
+        }
+        return _evStartLeg(ev.start_time, ev.start_type) || "\u2014";
+    }
+
+    // The three Event Only base charges for one set of inputs.
+    function _evPriceTrio(cc, mu, sg, tf, fmt) {
+        if (cc == null || cc === "" || mu == null || mu === "") return null;
+        const marks = getPlayerMarkups(parseFloat(mu), fmt);
+        const charge = m => (m == null ? null
+            : calcPricingLine(parseFloat(cc), m, parseFloat(sg || 0), tf).actualCharge);
+        return { member: charge(marks.member), guest: charge(marks.guest),
+                 firstTimer: charge(marks.firstTimer) };
+    }
+
+    function _evPriceTrioHtml(trio, label) {
+        if (!trio) return "";
+        // 27-hole events have no 1st Timer tier — an em dash, not a $0.
+        const ft = trio.firstTimer == null
+            ? `<span class="ev-p-na">\u2014</span>`
+            : `<span class="ev-p-ft">$${trio.firstTimer}</span>`;
+        const lbl = label ? `<span class="ev-start-leg">${label}</span>` : "";
+        return `${lbl}<span class="ev-p-m">$${trio.member}</span><span class="ev-p-sep">|</span>`
+             + `<span class="ev-p-g">$${trio.guest}</span><span class="ev-p-sep">|</span>${ft}`;
+    }
+
+    function evPriceCell(ev) {
+        const fmt = String(ev.format || "");
+        const isCombo = fmt.toLowerCase().includes("combo")
+            || fmt.includes("9/18");
+        const tf = ev.transaction_fee_pct ?? 3.5;
+        if (isCombo) {
+            const nine = _evPriceTrio(ev.course_cost_9 ?? ev.course_cost,
+                ev.tgf_markup_9 ?? ev.tgf_markup,
+                ev.side_game_fee_9 ?? ev.side_game_fee, tf, fmt);
+            const eighteen = _evPriceTrio(ev.course_cost_18,
+                ev.tgf_markup_18 ?? ev.tgf_markup,
+                ev.side_game_fee_18 ?? ev.side_game_fee, tf, fmt);
+            const rows = [];
+            if (nine) rows.push(_evPriceTrioHtml(nine, "9"));
+            if (eighteen) rows.push(_evPriceTrioHtml(eighteen, "18"));
+            return rows.length ? rows.join("<br>") : `<span class="ev-p-na">\u2014</span>`;
+        }
+        const trio = _evPriceTrio(ev.course_cost, ev.tgf_markup,
+                                  ev.side_game_fee, tf, fmt);
+        // An uncontracted course has no knowable price yet — say nothing
+        // rather than print a $0 somebody might quote.
+        return trio ? _evPriceTrioHtml(trio) : `<span class="ev-p-na">\u2014</span>`;
     }
 
     function renderPlayerPricingGrid(cc, memberMarkup, sg, tf, format, opts) {
