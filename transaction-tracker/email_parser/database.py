@@ -881,6 +881,11 @@ CONTACT_ALIAS_FIELDS = ("phone", "email")
 
 
 def ensure_contact_alias_table(conn: sqlite3.Connection) -> None:
+    """LEGACY. Nothing reads or writes contact_aliases any more — every
+    alias lives in customer_aliases (see unify_alias_tables). The table
+    and its rows are deliberately kept as the rollback path and are never
+    dropped by code; this keeps it creatable so the migration can always
+    read it. Remove in a later release once the merge has held."""
     conn.execute("""
         CREATE TABLE IF NOT EXISTS contact_aliases (
             id          INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -904,6 +909,210 @@ def normalize_contact_value(field: str, value: str) -> str:
     return v.lower()
 
 
+def unify_alias_tables(conn: sqlite3.Connection) -> dict:
+    """ONE alias list (Kerry 2026-09-04: "I approve the schema change.
+    Get rid of the seam...just don't screw up anything or lose anything").
+
+    There were two tables holding the same human fact:
+
+      customer_aliases  the MATCHING list the parser uses to decide who a
+                        person is. 190 rows, ~90 readers, name + email.
+      contact_aliases   the DON'T-WARN list the drift check uses. 1 row,
+                        3 readers, email + phone.
+
+    Kerry added an address on the Customer Info form (which writes the
+    first) and reasonably expected the action item to stop coming back
+    (which reads the second). Same sentence, two homes.
+
+    `customer_aliases` survives: it is the older, load-bearing store, and
+    moving 90 identity-resolution readers to satisfy 3 drift readers would
+    be the change most likely to break something. Its one gap is that its
+    CHECK constraint predates phone aliases, so the table is rebuilt once
+    to widen it.
+
+    NOTHING IS DROPPED. `contact_aliases` keeps its rows and its table; it
+    is simply no longer read or written. That is the rollback: point the
+    three functions back. Drop it in a later release once this has held.
+
+    Idempotent — the rebuild is skipped once 'phone' is allowed, and the
+    copy is INSERT OR IGNORE. Returns a report so the deploy log says what
+    actually moved.
+    """
+    out = {"rebuilt": False, "copied": 0, "already": 0, "rows_before": 0,
+           "rows_after": 0, "unmigrated": 0}
+    try:
+        row = conn.execute(
+            "SELECT sql FROM sqlite_master WHERE type='table' "
+            "AND name='customer_aliases'").fetchone()
+        if not row:
+            # The surviving store has to exist for this to be one list.
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS customer_aliases (
+                    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+                    customer_name   TEXT NOT NULL,
+                    alias_type      TEXT NOT NULL
+                                    CHECK(alias_type IN ('name', 'email', 'phone')),
+                    alias_value     TEXT NOT NULL,
+                    created_at      TEXT DEFAULT (datetime('now')),
+                    customer_id     INTEGER REFERENCES customers(customer_id),
+                    note            TEXT
+                )""")
+            row = conn.execute(
+                "SELECT sql FROM sqlite_master WHERE type='table' "
+                "AND name='customer_aliases'").fetchone()
+            if not row:
+                return out
+        out["rows_before"] = conn.execute(
+            "SELECT COUNT(*) AS n FROM customer_aliases").fetchone()["n"]
+
+        # ── 1. Widen the CHECK so a phone alias can live here at all ──
+        # SQLite cannot ALTER a CHECK, so this is the standard rebuild.
+        # 190 rows; the count is verified before the old table is dropped.
+        if "'phone'" not in (row["sql"] or ""):
+            # A rebuild DROPs the table. A view or trigger written against
+            # it would survive the drop and break silently, so refuse
+            # rather than risk it — everything else here still runs, and
+            # the log names what blocked it.
+            deps = [r["name"] for r in conn.execute(
+                "SELECT name FROM sqlite_master WHERE type IN "
+                "('view','trigger') AND sql LIKE '%customer_aliases%'")]
+            if deps:
+                out["blocked_by"] = deps
+                logger.error("Alias merge: NOT rebuilding customer_aliases — "
+                             "these depend on it and would break: %s", deps)
+                raise RuntimeError(f"rebuild blocked by {deps}")
+            n_before = out["rows_before"]
+            conn.execute("DROP TABLE IF EXISTS customer_aliases_rebuild")
+            conn.execute("""
+                CREATE TABLE customer_aliases_rebuild (
+                    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+                    customer_name   TEXT NOT NULL,
+                    alias_type      TEXT NOT NULL
+                                    CHECK(alias_type IN ('name', 'email', 'phone')),
+                    alias_value     TEXT NOT NULL,
+                    created_at      TEXT DEFAULT (datetime('now')),
+                    customer_id     INTEGER REFERENCES customers(customer_id),
+                    note            TEXT
+                )""")
+            conn.execute(
+                "INSERT INTO customer_aliases_rebuild "
+                "(id, customer_name, alias_type, alias_value, created_at, "
+                " customer_id) "
+                "SELECT id, customer_name, alias_type, alias_value, "
+                "       created_at, customer_id FROM customer_aliases")
+            n_copied = conn.execute(
+                "SELECT COUNT(*) AS n FROM customer_aliases_rebuild"
+            ).fetchone()["n"]
+            if n_copied != n_before:
+                # Never destroy the original on a short count.
+                conn.execute("DROP TABLE customer_aliases_rebuild")
+                raise RuntimeError(
+                    f"alias rebuild copied {n_copied} of {n_before} rows — "
+                    "original left untouched")
+            conn.execute("DROP TABLE customer_aliases")
+            conn.execute("ALTER TABLE customer_aliases_rebuild "
+                         "RENAME TO customer_aliases")
+            # The old table's indexes went with it; both are recreated
+            # exactly as _dedup_customer_aliases declares them.
+            conn.execute(
+                "CREATE UNIQUE INDEX IF NOT EXISTS "
+                "idx_customer_aliases_cid_unique ON customer_aliases"
+                "(customer_id, alias_type, LOWER(TRIM(alias_value))) "
+                "WHERE customer_id IS NOT NULL")
+            conn.execute(
+                "CREATE UNIQUE INDEX IF NOT EXISTS "
+                "idx_customer_aliases_name_unique ON customer_aliases"
+                "(LOWER(TRIM(COALESCE(customer_name, ''))), alias_type, "
+                " LOWER(TRIM(alias_value))) WHERE customer_id IS NULL")
+            out["rebuilt"] = True
+            logger.info("Alias merge: rebuilt customer_aliases (%d rows kept, "
+                        "phone now allowed)", n_copied)
+        else:
+            # A prior rebuild may predate the note column.
+            try:
+                conn.execute("ALTER TABLE customer_aliases ADD COLUMN note TEXT")
+            except sqlite3.OperationalError:
+                pass
+
+        # The unique indexes are what make every alias write idempotent.
+        # They must exist on EVERY path — a freshly created table has none,
+        # and without them INSERT OR IGNORE never ignores and the merge
+        # duplicates a row on each boot.
+        try:
+            conn.execute(
+                "CREATE UNIQUE INDEX IF NOT EXISTS "
+                "idx_customer_aliases_cid_unique ON customer_aliases"
+                "(customer_id, alias_type, LOWER(TRIM(alias_value))) "
+                "WHERE customer_id IS NOT NULL")
+            conn.execute(
+                "CREATE UNIQUE INDEX IF NOT EXISTS "
+                "idx_customer_aliases_name_unique ON customer_aliases"
+                "(LOWER(TRIM(COALESCE(customer_name, ''))), alias_type, "
+                " LOWER(TRIM(alias_value))) WHERE customer_id IS NULL")
+        except sqlite3.Error:
+            # Pre-existing duplicates block the index; the dedup pass that
+            # runs right after this one clears them.
+            logger.warning("alias unique indexes not (yet) creatable")
+
+        # ── 2. Move every contact_aliases row into the surviving list ──
+        try:
+            src = conn.execute(
+                "SELECT a.customer_id, a.field, a.raw_value, a.value_norm, "
+                "       a.note, a.created_at, "
+                "       TRIM(COALESCE(c.first_name,'')||' '||"
+                "            COALESCE(c.last_name,'')) AS cname "
+                "FROM contact_aliases a "
+                "LEFT JOIN customers c ON c.customer_id = a.customer_id"
+            ).fetchall()
+        except sqlite3.Error:
+            src = []
+        for a in src:
+            # customer_name is NOT NULL on the surviving table; a contact
+            # alias always has a customer_id, so the name is derivable.
+            cname = (a["cname"] or "").strip() or f"customer {a['customer_id']}"
+            val = (a["raw_value"] or a["value_norm"] or "").strip()
+            if not val:
+                continue
+            # Compare NORMALIZED. The unique index compares the literal
+            # string, so "(614) 581-1495" and "6145811495" would both
+            # insert — the same number twice.
+            if is_known_contact_alias(conn, a["customer_id"], a["field"], val):
+                out["already"] += 1
+                continue
+            cur = conn.execute(
+                "INSERT OR IGNORE INTO customer_aliases "
+                "(customer_name, alias_type, alias_value, created_at, "
+                " customer_id, note) VALUES (?,?,?,?,?,?)",
+                (cname, a["field"], val, a["created_at"], a["customer_id"],
+                 a["note"]))
+            if cur.rowcount:
+                out["copied"] += 1
+            else:
+                out["already"] += 1
+
+        # ── 3. Prove nothing was left behind ──────────────────────────
+        out["rows_after"] = conn.execute(
+            "SELECT COUNT(*) AS n FROM customer_aliases").fetchone()["n"]
+        for a in src:
+            val = (a["raw_value"] or a["value_norm"] or "").strip()
+            if not val:
+                continue
+            if not is_known_contact_alias(conn, a["customer_id"],
+                                          a["field"], val):
+                out["unmigrated"] += 1
+        if out["unmigrated"]:
+            logger.error("Alias merge: %d contact_aliases row(s) did NOT "
+                         "make it across — contact_aliases is intact, "
+                         "nothing was dropped", out["unmigrated"])
+        elif out["copied"]:
+            logger.info("Alias merge: moved %d contact alias row(s) into "
+                        "customer_aliases (%d already there)",
+                        out["copied"], out["already"])
+    except Exception:
+        logger.exception("Non-fatal: alias table unification failed")
+    return out
+
+
 def is_known_contact_alias(conn: sqlite3.Connection, customer_id: int,
                            field: str, value: str) -> bool:
     if not customer_id or field not in CONTACT_ALIAS_FIELDS:
@@ -911,29 +1120,11 @@ def is_known_contact_alias(conn: sqlite3.Connection, customer_id: int,
     norm = normalize_contact_value(field, value)
     if not norm:
         return False
-    try:
-        ensure_contact_alias_table(conn)
-        if conn.execute(
-                "SELECT 1 FROM contact_aliases WHERE customer_id = ? "
-                "AND field = ? AND value_norm = ?",
-                (customer_id, field, norm)).fetchone():
-            return True
-    except sqlite3.Error:
-        return False
-    # TWO alias lists, one human intention (Kerry 2026-09-04, the Logan
-    # Billeaud case). `contact_aliases` is written by "Always ignore" on
-    # a drift item and suppresses the interruption; `customer_aliases` is
-    # written by +Add on the Customer Info form and makes a stray value
-    # MATCH to the right person. Kerry added loganrbo@yahoo.com on the
-    # form and reasonably expected the action item to stop coming back —
-    # but only the first list was being read here, so the drift check
-    # still called it news and would have raised it again on the next
-    # re-parse of that order.
-    #
-    # From his seat both are the same sentence: "this address is also
-    # his." So both count. Read-side on purpose: it needs no migration
-    # and it covers every alias he has ever added by hand, including the
-    # ones added before this existed.
+    # ONE list (Kerry 2026-09-04: "get rid of the seam"). Every alias —
+    # whether Kerry typed it into the Customer Info form or reached it
+    # through "Always ignore" on a drift item — lives in
+    # customer_aliases, so both buttons do both jobs. See
+    # unify_alias_tables() for why that table is the survivor.
     try:
         rows = conn.execute(
             "SELECT alias_value FROM customer_aliases WHERE customer_id = ? "
@@ -964,15 +1155,33 @@ def add_contact_alias(customer_id: int, field: str, value: str,
     if not norm:
         return {"error": f"cannot normalize {value!r} for {field}"}
     with _connect(db_path) as conn:
-        ensure_contact_alias_table(conn)
-        if not conn.execute("SELECT 1 FROM customers WHERE customer_id = ?",
-                            (customer_id,)).fetchone():
+        unify_alias_tables(conn)
+        cust = conn.execute(
+            "SELECT TRIM(COALESCE(first_name,'')||' '||COALESCE(last_name,'')) "
+            "AS cname FROM customers WHERE customer_id = ?",
+            (customer_id,)).fetchone()
+        if not cust:
             return {"error": f"customer {customer_id} not found"}
+        # ONE list. This writes exactly where the Customer Info form's
+        # +Add writes, so "Always ignore" and "+Add" are now genuinely the
+        # same action — which is what Kerry expected them to be.
+        #
+        # Idempotent on the NORMALIZED value, not the literal one: the
+        # unique index compares strings, so without this "(614) 581-1495"
+        # and "6145811495" would both land as separate aliases for the
+        # same number.
+        if is_known_contact_alias(conn, customer_id, field, value):
+            cleared = _resolve_warnings_matching_aliases(conn)
+            conn.commit()
+            return {"customer_id": customer_id, "field": field,
+                    "value_norm": norm, "warnings_cleared": cleared,
+                    "already_known": True, "ok": True}
         conn.execute(
-            "INSERT OR IGNORE INTO contact_aliases "
-            "(customer_id, field, value_norm, raw_value, note) "
+            "INSERT OR IGNORE INTO customer_aliases "
+            "(customer_name, alias_type, alias_value, customer_id, note) "
             "VALUES (?,?,?,?,?)",
-            (customer_id, field, norm, (value or "").strip(), note or None))
+            ((cust["cname"] or "").strip() or f"customer {customer_id}",
+             field, (value or "").strip(), customer_id, note or None))
         conn.commit()
         cleared = _resolve_warnings_matching_aliases(conn)
         conn.commit()
@@ -983,12 +1192,17 @@ def add_contact_alias(customer_id: int, field: str, value: str,
 def list_contact_aliases(customer_id: int | None = None,
                          db_path: str | Path | None = None) -> list[dict]:
     with _connect(db_path) as conn:
-        ensure_contact_alias_table(conn)
-        q = ("SELECT a.*, c.first_name, c.last_name FROM contact_aliases a "
-             "LEFT JOIN customers c ON c.customer_id = a.customer_id")
+        unify_alias_tables(conn)
+        # Contact aliases only (name variants are a different question
+        # and have their own reader in get_customer_aliases).
+        q = ("SELECT a.id, a.customer_id, a.alias_type AS field, "
+             "       a.alias_value AS raw_value, a.note, a.created_at, "
+             "       c.first_name, c.last_name FROM customer_aliases a "
+             "LEFT JOIN customers c ON c.customer_id = a.customer_id "
+             "WHERE LOWER(COALESCE(a.alias_type,'')) IN ('email', 'phone')")
         params: tuple = ()
         if customer_id:
-            q += " WHERE a.customer_id = ?"
+            q += " AND a.customer_id = ?"
             params = (customer_id,)
         return [dict(r) for r in conn.execute(q + " ORDER BY a.id", params)]
 
@@ -1008,7 +1222,7 @@ def _resolve_warnings_matching_aliases(conn: sqlite3.Connection) -> int:
     Runs at boot and after an alias is added, so recording one variant
     also cleans up the history it already generated."""
     try:
-        ensure_contact_alias_table(conn)
+        unify_alias_tables(conn)
         rows = conn.execute(
             "SELECT id, customer_id, message FROM parse_warnings "
             "WHERE warning_code IN ('EMAIL_DRIFT', 'PHONE_DRIFT') "
@@ -5545,6 +5759,12 @@ def init_db(db_path: str | Path | None = None) -> None:
         # Collapse duplicate alias rows and create the unique indexes that
         # keep them from re-accumulating (runs right after the alias backfill
         # so just-linked rows dedup by customer_id, not name).
+        # ONE alias list (Kerry 2026-09-04). Widens the alias_type CHECK
+        # so phone aliases can live here, then moves every contact_aliases
+        # row across. Must run BEFORE the dedup below, which recreates the
+        # unique indexes the rebuild drops. Never raises; never drops
+        # contact_aliases.
+        unify_alias_tables(conn)
         try:
             _dedup_customer_aliases(conn)
         except Exception:
@@ -24251,15 +24471,34 @@ def get_customer_aliases(customer_name: str,
 
 def add_customer_alias(customer_name: str, alias_type: str, alias_value: str,
                        db_path: str | Path | None = None) -> dict:
-    """Add an alias (name or email) for a customer."""
-    if alias_type not in ("name", "email"):
-        raise ValueError("alias_type must be 'name' or 'email'")
+    """Add an alias (name, email or phone) for a customer.
+
+    `phone` joined the list in the alias merge (Kerry 2026-09-04) — this
+    table is now the ONE alias store, so it has to hold every kind.
+    """
+    if alias_type not in ("name", "email", "phone"):
+        raise ValueError("alias_type must be 'name', 'email' or 'phone'")
     alias_value = alias_value.strip()
     if not alias_value:
         raise ValueError("alias_value cannot be empty")
     if alias_type == "email":
         alias_value = alias_value.lower()
     with _connect(db_path) as conn:
+        unify_alias_tables(conn)
+        # customer_id AT INSERT TIME, not at the next boot's backfill
+        # (guiding principle 6). This row has to do its job the moment
+        # Kerry adds it: is_known_contact_alias keys on customer_id, so a
+        # NULL here meant a freshly typed alias silently did nothing until
+        # the next deploy.
+        cid_row = conn.execute(
+            "SELECT customer_id FROM customers WHERE "
+            "TRIM(COALESCE(first_name,'')||' '||COALESCE(last_name,'')) = ? "
+            "COLLATE NOCASE", (customer_name.strip(),)).fetchone()
+        cid = cid_row["customer_id"] if cid_row else None
+        if cid and alias_type in CONTACT_ALIAS_FIELDS and \
+                is_known_contact_alias(conn, cid, alias_type, alias_value):
+            return {"id": None, "type": alias_type, "value": alias_value,
+                    "existed": True}
         existing = conn.execute(
             """SELECT id FROM customer_aliases
                WHERE customer_name = ? COLLATE NOCASE AND alias_type = ?
@@ -24269,11 +24508,18 @@ def add_customer_alias(customer_name: str, alias_type: str, alias_value: str,
         if existing:
             return {"id": existing["id"], "type": alias_type, "value": alias_value, "existed": True}
         cursor = conn.execute(
-            "INSERT OR IGNORE INTO customer_aliases (customer_name, alias_type, alias_value) VALUES (?, ?, ?)",
-            (customer_name, alias_type, alias_value),
+            "INSERT OR IGNORE INTO customer_aliases "
+            "(customer_name, alias_type, alias_value, customer_id) "
+            "VALUES (?, ?, ?, ?)",
+            (customer_name, alias_type, alias_value, cid),
         )
+        # Adding the alias is also the answer to any open drift item that
+        # was asking about this exact value — same action, both jobs.
+        cleared = _resolve_warnings_matching_aliases(conn)
         conn.commit()
-        return {"id": cursor.lastrowid, "type": alias_type, "value": alias_value, "existed": False}
+        return {"id": cursor.lastrowid, "type": alias_type,
+                "value": alias_value, "customer_id": cid,
+                "warnings_cleared": cleared, "existed": False}
 
 
 def delete_customer_alias(alias_id: int, db_path: str | Path | None = None) -> bool:

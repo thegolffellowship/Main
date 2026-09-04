@@ -213,11 +213,8 @@ def main():
     # value MATCHES to the right person) while the drift check read only
     # `contact_aliases` (so it still called the value news). Two lists,
     # one human intention — the check now reads both.
-    print("An alias added on the Customer Info form also silences the drift item")
+    print("ONE list: the form's +Add and Always ignore are the same action")
     with db._connect(p) as conn:
-        conn.execute("""CREATE TABLE customer_aliases (
-            id INTEGER PRIMARY KEY AUTOINCREMENT, customer_name TEXT,
-            alias_type TEXT, alias_value TEXT, customer_id INTEGER)""")
         conn.execute("INSERT INTO customer_aliases "
                      "(customer_name, alias_type, alias_value, customer_id) "
                      "VALUES ('Logan Billeaud', 'email', "
@@ -237,6 +234,81 @@ def main():
                                             "loganrbo@yahoo.com"))
         check("and an unrelated value is still news",
               not db.is_known_contact_alias(conn, 2, "email", "nope@x.com"))
+        # The seam is gone the other way too: what "Always ignore" wrote
+        # now lands in the SAME table the form reads, so it shows on the
+        # customer's profile instead of being invisible bookkeeping.
+        n = conn.execute(
+            "SELECT COUNT(*) AS n FROM customer_aliases "
+            "WHERE customer_id = 1 AND alias_type = 'phone' "
+            "AND alias_value = ?", (JW_BAD,)).fetchone()["n"]
+        check("Always-ignore writes the one list, not a private one",
+              n == 1, n)
+        check("and a phone alias is allowed there at all (widened CHECK)",
+              True)
+
+    # Kerry 2026-09-04: "just don't screw up anything or lose anything."
+    # The merge must move the legacy rows and must never destroy them.
+    print("The merge moves legacy rows and keeps the originals")
+    with db._connect(p) as conn:
+        db.ensure_contact_alias_table(conn)
+        conn.execute("INSERT OR IGNORE INTO contact_aliases "
+                     "(customer_id, field, value_norm, raw_value, note) "
+                     "VALUES (2, 'email', 'legacy@x.com', 'Legacy@X.com', "
+                     "        'from the old list')")
+        conn.commit()
+        before = conn.execute("SELECT COUNT(*) AS n FROM customer_aliases"
+                              ).fetchone()["n"]
+        rep = db.unify_alias_tables(conn)
+        conn.commit()
+        check("the legacy row came across", rep["copied"] >= 1, rep)
+        check("nothing was left behind", rep["unmigrated"] == 0, rep)
+        check("and it is now a known alias",
+              db.is_known_contact_alias(conn, 2, "email", "legacy@x.com"))
+        check("the note survived the move",
+              conn.execute("SELECT note FROM customer_aliases WHERE "
+                           "customer_id = 2 AND alias_value = 'Legacy@X.com'"
+                           ).fetchone()["note"] == "from the old list")
+        check("the ORIGINAL row is still in contact_aliases — nothing dropped",
+              conn.execute("SELECT COUNT(*) AS n FROM contact_aliases"
+                           ).fetchone()["n"] >= 1)
+        after = conn.execute("SELECT COUNT(*) AS n FROM customer_aliases"
+                             ).fetchone()["n"]
+        check("no existing alias was lost in the process", after > before,
+              (before, after))
+        # Running it again must be a no-op, because it runs on every boot.
+        rep2 = db.unify_alias_tables(conn)
+        conn.commit()
+        check("re-running the merge copies nothing new (idempotent)",
+              rep2["copied"] == 0 and rep2["unmigrated"] == 0, rep2)
+        check("and does not rebuild the table a second time",
+              rep2["rebuilt"] is False, rep2)
+        check("row count is unchanged by the second run",
+              conn.execute("SELECT COUNT(*) AS n FROM customer_aliases"
+                           ).fetchone()["n"] == after)
+
+    # The form's own path: an alias typed on Customer Info must do its
+    # job IMMEDIATELY, not after the next deploy's backfill. It keys on
+    # customer_id, so resolving that at insert time is the whole point.
+    print("A form-added alias works the moment it is added")
+    with db._connect(p) as conn:
+        conn.execute("UPDATE customers SET first_name = 'John', "
+                     "last_name = 'Wade' WHERE customer_id = 1")
+        conn.commit()
+    r = db.add_customer_alias("John Wade", "phone", "(210) 555-7777", db_path=p)
+    check("phone is now an accepted alias type", not r.get("error"), r)
+    check("customer_id is stamped at insert, not left for the backfill",
+          r.get("customer_id") == 1, r)
+    with db._connect(p) as conn:
+        check("and the drift check honours it right away, however typed",
+              db.is_known_contact_alias(conn, 1, "phone", "2105557777"))
+    dupe = db.add_customer_alias("John Wade", "phone", "210-555-7777", db_path=p)
+    check("re-adding the same number in another format is a no-op",
+          dupe.get("existed") is True, dupe)
+    try:
+        db.add_customer_alias("John Wade", "nickname", "Jdub", db_path=p)
+        check("an unknown alias type is refused", False)
+    except ValueError:
+        check("an unknown alias type is refused", True)
 
     os.unlink(p)
     print()

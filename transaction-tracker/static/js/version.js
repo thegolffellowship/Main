@@ -1,5 +1,15 @@
-window.TGF_VERSION = "2.319.0";
+window.TGF_VERSION = "2.320.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.320.0",
+    date: "2026-09-04",
+    changes: [
+      "ONE ALIAS LIST. Kerry ratified the schema change: 'Get rid of the seam...just don't screw up anything or lose anything.' There were two tables holding the same human fact \u2014 customer_aliases (190 rows, ~90 readers, the matching list the parser uses to decide who someone is) and contact_aliases (1 row, 3 readers, the don't-warn list the drift check uses). Adding an address in one place did not do the other's job. customer_aliases survives: moving 90 identity-resolution readers to satisfy 3 drift readers is the change most likely to break something.",
+      "Its alias_type CHECK predated phone aliases, so the table is rebuilt once to widen it \u2014 count-verified before the original is dropped, both unique indexes recreated, and the rebuild REFUSES to run if any view or trigger depends on the table. NOTHING IS DROPPED: contact_aliases keeps its rows and its table, simply no longer read or written. That is the rollback. It can be removed in a later release once this has held.",
+      "Phone is now an alias type on the Customer Info form, so an unreachable work number can be recorded the same way an old address is.",
+      "An alias added on the form now resolves its customer_id AT INSERT TIME rather than waiting for the next deploy's backfill \u2014 the drift check keys on customer_id, so until now a freshly typed alias silently did nothing until the app next restarted. It also closes any open action item asking about that exact value, and it is idempotent on the NORMALIZED value, so '(210) 555-7777' and '210-555-7777' can no longer both land as separate aliases for one number.",
+    ],
+  },
   {
     version: "2.319.0",
     date: "2026-09-04",
