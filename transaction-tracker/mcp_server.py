@@ -2221,8 +2221,9 @@ def _scoring_dispatch(url: str, extract: str):
                 "campaign": _b.get("name"),
                 "margin": _v.get("margin"),
                 "collected": _v.get("collected"),
+                "margin_actual": _v.get("margin_actual"),
+                "overstated": _v.get("overstated"),
                 "rows_reconcile": _v.get("rows_reconcile"),
-                "residual_total": _v.get("residual_total"),
                 "rows": _v.get("rows"),
             }, indent=2, default=str)
         if cmd == "scoring-campaigns":

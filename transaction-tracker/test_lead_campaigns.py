@@ -370,8 +370,10 @@ def main():
     check("it carries every bucket the money splits into",
           (row["collected"], row["course"], row["prizes"], row["fee"],
            row["margin"]) == (64.0, 34.0, 14.0, 2.0, 14.0), row)
-    check("the buckets reconcile to what the player paid — residual 0",
-          row["residual"] == 0.0 and v["rows_reconcile"] is True, row)
+    check("what was left over matches what the books booked",
+          row["margin_actual"] == 16.0 and row["margin_booked"] == 14.0, row)
+    check("and the gap is reported, not hidden",
+          row["overstated"] == -2.0, row)
     check("the rows sum to the headline margin",
           round(sum(r["margin"] for r in v["rows"]), 2) == v["margin"], v)
     check("and to the headline collected",
@@ -384,13 +386,33 @@ def main():
         conn.commit()
     v2 = campaigns.campaign_stats(db_path, today="2026-09-03",
                                   gap_fill_seconds=0)["campaigns"][0]["value"]
-    check("an allocation that does not add up is FLAGGED, not hidden",
-          v2["rows_reconcile"] is False and v2["rows"][0]["residual"] == 9.0,
+    check("a booked margin above what was left over is FLAGGED",
+          v2["rows_reconcile"] is False and v2["rows"][0]["overstated"] == -11.0,
           v2["rows"][0])
     with db._connect(db_path) as conn:
         conn.execute("UPDATE acct_allocations SET prize_pool = 14.00 "
                      "WHERE order_id = 'O-2'")
         conn.commit()
+
+    # THE REAL FINDING this table exposed on production: tgf_operating
+    # is the event's STANDARD markup and never looks at what the player
+    # paid, so a 1st Timer who came in $25 under the guest rate still
+    # books the full markup. The books say more was kept than was.
+    with db._connect(db_path) as conn:
+        conn.execute("UPDATE acct_allocations SET total_collected = 55.00, "
+                     "course_payable = 54.12, prize_pool = 7.00, "
+                     "tgf_operating = 8.00 WHERE order_id = 'O-2'")
+        conn.commit()
+    disc = campaigns.campaign_stats(db_path, today="2026-09-03",
+                                    gap_fill_seconds=0)["campaigns"][0]["value"]
+    check("a discounted round books more margin than was left over",
+          disc["rows"][0]["margin_booked"] == 8.0
+          and disc["rows"][0]["margin_actual"] == -6.12, disc["rows"][0])
+    check("the overstatement is quantified, per row and in total",
+          disc["rows"][0]["overstated"] == 14.12
+          and disc["overstated"] == 14.12, disc)
+    check("and the headline is marked as not reconciling",
+          disc["rows_reconcile"] is False, disc)
 
     print("Closed window + converted_at stamp")
     st = campaigns.campaign_stats(db_path, today="2026-10-30", gap_fill_seconds=0)

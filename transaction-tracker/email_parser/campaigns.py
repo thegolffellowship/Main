@@ -481,7 +481,8 @@ def campaign_value(lead_rows: list[dict], conn,
     orders = sorted({r["order_id"] for r in rows if r["order_id"]})
     out["orders"] = len(orders)
     out["rows"] = []
-    out["residual_total"] = 0.0
+    out["margin_actual"] = 0.0
+    out["overstated"] = 0.0
     out["rows_reconcile"] = True
     if not orders:
         return out
@@ -520,11 +521,23 @@ def campaign_value(lead_rows: list[dict], conn,
     out["collected"] = round(agg["collected"] or 0.0, 2)
 
     # The audit trail (Kerry 2026-09-04: "I want to make sure your math
-    # is correct"). Every allocation row behind the margin, per person,
-    # with the buckets it splits into. The four destinations sum to what
-    # the player paid — course, prizes, processor, TGF — so `residual`
-    # is a genuine self-check: anything but ~0 means the allocation
-    # itself is wrong, not the display.
+    # is correct"). It earned its keep immediately: the headline margin
+    # OVERSTATES what TGF kept.
+    #
+    # `tgf_operating` is the event's STANDARD markup
+    # (_calc_event_allocation = tgf_markup + side_markup). It does not
+    # look at what the player actually paid, so a 1st Timer who came in
+    # $25 under the guest rate still books the full markup and the
+    # shortfall is invisible. Memberships are exact; discounted rounds
+    # are not.
+    #
+    # Hence two figures per row:
+    #   margin_booked  — tgf_operating, what the books say.
+    #   margin_actual  — collected - course - surcharge - prizes, what
+    #                    was genuinely left over.
+    # The processor fee is in NEITHER: the customer pays it on top, so
+    # it is not inside `collected` (which is item_price) and charging it
+    # here would double-count.
     out["rows"] = []
     for r in conn.execute(
             f"SELECT a.order_id, a.event_name, a.allocation_date, "
@@ -547,16 +560,21 @@ def campaign_value(lead_rows: list[dict], conn,
             tuple(orders)).fetchall():
         d = dict(r)
         d["player"] = (d.get("player") or "").strip() or "(unknown)"
-        d["residual"] = round(d["collected"] - d["course"] - d["surcharge"]
-                              - d["prizes"] - d["fee"] - d["margin"], 2)
+        d["margin_booked"] = d["margin"]
+        d["margin_actual"] = round(d["collected"] - d["course"]
+                                   - d["surcharge"] - d["prizes"], 2)
+        # Positive = the books claim more than was actually left over.
+        d["overstated"] = round(d["margin_booked"] - d["margin_actual"], 2)
         for k in ("collected", "course", "surcharge", "prizes", "fee",
-                  "tax", "margin"):
+                  "tax", "margin", "margin_booked", "margin_actual",
+                  "overstated"):
             d[k] = round(d[k], 2)
         out["rows"].append(d)
-    out["residual_total"] = round(sum(r["residual"] for r in out["rows"]), 2)
+    out["margin_actual"] = round(sum(r["margin_actual"] for r in out["rows"]), 2)
+    out["overstated"] = round(out["margin"] - out["margin_actual"], 2)
     out["coverage_pct"] = (round(100.0 * out["allocated_orders"]
                                  / out["orders"], 1) if out["orders"] else None)
-    out["rows_reconcile"] = abs(out["residual_total"]) < 0.05
+    out["rows_reconcile"] = abs(out["overstated"]) < 0.05
     return out
 
 
@@ -694,6 +712,15 @@ def campaign_stats(db_path: str | Path | None = None,
                               / spend, 1) if spend else None),
                 "value_per_lead": (round((value.get("margin") or 0)
                                          / f["leads"], 2) if f["leads"] else None),
+                # The audit's honest figure, and what ROI looks like on
+                # it. The headline still quotes the booked margin, but
+                # nobody should have to open a table to learn the two
+                # differ.
+                "margin_actual": value.get("margin_actual"),
+                "overstated": value.get("overstated"),
+                "reconciles": value.get("rows_reconcile"),
+                "roas_actual": (round((value.get("margin_actual") or 0) / spend, 2)
+                                if spend else None),
                 "coverage_pct": value.get("coverage_pct"),
                 "coverage_pending": value.get("coverage_pending"),
             }

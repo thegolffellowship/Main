@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.314.1";
+window.TGF_VERSION = "2.315.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.315.0",
+    date: "2026-09-04",
+    changes: [
+      "The margin breakdown found a real problem on its first run against production, which is the point of building it. tgf_operating is the event's STANDARD markup and never looks at what the player actually paid, so a 1st Timer who came in $25 under the guest rate still books the full markup. Across the Fall 2026 campaign the books claim $245 of margin where $141.91 was actually left after the course and the winners were paid. Membership rows agree to the penny; discounted rounds are where it goes wrong.",
+      "The table now shows BOOKED next to ACTUALLY LEFT (paid minus course minus prizes) and the overstatement per row, and the headline tile says 'books say' with the real figure beside it whenever the two disagree. The card processor fee is in neither column — the player pays it on top, so it is not inside what was collected and charging it against the margin would double-count.",
+      "An earlier version of this check asserted a reconciliation rule that was itself wrong (it subtracted the processor fee from the collected amount), which would have reported every membership as broken. Corrected before anyone acted on it.",
+    ],
+  },
   {
     version: "2.314.1",
     date: "2026-09-04",
