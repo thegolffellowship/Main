@@ -1,5 +1,15 @@
-window.TGF_VERSION = "2.302.1";
+window.TGF_VERSION = "2.303.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.303.0",
+    date: "2026-09-04",
+    changes: [
+      "FIX: the Lead Center has been blank on mobile since v2.300.0 shipped last night. That release collapsed the P1-P4 presets from per-slot keys (tue/sat/both) to a single text field, and a legacy line in /api/leads kept indexing [\"tue\"] — a KeyError that 500'd the entire route. Every lead, every filter, gone. Kerry found it, not the test suite.",
+      "Two things turned a one-line bug into an invisible one. The route's error was OUTSIDE the try/except that guards the per-lead SMS work, so one stale key took the whole payload down. And the page wrote its failure banner only into the desktop list container, which is display:none under 768px — so on the phone Kerry actually works from, a 500 rendered as a silent blank page with no error at all. The banner now writes to both containers and says whether it is a login problem or a bug, because a failure has to be visible on the surface it happened on.",
+      "New test_leads_page_render.js runs the Lead Center's own script headless and renders real-shaped leads — a backfilled one carrying the 48-hour alarm, a fresh one, a converted member, and one whose server-side SMS pick failed. Nothing in the suite touched the page itself, which is exactly why nine green suites sat on top of a dead screen. A Python guard now also asserts every preset the route hands the client resolves without indexing a slot key.",
+      "price_block no longer appears in the SMS ▾ picker. It is a fragment other presets embed, not something to send on its own.",
+    ],
+  },
   {
     version: "2.302.1",
     date: "2026-09-04",

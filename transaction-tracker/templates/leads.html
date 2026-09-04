@@ -333,8 +333,18 @@
     const isLate = l => l.status === "new" && (l.days_since_arrival ?? 0) >= 2;
     async function loadLeads() {
         const res = await fetch("/api/leads");
-        if (!res.ok) { document.getElementById("ld-dlist").innerHTML =
-            "<div class='ld-dempty'>Failed to load (need manager login).</div>"; return; }
+        if (!res.ok) {
+            // BOTH containers: #ld-dlist is display:none under 768px, so
+            // writing the error only there meant a 500 rendered as a
+            // blank page on the phone Kerry actually works from. A
+            // failure must be visible on the surface it happened on.
+            const msg = `<div class='ld-dempty'>Couldn't load leads (HTTP ${res.status}). `
+                + `${res.status === 401 || res.status === 403
+                    ? "Sign in as a manager." : "The server errored — this is a bug, not your login."}</div>`;
+            document.getElementById("ld-dlist").innerHTML = msg;
+            document.getElementById("ld-mlist").innerHTML = msg;
+            return;
+        }
         ALL = await res.json();
         renderLeads();
     }

@@ -260,6 +260,25 @@ def main():
     check("unchecking clears it", got == 0, got)
     os.unlink(tmp.name)
 
+    print("The /api/leads payload shape (v2.300.0 regression)")
+    # v2.300.0 collapsed P1-P4 from per-slot keys (tue/sat/both) to one
+    # `text`, and a legacy line in /api/leads still read ["tue"]. The
+    # KeyError 500'd the route and the Lead Center came up BLANK on
+    # mobile. Every preset the route hands the client must resolve to a
+    # body without indexing a slot key.
+    order = leads.sms_preset_order(presets)
+    for k in order:
+        p = presets[k]
+        body = p.get("text") or p.get("tue") or p.get("both") or ""
+        check(f"{k} resolves to a body without a slot key", bool(body), p.keys())
+    _p4 = presets.get("p4") or {}
+    check("the legacy sms_template still resolves",
+          bool(_p4.get("text") or _p4.get("tue") or _p4.get("both")), _p4.keys())
+    check("fragments are not offered as pickable presets",
+          not ({"closer", "p9", "price_block"} & set(order)), order)
+    check("every ORDERED preset actually exists in the set",
+          all(k in presets for k in order), order)
+
     print("Selection logic still holds")
     r = pick(lead(imp="Competition", avail="Tuesdays only"))
     check("Competition -> P1", r["preset"] == "p1", r)

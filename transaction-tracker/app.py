@@ -11401,7 +11401,16 @@ def api_leads():
             l["sms"] = None
     # Kept for older clients: the picked-by-default single template
     # shape + the next-event map.
-    sms_template = sms_presets["p4"]["tue"]
+    # v2.300.0 collapsed P1-P4 from per-slot keys (tue/sat/both) to a
+    # single `text`, and this legacy line kept indexing ["tue"] — a hard
+    # KeyError that 500'd the whole route, so the Lead Center rendered
+    # EMPTY on mobile (the desktop error banner lives in a container
+    # that is display:none under 768px, which is why it failed silently
+    # on the phone Kerry actually works from). Never index a preset key
+    # directly again.
+    _p4 = sms_presets.get("p4") or {}
+    sms_template = (_p4.get("text") or _p4.get("tue")
+                    or _p4.get("both") or "")
     next_events = dict(nexts.get("any") or {})
     from email_parser.leads import (get_tag_options, get_answer_options,
                                     SMS_P9_PRESETS)

@@ -2438,11 +2438,16 @@ def get_sms_presets(db_path=None) -> dict:
     return out
 
 
+# Not presets — fragments other presets embed. They must never appear in
+# the ▾ picker as something Kerry can send on its own.
+_SMS_FRAGMENTS = ("closer", "p9", "price_block")
+
+
 def sms_preset_order(presets: dict) -> list[str]:
     order = [k for k in SMS_PRESET_ORDER if k in presets]
     order += sorted(k for k in presets
-                    if k not in order and k not in ("closer", "p9"))
-    return order
+                    if k not in order and k not in _SMS_FRAGMENTS)
+    return [k for k in order if k not in _SMS_FRAGMENTS]
 
 
 def _event_label(row) -> str:
