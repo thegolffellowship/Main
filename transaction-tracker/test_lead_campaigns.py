@@ -274,8 +274,8 @@ def main():
 
     print("Lifetime value + ROI")
     val = st2["campaigns"][0]["value"]
-    check("collected sums what those customers actually paid",
-          val["collected"] == 278.0, val)
+    check("with nothing allocated there is no money to report yet",
+          val["collected"] == 0.0 and val["margin"] == 0.0, val)
     # SQLite is dynamically typed and real rows DO hold item_price as
     # TEXT. Summing those in Python took the whole Stats view down on
     # production with "unsupported operand type(s) for +: 'int' and
@@ -286,10 +286,20 @@ def main():
                      "VALUES (9002, 'active', 'GoDaddy', 's9.23 Quarry', "
                      "'58.00', 'O-5')")
         conn.commit()
-    check("a TEXT item_price does not blow up the sum",
-          campaigns.campaign_stats(db_path, today="2026-09-03",
-                                   gap_fill_seconds=0)["campaigns"][0]
-          ["value"]["collected"] == 336.0)
+    # Both money figures come off acct_allocations, NOT items.item_price:
+    # that column is not reliably numeric (SQLite is dynamically typed)
+    # and summing it gave $0 against $245 of real margin on production.
+    # Same rows for both means one coverage number covers both.
+    with db._connect(db_path) as conn:
+        conn.execute("INSERT INTO acct_allocations (order_id, item_id, "
+                     "tgf_operating, total_collected) "
+                     "VALUES ('O-1', 1, 21.0, '139.00')")
+        conn.commit()
+    v2 = campaigns.campaign_stats(db_path, today="2026-09-03",
+                                  gap_fill_seconds=0)["campaigns"][0]["value"]
+    check("collected and margin both come from the allocations layer",
+          v2["collected"] == 139.0 and v2["margin"] == 21.0, v2)
+    check("a TEXT amount does not blow up the sum", v2["collected"] == 139.0)
     check("it counts orders, not just items", val["orders"] == 3, val)
     roi = st2["campaigns"][0]["roi"]
     check("ROI is reported once there is spend", roi is not None, roi)
@@ -310,11 +320,11 @@ def main():
     st3 = campaigns.campaign_stats(db_path, today="2026-09-03",
                                gap_fill_seconds=0)
     check("an allocated order feeds the margin",
-          st3["campaigns"][0]["value"]["margin"] == 15.0,
+          st3["campaigns"][0]["value"]["margin"] == 36.0,
           st3["campaigns"][0]["value"])
     check("ROAS on margin is margin over spend",
           abs(st3["campaigns"][0]["roi"]["roas_margin"]
-              - 15.0 / st3["campaigns"][0]["spend"]) < 0.01,
+              - 36.0 / st3["campaigns"][0]["spend"]) < 0.01,
           st3["campaigns"][0]["roi"])
 
     print("Closed window + converted_at stamp")

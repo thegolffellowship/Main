@@ -429,6 +429,14 @@ def campaign_value(customer_ids: list[int], conn,
                    margin), after course fees go to the course and prize
                    pools go to the winners.
 
+    BOTH come from `acct_allocations`, deliberately. Summing
+    `items.item_price` for the gross looked simpler and gave $0 against
+    a real $245 of margin on production — SQLite is dynamically typed
+    and that column is not reliably numeric. Reading both figures off
+    the same rows also means ONE coverage number applies to both,
+    instead of a gross that looks complete sitting next to a margin
+    that is not.
+
     Most of an entry fee is pass-through. ROI computed on `collected`
     would read roughly six times better than the business actually did,
     which is exactly the number nobody should base an ad budget on. ROI
@@ -450,19 +458,15 @@ def campaign_value(customer_ids: list[int], conn,
         return out
     ph = ",".join("?" * len(customer_ids))
     rows = conn.execute(
-        # CAST, not COALESCE alone: SQLite is dynamically typed and some
-        # item_price values are stored as TEXT, so summing them in
-        # Python blew up with "unsupported operand type(s) for +: 'int'
-        # and 'str'" and took the whole Stats view down.
-        f"SELECT i.id, i.order_id, "
-        f"CAST(COALESCE(i.item_price, 0) AS REAL) AS price "
+        # items answers WHICH orders are theirs; the money comes from the
+        # allocations layer below.
+        f"SELECT i.id, i.order_id "
         f"FROM items i WHERE i.customer_id IN ({ph}) "
         f"AND COALESCE(i.transaction_status, 'active') = 'active' "
         f"AND i.parent_item_id IS NULL "
         f"AND i.merchant NOT IN ({','.join(repr(m) for m in PLACEHOLDER_MERCHANTS)})",
         tuple(customer_ids)).fetchall()
     out["items"] = len(rows)
-    out["collected"] = round(sum(float(r["price"] or 0) for r in rows), 2)
     orders = sorted({r["order_id"] for r in rows if r["order_id"]})
     out["orders"] = len(orders)
     if not orders:
@@ -493,11 +497,13 @@ def campaign_value(customer_ids: list[int], conn,
 
     agg = conn.execute(
         f"SELECT COUNT(DISTINCT a.order_id) AS n, "
-        f"       COALESCE(SUM(CAST(a.tgf_operating AS REAL)), 0) AS margin "
+        f"       COALESCE(SUM(CAST(a.tgf_operating AS REAL)), 0) AS margin, "
+        f"       COALESCE(SUM(CAST(a.total_collected AS REAL)), 0) AS collected "
         f"FROM acct_allocations a WHERE a.order_id IN ({oph})",
         tuple(orders)).fetchone()
     out["allocated_orders"] = agg["n"] or 0
     out["margin"] = round(agg["margin"] or 0.0, 2)
+    out["collected"] = round(agg["collected"] or 0.0, 2)
     out["coverage_pct"] = (round(100.0 * out["allocated_orders"]
                                  / out["orders"], 1) if out["orders"] else None)
     return out

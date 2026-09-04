@@ -640,8 +640,16 @@ because the gap between them is the point:
 
 | | |
 |---|---|
-| `collected` | every dollar these customers have paid TGF, ever |
+| `collected` | `acct_allocations.total_collected` — every dollar these customers have paid TGF, ever |
 | `margin` | `acct_allocations.tgf_operating` — what TGF **kept** |
+
+**Both come off `acct_allocations`, deliberately.** Summing
+`items.item_price` looked simpler and reported **$0 against a real $245
+of margin** on production — SQLite is dynamically typed and that column
+is not reliably numeric. Reading both off the same rows also means ONE
+coverage number covers both, instead of a gross that looks complete
+sitting beside a margin that isn't. `items` is used only to decide which
+orders belong to these customers.
 
 **ROI is on MARGIN.** Most of an entry fee passes through to the course
 and the prize pool (the Money Flow waterfall put TGF's keep near 17% of

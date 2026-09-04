@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.312.1";
+window.TGF_VERSION = "2.312.2";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.312.2",
+    date: "2026-09-04",
+    changes: [
+      "Gross collected now comes from the allocations layer alongside the margin, instead of summing items.item_price. The CAST in 2.312.1 stopped the crash but produced $0 of revenue next to $245 of real margin, which is worse — a wrong number is worse than an error, because an error gets fixed. Both figures now read off the same rows, so one coverage percentage covers both rather than a gross that looks complete sitting beside a margin that is not.",
+    ],
+  },
   {
     version: "2.312.1",
     date: "2026-09-04",
