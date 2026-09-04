@@ -54,13 +54,15 @@ global.currentRole = "admin"; global.shellApplyRole = () => {};
 
 let render, setALL;
 try {
-    eval(js + "\nglobal.__render = renderLeads; global.__setALL = v => { ALL = v; };");
+    eval(js + "\nglobal.__render = renderLeads; global.__setALL = v => { ALL = v; };"
+            + "\nglobal.__F = { toggleSection };");
     render = global.__render; setALL = global.__setALL;
     console.log("  PASS  the page script evaluates");
 } catch (e) {
     console.log("  FAIL  the page script evaluates  " + e.message);
     process.exit(1);
 }
+const F = global.__F;
 
 // ---- realistic payload ---------------------------------------------
 const P = {
@@ -165,6 +167,54 @@ render();
 check("a GG RSVP counts too — that is the person acting",
       /1 responded/.test(touchSub()), touchSub());
 setALL(ALL); render();
+
+// ---- sections: order + accordion (Kerry 2026-09-04) ----------------
+console.log("Sections");
+const barsOf = html => [...html.matchAll(/class="ld-secbar[^"]*"[^>]*data-sec="([^"]+)"/g)]
+    .map(m => m[1]);
+const order = barsOf(mob);
+check("NEW LEADS outranks FOLLOW-UPS DUE",
+      order.indexOf("NEW LEADS") >= 0
+      && order.indexOf("NEW LEADS") < order.indexOf("FOLLOW-UPS DUE"), order);
+check("each section appears exactly once — tier() and sectionOf() agree",
+      order.length === new Set(order).size, order);
+check("mobile gets section bars too, not just desktop",
+      barsOf(desk).length === order.length, barsOf(desk));
+
+const hiddenRows = h => (h.match(/class="ld-(?:drow|mcard)[^"]*"[^>]*hidden/g) || []).length;
+const allRows = h => (h.match(/class="ld-(?:drow|mcard)[^"]*"/g) || []).length;
+check("every section starts COLLAPSED",
+      hiddenRows(mob) === allRows(mob) && allRows(mob) > 0,
+      hiddenRows(mob) + "/" + allRows(mob));
+check("the collapsed bars still carry their counts",
+      /class="n">· \d+/.test(mob), mob.slice(0, 200));
+
+F.toggleSection("NEW LEADS");
+const openMob = store["ld-mlist"].innerHTML;
+const openRows = [...openMob.matchAll(/class="ld-mcard[^"]*"\s+data-sec="([^"]+)"([^>]*)>/g)]
+    .map(m => ({ sec: m[1], hidden: /hidden/.test(m[2]) }));
+check("only the open section's cards are visible",
+      openRows.length > 0
+      && openRows.every(r => r.hidden === (r.sec !== "NEW LEADS")),
+      JSON.stringify(openRows));
+check("the open bar shows a down chevron",
+      /ld-secbar[^"]*open[^"]*"[^>]*data-sec="NEW LEADS"/.test(openMob),
+      openMob.slice(0, 300));
+
+F.toggleSection("FOLLOW-UPS DUE");
+const swapped = [...store["ld-mlist"].innerHTML
+    .matchAll(/class="ld-mcard[^"]*"\s+data-sec="([^"]+)"([^>]*)>/g)]
+    .map(m => ({ sec: m[1], hidden: /hidden/.test(m[2]) }));
+check("opening another auto-collapses the first — one at a time",
+      swapped.every(r => r.hidden === (r.sec !== "FOLLOW-UPS DUE")),
+      JSON.stringify(swapped));
+
+F.toggleSection("FOLLOW-UPS DUE");
+const reclosed = [...store["ld-mlist"].innerHTML
+    .matchAll(/class="ld-mcard[^"]*"\s+data-sec="([^"]+)"([^>]*)>/g)]
+    .map(m => /hidden/.test(m[2]));
+check("clicking the open section closes it again",
+      reclosed.length > 0 && reclosed.every(Boolean), reclosed);
 
 // Empty queue must say so rather than render blank.
 setALL({ ...ALL, leads: [] });

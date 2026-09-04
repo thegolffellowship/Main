@@ -573,6 +573,38 @@ attribution tag, so **the All figure is the accurate one** and the
 per-campaign CPL understates by excluding them. The Leads tile's "Meta
 counts N" sub-label is the check.
 
+## Queue sections — order and accordion (Kerry 2026-09-04, v2.310.0)
+
+> "New Leads should have priority over Follow-Ups Due leads... start out
+> the sections collapsed with ability to expand. When another is
+> expanded, auto-collapse any that are currently expanded."
+
+**NEW LEADS now outranks FOLLOW-UPS DUE.** A new lead is a stranger
+whose 48-hour clock has not started; a follow-up is someone already
+contacted. The unstarted clock is the one that runs out.
+
+**`tier()` and `sectionOf()` must stay in lockstep.** The section bar
+drops in wherever the section CHANGES down an already-sorted list, so a
+disagreement between the two doesn't reorder anything — it splits one
+section into two bars with the same name. Both were changed together and
+a test asserts each section appears exactly once.
+
+**Strict accordion, at most one section open, all closed on load.**
+`openSection` lives outside `renderLeads` so tagging a lead doesn't slam
+the section shut mid-task, but it is deliberately **not persisted** —
+"start out collapsed" means every load starts collapsed. Rows, detail
+blocks and mobile cards all carry `data-sec` and are hidden when their
+section isn't the open one; `[hidden]` needs `!important` because
+`.ld-drow` and `.ld-mcard` set `display` themselves.
+
+**Mobile gained section bars for the first time** in this change. They
+only ever rendered into the desktop list, so there was nothing to
+collapse on a phone — which is the surface where the wall of leads was
+worst.
+
+Flat sorts (anything other than Priority) have no sections, so no
+collapsing applies there.
+
 ## Morning follow-up digest (Kerry 2026-09-03, v2.302.0)
 
 > "Yes should be part of morning digest."

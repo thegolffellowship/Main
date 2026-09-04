@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.309.0";
+window.TGF_VERSION = "2.310.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.310.0",
+    date: "2026-09-04",
+    changes: [
+      "NEW LEADS now sits above FOLLOW-UPS DUE in the queue (Kerry: 'New Leads should have priority over Follow-Ups Due leads'). A new lead is a stranger whose 48-hour clock has not started yet; a follow-up is someone already contacted. The unstarted clock is the one that runs out.",
+      "Queue sections start COLLAPSED and behave as a strict accordion — opening one closes whatever was open. The Lead Center now opens as a short list of headings with counts instead of a wall of leads, and the state survives tagging a lead mid-task but resets on reload, because 'start out collapsed' means every load. Mobile got section bars for the first time in the process: they had only ever rendered into the desktop list, so the phone had no sections to collapse at all, which is exactly where the wall was worst.",
+      "The section header and the sort order are now changed together by rule. A bar drops in wherever the section CHANGES down a sorted list, so if the two disagree a section does not merely sort oddly — it splits into two bars with the same name. A test asserts each section appears exactly once.",
+    ],
+  },
   {
     version: "2.309.0",
     date: "2026-09-04",

@@ -57,6 +57,12 @@
            move under a TOUCHED bar) */
         .ld-secbar { background: #1B1B1B; color: #fff; font: 700 10px/1 'Bitter', serif; letter-spacing: 1.5px; text-transform: uppercase; padding: 6px 14px; }
         .ld-secbar .n { color: #9CA3AF; margin-left: 6px; letter-spacing: 0; }
+        .ld-secbar { cursor: pointer; user-select: none; }
+        .ld-secbar:hover { filter: brightness(1.25); }
+        .ld-secch { display: inline-block; width: 10px; margin-right: 6px;
+                    font-size: 9px; opacity: 0.85; }
+        /* .ld-drow and .ld-mcard set display, so [hidden] alone loses. */
+        .ld-drow[hidden], .ld-mcard[hidden], .ld-ddet[hidden] { display: none !important; }
         /* MEMBERS: the ultimate conversion (Kerry 2026-08-31) — TGF
            orange section, orange edge, filled star badge */
         .ld-secbar.member { background: var(--primary, #E87C3E); }
@@ -330,6 +336,16 @@
         fAvail.clear(); fWant.clear(); fLoop.clear();
         renderLeads();
     }
+    // At most ONE section open at a time (Kerry 2026-09-04). Null means
+    // everything collapsed, which is how every load starts — the queue
+    // opens as a short list of headings with counts rather than a wall
+    // of leads.
+    let openSection = null;
+    function toggleSection(name) {
+        openSection = openSection === name ? null : name;
+        renderLeads();
+    }
+
     const isLate = l => l.status === "new" && (l.days_since_arrival ?? 0) >= 2;
     async function loadLeads() {
         const res = await fetch("/api/leads");
@@ -590,13 +606,17 @@
         // note) · 2 touched, no disposition yet · 3 outreach sent, no
         // response · 4 member · 5 converted · 6 dismissed. Within a
         // tier, most recent activity first.
+        // Kerry 2026-09-04: "New Leads should have priority over
+        // Follow-Ups Due leads." A new lead is a stranger whose 48-hour
+        // clock has not started; a follow-up is someone already
+        // contacted. The unstarted clock is the one that runs out.
         const tier = l =>
             l.status === "dismissed" ? 8
-            : fuDue(l) ? 0
+            : l.status === "new" ? 0
+            : fuDue(l) ? 1
             : fuSnoozed(l) ? 7
             : isMember(l) ? 5
             : l.status === "converted" ? 6
-            : l.status === "new" ? 1
             : responded(l) ? 2
             : QUIET_TAGS.includes(l.tag || "") ? 4
             : 3;
@@ -688,11 +708,14 @@
         // only renders in flat sorts, where there are no sections.
         // TOUCHED splits into RESPONDED (hot tags — a conversation is
         // going) and NO RESPONSE (outreach made / no disposition yet).
+        // Mirrors tier() exactly. If the two disagree a section splits
+        // into two bars with the same name, because the bar drops in
+        // wherever the section CHANGES down a sorted list.
         const sectionOf = l =>
             l.status === "dismissed" ? "DISMISSED"
+            : l.status === "new" ? "NEW LEADS"
             : fuDue(l) ? "FOLLOW-UPS DUE"
             : fuSnoozed(l) ? "SNOOZED"
-            : l.status === "new" ? "NEW LEADS"
             : isMember(l) ? "MEMBERS"
             : l.status === "converted" ? "CONVERTED"
             : responded(l) ? "RESPONDED"
@@ -705,6 +728,14 @@
             secCounts[s] = (secCounts[s] || 0) + 1;
         });
         const showPill = sortKey !== "priority";
+        // Sections collapse (Kerry 2026-09-04: "start out the sections
+        // collapsed with ability to expand. When another is expanded,
+        // auto-collapse any that are currently expanded") — a strict
+        // accordion, at most one section open. openSection lives outside
+        // renderLeads so tagging a lead does not slam the section shut
+        // under him, but it is NOT persisted: every load starts closed,
+        // which is what "start out collapsed" means.
+        const useSections = !showPill;
         let curSection = null;
         const drows = [], cards = [];
         visible.forEach(l => {
@@ -810,11 +841,16 @@
             const notePrev = latestNote
                 ? `<div class="ld-dnote"><b>${esc((latestNote.author || "?")[0])}</b> · ${esc(fmtNoteTime(latestNote.created_at))} — ${esc(latestNote.note)}</div>`
                 : l.notes ? `<div class="ld-dnote">${esc(l.notes)}</div>` : "";
-            if (!showPill && sectionOf(l) !== curSection) {
-                curSection = sectionOf(l);
-                drows.push(`<div class="ld-secbar${SEC_CLASS[curSection] || ""}">${curSection}<span class="n">· ${secCounts[curSection]}</span></div>`);
+            const sec = sectionOf(l);
+            if (useSections && sec !== curSection) {
+                curSection = sec;
+                const isOpen = openSection === sec;
+                const bar = `<div class="ld-secbar${SEC_CLASS[sec] || ""}${isOpen ? " open" : ""}" data-sec="${esc(sec)}" onclick="toggleSection(this.dataset.sec)" title="${isOpen ? "Collapse" : "Expand"}"><span class="ld-secch">${isOpen ? "&#9662;" : "&#9656;"}</span>${sec}<span class="n">· ${secCounts[sec]}</span></div>`;
+                drows.push(bar);
+                cards.push(bar);
             }
-            drows.push(`<div class="ld-drow ${chCls}">
+            const secHidden = useSections && openSection !== sec ? " hidden" : "";
+            drows.push(`<div class="ld-drow ${chCls}" data-sec="${esc(sec)}"${secHidden}>
                 <div class="ld-dstatus">
                     ${showPill ? `<span class="ld-pill ld-${esc(l.status)}">${esc(l.status)}</span>` : ""}
                     <div class="ld-dsub ${late ? "ld-late" : ""}">${age}${late ? " · overdue" : ""}${l.touched_by ? ` · by ${esc(l.touched_by)}` : ""}</div>
@@ -839,7 +875,7 @@
                         <span class="ld-menu" id="ld-dmenu-${l.id}">${menuItems}</span></span>
                 </div>
             </div>
-            <div class="ld-ddet ${chCls}" id="ld-det-${l.id}">
+            <div class="ld-ddet ${chCls}" id="ld-det-${l.id}" data-sec="${esc(sec)}"${secHidden}>
                 <div class="ld-selform" id="ld-sel-${l.id}" hidden></div>
                 ${notesList ? `<table class="ld-mnotes">${notesList}</table><hr style="border:none;border-top:1px solid #E5E7EB">` : ""}
                 ${extras.length ? renderAnswerTable(extras) : "<span class='ld-dsub'>No form answers.</span>"}
@@ -847,7 +883,7 @@
             // Mobile call-sheet card (#361): one-glance triage,
             // two-tap contact. Badges always visible; sms:/tel:/mailto:
             // deep-links; newest note previewed; overflow menu.
-            cards.push(`<div class="ld-mcard ${chCls}">
+            cards.push(`<div class="ld-mcard ${chCls}" data-sec="${esc(sec)}"${secHidden}>
                 <div class="ld-mhead"><span class="ld-dot ${dotCls}"></span><b>${esc(name)}</b>${l.has_history ? ' <span class="ld-existing">customer</span>' : ""}
                     <span class="ld-mmeta ${late ? "ld-late" : ""}">${esc(l.chapter) || "unrouted"} · ${age} · ${esc(l.status)}</span>${fuChip}</div>
                 <div>${badgeHtml}${tagHtml}</div>
