@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.316.0";
+window.TGF_VERSION = "2.317.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.317.0",
+    date: "2026-09-04",
+    changes: [
+      "RESPONDED meant two different things on two different screens and Kerry resolved it: 'Responded definitely needs to be resolved. We don't want to put that into those statistics.' The Stats metric is now REPLIED and counts one thing only \u2014 a human wrote back to our outreach. It excludes Golf Genius RSVPs, HubSpot re-submissions and the app's own bookkeeping notes, and it no longer counts a bare conversion: somebody can register on GG without ever answering a text, and that is a conversion, not a reply.",
+      "The QUEUE keeps its broader RESPONDED, unchanged. Two words, two jobs \u2014 the queue answers 'who still needs me' and must not send Kerry chasing somebody who already RSVP'd; Stats answers 'did our outreach work' and is reported next to CPL, so it has to mean exactly one thing.",
+      "A reply is now RECORDED when it happens instead of being read off the tag later. It had to be: the conversion auto-detect overwrites tag with 'Became member' or 'Registered event', so a lead who texted back 'Interested' and then registered looked afterwards exactly like a lead who never answered. Reading the current tag would have undercounted precisely the campaigns that worked. Backfilled from the evidence that still exists, so the figure is no worse today and correct from here on.",
+    ],
+  },
   {
     version: "2.316.0",
     date: "2026-09-04",

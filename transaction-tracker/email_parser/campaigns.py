@@ -612,7 +612,7 @@ def campaign_value(lead_rows: list[dict], conn,
 def _funnel(leads: list[dict], today: date, cutoff: date | None) -> dict:
     """Counts for one bucket. cutoff = the trailing-window end (campaign
     end + 30d); None = no window (organic / undated)."""
-    f = {"leads": len(leads), "touched": 0, "responded": 0, "interested": 0,
+    f = {"leads": len(leads), "touched": 0, "replied": 0, "interested": 0,
          "players": 0, "members": 0, "registered": 0, "dismissed": 0,
          "new": 0, "players_trailing": 0, "members_trailing": 0}
     for l in leads:
@@ -622,9 +622,31 @@ def _funnel(leads: list[dict], today: date, cutoff: date | None) -> dict:
             f["new"] += 1
         if st in ("touched", "converted"):
             f["touched"] += 1
-            if tag in HOT_TAGS or (l.get("note_count") or 0) > 0 \
-                    or st == "converted":
-                f["responded"] += 1
+            # REPLIED is the STATS metric and it means one thing only:
+            # a human wrote back to our outreach. Kerry ruled it in
+            # mailbox #412 — "Responded definitely needs to be resolved.
+            # We don't want to put that into those statistics."
+            #
+            # So this excludes, deliberately:
+            #   * `auto` notes (bookkeeping the app wrote to itself),
+            #   * GG RSVPs and HubSpot re-submissions (the note query
+            #     that feeds note_count drops authors HS / GG / auto),
+            #   * bare `status == converted` — somebody can register on
+            #     Golf Genius without ever answering a text, and that is
+            #     a conversion, not a reply.
+            # HOT_TAGS stay in: nothing sets them automatically (the
+            # only machine-written tags are `Became member` and
+            # `Registered event`), so a hot tag means Kerry heard back.
+            #
+            # The QUEUE's broader RESPONDED is a different word for a
+            # different job and is unchanged — it answers "who still
+            # needs me", this answers "did our outreach work".
+            # replied_at is the durable record, stamped the moment a
+            # reply is seen; the tag and note checks stay as a fallback
+            # for anything that predates it or is stamped elsewhere.
+            if (l.get("replied_at") or tag in HOT_TAGS
+                    or (l.get("note_count") or 0) > 0):
+                f["replied"] += 1
         # UNIQUE leads who have registered for an event, members
         # included — a member who also plays belongs in both counts, so
         # this deliberately overlaps `members` rather than partitioning.
@@ -650,8 +672,8 @@ def _funnel(leads: list[dict], today: date, cutoff: date | None) -> dict:
                 f["players_trailing"] += 1
                 if is_mem:
                     f["members_trailing"] += 1
-    f["response_pct"] = (round(100.0 * f["responded"] / f["touched"], 1)
-                         if f["touched"] else None)
+    f["reply_pct"] = (round(100.0 * f["replied"] / f["touched"], 1)
+                      if f["touched"] else None)
     return f
 
 
@@ -662,6 +684,7 @@ def campaign_stats(db_path: str | Path | None = None,
     META panel (insights or manual spend), FUNNEL panel with CPL / CPP /
     CPMem current + 30-day trailing, per-chapter split."""
     from . import database as db
+    from .leads import _REPLY_EXCLUDE_SQL
     from .timezone_utils import today_central_str
     today_d = date.fromisoformat(today or today_central_str())
     campaigns = list_campaigns(db_path)
@@ -671,9 +694,14 @@ def campaign_stats(db_path: str | Path | None = None,
         conn.commit()
         leads = [dict(r) for r in conn.execute(
             "SELECT l.id, l.status, l.tag, l.chapter, l.campaign_id, "
-            "l.customer_id, l.converted_at, l.arrived_at, "
+            "l.customer_id, l.converted_at, l.arrived_at, l.replied_at, "
+            # Only notes a PERSON wrote count toward REPLIED — see
+            # leads.REPLY_EXCLUDED_NOTE_AUTHORS for why GG and HS are out
+            # here but still disarm the alarm in the queue. Matched
+            # case-insensitively so an author stored as 'gg' can't slip
+            # in as a reply.
             "(SELECT COUNT(*) FROM lead_notes n WHERE n.lead_id = l.id "
-            " AND COALESCE(n.author, '') NOT IN ('HS', 'GG', 'auto')) "
+            f" AND COALESCE(LOWER(n.author), '') NOT IN ({_REPLY_EXCLUDE_SQL})) "
             "AS note_count, "
             # Kerry 2026-09-04: "Registered event guests should show
             # total unique leads from this campaign who have registered

@@ -94,6 +94,22 @@ def _hubspot_token() -> str | None:
             or os.getenv("HUBSPOT_PRIVATE_APP_TOKEN")) or None
 
 
+# What counts as a HUMAN REPLY for the stats metric (mailbox #412).
+# Narrower than the queue's response signal on purpose: `auto` is the
+# app's own bookkeeping, `GG` is a Golf Genius RSVP and `HS` a HubSpot
+# re-submission. All three mean the lead did SOMETHING — which is why
+# they still disarm the 48-hour alarm — but none of them is the person
+# writing back, so none of them belongs in "did our outreach work".
+REPLY_EXCLUDED_NOTE_AUTHORS = ("auto", "gg", "hs")
+# Tags Kerry only reaches for after hearing back. Nothing sets these
+# automatically (the machine-written tags are 'Became member' and
+# 'Registered event'), so one of these IS evidence of a reply.
+REPLY_TAGS = ("Call back", "Interested", "Coming to event")
+
+_REPLY_EXCLUDE_SQL = ", ".join(f"'{a}'" for a in REPLY_EXCLUDED_NOTE_AUTHORS)
+_HOT_TAGS_SQL = ", ".join("'" + t.replace("'", "''") + "'" for t in REPLY_TAGS)
+
+
 def ensure_leads_table(conn: sqlite3.Connection) -> None:
     conn.execute("""
         CREATE TABLE IF NOT EXISTS leads (
@@ -164,6 +180,36 @@ def ensure_leads_table(conn: sqlite3.Connection) -> None:
         # date emails exactly once and a re-snoozed lead re-arms for
         # its new date automatically.
         conn.execute("ALTER TABLE leads ADD COLUMN follow_up_notified_for TEXT")
+    except sqlite3.OperationalError:
+        pass
+    try:
+        # REPLIED evidence (mailbox #412, Kerry: "Responded definitely
+        # needs to be resolved. We don't want to put that into those
+        # statistics.").
+        #
+        # The stats metric is REPLIED and means a human wrote back. The
+        # problem is that the evidence does not survive: the conversion
+        # auto-detect OVERWRITES tag with 'Became member' / 'Registered
+        # event', so a lead who texted back "Interested" and then
+        # registered looks, afterwards, exactly like a lead who never
+        # answered at all. Reading the reply off the CURRENT tag would
+        # therefore undercount every campaign that actually worked.
+        #
+        # So stamp it when it happens instead of reconstructing it
+        # later: first human reply wins, never cleared, no money and no
+        # member-facing effect. Backfilled below from the evidence that
+        # still exists today, which makes the metric no worse now and
+        # correct from here on.
+        conn.execute("ALTER TABLE leads ADD COLUMN replied_at TEXT")
+        conn.execute(
+            "UPDATE leads SET replied_at = COALESCE("
+            "  (SELECT MIN(n.created_at) FROM lead_notes n "
+            "   WHERE n.lead_id = leads.id "
+            f"   AND COALESCE(LOWER(n.author), '') NOT IN ({_REPLY_EXCLUDE_SQL})),"
+            "  touched_at, arrived_at) "
+            "WHERE EXISTS (SELECT 1 FROM lead_notes n WHERE n.lead_id = leads.id "
+            f"              AND COALESCE(LOWER(n.author), '') NOT IN ({_REPLY_EXCLUDE_SQL})) "
+            f"   OR COALESCE(tag, '') IN ({_HOT_TAGS_SQL})")
     except sqlite3.OperationalError:
         pass
     # Per-lead notes log (mailbox #361 — first brick of Tracker-as-CRM):
@@ -1611,6 +1657,28 @@ def get_outreach_tags(db_path: str | Path | None = None) -> list[str]:
     return [str(o) for o in opts] if opts else list(DEFAULT_OUTREACH_TAGS)
 
 
+def _stamp_replied(conn, lead_id: int, tag: str | None = None,
+                   author: str | None = None) -> None:
+    """Record the FIRST time a human wrote back (mailbox #412).
+
+    Called from the two places a reply is actually observed — a note
+    from a person, or one of the REPLY_TAGS. COALESCE keeps the first
+    one: a later reply must not move the date, and nothing clears it.
+
+    This exists because the conversion auto-detect overwrites `tag`, so
+    by the time a lead converts there is no other trace left that they
+    ever answered.
+    """
+    if author is not None:
+        if (author or "").strip().lower() in REPLY_EXCLUDED_NOTE_AUTHORS:
+            return
+    elif (tag or "") not in REPLY_TAGS:
+        return
+    conn.execute(
+        "UPDATE leads SET replied_at = COALESCE(replied_at, datetime('now')) "
+        "WHERE id = ?", (lead_id,))
+
+
 def _clear_outreach_alarm(conn, lead_id: int) -> bool:
     """Disarm the AUTO alarm (outreach_at NOT NULL). A hand-set
     follow-up date is left exactly as Kerry set it."""
@@ -1741,6 +1809,7 @@ def set_lead_tag(lead_id: int, tag: str,
             # Any non-outreach tag is a disposition he only reaches for
             # after hearing something (Interested, Call back, Not now...).
             _clear_outreach_alarm(conn, lead_id)
+        _stamp_replied(conn, lead_id, tag=tag)
         conn.commit()
     return {"id": lead_id, "tag": tag or None, "follow_up_at": alarm,
             "ok": True}
@@ -1880,6 +1949,7 @@ def add_lead_note(lead_id: int, note: str, author: str = "",
         cleared = False
         if (author or "").strip().lower() not in BOOKKEEPING_NOTE_AUTHORS:
             cleared = _clear_outreach_alarm(conn, lead_id)
+        _stamp_replied(conn, lead_id, author=author)
         conn.commit()
     return {"lead_id": lead_id, "alarm_cleared": cleared, "ok": True}
 

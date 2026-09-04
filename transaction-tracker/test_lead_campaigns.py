@@ -139,8 +139,52 @@ def main():
     check("CPL = 127.16 / 11 = 11.56", cost["cpl"] == 11.56, cost)
     check("CPMem = 127.16 / 3 = 42.39 (Kerry's example)", cost["cpmem"] == 42.39, cost)
     check("touched counts touched + converted", f["touched"] == 9, f)
-    check("responded = hot tag / human note / converted", f["responded"] == 8, f)
+    # Mailbox #412: the STATS metric is REPLIED and counts a human reply
+    # only. Of the 9 touched+converted leads, exactly two have evidence a
+    # person wrote back — T1 (Interested + a note) and T3 (a note). The
+    # six converted leads registered or joined without ever answering a
+    # text, and T2 was only texted AT. Under the old rule all six
+    # converted leads counted, which is the collision Kerry resolved.
+    check("replied = human reply only, NOT bare conversion",
+          f["replied"] == 2, f)
+    check("reply_pct = 2 / 9 touched", f["reply_pct"] == 22.2, f)
+    check("old `responded` key is gone (two words, two jobs)",
+          "responded" not in f and "response_pct" not in f, list(f))
     check("interested = Interested / Coming to event tags", f["interested"] == 1, f)
+
+    # The reason replied_at exists at all. The conversion auto-detect
+    # OVERWRITES tag, so a lead who texted back and then registered has
+    # no trace left on the row that they ever answered. Reading REPLIED
+    # off the current tag would quietly undercount exactly the campaigns
+    # that worked, so the reply is stamped when it happens.
+    print("REPLIED survives the conversion that overwrites the tag")
+    with db._connect(db_path) as conn:
+        replier = plant(conn, "Replier", "San Antonio", "touched", None, META)
+        conn.commit()
+    leads.set_lead_tag(replier, "Interested", db_path=db_path, author="K")
+    with db._connect(db_path) as conn:
+        stamped = conn.execute("SELECT replied_at FROM leads WHERE id = ?",
+                               (replier,)).fetchone()["replied_at"]
+        conn.commit()
+    check("tagging Interested stamps replied_at", bool(stamped), stamped)
+    before = campaigns.campaign_stats(db_path, today="2026-09-03",
+                                      gap_fill_seconds=0)["campaigns"][0]["funnel"]
+    check("and they count as replied while the tag is still there",
+          before["replied"] == 3, before)
+    with db._connect(db_path) as conn:      # what the auto-detect does
+        conn.execute("UPDATE leads SET status = 'converted', "
+                     "tag = 'Registered event', converted_at = '2026-09-02' "
+                     "WHERE id = ?", (replier,))
+        conn.commit()
+    after = campaigns.campaign_stats(db_path, today="2026-09-03",
+                                     gap_fill_seconds=0)["campaigns"][0]["funnel"]
+    check("they STILL count after the tag is overwritten",
+          after["replied"] == 3, after)
+    check("and the conversion is counted as a player too",
+          after["players"] == before["players"] + 1, (before["players"], after["players"]))
+    with db._connect(db_path) as conn:      # leave the fixture as found
+        conn.execute("DELETE FROM leads WHERE id = ?", (replier,))
+        conn.commit()
     check("dismissed = 1, new = 1", (f["dismissed"], f["new"]) == (1, 1), f)
     check("trailing cutoff = end 9/6 + 30 = 10/6, window open on 9/3",
           c["trailing_cutoff"] == "2026-10-06" and c["trailing_window_open"] is True, c)
