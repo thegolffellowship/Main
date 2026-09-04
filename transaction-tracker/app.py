@@ -6966,6 +6966,8 @@ def api_notification_action_items():
     """
     items = []
 
+    from email_parser.database import parse_drift_warning
+
     # 1. Parse warnings
     for w in get_parse_warnings("open"):
         items.append({
@@ -6982,6 +6984,11 @@ def api_notification_action_items():
             # alias attaches to a customer, so the button only shows when
             # the warning actually has one.
             "customer_id": w.get("customer_id"),
+            # The value the ORDER carried, so the banner can offer "Use
+            # this instead" with the actual address or number on the
+            # button rather than making Kerry read it out of the message.
+            "drift_value": (lambda p: p[1] if p else None)(
+                parse_drift_warning(w.get("message") or "")),
             "created_at": w.get("created_at"),
         })
 
@@ -7073,6 +7080,47 @@ def api_parse_warning_always_ignore(warning_id):
         pass
     return jsonify({"status": "ok", "field": field, "value": order_val,
                     "warnings_cleared": res.get("warnings_cleared", 0)})
+
+
+@app.route("/api/parse-warnings/<int:warning_id>/adopt", methods=["POST"])
+@require_role("manager")
+def api_parse_warning_adopt(warning_id):
+    """The OTHER honest ending to a drift warning (Kerry 2026-09-04:
+    "is there any way to wire in actual actions or a path to resolution
+    rather than giving me the action item and requiring me to manually
+    address it"): the record is out of date, so make the order's value
+    canonical. The old value is kept as a known alias so historical
+    orders and Golf Genius rows still match on it."""
+    from email_parser.database import (_connect, adopt_drift_value,
+                                       parse_drift_warning)
+    with _connect() as conn:
+        row = conn.execute(
+            "SELECT id, customer, customer_id, message, warning_code "
+            "FROM parse_warnings WHERE id = ?", (warning_id,)).fetchone()
+    if not row:
+        return jsonify({"error": "Warning not found."}), 404
+    if not row["customer_id"]:
+        return jsonify({"error": "That warning has no customer linked, so "
+                                 "there is nothing to update."}), 400
+    parsed = parse_drift_warning(row["message"])
+    if not parsed:
+        return jsonify({"error": "Only email/phone drift warnings can be "
+                                 "adopted this way."}), 400
+    field, order_val = parsed
+    res = adopt_drift_value(
+        row["customer_id"], field, order_val,
+        note=f"superseded via action item #{warning_id} "
+             f"({row['customer'] or 'unknown'})")
+    if res.get("error"):
+        return jsonify(res), 400
+    try:
+        from email_parser.database import log_agent_action
+        log_agent_action(session.get("user") or "manager",
+                         "parse-warning-adopt",
+                         f"cid={row['customer_id']} {field}={order_val}")
+    except Exception:
+        pass
+    return jsonify({"status": "ok", **res})
 
 
 @app.route("/api/parse-warnings/<int:warning_id>/resolve", methods=["POST"])

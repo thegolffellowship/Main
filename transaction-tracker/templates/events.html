@@ -12791,8 +12791,18 @@
             const isDrift = w.code === "PHONE_DRIFT"
                 || w.code === "EMAIL_DRIFT";
             if (w.pw_id && isDrift && w.customer_id) {
+                // Two honest endings, both one click (Kerry 2026-09-04:
+                // "wire in actual actions or a path to resolution").
+                // The order is wrong -> record the variant. The RECORD
+                // is stale (new job, new number) -> adopt the new value.
+                // Only the first was wired, so the second meant leaving
+                // the app, editing by hand, and coming back to Dismiss.
+                const drifted = escapeHtml(w.drift_value || "this value");
+                actionBtns += `<button class="btn btn-primary" style="font-size:0.72rem; padding:0.25rem 0.65rem;"
+                        title="They changed it — make ${drifted} the record for ${escapeHtml(w.customer || "this customer")}. The old value is kept as an alias so past orders still match."
+                        data-pw-adopt="${w.pw_id}" data-pw-newval="${drifted}">Use this instead</button>`;
                 actionBtns += `<button class="btn btn-secondary" style="font-size:0.72rem; padding:0.25rem 0.65rem;"
-                        title="Record this value as a known variant for ${escapeHtml(w.customer || "this customer")} — the canonical record still wins, you just stop being asked"
+                        title="The order is wrong — record this value as a known variant for ${escapeHtml(w.customer || "this customer")}. The canonical record still wins, you just stop being asked"
                         data-pw-always="${w.pw_id}">Always ignore</button>`;
             }
             if (w.pw_id) {
@@ -12824,6 +12834,33 @@
                     renderParseWarningBanner();
                 } catch (err) {
                     alert("Failed to dismiss warning.");
+                }
+            });
+        });
+
+        // "Use this instead" — adopt the order's value as canonical.
+        list.querySelectorAll("[data-pw-adopt]").forEach(btn => {
+            btn.addEventListener("click", async () => {
+                const id = btn.dataset.pwAdopt;
+                if (!confirm(`Make ${btn.dataset.pwNewval} the record for this `
+                        + `customer?\n\nThe old value is kept as an alias, so `
+                        + `past orders and Golf Genius rows still match on it.`)) return;
+                btn.disabled = true;
+                try {
+                    const r = await fetch(`/api/parse-warnings/${id}/adopt`,
+                                          { method: "POST" });
+                    const d = await r.json();
+                    if (!r.ok) { alert(d.error || "Failed."); btn.disabled = false; return; }
+                    parseWarnings = parseWarnings.filter(w => String(w.pw_id) !== String(id));
+                    renderParseWarningBanner();
+                    const extra = (d.warnings_cleared || 1) > 1
+                        ? ` ${d.warnings_cleared} matching items cleared.` : "";
+                    alert(`Updated to ${d.new}.`
+                        + (d.old_kept_as_alias ? ` ${d.old} kept as an alias.` : "")
+                        + extra);
+                } catch (err) {
+                    alert("Failed to update the record.");
+                    btn.disabled = false;
                 }
             });
         });

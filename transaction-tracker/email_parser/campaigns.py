@@ -535,9 +535,36 @@ def campaign_value(lead_rows: list[dict], conn,
     #   margin_booked  — tgf_operating, what the books say.
     #   margin_actual  — collected - course - surcharge - prizes, what
     #                    was genuinely left over.
-    # The processor fee is in NEITHER: the customer pays it on top, so
-    # it is not inside `collected` (which is item_price) and charging it
-    # here would double-count.
+    # BOTH fee legs belong in margin_actual (Kerry 2026-09-04: "I don't
+    # think the Will Wallace example is correct either when you consider
+    # 3.5% transaction fees plus the $55 minus the GoDaddy fees"). My
+    # first version subtracted the fee from collected — wrong, it would
+    # have called every membership broken. My second dropped it
+    # entirely — also wrong, because the customer PAYS the 3.5% and
+    # GoDaddy takes its actual cut, and those are two different numbers.
+    # godaddy_order_splits holds both at item grain:
+    #   + transaction_fee   what the customer paid on top
+    #   - merchant_fee      what GoDaddy actually took (stored signed)
+    # TGF keeps the difference, which is usually small and occasionally
+    # negative.
+    # Both fee legs per item, from the splits table the money-flow
+    # report treats as authoritative for fees.
+    fees: dict = {}
+    try:
+        for fr in conn.execute(
+                f"SELECT item_id, "
+                f"  SUM(CASE WHEN split_type = 'transaction_fee' "
+                f"           THEN ABS(amount) ELSE 0 END) AS fee_in, "
+                f"  SUM(CASE WHEN split_type = 'merchant_fee' "
+                f"           THEN ABS(amount) ELSE 0 END) AS fee_out "
+                f"FROM godaddy_order_splits WHERE item_id IS NOT NULL "
+                f"GROUP BY item_id").fetchall():
+            fees[fr["item_id"]] = (float(fr["fee_in"] or 0),
+                                   float(fr["fee_out"] or 0))
+    except Exception:
+        logger.warning("fee splits unavailable — margin_actual will omit "
+                       "the fee legs", exc_info=True)
+
     out["rows"] = []
     for r in conn.execute(
             f"SELECT a.order_id, a.event_name, a.allocation_date, "
@@ -549,7 +576,7 @@ def campaign_value(lead_rows: list[dict], conn,
             f"       CAST(COALESCE(a.godaddy_fee,0) AS REAL) AS fee, "
             f"       CAST(COALESCE(a.tax_reserve,0) AS REAL) AS tax, "
             f"       CAST(COALESCE(a.tgf_operating,0) AS REAL) AS margin, "
-            f"       i.item_name, "
+            f"       a.item_id, i.item_name, "
             f"       TRIM(COALESCE(c.first_name,'')||' '||"
             f"            COALESCE(c.last_name,'')) AS player "
             f"FROM acct_allocations a "
@@ -561,13 +588,17 @@ def campaign_value(lead_rows: list[dict], conn,
         d = dict(r)
         d["player"] = (d.get("player") or "").strip() or "(unknown)"
         d["margin_booked"] = d["margin"]
-        d["margin_actual"] = round(d["collected"] - d["course"]
-                                   - d["surcharge"] - d["prizes"], 2)
+        d["fee_in"] = round(fees.get(d.get("item_id"), (0.0, 0.0))[0], 2)
+        d["fee_out"] = round(fees.get(d.get("item_id"), (0.0, 0.0))[1], 2)
+        d["fee_net"] = round(d["fee_in"] - d["fee_out"], 2)
+        d["margin_actual"] = round(d["collected"] + d["fee_in"] - d["fee_out"]
+                                   - d["course"] - d["surcharge"]
+                                   - d["prizes"], 2)
         # Positive = the books claim more than was actually left over.
         d["overstated"] = round(d["margin_booked"] - d["margin_actual"], 2)
         for k in ("collected", "course", "surcharge", "prizes", "fee",
                   "tax", "margin", "margin_booked", "margin_actual",
-                  "overstated"):
+                  "overstated", "fee_in", "fee_out", "fee_net"):
             d[k] = round(d[k], 2)
         out["rows"].append(d)
     out["margin_actual"] = round(sum(r["margin_actual"] for r in out["rows"]), 2)

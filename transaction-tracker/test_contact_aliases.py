@@ -147,6 +147,66 @@ def main():
     check("and the note Kerry left",
           rows[0]["note"] == "Jdub types it wrong", rows[0].get("note"))
 
+    print("Adopt: the RECORD is stale, not the order (Kerry 2026-09-04)")
+    # "Is there any way to wire in actual actions or a path to resolution
+    # rather than giving me the action item and requiring me to manually
+    # address it": a drift warning has TWO honest endings and only one
+    # was wired. This is the other — the person changed jobs or numbers,
+    # so the order is right and the record is stale.
+    with db._connect(p) as conn:
+        conn.execute("CREATE TABLE IF NOT EXISTS customer_emails ("
+                     "email_id INTEGER PRIMARY KEY AUTOINCREMENT,"
+                     " customer_id INTEGER NOT NULL, email TEXT NOT NULL,"
+                     " is_primary INTEGER NOT NULL DEFAULT 0,"
+                     " is_golf_genius INTEGER NOT NULL DEFAULT 0, label TEXT,"
+                     " created_at TEXT, undeliverable INTEGER NOT NULL DEFAULT 0,"
+                     " undeliverable_at TEXT, undeliverable_reason TEXT,"
+                     " UNIQUE(customer_id, email))")
+        for col in ("phone_undeliverable INTEGER NOT NULL DEFAULT 0",
+                    "phone_undeliverable_at TEXT",
+                    "phone_undeliverable_reason TEXT"):
+            try:
+                conn.execute(f"ALTER TABLE customers ADD COLUMN {col}")
+            except Exception:
+                pass
+        conn.execute("INSERT INTO customer_emails (customer_id, email, "
+                     "is_primary) VALUES (1, 'old@crownusa.com', 1)")
+        warn(conn, 1, "John Wade", "email", "new@yahoo.com",
+             "old@crownusa.com", "uid-adopt")
+        conn.commit()
+
+    res = db.adopt_drift_value(1, "email", "new@yahoo.com", db_path=p)
+    check("the call succeeds", res.get("ok"), res)
+    with db._connect(p) as conn:
+        em = {r["email"]: r["is_primary"] for r in conn.execute(
+            "SELECT email, is_primary FROM customer_emails WHERE customer_id = 1")}
+    check("the order's value becomes the record",
+          em.get("new@yahoo.com") == 1, em)
+    check("the OLD address is kept, just not primary",
+          em.get("old@crownusa.com") == 0, em)
+    with db._connect(p) as conn:
+        still_matches = db.is_known_contact_alias(conn, 1, "email",
+                                                  "old@crownusa.com")
+    check("and it is kept as an alias so past orders still match",
+          res["old_kept_as_alias"] is True and still_matches, res)
+    check("the action item resolves itself — no manual Dismiss",
+          res["warnings_cleared"] == 1, res)
+    with db._connect(p) as conn:
+        st = conn.execute("SELECT status FROM parse_warnings "
+                          "WHERE email_uid = 'uid-adopt'").fetchone()["status"]
+    check("and the warning is marked resolved, not dismissed",
+          st == "resolved", st)
+
+    r_phone = db.adopt_drift_value(1, "phone", "(210) 555-1234", db_path=p)
+    with db._connect(p) as conn:
+        ph = conn.execute("SELECT phone FROM customers "
+                          "WHERE customer_id = 1").fetchone()["phone"]
+    check("phones adopt the same way", ph == "(210) 555-1234", ph)
+    check("and the old number survives as an alias",
+          r_phone["old_kept_as_alias"] is True, r_phone)
+    check("a bad field is refused",
+          "error" in db.adopt_drift_value(1, "nickname", "x", db_path=p))
+
     os.unlink(p)
     print()
     if FAILURES:

@@ -1188,6 +1188,7 @@
                 <td class="ld-dsub">${esc(x.item_name || x.event_name || "")}</td>
                 <td class="ld-dsub">${esc((x.allocation_date || "").slice(0, 10))}</td>
                 ${cell(x.collected)}${cell(x.course + x.surcharge)}${cell(x.prizes)}
+                <td class="ld-dsub" title="Customer paid ${money(x.fee_in)} in transaction fee; GoDaddy took ${money(x.fee_out)}">${money(x.fee_net)}</td>
                 <td class="ld-dsub">${money(x.margin_booked)}</td>
                 <td><b class="${x.margin_actual < 0 ? "ld-late" : ""}">${money(x.margin_actual)}</b></td>
                 <td class="${Math.abs(x.overstated) >= 0.01 ? "ld-late" : "ld-dsub"}">${Math.abs(x.overstated) < 0.01 ? "✓" : money(x.overstated)}</td>
@@ -1195,23 +1196,24 @@
             return `<div style="margin-top:0.75rem; overflow-x:auto">
               <table class="ld-costtbl"><thead><tr>
                 <th style="text-align:left">Player</th><th style="text-align:left">Bought</th><th style="text-align:left">Date</th>
-                <th>Paid</th><th>Course</th><th>Prizes</th><th>Booked</th><th>Actually left</th><th>Overstated</th>
+                <th>Paid</th><th>Course</th><th>Prizes</th><th title="3.5% the customer paid, minus what GoDaddy actually took">Fee net</th><th>Booked</th><th>Actually left</th><th>Overstated</th>
               </tr></thead><tbody>${body}</tbody>
               <tfoot><tr style="border-top:2px solid #1B1B1B; font-weight:700">
                 <td colspan="3">${rows.length} allocation${rows.length === 1 ? "" : "s"}</td>
                 ${cell(tot("collected"))}
                 ${cell(rows.reduce((a, x) => a + x.course + x.surcharge, 0))}
                 ${cell(tot("prizes"))}
+                <td class="ld-dsub">${money(tot("fee_net"))}</td>
                 <td class="ld-dsub">${money(tot("margin_booked"))}</td>
                 <td>${money(tot("margin_actual"))}</td>
                 <td class="${v.rows_reconcile ? "" : "ld-late"}">${v.rows_reconcile ? "✓" : money(v.overstated)}</td>
               </tr></tfoot></table>
               <div class="ld-foot">
                 <b>Booked</b> is the event's standard markup, which is what the headline uses.
-                <b>Actually left</b> is Paid &minus; Course &minus; Prizes: what was really there after the course and the winners were paid.
+                <b>Actually left</b> is Paid + Fee net &minus; Course &minus; Prizes: what was really there once the course, the winners and the card processor were settled.
                 ${v.rows_reconcile ? "They agree." : `<span class="ld-late">They do NOT agree. The books overstate by ${money(v.overstated)} across these ${rows.length} rows, so TGF actually kept ${money(tot("margin_actual"))}, not ${money(tot("margin_booked"))}.</span>
                 The cause is discounting: the allocator books the event's standard markup without looking at what the player paid, so a 1st Timer who came in $25 under the guest rate still books full markup. Membership rows agree to the penny; discounted rounds do not.`}
-                The card processor fee (${money(tot("fee"))}) is in neither column &mdash; the player pays it on top, so it is not inside Paid.
+                <b>Fee net</b> is the 3.5% the customer paid on top (${money(tot("fee_in"))}) minus what GoDaddy actually took (${money(tot("fee_out"))}) &mdash; TGF keeps the difference, and it IS included in Actually left.
                 Sales tax reserve (8.25% of markup, ${money(tot("tax"))}) is not deducted either; it comes out of TGF's share later.
               </div></div>`;
         }

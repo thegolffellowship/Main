@@ -67,6 +67,10 @@ def main():
                      " parent_item_id INTEGER, order_date TEXT, item_index INTEGER,"
                      " customer TEXT, chapter TEXT, holes TEXT, side_games TEXT,"
                      " user_status TEXT, quantity INTEGER)")
+        conn.execute("""CREATE TABLE IF NOT EXISTS godaddy_order_splits (
+            id INTEGER PRIMARY KEY AUTOINCREMENT, transaction_id INTEGER,
+            item_id INTEGER, event_name TEXT, customer TEXT,
+            split_type TEXT NOT NULL, amount REAL NOT NULL, created_at TEXT)""")
         conn.execute("""CREATE TABLE IF NOT EXISTS acct_allocations (
             id INTEGER PRIMARY KEY AUTOINCREMENT, order_id TEXT NOT NULL,
             item_id INTEGER, event_name TEXT, chapter TEXT,
@@ -408,6 +412,25 @@ def main():
     check("a discounted round books more margin than was left over",
           disc["rows"][0]["margin_booked"] == 8.0
           and disc["rows"][0]["margin_actual"] == -6.12, disc["rows"][0])
+
+    # Kerry 2026-09-04: the customer PAYS the 3.5% and GoDaddy takes its
+    # actual cut — two different numbers, and TGF keeps the difference.
+    # Dropping both (my second attempt) was as wrong as subtracting one.
+    with db._connect(db_path) as conn:
+        conn.executemany(
+            "INSERT INTO godaddy_order_splits (item_id, split_type, amount) "
+            "VALUES (?,?,?)",
+            [(3, "transaction_fee", 1.93), (3, "merchant_fee", -1.90)])
+        conn.commit()
+    fee = campaigns.campaign_stats(db_path, today="2026-09-03",
+                                   gap_fill_seconds=0)["campaigns"][0]["value"]
+    fr = fee["rows"][0]
+    check("the fee the customer paid is added back",
+          fr["fee_in"] == 1.93, fr)
+    check("what GoDaddy actually took is subtracted",
+          fr["fee_out"] == 1.9, fr)
+    check("TGF keeps the difference, and it moves margin_actual",
+          fr["fee_net"] == 0.03 and fr["margin_actual"] == -6.09, fr)
     check("the overstatement is quantified, per row and in total",
           disc["rows"][0]["overstated"] == 14.12
           and disc["overstated"] == 14.12, disc)

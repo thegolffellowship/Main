@@ -1,5 +1,15 @@
-window.TGF_VERSION = "2.315.0";
+window.TGF_VERSION = "2.316.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.316.0",
+    date: "2026-09-04",
+    changes: [
+      "Drift action items can now be RESOLVED, not just silenced (Kerry: 'is there any way to wire in actual actions or a path to resolution rather than giving me the action item and requiring me to manually address it and then clicking Always ignore or Dismissing?'). A drift warning has two honest endings and only one was wired. The order is wrong: Always ignore, which records the variant. The RECORD is stale because they changed jobs or numbers: the new 'Use this instead' button, which makes the order's value canonical, keeps the old one as an alias so past orders still match, and closes every open item naming that value. The item disappears because it was fixed, not because it was hidden.",
+      "The margin breakdown now includes BOTH fee legs (Kerry: 'I don't think the Will Wallace example is correct either when you consider 3.5% transaction fees plus the GoDaddy fees'). The customer pays the 3.5% on top and GoDaddy takes its own cut — two different numbers, and TGF keeps the difference. My first version subtracted one, my second dropped both; the table now adds what the customer paid and subtracts what GoDaddy took, from godaddy_order_splits at item grain.",
+      "Membership allocations have no Lone Star Cup shirt line at all, so membership margin is overstated by whatever a shirt costs. That number is not in any doc available here, so it is a question to CA rather than a guess — asked, along with whether the allocator should book discounts at all given 1st Timers are the entire point of the lead campaign.",
+      "The alias entry row on the customer edit form is narrowed so the +Add button is reachable without scrolling sideways.",
+    ],
+  },
   {
     version: "2.315.0",
     date: "2026-09-04",

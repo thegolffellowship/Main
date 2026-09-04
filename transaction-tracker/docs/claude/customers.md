@@ -59,6 +59,35 @@ block — every `owns=True` resolver call then hit "Cannot operate on a closed d
 on its first `.execute()` and bubbled out of `api_send_messages` as a 500. Always open
 the connection directly in resolver helpers.
 
+## Drift warnings resolve themselves now (Kerry 2026-09-04, v2.316.0)
+
+> "Is there any way to wire in actual actions or a path to resolution
+> rather than giving me the action item and requiring me to manually
+> address it and then clicking Always ignore or Dismissing?"
+
+A drift warning has exactly **two** honest endings, and only one was
+wired:
+
+| The order is wrong | **Always ignore** — records the variant as a known alias (v2.298.0) |
+|---|---|
+| The **record** is stale | **Use this instead** — `adopt_drift_value()` (NEW) |
+
+The second is the common case for a work address or number after
+someone changes jobs, and it used to mean leaving the app, editing the
+customer by hand, and coming back to click Dismiss.
+
+`adopt_drift_value(customer_id, field, new_value)` makes the order's
+value canonical, **keeps the old one as an alias** so historical orders
+and Golf Genius rows still match, clears any `undeliverable` flag on the
+adopted value, and **resolves every open warning naming that value** —
+so the action item disappears because it was fixed, not because it was
+silenced. `POST /api/parse-warnings/<id>/adopt`; the button carries the
+actual address or number so Kerry never has to read it out of the
+message text.
+
+**Status matters:** adopted warnings are marked `resolved`, dismissed
+ones `dismissed`. The difference is auditable.
+
 ## Unreachable contact details (Kerry 2026-09-04, v2.307–v2.309)
 
 > "Remove hayden's email. I guess it could be an alias, but not

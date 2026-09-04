@@ -42224,6 +42224,83 @@ def _resolve_lookup_customer_id(conn, item_or_id, name_hint: str = "") -> int | 
     return int(row["customer_id"]) if row else None
 
 
+def adopt_drift_value(customer_id: int, field: str, new_value: str,
+                      note: str = "", db_path=None) -> dict:
+    """Make the ORDER's value canonical — the other real resolution to a
+    drift warning (Kerry 2026-09-04: "is there any way to wire in actual
+    actions or a path to resolution rather than giving me the action
+    item and requiring me to manually address it").
+
+    A drift warning has exactly two honest endings: the order is wrong
+    (record it as a known variant — `add_contact_alias`) or the RECORD
+    is out of date because the person changed jobs, numbers or mailboxes.
+    Only the first was wired, so the second meant leaving the app,
+    editing the customer by hand, and coming back to click Dismiss.
+
+    The old value is never thrown away — it becomes a known alias, so
+    historical orders and Golf Genius rows still match on it.
+    """
+    field = (field or "").strip().lower()
+    new_value = (new_value or "").strip()
+    if not customer_id or field not in ("email", "phone") or not new_value:
+        return {"error": "need customer_id, field email|phone, and a value"}
+    with _connect(db_path) as conn:
+        cust = conn.execute(
+            "SELECT customer_id, phone, "
+            "TRIM(COALESCE(first_name,'')||' '||COALESCE(last_name,'')) AS n "
+            "FROM customers WHERE customer_id = ?", (customer_id,)).fetchone()
+        if not cust:
+            return {"error": f"customer {customer_id} not found"}
+        old = None
+        if field == "phone":
+            old = (cust["phone"] or "").strip()
+            conn.execute("UPDATE customers SET phone = ?, "
+                         "phone_undeliverable = 0, phone_undeliverable_at = NULL, "
+                         "phone_undeliverable_reason = NULL "
+                         "WHERE customer_id = ?", (new_value, customer_id))
+        else:
+            r = conn.execute(
+                "SELECT email FROM customer_emails WHERE customer_id = ? "
+                "AND is_primary = 1 LIMIT 1", (customer_id,)).fetchone()
+            old = (r["email"] if r else "") or ""
+            conn.execute("UPDATE customer_emails SET is_primary = 0 "
+                         "WHERE customer_id = ?", (customer_id,))
+            # The new address may already be on file as a secondary.
+            conn.execute(
+                "INSERT INTO customer_emails (customer_id, email, is_primary, "
+                "label) VALUES (?, ?, 1, 'adopted') "
+                "ON CONFLICT(customer_id, email) DO UPDATE SET "
+                "is_primary = 1, undeliverable = 0, undeliverable_at = NULL, "
+                "undeliverable_reason = NULL",
+                (customer_id, new_value))
+        conn.commit()
+    # The OLD value keeps matching historical rows.
+    aliased = None
+    if old and old.strip().lower() != new_value.strip().lower():
+        aliased = add_contact_alias(
+            customer_id, field, old,
+            note=note or f"superseded by {new_value}", db_path=db_path)
+    # Close the warnings this value produced, both directions.
+    cleared = 0
+    with _connect(db_path) as conn:
+        for r in conn.execute(
+                "SELECT id, message FROM parse_warnings "
+                "WHERE status = 'open' AND customer_id = ? "
+                "AND warning_code IN ('EMAIL_DRIFT', 'PHONE_DRIFT')",
+                (customer_id,)).fetchall():
+            p = parse_drift_warning(r["message"] or "")
+            if p and p[0] == field and (
+                    normalize_contact_value(field, p[1])
+                    == normalize_contact_value(field, new_value)):
+                conn.execute("UPDATE parse_warnings SET status = 'resolved' "
+                             "WHERE id = ?", (r["id"],))
+                cleared += 1
+        conn.commit()
+    return {"customer_id": customer_id, "field": field, "new": new_value,
+            "old": old or None, "old_kept_as_alias": bool(aliased),
+            "warnings_cleared": cleared, "ok": True}
+
+
 def set_email_undeliverable(customer_id: int, email: str,
                             reason: str = "", undo: bool = False,
                             db_path=None) -> dict:
