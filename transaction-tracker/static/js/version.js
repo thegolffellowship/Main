@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.308.0";
+window.TGF_VERSION = "2.309.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.309.0",
+    date: "2026-09-04",
+    changes: [
+      "Phone numbers can be marked unreachable too (Kerry, minutes after the email: 'Hayden's phone number is no good either. It was his work number'). Same rule as the email flag — the number stays on the record because an old order or a Venmo memo still matches on it, and resolve_player_phone simply stops handing it out so nothing calls or texts a line that is not his any more.",
+      "The two now share ONE action item per person rather than one per channel. It names every channel that is gone, escalates to high when there is no way to reach someone at all, drops back to medium when one channel returns, and CLOSES ITSELF once they are reachable again — an alert nobody can clear is an alert people learn to ignore.",
+    ],
+  },
   {
     version: "2.308.0",
     date: "2026-09-04",

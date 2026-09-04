@@ -2348,6 +2348,21 @@ def _scoring_dispatch(url: str, extract: str):
                     "mcp-claude", "scoring-email-undeliverable",
                     f"cid={_p[0]} {_p[1]} undo={_undo}")
             return json.dumps(res, indent=2, default=str)
+        if cmd == "scoring-phone-unreachable":
+            # "<customer_id>[|reason][|undo]" — a dead work number: keep
+            # it for MATCHING, never call or text it.
+            _p = [x.strip() for x in arg.split("|")]
+            if not _p or not _p[0].isdigit():
+                return json.dumps({
+                    "error": "need <customer_id>[|reason][|undo]"})
+            _undo = "undo" in [x.lower() for x in _p[1:]]
+            _reason = _p[1] if len(_p) > 1 and _p[1].lower() != "undo" else ""
+            res = db.set_phone_undeliverable(int(_p[0]), reason=_reason,
+                                             undo=_undo)
+            if not res.get("error"):
+                db.log_agent_action("mcp-claude", "scoring-phone-unreachable",
+                                    f"cid={_p[0]} undo={_undo}")
+            return json.dumps(res, indent=2, default=str)
         if cmd == "scoring-leads-payload":
             # A health read of exactly what /api/leads hands the Lead
             # Center page — the thing that silently 500'd for a day.

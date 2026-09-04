@@ -3827,6 +3827,20 @@ def init_db(db_path: str | Path | None = None) -> None:
             except sqlite3.OperationalError:
                 pass
 
+        # The same thing happens to a work PHONE (Kerry 2026-09-04:
+        # "Hayden's phone number is no good either. It was his work
+        # number"). Phones live on the customers row rather than their
+        # own table, so the flag does too. Same rule: keep it for
+        # MATCHING (a Venmo memo or an old order still carries it),
+        # never call or text it.
+        for _col, _type in (("phone_undeliverable", "INTEGER NOT NULL DEFAULT 0"),
+                            ("phone_undeliverable_at", "TIMESTAMP"),
+                            ("phone_undeliverable_reason", "TEXT")):
+            try:
+                conn.execute(f"ALTER TABLE customers ADD COLUMN {_col} {_type}")
+            except sqlite3.OperationalError:
+                pass
+
         conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_customer_emails_customer "
             "ON customer_emails(customer_id)"
@@ -42259,34 +42273,118 @@ def set_email_undeliverable(customer_id: int, email: str,
             conn.execute("UPDATE customer_emails SET is_primary = 1 "
                          "WHERE email_id = ?", (live["email_id"],))
         conn.commit()
-        name = conn.execute(
-            "SELECT TRIM(COALESCE(first_name,'')||' '||COALESCE(last_name,'')) "
-            "AS n FROM customers WHERE customer_id = ?",
-            (customer_id,)).fetchone()
-        name = (name["n"] if name else "") or f"customer {customer_id}"
-        if not undo and not live:
-            # Nothing left to reach them on. Say so loudly, or the member
-            # silently stops receiving renewal notices and nobody knows.
-            subject = f"NO EMAIL ON FILE: {name}"
-            if not conn.execute(
-                    "SELECT 1 FROM action_items WHERE subject = ? "
-                    "AND status IN ('open', 'in_progress') LIMIT 1",
-                    (subject,)).fetchone():
-                conn.execute(
-                    """INSERT INTO action_items
-                           (subject, from_name, summary, urgency, category)
-                       VALUES (?, 'Contact watch', ?, 'medium', 'customers')""",
-                    (subject,
-                     f"{email} was marked undeliverable"
-                     + (f" ({reason})" if reason else "")
-                     + f" and {name} has no other address on file. Renewal "
-                       "notices, entry confirmations and event email will "
-                       "SKIP them until a new address is added. Ask for one."))
-                conn.commit()
+        gap = _flag_contact_gap(conn, customer_id, f"{email} was marked "
+                                f"undeliverable"
+                                + (f" ({reason})" if reason else ""))
+        conn.commit()
     return {"customer_id": customer_id, "email": email,
             "undeliverable": not undo, "reason": reason or None,
             "now_primary": live["email"] if live else None,
-            "no_deliverable_address": (not undo) and not live, "ok": True}
+            "no_deliverable_address": (not undo) and not live,
+            "contact_gap": gap, "ok": True}
+
+
+def set_phone_undeliverable(customer_id: int, reason: str = "",
+                            undo: bool = False, db_path=None) -> dict:
+    """Bar a phone number from being called or texted while keeping it on
+    the record for MATCHING (Kerry 2026-09-04: "Hayden's phone number is
+    no good either. It was his work number").
+
+    Same rule as the email flag, different shape only because phones
+    live on the customers row rather than their own table. An old order
+    or a Venmo memo still carries the number, so clearing the value
+    outright would break those matches.
+    """
+    if not customer_id:
+        return {"error": "need customer_id"}
+    with _connect(db_path) as conn:
+        row = conn.execute(
+            "SELECT phone FROM customers WHERE customer_id = ?",
+            (customer_id,)).fetchone()
+        if not row:
+            return {"error": f"customer {customer_id} not found"}
+        if undo:
+            conn.execute(
+                "UPDATE customers SET phone_undeliverable = 0, "
+                "phone_undeliverable_at = NULL, "
+                "phone_undeliverable_reason = NULL WHERE customer_id = ?",
+                (customer_id,))
+        else:
+            conn.execute(
+                "UPDATE customers SET phone_undeliverable = 1, "
+                "phone_undeliverable_at = datetime('now'), "
+                "phone_undeliverable_reason = ? WHERE customer_id = ?",
+                (reason or None, customer_id))
+        gap = _flag_contact_gap(conn, customer_id,
+                                f"{row['phone'] or 'the phone number'} was "
+                                f"marked unreachable"
+                                + (f" ({reason})" if reason else ""))
+        conn.commit()
+    return {"customer_id": customer_id, "phone": row["phone"],
+            "undeliverable": not undo, "reason": reason or None,
+            "contact_gap": gap, "ok": True}
+
+
+def _flag_contact_gap(conn, customer_id: int, what_happened: str) -> dict:
+    """Raise (or clear) ONE action item per customer describing which
+    ways of reaching them are gone.
+
+    Every send path skips silently when there is no address — that is
+    the right behaviour and the reason this item has to exist. Without
+    it a member simply stops hearing from TGF and nobody finds out
+    until they lapse.
+    """
+    row = conn.execute(
+        "SELECT TRIM(COALESCE(first_name,'')||' '||COALESCE(last_name,'')) AS n,"
+        " phone, COALESCE(phone_undeliverable, 0) AS phone_bad "
+        "FROM customers WHERE customer_id = ?", (customer_id,)).fetchone()
+    if not row:
+        return {}
+    name = (row["n"] or "").strip() or f"customer {customer_id}"
+    live_email = conn.execute(
+        "SELECT email FROM customer_emails WHERE customer_id = ? "
+        "AND COALESCE(undeliverable, 0) = 0 AND email IS NOT NULL "
+        "AND TRIM(email) != '' LIMIT 1", (customer_id,)).fetchone()
+    has_email = bool(live_email)
+    has_phone = bool((row["phone"] or "").strip()) and not row["phone_bad"]
+    subject = f"NO WAY TO REACH: {name}"
+    open_item = conn.execute(
+        "SELECT id FROM action_items WHERE subject = ? "
+        "AND status IN ('open', 'in_progress') LIMIT 1", (subject,)).fetchone()
+    if has_email and has_phone:
+        # Reachable again — close the item rather than leave it nagging.
+        if open_item:
+            conn.execute("UPDATE action_items SET status = 'completed', "
+                         "completed_at = datetime('now'), "
+                         "completed_by = 'contact-watch' WHERE id = ?",
+                         (open_item["id"],))
+        return {"has_email": True, "has_phone": True, "item": "closed"
+                if open_item else None}
+    gone = []
+    if not has_email:
+        gone.append("no email address")
+    if not has_phone:
+        gone.append("no usable phone number")
+    summary = (f"{what_happened}. {name} now has "
+               + " and ".join(gone) + ". ")
+    summary += ("Renewal notices, entry confirmations and event email will "
+                "SKIP them" if not has_email
+                else "They can still be emailed")
+    summary += (", and there is no number to call or text."
+                if not has_phone else ".")
+    summary += " Ask for current contact details."
+    urgency = "high" if (not has_email and not has_phone) else "medium"
+    if open_item:
+        conn.execute("UPDATE action_items SET summary = ?, urgency = ? "
+                     "WHERE id = ?", (summary, urgency, open_item["id"]))
+        return {"has_email": has_email, "has_phone": has_phone,
+                "item": "updated"}
+    conn.execute(
+        """INSERT INTO action_items
+               (subject, from_name, summary, urgency, category, customer_id)
+           VALUES (?, 'Contact watch', ?, ?, 'customers', ?)""",
+        (subject, summary, urgency, customer_id))
+    return {"has_email": has_email, "has_phone": has_phone, "item": "raised"}
 
 
 def resolve_player_email(item, conn=None, db_path=None) -> str:
@@ -42372,11 +42470,17 @@ def resolve_player_phone(item, conn=None, db_path=None) -> str:
         cid = _resolve_lookup_customer_id(conn, item)
         if cid:
             row = conn.execute(
-                "SELECT phone FROM customers WHERE customer_id = ? LIMIT 1",
+                "SELECT phone, COALESCE(phone_undeliverable, 0) AS bad "
+                "FROM customers WHERE customer_id = ? LIMIT 1",
                 (cid,),
             ).fetchone()
-            if row and row["phone"]:
+            if row and row["phone"] and not row["bad"]:
                 return row["phone"].strip()
+            if row and row["bad"]:
+                # A dead work number. The value stays on the record for
+                # MATCHING; handing it back would put a call or a text
+                # into a line that is not his any more.
+                return ""
         if isinstance(item, dict):
             return (item.get("customer_phone") or "").strip()
         return ""

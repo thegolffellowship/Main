@@ -1,4 +1,4 @@
-"""Undeliverable email addresses (Kerry 2026-09-04, Hayden Cooper).
+"""Unreachable contact details (Kerry 2026-09-04, Hayden Cooper).
 
   "Remove hayden's email. I guess it could be an alias, but not
    something that he'd ever be sent an email thru. He doesn't work
@@ -15,9 +15,12 @@ barred from SENDING. Checks:
   - with nothing left, an action item says so, because the alternative
     is a member silently receiving nothing;
   - undo puts it back;
-  - the row itself is never deleted — matching still works.
+  - the row itself is never deleted — matching still works;
+  - the PHONE gets the same treatment ("It was his work number"), and
+    the two share ONE action item per person that escalates when both
+    channels are gone and closes itself when either comes back.
 
-Run: python3 test_undeliverable_email.py
+Run: python3 test_unreachable_contacts.py
 """
 
 import os
@@ -51,7 +54,10 @@ def main():
     p = tmp.name
     with db._connect(p) as conn:
         conn.execute("CREATE TABLE customers (customer_id INTEGER PRIMARY KEY,"
-                     " first_name TEXT, last_name TEXT)")
+                     " first_name TEXT, last_name TEXT, phone TEXT,"
+                     " phone_undeliverable INTEGER NOT NULL DEFAULT 0,"
+                     " phone_undeliverable_at TIMESTAMP,"
+                     " phone_undeliverable_reason TEXT)")
         conn.execute("""CREATE TABLE customer_emails (
             email_id INTEGER PRIMARY KEY AUTOINCREMENT,
             customer_id INTEGER NOT NULL, email VARCHAR(200) NOT NULL,
@@ -64,12 +70,16 @@ def main():
         conn.execute("""CREATE TABLE action_items (
             id INTEGER PRIMARY KEY AUTOINCREMENT, subject TEXT,
             from_name TEXT, summary TEXT, urgency TEXT, category TEXT,
-            status TEXT NOT NULL DEFAULT 'open',
+            status TEXT NOT NULL DEFAULT 'open', customer_id INTEGER,
+            completed_at TIMESTAMP, completed_by TEXT,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)""")
         conn.execute("CREATE TABLE customer_aliases (customer_name TEXT, "
                      "alias_type TEXT, alias_value TEXT)")
-        conn.executemany("INSERT INTO customers VALUES (?,?,?)",
-                         [(161, "Hayden", "Cooper"), (9, "Two", "Address")])
+        conn.executemany(
+            "INSERT INTO customers (customer_id, first_name, last_name, phone)"
+            " VALUES (?,?,?,?)",
+            [(161, "Hayden", "Cooper", "(737) 268-9959"),
+             (9, "Two", "Address", "(210) 555-0000")])
         conn.executemany(
             "INSERT INTO customer_emails (customer_id, email, is_primary) "
             "VALUES (?,?,?)",
@@ -102,6 +112,9 @@ def main():
     check("an action item says so — silence is the failure mode here",
           len(ai) == 1 and "Hayden Cooper" in ai[0]["subject"]
           and "SKIP" in ai[0]["summary"], ai)
+    check("while the phone still works it is medium, not high, and says so",
+          ai[0]["urgency"] == "medium" and "no email address" in ai[0]["summary"]
+          and "no usable phone" not in ai[0]["summary"], ai[0])
     db.set_email_undeliverable(161, "hayden@hdroofingandrepairs.com",
                                reason="again", db_path=p)
     with db._connect(p) as conn:
@@ -121,6 +134,54 @@ def main():
     with db._connect(p) as conn:
         n = conn.execute("SELECT COUNT(*) c FROM action_items").fetchone()["c"]
     check("no action item — they are still reachable", n == 1, n)
+
+    print("The phone goes too — it was his work number")
+    pr = db.set_phone_undeliverable(
+        161, reason="work number at HD Roofing, no longer his", db_path=p)
+    check("call succeeds", pr.get("ok") and pr["undeliverable"], pr)
+    with db._connect(p) as conn:
+        c = dict(conn.execute(
+            "SELECT phone, phone_undeliverable, phone_undeliverable_reason "
+            "FROM customers WHERE customer_id = 161").fetchone())
+    check("the number is NOT wiped — old orders still match on it",
+          c["phone"] == "(737) 268-9959" and c["phone_undeliverable"] == 1, c)
+    check("the resolver refuses to hand it out",
+          db.resolve_player_phone({"customer_id": 161}, db_path=p) == "",
+          db.resolve_player_phone({"customer_id": 161}, db_path=p))
+    with db._connect(p) as conn:
+        ai = [dict(r) for r in conn.execute(
+            "SELECT subject, summary, urgency, status FROM action_items "
+            "WHERE subject LIKE '%Hayden%'")]
+    check("still ONE item per person, not one per channel", len(ai) == 1, ai)
+    check("it escalates to high once BOTH channels are gone",
+          ai[0]["urgency"] == "high", ai[0])
+    check("and it names both",
+          "no email address" in ai[0]["summary"]
+          and "no usable phone number" in ai[0]["summary"], ai[0]["summary"])
+
+    print("Reachable again closes it")
+    db.set_phone_undeliverable(161, undo=True, db_path=p)
+    with db._connect(p) as conn:
+        ai = dict(conn.execute(
+            "SELECT urgency, summary, status FROM action_items "
+            "WHERE subject LIKE '%Hayden%'").fetchone())
+    check("restoring one channel drops it back to medium",
+          ai["urgency"] == "medium" and ai["status"] == "open", ai)
+    check("the phone resolves again",
+          db.resolve_player_phone({"customer_id": 161}, db_path=p)
+          == "(737) 268-9959")
+    db.set_email_undeliverable(161, "hayden@hdroofingandrepairs.com",
+                               undo=True, db_path=p)
+    with db._connect(p) as conn:
+        ai = dict(conn.execute(
+            "SELECT status, completed_by FROM action_items "
+            "WHERE subject LIKE '%Hayden%'").fetchone())
+    check("with both channels back the item closes itself",
+          ai["status"] == "completed" and ai["completed_by"] == "contact-watch",
+          ai)
+    # put him back where the earlier section left him
+    db.set_email_undeliverable(161, "hayden@hdroofingandrepairs.com",
+                               reason="left the company", db_path=p)
 
     print("Undo")
     r3 = db.set_email_undeliverable(161, "HAYDEN@HDRoofingAndRepairs.com",

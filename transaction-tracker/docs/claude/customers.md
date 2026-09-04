@@ -59,7 +59,7 @@ block — every `owns=True` resolver call then hit "Cannot operate on a closed d
 on its first `.execute()` and bubbled out of `api_send_messages` as a 500. Always open
 the connection directly in resolver helpers.
 
-## Undeliverable email addresses (Kerry 2026-09-04, v2.307.0)
+## Unreachable contact details (Kerry 2026-09-04, v2.307–v2.309)
 
 > "Remove hayden's email. I guess it could be an alias, but not
 > something that he'd ever be sent an email thru. He doesn't work there
@@ -90,13 +90,28 @@ ON FILE: <name>"), because otherwise the member silently stops receiving
 renewal notices and nobody finds out until they lapse. Deduped on the
 subject.
 
+**The PHONE gets the same treatment** (Kerry, minutes later: *"Hayden's
+phone number is no good either. It was his work number"*).
+`customers.phone_undeliverable` (+ `_at`, `_reason`), because phones
+live on the customers row rather than their own table.
+`set_phone_undeliverable(customer_id, reason, undo=False)`; bridge
+`scoring-phone-unreachable:<cid>[|reason][|undo]`. `resolve_player_phone`
+returns "" for a flagged number; the value stays on the record because
+an old order or a Venmo memo still matches on it.
+
+**ONE action item per person, not one per channel.**
+`_flag_contact_gap()` raises "NO WAY TO REACH: <name>", names every
+channel that is gone, escalates to **high** when both are, downgrades to
+medium when one comes back, and **closes itself** when the person is
+reachable again. Deduped on the subject and updated in place.
+
 **This is NOT opting out.** Opting out is the member's choice about
 being contacted at all (Kerry 2026-09-03: it "needs its own thing").
 This is the mailbox no longer existing. Keep the two separate — a
 rebuilt address should not resurrect an opt-out, and an opt-out should
 not read as a bounce.
 
-Test: `test_undeliverable_email.py`.
+Test: `test_unreachable_contacts.py`.
 
 ## Identity Self-Healing at Boot
 
