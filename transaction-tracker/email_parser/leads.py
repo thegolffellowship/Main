@@ -966,6 +966,9 @@ def lead_center_payload(status: str = "", campaigns: list | None = None,
             "campaigns": campaigns if campaigns is not None else [],
             "tag_options": get_tag_options(db_path),
             "answer_options": get_answer_options(),
+            # The browser resolves fragments off THIS map, not off a copy
+            # of the rules. One definition, two renderers (#425).
+            "sms_fragment_requires": SMS_FRAGMENT_REQUIRES,
             "manual_lead_sources": MANUAL_LEAD_SOURCES}
 
 
@@ -2830,9 +2833,31 @@ def get_sms_presets(db_path=None) -> dict:
 
 # Not presets — fragments other presets embed. They must never appear in
 # the ▾ picker as something Kerry can send on its own.
-_SMS_FRAGMENTS = ("closer", "p9", "price_block", "deadline_block",
-                  "link_offer", "link_line", "link_below",
-                  "first_timer_tail")
+# A FRAGMENT is a clause that renders or vanishes as a unit, keyed to the
+# var it depends on. This map is the SINGLE definition — it ships in the
+# Lead Center payload so the browser resolves fragments the same way the
+# server does, rather than each renderer carrying its own copy.
+#
+# That divergence is exactly what broke P7 on 2026-09-05: the server-side
+# valve was correct and the BROWSER, which is what actually fills Kerry's
+# composer, had never been taught about the new fragments and emitted
+# {deadline_block} / {link_offer} / {link_line} as literal text. The
+# safety property belonged to the mechanism and was attached to one
+# block instead (#425).
+#
+# Every fragment must OWN its punctuation and connective words, so that
+# removing it leaves a complete sentence. Not ", {first_timer_price} as a
+# 1st Timer" sitting inside a sentence that keeps the comma — the comma
+# goes with it.
+SMS_FRAGMENT_REQUIRES = {
+    "deadline_block":   "deadline",
+    "link_offer":       "link",
+    "link_line":        "link",
+    "link_below":       "link",
+    "first_timer_tail": "_price_known",
+    "price_block":      "_price_known",
+}
+_SMS_FRAGMENTS = ("closer", "p9") + tuple(SMS_FRAGMENT_REQUIRES)
 
 
 # ── Email delivery of the same presets (Kerry 2026-09-05) ────────
@@ -3166,6 +3191,82 @@ def sms_vars_for(lead: dict, owners: dict | None = None,
     }
 
 
+def tidy_sms(text: str) -> str:
+    """Clean up after a clause is removed. Same rules as the browser's
+    copy in leads.html — keep them in step.
+
+    A brace guard alone is not enough (#425 §3). A token that dropped
+    CLEANLY can still leave "…if the timing works,  as a 1st Timer." —
+    no brace, passes any guard, and reads worse than a visible
+    placeholder because it looks like carelessness rather than a bug.
+    The test of a degraded render is that a reader cannot tell a block
+    was removed.
+    """
+    import re as _re
+    out = text or ""
+    out = _re.sub(r"[ \t]{2,}", " ", out)          # doubled spaces
+    out = _re.sub(r"[ \t]+([,.;:!?])", r"\1", out)  # space before punctuation
+    out = _re.sub(r",\s*([.!?])", r"\1", out)       # orphaned comma before a stop
+    out = _re.sub(r",\s*,", ",", out)              # doubled commas
+    out = _re.sub(r"\(\s*\)", "", out)              # emptied parentheses
+    out = "\n".join(ln.strip() for ln in out.split("\n"))
+    out = _re.sub(r"\n{3,}", "\n\n", out)           # a dropped line left a hole
+    return out.strip()
+
+
+# Shapes that mean the render is not fit to send. A message missing a
+# sentence is recoverable; one that tells a stranger they are reading
+# machine output is not, because TGF's entire pitch is that a real
+# person texted them.
+_BAD_SHAPES = (
+    ("placeholder", r"[{}]"),
+    # An event reference with no event behind it. Two shapes, because a
+    # blank {course} can land before punctuation ("at.") or before the
+    # next word ("at is up next"), and the second is the one that got
+    # through the first version of this check.
+    ("empty_event", r"\bat\s*[.,]"),
+    ("empty_event", r"\b(?:at|on)\s+(?:is|was|if|up|and|or)\b"),
+    ("dangling_connective", r"\b(?:and|or|for|with|at|to)\s*$"),
+)
+
+
+def sms_render_issues(text: str) -> list[str]:
+    """Everything wrong with a rendered message, named. Empty = sendable.
+
+    Checks the DATA first where it is available, because that is exact:
+    a preset that names an event when there is no event produces
+    "at is up next based on your availability", which contains no brace,
+    passes any placeholder guard, and reads worse than a visible token
+    because it looks like carelessness rather than a bug (#425 §3).
+    The text patterns stay as a backstop for callers that only have the
+    string.
+    """
+    import re as _re
+    found = []
+    for name, pat in _BAD_SHAPES:
+        if name not in found and _re.search(pat, text or "", _re.MULTILINE):
+            found.append(name)
+    return found
+
+
+def sms_issues_for(presets: dict, key: str, text: str,
+                   sms_vars: dict) -> list[str]:
+    """Issues for one render, using the preset SOURCE and the vars.
+
+    This is the exact version: it asks whether the template referenced an
+    event and whether we actually had one, rather than trying to spot the
+    wreckage afterwards.
+    """
+    found = list(sms_render_issues(text))
+    src = (presets.get(key) or {}).get("text") or ""
+    names_event = "{course}" in src or "{when}" in src
+    have_event = bool((sms_vars or {}).get("course")
+                      and (sms_vars or {}).get("when"))
+    if names_event and not have_event and "empty_event" not in found:
+        found.append("empty_event")
+    return found
+
+
 def render_sms(presets: dict, key: str, lead: dict, sms_vars: dict,
                slot: str = "", addons: list | None = None,
                closer: bool = False) -> str:
@@ -3190,40 +3291,42 @@ def render_sms(presets: dict, key: str, lead: dict, sms_vars: dict,
             lines.append(t)
     out = "\n".join(lines)
 
-    # #417 fragments, assembled before the rest so a missing value takes
-    # its whole sentence with it. A follow-up whose event has no
-    # registration URL sends WITHOUT the link sentence rather than with a
-    # dangling "Here's the link" and nothing after it.
-    _frag_ok = {
-        "deadline_block": bool(sms_vars.get("deadline")),
-        "link_offer": bool(sms_vars.get("link")),
-        "link_line": bool(sms_vars.get("link")),
-        "link_below": bool(sms_vars.get("link")),
-        "first_timer_tail": bool(sms_vars.get("_price_known")),
-    }
-    for _k, _ok in _frag_ok.items():
+    # EVERY fragment resolves through one loop off SMS_FRAGMENT_REQUIRES.
+    # There is no per-block special case any more: adding a fragment to
+    # that map is the whole job, which is what stops the next one being
+    # forgotten the way the #417 blocks were (#425).
+    for _k, _req in SMS_FRAGMENT_REQUIRES.items():
         tok = "{" + _k + "}"
-        if tok in out:
-            out = out.replace(
-                tok, ((presets.get(_k) or {}).get("text") or "") if _ok else "")
-
-    # Assemble the price block before substituting the rest.
-    if "{price_block}" in out:
+        if tok not in out:
+            continue
         block = ""
-        if sms_vars.get("_price_known"):
-            pb = presets.get("price_block") or {}
+        if sms_vars.get(_req):
+            frag = presets.get(_k) or {}
             # P3 deliberately omits the optional-gross-games sentence:
             # skins is a competitor's pitch and lands wrong on a
             # community lead (#406).
-            block = (pb.get("no_games") if key == "p3" else pb.get("text")) or ""
-        out = out.replace("{price_block}", block)
+            block = ((frag.get("no_games") if (_k == "price_block"
+                                               and key == "p3")
+                      else frag.get("text")) or "")
+        out = out.replace(tok, block)
 
     for k, v in sms_vars.items():
         if k.startswith("_"):
             continue
         out = out.replace("{" + k + "}", str(v))
-    # Tidy any double spaces a dropped block leaves behind.
-    return re.sub(r"[ \t]{2,}", " ", out).strip()
+
+    # FAIL CLOSED. A message that is missing a sentence is recoverable; a
+    # message with {link_offer} in it tells a stranger they are reading
+    # machine output, and that is the one impression TGF cannot afford.
+    # So any token that survived every rule above is DROPPED, loudly,
+    # rather than served.
+    if "{" in out or "}" in out:
+        leftover = re.findall(r"\{[a-z_0-9]+\}", out)
+        logger.error("SMS render left %s unresolved in preset %s — dropped "
+                     "rather than served", leftover or "braces", key)
+        out = re.sub(r"\{[a-z_0-9]+\}", "", out)
+        out = out.replace("{", "").replace("}", "")
+    return tidy_sms(out)
 
 
 def _email_html(body: str, link: str = "") -> str:
@@ -3289,6 +3392,8 @@ def lead_email_text(lead_id: int, preset: str = "", closer: bool = False,
     res["html"] = _email_html(res["text"], link)
     res["email"] = (lead.get("email") or "").strip()
     res["opted_out"] = lead_opted_out(lead)
+    res["issues"] = sms_issues_for(get_sms_presets(db_path), res["preset"],
+                                   res["text"], res.get("vars") or {})
     return res
 
 
@@ -3314,6 +3419,14 @@ def send_lead_email(lead_id: int, preset: str = "", closer: bool = False,
     to = res.get("email") or ""
     if not to:
         return {"error": "this lead has no email address"}
+    # BOUNDARY CHECK (#425 §4). The UI refuses a broken render, and so
+    # does this — a route is reachable without the UI, and the whole
+    # point of a boundary check is that it sits at the boundary.
+    issues = res.get("issues") or []
+    if issues:
+        return {"error": "this preset does not render cleanly for this lead "
+                         f"({', '.join(issues)}) — nothing was sent",
+                "issues": issues}
     if res.get("opted_out"):
         # Being asked once is a survey answer. Emailing after they said
         # no is spam, and TGF's whole pitch is that it is not that.
@@ -3393,6 +3506,11 @@ def lead_sms_text(lead_id: int, preset: str = "", closer: bool = False,
             "text": render_sms(presets, key, lead, vars_,
                                slot=pick["slot"], addons=addons,
                                closer=closer),
+            "issues": sms_issues_for(presets, key,
+                                     render_sms(presets, key, lead, vars_,
+                                                slot=pick["slot"],
+                                                addons=addons, closer=closer),
+                                     vars_),
             "vars": vars_, "presets": sms_preset_order(presets)}
 
 

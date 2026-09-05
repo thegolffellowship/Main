@@ -265,6 +265,9 @@
       .ld-emmsg.ok  { color:#1F7A4D; }
       .ld-emmsg.err { color:#B4322A; }
       .ld-optout { opacity:.55; cursor:not-allowed; }
+      .ld-smsbad { font-size:.72rem; color:#B4322A; background:#FBEDEB;
+                   border-radius:4px; padding:.3rem .45rem; margin:.3rem 0; }
+      .ld-sms-bad { opacity:.55; }
     </style>
         <dialog id="ld-addlead" class="ld-dlg">
           <form method="dialog" id="ld-addform">
@@ -1100,20 +1103,76 @@
         const vars = Object.assign({ first_name: l.first_name || "there",
             owner: "Kerry", next_tue: "Tuesday night", next_sat: "our next Saturday 18",
             next_event: "one of our upcoming events" }, st.vars);
-        // {price_block} holds the two ratified price sentences and drops
-        // out entirely when the first-timer price can't be computed —
-        // better no price than a text with a hole in it (#406).
-        if (out.includes("{price_block}")) {
-            const pb = presets.price_block || {};
-            const block = vars._price_known
-                ? ((key === "p3" ? pb.no_games : pb.text) || "") : "";
-            out = out.split("{price_block}").join(block);
+        // EVERY fragment resolves off the server's own map. This browser
+        // renderer is what fills Kerry's composer, and on 2026-09-05 it
+        // shipped {deadline_block} / {link_offer} / {link_line} into a
+        // message that was one tap from a prospect, because the server
+        // had learned about the new fragments and it had not. There is
+        // no per-block special case here any more — if the server adds a
+        // fragment, this loop already handles it (#425).
+        const reqs = ALL.sms_fragment_requires
+            || { price_block: "_price_known" };
+        for (const [name, req] of Object.entries(reqs)) {
+            const tok = "{" + name + "}";
+            if (!out.includes(tok)) continue;
+            const frag = presets[name] || {};
+            const block = vars[req]
+                ? ((name === "price_block" && key === "p3"
+                        ? frag.no_games : frag.text) || "")
+                : "";
+            out = out.split(tok).join(block);
         }
         for (const k of Object.keys(vars)) {
             if (k.startsWith("_")) continue;
             out = out.split("{" + k + "}").join(vars[k]);
         }
-        return out.replace(/[ \t]{2,}/g, " ").trim();
+        // FAIL CLOSED, same rule as the server: never show or send a
+        // string with a brace in it. Dropping a clause is recoverable;
+        // telling a stranger they are reading machine output is not.
+        if (out.includes("{") || out.includes("}")) {
+            console.error("SMS render left placeholders in", key,
+                          out.match(/\{[a-z_0-9]+\}/g));
+            out = out.replace(/\{[a-z_0-9]+\}/g, "").replace(/[{}]/g, "");
+        }
+        return tidySms(out);
+    }
+
+    // Keep in step with tidy_sms() in email_parser/leads.py. A brace
+    // guard alone is not enough: a clause that dropped CLEANLY can still
+    // leave "…if the timing works,  as a 1st Timer.", which reads worse
+    // than a visible placeholder because it looks like carelessness.
+    function tidySms(text) {
+        let out = text || "";
+        out = out.replace(/[ \t]{2,}/g, " ");
+        out = out.replace(/[ \t]+([,.;:!?])/g, "$1");
+        out = out.replace(/,\s*([.!?])/g, "$1");
+        out = out.replace(/,\s*,/g, ",");
+        out = out.replace(/\(\s*\)/g, "");
+        out = out.split("\n").map(l => l.trim()).join("\n");
+        out = out.replace(/\n{3,}/g, "\n\n");
+        return out.trim();
+    }
+
+    // Shapes that mean a render is not fit to send, named so the card
+    // can say WHY rather than silently offering broken text.
+    // Mirrors sms_issues_for() in email_parser/leads.py. Checks the DATA
+    // first where it has it — a preset that names an event when there is
+    // no event renders "at is up next based on your availability", which
+    // has no brace, passes any placeholder guard, and reads worse than a
+    // visible token because it looks like carelessness (#425 §3).
+    function smsIssues(text, l, key) {
+        const found = [];
+        if (/[{}]/.test(text)) found.push("placeholder");
+        const src = ((ALL.sms_presets || {})[key || (l && smsState(l).key)] || {}).text || "";
+        const vars = (l && smsState(l).vars) || {};
+        const namesEvent = src.includes("{course}") || src.includes("{when}");
+        if (namesEvent && !(vars.course && vars.when)) found.push("no event to name");
+        if (!found.includes("no event to name")
+            && (/\bat\s*[.,]/.test(text)
+                || /\b(?:at|on)\s+(?:is|was|if|up|and|or)\b/.test(text)))
+            found.push("no event to name");
+        if (/\b(?:and|or|for|with|at|to)\s*$/m.test(text)) found.push("unfinished sentence");
+        return found;
     }
     // ── Email the same preset (Kerry 2026-09-05) ────────────────
     // One copy of the copy: this reuses smsTextFor, so the email body is
@@ -1152,11 +1211,16 @@
         const presets = ALL.sms_presets || {};
         const rows = (ALL.sms_order || []).map(k =>
             `<button class="ld-btn${k === st.key ? " sel" : ""}" onclick="pickSms(${l.id},'${k}')">${k === st.key ? "✓ " : ""}${esc(k.toUpperCase())} · ${esc((presets[k] || {}).label || k)}</button>`).join("");
-        return `<div class="ld-smsprev">${esc(smsTextFor(l))}</div>
+        const body = smsTextFor(l);
+        const bad = smsIssues(body, l);
+        const sendBtn = bad.length
+            ? `<div class="ld-smsbad">Not sendable — ${esc(bad.join(", "))}. Pick another preset.</div>`
+            : `<button class="ld-btn ld-btn-primary" id="ld-emsend-${side}-${l.id}" onclick="sendLeadEmail(${l.id},'${side}')">Send ${esc(st.key.toUpperCase())} now</button>`;
+        return `<div class="ld-smsprev">${esc(body)}</div>
             <div class="ld-emto">to ${esc(l.email || "")}</div>
             ${rows}
             <button class="ld-btn" onclick="toggleSmsCloser(${l.id})">${st.closer ? "☑" : "☐"} Add offer line</button>
-            <button class="ld-btn ld-btn-primary" id="ld-emsend-${side}-${l.id}" onclick="sendLeadEmail(${l.id},'${side}')">Send ${esc(st.key.toUpperCase())} now</button>
+            ${sendBtn}
             <div class="ld-emmsg" id="ld-emmsg-${side}-${l.id}"></div>`;
     }
 
@@ -1204,16 +1268,33 @@
         const rows = (ALL.sms_order || []).map(k =>
             `<button class="ld-btn${k === st.key ? " sel" : ""}" onclick="pickSms(${l.id},'${k}')">${k === st.key ? "✓ " : ""}${esc(k.toUpperCase())} · ${esc((presets[k] || {}).label || k)}</button>`).join("");
         const why = st.why ? `<div class="ld-smswhy">auto-pick: ${esc(st.why)}${st.addons.includes("p9") ? " · + both-cities line" : ""}</div>` : "";
-        return `<div class="ld-smsprev">${esc(smsTextFor(l))}</div>${why}${rows}
+        const body = smsTextFor(l);
+        const bad = smsIssues(body, l);
+        const warn = bad.length
+            ? `<div class="ld-smsbad">Not sendable — ${esc(bad.join(", "))}. Pick another preset.</div>`
+            : "";
+        return `<div class="ld-smsprev">${esc(body)}</div>${warn}${why}${rows}
             <button class="ld-btn" onclick="toggleSmsCloser(${l.id})">${st.closer ? "☑" : "☐"} Add offer line</button>`;
     }
     function renderSms(id) {
         const l = ((ALL || {}).leads || []).find(x => x.id === id);
         if (!l) return;
         const body = smsTextFor(l);
+        // BOUNDARY CHECK (#425 §4): the composer is the last place this
+        // text can be inspected before it reaches a stranger, so the
+        // check belongs here and not only at the source. A render with
+        // issues opens an EMPTY composer rather than a broken message.
+        const bad = smsIssues(body, l);
         for (const side of ["m", "d"]) {
             const a = document.getElementById(`ld-sms-${side}-${id}`);
-            if (a) { a.href = `sms:${l.phone}?&body=${encodeURIComponent(body)}`; a.title = body; }
+            if (a) {
+                a.href = bad.length ? `sms:${l.phone}` :
+                    `sms:${l.phone}?&body=${encodeURIComponent(body)}`;
+                a.title = bad.length
+                    ? `Not sendable: ${bad.join(", ")}. Pick another preset.`
+                    : body;
+                a.classList.toggle("ld-sms-bad", bad.length > 0);
+            }
             const pk = document.getElementById(`ld-smspk-${side}-${id}`);
             if (pk) pk.textContent = smsPickLabel(l, side === "m");
             const menu = document.getElementById(`ld-smsmenu-${side}-${id}`);

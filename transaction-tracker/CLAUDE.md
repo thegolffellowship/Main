@@ -39,6 +39,26 @@ Before working on a specific area, Read the relevant sub-doc:
 
 ## Guiding Principles
 
+**Protect the CLASS, not the instance (platform-claude #425, 2026-09-05).**
+When you make one thing safe, enumerate everything else of its kind and
+make those safe too — or write down which members you deliberately left
+unprotected and why. Three times in one week the instance was fixed well
+and the class was not: the 48-hour alarm armed forward but not backward
+(#405); the `price_block` valve failed safe but no other block did, so
+the #417 fragments shipped with no empty case and P7 emitted
+`{link_offer}` into Kerry's composer (#424); and the first brace guard
+would still have passed `"…if the timing works,  as a 1st Timer."`
+Each fix was correct. The pattern is that the safety property gets
+attached to the case in front of us instead of to the MECHANISM.
+
+**Corollary — check at the boundary, not only at the source.** A defect
+that only appears on the surface a person actually uses is invisible to
+every test upstream of it. A 500 rendered as a blank page on mobile
+because the error banner lived in the desktop container (#410); a
+rendering defect appeared only in the iMessage composer at the moment of
+sending (#424). Anything that reaches a member or a prospect needs a
+validity check where it leaves the system.
+
 **Release checklist — backfill rule (platform-claude #405, 2026-09-03):** any feature that arms state on an event GOING FORWARD needs a backfill for the rows that predate it. v2.294.0's 48-hour alarm shipped without one and left 27 already-contacted leads outside the gate it exists to enforce — a feature can silently under-cover exactly the population it was built for.
 
 These are durable design principles that apply to **every** feature in this app and to the future TGF Platform. When in doubt, default to these.

@@ -1,5 +1,18 @@
-window.TGF_VERSION = "2.324.0";
+window.TGF_VERSION = "2.325.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.325.0",
+    date: "2026-09-05",
+    changes: [
+      "FIX, LIVE DEFECT: P7 was putting raw {deadline_block} / {link_offer} / {link_line} into the iMessage composer. Kerry caught it before sending. The cause was NOT that the registration-link field and the derived deadline were missing \u2014 both shipped in v2.321.0 and the server-side valve was correct. The cause is that there are TWO renderers, and only the server learned about the new fragments. The browser is what fills the composer, and it still had a hand-written special case for {price_block} and nothing else, so every other fragment fell through as literal text.",
+      "Both renderers now resolve EVERY fragment from one map the server ships in the payload. There is no per-block special case left in either. Adding a fragment to that map is now the whole job, which is what stops the next one being forgotten.",
+      "FAIL CLOSED, both sides: a rendered message containing a brace is never shown and never sent. The token is stripped and the failure logged, because a message missing a sentence is recoverable and one that tells a stranger they are reading machine output is not \u2014 the entire pitch is that a real person texted them.",
+      "A brace guard alone was not enough, and CA was right to push. A clause that drops CLEANLY can still leave 'if the timing works,  as a 1st Timer.' \u2014 no brace, passes any guard, and reads worse than a visible placeholder because it looks like carelessness. Every fragment now owns its own comma and full stop so removing it leaves a whole sentence, and a shared tidy pass catches doubled spaces, orphaned commas and commas before a full stop.",
+      "A preset that names an event when there is no event for that lead is now REFUSED rather than quietly served. It used to render 'at is up next based on your availability' \u2014 no brace, so nothing caught it. The Text link opens an empty composer, the Send button is replaced by the reason, and the API refuses too, because a route is reachable without the UI.",
+      "New test: every preset \u00d7 all 65 combinations of absent data \u00d7 with and without the offer line \u2014 1,040 renders, asserting no placeholder, no doubled space, no orphaned comma, no unfinished sentence, no empty message. The old suites tested the happy path, which is why this defect could only be found by a person looking at his phone.",
+      "scoring-leads-payload now reports which preset each lead would send and how many renders are unsendable, so the exposure of a rendering defect can be counted instead of guessed at.",
+    ],
+  },
   {
     version: "2.324.0",
     date: "2026-09-05",

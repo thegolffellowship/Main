@@ -1680,6 +1680,43 @@ def get_venmo_transactions(
 _GGH_BG: dict = {}
 
 
+def _render_health(payload: dict) -> dict:
+    """Preset-render health across the live queue (#424/#425).
+
+    Reports which preset each lead would send and whether that render is
+    clean, so the exposure of a rendering defect can be counted rather
+    than guessed at.
+    """
+    from email_parser.leads import (get_sms_presets, render_sms,
+                                    sms_issues_for)
+    presets = get_sms_presets()
+    by_preset: dict = {}
+    issues: dict = {}
+    unsendable = 0
+    for l in payload.get("leads") or []:
+        sms = l.get("sms") or {}
+        key = sms.get("preset")
+        if not key:
+            continue
+        by_preset[key] = by_preset.get(key, 0) + 1
+        try:
+            txt = render_sms(presets, key, l, sms.get("vars") or {},
+                             slot=sms.get("slot") or "",
+                             addons=sms.get("addons") or [])
+            found = sms_issues_for(presets, key, txt, sms.get("vars") or {})
+        except Exception as e:            # a render that throws is unsendable
+            found = [f"render error: {e.__class__.__name__}"]
+        if found:
+            unsendable += 1
+            for f in found:
+                issues.setdefault(f, []).append(key)
+    return {
+        "picked_by_preset": dict(sorted(by_preset.items())),
+        "renders_unsendable": unsendable,
+        "render_issues": {k: sorted(set(v)) for k, v in issues.items()},
+    }
+
+
 def _scoring_dispatch(url: str, extract: str):
     """Bridge for MCP sessions whose cached tool inventory predates the
     v2.23 scoring tools (client sessions freeze the tool list at session
@@ -2416,6 +2453,11 @@ def _scoring_dispatch(url: str, extract: str):
                 "sms_template_chars": len(_pl.get("sms_template") or ""),
                 "ad_sets": sorted((_pl.get("by_ad_set") or {}).keys()),
                 "tag_options": len(_pl.get("tag_options") or []),
+                # #424/#425: what each lead's PICKED preset actually
+                # renders to right now, and whether it is fit to send.
+                # The P7 defect was invisible to every existing check
+                # because it only appeared in the composer.
+                **_render_health(_pl),
             }, indent=2, default=str)
         if cmd == "scoring-followups-due":
             # What the 7 AM morning digest will list, checkable at any
