@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.325.0";
+window.TGF_VERSION = "2.325.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.325.1",
+    date: "2026-09-05",
+    changes: [
+      "The preset menu now dismisses like a menu. Kerry: 'The text preset choice tab doesn't collapse easily. It should go away once something else is clicked like when you click text.' It only ever closed when ANOTHER menu was opened, so tapping Text, Call or Note left it sitting over the next card with no obvious way out. Now a tap anywhere outside it closes it, as does Escape, and a successful email send puts it away. Tapping a preset INSIDE the menu still keeps it open, because that re-renders the preview and the point is to read it.",
+      "The headless page harness can now see clicks at all \u2014 its DOM stub swallowed every listener and returned no menus, which is precisely why this reached a phone instead of a test. It records the page's document listeners, tracks open menus, and dispatches synthetic taps, so the dismiss rules are now asserted: the picker, the menu interior, Text, Call, anywhere else, and Escape.",
+    ],
+  },
   {
     version: "2.325.0",
     date: "2026-09-05",

@@ -40,8 +40,24 @@ const el = id => ({ id, innerHTML: "", style: {}, value: "", dataset: {},
     checked: false, classList: { add() {}, remove() {}, toggle() {}, contains: () => false },
     addEventListener() {}, querySelectorAll: () => [], querySelector: () => null,
     closest: () => null, appendChild() {}, remove() {} });
+
+// The menus the page can open, and the document listeners it installs.
+// The stub used to swallow both, which is exactly why the "menu never
+// closes" bug reached Kerry's phone: nothing here could see a click.
+const MENUS = [];
+const LISTENERS = { click: [], keydown: [] };
+// A click target that answers closest() the way a browser would, from a
+// declared list of the classes on it and its ancestors.
+const target = (...classes) => ({
+    closest: sel => sel.split(",").map(x => x.trim().replace(".", ""))
+        .some(c => classes.includes(c)) ? {} : null,
+});
+const dispatch = (type, ev) => LISTENERS[type].forEach(fn => fn(ev));
+
 global.document = { getElementById: id => store[id] || (store[id] = el(id)),
-    querySelectorAll: () => [], querySelector: () => null, addEventListener() {},
+    querySelectorAll: sel => (sel === ".ld-menu" ? MENUS : []),
+    querySelector: () => null,
+    addEventListener: (type, fn) => { (LISTENERS[type] || []).push(fn); },
     createElement: () => el("x"), body: el("body"), documentElement: el("html") };
 global.window = { location: { search: "", href: "" }, addEventListener() {},
     matchMedia: () => ({ matches: false, addEventListener() {} }) };
@@ -57,7 +73,8 @@ try {
     eval(js + "\nglobal.__render = renderLeads; global.__setALL = v => { ALL = v; };"
             + "\nglobal.__F = { toggleSection,"
             + " setSearch: v => { searchQ = v; renderLeads(); },"
-            + " setStatus: v => { statusFilter = v; renderLeads(); } };");
+            + " setStatus: v => { statusFilter = v; renderLeads(); },"
+            + " toggleMenu, closeAllMenus };");
     render = global.__render; setALL = global.__setALL;
     console.log("  PASS  the page script evaluates");
 } catch (e) {
@@ -165,6 +182,46 @@ check("a lead with no usable preset is offered a plain compose link, "
 // lead the 48-hour alarm ever armed read as RESPONDED, and the v2.301.x
 // backfill flipped 49 people at once on the screen Kerry uses to decide
 // who still needs chasing.
+// Kerry 2026-09-05: "The text preset choice tab doesn't collapse easily.
+// It should go away once something else is clicked like when you click
+// text." It used to close ONLY when another menu opened, so tapping
+// Text / Call / Note left it sitting over the next card.
+console.log("The preset menu dismisses like a menu");
+const menu = document.getElementById("ld-smsmenu-m-1");
+MENUS.push(menu);
+F.toggleMenu("ld-smsmenu-m-1");
+check("opening it shows it", menu.style.display === "block", menu.style.display);
+
+dispatch("click", { target: target("ld-smspk") });
+check("tapping the picker itself does NOT close it — its own handler owns that",
+      menu.style.display === "block", menu.style.display);
+
+dispatch("click", { target: target("ld-btn", "ld-menu") });
+check("choosing a preset INSIDE the menu keeps it open, so the preview "
+      + "can update", menu.style.display === "block", menu.style.display);
+
+dispatch("click", { target: target("cell-link") });
+check("tapping Text closes it", menu.style.display === "none", menu.style.display);
+
+F.toggleMenu("ld-smsmenu-m-1");
+dispatch("click", { target: target("ld-act") });
+check("so does tapping Call or Note", menu.style.display === "none", menu.style.display);
+
+F.toggleMenu("ld-smsmenu-m-1");
+dispatch("click", { target: target("ld-dcard") });
+check("so does tapping anywhere else on the page",
+      menu.style.display === "none", menu.style.display);
+
+F.toggleMenu("ld-smsmenu-m-1");
+dispatch("keydown", { key: "Escape" });
+check("and Escape closes it", menu.style.display === "none", menu.style.display);
+
+F.toggleMenu("ld-smsmenu-m-1");
+F.toggleMenu("ld-smsmenu-m-1");
+check("tapping the picker twice toggles it shut",
+      menu.style.display === "none", menu.style.display);
+MENUS.length = 0;
+
 const touchSub = () => store["ld-touch-sub"].textContent || "";
 check("a lead whose only note is 'auto' is NOT counted as responded",
       /0 responded/.test(touchSub()), touchSub());

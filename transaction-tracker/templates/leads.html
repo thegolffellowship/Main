@@ -1248,6 +1248,9 @@
                 msg.textContent = `Sent. Follow-up ${d.follow_up_at || "armed"}.`;
                 msg.className = "ld-emmsg ok";
             }
+            // The job is done — put the menu away rather than leaving it
+            // over the next card.
+            setTimeout(closeAllMenus, 900);
             await loadLeads();
         } catch (e) {
             // Say what happened on the card. A send that silently failed
@@ -1523,13 +1526,35 @@
         if (d.error) { alert(d.error); return; }
         loadLeads();
     }
+    function closeAllMenus() {
+        document.querySelectorAll(".ld-menu").forEach(m => m.style.display = "none");
+    }
     function toggleMenu(id) {
         const el = document.getElementById(id);
         if (!el) return;
         const open = el.style.display === "block";
-        document.querySelectorAll(".ld-menu").forEach(m => m.style.display = "none");
+        closeAllMenus();
         el.style.display = open ? "none" : "block";
     }
+    // The preset menu used to stay open until another menu was opened, so
+    // tapping Text / Call / Note left it sitting over the next card with
+    // no obvious way to dismiss it (Kerry 2026-09-05: "it should go away
+    // once something else is clicked like when you click text").
+    //
+    // Bubble phase on purpose: the picker's own inline onclick has
+    // already run by the time this fires, so a tap ON the picker must be
+    // ignored here or it would close what was just opened. A tap INSIDE
+    // the menu is a choice — picking a preset re-renders the preview and
+    // the menu should stay up to show it. Everything else dismisses.
+    document.addEventListener("click", e => {
+        const t = e.target;
+        if (t && t.closest && (t.closest(".ld-smspk, .ld-emailpk")
+                               || t.closest(".ld-menu"))) return;
+        closeAllMenus();
+    });
+    document.addEventListener("keydown", e => {
+        if (e.key === "Escape") closeAllMenus();
+    });
     function toggleDet(id) {
         const el = document.getElementById("ld-det-" + id);
         if (el) el.style.display = el.style.display === "block" ? "none" : "block";
