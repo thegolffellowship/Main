@@ -359,6 +359,7 @@ def send_mail_graph(
     html_body: str,
     cc_address: str | None = None,
     bcc_address: str | None = None,
+    reply_to: str | None = None,
 ) -> bool:
     """Send an email via Microsoft Graph API (requires Mail.Send permission).
 
@@ -388,6 +389,15 @@ def send_mail_graph(
         },
         "toRecipients": to_recipients,
     }
+    if reply_to:
+        # Mail sent FROM the shared TGF mailbox should be replied to by
+        # whoever is actually working the thread — otherwise a lead's
+        # answer lands in an inbox whose parser only reads order emails,
+        # and nobody sees it. Comma-separated, like the others.
+        _rt = [a.strip() for a in reply_to.split(",") if a.strip()]
+        if _rt:
+            message["replyTo"] = [
+                {"emailAddress": {"address": addr}} for addr in _rt]
     if cc_address:
         cc_addresses = [a.strip() for a in cc_address.split(",") if a.strip()]
         if cc_addresses:

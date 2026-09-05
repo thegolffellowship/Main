@@ -11550,6 +11550,29 @@ def api_lead_edit(lead_id):
     return jsonify(res), (400 if res.get("error") else 200)
 
 
+@app.route("/api/leads/<int:lead_id>/email", methods=["POST"])
+@require_role("manager")
+def api_send_lead_email(lead_id):
+    """Send one ratified preset to one lead by email (Kerry 2026-09-05).
+
+    Body: {preset, closer, author, preview}. `preview: true` renders the
+    subject and body WITHOUT sending, so the card can show exactly what
+    is about to go out. Sending logs the touch and arms the 48-hour
+    clock, which the SMS path cannot do for itself.
+    """
+    from email_parser.leads import lead_email_text, send_lead_email
+    d = request.get_json(silent=True) or {}
+    preset = (d.get("preset") or "").strip()
+    closer = bool(d.get("closer"))
+    if d.get("preview"):
+        res = lead_email_text(lead_id, preset=preset, closer=closer)
+    else:
+        res = send_lead_email(lead_id, preset=preset, closer=closer,
+                              author=(d.get("author")
+                                      or session.get("role") or ""))
+    return jsonify(res), (400 if res.get("error") else 200)
+
+
 @app.route("/api/leads/manual", methods=["POST"])
 @require_role("manager")
 def api_add_manual_lead():

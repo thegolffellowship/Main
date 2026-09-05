@@ -148,6 +148,18 @@ check("the backfilled ⏰ alarm chip renders", mob.includes("⏰"));
 check("no unsubstituted placeholder leaks into a message",
       !/\{(first_name|owner|cadence|price_block|first_timer_price)\}/.test(mob),
       (mob.match(/\{[a-z_]+\}/g) || []).slice(0, 5).join(" "));
+check("nor into the desktop list",
+      !/\{(first_name|owner|cadence|price_block|first_timer_price)\}/.test(desk),
+      (desk.match(/\{[a-z_]+\}/g) || []).slice(0, 5).join(" "));
+
+// v2.324.0: the Email picker renders the same preset preview the Text
+// picker does, so it hit the SAME trap on a lead whose server-side pick
+// failed — a half-filled template with {cadence} still in it, next to a
+// button offering to mail it to a stranger. No preset, no send button.
+check("a lead with no usable preset is offered a plain compose link, "
+      + "never a half-rendered one",
+      !/ld-emsend-[md]-6\b/.test(mob + desk),
+      "Nosms still shows a Send button");
 
 // An 'auto' note is BOOKKEEPING, not a reply. Counting it made every
 // lead the 48-hour alarm ever armed read as RESPONDED, and the v2.301.x

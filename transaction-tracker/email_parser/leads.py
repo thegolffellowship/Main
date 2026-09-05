@@ -2835,6 +2835,60 @@ _SMS_FRAGMENTS = ("closer", "p9", "price_block", "deadline_block",
                   "first_timer_tail")
 
 
+# ── Email delivery of the same presets (Kerry 2026-09-05) ────────
+#
+# The presets were written for SMS and are ratified as SMS copy. Email
+# needs one thing SMS does not: a subject line. These are MINE, not
+# ratified — deliberately flat and factual rather than marketing beats,
+# because the body is Kerry's voice and a salesy subject over it would
+# read as a different person wrote them. Flagged to CA for wave 3.
+#
+# Dial-overridable via `lead_email_subjects` so Kerry can rewrite one
+# without a deploy.
+DEFAULT_EMAIL_SUBJECTS = {
+    "p1": "Golf with The Golf Fellowship",
+    "p2": "Golf with The Golf Fellowship",
+    "p3": "Golf with The Golf Fellowship",
+    "p4": "Golf with The Golf Fellowship",
+    "p6": "When does golf work for you?",
+    "p7": "Following up — {course}",
+    "p7b": "Last one from me",
+    "p8": "Good to see your name again",
+}
+DEFAULT_EMAIL_SUBJECT = "The Golf Fellowship"
+
+
+def get_email_subjects(db_path: str | Path | None = None) -> dict:
+    """Preset → subject line, `lead_email_subjects` dial over defaults."""
+    out = dict(DEFAULT_EMAIL_SUBJECTS)
+    dial = _dial_json("lead_email_subjects", {}, db_path=db_path)
+    if isinstance(dial, dict):
+        for k, v in dial.items():
+            if isinstance(v, str) and v.strip():
+                out[k] = v.strip()
+    return out
+
+
+def lead_opted_out(lead: dict) -> bool:
+    """True when the lead said NO to the stay-in-the-loop question.
+
+    The same test dismiss_no_loop_leads and the CSV invite exports use.
+    A dismissed lead can still be looked at, and the Text button still
+    renders because Kerry may have a live conversation going — but TGF
+    must never SEND to somebody who said not to. Being asked once is a
+    survey answer; being emailed after saying no is spam.
+    """
+    payload = lead.get("payload") or {}
+    if not isinstance(payload, dict):
+        return False
+    val = payload.get(LOOP_QUESTION_KEY)
+    if not (isinstance(val, str) and val.strip()):
+        val = next((v for k, v in payload.items()
+                    if ("stay_in_the_loop" in k.lower() or "loop" in k.lower())
+                    and isinstance(v, str) and v.strip()), "")
+    return val.strip().lower().startswith("no")
+
+
 def sms_preset_order(presets: dict) -> list[str]:
     order = [k for k in SMS_PRESET_ORDER if k in presets]
     order += sorted(k for k in presets
@@ -3170,6 +3224,146 @@ def render_sms(presets: dict, key: str, lead: dict, sms_vars: dict,
         out = out.replace("{" + k + "}", str(v))
     # Tidy any double spaces a dropped block leaves behind.
     return re.sub(r"[ \t]{2,}", " ", out).strip()
+
+
+def _email_html(body: str, link: str = "") -> str:
+    """The preset text as an email body.
+
+    Deliberately plain. These read as a person typing, not as a
+    newsletter, and wrapping Kerry's words in a branded template would
+    make them sound like marketing — which is exactly what the SMS copy
+    was written to avoid. Blank lines become paragraphs; a bare URL on
+    its own line becomes a real link, which is the whole point of the
+    wave-2 follow-ups.
+    """
+    import html as _h
+    import re as _re
+    out = []
+    for para in (body or "").split("\n\n"):
+        para = para.strip()
+        if not para:
+            continue
+        if link and para == link:
+            out.append(
+                f'<p style="margin:0 0 14px"><a href="{_h.escape(link, True)}" '
+                f'style="color:#E87C3E;font-weight:600">'
+                f'{_h.escape(link)}</a></p>')
+            continue
+        safe = _h.escape(para).replace("\n", "<br>")
+        if link:
+            safe = safe.replace(
+                _h.escape(link),
+                f'<a href="{_h.escape(link, True)}" '
+                f'style="color:#E87C3E;font-weight:600">{_h.escape(link)}</a>')
+        out.append(f'<p style="margin:0 0 14px">{safe}</p>')
+    return ('<div style="font-family:-apple-system,BlinkMacSystemFont,'
+            '\'Segoe UI\',Roboto,Helvetica,Arial,sans-serif;'
+            'font-size:15px;line-height:1.55;color:#1B1B1B">'
+            + "".join(out) + "</div>")
+
+
+def lead_email_text(lead_id: int, preset: str = "", closer: bool = False,
+                    db_path: str | Path | None = None) -> dict:
+    """The SAME preset, rendered for email: subject + body + HTML.
+
+    One copy of the copy. The presets are ratified as SMS text and email
+    reuses them verbatim rather than growing a second wording that
+    drifts — the only thing email adds is a subject line.
+    """
+    res = lead_sms_text(lead_id, preset=preset, closer=closer,
+                        db_path=db_path)
+    if res.get("error"):
+        return res
+    rows = [r for r in get_leads(limit=5000, db_path=db_path)
+            if r["id"] == lead_id]
+    lead = rows[0] if rows else {}
+    subj_map = get_email_subjects(db_path)
+    subject = subj_map.get(res["preset"], DEFAULT_EMAIL_SUBJECT)
+    # Subjects may carry the same placeholders the body does.
+    for k, v in (res.get("vars") or {}).items():
+        if not k.startswith("_"):
+            subject = subject.replace("{" + k + "}", str(v))
+    subject = " ".join(subject.split()).strip() or DEFAULT_EMAIL_SUBJECT
+    link = ((res.get("vars") or {}).get("link") or "").strip()
+    res["subject"] = subject
+    res["html"] = _email_html(res["text"], link)
+    res["email"] = (lead.get("email") or "").strip()
+    res["opted_out"] = lead_opted_out(lead)
+    return res
+
+
+def send_lead_email(lead_id: int, preset: str = "", closer: bool = False,
+                    author: str = "", db_path: str | Path | None = None
+                    ) -> dict:
+    """Send one preset to one lead, and record that it happened.
+
+    The SMS path cannot log itself — it hands off to the phone and TGF
+    only learns about it if Kerry tags the card afterwards. This path
+    knows, so it does the bookkeeping the tag would have done: a note
+    naming the preset, and the 48-hour follow-up clock armed the same way
+    'Sent email' arms it. That is the point of sending from here rather
+    than from a mail client.
+    """
+    from . import database as db
+    from .timezone_utils import now_central
+
+    res = lead_email_text(lead_id, preset=preset, closer=closer,
+                          db_path=db_path)
+    if res.get("error"):
+        return res
+    to = res.get("email") or ""
+    if not to:
+        return {"error": "this lead has no email address"}
+    if res.get("opted_out"):
+        # Being asked once is a survey answer. Emailing after they said
+        # no is spam, and TGF's whole pitch is that it is not that.
+        return {"error": "this lead answered NO to invitations — "
+                         "TGF does not email people who opted out"}
+
+    tenant_id = os.getenv("AZURE_TENANT_ID")
+    client_id = os.getenv("AZURE_CLIENT_ID")
+    client_secret = os.getenv("AZURE_CLIENT_SECRET")
+    from_addr = os.getenv("EMAIL_ADDRESS")
+    if not all([tenant_id, client_id, client_secret, from_addr]):
+        return {"error": "email is not configured on this server "
+                         "(Graph credentials missing)"}
+
+    from .fetcher import send_mail_graph
+    # Replies go to whoever runs that chapter, not into a shared mailbox
+    # nobody is watching. Robert's Austin leads reply to Robert.
+    reply_to = _notify_recipients(res.get("chapter"),
+                                  db_path=db_path) or from_addr
+    ok = send_mail_graph(
+        tenant_id=tenant_id, client_id=client_id,
+        client_secret=client_secret, from_address=from_addr,
+        to_address=to, subject=res["subject"], html_body=res["html"],
+        reply_to=reply_to)
+    if not ok:
+        return {"error": "the mail server rejected the send — nothing was "
+                         "sent and nothing was logged"}
+
+    now = now_central()
+    who = (author or "").strip() or "Kerry"
+    with db._connect(db_path) as conn:
+        ensure_leads_table(conn)
+        conn.execute(
+            "INSERT INTO lead_notes (lead_id, author, note) VALUES (?,?,?)",
+            (lead_id, "auto",
+             f"Emailed {res['preset'].upper()} to {to} "
+             f"{now.strftime('%-m/%-d, %-I:%M %p')} — \"{res['subject']}\""))
+        conn.execute(
+            "UPDATE leads SET status = CASE WHEN status = 'new' "
+            "  THEN 'touched' ELSE status END, "
+            "  touched_at = COALESCE(touched_at, datetime('now')), "
+            "  touched_by = COALESCE(NULLIF(touched_by, ''), ?) "
+            "WHERE id = ?", (who, lead_id))
+        conn.commit()
+    # Arm the 48-hour clock exactly as the 'Sent email' tag would, so an
+    # emailed lead cannot fall through the gate that exists to catch it.
+    alarm = set_lead_tag(lead_id, "Sent email", db_path=db_path, author=who)
+    return {"ok": True, "lead_id": lead_id, "to": to,
+            "preset": res["preset"], "subject": res["subject"],
+            "follow_up_at": (alarm or {}).get("follow_up_at")}
 
 
 def lead_sms_text(lead_id: int, preset: str = "", closer: bool = False,

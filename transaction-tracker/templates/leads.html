@@ -260,6 +260,11 @@
         background:#FBEDEB; color:#B4322A; font-size:.8rem; }
       .ld-dlg-actions { display:flex; justify-content:flex-end; gap:.5rem; margin-top:1rem; }
       .ld-btn-primary { background:var(--primary); color:#fff; border-color:var(--primary); }
+      .ld-emto { font-size:.7rem; color:var(--text-muted); margin:.15rem 0 .3rem; }
+      .ld-emmsg { font-size:.72rem; margin-top:.3rem; }
+      .ld-emmsg.ok  { color:#1F7A4D; }
+      .ld-emmsg.err { color:#B4322A; }
+      .ld-optout { opacity:.55; cursor:not-allowed; }
     </style>
         <dialog id="ld-addlead" class="ld-dlg">
           <form method="dialog" id="ld-addform">
@@ -942,7 +947,8 @@
                     <div class="ld-dsub">${esc(l.chapter) || "unrouted"} · ${fmtReceived(l)}</div>
                 </div>
                 <div class="ld-dcontact">
-                    ${l.email ? `<a class="cell-link" href="mailto:${esc(l.email)}">${esc(l.email)}</a>` : ""}
+                    ${l.email ? `<a class="cell-link" href="mailto:${esc(l.email)}">${esc(l.email)}</a>
+                    ${emailPickerHtml(l, "d")}` : ""}
                     ${l.phone ? `<a class="cell-link" href="tel:${esc(l.phone)}">${esc(l.phone)}</a>
                     <span class="ld-menu-wrap ld-smswrap"><a class="cell-link" id="ld-sms-d-${l.id}" href="sms:${esc(l.phone)}?&body=${encodeURIComponent(smsBody)}" title="${esc(smsBody)}">💬 Text</a><span class="ld-smspk" id="ld-smspk-d-${l.id}" onclick="toggleMenu('ld-smsmenu-d-${l.id}')">${esc(smsPickLabel(l, false))}</span><span class="ld-menu ld-smsmenu" id="ld-smsmenu-d-${l.id}">${smsMenuHtml(l)}</span></span>` : ""}
                 </div>
@@ -969,7 +975,7 @@
                 <div class="ld-acts">
                     ${l.phone ? `<a class="ld-act" id="ld-sms-m-${l.id}" href="sms:${esc(l.phone)}?&body=${encodeURIComponent(smsBody)}" title="${esc(smsBody)}">💬 Text</a><span class="ld-menu-wrap"><span class="ld-act ld-smspk" id="ld-smspk-m-${l.id}" onclick="toggleMenu('ld-smsmenu-m-${l.id}')">${esc(smsPickLabel(l, true))}</span><span class="ld-menu ld-smsmenu" id="ld-smsmenu-m-${l.id}">${smsMenuHtml(l)}</span></span>
                                  <a class="ld-act" href="tel:${esc(l.phone)}">📞 Call</a>` : ""}
-                    ${l.email ? `<a class="ld-act" href="mailto:${esc(l.email)}">✉️ Email</a>` : ""}
+                    ${l.email ? emailPickerHtml(l, "m") : ""}
                     <span class="ld-act" onclick="noteLead(${l.id})">➕ Note</span>
                 </div>
                 ${latestNote ? `<div class="ld-noteprev"><b>${esc((latestNote.author || "?")[0])}</b> · ${esc(fmtNoteTime(latestNote.created_at))} — ${esc(latestNote.note)}</div>` : ""}
@@ -1109,6 +1115,84 @@
         }
         return out.replace(/[ \t]{2,}/g, " ").trim();
     }
+    // ── Email the same preset (Kerry 2026-09-05) ────────────────
+    // One copy of the copy: this reuses smsTextFor, so the email body is
+    // the ratified SMS text and cannot drift from it. The only thing
+    // email adds is a subject, which the server supplies.
+    function emailPickerHtml(l, side) {
+        const optedOut = leadOptedOut(l);
+        const cls = side === "m" ? "ld-act" : "cell-link";
+        // If the server could not pick a preset for this lead, there is
+        // nothing to send: rendering the menu anyway would show a
+        // half-filled template with {cadence} still in it, and offer to
+        // mail that to a stranger. Fall back to a plain compose link.
+        if (!l.sms || !l.sms.vars) {
+            return `<a class="${cls}" href="mailto:${esc(l.email)}">✉️ Email</a>`;
+        }
+        if (optedOut) {
+            // Visible, and visibly refused. Kerry should be able to see
+            // WHY he cannot email somebody rather than wonder where the
+            // button went.
+            return `<span class="${cls} ld-optout" title="This lead answered NO to invitations">✉️ Opted out</span>`;
+        }
+        return `<span class="ld-menu-wrap"><span class="${cls} ld-emailpk" id="ld-empk-${side}-${l.id}" onclick="toggleMenu('ld-emmenu-${side}-${l.id}')">✉️ Email ${esc(smsState(l).key.toUpperCase())} ▾</span><span class="ld-menu ld-smsmenu" id="ld-emmenu-${side}-${l.id}">${emailMenuHtml(l, side)}</span></span>`;
+    }
+
+    function leadOptedOut(l) {
+        const p = l.payload || {};
+        let v = "";
+        for (const k of Object.keys(p)) {
+            if (k.toLowerCase().includes("loop") && typeof p[k] === "string" && p[k].trim()) { v = p[k]; break; }
+        }
+        return v.trim().toLowerCase().startsWith("no");
+    }
+
+    function emailMenuHtml(l, side) {
+        const st = smsState(l);
+        const presets = ALL.sms_presets || {};
+        const rows = (ALL.sms_order || []).map(k =>
+            `<button class="ld-btn${k === st.key ? " sel" : ""}" onclick="pickSms(${l.id},'${k}')">${k === st.key ? "✓ " : ""}${esc(k.toUpperCase())} · ${esc((presets[k] || {}).label || k)}</button>`).join("");
+        return `<div class="ld-smsprev">${esc(smsTextFor(l))}</div>
+            <div class="ld-emto">to ${esc(l.email || "")}</div>
+            ${rows}
+            <button class="ld-btn" onclick="toggleSmsCloser(${l.id})">${st.closer ? "☑" : "☐"} Add offer line</button>
+            <button class="ld-btn ld-btn-primary" id="ld-emsend-${side}-${l.id}" onclick="sendLeadEmail(${l.id},'${side}')">Send ${esc(st.key.toUpperCase())} now</button>
+            <div class="ld-emmsg" id="ld-emmsg-${side}-${l.id}"></div>`;
+    }
+
+    async function sendLeadEmail(id, side) {
+        const l = ((ALL || {}).leads || []).find(x => x.id === id);
+        if (!l) return;
+        const st = smsState(l);
+        // Sending is not undoable, so it asks once and says exactly who
+        // is about to receive what.
+        if (!confirm(`Email ${st.key.toUpperCase()} to ${l.email}?\n\n`
+                     + smsTextFor(l))) return;
+        const btn = document.getElementById(`ld-emsend-${side}-${id}`);
+        const msg = document.getElementById(`ld-emmsg-${side}-${id}`);
+        if (btn) { btn.disabled = true; btn.textContent = "Sending\u2026"; }
+        if (msg) { msg.textContent = ""; msg.className = "ld-emmsg"; }
+        try {
+            const r = await fetch(`/api/leads/${id}/email`, {
+                method: "POST",
+                headers: {"Content-Type": "application/json"},
+                body: JSON.stringify({preset: st.key, closer: st.closer}),
+            });
+            const d = await r.json().catch(() => ({}));
+            if (!r.ok || d.error) throw new Error(d.error || "Send failed");
+            if (msg) {
+                msg.textContent = `Sent. Follow-up ${d.follow_up_at || "armed"}.`;
+                msg.className = "ld-emmsg ok";
+            }
+            await loadLeads();
+        } catch (e) {
+            // Say what happened on the card. A send that silently failed
+            // is worse than one that visibly did.
+            if (msg) { msg.textContent = e.message; msg.className = "ld-emmsg err"; }
+            if (btn) { btn.disabled = false; btn.textContent = `Send ${st.key.toUpperCase()} now`; }
+        }
+    }
+
     function smsPickLabel(l, short) {
         const st = smsState(l);
         const lbl = ((ALL.sms_presets || {})[st.key] || {}).label || st.key;
@@ -1134,6 +1218,11 @@
             if (pk) pk.textContent = smsPickLabel(l, side === "m");
             const menu = document.getElementById(`ld-smsmenu-${side}-${id}`);
             if (menu) menu.innerHTML = smsMenuHtml(l);
+            // The email menu shows the same preset, so it has to follow.
+            const epk = document.getElementById(`ld-empk-${side}-${id}`);
+            if (epk) epk.textContent = `✉️ Email ${smsState(l).key.toUpperCase()} ▾`;
+            const emenu = document.getElementById(`ld-emmenu-${side}-${id}`);
+            if (emenu) emenu.innerHTML = emailMenuHtml(l, side);
         }
     }
     function pickSms(id, key) {

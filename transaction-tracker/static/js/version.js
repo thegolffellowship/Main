@@ -1,5 +1,16 @@
-window.TGF_VERSION = "2.323.1";
+window.TGF_VERSION = "2.324.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.324.0",
+    date: "2026-09-05",
+    changes: [
+      "EMAIL THE SAME PRESETS. Every lead card with an address now carries an \u2709\ufe0f Email \u25be picker beside \ud83d\udcac Text, running the identical ratified copy \u2014 one copy of the copy, so the two can never drift into different wordings. The only thing email adds is a subject line, and those are dial-overridable (`lead_email_subjects`) so a line can be rewritten without a deploy. The subjects are deliberately flat and factual rather than marketing beats: the body is Kerry's voice and a salesy subject over it would read as a different person wrote it.",
+      "It SENDS from the app rather than handing off to a mail client, and that is the point \u2014 the text path cannot log itself, so TGF only learns a lead was contacted if Kerry remembers to tag the card. An emailed lead now writes its own note naming the preset and the subject, marks itself touched, and arms the 48-hour follow-up clock exactly as the 'Sent email' tag would. It cannot fall through the gate that exists to catch it.",
+      "The registration link renders as a real hyperlink in the email body, which is what the wave-2 follow-ups were rewritten for. Replies go to the chapter's own notification list rather than the shared mailbox \u2014 Robert's Austin leads reply to Robert \u2014 because a lead answering into an inbox whose parser only reads order emails is a reply nobody sees.",
+      "TGF WILL NOT EMAIL SOMEBODY WHO SAID NO. A lead who answered no to the stay-in-the-loop question shows '\u2709\ufe0f Opted out' in place of the button and the server refuses the send even if the request is made directly. Being asked once is a survey answer; being emailed after saying no is spam, and not being that is most of TGF's pitch.",
+      "A lead whose preset could not be resolved gets a plain compose link instead of the picker. The headless page harness caught this one: the preview would otherwise have rendered a half-filled template with {cadence} still in it, next to a button offering to mail it to a stranger. That case is now pinned by a test.",
+    ],
+  },
   {
     version: "2.323.1",
     date: "2026-09-05",
