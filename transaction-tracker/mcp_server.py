@@ -2434,6 +2434,31 @@ def _scoring_dispatch(url: str, extract: str):
                 _out["briefing_bytes"] = len(_html)
                 _out.pop("leads", None)
             return json.dumps(_out, indent=2, default=str)
+        if cmd == "scoring-add-lead":
+            # Manual lead entry from outside the browser (#420 §6). Same
+            # function the + Add Lead form calls, same validation, same
+            # duplicate guard — this is a second door, never a second
+            # implementation. JSON body after the colon.
+            from email_parser.leads import add_manual_lead as _aml
+            try:
+                _d = json.loads(arg or "{}")
+            except json.JSONDecodeError as e:
+                return json.dumps({"error": f"bad JSON: {e}"})
+            _r = _aml(first_name=_d.get("first_name") or "",
+                      last_name=_d.get("last_name") or "",
+                      phone=_d.get("phone") or "",
+                      email=_d.get("email") or "",
+                      source=_d.get("source") or "manual",
+                      chapter=_d.get("chapter") or "",
+                      city=_d.get("city") or "",
+                      answers=_d.get("answers") or {},
+                      note=_d.get("note") or "",
+                      referred_by=_d.get("referred_by") or "",
+                      author=_d.get("author") or "mcp-claude")
+            if _r.get("ok"):
+                db.log_agent_action("mcp-claude", "scoring-add-lead",
+                                    json.dumps(_r))
+            return json.dumps(_r, indent=2, default=str)
         if cmd == "scoring-fee-spread":
             # #421: "DO NOT THEORIZE THIS. MEASURE IT." The 3.5% TGF
             # charges is an approximation of GoDaddy's own cost (their

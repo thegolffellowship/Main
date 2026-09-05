@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.323.0";
+window.TGF_VERSION = "2.323.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.323.1",
+    date: "2026-09-05",
+    changes: [
+      "scoring-add-lead: a second door into manual lead entry, for adding a lead without opening the browser. It calls the same function the form calls, so the validation, the duplicate guard and the audit note are identical \u2014 a second door, never a second implementation.",
+    ],
+  },
   {
     version: "2.323.0",
     date: "2026-09-05",
