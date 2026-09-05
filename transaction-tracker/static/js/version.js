@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.325.2";
+window.TGF_VERSION = "2.326.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.326.0",
+    date: "2026-09-05",
+    changes: [
+      "P3 and P4 now lead into the cadence: 'We play a Saturday 18 each month and 9 after work on Tuesdays whenever you can, all set up for you.' Kerry: 'Seems like it should have something before that phrase.' The cadence phrase was written to sit MID-sentence \u2014 P2 has always used it that way, 'We play a different course every time, {cadence}' \u2014 and P3 and P4 dropped it at a paragraph start, so they opened on a bare 'a Saturday 18 each month'.",
+      "It fixes the Tuesday variant at the same time, which used to open a sentence on the numeral 9. It now reads 'We play 9 after work on Tuesdays weekly and a Saturday 18 each month'. The cadence wording itself is unchanged, and P2 keeps its single lead-in rather than gaining a second one \u2014 both pinned by tests.",
+      "'We play' rather than anything new: it is the phrasing P2 already uses, so the three presets now sound like the same person wrote them.",
+    ],
+  },
   {
     version: "2.325.2",
     date: "2026-09-05",

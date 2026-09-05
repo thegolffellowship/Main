@@ -2382,7 +2382,9 @@ DEFAULT_SMS_PRESETS: dict = {
                  "different members each time so you play with as many "
                  "people as possible, and I'll pair you up with someone who "
                  "will welcome you and show you the ropes.\n\n"
-                 "{cadence}, with fellowship after. Next one{chapter} is "
+                 # Same lead-in as P4; see the note there.
+                 "We play {cadence}, with fellowship after. "
+                 "Next one{chapter} is "
                  "{when} at {course}{start_phrase}.{price_block}\n\n"
                  "Want to come meet everybody?"),
     },
@@ -2393,8 +2395,15 @@ DEFAULT_SMS_PRESETS: dict = {
                  "the whole thing.\n\n"
                  "Good courses, fair competition, good people. We've been "
                  "chasing that mix for twenty seasons.\n\n"
-                 "{cadence}, all set up for you. Next one{chapter} is {when} "
-                 "at {course}{start_phrase}.{price_block}\n\n"
+                 # "We play" (Kerry 2026-09-05: "seems like it should have
+                 # something before that phrase"). The cadence phrase was
+                 # written to sit mid-sentence — P2 already uses it that
+                 # way — and P3/P4 dropped it at a paragraph start, so it
+                 # opened on "a Saturday 18 each month…". A lead-in fixes
+                 # the reading AND the Tuesday variant, which otherwise
+                 # opened a sentence on the numeral 9.
+                 "We play {cadence}, all set up for you. Next one{chapter} "
+                 "is {when} at {course}{start_phrase}.{price_block}\n\n"
                  "Want to try it out?"),
     },
     # ── WAVE 2 (mailbox #417, Kerry-ratified 2026-09-04) ──────────

@@ -191,13 +191,33 @@ def main():
     check("no paragraph in any preset begins with a lowercase word",
           not bad, bad[:4])
 
+    # Kerry: "Seems like it should have something before that phrase."
+    # The cadence phrase was written to sit MID-sentence — P2 has always
+    # used it that way — and P3/P4 dropped it at a paragraph start, so
+    # they opened on "a Saturday 18 each month…". A lead-in fixes the
+    # reading, and fixes the Tuesday variant too, which otherwise opened
+    # a sentence on the numeral 9.
     vsat = leads.sms_vars_for(LEAD, owners, {}, rowsC, "sat")
+    vtue0 = leads.sms_vars_for(LEAD, owners, {}, rowsC, "tue")
+    for k in ("p3", "p4"):
+        for slot, vv in (("sat", vsat), ("tue", vtue0)):
+            txt = leads.render_sms(presets, k, LEAD, vv, slot=slot)
+            check(f"{k.upper()} {slot} leads into the cadence",
+                  "We play " in txt, txt)
     p4 = leads.render_sms(presets, "p4", LEAD, vsat, slot="sat")
-    check("P4 Saturday reads 'A Saturday 18 each month'",
-          "A Saturday 18 each month" in p4, p4)
-    check("and the words themselves are untouched — only the first letter",
-          "a Saturday 18 each month and 9 after work on Tuesdays"
-          in p4.replace("A Saturday", "a Saturday"), p4)
+    check("P4 Saturday reads 'We play a Saturday 18 each month'",
+          "We play a Saturday 18 each month" in p4, p4)
+    check("the cadence wording itself is untouched",
+          "a Saturday 18 each month and 9 after work on Tuesdays "
+          "whenever you can" in p4, p4)
+    p4t = leads.render_sms(presets, "p4", LEAD, vtue0, slot="tue")
+    check("and the Tuesday variant no longer opens on a numeral",
+          "We play 9 after work on Tuesdays weekly" in p4t, p4t)
+    # P2 already had its own lead-in and must not gain a second one.
+    p2 = leads.render_sms(presets, "p2", LEAD, vsat, slot="sat")
+    check("P2 keeps its single lead-in, not two",
+          p2.count("We play") == 1
+          and "We play a different course every time" in p2, p2)
 
     # The two things this rule must NEVER touch.
     p7 = leads.render_sms(presets, "p7", LEAD, vsat, slot="sat")
