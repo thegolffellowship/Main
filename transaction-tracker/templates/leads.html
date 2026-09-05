@@ -268,6 +268,20 @@
       .ld-smsbad { font-size:.72rem; color:#B4322A; background:#FBEDEB;
                    border-radius:4px; padding:.3rem .45rem; margin:.3rem 0; }
       .ld-sms-bad { opacity:.55; }
+      .ld-menuhead { display:flex; align-items:center; justify-content:space-between;
+                     gap:.5rem; margin:-.1rem 0 .4rem; padding-bottom:.3rem;
+                     border-bottom:1px solid var(--border);
+                     font-size:.68rem; font-weight:700; letter-spacing:.06em;
+                     text-transform:uppercase; color:var(--text-muted); }
+      .ld-menux { border:0; background:none; color:var(--text-muted);
+                  font-size:1.25rem; line-height:1; padding:.1rem .35rem;
+                  margin:-.2rem -.3rem -.2rem 0; cursor:pointer; }
+      .ld-menux:hover { color:var(--text); }
+      .ld-copybtn { border:1px solid var(--border); background:#fff;
+                    border-radius:5px; font-size:.68rem; font-weight:600;
+                    color:var(--link); padding:.12rem .4rem; margin-left:.35rem;
+                    cursor:pointer; white-space:nowrap; }
+      .ld-copybtn.ld-copied { color:#1F7A4D; border-color:#1F7A4D; }
     </style>
         <dialog id="ld-addlead" class="ld-dlg">
           <form method="dialog" id="ld-addform">
@@ -951,6 +965,7 @@
                 </div>
                 <div class="ld-dcontact">
                     ${l.email ? `<a class="cell-link" href="mailto:${esc(l.email)}">${esc(l.email)}</a>
+                    <button class="ld-copybtn" onclick="copyLeadEmail(${l.id}, this)">Copy</button>
                     ${emailPickerHtml(l, "d")}` : ""}
                     ${l.phone ? `<a class="cell-link" href="tel:${esc(l.phone)}">${esc(l.phone)}</a>
                     <span class="ld-menu-wrap ld-smswrap"><a class="cell-link" id="ld-sms-d-${l.id}" href="sms:${esc(l.phone)}?&body=${encodeURIComponent(smsBody)}" title="${esc(smsBody)}">💬 Text</a><span class="ld-smspk" id="ld-smspk-d-${l.id}" onclick="toggleMenu('ld-smsmenu-d-${l.id}')">${esc(smsPickLabel(l, false))}</span><span class="ld-menu ld-smsmenu" id="ld-smsmenu-d-${l.id}">${smsMenuHtml(l)}</span></span>` : ""}
@@ -978,7 +993,8 @@
                 <div class="ld-acts">
                     ${l.phone ? `<a class="ld-act" id="ld-sms-m-${l.id}" href="sms:${esc(l.phone)}?&body=${encodeURIComponent(smsBody)}" title="${esc(smsBody)}">💬 Text</a><span class="ld-menu-wrap"><span class="ld-act ld-smspk" id="ld-smspk-m-${l.id}" onclick="toggleMenu('ld-smsmenu-m-${l.id}')">${esc(smsPickLabel(l, true))}</span><span class="ld-menu ld-smsmenu" id="ld-smsmenu-m-${l.id}">${smsMenuHtml(l)}</span></span>
                                  <a class="ld-act" href="tel:${esc(l.phone)}">📞 Call</a>` : ""}
-                    ${l.email ? emailPickerHtml(l, "m") : ""}
+                    ${l.email ? emailPickerHtml(l, "m")
+                        + `<span class="ld-act" onclick="copyLeadEmail(${l.id}, this)">⧉ Copy email</span>` : ""}
                     <span class="ld-act" onclick="noteLead(${l.id})">➕ Note</span>
                 </div>
                 ${latestNote ? `<div class="ld-noteprev"><b>${esc((latestNote.author || "?")[0])}</b> · ${esc(fmtNoteTime(latestNote.created_at))} — ${esc(latestNote.note)}</div>` : ""}
@@ -1253,8 +1269,11 @@
         const sendBtn = bad.length
             ? `<div class="ld-smsbad">Not sendable — ${esc(bad.join(", "))}. Pick another preset.</div>`
             : `<button class="ld-btn ld-btn-primary" id="ld-emsend-${side}-${l.id}" onclick="sendLeadEmail(${l.id},'${side}')">Send ${esc(st.key.toUpperCase())} now</button>`;
-        return `<div class="ld-smsprev">${esc(body)}</div>
-            <div class="ld-emto">to ${esc(l.email || "")}</div>
+        return `${menuHead(esc(st.key.toUpperCase()) + " · email")}
+            <div class="ld-smsprev">${esc(body)}</div>
+            <div class="ld-emto">to ${esc(l.email || "")}
+              <button class="ld-copybtn" onclick="copyLeadEmail(${l.id}, this)">Copy address</button>
+            </div>
             ${rows}
             <button class="ld-btn" onclick="toggleSmsCloser(${l.id})">${st.closer ? "☑" : "☐"} Add offer line</button>
             ${sendBtn}
@@ -1297,6 +1316,15 @@
         }
     }
 
+    // Every menu gets a title and an X. Kerry asked for the X directly;
+    // the title is what makes it obvious WHICH menu is open when two
+    // pickers sit side by side on the same card.
+    function menuHead(title) {
+        return `<div class="ld-menuhead"><span>${title}</span>`
+             + `<button class="ld-menux" onclick="closeAllMenus()" `
+             + `aria-label="Close">&times;</button></div>`;
+    }
+
     function smsPickLabel(l, short) {
         const st = smsState(l);
         const lbl = ((ALL.sms_presets || {})[st.key] || {}).label || st.key;
@@ -1313,7 +1341,8 @@
         const warn = bad.length
             ? `<div class="ld-smsbad">Not sendable — ${esc(bad.join(", "))}. Pick another preset.</div>`
             : "";
-        return `<div class="ld-smsprev">${esc(body)}</div>${warn}${why}${rows}
+        return `${menuHead(esc(st.key.toUpperCase()) + " · text")}
+            <div class="ld-smsprev">${esc(body)}</div>${warn}${why}${rows}
             <button class="ld-btn" onclick="toggleSmsCloser(${l.id})">${st.closer ? "☑" : "☐"} Add offer line</button>`;
     }
     function renderSms(id) {
@@ -1563,6 +1592,44 @@
         if (d.error) { alert(d.error); return; }
         loadLeads();
     }
+    // Copy to clipboard, for adding a lead to Contacts on a phone
+    // (Kerry 2026-09-05). navigator.clipboard needs HTTPS and a user
+    // gesture, which a tap is; the textarea fallback covers older iOS.
+    // It NEVER silently fails — if both paths are blocked the button
+    // says so, because a "Copy" that quietly did nothing is worse than
+    // no button.
+    async function copyText(text, btn) {
+        const say = (msg, ok) => {
+            if (!btn) return;
+            const was = btn.textContent;
+            btn.textContent = msg;
+            btn.classList.toggle("ld-copied", !!ok);
+            setTimeout(() => { btn.textContent = was;
+                               btn.classList.remove("ld-copied"); }, 1400);
+        };
+        try {
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                await navigator.clipboard.writeText(text);
+            } else {
+                const ta = document.createElement("textarea");
+                ta.value = text;
+                ta.setAttribute("readonly", "");
+                ta.style.position = "absolute"; ta.style.left = "-9999px";
+                document.body.appendChild(ta);
+                ta.select();
+                if (!document.execCommand("copy")) throw new Error("blocked");
+                ta.remove();
+            }
+            say("Copied", true);
+        } catch (err) {
+            say("Press & hold instead");
+        }
+    }
+    function copyLeadEmail(id, btn) {
+        const l = ((ALL || {}).leads || []).find(x => x.id === id);
+        if (l && l.email) copyText(l.email, btn);
+    }
+
     function closeAllMenus() {
         document.querySelectorAll(".ld-menu").forEach(m => m.style.display = "none");
     }
@@ -1573,22 +1640,28 @@
         closeAllMenus();
         el.style.display = open ? "none" : "block";
     }
-    // The preset menu used to stay open until another menu was opened, so
-    // tapping Text / Call / Note left it sitting over the next card with
-    // no obvious way to dismiss it (Kerry 2026-09-05: "it should go away
-    // once something else is clicked like when you click text").
+    // Tapping Text / Call / Note used to leave the menu sitting over the
+    // next card with no way to dismiss it (Kerry 2026-09-05: "it should
+    // go away once something else is clicked like when you click text").
     //
-    // Bubble phase on purpose: the picker's own inline onclick has
-    // already run by the time this fires, so a tap ON the picker must be
-    // ignored here or it would close what was just opened. A tap INSIDE
-    // the menu is a choice — picking a preset re-renders the preview and
-    // the menu should stay up to show it. Everything else dismisses.
+    // CAPTURE PHASE, and that is the whole fix for the follow-up Kerry
+    // reported: "Don't collapse email and text things when I select a
+    // different preset within the modal." In bubble phase this runs
+    // AFTER the button's own onclick, and pickSms() re-renders the menu's
+    // innerHTML — which detaches the very button that was clicked, so
+    // closest() walked an orphaned node, found no .ld-menu, and closed
+    // the menu the user was working in. In capture the target is still
+    // attached and the ancestry is real.
+    //
+    // A tap on the picker is ignored here: its own onclick owns the
+    // toggle, and it has not run yet at capture time. A tap INSIDE the
+    // menu is a choice, not a dismissal. Everything else closes.
     document.addEventListener("click", e => {
         const t = e.target;
         if (t && t.closest && (t.closest(".ld-smspk, .ld-emailpk")
                                || t.closest(".ld-menu"))) return;
         closeAllMenus();
-    });
+    }, true);
     document.addEventListener("keydown", e => {
         if (e.key === "Escape") closeAllMenus();
     });

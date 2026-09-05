@@ -46,6 +46,8 @@ const el = id => ({ id, innerHTML: "", style: {}, value: "", dataset: {},
 // closes" bug reached Kerry's phone: nothing here could see a click.
 const MENUS = [];
 const LISTENERS = { click: [], keydown: [] };
+const CAPTURE = {};
+const COPIED = [];
 // A click target that answers closest() the way a browser would, from a
 // declared list of the classes on it and its ancestors.
 const target = (...classes) => ({
@@ -57,7 +59,12 @@ const dispatch = (type, ev) => LISTENERS[type].forEach(fn => fn(ev));
 global.document = { getElementById: id => store[id] || (store[id] = el(id)),
     querySelectorAll: sel => (sel === ".ld-menu" ? MENUS : []),
     querySelector: () => null,
-    addEventListener: (type, fn) => { (LISTENERS[type] || []).push(fn); },
+    addEventListener: (type, fn, capture) => {
+        (LISTENERS[type] || []).push(fn);
+        CAPTURE[type] = CAPTURE[type] || [];
+        CAPTURE[type].push(!!capture);
+    },
+    execCommand: () => (COPIED.push("execCommand"), true),
     createElement: () => el("x"), body: el("body"), documentElement: el("html") };
 global.window = { location: { search: "", href: "" }, addEventListener() {},
     matchMedia: () => ({ matches: false, addEventListener() {} }) };
@@ -74,7 +81,7 @@ try {
             + "\nglobal.__F = { toggleSection,"
             + " setSearch: v => { searchQ = v; renderLeads(); },"
             + " setStatus: v => { statusFilter = v; renderLeads(); },"
-            + " toggleMenu, closeAllMenus };");
+            + " toggleMenu, closeAllMenus, copyLeadEmail, menuHead };");
     render = global.__render; setALL = global.__setALL;
     console.log("  PASS  the page script evaluates");
 } catch (e) {
@@ -220,7 +227,39 @@ F.toggleMenu("ld-smsmenu-m-1");
 F.toggleMenu("ld-smsmenu-m-1");
 check("tapping the picker twice toggles it shut",
       menu.style.display === "none", menu.style.display);
+
+// Kerry 2026-09-05: "Don't collapse email and text things when I select a
+// different preset within the modal." In BUBBLE phase the dismiss
+// handler runs after pickSms() has replaced the menu's innerHTML, which
+// detaches the clicked button — closest() then walks an orphaned node,
+// finds no .ld-menu, and closes the menu the user is working in. Capture
+// phase is the fix, so the phase itself is the thing worth asserting.
+check("the dismiss handler is registered in CAPTURE phase, so a preset "
+      + "button is still attached when it runs",
+      (CAPTURE.click || []).some(c => c === true), CAPTURE.click);
 MENUS.length = 0;
+
+// Kerry asked for both of these directly.
+console.log("Every menu has a title and a close button");
+const head = F.menuHead("P7 · email");
+check("it carries the menu's name", head.includes("P7 · email"), head);
+check("and an X that closes it",
+      head.includes("closeAllMenus()") && head.includes("&times;"), head);
+
+// "Give me a copy email address button so I can copy to add to new
+// contacts on my phone."
+console.log("Copying a lead's email");
+global.navigator.clipboard = { writeText: t => (COPIED.push(t), Promise.resolve()) };
+const btn = { textContent: "Copy", classList: { toggle() {}, remove() {} } };
+F.copyLeadEmail(3, btn);
+check("it copies the address, not the name or the whole card",
+      COPIED.length === 1 && COPIED[0] === "b@x.com", COPIED);
+COPIED.length = 0;
+F.copyLeadEmail(99999, btn);
+check("a lead we do not have copies nothing rather than an empty string",
+      COPIED.length === 0, COPIED);
+check("the button reports back so a silent failure is impossible",
+      btn.textContent !== "", btn.textContent);
 
 const touchSub = () => store["ld-touch-sub"].textContent || "";
 check("a lead whose only note is 'auto' is NOT counted as responded",

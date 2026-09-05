@@ -1,5 +1,15 @@
-window.TGF_VERSION = "2.326.0";
+window.TGF_VERSION = "2.327.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.327.0",
+    date: "2026-09-05",
+    changes: [
+      "Picking a different preset no longer closes the menu. Kerry: 'Don't collapse email and text things when I select a different preset within the modal.' The dismiss handler ran in BUBBLE phase, so by the time it fired the preset button had already re-rendered the menu's contents and detached itself \u2014 closest() then walked an orphaned node, found no menu around it, and closed the very menu being worked in. Moved to capture phase, where the button is still attached and its ancestry is real. Tapping outside, or on another tab, still closes it as before.",
+      "Every menu now has a title and an X. Kerry asked for the close button; the title is what makes it obvious WHICH menu is open when the text and email pickers sit side by side on one card.",
+      "COPY EMAIL button, for adding a lead to Contacts on a phone \u2014 on the mobile action row, on the desktop contact line, and inside the email menu next to the address. It uses the clipboard API where available and falls back for older iOS, and it never fails silently: if both paths are blocked the button says 'Press & hold instead' rather than looking like it worked.",
+      "The page harness now records whether a listener was registered in capture phase, so the fix above is asserted rather than assumed \u2014 the phase IS the fix, and nothing else in a rendered-HTML test would have caught it.",
+    ],
+  },
   {
     version: "2.326.0",
     date: "2026-09-05",
