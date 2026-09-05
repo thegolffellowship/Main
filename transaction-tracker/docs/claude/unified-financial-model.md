@@ -330,3 +330,76 @@ expand on the course/prize/markup lines and a "TGF keeps X%" stat.
 ## Accounting categories (TGF-scoped, seeded by `_seed_unified_financial_categories`)
 - **Income:** "Credit Transfer In", "External Payment", "Event Revenue", "Membership Fees"
 - **Expense:** "Credit Transfer Out", "Player Refunds", "Golf Course Fees / Green Fees"
+
+---
+
+## TGF margin is the RESIDUAL (v2.322.0, Kerry-ratified 2026-09-04)
+
+Mailbox #418 / #420 / #422. Kerry: *"TGF margin should be actual TGF
+margin, which is net."*
+
+`tgf_operating` used to be the event's **rate-card markup** and never
+looked at what the player actually paid, so a 1st Timer $25 under the
+guest rate still booked the full markup. It is now:
+
+```
+tgf_operating = collected − course_payable − course_surcharge − prize_pool
+discount_given = rate_card_markup − tgf_operating
+```
+
+The course still invoices its full rate and the winners still collect
+the full pool — neither obligation shrinks — so a discount can only come
+out of TGF's share.
+
+**It is allowed to go negative, deliberately.** Kerry accepted the
+9-hole 1st Timer round as a **loss leader**: *"Don't want to increase
+guest price or lower the discount to offset it."* The structural reason,
+which nobody decided and which is worth knowing before anyone "fixes"
+it: **the $25 discount is larger than the entire 9-hole markup stack.**
+A 9-hole has $8 base + $10 guest surcharge = $18; less $25 leaves −$7. An
+18-hole has $15 + $15 = $30; less $25 leaves +$5. One flat discount met
+two markup stacks. `discount_given` exists to make that visible, not to
+correct it.
+
+**Past events are frozen.** `MARGIN_MODEL_CUTOVER` (default `2026-09-05`,
+overridable via the `margin_model_cutover` app setting) gates it: an
+allocation dated earlier keeps the rate-card model it was booked under,
+because those months are already filed with the Comptroller.
+
+**Tax reserve floors at zero.** `max(tgf_operating, 0) × 8.25%`. There is
+no negative taxable sale, and a loss must never net against another
+round's tax. Whether a discount that *exceeds* the markup reduces the
+taxable base at all is a question for Kerry's CPA — the Pricing &
+Services Master is silent on it. Directional note from #420: if filings
+were computed off an overstated `tgf_operating`, TGF has probably been
+**over**-remitting.
+
+## Membership set-asides
+
+A membership is not all margin. The allocator must carry the **full**
+set-aside list per item type — a set-aside that exists in policy but not
+in code is margin that reads high forever (#420 standing instruction).
+
+| Bucket | Amount | Notes |
+|---|---|---|
+| `prize_pool` | $6.00 | Monthly Points Race, plus per-contest pools |
+| `lsc_shirt_fund` | $10.00 | Lone Star Cup shirts (#422) |
+
+**The LSC shirt fund is its own bucket on purpose.** It is a **TGF-owned
+budget earmark** — not member-owned, not obligated funds. A prize pool is
+owed to whoever wins it and must exist as cash; this is TGF earmarking
+its own money for a purpose it chose and can change. Never surface it to
+members as "your dues fund the Cup", which would convert a flexible
+earmark into an expectation TGF has to honour.
+
+$10 per membership **SOLD** — not per active member, not per qualifier.
+Group funded so qualifiers pay nothing extra. Cost basis is 2 shirts ×
+$30 = $60 per qualifier against a planning model of 12 qualifiers per
+75-member chapter, needing $9.60. Season contest buy-ins are deliberately
+**not** a source.
+
+**A dial, not a constant** (`membership_setaside_lsc_shirt`). The model
+assumes a 16% qualification rate; this season is running 19–24%, and
+shirt cost scales with QUALIFIERS while the fund scales with MEMBERS. If
+that holds, the short-year top-up on the LSC entry becomes permanent
+rather than occasional. Two or three seasons before $10 is settled.

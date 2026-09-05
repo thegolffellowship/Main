@@ -2434,6 +2434,82 @@ def _scoring_dispatch(url: str, extract: str):
                 _out["briefing_bytes"] = len(_html)
                 _out.pop("leads", None)
             return json.dumps(_out, indent=2, default=str)
+        if cmd == "scoring-fee-spread":
+            # #421: "DO NOT THEORIZE THIS. MEASURE IT." The 3.5% TGF
+            # charges is an approximation of GoDaddy's own cost (their
+            # percentage plus $0.30), so the spread over-recovers above
+            # some order size and under-recovers below it. Reports the
+            # real distribution, the break-even, and — separately — how
+            # far the multi-item transaction_fee double-count reaches.
+            import statistics as _st
+            with db._connect() as _c:
+                _rows = [dict(r) for r in _c.execute(
+                    "SELECT s.transaction_id AS txn, t.date AS d, "
+                    "  t.net_deposit AS net, t.merchant_fee AS mf, "
+                    "  COUNT(DISTINCT s.item_id) AS items, "
+                    "  SUM(CASE WHEN s.split_type='registration' "
+                    "           THEN s.amount ELSE 0 END) AS reg, "
+                    "  SUM(CASE WHEN s.split_type='transaction_fee' "
+                    "           THEN ABS(s.amount) ELSE 0 END) AS fee_sum, "
+                    "  COUNT(DISTINCT CASE WHEN s.split_type='transaction_fee' "
+                    "        THEN ROUND(ABS(s.amount),2) END) AS fee_distinct, "
+                    "  MAX(CASE WHEN s.split_type='transaction_fee' "
+                    "           THEN ABS(s.amount) ELSE 0 END) AS fee_max, "
+                    "  SUM(CASE WHEN s.split_type='merchant_fee' "
+                    "           THEN ABS(s.amount) ELSE 0 END) AS mfee_sum "
+                    "FROM godaddy_order_splits s "
+                    "LEFT JOIN acct_transactions t ON t.id = s.transaction_id "
+                    "WHERE COALESCE(t.status,'active') NOT IN ('reversed','merged') "
+                    "GROUP BY s.transaction_id")]
+            _spreads, _dbl, _dbl_amt, _multi = [], 0, 0.0, 0
+            _by_size = []
+            _months = {}
+            for r in _rows:
+                reg = float(r["reg"] or 0)
+                fee_true = float(r["fee_max"] or 0) if (r["items"] or 0) > 1 \
+                    and (r["fee_distinct"] or 0) == 1 else float(r["fee_sum"] or 0)
+                mfee = float(r["mfee_sum"] or 0)
+                if (r["items"] or 0) > 1:
+                    _multi += 1
+                    over = float(r["fee_sum"] or 0) - fee_true
+                    if over > 0.004:
+                        _dbl += 1
+                        _dbl_amt += over
+                        _months[(r["d"] or "")[:7]] = round(
+                            _months.get((r["d"] or "")[:7], 0.0) + over, 2)
+                if fee_true > 0 and mfee > 0 and reg > 0:
+                    sp = round(fee_true - mfee, 2)
+                    _spreads.append(sp)
+                    _by_size.append((reg, sp))
+            _by_size.sort()
+            # Where does the spread cross zero as order size grows?
+            _breakeven = None
+            for reg, sp in _by_size:
+                if sp >= 0:
+                    _breakeven = reg
+                    break
+            _pos = [s for s in _spreads if s > 0]
+            _neg = [s for s in _spreads if s < 0]
+            return json.dumps({
+                "orders_measured": len(_spreads),
+                "spread_total": round(sum(_spreads), 2),
+                "spread_mean": round(_st.mean(_spreads), 4) if _spreads else None,
+                "spread_median": round(_st.median(_spreads), 2) if _spreads else None,
+                "spread_min": min(_spreads) if _spreads else None,
+                "spread_max": max(_spreads) if _spreads else None,
+                "orders_tgf_ahead": len(_pos),
+                "orders_tgf_behind": len(_neg),
+                "orders_exactly_even": len(_spreads) - len(_pos) - len(_neg),
+                "gained_on_positive": round(sum(_pos), 2),
+                "lost_on_negative": round(sum(_neg), 2),
+                "smallest_order_where_tgf_is_ahead": _breakeven,
+                "sample_small_orders": _by_size[:6],
+                "sample_large_orders": _by_size[-6:],
+                "multi_item_orders": _multi,
+                "orders_with_duplicated_fee": _dbl,
+                "money_flow_fee_overstated_by": round(_dbl_amt, 2),
+                "overstatement_by_month": dict(sorted(_months.items())),
+            }, indent=2, default=str)
         if cmd == "scoring-schema":
             # Read-only: the LIVE CREATE statement + columns + indexes for
             # one table. Added 2026-09-04 because the alias-table merge

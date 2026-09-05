@@ -1,5 +1,17 @@
-window.TGF_VERSION = "2.321.0";
+window.TGF_VERSION = "2.322.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.322.0",
+    date: "2026-09-05",
+    changes: [
+      "TGF MARGIN IS NOW THE RESIDUAL, Kerry-ratified: 'TGF margin should be actual TGF margin, which is net.' tgf_operating was the event's rate-card markup and never looked at what the player actually paid, so a 1st Timer $25 under the guest rate still booked the full markup. It is now collected minus course, surcharge and prize pool \u2014 because the course still invoices its full rate and the winners still collect the full pool, so a discount can only come out of TGF's share.",
+      "It is allowed to go NEGATIVE, deliberately. Kerry accepted the 9-hole 1st Timer round as a loss leader: 'Don't want to increase guest price or lower the discount to offset it.' The structural reason, which nobody decided: the $25 discount is LARGER THAN THE ENTIRE 9-HOLE MARKUP STACK. A 9-hole has $8 base + $10 guest surcharge = $18; less $25 leaves \u2212$7. An 18-hole has $15 + $15 = $30; less $25 leaves +$5. One flat discount met two markup stacks. The new discount_given column exists to make that visible, not to correct it.",
+      "PAST EVENTS STAY FROZEN. A cutover date (2026-09-05, dial-overridable) means an allocation from a filed month keeps the model it was booked under. Recomputing history would rewrite what has already gone to the Comptroller.",
+      "Memberships now set aside $10 for LONE STAR CUP SHIRTS alongside the $6 monthly points race, so a $50 membership books $34 of margin rather than $44. Group funded on purpose \u2014 Kerry: 'I want it to be a group funded thing so it spreads across membership and doesn't fall on those who qualified.' It sits in its OWN bucket because it is a TGF-owned earmark, not obligated funds: a prize pool is owed to whoever wins it, this is money TGF set aside for a purpose it chose and can change. It is a dial, not a constant.",
+      "Sales tax reserve now floors at zero per row. There is no negative taxable sale, and a loss must never net against another round's tax. Whether a discount that EXCEEDS the markup reduces the taxable base at all is still a question for Kerry's CPA \u2014 the Pricing & Services Master is silent on it.",
+      "New read-only bridge command scoring-fee-spread, because CA's instruction was 'DO NOT THEORIZE THIS. MEASURE IT' \u2014 it reports the real distribution of what TGF charged in card fees against what GoDaddy actually took, and separately how far back the multi-item fee double-count reaches.",
+    ],
+  },
   {
     version: "2.321.0",
     date: "2026-09-04",

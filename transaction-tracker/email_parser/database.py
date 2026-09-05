@@ -4757,6 +4757,28 @@ def init_db(db_path: str | Path | None = None) -> None:
             """
         )
 
+        # ── Money model, mailbox #420/#422, Kerry-ratified 2026-09-04 ──
+        # discount_given  what the rate card said the markup was, less
+        #                 what was actually left. Kerry accepted the
+        #                 9-hole 1st Timer round as a LOSS LEADER and
+        #                 asked only that it be visible, which is what
+        #                 this column is for.
+        # lsc_shirt_fund  $10 per membership sold, group funded so
+        #                 qualifiers pay nothing extra. Its OWN bucket:
+        #                 a TGF-owned budget earmark, NOT member-owned
+        #                 and NOT obligated funds. Prize pools are owed
+        #                 to whoever wins them and must exist as cash;
+        #                 this is TGF earmarking its own money for a
+        #                 purpose it chose and can change. Never surface
+        #                 it to members as "your dues fund the Cup" —
+        #                 that turns a flexible earmark into a promise.
+        for _col in ("discount_given", "lsc_shirt_fund"):
+            try:
+                conn.execute(f"ALTER TABLE acct_allocations "
+                             f"ADD COLUMN {_col} REAL DEFAULT 0")
+            except sqlite3.OperationalError:
+                pass
+
         conn.execute(
             """
             CREATE TABLE IF NOT EXISTS acct_recurring (
@@ -39909,7 +39931,8 @@ def _create_allocation_for_item(
     alloc["allocation_date"] = item.get("order_date")
     alloc["godaddy_fee"] = 0  # no processing fee on non-GoDaddy payments
     alloc["total_collected"] = total_collected
-    alloc["tax_reserve"] = round(alloc.get("tgf_operating", 0) * 0.0825, 2)
+    alloc["tax_reserve"] = round(
+        max(alloc.get("tgf_operating", 0) or 0, 0) * 0.0825, 2)
     alloc["payment_method"] = payment_method
 
     # Determine status
@@ -39925,8 +39948,9 @@ def _create_allocation_for_item(
            (order_id, item_id, event_name, chapter, allocation_date,
             player_count, course_payable, course_surcharge, prize_pool,
             tgf_operating, godaddy_fee, tax_reserve, total_collected,
-            allocation_status, notes, payment_method)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            allocation_status, notes, payment_method,
+            discount_given, lsc_shirt_fund)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
            ON CONFLICT(order_id, item_id) DO UPDATE SET
             event_name=excluded.event_name, chapter=excluded.chapter,
             allocation_date=excluded.allocation_date, player_count=excluded.player_count,
@@ -39935,13 +39959,16 @@ def _create_allocation_for_item(
             godaddy_fee=excluded.godaddy_fee, tax_reserve=excluded.tax_reserve,
             total_collected=excluded.total_collected,
             allocation_status=excluded.allocation_status, notes=excluded.notes,
-            payment_method=excluded.payment_method""",
+            payment_method=excluded.payment_method,
+            discount_given=excluded.discount_given,
+            lsc_shirt_fund=excluded.lsc_shirt_fund""",
         (synthetic_order_id, item_id, alloc["event_name"], alloc["chapter"],
          alloc["allocation_date"], alloc.get("player_count", 1),
          alloc.get("course_payable", 0), alloc.get("course_surcharge", 0),
          alloc.get("prize_pool", 0), alloc.get("tgf_operating", 0),
          alloc["godaddy_fee"], alloc["tax_reserve"], alloc["total_collected"],
-         alloc["allocation_status"], alloc.get("notes"), payment_method),
+         alloc["allocation_status"], alloc.get("notes"), payment_method,
+         alloc.get("discount_given", 0), alloc.get("lsc_shirt_fund", 0)),
     )
 
     # Optionally create accounting transaction
@@ -40050,7 +40077,8 @@ def calculate_order_allocation(order_id: str, db_path: str | Path | None = None)
             alloc["total_collected"] = _parse_dollar(item.get("item_price")) or 0
 
             # Tax reserve: 8.25% of TGF operating revenue
-            alloc["tax_reserve"] = round(alloc.get("tgf_operating", 0) * 0.0825, 2)
+            alloc["tax_reserve"] = round(
+        max(alloc.get("tgf_operating", 0) or 0, 0) * 0.0825, 2)
 
             # Determine status
             if is_membership:
@@ -40075,8 +40103,8 @@ def calculate_order_allocation(order_id: str, db_path: str | Path | None = None)
                    (order_id, item_id, event_name, chapter, allocation_date,
                     player_count, course_payable, course_surcharge, prize_pool,
                     tgf_operating, godaddy_fee, tax_reserve, total_collected,
-                    allocation_status, notes)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    allocation_status, notes, discount_given, lsc_shirt_fund)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                    ON CONFLICT(order_id, item_id) DO UPDATE SET
                     event_name=excluded.event_name, chapter=excluded.chapter,
                     allocation_date=excluded.allocation_date, player_count=excluded.player_count,
@@ -40084,13 +40112,16 @@ def calculate_order_allocation(order_id: str, db_path: str | Path | None = None)
                     prize_pool=excluded.prize_pool, tgf_operating=excluded.tgf_operating,
                     godaddy_fee=excluded.godaddy_fee, tax_reserve=excluded.tax_reserve,
                     total_collected=excluded.total_collected,
-                    allocation_status=excluded.allocation_status, notes=excluded.notes""",
+                    allocation_status=excluded.allocation_status, notes=excluded.notes,
+                    discount_given=excluded.discount_given,
+                    lsc_shirt_fund=excluded.lsc_shirt_fund""",
                 (alloc["order_id"], alloc["item_id"], alloc["event_name"],
                  alloc["chapter"], alloc["allocation_date"], alloc.get("player_count", 1),
                  alloc.get("course_payable", 0), alloc.get("course_surcharge", 0),
                  alloc.get("prize_pool", 0), alloc.get("tgf_operating", 0),
                  alloc["godaddy_fee"], alloc["tax_reserve"], alloc["total_collected"],
-                 alloc["allocation_status"], alloc.get("notes")),
+                 alloc["allocation_status"], alloc.get("notes"),
+                 alloc.get("discount_given", 0), alloc.get("lsc_shirt_fund", 0)),
             )
         conn.commit()
 
@@ -40544,14 +40575,118 @@ def _calc_event_allocation(item: dict, conn: sqlite3.Connection) -> dict:
     side_markup = _SIDE_MARKUP.get((side_games, hole_key), 0)
     base_pots = 14.0 if is_18 else 7.0
 
+    _course = round(course_cost, 2)
+    _surch = round(surcharge, 2)
+    _pool = round(base_pots + side_prize, 2)
+    _rate_card = round((tgf_markup or 0) + side_markup, 2)
+
+    # TGF MARGIN IS THE RESIDUAL (mailbox #418/#420, Kerry-ratified
+    # 2026-09-04: "TGF margin should be actual TGF margin, which is net").
+    #
+    # tgf_operating used to be the rate-card markup and never looked at
+    # what the player paid, so a 1st Timer $25 under the guest rate still
+    # booked the full markup. The course still invoices its full rate and
+    # the winners still collect the full pool — neither obligation
+    # shrinks — so a discount can only come out of TGF's share.
+    #
+    # Allowed to go NEGATIVE. Kerry accepted the 9-hole 1st Timer round as
+    # a LOSS LEADER and asked only that it be visible: "It's a loss
+    # leader. Don't want to increase guest price or lower the discount to
+    # offset it." The structural reason, worth knowing before anyone
+    # "fixes" it — the $25 discount is LARGER THAN THE ENTIRE 9-HOLE
+    # MARKUP STACK. A 9-hole has $8 base + $10 guest surcharge = $18
+    # available; less $25 leaves -$7 before rounding. An 18-hole has
+    # $15 + $15 = $30; less $25 leaves +$5. The discount was calibrated to
+    # 18-hole economics and is applied to 9s. Nobody decided that; it fell
+    # out of one flat number meeting two markup stacks. It is not being
+    # changed, only made visible.
+    #
+    # PAST EVENTS ARE FROZEN (guiding principle 4, and Kerry's explicit
+    # "forward-only" ruling): an allocation dated before the cutover keeps
+    # the model it was booked under. Recomputing history would rewrite
+    # months already filed with the Comptroller.
+    collected = _parse_dollar(item.get("item_price")) or 0
+    if collected > 0 and _margin_model_applies(item.get("order_date"), conn):
+        residual = round(collected - _course - _surch - _pool, 2)
+        return {
+            "player_count": 1,
+            "course_payable": _course,
+            "course_surcharge": _surch,
+            "prize_pool": _pool,
+            "tgf_operating": residual,
+            # What the rate card said, less what was actually left. This
+            # is the marketing cost of a 1st Timer, which was previously
+            # invisible as simply-missing margin.
+            "discount_given": round(_rate_card - residual, 2),
+            "_needs_course_cost": False,
+        }
     return {
         "player_count": 1,
-        "course_payable": round(course_cost, 2),
-        "course_surcharge": round(surcharge, 2),
-        "prize_pool": round(base_pots + side_prize, 2),
-        "tgf_operating": round((tgf_markup or 0) + side_markup, 2),
+        "course_payable": _course,
+        "course_surcharge": _surch,
+        "prize_pool": _pool,
+        "tgf_operating": _rate_card,
         "_needs_course_cost": False,
     }
+
+
+# The day the residual margin model took effect. An allocation dated
+# before this keeps the rate-card model it was booked under, because past
+# events are frozen (guiding principle 4) and those months are already
+# filed. Overridable via the `margin_model_cutover` app setting.
+MARGIN_MODEL_CUTOVER = "2026-09-05"
+
+
+def _setting_via(conn: sqlite3.Connection | None, key: str) -> str | None:
+    """Read one app setting on an ALREADY-OPEN connection.
+
+    The allocators run inside a connection, and get_app_setting opens its
+    own — nesting a second connection on the same SQLite file inside a
+    write path is how you buy a lock timeout for no reason. Returns None
+    when the table does not exist yet (fresh database, tests).
+    """
+    if conn is None:
+        try:
+            return get_app_setting(key)
+        except sqlite3.Error:
+            return None
+    try:
+        row = conn.execute(
+            "SELECT value FROM app_settings WHERE key = ?", (key,)).fetchone()
+        return row["value"] if row else None
+    except sqlite3.Error:
+        return None
+
+
+def _margin_model_applies(order_date: str | None,
+                          conn: sqlite3.Connection | None = None) -> bool:
+    """True when this allocation should use the residual margin model."""
+    cutover = _setting_via(conn, "margin_model_cutover") or MARGIN_MODEL_CUTOVER
+    d = (str(order_date or "").strip())[:10]
+    if not d:
+        # No date means we cannot prove it is historical, and booking a
+        # brand-new row under the old model is the worse error.
+        return True
+    return d >= str(cutover)[:10]
+
+
+def _membership_setaside(name: str, default: float,
+                         conn: sqlite3.Connection | None = None) -> float:
+    """A membership set-aside amount, dial-overridable (#422 §9: "IT IS A
+    DIAL, NOT A CONSTANT"). Reviewed annually; guiding principle 2 says a
+    threshold that changes belongs in data, not in code."""
+    raw = _setting_via(conn, f"membership_setaside_{name}")
+    if raw in (None, ""):
+        return default
+    try:
+        v = float(str(raw).strip().lstrip("$"))
+    except (ValueError, TypeError):
+        # A typo in a dial must never silently zero a set-aside — that
+        # would read as margin TGF does not have.
+        logger.warning("membership_setaside_%s is %r, not a number — "
+                       "using %.2f", name, raw, default)
+        return default
+    return v if v >= 0 else default
 
 
 def _calc_membership_allocation(item: dict, conn: sqlite3.Connection) -> dict:
@@ -40607,12 +40742,34 @@ def _calc_membership_allocation(item: dict, conn: sqlite3.Connection) -> dict:
     # Monthly Points Race pool contribution
     monthly_prize = 6.0
 
+    # Lone Star Cup shirts (mailbox #422, Kerry-ratified 2026-09-04).
+    # $10 per membership SOLD — not per active member, not per qualifier.
+    # GROUP FUNDED on purpose: Kerry, "I want it to be a group funded
+    # thing so it spreads across membership and doesn't fall on those who
+    # qualified." Cost basis is 2 shirts x $30 = $60 per qualifier
+    # against a planning model of 12 qualifiers per 75-member chapter,
+    # which needs $9.60 and rounds to $10.
+    #
+    # A DIAL, NOT A CONSTANT. The model assumes a 16% qualification rate
+    # and this season is running 19-24%, so if that holds the fund runs
+    # short every year and the short-year top-up on the LSC entry becomes
+    # permanent rather than occasional. Two or three seasons before $10
+    # is treated as settled.
+    #
+    # Season contest buy-ins are deliberately NOT a source: Kerry removed
+    # shirts from those and they stay removed.
+    lsc_shirt = _membership_setaside("lsc_shirt", 10.0, conn)
+
     return {
         "player_count": 1,
         "course_payable": 0,
         "course_surcharge": 0,
         "prize_pool": round(monthly_prize + contest_prize, 2),
-        "tgf_operating": round(base_tgf + contest_markup, 2),
+        # The shirt fund comes OUT of TGF's side, which is the whole
+        # point — a set-aside that exists in policy but not in code is
+        # margin that reads high forever (#420 standing instruction).
+        "lsc_shirt_fund": round(lsc_shirt, 2),
+        "tgf_operating": round(base_tgf + contest_markup - lsc_shirt, 2),
         "_needs_course_cost": False,
     }
 
