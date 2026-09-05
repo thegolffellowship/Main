@@ -233,9 +233,66 @@
                 <option value="status:1">By status</option>
             </select>
             <select id="ld-campsel" class="ld-tagsel" onchange="setCampaignFilter(this.value)"><option value="all">All campaigns</option></select>
+            <button class="ld-btn" id="ld-addbtn" onclick="openAddLead()">+ Add Lead</button>
             <button class="ld-btn ld-statsbtn" id="ld-statsbtn" onclick="toggleStats()">📊 Stats</button>
             <span class="ld-showing" id="ld-showing"></span>
         </div>
+        <!-- Manual lead entry (mailbox #420 §6, Kerry: "Leads shouldn't
+             only cover Facebook campaigns"). Kannon Brown came off
+             Robert's post, Kevin Ponder was met in person, Rick and Joey
+             came from Logan — TGF's cheapest acquisitions and the only
+             channel with no instrumentation. The three survey answers are
+             OPTIONAL because a referral has no form behind it. -->
+    <style>
+      .ld-dlg { border:1px solid var(--border); border-radius:10px; padding:1.1rem 1.2rem;
+                max-width:640px; width:calc(100% - 2rem); color:var(--text); background:#fff; }
+      .ld-dlg::backdrop { background:rgba(27,27,27,.45); }
+      .ld-dlg h3 { margin:0 0 .2rem; font-size:1.05rem; }
+      .ld-dlg-sub { margin:0 0 .8rem; font-size:.78rem; color:var(--text-muted); }
+      .ld-addgrid { display:grid; grid-template-columns:1fr 1fr; gap:.55rem .7rem; }
+      @media (max-width:560px) { .ld-addgrid { grid-template-columns:1fr; } }
+      .ld-addgrid label, .ld-dlg > form > label { display:block; font-size:.75rem; font-weight:600; color:var(--text-muted); }
+      .ld-addgrid input, .ld-addgrid select, .ld-dlg textarea {
+        width:100%; margin-top:.15rem; padding:.32rem .45rem; font-size:.85rem; font-weight:400;
+        border:1px solid var(--border); border-radius:6px; color:var(--text); background:#fff; }
+      .ld-dlg textarea { font-family:inherit; }
+      .ld-dlg-err { margin-top:.7rem; padding:.45rem .6rem; border-radius:6px;
+        background:#FBEDEB; color:#B4322A; font-size:.8rem; }
+      .ld-dlg-actions { display:flex; justify-content:flex-end; gap:.5rem; margin-top:1rem; }
+      .ld-btn-primary { background:var(--primary); color:#fff; border-color:var(--primary); }
+    </style>
+        <dialog id="ld-addlead" class="ld-dlg">
+          <form method="dialog" id="ld-addform">
+            <h3>Add a lead</h3>
+            <p class="ld-dlg-sub">For someone who did not come through an ad — a referral, a conversation at an event, a post reply.</p>
+            <div class="ld-addgrid">
+              <label>First name *<input id="al-first" required autocomplete="off"></label>
+              <label>Last name<input id="al-last" autocomplete="off"></label>
+              <label>Phone<input id="al-phone" inputmode="tel" autocomplete="off" placeholder="(210) 555-0123"></label>
+              <label>Email<input id="al-email" type="email" autocomplete="off"></label>
+              <label>How they came<select id="al-source"></select></label>
+              <label>Chapter<select id="al-chapter">
+                <option value="">— route from city —</option>
+                <option value="San Antonio">San Antonio</option>
+                <option value="Austin">Austin</option>
+              </select></label>
+              <label id="al-refwrap">Referred by<input id="al-referred" autocomplete="off" placeholder="Name of the member who sent them"></label>
+              <label>City<input id="al-city" autocomplete="off"></label>
+            </div>
+            <p class="ld-dlg-sub" style="margin-top:.7rem">
+              If you already know these, fill them in — they pick the text, the event and who signs it.
+              Leave blank what you genuinely don't know; a guess here reads as fact later.
+            </p>
+            <div class="ld-addgrid" id="al-answers"></div>
+            <label style="display:block;margin-top:.7rem">Note<textarea id="al-note" rows="2" placeholder="Anything from the conversation worth keeping"></textarea></label>
+            <div class="ld-dlg-err" id="al-err" hidden></div>
+            <div class="ld-dlg-actions">
+              <button type="button" class="ld-btn" onclick="document.getElementById('ld-addlead').close()">Cancel</button>
+              <button type="button" class="ld-btn ld-btn-primary" id="al-save" onclick="saveManualLead()">Add lead</button>
+            </div>
+          </form>
+        </dialog>
+
         <div class="ld-toolbar ld-tri">
             <span class="ld-trilab">Availability</span>
             <span class="ld-seg" id="ld-tri-avail">
@@ -1322,6 +1379,82 @@
     // Invitations use the exact Facebook option values so every badge,
     // filter and CSV rule keeps working; City + Chapter ride along.
     // Changing Invitations re-routes the chapter like a fresh answer.
+    // ── Manual lead entry (#420 §6) ──────────────────────────────
+    function openAddLead() {
+        const dlg = document.getElementById("ld-addlead");
+        if (!dlg) return;
+        const srcs = ALL.manual_lead_sources || {};
+        const ss = document.getElementById("al-source");
+        ss.innerHTML = Object.entries(srcs)
+            .map(([v, lbl]) => `<option value="${esc(v)}"${v === "referral" ? " selected" : ""}>${esc(lbl)}</option>`)
+            .join("");
+        // "Referred by" only means something for a referral.
+        const syncRef = () => {
+            const w = document.getElementById("al-refwrap");
+            if (w) w.style.display = ss.value === "referral" ? "" : "none";
+        };
+        ss.onchange = syncRef; syncRef();
+
+        const opts = ALL.answer_options || {};
+        const sel = (field, label) => {
+            const o = opts[field] || {};
+            return `<label>${label}<select id="al-${field}">
+                <option value="">— don't know yet —</option>
+                ${(o.options || []).map(x => `<option value="${esc(x.value)}">${esc(x.label)}</option>`).join("")}
+            </select></label>`;
+        };
+        document.getElementById("al-answers").innerHTML =
+            sel("availability", "Availability") +
+            sel("importance", "What matters to them") +
+            sel("invitations", "Wants invites");
+        ["al-first", "al-last", "al-phone", "al-email", "al-city",
+         "al-referred", "al-note"].forEach(i => {
+            const el = document.getElementById(i); if (el) el.value = "";
+        });
+        const err = document.getElementById("al-err");
+        err.hidden = true; err.textContent = "";
+        dlg.showModal();
+        document.getElementById("al-first").focus();
+    }
+
+    async function saveManualLead() {
+        const err = document.getElementById("al-err");
+        const btn = document.getElementById("al-save");
+        const val = i => (document.getElementById(i)?.value || "").trim();
+        const answers = {};
+        ["availability", "importance", "invitations"].forEach(f => {
+            const v = val("al-" + f); if (v) answers[f] = v;
+        });
+        const body = {
+            first_name: val("al-first"), last_name: val("al-last"),
+            phone: val("al-phone"), email: val("al-email"),
+            source: val("al-source") || "manual",
+            chapter: val("al-chapter"), city: val("al-city"),
+            referred_by: val("al-referred"), note: val("al-note"),
+            answers,
+        };
+        err.hidden = true;
+        btn.disabled = true; btn.textContent = "Adding\u2026";
+        try {
+            const r = await fetch("/api/leads/manual", {
+                method: "POST",
+                headers: {"Content-Type": "application/json"},
+                body: JSON.stringify(body),
+            });
+            const d = await r.json().catch(() => ({}));
+            if (!r.ok || d.error) throw new Error(d.error || "Could not add the lead");
+            document.getElementById("ld-addlead").close();
+            await loadLeads();
+        } catch (e) {
+            // Say what went wrong, in the dialog, rather than closing it
+            // and losing what was typed.
+            err.textContent = e.message;
+            err.hidden = false;
+        } finally {
+            btn.disabled = false; btn.textContent = "Add lead";
+        }
+    }
+
     function editSelections(id) {
         const l = (ALL.leads || []).find(x => x.id === id);
         if (!l) return;

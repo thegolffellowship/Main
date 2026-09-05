@@ -11550,6 +11550,36 @@ def api_lead_edit(lead_id):
     return jsonify(res), (400 if res.get("error") else 200)
 
 
+@app.route("/api/leads/manual", methods=["POST"])
+@require_role("manager")
+def api_add_manual_lead():
+    """Add a lead by hand (mailbox #420 §6, Kerry: "Leads shouldn't only
+    cover Facebook campaigns. Should also be able to add manual leads.").
+
+    Body: {first_name, last_name, phone, email, source, chapter, city,
+    answers: {availability|importance|invitations}, note, referred_by,
+    author}. The three survey answers are OPTIONAL — a referral has no
+    form behind it, and a blank answer must fall back visibly rather than
+    silently defaulting everyone to the same preset.
+    """
+    from email_parser.leads import add_manual_lead
+    d = request.get_json(silent=True) or {}
+    res = add_manual_lead(
+        first_name=d.get("first_name") or "",
+        last_name=d.get("last_name") or "",
+        phone=d.get("phone") or "",
+        email=d.get("email") or "",
+        source=d.get("source") or "manual",
+        chapter=d.get("chapter") or "",
+        city=d.get("city") or "",
+        answers=d.get("answers") or {},
+        note=d.get("note") or "",
+        referred_by=d.get("referred_by") or "",
+        author=d.get("author") or (session.get("role") or ""),
+    )
+    return jsonify(res), (400 if res.get("error") else 200)
+
+
 @app.route("/api/leads/<int:lead_id>/answers", methods=["POST"])
 @require_role("manager")
 def api_lead_answers(lead_id):

@@ -965,7 +965,8 @@ def lead_center_payload(status: str = "", campaigns: list | None = None,
             "sms_p9_presets": sorted(SMS_P9_PRESETS),
             "campaigns": campaigns if campaigns is not None else [],
             "tag_options": get_tag_options(db_path),
-            "answer_options": get_answer_options()}
+            "answer_options": get_answer_options(),
+            "manual_lead_sources": MANUAL_LEAD_SOURCES}
 
 
 def followups_due(db_path: str | Path | None = None) -> list[dict]:
@@ -2081,6 +2082,141 @@ def apply_manual_answers(payload: dict | None,
     for k, v in manual.items():
         payload[k] = v
     return payload
+
+
+# Where a lead came from (#420 §6, Kerry: "Leads shouldn't only cover
+# Facebook campaigns. Should also be able to add manual leads."). The
+# Lead Center was a Facebook campaign screen; it is now a lead system.
+# `meta` is the polled Facebook pipe, everything else is entered by hand.
+# Referral leads cost $0, which is worth seeing next to the paid CPL.
+MANUAL_LEAD_SOURCES = {
+    "referral":  "Referral",
+    "organic":   "Organic",
+    "in_person": "Met in person",
+    "partner":   "Partner",
+    "manual":    "Manual",
+}
+
+
+def add_manual_lead(first_name: str, last_name: str = "", phone: str = "",
+                    email: str = "", source: str = "manual",
+                    chapter: str = "", city: str = "",
+                    answers: dict | None = None, note: str = "",
+                    referred_by: str = "", author: str = "",
+                    db_path: str | Path | None = None) -> dict:
+    """Add a lead nobody's ad campaign produced.
+
+    Kannon Brown came off Robert's post, Kevin Ponder was met in person,
+    Rick Billeaud and Joey Difrank came from Logan. These are TGF's
+    cheapest acquisitions and the only channel with no instrumentation at
+    all — before this they had no record anywhere.
+
+    THE DESIGN WRINKLE (#420 §6): a manual lead has no survey answers,
+    and Availability / Importance / Invitations are exactly what drive
+    preset selection, event choice, cadence order, owner naming and the
+    chapter callout. So they are OPTIONAL here and captured when known —
+    Kerry usually learns half of it in the conversation that produced the
+    lead. What he does not know stays genuinely blank, and the preset
+    picker falls back the same way it does for a survey nobody finished,
+    rather than being quietly defaulted to something that reads as fact.
+    """
+    import re
+
+    from . import database as db
+    from .timezone_utils import now_central
+
+    first_name = (first_name or "").strip()
+    if not first_name:
+        return {"error": "a first name is required"}
+    source = (source or "manual").strip().lower()
+    if source not in MANUAL_LEAD_SOURCES:
+        return {"error": f"source must be one of "
+                         f"{sorted(MANUAL_LEAD_SOURCES)}, got {source!r}"}
+    phone = (phone or "").strip()
+    email = (email or "").strip()
+    if not phone and not email:
+        return {"error": "a phone or an email is required — a lead with "
+                         "no way to reach them is not a lead"}
+    chapter = (chapter or "").strip()
+    if chapter and chapter not in ("San Antonio", "Austin"):
+        return {"error": "chapter must be San Antonio, Austin, or blank"}
+
+    answers = {k: v for k, v in (answers or {}).items() if v}
+    for f, v in answers.items():
+        if f not in MANUAL_ANSWER_KEYS:
+            return {"error": f"unknown field {f!r}"}
+        if v not in {o for o, _ in MANUAL_ANSWER_OPTIONS[f]}:
+            return {"error": f"{f}: {v!r} is not a survey option"}
+
+    now = now_central()
+    payload = {MANUAL_ANSWER_KEYS[f]: v for f, v in answers.items()}
+    payload["_manual_entry"] = {
+        "by": (author or "manager").strip(),
+        "at": now.strftime("%Y-%m-%d %H:%M"),
+        "source": source,
+    }
+    if referred_by.strip():
+        # The relationship, recorded as text until the referral model is
+        # ratified (#413/#416). Deliberately NOT written to
+        # customers.referred_by_customer_id, which today means "I paid
+        # for this person's spot" — a different sentence.
+        payload["_referred_by"] = referred_by.strip()
+
+    with db._connect(db_path) as conn:
+        ensure_leads_table(conn)
+        # One person, one lead row. A manual add must not mint a second
+        # record for somebody the Facebook pipe already delivered.
+        dupe = None
+        if phone:
+            digits = re.sub(r"\D", "", phone)[-10:]
+            if digits:
+                for r in conn.execute(
+                        "SELECT id, first_name, last_name, phone FROM leads "
+                        "WHERE phone IS NOT NULL AND phone != '' "
+                        "AND merged_into IS NULL"):
+                    if re.sub(r"\D", "", r["phone"] or "")[-10:] == digits:
+                        dupe = r
+                        break
+        if dupe is None and email:
+            dupe = conn.execute(
+                "SELECT id, first_name, last_name, phone FROM leads "
+                "WHERE LOWER(TRIM(COALESCE(email,''))) = ? "
+                "AND merged_into IS NULL", (email.lower(),)).fetchone()
+        if dupe:
+            return {"error": f"lead {dupe['id']} is already "
+                             f"{(dupe['first_name'] or '').strip()} "
+                             f"{(dupe['last_name'] or '').strip()}".strip()
+                             + " with that contact — open that card instead",
+                    "existing_lead_id": dupe["id"]}
+
+        cur = conn.execute(
+            "INSERT INTO leads (source, external_id, first_name, last_name, "
+            " email, phone, city, chapter, source_label, arrived_at, "
+            " status, payload) "
+            "VALUES (?,?,?,?,?,?,?,?,?,?, 'new', ?)",
+            (source, f"manual-{now.strftime('%Y%m%d%H%M%S')}-"
+                     f"{first_name.lower()[:8]}",
+             first_name, (last_name or "").strip() or None,
+             email or None, phone or None, (city or "").strip() or None,
+             chapter or None, MANUAL_LEAD_SOURCES[source],
+             now.strftime("%Y-%m-%d %H:%M:%S"), json.dumps(payload)))
+        lead_id = cur.lastrowid
+        why = MANUAL_LEAD_SOURCES[source].lower()
+        if referred_by.strip():
+            why = f"referred by {referred_by.strip()}"
+        conn.execute(
+            "INSERT INTO lead_notes (lead_id, author, note) VALUES (?,?,?)",
+            (lead_id, "auto",
+             f"Added by hand ({why}) {now.strftime('%-m/%-d, %-I:%M %p')}"))
+        if note.strip():
+            conn.execute(
+                "INSERT INTO lead_notes (lead_id, author, note) VALUES (?,?,?)",
+                (lead_id, (author or "K").strip()[:12], note.strip()))
+        conn.commit()
+    return {"ok": True, "lead_id": lead_id, "source": source,
+            "chapter": chapter or None,
+            "answers_captured": sorted(answers),
+            "answers_missing": sorted(set(MANUAL_ANSWER_KEYS) - set(answers))}
 
 
 def set_lead_answers(lead_id: int, answers: dict | None = None,

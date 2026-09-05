@@ -1,5 +1,15 @@
-window.TGF_VERSION = "2.322.0";
+window.TGF_VERSION = "2.323.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.323.0",
+    date: "2026-09-05",
+    changes: [
+      "THE LEAD CENTER IS A LEAD SYSTEM NOW, not a Facebook campaign screen. Kerry: 'Leads shouldn't only cover Facebook campaigns. Should also be able to add manual leads.' + Add Lead takes a referral, an organic arrival, someone met in person or a partner introduction, and drops them into the SAME queue with the same 48-hour gate and the same presets, because the work is identical. Kannon Brown came off Robert's post, Kevin Ponder was met in person, Rick Billeaud and Joey Difrank came from Logan \u2014 TGF's cheapest acquisitions and, until now, the only channel with no record anywhere.",
+      "The design wrinkle is that a manual lead has no survey behind it, and Availability / Importance / Invitations are exactly what pick the text, the event, the cadence and who signs it. So the form asks for them OPTIONALLY, labelled \"don't know yet\" rather than defaulted \u2014 Kerry usually learns half of it in the conversation that produced the lead, and a guess entered here would read as fact later. What is left blank falls back the same way an unfinished survey does.",
+      "One person, one lead row: adding someone whose number is already in the queue is refused and points at the existing card, matching on digits so '(337) 281-6169' and '337-281-6169' are the same person. A lead with no phone AND no email is refused outright \u2014 that is not a lead.",
+      "Referral leads carry a $0 cost, which is worth seeing next to a $1.44 paid CPL once the reporting catches up.",
+    ],
+  },
   {
     version: "2.322.0",
     date: "2026-09-05",
