@@ -165,6 +165,52 @@ def main():
     else:
         check("every preset is clean and sendable with full data", True)
 
+    # Kerry 2026-09-05, looking at P4 for a Saturday lead: the paragraph
+    # read "a Saturday 18 each month ... all set up for you." The cadence
+    # phrase reads correctly mid-sentence and the ratified copy puts it
+    # at a paragraph start.
+    print("A substituted value that starts a sentence is capitalised")
+    rowsC = {"any": {"San Antonio": FULL_EVENT},
+             "tue": {"San Antonio": FULL_EVENT},
+             "sat": {"San Antonio": FULL_EVENT}}
+    import re as _re
+    bad = []
+    for slot in ("tue", "sat", "both"):
+        vv = leads.sms_vars_for(LEAD, owners, {}, rowsC, slot)
+        for k in keys:
+            txt = leads.render_sms(presets, k, LEAD, vv, slot=slot)
+            for line in txt.split("\n"):
+                line = line.strip()
+                # A link or an address keeps its own case, deliberately —
+                # "Https://" would be wrong.
+                if _re.match(r"(?:https?://|www\.|mailto:)|\S+@\S+\.",
+                             line, _re.I):
+                    continue
+                if line and line[0].islower():
+                    bad.append((k, slot, line[:44]))
+    check("no paragraph in any preset begins with a lowercase word",
+          not bad, bad[:4])
+
+    vsat = leads.sms_vars_for(LEAD, owners, {}, rowsC, "sat")
+    p4 = leads.render_sms(presets, "p4", LEAD, vsat, slot="sat")
+    check("P4 Saturday reads 'A Saturday 18 each month'",
+          "A Saturday 18 each month" in p4, p4)
+    check("and the words themselves are untouched — only the first letter",
+          "a Saturday 18 each month and 9 after work on Tuesdays"
+          in p4.replace("A Saturday", "a Saturday"), p4)
+
+    # The two things this rule must NEVER touch.
+    p7 = leads.render_sms(presets, "p7", LEAD, vsat, slot="sat")
+    check("a link on its own line is never 'Https://'",
+          "https://" in p7 and "Https://" not in p7, p7)
+    vtue = leads.sms_vars_for(LEAD, owners, {}, rowsC, "tue")
+    p4t = leads.render_sms(presets, "p4", LEAD, vtue, slot="tue")
+    check("a value starting with a digit is left alone",
+          "9 after work on Tuesdays weekly" in p4t, p4t)
+    p1 = leads.render_sms(presets, "p1", LEAD, vtue, slot="tue")
+    check("the deliberate ellipsis in P1 is literal copy and stays lowercase",
+          "legit... gross and net games" in p1, p1)
+
     print("Every fragment is registered, so none can be forgotten again")
     import re
     declared = set(leads.SMS_FRAGMENT_REQUIRES)

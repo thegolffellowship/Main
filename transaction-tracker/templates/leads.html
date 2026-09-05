@@ -1122,9 +1122,23 @@
                 : "";
             out = out.split(tok).join(block);
         }
-        for (const k of Object.keys(vars)) {
-            if (k.startsWith("_")) continue;
-            out = out.split("{" + k + "}").join(vars[k]);
+        // Substitute left to right so each value can see the text
+        // ALREADY rendered before it, which is what decides whether it
+        // begins a sentence. Mirrors render_sms() in leads.py.
+        {
+            const parts = [];
+            let pos = 0;
+            const re = /\{([a-z_0-9]+)\}/g;
+            let m;
+            while ((m = re.exec(out)) !== null) {
+                const name = m[1];
+                if (name.startsWith("_") || !(name in vars)) continue;
+                parts.push(out.slice(pos, m.index));
+                parts.push(capForPosition(String(vars[name]), parts.join("")));
+                pos = m.index + m[0].length;
+            }
+            parts.push(out.slice(pos));
+            out = parts.join("");
         }
         // FAIL CLOSED, same rule as the server: never show or send a
         // string with a brace in it. Dropping a clause is recoverable;
@@ -1135,6 +1149,29 @@
             out = out.replace(/\{[a-z_0-9]+\}/g, "").replace(/[{}]/g, "");
         }
         return tidySms(out);
+    }
+
+    // Capitalise a SUBSTITUTED value when it starts a sentence. Keep in
+    // step with _cap_for_position() in email_parser/leads.py.
+    //
+    // Kerry 2026-09-05, on P4 for a Saturday lead: the paragraph read
+    // "a Saturday 18 each month and 9 after work on Tuesdays whenever
+    // you can, all set up for you." The cadence phrase was written to
+    // sit mid-sentence and the ratified copy puts it at a paragraph
+    // start.
+    //
+    // Substituted values only, never the literal copy — so the
+    // deliberate ellipsis in P1 ("legit... gross and net games") stays
+    // exactly as Kerry wrote it. A leading digit stays a digit and a URL
+    // is never "Https://".
+    const NEVER_CAP = /^(?:https?:\/\/|www\.|mailto:)|^\S+@\S+\./i;
+    function startsSentence(built) {
+        return !built || built.endsWith("\n") || /[.!?]\s+$/.test(built);
+    }
+    function capForPosition(value, built) {
+        if (!value || !startsSentence(built)) return value;
+        if (NEVER_CAP.test(value) || !/^[a-z]/i.test(value)) return value;
+        return value[0].toUpperCase() + value.slice(1);
     }
 
     // Keep in step with tidy_sms() in email_parser/leads.py. A brace

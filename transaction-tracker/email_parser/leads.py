@@ -3191,6 +3191,40 @@ def sms_vars_for(lead: dict, owners: dict | None = None,
     }
 
 
+def _starts_sentence(built: str) -> bool:
+    """True when the next thing appended begins a sentence."""
+    import re as _re
+    return (not built) or built.endswith("\n") \
+        or bool(_re.search(r"[.!?]\s+$", built))
+
+
+# A value that must keep its own capitalisation whatever position it
+# lands in: a link, an address, a handle.
+_NEVER_CAP = __import__("re").compile(
+    r"^(?:https?://|www\.|mailto:)|^\S+@\S+\.", __import__("re").I)
+
+
+def _cap_for_position(value: str, built: str) -> str:
+    """Capitalise a SUBSTITUTED value when it starts a sentence.
+
+    Kerry 2026-09-05, on P4 for a Saturday lead: the paragraph read
+    "a Saturday 18 each month and 9 after work on Tuesdays whenever you
+    can, all set up for you." The cadence phrase was written to sit
+    mid-sentence and the ratified copy puts it at a paragraph start.
+
+    Applied ONLY to substituted values, never to the literal copy — so
+    the deliberate ellipsis in P1 ("legit... gross and net games") is
+    left exactly as Kerry wrote it. Values that are not words are left
+    alone too: a leading digit stays a digit, and a URL is never
+    "Https://".
+    """
+    if not value or not _starts_sentence(built):
+        return value
+    if _NEVER_CAP.match(value) or not value[0].isalpha():
+        return value
+    return value[0].upper() + value[1:]
+
+
 def tidy_sms(text: str) -> str:
     """Clean up after a clause is removed. Same rules as the browser's
     copy in leads.html — keep them in step.
@@ -3310,10 +3344,21 @@ def render_sms(presets: dict, key: str, lead: dict, sms_vars: dict,
                       else frag.get("text")) or "")
         out = out.replace(tok, block)
 
-    for k, v in sms_vars.items():
-        if k.startswith("_"):
+    # Substitute left to right so each value can see the text ALREADY
+    # rendered before it, which is what decides whether it begins a
+    # sentence. An unknown token is left untouched here; the fail-closed
+    # guard below is what deals with it.
+    parts: list = []
+    pos = 0
+    for m in re.finditer(r"\{([a-z_0-9]+)\}", out):
+        name = m.group(1)
+        if name.startswith("_") or name not in sms_vars:
             continue
-        out = out.replace("{" + k + "}", str(v))
+        parts.append(out[pos:m.start()])
+        parts.append(_cap_for_position(str(sms_vars[name]), "".join(parts)))
+        pos = m.end()
+    parts.append(out[pos:])
+    out = "".join(parts)
 
     # FAIL CLOSED. A message that is missing a sentence is recoverable; a
     # message with {link_offer} in it tells a stranger they are reading

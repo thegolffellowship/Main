@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.325.1";
+window.TGF_VERSION = "2.325.2";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.325.2",
+    date: "2026-09-05",
+    changes: [
+      "A substituted value that lands at the start of a sentence is now capitalised. Kerry spotted P4 for a Saturday lead reading 'a Saturday 18 each month and 9 after work on Tuesdays whenever you can, all set up for you.' \u2014 a paragraph beginning with a lowercase word. The cadence phrase reads correctly mid-sentence and the ratified copy places it at a paragraph start; nobody chose that, it fell out of a phrase and a template meeting. P3 had it too, on the same slot.",
+      "Fixed in the renderer rather than by editing four bits of ratified copy, so it covers every preset and every future token. The words themselves are untouched \u2014 only the first letter changes. It applies to SUBSTITUTED values only, never to the literal copy, which is why the deliberate ellipsis in P1 ('legit... gross and net games') is left exactly as written.",
+      "Two things it must never touch, both pinned by tests: a link on its own line is never 'Https://', and a value starting with a digit stays as it is \u2014 the Tuesday cadence still reads '9 after work on Tuesdays weekly'.",
+    ],
+  },
   {
     version: "2.325.1",
     date: "2026-09-05",
