@@ -135,19 +135,36 @@ Options are the `lead_tag_options` dial (JSON list; defaults Left VM ·
 Texted · Sent email · No answer · Call back · Interested · Coming to event · Too
 expensive · Not now · Bad contact · Registered event · Became member).
 Tagging a NEW lead auto-marks it touched. **Deactivating tags**
-(`DEACTIVATING_TAGS`: Too expensive · Bad contact, Kerry 2026-08-31):
-selecting one flips the lead to dismissed — deactivated, never
-deleted; the row + notes stay, it leaves the invite CSV, Restore
-brings it back. A converted lead keeps its status (tag still records
-the disposition). CSV export also excludes the Too expensive tag.
+(defaults `DEFAULT_DEACTIVATING_TAGS`: Too expensive · Bad contact,
+Kerry 2026-08-31; **No answer · Not now** added 2026-09-06 — "move any
+that I've said no answer to dismissed and do that automatically when
+selected"): selecting one flips the lead to dismissed — deactivated,
+never deleted; the row + notes stay, it leaves the invite CSV, Restore
+brings it back, and one auto note records why it left the queue. A
+converted lead keeps its status (tag still records the disposition).
+The set is a DIAL — `lead_deactivating_tags` (JSON list) overrides the
+defaults, same shape as `lead_outreach_tags`/`lead_rearm_tags`; read it
+through `get_deactivating_tags(db_path)` or, inside an open
+connection, `_deactivating_tags_via(conn)`. Never hardcode the members
+again: the CSV export did, and would have drifted the moment the set
+changed. CSV export excludes any deactivating tag (belt and braces —
+a converted lead still carries one).
 `ensure_leads_table` self-heals on every read/write (v2.261.1): an
 active lead carrying a deactivating tag (tagged pre-feature or during
-a deploy gap) is swept to dismissed. The CSV also hard-skips any
+a deploy gap) is swept to dismissed. That heal is ALSO the backfill
+required by mailbox #405 whenever the set widens — v2.328.0 moved the
+13 leads already tagged No answer / Not now. Because the heal is
+perpetual, **Restore must clear the tag or it silently undoes
+itself** — `mark_lead` does exactly that when it reactivates a
+dismissed lead, with a note. The payload ships `deactivating_tags` so
+the tag dropdown can label those options "— dismisses" at the point of
+choosing. The CSV also hard-skips any
 invitations answer starting with 'no' — an opt-out never rides the
 routed-chapter fallback. Regression suite: `test_leads_export.py`. Surfaces:
 tag picker in desktop actions + mobile action row, orange pill display,
 `POST /api/leads/<id>/tag`, bridge `scoring-lead-tag:<id>|<tag>`
-(empty clears; audited), `set_lead_tag`/`get_tag_options` in leads.py.
+(empty clears; audited), `set_lead_tag`/`get_tag_options`/`get_deactivating_tags` in
+leads.py.
 
 ## Invite-list CSV export (Kerry 2026-08-28)
 

@@ -88,6 +88,8 @@ def main():
                    "yes_for_both", tag="Bad contact")
         plant_lead(conn, "NotNow", "notnow@x.com", "Austin",
                    "yes_for_both", tag="Not now")
+        plant_lead(conn, "NoAnswerTag", "noans@x.com", "Austin",
+                   "yes_for_both", tag="No answer")
         plant_lead(conn, "NoEmail", "", "San Antonio", "yes_for_both")
         conn.commit()
 
@@ -116,6 +118,7 @@ def main():
     check("'Too expensive' tag excluded", "PriceyTag" not in sa)
     check("'Bad contact' tag excluded", "BadContact" not in atx)
     check("'Not now' tag excluded", "NotNow" not in atx)
+    check("'No answer' tag excluded", "NoAnswerTag" not in atx)
     # Boot-heal: PRE-EXISTING deactivating tags (applied before the tag
     # auto-dismissed, e.g. John Oscar 2026-08-31) get swept to dismissed
     # by ensure_leads_table on any read — the export calls above were
@@ -123,13 +126,18 @@ def main():
     with db._connect(db_path) as conn:
         healed = {r["first_name"]: r["status"] for r in conn.execute(
             "SELECT first_name, status FROM leads "
-            "WHERE first_name IN ('BadContact', 'PriceyTag', 'NotNow')")}
+            "WHERE first_name IN ('BadContact', 'PriceyTag', 'NotNow', "
+            "'NoAnswerTag')")}
     check("pre-existing 'Bad contact' healed to dismissed",
           healed.get("BadContact") == "dismissed", str(healed))
     check("pre-existing 'Too expensive' healed to dismissed",
           healed.get("PriceyTag") == "dismissed", str(healed))
-    check("'Not now' is NOT a deactivating tag (stays touched)",
-          healed.get("NotNow") == "touched", str(healed))
+    # Kerry 2026-09-06 widened the set; the boot heal is the retroactive
+    # sweep that catches everything already carrying the two new tags.
+    check("pre-existing 'Not now' healed to dismissed",
+          healed.get("NotNow") == "dismissed", str(healed))
+    check("pre-existing 'No answer' healed to dismissed",
+          healed.get("NoAnswerTag") == "dismissed", str(healed))
     check("email-less row excluded",
           all(r["email"] for chap in ("San Antonio", "Austin")
               for r in leads.get_lead_export_rows(chap, db_path=db_path)))
@@ -158,6 +166,59 @@ def main():
           st["TagMeConv"] == ("converted", "Too expensive"), str(st))
     check("'Bad contact' deactivates (status -> dismissed)",
           st["TagMeBad"] == ("dismissed", "Bad contact"), str(st))
+
+    # ---- The two tags Kerry added 2026-09-06 ----
+    with db._connect(db_path) as conn:
+        lid_na = plant_lead(conn, "TagMeNoAns", "tagna@x.com",
+                            "Austin", "yes_for_both", status="touched")
+        lid_nn = plant_lead(conn, "TagMeNotNow", "tagnn@x.com",
+                            "Austin", "yes_for_both", status="new")
+        conn.commit()
+    leads.set_lead_tag(lid_na, "No answer", db_path=db_path)
+    leads.set_lead_tag(lid_nn, "Not now", db_path=db_path)
+    with db._connect(db_path) as conn:
+        st2 = {r["id"]: (r["status"], r["tag"]) for r in conn.execute(
+            "SELECT id, status, tag FROM leads WHERE id IN (?, ?)",
+            (lid_na, lid_nn))}
+    check("'No answer' deactivates on selection",
+          st2[lid_na] == ("dismissed", "No answer"), str(st2))
+    check("'Not now' deactivates on selection (from NEW)",
+          st2[lid_nn] == ("dismissed", "Not now"), str(st2))
+
+    # Restore has to STICK: the boot heal re-dismisses anything still
+    # carrying a deactivating tag, so mark_lead clears the tag.
+    leads.mark_lead(lid_na, "touched", db_path=db_path)
+    with db._connect(db_path) as conn:
+        leads.ensure_leads_table(conn)          # fire the heal again
+        row_r = conn.execute("SELECT status, tag FROM leads WHERE id = ?",
+                             (lid_na,)).fetchone()
+    check("Restore survives the boot heal (status stays touched)",
+          row_r["status"] == "touched", str(dict(row_r)))
+    check("Restore clears the deactivating tag",
+          row_r["tag"] is None, str(dict(row_r)))
+
+    # The set is a DIAL, not a deploy: retiring "Not now" through
+    # lead_deactivating_tags must stop it dismissing.
+    with db._connect(db_path) as conn:
+        conn.execute("CREATE TABLE IF NOT EXISTS app_settings ("
+                     "key TEXT PRIMARY KEY, value TEXT, updated_at TEXT)")
+        conn.commit()
+    db.set_app_setting("lead_deactivating_tags",
+                       json.dumps(["Too expensive", "Bad contact"]),
+                       db_path=db_path)
+    with db._connect(db_path) as conn:
+        lid_dial = plant_lead(conn, "TagDialed", "tagdial@x.com",
+                              "Austin", "yes_for_both", status="touched")
+        conn.commit()
+    leads.set_lead_tag(lid_dial, "Not now", db_path=db_path)
+    with db._connect(db_path) as conn:
+        leads.ensure_leads_table(conn)
+        row_d = conn.execute("SELECT status, tag FROM leads WHERE id = ?",
+                             (lid_dial,)).fetchone()
+    check("lead_deactivating_tags dial overrides the code default",
+          (row_d["status"], row_d["tag"]) == ("touched", "Not now"),
+          str(dict(row_d)))
+    db.set_app_setting("lead_deactivating_tags", "", db_path=db_path)
 
     lid_norm = None
     with db._connect(db_path) as conn:

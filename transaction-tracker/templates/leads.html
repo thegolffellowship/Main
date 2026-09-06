@@ -855,10 +855,16 @@
             const tagHtml = !l.tag ? ""
                 : isMember(l) ? `<span class="ld-mbadge">★ MEMBER</span>`
                 : `<span class="ld-tag">${esc(l.tag)}</span>`;
+            // A deactivating tag dismisses the lead the moment it is
+            // picked (Kerry 2026-09-06: No answer / Not now). Say that
+            // in the option itself — the consequence belongs where the
+            // choice is made, not in a note discovered afterwards.
+            const deact = new Set(ALL.deactivating_tags || []);
             const tagSel = `<select class="ld-tagsel" onchange="setTag(${l.id}, this.value)">` +
                 `<option value="">🏷 tag…</option>` +
                 (ALL.tag_options || []).map(t =>
-                    `<option value="${esc(t)}"${t === l.tag ? " selected" : ""}>${esc(t)}</option>`).join("") +
+                    `<option value="${esc(t)}"${t === l.tag ? " selected" : ""}>${esc(t)}` +
+                    `${deact.has(t) ? " — dismisses" : ""}</option>`).join("") +
                 `</select>`;
             // Triage badges (shared desktop + mobile): availability,
             // importance, invitations, ad set — decoded to Kerry's shorthand.

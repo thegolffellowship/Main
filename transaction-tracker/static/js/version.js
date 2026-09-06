@@ -1,5 +1,16 @@
-window.TGF_VERSION = "2.327.0";
+window.TGF_VERSION = "2.328.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.328.0",
+    date: "2026-09-06",
+    changes: [
+      "'No answer' and 'Not now' now dismiss the lead the moment they are selected. Kerry: 'Need to move any that I've said no answer (I'm selecting no answer after 3rd text) to dismissed and do that automatically when selected. Also any that I select not now for.' They join 'Too expensive' and 'Bad contact' as deactivating tags — the lead is never deleted: the row, its notes and its history stay, it drops out of the active queue and off the invite-list CSV, and Restore brings it back.",
+      "Every lead ALREADY carrying one of the two new tags moves too — 12 tagged 'No answer' and 1 tagged 'Not now' as of this release. A feature that only arms going forward misses exactly the population it was built for (the backfill rule, mailbox #405), so the boot heal that has always swept pre-existing deactivating tags does the retroactive pass. Each move writes one note on the card saying why it left the queue.",
+      "Restore now sticks. That same heal re-dismisses anything still carrying a deactivating tag on the next read, so restoring a lead without clearing its tag would silently undo itself — a latent trap while only 'Too expensive' and 'Bad contact' deactivated, and a common one now. Restoring clears the tag and says so in a note; the disposition no longer applies once the lead is back in the queue.",
+      "WHICH tags deactivate is now data, not a deploy: the lead_deactivating_tags dial (a JSON list) overrides the defaults, the same shape as lead_tag_options / lead_outreach_tags / lead_rearm_tags. The invite-list CSV reads that live set as well — it had a hardcoded copy of the trio that would have drifted the moment the set changed.",
+      "The tag dropdown labels those options '— dismisses', so the consequence is visible where the choice is made rather than discovered after the lead disappears.",
+    ],
+  },
   {
     version: "2.327.0",
     date: "2026-09-05",

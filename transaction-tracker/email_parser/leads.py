@@ -234,16 +234,36 @@ def ensure_leads_table(conn: sqlite3.Connection) -> None:
     # Heal (v2.261.1, Kerry: "Bad Contact is still persisting"): leads
     # carrying a deactivating tag from BEFORE the tag auto-dismissed —
     # or tagged during a deploy gap — flip to dismissed on every
-    # read/write path. Idempotent; converted keeps its status. Commits
-    # only when a row actually changed (ensure runs at the start of
-    # operations, so nothing else is pending on this connection).
+    # read/write path.
+    #
+    # This is also the retroactive sweep the backfill rule (#405)
+    # requires: widening the set — v2.328.0 added "No answer" and
+    # "Not now" — moves every lead ALREADY carrying one of the new tags,
+    # not just the ones tagged from here on.
+    #
+    # Idempotent; converted keeps its status. A Restore is not undone by
+    # this pass: mark_lead clears the deactivating tag when it
+    # reactivates a lead, so there is nothing left here to re-dismiss.
+    # Each move writes one note so the disappearance from the queue is
+    # explained on the card. Commits only when a row actually changed
+    # (ensure runs at the start of operations, so nothing else is
+    # pending on this connection).
     try:
-        cur = conn.execute(
-            "UPDATE leads SET status = 'dismissed' "
-            f"WHERE tag IN ({','.join('?' * len(DEACTIVATING_TAGS))}) "
+        _deact = sorted(_deactivating_tags_via(conn))
+        _rows = conn.execute(
+            "SELECT id, tag FROM leads WHERE tag IN "
+            f"({','.join('?' * len(_deact))}) "
             "AND status NOT IN ('dismissed', 'converted')",
-            tuple(sorted(DEACTIVATING_TAGS)))
-        if cur.rowcount:
+            tuple(_deact)).fetchall()
+        for _r in _rows:
+            conn.execute("UPDATE leads SET status = 'dismissed' WHERE id = ?",
+                         (_r["id"],))
+            conn.execute(
+                "INSERT INTO lead_notes (lead_id, author, note) "
+                "VALUES (?, 'auto', ?)",
+                (_r["id"], f"Dismissed automatically on the {_r['tag']} tag. "
+                           "Restore puts it back in the queue."))
+        if _rows:
             conn.commit()
     except sqlite3.OperationalError:
         pass
@@ -965,6 +985,10 @@ def lead_center_payload(status: str = "", campaigns: list | None = None,
             "sms_p9_presets": sorted(SMS_P9_PRESETS),
             "campaigns": campaigns if campaigns is not None else [],
             "tag_options": get_tag_options(db_path),
+            # Which of those tags END the pursuit, so the dropdown can
+            # say so at the point of choosing rather than after the
+            # lead disappears from the queue.
+            "deactivating_tags": sorted(get_deactivating_tags(db_path)),
             "answer_options": get_answer_options(),
             # The browser resolves fragments off THIS map, not off a copy
             # of the rules. One definition, two renderers (#425).
@@ -1588,16 +1612,21 @@ def get_lead_export_rows(chapter: str,
     2026-08-28, handicap-export style). Membership criteria: the lead's
     INVITATIONS opt-in answer ('yes_for_<chapter>' or 'yes_for_both');
     a lead with no answer falls back to its routed chapter. Excluded:
-    dismissed leads, 'Bad contact'/'Not now'/'Too expensive' tags,
-    rows without email, and any explicit invitations opt-OUT (an
-    answer starting with 'no' — Kerry 2026-08-31: those that don't
+    dismissed leads, any DEACTIVATING tag (the live set, so this list
+    can never drift from the dial the way the hardcoded trio did — it
+    still read 'Bad contact'/'Not now'/'Too expensive' after the set
+    changed), rows without email, and any explicit invitations opt-OUT
+    (an answer starting with 'no' — Kerry 2026-08-31: those that don't
     want invites never go on the CSV)."""
     want_sa = chapter == "San Antonio"
+    deact = get_deactivating_tags(db_path)
     out = []
     for l in get_leads(limit=1000, db_path=db_path):
         if l.get("status") == "dismissed":
             continue
-        if (l.get("tag") or "") in ("Bad contact", "Not now", "Too expensive"):
+        # Belt and braces: a deactivating tag also excludes a lead the
+        # status alone would keep (a CONVERTED one still carries it).
+        if (l.get("tag") or "") in deact:
             continue
         email = (l.get("email") or "").strip()
         if not email:
@@ -1724,7 +1753,40 @@ DEFAULT_TAG_OPTIONS = ["Left VM", "Texted", "Sent email", "Followed up",
 # deactivate; "Bad contact should also deactivate"). Selecting one flips
 # status to dismissed: the row and its notes stay, it drops out of the
 # active queue and the invite-list CSV, and Restore brings it back.
-DEACTIVATING_TAGS = {"Too expensive", "Bad contact"}
+#
+# Kerry 2026-09-06 extends it to the two dispositions that end a
+# pursuit without a decision: "Need to move any that I've said no answer
+# (I'm selecting no answer after 3rd text) to dismissed and do that
+# automatically when selected. Also any that I select not now for."
+DEFAULT_DEACTIVATING_TAGS = ["Too expensive", "Bad contact",
+                             "No answer", "Not now"]
+# Kept as a module constant for callers that just want the defaults;
+# the LIVE set is get_deactivating_tags() / _deactivating_tags_via().
+DEACTIVATING_TAGS = set(DEFAULT_DEACTIVATING_TAGS)
+
+
+def get_deactivating_tags(db_path: str | Path | None = None) -> set[str]:
+    """WHICH tags deactivate is a rule, so it is data: the
+    `lead_deactivating_tags` dial (JSON list) overrides the defaults.
+    Kerry can retire or add one from Settings without a deploy — the
+    same shape as lead_tag_options / lead_outreach_tags / lead_rearm_tags."""
+    opts = _dial_json("lead_deactivating_tags", [], db_path=db_path)
+    return {str(o) for o in opts} if opts else set(DEFAULT_DEACTIVATING_TAGS)
+
+
+def _deactivating_tags_via(conn) -> set[str]:
+    """The same set read on an ALREADY-OPEN connection. The boot heal
+    runs inside one, and nesting a second connection on the same SQLite
+    file inside a write path buys a lock timeout for nothing."""
+    try:
+        from . import database as db
+        raw = db._setting_via(conn, "lead_deactivating_tags")
+        val = json.loads(raw) if raw else None
+        if isinstance(val, list) and val:
+            return {str(o) for o in val}
+    except Exception:
+        pass
+    return set(DEFAULT_DEACTIVATING_TAGS)
 
 
 def get_tag_options(db_path: str | Path | None = None) -> list[str]:
@@ -1756,13 +1818,20 @@ def set_lead_tag(lead_id: int, tag: str,
                            (lead_id,)).fetchone()
         if not row:
             return {"error": f"lead {lead_id} not found"}
-        if tag in DEACTIVATING_TAGS and row["status"] != "converted":
+        if tag in get_deactivating_tags(db_path) \
+                and row["status"] != "converted":
             # Deactivate, never delete: converted leads keep their status
             # (the tag still records the disposition).
             conn.execute(
                 "UPDATE leads SET tag = ?, status = 'dismissed', "
                 "touched_at = COALESCE(touched_at, datetime('now')) "
                 "WHERE id = ?", (tag, lead_id))
+            if row["status"] != "dismissed":
+                conn.execute(
+                    "INSERT INTO lead_notes (lead_id, author, note) "
+                    "VALUES (?, 'auto', ?)",
+                    (lead_id, f"Dismissed automatically on the {tag} tag. "
+                              "Restore puts it back in the queue."))
         elif tag and row["status"] == "new":
             conn.execute(
                 "UPDATE leads SET tag = ?, status = 'touched', "
@@ -1978,6 +2047,10 @@ def mark_lead(lead_id: int, status: str, touched_by: str = "",
                            (lead_id,)).fetchone()
         if not row:
             return {"error": f"lead {lead_id} not found"}
+        # Is this a RESTORE? Captured before the branches below, because
+        # "edit" rewrites `status` to the row's current one.
+        _restoring = (row["status"] == "dismissed"
+                      and status in ("new", "touched"))
         if status == "edit":
             conn.execute(
                 "UPDATE leads SET touched_by = COALESCE(NULLIF(?, ''), "
@@ -2005,6 +2078,24 @@ def mark_lead(lead_id: int, status: str, touched_by: str = "",
             conn.execute(
                 "UPDATE leads SET status = ?, notes = COALESCE(NULLIF(?, ''), "
                 "notes) WHERE id = ?", (status, notes, lead_id))
+        # Restore has to survive the boot heal. That pass re-dismisses
+        # anything still carrying a deactivating tag, so a Restore that
+        # left the tag in place would silently undo itself on the next
+        # read — a latent trap while only "Too expensive"/"Bad contact"
+        # deactivated, and a common one now that "No answer"/"Not now"
+        # do. The disposition no longer applies once Kerry puts the lead
+        # back in the queue: clear it, and say so on the card.
+        if _restoring:
+            _tag = conn.execute("SELECT tag FROM leads WHERE id = ?",
+                                (lead_id,)).fetchone()["tag"]
+            if _tag and _tag in _deactivating_tags_via(conn):
+                conn.execute("UPDATE leads SET tag = NULL WHERE id = ?",
+                             (lead_id,))
+                conn.execute(
+                    "INSERT INTO lead_notes (lead_id, author, note) "
+                    "VALUES (?, 'auto', ?)",
+                    (lead_id, f"Restored to the queue — cleared the {_tag} "
+                              "tag so it cannot dismiss itself again."))
         # A real status change disarms the 48-hour alarm (Kerry
         # 2026-09-03). Re-marking the status it already had changed
         # nothing, so it leaves the clock running.
