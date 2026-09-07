@@ -912,6 +912,16 @@ only the name was stored; a read-time name→cid fallback covers
 pre-fix rows, and a recorded final renders the seat SECURED
 ("<season> City Match Play Champion").
 
+**Assigned seats carry their own reason (v2.330.0, Kerry 2026-09-07).**
+The two per-team spots in `lsc_bonus_seats` were hardcoded to read
+"Former <chapter> chapter — bonus invitation" under a "DFW/HOUSTON · n"
+label. Kerry locked Justin McCrary (cid 46) into San Antonio while
+moving Julius Jenkins (cid 304) to Austin; McCrary is SA's top
+alternate, not a former DFW/Houston member, and that line renders on a
+member-facing board. An entry may now carry `seat` (label), `note` and
+`as` (the earned_as line); all optional, all defaulting to the previous
+text, so existing entries render unchanged.
+
 **ONE PERSON, ONE SEAT (v2.329.0, Kerry 2026-09-07: "Jay Hogue twice?
 Did we cover someone over?").** A standings board can carry TWO ROWS for
 the same human. Golf Genius opened a second Austin NET line for Jay

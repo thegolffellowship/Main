@@ -10838,16 +10838,29 @@ def get_lone_star_cup_projection(db_path: str | Path = DB_PATH,
                     s["earned_as"] = (f"{season} {chapter} NET "
                                       f"{'Co-' if n_cap > 1 else ''}Champion")
 
-        # BONUS seats appended after the earned 12 (Kerry 2026-08-19):
-        # two per team for members of the former DFW & Houston chapters.
-        # Filled from the lsc_bonus_seats dial; the second spot renders
-        # open until Kerry names someone. Acceptance locking below
-        # applies to these rows the same as any earned seat.
+        # ASSIGNED seats appended after the earned 12 (Kerry 2026-08-19):
+        # two per team, originally reserved for members of the former DFW
+        # & Houston chapters. Filled from the lsc_bonus_seats dial; an
+        # unnamed spot renders open until Kerry names someone. Acceptance
+        # locking below applies to these rows like any earned seat.
+        #
+        # An entry may carry its own label and reason (Kerry 2026-09-07:
+        # Justin McCrary locked into San Antonio while Julius Jenkins
+        # moved to Austin). McCrary is San Antonio's top alternate, not a
+        # former DFW/Houston member, and the DFW/HOUSTON wording is on a
+        # MEMBER-FACING board — a seat Kerry assigns for another reason
+        # has to say the true reason. Optional keys, all defaulting to
+        # the original behaviour so existing entries are untouched:
+        #   seat — label override (default "DFW/HOUSTON · <n>")
+        #   note — the seat's explanatory line
+        #   as   — the earned_as line (default "Former <from> chapter …")
         for _bi in range(max(2, len(bonus_entries))):
             _be = bonus_entries[_bi] if _bi < len(bonus_entries) else {}
-            _brow = {"seat": f"DFW/HOUSTON · {_bi + 1}",
-                     "note": ("Bonus spot — open to members of the "
-                              "former DFW & Houston chapters"),
+            _brow = {"seat": (_be.get("seat")
+                              or f"DFW/HOUSTON · {_bi + 1}"),
+                     "note": (_be.get("note")
+                              or "Bonus spot — open to members of the "
+                                 "former DFW & Houston chapters"),
                      "player_name": None, "customer_id": None,
                      "earned_as": None, "via_pool": False,
                      "status": "tbd"}
@@ -10867,8 +10880,9 @@ def get_lone_star_cup_projection(db_path: str | Path = DB_PATH,
                 _brow.update(
                     player_name=_bname or "(unknown)",
                     customer_id=int(_bcid) if _bcid else None,
-                    earned_as=(f"Former {_be.get('from') or 'DFW/Houston'}"
-                               " chapter — bonus invitation"),
+                    earned_as=(_be.get("as")
+                               or f"Former {_be.get('from') or 'DFW/Houston'}"
+                                  " chapter — bonus invitation"),
                     status="projected")
             seats.append(_brow)
 

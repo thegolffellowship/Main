@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.329.0";
+window.TGF_VERSION = "2.330.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.330.0",
+    date: "2026-09-07",
+    changes: [
+      "An assigned Lone Star Cup seat can now say why it was assigned. The two per-team spots were built for members of the former DFW and Houston chapters and every row said so in fixed text. Kerry locked Justin McCrary into San Antonio while moving Julius Jenkins to Austin \u2014 McCrary is San Antonio's top alternate, not a former DFW or Houston member, and that line renders on a board members read. An entry can now carry its own seat label, note and reason; entries that don't are rendered exactly as before.",
+    ],
+  },
   {
     version: "2.329.0",
     date: "2026-09-07",
