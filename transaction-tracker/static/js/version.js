@@ -1,5 +1,15 @@
-window.TGF_VERSION = "2.333.0";
+window.TGF_VERSION = "2.334.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.334.0",
+    date: "2026-09-07",
+    changes: [
+      "A finished lead no longer sits in FOLLOW-UPS DUE. Kerry: 'Jeff Sekiguchi shouldn't be in Follow-Ups Due anymore because he signed up for an event.' He already WAS converted \u2014 the auto-detect saw his ShadowGlen registration and flipped him hours earlier. What kept him in the section was the 48-hour alarm still armed on the row: the due test runs before status, because an action outranks an outcome, so the row has to stop being due.",
+      "The rule already existed on the manual path \u2014 mark_lead has always cleared the alarm on a status change. Every AUTOMATIC writer set status with plain SQL and left it armed: the conversion detect, the membership detect, and both auto-dismiss sweeps. It is now stated once, over the terminal statuses, and runs after every one of them.",
+      "A hand-set follow-up date is never touched. Setting a reminder to call a new member is something you meant; only the automatic 48-hour alarm is cleared, exactly as the manual path has always behaved.",
+      "It runs both at the top of the poll and immediately after the conversion detect, so a lead converted a moment ago does not keep its alarm until the next run fifteen minutes later.",
+    ],
+  },
   {
     version: "2.333.0",
     date: "2026-09-07",

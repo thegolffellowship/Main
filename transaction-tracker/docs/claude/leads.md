@@ -128,6 +128,26 @@ updates payload-if-changed; EMPTY identity fields fill from HubSpot
 (a manual scoring-lead-edit fix is never clobbered), then the standing
 self-heals re-route chapter and re-derive stats.
 
+## Terminal leads carry no alarm
+
+`clear_alarms_on_terminal_leads` (Kerry 2026-09-07: "Jeff Sekiguchi
+shouldn't be in Follow-Ups Due anymore because he signed up for an
+event") drops `follow_up_at` / `follow_up_notified_for` / `outreach_at`
+from any lead whose status is **converted or dismissed** and whose alarm
+is the AUTO one (`outreach_at IS NOT NULL`). A hand-set date is never
+touched.
+
+Jeff was already converted; the section put him in FOLLOW-UPS DUE
+because `sectionOf` tests `fuDue(l)` BEFORE status — a due action
+outranks an outcome, which is correct, so the row has to stop being due.
+`mark_lead` had cleared the alarm on a status change since v2.294.0, but
+only on the MANUAL path: the conversion auto-detect, the membership
+detect and both auto-dismiss sweeps set `status` with plain SQL and left
+it armed. The rule now lives over the statuses rather than in any one
+writer, and runs at the top of `check_new_leads` plus immediately after
+the conversion detect (so a lead converted this poll is cleaned this
+poll). Regression: `test_lead_terminal_alarm.py`.
+
 ## Disqualifying-answer auto-dismiss
 
 Two sweeps run at the top of `check_new_leads`, **above the HubSpot

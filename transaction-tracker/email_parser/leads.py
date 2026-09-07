@@ -929,6 +929,38 @@ def dismiss_no_loop_leads(conn: sqlite3.Connection) -> int:
 NO_DAYS_NOTE_PREFIX = "Can't play Tuesdays or Saturdays"
 
 
+def clear_alarms_on_terminal_leads(conn: sqlite3.Connection) -> int:
+    """Drop the 48-hour AUTO alarm from leads that are already finished.
+
+    Kerry 2026-09-07: "Jeff Sekiguchi shouldn't be in Follow-Ups Due
+    anymore because he signed up for an event." He was already
+    converted — the auto-detect had seen his ShadowGlen registration and
+    flipped him hours earlier. What kept him in the section was the
+    48-hour alarm still sitting on the row, because FOLLOW-UPS DUE is
+    tested before status: a due alarm is an action and outranks an
+    outcome, which is right, so the row has to stop being due.
+
+    The rule already existed, in `mark_lead`: any real status change
+    clears the auto alarm. It just lived on the MANUAL path only. Every
+    automatic writer — the conversion auto-detect, the membership
+    detect, the no-loop and no-days sweeps — set `status` with plain SQL
+    and left the alarm armed. One more instance of the safety property
+    being attached to the case in front of us instead of the mechanism.
+
+    So the rule is stated once, over the terminal statuses, and runs
+    after every automatic writer: converted or dismissed means nobody is
+    waiting on a reply. A HAND-SET follow-up (outreach_at IS NULL) is
+    never touched — Kerry setting a date on a new member is a reminder
+    he wants, not a stale alarm. Idempotent; returns rows cleared.
+    """
+    cur = conn.execute(
+        "UPDATE leads SET follow_up_at = NULL, "
+        "follow_up_notified_for = NULL, outreach_at = NULL "
+        "WHERE status IN ('converted', 'dismissed') "
+        "AND outreach_at IS NOT NULL")
+    return cur.rowcount or 0
+
+
 def dismiss_no_days_leads(conn: sqlite3.Connection) -> int:
     """Auto-dismiss leads whose AVAILABILITY answer is neither day.
 
@@ -1239,7 +1271,11 @@ def check_new_leads(db_path: str | Path | None = None) -> dict:
     # The first pass over existing rows is the backfill the release
     # checklist asks for (mailbox #405).
     from . import database as _db
-    for _fn in (dismiss_no_loop_leads, dismiss_no_days_leads):
+    # clear_alarms_on_terminal_leads runs LAST of the three: the two
+    # sweeps above finish leads, and finishing a lead is exactly what
+    # has to disarm its alarm.
+    for _fn in (dismiss_no_loop_leads, dismiss_no_days_leads,
+                clear_alarms_on_terminal_leads):
         try:
             with _db._connect(db_path) as _c:
                 ensure_leads_table(_c)
@@ -1548,6 +1584,11 @@ def check_new_leads(db_path: str | Path | None = None) -> dict:
                 "AND NOT EXISTS (SELECT 1 FROM customer_memberships m "
                 "                WHERE m.customer_id = leads.customer_id)",
                 PLACEHOLDER_MERCHANTS)
+            # Same poll, not the next one: a lead converted a moment ago
+            # would otherwise keep its alarm — and sit in FOLLOW-UPS DUE
+            # — until the following run. Idempotent, so calling it here
+            # as well as at the top of the poll costs nothing.
+            clear_alarms_on_terminal_leads(conn)
         except sqlite3.Error as e:
             logger.warning("Lead conversion auto-detect failed: %s", e)
         # Backfill: prospects created before the acquisition_source fix
