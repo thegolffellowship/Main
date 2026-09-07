@@ -4262,6 +4262,58 @@ def _scoring_dispatch(url: str, extract: str):
             base = os.getenv("PUBLIC_BASE_URL", "https://tgf-tracker.up.railway.app")
             return json.dumps({"customer_id": int(arg),
                                "url": f"{base}/me?t={tok}"}, indent=2)
+        if cmd == "scoring-event-count-audit":
+            # Where does an event's registration count come from, and do
+            # the two ways of linking an item to an event AGREE? Added
+            # 2026-09-07 after a9.22 ShadowGlen read 15/1: the badge
+            # counted by NAME, fourteen orders arrived as "a9.22
+            # SHADOWGLEN", and every one of them already carried
+            # event_id. Lists any event where the id-link and the
+            # name-link disagree, newest first. READ-ONLY.
+            _lim = int(arg.strip() or "40")
+            with db._connect() as _c:
+                _rows = _c.execute(
+                    """SELECT e.id, e.item_name, e.event_date,
+                              (SELECT COUNT(*) FROM items i
+                                WHERE i.event_id = e.id
+                                  AND COALESCE(i.transaction_status,
+                                               'active') = 'active'
+                                  AND i.parent_item_id IS NULL) AS by_id,
+                              (SELECT COUNT(*) FROM items i
+                                WHERE (i.item_name = e.item_name
+                                       COLLATE NOCASE
+                                   OR EXISTS (SELECT 1 FROM event_aliases ea
+                                               WHERE ea.canonical_event_name
+                                                     = e.item_name
+                                                 AND ea.alias_name =
+                                                     i.item_name
+                                                     COLLATE NOCASE))
+                                  AND COALESCE(i.transaction_status,
+                                               'active') = 'active'
+                                  AND i.parent_item_id IS NULL) AS by_name
+                       FROM events e
+                       ORDER BY e.event_date DESC, e.id DESC
+                       LIMIT ?""", (_lim,)).fetchall()
+                out = []
+                for _r in _rows:
+                    if _r["by_id"] == _r["by_name"]:
+                        continue
+                    _names = [dict(x) for x in _c.execute(
+                        """SELECT item_name, COUNT(*) AS n FROM items
+                           WHERE event_id = ?
+                             AND COALESCE(transaction_status,
+                                          'active') = 'active'
+                             AND parent_item_id IS NULL
+                           GROUP BY item_name""", (_r["id"],))]
+                    out.append({"event_id": _r["id"],
+                                "event_name": _r["item_name"],
+                                "event_date": _r["event_date"],
+                                "by_event_id": _r["by_id"],
+                                "by_name_or_alias": _r["by_name"],
+                                "item_names": _names})
+                return json.dumps({"checked": len(_rows),
+                                   "disagreeing": len(out),
+                                   "events": out}, indent=2, default=str)
         if cmd == "scoring-resolve":
             # Identity debugging: how does a GG name resolve to a customer?
             with db._connect() as conn:

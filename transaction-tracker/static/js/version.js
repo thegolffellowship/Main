@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.331.0";
+window.TGF_VERSION = "2.332.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.332.0",
+    date: "2026-09-07",
+    changes: [
+      "The event registration count now follows event_id, not just the name. a9.22 ShadowGlen read 15/1 on the Events page \u2014 fifteen people on the roster, one registration \u2014 because the counter matched items to the event by NAME while fourteen of the fifteen orders came in from the store as 'a9.22 SHADOWGLEN'. Every one of them already carried event_id; the id was sitting right there and the count wasn't reading it.",
+      "customer_id is the identity key for people and event_id is the same thing for events. The id-first join was already used by the roster, the holes heal and the financial joins \u2014 this counter was simply never brought along, which is how the number on the front page of the app came to disagree with the roster underneath it. The name and alias arms stay as the fallback for rows that predate items.event_id.",
+      "New read-only audit behind the bridge, scoring-event-count-audit: it lists every event where the id-link and the name-link disagree, with the item names actually recorded against it. The point is that the next mismatch surfaces as a report rather than as a number someone happens to notice.",
+    ],
+  },
   {
     version: "2.331.0",
     date: "2026-09-07",

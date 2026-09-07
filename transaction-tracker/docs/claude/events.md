@@ -1,5 +1,30 @@
 # Events Page — Player Status Architecture
 
+## Registration count: event_id leads (v2.332.0)
+
+`get_all_events()` counts an event's registrations by `i.event_id = e.id`
+FIRST, then falls back to the canonical-name and alias match for rows
+that predate `items.event_id`.
+
+Kerry 2026-09-07: a9.22 ShadowGlen read **15/1** on the Events card —
+fifteen on the roster, one registration — because the counter matched on
+NAME only and fourteen of the fifteen orders arrived from the store as
+`a9.22 SHADOWGLEN` against an event named `a9.22 ShadowGlen`. All
+fourteen already carried `event_id = 3313`.
+
+The lesson is the one in CLAUDE.md principle 6, applied to events rather
+than people: **`event_id` is the identity key, a name is a label.** The
+id-first join already existed in the roster query, `heal_item_holes_from
+_event` and the financial joins; this counter was never brought along,
+so a number on the app's landing page disagreed with the roster beneath
+it. When you add a query that links items to an event, lead with
+`i.event_id = e.id`.
+
+Audit: `probe_golf_genius(extract="scoring-event-count-audit[:<limit>]")`
+lists every event where the id-link and the name-link disagree, with the
+item names actually recorded against it. Regression:
+`test_event_registration_count.py`.
+
 ## Transaction statuses
 - `active` — normal registration, shown in main table
 - `rsvp_only` — RSVP without payment, shown in main table (yellow background)

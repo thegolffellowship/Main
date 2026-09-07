@@ -23060,8 +23060,23 @@ def set_mvp_unlink(event_name: str, unlink: bool = True,
 def get_all_events(db_path: str | Path | None = None) -> list[dict]:
     """Return all events with registration counts (active items only).
 
-    Counts items whose item_name matches the event's canonical name
-    OR any alias that points to it.
+    Counts items LINKED BY event_id, or whose item_name matches the
+    event's canonical name or any alias pointing to it.
+
+    event_id leads (Kerry 2026-09-07: "something's wrong with the
+    ShadowGlen counts"). a9.22 ShadowGlen showed 15/1 — fifteen people on
+    the roster, one registration — because the count matched on NAME
+    alone while fourteen of the fifteen orders came in as "a9.22
+    SHADOWGLEN". Every one of them already carried event_id = 3313; the
+    id was sitting right there and the count wasn't reading it.
+
+    customer_id is the identity key for people and event_id is the same
+    thing for events (CLAUDE.md principle 6). The FK-first form was
+    already used by the roster, the holes heal and the financial joins —
+    this counter was simply never brought along, which is how a number
+    on the front page of the app disagreed with the roster underneath
+    it. The name and alias arms stay as the fallback for legacy rows
+    that predate items.event_id.
     """
     with _connect(db_path) as conn:
         rows = conn.execute(
@@ -23072,7 +23087,9 @@ def get_all_events(db_path: str | Path | None = None) -> list[dict]:
             FROM events e
             LEFT JOIN event_aliases ea ON ea.canonical_event_name = e.item_name
             LEFT JOIN items i
-                ON (i.item_name = e.item_name COLLATE NOCASE OR i.item_name = ea.alias_name COLLATE NOCASE)
+                ON (i.event_id = e.id
+                    OR i.item_name = e.item_name COLLATE NOCASE
+                    OR i.item_name = ea.alias_name COLLATE NOCASE)
                 AND COALESCE(i.transaction_status, 'active') = 'active'
                 AND i.parent_item_id IS NULL
             GROUP BY e.id
