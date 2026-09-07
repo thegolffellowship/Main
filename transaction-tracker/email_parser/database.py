@@ -10824,10 +10824,31 @@ def get_lone_star_cup_projection(db_path: str | Path = DB_PATH,
                                    f"{_lsc_ordinal(nxt['place'])} of "
                                    f"{nxt['field']} in {nxt['contest']}"),
                         via_pool=True, status="projected")
+                elif contest in ("fellowship", "players"):
+                    # EXHAUSTED, not pending (Kerry 2026-09-07: "remove
+                    # the last empty spot from Austin"). The standings
+                    # are final and the alternates pool is empty, so this
+                    # seat has no candidate and never will this season —
+                    # an empty row on a member-facing board reads as a
+                    # place still up for grabs, which is the opposite of
+                    # true. Dropped from the render, counted below.
+                    #
+                    # Only the STANDINGS-fed seats collapse. The captain
+                    # and MATCH PLAY seats are waiting on a RESULT, and
+                    # showing those open is the whole point (Kerry
+                    # 2026-07-10: no speculative projection from
+                    # seeding) — they stay.
+                    row["_exhausted"] = True
             seats.append(row)
 
-        # Declared-final champions hold their seat as SECURED, not
-        # projected — the one seat the standings can no longer move
+        # The 12 QUALIFYING seats are the standard and do not change
+        # (Kerry 2026-09-07: "maintain the standard 12 team qualifying
+        # spots for future years") — n_qualifying_seats reports the
+        # structure every season, n_qualifying_unfilled says how many of
+        # them had no candidate THIS season. Only the render drops them.
+        n_qualifying = len(seat_defs)
+        n_exhausted = sum(1 for r in seats if r.get("_exhausted"))
+        seats = [r for r in seats if not r.pop("_exhausted", False)]
         if champs:
             champ_ids = {c.get("customer_id") for c in champs
                          if c.get("customer_id")}
@@ -10944,6 +10965,11 @@ def get_lone_star_cup_projection(db_path: str | Path = DB_PATH,
             "n_projected": sum(1 for r in seats
                                if r["status"] in ("projected", "secured")),
             "n_secured": sum(1 for r in seats if r["status"] == "secured"),
+            # The qualifying structure, reported every season so it stays
+            # visible even when a seat could not be filled and was
+            # dropped from the render (Kerry 2026-09-07).
+            "n_qualifying_seats": n_qualifying,
+            "n_qualifying_unfilled": n_exhausted,
             "alternates": alternates,
             "declined": declined_rows,
         })

@@ -1,5 +1,15 @@
-window.TGF_VERSION = "2.330.0";
+window.TGF_VERSION = "2.331.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.331.0",
+    date: "2026-09-07",
+    changes: [
+      "A qualifying seat with no candidate left is no longer rendered as an open row. Austin's PLAYERS CUP \u00b7 4 sat empty because the final standings are exhausted and the alternates pool is empty \u2014 on a member-facing board that reads as a place still up for grabs, which is the opposite of true. Kerry: 'Remove the last empty spot from Austin.'",
+      "Only the STANDINGS-fed seats collapse. The captain and MATCH PLAY seats wait on a RESULT rather than on a candidate, and showing those open is the whole point \u2014 they still render TBD as before.",
+      "The standard 12 qualifying spots are unchanged and now reported explicitly. Each chapter carries n_qualifying_seats (always 12, or the co-captain variant) and n_qualifying_unfilled, so the structure stays visible for future years even in a season where one of them could not be filled.",
+      "Pat Youngs and Justin McCrary now read MANAGER PICK \u00b7 1 and \u00b7 2 on San Antonio rather than borrowing the DFW/Houston bonus wording. Austin keeps three DFW/Houston spots \u2014 Wetz, Barstow and Julius Jenkins.",
+    ],
+  },
   {
     version: "2.330.0",
     date: "2026-09-07",

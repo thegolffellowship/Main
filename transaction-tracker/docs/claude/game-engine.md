@@ -912,6 +912,19 @@ only the name was stored; a read-time name→cid fallback covers
 pre-fix rows, and a recorded final renders the seat SECURED
 ("<season> City Match Play Champion").
 
+**Exhausted seats collapse; the 12 stay the standard (v2.331.0, Kerry
+2026-09-07: "Remove the last empty spot from Austin ... but maintain the
+standard 12 team qualifying spots for future years").** A
+FELLOWSHIP/PLAYERS seat with no keeper AND an empty alternates pool has
+no candidate and never will that season — it is dropped from `seats`
+rather than rendered TBD, because an empty row on a member-facing board
+reads as a place still open. The CAPTAIN and MATCH PLAY seats wait on a
+RESULT, not a candidate, so they still render TBD (Kerry 2026-07-10: no
+speculative projection from seeding). `seat_defs` is untouched — the
+structure is reported per chapter as `n_qualifying_seats` /
+`n_qualifying_unfilled` so it stays visible in a season that cannot fill
+one.
+
 **Assigned seats carry their own reason (v2.330.0, Kerry 2026-09-07).**
 The two per-team spots in `lsc_bonus_seats` were hardcoded to read
 "Former <chapter> chapter — bonus invitation" under a "DFW/HOUSTON · n"
