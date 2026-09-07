@@ -109,6 +109,21 @@ def main():
     check("with the alarm gone the row is no longer due",
           row(p, i_conv)["follow_up_at"] is None)
 
+    # Kerry 2026-09-07: a converted lead never belongs in a reminder,
+    # hand-set date or not — "we don't need reminders anymore for them".
+    # The digest is the half that emails him, so it has to agree with
+    # the section ordering in the page.
+    with db._connect(p) as conn:
+        i_conv2 = plant(conn, "ConvHandSet", "converted", "2026-01-01", None)
+        i_open = plant(conn, "StillOpen", "touched", "2026-01-01", None)
+        conn.commit()
+    due = leads.followups_due(db_path=p)
+    ids = {d["id"] for d in due}
+    check("a converted lead with a HAND-SET due date is out of the digest",
+          i_conv2 not in ids, sorted(ids))
+    check("an open lead with the same date is still in it",
+          i_open in ids, sorted(ids))
+
     print()
     if FAILURES:
         print(f"{len(FAILURES)} FAILED: " + ", ".join(FAILURES))

@@ -130,6 +130,18 @@ self-heals re-route chapter and re-derive stats.
 
 ## Terminal leads carry no alarm
 
+**Kerry's rule, 2026-09-07 (verbatim):** *"Anyone that signs up for an
+event or is a member no longer needs to be in follow ups due. They
+become part of our awareness from their signup side thru the EVENTS page
+and Golf Genius, so we don't need reminders anymore for them."* Two
+places enforce it, and they must agree: `sectionOf` in leads.html tests
+MEMBERS and CONVERTED **before** the follow-up sections, and
+`followups_due` excludes `converted` alongside `dismissed` so the morning
+digest cannot nag about a lead the page has already filed. This covers
+HAND-SET dates as well; nothing is deleted, the date simply stops
+raising a reminder. A lead still being worked keeps the old precedence —
+a due action outranks its status.
+
 `clear_alarms_on_terminal_leads` (Kerry 2026-09-07: "Jeff Sekiguchi
 shouldn't be in Follow-Ups Due anymore because he signed up for an
 event") drops `follow_up_at` / `follow_up_notified_for` / `outreach_at`

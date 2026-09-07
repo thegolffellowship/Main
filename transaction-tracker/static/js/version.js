@@ -1,5 +1,15 @@
-window.TGF_VERSION = "2.334.0";
+window.TGF_VERSION = "2.335.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.335.0",
+    date: "2026-09-07",
+    changes: [
+      "MEMBERS and CONVERTED now outrank the follow-up sections. Kerry: 'Anyone that signs up for an event or is a member no longer needs to be in follow ups due. They become part of our awareness from their signup side thru the EVENTS page and Golf Genius, so we don't need reminders anymore for them.' A signup is not a lead you are still chasing, and the Events page is where you watch it from.",
+      "The morning digest agrees with the page. A converted lead is now excluded from the due list the same way a dismissed one always was \u2014 otherwise the section could be right while the email still nagged.",
+      "This covers the hand-set dates too, which the previous release deliberately left alone. Nothing is deleted: the date stays on the record, it just no longer raises a reminder for somebody who has already signed up.",
+      "A lead still being worked keeps the old precedence \u2014 a due action outranks its status, which is the entire point of the section.",
+    ],
+  },
   {
     version: "2.334.0",
     date: "2026-09-07",

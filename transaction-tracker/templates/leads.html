@@ -815,13 +815,23 @@
         // Mirrors tier() exactly. If the two disagree a section splits
         // into two bars with the same name, because the bar drops in
         // wherever the section CHANGES down a sorted list.
+        // MEMBERS and CONVERTED now outrank the follow-up sections
+        // (Kerry 2026-09-07): "Anyone that signs up for an event or is
+        // a member no longer needs to be in follow ups due. They become
+        // part of our awareness from their signup side thru the EVENTS
+        // page and Golf Genius, so we don't need reminders anymore for
+        // them." A signup is not a lead you are still chasing, and the
+        // Events page is where you watch it from — so the outcome wins
+        // over the reminder for these two, and only these two. A lead
+        // still being worked keeps the old precedence: a due action
+        // outranks its status, which is the whole point of the section.
         const sectionOf = l =>
             l.status === "dismissed" ? "DISMISSED"
             : l.status === "new" ? "NEW LEADS"
-            : fuDue(l) ? "FOLLOW-UPS DUE"
-            : fuSnoozed(l) ? "SNOOZED"
             : isMember(l) ? "MEMBERS"
             : l.status === "converted" ? "CONVERTED"
+            : fuDue(l) ? "FOLLOW-UPS DUE"
+            : fuSnoozed(l) ? "SNOOZED"
             : responded(l) ? "RESPONDED"
             : "NO RESPONSE";
         const SEC_CLASS = { "MEMBERS": " member", "FOLLOW-UPS DUE": " due",

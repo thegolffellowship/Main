@@ -1101,8 +1101,17 @@ def followups_due(db_path: str | Path | None = None) -> list[dict]:
     with db._connect(db_path) as conn:
         ensure_leads_table(conn)
         rows = [dict(r) for r in conn.execute(
+            # CONVERTED is as finished as dismissed for reminder
+            # purposes (Kerry 2026-09-07): "Anyone that signs up for an
+            # event or is a member no longer needs to be in follow ups
+            # due. They become part of our awareness from their signup
+            # side thru the EVENTS page and Golf Genius, so we don't
+            # need reminders anymore for them." A member is a converted
+            # lead too (tag 'Became member'), so one status test covers
+            # both halves of his rule.
             "SELECT * FROM leads WHERE follow_up_at IS NOT NULL "
-            "AND follow_up_at <= ? AND status != 'dismissed' "
+            "AND follow_up_at <= ? "
+            "AND status NOT IN ('dismissed', 'converted') "
             "AND merged_into IS NULL ORDER BY follow_up_at, id",
             (today,)).fetchall()]
         for lead in rows:
