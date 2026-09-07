@@ -10134,6 +10134,9 @@ def api_lone_star_cup():
                 ch.pop("alternates", None)
             # Deposit amounts are financial data — staff eyes only
             d.pop("deposits", None)
+            # Collapsed duplicate standings rows are a roster-ops
+            # diagnostic, same tier as the alternates list
+            d.pop("duplicate_rows", None)
         else:
             # Lodging tracker (Kerry 2026-08-19) — attached only for
             # staff sessions, so the public payload never carries it

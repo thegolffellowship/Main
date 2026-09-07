@@ -1,5 +1,16 @@
-window.TGF_VERSION = "2.328.0";
+window.TGF_VERSION = "2.329.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.329.0",
+    date: "2026-09-07",
+    changes: [
+      "One person can no longer hold two Lone Star Cup seats. Jay Hogue was seated at Austin's FELLOWSHIP CUP \u00b7 2 AND \u00b7 4, so Team Austin read fourteen seats and thirteen people. Kerry: 'Jay Hogue twice? Did we cover someone over?' The seat allocator already deduped which CONTEST a double-qualifier keeps, but it rebuilt the actual seat holders from the raw standings stream \u2014 and the Fellowship Cup board carries two rows for him, so both were seatable.",
+      "The cause is upstream and worth knowing: Golf Genius opened a SECOND Austin NET line for Hogue and for Matt Sharp when they played the San Antonio 6/27 Kissing Tree event \u2014 same member card, blank affiliation tag, that event's points sitting on a line of their own. Both stray lines read 8 points from 2 tournaments, which is why they looked like phantoms rather than real play.",
+      "Fixed at the source every later pass reads: _dedupe_stream_by_cid collapses each contest stream to one entry per customer_id, keeping the best place regardless of the order the board arrives in. Identity is customer_id, never a row \u2014 the same rule that exists to stop exactly this class of bug.",
+      "A collapse is now reported rather than absorbed. The projection payload carries a staff-only duplicate_rows list naming who was doubled and which place was dropped, so the next duplicate shows up as a fact instead of as a wrong roster nobody can explain.",
+      "Austin's freed seat fills from the alternates pool the same way its other vacancies do, so the board goes back to fourteen seats and fourteen people.",
+    ],
+  },
   {
     version: "2.328.0",
     date: "2026-09-06",

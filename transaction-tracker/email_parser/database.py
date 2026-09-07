@@ -10255,6 +10255,47 @@ def _lsc_ordinal(n: int) -> str:
     return f"{n}{ {1: 'st', 2: 'nd', 3: 'rd'}.get(n % 10, 'th') }"
 
 
+def _dedupe_stream_by_cid(cands: list, chapter: str | None = None,
+                          report: list | None = None) -> list:
+    """Collapse a contest stream to ONE ENTRY PER PERSON, best place first.
+
+    A standings board can carry two rows for the same human. Golf Genius
+    opened a second Austin line for Jay Hogue and for Matt Sharp when
+    they played the San Antonio 6/27 event — same member card, no
+    affiliation tag, points on their own line. The LSC allocator deduped
+    the CHOICE of contest but rebuilt the seat holders from the raw
+    stream, so both of Hogue's rows were seatable and he took two of
+    Austin's fourteen seats. One real person lost a place, silently.
+
+    Identity is customer_id, never a row (CLAUDE.md principle 6). Keeping
+    the BEST place regardless of arrival order makes the result
+    independent of how the board happens to be sorted; `report` collects
+    what was collapsed so a duplicate is surfaced, not just absorbed.
+    """
+    out: list = []
+    best: dict = {}
+    for c in cands:
+        cid = c.get("cid")
+        prev = best.get(cid)
+        if prev is None:
+            entry = dict(c)
+            best[cid] = entry
+            out.append(entry)
+            continue
+        if report is not None:
+            report.append({"chapter": chapter, "customer_id": cid,
+                           "player_name": c.get("name"),
+                           "kept_place": min(prev["place"], c["place"]),
+                           "dropped_place": max(prev["place"], c["place"])})
+        if c["place"] < prev["place"]:
+            prev["place"] = c["place"]
+            prev["name"] = c.get("name")
+    # Stable: a no-op while the board arrives ranked, and correct if a
+    # collapsed duplicate improved a place mid-list.
+    out.sort(key=lambda c: c["place"])
+    return out
+
+
 def get_lone_star_cup_projection(db_path: str | Path = DB_PATH,
                                  # 12 next-up alternates per chapter
                                  # (Kerry 2026-08-24; the list itself is
@@ -10444,6 +10485,11 @@ def get_lone_star_cup_projection(db_path: str | Path = DB_PATH,
         lsc_bonus = {}
 
     chapters_out = []
+    # Every standings row collapsed by stream()'s one-person-one-entry
+    # rule, so a duplicate is REPORTED rather than silently absorbed —
+    # the seat came out right either way, but somebody still has two
+    # lines on a board and only a visible record gets that fixed.
+    dup_seen: list = []
     for chapter, race_key in (("Austin", "austin_net"),
                               ("San Antonio", "san_antonio_net")):
         # LIVE view: identical passthrough on quiet days, and on/after
@@ -10461,7 +10507,24 @@ def get_lone_star_cup_projection(db_path: str | Path = DB_PATH,
         n_fc = 6 - (n_cap - 1)
 
         def stream(rows, chapter_field=None):
-            out = []
+            """One contest's eligible players, in standings order.
+
+            ONE PERSON, ONE ENTRY (Kerry 2026-09-07: "Jay Hogue twice?
+            Did we cover someone over?"). A standings board can carry two
+            rows for the same human — Golf Genius opened a second Austin
+            line for Hogue and for Matt Sharp when they played the San
+            Antonio 6/27 event, same member card, no affiliation tag. The
+            seat allocator deduped the CHOICE of contest (pass 2) but
+            rebuilt the holders from this raw stream, so both rows were
+            seatable and Hogue took two of Austin's fourteen — one real
+            person's seat lost, silently.
+
+            Identity is customer_id, never a row (CLAUDE.md principle 6),
+            so collapse here, at the source every later pass reads: keep
+            the BEST place for each cid regardless of arrival order, and
+            record what was collapsed for `duplicate_rows` below.
+            """
+            cands = []
             for r in rows:
                 if not r.get("enrolled") or not r.get("customer_id"):
                     continue
@@ -10472,9 +10535,9 @@ def get_lone_star_cup_projection(db_path: str | Path = DB_PATH,
                 place = pnum(r.get("rank"))
                 if place is None:
                     continue
-                out.append({"name": r["player_name"],
-                            "cid": r["customer_id"], "place": place})
-            return out
+                cands.append({"name": r["player_name"],
+                              "cid": r["customer_id"], "place": place})
+            return _dedupe_stream_by_cid(cands, chapter, dup_seen)
 
         streams = {
             "captain": stream(net["standings"]),
@@ -10875,6 +10938,7 @@ def get_lone_star_cup_projection(db_path: str | Path = DB_PATH,
         "season": season,
         "chapters": chapters_out,
         "deposits": {str(k): v for k, v in lsc_deposits.items()},
+        "duplicate_rows": dup_seen,
         "rules_note": ("Projected from today's standings. Double-qualifiers "
                        "take the seat where they placed higher; open seats "
                        "fill from the alternates pool."),

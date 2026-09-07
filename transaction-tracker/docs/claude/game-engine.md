@@ -912,6 +912,30 @@ only the name was stored; a read-time name→cid fallback covers
 pre-fix rows, and a recorded final renders the seat SECURED
 ("<season> City Match Play Champion").
 
+**ONE PERSON, ONE SEAT (v2.329.0, Kerry 2026-09-07: "Jay Hogue twice?
+Did we cover someone over?").** A standings board can carry TWO ROWS for
+the same human. Golf Genius opened a second Austin NET line for Jay
+Hogue (cid 37, card 10440471) and Matt Sharp (cid 30, card 11432769)
+when they played the San Antonio 6/27 Kissing Tree event — same member
+card, blank affiliation tag, 8 points on a line of their own — and the
+Fellowship Cup board inherited both. `get_lone_star_cup_projection`
+deduped the CHOICE of contest (pass 2, `kept`) but rebuilt the seat
+holders from the RAW stream, so both of Hogue's rows were seatable and
+he held Austin's FELLOWSHIP CUP · 2 and · 4: fourteen seats, thirteen
+people, and the top Austin alternate silently short a place.
+`_dedupe_stream_by_cid(cands, chapter, report)` now collapses every
+contest stream to one entry per `customer_id`, keeping the BEST place
+regardless of arrival order (identity is customer_id, never a row —
+CLAUDE.md principle 6), and records each collapse in the payload's
+staff-only `duplicate_rows` so a duplicate is SURFACED, not absorbed.
+Tests: `test_lsc_duplicate_seats.py`. **Open question for Kerry (money,
+not shipped):** those stray lines are real points — Hogue 8, Sharp 8 —
+earned at an SA event and NOT included in their Austin totals. Whether
+an SA-event point counts toward the Austin NET race is a rules call; if
+it does, Hogue is 124 and 2nd rather than T3 with 116, which moves both
+the NET payout ladder and the Austin captaincy. The race is declared
+FINAL, so nothing was merged.
+
 **FINAL winnings (v2.186.0, Kerry championship evening):** dial
 `app_settings gg_points_race_final` (JSON `{race_key: "date"}`) →
 `_points_race_final` → payload `race_final`. UI (`prRaceFinal`, set by
