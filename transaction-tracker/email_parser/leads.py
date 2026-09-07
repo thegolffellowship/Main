@@ -926,6 +926,66 @@ def dismiss_no_loop_leads(conn: sqlite3.Connection) -> int:
     return n
 
 
+NO_DAYS_NOTE_PREFIX = "Can't play Tuesdays or Saturdays"
+
+
+def dismiss_no_days_leads(conn: sqlite3.Connection) -> int:
+    """Auto-dismiss leads whose AVAILABILITY answer is neither day.
+
+    Kerry 2026-09-07: "if selection is No Days for availability, they
+    should get automatically Dismissed for now." The survey option reads
+    "Neither - but I'm still interested", so this is a PARK, not a
+    rejection: TGF has nothing to offer them until there is a day they
+    can play. The note says so, and Restore is one click.
+
+    ONE-TIME per lead, and that is the difference from
+    dismiss_no_loop_leads, which re-dismisses on every poll. Somebody who
+    asked for no contact should stay out however often the queue is
+    rebuilt; somebody who merely can't make Tuesday or Saturday is
+    exactly the person Kerry might pull back in after a schedule change,
+    and a sweep that ran forever would undo that Restore silently on the
+    next poll — the same trap the deactivating-tag heal had. The
+    already-written note is the record that this lead has had its one
+    automatic pass.
+
+    Availability is decoded by `sms_slot_for`, the one decoder the SMS
+    picker and the badges use, so a lead cannot be "No days" on the card
+    and something else here. The consequence to know: an option value
+    the form adds later decodes to "none" too, and would be parked. That
+    is visible — the note names the reason and the row sits in DISMISSED
+    with Restore next to it — and it keeps one definition of the answer
+    rather than two that can disagree.
+
+    Never touches converted or already-dismissed rows. Returns rows
+    dismissed.
+    """
+    n = 0
+    for r in conn.execute(
+            "SELECT id, payload FROM leads WHERE payload IS NOT NULL "
+            "AND status NOT IN ('dismissed', 'converted')").fetchall():
+        try:
+            p = json.loads(r["payload"])
+        except Exception:
+            continue
+        if sms_slot_for({"payload": p}) != "none":
+            continue
+        # The note IS the one-time gate: written once, never again, so a
+        # Restore is permanent.
+        if conn.execute(
+                "SELECT 1 FROM lead_notes WHERE lead_id = ? AND note LIKE ?",
+                (r["id"], NO_DAYS_NOTE_PREFIX + "%")).fetchone():
+            continue
+        conn.execute("UPDATE leads SET status = 'dismissed' WHERE id = ?",
+                     (r["id"],))
+        conn.execute(
+            "INSERT INTO lead_notes (lead_id, author, note) VALUES "
+            "(?, 'auto', ?)",
+            (r["id"], NO_DAYS_NOTE_PREFIX + " (No days on the survey) — "
+                      "auto-dismissed for now. Restore to work them."))
+        n += 1
+    return n
+
+
 def lead_center_payload(status: str = "", campaigns: list | None = None,
                         db_path: str | Path | None = None) -> dict:
     """Everything the Lead Center page renders from, in one place.
@@ -1168,6 +1228,25 @@ def check_new_leads(db_path: str | Path | None = None) -> dict:
         result["followups"] = send_followup_digests(db_path=db_path)
     except Exception:
         logger.warning("Follow-up due-ping sweep failed", exc_info=True)
+    # The DISQUALIFYING-ANSWER sweeps run here for the same reason, and
+    # they were moved above the token gate on 2026-09-07 when the second
+    # one was added: they act on answers ALREADY in the database and
+    # have nothing to do with fetching. Below the gate they were one
+    # missing env var away from never running — and HubSpot is being
+    # decommissioned, so that is not a hypothetical.
+    #   no-loop  — asked for no contact; re-dismissed every poll.
+    #   no-days  — can play neither day; ONE-TIME, so Restore holds.
+    # The first pass over existing rows is the backfill the release
+    # checklist asks for (mailbox #405).
+    from . import database as _db
+    for _fn in (dismiss_no_loop_leads, dismiss_no_days_leads):
+        try:
+            with _db._connect(db_path) as _c:
+                ensure_leads_table(_c)
+                result[_fn.__name__] = _fn(_c)
+                _c.commit()
+        except Exception:
+            logger.warning("%s failed", _fn.__name__, exc_info=True)
     token = _hubspot_token()
     if not token:
         result["error"] = "HUBSPOT_TOKEN not set"
@@ -1471,13 +1550,6 @@ def check_new_leads(db_path: str | Path | None = None) -> dict:
                 PLACEHOLDER_MERCHANTS)
         except sqlite3.Error as e:
             logger.warning("Lead conversion auto-detect failed: %s", e)
-        # No-loop auto-dismiss (Kerry 2026-09-01: "If they're not wanting
-        # communication (No Loop) then they should probably go to bottom
-        # dismissed"). Runs every poll, idempotent.
-        try:
-            dismiss_no_loop_leads(conn)
-        except Exception:
-            logger.warning("No-loop auto-dismiss failed", exc_info=True)
         # Backfill: prospects created before the acquisition_source fix
         # carry the resolver's 'godaddy' default — purchase-less
         # lead-linked customers are Facebook acquisitions.

@@ -51,7 +51,18 @@
            "not functional" — actions off-screen, no quick status read).
            One grid row per lead, STATUS FIRST, color-coded left edge,
            actions always visible, expandable details panel. */
-        #ld-dlist { border: 1px solid var(--border); border-radius: 12px; background: #fff; overflow: hidden; }
+        /* NO overflow:hidden here (Kerry 2026-09-07: "why there's no
+           Dismiss on this lead"). The ⋯ menu is absolutely positioned
+           inside this box, so clipping the box to its rounded corners
+           also guillotined any menu that opened near the bottom of the
+           list — Morgan Sumner's row lost Undo and Dismiss off the end
+           of it. Nothing was broken in the menu; two real actions were
+           simply invisible, which is worse than an error. The corners
+           are rounded on the first and last child instead, so the
+           radius survives and menus can overhang. */
+        #ld-dlist { border: 1px solid var(--border); border-radius: 12px; background: #fff; }
+        #ld-dlist > *:first-child { border-top-left-radius: 11px; border-top-right-radius: 11px; }
+        #ld-dlist > *:last-child { border-bottom-left-radius: 11px; border-bottom-right-radius: 11px; }
         /* Category bars carry the status in priority view (Kerry
            2026-08-31: badges gone, "NEW LEADS" bar on top, touched
            move under a TOUCHED bar) */

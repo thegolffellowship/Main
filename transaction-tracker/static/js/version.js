@@ -1,5 +1,16 @@
-window.TGF_VERSION = "2.332.0";
+window.TGF_VERSION = "2.333.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.333.0",
+    date: "2026-09-07",
+    changes: [
+      "The \u22ef menu no longer loses its last items off the bottom of the list. Kerry: 'Check why there's no Dismissed on this lead.' Undo and Dismiss were being rendered \u2014 the lead list box was clipped to its own rounded corners, and any menu opening near the bottom got guillotined at the edge. Nothing was broken in the menu; two real actions were simply invisible, which is worse than an error. The corners are now rounded on the first and last row instead, so the radius survives and menus can overhang.",
+      "A lead whose availability answer is No days is auto-dismissed. Kerry: 'if selection is No Days for availability, they should get automatically Dismissed for now.' The survey option reads 'Neither - but I'm still interested', so this is a park rather than a rejection \u2014 the note on the card says exactly that, and Restore is one click.",
+      "Unlike the No-loop sweep, this one runs ONCE per lead. Somebody who asked for no contact should stay out however often the queue rebuilds; somebody who merely can't make Tuesday or Saturday is the person you pull back in after a schedule change, and a sweep that ran every poll would undo that Restore silently on the next one.",
+      "Both disqualifying-answer sweeps moved above the HubSpot token check. They act on answers already in the database and have nothing to do with fetching \u2014 below the gate they were one missing env var away from never running, and HubSpot is being decommissioned, so that is not hypothetical. The first pass over existing rows is the backfill.",
+      "Availability is read through the same decoder the card badge and the SMS picker use, so a lead cannot read 'No days' on the card and something else to the sweep.",
+    ],
+  },
   {
     version: "2.332.0",
     date: "2026-09-07",

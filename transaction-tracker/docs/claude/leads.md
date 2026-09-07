@@ -128,6 +128,32 @@ updates payload-if-changed; EMPTY identity fields fill from HubSpot
 (a manual scoring-lead-edit fix is never clobbered), then the standing
 self-heals re-route chapter and re-derive stats.
 
+## Disqualifying-answer auto-dismiss
+
+Two sweeps run at the top of `check_new_leads`, **above the HubSpot
+token gate** (they act on answers already in the database; below the gate
+one missing env var stopped them, and HubSpot is being decommissioned):
+
+- `dismiss_no_loop_leads` — answered NO to stay-in-the-loop. Runs EVERY
+  poll: somebody who asked for no contact stays out however often the
+  queue rebuilds.
+- `dismiss_no_days_leads` (Kerry 2026-09-07: "if selection is No Days for
+  availability, they should get automatically Dismissed for now") —
+  availability decodes to `none` via `sms_slot_for`, the same decoder the
+  card badge and SMS picker use. Runs **ONCE per lead**, gated on its own
+  auto note: the option reads "Neither - but I'm still interested", so
+  this is a PARK, and a sweep that ran every poll would silently undo a
+  Restore — the trap the deactivating-tag heal had. Consequence to know:
+  an option the form adds later also decodes to `none` and would be
+  parked; the note names the reason and Restore sits next to the row.
+
+Neither touches converted or already-dismissed rows. Regression:
+`test_lead_no_days.py`.
+
+**Kerry's follow-ons, not built:** an automatic reply when Twilio is
+wired, and probably an automatic email reply regardless. Both are
+member-facing sends and need ratified copy before they ship.
+
 ## Disposition tags (Kerry 2026-08-28)
 
 One current `leads.tag` per lead, orthogonal to the status pipeline.
