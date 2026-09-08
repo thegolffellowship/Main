@@ -51416,8 +51416,18 @@ def get_event_print_pack(event_id: int, db_path=None) -> dict | None:
                 "name": nm,
                 "sort_name": f"{last}, {first}".strip().strip(","),
                 "slot_label": g["slot_label"],
+                # Just "10A" (Kerry 2026-09-08) — the word HOLE is said
+                # once in the group box and repeating it 23 times down a
+                # narrow column is noise.
+                "slot_short": re.sub(r"^HOLE\s+", "", g["slot_label"],
+                                     flags=re.I),
                 "group_num": g["group_num"],
                 "holes": g["holes"],
+                # The same facts the group box carries, so the alpha list
+                # answers "where am I, from which tee, off what index"
+                # without anyone cross-referencing two halves of a page.
+                "tee_choice": p.get("tee_choice"),
+                "handicap_index": p.get("handicap_index"),
                 "cart": "A" if (p.get("cart_pos") or 0) in (1, 2) else "B",
             })
     alpha.sort(key=lambda r: r["sort_name"].lower())
@@ -52368,6 +52378,11 @@ def get_pairing_history_counts(year: int | None = None, db_path=None,
 _GG_PAIRING_PORTALS = {
     "sa": "https://tgf-sa.golfgenius.com",
     "austin": "https://tgf-austin.golfgenius.com",
+    # The TGF-wide championship runs in its own portal, not either
+    # chapter league (runbook-tgf-championship-2026-08-14.md). Without
+    # it the one event every member plays was the one event whose
+    # pairings could not be ingested.
+    "champ26": "https://tgf-champ26.golfgenius.com",
 }
 _TEESHEET_PAGE_CACHE: dict = {}
 _TEESHEET_WIDGET_CACHE: dict = {}
@@ -52932,7 +52947,8 @@ def import_gg_teesheets_all(portal: str, apply: bool = False,
 #    in the group, so they become empty seats (kept for cart alignment,
 #    excluded from pairs).
 
-_GG_LEAGUE_IDS = {"sa": "514047", "austin": "514705"}
+_GG_LEAGUE_IDS = {"sa": "514047", "austin": "514705",
+                  "champ26": "546813"}
 _TEAM_BOARD_RE = re.compile(r"\b(?:TEAM|CART)\s+Net\b", re.I)
 _BLIND_SEAT_RE = re.compile(r"^[A-Za-z]{1,3}\[(.+)\]$")
 # Trailing affiliation list after the LAST member: one entry per player,

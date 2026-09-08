@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.339.0";
+window.TGF_VERSION = "2.340.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.340.0",
+    date: "2026-09-08",
+    changes: [
+      "The alphabetical list on the starter sheet now carries the same facts as the group boxes \u2014 tee and index \u2014 with the hole assignment in bold at the end. Kerry: 'Add same info in Alphabetical per player as pairings, but without the A/B and without HOLE...just the 10A or 10B.' The word HOLE is said once in each group box; repeating it twenty-three times down a narrow column was noise.",
+      "Two columns instead of three, now that each row carries four fields.",
+      "The TGF Championship portal is now reachable for pairing ingest. It runs in its own Golf Genius portal rather than either chapter league, so the one event every member plays was the one event whose pairings could not be pulled.",
+    ],
+  },
   {
     version: "2.339.0",
     date: "2026-09-08",

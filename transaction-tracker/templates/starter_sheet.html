@@ -96,13 +96,17 @@
        rather than right then down") — a column layout, not a grid, so
        A–F fills the first column before G starts the second, the way a
        phone book reads. */
-    .alpha { column-count: 3; column-gap: 16px; }
-    .arow { display: flex; align-items: baseline; gap: 6px;
+    .alpha { column-count: 2; column-gap: 22px; }
+    .arow { display: flex; align-items: baseline; gap: 7px;
             font-size: 11px; padding: 2px 0; border-bottom: 1px dotted #ccc;
             break-inside: avoid; }
     .arow .an { flex: 1; min-width: 0; }
+    .arow .atee { color: #444; width: 40px; text-align: right;
+                  white-space: nowrap; }
+    .arow .aidx { color: #444; width: 26px; text-align: right;
+                  font-variant-numeric: tabular-nums; white-space: nowrap; }
     .arow .as { font-family: "Bitter", Georgia, serif; font-weight: 700;
-                white-space: nowrap; }
+                width: 30px; text-align: right; white-space: nowrap; }
 
     .empty { color: #999; padding: 40px; text-align: center; font-style: italic; }
     .foot { margin-top: 14px; font-size: 9.5px; color: #888; }
@@ -178,7 +182,9 @@
     {% for a in pack.alpha %}
       <div class="arow">
         <span class="an">{{ a.sort_name }}</span>
-        <span class="as">{{ a.slot_label }}</span>
+        <span class="atee">{{ a.tee_choice or "—" }}</span>
+        <span class="aidx">{% if a.handicap_index is not none %}{{ "%.1f"|format(a.handicap_index) }}{% else %}—{% endif %}</span>
+        <span class="as">{{ a.slot_short }}</span>
       </div>
     {% endfor %}
   </div>
