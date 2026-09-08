@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.337.0";
+window.TGF_VERSION = "2.337.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.337.1",
+    date: "2026-09-08",
+    changes: [
+      "Follow-up to 2.337.0, caught on live data: an app sheet saved for TODAY was still counting. Kerry had already saved tonight's Silverhorn sheet \u2014 33 rows dated today \u2014 and the generator scored it against itself hours before anyone teed off, reading Jeff Young and Pat Youngs at 8 rounds instead of 7. An app row is a PLAN until the round is played, and on the morning of the event it is still a plan.",
+      "A Golf Genius row for today is different and does count: GG publishes after play, so it is a fact the moment it exists.",
+      "Belt as well as braces: the event being generated FOR is now excluded from its own history explicitly, whatever the dates say.",
+    ],
+  },
   {
     version: "2.337.0",
     date: "2026-09-08",

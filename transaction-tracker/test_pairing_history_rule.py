@@ -99,6 +99,46 @@ def main():
     check("re-generating an unplayed event does not fight its own save",
           counts2 == counts, counts2)
 
+    # TODAY is the case that actually bit: Kerry saved tonight's sheet
+    # and the generator scored it against itself hours before anyone
+    # teed off. An app row is a plan until the round is played.
+    todays = today.strftime("%Y-%m-%d")
+    with db._connect(p) as conn:
+        add(conn, "Lee Tonight", "Moe Tonight", 5, todays, "app")
+        add(conn, "Ned Posted", "Oli Posted", 6, todays, "gg_teesheet")
+        conn.commit()
+    c3 = db.get_pairing_history_counts(year=yr, db_path=p)
+
+    def n3(a, b):
+        a, b = db._pair_key_name(a), db._pair_key_name(b)
+        return c3.get((min(a, b), max(a, b)), 0)
+
+    check("an APP sheet saved for TODAY does not count — it is still "
+          "a plan at 9 in the morning",
+          n3("Lee Tonight", "Moe Tonight") == 0, c3)
+    check("a GG row for today DOES count — Golf Genius posts after play",
+          n3("Ned Posted", "Oli Posted") == 1, c3)
+
+    # And the belt: the event being generated for is never its own
+    # history, whatever the dates say.
+    with db._connect(p) as conn:
+        add(conn, "Pam Self", "Quin Self", 7, past, "gg_teesheet")
+        conn.commit()
+    c4 = db.get_pairing_history_counts(year=yr, db_path=p)
+    c5 = db.get_pairing_history_counts(year=yr, db_path=p,
+                                       exclude_event_id=7)
+
+    def has(counts_, a, b):
+        a, b = db._pair_key_name(a), db._pair_key_name(b)
+        return counts_.get((min(a, b), max(a, b)), 0)
+
+    check("a played GG pair counts normally",
+          has(c4, "Pam Self", "Quin Self") == 1, c4)
+    check("... and is excluded when generating for THAT event",
+          has(c5, "Pam Self", "Quin Self") == 0, c5)
+    check("excluding one event leaves the rest alone",
+          has(c5, "Ann Real", "Bob Real") == 1, c5)
+
     print()
     if FAILURES:
         print(f"{len(FAILURES)} FAILED: " + ", ".join(FAILURES))

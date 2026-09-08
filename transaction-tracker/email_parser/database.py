@@ -52191,7 +52191,8 @@ def _pair_key_name(name: str) -> str:
     return " ".join((name or "").split()).lower()
 
 
-def get_pairing_history_counts(year: int | None = None, db_path=None) -> dict:
+def get_pairing_history_counts(year: int | None = None, db_path=None,
+                               exclude_event_id: int | None = None) -> dict:
     """Pairs actually PLAYED this calendar year → how many times.
 
     Keys are normalized via _pair_key_name (lowercase, collapsed spaces),
@@ -52209,11 +52210,25 @@ def get_pairing_history_counts(year: int | None = None, db_path=None) -> dict:
        are the only account of what happened and still count — dropping
        them would erase real history rather than speculation.
 
-    2. **Nothing dated in the future counts.** Pairings saved for an
-       event that has not been played are a plan. Left in, they made the
-       generator treat pairs it had just proposed as repeats — so hitting
-       Generate twice fought its own first answer, and a rained-out round
-       would have poisoned the next one.
+    2. **Nothing unplayed counts.** Pairings saved for an event that has
+       not been played are a plan. Left in, they made the generator treat
+       pairs it had just proposed as repeats — so hitting Generate twice
+       fought its own first answer, and a rained-out round would have
+       poisoned the next one.
+
+       "Unplayed" has to include TODAY for an app row. The first cut of
+       this used `event_date <= today` and Kerry had already saved
+       tonight's Silverhorn sheet: 33 app rows dated today, which the
+       generator promptly scored against itself — Jeff Young and Pat
+       Youngs read 8 instead of 7 because the sheet he was regenerating
+       counted as a round. An app row is a PLAN until the round is
+       played, and on the morning of the event it is still a plan. A GG
+       row for today is different: Golf Genius publishes after play, so
+       it is a fact the moment it exists.
+
+    `exclude_event_id` belts this: whatever the dates say, the event
+    being generated FOR is never its own history. The generator always
+    passes it.
     """
     if year is None:
         year = today_central().year
@@ -52228,15 +52243,20 @@ def get_pairing_history_counts(year: int | None = None, db_path=None) -> dict:
             SELECT player_a, player_b, COUNT(*) as cnt
             FROM pairing_history ph
             WHERE event_date BETWEEN ? AND ?
-              AND event_date <= ?
-              AND (COALESCE(source, 'app') <> 'app'
+              AND (? IS NULL OR ph.event_id IS NULL OR ph.event_id <> ?)
+              AND CASE WHEN COALESCE(ph.source, 'app') = 'app'
+                       THEN ph.event_date < ?     -- a plan until played
+                       ELSE ph.event_date <= ?    -- GG posts after play
+                  END
+              AND (COALESCE(ph.source, 'app') <> 'app'
                    OR NOT EXISTS (
                        SELECT 1 FROM pairing_history gg
                        WHERE gg.event_id = ph.event_id
                          AND COALESCE(gg.source, 'app') <> 'app'))
             GROUP BY player_a, player_b
             """,
-            (year_start, year_end, today),
+            (year_start, year_end, exclude_event_id, exclude_event_id,
+             today, today),
         ).fetchall()
 
     counts: dict = {}
@@ -53048,7 +53068,8 @@ def debug_generate_pairings(event_id: int,
     """Run the pairing generator server-side with NO seeds and report the
     repeat-score arithmetic it saw — isolates 'the generator ignores
     history' from 'the UI passed locked seeds'."""
-    counts = get_pairing_history_counts(db_path=db_path)
+    counts = get_pairing_history_counts(db_path=db_path,
+                                        exclude_event_id=int(event_id))
     res = generate_event_pairings(int(event_id), db_path=db_path)
     out: dict = {"event_id": int(event_id), "n_pair_keys": len(counts)}
     for holes in ("9", "18"):
@@ -54072,7 +54093,8 @@ def generate_event_pairings(
             nines, eighteens = items, []
 
     # ── Pairing history for current year ─────────────────────────────
-    pair_counts = get_pairing_history_counts(db_path=db_path)
+    pair_counts = get_pairing_history_counts(db_path=db_path,
+                                             exclude_event_id=event_id)
 
     # ── Confirmed Match Play pairs: roster + holes validation ────────
     # (rule 8 amendment — opponents must share a holes bucket to share
