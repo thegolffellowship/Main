@@ -1,5 +1,15 @@
-window.TGF_VERSION = "2.337.1";
+window.TGF_VERSION = "2.338.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.338.0",
+    date: "2026-09-08",
+    changes: [
+      "Golf Genius is now the ONLY source of pairing history. Kerry: 'GG is only source at the moment. Erase any tracker history rows. That will change once we get rid of GG.' The app's own saved sheets no longer count, and saving a sheet no longer writes to the history table at all.",
+      "Nothing is lost by that. Every saved sheet still lives in its own table, so the history rebuilds from it the day the app becomes the record \u2014 and that day is a settings flip (pairing_history_app_writes), not a deploy.",
+      "Nothing counts until it has actually been played, for every source. Kerry: an app row is 'a plan until the round is played', and 'GG could also change until tee off'. So the cutoff is the day BEFORE today: an event played today counts from tomorrow. That costs a day and removes any argument about when the shotgun actually went off.",
+      "The existing app-written rows are purged, with a dry run first and the Golf Genius rows untouched.",
+    ],
+  },
   {
     version: "2.337.1",
     date: "2026-09-08",

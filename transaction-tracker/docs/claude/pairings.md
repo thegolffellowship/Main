@@ -11,18 +11,22 @@ principle 2, these ship as named, editable rules-as-data, not code.
 `get_pairing_history_counts` is the generator's only view of the past.
 Two rules govern it:
 
-1. **"final GG pairings is what rules."** `save_event_pairings` writes
-   `source='app'` rows the moment a sheet is saved, so a grouping the app
-   merely PROPOSED used to score identically to one that teed off. Now,
-   where an event has any non-`app` rows (`gg_teesheet`, `gg_teamnet`,
-   `tee_sheet`) those are the record and its `app` rows are ignored.
-   Where GG never ingested the event, the `app` rows are the only account
-   of what happened and still count — dropping them would erase real
-   history, not speculation.
-2. **Nothing dated in the future counts.** A sheet saved for an unplayed
-   event made the generator treat pairs it had just proposed as repeats,
-   so a second Generate fought its own first answer and a rained-out
-   round would have poisoned the next event.
+1. **Golf Genius is the ONLY source.** Kerry: *"GG is only source at
+   the moment. Erase any tracker history rows. That will change once we
+   get rid of GG."* Only non-`app` rows count. `save_event_pairings` no
+   longer writes to this table while `pairing_history_app_writes` is off
+   (the default) — the saved sheet still lives in `event_pairings`, so
+   nothing is lost and the table rebuilds from it the day the app
+   becomes the record. Flipping that dial is the whole post-GG change.
+   The existing app rows were purged (`purge_app_pairing_history`,
+   bridge `scoring-pairings:purge-app[|apply]`).
+2. **Nothing counts until it has been played — every source.** Kerry: an
+   app row is *"a plan until the round is played"*, and *"GG could also
+   change until tee off."* The cutoff is `event_date < today`: an event
+   played today counts from tomorrow, which costs a day and removes any
+   argument about when the shotgun actually went off. `exclude_event_id`
+   belts it — the generator always passes the event it is building for,
+   so an event is never its own history.
 
 The year window is Central (`today_central`), not UTC. Regression:
 `test_pairing_history_rule.py`. Diagnose live with

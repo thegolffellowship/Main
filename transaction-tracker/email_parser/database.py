@@ -51410,6 +51410,65 @@ def get_event_print_pack(event_id: int, db_path=None) -> dict | None:
     }
 
 
+def _app_history_writes_on(conn: sqlite3.Connection) -> bool:
+    """Does a saved sheet get written into pairing_history?
+
+    Off by default: Golf Genius is the record of what was played
+    (Kerry 2026-09-08). Flip `pairing_history_app_writes` to 1 when TGF
+    stops running events through GG and the app's own sheets become the
+    only account of what happened.
+    """
+    try:
+        return str(_setting_via(conn, "pairing_history_app_writes")
+                   or "0").strip().lower() in ("1", "true", "yes", "on")
+    except Exception:
+        return False
+
+
+def purge_app_pairing_history(dry_run: bool = True, db_path=None) -> dict:
+    """Remove the app's own proposals from pairing_history.
+
+    Kerry 2026-09-08: "GG is only source at the moment. Erase any tracker
+    history rows." These rows recorded what the generator PROPOSED, not
+    what was played, and they scored identically to Golf Genius rows.
+
+    Nothing is destroyed that cannot be rebuilt: `event_pairings` still
+    holds every saved sheet, so if the app ever becomes the record these
+    rows regenerate from it. Dry run by default; returns the affected
+    events either way.
+    """
+    with _connect(db_path) as conn:
+        _ensure_pairing_tables(conn)
+        rows = conn.execute(
+            "SELECT event_id, event_date, COUNT(*) AS n "
+            "FROM pairing_history WHERE COALESCE(source, 'app') = 'app' "
+            "GROUP BY event_id, event_date ORDER BY event_date").fetchall()
+        out = {"dry_run": bool(dry_run),
+               "rows": sum(r["n"] for r in rows),
+               "events": [{"event_id": r["event_id"],
+                           "event_date": r["event_date"],
+                           "rows": r["n"]} for r in rows]}
+        # What survives, so the caller can see the record is intact.
+        out["remaining_by_source"] = {
+            r["s"]: r["n"] for r in conn.execute(
+                "SELECT COALESCE(source,'app') AS s, COUNT(*) AS n "
+                "FROM pairing_history GROUP BY COALESCE(source,'app')")}
+        out["saved_sheets_kept"] = conn.execute(
+            "SELECT COUNT(DISTINCT event_id) FROM event_pairings").fetchone()[0]
+        if dry_run:
+            return out
+        cur = conn.execute(
+            "DELETE FROM pairing_history "
+            "WHERE COALESCE(source, 'app') = 'app'")
+        conn.commit()
+        out["deleted"] = cur.rowcount
+        out["remaining_by_source"] = {
+            r["s"]: r["n"] for r in conn.execute(
+                "SELECT COALESCE(source,'app') AS s, COUNT(*) AS n "
+                "FROM pairing_history GROUP BY COALESCE(source,'app')")}
+        return out
+
+
 def save_event_pairings(event_id: int, groups_by_holes: dict, db_path=None) -> None:
     """Persist pairings for an event and rebuild pairing_history rows.
 
@@ -51450,7 +51509,17 @@ def save_event_pairings(event_id: int, groups_by_holes: dict, db_path=None) -> N
 
                 # Record every pair in history — rode pairs by cart_pos
                 # (1&2 / 3&4, Kerry's ruling), customer ids by exact
-                # canonical-name match (best effort; NULL when unknown)
+                # canonical-name match (best effort; NULL when unknown).
+                #
+                # OFF while Golf Genius is the record (Kerry 2026-09-08:
+                # "GG is only source at the moment ... That will change
+                # once we get rid of GG"). The saved sheet itself lives
+                # in event_pairings above and is untouched, so this table
+                # can be rebuilt from it the day the dial flips — nothing
+                # is lost by not writing a proposal into the record of
+                # what was played.
+                if not _app_history_writes_on(conn):
+                    continue
                 ordered = sorted(grp["players"], key=lambda p: p["cart_pos"])
                 player_names = [p["name"] for p in ordered]
                 rode_pairs = set()
@@ -52202,29 +52271,27 @@ def get_pairing_history_counts(year: int | None = None, db_path=None,
 
     TWO RULES ABOUT WHAT COUNTS, both Kerry 2026-09-08.
 
-    1. **"final GG pairings is what rules."** Saving a sheet in the app
-       writes source='app' rows immediately, so a grouping the app merely
-       PROPOSED counted the same as one that actually teed off. Where an
-       event has any Golf Genius rows they are the record and the app
-       rows for that event are ignored. Where it has none, the app rows
-       are the only account of what happened and still count — dropping
-       them would erase real history rather than speculation.
+    1. **"GG is only source at the moment."** Golf Genius is the record
+       of what was played; the app's own saved sheets are not. Saving a
+       sheet used to write source='app' rows immediately, so a grouping
+       the app merely PROPOSED scored the same as one that teed off.
+       Only non-`app` sources count, and the app no longer writes to this
+       table at all while `pairing_history_app_writes` is off — the saved
+       sheet still lives in `event_pairings`, so nothing is lost and this
+       table can be rebuilt from it. Kerry: "That will change once we get
+       rid of GG"; flipping the dial is the whole change.
 
-    2. **Nothing unplayed counts.** Pairings saved for an event that has
-       not been played are a plan. Left in, they made the generator treat
-       pairs it had just proposed as repeats — so hitting Generate twice
-       fought its own first answer, and a rained-out round would have
-       poisoned the next one.
+    2. **Nothing counts until it has been played.** Kerry: an app row is
+       "a plan until the round is played" — "And GG could also change
+       until tee off." So the cutoff is `event_date < today` for every
+       source. An event played today counts from tomorrow, which costs a
+       day and removes any argument about what time the shotgun went off.
 
-       "Unplayed" has to include TODAY for an app row. The first cut of
-       this used `event_date <= today` and Kerry had already saved
-       tonight's Silverhorn sheet: 33 app rows dated today, which the
-       generator promptly scored against itself — Jeff Young and Pat
-       Youngs read 8 instead of 7 because the sheet he was regenerating
-       counted as a round. An app row is a PLAN until the round is
-       played, and on the morning of the event it is still a plan. A GG
-       row for today is different: Golf Genius publishes after play, so
-       it is a fact the moment it exists.
+       This is not theoretical. The first cut used `<= today` and Kerry
+       had already saved tonight's Silverhorn sheet: 33 rows dated today,
+       which the generator promptly scored against itself — Jeff Young
+       and Pat Youngs read 8 rounds instead of 7 because the sheet being
+       regenerated counted as history.
 
     `exclude_event_id` belts this: whatever the dates say, the event
     being generated FOR is never its own history. The generator always
@@ -52244,19 +52311,12 @@ def get_pairing_history_counts(year: int | None = None, db_path=None,
             FROM pairing_history ph
             WHERE event_date BETWEEN ? AND ?
               AND (? IS NULL OR ph.event_id IS NULL OR ph.event_id <> ?)
-              AND CASE WHEN COALESCE(ph.source, 'app') = 'app'
-                       THEN ph.event_date < ?     -- a plan until played
-                       ELSE ph.event_date <= ?    -- GG posts after play
-                  END
-              AND (COALESCE(ph.source, 'app') <> 'app'
-                   OR NOT EXISTS (
-                       SELECT 1 FROM pairing_history gg
-                       WHERE gg.event_id = ph.event_id
-                         AND COALESCE(gg.source, 'app') <> 'app'))
+              AND ph.event_date < ?                  -- played, not planned
+              AND COALESCE(ph.source, 'app') <> 'app'  -- GG is the record
             GROUP BY player_a, player_b
             """,
             (year_start, year_end, exclude_event_id, exclude_event_id,
-             today, today),
+             today),
         ).fetchall()
 
     counts: dict = {}

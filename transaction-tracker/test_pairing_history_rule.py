@@ -10,10 +10,12 @@ had just proposed as repeats, so hitting Generate twice fought its own
 first answer.
 
 Two rules, pinned here:
-  1. Golf Genius rules. Where an event has GG rows they are the record
-     and its app rows are ignored. Where it has none, the app rows are
-     the only account of what happened and still count.
-  2. Nothing dated in the future counts at all.
+  1. Golf Genius is the ONLY source. Kerry 2026-09-08: "GG is only
+     source at the moment. Erase any tracker history rows. That will
+     change once we get rid of GG."
+  2. Nothing counts until it has been played — for every source. Kerry:
+     an app row is "a plan until the round is played", "And GG could
+     also change until tee off." So the cutoff is event_date < today.
 
 Run: python3 test_pairing_history_rule.py
 """
@@ -78,17 +80,16 @@ def main():
 
     check("a GG pair on a played event counts",
           n("Ann Real", "Bob Real") == 1, counts)
-    check("an APP pair is ignored when GG has that event "
-          "(final GG pairings rule)",
+    check("an APP pair is ignored when GG has that event",
           n("Ann Real", "Cal Proposed") == 0, counts)
-    check("an APP pair still counts when GG never ingested that event — "
-          "it is the only record of what happened",
-          n("Dee Only", "Eve Only") == 1, counts)
+    check("an APP pair is ignored even when GG never ingested the event "
+          "— GG is the only source",
+          n("Dee Only", "Eve Only") == 0, counts)
     check("a pairing saved for a FUTURE event never counts",
           n("Fay Future", "Gus Future") == 0, counts)
     check("... not even a GG-sourced future one",
           n("Hal Future", "Ivy Future") == 0, counts)
-    check("nothing else leaked in", len(counts) == 2, counts)
+    check("nothing else leaked in", len(counts) == 1, counts)
 
     # The regression that started it: save a sheet, regenerate, and the
     # generator must not treat its own proposal as a prior play.
@@ -116,8 +117,8 @@ def main():
     check("an APP sheet saved for TODAY does not count — it is still "
           "a plan at 9 in the morning",
           n3("Lee Tonight", "Moe Tonight") == 0, c3)
-    check("a GG row for today DOES count — Golf Genius posts after play",
-          n3("Ned Posted", "Oli Posted") == 1, c3)
+    check("nor does a GG row for TODAY — GG can change until tee off",
+          n3("Ned Posted", "Oli Posted") == 0, c3)
 
     # And the belt: the event being generated for is never its own
     # history, whatever the dates say.
@@ -138,6 +139,67 @@ def main():
           has(c5, "Pam Self", "Quin Self") == 0, c5)
     check("excluding one event leaves the rest alone",
           has(c5, "Ann Real", "Bob Real") == 1, c5)
+
+    # Saving a sheet must not write history while GG is the record, and
+    # the saved sheet itself must survive so the table can be rebuilt.
+    with db._connect(p) as conn:
+        conn.execute("CREATE TABLE IF NOT EXISTS app_settings ("
+                     "key TEXT PRIMARY KEY, value TEXT, updated_at TEXT)")
+        conn.execute("CREATE TABLE IF NOT EXISTS events ("
+                     "id INTEGER PRIMARY KEY, item_name TEXT, "
+                     "event_date TEXT)")
+        conn.execute("CREATE TABLE IF NOT EXISTS customers ("
+                     "customer_id INTEGER PRIMARY KEY, first_name TEXT, "
+                     "last_name TEXT)")
+        conn.execute("INSERT OR REPLACE INTO events VALUES (99, 'Test', ?)",
+                     (past,))
+        conn.commit()
+    sheet = {"9": [{"group_num": 1, "slot_label": "HOLE 1A", "players": [
+        {"name": "Rae Saved", "cart_pos": 1, "tee_choice": "<50",
+         "handicap_index": 5.0},
+        {"name": "Sam Saved", "cart_pos": 2, "tee_choice": "<50",
+         "handicap_index": 6.0}]}]}
+    db.save_event_pairings(99, sheet, db_path=p)
+    with db._connect(p) as conn:
+        n_hist = conn.execute(
+            "SELECT COUNT(*) FROM pairing_history WHERE event_id = 99"
+        ).fetchone()[0]
+        n_sheet = conn.execute(
+            "SELECT COUNT(*) FROM event_pairings WHERE event_id = 99"
+        ).fetchone()[0]
+    check("saving a sheet writes NO history while GG is the record",
+          n_hist == 0, n_hist)
+    check("but the saved sheet itself is kept, so history can be "
+          "rebuilt when the app becomes the record",
+          n_sheet == 2, n_sheet)
+
+    # And the dial is the whole change for the post-GG world.
+    db.set_app_setting("pairing_history_app_writes", "1", db_path=p)
+    db.save_event_pairings(99, sheet, db_path=p)
+    with db._connect(p) as conn:
+        n_hist2 = conn.execute(
+            "SELECT COUNT(*) FROM pairing_history WHERE event_id = 99"
+        ).fetchone()[0]
+    check("flipping pairing_history_app_writes turns writing back on",
+          n_hist2 == 1, n_hist2)
+
+    # The purge Kerry asked for: app rows go, GG rows stay.
+    db.set_app_setting("pairing_history_app_writes", "0", db_path=p)
+    dry = db.purge_app_pairing_history(dry_run=True, db_path=p)
+    check("the purge dry-runs before it deletes", dry["dry_run"] is True)
+    check("the dry run counts the app rows it would remove",
+          dry["rows"] > 0, dry)
+    done = db.purge_app_pairing_history(dry_run=False, db_path=p)
+    with db._connect(p) as conn:
+        left = {r[0]: r[1] for r in conn.execute(
+            "SELECT COALESCE(source,'app'), COUNT(*) FROM pairing_history "
+            "GROUP BY COALESCE(source,'app')")}
+    check("every app row is gone after the purge",
+          left.get("app", 0) == 0, left)
+    check("the Golf Genius rows are untouched",
+          left.get("gg_teesheet", 0) > 0, left)
+    check("and the saved sheets survive the purge",
+          done["saved_sheets_kept"] >= 1, done)
 
     print()
     if FAILURES:

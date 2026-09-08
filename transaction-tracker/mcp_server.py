@@ -3488,6 +3488,16 @@ def _scoring_dispatch(url: str, extract: str):
                 # fragment + 2026 totals by source
                 return json.dumps(db.debug_pairing_history(parts[1]),
                                   indent=2, default=str)
+            if sub == "purge-app":
+                # Kerry 2026-09-08: "GG is only source at the moment.
+                # Erase any tracker history rows." Dry run unless
+                # |apply. event_pairings keeps every saved sheet, so
+                # these rows can be rebuilt if the app ever becomes the
+                # record.
+                _apply = len(parts) >= 2 and parts[1].lower() == "apply"
+                return json.dumps(
+                    db.purge_app_pairing_history(dry_run=not _apply),
+                    indent=2, default=str)
             if sub == "clear" and len(parts) >= 2 and parts[1].isdigit():
                 # undo a mis-matched apply: deletes ONLY source='gg_teamnet'
                 # pairing_history rows for the event
