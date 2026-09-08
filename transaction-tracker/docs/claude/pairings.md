@@ -6,6 +6,30 @@ pairing docs platform-claude (CA) holds and merge them here BEFORE the
 engine build (mailbox request posted same session). Per house
 principle 2, these ship as named, editable rules-as-data, not code.
 
+## Rounds and blind draws (Kerry 2026-09-08)
+
+**A pair is recorded once per ROUND, not once per event.** Kerry, on the
+two-day TGF Championship: *"Yes of course both rounds count as
+pairings."* `pairing_history` carried `UNIQUE(player_a, player_b,
+event_id)`, so a pair drawn together both days stored once.
+`_migrate_pairing_history_rounds` rebuilds the table without that
+constraint (SQLite cannot drop one in place; count-verified before the
+old table goes) and moves uniqueness to
+`idx_pairing_history_uq (player_a, player_b, event_id, IFNULL(round_id,''))`.
+Single-round events keep `round_id` NULL and behave as before.
+`import_gg_teamnet_round` stamps `round_id` and, on apply, deletes its
+OWN round plus any other source's rows for the event — so ingesting
+round 2 no longer wipes round 1.
+
+**Blind draws never count.** A blind fill (`Bl[NAME]` on a team board) is
+an absent player's score borrowed into a group; they were not there and
+played with nobody. `_parse_teamnet_groups` yields `None` for that seat
+so the 1&2 / 3&4 cart split stays aligned, and the pair loop skips it.
+
+**The TGF-wide championship has its own GG portal** (`champ26`, league
+546813) — it is not in either chapter league, which is why its pairings
+could not be ingested at all until v2.340.0.
+
 ## What counts as history (Kerry 2026-09-08)
 
 `get_pairing_history_counts` is the generator's only view of the past.

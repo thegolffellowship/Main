@@ -44,12 +44,15 @@
     .foot { font-size: 11px; color: #999; }
     .empty { color: #999; padding: 40px; text-align: center; font-style: italic; }
     @media print {
-      body { padding: 0; background: #fff; }
+      /* Margin lives in the body, not @page — @page margins are the one
+         thing the browser's own Margins setting overrides, which is how
+         the starter sheet came to print edge to edge (Kerry 2026-09-08). */
+      body { padding: 0.4in; background: #fff; }
       .noprint { display: none !important; }
       .cards { gap: 0; }
       .card { border-radius: 0; margin: 0 auto; page-break-after: always; }
     }
-    @page { size: letter portrait; margin: 0.4in; }
+    @page { size: letter portrait; margin: 0; }
   </style>
 </head>
 <body>
@@ -57,6 +60,7 @@
     <button style="font:inherit;padding:6px 14px;border:2px solid #1B1B1B;border-radius:999px;background:#fff;color:#1B1B1B;font-weight:600;cursor:pointer;margin-right:8px;"
             onclick="location.href = '/events?event={{ pack.event.id }}&view=pairings';">&#8592; Back</button>
     <button onclick="window.print()">Print Cart Signs</button>
+    <button class="pdf" style="font:inherit;padding:8px 16px;border:0;border-radius:999px;background:#1B1B1B;color:#fff;font-weight:600;cursor:pointer;margin-left:8px;" onclick="downloadPdf()">&#8681; Download PDF</button>
     <span style="color:#666;font-size:13px;margin-left:10px;">One card per cart · fold and place on the cart.</span>
   </div>
 
@@ -89,5 +93,18 @@
     {% endfor %}
   </div>
   {% endif %}
+  <script>
+    // Same print pipeline, with the file pre-named so "Save as PDF"
+    // does not propose the URL (Kerry 2026-09-08).
+    function downloadPdf() {
+      var was = document.title;
+      document.title = {{ ((pack.event.item_name or "Cart Signs") ~ " Cart Signs " ~ (pack.event.event_date or "")) | trim | tojson }};
+      window.addEventListener("afterprint", function once() {
+        document.title = was;
+        window.removeEventListener("afterprint", once);
+      });
+      window.print();
+    }
+  </script>
 </body>
 </html>

@@ -51015,6 +51015,80 @@ def _pairing_time_slots(event: dict, holes: str) -> list[str]:
     return slots
 
 
+def _migrate_pairing_history_rounds(conn: sqlite3.Connection) -> bool:
+    """Let one pair be recorded once PER ROUND, not once per event.
+
+    Kerry 2026-09-08, on the two-day TGF Championship: "Yes of course
+    both rounds count as pairings. Apply both." The table's
+    `UNIQUE(player_a, player_b, event_id)` made that impossible — a pair
+    drawn together on Friday AND Saturday could only be stored once, so
+    the second day silently vanished into an INSERT OR IGNORE and the
+    pair read as having played together half as often as they did.
+
+    SQLite cannot drop a table-level constraint, so the table is rebuilt
+    without it and the uniqueness moves to an index over
+    `IFNULL(round_id,'')`. Single-round events keep NULL and behave
+    exactly as before. Count-verified before the old table is dropped —
+    the alias-merge lesson: never drop until the copy is proven.
+    Idempotent; returns True when it actually rebuilt.
+    """
+    row = conn.execute(
+        "SELECT sql FROM sqlite_master WHERE type = 'table' "
+        "AND name = 'pairing_history'").fetchone()
+    sql = (row["sql"] if row else "") or ""
+    if "UNIQUE" not in sql.upper():
+        return False        # already rebuilt
+    # A view or trigger over the table would break under the rename.
+    dep = conn.execute(
+        "SELECT name FROM sqlite_master WHERE type IN ('view','trigger') "
+        "AND sql LIKE '%pairing_history%'").fetchone()
+    if dep:
+        logger.warning("pairing_history round migration skipped — %s "
+                       "depends on the table", dep["name"])
+        return False
+    cols = [r["name"] for r in conn.execute(
+        "PRAGMA table_info(pairing_history)")]
+    keep = [c for c in cols if c != "id"]
+    before = conn.execute("SELECT COUNT(*) FROM pairing_history").fetchone()[0]
+    conn.execute("""
+        CREATE TABLE pairing_history_new (
+            id             INTEGER PRIMARY KEY AUTOINCREMENT,
+            player_a       TEXT NOT NULL,
+            player_b       TEXT NOT NULL,
+            event_id       INTEGER NOT NULL REFERENCES events(id),
+            event_date     TEXT NOT NULL,
+            created_at     TEXT DEFAULT (datetime('now')),
+            customer_a_id  INTEGER,
+            customer_b_id  INTEGER,
+            rode           INTEGER DEFAULT 0,
+            source         TEXT DEFAULT 'app',
+            round_id       TEXT
+        )""")
+    _cl = ", ".join(keep)
+    conn.execute(f"INSERT INTO pairing_history_new ({_cl}) "
+                 f"SELECT {_cl} FROM pairing_history")
+    after = conn.execute(
+        "SELECT COUNT(*) FROM pairing_history_new").fetchone()[0]
+    if after != before:
+        conn.execute("DROP TABLE pairing_history_new")
+        logger.error("pairing_history round migration ABORTED: copied %s "
+                     "of %s rows", after, before)
+        return False
+    conn.execute("DROP TABLE pairing_history")
+    conn.execute("ALTER TABLE pairing_history_new RENAME TO pairing_history")
+    conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_pairing_history_uq "
+                 "ON pairing_history(player_a, player_b, event_id, "
+                 "IFNULL(round_id, ''))")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_pairing_history_ab "
+                 "ON pairing_history(player_a, player_b)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_pairing_history_date "
+                 "ON pairing_history(event_date)")
+    conn.commit()
+    logger.info("pairing_history rebuilt for per-round uniqueness (%s rows)",
+                before)
+    return True
+
+
 def _ensure_pairing_tables(conn: sqlite3.Connection) -> None:
     """Create pairing tables if they don't exist (handles live DB migration)."""
     conn.execute(
@@ -51104,11 +51178,13 @@ def _ensure_pairing_tables(conn: sqlite3.Connection) -> None:
     # row's source ('app' saves vs 'gg_teesheet' ingest).
     for col, decl in (("customer_a_id", "INTEGER"), ("customer_b_id", "INTEGER"),
                       ("rode", "INTEGER DEFAULT 0"),
-                      ("source", "TEXT DEFAULT 'app'")):
+                      ("source", "TEXT DEFAULT 'app'"),
+                      ("round_id", "TEXT")):
         try:
             conn.execute(f"ALTER TABLE pairing_history ADD COLUMN {col} {decl}")
         except sqlite3.OperationalError:
             pass  # already added
+    _migrate_pairing_history_rounds(conn)
     # Manager-suppressed partner requests (Kerry 2026-07-21): a row here
     # means the generator ignores that requester's partner_request for
     # this event. The request stays visible in the PAIRINGS requests
@@ -53111,10 +53187,23 @@ def import_gg_teamnet_round(portal: str, round_id: str, apply: bool = False,
             resolved.append(rs)
         out["unresolved_names"] = unresolved
         if apply:
-            conn.execute("DELETE FROM pairing_history WHERE event_id = ?",
-                         (ev["id"],))
+            # Replace THIS round, and any other source's rows for the
+            # event (one source owns an event) — but leave the event's
+            # OTHER teamnet rounds alone. A two-day championship is two
+            # rounds of real pairings, not one that overwrites the other
+            # (Kerry 2026-09-08: "Yes of course both rounds count").
+            conn.execute(
+                "DELETE FROM pairing_history WHERE event_id = ? "
+                "AND (COALESCE(source,'app') <> 'gg_teamnet' "
+                "     OR IFNULL(round_id,'') = ?)",
+                (ev["id"], str(round_id)))
             n_pairs = 0
             for rs in resolved:
+                # BLIND DRAWS NEVER COUNT (Kerry 2026-09-08). A blind
+                # fill is an absent player's score borrowed into the
+                # group; they were not there and played with nobody. The
+                # parser already makes those seats None so the cart
+                # split stays aligned — this is where they are dropped.
                 real = [(idx, p) for idx, p in enumerate(rs) if p]
                 for x in range(len(real)):
                     for y in range(x + 1, len(real)):
@@ -53123,12 +53212,18 @@ def import_gg_teamnet_round(portal: str, round_id: str, apply: bool = False,
                         conn.execute(
                             """INSERT OR IGNORE INTO pairing_history
                                (player_a, player_b, event_id, event_date,
-                                customer_a_id, customer_b_id, rode, source)
-                               VALUES (?, ?, ?, ?, ?, ?, ?, 'gg_teamnet')""",
+                                customer_a_id, customer_b_id, rode, source,
+                                round_id)
+                               VALUES (?, ?, ?, ?, ?, ?, ?, 'gg_teamnet', ?)""",
                             (a["name"], b["name"], ev["id"], ev["event_date"],
                              a["cid"], b["cid"],
-                             1 if ia // 2 == ib // 2 else 0))
+                             1 if ia // 2 == ib // 2 else 0, str(round_id)))
                         n_pairs += 1
+            # The visible sheet still shows ONE round (the last applied) —
+            # event_pairings has one row per player per event and the
+            # PAIRINGS tab is a single sheet. History is what needed the
+            # round dimension; the tab showing round 2 after both are
+            # ingested is correct, not a loss.
             out["event_pairings_rows"] = _write_event_pairings_from_groups(
                 conn, ev["id"],
                 [{"slot": None, "players": rs} for rs in resolved])

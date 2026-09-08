@@ -23,10 +23,23 @@
     html, body, .gbox-head, .prow {
       -webkit-print-color-adjust: exact; print-color-adjust: exact;
     }
+    /* WYSIWYG (Kerry 2026-09-08: "can you format the view to exactly
+       what it will look like when printed? Showing a thin line for the
+       edge of the sheet?"). On screen the sheet is a real 8.5x11 page
+       on a grey desk, so what you scroll IS what comes off the printer
+       — no discovering the layout at the print dialog. In print the
+       desk and the page edge disappear and .sheet is simply the page.
+       One set of measurements serves both. */
     body {
-      margin: 0; padding: 0.5in;
+      margin: 0; padding: 0;
       font-family: "Helvetica Neue", Arial, system-ui, sans-serif;
-      color: #111; background: #fff; font-size: 12px;
+      color: #111; background: #EFEFEC; font-size: 12px;
+    }
+    .sheet {
+      width: 8.5in; min-height: 11in; padding: 0.5in;
+      margin: 0 auto 24px; background: #fff;
+      border: 1px solid #C9C9C4;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.08);
     }
     .sheet-head {
       display: flex; justify-content: space-between; align-items: flex-end;
@@ -113,8 +126,15 @@
     @media print {
       .noprint { display: none !important; }
       .groups { grid-template-columns: repeat(3, 1fr); }
+      body { background: #fff; }
+      /* The page edge is a screen affordance; on paper the paper is the
+         edge. Width goes auto so a non-letter tray still fills. */
+      .sheet {
+        width: auto; min-height: 0; margin: 0;
+        border: 0; box-shadow: none; padding: 0.5in;
+      }
     }
-    .toolbar { margin-bottom: 12px; }
+    .toolbar { width: 8.5in; margin: 0 auto; padding: 14px 0; }
     .toolbar button {
       font: inherit; padding: 8px 16px; border: 0; border-radius: 999px;
       background: #E87C3E; color: #fff; font-weight: 600; cursor: pointer;
@@ -126,13 +146,20 @@
       background: #fff; color: #1B1B1B; border: 2px solid #1B1B1B;
       margin-right: 8px; padding: 6px 14px;
     }
+    .toolbar button.pdf { background: #1B1B1B; margin-left: 8px; }
   </style>
 </head>
 <body>
   <div class="toolbar noprint">
     <button class="back" onclick="location.href = '/events?event={{ pack.event.id }}&view=pairings';">&#8592; Back</button>
     <button onclick="window.print()">Print Starter Sheet</button>
+    <!-- Download PDF is the same print pipeline with the filename
+         pre-named (Kerry 2026-09-08). A page cannot choose "Save as
+         PDF" for you — what it can do is stop the file being called
+         after the URL, which was the slow part. -->
+    <button class="pdf" onclick="downloadPdf()">&#8681; Download PDF</button>
   </div>
+  <div class="sheet">
   <div class="sheet-head">
     <div>
       <h1>{{ pack.event.item_name }}</h1>
@@ -193,5 +220,19 @@
   <div class="foot">
     Cart A = seats 1&amp;2 · Cart B = seats 3&amp;4. &nbsp; Idx = 9-hole handicap index carried by pairings (not the playing handicap). &nbsp; The Golf Fellowship.
   </div>
+  </div><!-- /.sheet -->
+  <script>
+    // Rename the tab before printing so "Save as PDF" proposes the
+    // event and date instead of the URL, then put the title back.
+    function downloadPdf() {
+      var was = document.title;
+      document.title = {{ ((pack.event.item_name or "Starter Sheet") ~ " " ~ (pack.event.event_date or "")) | trim | tojson }};
+      window.addEventListener("afterprint", function once() {
+        document.title = was;
+        window.removeEventListener("afterprint", once);
+      });
+      window.print();
+    }
+  </script>
 </body>
 </html>

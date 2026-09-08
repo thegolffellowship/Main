@@ -1,5 +1,17 @@
-window.TGF_VERSION = "2.340.0";
+window.TGF_VERSION = "2.341.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.341.0",
+    date: "2026-09-08",
+    changes: [
+      "A pair can now be recorded once PER ROUND rather than once per event. Kerry, on the two-day TGF Championship: 'Yes of course both rounds count as pairings.' They could not \u2014 the history table's uniqueness was one row per pair per event, so a pair drawn together on Friday AND Saturday stored once and read as having played together half as often as they had. The table is rebuilt without that constraint and the uniqueness moves to an index that includes the round; single-round events are unaffected.",
+      "Ingesting one round of a multi-round event no longer wipes the other. It replaces its own round and any other source's rows for that event, which is what 'one source owns an event' was always meant to mean.",
+      "Blind draws never count, and now say so in the code. A blind fill is an absent player's score borrowed into a group \u2014 they were not there and played with nobody. The parser already made those seats empty; the rule is now written where the pairs are formed.",
+      "Print views are WYSIWYG. The starter sheet renders as a real 8.5x11 page with a thin edge on a grey desk, so what you scroll is what comes off the printer instead of being discovered at the print dialog. In print the desk and the edge disappear.",
+      "Download PDF sits next to Print on both the starter sheet and the cart signs. A page cannot pick 'Save as PDF' for you \u2014 what it can do is stop the file being named after the URL, which was the slow part.",
+      "Cart signs get the same margin fix the starter sheet had: the margin moved out of @page, which the browser's own Margins setting overrides.",
+    ],
+  },
   {
     version: "2.340.0",
     date: "2026-09-08",
