@@ -15,6 +15,14 @@
        lives in body padding, which nothing overrides, and @page is 0 so
        the two can never stack into a full inch. */
     @page { size: letter portrait; margin: 0; }
+    /* Browsers drop background colours when printing unless the page
+       says it means them (Kerry 2026-09-08: "Foursome headers not
+       showing in preview as Black with white letters"). The group
+       headers and the shaded B rows are how the sheet is read at a
+       glance, so they are content, not decoration. */
+    html, body, .gbox-head, .prow {
+      -webkit-print-color-adjust: exact; print-color-adjust: exact;
+    }
     body {
       margin: 0; padding: 0.5in;
       font-family: "Helvetica Neue", Arial, system-ui, sans-serif;
@@ -63,6 +71,10 @@
       padding: 3px 7px; border-top: 1px solid #e2e2e2; font-size: 11.5px;
     }
     .prow:first-of-type { border-top: 0; }
+    /* Cart B rides the second seat pair — a light band makes the two
+       carts readable as two carts without another column of letters
+       (Kerry 2026-09-08). */
+    .prow.is-b { background: #efefef; }
     .prow .pname { flex: 1; font-weight: 600; min-width: 0; }
     .prow .tee { color: #444; width: 42px; text-align: right; white-space: nowrap; }
     .prow .idx { color: #444; width: 30px; text-align: right;
@@ -80,15 +92,17 @@
     }
     .alpha-head span { font-family: inherit; font-size: 10px; color: #666;
                        font-weight: 600; letter-spacing: 0.05em; }
-    .alpha { display: grid; grid-template-columns: repeat(3, 1fr);
-             gap: 0 14px; }
+    /* DOWN then across (Kerry 2026-09-08: "let's read down and right
+       rather than right then down") — a column layout, not a grid, so
+       A–F fills the first column before G starts the second, the way a
+       phone book reads. */
+    .alpha { column-count: 3; column-gap: 16px; }
     .arow { display: flex; align-items: baseline; gap: 6px;
             font-size: 11px; padding: 2px 0; border-bottom: 1px dotted #ccc;
             break-inside: avoid; }
     .arow .an { flex: 1; min-width: 0; }
     .arow .as { font-family: "Bitter", Georgia, serif; font-weight: 700;
                 white-space: nowrap; }
-    .arow .ac { width: 10px; text-align: center; font-weight: 700; }
 
     .empty { color: #999; padding: 40px; text-align: center; font-style: italic; }
     .foot { margin-top: 14px; font-size: 9.5px; color: #888; }
@@ -146,7 +160,7 @@
           <span class="grp">{{ g.group_num }}{% if g.holes == '18' %} · 18{% endif %}</span>
         </div>
         {% for p in g.players %}
-          <div class="prow">
+          <div class="prow{% if (p.cart_pos or 0) not in [1,2] %} is-b{% endif %}">
             <span class="pname">{{ p.name }}</span>
             <span class="tee">{{ p.tee_choice or "—" }}</span>
             <span class="idx">{% if p.handicap_index is not none %}{{ "%.1f"|format(p.handicap_index) }}{% else %}—{% endif %}</span>
@@ -165,7 +179,6 @@
       <div class="arow">
         <span class="an">{{ a.sort_name }}</span>
         <span class="as">{{ a.slot_label }}</span>
-        <span class="ac {% if a.cart == 'A' %}cart-A{% else %}cart-B{% endif %}">{{ a.cart }}</span>
       </div>
     {% endfor %}
   </div>

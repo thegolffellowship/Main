@@ -1,5 +1,15 @@
-window.TGF_VERSION = "2.338.0";
+window.TGF_VERSION = "2.338.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.338.1",
+    date: "2026-09-08",
+    changes: [
+      "Starter sheet, four fixes off Kerry's print preview. The group headers print black-on-white again: browsers drop background colours when printing unless the page says it means them, and those headers are how the sheet is read at a glance, not decoration.",
+      "The alphabetical list reads DOWN then across \u2014 A through F fills the first column before G starts the second, the way a phone book reads, rather than snaking left to right.",
+      "Cart B rows carry a light grey band, so the two carts in a group read as two carts.",
+      "The A/B letter is gone from the alphabetical list \u2014 it answers 'where am I', and the cart is on the group box.",
+    ],
+  },
   {
     version: "2.338.0",
     date: "2026-09-08",
