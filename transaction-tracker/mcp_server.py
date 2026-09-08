@@ -2603,6 +2603,30 @@ def _scoring_dispatch(url: str, extract: str):
                                "create_sql": _sql["sql"],
                                "columns": _cols, "indexes": _idx},
                               indent=2, default=str)
+        if cmd == "scoring-msg-templates":
+            # Read-only: the message-template shelf as PRODUCTION actually
+            # holds it. Added 2026-09-08 — the system-template seed only
+            # ran against an empty table, so "it is in the code" said
+            # nothing about whether a preset reached the live shelf, and
+            # member-facing copy is not something to assume.
+            _want = (arg or "").strip().lower()
+            with db._connect() as _c:
+                _rows = [dict(r) for r in _c.execute(
+                    "SELECT id, name, channel, subject, is_system, "
+                    "html_body FROM message_templates "
+                    "ORDER BY is_system DESC, name")]
+            _out = []
+            for _r in _rows:
+                if _want and _want not in (_r["name"] or "").lower():
+                    continue
+                _body = _r.pop("html_body", "") or ""
+                _r["body_chars"] = len(_body)
+                _r["blanks"] = sorted(set(
+                    re.findall(r"\[[A-Z][A-Z0-9 _/-]{2,}\]", _body)))
+                if _want:
+                    _r["html_body"] = _body
+                _out.append(_r)
+            return json.dumps({"n": len(_out), "templates": _out}, indent=2)
         if cmd == "scoring-backup-status":
             # Is it configured, and did the last runs succeed?
             from email_parser.backups import backup_status
