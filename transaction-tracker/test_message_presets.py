@@ -111,3 +111,74 @@ def test_send_has_a_fellowship_branch():
         r'r\.get\("fellowship"\)[\s\S]{0,80}?startswith\("Y"\)', src), \
         "server-side fellowship filter missing — the client filter alone " \
         "would let the server fall through to everyone"
+
+
+def test_revised_copy_replaces_an_untouched_seed():
+    """The v2.344.0 wording is already live. A revision must reach it."""
+    d = _fresh_db()
+    prior = next(iter(
+        db._PRIOR_SYSTEM_TEMPLATE_BODIES["Fellowship — Where We're Meeting"]))
+    with sqlite3.connect(d) as c:
+        c.execute("UPDATE message_templates SET html_body = ? "
+                  "WHERE name LIKE 'Fellowship%'", (prior,))
+
+    db.init_db(str(d))
+
+    with sqlite3.connect(d) as c:
+        body = c.execute("SELECT html_body FROM message_templates "
+                         "WHERE name LIKE 'Fellowship%'").fetchone()[0]
+    assert body != prior, "the revised wording never reached the live row"
+    assert "Come over when your group finishes." in body
+    assert "whenever your group finishes" not in body
+    assert "{manager_name}" in body and "{manager_phone}" in body
+
+
+def test_a_hand_edited_template_survives_a_revision():
+    d = _fresh_db()
+    with sqlite3.connect(d) as c:
+        c.execute("UPDATE message_templates SET html_body = 'KERRY WROTE THIS' "
+                  "WHERE name LIKE 'Fellowship%'")
+    db.init_db(str(d))
+    with sqlite3.connect(d) as c:
+        body = c.execute("SELECT html_body FROM message_templates "
+                         "WHERE name LIKE 'Fellowship%'").fetchone()[0]
+    assert body == "KERRY WROTE THIS"
+
+
+def test_austin_has_no_number_so_it_cannot_be_mailed_blank():
+    """Kerry named Robert but gave no number. Guessing one is not an option,
+    so the send must refuse rather than mail a gap."""
+    sa = db.DEFAULT_CHAPTER_MANAGERS["San Antonio"]
+    assert sa["name"] and sa["phone"]
+    austin = db.DEFAULT_CHAPTER_MANAGERS["Austin"]
+    assert austin["name"] == "Robert"
+    assert austin["phone"] == "", "a phone number must never be invented"
+
+    src = Path("app.py").read_text(encoding="utf-8")
+    assert re.search(
+        r'_needs = \[v for v in \("manager_name", "manager_phone"\)', src)
+    assert "would send blank" in src, "no boundary guard on the manager vars"
+
+
+def test_chapter_manager_lookup():
+    d = _fresh_db()
+    assert db.get_chapter_manager("San Antonio", str(d))["phone"]
+    assert db.get_chapter_manager("san antonio", str(d))["phone"], "case matters"
+    assert db.get_chapter_manager("Austin", str(d))["name"] == "Robert"
+    assert db.get_chapter_manager("Austin", str(d))["phone"] == ""
+    # Unknown / national label resolves to empty, which callers treat as
+    # "not configured" rather than falling back to some other chapter.
+    assert db.get_chapter_manager("TGF", str(d)) == {"name": "", "phone": ""}
+    assert db.get_chapter_manager(None, str(d)) == {"name": "", "phone": ""}
+
+
+def test_dial_overrides_the_code_default():
+    d = _fresh_db()
+    import json
+    db.set_app_setting(db.CHAPTER_MANAGERS_KEY, json.dumps(
+        {"Austin": {"name": "Robert Straiton", "phone": "(512) 555-0100"}}),
+        str(d))
+    got = db.get_chapter_manager("Austin", str(d))
+    assert got == {"name": "Robert Straiton", "phone": "(512) 555-0100"}
+    # An override for one chapter must not blank out the others.
+    assert db.get_chapter_manager("San Antonio", str(d))["phone"]

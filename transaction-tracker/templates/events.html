@@ -2163,6 +2163,8 @@
                         <button type="button" class="btn btn-secondary compose-var-btn" data-var="event_date" style="font-size:0.7rem; padding:0.15rem 0.4rem;">{event_date}</button>
                         <button type="button" class="btn btn-secondary compose-var-btn" data-var="course" style="font-size:0.7rem; padding:0.15rem 0.4rem;">{course}</button>
                         <button type="button" class="btn btn-secondary compose-var-btn" data-var="chapter" style="font-size:0.7rem; padding:0.15rem 0.4rem;">{chapter}</button>
+                        <button type="button" class="btn btn-secondary compose-var-btn" data-var="manager_name" style="font-size:0.7rem; padding:0.15rem 0.4rem;" title="Chapter manager's name, from the chapter_managers setting">{manager_name}</button>
+                        <button type="button" class="btn btn-secondary compose-var-btn" data-var="manager_phone" style="font-size:0.7rem; padding:0.15rem 0.4rem;" title="Chapter manager's cell, from the chapter_managers setting">{manager_phone}</button>
                     </div>
                     <textarea id="compose-body" class="modal-input" rows="8" style="margin-top:0.2rem; font-family:inherit; resize:vertical;" placeholder="Type your message here... Use the variable buttons above to insert personalization tags."></textarea>
                 </label>
@@ -10463,7 +10465,8 @@
         // building. This guards EVERY template, not just the one that
         // introduced a blank.
         const KNOWN_VARS = ["player_name", "event_name", "event_date",
-                            "course", "chapter"];
+                            "course", "chapter",
+                            "manager_name", "manager_phone"];
         const blanks = [];
         (subject + "\n" + body).replace(/\[[A-Z][A-Z0-9 _/-]{2,}\]/g,
             m => { if (!blanks.includes(m)) blanks.push(m); return m; });

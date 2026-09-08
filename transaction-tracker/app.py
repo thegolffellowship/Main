@@ -99,6 +99,7 @@ from email_parser.database import (
     get_all_feedback,
     update_feedback_status,
     get_message_templates,
+    get_chapter_manager,
     get_message_template,
     create_message_template,
     update_message_template,
@@ -7678,13 +7679,32 @@ def api_send_messages():
     # Build event variables for template rendering
     all_events = get_all_events()
     event_info = next((e for e in all_events if (e["item_name"] or "").lower() == event_name.lower()), {})
+    # Who to call about this chapter's event, from the chapter_managers
+    # dial. Kept as variables so one template serves both chapters.
+    _mgr = get_chapter_manager(event_info.get("chapter"))
     event_vars = {
         "event_name": event_name,
         "event_date": event_info.get("event_date") or "",
         "course": event_info.get("course") or "",
         "chapter": event_info.get("chapter") or "",
+        "manager_name": _mgr["name"],
+        "manager_phone": _mgr["phone"],
     }
     event_status = (event_info.get("status") or "active")
+
+    # Boundary check: a template that ASKS for the manager's name or cell
+    # must not go out with a blank where it should be. Austin ships with
+    # no number on file, so this is a live case, not a hypothetical.
+    _needs = [v for v in ("manager_name", "manager_phone")
+              if ("{%s}" % v) in (subject_tpl + body_tpl)]
+    _missing = [v for v in _needs if not event_vars[v]]
+    if _missing:
+        return jsonify({"error":
+            "No chapter manager on file for "
+            f"{event_info.get('chapter') or 'this event'} — "
+            f"{', '.join(_missing)} would send blank. "
+            "Set the chapter_managers app setting, or take the "
+            "variable out of the message."}), 400
 
     # Filter audience. An UNKNOWN value used to fall through the
     # per-recipient else-branch below and mail the entire roster — a
@@ -7940,6 +7960,9 @@ def api_preview_message():
         "course": data.get("course", "Sample Course"),
         "chapter": data.get("chapter", "San Antonio"),
     }
+    _pmgr = get_chapter_manager(variables["chapter"])
+    variables["manager_name"] = _pmgr["name"] or "(no manager on file)"
+    variables["manager_phone"] = _pmgr["phone"] or "(no number on file)"
 
     return jsonify({
         "subject": render_msg_template(subject_tpl, variables),

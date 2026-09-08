@@ -1818,3 +1818,48 @@ is still on its default `all`, so a deliberate choice is never overridden.
 
 Test: `test_message_presets.py` (seed reach + audience allowlist) and the
 Message Players block of `test_fellowship_filter.js`.
+
+### Chapter managers as data (v2.345.0)
+
+> *"Add in chapter manager name and cell number for convenience. So for
+> SA that's me. For Austin that's Robert."*
+
+`{manager_name}` and `{manager_phone}` resolve per event from the
+`chapter_managers` app setting via `get_chapter_manager(chapter)` in
+database.py, merged over `DEFAULT_CHAPTER_MANAGERS`. One template
+therefore serves both chapters, and a third chapter is a dial edit rather
+than a release (CLAUDE.md principle 2).
+
+**Austin ships with an empty phone on purpose.** Kerry named Robert but
+gave no last name or number, and there are at least two plausible Roberts
+in the roster (Robert Straiton, Robert Light). A phone number about to be
+mailed to members is not something to infer. `/api/messages/send` refuses
+with a 400 naming the chapter when a template USES either variable and
+the chapter has no value for it — the send cannot go out with a gap where
+the number belongs. Fill it with:
+
+```
+scoring-setting-set:chapter_managers|{"Austin": {"name": "...", "phone": "..."}}
+```
+
+(the dial merges over the defaults, so setting one chapter does not blank
+the other). San Antonio is seeded with Kerry and the cell on his customer
+record — worth confirming that is the number he wants published.
+
+### Revising a system template's wording (v2.345.0)
+
+The by-name seed added templates but never touched existing rows, so the
+first version of any wording was permanent in practice. It now also
+UPDATES a row when the stored body is still verbatim one of the bodies we
+seeded, tracked in `_PRIOR_SYSTEM_TEMPLATE_BODIES` in database.py. An
+untouched seed receives the correction; anything edited in the UI is left
+alone.
+
+**When you change a system template's wording, APPEND the outgoing body
+to that dict — never edit the entry in place**, or the previous version
+stops being recognised as unedited and the deployments still carrying it
+are stranded. Verify against production before and after with the
+read-only bridge command `scoring-msg-templates[:<name fragment>]`, which
+reports each template's stored body and any unfilled `[BLANKS]` in it.
+
+Tests: `test_message_presets.py`.

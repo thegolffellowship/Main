@@ -4200,13 +4200,13 @@ def init_db(db_path: str | Path | None = None) -> None:
                 "<p>You said YES to fellowship after <strong>{event_name}</strong>, "
                 "so here is where we are headed once we are off the course:</p>"
                 "<p><strong>[MEETING SPOT]</strong></p>"
-                "<p>Come over whenever your group finishes \u2014 no need to wait "
-                "on anyone. It is a good hour to actually get to know the people "
-                "you just played with.</p>"
+                "<p>Come over when your group finishes.</p>"
                 "<p>If your plans have changed and you cannot join us, just reply "
-                "and let me know. We give the restaurant a headcount, so an "
-                "accurate number genuinely helps.</p>"
-                "<p>Looking forward to it,<br>The Golf Fellowship</p>",
+                "and let me know, or text {manager_name} at {manager_phone}. We "
+                "give the restaurant a headcount, so an accurate number genuinely "
+                "helps.</p>"
+                "<p>Looking forward to it,<br>{manager_name}<br>"
+                "The Golf Fellowship</p>",
                 None,
             ),
             (
@@ -4220,13 +4220,31 @@ def init_db(db_path: str | Path | None = None) -> None:
             ),
         ]
         for name, channel, subj, html, sms in system_templates:
-            if (name or "").strip().lower() in _existing_tpl_names:
+            if (name or "").strip().lower() not in _existing_tpl_names:
+                conn.execute(
+                    "INSERT INTO message_templates (name, channel, subject, "
+                    "html_body, sms_body, is_system) VALUES (?, ?, ?, ?, ?, 1)",
+                    (name, channel, subj, html, sms),
+                )
                 continue
-            conn.execute(
-                "INSERT INTO message_templates (name, channel, subject, html_body, "
-                "sms_body, is_system) VALUES (?, ?, ?, ?, ?, 1)",
-                (name, channel, subj, html, sms),
-            )
+            # The row exists. Revising the wording of a system template is
+            # a normal thing to want (Kerry rewrote the fellowship note the
+            # same day it shipped), but a blind UPDATE would also wipe an
+            # edit he made in the UI. So: replace ONLY when the stored body
+            # is still verbatim one of the versions WE seeded. Anything
+            # else is somebody's work and is left alone.
+            priors = _PRIOR_SYSTEM_TEMPLATE_BODIES.get(name)
+            if not priors:
+                continue
+            row = conn.execute(
+                "SELECT id, html_body FROM message_templates "
+                "WHERE name = ? AND is_system = 1", (name,)).fetchone()
+            if row and (row["html_body"] or "") in priors:
+                conn.execute(
+                    "UPDATE message_templates SET subject = ?, html_body = ?, "
+                    "sms_body = ?, updated_at = datetime('now') WHERE id = ?",
+                    (subj, html, sms, row["id"]),
+                )
 
         # Backfill NULL/empty values in critical columns
         conn.execute("UPDATE items SET customer = '(Unknown)' WHERE customer IS NULL OR customer = ''")
@@ -38137,6 +38155,83 @@ def set_app_setting(key: str, value: str, db_path: str | Path | None = None) -> 
             (key, value),
         )
         conn.commit()
+
+
+# Bodies we have previously SEEDED for a system template, keyed by name.
+# A stored body that still matches one of these verbatim has never been
+# touched by a human, so a revised seed may replace it; anything else is
+# somebody's edit and is left alone. Append the outgoing body here
+# whenever you change a system template's wording — never edit in place,
+# or the old version stops being recognised as unedited.
+_PRIOR_SYSTEM_TEMPLATE_BODIES = {
+    # v2.344.0 → v2.345.0: Kerry trimmed the second paragraph to one line
+    # and added the chapter manager's name and cell.
+    "Fellowship \u2014 Where We're Meeting": {
+        "<p>Hi {player_name},</p>"
+        "<p>You said YES to fellowship after <strong>{event_name}</strong>, "
+        "so here is where we are headed once we are off the course:</p>"
+        "<p><strong>[MEETING SPOT]</strong></p>"
+        "<p>Come over whenever your group finishes \u2014 no need to wait "
+        "on anyone. It is a good hour to actually get to know the people "
+        "you just played with.</p>"
+        "<p>If your plans have changed and you cannot join us, just reply "
+        "and let me know. We give the restaurant a headcount, so an "
+        "accurate number genuinely helps.</p>"
+        "<p>Looking forward to it,<br>The Golf Fellowship</p>",
+    },
+}
+
+
+CHAPTER_MANAGERS_KEY = "chapter_managers"
+
+# Who a member should call about a given chapter's event, as DATA rather
+# than as a string baked into a template (Kerry 2026-09-08: "Add in
+# chapter manager name and cell number... For SA that's me. For Austin
+# that's Robert."). Rules-as-data, CLAUDE.md principle 2 — a new chapter
+# is a dial edit, not a release.
+#
+# An entry is only usable when BOTH name and phone are filled. Austin is
+# deliberately seeded EMPTY: Kerry named Robert but gave no last name or
+# number, and a phone number is not something to guess at when it is
+# about to be mailed to members. Any send that needs an unfilled entry is
+# refused rather than mailed with a gap.
+DEFAULT_CHAPTER_MANAGERS = {
+    "San Antonio": {"name": "Kerry", "phone": "(210) 838-3948"},
+    "Austin": {"name": "Robert", "phone": ""},
+}
+
+
+def get_chapter_managers(db_path: str | Path | None = None) -> dict:
+    """Return the {chapter: {name, phone}} dial, merged over the defaults."""
+    import json as _json
+    out = {k: dict(v) for k, v in DEFAULT_CHAPTER_MANAGERS.items()}
+    raw = get_app_setting(CHAPTER_MANAGERS_KEY, db_path)
+    if raw:
+        try:
+            cfg = _json.loads(raw)
+            if isinstance(cfg, dict):
+                for chapter, val in cfg.items():
+                    if isinstance(val, dict):
+                        out[chapter] = {
+                            "name": str(val.get("name") or "").strip(),
+                            "phone": str(val.get("phone") or "").strip(),
+                        }
+        except Exception:
+            logger.warning("chapter_managers dial is not valid JSON — using defaults")
+    return out
+
+
+def get_chapter_manager(chapter: str | None,
+                        db_path: str | Path | None = None) -> dict:
+    """Resolve one chapter's manager. Matched case-insensitively; an
+    unknown chapter (or the national 'TGF' label) returns empty strings,
+    which callers must treat as 'not configured'."""
+    cfg = get_chapter_managers(db_path)
+    want = (chapter or "").strip().lower()
+    for name, val in cfg.items():
+        if name.strip().lower() == want:
+            return {"name": val.get("name") or "", "phone": val.get("phone") or ""}
+    return {"name": "", "phone": ""}
 
 
 # ═══════════════════════════════════════════════════════════════════════════

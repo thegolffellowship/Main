@@ -1,5 +1,15 @@
-window.TGF_VERSION = "2.344.1";
+window.TGF_VERSION = "2.345.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.345.0",
+    date: "2026-09-08",
+    changes: [
+      "The fellowship note is shorter and now says who to call. Kerry: 'Just change the Come over.. paragraph to just Come over when your group finishes. Add in chapter manager name and cell number.' The second paragraph is one line, and the drop-out request names the chapter's manager with their cell.",
+      "Chapter managers are a setting, not a sentence baked into a template. {manager_name} and {manager_phone} resolve from the event's chapter through the new chapter_managers app setting, so one template serves San Antonio and Austin and a third chapter is a dial edit rather than a release. Both are available as buttons in the composer alongside {player_name} and the rest.",
+      "San Antonio is filled in with Kerry and the cell on his customer record \u2014 worth a glance to confirm it is the number he wants members using. Austin is deliberately blank: Robert was named but no number was given, and a phone number is not something to guess at when it is about to be mailed to members. Any send that would leave one of those blank is refused outright and says which chapter is missing.",
+      "A system template's wording can now be revised in a release. The seed added new templates but never touched existing ones, so the first fellowship wording would have stayed live forever. It now replaces a stored body only when that body is still verbatim a version we shipped \u2014 an untouched seed gets the correction, and anything edited in the UI is left exactly alone.",
+    ],
+  },
   {
     version: "2.344.1",
     date: "2026-09-08",
