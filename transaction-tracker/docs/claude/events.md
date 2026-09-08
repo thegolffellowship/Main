@@ -1869,3 +1869,33 @@ read-only bridge command `scoring-msg-templates[:<name fragment>]`, which
 reports each template's stored body and any unfilled `[BLANKS]` in it.
 
 Tests: `test_message_presets.py`.
+
+### The composer is a plain-text editor (v2.346.0)
+
+> *"Any way to make that editor a regular text editor rather than a HTML
+> editor? Also can you add spaces between the paragraphs as a standard?"*
+
+`#compose-body` holds PLAIN TEXT. A blank line starts a paragraph;
+`**stars**` make bold, which is the only markup the templates use. The
+HTML is generated on the way out by `composeTextToHtml()`, and a stored
+template is converted in by `composeHtmlToText()`. `#compose-html-mode`
+("Edit HTML") turns the conversion off; flipping it converts what is
+already in the box, so the two views never disagree.
+
+**Every read of the body goes through `composeBodyHtml()`** — send,
+preview and save-as-template. A path that reads `.value` directly would
+mail raw markdown; `test_compose_plaintext.js` counts the direct reads.
+
+Text-mode input is HTML-escaped, so an `&` in a venue name (Max &
+Louie's) cannot break the message. The escape hatch for real markup is
+the switch, not a lucky parse.
+
+**Paragraph spacing is a house standard applied on the SERVER**
+(`normalize_email_html()` in fetcher.py, `EMAIL_P_STYLE`). It gives every
+`<p>` that carries no style of its own `margin:0 0 1em`, and runs on both
+the send and preview paths — so templates written before the standard
+existed get the spacing too, and the preview shows what will actually
+send. A `<p>` that already has a style attribute is left alone; that is
+somebody stating an intent.
+
+Tests: `test_compose_plaintext.js`.

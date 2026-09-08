@@ -2166,12 +2166,16 @@
                         <button type="button" class="btn btn-secondary compose-var-btn" data-var="manager_name" style="font-size:0.7rem; padding:0.15rem 0.4rem;" title="Chapter manager's name, from the chapter_managers setting">{manager_name}</button>
                         <button type="button" class="btn btn-secondary compose-var-btn" data-var="manager_phone" style="font-size:0.7rem; padding:0.15rem 0.4rem;" title="Chapter manager's cell, from the chapter_managers setting">{manager_phone}</button>
                     </div>
-                    <textarea id="compose-body" class="modal-input" rows="8" style="margin-top:0.2rem; font-family:inherit; resize:vertical;" placeholder="Type your message here... Use the variable buttons above to insert personalization tags."></textarea>
+                    <textarea id="compose-body" class="modal-input" rows="8" style="margin-top:0.2rem; font-family:inherit; resize:vertical;" placeholder="Type your message here. Leave a blank line between paragraphs; wrap **words in stars** to bold them. Use the buttons above to insert personalization tags."></textarea>
                 </label>
                 <div style="display:flex; gap:0.5rem; margin-bottom:0.5rem;">
                     <button type="button" id="compose-preview-btn" class="btn btn-secondary" style="font-size:0.75rem; padding:0.25rem 0.6rem;">Preview</button>
                     <label style="font-size:0.78rem; display:flex; align-items:center; gap:0.3rem; cursor:pointer;">
                         <input type="checkbox" id="compose-save-template"> Save as template
+                    </label>
+                    <label style="font-size:0.78rem; display:flex; align-items:center; gap:0.3rem; cursor:pointer; margin-left:auto; color:var(--text-muted);"
+                           title="Off: write plain text \u2014 a blank line starts a new paragraph and **stars** make bold. On: edit the raw HTML.">
+                        <input type="checkbox" id="compose-html-mode"> Edit HTML
                     </label>
                 </div>
                 <div id="compose-preview-box" style="display:none; border:1px solid var(--border); border-radius:var(--radius); padding:0.75rem; margin-bottom:0.75rem; background:var(--bg-card); font-size:0.82rem;">
@@ -10357,6 +10361,86 @@
         document.getElementById("compose-msg-overlay").style.display = "none";
     }
 
+    // ── Plain-text message editor ────────────────────────────────────────────
+    // Kerry 2026-09-08: "Any way to make that editor a regular text editor
+    // rather than a HTML editor?" The textarea now holds PLAIN TEXT and the
+    // HTML is generated on the way out. A blank line starts a paragraph;
+    // **stars** make bold, which is the only markup the templates actually
+    // use. "Edit HTML" turns the conversion off for anyone who needs the
+    // raw markup.
+    //
+    // Paragraph spacing is written INTO the markup rather than left to the
+    // client's default, because mail clients disagree about <p> margins and
+    // several strip them outright ("add spaces between the paragraphs as a
+    // standard"). The server applies the same style to templates written
+    // before this existed — see normalize_email_html().
+    const COMPOSE_P_STYLE = "margin:0 0 1em;";
+
+    function composeHtmlMode() {
+        const el = document.getElementById("compose-html-mode");
+        return !!(el && el.checked);
+    }
+
+    function composeHtmlToText(html) {
+        let t = String(html || "");
+        t = t.replace(/<\s*br\s*\/?>/gi, "\n");
+        t = t.replace(/<\s*\/\s*p\s*>/gi, "\n\n");
+        t = t.replace(/<\s*li[^>]*>/gi, "\u2022 ");
+        t = t.replace(/<\s*\/\s*(div|h[1-6]|li|tr|ul|ol)\s*>/gi, "\n");
+        t = t.replace(/<\s*(strong|b)(\s[^>]*)?>/gi, "**")
+             .replace(/<\s*\/\s*(strong|b)\s*>/gi, "**");
+        t = t.replace(/<\s*(em|i)(\s[^>]*)?>/gi, "_")
+             .replace(/<\s*\/\s*(em|i)\s*>/gi, "_");
+        t = t.replace(/<[^>]+>/g, "");
+        // Decode entities via the DOM rather than a hand-rolled table.
+        const ta = document.createElement("textarea");
+        ta.innerHTML = t;
+        t = ta.value;
+        return t.replace(/[ \t]+\n/g, "\n").replace(/\n{3,}/g, "\n\n").trim();
+    }
+
+    function composeTextToHtml(text) {
+        const esc = x => String(x).replace(/&/g, "&amp;")
+                                  .replace(/</g, "&lt;")
+                                  .replace(/>/g, "&gt;");
+        return String(text || "").replace(/\r\n/g, "\n")
+            .split(/\n\s*\n/)
+            .map(block => {
+                const raw = block.trim();
+                if (!raw) return "";
+                let h = esc(raw)
+                    .replace(/\*\*([^*\n]+)\*\*/g, "<strong>$1</strong>")
+                    .replace(/\n/g, "<br>");
+                return `<p style="${COMPOSE_P_STYLE}">${h}</p>`;
+            })
+            .filter(Boolean).join("");
+    }
+
+    /** What the textarea currently means, as HTML, whatever mode it is in. */
+    function composeBodyHtml() {
+        const raw = document.getElementById("compose-body").value;
+        return composeHtmlMode() ? raw : composeTextToHtml(raw);
+    }
+
+    /** Put a stored (HTML) body into the textarea in the current mode. */
+    function composeSetBody(html) {
+        document.getElementById("compose-body").value =
+            composeHtmlMode() ? (html || "") : composeHtmlToText(html);
+    }
+
+    // Flipping the switch converts what is already there, so nothing is lost
+    // and the two views always describe the same message.
+    document.addEventListener("DOMContentLoaded", () => {
+        const modeEl = document.getElementById("compose-html-mode");
+        if (!modeEl) return;
+        modeEl.addEventListener("change", () => {
+            const ta = document.getElementById("compose-body");
+            ta.value = modeEl.checked
+                ? composeTextToHtml(ta.value)   // text → html
+                : composeHtmlToText(ta.value);  // html → text
+        });
+    });
+
     // Template selection handler
     document.getElementById("compose-template").addEventListener("change", function() {
         const tplId = parseInt(this.value);
@@ -10364,7 +10448,7 @@
         const tpl = composeTemplates.find(t => t.id === tplId);
         if (!tpl) return;
         document.getElementById("compose-subject").value = tpl.subject || "";
-        document.getElementById("compose-body").value = tpl.html_body || "";
+        composeSetBody(tpl.html_body || "");
         // A template that only makes sense for one audience selects it —
         // but only from the default, so a deliberate choice is never
         // overwritten (Kerry 2026-09-08).
@@ -10417,7 +10501,7 @@
     // Preview button
     document.getElementById("compose-preview-btn").addEventListener("click", async function() {
         const subject = document.getElementById("compose-subject").value;
-        const body = document.getElementById("compose-body").value;
+        const body = composeBodyHtml();
         const ev = allEvents.find(e => e.item_name === composeEventName);
         try {
             const resp = await fetch("/api/messages/preview", {
@@ -10451,7 +10535,7 @@
     // Send button
     document.getElementById("compose-send-btn").addEventListener("click", async function() {
         const subject = document.getElementById("compose-subject").value.trim();
-        const body = document.getElementById("compose-body").value.trim();
+        const body = composeBodyHtml().trim();
         const audience = document.getElementById("compose-audience").value;
         const templateId = parseInt(document.getElementById("compose-template").value) || null;
         const saveAsTemplate = document.getElementById("compose-save-template").checked;

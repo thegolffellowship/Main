@@ -284,6 +284,7 @@ from email_parser.timezone_utils import now_central, today_central_str
 from email_parser.fetcher import (
     fetch_transaction_emails, fetch_all_emails, fetch_email_by_id,
     send_mail_graph, render_msg_template, send_bulk_emails,
+    normalize_email_html,
 )
 from email_parser.parser import parse_email, parse_emails, _strip_html
 from email_parser.expense_parser import (
@@ -7676,6 +7677,11 @@ def api_send_messages():
     if not subject_tpl or not body_tpl:
         return jsonify({"error": "subject and html_body are required (directly or via template)"}), 400
 
+    # House paragraph spacing, applied HERE rather than in the composer so
+    # templates written before the standard existed get it too (Kerry
+    # 2026-09-08: "add spaces between the paragraphs as a standard").
+    body_tpl = normalize_email_html(body_tpl)
+
     # Build event variables for template rendering
     all_events = get_all_events()
     event_info = next((e for e in all_events if (e["item_name"] or "").lower() == event_name.lower()), {})
@@ -7960,6 +7966,7 @@ def api_preview_message():
         "course": data.get("course", "Sample Course"),
         "chapter": data.get("chapter", "San Antonio"),
     }
+    body_tpl = normalize_email_html(body_tpl)
     _pmgr = get_chapter_manager(variables["chapter"])
     variables["manager_name"] = _pmgr["name"] or "(no manager on file)"
     variables["manager_phone"] = _pmgr["phone"] or "(no number on file)"

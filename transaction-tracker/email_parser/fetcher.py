@@ -2,6 +2,7 @@
 
 import logging
 import os
+import re
 import time
 from datetime import datetime, timedelta
 
@@ -448,6 +449,31 @@ def render_msg_template(template_text: str, variables: dict) -> str:
     for key, value in variables.items():
         result = result.replace("{" + key + "}", str(value or ""))
     return result
+
+
+# Paragraph spacing is a HOUSE STANDARD, not a per-template decision
+# (Kerry 2026-09-08: "can you add spaces between the paragraphs as a
+# standard?"). Mail clients disagree about the default <p> margin and
+# several strip it outright, so the gap is written into the markup.
+EMAIL_P_STYLE = "margin:0 0 1em;"
+
+_BARE_P_RE = re.compile(r"<p(?=[\s>])(?![^>]*\bstyle\s*=)", re.I)
+
+
+def normalize_email_html(html: str) -> str:
+    """Give every <p> that carries no style of its own the house spacing.
+
+    Applied on the SEND path rather than only in the composer, so the
+    templates written before this existed get the spacing too, and so a
+    message assembled anywhere else in the app cannot quietly skip it.
+    A <p> that already has a style attribute is left alone — that is
+    somebody stating an intent.
+    """
+    if not html:
+        return html or ""
+    out = _BARE_P_RE.sub(f'<p style="{EMAIL_P_STYLE}"', html)
+    # A bare "<p>" has no attribute to sit before, so it needs its own pass.
+    return out.replace("<p>", f'<p style="{EMAIL_P_STYLE}">')
 
 
 def send_bulk_emails(

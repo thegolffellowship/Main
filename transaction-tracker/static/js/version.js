@@ -1,5 +1,15 @@
-window.TGF_VERSION = "2.345.2";
+window.TGF_VERSION = "2.346.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.346.0",
+    date: "2026-09-08",
+    changes: [
+      "The message body is a plain text box now, not an HTML editor. Kerry: 'Any way to make that editor a regular text editor rather than a HTML editor?' You write the message the way you would write it anywhere else \u2014 a blank line starts a new paragraph, and **words wrapped in stars** come out bold, which is the only formatting the templates actually use. The HTML is built when you preview or send. Loading a template converts it the other way, so the fellowship note now reads as sentences instead of tags.",
+      "An 'Edit HTML' switch is there for when you want the raw markup. Flipping it converts whatever is already in the box rather than clearing it, so both views always describe the same message.",
+      "Anything typed into the plain box is escaped on the way out, so an ampersand in a restaurant name \u2014 Max & Louie's \u2014 can no longer break the email.",
+      "Blank lines between paragraphs are now the house standard, applied on the server. Mail clients disagree about paragraph spacing and several strip it, so the gap is written into the message itself. It applies to every template, including the ones written before this existed, and the preview shows exactly what will send.",
+    ],
+  },
   {
     version: "2.345.2",
     date: "2026-09-08",
