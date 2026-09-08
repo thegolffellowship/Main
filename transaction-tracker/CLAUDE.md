@@ -519,6 +519,18 @@ If a new page needs wrapping table text, override with
 contests.html) and set nowrap back inline on the specific cells that need it
 (dates, numbers).
 
+**The inheritance is the trap, and the fix belongs on the CONTAINER
+(v2.336.0, Kerry 2026-09-08).** The pairings view renders inside
+`.event-detail-row > td`, so every block in it inherited nowrap.
+`.pairing-player-name` carried a private `white-space: normal`, which
+made the panel look fine — until a ~1,100-character explainer was added
+for the requests list. It laid out as one line, grew the cell, grew the
+groups grid with it, and stretched the auto-fit columns to double width;
+the symptom read as "the Requests panel breaks the layout". When a panel
+renders inside a `td`, declare `white-space: normal` on the PANEL and
+let short fixed-width numeric cells opt back out — never on the one
+element that happens to hurt today. Test: `test_pairings_wrap.js`.
+
 **Companion guard (v2.190.0, mobile wave 1):** `body { overflow-x: clip }`
 is now global in dashboard.css — an unwrapped wide table can no longer drag
 the whole page sideways on a phone. `clip` (not `hidden`) so body never

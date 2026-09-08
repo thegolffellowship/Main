@@ -1,5 +1,15 @@
-window.TGF_VERSION = "2.335.0";
+window.TGF_VERSION = "2.336.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.336.0",
+    date: "2026-09-08",
+    changes: [
+      "The pairings view no longer changes shape when Requests is open. Kerry: 'Should be the same as when requests is closed.' It was: three group columns became two fat ones running off the right edge.",
+      "The cause was not the Requests panel. The whole pairings view renders inside a table cell, and dashboard.css declares a global nowrap on table cells that BLOCK CHILDREN INHERIT. The requests explainer is about 1,100 characters, could not wrap, and laid out as one enormous line \u2014 which grew the cell, grew the groups grid with it, and stretched the auto-fit columns to roughly double width. Closing Requests removed the long text, so the layout looked fine again and the panel took the blame.",
+      "Permission to wrap now sits on the panel, so every block inside it inherits it \u2014 requests, seeds, swap bar and group cards alike. The player-name element already carried that override privately, which is exactly why the next long block added to the panel walked into the same trap.",
+      "The narrow stat columns opt back out, so '50-64' can never break at its hyphen.",
+    ],
+  },
   {
     version: "2.335.0",
     date: "2026-09-07",

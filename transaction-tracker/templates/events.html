@@ -240,7 +240,38 @@
             font-weight: 700;
         }
         /* ── Pairings panel ─────────────────────────────────── */
-        .pairings-panel { padding: 0.5rem 0; }
+        /* WRAPPING IS THE PANEL'S JOB, not each element's (Kerry
+           2026-09-08: "fix pairings view when Requests is open — should
+           be the same as when requests is closed").
+
+           The whole panel renders inside .event-detail-row > td, and
+           dashboard.css declares a global `tbody td { white-space:
+           nowrap }` that BLOCK CHILDREN INHERIT. With Requests open, the
+           panel's explainer paragraph is ~1,100 characters that could
+           not wrap, so it laid out as one enormous line; the cell grew
+           to fit it, the groups grid grew with the cell, and its
+           auto-fit columns stretched to roughly twice their width — two
+           fat groups running off the right edge instead of three that
+           fit. Closing Requests removed the long text and the layout
+           looked correct again, which is why it read as a Requests bug.
+
+           `.pairing-player-name` already carried this override. It was
+           attached to the one element that visibly suffered rather than
+           to the container, so every later block added to the panel
+           inherited the hazard — the requests explainer being the first
+           one long enough to show it. Declared here once, it covers the
+           requests panel, the seeds panel, the swap bar and the group
+           cards; the short fixed-width numeric columns inside the cards
+           are unaffected by permission to wrap. Anything that genuinely
+           must not break sets nowrap on itself. */
+        .pairings-panel { white-space: normal; padding: 0.5rem 0; }
+        /* The narrow fixed-width stat columns opt back OUT: "50-64" has
+           a hyphen the browser may break at, and these are the cells
+           CLAUDE.md means when it says set nowrap back on dates and
+           numbers. */
+        .pairings-panel .pairing-points,
+        .pairings-panel .pairing-hcp,
+        .pairings-panel .pairing-tee { white-space: nowrap; }
         .pairings-controls {
             display: flex; align-items: center; gap: 0.5rem;
             flex-wrap: wrap; padding: 0.35rem 0 0.6rem;
