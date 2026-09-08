@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.338.1";
+window.TGF_VERSION = "2.339.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.339.0",
+    date: "2026-09-08",
+    changes: [
+      "Rosters and pairings now show a player's real name, not the name their order happened to arrive under. Kerry: 'Adam Baker came in as James Baker. That should not be. They should have merged.' They HAD merged \u2014 one customer record, with James Baker already recorded as an alias. What was wrong was only the label: every order stores a snapshot of the name it came in with, and his 9/7 registration came in as James.",
+      "Fixed in the payload that feeds the roster, the pairings sheet, the GG export and the print pack, rather than on the one screen where it was noticed \u2014 the same wrong name was on all of them.",
+      "What the order actually said is kept alongside as customer_order_name. The snapshot is evidence of what was typed; it was never the identity.",
+    ],
+  },
   {
     version: "2.338.1",
     date: "2026-09-08",

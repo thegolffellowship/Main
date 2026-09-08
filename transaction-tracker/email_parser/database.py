@@ -22465,10 +22465,42 @@ def mark_expense_email_seen(email_uid: str, classified_as: str | None = None,
 
 
 def get_all_items(db_path: str | Path | None = None) -> list[dict]:
-    """Return all item rows ordered by order_date descending."""
+    """Return all item rows ordered by order_date descending.
+
+    `customer` is the CANONICAL name wherever the row resolves to a
+    customer (Kerry 2026-09-08: "Adam Baker came in as James Baker. That
+    should not be. They should have merged"). They HAD merged — one
+    customer_id, with "James Baker" already recorded as a name alias.
+    What was wrong was the label: every order stores a snapshot of the
+    name it arrived under, his 9/7 registration came in as James, and
+    the roster and pairings rendered that snapshot.
+
+    Fixing it here rather than on the roster is deliberate. This payload
+    feeds the roster, the pairings sheet, the GG export and the print
+    pack, so patching the one screen where it was noticed would have left
+    the same wrong name on the others. The as-ordered value is kept as
+    `customer_order_name` for anything that genuinely needs to know what
+    the order said — the identity-drift doc's point is that the snapshot
+    is evidence, not identity.
+    """
     with _connect(db_path) as conn:
-        rows = conn.execute("SELECT * FROM items ORDER BY order_date DESC, order_time DESC, id DESC").fetchall()
-        return [dict(row) for row in rows]
+        rows = conn.execute("""
+            SELECT i.*,
+                   i.customer AS customer_order_name,
+                   TRIM(COALESCE(c.first_name, '') || ' '
+                        || COALESCE(c.last_name, '')) AS _canon
+            FROM items i
+            LEFT JOIN customers c ON c.customer_id = i.customer_id
+            ORDER BY i.order_date DESC, i.order_time DESC, i.id DESC
+        """).fetchall()
+        out = []
+        for row in rows:
+            d = dict(row)
+            canon = (d.pop("_canon", "") or "").strip()
+            if canon:
+                d["customer"] = canon
+            out.append(d)
+        return out
 
 
 def get_item_stats(db_path: str | Path | None = None) -> dict:
