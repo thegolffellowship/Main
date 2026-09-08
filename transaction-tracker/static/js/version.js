@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.345.1";
+window.TGF_VERSION = "2.345.2";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.345.2",
+    date: "2026-09-08",
+    changes: [
+      "Robert Straiton's cell is now on his customer record, not only in the chapter-manager setting. Kerry: 'It definitely should be on his customer record.' It goes in through the same path the Customers page uses, so the number is validated and the canonical customers row is the source of truth \u2014 not written straight into the table.",
+    ],
+  },
   {
     version: "2.345.1",
     date: "2026-09-08",

@@ -2603,6 +2603,45 @@ def _scoring_dispatch(url: str, extract: str):
                                "create_sql": _sql["sql"],
                                "columns": _cols, "indexes": _idx},
                               indent=2, default=str)
+        if cmd == "scoring-customer-set":
+            # "<customer_id>|<field>|<value>" — set one personal-info field
+            # on a customer, through update_customer_info so the items rows
+            # and the canonical customers row stay in step (it treats
+            # customers.phone / customer_emails as the source of truth).
+            # Added 2026-09-08 for Robert Straiton's cell, which Kerry gave
+            # verbally and which existed nowhere in the database.
+            # The field whitelist lives in update_customer_info; anything
+            # outside it is silently dropped there, so this reports the
+            # before/after value rather than just "ok".
+            _p = [x.strip() for x in (arg or "").split("|", 2)]
+            if len(_p) < 3 or not _p[0].isdigit():
+                return json.dumps({"error": "usage scoring-customer-set:"
+                                            "<customer_id>|<field>|<value>"})
+            _cid, _field, _val = int(_p[0]), _p[1], _p[2]
+            with db._connect() as _c:
+                _row = _c.execute(
+                    "SELECT customer_id, first_name, last_name, phone, chapter "
+                    "FROM customers WHERE customer_id = ?", (_cid,)).fetchone()
+            if not _row:
+                return json.dumps({"error": f"no customer {_cid}"})
+            _name = f"{_row['first_name']} {_row['last_name']}".strip()
+            _before = dict(_row)
+            try:
+                _n = db.update_customer_info(_name, {_field: _val},
+                                             customer_id=_cid)
+            except ValueError as _e:
+                return json.dumps({"error": str(_e), "customer": _name})
+            with db._connect() as _c:
+                _after = dict(_c.execute(
+                    "SELECT customer_id, first_name, last_name, phone, chapter "
+                    "FROM customers WHERE customer_id = ?", (_cid,)).fetchone())
+            _audit("customer-set",
+                   f"cid={_cid} {_name}: {_field} -> {_val!r} "
+                   f"({_n} item row(s))")
+            return json.dumps({"customer": _name, "field": _field,
+                               "item_rows_updated": _n,
+                               "before": _before, "after": _after,
+                               "changed": _before != _after}, indent=2)
         if cmd == "scoring-msg-templates":
             # Read-only: the message-template shelf as PRODUCTION actually
             # holds it. Added 2026-09-08 — the system-template seed only
