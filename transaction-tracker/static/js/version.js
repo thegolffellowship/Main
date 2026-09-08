@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.346.0";
+window.TGF_VERSION = "2.346.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.346.1",
+    date: "2026-09-08",
+    changes: [
+      "Documentation only, no behavior change. The whole day is written up as a session record \u2014 what shipped, what was verified against live data rather than assumed, and the three live hazards found while building things nobody asked about them: an unrecognised send audience that would have mailed the entire roster, a template seed that could never deliver a new or revised template to a running site, and a template blank that could have reached a member. Also the one report I could not reproduce and left open.",
+    ],
+  },
   {
     version: "2.346.0",
     date: "2026-09-08",

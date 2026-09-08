@@ -35,6 +35,7 @@ Before working on a specific area, Read the relevant sub-doc:
 - `docs/claude/hubspot-decommission-directive.md` (**Kerry's HubSpot decommission + Meta-direct lead ingest scope, 2026-09-03** — live HubSpot inventory (1,453 contacts back to Feb 2023, 469 emails, 118 tasks, 24 calls, 15 hand-written notes, 0 deals), extraction-as-a-gate, dual-run cutover, and the definition of "safely viable". READ BEFORE touching the lead pipe)
 - `docs/claude/ux-directive-work-surfaces.md` (**Kerry's UX directive to CA + CD, 2026-09-03** — the Lead Center header accretion problem counted, the job-to-be-done, the three-tier disclosure target, deliverables for design-claude, acceptance criteria, and the standing tier rule for every future control. Pilot = Lead Center, pattern then rolls to Events / Transactions / Customers. READ BEFORE adding any control to a work surface)
 - `docs/claude/leads.md` (NEW LEADS queue — Facebook/Meta leads polled from HubSpot every 45 min, 48-hour-touch audit at `/admin/leads`, email pings to Kerry + chapter manager, editable survey selections with re-sync-proof overrides, ratified first-touch SMS presets (#388/#389) picked per lead behind the 💬 Text ▾; `email_parser/leads.py`; campaign entity + 📊 Stats view with CPL / CPP / CPMem current + 30-day trailing (#391, `email_parser/campaigns.py`, Meta insights idle until `META_ACCESS_TOKEN`); idle until `HUBSPOT_TOKEN` env is set. Also the Tracker→Brevo member-status sync — `email_parser/brevo.py`, nightly, idle until `BREVO_API_KEY` is set)
+- `docs/claude/handoff-2026-09-08-pairings-fellowship-composer.md` (**session record, 2026-09-08, v2.336.0→v2.346.0** — the GG pairing ingests applied, the pairings roster that was not the roster (Michelle Delcarmen), open-seat picker, actions menus lifted out of the table's paint order, the FELLOWSHIP filter + Message Players preset, chapter managers as a dial, and the plain-text composer. Also the THREE live hazards found on the way: an unrecognised audience mailed the whole roster, the system-template seed could never deliver a new or revised template, and a template blank could reach a member. Read §7 before touching message templates)
 - `docs/claude/event-recaps.md` (**news-reporter event recaps for the GG roster blast — Kerry's house style of record**: comparative highlighting, MVP-money-only dollars + "% cashed" angle, Gross/Net(±) score format, humor-borne buy-in nudges, new-member spotlights, fellowship close. Read BEFORE writing any recap)
 
 ## Guiding Principles
@@ -259,7 +260,12 @@ No Python or local install needed — Claude Desktop connects directly to Railwa
   `_ensure_pairing_tables()` on first pairing operation so existing live deployments
   self-migrate. UI has four modes: Player swap, Cart Pair swap, Group swap, and
   **Move** (place a player into a group without swapping). An **Unassigned Players**
-  panel appears below groups for any registered players not yet in a group.
+  panel appears below groups for anyone on the ROSTER not yet in a group — which
+  since v2.342.0 includes GG-RSVP-only players who have no `items` row, merged in
+  client-side as `state.rosterExtra` because the unmatched-RSVP derivation lives in
+  the page. Membership is keyed with `pairPersonKey()`, never a raw name string.
+  Clicking an empty `— open —` seat with nothing selected opens a picker of those
+  players. See `docs/claude/pairings.md`.
 - **Boot-time self-healing** — `init_db()` runs idempotent repair functions on every
   startup. Current repairs: `_repair_chalfant_attribution()` and
   `_repair_massey_attribution()` re-attribute transactions absorbed by bad customer
@@ -345,7 +351,7 @@ No Python or local install needed — Claude Desktop connects directly to Railwa
 - `email_parser/memberships.py` — `customer_memberships` schema/backfill, renewal detection, reminder email templates, daily scheduler job, signed roster opt-in/out tokens
 - `email_parser/match_play.py` — pure Match Play engine (versioned-config evaluation: structure, seeded bracket w/ byes, exact-cents payout ladders); seed = the ratified 29-column matrix; tests in `test_match_play.py`; see `docs/claude/game-engine.md`
 - `email_parser/live_scoring.py` — pure live-scoring engine (Individual Net/Gross, Team Net, Skins, MVP, CTP/HIO) computed from RAW GROSS HOLE SCORES alone; rules-as-data in `SEED_LIVE_SCORING_CONFIG` from the ratified side-games spec; reuses `compute_hole_derivations` + `handicap_calc.allocate_strokes` rather than reimplementing them. Powers the admin Test Center; tests in `test_live_scoring.py` / `test_live_scoring_center.py`; see `docs/claude/live-scoring-test-center.md`
-- `email_parser/fetcher.py` — Microsoft Graph email fetching
+- `email_parser/fetcher.py` — Microsoft Graph email fetching; also `render_msg_template` and **`normalize_email_html()` / `EMAIL_P_STYLE`** (v2.346.0 — the house paragraph-spacing standard for outgoing mail, applied on the SEND and PREVIEW paths so templates predating it get it too)
 - `email_parser/report.py` — Daily digest email builder + sender
 - `email_parser/rsvp_parser.py` — Golf Genius RSVP email parser (regex, no AI)
 - `templates/index.html` — Transactions dashboard

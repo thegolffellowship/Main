@@ -1,4 +1,4 @@
-# State of the Tracker — early September 2026 (Platform-facing brief)
+# State of the Tracker — September 2026 (Platform-facing brief)
 
 Audience: the claude.ai "The Golf Fellowship" Project, where TGF Platform
 planning has lived for the past six months. Purpose: catch that planning
@@ -271,6 +271,51 @@ only works on Kerry's iPhone), `railway-api-setup.md`,
 **Live credentials now set:** `META_ACCESS_TOKEN` (non-expiring System
 User, read-only), HubSpot service key widened to 9 scopes, and
 `Files.ReadWrite.All` consented on the Azure app.
+
+## The September 8 wave (v2.336 → v2.346) — game-day surfaces
+
+A single-day wave driven by Kerry's directives during the run-up to the
+2026-09-08 events. Full record with verbatim quotes and verification:
+`docs/claude/handoff-2026-09-08-pairings-fellowship-composer.md`.
+
+**Pairings.** The panel's roster was built from the `items` table, so a
+player who only RSVP'd in Golf Genius was invisible to it while the
+Players tab showed them — the two surfaces disagreed about who was
+playing. They now share a roster. Open seats became a first-class entry
+point: click one and pick from the players not yet in a group. Person
+matching moved onto `pairPersonKey()`, off raw name strings. Three GG
+ingests applied (135 pairs), with both TGF Championship rounds coexisting
+on one event under the v2.341.0 per-round index.
+
+**Fellowship outreach, end to end.** `items.fellowship` was captured on
+every order and readable one player at a time. It is now a roster filter
+badge and a Message Players audience, with a system template that names
+the venue and asks anyone dropping to say so, so the restaurant headcount
+stays right. Chapter managers (name + cell) became the `chapter_managers`
+dial rather than a sentence inside a template — one template serves both
+chapters and a third is a dial edit.
+
+**The composer became a plain-text editor.** It held raw HTML, so writing
+a member email meant typing `<p>` tags. Blank line for a paragraph,
+`**stars**` for bold, HTML generated on the way out, with an Edit HTML
+escape hatch. Paragraph spacing became a server-side house standard so
+every template — including ones predating it — carries it.
+
+**Three live hazards closed, none of them requested.** An unrecognised
+`audience` on `/api/messages/send` fell through to "include this player"
+and would have mailed the entire roster. The system-template seed ran only
+against an empty table, so no template added after a deployment first
+booted could ever reach it — the backfill rule in reverse; revising the
+wording of an existing one then needed its own mechanism, which only
+replaces a body still verbatim as-shipped. And a template blank
+(`[MEETING SPOT]`) or an unknown `{tag}` can no longer leave the building
+— the #424 lesson applied at the boundary for every template, not the one
+that reintroduced it.
+
+**Two new bridge commands:** `scoring-msg-templates` (read the live
+template shelf — added precisely because "it is in the code" said nothing
+about production) and `scoring-customer-set` (write one personal-info
+field through the validated path).
 
 ## Plan of record: native app + website
 
