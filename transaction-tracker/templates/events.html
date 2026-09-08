@@ -236,6 +236,23 @@
             border-color: var(--primary-hover);
             box-shadow: inset 0 0 0 2px rgba(255,255,255,0.45);
         }
+        /* Fellowship request (Kerry 2026-09-08). Its own tint so it reads
+           as a different QUESTION from the games badges beside it, not as
+           another game type. Active state keeps the shared orange fill. */
+        .game-stat-badge.fellowship-badge {
+            border-color: #86a7c4;
+            color: #34617f;
+            background: #eef4f9;
+        }
+        .game-stat-badge.fellowship-badge:hover {
+            border-color: #34617f;
+            color: #24485f;
+        }
+        .game-stat-badge.fellowship-badge.active {
+            background: #E87C3E;
+            color: #fff;
+            border-color: #E87C3E;
+        }
         .game-stat-badge strong {
             font-weight: 700;
         }
@@ -3256,6 +3273,7 @@
                         badgesHtml += `<span class="game-stat-badge ${activeFilter === 'NET' ? 'active' : ''}" data-event-id="${ev.id}" data-filter="NET">NET <strong>${stats.net}</strong></span>`;
                         badgesHtml += `<span class="game-stat-badge ${activeFilter === 'GROSS' ? 'active' : ''}" data-event-id="${ev.id}" data-filter="GROSS">GROSS <strong>${stats.gross}</strong></span>`;
                         badgesHtml += `<span class="game-stat-badge ${activeFilter === 'NO GAMES' ? 'active' : ''}" data-event-id="${ev.id}" data-filter="NO GAMES">NONE <strong>${stats.noGames}</strong></span>`;
+                        badgesHtml += fellowshipBadgeHtml(ev, registrants, activeFilter);
                         badgesHtml += '</span>';
                     }
                 }
@@ -3283,6 +3301,7 @@
                     if (activeFilter) {
                         const mAx = gamesAxisFor(ev.id);
                         filteredRegs = mobileActive.filter(r => {
+                            if (activeFilter === FELLOWSHIP_FILTER) return isFellowshipYes(r);
                             if (mAx) return axisFilterMatch(ev, r, activeFilter);
                             const type = getEffectiveGameType(r, registrants);
                             if (activeFilter === "NET") return type === "NET" || type === "BOTH";
@@ -4093,6 +4112,34 @@
             else { noGames++; }
         });
         return { players: parents.length - notPlaying, net, gross, noGames, notPlaying };
+    }
+
+    // ── Fellowship request filter (Kerry 2026-09-08) ─────────────────────────
+    // "Can you give me a button to filter/list those who've selected YES for
+    // FELLOWSHIP?" The answer lives on items.fellowship as 'YES' / 'NO' /
+    // null and was only visible one player at a time behind the info icon.
+    // Matched on a leading Y so a 'Yes' from a future form still counts.
+    const FELLOWSHIP_FILTER = "FELLOWSHIP";
+    const _FELLOW_INACTIVE = ["credited", "refunded", "transferred", "wd"];
+
+    function isFellowshipYes(r) {
+        return /^\s*y/i.test(String(r && r.fellowship || ""));
+    }
+
+    function countFellowshipYes(registrants) {
+        return (registrants || []).filter(r =>
+            !r.parent_item_id
+            && !_FELLOW_INACTIVE.includes(r.transaction_status)
+            && isFellowshipYes(r)).length;
+    }
+
+    function fellowshipBadgeHtml(ev, registrants, activeFilter) {
+        const n = countFellowshipYes(registrants);
+        if (!n) return "";
+        return `<span class="game-stat-badge fellowship-badge ${activeFilter === FELLOWSHIP_FILTER ? 'active' : ''}"`
+            + ` data-event-id="${ev.id}" data-filter="${FELLOWSHIP_FILTER}"`
+            + ` title="Players who answered YES to the fellowship request">`
+            + `FELLOWSHIP <strong>${n}</strong></span>`;
     }
 
     function getRsvpForItem(itemId, eventName) {
@@ -7275,6 +7322,7 @@
                 html += `<span class="game-stat-badge ${activeFilter === 'NO GAMES' ? 'active' : ''}" data-event-id="${ev.id}" data-filter="NO GAMES">NONE <strong>${stats.noGames}</strong></span>`;
                 html += '</span>';
             }
+            html += fellowshipBadgeHtml(ev, registrants, activeFilter);
             if (rsvps.length) {
                 html += `<span class="game-stat-badge rsvp-stat-badge" style="cursor:default;">GG <strong>${playingRsvps.length}</strong> / <strong style="color:var(--red);">${notPlayingRsvps.length}</strong></span>`;
             }
@@ -7336,6 +7384,9 @@
         if (activeFilter) {
             const ax = gamesAxisFor(ev.id);
             filtered = activePlayers.filter(r => {
+                // Fellowship is orthogonal to the games axis, so it is
+                // answered before the axis branch swallows the filter.
+                if (activeFilter === FELLOWSHIP_FILTER) return isFellowshipYes(r);
                 if (ax) return axisFilterMatch(ev, r, activeFilter);
                 const type = getEffectiveGameType(r, registrants);
                 if (activeFilter === "NET") return type === "NET" || type === "BOTH";

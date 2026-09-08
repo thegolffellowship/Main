@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.342.0";
+window.TGF_VERSION = "2.343.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.343.0",
+    date: "2026-09-08",
+    changes: [
+      "A FELLOWSHIP badge on the event roster filters to the players who answered YES to the fellowship request. Kerry: 'Can you give me a button to filter/list those who've selected YES for FELLOWSHIP?' The answer was already stored on every order, but it could only be read one player at a time by expanding a row \u2014 there was no way to see the group. The badge carries the count, hides itself when nobody said yes, and sits beside the game badges in its own tint so it does not read as another game type.",
+      "It filters correctly on day-games events too. Those events short-circuit the roster filter to the YES/SAT/SUN/NO axis, which would have swallowed the fellowship filter and quietly returned the wrong roster \u2014 fellowship is answered before that branch on both desktop and mobile.",
+    ],
+  },
   {
     version: "2.342.0",
     date: "2026-09-08",

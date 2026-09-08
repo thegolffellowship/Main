@@ -1751,3 +1751,29 @@ RIGHT — a trailing segment is consumed only when it's a digits flights
 count or a known game name; everything else stays part of the event).
 Any new bridge command or JS cache key that carries an event name must
 follow the same pattern (v2.129.x rpartition precedent).
+
+## FELLOWSHIP filter badge (v2.343.0, Kerry 2026-09-08)
+
+> *"Can you give me a button to filter/list those who've selected YES for
+> FELLOWSHIP?"*
+
+`items.fellowship` holds `'YES'` / `'NO'` / NULL, captured at order time.
+It was rendered only inside a player's expandable detail row, so the only
+way to see who wanted a fellowship pairing was to expand every row in the
+roster one at a time.
+
+A `FELLOWSHIP <n>` badge now sits in the roster's sub-filter row (desktop
+and mobile) and filters the table to those players. It hides itself when
+the count is zero. `isFellowshipYes()` matches on a leading `Y` so a
+`Yes` from a future form still counts; `countFellowshipYes()` excludes
+child payment rows and credited/refunded/transferred/WD players, matching
+how every other roster count is computed.
+
+**The trap this had to avoid:** on day-games events (`gamesAxisFor(ev.id)`)
+the roster filter short-circuits to `axisFilterMatch()` on its first line,
+which reads `activeFilter` as one of YES/SAT/SUN/NO. A fellowship filter
+arriving there would have silently produced a games-axis roster. Both the
+desktop and mobile filters answer `FELLOWSHIP_FILTER` above that branch.
+Any FUTURE filter that is orthogonal to the games axis must do the same.
+
+Test: `test_fellowship_filter.js`.
