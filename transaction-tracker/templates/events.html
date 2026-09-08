@@ -2115,6 +2115,7 @@
                         <option value="net">NET Players</option>
                         <option value="gross">GROSS Players</option>
                         <option value="both">BOTH (Net + Gross)</option>
+                        <option value="fellowship">Fellowship YES</option>
                         <option value="not_playing">Not Playing</option>
                         <option value="custom">Custom Selection</option>
                     </select>
@@ -10204,6 +10205,7 @@
             if (audience === "net") return sg === "NET" || sg === "BOTH";
             if (audience === "gross") return sg === "GROSS" || sg === "BOTH";
             if (audience === "both") return sg === "BOTH";
+            if (audience === "fellowship") return isFellowshipYes(r);
             if (audience === "playing" || audience === "not_playing") {
                 // Approximate: use RSVP data if available
                 return true; // server-side will do accurate filtering
@@ -10361,6 +10363,14 @@
         if (!tpl) return;
         document.getElementById("compose-subject").value = tpl.subject || "";
         document.getElementById("compose-body").value = tpl.html_body || "";
+        // A template that only makes sense for one audience selects it —
+        // but only from the default, so a deliberate choice is never
+        // overwritten (Kerry 2026-09-08).
+        const audSel = document.getElementById("compose-audience");
+        if (/fellowship/i.test(tpl.name || "") && audSel.value === "all") {
+            audSel.value = "fellowship";
+            updateRecipientCount();
+        }
     });
 
     // Audience change handler
@@ -10446,6 +10456,29 @@
 
         if (!subject) { alert("Subject is required"); return; }
         if (!body) { alert("Message body is required"); return; }
+
+        // Boundary check (CLAUDE.md corollary; #424 shipped {link_offer}
+        // into Kerry's composer). A template can carry a deliberate blank
+        // — [MEETING SPOT] — or an unknown {tag}. Neither may leave the
+        // building. This guards EVERY template, not just the one that
+        // introduced a blank.
+        const KNOWN_VARS = ["player_name", "event_name", "event_date",
+                            "course", "chapter"];
+        const blanks = [];
+        (subject + "\n" + body).replace(/\[[A-Z][A-Z0-9 _/-]{2,}\]/g,
+            m => { if (!blanks.includes(m)) blanks.push(m); return m; });
+        (subject + "\n" + body).replace(/\{([a-z0-9_]+)\}/gi, (m, v) => {
+            if (!KNOWN_VARS.includes(v.toLowerCase()) && !blanks.includes(m)) {
+                blanks.push(m);
+            }
+            return m;
+        });
+        if (blanks.length) {
+            alert("Still to fill in before this can go out:\n\n  "
+                + blanks.join("\n  ")
+                + "\n\nReplace each one in the message above, then send.");
+            return;
+        }
 
         let recipientCount;
         let customEmails = null;

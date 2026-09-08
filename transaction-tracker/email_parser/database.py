@@ -4114,84 +4114,119 @@ def init_db(db_path: str | Path | None = None) -> None:
             "WHERE is_golf_genius = 1"
         )
 
-        # Seed built-in message templates on first run
-        existing = conn.execute("SELECT COUNT(*) as cnt FROM message_templates WHERE is_system = 1").fetchone()
-        if existing["cnt"] == 0:
-            system_templates = [
-                (
-                    "Payment Reminder", "email",
-                    "Payment Reminder — {event_name}",
-                    "<p>Hi {player_name},</p>"
-                    "<p>This is a friendly reminder that we have you down for "
-                    "<strong>{event_name}</strong>, but we haven't received your payment yet.</p>"
-                    "<p>Please complete your registration at your earliest convenience.</p>"
-                    "<p>Thanks,<br>The Golf Fellowship</p>",
-                    None,
-                ),
-                (
-                    "Event Announcement", "both",
-                    "{event_name} — You're Registered!",
-                    "<p>Hi {player_name},</p>"
-                    "<p>You're registered for <strong>{event_name}</strong> at "
-                    "<strong>{course}</strong> on <strong>{event_date}</strong>!</p>"
-                    "<p>We look forward to seeing you there.</p>"
-                    "<p>Thanks,<br>The Golf Fellowship</p>",
-                    "You're registered for {event_name} at {course} on {event_date}! See you there.",
-                ),
-                (
-                    "Tee Time Update", "both",
-                    "Tee Times — {event_name}",
-                    "<p>Hi {player_name},</p>"
-                    "<p>Tee times are set for <strong>{event_name}</strong> at "
-                    "<strong>{course}</strong> on <strong>{event_date}</strong>.</p>"
-                    "<p>Thanks,<br>The Golf Fellowship</p>",
-                    "Tee times are set for {event_name} at {course} on {event_date}.",
-                ),
-                (
-                    "Weather Alert", "both",
-                    "Weather Update — {event_name}",
-                    "<p>Hi {player_name},</p>"
-                    "<p>Weather update for <strong>{event_name}</strong> on "
-                    "<strong>{event_date}</strong>.</p>"
-                    "<p>Thanks,<br>The Golf Fellowship</p>",
-                    "Weather update for {event_name} on {event_date}.",
-                ),
-                (
-                    "Event Cancellation", "both",
-                    "{event_name} — Cancelled",
-                    "<p>Hi {player_name},</p>"
-                    "<p>Unfortunately, <strong>{event_name}</strong> scheduled for "
-                    "<strong>{event_date}</strong> at <strong>{course}</strong> has been "
-                    "cancelled.</p>"
-                    "<p>We'll be in touch with more details.</p>"
-                    "<p>Thanks,<br>The Golf Fellowship</p>",
-                    "{event_name} on {event_date} at {course} has been cancelled. More details to follow.",
-                ),
-                (
-                    "Day-Of Reminder", "both",
-                    "See You Today — {event_name}",
-                    "<p>Hi {player_name},</p>"
-                    "<p>See you today at <strong>{course}</strong> for "
-                    "<strong>{event_name}</strong>!</p>"
-                    "<p>Thanks,<br>The Golf Fellowship</p>",
-                    "See you today at {course} for {event_name}!",
-                ),
-                (
-                    "Post-Event Results", "email",
-                    "Results — {event_name}",
-                    "<p>Hi {player_name},</p>"
-                    "<p>Results are in for <strong>{event_name}</strong> at "
-                    "<strong>{course}</strong>!</p>"
-                    "<p>Thanks for playing,<br>The Golf Fellowship</p>",
-                    None,
-                ),
-            ]
-            for name, channel, subj, html, sms in system_templates:
-                conn.execute(
-                    "INSERT INTO message_templates (name, channel, subject, html_body, sms_body, is_system) "
-                    "VALUES (?, ?, ?, ?, ?, 1)",
-                    (name, channel, subj, html, sms),
-                )
+        # Seed built-in message templates.
+        #
+        # This USED to run only when the table held no system rows at all
+        # ("on first run"), which meant a template added to this list in a
+        # later release never reached any deployment that had already
+        # booted — the backfill rule (#405) in reverse. It now inserts
+        # BY NAME, so a new entry lands everywhere and an existing one is
+        # left exactly as it is (Kerry edits system templates in the UI;
+        # re-seeding would silently revert his wording).
+        _existing_tpl_names = {
+            (row["name"] or "").strip().lower()
+            for row in conn.execute(
+                "SELECT name FROM message_templates").fetchall()
+        }
+        system_templates = [
+            (
+                "Payment Reminder", "email",
+                "Payment Reminder — {event_name}",
+                "<p>Hi {player_name},</p>"
+                "<p>This is a friendly reminder that we have you down for "
+                "<strong>{event_name}</strong>, but we haven't received your payment yet.</p>"
+                "<p>Please complete your registration at your earliest convenience.</p>"
+                "<p>Thanks,<br>The Golf Fellowship</p>",
+                None,
+            ),
+            (
+                "Event Announcement", "both",
+                "{event_name} — You're Registered!",
+                "<p>Hi {player_name},</p>"
+                "<p>You're registered for <strong>{event_name}</strong> at "
+                "<strong>{course}</strong> on <strong>{event_date}</strong>!</p>"
+                "<p>We look forward to seeing you there.</p>"
+                "<p>Thanks,<br>The Golf Fellowship</p>",
+                "You're registered for {event_name} at {course} on {event_date}! See you there.",
+            ),
+            (
+                "Tee Time Update", "both",
+                "Tee Times — {event_name}",
+                "<p>Hi {player_name},</p>"
+                "<p>Tee times are set for <strong>{event_name}</strong> at "
+                "<strong>{course}</strong> on <strong>{event_date}</strong>.</p>"
+                "<p>Thanks,<br>The Golf Fellowship</p>",
+                "Tee times are set for {event_name} at {course} on {event_date}.",
+            ),
+            (
+                "Weather Alert", "both",
+                "Weather Update — {event_name}",
+                "<p>Hi {player_name},</p>"
+                "<p>Weather update for <strong>{event_name}</strong> on "
+                "<strong>{event_date}</strong>.</p>"
+                "<p>Thanks,<br>The Golf Fellowship</p>",
+                "Weather update for {event_name} on {event_date}.",
+            ),
+            (
+                "Event Cancellation", "both",
+                "{event_name} — Cancelled",
+                "<p>Hi {player_name},</p>"
+                "<p>Unfortunately, <strong>{event_name}</strong> scheduled for "
+                "<strong>{event_date}</strong> at <strong>{course}</strong> has been "
+                "cancelled.</p>"
+                "<p>We'll be in touch with more details.</p>"
+                "<p>Thanks,<br>The Golf Fellowship</p>",
+                "{event_name} on {event_date} at {course} has been cancelled. More details to follow.",
+            ),
+            (
+                "Day-Of Reminder", "both",
+                "See You Today — {event_name}",
+                "<p>Hi {player_name},</p>"
+                "<p>See you today at <strong>{course}</strong> for "
+                "<strong>{event_name}</strong>!</p>"
+                "<p>Thanks,<br>The Golf Fellowship</p>",
+                "See you today at {course} for {event_name}!",
+            ),
+            (
+                # Kerry 2026-09-08: a quick send to the players who
+                # answered YES to the fellowship request — where we
+                # are meeting afterward, and a nudge to tell us if
+                # they drop so the restaurant headcount stays right.
+                # [MEETING SPOT] is deliberately a bracketed blank;
+                # the composer refuses to send while one survives.
+                "Fellowship \u2014 Where We're Meeting", "email",
+                "Fellowship after {event_name} \u2014 where we're meeting",
+                "<p>Hi {player_name},</p>"
+                "<p>You said YES to fellowship after <strong>{event_name}</strong>, "
+                "so here is where we are headed once we are off the course:</p>"
+                "<p><strong>[MEETING SPOT]</strong></p>"
+                "<p>Come over whenever your group finishes \u2014 no need to wait "
+                "on anyone. It is a good hour to actually get to know the people "
+                "you just played with.</p>"
+                "<p>If your plans have changed and you cannot join us, just reply "
+                "and let me know. We give the restaurant a headcount, so an "
+                "accurate number genuinely helps.</p>"
+                "<p>Looking forward to it,<br>The Golf Fellowship</p>",
+                None,
+            ),
+            (
+                "Post-Event Results", "email",
+                "Results — {event_name}",
+                "<p>Hi {player_name},</p>"
+                "<p>Results are in for <strong>{event_name}</strong> at "
+                "<strong>{course}</strong>!</p>"
+                "<p>Thanks for playing,<br>The Golf Fellowship</p>",
+                None,
+            ),
+        ]
+        for name, channel, subj, html, sms in system_templates:
+            if (name or "").strip().lower() in _existing_tpl_names:
+                continue
+            conn.execute(
+                "INSERT INTO message_templates (name, channel, subject, html_body, "
+                "sms_body, is_system) VALUES (?, ?, ?, ?, ?, 1)",
+                (name, channel, subj, html, sms),
+            )
 
         # Backfill NULL/empty values in critical columns
         conn.execute("UPDATE items SET customer = '(Unknown)' WHERE customer IS NULL OR customer = ''")

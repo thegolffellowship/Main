@@ -7644,7 +7644,8 @@ def api_send_messages():
         template_id: int (optional — use template subject/body),
         subject: str (overrides template subject if provided),
         html_body: str (overrides template body if provided),
-        audience: str (all|playing|rsvp_only|net|gross|both|not_playing|custom),
+        audience: str (all|playing|rsvp_only|net|gross|both|fellowship|
+                       not_playing|custom),
         custom_emails: [str] (required when audience=custom — specific email addresses),
         exclude_ids: [int] (optional — item IDs to exclude)
     }
@@ -7685,8 +7686,15 @@ def api_send_messages():
     }
     event_status = (event_info.get("status") or "active")
 
-    # Filter audience
+    # Filter audience. An UNKNOWN value used to fall through the
+    # per-recipient else-branch below and mail the entire roster — a
+    # typo or a stale client would have blasted everyone. Reject it here
+    # instead; every legitimate value is in this set.
     audience = (data.get("audience") or "all").lower()
+    VALID_AUDIENCES = {"all", "playing", "rsvp_only", "net", "gross",
+                       "both", "fellowship", "not_playing", "custom"}
+    if audience not in VALID_AUDIENCES:
+        return jsonify({"error": f"unknown audience '{audience}'"}), 400
     custom_emails = set()
     if audience == "custom":
         raw = data.get("custom_emails") or []
@@ -7833,6 +7841,12 @@ def api_send_messages():
                 filtered.append(r)
         elif audience == "both":
             if sg == "BOTH":
+                filtered.append(r)
+        elif audience == "fellowship":
+            # items.fellowship is 'YES' / 'NO' / NULL. Leading-Y match so
+            # a 'Yes' from a future form still counts. GG RSVP rows carry
+            # no answer and are correctly excluded.
+            if str(r.get("fellowship") or "").strip().upper().startswith("Y"):
                 filtered.append(r)
         elif audience == "not_playing":
             if rsvp == "not_playing":

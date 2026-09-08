@@ -1,5 +1,15 @@
-window.TGF_VERSION = "2.343.0";
+window.TGF_VERSION = "2.344.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.344.0",
+    date: "2026-09-08",
+    changes: [
+      "Message Players can now address the fellowship group. A new 'Fellowship YES' audience sits alongside NET / GROSS / RSVP Only, and a 'Fellowship \u2014 Where We're Meeting' preset fills in the subject and body: where the group is headed afterward, and a request to reply if plans change so the restaurant headcount stays right. Everything is editable in the modal before it goes \u2014 the preset is a starting point, not a locked message. Picking the preset selects the fellowship audience for you, unless you had already chosen a different one.",
+      "The message composer now refuses to send with a blank still in it. The preset carries [MEETING SPOT] where the venue goes; send is blocked, with the list of what is left, until every bracketed blank and every unrecognised {tag} is replaced. This guards every template, not just the new one \u2014 a preset that reached a member with its placeholder intact has happened before.",
+      "An unrecognised audience no longer emails the entire roster. The send endpoint matched audiences with a chain of tests ending in 'otherwise, include this player', so a typo or a stale browser tab would have quietly gone to everyone. Unknown audiences are now refused outright.",
+      "Built-in message templates now reach deployments that have already started up. The seed only ran against a completely empty table, which every install passed through months ago \u2014 any template added later would have existed in the code and nowhere else. It now adds by name, and never overwrites wording you have edited yourself.",
+    ],
+  },
   {
     version: "2.343.0",
     date: "2026-09-08",

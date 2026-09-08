@@ -56,6 +56,25 @@ check("mobile answers FELLOWSHIP before the axis branch",
     mob.indexOf("activeFilter === FELLOWSHIP_FILTER") > -1
     && mob.indexOf("activeFilter === FELLOWSHIP_FILTER") < mob.indexOf("if (mAx) return axisFilterMatch"));
 
+console.log("\nMessage Players");
+check("Fellowship YES is an audience in the compose modal",
+    /<option value="fellowship">Fellowship YES<\/option>/.test(html));
+check("the compose recipient filter honours it",
+    /if \(audience === "fellowship"\) return isFellowshipYes\(r\);/.test(html));
+check("choosing the Fellowship template selects its audience",
+    /\/fellowship\/i\.test\(tpl\.name \|\| ""\) && audSel\.value === "all"/.test(html));
+
+// #424 shipped {link_offer} into Kerry's composer. A template blank must
+// not be able to leave the building either.
+check("send blocks on an unfilled [BRACKET] blank",
+    /\\\[\[A-Z\]\[A-Z0-9 _\/-\]\{2,\}\\\]/.test(html));
+check("send blocks on an unknown {curly} variable",
+    /const KNOWN_VARS = \["player_name", "event_name", "event_date",/.test(html)
+    && /if \(blanks\.length\) \{/.test(html));
+check("the guard runs before any recipient is counted or confirmed",
+    html.indexOf("Still to fill in before this can go out")
+        < html.indexOf("if (!recipientCount) { alert(\"No recipients selected\"); return; }"));
+
 console.log("");
 if (failures) { console.log(failures + " FAILURE(S)"); process.exit(1); }
 console.log("All fellowship-filter assertions passed.");

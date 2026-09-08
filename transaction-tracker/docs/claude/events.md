@@ -1777,3 +1777,44 @@ desktop and mobile filters answer `FELLOWSHIP_FILTER` above that branch.
 Any FUTURE filter that is orthogonal to the games axis must do the same.
 
 Test: `test_fellowship_filter.js`.
+
+## Fellowship preset in Message Players (v2.344.0, Kerry 2026-09-08)
+
+> *"Wire up a preset selection and email in the Message Players option
+> where I can quickly send an email to those who have selected Fellowship
+> and let them know where we plan to meet afterward and if they change
+> their mind to please let me know so that we can adjust our counts.
+> Needs to be editable by me within the message modal."*
+
+**Audience.** `fellowship` joins `all | playing | rsvp_only | net | gross
+| both | not_playing | custom`, client-side in `getComposeRecipients()`
+and server-side in `/api/messages/send`. Both match a leading `Y` on
+`items.fellowship`. GG RSVP rows carry no answer and drop out.
+
+**Preset.** System template `Fellowship — Where We're Meeting`. Selecting
+it loads subject and body into the editable fields — nothing about it is
+locked — and switches the audience to `fellowship` ONLY if the audience
+is still on its default `all`, so a deliberate choice is never overridden.
+
+**Three safety fixes shipped alongside, each a class-level fix:**
+
+1. *The audience could fall open.* The send loop was a chain of `elif`
+   ending in `else: filtered.append(r)`, so an unrecognised audience —
+   a typo, a stale tab, a renamed option — mailed the WHOLE ROSTER.
+   `VALID_AUDIENCES` is now checked once, up front, and an unknown value
+   is a 400. Any new audience must be added to that set.
+2. *A blank could leave the building.* The preset carries `[MEETING SPOT]`.
+   The send handler refuses while the subject or body still holds a
+   `[BRACKETED BLANK]` or a `{tag}` outside `KNOWN_VARS`, and names what
+   is left. It guards EVERY template — the #424 lesson (`{link_offer}`
+   reaching Kerry's composer) applied at the boundary rather than to the
+   one template that reintroduced the hazard.
+3. *The template seed never reached production.* It ran only
+   `if existing["cnt"] == 0` — true once, in 2026. A template added to
+   the list later would have lived in the code and nowhere else. The seed
+   now inserts BY NAME on every boot, skipping names that already exist,
+   so it never reverts a template edited in the UI. Adding a system
+   template is now just adding a tuple.
+
+Test: `test_message_presets.py` (seed reach + audience allowlist) and the
+Message Players block of `test_fellowship_filter.js`.
