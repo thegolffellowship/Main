@@ -51342,6 +51342,54 @@ def get_event_print_pack(event_id: int, db_path=None) -> dict | None:
                 "players": players,
                 "carts": _carts(players),
             })
+    # WHEN to be there, not just where (Kerry 2026-09-08: the starter
+    # sheet "needs to show the time of the shotgun"). start_time is
+    # stored "%H:%M"; a shotgun has ONE time for everybody, so it is the
+    # single most useful thing on the page and the pack hands the
+    # template a finished label rather than making it do clock maths.
+    def _clock(hhmm):
+        try:
+            return datetime.strptime(str(hhmm), "%H:%M").strftime(
+                "%-I:%M %p")
+        except (ValueError, TypeError):
+            return (hhmm or "") or None
+
+    _st = (ev.get("start_type") or "").strip()
+    _start = _clock(ev.get("start_time"))
+    start_label = None
+    if _start:
+        start_label = (f"Shotgun {_start}" if _st == "Shotgun"
+                       else f"First tee {_start}")
+    _st18 = (ev.get("start_type_18") or "").strip()
+    _start18 = _clock(ev.get("start_time_18"))
+    start_label_18 = None
+    if _start18 and (ev.get("format") or "").strip() == "9/18 Combo":
+        start_label_18 = (f"Shotgun {_start18}" if _st18 == "Shotgun"
+                          else f"First tee {_start18}")
+
+    # ALPHA LIST (Kerry 2026-09-08): the starter's other job is answering
+    # "where am I?" for a player who walks up knowing only their own
+    # name. Same rows as the groups, sorted by SURNAME — built here so
+    # the sheet and the groups can never disagree about who is playing.
+    alpha = []
+    for g in groups:
+        for p in g["players"]:
+            nm = (p.get("name") or "").strip()
+            if not nm:
+                continue
+            parts = nm.split()
+            last = parts[-1] if parts else nm
+            first = " ".join(parts[:-1]) if len(parts) > 1 else ""
+            alpha.append({
+                "name": nm,
+                "sort_name": f"{last}, {first}".strip().strip(","),
+                "slot_label": g["slot_label"],
+                "group_num": g["group_num"],
+                "holes": g["holes"],
+                "cart": "A" if (p.get("cart_pos") or 0) in (1, 2) else "B",
+            })
+    alpha.sort(key=lambda r: r["sort_name"].lower())
+
     return {
         "event": {
             "id": event_id,
@@ -51351,9 +51399,14 @@ def get_event_print_pack(event_id: int, db_path=None) -> dict | None:
             "chapter": ev.get("chapter"),
             "format": ev.get("format"),
             "start_type": ev.get("start_type"),
+            "start_time": ev.get("start_time"),
+            "start_label": start_label,
+            "start_label_18": start_label_18,
         },
         "groups": groups,
         "group_count": len(groups),
+        "alpha": alpha,
+        "player_count": len(alpha),
     }
 
 
@@ -52139,26 +52192,51 @@ def _pair_key_name(name: str) -> str:
 
 
 def get_pairing_history_counts(year: int | None = None, db_path=None) -> dict:
-    """Return a dict mapping (player_a, player_b) → count for the given calendar year.
+    """Pairs actually PLAYED this calendar year → how many times.
 
     Keys are normalized via _pair_key_name (lowercase, collapsed spaces),
-    alphabetical order. If year is None uses the current year.
+    alphabetical order. If year is None uses the current year, Central —
+    the year boundary is a business date like any other, and UTC would
+    roll it over six hours early on New Year's Eve.
+
+    TWO RULES ABOUT WHAT COUNTS, both Kerry 2026-09-08.
+
+    1. **"final GG pairings is what rules."** Saving a sheet in the app
+       writes source='app' rows immediately, so a grouping the app merely
+       PROPOSED counted the same as one that actually teed off. Where an
+       event has any Golf Genius rows they are the record and the app
+       rows for that event are ignored. Where it has none, the app rows
+       are the only account of what happened and still count — dropping
+       them would erase real history rather than speculation.
+
+    2. **Nothing dated in the future counts.** Pairings saved for an
+       event that has not been played are a plan. Left in, they made the
+       generator treat pairs it had just proposed as repeats — so hitting
+       Generate twice fought its own first answer, and a rained-out round
+       would have poisoned the next one.
     """
     if year is None:
-        year = datetime.now().year
+        year = today_central().year
     year_start = f"{year}-01-01"
     year_end = f"{year}-12-31"
+    today = today_central_str()
 
     with _connect(db_path) as conn:
         _ensure_pairing_tables(conn)
         rows = conn.execute(
             """
             SELECT player_a, player_b, COUNT(*) as cnt
-            FROM pairing_history
+            FROM pairing_history ph
             WHERE event_date BETWEEN ? AND ?
+              AND event_date <= ?
+              AND (COALESCE(source, 'app') <> 'app'
+                   OR NOT EXISTS (
+                       SELECT 1 FROM pairing_history gg
+                       WHERE gg.event_id = ph.event_id
+                         AND COALESCE(gg.source, 'app') <> 'app'))
             GROUP BY player_a, player_b
             """,
-            (year_start, year_end),
+            (year_start, year_end, today),
         ).fetchall()
 
     counts: dict = {}

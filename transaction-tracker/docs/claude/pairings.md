@@ -6,6 +6,34 @@ pairing docs platform-claude (CA) holds and merge them here BEFORE the
 engine build (mailbox request posted same session). Per house
 principle 2, these ship as named, editable rules-as-data, not code.
 
+## What counts as history (Kerry 2026-09-08)
+
+`get_pairing_history_counts` is the generator's only view of the past.
+Two rules govern it:
+
+1. **"final GG pairings is what rules."** `save_event_pairings` writes
+   `source='app'` rows the moment a sheet is saved, so a grouping the app
+   merely PROPOSED used to score identically to one that teed off. Now,
+   where an event has any non-`app` rows (`gg_teesheet`, `gg_teamnet`,
+   `tee_sheet`) those are the record and its `app` rows are ignored.
+   Where GG never ingested the event, the `app` rows are the only account
+   of what happened and still count — dropping them would erase real
+   history, not speculation.
+2. **Nothing dated in the future counts.** A sheet saved for an unplayed
+   event made the generator treat pairs it had just proposed as repeats,
+   so a second Generate fought its own first answer and a rained-out
+   round would have poisoned the next event.
+
+The year window is Central (`today_central`), not UTC. Regression:
+`test_pairing_history_rule.py`. Diagnose live with
+`probe_golf_genius(extract="scoring-pairings:hist|<event id or name>")`
+and `scoring-pairings:gen|<event id>`.
+
+**Not implemented, and Kerry has been told:** there is no weighting for
+players who have ATTENDED the least. The cost function knows only how
+often two people have been grouped, never how many events either has
+played.
+
 ## Why this matters (Kerry)
 
 "We are The Golf Fellowship and getting to know everyone is part of

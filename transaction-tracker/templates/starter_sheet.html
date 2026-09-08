@@ -7,46 +7,95 @@
   <link href="https://fonts.googleapis.com/css2?family=Bitter:wght@600;700&display=swap" rel="stylesheet">
   <style>
     * { box-sizing: border-box; }
+    /* MARGINS THAT SURVIVE THE PRINT DIALOG (Kerry 2026-09-08: "This
+       needs standard margins"). The sheet used to put its half-inch in
+       @page and zero the body padding — correct CSS, but @page margins
+       are the one thing the browser's own Margins setting overrides, so
+       with it on None the sheet printed edge-to-edge. The margin now
+       lives in body padding, which nothing overrides, and @page is 0 so
+       the two can never stack into a full inch. */
+    @page { size: letter portrait; margin: 0; }
     body {
-      margin: 0; padding: 24px;
+      margin: 0; padding: 0.5in;
       font-family: "Helvetica Neue", Arial, system-ui, sans-serif;
-      color: #111; background: #fff; font-size: 13px;
+      color: #111; background: #fff; font-size: 12px;
     }
     .sheet-head {
       display: flex; justify-content: space-between; align-items: flex-end;
-      border-bottom: 3px solid #111; padding-bottom: 8px; margin-bottom: 14px;
+      border-bottom: 3px solid #111; padding-bottom: 8px; margin-bottom: 12px;
     }
     .sheet-head h1 {
       font-family: "Bitter", Georgia, serif; font-weight: 700;
       font-size: 22px; margin: 0;
     }
-    .sheet-head .sub { color: #444; font-size: 13px; margin-top: 2px; }
-    .sheet-head .meta { text-align: right; font-size: 12px; color: #444; }
+    .sheet-head .sub { color: #444; font-size: 12.5px; margin-top: 2px; }
+    .sheet-head .meta { text-align: right; font-size: 11.5px; color: #444; }
     .sheet-head .meta strong { color: #111; }
-    table { width: 100%; border-collapse: collapse; }
-    thead th {
-      text-align: left; font-size: 10px; letter-spacing: .06em;
-      text-transform: uppercase; color: #555; border-bottom: 2px solid #111;
-      padding: 4px 6px;
+    /* The one thing everybody on the lot needs to know. */
+    .start-time {
+      font-family: "Bitter", Georgia, serif; font-weight: 700;
+      font-size: 17px; color: #111; letter-spacing: 0.01em;
+      margin-top: 1px;
     }
-    tbody td { padding: 5px 6px; border-bottom: 1px solid #ddd; white-space: normal; vertical-align: top; }
-    tr.grp-start td { border-top: 2px solid #111; }
-    .slot { font-family: "Bitter", Georgia, serif; font-weight: 700; font-size: 14px; white-space: nowrap; }
-    .grp-num { color: #666; font-size: 11px; white-space: nowrap; }
-    .pname { font-weight: 600; }
-    .tee, .idx { color: #333; white-space: nowrap; }
-    .cart { font-weight: 700; text-align: center; }
+
+    /* GROUPS AS BOXES, three across (Kerry 2026-09-08: "Foursomes could
+       be two or even 3 columns per row in boxes"). Three fits letter
+       portrait at 2.33in a box, which holds a full name plus tee, index
+       and cart without truncating. */
+    .groups {
+      display: grid; grid-template-columns: repeat(3, 1fr);
+      gap: 8px; align-items: start;
+    }
+    @media (max-width: 700px) { .groups { grid-template-columns: repeat(2, 1fr); } }
+    .gbox { border: 1.5px solid #111; border-radius: 4px; overflow: hidden;
+            break-inside: avoid; page-break-inside: avoid; }
+    .gbox-head {
+      display: flex; justify-content: space-between; align-items: baseline;
+      background: #111; color: #fff; padding: 3px 7px;
+    }
+    .gbox-head .slot {
+      font-family: "Bitter", Georgia, serif; font-weight: 700;
+      font-size: 13px; letter-spacing: 0.02em;
+    }
+    .gbox-head .grp { font-size: 10px; color: #bbb; }
+    .prow {
+      display: flex; align-items: baseline; gap: 5px;
+      padding: 3px 7px; border-top: 1px solid #e2e2e2; font-size: 11.5px;
+    }
+    .prow:first-of-type { border-top: 0; }
+    .prow .pname { flex: 1; font-weight: 600; min-width: 0; }
+    .prow .tee { color: #444; width: 42px; text-align: right; white-space: nowrap; }
+    .prow .idx { color: #444; width: 30px; text-align: right;
+                 font-variant-numeric: tabular-nums; white-space: nowrap; }
+    .prow .cart { width: 12px; text-align: center; font-weight: 700; }
     .cart-A { color: #0b6; }
     .cart-B { color: #06c; }
-    .empty { color: #999; padding: 40px; text-align: center; font-style: italic; }
-    .foot { margin-top: 16px; font-size: 10px; color: #888; }
-    @media print {
-      body { padding: 0; }
-      .noprint { display: none !important; }
-      thead { display: table-header-group; }
-      tr { page-break-inside: avoid; }
+
+    /* ALPHA LIST — for the player who walks up knowing only their name. */
+    .alpha-head {
+      font-family: "Bitter", Georgia, serif; font-weight: 700; font-size: 13px;
+      border-bottom: 2px solid #111; padding-bottom: 3px;
+      margin: 16px 0 6px; display: flex; justify-content: space-between;
+      align-items: baseline;
     }
-    @page { size: letter portrait; margin: 0.5in; }
+    .alpha-head span { font-family: inherit; font-size: 10px; color: #666;
+                       font-weight: 600; letter-spacing: 0.05em; }
+    .alpha { display: grid; grid-template-columns: repeat(3, 1fr);
+             gap: 0 14px; }
+    .arow { display: flex; align-items: baseline; gap: 6px;
+            font-size: 11px; padding: 2px 0; border-bottom: 1px dotted #ccc;
+            break-inside: avoid; }
+    .arow .an { flex: 1; min-width: 0; }
+    .arow .as { font-family: "Bitter", Georgia, serif; font-weight: 700;
+                white-space: nowrap; }
+    .arow .ac { width: 10px; text-align: center; font-weight: 700; }
+
+    .empty { color: #999; padding: 40px; text-align: center; font-style: italic; }
+    .foot { margin-top: 14px; font-size: 9.5px; color: #888; }
+    @media print {
+      .noprint { display: none !important; }
+      .groups { grid-template-columns: repeat(3, 1fr); }
+    }
     .toolbar { margin-bottom: 12px; }
     .toolbar button {
       font: inherit; padding: 8px 16px; border: 0; border-radius: 999px;
@@ -63,7 +112,7 @@
 </head>
 <body>
   <div class="toolbar noprint">
-    <button class="back" onclick="if (history.length > 1) { history.back(); } else { location.href = '/events'; }">&#8592; Back</button>
+    <button class="back" onclick="location.href = '/events?event={{ pack.event.id }}&view=pairings';">&#8592; Back</button>
     <button onclick="window.print()">Print Starter Sheet</button>
   </div>
   <div class="sheet-head">
@@ -76,6 +125,12 @@
     <div class="meta">
       <div><strong>{{ pack.event.event_date or "" }}</strong></div>
       <div>{{ pack.event.format or "" }}{% if pack.event.start_type %} · {{ pack.event.start_type }}{% endif %}</div>
+      {% if pack.event.start_label %}
+        <div class="start-time">{{ pack.event.start_label }}</div>
+      {% endif %}
+      {% if pack.event.start_label_18 %}
+        <div class="start-time" style="font-size:13px;">18s · {{ pack.event.start_label_18 }}</div>
+      {% endif %}
       <div>Starter Sheet</div>
     </div>
   </div>
@@ -83,38 +138,37 @@
   {% if not pack.groups %}
     <div class="empty">No pairings saved for this event yet. Generate &amp; save pairings first.</div>
   {% else %}
-  <table>
-    <thead>
-      <tr>
-        <th style="width:70px;">Time</th>
-        <th style="width:34px;">Grp</th>
-        <th>Player</th>
-        <th style="width:70px;">Tee</th>
-        <th style="width:46px;">Idx</th>
-        <th style="width:44px;">Cart</th>
-      </tr>
-    </thead>
-    <tbody>
-      {% for g in pack.groups %}
+  <div class="groups">
+    {% for g in pack.groups %}
+      <div class="gbox">
+        <div class="gbox-head">
+          <span class="slot">{{ g.slot_label }}</span>
+          <span class="grp">{{ g.group_num }}{% if g.holes == '18' %} · 18{% endif %}</span>
+        </div>
         {% for p in g.players %}
-        <tr class="{% if loop.first %}grp-start{% endif %}">
-          {% if loop.first %}
-            <td class="slot" rowspan="{{ g.players|length }}">{{ g.slot_label }}</td>
-            <td class="grp-num" rowspan="{{ g.players|length }}">
-              {{ g.group_num }}{% if g.holes == '18' %} · 18{% endif %}
-            </td>
-          {% endif %}
-          <td class="pname">{{ p.name }}</td>
-          <td class="tee">{{ p.tee_choice or "—" }}</td>
-          <td class="idx">{% if p.handicap_index is not none %}{{ "%.1f"|format(p.handicap_index) }}{% else %}—{% endif %}</td>
-          <td class="cart {% if (p.cart_pos or 0) in [1,2] %}cart-A{% else %}cart-B{% endif %}">
-            {% if (p.cart_pos or 0) in [1,2] %}A{% else %}B{% endif %}
-          </td>
-        </tr>
+          <div class="prow">
+            <span class="pname">{{ p.name }}</span>
+            <span class="tee">{{ p.tee_choice or "—" }}</span>
+            <span class="idx">{% if p.handicap_index is not none %}{{ "%.1f"|format(p.handicap_index) }}{% else %}—{% endif %}</span>
+            <span class="cart {% if (p.cart_pos or 0) in [1,2] %}cart-A{% else %}cart-B{% endif %}">{% if (p.cart_pos or 0) in [1,2] %}A{% else %}B{% endif %}</span>
+          </div>
         {% endfor %}
-      {% endfor %}
-    </tbody>
-  </table>
+      </div>
+    {% endfor %}
+  </div>
+
+  <div class="alpha-head">
+    ALPHABETICAL <span>{{ pack.player_count }} PLAYER{{ "" if pack.player_count == 1 else "S" }}</span>
+  </div>
+  <div class="alpha">
+    {% for a in pack.alpha %}
+      <div class="arow">
+        <span class="an">{{ a.sort_name }}</span>
+        <span class="as">{{ a.slot_label }}</span>
+        <span class="ac {% if a.cart == 'A' %}cart-A{% else %}cart-B{% endif %}">{{ a.cart }}</span>
+      </div>
+    {% endfor %}
+  </div>
   {% endif %}
 
   <div class="foot">

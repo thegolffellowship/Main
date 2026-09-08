@@ -3743,6 +3743,24 @@
         // toggleEventDetail can find its row in the rendered DOM.
         const params = new URLSearchParams(window.location.search);
         const itemParam = params.get("item");
+        // Print views come back HERE (Kerry 2026-09-08: "When I click
+        // back on the Starter Sheet print view, it should go right back
+        // to the Pairings view for that event. Same for any print
+        // views"). They open in a new tab, so history.back() had nothing
+        // to go back to and dumped him on a bare /events. ?event=<id>
+        // finds the row by id — a print view knows the id, not the name
+        // — and ?view=pairings opens the tab he left from.
+        const evParam = params.get("event");
+        if (evParam && expandedEventId === null) {
+            const byId = allEvents.find(e => String(e.id) === String(evParam));
+            if (byId) {
+                if (params.get("view") === "pairings") {
+                    pairingsOpenForEvent[byId.id] = true;
+                }
+                toggleEventDetail(byId.id);
+                return;
+            }
+        }
         if (itemParam && expandedEventId === null) {
             const fullMatch = allEvents.find(e => e.item_name === itemParam);
             if (fullMatch) {
