@@ -75,6 +75,45 @@ check("the guard runs before any recipient is counted or confirmed",
     html.indexOf("Still to fill in before this can go out")
         < html.indexOf("if (!recipientCount) { alert(\"No recipients selected\"); return; }"));
 
+console.log("\nQuick Message");
+
+// Kerry 2026-09-08: "It takes several steps thru the Action Button."
+// The button is driven by a REGISTRY keyed on the active filter, not by a
+// fellowship special case, so the next filter with an obvious message is a
+// row rather than another branch.
+check("presets are a registry keyed on the filter",
+    /const QUICK_MESSAGE_PRESETS = \{\s*\n\s*\[FELLOWSHIP_FILTER\]: \{/.test(html));
+check("the registry names both the audience and the template",
+    /audience: "fellowship",\s*\n\s*templateMatch: \/\^fellowship\/i,/.test(html));
+check("one helper renders the button for any registered filter",
+    /function quickMessageBtnHtml\(ev, activeFilter, count\)/.test(html));
+check("no button when the filter has no preset, or nobody matches",
+    /if \(!qm \|\| !count\) return "";/.test(html));
+
+check("desktop renders it beside the Actions button",
+    /html \+= quickMessageBtnHtml\(ev, activeFilter, filtered\.length\);/.test(html));
+check("mobile renders it too",
+    /const mQuick = quickMessageBtnHtml\(ev, activeFilter, filteredRegs\.length\);/.test(html));
+
+check("clicking opens the composer with the preset",
+    /openComposeModal\(btn\.dataset\.eventName, qm\);/.test(html));
+check("openComposeModal accepts one",
+    /function openComposeModal\(eventName, preset\)/.test(html));
+
+// The templates load async. Applying only before the fetch misses on a cold
+// cache; only after leaves the modal blank for a beat and can clobber typing.
+check("preset is applied against the cache first",
+    /presetApplied = applyComposePreset\(preset\);/.test(html));
+check("and retried after the refresh ONLY if the cache missed",
+    /if \(preset && !presetApplied\) applyComposePreset\(preset\);/.test(html));
+
+check("the template loads through the real change handler, not a copy of it",
+    /tplSel\.dispatchEvent\(new Event\("change"\)\);/.test(html));
+check("a missing template still leaves the audience correct",
+    /if \(preset\.audience\) \{\s*\n\s*document\.getElementById\("compose-audience"\)\.value = preset\.audience;/.test(html));
+check("the recipient count refreshes so the button's number is provable",
+    /updateRecipientCount\(\);\s*\n\s*return !!hit;/.test(html));
+
 console.log("");
 if (failures) { console.log(failures + " FAILURE(S)"); process.exit(1); }
 console.log("All fellowship-filter assertions passed.");

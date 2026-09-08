@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.346.1";
+window.TGF_VERSION = "2.347.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.347.0",
+    date: "2026-09-08",
+    changes: [
+      "A Quick Message button appears whenever the FELLOWSHIP filter is on. Kerry: 'It takes several steps thru the Action Button.' It did \u2014 Actions, Message Players, pick the audience, pick the template, four steps to send a message the filter already knew you wanted. One click now opens the composer pointed at those players with the Fellowship template loaded, and the count on the button is the count that will be mailed. Everything is still editable before it goes.",
+      "It is built as a registry rather than a fellowship special case: a filter that has an obvious message to send names its audience and its template in one place, and the button, its label and the pre-filled modal all follow. The next one is a row, not another branch.",
+      "The pre-fill survives a cold cache. Templates load in the background, so the preset is applied against what is already cached \u2014 no flicker on a warm modal \u2014 and retried after the refresh only if that missed, which is also what stops a slow fetch overwriting something you had started typing. If the template has been deleted the audience is still set correctly, so you get a correctly-addressed empty message rather than a quietly wrong one.",
+    ],
+  },
   {
     version: "2.346.1",
     date: "2026-09-08",

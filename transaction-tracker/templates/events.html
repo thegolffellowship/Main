@@ -239,6 +239,16 @@
         /* Fellowship request (Kerry 2026-09-08). Its own tint so it reads
            as a different QUESTION from the games badges beside it, not as
            another game type. Active state keeps the shared orange fill. */
+        /* Quick Message: an ACTION, so it reads as a button rather than
+           another filter pill sitting next to the badges. */
+        .quick-msg-btn {
+            font-size: 0.75rem; font-weight: 600;
+            padding: 0.3rem 0.75rem;
+            background: var(--primary); color: #fff;
+            border: none; border-radius: 6px; cursor: pointer;
+            white-space: nowrap;
+        }
+        .quick-msg-btn:hover { background: var(--primary-hover); }
         .game-stat-badge.fellowship-badge {
             border-color: #86a7c4;
             color: #34617f;
@@ -3329,6 +3339,14 @@
                         filteredRegs = sortRegistrants(filteredRegs, registrants, ev);
                     }
 
+                    // Quick Message on mobile. There is no Registrations
+                    // controls row here, so it sits directly under the
+                    // badges, where the filter that summoned it lives.
+                    const mQuick = quickMessageBtnHtml(ev, activeFilter, filteredRegs.length);
+                    if (mQuick) {
+                        badgesHtml += `<div style="margin-top:0.4rem;">${mQuick}</div>`;
+                    }
+
                     // Render inactive section for mobile
                     let mobileInactiveHtml = '';
                     if (mobileInactive.length) {
@@ -4147,6 +4165,34 @@
             + ` data-event-id="${ev.id}" data-filter="${FELLOWSHIP_FILTER}"`
             + ` title="Players who answered YES to the fellowship request">`
             + `FELLOWSHIP <strong>${n}</strong></span>`;
+    }
+
+    // ── Quick Message ────────────────────────────────────────────────────────
+    // Kerry 2026-09-08: "add a Quick Message button that shows up when
+    // FELLOWSHIP is clicked/filtered that auto selects that option in the
+    // Action button for Message Players and pre-populates... It takes
+    // several steps thru the Action Button."
+    //
+    // A REGISTRY rather than a fellowship special case: a filter that has an
+    // obvious message to send names its audience and its template here, and
+    // the button, the label and the modal pre-fill all follow. Fellowship is
+    // the only member today; adding the next one is a row.
+    const QUICK_MESSAGE_PRESETS = {
+        [FELLOWSHIP_FILTER]: {
+            label: "Message Fellowship",
+            audience: "fellowship",
+            templateMatch: /^fellowship/i,
+        },
+    };
+
+    function quickMessageBtnHtml(ev, activeFilter, count) {
+        const qm = QUICK_MESSAGE_PRESETS[activeFilter];
+        if (!qm || !count) return "";
+        return `<button type="button" class="btn quick-msg-btn"`
+            + ` data-event-name="${escapeHtml(ev.item_name)}"`
+            + ` data-quick-filter="${escapeHtml(activeFilter)}"`
+            + ` title="Open Message Players already set to this group, with the matching template loaded">`
+            + `\u2709 ${escapeHtml(qm.label)} (${count})</button>`;
     }
 
     function getRsvpForItem(itemId, eventName) {
@@ -7425,6 +7471,7 @@
         const rsvpOnlyCount = registrants.filter(r => (r.transaction_status || "active") === "rsvp_only" && r.customer_email).length;
         html += '<div style="display:flex; align-items:center; gap:0.75rem; margin-bottom:0.5rem; flex-wrap:wrap;">';
         html += `<h4 style="margin:0;">Registrations (${filtered.length}${activeFilter ? ' \u2014 ' + activeFilter : ''})</h4>`;
+        html += quickMessageBtnHtml(ev, activeFilter, filtered.length);
         html += `<div class="ev-actions-wrap">
             <button class="btn ev-actions-toggle" style="font-size:0.75rem; padding:0.3rem 0.7rem; background:#374151; color:#fff; border:none; border-radius:6px; cursor:pointer;">\u2699 Actions \u25be</button>
             <div class="ev-actions-menu">
@@ -8869,6 +8916,17 @@
         });
 
         // Message Players button
+        // Quick Message — Message Players, already pointed at the filtered
+        // group with its template loaded.
+        container.querySelectorAll(".quick-msg-btn").forEach(btn => {
+            btn.addEventListener("click", (e) => {
+                e.stopPropagation();
+                const qm = QUICK_MESSAGE_PRESETS[btn.dataset.quickFilter];
+                if (!qm) return;
+                openComposeModal(btn.dataset.eventName, qm);
+            });
+        });
+
         container.querySelectorAll(".btn-message-players").forEach(btn => {
             btn.addEventListener("click", (e) => {
                 e.stopPropagation();
@@ -10320,7 +10378,7 @@
         if (e.key === "Enter") { e.preventDefault(); document.getElementById("compose-add-extra").click(); }
     });
 
-    function openComposeModal(eventName) {
+    function openComposeModal(eventName, preset) {
         composeEventName = eventName;
         const ev = allEvents.find(e => e.item_name === eventName);
         document.getElementById("compose-msg-event-info").innerHTML =
@@ -10351,10 +10409,47 @@
         // even if the page-load fetch failed or raced (this was the "prebuilt
         // messages missing on mobile" bug — Kerry 2026-07-14).
         populateTemplateDropdown();
-        loadMessageTemplates().then(ok => { if (ok) populateTemplateDropdown(); });
+        // Apply the preset against the CACHE first, so a warm modal opens
+        // filled with no flicker — then again after the refresh, but only if
+        // the cache missed. Applying only after the fetch leaves the modal
+        // blank for a beat; applying only before misses on a cold cache,
+        // which is the "prebuilt messages missing on mobile" shape again.
+        // The retry is conditional so a slow fetch cannot overwrite something
+        // typed in the meantime.
+        let presetApplied = false;
+        if (preset) presetApplied = applyComposePreset(preset);
+        loadMessageTemplates().then(ok => {
+            if (ok) populateTemplateDropdown();
+            if (preset && !presetApplied) applyComposePreset(preset);
+        });
 
         updateRecipientCount();
         document.getElementById("compose-msg-overlay").style.display = "flex";
+    }
+
+    /** Point the composer at an audience with its template already loaded.
+     *  Returns whether the template was found — the audience is set either
+     *  way, so a deleted template leaves a correctly-addressed empty message
+     *  rather than a silently wrong one. */
+    function applyComposePreset(preset) {
+        const tplSel = document.getElementById("compose-template");
+        let hit = null;
+        if (preset.templateMatch) {
+            hit = (composeTemplates || []).find(
+                t => preset.templateMatch.test(t.name || ""));
+        }
+        if (hit) {
+            tplSel.value = String(hit.id);
+            // Go through the real change handler rather than copying its
+            // body — it is what loads subject and body in the current
+            // editor mode, and it must not drift from this path.
+            tplSel.dispatchEvent(new Event("change"));
+        }
+        if (preset.audience) {
+            document.getElementById("compose-audience").value = preset.audience;
+        }
+        updateRecipientCount();
+        return !!hit;
     }
 
     function closeComposeModal() {

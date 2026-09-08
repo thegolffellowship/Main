@@ -1899,3 +1899,35 @@ send. A `<p>` that already has a style attribute is left alone; that is
 somebody stating an intent.
 
 Tests: `test_compose_plaintext.js`.
+
+### Quick Message (v2.347.0)
+
+> *"How about we add a Quick Message button that shows up when FELLOWSHIP
+> is clicked/filtered that auto selects that option in the Action button
+> for Message Players and pre-populates with the Fellowship YES players
+> and the Fellowship standard message? It takes several steps thru the
+> Action Button."*
+
+`QUICK_MESSAGE_PRESETS` in events.html is a registry keyed on the active
+roster filter: `{label, audience, templateMatch}`. `quickMessageBtnHtml()`
+renders a button for any filter in it that currently matches somebody —
+desktop beside the Registrations Actions button, mobile under the badge
+row (it has no controls row). Fellowship is the only member today; the
+next one is a row, not a branch.
+
+Clicking calls `openComposeModal(eventName, preset)`, which applies the
+preset via `applyComposePreset()`: it selects the matching template and
+**dispatches the real `change` event** rather than copying that handler's
+body, so the two paths cannot drift — the handler is what loads subject
+and body in the current editor mode.
+
+**The async gotcha this had to survive.** `composeTemplates` is filled by
+a background fetch that can be cold, stale, or fail (the 2026-07-14
+"prebuilt messages missing on mobile" bug). The preset is applied against
+the cache first, so a warm modal opens filled with no flicker, and retried
+after the refresh ONLY if the first attempt missed. The condition is what
+stops a slow fetch overwriting text typed in the meantime.
+
+A missing template (deleted, renamed past the `templateMatch`) still sets
+the audience — a correctly-addressed empty message, not a silently wrong
+one.
