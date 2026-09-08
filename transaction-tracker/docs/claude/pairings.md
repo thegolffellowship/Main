@@ -965,3 +965,63 @@ canonical query (AVG of last ≤20 differentials in 12 months via
 `handicap_player_links`) without writing back — the saved rows stay a
 faithful snapshot of what the import provided. A stored index is never
 overwritten.
+
+---
+
+## The pairings roster (v2.342.0, Kerry 2026-09-08)
+
+> *"If someone is not in pairings, it needs to show. Like Michelle
+> DelCarmen. For the open spots, I need to be able to click and select
+> from a list of those players."*
+
+**The roster is not the orders table.** `GET /api/events/<id>/pairings`
+builds `event_players` from `items`, so a player who only RSVP'd in
+Golf Genius — no order row — reached neither the Unassigned panel nor
+the stale-roster banner. The Players tab has always shown them, as
+synthetic `transaction_status: 'gg_rsvp'` rows derived client-side from
+the RSVP list (`ggRsvpRows` on desktop, `mGgRows` on mobile). Those rows
+are now passed into `renderPairingsPanel(ev, registrants, rosterExtra)`
+and merged onto `state.rosterExtra`, so both surfaces agree on who is
+playing. RSVP-only entries carry a `pairing-rsvp-badge` so the manager
+can see why someone is on the sheet with no payment.
+
+This is deliberately a CLIENT-side merge: the unmatched-RSVP derivation
+(email overrides, matched_item_id sanity, first-name heuristics) lives
+in the page and duplicating it server-side would guarantee divergence.
+When that derivation moves to the server, `event_players` should absorb
+it and `rosterExtra` should go away.
+
+**Identity.** `getUnassigned` compared lowercased name strings — the
+same class of bug CLAUDE.md rule 6 exists to prevent, and inconsistent
+with the stale-roster banner three lines above it, which already keys
+people with `pairPersonKey()`. Both now use `pairPersonKey`, and the
+merged roster dedupes on it so a player present in both sources is
+listed once.
+
+**Open seats are a first-class entry point.** Clicking an
+`— open —` seat with nothing selected opens `openPairingPicker()`: the
+unassigned roster with index, tee, an RSVP flag, and a 9/18 mismatch
+marker; picking one calls `_movePlayer` into that exact seat. The old
+behaviour — empty seats were drop targets only, reachable via Move mode
+plus a click in the Unassigned panel at the bottom of the page — is
+unchanged when something IS already selected.
+
+## Menus inside tables (v2.342.0)
+
+> *"Can't read options in actions drop down menu."*
+
+The Events page's actions menus were `position: absolute` inside a
+`td`, which left them subject to every ancestor's overflow and paint
+order — the next row's gear button drew over the menu and swallowed
+half its words. (An earlier instance of the same class, 2026-08-18, was
+patched by giving `.mobile-card` `overflow: visible`.) All three menus —
+event card, Registrations header, per-row gear — now go through
+`evOpenActionsMenu(btn)` / `evCloseActionsMenus()`, which measure the
+button's rect and draw the menu in a `position: fixed` layer at
+`z-index: 9000`, clamped into the viewport and flipped above the button
+when there is no room below. Fixed menus don't travel with the page, so
+scroll and resize close them. The same technique backs
+`openPairingPicker()`. Any NEW menu on a table surface must use it —
+this is the mechanism-level fix, not another per-case `overflow` patch.
+
+Test: `test_pairings_roster.js`.

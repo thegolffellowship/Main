@@ -1,5 +1,15 @@
-window.TGF_VERSION = "2.341.0";
+window.TGF_VERSION = "2.342.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.342.0",
+    date: "2026-09-08",
+    changes: [
+      "Players who are on the roster but not in a group now show up in the pairings view. Kerry: 'If someone is not in pairings, it needs to show. Like Michelle DelCarmen.' She never could \u2014 the pairings roster was built from the orders table, and she had only RSVP'd in Golf Genius, so the Unassigned panel had no idea she existed. The panel now reads the same roster the Players tab shows, and marks the RSVP-only ones so it is clear why they are there without a payment.",
+      "An open seat is now clickable on its own. Click any '\u2014 open \u2014' spot with nothing selected and it lists the players who are not yet in a group, with index and tee, and seats the one you pick. Before this the only route in was to switch to Move mode and click a name in the panel at the bottom of the page \u2014 a long way from the empty chair you are looking at.",
+      "The Unassigned panel matches people, not strings. It compared lowercased names, so a roster 'Michael Marques' and a seated 'Mike Marques' would have been two different men and the seated one would have been listed as missing. It now uses the same person key the stale-roster banner three lines above it already used.",
+      "Actions menus are readable again. Kerry: 'Can't read options in actions drop down menu.' The menu was positioned inside the table, where the next row's gear button painted over the top of it and swallowed half the words. Every actions menu on the Events page \u2014 the event card, the Registrations header, and the per-row gear \u2014 now measures the button it belongs to and draws in a layer above the page, so nothing in the table can clip or cover it. They close on scroll rather than float away from their button.",
+    ],
+  },
   {
     version: "2.341.0",
     date: "2026-09-08",

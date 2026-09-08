@@ -690,6 +690,52 @@
             left: auto;
             right: 0;
         }
+        /* OPEN menus are lifted out of the table's paint order entirely
+           (Kerry 2026-09-08: "Can't read options in actions drop down
+           menu" — the row below's gear button was drawing over the menu
+           text). Absolute positioning left the menu at the mercy of
+           every ancestor's stacking context and overflow; a measured
+           fixed layer answers to nothing but the viewport. Coordinates
+           are written inline by evOpenActionsMenu() from the button's
+           rect, so this class carries no top/left of its own. */
+        /* Open-seat player picker (Kerry 2026-09-08: "For the open spots,
+           I need to be able to click and select from a list of those
+           players."). Same measured-fixed layer as the actions menus so
+           the table can't clip it. */
+        .pairing-rsvp-badge {
+            font-size: 0.6rem; font-weight: 700; letter-spacing: 0.04em;
+            color: #b45309; background: #fef3c7; border: 1px solid #fcd34d;
+            border-radius: 4px; padding: 0 4px; margin-left: 4px;
+            white-space: nowrap;
+        }
+        .pairing-pick-menu {
+            position: fixed; z-index: 9000; background: #fff;
+            border: 1px solid #e5e7eb; border-radius: 8px;
+            box-shadow: 0 8px 24px rgba(0,0,0,0.16);
+            min-width: 210px; max-height: 320px; overflow-y: auto;
+            padding: 0.3rem 0;
+        }
+        .pairing-pick-head {
+            padding: 0.35rem 0.8rem 0.4rem; font-size: 0.68rem; font-weight: 700;
+            letter-spacing: 0.06em; text-transform: uppercase; color: #6b7280;
+            border-bottom: 1px solid #f3f4f6; margin-bottom: 0.2rem;
+        }
+        .pairing-pick-item {
+            display: flex; align-items: baseline; gap: 0.5rem; width: 100%;
+            padding: 0.4rem 0.8rem; font-size: 0.82rem; text-align: left;
+            background: none; border: none; cursor: pointer; color: #1B1B1B;
+        }
+        .pairing-pick-item:hover { background: #f3f4f6; }
+        .pairing-pick-meta { margin-left: auto; font-size: 0.72rem; color: #6b7280; }
+        .pairing-pick-empty {
+            padding: 0.5rem 0.8rem; font-size: 0.8rem; color: #6b7280;
+        }
+        .ev-actions-menu.menu-floating {
+            position: fixed;
+            z-index: 9000;
+            right: auto;
+            bottom: auto;
+        }
         .row-actions-toggle {
             font-size: 0.7rem;
             padding: 0.15rem 0.45rem;
@@ -3221,7 +3267,7 @@
                     // container-scoped and rerenderDetail routes mobile
                     // containers back through renderEventsMobile; only
                     // this stub stood in the way.
-                    detailHtml = badgesHtml + renderPairingsPanel(ev, registrants);
+                    detailHtml = badgesHtml + renderPairingsPanel(ev, registrants, mGgRows);
                 } else if (mobilePayoutsView) {
                     detailHtml = badgesHtml + renderPayoutsPanel(ev, registrants);
                 } else if (mobileFinancialView) {
@@ -5693,8 +5739,24 @@
         return `<span class="pairing-pace-badge" title="${title}" style="font-size:0.68rem;font-weight:700;color:${color};border:1px solid currentColor;border-radius:8px;padding:0 0.3rem;flex-shrink:0;min-width:1.8rem;text-align:center;opacity:${r != null ? '1' : '0.55'};">&#x23F1;${shown}</span>`;
     }
 
-    function renderPairingsPanel(ev, registrants) {
+    function renderPairingsPanel(ev, registrants, rosterExtra) {
         const state = getPairingsState(ev.id);
+        // The pairings roster must be the SAME roster the Players tab
+        // shows (Kerry 2026-09-08: "If someone is not in pairings, it
+        // needs to show. Like Michelle DelCarmen."). The /pairings API
+        // builds event_players from the `items` table, so a player who
+        // only ever RSVP'd in Golf Genius — no order row — was invisible
+        // to the Unassigned panel. The caller already derived those
+        // synthetic GG rows for the roster table; carry them in here so
+        // both surfaces agree on who is playing.
+        state.rosterExtra = (rosterExtra || []).map(r => ({
+            name: r.customer || r.name || '',
+            tee_choice: r.tee_choice || null,
+            handicap_index: null,
+            member_status: 'guest',
+            is_member: false,
+            rsvp_only: true,
+        })).filter(r => r.name && r.name !== 'Unknown');
         state.maxGroupSize = Number(ev.allow_fivesomes) ? 5 : 4;
         // The pairing METHOD is a property of the event, not of this page
         // view (Kerry 2026-07-31: "Whatever method I used should persist
@@ -6205,7 +6267,7 @@
                 }
                 const player = byPos[pos];
                 if (!player) {
-                    html += `<div class="pairing-empty-slot" title="Open spot — select a player or cart pair first, then click here"
+                    html += `<div class="pairing-empty-slot" title="Open spot — click to pick a player from the roster, or select a player/cart pair first and click here"
                         data-ev-id="${ev.id}" data-holes="${holes}" data-group-num="${grp.group_num}" data-cart-pos="${pos}">
                         <span class="pairing-cart-dot" style="background:var(--border);"></span>
                         <span class="pairing-player-name">— open —</span></div>`;
@@ -7239,7 +7301,7 @@
 
         // ---- PAIRINGS VIEW ----
         if (pairingsView) {
-            html += renderPairingsPanel(ev, registrants);
+            html += renderPairingsPanel(ev, registrants, ggRsvpRows);
             return html;
         }
 
@@ -7940,21 +8002,69 @@
         if (typeof _setStickyOffsets === 'function') _setStickyOffsets();
     }
 
+    // ── Actions dropdown positioning ─────────────────────────────────────────
+    // Every "⚙ Actions ▾" menu on this page (event card, Registrations
+    // header, and the per-row gear) shares these two functions. The menu
+    // markup stays where it is in the DOM — only its geometry moves — so
+    // the existing click handlers on .ev-menu-item keep working.
+    function evCloseActionsMenus() {
+        document.querySelectorAll('.ev-actions-menu').forEach(m => {
+            m.style.display = 'none';
+            m.classList.remove('menu-floating');
+            m.style.top = m.style.left = m.style.minWidth = '';
+        });
+    }
+
+    function evOpenActionsMenu(btn) {
+        const menu = btn.nextElementSibling;
+        if (!menu || !menu.classList.contains('ev-actions-menu')) return;
+        evCloseActionsMenus();
+        // Measure with the menu laid out but still invisible to the user.
+        menu.classList.add('menu-floating');
+        menu.style.visibility = 'hidden';
+        menu.style.display = 'block';
+        menu.style.top = '0px';
+        menu.style.left = '0px';
+        const b = btn.getBoundingClientRect();
+        const m = menu.getBoundingClientRect();
+        const pad = 6;
+        // Right-align to the button, then clamp into the viewport.
+        let left = b.right - m.width;
+        left = Math.min(left, window.innerWidth - m.width - pad);
+        left = Math.max(pad, left);
+        // Below the button by default; flip above when the bottom edge
+        // would fall off screen and there is more room up top.
+        let top = b.bottom + 3;
+        if (top + m.height > window.innerHeight - pad
+            && b.top - m.height - 3 > pad) {
+            top = b.top - m.height - 3;
+        }
+        top = Math.max(pad, Math.min(top, window.innerHeight - m.height - pad));
+        menu.style.left = left + 'px';
+        menu.style.top = top + 'px';
+        menu.style.visibility = '';
+    }
+
+    // A fixed menu doesn't travel with the page, so close on any scroll or
+    // resize rather than leave it stranded over unrelated rows.
+    window.addEventListener('scroll', () => {
+        if (document.querySelector('.ev-actions-menu.menu-floating')) evCloseActionsMenus();
+    }, true);
+    window.addEventListener('resize', evCloseActionsMenus);
+
     function attachDetailHandlers(container, ev) {
         // Actions dropdown toggle
         container.querySelectorAll('.ev-actions-toggle').forEach(btn => {
             btn.addEventListener('click', (e) => {
                 e.stopPropagation();
                 const menu = btn.nextElementSibling;
-                const isOpen = menu.style.display === 'block';
-                document.querySelectorAll('.ev-actions-menu').forEach(m => { m.style.display = 'none'; });
-                if (!isOpen) menu.style.display = 'block';
+                const isOpen = menu && menu.style.display === 'block';
+                if (isOpen) evCloseActionsMenus();
+                else evOpenActionsMenu(btn);
             });
         });
         container.querySelectorAll('.ev-menu-item').forEach(item => {
-            item.addEventListener('click', () => {
-                container.querySelectorAll('.ev-actions-menu').forEach(m => { m.style.display = 'none'; });
-            });
+            item.addEventListener('click', () => { evCloseActionsMenus(); });
         });
 
         // Expandable player detail rows
@@ -9546,12 +9656,26 @@
         // 1some as clickable for moving as a PLAYER, or a PAIR."
         container.querySelectorAll('.pairing-empty-slot').forEach(slot => {
             slot.addEventListener('click', e => {
-                if (!state.swapMode || state.swapMode === 'group') return;
-                if (!state.selection) return; // empty seats are targets only — pick a player/pair first
+                if (state.swapMode === 'group') return;
                 e.stopPropagation();
                 const holes = slot.dataset.holes;
                 const groupNum = parseInt(slot.dataset.groupNum);
                 const cartPos = parseInt(slot.dataset.cartPos);
+                if (!state.selection) {
+                    // Nothing picked up yet — offer the unassigned roster
+                    // right at the seat (Kerry 2026-09-08). Before this the
+                    // only way in was Move mode + a click in the Unassigned
+                    // panel, which is a long way from the empty chair you
+                    // are looking at.
+                    openPairingPicker(slot, getUnassigned(state), holes, pick => {
+                        _movePlayer(state, {unassigned: true, name: pick.name},
+                                    holes, groupNum, cartPos);
+                        state.isDirty = true; state.selection = null;
+                        commitPairHistory(state);
+                        rerenderDetail(container, ev);
+                    });
+                    return;
+                }
                 if (state.swapMode === 'cartpair') {
                     if (state.selection.holes !== holes) {
                         alert('Cannot swap 9-hole and 18-hole players.');
@@ -9627,6 +9751,66 @@
         });
     }
 
+    // ── Open-seat player picker ──────────────────────────────────────────────
+    // Clicking an "— open —" seat with nothing selected offers the players
+    // who are on the roster but not in any group. Picking one seats them.
+    function closePairingPicker() {
+        document.querySelectorAll('.pairing-pick-menu').forEach(m => m.remove());
+    }
+
+    function openPairingPicker(anchor, players, holes, onPick) {
+        closePairingPicker();
+        const menu = document.createElement('div');
+        menu.className = 'pairing-pick-menu';
+        let inner = '<div class="pairing-pick-head">Seat a player</div>';
+        if (!players.length) {
+            inner += '<div class="pairing-pick-empty">Everyone on the roster is already in a group.</div>';
+        } else {
+            players.forEach((p, i) => {
+                const hcp = p.handicap_index != null ? Number(p.handicap_index).toFixed(1) : '—';
+                const tee = p.tee_choice ? escapeHtml(p.tee_choice) : '—';
+                // A 9-hole player dropped into an 18-hole group (or the
+                // reverse) is legal but worth flagging at the click.
+                const ph = String(p.holes || '');
+                const mismatch = ph && holes && ph !== String(holes)
+                    ? ` <span style="color:#b45309;font-weight:700;">${escapeHtml(ph)}h</span>` : '';
+                inner += `<button type="button" class="pairing-pick-item" data-pick-idx="${i}">`
+                    + `<span>${escapeHtml(p.name)}${p.rsvp_only ? ' <span style="color:#d97706;font-size:0.7rem;font-weight:700;">RSVP</span>' : ''}${mismatch}</span>`
+                    + `<span class="pairing-pick-meta">${hcp} &middot; ${tee}</span></button>`;
+            });
+        }
+        menu.innerHTML = inner;
+        document.body.appendChild(menu);
+        const b = anchor.getBoundingClientRect();
+        const m = menu.getBoundingClientRect();
+        const pad = 6;
+        let left = Math.max(pad, Math.min(b.left, window.innerWidth - m.width - pad));
+        let top = b.bottom + 3;
+        if (top + m.height > window.innerHeight - pad && b.top - m.height - 3 > pad) {
+            top = b.top - m.height - 3;
+        }
+        top = Math.max(pad, Math.min(top, window.innerHeight - m.height - pad));
+        menu.style.left = left + 'px';
+        menu.style.top = top + 'px';
+        menu.querySelectorAll('.pairing-pick-item').forEach(btn => {
+            btn.addEventListener('click', e => {
+                e.stopPropagation();
+                const pick = players[Number(btn.dataset.pickIdx)];
+                closePairingPicker();
+                if (pick) onPick(pick);
+            });
+        });
+        // Swallow the click that opened it, then close on the next one.
+        setTimeout(() => {
+            document.addEventListener('click', closePairingPicker, {once: true});
+        }, 0);
+    }
+    window.addEventListener('scroll', closePairingPicker, true);
+    window.addEventListener('resize', closePairingPicker);
+    document.addEventListener('keydown', e => {
+        if (e.key === 'Escape') closePairingPicker();
+    });
+
     function _findGroup(state, holes, groupNum) {
         const list = holes === '18' ? state.groups_18 : state.groups_9;
         return list.find(g => g.group_num === groupNum);
@@ -9637,12 +9821,27 @@
     }
 
     function getUnassigned(state) {
-        if (!state.event_players || !state.event_players.length) return [];
-        const pairedNames = new Set();
+        // Roster = paid/registered players from the API + the RSVP-only
+        // players the Players tab renders synthetically. Matching is by
+        // pairPersonKey, not by lowercased string: the stale-roster banner
+        // right above already keys people that way, and a raw string
+        // compare would call "Mike Marques" and "Michael Marques" two
+        // different people and list a seated player as unassigned.
+        const roster = [...(state.event_players || []), ...(state.rosterExtra || [])];
+        if (!roster.length) return [];
+        const seated = new Set();
         [...(state.groups_9 || []), ...(state.groups_18 || [])].forEach(g => {
-            (g.players || []).forEach(p => pairedNames.add((p.name || '').toLowerCase()));
+            (g.players || []).forEach(p => seated.add(pairPersonKey(p.name)));
         });
-        return state.event_players.filter(p => !pairedNames.has((p.name || '').toLowerCase()));
+        const out = [];
+        const seen = new Set();
+        roster.forEach(p => {
+            const k = pairPersonKey(p.name);
+            if (!k || seated.has(k) || seen.has(k)) return;
+            seen.add(k);
+            out.push(p);
+        });
+        return out;
     }
 
     function renderUnassignedPlayers(ev, state) {
@@ -9661,6 +9860,9 @@
                 data-ev-id="${ev.id}" data-unassigned-name="${escapeHtml(player.name)}">`;
             html += `<span class="pairing-cart-dot" style="background:#f59e0b;"></span>`;
             html += `<span class="pairing-player-name">${escapeHtml(player.name || '—')}</span>`;
+            if (player.rsvp_only) {
+                html += '<span class="pairing-rsvp-badge" title="RSVP&#39;d in Golf Genius — no order on file yet">RSVP</span>';
+            }
             if (player.name) {
                 html += paceBadge(state, player.name);
             }
@@ -14017,10 +14219,10 @@
             if (!colDrop.contains(e.target) && e.target !== colBtn) {
                 colDrop.classList.remove("open");
             }
-            // Close actions dropdown when clicking outside
-            if (!e.target.closest('.ev-actions-wrap')) {
-                document.querySelectorAll('.ev-actions-menu').forEach(m => { m.style.display = 'none'; });
-            }
+            // Close actions dropdown when clicking outside. A floating menu
+            // is no longer inside .ev-actions-wrap on screen, but it IS
+            // still its DOM descendant, so this test still holds.
+            if (!e.target.closest('.ev-actions-wrap')) evCloseActionsMenus();
             // Also close detail column dropdowns
             document.querySelectorAll(".detail-col-dropdown.open").forEach(d => {
                 if (!d.contains(e.target)) d.classList.remove("open");
