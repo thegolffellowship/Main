@@ -38190,14 +38190,14 @@ CHAPTER_MANAGERS_KEY = "chapter_managers"
 # that's Robert."). Rules-as-data, CLAUDE.md principle 2 — a new chapter
 # is a dial edit, not a release.
 #
-# An entry is only usable when BOTH name and phone are filled. Austin is
-# deliberately seeded EMPTY: Kerry named Robert but gave no last name or
-# number, and a phone number is not something to guess at when it is
-# about to be mailed to members. Any send that needs an unfilled entry is
-# refused rather than mailed with a gap.
+# An entry is only usable when BOTH name and phone are filled; any send
+# that needs an unfilled one is refused rather than mailed with a gap.
+# Both numbers below were given by Kerry directly on 2026-09-08 (Austin
+# is Robert Straiton) — NOT read off a customer record, which is why
+# Robert's cell appears here and nowhere else in the database.
 DEFAULT_CHAPTER_MANAGERS = {
     "San Antonio": {"name": "Kerry", "phone": "(210) 838-3948"},
-    "Austin": {"name": "Robert", "phone": ""},
+    "Austin": {"name": "Robert", "phone": "(361) 389-9395"},
 }
 
 

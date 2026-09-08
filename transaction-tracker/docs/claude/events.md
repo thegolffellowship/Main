@@ -1830,21 +1830,27 @@ database.py, merged over `DEFAULT_CHAPTER_MANAGERS`. One template
 therefore serves both chapters, and a third chapter is a dial edit rather
 than a release (CLAUDE.md principle 2).
 
-**Austin ships with an empty phone on purpose.** Kerry named Robert but
-gave no last name or number, and there are at least two plausible Roberts
-in the roster (Robert Straiton, Robert Light). A phone number about to be
-mailed to members is not something to infer. `/api/messages/send` refuses
-with a 400 naming the chapter when a template USES either variable and
-the chapter has no value for it — the send cannot go out with a gap where
-the number belongs. Fill it with:
+**Both numbers came from Kerry directly (2026-09-08), not from a customer
+record.** San Antonio is Kerry, (210) 838-3948 — confirmed by him.
+Austin is Robert Straiton, (361) 389-9395 — a number that exists nowhere
+else in the database; his customer row has no phone. Do not "correct"
+either against `customers.customer_phone`.
+
+The dial is set live on production and mirrored in
+`DEFAULT_CHAPTER_MANAGERS`, so a rebuilt database carries the same values.
+
+**A chapter with no number still cannot be mailed blank.**
+`/api/messages/send` refuses with a 400 naming the chapter when a
+template USES either variable and the chapter has no value for it — which
+is what makes it safe to add a new chapter's manager before their number
+is known. Set or change one with:
 
 ```
 scoring-setting-set:chapter_managers|{"Austin": {"name": "...", "phone": "..."}}
 ```
 
 (the dial merges over the defaults, so setting one chapter does not blank
-the other). San Antonio is seeded with Kerry and the cell on his customer
-record — worth confirming that is the number he wants published.
+the others).
 
 ### Revising a system template's wording (v2.345.0)
 

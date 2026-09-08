@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.345.0";
+window.TGF_VERSION = "2.345.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.345.1",
+    date: "2026-09-08",
+    changes: [
+      "Both chapter managers are on file. Kerry confirmed his own cell, and Austin is Robert Straiton at (361) 389-9395 \u2014 a number he gave directly, which exists nowhere else in the database (Robert's customer record has no phone), so nothing should ever 'correct' it against that record. The setting was applied to the live site immediately; this release only mirrors it into the code defaults so a rebuilt database carries the same values.",
+      "The Fellowship preset now sends on Austin events as well as San Antonio. The refusal that blocked it stays in place for any future chapter added before its number is known.",
+    ],
+  },
   {
     version: "2.345.0",
     date: "2026-09-08",

@@ -145,14 +145,24 @@ def test_a_hand_edited_template_survives_a_revision():
     assert body == "KERRY WROTE THIS"
 
 
-def test_austin_has_no_number_so_it_cannot_be_mailed_blank():
-    """Kerry named Robert but gave no number. Guessing one is not an option,
-    so the send must refuse rather than mail a gap."""
-    sa = db.DEFAULT_CHAPTER_MANAGERS["San Antonio"]
-    assert sa["name"] and sa["phone"]
-    austin = db.DEFAULT_CHAPTER_MANAGERS["Austin"]
-    assert austin["name"] == "Robert"
-    assert austin["phone"] == "", "a phone number must never be invented"
+def test_both_chapters_have_a_manager_on_file():
+    """Kerry confirmed his own cell and gave Robert Straiton's on
+    2026-09-08. Both came from him directly — neither was read off a
+    customer record or inferred."""
+    for chapter in ("San Antonio", "Austin"):
+        mgr = db.DEFAULT_CHAPTER_MANAGERS[chapter]
+        assert mgr["name"], f"{chapter} has no manager name"
+        assert mgr["phone"], f"{chapter} has no manager phone"
+
+
+def test_a_chapter_without_a_number_cannot_be_mailed_blank():
+    """The guard is what makes it safe to add a chapter before its
+    number is known — it refuses instead of mailing 'text Robert at '."""
+    d = _fresh_db()
+    import json
+    db.set_app_setting(db.CHAPTER_MANAGERS_KEY, json.dumps(
+        {"Houston": {"name": "Someone", "phone": ""}}), str(d))
+    assert db.get_chapter_manager("Houston", str(d))["phone"] == ""
 
     src = Path("app.py").read_text(encoding="utf-8")
     assert re.search(
@@ -165,7 +175,7 @@ def test_chapter_manager_lookup():
     assert db.get_chapter_manager("San Antonio", str(d))["phone"]
     assert db.get_chapter_manager("san antonio", str(d))["phone"], "case matters"
     assert db.get_chapter_manager("Austin", str(d))["name"] == "Robert"
-    assert db.get_chapter_manager("Austin", str(d))["phone"] == ""
+    assert db.get_chapter_manager("Austin", str(d))["phone"]
     # Unknown / national label resolves to empty, which callers treat as
     # "not configured" rather than falling back to some other chapter.
     assert db.get_chapter_manager("TGF", str(d)) == {"name": "", "phone": ""}
