@@ -137,7 +137,8 @@ store actually answered.
 2. **No payout was marked paid.** 31 rows PENDING across both events
    ($806.00). Paying is Kerry's Venmo; the receipt matcher closes them.
 3. **No recap was sent.** Two drafts exist. Who sends is OPEN 2; Austin's
-   draft also has two blanks (venue, September points).
+   draft has one blank left (September points; the venue came later —
+   "ShadowGlen was right at the course clubhouse", now on the event).
 4. **Austin Skins / CTP left as recorded.** The shadow Skins rows were not
    deleted and no CTP was invented. OPEN 7.
 5. **Course-bill expenses not linked to their events.** No course charge

@@ -28,7 +28,8 @@ reporting anything done.
    recorded before GG posts a board; the HIO pot pre-counting future
    registrations.
 4. Whether to send the two recap drafts in `docs/claude/recaps/`, and by
-   whom. Austin's still needs the venue and the September points line.
+   whom. Austin's still needs the September points line (the monthly
+   snapshot had not picked up a9.22 when drafted); its venue is filled.
 
 ## Still on the Tracker side, unchanged
 
