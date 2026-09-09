@@ -2729,6 +2729,18 @@ def _scoring_dispatch(url: str, extract: str):
             _subs = [s.strip() for s in arg.split(",") if s.strip()]
             return json.dumps(_ggh.hio_archive_events(_subs),
                               indent=2, default=str)
+        if cmd == "scoring-event-links":
+            # Store registration links (event_links.py, Kerry 2026-09-09):
+            # derive + verify the store product URL for every upcoming
+            # event, mark played events' links expired. "" = dry run
+            # (asks the store, writes nothing); "apply" = save; an event
+            # id scopes to one event ("3314" or "3314|apply").
+            from email_parser.event_links import sweep_event_links as _sweep
+            _p = [x.strip() for x in (arg or "").split("|") if x.strip()]
+            _apply = any(x.lower() == "apply" for x in _p)
+            _one = next((int(x) for x in _p if x.isdigit()), None)
+            return json.dumps(_sweep(apply=_apply, only_event_id=_one),
+                              indent=2, default=str)
         if cmd == "scoring-alias-add":
             # "<customer canonical name>|<alias name>" — records a NAME
             # alias (e.g. the Venmo account name a member pays under).

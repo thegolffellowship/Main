@@ -1155,10 +1155,14 @@
                         </div>
                     </div>
                     <div id="edit-registration-url" style="margin-top:0.75rem;">
-                        <label style="display:block; font-weight:600; font-size:0.82rem; margin-bottom:0.2rem;">Registration link</label>
-                        <input type="url" id="edit-event-registration_url" class="modal-input" placeholder="https://..." style="width:100%;">
+                        <label style="display:block; font-weight:600; font-size:0.82rem; margin-bottom:0.2rem;">Registration link <span style="font-weight:400; color:var(--text-muted);">(store product page)</span></label>
+                        <div style="display:flex; gap:0.4rem; align-items:center;">
+                            <input type="url" id="edit-event-registration_url" class="modal-input" placeholder="https://thegolffellowship.com/shop/ols/products/..." style="flex:1; min-width:0;">
+                            <button type="button" id="edit-event-registration_url-verify" class="btn btn-secondary" style="font-size:0.75rem; padding:0.3rem 0.6rem; white-space:nowrap;" title="Ask the store whether this link is live. Blank: derive it from the event name first.">Verify</button>
+                        </div>
+                        <div id="edit-event-registration_url-status" style="font-size:0.75rem; margin-top:0.3rem;"></div>
                         <div style="font-size:0.75rem; color:var(--text-muted); margin-top:0.2rem;">
-                            The sign-up URL the Lead Center follow-up texts send. Leave blank and the text drops the link sentence rather than sending a broken one.
+                            Derived from the event name and checked against the store every morning. Used by the Lead Center follow-up texts and by <code>{event_url}</code> in Message Players. Expires once the event has been played — it stays on record but will not be sent.
                         </div>
                     </div>
 
@@ -1981,10 +1985,10 @@
                         </div>
                     </div>
                     <div id="add-registration-url" style="margin-top:0.75rem;">
-                        <label style="display:block; font-weight:600; font-size:0.82rem; margin-bottom:0.2rem;">Registration link</label>
-                        <input type="url" id="add-event-registration_url" class="modal-input" placeholder="https://..." style="width:100%;">
+                        <label style="display:block; font-weight:600; font-size:0.82rem; margin-bottom:0.2rem;">Registration link <span style="font-weight:400; color:var(--text-muted);">(store product page)</span></label>
+                        <input type="url" id="add-event-registration_url" class="modal-input" placeholder="Leave blank — derived from the event name and verified on save" style="width:100%;">
                         <div style="font-size:0.75rem; color:var(--text-muted); margin-top:0.2rem;">
-                            The sign-up URL the Lead Center follow-up texts send. Leave blank and the text drops the link sentence rather than sending a broken one.
+                            Leave blank and the Tracker derives the store URL from the event name (<code>a9.23 Avery Ranch</code> &rarr; <code>a9-23-avery-ranch</code>) and checks it against the store as soon as the event is saved. Type one only if the store page is named differently. Used by the Lead Center follow-up texts and by <code>{event_url}</code> in Message Players.
                         </div>
                     </div>
 
@@ -2175,6 +2179,7 @@
                         <button type="button" class="btn btn-secondary compose-var-btn" data-var="chapter" style="font-size:0.7rem; padding:0.15rem 0.4rem;">{chapter}</button>
                         <button type="button" class="btn btn-secondary compose-var-btn" data-var="manager_name" style="font-size:0.7rem; padding:0.15rem 0.4rem;" title="Chapter manager's name, from the chapter_managers setting">{manager_name}</button>
                         <button type="button" class="btn btn-secondary compose-var-btn" data-var="manager_phone" style="font-size:0.7rem; padding:0.15rem 0.4rem;" title="Chapter manager's cell, from the chapter_managers setting">{manager_phone}</button>
+                        <button type="button" class="btn btn-secondary compose-var-btn" data-var="event_url" style="font-size:0.7rem; padding:0.15rem 0.4rem;" title="The event's store registration link (Edit Event → Registration link). Refused when the event has no verified link or has already been played.">{event_url}</button>
                     </div>
                     <textarea id="compose-body" class="modal-input" rows="8" style="margin-top:0.2rem; font-family:inherit; resize:vertical;" placeholder="Type your message here. Leave a blank line between paragraphs; wrap **words in stars** to bold them. Use the buttons above to insert personalization tags."></textarea>
                 </label>
@@ -10609,6 +10614,10 @@
                     event_date: ev?.event_date || "",
                     course: ev?.course || "",
                     chapter: ev?.chapter || "",
+                    // Only a usable link previews; otherwise the preview
+                    // shows the same gap the send guard refuses on.
+                    event_url: (ev && ev.registration_url && !["expired", "missing"].includes(ev.registration_url_state))
+                        ? ev.registration_url : "",
                 }),
             });
             const data = await resp.json();
@@ -10645,7 +10654,7 @@
         // introduced a blank.
         const KNOWN_VARS = ["player_name", "event_name", "event_date",
                             "course", "chapter",
-                            "manager_name", "manager_phone"];
+                            "manager_name", "manager_phone", "event_url"];
         const blanks = [];
         (subject + "\n" + body).replace(/\[[A-Z][A-Z0-9 _/-]{2,}\]/g,
             m => { if (!blanks.includes(m)) blanks.push(m); return m; });
@@ -12318,12 +12327,19 @@
             // Persist any packages entered on the PACKAGES tab against the
             // freshly created event (Kerry 2026-08-04: build the event and
             // its packages together).
+            let newEv = null;
             try {
-                const newEv = (await res.json()).event;
+                newEv = (await res.json()).event;
                 const pkgs = pkgCollectRows("add-packages-rows");
                 if (newEv && newEv.id && pkgs.length) await pkgSave(newEv.id, pkgs);
             } catch (err) {
                 alert("Event created, but saving its packages failed — re-enter them in Edit Event → PACKAGES.");
+            }
+            // Derive + verify the store registration link right away
+            // (event_links.py). Non-blocking; the daily sweep is the backstop.
+            if (newEv && newEv.id) {
+                fetch(`/api/events/${newEv.id}/registration-url/check`, { method: "POST" })
+                    .then(() => fetchEvents()).catch(() => {});
             }
             closeAddEventModal();
             await fetchEvents();
@@ -12967,6 +12983,65 @@
     // Edit event modal
     const EVENT_EDIT_FIELDS = ["item_name", "event_date", "course", "chapter", "format", "start_type", "start_time"];
 
+    // Store registration link status line (event_links.py owns the rule;
+    // the server hands us registration_url_state + _suggested on every
+    // event so this only renders).
+    const REG_URL_STATE_LABELS = {
+        ok: ["VERIFIED", "#16A34A", "The store answered for this link."],
+        unverified: ["UNVERIFIED", "#b45309", "On file, but the store has not been asked yet. Click Verify."],
+        missing: ["MISSING", "#dc2626", "No live product page found. Check the store, or type the exact URL."],
+        error: ["UNREACHABLE", "#b45309", "The store could not be reached when last asked."],
+        expired: ["EXPIRED", "#6b7280", "The event has been played. The link stays on record but will not be sent."],
+    };
+    function renderRegistrationUrlStatus(ev) {
+        const box = document.getElementById("edit-event-registration_url-status");
+        if (!box) return;
+        const state = ev.registration_url_state || (ev.registration_url ? "unverified" : "missing");
+        const [label, color, hint] = REG_URL_STATE_LABELS[state] || REG_URL_STATE_LABELS.missing;
+        let html = `<span style="display:inline-block; padding:0.05rem 0.45rem; border-radius:999px; font-weight:700; font-size:0.68rem; color:#fff; background:${color};">${label}</span> <span style="color:var(--text-muted);">${hint}</span>`;
+        if (ev.registration_url_checked_at && state !== "expired") {
+            html += ` <span style="color:var(--text-muted);">Checked ${escapeHtml(String(ev.registration_url_checked_at).slice(0, 16))} UTC.</span>`;
+        }
+        if (!ev.registration_url && ev.registration_url_suggested) {
+            html += `<div style="margin-top:0.25rem;">Suggested: <code style="font-size:0.72rem;">${escapeHtml(ev.registration_url_suggested)}</code> <button type="button" class="btn btn-secondary" id="edit-event-registration_url-use" style="font-size:0.7rem; padding:0.1rem 0.45rem;">Use</button></div>`;
+        }
+        box.innerHTML = html;
+        const useBtn = document.getElementById("edit-event-registration_url-use");
+        if (useBtn) useBtn.addEventListener("click", () => {
+            document.getElementById("edit-event-registration_url").value = ev.registration_url_suggested;
+        });
+    }
+    document.getElementById("edit-event-registration_url-verify")?.addEventListener("click", async () => {
+        const id = parseInt(document.getElementById("edit-event-id").value, 10);
+        const input = document.getElementById("edit-event-registration_url");
+        const typed = (input.value || "").trim();
+        const ev = allEvents.find(e => e.id === id);
+        if (!ev) return;
+        const box = document.getElementById("edit-event-registration_url-status");
+        box.innerHTML = '<span style="color:var(--text-muted);">Asking the store…</span>';
+        try {
+            // Save a typed URL first so the check runs against what is in the box.
+            if (typed && typed !== (ev.registration_url || "")) {
+                await fetch(`/api/events/${id}`, { method: "PATCH",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ registration_url: typed }) });
+            }
+            const res = await fetch(`/api/events/${id}/registration-url/check`, { method: "POST" });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error || "check failed");
+            Object.assign(ev, {
+                registration_url: data.registration_url,
+                registration_url_state: data.registration_url_state,
+                registration_url_suggested: data.registration_url_suggested,
+                registration_url_checked_at: (data.link || {}).checked_at,
+            });
+            input.value = ev.registration_url || "";
+            renderRegistrationUrlStatus(ev);
+        } catch (err) {
+            box.innerHTML = `<span style="color:#dc2626;">${escapeHtml(err.message || "check failed")}</span>`;
+        }
+    });
+
     function openEditEvent(eventId) {
         const ev = allEvents.find(e => e.id === eventId);
         if (!ev) return;
@@ -13038,6 +13113,7 @@
         if (editRangeBalls) editRangeBalls.checked = !!Number(ev.range_balls_included);
         const editRegUrl = document.getElementById("edit-event-registration_url");
         if (editRegUrl) editRegUrl.value = ev.registration_url || "";
+        renderRegistrationUrlStatus(ev);
 
         // Pricing fields — single format
         document.getElementById("edit-event-tgf_markup").value = ev.tgf_markup != null ? ev.tgf_markup : "";

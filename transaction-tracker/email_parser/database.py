@@ -3455,6 +3455,12 @@ def init_db(db_path: str | Path | None = None) -> None:
             ("allow_fivesomes", "INTEGER"),
             ("pairing_mode", "TEXT"),
             ("pairing_race_key", "TEXT"),
+            # Store registration link provenance (event_links.py, Kerry
+            # 2026-09-09): what the store said about registration_url and
+            # when. 'ok' | 'missing' | 'error' | 'expired'; NULL = never
+            # asked. The URL itself is registration_url (#417 D).
+            ("registration_url_status", "TEXT"),
+            ("registration_url_checked_at", "TEXT"),
         ]:
             try:
                 conn.execute(f"ALTER TABLE events ADD COLUMN {col} {col_type}")
@@ -23182,10 +23188,17 @@ def get_all_events(db_path: str | Path | None = None) -> list[dict]:
             """
         ).fetchall()
         results = []
+        from .event_links import link_state as _link_state
+        _today = today_central()
         for r in rows:
             d = dict(r)
             # Convert aliases CSV to list
             d["aliases"] = [a for a in (d.get("aliases") or "").split(",") if a]
+            # Store link as the modal and composer should read it —
+            # computed here so every surface applies ONE rule.
+            _ls = _link_state(d, _today)
+            d["registration_url_state"] = _ls["state"]
+            d["registration_url_suggested"] = _ls["suggested_url"]
             results.append(d)
         return results
 

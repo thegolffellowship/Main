@@ -144,6 +144,10 @@ Do not assume it — read it — but do not redo it either.
     `list_events` for the next dates. "% cashed" = distinct payout
     recipients ÷ field, from GG-backed rows only. Results link:
     `<portal>/pages/<results page>?round_id=<gg league round id>`.
+    Store links for the "up next" events come from
+    `events.registration_url` (derived + verified nightly since
+    v2.349.0; `scoring-event-links` shows the state) — do not hand-build
+    a slug when the row already carries a verified URL.
     Save the draft under `transaction-tracker/docs/claude/recaps/`.
     Kerry sends — OPEN 2.
 5.2 **First-timer follow-up** while the round is fresh — list them

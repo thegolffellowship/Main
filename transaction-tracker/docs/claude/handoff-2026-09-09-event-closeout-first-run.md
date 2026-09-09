@@ -101,6 +101,31 @@ now stores `customer_id` at insert and refuses a self-alias. Test:
 Repair on production = re-send the same one field after deploy; the
 verification is in §5.
 
+### 3c. Store registration links (v2.349.0)
+
+Kerry, pasting the Avery Ranch product URL: *"Are you able to grab other
+current event URLs and add them to the Event pages for email or text
+presets? You could just add a box in each of the Event Creator/Edit
+modals … After the events they become obsolete and should be removed or
+something."*
+
+The box already existed (`registration_url`, #417 D, consumed by the Lead
+Center texts) — it was hand-typed or blank. Now derived from the event
+name, verified against the store before it is saved (GoDaddy soft-404s
+to the shop index, so a 200 alone is not proof), surfaced in Edit Event
+with a state badge + Verify + Use-suggested, filled on Add Event right
+after create, swept daily at 06:00 Central, and marked EXPIRED (not
+deleted — past events are frozen) once the date passes. `{event_url}` in
+Message Players, with the same send-refuses-with-a-reason guard as
+`{manager_phone}`. Full rule: `docs/claude/events.md` § Store
+registration link. Test: `test_event_links.py` (32 checks).
+
+**What could not be verified from this container:** the store is
+unreachable through the session proxy, so the checker's soft-404 rule
+was tested with an injected fetch and then run for real on production
+through `scoring-event-links` after deploy — see the digest for what the
+store actually answered.
+
 ## 4. NOT done, and why
 
 1. **Handicap cards were not emailed to the players who played (Phase

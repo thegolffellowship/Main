@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.348.0";
+window.TGF_VERSION = "2.349.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.349.0",
+    date: "2026-09-09",
+    changes: [
+      "Store registration links are derived, verified and expiring (Kerry: “grab other current event URLs and add them to the Event pages for email or text presets … after the events they become obsolete”). The Registration link box in Add Event and Edit Event already existed for the Lead Center texts; it is now filled automatically: the store slug is the event name lower-cased with punctuation collapsed to hyphens (a9.23 Avery Ranch → a9-23-avery-ranch), and a derived link is saved only once the store answers for it — the store redirects unknown products to the shop index instead of 404ing, so “answers” means HTTP 200 on a URL that still carries the slug.",
+      "Edit Event shows the link's state — VERIFIED, UNVERIFIED, MISSING, UNREACHABLE, EXPIRED — with a Verify button and a one-click Use for the suggested URL. Add Event derives and checks the link the moment the event is saved. A daily 06:00 Central sweep covers every upcoming event and marks played events' links EXPIRED; nothing is ever deleted (past events are frozen), the link simply stops being sendable.",
+      "Message Players gains {event_url}. Send refuses, naming the reason, when the event has no link, the store rejected it, or the event has already been played — the same boundary check that guards {manager_phone}. Preview shows the gap instead of a blank. Bridge: scoring-event-links[|apply][|<event id>]. Test: test_event_links.py (32 checks).",
+    ],
+  },
   {
     version: "2.348.0",
     date: "2026-09-09",
