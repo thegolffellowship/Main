@@ -204,6 +204,81 @@ CA (spread is in the tax base; the GoDaddy-covering part is not).
 
 Question 3 (open): the pre-9/5 rows that book rate-card markup.
 
+## Question 3 and the rulings that came with it (evening) — v2.351.0
+
+Kerry, verbatim: *"All memberships fund shirts but here's how it needs to
+be allocated. August 2025 thru July 2026 goes to 2026 Lone Star Cup shirt
+fund, while August 2026 to July 2027 goes to 2027 shirt fund. The shirt
+fund needs to have it's own column in the lead breakdown."* · *"I'm fine
+with moving the margin-model cutover back to 8/27, but ultimately I want
+you to tell me where the gaps are in the past event costs ... I don't
+care if it doesn't match the Comptroller's stuff. We can always amend
+past reporting if necessary. Our bookkeeping needs to be above reproach
+and account for every penny and I need to know what needs to be in our
+liability buckets too."* · *"I want to be able to see that ACTUALLY LEFT
+and OVERSTATED column reduced to one column, MARGIN ... Then perhaps a
+column that computes tax liability for sales tax."*
+
+Done: cutover dial → 2026-08-27, window rebooked (87 orders, 57 rows,
+margin −$122.71, tax −$6.95, Aug+Sep only). Table: Paid · Fee net ·
+Course · Prizes · Shirt fund · Margin · Sales tax · Check; pre-cutover
+rows flagged "rate card". New reads `scoring-margin-gaps` and
+`scoring-liabilities` (`email_parser/margin_ledger.py`).
+
+### Liabilities snapshot (2026-09-09)
+Prize payouts owed $838.01 (34 rows) · credits held $110.70 (2) · LSC
+shirt fund 2026: 108 memberships = $1,080; 2027: 9 = $90 (shirt purchases
+not yet tagged to the fund) · sales-tax reserve open: Aug $143.48 (due
+9/20) + Sep $61.45 = $204.93; Jan–Jul filed ($2,034.64 reserved).
+Sidebar from Kerry: long-term liabilities into a high-yield savings
+account — routed to CA / Sarah (mailbox #435).
+
+### The gap list (pre-8/27 history, 73 events, 1,257 rows)
+Books say $25,408 of margin; today's residual model would book $28,299.
+The difference is DATA, not model. What Kerry needs to supply, by class:
+1. **Memberships (110 rows, booked $8,661 vs $5,691):** the membership
+   price list by period and what each tier included (New/Renewal/Plus,
+   contest add-ons, $6 pool), so the tiers of the day can be encoded.
+2. **Items with no events row at all:** 2026 HILL COUNTRY MATCHES (27),
+   Austin Kickoff SHADOWGLEN (23), San Antonio Kickoff CEDAR CREEK (24),
+   s9.9 TPC CANYONS (37), s9.16 TPC OAKS (28), s9.10 BRACKENRIDGE (19),
+   San Antonio Kickoff NORTHERN HILLS (1), a18.2 CRYSTAL FALLS (11).
+   Need: course cost per player and the prize structure.
+3. **Package events:** 2026 TGF CHAMPIONSHIP (29 rows; per-package course
+   cost), s18.10 FALL KICKOFF Landa Park (24).
+4. **Events rows with course cost blank:** s9.2/s9.7/s9.12/s9.20 Canyon
+   Springs, s9.3/s9.8/s9.13/s9.17 Silverhorn, s9.4/s9.15/s9.19 Quarry,
+   s9.5 Brackenridge, s9.14 Hill Country, s9.9 TPC SA Canyons, a9.3 Avery
+   Ranch, a9.5 Star Ranch, s18.1 Cedar Creek. Need: course cost per player.
+5. **No gap, ready to restate on Kerry's word** (course cost present;
+   only the 1st-Timer discount shows): s18.7 Kissing Tree, a9.11 Riverside,
+   a9.20/a9.8 Avery, a9.12 Roy Kizer, s18.4 Landa, s18.8 Vaaler, a9.19
+   Teravista, a9.18 Forest Creek, a9.10 Star Ranch, s9.21 Canyon Springs.
+
+### Walk-in 1st Timers (Hightower, Hammond — a18.5 Forest Creek) — PROPOSAL, not built
+Kerry: *"They aren't from our Leads ad ... but we still need to be able
+to track them in LEADS. They should be filterable as not part of any
+Leads Ad."* Map:
+- **Capture:** when a GoDaddy order lands for a customer with no prior
+  purchase history and no lead row, auto-create a lead: `source='organic'`,
+  sub-source `store_order` (new value in the ratified list), chapter from
+  the event, `status='converted'` + tag "Registered event", campaign =
+  Unattributed / organic (so CPL/CPP never see them). Also on the
+  manual path today.
+- **Filter:** a source chip "Store 1st Timers (no ad)" beside the campaign
+  select; the ALL funnel counts them, campaign cost math does not.
+- **The clock:** their 48-hour clock is a PRE-EVENT touch, not a sales
+  touch: a new preset (P11 "you're in for Saturday") that asks for a
+  handicap index and offers the ropes-buddy line; the reply logs as a
+  note and the manager enters the index as the starting handicap.
+  Post-event: the first-timer follow-up template the closeout skill found
+  missing (Phase 5.2).
+- **Brevo:** GoDaddy→Brevo already puts them on the new-contact series;
+  the nightly sync should stamp TGF_FIRST_EVENT (date) so the series can
+  branch before/after the first round.
+- **Now:** Hightower and Hammond added by hand as the first two rows once
+  Kerry says go.
+
 ## Kerry decisions this lane is waiting on
 
 - **Round two of the lead campaign** — the biggest lever on the board.
