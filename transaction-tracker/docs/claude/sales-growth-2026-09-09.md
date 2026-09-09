@@ -374,8 +374,9 @@ never read it, so v2.355.0's flag restore re-created the three
 enrollments. v2.356.0: removed stays removed (sync skips + heals),
 removals keep the purchase flag, `scoring-contest-flags-audit` sweeps
 every off-table membership against its email (first pass: 35 clean, 18
-unfetchable because Outlook rules re-key moved messages → v2.356.1
-falls back to a subject search). Miller moved to the Fall race by hand
+unfetchable because Outlook rules re-key moved messages → v2.356.2
+falls back to a subject search; final pass 53 fetched, 53 clean, 0
+mismatches, 18 re-found by subject). Miller moved to the Fall race by hand
 (net NO, fall YES); his 2026 NET enrollment dropped by the sync's
 reconciliation. Match Play 2026 enrollment back to 19. All 14
 membership price groups decompose to the cent. OPEN (Finance lane):
