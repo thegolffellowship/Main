@@ -26,13 +26,20 @@ FLAGS = ("net_points_race", "gross_points_race", "city_match_play",
          "fall_net_points_race")
 
 
-def _default_fetch(uid: str) -> dict | None:
-    from .fetcher import fetch_email_by_id
+def _default_fetch(uid: str, order_id: str | None = None) -> dict | None:
+    """By stored message id first; when that 404s (the message was moved
+    by an Outlook rule and re-keyed), by the order number in the subject."""
+    from .fetcher import fetch_email_by_id, fetch_email_by_subject
     creds = [os.getenv(k) for k in ("AZURE_TENANT_ID", "AZURE_CLIENT_ID",
                                     "AZURE_CLIENT_SECRET", "EMAIL_ADDRESS")]
     if not all(creds):
         raise RuntimeError("Azure AD / EMAIL_ADDRESS not configured")
-    return fetch_email_by_id(*creds, uid)
+    email = fetch_email_by_id(*creds, uid)
+    if email is None and order_id:
+        email = fetch_email_by_subject(*creds, f"New Order #{order_id}")
+        if email:
+            email["refetched_by_subject"] = True
+    return email
 
 
 def _body_text(email_data: dict) -> str:
@@ -76,7 +83,10 @@ def contest_flags_audit(db_path: str | Path | None = None, apply: bool = False,
             uid = r["email_uid"]
             if uid not in cache:
                 try:
-                    cache[uid] = fetch(uid)
+                    try:
+                        cache[uid] = fetch(uid, r.get("order_id"))
+                    except TypeError:      # a one-argument fetch (tests)
+                        cache[uid] = fetch(uid)
                 except Exception as e:  # noqa: BLE001
                     logger.warning("contest flags audit: fetch failed for %s: %s", uid, e)
                     cache[uid] = None
@@ -86,6 +96,8 @@ def contest_flags_audit(db_path: str | Path | None = None, apply: bool = False,
                                            "customer": r["customer"]})
                 continue
             out["fetched"] += 1
+            if email.get("refetched_by_subject"):
+                out["refetched_by_subject"] = out.get("refetched_by_subject", 0) + 1
             form = contest_flags_from_body(_body_text(email).upper())
             diffs = {}
             for f in FLAGS:

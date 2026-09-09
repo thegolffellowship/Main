@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.356.0";
+window.TGF_VERSION = "2.356.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.356.1",
+    date: "2026-09-09",
+    changes: [
+      "Contest-flags audit: a re-keyed order email is found by its subject. The first sweep could not fetch 18 of 53 order emails — every one from January through April — because an Outlook rule had moved them to a dated folder and Graph gives a moved message a NEW id, so the email_uid stored at parse time 404s. fetch_email_by_subject() looks the order up by 'New Order #R…' when the id fails; the audit reports how many it re-found that way. The same re-keying is why Re-extract fails on older orders (a follow-up).",
+      "Production after v2.356.0: the boot sync dropped the three re-created Match Play enrollments (19 enrolled again; the sync reports skipped_removed=3), Daniel Miller moved from the 2026 NET Points Race to the 2026 Fall race per his order, and the membership rebook re-ran: 14 of 14 price groups now decompose to the cent (+$25 margin, Fall pool +$40, NET pool −$80 on Miller).",
+    ],
+  },
   {
     version: "2.356.0",
     date: "2026-09-09",

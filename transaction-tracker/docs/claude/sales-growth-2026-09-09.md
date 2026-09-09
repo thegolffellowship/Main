@@ -373,8 +373,15 @@ over ... You should see that in the history somewhere."* It was there
 never read it, so v2.355.0's flag restore re-created the three
 enrollments. v2.356.0: removed stays removed (sync skips + heals),
 removals keep the purchase flag, `scoring-contest-flags-audit` sweeps
-every off-table membership against its email. Miller moved to the
-Fall race by hand (net NO, fall YES).
+every off-table membership against its email (first pass: 35 clean, 18
+unfetchable because Outlook rules re-key moved messages → v2.356.1
+falls back to a subject search). Miller moved to the Fall race by hand
+(net NO, fall YES); his 2026 NET enrollment dropped by the sync's
+reconciliation. Match Play 2026 enrollment back to 19. All 14
+membership price groups decompose to the cent. OPEN (Finance lane):
+the three refunded Match Play entries book $50 each with the Venmo
+refunds only in the removals table / expense feed, so the Match Play
+pool reads $120 high.
 
 ## Kerry decisions this lane is waiting on
 
