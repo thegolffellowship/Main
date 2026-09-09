@@ -442,6 +442,15 @@ past filings were computed off an overstated `tgf_operating`, TGF has
 probably been **over**-remitting; Kerry: *"We can always amend past
 reporting if necessary."*
 
+**Historical orders (v2.357.0).** The Tracker's order history began
+2025-12-29 because the inbox check reads seven days back. Older orders
+come in through `order_import.py` (bridge `scoring-import-orders`), the
+same pipeline as the live check, with member notices pre-suppressed.
+Kerry 2026-09-09: Aug 1 – Dec 28 2025 first (the 2026 shirt fund's
+Aug–Jul window), events later; 2025 events have no event rows so their
+allocations wait in the gap list, and Kerry expects 2025 side-game
+breakdowns to differ from today's table.
+
 **Membership decomposition (v2.353.0).** A membership item books
 `base` (New 44 / Returning 69 / Plus 244 taxable) + $6 Monthly Points
 pool + $10 markup per contest bundled (Plus waived) + the contest pools

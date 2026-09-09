@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.356.2";
+window.TGF_VERSION = "2.357.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.357.0",
+    date: "2026-09-09",
+    changes: [
+      "Date-range order import (Kerry: 'August 1 thru December 28, 2025 for the shirt fund first'). `scoring-import-orders:<from>|<to>[|apply][|membership-only]` reads 'New Order' emails for the window from the same mailbox (every folder), skips what the Tracker already holds — by message id OR by the order number in the subject, since moved messages are re-keyed — and runs the rest through the inbox check's own pipeline (parse, save, warnings, processed, then the event / contest / event-link syncs). Dry-run counts and lists; apply runs in a background thread (the bridge times out at 60 s) and `scoring-import-status` reports progress. email_parser/order_import.py; test_order_import.py.",
+      "Two guards for a historical import. No member email: an imported membership term gets its four notice columns and the 'thanks for renewing' confirmation pre-stamped 'suppressed:historical-import', and so does any later term of the same customer that had no confirmation yet — the daily membership job fires on exact expiry dates and would otherwise mail 2025 buyers about terms the Tracker only just learned of. Status flips are shown first: the preview lists every 2025 membership whose buyer has no 2026 membership in the Tracker, because after import that 2025 term becomes their latest and the status sync reads them as FORMER (Brevo follows).",
+    ],
+  },
   {
     version: "2.356.2",
     date: "2026-09-09",

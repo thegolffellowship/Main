@@ -1748,6 +1748,8 @@ def _scoring_dispatch(url: str, extract: str):
       scoring-margin-gaps[:<limit>]  pre-cutover events: booked vs residual-would-book, with reasons (measure-only)
       scoring-liabilities          payouts owed, credits held, LSC shirt fund by Cup year, HIO pot, tax reserve by month
       scoring-membership-gap[:apply]  the membership gap group: booked vs today's decomposition by price/type/contests; apply rebooks membership rows only
+      scoring-import-orders:<from>|<to>[|apply][|membership-only]  date-range import of "New Order" emails from the mailbox (dry-run counts; apply runs in the background, no member email)
+      scoring-import-status        progress of the running/last import
       scoring-contest-flags-audit[:apply][|all]  memberships not at $50/$75 (|all = every one) + SEASON CONTESTS items: stored contest flags vs the option lines printed on the order email (Graph fetch, no AI); apply writes the form's answers
       scoring-mp-reconcile75[:<season>|<chapter>|<allow>]  match-play reconcile
                                    with off-lowest per-chapter allowance
@@ -2428,6 +2430,25 @@ def _scoring_dispatch(url: str, extract: str):
                     "mcp-claude", "scoring-membership-gap",
                     f"rebooked membership rows: {res.get('applied')}")
             return json.dumps(res, indent=2, default=str)
+        if cmd == "scoring-import-orders":
+            # Kerry 2026-09-09: "August 1 thru December 28, 2025 for the
+            # shirt fund first." Dry-run by default; apply is audited and
+            # runs in a thread (poll scoring-import-status).
+            from email_parser.order_import import preview, start
+            _parts = [x.strip() for x in arg.split("|") if x.strip()]
+            if len(_parts) < 2:
+                return json.dumps({"error": "usage: scoring-import-orders:<from>|<to>[|apply][|membership-only]"})
+            _from, _to = _parts[0][:10], _parts[1][:10]
+            _flags = [x.lower() for x in _parts[2:]]
+            _mem = "membership-only" in _flags
+            if "apply" in _flags:
+                db.log_agent_action("mcp-claude", "scoring-import-orders",
+                                    f"started import {_from}..{_to} membership_only={_mem}")
+                return json.dumps(start(_from, _to, membership_only=_mem), indent=2, default=str)
+            return json.dumps(preview(_from, _to, membership_only=_mem), indent=2, default=str)
+        if cmd == "scoring-import-status":
+            from email_parser.order_import import status
+            return json.dumps(status(), indent=2, default=str)
         if cmd == "scoring-contest-flags-audit":
             # Kerry 2026-09-09: sweep every membership that is not a plain
             # $50 / $75 for contest add-ons against the ORDER EMAIL.
