@@ -331,9 +331,29 @@ Kerry, on the new table and the liabilities read:
 
 Mailbox **#436** carries all of it for CA.
 
+## Round two of the evening (v2.353.0)
+
+Kerry picked memberships. `scoring-membership-gap` (measure): 117
+rows, 16 groups, 13 fit today's table; margin $8,949.20 → $5,943.00
+(−$3,006.20), pools $1,536 → $3,262, shirt set-aside $100 → $1,170,
+tax base −$247.73. Misfits (4 rows): $125 Returning no-contest
+(Campos, Cheshire), $125 Returning + NET (Miller), $265 Returning +
+NET+GROSS (Lourigan). Apply is Kerry-gated. FALL Net Points Race now
+decodes inside a membership (Kannon Brown rebooked: $59.20 → $44.20
+margin, $46 pools). Lead attribution window is indefinite (Kerry).
+HIO pot ($3,349 through 9/12's field; $3,336 played) is in the
+liabilities read; Kerry is moving it and the 2027 shirt fund to a HYSA.
+Gap list by_month gives the negative-row tax credit per filed month
+(Jan–Jul ≈ −$89, indicative). Mailbox #437.
+
 ## Kerry decisions this lane is waiting on
 
-- **Which gap group first** (recommend memberships).
+- **Apply the membership rebook** (`scoring-membership-gap:apply`).
+- **The three prices the table does not know** ($125 no-contest, $125
+  + NET on 7/2, $265 + NET+GROSS on 3/16).
+- **2025 import**: date range (Aug 1–Dec 28 2025 for the shirt fund, or
+  all of 2025), confirm same mailbox, go on the parse spend. Needs a
+  windowed import bridge (not built).
 - **HIO pot into the liabilities read** + expense tagging to the
   earmark buckets (the "balance" side) — scope with CA's chart of
   accounts.
