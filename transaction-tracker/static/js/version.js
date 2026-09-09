@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.347.2";
+window.TGF_VERSION = "2.348.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.348.0",
+    date: "2026-09-09",
+    changes: [
+      "A one-field rename no longer produces a surname-less customer. Kerry asked for “Tom Donovan” as the member's name with “Thomas Donovan” as the alias; the bridge sent first_name alone and update_customer_info built the display name from the incoming fields only — so “Tom” was written to his registration row and cascaded into the alias and handicap-link labels, and his registration stopped resolving by name. The UI card never hit it because it always sends first and last together.",
+      "The display name is now built from the merged name parts (incoming over on-record), the cascade is keyed on customer_id with a name sweep only for unlinked rows, it runs on every name change so a repair pass can re-stamp rows an earlier bad label left behind, and a name alias equal to the canonical name is removed. Test: test_customer_rename_cascade.py.",
+      "scoring-alias-add now stores customer_id at insert (rule 6) and refuses an alias equal to the canonical name.",
+    ],
+  },
   {
     version: "2.347.2",
     date: "2026-09-09",

@@ -1,7 +1,8 @@
 # Session record — 2026-09-09 · first run of the event closeout (s9.22 Silverhorn, a9.22 ShadowGlen)
 
-**v2.347.2, documentation only.** Branch `claude/mail-from-ca-79xa2a`,
-pushed to `main` (Railway deploys from `main`).
+**v2.347.2 (documentation) → v2.348.0 (one data-integrity fix, §3b).**
+Branch `claude/mail-from-ca-79xa2a`, pushed to `main` (Railway deploys
+from `main`).
 
 Kerry's instruction: *"Close out the two events from 2026-09-08. Use the
 `event-closeout` skill … Start at Phase 1. Work both chapters, report per
@@ -76,6 +77,29 @@ revenue. `accounting_verified` is true.
 | Recap | `docs/claude/recaps/2026-09-08-a9.22-shadowglen.md` (DRAFT; skins and CTP deliberately absent) |
 
 Both chapters: `sync_season_contests()` → `enrolled: 0, linked: 92`.
+
+### 3b. Kerry's correction, and the hazard it uncovered (v2.348.0)
+
+Kerry, after the report: *"Tom Donovan should be the base member's name
+and Thomas Donovan the alias."* Two writes: `scoring-customer-set:796|
+first_name|Tom` and `scoring-alias-add:Tom Donovan|Thomas Donovan`.
+
+The first one mangled his record. `update_customer_info` built the
+display name from the INCOMING fields only, so a one-field rename set
+`items.customer = "Tom"` and cascaded that surname-less label into
+`customer_aliases.customer_name` and `handicap_player_links.customer_name`.
+`get_customer_details("Donovan")` then returned nothing. The UI card never
+hit this because it always sends first and last together; the bridge sends
+one field. Protect the class: the display name is now built from the
+MERGED parts (incoming over on-record), the cascade is keyed on
+`customer_id` with a name sweep only for unlinked rows, it runs on every
+name change (so a repair pass can re-stamp rows a bad label left behind),
+and a name alias equal to the canonical name is deleted. `scoring-alias-add`
+now stores `customer_id` at insert and refuses a self-alias. Test:
+`test_customer_rename_cascade.py` (14 checks).
+
+Repair on production = re-send the same one field after deploy; the
+verification is in §5.
 
 ## 4. NOT done, and why
 

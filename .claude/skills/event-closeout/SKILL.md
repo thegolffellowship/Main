@@ -60,6 +60,11 @@ Do not assume it — read it — but do not redo it either.
     `scoring-alias-add:<canonical name>|<GG-style name>`, then re-pull the
     card: `scoring-import-event:<code>@<round_id>|refresh=<surname>`.
     Never post handicaps or pairings for a null-cid row (CLAUDE.md rule 6).
+    **Which spelling is canonical is Kerry's call** (2026-09-09: "Tom
+    Donovan" is the member's name, "Thomas Donovan" the alias) — ask
+    before renaming a customers row; the rename itself is
+    `scoring-customer-set:<cid>|first_name|<value>` (safe for one field
+    at a time since v2.348.0).
 
 1.2 **The final GG pairings — the forgotten step.**
     `scoring-pairings:team|<portal>|<round_id>` (dry run) → check

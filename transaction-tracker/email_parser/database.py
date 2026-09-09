@@ -23759,14 +23759,16 @@ def update_customer_info(customer_name: str, fields: dict,
             raise ValueError(f"Invalid phone: {safe['customer_phone']}")
         safe["customer_phone"] = valid
 
-    # If first/last name changed, sync the display name
-    if any(k in safe for k in ("first_name", "last_name", "suffix")):
-        display = " ".join(filter(None, [
-            safe.get("first_name", ""), safe.get("last_name", ""),
-            safe.get("suffix", ""),
-        ]))
-        if display:
-            safe["customer"] = display
+    # The display-name sync (items.customer + every table that renders its
+    # own customer_name copy) happens INSIDE the connection below, after
+    # customer_id is resolved, so it can merge the incoming name parts with
+    # the ones already on record. Building it from the incoming fields
+    # alone turned a one-field rename into a surname-less label: the
+    # scoring-customer-set bridge sent {first_name: "Tom"} for Thomas
+    # Donovan (cid 796, 2026-09-09) and "Tom" was written to items.customer,
+    # customer_aliases.customer_name and handicap_player_links.customer_name.
+    # The UI card never hit it because it always sends first + last together.
+    _NAME_PARTS = ("first_name", "last_name", "suffix")
 
     with _connect(db_path) as conn:
         rowcount = 0
@@ -23805,6 +23807,28 @@ def update_customer_info(customer_name: str, fields: dict,
                 ).fetchone()
                 cid = cid_row["customer_id"] if cid_row else None
 
+        # Sync the display name from the MERGED name parts (incoming fields
+        # over what is on record) whenever any part is being changed.
+        if any(k in safe for k in _NAME_PARTS):
+            current: dict = {}
+            src = None
+            if cid:
+                src = conn.execute(
+                    "SELECT first_name, last_name, suffix FROM customers "
+                    "WHERE customer_id = ?", (cid,)).fetchone()
+            if src is None or not (src["first_name"] or src["last_name"]):
+                src = conn.execute(
+                    "SELECT first_name, last_name, suffix FROM items "
+                    "WHERE customer = ? COLLATE NOCASE "
+                    "ORDER BY id DESC LIMIT 1", (customer_name,)).fetchone()
+            if src is not None:
+                current = {k: src[k] for k in _NAME_PARTS}
+            merged = [(safe[k] if k in safe else current.get(k)) or ""
+                      for k in _NAME_PARTS]
+            display = " ".join(p.strip() for p in merged if p and p.strip())
+            if display:
+                safe["customer"] = display
+
         # Update items table (for item-level fields). Key on customer_id when
         # resolved: an earlier save may have already renamed items.customer
         # (the display-name sync below), so a follow-up save from a UI card
@@ -23832,15 +23856,39 @@ def update_customer_info(customer_name: str, fields: dict,
                     list(safe.values()) + [customer_name],
                 )
                 rowcount = cursor.rowcount
-            # Update alias references if display name changed
-            if "customer" in safe and safe["customer"] != customer_name:
+            # Propagate the display name to every table that renders its own
+            # customer_name copy. Keyed on customer_id when resolved (rule 6)
+            # with a name sweep for unlinked rows — and run whenever a name
+            # part changed, not only when the label differs from the caller's
+            # `customer_name`, so a repair pass can re-stamp rows that an
+            # earlier bad label left behind.
+            if "customer" in safe:
+                if cid:
+                    conn.execute(
+                        "UPDATE OR IGNORE customer_aliases SET customer_name = ? WHERE customer_id = ?",
+                        (safe["customer"], cid),
+                    )
+                    conn.execute(
+                        "UPDATE handicap_player_links SET customer_name = ? WHERE customer_id = ?",
+                        (safe["customer"], cid),
+                    )
+                    # A name alias equal to the canonical name is not an alias;
+                    # the surname-less label bug manufactured one.
+                    conn.execute(
+                        "DELETE FROM customer_aliases WHERE customer_id = ? "
+                        "AND alias_type = 'name' "
+                        "AND alias_value = customer_name COLLATE NOCASE",
+                        (cid,),
+                    )
                 conn.execute(
-                    "UPDATE OR IGNORE customer_aliases SET customer_name = ? WHERE customer_name = ? COLLATE NOCASE",
+                    "UPDATE OR IGNORE customer_aliases SET customer_name = ? "
+                    "WHERE customer_id IS NULL AND customer_name = ? COLLATE NOCASE",
                     (safe["customer"], customer_name),
                 )
                 # Also update handicap_player_links so handicap stays connected
                 conn.execute(
-                    "UPDATE handicap_player_links SET customer_name = ? WHERE customer_name = ? COLLATE NOCASE",
+                    "UPDATE handicap_player_links SET customer_name = ? "
+                    "WHERE customer_id IS NULL AND customer_name = ? COLLATE NOCASE",
                     (safe["customer"], customer_name),
                 )
                 # Propagate the rename to enrollment tables that render their

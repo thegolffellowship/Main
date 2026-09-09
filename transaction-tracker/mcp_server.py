@@ -2733,19 +2733,34 @@ def _scoring_dispatch(url: str, extract: str):
             # "<customer canonical name>|<alias name>" — records a NAME
             # alias (e.g. the Venmo account name a member pays under).
             _canon, _, _alias = arg.partition("|")
+            _canon, _alias = _canon.strip(), _alias.strip()
+            if _canon.lower() == _alias.lower():
+                return json.dumps({"error": "alias equals the canonical name",
+                                   "customer": _canon, "alias": _alias})
             with db._connect(None) as _c:
+                # Store customer_id at insert (CLAUDE.md rule 6): resolve the
+                # canonical name against customers first/last. NULL when it
+                # does not resolve — reported, so the caller sees it.
+                _np = _canon.split()
+                _cid_row = _c.execute(
+                    "SELECT customer_id FROM customers "
+                    "WHERE LOWER(first_name) = LOWER(?) "
+                    "AND LOWER(last_name) = LOWER(?) LIMIT 1",
+                    (_np[0], _np[-1])).fetchone() if len(_np) >= 2 else None
+                _cid = _cid_row["customer_id"] if _cid_row else None
                 _dup = _c.execute(
                     "SELECT id FROM customer_aliases WHERE customer_name = ? "
                     "AND alias_type = 'name' AND alias_value = ? COLLATE NOCASE",
-                    (_canon.strip(), _alias.strip())).fetchone()
+                    (_canon, _alias)).fetchone()
                 if not _dup:
                     _c.execute(
                         "INSERT INTO customer_aliases (customer_name, "
-                        "alias_type, alias_value) VALUES (?, 'name', ?)",
-                        (_canon.strip(), _alias.strip()))
+                        "alias_type, alias_value, customer_id) "
+                        "VALUES (?, 'name', ?, ?)",
+                        (_canon, _alias, _cid))
                     _c.commit()
-            return json.dumps({"customer": _canon.strip(),
-                               "alias": _alias.strip(),
+            return json.dumps({"customer": _canon, "alias": _alias,
+                               "customer_id": _cid,
                                "added": not bool(_dup)}, indent=2)
         if cmd == "scoring-refund-watch-cancel":
             # Cancel an open (unverified) refund watch — "<name>|<amount>
