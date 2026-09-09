@@ -983,12 +983,14 @@ assignment is never overwritten by the auto-link.
 CPP = Cost Per Player = ad spend / unique leads who became a PLAYER
 (registered any event OR became a member; counts once) · CPMem = Cost
 Per Member = ad spend / leads who became members (never "CPM"). Reported
-CURRENT and **LIFETIME** (v2.353.0 — the 30-day trailing window is
-gone; Kerry 2026-09-09: "What is the significance of 10/6 as the end of
-the trailing window? Shouldn't it be indefinite?" A lead is a lifetime
-relationship, so conversions count whenever they happen; the
-`*_trailing` fields remain and equal current, `TRAILING_DAYS = None` is
-the switch). `converted_at` stamps on every conversion path
+CURRENT and as **BENCHMARK WINDOWS** (v2.354.0, Kerry 2026-09-09: "30
+days, 60 days, 90 days, 180 days, one year, lifetime total would be
+good benchmarks to compare"): `cost.windows` carries CPP / CPMem with
+conversions counted through the campaign's last spend day + 30 / 60 /
+90 / 180 / 365 days and lifetime (no cut-off); `open` marks a window
+still filling. `BENCHMARK_WINDOWS` in campaigns.py. The single 30-day
+trailing column of #391 is gone (`TRAILING_DAYS = None`; the
+`*_trailing` fields remain and equal lifetime). `converted_at` stamps on every conversion path
 (auto-detect + `mark_lead`), backfilled from `touched_at` for rows
 converted before the column existed.
 

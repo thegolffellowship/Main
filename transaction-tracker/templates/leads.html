@@ -1491,12 +1491,23 @@
             ${metric("Members", num(f.members))}
             ${metric("Dismissed", num(f.dismissed))}
             </div>
-            <table class="ld-costtbl"><thead><tr><th></th><th>Current</th><th>${STATS.trailing_days == null ? "Lifetime" : STATS.trailing_days + "-day trailing"}</th></tr></thead><tbody>
-            <tr><td>CPL <span class="ld-dsub">spend / leads</span></td><td>${money(c.cpl)}</td><td>${money(c.cpl)}</td></tr>
-            <tr><td>CPP <span class="ld-dsub">spend / players</span></td><td>${money(c.cpp)}<span class="ld-dsub"> /${f.players}</span></td><td>${money(c.cpp_trailing)}<span class="ld-dsub"> /${f.players_trailing}</span></td></tr>
-            <tr><td>CPMem <span class="ld-dsub">spend / members</span></td><td>${money(c.cpmem)}<span class="ld-dsub"> /${f.members}</span></td><td>${money(c.cpmem_trailing)}<span class="ld-dsub"> /${f.members_trailing}</span></td></tr>
-            </tbody></table>
-            <div class="ld-foot">Replied = a human wrote back to our outreach. It does not count Golf Genius RSVPs, HubSpot re-submissions or the app's own bookkeeping notes, so it is narrower than RESPONDED in the queue — that one answers &ldquo;who still needs me&rdquo;, this one answers &ldquo;did our outreach work&rdquo;. Player = registered any event or became a member (counts once). ${STATS.trailing_days == null ? "Lifetime = every conversion a lead ever makes; there is no cut-off date (Kerry 2026-09-09)" : "Trailing counts conversions through " + STATS.trailing_days + " days after the last spend day"} · ${esc(win)}.</div></div>`;
+            ${(() => {
+                // Benchmark windows (Kerry 2026-09-09): conversions
+                // through the last spend day + 30/60/90/180/365, and
+                // lifetime. An open window is provisional.
+                const keys = (STATS.benchmark_windows || [30, 60, 90, 180, 365]).map(String).concat(["lifetime"]);
+                const W = (c.windows || {});
+                const lbl = k => k === "lifetime" ? "Lifetime" : (k === "365" ? "1 yr" : k + "d");
+                const hdr = keys.map(k => `<th title="${W[k] && W[k].cutoff ? "through " + fmtD(W[k].cutoff) : "no cut-off"}">${lbl(k)}${W[k] && W[k].open ? '<span class="ld-dsub"> ·open</span>' : ""}</th>`).join("");
+                const cell = (k, which) => { const w = W[k]; if (!w) return "<td>—</td>";
+                    const v = which === "cpp" ? w.cpp : w.cpmem; const n = which === "cpp" ? w.players : w.members;
+                    return `<td>${money(v)}<span class="ld-dsub"> /${n}</span></td>`; };
+                return `<div style="overflow-x:auto"><table class="ld-costtbl"><thead><tr><th></th><th>Current</th>${hdr}</tr></thead><tbody>
+            <tr><td>CPL <span class="ld-dsub">spend / leads</span></td><td>${money(c.cpl)}</td>${keys.map(() => `<td>${money(c.cpl)}</td>`).join("")}</tr>
+            <tr><td>CPP <span class="ld-dsub">spend / players</span></td><td>${money(c.cpp)}<span class="ld-dsub"> /${f.players}</span></td>${keys.map(k => cell(k, "cpp")).join("")}</tr>
+            <tr><td>CPMem <span class="ld-dsub">spend / members</span></td><td>${money(c.cpmem)}<span class="ld-dsub"> /${f.members}</span></td>${keys.map(k => cell(k, "cpmem")).join("")}</tr>
+            </tbody></table></div>`; })()}
+            <div class="ld-foot">Replied = a human wrote back to our outreach. It does not count Golf Genius RSVPs, HubSpot re-submissions or the app's own bookkeeping notes, so it is narrower than RESPONDED in the queue — that one answers &ldquo;who still needs me&rdquo;, this one answers &ldquo;did our outreach work&rdquo;. Player = registered any event or became a member (counts once). The window columns count conversions through the campaign's last spend day plus 30 / 60 / 90 / 180 / 365 days so campaigns can be compared at the same age; Lifetime has no cut-off (Kerry 2026-09-09). An open window is still filling. ${esc(win)}.</div></div>`;
         // The audit trail behind TGF MARGIN (Kerry 2026-09-04: "I want
         // to make sure your math is correct"). Every allocation row that
         // makes up the number, per person, with the four destinations

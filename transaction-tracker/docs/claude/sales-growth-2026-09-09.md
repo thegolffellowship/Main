@@ -346,9 +346,23 @@ liabilities read; Kerry is moving it and the 2027 shirt fund to a HYSA.
 Gap list by_month gives the negative-row tax credit per filed month
 (Jan–Jul ≈ −$89, indicative). Mailbox #437.
 
+## Round three (v2.354.0)
+
+Membership rebook APPLIED after a backup: 106/117 rows, margin
+$8,934.20 → $5,943.20, tax reserve $737.03 → $490.62. Benchmark
+windows 30/60/90/180/1y/lifetime on the stats table (Kerry). 2025
+"New Order" emails confirmed present in the same mailbox by a
+connector search across all folders (July–December 2025 hits), and the
+parser's Graph call reads the whole mailbox regardless of folder, so a
+date-range import will find them. Kannon question answered: the
+contest ENROLLMENT reads `fall_net_points_race` (standings were always
+right); the MONEY decomposition inside the membership allocator had its
+own three-field list and missed it — one hard-coded list in one
+function. Liabilities: not on any page; only the bridge read — Finance
+lane prompt written (`session-prompt-financial-audit.md`).
+
 ## Kerry decisions this lane is waiting on
 
-- **Apply the membership rebook** (`scoring-membership-gap:apply`).
 - **The three prices the table does not know** ($125 no-contest, $125
   + NET on 7/2, $265 + NET+GROSS on 3/16).
 - **2025 import**: date range (Aug 1–Dec 28 2025 for the shirt fund, or

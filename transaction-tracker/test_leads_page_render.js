@@ -81,7 +81,8 @@ try {
             + "\nglobal.__F = { toggleSection,"
             + " setSearch: v => { searchQ = v; renderLeads(); },"
             + " setStatus: v => { statusFilter = v; renderLeads(); },"
-            + " toggleMenu, closeAllMenus, copyLeadEmail, menuHead };");
+            + " toggleMenu, closeAllMenus, copyLeadEmail, menuHead,"
+            + " setStats: v => { STATS = v; renderStats(); } };");
     render = global.__render; setALL = global.__setALL;
     console.log("  PASS  the page script evaluates");
 } catch (e) {
@@ -369,6 +370,37 @@ try { render(); } catch (e) { check("empty queue renders", false, e.message); }
 check("an empty queue shows an empty-state, never a blank page",
       store["ld-mlist"].innerHTML.length > 0
       || store["ld-dlist"].innerHTML.length > 0);
+
+// ---- Stats panel: the benchmark windows (Kerry 2026-09-09) --------
+// 30/60/90/180/1y/lifetime columns must render, an open window must
+// say so, and lifetime must carry no cut-off. Nothing else in the
+// suite touched renderStats before this.
+{
+    const win = (players, members, cutoff, open) => ({ players, members, cutoff, open,
+        cpp: players ? 199.62 / players : null, cpmem: members ? 199.62 / members : null });
+    const funnel = { leads: 129, touched: 100, replied: 20, interested: 5, players: 6, members: 3,
+        registered: 5, dismissed: 10, new: 9, players_trailing: 6, members_trailing: 3, reply_pct: 20,
+        windows: {} };
+    const windows = { "30": win(4, 2, "2026-10-06", true), "60": win(6, 3, "2026-11-05", true),
+        "90": win(6, 3, "2026-12-05", true), "180": win(6, 3, "2027-03-05", true),
+        "365": win(6, 3, "2027-09-06", true), "lifetime": win(6, 3, null, null) };
+    const bucket = { id: 1, name: "Fall 2026", spend: 199.62, spend_source: "meta", end_date: "2026-09-06",
+        trailing_cutoff: null, trailing_window_open: null, meta: {}, funnel, chapters: {},
+        cost: { cpl: 1.55, cpp: 33.27, cpmem: 66.54, cpp_trailing: 33.27, cpmem_trailing: 66.54, windows },
+        value: null, roi: null };
+    try {
+        F.setStats({ campaigns: [bucket], unattributed: bucket, all: bucket,
+            trailing_days: null, benchmark_windows: [30, 60, 90, 180, 365], definitions: {} });
+    } catch (e) { check("stats panel renders", false, e.message); }
+    const sh = store["ld-stats"].innerHTML;
+    check("stats panel renders the benchmark columns 30d … 1 yr … Lifetime",
+          /<th[^>]*>30d/.test(sh) && /<th[^>]*>180d/.test(sh) && /<th[^>]*>1 yr/.test(sh)
+          && /<th[^>]*>Lifetime/.test(sh), sh.slice(0, 400));
+    check("an open window is marked open", /30d<span class="ld-dsub"> ·open<\/span>/.test(sh), sh.slice(0, 600));
+    check("the 30-day CPP reads $49.91 /4", /\$49\.91<span class="ld-dsub"> \/4<\/span>/.test(sh), sh.slice(0, 900));
+    check("lifetime carries no cut-off", /title="no cut-off">Lifetime/.test(sh));
+    check("the window table scrolls inside its own container", /overflow-x:auto"><table class="ld-costtbl"><thead><tr><th><\/th><th>Current<\/th>/.test(sh));
+}
 
 console.log("");
 if (FAILURES.length) {

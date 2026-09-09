@@ -16,12 +16,15 @@ METRIC DEFINITIONS (Kerry's, verbatim):
           (registered any event OR became a member; both counts once)
   CPMem = Cost Per Member = ad spend / leads who became members
           (never "CPM" — that is cost-per-mille in the Meta panel)
-Reported CURRENT (to date). The 30-day trailing window that used to
-sit beside it is gone (Kerry 2026-09-09: "What is the significance of
-10/6 as the end of the trailing window? Shouldn't it be indefinite?") —
-a lead is a lifetime relationship, so conversions count whenever they
-happen. The `*_trailing` fields remain for the page and equal current;
-`TRAILING_DAYS = None` is the switch.
+Reported CURRENT (to date) and as BENCHMARK WINDOWS — conversions
+counted through the campaign's last spend day + 30 / 60 / 90 / 180 /
+365 days, and LIFETIME (no cut-off). Kerry 2026-09-09: "What is the
+significance of 10/6 as the end of the trailing window? Shouldn't it be
+indefinite? ... I think having 30 days, 60 days, 90 days, 180 days, one
+year, lifetime total would be good benchmarks to compare." A window
+that has not closed yet is marked open (its figure is provisional). The
+`*_trailing` fields remain for older readers and equal lifetime;
+`TRAILING_DAYS = None` keeps them there.
 
 META PANEL: spend, impressions, reach, frequency, link clicks, CTR,
 CPM, leads, CPL from the Marketing API insights edge
@@ -52,6 +55,9 @@ META_GRAPH_VERSION = "v21.0"
 META_INSIGHT_FIELDS = ("spend,impressions,reach,frequency,"
                        "inline_link_clicks,ctr,cpm,actions")
 TRAILING_DAYS = None  # indefinite (Kerry 2026-09-09); an int re-arms the window
+# Benchmark windows, days after the campaign's last spend day (Kerry
+# 2026-09-09). Lifetime is always reported beside them.
+BENCHMARK_WINDOWS = (30, 60, 90, 180, 365)
 INSIGHTS_STALE_MINUTES = 60
 
 # The current campaign (Kerry 2026-09-03) — seeded once, then Kerry's
@@ -720,12 +726,25 @@ def campaign_value(lead_rows: list[dict], conn,
     return out
 
 
-def _funnel(leads: list[dict], today: date, cutoff: date | None) -> dict:
-    """Counts for one bucket. cutoff = the trailing-window end (campaign
-    end + 30d); None = no window (organic / undated)."""
+def _funnel(leads: list[dict], today: date, cutoff: date | None,
+            end_date: date | None = None) -> dict:
+    """Counts for one bucket. cutoff = the trailing-window end; None =
+    no window (organic / undated / indefinite). `end_date` (the
+    campaign's last spend day) anchors the BENCHMARK_WINDOWS counts in
+    f["windows"]; without it every window equals lifetime."""
     f = {"leads": len(leads), "touched": 0, "replied": 0, "interested": 0,
          "players": 0, "members": 0, "registered": 0, "dismissed": 0,
-         "new": 0, "players_trailing": 0, "members_trailing": 0}
+         "new": 0, "players_trailing": 0, "members_trailing": 0,
+         "windows": {}}
+    win_cut = {}
+    for n in BENCHMARK_WINDOWS:
+        wc = (end_date + timedelta(days=n)) if end_date else None
+        win_cut[n] = wc
+        f["windows"][str(n)] = {
+            "players": 0, "members": 0,
+            "cutoff": wc.isoformat() if wc else None,
+            "open": (today <= wc) if wc else None}
+    f["windows"]["lifetime"] = {"players": 0, "members": 0, "cutoff": None, "open": None}
     for l in leads:
         st = l.get("status")
         tag = l.get("tag") or ""
@@ -773,16 +792,27 @@ def _funnel(leads: list[dict], today: date, cutoff: date | None) -> dict:
             if is_mem:
                 f["members"] += 1
             conv = (l.get("converted_at") or "")[:10]
-            inside = True
-            if cutoff and conv:
+            conv_d = None
+            if conv:
                 try:
-                    inside = date.fromisoformat(conv) <= cutoff
+                    conv_d = date.fromisoformat(conv)
                 except ValueError:
-                    inside = True
+                    conv_d = None
+            inside = True
+            if cutoff and conv_d:
+                inside = conv_d <= cutoff
             if inside:
                 f["players_trailing"] += 1
                 if is_mem:
                     f["members_trailing"] += 1
+            for n, wc in win_cut.items():
+                if wc is None or conv_d is None or conv_d <= wc:
+                    f["windows"][str(n)]["players"] += 1
+                    if is_mem:
+                        f["windows"][str(n)]["members"] += 1
+            f["windows"]["lifetime"]["players"] += 1
+            if is_mem:
+                f["windows"]["lifetime"]["members"] += 1
     f["reply_pct"] = (round(100.0 * f["replied"] / f["touched"], 1)
                       if f["touched"] else None)
     return f
@@ -852,18 +882,30 @@ def campaign_stats(db_path: str | Path | None = None,
                 window_open = today_d <= cutoff
             except ValueError:
                 cutoff = None
-        f = _funnel(rows, today_d, cutoff)
+        end_d = None
+        if end_date:
+            try:
+                end_d = date.fromisoformat(end_date)
+            except ValueError:
+                end_d = None
+        f = _funnel(rows, today_d, cutoff, end_d)
         chapters = {}
         for ch in ("San Antonio", "Austin", None):
             sub = [r for r in rows if (r.get("chapter") or None) == ch]
             if sub:
-                chapters[ch or "unrouted"] = _funnel(sub, today_d, cutoff)
+                chapters[ch or "unrouted"] = _funnel(sub, today_d, cutoff, end_d)
         cost = {
             "cpl": _ratio(spend, f["leads"]),
             "cpp": _ratio(spend, f["players"]),
             "cpmem": _ratio(spend, f["members"]),
             "cpp_trailing": _ratio(spend, f["players_trailing"]),
             "cpmem_trailing": _ratio(spend, f["members_trailing"]),
+            # The benchmark columns: CPP / CPMem at each window.
+            "windows": {k: {"cpp": _ratio(spend, w["players"]),
+                            "cpmem": _ratio(spend, w["members"]),
+                            "players": w["players"], "members": w["members"],
+                            "cutoff": w["cutoff"], "open": w["open"]}
+                        for k, w in f["windows"].items()},
         }
         # ROI on MARGIN, never on gross collected (Kerry 2026-09-04:
         # "a calculated ROI on the stats, that includes the lifetime
@@ -955,6 +997,7 @@ def campaign_stats(db_path: str | Path | None = None,
             default="") or None
     return {"today": today_d.isoformat(), "meta_token": bool(_meta_token()),
             "trailing_days": TRAILING_DAYS,
+            "benchmark_windows": list(BENCHMARK_WINDOWS),
             "definitions": {
                 "CPL": "ad spend / leads",
                 "CPP": "ad spend / unique leads who became a player "
@@ -965,6 +1008,10 @@ def campaign_stats(db_path: str | Path | None = None,
                              if TRAILING_DAYS is None else
                              f"conversions counted through {TRAILING_DAYS} "
                              "days after the campaign's last spend day"),
+                "windows": ("benchmark columns: conversions counted through the "
+                            "campaign's last spend day + 30 / 60 / 90 / 180 / 365 "
+                            "days, and lifetime (no cut-off); an open window is "
+                            "provisional"),
             },
             "campaigns": out_campaigns, "unattributed": unattributed,
             "all": all_bucket}

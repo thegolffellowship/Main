@@ -201,6 +201,20 @@ def main():
     check("stats declare the indefinite window",
           campaigns.TRAILING_DAYS is None and "indefinitely" in st["definitions"]["trailing"],
           st.get("definitions", {}).get("trailing"))
+    # Benchmark windows (Kerry 2026-09-09: 30/60/90/180/1y/lifetime).
+    W = cost["windows"]
+    check("30-day window: end 9/6 + 30 = 10/6, open on 9/3, drops the 10/9 and 10/20 conversions",
+          W["30"]["cutoff"] == "2026-10-06" and W["30"]["open"] is True
+          and (W["30"]["players"], W["30"]["members"]) == (4, 2), W["30"])
+    check("30-day CPP = 127.16 / 4 = 31.79, CPMem = 63.58",
+          (W["30"]["cpp"], W["30"]["cpmem"]) == (31.79, 63.58), W["30"])
+    check("60-day window (11/5) keeps both late conversions = lifetime",
+          W["60"]["cutoff"] == "2026-11-05"
+          and (W["60"]["players"], W["60"]["members"]) == (W["lifetime"]["players"], W["lifetime"]["members"]), W)
+    check("lifetime has no cut-off and equals current",
+          W["lifetime"]["cutoff"] is None and W["lifetime"]["players"] == f["players"], W["lifetime"])
+    check("all five windows plus lifetime present",
+          set(W) == {"30", "60", "90", "180", "365", "lifetime"}, list(W))
     ch = c["chapters"]
     check("per-chapter split present", set(ch) >= {"San Antonio", "Austin", "unrouted"}, list(ch))
     check("SA players 3 members 2", (ch["San Antonio"]["players"], ch["San Antonio"]["members"]) == (3, 2), ch["San Antonio"])

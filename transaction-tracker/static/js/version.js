@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.353.0";
+window.TGF_VERSION = "2.354.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.354.0",
+    date: "2026-09-09",
+    changes: [
+      "Lead campaign stats: benchmark windows. Kerry: 'I think having 30 days, 60 days, 90 days, 180 days, one year, lifetime total would be good benchmarks to compare.' The cost table now carries Current, 30d, 60d, 90d, 180d, 1 yr and Lifetime columns for CPP and CPMem, each counting conversions through the campaign's last spend day plus the window; a window still filling is marked open; Lifetime has no cut-off. Replaces the single Lifetime column of v2.353.0.",
+      "Membership rebook APPLIED (Kerry: 'Seems like you should apply the membership rebook'). Backup taken first (tracker_20260909_202327). 117 membership rows, 106 changed: margin $8,934.20 → $5,943.20, pools $1,576 → $3,262, shirt set-aside $100 → $1,170, tax reserve $737.03 → $490.62. Event rows in the same orders untouched. Four rows at prices the table does not know stay at nearest fit until Kerry names them.",
+      "New paste-in prompt docs/claude/session-prompt-financial-audit.md for the Finance lane Kerry asked for: audit the financial side, design the liability ledger with inflows and outflows, and simplify the surfaces — one decision at a time.",
+    ],
+  },
   {
     version: "2.353.0",
     date: "2026-09-09",
