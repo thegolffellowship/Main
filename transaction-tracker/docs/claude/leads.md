@@ -872,6 +872,14 @@ from `note_count` too, so the Stats view's response rate is stricter
 than the queue's. Flagged to CA rather than changed unilaterally — it
 is a reported metric.
 
+**"Followed up 2x" (Kerry 2026-09-09, v2.361.0).** *"I need a 2nd
+follow up option."* Same action a second time: in `DEFAULT_REARM_TAGS`
+(restarts the clock like Followed up), in the tag list right after
+Followed up, in the page's QUIET_TAGS (outreach, not a response). The
+sequence Kerry works is Texted → Followed up → Followed up 2x → No
+answer (which dismisses). The stored `lead_tag_options` dial was
+updated on production at the same time — see the trap below.
+
 **TRAP — a saved dial beats the code defaults.** `lead_tag_options` was
 already set in `app_settings`, so adding "Followed up" to
 `DEFAULT_TAG_OPTIONS` did **nothing** on production: the dropdown kept

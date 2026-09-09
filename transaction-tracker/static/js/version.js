@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.360.0";
+window.TGF_VERSION = "2.361.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.361.0",
+    date: "2026-09-09",
+    changes: [
+      "Lead tag selector: 'Followed up 2x' (Kerry: 'I need a 2nd follow up option'). Same action a second time — it restarts the 48-hour clock exactly like Followed up (lead_rearm_tags default now carries both), sits right after Followed up in the list, and counts as quiet outreach, not a response. The record shows how many times a person was chased before No answer. The stored lead_tag_options dial was updated on production alongside (a saved dial beats the code defaults).",
+    ],
+  },
   {
     version: "2.360.0",
     date: "2026-09-09",

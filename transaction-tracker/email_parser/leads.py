@@ -1853,7 +1853,11 @@ def _clear_outreach_alarm(conn, lead_id: int) -> bool:
 # being explicit is what makes overriding the pending date safe:
 # a mis-tap on Texted must never push a lead out of sight, but choosing
 # Followed up says exactly that.
-DEFAULT_REARM_TAGS = ["Followed up"]
+# "Followed up 2x" (Kerry 2026-09-09: "I need a 2nd follow up option") is
+# the same action a second time — the record shows how many times the
+# person was chased before No answer (Kerry selects that after the 3rd
+# text), and it restarts the clock just like the first.
+DEFAULT_REARM_TAGS = ["Followed up", "Followed up 2x"]
 
 
 def get_rearm_tags(db_path: str | Path | None = None) -> list[str]:
@@ -1865,7 +1869,7 @@ def get_rearm_tags(db_path: str | Path | None = None) -> list[str]:
 # these are the defaults. Tags are dispositions, orthogonal to the
 # new/touched/converted/dismissed pipeline.
 DEFAULT_TAG_OPTIONS = ["Left VM", "Texted", "Sent email", "Followed up",
-                       "No answer",
+                       "Followed up 2x", "No answer",
                        "Call back", "Interested", "Coming to event",
                        "Too expensive", "Days don't work", "Not now",
                        "Bad contact", "Registered event", "Became member"]
