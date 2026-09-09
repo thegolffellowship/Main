@@ -2858,6 +2858,77 @@ def _scoring_dispatch(url: str, extract: str):
             _subs = [s.strip() for s in arg.split(",") if s.strip()]
             return json.dumps(_ggh.hio_archive_events(_subs),
                               indent=2, default=str)
+        if cmd == "scoring-event-pricing-audit":
+            # READ-ONLY (Kerry 2026-09-09, "Pricing should be based off of
+            # what is in the Pricing List in the editor"): events whose
+            # saved course cost has NO line-item breakdown, or whose
+            # breakdown totals to a different number. Those are the rows
+            # the editor used to show as $0 while the list showed the
+            # saved cost. "" = upcoming only; "all" = every dated event.
+            import json as _json
+            _all = (arg or "").strip().lower() == "all"
+            from email_parser.timezone_utils import today_central as _tc
+            _today = _tc().isoformat()
+
+            def _bd_total(raw):
+                if not raw:
+                    return None
+                try:
+                    bd = _json.loads(raw) if isinstance(raw, str) else raw
+                except Exception:
+                    return None
+                tot = 0.0
+                for v in (bd or {}).values():
+                    try:
+                        amt = float((v or {}).get("amount") or 0)
+                        tax = float((v or {}).get("tax_pct") or 0)
+                    except (TypeError, ValueError):
+                        continue
+                    tot += amt * (1 + tax / 100)
+                return round(tot, 2) if tot > 0 else None
+
+            with db._connect() as _c:
+                _rows = _c.execute(
+                    "SELECT id, item_name, event_date, format, course_cost, "
+                    "course_cost_breakdown, course_cost_9, course_cost_breakdown_9, "
+                    "course_cost_18, course_cost_breakdown_18 FROM events "
+                    "WHERE event_date IS NOT NULL "
+                    + ("" if _all else "AND event_date >= ? ")
+                    + "ORDER BY event_date, id",
+                    () if _all else (_today,)).fetchall()
+            _out = []
+            for r in _rows:
+                for leg, cc_col, bd_col in (("", "course_cost", "course_cost_breakdown"),
+                                            ("9", "course_cost_9", "course_cost_breakdown_9"),
+                                            ("18", "course_cost_18", "course_cost_breakdown_18")):
+                    cc = r[cc_col]
+                    if cc is None:
+                        continue
+                    tot = _bd_total(r[bd_col])
+                    if tot is None:
+                        state = "no_breakdown"
+                    elif abs(tot - float(cc)) > 0.011:
+                        state = "mismatch"
+                    else:
+                        continue
+                    _out.append({"id": r["id"], "item_name": r["item_name"],
+                                 "event_date": r["event_date"], "leg": leg or "single",
+                                 "course_cost": cc, "breakdown_total": tot, "state": state})
+            return json.dumps({"scope": "all" if _all else "upcoming",
+                               "events_checked": len(_rows), "flagged": len(_out),
+                               "rows": _out}, indent=2, default=str)
+        if cmd == "scoring-event-links":
+            # Store registration links (event_links.py, Kerry 2026-09-09):
+            # derive + verify the store product URL for every upcoming
+            # event, mark played events' links expired. "" = dry run
+            # (asks the store, writes nothing); "apply" = save; an event
+            # id scopes to one event ("3314" or "3314|apply").
+            from email_parser.event_links import sweep_event_links as _sweep
+            _p = [x.strip() for x in (arg or "").split("|") if x.strip()]
+            _apply = any(x.lower() == "apply" for x in _p)
+            _one = next((int(x) for x in _p if x.isdigit()), None)
+            return json.dumps(_sweep(apply=_apply, only_event_id=_one),
+                              indent=2, default=str)
         if cmd == "scoring-alias-add":
             # "<customer canonical name>|<alias name>" — records a NAME
             # alias (e.g. the Venmo account name a member pays under).

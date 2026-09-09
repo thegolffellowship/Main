@@ -1,11 +1,34 @@
-window.TGF_VERSION = "2.357.0";
+window.TGF_VERSION = "2.358.0";
 window.TGF_CHANGELOG = [
   {
-    version: "2.357.0",
+    version: "2.358.0",
     date: "2026-09-09",
     changes: [
       "Date-range order import (Kerry: 'August 1 thru December 28, 2025 for the shirt fund first'). `scoring-import-orders:<from>|<to>[|apply][|membership-only]` reads 'New Order' emails for the window from the same mailbox (every folder), skips what the Tracker already holds — by message id OR by the order number in the subject, since moved messages are re-keyed — and runs the rest through the inbox check's own pipeline (parse, save, warnings, processed, then the event / contest / event-link syncs). Dry-run counts and lists; apply runs in a background thread (the bridge times out at 60 s) and `scoring-import-status` reports progress. email_parser/order_import.py; test_order_import.py.",
       "Two guards for a historical import. No member email: an imported membership term gets its four notice columns and the 'thanks for renewing' confirmation pre-stamped 'suppressed:historical-import', and so does any later term of the same customer that had no confirmation yet — the daily membership job fires on exact expiry dates and would otherwise mail 2025 buyers about terms the Tracker only just learned of. Status flips are shown first: the preview lists every 2025 membership whose buyer has no 2026 membership in the Tracker, because after import that 2025 term becomes their latest and the status sync reads them as FORMER (Brevo follows).",
+  {
+    version: "2.358.0",
+    date: "2026-09-09",
+    changes: [
+      "The fellowship venue is per EVENT (Kerry: “Max & Louie's was just for that event. We go to different places for each event. Some, like next week, are right in the clubhouse on site”). A Fellowship spot field now sits on the GENERAL tab of Add Event and Edit Event, and the Fellowship — Where We're Meeting preset renders it as {fellowship_spot} instead of the hand-filled [MEETING SPOT] blank. The send refuses, naming the event, while the spot is blank — the same boundary check as {manager_phone} and {event_url}; the composer has a {fellowship_spot} button and the preview shows the gap.",
+      "Template revision done per the §7 rule: the previous seeded body is appended to the prior-bodies registry, so an untouched production row picks up the new wording on boot and a hand-edited one is left alone.",
+    ],
+  },
+  {
+    version: "2.357.1",
+    date: "2026-09-09",
+    changes: [
+      "Edit Event's Course Cost calculator now agrees with the saved course cost (Kerry: “Pricing should be based off of what is in the Pricing List in the editor”). The list column reads events.course_cost; the editor's Pricing List read the calculator, which was seeded only from a line-item breakdown — and course costs entered through the API or MCP tools carry none. So the calculator showed $0.00, the editor's tiers were built from markup and games alone, and Save from that screen wrote the course cost away. The calculator is now seeded from the saved cost as a single tax-free Green Fees line whenever no breakdown exists or the breakdown totals a different number, with a note saying which case it is. Saving keeps the total.",
+      "Read-only bridge scoring-event-pricing-audit[:all] lists the events whose saved course cost has no breakdown or a disagreeing one — the rows the editor used to misread. Test: test_event_pricing_editor.js (13 checks).",
+    ],
+  },
+  {
+    version: "2.357.0",
+    date: "2026-09-09",
+    changes: [
+      "Store registration links are derived, verified and expiring (Kerry: \u201cgrab other current event URLs and add them to the Event pages for email or text presets \u2026 after the events they become obsolete\u201d). The Registration link box in Add Event and Edit Event already existed for the Lead Center texts; it is now filled automatically: the store slug is the event name lower-cased with punctuation collapsed to hyphens (a9.23 Avery Ranch \u2192 a9-23-avery-ranch), and a derived link is saved only once the store answers for it \u2014 the store redirects unknown products to the shop index instead of 404ing, so \u201canswers\u201d means HTTP 200 on a URL that still carries the slug.",
+      "Edit Event shows the link's state \u2014 VERIFIED, UNVERIFIED, MISSING, UNREACHABLE, EXPIRED \u2014 with a Verify button and a one-click Use for the suggested URL. Add Event derives and checks the link the moment the event is saved. A daily 06:00 Central sweep covers every upcoming event and marks played events' links EXPIRED; nothing is ever deleted (past events are frozen), the link simply stops being sendable.",
+      "Message Players gains {event_url}. Send refuses, naming the reason, when the event has no link, the store rejected it, or the event has already been played \u2014 the same boundary check that guards {manager_phone}. Preview shows the gap instead of a blank. Bridge: scoring-event-links[|apply][|<event id>]. Test: test_event_links.py (32 checks).",
     ],
   },
   {

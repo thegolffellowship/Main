@@ -101,6 +101,31 @@ now stores `customer_id` at insert and refuses a self-alias. Test:
 Repair on production = re-send the same one field after deploy; the
 verification is in §5.
 
+### 3c. Store registration links (v2.357.0 — numbered after merging the Sales & Growth lane's 2.349–2.356 from main)
+
+Kerry, pasting the Avery Ranch product URL: *"Are you able to grab other
+current event URLs and add them to the Event pages for email or text
+presets? You could just add a box in each of the Event Creator/Edit
+modals … After the events they become obsolete and should be removed or
+something."*
+
+The box already existed (`registration_url`, #417 D, consumed by the Lead
+Center texts) — it was hand-typed or blank. Now derived from the event
+name, verified against the store before it is saved (GoDaddy soft-404s
+to the shop index, so a 200 alone is not proof), surfaced in Edit Event
+with a state badge + Verify + Use-suggested, filled on Add Event right
+after create, swept daily at 06:00 Central, and marked EXPIRED (not
+deleted — past events are frozen) once the date passes. `{event_url}` in
+Message Players, with the same send-refuses-with-a-reason guard as
+`{manager_phone}`. Full rule: `docs/claude/events.md` § Store
+registration link. Test: `test_event_links.py` (32 checks).
+
+**What could not be verified from this container:** the store is
+unreachable through the session proxy, so the checker's soft-404 rule
+was tested with an injected fetch and then run for real on production
+through `scoring-event-links` after deploy — see the digest for what the
+store actually answered.
+
 ## 4. NOT done, and why
 
 1. **Handicap cards were not emailed to the players who played (Phase
@@ -112,7 +137,8 @@ verification is in §5.
 2. **No payout was marked paid.** 31 rows PENDING across both events
    ($806.00). Paying is Kerry's Venmo; the receipt matcher closes them.
 3. **No recap was sent.** Two drafts exist. Who sends is OPEN 2; Austin's
-   draft also has two blanks (venue, September points).
+   draft has one blank left (September points; the venue came later —
+   "ShadowGlen was right at the course clubhouse", now on the event).
 4. **Austin Skins / CTP left as recorded.** The shadow Skins rows were not
    deleted and no CTP was invented. OPEN 7.
 5. **Course-bill expenses not linked to their events.** No course charge
@@ -140,13 +166,19 @@ verification is in §5.
 - `version.js` polled on production after the push (see the deploy line
   at the top).
 
-## 6. Kerry still owes (asked again here, not for the first time)
+## 6. The two standing asks — both answered 2026-09-09 evening
 
-- The **San Antonio `lead_notify_recipients`** address. The dial holds
-  only Austin (`robert@thegolffellowship.com`); SA is 67% of lead volume.
-- **Austin's fellowship meeting spot.** The template blank guard will
-  refuse the send until it is filled; the Austin recap draft carries the
-  same blank.
+- **San Antonio `lead_notify_recipients`: CLOSED.** Kerry: *"SA lead
+  pings are just me."* SA leads already ping the default list, which is
+  Kerry's inbox; no SA entry is needed. Item removed from the queue.
+- **Fellowship meeting spot: re-designed, not answered.** Kerry: *"Max &
+  Louie's was just for that event. We go to different places for each
+  event. Some, like next week, are right in the clubhouse on site."* So
+  the venue is per EVENT — v2.358.0 adds `events.fellowship_spot` on the
+  GENERAL tab and the preset renders `{fellowship_spot}`. His message
+  carried a literal "[venue]" placeholder for Austin, so the a9.22 recap
+  draft still has its blank; for a9.23 Avery Ranch he will type the spot
+  into Edit Event before sending the preset.
 
 ## 7. OPEN for Kerry — from the skill, verbatim
 

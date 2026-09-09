@@ -25,6 +25,76 @@ lists every event where the id-link and the name-link disagree, with the
 item names actually recorded against it. Regression:
 `test_event_registration_count.py`.
 
+## Fellowship spot — per event, not per chapter (v2.358.0, Kerry 2026-09-09)
+
+`events.fellowship_spot` (GENERAL tab, Add + Edit) is where the group
+meets after THAT event. Kerry: *"Max & Louie's was just for that event.
+We go to different places for each event. Some ... are right in the
+clubhouse on site."* The system template `Fellowship — Where We're
+Meeting` renders it as `{fellowship_spot}` (was the bracketed
+`[MEETING SPOT]` blank). `/api/messages/send` refuses with the event
+named when the template uses the variable and the event has none;
+`/api/messages/preview` shows "(no fellowship spot set for this event)".
+Not a dial: two chapters, a different venue every week, so a per-chapter
+setting would have been wrong by design. Whitelisted in `update_event`,
+carried by `api_create_event` extras, populated / saved in the modals.
+Prior body appended to `_PRIOR_SYSTEM_TEMPLATE_BODIES` (§7 rule).
+
+## Course cost: the saved number is the source; the editor derives from it (v2.357.1, Kerry 2026-09-09)
+
+`events.course_cost` (and `_9` / `_18`) is what the list column, the
+financial summary and the withdrawal credits read. The Edit Event
+calculator stores an optional line-item breakdown
+(`course_cost_breakdown*` JSON: green_fees / cart_fees / range_balls /
+printing / other, each amount + tax%) and used to be seeded ONLY from it —
+so a cost set through the API or the MCP `create_new_event` /
+`update_existing_event` tools (no breakdown parameter) rendered as $0.00
+in the editor, the editor's tiers were computed from markup + games alone,
+and Save wrote `course_cost = null`.
+
+Rule (`breakdownForEditor` in `templates/events.html`): seed the
+calculator from the breakdown when it exists AND totals the saved cost
+(±1¢); otherwise from the saved cost as one tax-free Green Fees line, with
+a note ("entered as a total" / "line items disagree — showing the course
+cost"). An all-zero or unparseable breakdown counts as missing. Audit:
+`scoring-event-pricing-audit[:all]`. Test: `test_event_pricing_editor.js`.
+
+## Store registration link — derived, verified, expiring (v2.357.0, Kerry 2026-09-09)
+
+`events.registration_url` (added for the Lead Center follow-up texts,
+#417 D) is the ONE place an event's store product URL lives; the Lead
+Center texts and the Message Players `{event_url}` variable both read it.
+`email_parser/event_links.py` owns the rule:
+
+- **Derive**: slug = item_name lower-cased, every run of non-alphanumerics
+  → one hyphen (`a9.23 Avery Ranch` → `a9-23-avery-ranch`; `s9.16 TPC San
+  Antonio | Oaks` → `s9-16-tpc-san-antonio-oaks`), under
+  `https://thegolffellowship.com/shop/ols/products/`.
+- **Verify before saving**: the store (GoDaddy Online Store) redirects an
+  unknown product to the shop index rather than 404ing, so "live" = HTTP
+  200 AND the final URL still carries the slug. A derived URL that does
+  not verify is NOT saved — the modal shows it as a suggestion with a
+  MISSING badge. A hand-typed URL is verified in place, never replaced.
+- **Expire, never delete** (principle 4): once `event_date` < today the
+  state reads `expired`; the URL stays on the row. `{event_url}` refuses
+  to render it and the modal badge says so.
+- **State** (`registration_url_state`, computed in `get_all_events`, one
+  rule for every surface): `ok` | `unverified` | `missing` | `error` |
+  `expired`. Provenance columns: `registration_url_status`,
+  `registration_url_checked_at`.
+- **Runs**: daily 06:00 Central scheduler job (`EVENT_LINK_SWEEP=0`
+  disables); `POST /api/events/<id>/registration-url/check` (Edit Event
+  → Verify, and Add Event right after create); bridge
+  `scoring-event-links[|apply][|<event id>]` (no arg = dry run).
+- **Composer**: `{event_url}` button + `KNOWN_VARS`; `/api/messages/send`
+  refuses with the reason when a template uses it and the link is
+  missing, rejected or expired (same class as the `{manager_phone}`
+  guard); `/api/messages/preview` shows "(no registration link on file)".
+- The checker has a host allowlist (`thegolffellowship.com` only) for the
+  same SSRF reason `fetch_public_page` has one.
+
+Test: `test_event_links.py`.
+
 ## Transaction statuses
 - `active` — normal registration, shown in main table
 - `rsvp_only` — RSVP without payment, shown in main table (yellow background)

@@ -1526,6 +1526,33 @@ def start_scheduler():
     )
     logger.info("Monthly points snapshot refresh scheduled daily at 05:30 US/Central")
 
+    # ── Store registration links (event_links.py, Kerry 2026-09-09) ──
+    # Derive + verify the store product URL for every upcoming event and
+    # mark played events' links expired. Pure HTTP against the public
+    # store; nothing is ever deleted. Disable with EVENT_LINK_SWEEP=0.
+    def event_links_sweep_job():
+        from email_parser.event_links import sweep_event_links
+        try:
+            res = sweep_event_links(apply=True)
+            logger.info("Event links sweep: %d verified, %d filled, %d missing, "
+                        "%d expired, %d errors",
+                        res["verified"], res["filled"], res["missing"],
+                        res["expired"], res["errors"])
+        except Exception:
+            logger.exception("Event links sweep failed (non-fatal)")
+
+    if os.getenv("EVENT_LINK_SWEEP", "1") != "0":
+        scheduler.add_job(
+            event_links_sweep_job,
+            "cron",
+            hour=6,
+            minute=0,
+            timezone="US/Central",
+            id="event_links_sweep",
+            replace_existing=True,
+        )
+        logger.info("Event links sweep scheduled daily at 06:00 US/Central")
+
     # ── Auto GG results sync (v2.40.0) ──────────────────────────────
     # Kerry closes an event in GG → results + payouts appear in the
     # Tracker without any manual import. Hourly noon-11pm Central (events
@@ -6703,6 +6730,9 @@ def api_create_event():
         _url = (data.get("registration_url") or "").strip()
         if _url:
             extras["registration_url"] = _url
+        _spot = (data.get("fellowship_spot") or "").strip()
+        if _spot:
+            extras["fellowship_spot"] = _spot
         if extras and event.get("id"):
             try:
                 update_event(event["id"], extras)
@@ -7636,6 +7666,25 @@ def api_delete_template(template_id):
     return jsonify({"error": "Template not found or is a system template"}), 400
 
 
+@app.route("/api/events/<int:event_id>/registration-url/check", methods=["POST"])
+@require_role("manager")
+def api_event_registration_url_check(event_id):
+    """Derive (if blank), verify against the store and save one event's
+    registration link — the Edit Event modal's Verify button, and what the
+    Add Event flow calls right after creating an event. Returns the sweep
+    row plus the link state the modal renders."""
+    from email_parser.event_links import sweep_event_links, link_state
+    res = sweep_event_links(apply=True, only_event_id=event_id)
+    row = res["rows"][0] if res["rows"] else None
+    ev = next((e for e in get_all_events() if e["id"] == event_id), None)
+    if not ev:
+        return jsonify({"error": "event not found"}), 404
+    return jsonify({"result": row, "link": link_state(ev),
+                    "registration_url": ev.get("registration_url") or "",
+                    "registration_url_state": ev.get("registration_url_state"),
+                    "registration_url_suggested": ev.get("registration_url_suggested")})
+
+
 @app.route("/api/messages/send", methods=["POST"])
 @require_role("manager")
 def api_send_messages():
@@ -7688,6 +7737,11 @@ def api_send_messages():
     # Who to call about this chapter's event, from the chapter_managers
     # dial. Kept as variables so one template serves both chapters.
     _mgr = get_chapter_manager(event_info.get("chapter"))
+    # The store registration link, only while it is usable: verified (or
+    # hand-typed) and the event not yet played. event_links.py owns the
+    # rule; a past event's link is "expired", never deleted.
+    from email_parser.event_links import event_url_for_message
+    _event_url, _event_url_problem = event_url_for_message(event_info or None)
     event_vars = {
         "event_name": event_name,
         "event_date": event_info.get("event_date") or "",
@@ -7695,6 +7749,10 @@ def api_send_messages():
         "chapter": event_info.get("chapter") or "",
         "manager_name": _mgr["name"],
         "manager_phone": _mgr["phone"],
+        "event_url": _event_url,
+        # Where the group meets after THIS event — per event, not per
+        # chapter (Kerry 2026-09-09). Blank = the send below refuses.
+        "fellowship_spot": (event_info.get("fellowship_spot") or "").strip(),
     }
     event_status = (event_info.get("status") or "active")
 
@@ -7711,6 +7769,18 @@ def api_send_messages():
             f"{', '.join(_missing)} would send blank. "
             "Set the chapter_managers app setting, or take the "
             "variable out of the message."}), 400
+    # Same class of check for the registration link: a message that
+    # carries {event_url} must not go out with a blank OR a dead link.
+    if "{event_url}" in (subject_tpl + body_tpl) and not _event_url:
+        return jsonify({"error":
+            f"{{event_url}} cannot be sent: {_event_url_problem}. "
+            "Verify the link in Edit Event, or take the variable out "
+            "of the message."}), 400
+    if "{fellowship_spot}" in (subject_tpl + body_tpl) and not event_vars["fellowship_spot"]:
+        return jsonify({"error":
+            f"No fellowship spot is set for {event_name} — "
+            "{fellowship_spot} would send blank. Set it in Edit Event "
+            "(Fellowship spot), or take the variable out of the message."}), 400
 
     # Filter audience. An UNKNOWN value used to fall through the
     # per-recipient else-branch below and mail the entire roster — a
@@ -7970,6 +8040,12 @@ def api_preview_message():
     _pmgr = get_chapter_manager(variables["chapter"])
     variables["manager_name"] = _pmgr["name"] or "(no manager on file)"
     variables["manager_phone"] = _pmgr["phone"] or "(no number on file)"
+    # The composer passes the event's usable link (or nothing); the
+    # preview names the gap the send guard would refuse on.
+    variables["event_url"] = (data.get("event_url") or "").strip() \
+        or "(no registration link on file)"
+    variables["fellowship_spot"] = (data.get("fellowship_spot") or "").strip() \
+        or "(no fellowship spot set for this event)"
 
     return jsonify({
         "subject": render_msg_template(subject_tpl, variables),
