@@ -1532,10 +1532,10 @@
                 <td class="${v.rows_reconcile ? "" : "ld-late"}">${v.rows_reconcile ? "✓" : money(v.overstated)}</td>
               </tr></tfoot></table>
               <div class="ld-foot">
-                <b>Booked</b> is the event's standard markup, which is what the headline uses.
+                <b>Booked</b> is what the allocator booked, which is what the headline uses: the rate-card markup for rows before 2026-09-05, and from then on the residual after course, prizes, set-asides and the card-fee spread (Kerry 2026-09-09: the spread is margin).
                 <b>Actually left</b> is Paid + Fee net &minus; Course &minus; Prizes &minus; set-asides (the $10 Lone Star Cup shirt fund on a membership): what was really there once the course, the winners, the card processor and TGF's own earmarks were settled.
                 ${v.rows_reconcile ? "They agree." : `<span class="ld-late">They do NOT agree. The books overstate by ${money(v.overstated)} across these ${rows.length} rows, so TGF actually kept ${money(tot("margin_actual"))}, not ${money(tot("margin_booked"))}.</span>
-                The cause is discounting: the allocator books the event's standard markup without looking at what the player paid, so a 1st Timer who came in $25 under the guest rate still books full markup. Membership rows agree to the penny; discounted rounds do not.`}
+                The cause is rows dated before 2026-09-05: they book the event's rate-card markup without looking at what the player paid, so a 1st Timer who came in $25 under the guest rate still books full markup. Rows from the cutover on agree to the penny.`}
                 <b>Fee net</b> is the 3.5% the customer paid on top (${money(tot("fee_in"))}) minus what GoDaddy actually took (${money(tot("fee_out"))}) &mdash; TGF keeps the difference, and it IS included in Actually left. On a multi-item order both legs are the order's fee shared out by what each item charged, so the rows of one order sum to that order's fee once.
                 Sales tax reserve (8.25% of markup, ${money(tot("tax"))}) is not deducted either; it comes out of TGF's share later.
               </div></div>`;

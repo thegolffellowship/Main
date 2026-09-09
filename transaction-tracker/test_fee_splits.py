@@ -119,6 +119,72 @@ def main():
     check("godaddy_fee per item = price share of $9.66", fees == [3.72, 1.80, 1.98, 2.16], fees)
     check("not $2.42 each (the old equal split)", 2.42 not in fees, fees)
 
+    print("The spread is margin, and it is taxed (Kerry 2026-09-09)")
+    # Kerry: "the spread should be inside the TGF Margin and in my mind is
+    # the part that gets taxed as it's basically a markup over and above
+    # (or below) what the actual GoDaddy fees are."
+    with db._connect(p) as conn:
+        for n, cost, pool_side in (("s18.11 CEDAR CREEK", 90.65, 14.0),
+                                   ("s9.23 THE QUARRY", 42.22, 7.0),
+                                   ("s9.22 SILVERHORN", 48.71, 7.0),
+                                   ("s9.25 CANYON SPRINGS", 54.12, 7.0)):
+            conn.execute(
+                "INSERT INTO events (item_name, event_date, course, chapter, format, "
+                " course_cost, tgf_markup, side_game_fee, course_surcharge) "
+                "VALUES (?, '2026-09-19', 'x', 'San Antonio', '18 Hole', ?, 15.0, ?, 0.0)",
+                (n, cost, pool_side))
+        conn.commit()
+    allocs = db.calculate_order_allocation("R343961029", db_path=p)
+    spreads = [a["fee_spread"] for a in allocs]
+    check("each item carries its spread: fee-in share minus GoDaddy share",
+          spreads == [0.48, 0.23, 0.26, 0.29], spreads)
+    check("the spreads sum to the order's +$1.26 — Kerry's number",
+          round(sum(spreads), 2) == 1.26)
+    for a in allocs:
+        want = round(a["total_collected"] - a.get("course_payable", 0)
+                     - a.get("course_surcharge", 0) - a.get("prize_pool", 0)
+                     - a.get("lsc_shirt_fund", 0) + a["fee_spread"], 2)
+        check(f"{a['event_name']}: margin is the residual PLUS the spread",
+              a["tgf_operating"] == want, (a["tgf_operating"], want))
+        check(f"{a['event_name']}: tax reserve is 8.25% of that, spread included",
+              a["tax_reserve"] == round(max(a["tgf_operating"], 0) * 0.0825, 2),
+              (a["tax_reserve"], a["tgf_operating"]))
+    cc = allocs[0]
+    check("Cedar Creek books 15.83, not 15.35", cc["tgf_operating"] == 15.83, cc)
+    with db._connect(p) as conn:
+        stored = conn.execute("SELECT fee_spread, tgf_operating FROM acct_allocations "
+                              "WHERE order_id = 'R343961029' AND item_id = 101").fetchone()
+    check("and the stored row carries both",
+          (round(stored["fee_spread"], 2), round(stored["tgf_operating"], 2)) == (0.48, 15.83),
+          dict(stored))
+
+    # A pre-cutover order is frozen: no spread, rate-card margin untouched.
+    pre = db.calculate_order_allocation("R586155719", db_path=p)
+    check("a pre-cutover order books no spread", pre and pre[0]["fee_spread"] == 0.0, pre)
+
+    # dry_run computes without writing.
+    with db._connect(p) as conn:
+        conn.execute("UPDATE acct_allocations SET fee_spread = 0, tgf_operating = 15.35 "
+                     "WHERE order_id = 'R343961029' AND item_id = 101")
+        conn.commit()
+    dry = db.calculate_order_allocation("R343961029", db_path=p, dry_run=True)
+    with db._connect(p) as conn:
+        still = conn.execute("SELECT tgf_operating FROM acct_allocations "
+                             "WHERE order_id = 'R343961029' AND item_id = 101").fetchone()[0]
+    check("dry_run returns the new figure but writes nothing",
+          dry[0]["tgf_operating"] == 15.83 and round(still, 2) == 15.35, (dry[0]["tgf_operating"], still))
+
+    print("rebook_spread_since: dry-run reports, apply writes, re-run is a no-op")
+    rb = fs.rebook_spread_since("2026-09-05", dry_run=True, db_path=p)
+    check("dry-run sees the one stale row", rb["rows_changed"] == 1
+          and rb["changes"][0]["tgf_operating"] == [15.35, 15.83], rb)
+    rb2 = fs.rebook_spread_since("2026-09-05", dry_run=False, db_path=p)
+    check("apply writes it", rb2["rows_changed"] == 1 and rb2["fee_spread_total"] == 1.26, rb2)
+    rb3 = fs.rebook_spread_since("2026-09-05", dry_run=True, db_path=p)
+    check("and a second pass changes nothing", rb3["rows_changed"] == 0, rb3)
+    check("the pre-cutover order is outside the window",
+          all(c["order_id"] != "R586155719" for c in rb2["changes"]))
+
     print("Integrity: a clean database passes")
     with db._connect(p) as conn:
         integ = fs.fee_split_integrity(conn)

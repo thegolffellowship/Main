@@ -1,5 +1,15 @@
-window.TGF_VERSION = "2.349.1";
+window.TGF_VERSION = "2.350.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.350.0",
+    date: "2026-09-09",
+    changes: [
+      "The card-fee spread is TGF margin and is taxed as margin (Kerry-ratified 2026-09-09). On every GoDaddy order the customer pays 3.5% and GoDaddy takes 2.9% + $0.30; what is left over — a few cents either way per item, about +$592 across all orders since December — used to sit in no bucket at all. The allocator now books each item's share of it into tgf_operating and stores it beside as fee_spread, and the 8.25% tax reserve picks it up automatically. Kerry: 'the spread should be inside the TGF Margin and in my mind is the part that gets taxed as it's basically a markup over and above (or below) what the actual GoDaddy fees are ... Somewhat similar to the rounding up concept with the course fees.' Rows dated before the 2026-09-05 margin-model cutover are frozen and book no spread.",
+      "One-time rebook for the rows written since the cutover: scoring-margin-rebook:<since>[|apply] recomputes those orders' allocations through the ordinary allocator (dry-run by default) and reports every bucket that moved. calculate_order_allocation gained dry_run so the report can be produced without writing.",
+      "Consequence on the campaign margin audit table: BOOKED now equals ACTUALLY LEFT on post-cutover rows; the remaining 'overstated' figure is the pre-cutover 1st Timer rows only, which is the next ruling. Footnotes updated to say so.",
+      "Tests: test_fee_splits.py (spread per item, sum to the order's +$1.26, tax on it, frozen pre-cutover row, dry-run, rebook), test_margin_model.py, test_lead_campaigns.py.",
+    ],
+  },
   {
     version: "2.349.1",
     date: "2026-09-09",

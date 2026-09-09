@@ -266,7 +266,8 @@ Each row represents one player's cost allocation for one event:
 - `course_payable` REAL — exact course fee (post-tax, not rounded)
 - `course_surcharge` REAL — per-player surcharge
 - `prize_pool` REAL — player's contribution to prize fund
-- `tgf_operating` REAL — TGF's operating margin
+- `tgf_operating` REAL — TGF's operating margin (residual from 2026-09-05; carries `fee_spread`)
+- `fee_spread` REAL — the item's fee-in share less its GoDaddy share (v2.350.0; inside `tgf_operating`, shown separately)
 - `godaddy_fee` REAL — actual GoDaddy merchant fee share
 - `tax_reserve` REAL — sales tax reserve (8.25% of tgf_operating)
 - `total_collected` REAL — total revenue collected from this player
@@ -361,8 +362,34 @@ guest rate still booked the full markup. It is now:
 
 ```
 tgf_operating = collected − course_payable − course_surcharge − prize_pool
-discount_given = rate_card_markup − tgf_operating
+                − set-asides + fee_spread          (fee_spread from v2.350.0)
+discount_given = rate_card_markup − (tgf_operating − fee_spread)
+fee_spread     = item's share of the 3.5% the customer paid
+                 − item's share of what GoDaddy took (2.9% + $0.30)
 ```
+
+**The fee spread is margin, and it is taxed (Kerry-ratified 2026-09-09,
+v2.350.0).** Kerry: *"the spread should be inside the TGF Margin and in
+my mind is the part that gets taxed as it's basically a markup over and
+above (or below) what the actual GoDaddy fees are. I said pass-thru
+initially because it was never meant to be a profit center, but only
+cover those GoDaddy fees. But ... there's no way to truly pass the
+GoDaddy fees onto the customer cent for cent ... I believe the right
+thing to do is to pay Sales Tax on it because that money is not
+allotted to anything but margin. Somewhat similar to the 'rounding up'
+concept with the course fees."* This supersedes, for the SPREAD only,
+the 2026-09-05 "exclude the fee from the taxable base" reading (#421):
+the part of the 3.5% that covers GoDaddy is still a pass-through cost;
+what is left over (positive on orders over ~$59, negative under) is
+margin and sits in `tgf_operating`, so `tax_reserve` (8.25% of
+`tgf_operating`, floored at zero) picks it up automatically. Both fee
+shares are by item price (`fee_splits.prorate`), so a multi-item
+order's spreads add back to the order's spread. Rows dated before the
+cutover book no spread (frozen). One-time rebook of the post-cutover
+rows: `scoring-margin-rebook:<since>[|apply]`
+(`fee_splits.rebook_spread_since`). A future Stripe integration that
+passes the processor fee through cent for cent would make the spread
+zero by construction.
 
 The course still invoices its full rate and the winners still collect
 the full pool — neither obligation shrinks — so a discount can only come

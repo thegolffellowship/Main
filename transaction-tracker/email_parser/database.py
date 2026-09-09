@@ -4825,7 +4825,16 @@ def init_db(db_path: str | Path | None = None) -> None:
         #                 purpose it chose and can change. Never surface
         #                 it to members as "your dues fund the Cup" —
         #                 that turns a flexible earmark into a promise.
-        for _col in ("discount_given", "lsc_shirt_fund"):
+        # fee_spread      what the customer paid in transaction fee for
+        #                 this item, less what GoDaddy actually took for
+        #                 it. Kerry 2026-09-09: "the spread should be
+        #                 inside the TGF Margin and ... is the part that
+        #                 gets taxed as it's basically a markup over and
+        #                 above (or below) what the actual GoDaddy fees
+        #                 are." Booked into tgf_operating from the margin
+        #                 model cutover on; carried here so it stays
+        #                 visible and auditable.
+        for _col in ("discount_given", "lsc_shirt_fund", "fee_spread"):
             try:
                 conn.execute(f"ALTER TABLE acct_allocations "
                              f"ADD COLUMN {_col} REAL DEFAULT 0")
@@ -5077,6 +5086,7 @@ def init_db(db_path: str | Path | None = None) -> None:
                 -- FRESH database they no-op and the columns must be here.
                 discount_given      REAL DEFAULT 0,
                 lsc_shirt_fund      REAL DEFAULT 0,
+                fee_spread          REAL DEFAULT 0,
                 created_at          TEXT DEFAULT (datetime('now')),
                 UNIQUE(order_id, item_id)
             )
@@ -40377,14 +40387,21 @@ def _create_allocation_for_item(
     return alloc
 
 
-def calculate_order_allocation(order_id: str, db_path: str | Path | None = None) -> list[dict]:
+def calculate_order_allocation(order_id: str, db_path: str | Path | None = None,
+                               dry_run: bool = False) -> list[dict]:
     """Calculate how each item in a GoDaddy order is allocated across buckets.
 
     For EVENT items: course_payable, course_surcharge, prize_pool, tgf_operating,
     godaddy_fee, tax_reserve.
     For MEMBERSHIP items: tgf_operating, prize_pool, godaddy_fee, tax_reserve.
 
+    From the margin-model cutover on, `tgf_operating` also carries the
+    item's FEE SPREAD (its share of the 3.5% the customer paid, less its
+    share of what GoDaddy took) — Kerry-ratified 2026-09-09: the spread
+    is margin and is taxed as margin. `fee_spread` is stored beside it.
+
     Returns a list of allocation dicts (one per item in the order).
+    `dry_run=True` computes without writing.
     """
     with _connect(db_path) as conn:
         items = conn.execute(
@@ -40406,10 +40423,16 @@ def calculate_order_allocation(order_id: str, db_path: str | Path | None = None)
         # (Kerry-ratified 2026-09-09 — the same basis as the order's
         # splits, so the allocator and the ledger agree per item; an
         # equal split gave a $58 round the same fee as a $120 one).
-        from .fee_splits import prorate as _prorate_fee
+        from .fee_splits import prorate as _prorate_fee, order_fee_from_items
+        _prices = [_parse_dollar(i.get("item_price")) for i in items]
         gd_fee_total = round(order_total * 0.029 + 0.30, 2) if order_total else 0
-        _gd_shares = _prorate_fee(
-            gd_fee_total, [_parse_dollar(i.get("item_price")) for i in items])
+        _gd_shares = _prorate_fee(gd_fee_total, _prices)
+        # The customer's 3.5%: ONE order fee (the parser stamps it on
+        # every item row), shared out by item price like the deposit.
+        _fee_in_shares = _prorate_fee(
+            order_fee_from_items(
+                _prices, [_parse_dollar(i.get("transaction_fees")) for i in items]),
+            _prices)
 
         results = []
         for _k, item in enumerate(items):
@@ -40428,7 +40451,19 @@ def calculate_order_allocation(order_id: str, db_path: str | Path | None = None)
             alloc["godaddy_fee"] = gd_fee_per_item
             alloc["total_collected"] = _parse_dollar(item.get("item_price")) or 0
 
-            # Tax reserve: 8.25% of TGF operating revenue
+            # FEE SPREAD → margin (Kerry 2026-09-09). Only under the
+            # residual model: rows before the cutover are frozen at the
+            # rate card (guiding principle 4). The spread can be negative
+            # on a small order (3.5% loses to 2.9% + $0.30 under ~$59).
+            alloc["fee_spread"] = 0.0
+            if _margin_model_applies(item.get("order_date"), conn):
+                alloc["fee_spread"] = round(_fee_in_shares[_k] - gd_fee_per_item, 2)
+                alloc["tgf_operating"] = round(
+                    (alloc.get("tgf_operating", 0) or 0) + alloc["fee_spread"], 2)
+
+            # Tax reserve: 8.25% of TGF operating revenue — the spread
+            # included, on Kerry's ruling: "that money is not allotted
+            # to anything but margin ... So that additionally gets taxed."
             alloc["tax_reserve"] = round(
         max(alloc.get("tgf_operating", 0) or 0, 0) * 0.0825, 2)
 
@@ -40448,6 +40483,9 @@ def calculate_order_allocation(order_id: str, db_path: str | Path | None = None)
             alloc.pop("_needs_course_cost", None)
             results.append(alloc)
 
+        if dry_run:
+            return results
+
         # Upsert allocations
         for alloc in results:
             conn.execute(
@@ -40455,8 +40493,9 @@ def calculate_order_allocation(order_id: str, db_path: str | Path | None = None)
                    (order_id, item_id, event_name, chapter, allocation_date,
                     player_count, course_payable, course_surcharge, prize_pool,
                     tgf_operating, godaddy_fee, tax_reserve, total_collected,
-                    allocation_status, notes, discount_given, lsc_shirt_fund)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    allocation_status, notes, discount_given, lsc_shirt_fund,
+                    fee_spread)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                    ON CONFLICT(order_id, item_id) DO UPDATE SET
                     event_name=excluded.event_name, chapter=excluded.chapter,
                     allocation_date=excluded.allocation_date, player_count=excluded.player_count,
@@ -40466,14 +40505,16 @@ def calculate_order_allocation(order_id: str, db_path: str | Path | None = None)
                     total_collected=excluded.total_collected,
                     allocation_status=excluded.allocation_status, notes=excluded.notes,
                     discount_given=excluded.discount_given,
-                    lsc_shirt_fund=excluded.lsc_shirt_fund""",
+                    lsc_shirt_fund=excluded.lsc_shirt_fund,
+                    fee_spread=excluded.fee_spread""",
                 (alloc["order_id"], alloc["item_id"], alloc["event_name"],
                  alloc["chapter"], alloc["allocation_date"], alloc.get("player_count", 1),
                  alloc.get("course_payable", 0), alloc.get("course_surcharge", 0),
                  alloc.get("prize_pool", 0), alloc.get("tgf_operating", 0),
                  alloc["godaddy_fee"], alloc["tax_reserve"], alloc["total_collected"],
                  alloc["allocation_status"], alloc.get("notes"),
-                 alloc.get("discount_given", 0), alloc.get("lsc_shirt_fund", 0)),
+                 alloc.get("discount_given", 0), alloc.get("lsc_shirt_fund", 0),
+                 alloc.get("fee_spread", 0)),
             )
         conn.commit()
 

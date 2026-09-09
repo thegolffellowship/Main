@@ -335,3 +335,72 @@ def repair_multi_item_fee_splits(dry_run: bool = True,
             out["integrity_now"] = fee_split_integrity(conn)
     out["fee_in_delta"] = round(out["fee_in_after"] - out["fee_in_before"], 2)
     return out
+
+
+def rebook_spread_since(since: str, dry_run: bool = True,
+                        db_path: str | Path | None = None) -> dict:
+    """Recompute the allocations of every GoDaddy order dated on or after
+    `since` so they carry the fee spread (Kerry 2026-09-09: the spread is
+    margin and is taxed as margin). The whole allocation is recomputed
+    through the ordinary allocator, so the report shows every bucket
+    that moved, not just the spread — anything else that changed (a
+    course cost edited since) is visible rather than absorbed.
+
+    Dry-run by default. `since` should be the margin-model cutover
+    (2026-09-05) or later; rows before it are frozen at the rate card and
+    the allocator leaves their spread at zero regardless."""
+    from . import database as db
+    since = (since or "").strip()[:10]
+    out = {"dry_run": dry_run, "since": since, "orders": 0, "rows": 0,
+           "rows_changed": 0, "tgf_operating_before": 0.0,
+           "tgf_operating_after": 0.0, "tax_reserve_before": 0.0,
+           "tax_reserve_after": 0.0, "fee_spread_total": 0.0, "changes": []}
+    with db._connect(db_path) as conn:
+        order_ids = [r["order_id"] for r in conn.execute(
+            """SELECT DISTINCT order_id FROM items
+               WHERE merchant = 'The Golf Fellowship'
+                 AND COALESCE(transaction_status, 'active') = 'active'
+                 AND order_id IS NOT NULL AND order_id != ''
+                 AND substr(COALESCE(order_date, ''), 1, 10) >= ?
+               ORDER BY order_date, order_id""", (since,)).fetchall()]
+        before = {}
+        for r in conn.execute(
+                """SELECT order_id, item_id, tgf_operating, tax_reserve,
+                          fee_spread, godaddy_fee
+                   FROM acct_allocations WHERE order_id IN (%s)"""
+                % ",".join("?" * len(order_ids)) if order_ids else
+                "SELECT order_id, item_id, tgf_operating, tax_reserve, "
+                "fee_spread, godaddy_fee FROM acct_allocations WHERE 0",
+                tuple(order_ids)).fetchall():
+            before[(r["order_id"], r["item_id"])] = dict(r)
+    for oid in order_ids:
+        rows = db.calculate_order_allocation(oid, db_path=db_path, dry_run=dry_run)
+        out["orders"] += 1
+        for a in rows:
+            out["rows"] += 1
+            b = before.get((oid, a["item_id"]), {})
+            t0 = float(b.get("tgf_operating") or 0)
+            x0 = float(b.get("tax_reserve") or 0)
+            t1 = float(a.get("tgf_operating") or 0)
+            x1 = float(a.get("tax_reserve") or 0)
+            out["tgf_operating_before"] = round(out["tgf_operating_before"] + t0, 2)
+            out["tgf_operating_after"] = round(out["tgf_operating_after"] + t1, 2)
+            out["tax_reserve_before"] = round(out["tax_reserve_before"] + x0, 2)
+            out["tax_reserve_after"] = round(out["tax_reserve_after"] + x1, 2)
+            out["fee_spread_total"] = round(
+                out["fee_spread_total"] + float(a.get("fee_spread") or 0), 2)
+            if abs(t1 - t0) > 0.005 or abs(x1 - x0) > 0.005 or not b:
+                out["rows_changed"] += 1
+                out["changes"].append({
+                    "order_id": oid, "item_id": a["item_id"],
+                    "event_name": a.get("event_name"),
+                    "tgf_operating": [round(t0, 2), round(t1, 2)],
+                    "fee_spread": round(float(a.get("fee_spread") or 0), 2),
+                    "tax_reserve": [round(x0, 2), round(x1, 2)],
+                    "new_row": not b,
+                })
+    out["tgf_operating_delta"] = round(
+        out["tgf_operating_after"] - out["tgf_operating_before"], 2)
+    out["tax_reserve_delta"] = round(
+        out["tax_reserve_after"] - out["tax_reserve_before"], 2)
+    return out

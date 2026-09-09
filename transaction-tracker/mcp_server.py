@@ -1717,6 +1717,9 @@ def _render_health(payload: dict) -> dict:
     }
 
 
+MARGIN_CUTOVER_DEFAULT = "2026-09-05"
+
+
 def _scoring_dispatch(url: str, extract: str):
     """Bridge for MCP sessions whose cached tool inventory predates the
     v2.23 scoring tools (client sessions freeze the tool list at session
@@ -1741,6 +1744,7 @@ def _scoring_dispatch(url: str, extract: str):
       scoring-hcp-recap:<event>    (re)send the chapter-manager recap email
       scoring-fee-splits-check     one order, one fee: item rows add back to the order row?
       scoring-fee-splits-repair[:apply]  pro-rate multi-item orders' fee rows by price (dry by default)
+      scoring-margin-rebook[:<since>[|apply]]  recompute allocations >= since so margin carries the fee spread
       scoring-mp-reconcile75[:<season>|<chapter>|<allow>]  match-play reconcile
                                    with off-lowest per-chapter allowance
       scoring-mp-lock-one:<chapter>|<A>|<B>[|apply]  manually lock one
@@ -2367,6 +2371,26 @@ def _scoring_dispatch(url: str, extract: str):
             _orders = res.pop("orders", [])
             res["orders_sample"] = _orders[:8]
             res["orders_listed"] = len(_orders)
+            return json.dumps(res, indent=2, default=str)
+        if cmd == "scoring-margin-rebook":
+            # "<since>[|apply]" — recompute allocations for GoDaddy orders
+            # dated >= since so they carry the fee spread in margin
+            # (Kerry 2026-09-09). Dry-run unless |apply. Audited.
+            _parts = [x.strip() for x in arg.split("|")]
+            _since = _parts[0] if _parts and _parts[0] else MARGIN_CUTOVER_DEFAULT
+            _apply = len(_parts) > 1 and _parts[1].lower() == "apply"
+            from email_parser.fee_splits import rebook_spread_since
+            res = rebook_spread_since(_since, dry_run=not _apply)
+            if _apply:
+                db.log_agent_action(
+                    "mcp-claude", "scoring-margin-rebook",
+                    f"since={_since} orders={res.get('orders')} "
+                    f"rows_changed={res.get('rows_changed')} "
+                    f"tgf_operating {res.get('tgf_operating_before')} -> "
+                    f"{res.get('tgf_operating_after')}"[:200])
+            _ch = res.pop("changes", [])
+            res["changes_sample"] = _ch[:12]
+            res["changes_listed"] = len(_ch)
             return json.dumps(res, indent=2, default=str)
         if cmd == "scoring-backup-run":
             # Take a backup NOW: consistent snapshot -> gzip -> OneDrive

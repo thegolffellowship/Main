@@ -783,6 +783,12 @@ at the source — see `email_parser/fee_splits.py` and
 `unified-financial-model.md` → "ONE ORDER, ONE FEE". The read-side
 apportionment here stays as a no-op guard.
 
+**Fee spread is margin (v2.350.0, Kerry 2026-09-09).** From the cutover
+on the allocator books the item's fee spread into `tgf_operating`, so
+BOOKED equals ACTUALLY LEFT on post-cutover rows and the table's
+remaining "overstated" is the pre-cutover rate-card rows only. Rule of
+record: `unified-financial-model.md` → "The fee spread is margin".
+
 **`margin_actual` deducts set-asides (v2.348.1).** `lsc_shirt_fund`
 ($10 per membership, #422) comes off ACTUALLY LEFT as it already came
 off BOOKED; before this every post-cutover membership read as
