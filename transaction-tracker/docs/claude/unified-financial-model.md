@@ -458,7 +458,15 @@ rows only (`calculate_order_allocation(only_item_ids=…)`,
 `rebook_spread_since(item_class="membership")`); Kerry ratified and it was
 APPLIED 2026-09-09 (v2.354.0, backup tracker_20260909_202327): 106 of
 117 rows changed, margin $8,934.20 → $5,943.20, pools $1,576 → $3,262,
-shirt set-aside $100 → $1,170, tax reserve $737.03 → $490.62.
+shirt set-aside $100 → $1,170, tax reserve $737.03 → $490.62. The four
+"misfit" rows turned out to be PARSER MISSES, not prices of the day:
+the order emails print "Add CITY Match Play?: YES" (Campos, Cheshire,
+Lourigan) and "Add FALL Points Race?: YES" read as NET (Miller). v2.355.0
+reads those option lines deterministically (`contest_flags_from_body`
+in parser.py) and the three Match Play rows were corrected and rebooked
+(+$30 margin, +$120 pool). Lesson for the class: a membership that does
+not decompose to its price is a flag miss until proven otherwise —
+check the source email before asking Kerry.
 
 ## Membership set-asides
 

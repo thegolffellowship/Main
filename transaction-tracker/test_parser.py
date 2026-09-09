@@ -277,8 +277,57 @@ def test_multi_item():
     return len(errors) == 0
 
 
+def test_contest_option_lines():
+    """The printed contest add-on lines override the LLM (2026-09-09:
+    Campos / Cheshire / Lourigan lost 'Add CITY Match Play?: YES';
+    Miller's 'Add FALL Points Race?: YES' came back as NET)."""
+    print("=== Test: Contest option lines are read from the form ===")
+    from email_parser.parser import contest_flags_from_body
+    errors = []
+    body = ("TGF MEMBERSHIP CITY: SAN ANTONIO RETURNING or NEW?: RETURNING "
+            "Add CITY Match Play?: YES Do you have a Current Handicap? YES SKU: MEM-R-S")
+    f = contest_flags_from_body(body.upper())
+    if f != {"city_match_play": "YES"}:
+        errors.append(f"match play line: {f}")
+    body2 = "TGF MEMBERSHIP RETURNING or NEW?: RETURNING Add FALL Points Race?: YES SKU: MEM-R-S"
+    f2 = contest_flags_from_body(body2.upper())
+    if f2 != {"fall_net_points_race": "YES", "net_points_race": "NO"}:
+        errors.append(f"fall line clears NET: {f2}")
+    body3 = ("Add NET Points Race?: YES Add GROSS Points Race?: YES "
+             "Add CITY Match Play?: NO")
+    f3 = contest_flags_from_body(body3.upper())
+    if f3 != {"net_points_race": "YES", "gross_points_race": "YES", "city_match_play": "NO"}:
+        errors.append(f"three lines: {f3}")
+    if contest_flags_from_body("EVENT ONLY - NO ADDITIONAL GAMES") != {}:
+        errors.append("no lines → empty (LLM value kept)")
+    # End to end: the LLM omits the flag, the form line supplies it.
+    email = dict(SAMPLE_EMAIL)
+    email["text"] = (SAMPLE_EMAIL["text"] + "\nTGF MEMBERSHIP\nRETURNING or NEW?: RETURNING\n"
+                     "Add CITY Match Play?: YES\nSKU: MEM-R-S\n$125.00")
+    ai = {"merchant": "The Golf Fellowship", "customer": "Rolando Campos",
+          "order_id": "R745590832", "order_date": "2026-05-13", "total_amount": "$129.38",
+          "items": [{"item_name": "TGF MEMBERSHIP", "item_price": "$125.00", "quantity": 1,
+                     "returning_or_new": "Returning", "city_match_play": None}]}
+    with patch("email_parser.parser.anthropic") as mock_anthropic:
+        mock_client = MagicMock()
+        mock_anthropic.Anthropic.return_value = mock_client
+        mock_client.messages.create.return_value = _make_mock_response(ai)
+        with patch.dict("os.environ", {"ANTHROPIC_API_KEY": "test-key"}):
+            rows = parse_email(email)
+    if not rows or rows[0].get("city_match_play") != "YES":
+        errors.append(f"end to end: {rows and rows[0].get('city_match_play')}")
+    if errors:
+        print("\n  FAILURES:")
+        for e in errors:
+            print(f"    - {e}")
+    else:
+        print("\n  ALL CHECKS PASSED")
+    print()
+    return not errors
+
+
 def main():
-    results = [test_single_item(), test_multi_item()]
+    results = [test_single_item(), test_multi_item(), test_contest_option_lines()]
     print("=" * 40)
     if all(results):
         print("ALL TESTS PASSED")

@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.354.0";
+window.TGF_VERSION = "2.355.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.355.0",
+    date: "2026-09-09",
+    changes: [
+      "The four membership rows at 'unknown' prices were not unknown prices — they were parser misses. The original GoDaddy emails (Kerry: 'Here's the original transactions. See the match play') print 'Add CITY Match Play?: YES' on Campos R745590832, Cheshire R841551831 and Lourigan R499684196, and 'Add FALL Points Race?: YES' on Miller R667402675; the LLM dropped the Match Play flag on the first three and read Miller's FALL line as NET. Flags corrected on the three Match Play rows and the membership rebook re-run: +$30 margin, +$120 to the Match Play pool, tax reserve +$2.46. None of the three was on the 2026 City Match Play enrollment; the boot-time contest sync now enrolls them from the corrected flags. Miller's NET→FALL correction is held for Kerry (it moves him between contests).",
+      "Parser: the contest add-on lines are now read deterministically. contest_flags_from_body() takes 'Add CITY Match Play / NET Points Race / GROSS Points Race / FALL Points Race?: YES|NO' straight from the order text and overrides the LLM wherever a line is printed; a form with a FALL line and no NET line reports NET as NO (the Miller shape). Where no line exists the LLM's value and the existing hallucination guards stand. A printed option line is a fact, not an extraction. Test: test_parser.py (test_contest_option_lines).",
+    ],
+  },
   {
     version: "2.354.0",
     date: "2026-09-09",

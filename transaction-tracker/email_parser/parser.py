@@ -568,6 +568,40 @@ def _normalize_item_name(name: str | None) -> str | None:
     return name
 
 
+# The order form prints each contest add-on as its own line —
+# "Add CITY Match Play?: YES", "Add NET Points Race?: YES", "Add GROSS
+# Points Race?: YES", "Add FALL Points Race?: YES" — and the LLM has
+# missed those lines three times in 22 Match Play buyers (Campos
+# R745590832, Cheshire R841551831, Lourigan R499684196; found 2026-09-09
+# when their memberships would not decompose to the price paid). A
+# printed option line is a fact, not an extraction; read it directly.
+_CONTEST_LINE_RE = {
+    "city_match_play": re.compile(r"ADD\s+CITY\s+MATCH\s+PLAY\s*\?\s*:\s*(YES|NO)\b"),
+    "net_points_race": re.compile(r"ADD\s+NET\s+POINTS\s+RACE\s*\?\s*:\s*(YES|NO)\b"),
+    "gross_points_race": re.compile(r"ADD\s+GROSS\s+POINTS\s+RACE\s*\?\s*:\s*(YES|NO)\b"),
+    "fall_net_points_race": re.compile(r"ADD\s+FALL\s+(?:NET\s+)?POINTS\s+RACE\s*\?\s*:\s*(YES|NO)\b"),
+}
+
+
+def contest_flags_from_body(body_up: str) -> dict:
+    """The contest add-on answers printed on the order form, read
+    deterministically from the (upper-cased) email text. Returns a dict
+    of flag → "YES" / "NO" for every option line found; a flag whose
+    line is absent is not in the dict, so the caller keeps whatever the
+    LLM said (older forms used different labels). A form that has a FALL
+    line and no NET line cannot be a NET Points Race entry — the LLM has
+    read "FALL Points Race" as NET (Miller R667402675) — so NET is
+    reported as "NO" in that case."""
+    out = {}
+    for field, rx in _CONTEST_LINE_RE.items():
+        m = rx.search(body_up or "")
+        if m:
+            out[field] = m.group(1)
+    if "fall_net_points_race" in out and "net_points_race" not in out:
+        out["net_points_race"] = "NO"
+    return out
+
+
 def _is_contest_item(normalized_item_name: str | None) -> bool:
     """Return True only for item types that carry season contest enrollment flags.
 
@@ -960,6 +994,10 @@ def parse_email(email_data: dict) -> list[dict]:
     # NAMED somewhere in the email text — real order confirmations always
     # print the option label next to its answer.
     _body_up = body.upper()
+    # The printed option lines override the LLM wherever they exist
+    # (see contest_flags_from_body). Applied per item below, inside the
+    # same contest-item gates as before.
+    _form_flags = contest_flags_from_body(_body_up)
 
     parsed = _call_ai(body)
     if not parsed:
@@ -1042,9 +1080,9 @@ def parse_email(email_data: dict) -> list[dict]:
             # items.  Null out these fields for all other item types (golf events, etc.)
             # so that a match-play tournament (e.g. Hill Country Matches) never creates
             # a spurious season contest enrollment.
-            "net_points_race": item.get("net_points_race") if (_is_contest_item(_normalize_item_name(item.get("item_name"))) and "NET" in _body_up) else None,
-            "gross_points_race": item.get("gross_points_race") if (_is_contest_item(_normalize_item_name(item.get("item_name"))) and "GROSS" in _body_up) else None,
-            "city_match_play": item.get("city_match_play") if (_is_contest_item(_normalize_item_name(item.get("item_name"))) and "MATCH PLAY" in _body_up) else None,
+            "net_points_race": _form_flags.get("net_points_race", item.get("net_points_race")) if (_is_contest_item(_normalize_item_name(item.get("item_name"))) and "NET" in _body_up) else None,
+            "gross_points_race": _form_flags.get("gross_points_race", item.get("gross_points_race")) if (_is_contest_item(_normalize_item_name(item.get("item_name"))) and "GROSS" in _body_up) else None,
+            "city_match_play": _form_flags.get("city_match_play", item.get("city_match_play")) if (_is_contest_item(_normalize_item_name(item.get("item_name"))) and "MATCH PLAY" in _body_up) else None,
             # FALL NET is deliberately NOT gated to contest items (Kerry
             # 2026-08-19): Fall event orders sell the Fall Points Race
             # entry as an add-on question, so the flag is honored on any
@@ -1052,7 +1090,7 @@ def parse_email(email_data: dict) -> list[dict]:
             # explicit FALL+NET order-form field, never the event name.
             # Same hallucination guard: the word FALL must appear in the
             # email for the flag to survive.
-            "fall_net_points_race": item.get("fall_net_points_race") if "FALL" in _body_up else None,
+            "fall_net_points_race": _form_flags.get("fall_net_points_race", item.get("fall_net_points_race")) if "FALL" in _body_up else None,
             "subject": subject,
             "from_addr": from_addr,
         })

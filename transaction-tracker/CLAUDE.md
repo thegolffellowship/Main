@@ -219,7 +219,7 @@ No Python or local install needed — Claude Desktop connects directly to Railwa
 ## Architecture
 
 - **Flask app** in `transaction-tracker/app.py` (~6200 lines, 200+ routes)
-- **Email parsing** via Claude in `email_parser/parser.py`. Default model is Haiku
+- **Email parsing** via Claude in `email_parser/parser.py`. **Contest add-on lines are read deterministically (v2.355.0):** `contest_flags_from_body()` takes "Add CITY Match Play / NET Points Race / GROSS Points Race / FALL Points Race?: YES|NO" straight from the order text and overrides the LLM wherever a line is printed (three Match Play buyers and one FALL buyer were mis-flagged by the LLM in 2026 — a printed option line is a fact, not an extraction). Default model is Haiku
   (`CLAUDE_MODEL` env var); orders whose body matches
   `/TGF\s+MEMBERSHIP|SKU:\s*MEM-[A-Z]-[A-Z]/i` route to `claude-sonnet-4-5`
   (`CLAUDE_MODEL_PREMIUM` env var to override). Membership + EVENT combo orders

@@ -363,8 +363,12 @@ lane prompt written (`session-prompt-financial-audit.md`).
 
 ## Kerry decisions this lane is waiting on
 
-- **The three prices the table does not know** ($125 no-contest, $125
-  + NET on 7/2, $265 + NET+GROSS on 3/16).
+- ~~The three prices the table does not know~~ — RESOLVED v2.355.0:
+  all four were parser misses (the emails print the option lines).
+  Campos / Cheshire / Lourigan flagged Match Play and rebooked; they
+  were absent from the 2026 City Match Play enrollment and the boot
+  sync now adds them (bracket implications are Kerry's). Miller's
+  NET→FALL correction is the next single question.
 - **2025 import**: date range (Aug 1–Dec 28 2025 for the shirt fund, or
   all of 2025), confirm same mailbox, go on the parse spend. Needs a
   windowed import bridge (not built).
