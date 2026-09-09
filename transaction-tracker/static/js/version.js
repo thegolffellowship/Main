@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.361.1";
+window.TGF_VERSION = "2.361.2";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.361.2",
+    date: "2026-09-09",
+    changes: [
+      "Bridge `scoring-customer-status:<id>|<status>[|<note>]` sets a customer's status on record (audited). For history the Tracker cannot derive from a purchase — Kerry: 'Vazquez, Aken, Cordero, Cedillo, Booker were all members ... Aken won a free membership' — the statement becomes the status row with Kerry's words as the note, so the badge reads ALUMNI (or MEMBER) instead of GUEST with a MEMBER RATE chip.",
+    ],
+  },
   {
     version: "2.361.1",
     date: "2026-09-09",

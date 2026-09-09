@@ -1750,6 +1750,7 @@ def _scoring_dispatch(url: str, extract: str):
       scoring-membership-gap[:apply]  the membership gap group: booked vs today's decomposition by price/type/contests; apply rebooks membership rows only
       scoring-import-orders:<from>|<to>[|apply][|membership-only]  date-range import of "New Order" emails from the mailbox (dry-run counts; apply runs in the background, no member email)
       scoring-import-status        progress of the running/last import
+      scoring-customer-status:<customer_id>|<status_name>[|<note>]  set a customer's status on record (member / member_plus / former / guest / 1st_timer); audited; for pre-Tracker history Kerry states (e.g. "Vazquez, Cordero were members")
       scoring-member-rate-check[:<since>]  customers who paid the MEMBER rate on an event with no membership purchase and no member status (Kerry 2026-09-09, Kyle Compton)
       scoring-contest-flags-audit[:apply][|all]  memberships not at $50/$75 (|all = every one) + SEASON CONTESTS items: stored contest flags vs the option lines printed on the order email (Graph fetch, no AI); apply writes the form's answers
       scoring-mp-reconcile75[:<season>|<chapter>|<allow>]  match-play reconcile
@@ -2450,6 +2451,21 @@ def _scoring_dispatch(url: str, extract: str):
         if cmd == "scoring-import-status":
             from email_parser.order_import import status
             return json.dumps(status(), indent=2, default=str)
+        if cmd == "scoring-customer-status":
+            # Pre-Tracker history has no purchase to derive from; Kerry's
+            # statement becomes the status on record (customer_statuses +
+            # current_player_status), with his words as the note.
+            _parts = [x.strip() for x in arg.split("|")]
+            if len(_parts) < 2 or not _parts[0].isdigit():
+                return json.dumps({"error": "usage: scoring-customer-status:<customer_id>|<status_name>[|<note>]"})
+            _cid, _st = int(_parts[0]), _parts[1]
+            _note = _parts[2] if len(_parts) > 2 else None
+            before = db.get_customer_profile(customer_id=_cid) if hasattr(db, "get_customer_profile") else None
+            rid = db.set_customer_status(_cid, _st, notes=_note)
+            db.log_agent_action("mcp-claude", "scoring-customer-status",
+                                f"customer {_cid} → {_st} ({_note})", outcome="ok")
+            return json.dumps({"ok": True, "customer_id": _cid, "status": _st,
+                               "status_row": rid, "note": _note}, indent=2)
         if cmd == "scoring-member-rate-check":
             _since = arg.strip()[:10] if arg.strip() else "2026-01-01"
             return json.dumps(db.member_rate_without_membership(since=_since), indent=2, default=str)
