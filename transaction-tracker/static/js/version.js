@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.361.0";
+window.TGF_VERSION = "2.361.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.361.1",
+    date: "2026-09-09",
+    changes: [
+      "Parser: the 2025 order form's 'Add FALL Match Play?: YES' line is read into the Match Play flag (Bartz R208580086: New at the $25-off promo + Fall Points Race + Fall Match Play = $150, which now decomposes to the cent). The contest-flags audit sees it too.",
+    ],
+  },
   {
     version: "2.361.0",
     date: "2026-09-09",
