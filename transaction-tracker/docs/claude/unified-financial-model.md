@@ -100,6 +100,23 @@ PROJECTED PROFIT = Net Income - Total Expenses
   Transfer targets (`transferred_from_id IS NOT NULL`) are excluded.
 - **Refunds** are contra-revenue (deducted from Income), not expenses. They appear as
   negative child payment items (e.g., -$29 partial refund via Zelle).
+- **ONE ORDER, ONE FEE (v2.349.0, Kerry-ratified 2026-09-09).** The parser stamps the
+  ORDER's 3.5% fee into `items.transaction_fees` on EVERY item row of a multi-item
+  order — that field is an order-level number stored per item, never sum it across an
+  order. `email_parser/fee_splits.py` holds the one rule: the fee is recorded once per
+  order (the `acct_transactions` row), and every per-item share — the `transaction_fee`
+  split, the `merchant_fee` split, `acct_allocations.godaddy_fee` — is the order's fee
+  pro rata BY ITEM PRICE, to the cent (`prorate`, last non-zero item absorbs rounding).
+  Never an equal split. `order_fee_from_items` tells a stamp from real shares by which
+  reading lands nearer 3.5% of the item total. `fee_split_integrity` (in the audit
+  report and `scoring-fee-splits-check`) reports any order whose item rows do not add
+  back to its order row; `repair_multi_item_fee_splits` (`scoring-fee-splits-repair
+  [:apply]`) rewrote the rows written before this rule. Note `acct_transactions.amount`
+  means the DEPOSIT on writer-created rows but the CHARGED total on rows an older boot
+  repair touched — derive "charged" as `net_deposit + merchant_fee`, never from `amount`.
+  And the order row can legitimately DIVERGE from its splits later (a refund or credit
+  adjusts the deposit; the splits stay as sold) — the integrity check lists those as
+  `diverged`, a separate class the fee repair never rewrites.
 
 ## Parser: item_price extraction
 - `item_price` must come from the **Subtotal** or **SKU line** in the GoDaddy email,
@@ -249,7 +266,8 @@ Each row represents one player's cost allocation for one event:
 - `course_payable` REAL — exact course fee (post-tax, not rounded)
 - `course_surcharge` REAL — per-player surcharge
 - `prize_pool` REAL — player's contribution to prize fund
-- `tgf_operating` REAL — TGF's operating margin
+- `tgf_operating` REAL — TGF's operating margin (residual from 2026-09-05; carries `fee_spread`)
+- `fee_spread` REAL — the item's fee-in share less its GoDaddy share (v2.350.0; inside `tgf_operating`, shown separately)
 - `godaddy_fee` REAL — actual GoDaddy merchant fee share
 - `tax_reserve` REAL — sales tax reserve (8.25% of tgf_operating)
 - `total_collected` REAL — total revenue collected from this player
@@ -344,8 +362,34 @@ guest rate still booked the full markup. It is now:
 
 ```
 tgf_operating = collected − course_payable − course_surcharge − prize_pool
-discount_given = rate_card_markup − tgf_operating
+                − set-asides + fee_spread          (fee_spread from v2.350.0)
+discount_given = rate_card_markup − (tgf_operating − fee_spread)
+fee_spread     = item's share of the 3.5% the customer paid
+                 − item's share of what GoDaddy took (2.9% + $0.30)
 ```
+
+**The fee spread is margin, and it is taxed (Kerry-ratified 2026-09-09,
+v2.350.0).** Kerry: *"the spread should be inside the TGF Margin and in
+my mind is the part that gets taxed as it's basically a markup over and
+above (or below) what the actual GoDaddy fees are. I said pass-thru
+initially because it was never meant to be a profit center, but only
+cover those GoDaddy fees. But ... there's no way to truly pass the
+GoDaddy fees onto the customer cent for cent ... I believe the right
+thing to do is to pay Sales Tax on it because that money is not
+allotted to anything but margin. Somewhat similar to the 'rounding up'
+concept with the course fees."* This supersedes, for the SPREAD only,
+the 2026-09-05 "exclude the fee from the taxable base" reading (#421):
+the part of the 3.5% that covers GoDaddy is still a pass-through cost;
+what is left over (positive on orders over ~$59, negative under) is
+margin and sits in `tgf_operating`, so `tax_reserve` (8.25% of
+`tgf_operating`, floored at zero) picks it up automatically. Both fee
+shares are by item price (`fee_splits.prorate`), so a multi-item
+order's spreads add back to the order's spread. Rows dated before the
+cutover book no spread (frozen). One-time rebook of the post-cutover
+rows: `scoring-margin-rebook:<since>[|apply]`
+(`fee_splits.rebook_spread_since`). A future Stripe integration that
+passes the processor fee through cent for cent would make the spread
+zero by construction.
 
 The course still invoices its full rate and the winners still collect
 the full pool — neither obligation shrinks — so a discount can only come
@@ -361,18 +405,78 @@ A 9-hole has $8 base + $10 guest surcharge = $18; less $25 leaves −$7. An
 two markup stacks. `discount_given` exists to make that visible, not to
 correct it.
 
-**Past events are frozen.** `MARGIN_MODEL_CUTOVER` (default `2026-09-05`,
-overridable via the `margin_model_cutover` app setting) gates it: an
-allocation dated earlier keeps the rate-card model it was booked under,
-because those months are already filed with the Comptroller.
+**Past events are frozen — until their costs are confirmed.**
+`MARGIN_MODEL_CUTOVER` (code default `2026-09-05`; the `margin_model_cutover`
+app setting is **2026-08-27 on production since 2026-09-09**, Kerry-ratified)
+gates it: an allocation dated earlier keeps the rate-card model it was booked
+under. Kerry 2026-09-09 on restating further back: *"I don't care if it
+doesn't match the Comptroller's stuff. We can always amend past reporting if
+necessary. Our bookkeeping needs to be above reproach and account for every
+penny."* The blocker is not the filings but the DATA: run
+`scoring-margin-gaps` (`margin_ledger.margin_gaps`) to see, per pre-cutover
+event, what the books say vs what today's residual model would book and why
+they differ (course cost blank, package events, membership tiers of the day).
+As Kerry confirms an event's costs, move the dial back and
+`scoring-margin-rebook:<since>|apply`. Never move the dial past an event whose
+"would book" is absurd — that is a gap, not a restatement.
 
-**Tax reserve floors at zero.** `max(tgf_operating, 0) × 8.25%`. There is
-no negative taxable sale, and a loss must never net against another
-round's tax. Whether a discount that *exceeds* the markup reduces the
-taxable base at all is a question for Kerry's CPA — the Pricing &
-Services Master is silent on it. Directional note from #420: if filings
-were computed off an overstated `tgf_operating`, TGF has probably been
-**over**-remitting.
+**Liability buckets** (`scoring-liabilities`, `margin_ledger.liability_buckets`):
+prize payouts owed (`tgf_payouts.paid_at IS NULL`), credits held (refunds
+console outstanding), the **Lone Star Cup shirt fund by Cup year** — $10 per
+membership SOLD, Aug–Jul sales fund that July's Cup (the Cup is played that OCTOBER: Aug 2025–Jul 2026 → the 2026 Cup, Aug 2026–Jul 2027 → the 2027 Cup; `lsc_fund_year`), counted from membership items so
+pre-cutover memberships count too (Kerry: "All memberships fund shirts") —
+and the sales-tax reserve by month, filed/open by the 20th-of-next-month rule.
+Shirt PURCHASES are not yet tagged to the fund (open).
+
+**Tax reserve is SIGNED per row; the MONTH floors at zero (Kerry-ratified
+2026-09-09, v2.352.0 — supersedes the 9/5 per-row floor).** Kerry:
+*"Shouldn't minus margins be minus sales tax too? ... Comptroller only
+asks for Total Sales and Total Taxable Sales for the month, not the per
+transaction breakdown. So in my mind, that seems like something that
+should reduce my Total Taxable Sales amount."* So `tax_reserve =
+tgf_operating × 8.25%` on every row, negative on a loss-leader round (a
+credit against its month), and the monthly figure (`liability_buckets`
+→ `sales_tax_reserve.by_month`, and the `tgf-sales-tax` skill) is the
+signed sum floored at zero. Directional note from #420 still holds: if
+past filings were computed off an overstated `tgf_operating`, TGF has
+probably been **over**-remitting; Kerry: *"We can always amend past
+reporting if necessary."*
+
+**Membership decomposition (v2.353.0).** A membership item books
+`base` (New 44 / Returning 69 / Plus 244 taxable) + $6 Monthly Points
+pool + $10 markup per contest bundled (Plus waived) + the contest pools
+(NET 80, Gross 40, Match Play 40, **FALL Net 40** — the
+`fall_net_points_race` field joined the table in v2.353.0 after Kannon
+Brown's $100 New + Fall order read as a Returning base) + the $10 shirt
+set-aside out of TGF's side. The base is chosen as the one whose parts
+sum closest to the price paid. `margin_ledger.membership_gap()` (bridge
+`scoring-membership-gap[:apply]`) is gap group 1: every membership in
+the history grouped by price / type / contests, booked vs would-book,
+and a `fits_table` flag per group — a misfit is a price of the day the
+table does not know and is Kerry's to name. Apply rebooks membership
+rows only (`calculate_order_allocation(only_item_ids=…)`,
+`rebook_spread_since(item_class="membership")`); Kerry ratified and it was
+APPLIED 2026-09-09 (v2.354.0, backup tracker_20260909_202327): 106 of
+117 rows changed, margin $8,934.20 → $5,943.20, pools $1,576 → $3,262,
+shirt set-aside $100 → $1,170, tax reserve $737.03 → $490.62. The four
+"misfit" rows turned out to be PARSER MISSES, not prices of the day:
+the order emails print "Add CITY Match Play?: YES" (Campos, Cheshire,
+Lourigan) and "Add FALL Points Race?: YES" read as NET (Miller). v2.355.0
+reads those option lines deterministically (`contest_flags_from_body`
+in parser.py) and the three Match Play rows were corrected and rebooked
+(+$30 margin, +$120 pool). Lesson for the class: a membership that does
+not decompose to its price is a flag miss until proven otherwise —
+check the source email before asking Kerry. Second lesson (v2.356.0):
+one of the four (Campos) was not a parser miss but the REMOVAL routine
+erasing the flag when Kerry refunded the entry; the other two had been
+refunded too. Now: the purchase flag stays true to the order, the
+removal record (`season_contest_removals`, with refund amount/method)
+is the history, and the sync honors it (removed stays removed). OPEN
+for the Finance lane: contest refunds paid by Venmo post to the expense
+feed and the removals table, not as contra rows against the contest
+pool, so a refunded entry's $50 still reads as markup + pool in
+`acct_allocations` — the pool is $120 high for the three 2026 Match
+Play refunds until refunds post against the bucket they came from.
 
 ## Membership set-asides
 

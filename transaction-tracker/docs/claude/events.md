@@ -25,7 +25,7 @@ lists every event where the id-link and the name-link disagree, with the
 item names actually recorded against it. Regression:
 `test_event_registration_count.py`.
 
-## Store registration link — derived, verified, expiring (v2.349.0, Kerry 2026-09-09)
+## Store registration link — derived, verified, expiring (v2.357.0, Kerry 2026-09-09)
 
 `events.registration_url` (added for the Lead Center follow-up texts,
 #417 D) is the ONE place an event's store product URL lives; the Lead

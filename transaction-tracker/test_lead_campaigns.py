@@ -83,6 +83,7 @@ def main():
             godaddy_fee REAL DEFAULT 0, tax_reserve REAL DEFAULT 0,
             total_collected REAL DEFAULT 0,
             allocation_status TEXT DEFAULT 'pending', notes TEXT,
+            discount_given REAL DEFAULT 0, lsc_shirt_fund REAL DEFAULT 0,
             created_at TEXT, UNIQUE(order_id, item_id))""")
         conn.execute("CREATE TABLE IF NOT EXISTS customers (customer_id INTEGER "
                      "PRIMARY KEY, first_name TEXT, last_name TEXT)")
@@ -189,12 +190,31 @@ def main():
         conn.execute("DELETE FROM leads WHERE id = ?", (replier,))
         conn.commit()
     check("dismissed = 1, new = 1", (f["dismissed"], f["new"]) == (1, 1), f)
-    check("trailing cutoff = end 9/6 + 30 = 10/6, window open on 9/3",
-          c["trailing_cutoff"] == "2026-10-06" and c["trailing_window_open"] is True, c)
-    check("trailing drops the 10/9 and 10/20 conversions: players 4, members 2",
-          (f["players_trailing"], f["members_trailing"]) == (4, 2), f)
-    check("CPP trailing = 127.16 / 4 = 31.79, CPMem trailing = 63.58",
-          (cost["cpp_trailing"], cost["cpmem_trailing"]) == (31.79, 63.58), cost)
+    # Kerry 2026-09-09: the trailing window is indefinite. No cutoff,
+    # the 10/9 and 10/20 conversions still count, trailing == current.
+    check("no trailing cutoff (indefinite window)",
+          c["trailing_cutoff"] is None and c["trailing_window_open"] is None, c)
+    check("trailing keeps the 10/9 and 10/20 conversions: equals current",
+          (f["players_trailing"], f["members_trailing"]) == (f["players"], f["members"]), f)
+    check("CPP / CPMem trailing equal current",
+          (cost["cpp_trailing"], cost["cpmem_trailing"]) == (cost["cpp"], cost["cpmem"]), cost)
+    check("stats declare the indefinite window",
+          campaigns.TRAILING_DAYS is None and "indefinitely" in st["definitions"]["trailing"],
+          st.get("definitions", {}).get("trailing"))
+    # Benchmark windows (Kerry 2026-09-09: 30/60/90/180/1y/lifetime).
+    W = cost["windows"]
+    check("30-day window: end 9/6 + 30 = 10/6, open on 9/3, drops the 10/9 and 10/20 conversions",
+          W["30"]["cutoff"] == "2026-10-06" and W["30"]["open"] is True
+          and (W["30"]["players"], W["30"]["members"]) == (4, 2), W["30"])
+    check("30-day CPP = 127.16 / 4 = 31.79, CPMem = 63.58",
+          (W["30"]["cpp"], W["30"]["cpmem"]) == (31.79, 63.58), W["30"])
+    check("60-day window (11/5) keeps both late conversions = lifetime",
+          W["60"]["cutoff"] == "2026-11-05"
+          and (W["60"]["players"], W["60"]["members"]) == (W["lifetime"]["players"], W["lifetime"]["members"]), W)
+    check("lifetime has no cut-off and equals current",
+          W["lifetime"]["cutoff"] is None and W["lifetime"]["players"] == f["players"], W["lifetime"])
+    check("all five windows plus lifetime present",
+          set(W) == {"30", "60", "90", "180", "365", "lifetime"}, list(W))
     ch = c["chapters"]
     check("per-chapter split present", set(ch) >= {"San Antonio", "Austin", "unrouted"}, list(ch))
     check("SA players 3 members 2", (ch["San Antonio"]["players"], ch["San Antonio"]["members"]) == (3, 2), ch["San Antonio"])
@@ -553,11 +573,45 @@ def main():
         check("and the pair does not invent the $3.99 the old maths did",
               round(ev["money_in"] + mem["money_in"], 2) != 118.26,
               (ev["money_in"], mem["money_in"]))
+        # Kerry 2026-09-09: the FEE columns had the same bug. The order's
+        # $3.99 stamped on both rows read as $7.98 of fee-in; the truth is
+        # $3.99 once, apportioned by registration like the deposit.
+        check("fee-in is the order's fee ONCE, apportioned by registration",
+              (ev["fee_in"], mem["fee_in"]) == (2.24, 1.75)
+              and round(ev["fee_in"] + mem["fee_in"], 2) == 3.99,
+              (ev["fee_in"], mem["fee_in"]))
+        check("fee-out is untouched (already pro-rated at write time)",
+              (ev["fee_out"], mem["fee_out"]) == (2.07, 1.65),
+              (ev["fee_out"], mem["fee_out"]))
+        check("so fee-net across the order is the real spread, +$0.27",
+              round(ev["fee_net"] + mem["fee_net"], 2) == 0.27,
+              (ev["fee_net"], mem["fee_net"]))
+
+    # Item-type set-asides come out of TGF's side (LSC shirt fund, $10
+    # per membership, mailbox #422). BOOKED deducts it; ACTUALLY LEFT
+    # must too, or every membership reads as overstated by exactly $10.
+    print("Set-asides leave ACTUALLY LEFT as well as BOOKED")
+    with db._connect(db_path) as conn:
+        conn.execute("UPDATE acct_allocations SET tgf_operating = 34.00, "
+                     "lsc_shirt_fund = 10.00 WHERE order_id = 'O-9' "
+                     "AND item_id = 92")
+        conn.commit()
+    sa = campaigns.campaign_stats(db_path, today="2026-09-03",
+                                  gap_fill_seconds=0)["campaigns"][0]["value"]
+    mem2 = {r["item_id"]: r for r in sa["rows"]}.get(92)
+    if mem2:
+        check("the membership row carries its set-aside",
+              mem2["setaside"] == 10.0, mem2)
+        check("and what was left is net of it (deposit share - prizes - $10)",
+              mem2["margin_actual"] == round(mem2["money_in"] - 6.00 - 10.00, 2),
+              (mem2["money_in"], mem2["margin_actual"]))
+        check("so booked and actual agree on a membership",
+              abs(mem2["overstated"]) < 0.20, mem2["overstated"])
 
     print("Closed window + converted_at stamp")
     st = campaigns.campaign_stats(db_path, today="2026-10-30", gap_fill_seconds=0)
     c = st["campaigns"][0]
-    check("window closed after 10/6", c["trailing_window_open"] is False, c["trailing_window_open"])
+    check("still no window on 10/30 (indefinite)", c["trailing_window_open"] is None, c["trailing_window_open"])
     with db._connect(db_path) as conn:
         nid = plant(conn, "Fresh", "Austin", "touched", None, META)
         conn.commit()

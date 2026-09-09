@@ -191,6 +191,9 @@
         .ld-costtbl th, .ld-costtbl td { text-align: right; padding: 4px 6px; border-top: 1px solid #F3F2EF; font-variant-numeric: tabular-nums; }
         .ld-costtbl th:first-child, .ld-costtbl td:first-child { text-align: left; }
         .ld-costtbl thead th { border-top: none; font-size: 10px; letter-spacing: .6px; text-transform: uppercase; color: #6B7280; }
+        /* Margin audit table (Kerry 2026-09-09): PLAYER, ITEMS and DATE read
+           left and take their widest content; the money columns stay right. */
+        .ld-margintbl th:nth-child(-n+3), .ld-margintbl td:nth-child(-n+3) { text-align: left; white-space: nowrap; width: 1%; }
         .ld-panel .ld-foot { font-size: 11px; color: #6B7280; margin-top: 8px; }
         .ld-mnotes td { padding: 2px 6px; font-size: 12px; white-space: normal; }
         @media (max-width: 768px) {
@@ -1457,7 +1460,7 @@
         const metric = (lbl, val, sub) => `<div class="ld-metric"><div class="lbl">${lbl}</div><div class="val">${val}</div>${sub ? `<div class="sub">${sub}</div>` : ""}</div>`;
         const win = b.trailing_cutoff
             ? (b.trailing_window_open ? `window open until ${fmtD(b.trailing_cutoff)}` : `window closed ${fmtD(b.trailing_cutoff)}`)
-            : "no end date · trailing = current";
+            : "no window — conversions count whenever they happen";
         const chapRows = Object.entries(b.chapters || {}).map(([ch, cf]) =>
             `<tr><td>${esc(ch)}</td><td>${cf.leads}</td><td>${cf.touched}</td><td>${cf.replied}</td><td>${cf.reply_pct == null ? "—" : cf.reply_pct + "%"}</td><td>${cf.interested}</td><td>${cf.players}</td><td>${cf.members}</td><td>${cf.dismissed}</td></tr>`).join("");
         const head = `<div class="ld-stats-head">
@@ -1488,12 +1491,23 @@
             ${metric("Members", num(f.members))}
             ${metric("Dismissed", num(f.dismissed))}
             </div>
-            <table class="ld-costtbl"><thead><tr><th></th><th>Current</th><th>30-day trailing</th></tr></thead><tbody>
-            <tr><td>CPL <span class="ld-dsub">spend / leads</span></td><td>${money(c.cpl)}</td><td>${money(c.cpl)}</td></tr>
-            <tr><td>CPP <span class="ld-dsub">spend / players</span></td><td>${money(c.cpp)}<span class="ld-dsub"> /${f.players}</span></td><td>${money(c.cpp_trailing)}<span class="ld-dsub"> /${f.players_trailing}</span></td></tr>
-            <tr><td>CPMem <span class="ld-dsub">spend / members</span></td><td>${money(c.cpmem)}<span class="ld-dsub"> /${f.members}</span></td><td>${money(c.cpmem_trailing)}<span class="ld-dsub"> /${f.members_trailing}</span></td></tr>
-            </tbody></table>
-            <div class="ld-foot">Replied = a human wrote back to our outreach. It does not count Golf Genius RSVPs, HubSpot re-submissions or the app's own bookkeeping notes, so it is narrower than RESPONDED in the queue — that one answers &ldquo;who still needs me&rdquo;, this one answers &ldquo;did our outreach work&rdquo;. Player = registered any event or became a member (counts once). Trailing counts conversions through ${STATS.trailing_days} days after the last spend day · ${esc(win)}.</div></div>`;
+            ${(() => {
+                // Benchmark windows (Kerry 2026-09-09): conversions
+                // through the last spend day + 30/60/90/180/365, and
+                // lifetime. An open window is provisional.
+                const keys = (STATS.benchmark_windows || [30, 60, 90, 180, 365]).map(String).concat(["lifetime"]);
+                const W = (c.windows || {});
+                const lbl = k => k === "lifetime" ? "Lifetime" : (k === "365" ? "1 yr" : k + "d");
+                const hdr = keys.map(k => `<th title="${W[k] && W[k].cutoff ? "through " + fmtD(W[k].cutoff) : "no cut-off"}">${lbl(k)}${W[k] && W[k].open ? '<span class="ld-dsub"> ·open</span>' : ""}</th>`).join("");
+                const cell = (k, which) => { const w = W[k]; if (!w) return "<td>—</td>";
+                    const v = which === "cpp" ? w.cpp : w.cpmem; const n = which === "cpp" ? w.players : w.members;
+                    return `<td>${money(v)}<span class="ld-dsub"> /${n}</span></td>`; };
+                return `<div style="overflow-x:auto"><table class="ld-costtbl"><thead><tr><th></th><th>Current</th>${hdr}</tr></thead><tbody>
+            <tr><td>CPL <span class="ld-dsub">spend / leads</span></td><td>${money(c.cpl)}</td>${keys.map(() => `<td>${money(c.cpl)}</td>`).join("")}</tr>
+            <tr><td>CPP <span class="ld-dsub">spend / players</span></td><td>${money(c.cpp)}<span class="ld-dsub"> /${f.players}</span></td>${keys.map(k => cell(k, "cpp")).join("")}</tr>
+            <tr><td>CPMem <span class="ld-dsub">spend / members</span></td><td>${money(c.cpmem)}<span class="ld-dsub"> /${f.members}</span></td>${keys.map(k => cell(k, "cpmem")).join("")}</tr>
+            </tbody></table></div>`; })()}
+            <div class="ld-foot">Replied = a human wrote back to our outreach. It does not count Golf Genius RSVPs, HubSpot re-submissions or the app's own bookkeeping notes, so it is narrower than RESPONDED in the queue — that one answers &ldquo;who still needs me&rdquo;, this one answers &ldquo;did our outreach work&rdquo;. Player = registered any event or became a member (counts once). The window columns count conversions through the campaign's last spend day plus 30 / 60 / 90 / 180 / 365 days so campaigns can be compared at the same age; Lifetime has no cut-off (Kerry 2026-09-09). An open window is still filling. ${esc(win)}.</div></div>`;
         // The audit trail behind TGF MARGIN (Kerry 2026-09-04: "I want
         // to make sure your math is correct"). Every allocation row that
         // makes up the number, per person, with the four destinations
@@ -1506,38 +1520,45 @@
             if (!rows.length) return "";
             const tot = k => rows.reduce((a, x) => a + (x[k] || 0), 0);
             const cell = (x, cls) => `<td${cls ? ` class="${cls}"` : ""}>${money(x)}</td>`;
+            const rc = v.rate_card_rows || 0;
+            // ONE margin column (Kerry 2026-09-09: "I want to be able to
+            // see that ACTUALLY LEFT and OVERSTATED column reduced to one
+            // column, MARGIN"). The check column is the control: paid +
+            // fee net − course − prizes − shirt fund − margin must be 0.
+            // A row still on the rate-card model (dated before the
+            // margin-model cutover) is flagged instead of a second
+            // margin figure sitting beside it.
             const body = rows.map(x => `<tr>
                 <td>${esc(x.player)}</td>
                 <td class="ld-dsub">${esc(x.item_name || x.event_name || "")}</td>
                 <td class="ld-dsub">${esc((x.allocation_date || "").slice(0, 10))}</td>
-                ${cell(x.collected)}${cell(x.course + x.surcharge)}${cell(x.prizes)}
+                ${cell(x.collected)}
                 <td class="ld-dsub" title="Customer paid ${money(x.fee_in)} in transaction fee; GoDaddy took ${money(x.fee_out)}">${money(x.fee_net)}</td>
-                <td class="ld-dsub">${money(x.margin_booked)}</td>
-                <td><b class="${x.margin_actual < 0 ? "ld-late" : ""}">${money(x.margin_actual)}</b></td>
-                <td class="${Math.abs(x.overstated) >= 0.01 ? "ld-late" : "ld-dsub"}">${Math.abs(x.overstated) < 0.01 ? "✓" : money(x.overstated)}</td>
+                ${cell(x.course + x.surcharge)}${cell(x.prizes)}
+                <td class="ld-dsub">${x.setaside ? money(x.setaside) : "—"}</td>
+                <td><b class="${x.margin_booked < 0 ? "ld-late" : ""}">${money(x.margin_booked)}</b></td>
+                <td class="ld-dsub">${money(x.tax)}</td>
+                <td class="${x.reconciles ? "ld-dsub" : "ld-late"}" title="${x.reconciles ? "paid + fee net − course − prizes − shirt fund − margin = 0" : (x.model === "rate card" ? `rate-card row: books ${money(x.margin_booked)}, residual would be ${money(x.margin_actual)}` : `does not foot by ${money(x.overstated)}`)}">${x.reconciles ? "✓" : (x.model === "rate card" ? "rate card" : money(x.overstated))}</td>
             </tr>`).join("");
             return `<div style="margin-top:0.75rem; overflow-x:auto">
-              <table class="ld-costtbl"><thead><tr>
-                <th style="text-align:left">Player</th><th style="text-align:left">Bought</th><th style="text-align:left">Date</th>
-                <th>Paid</th><th>Course</th><th>Prizes</th><th title="3.5% the customer paid, minus what GoDaddy actually took">Fee net</th><th>Booked</th><th>Actually left</th><th>Overstated</th>
+              <table class="ld-costtbl ld-margintbl"><thead><tr>
+                <th>Player</th><th>Items</th><th>Date</th>
+                <th>Paid</th><th title="3.5% the customer paid, minus what GoDaddy actually took — inside Margin">Fee net</th><th>Course</th><th>Prizes</th><th title="Lone Star Cup shirt fund, $10 per membership sold">Shirt fund</th><th>Margin</th><th title="8.25% of Margin, owed to the Comptroller">Sales tax</th><th title="paid + fee net − course − prizes − shirt fund − margin = 0">Check</th>
               </tr></thead><tbody>${body}</tbody>
               <tfoot><tr style="border-top:2px solid #1B1B1B; font-weight:700">
                 <td colspan="3">${rows.length} allocation${rows.length === 1 ? "" : "s"}</td>
                 ${cell(tot("collected"))}
+                <td class="ld-dsub">${money(tot("fee_net"))}</td>
                 ${cell(rows.reduce((a, x) => a + x.course + x.surcharge, 0))}
                 ${cell(tot("prizes"))}
-                <td class="ld-dsub">${money(tot("fee_net"))}</td>
-                <td class="ld-dsub">${money(tot("margin_booked"))}</td>
-                <td>${money(tot("margin_actual"))}</td>
-                <td class="${v.rows_reconcile ? "" : "ld-late"}">${v.rows_reconcile ? "✓" : money(v.overstated)}</td>
+                <td class="ld-dsub">${money(tot("setaside"))}</td>
+                <td>${money(tot("margin_booked"))}</td>
+                <td class="ld-dsub">${money(tot("tax"))}</td>
+                <td class="${rc ? "ld-late" : ""}">${rc ? `${rc} rate card` : "✓"}</td>
               </tr></tfoot></table>
               <div class="ld-foot">
-                <b>Booked</b> is the event's standard markup, which is what the headline uses.
-                <b>Actually left</b> is Paid + Fee net &minus; Course &minus; Prizes: what was really there once the course, the winners and the card processor were settled.
-                ${v.rows_reconcile ? "They agree." : `<span class="ld-late">They do NOT agree. The books overstate by ${money(v.overstated)} across these ${rows.length} rows, so TGF actually kept ${money(tot("margin_actual"))}, not ${money(tot("margin_booked"))}.</span>
-                The cause is discounting: the allocator books the event's standard markup without looking at what the player paid, so a 1st Timer who came in $25 under the guest rate still books full markup. Membership rows agree to the penny; discounted rounds do not.`}
-                <b>Fee net</b> is the 3.5% the customer paid on top (${money(tot("fee_in"))}) minus what GoDaddy actually took (${money(tot("fee_out"))}) &mdash; TGF keeps the difference, and it IS included in Actually left.
-                Sales tax reserve (8.25% of markup, ${money(tot("tax"))}) is not deducted either; it comes out of TGF's share later.
+                <b>Margin</b> is what TGF kept: Paid + Fee net &minus; Course &minus; Prizes &minus; Shirt fund. <b>Sales tax</b> is 8.25% of Margin, owed to the Comptroller and not deducted here; a negative row is a credit against its month, and the month nets to no less than zero. <b>Fee net</b> is the customer's 3.5% (${money(tot("fee_in"))}) minus what GoDaddy took (${money(tot("fee_out"))}); it is inside Margin and taxed with it. On a multi-item order every leg is shared out by item price and sums back to the order.
+                ${rc ? `<span class="ld-late">${rc} row${rc === 1 ? "" : "s"} dated before the margin-model cutover (${esc(v.cutover || "")}) still book the rate-card markup, which overstates by ${money(v.rate_card_overstated)} against what was actually left. They restate when their event costs are confirmed.</span>` : "Every row foots to zero."}
               </div></div>`;
         }
 
@@ -1553,7 +1574,7 @@
             ${metric("Ad spend", money(r.spend))}
             ${metric("Collected", money(r.collected), "gross, lifetime")}
             ${(v.rows || []).length
-                ? `<div class="ld-metric ld-mclick" onclick="toggleMarginDetail()" title="Show the per-player breakdown behind this number"><div class="lbl">TGF margin</div><div class="val">${money(r.margin)}</div><div class="sub">${v.rows_reconcile ? "what TGF kept" : `<span class="ld-late">books say; ${money(v.margin_actual)} actually left</span>`} · <span class="ld-mlink">${marginOpen ? "hide" : "show"} the math</span></div></div>`
+                ? `<div class="ld-metric ld-mclick" onclick="toggleMarginDetail()" title="Show the per-player breakdown behind this number"><div class="lbl">TGF margin</div><div class="val">${money(r.margin)}</div><div class="sub">${!(v.rate_card_rows) ? "what TGF kept" : `<span class="ld-late">${v.rate_card_rows} row${v.rate_card_rows === 1 ? "" : "s"} still on rate card</span>`} · <span class="ld-mlink">${marginOpen ? "hide" : "show"} the math</span></div></div>`
                 : metric("TGF margin", money(r.margin), "what TGF kept")}
             ${metric("Net", money(r.net), r.net >= 0 ? "ahead" : "behind")}
             ${metric("ROAS", r.roas_margin == null ? "—" : `${r.roas_margin}×`, "margin per $1 spent")}

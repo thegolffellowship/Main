@@ -16,11 +16,15 @@ METRIC DEFINITIONS (Kerry's, verbatim):
           (registered any event OR became a member; both counts once)
   CPMem = Cost Per Member = ad spend / leads who became members
           (never "CPM" — that is cost-per-mille in the Meta panel)
-Each reported CURRENT (to date) and 30-DAY TRAILING: conversions keep
-arriving after spend stops, so the honest read counts conversions
-through 30 days after the last dollar (campaign end date). While that
-window is still open the trailing figure equals current and the panel
-says when the window closes.
+Reported CURRENT (to date) and as BENCHMARK WINDOWS — conversions
+counted through the campaign's last spend day + 30 / 60 / 90 / 180 /
+365 days, and LIFETIME (no cut-off). Kerry 2026-09-09: "What is the
+significance of 10/6 as the end of the trailing window? Shouldn't it be
+indefinite? ... I think having 30 days, 60 days, 90 days, 180 days, one
+year, lifetime total would be good benchmarks to compare." A window
+that has not closed yet is marked open (its figure is provisional). The
+`*_trailing` fields remain for older readers and equal lifetime;
+`TRAILING_DAYS = None` keeps them there.
 
 META PANEL: spend, impressions, reach, frequency, link clicks, CTR,
 CPM, leads, CPL from the Marketing API insights edge
@@ -50,7 +54,10 @@ META_AD_ACCOUNT_ID = "2353186181735308"
 META_GRAPH_VERSION = "v21.0"
 META_INSIGHT_FIELDS = ("spend,impressions,reach,frequency,"
                        "inline_link_clicks,ctr,cpm,actions")
-TRAILING_DAYS = 30
+TRAILING_DAYS = None  # indefinite (Kerry 2026-09-09); an int re-arms the window
+# Benchmark windows, days after the campaign's last spend day (Kerry
+# 2026-09-09). Lifetime is always reported beside them.
+BENCHMARK_WINDOWS = (30, 60, 90, 180, 365)
 INSIGHTS_STALE_MINUTES = 60
 
 # The current campaign (Kerry 2026-09-03) — seeded once, then Kerry's
@@ -571,6 +578,26 @@ def campaign_value(lead_rows: list[dict], conn,
     # Read-side on purpose. The root cause is at WRITE time and the stored
     # split rows are money records that other reports read; rewriting them
     # is a migration, not a bug fix, and needs its own ratification.
+    #
+    # THE SAME BUG, on the fee columns (Kerry 2026-09-09: "I don't think
+    # the FEE NET lines are correct for Will Wallace's transactions.
+    # Transaction fee on the one attached with multiple line items was
+    # $10.92. My calculation for GoDaddy fees is $9.66. So the diff is
+    # +$1.26 which would be prorated across all of those line items.")
+    # Correct. His four-item order R343961029 carried the ORDER's $10.92
+    # on EVERY item row, so the table showed $10.92 of fee-in four times
+    # ($43.68 of fee the customer never paid) against a correctly
+    # pro-rated fee-out, and a fee-net of +$33.90 where the truth is
+    # +$1.26. `money_in` was already immune (it reads the deposit), so
+    # ACTUALLY LEFT was right and only the FEE columns lied — but a wrong
+    # column beside a right one is how a table stops being trusted.
+    #
+    # Read-side, same as money_in: the ORDER's fee is the value stamped
+    # on its rows (they all carry the same number), and each item's share
+    # is by registration amount — the same basis the deposit is split on,
+    # so the three legs (money in, fee in, fee out) are apportioned alike.
+    # A single-item order is unchanged. An order whose fee rows already
+    # differ per item has been pro-rated at write time and is used as is.
     money_in: dict = {}
     fees: dict = {}
     try:
@@ -584,7 +611,15 @@ def campaign_value(lead_rows: list[dict], conn,
                 "           THEN ABS(s.amount) ELSE 0 END) AS fee_out, "
                 "  (SELECT SUM(s2.amount) FROM godaddy_order_splits s2 "
                 "   WHERE s2.transaction_id = s.transaction_id "
-                "   AND s2.split_type = 'registration') AS order_reg "
+                "   AND s2.split_type = 'registration') AS order_reg, "
+                "  (SELECT COUNT(DISTINCT s3.item_id) "
+                "   FROM godaddy_order_splits s3 "
+                "   WHERE s3.transaction_id = s.transaction_id "
+                "   AND s3.split_type = 'transaction_fee') AS fee_rows, "
+                "  (SELECT COUNT(DISTINCT ROUND(ABS(s4.amount), 2)) "
+                "   FROM godaddy_order_splits s4 "
+                "   WHERE s4.transaction_id = s.transaction_id "
+                "   AND s4.split_type = 'transaction_fee') AS fee_values "
                 "FROM godaddy_order_splits s "
                 "LEFT JOIN acct_transactions t ON t.id = s.transaction_id "
                 "WHERE s.item_id IS NOT NULL "
@@ -592,8 +627,13 @@ def campaign_value(lead_rows: list[dict], conn,
             _reg = float(fr["reg"] or 0)
             _order_reg = float(fr["order_reg"] or 0)
             _net = fr["net_deposit"]
-            fees[fr["item_id"]] = (float(fr["fee_in"] or 0),
-                                   float(fr["fee_out"] or 0))
+            _fee_in = float(fr["fee_in"] or 0)
+            # Multi-item order with the SAME fee on every row = the
+            # order's fee stamped per item. Apportion it like the deposit.
+            if (int(fr["fee_rows"] or 0) > 1 and int(fr["fee_values"] or 0) == 1
+                    and _order_reg > 0):
+                _fee_in = round(_fee_in * (_reg / _order_reg), 2)
+            fees[fr["item_id"]] = (_fee_in, float(fr["fee_out"] or 0))
             if _net is not None and _order_reg > 0:
                 money_in[fr["item_id"]] = round(
                     float(_net) * (_reg / _order_reg), 2)
@@ -601,6 +641,24 @@ def campaign_value(lead_rows: list[dict], conn,
         logger.warning("fee splits unavailable — margin_actual falls back "
                        "to the collected amount", exc_info=True)
 
+    # lsc_shirt_fund arrived with v2.323 as an ALTER; a database that
+    # predates it (a test fixture, an old backup) has no set-asides.
+    _has_setaside = any(
+        c[1] == "lsc_shirt_fund"
+        for c in conn.execute("PRAGMA table_info(acct_allocations)").fetchall())
+    _setaside_sql = ("CAST(COALESCE(a.lsc_shirt_fund,0) AS REAL)"
+                     if _has_setaside else "0.0")
+    # Which rows are still on the rate-card model (dated before the
+    # margin-model cutover) — Kerry 2026-09-09: one MARGIN column, with
+    # the rows that are not yet residual flagged rather than a second
+    # "actually left" column beside them.
+    try:
+        from .database import _setting_via, MARGIN_MODEL_CUTOVER
+        _cutover = (_setting_via(conn, "margin_model_cutover")
+                    or MARGIN_MODEL_CUTOVER)[:10]
+    except Exception:
+        _cutover = "2026-09-05"
+    out["cutover"] = _cutover
     out["rows"] = []
     for r in conn.execute(
             f"SELECT a.order_id, a.event_name, a.allocation_date, "
@@ -612,6 +670,7 @@ def campaign_value(lead_rows: list[dict], conn,
             f"       CAST(COALESCE(a.godaddy_fee,0) AS REAL) AS fee, "
             f"       CAST(COALESCE(a.tax_reserve,0) AS REAL) AS tax, "
             f"       CAST(COALESCE(a.tgf_operating,0) AS REAL) AS margin, "
+            f"       {_setaside_sql} AS setaside, "
             f"       a.item_id, i.item_name, "
             f"       TRIM(COALESCE(c.first_name,'')||' '||"
             f"            COALESCE(c.last_name,'')) AS player "
@@ -633,13 +692,27 @@ def campaign_value(lead_rows: list[dict], conn,
         _mi = money_in.get(d.get("item_id"))
         d["money_in"] = _mi if _mi is not None else d["collected"]
         d["money_in_source"] = "deposit" if _mi is not None else "collected"
+        # Item-type set-asides come out of TGF's side too (the $10 Lone
+        # Star Cup shirt fund per membership, mailbox #422, standard v1.0
+        # in #428). BOOKED already deducts it; until 2026-09-09 this column
+        # did not, so every post-cutover membership read as "overstated"
+        # by exactly the set-aside. A definition that disagrees with the
+        # ratified standard is a bug, not a second opinion.
         d["margin_actual"] = round(d["money_in"] - d["course"]
-                                   - d["surcharge"] - d["prizes"], 2)
+                                   - d["surcharge"] - d["prizes"]
+                                   - d["setaside"], 2)
         # Positive = the books claim more than was actually left over.
         d["overstated"] = round(d["margin_booked"] - d["margin_actual"], 2)
+        d["model"] = ("residual" if str(d.get("allocation_date") or "")[:10] >= _cutover
+                      else "rate card")
+        # The check: money in − course − surcharge − prizes − set-asides
+        # − margin must be zero. A non-zero residual means the ALLOCATION
+        # is wrong (or is still rate card), never the display.
+        d["reconciles"] = abs(d["overstated"]) < 0.02
         for k in ("collected", "course", "surcharge", "prizes", "fee",
                   "tax", "margin", "margin_booked", "margin_actual",
-                  "overstated", "fee_in", "fee_out", "fee_net", "money_in"):
+                  "overstated", "fee_in", "fee_out", "fee_net", "money_in",
+                  "setaside"):
             d[k] = round(d[k], 2)
         out["rows"].append(d)
     out["margin_actual"] = round(sum(r["margin_actual"] for r in out["rows"]), 2)
@@ -647,15 +720,31 @@ def campaign_value(lead_rows: list[dict], conn,
     out["coverage_pct"] = (round(100.0 * out["allocated_orders"]
                                  / out["orders"], 1) if out["orders"] else None)
     out["rows_reconcile"] = abs(out["overstated"]) < 0.05
+    out["rate_card_rows"] = sum(1 for r in out["rows"] if r["model"] == "rate card")
+    out["rate_card_overstated"] = round(
+        sum(r["overstated"] for r in out["rows"] if r["model"] == "rate card"), 2)
     return out
 
 
-def _funnel(leads: list[dict], today: date, cutoff: date | None) -> dict:
-    """Counts for one bucket. cutoff = the trailing-window end (campaign
-    end + 30d); None = no window (organic / undated)."""
+def _funnel(leads: list[dict], today: date, cutoff: date | None,
+            end_date: date | None = None) -> dict:
+    """Counts for one bucket. cutoff = the trailing-window end; None =
+    no window (organic / undated / indefinite). `end_date` (the
+    campaign's last spend day) anchors the BENCHMARK_WINDOWS counts in
+    f["windows"]; without it every window equals lifetime."""
     f = {"leads": len(leads), "touched": 0, "replied": 0, "interested": 0,
          "players": 0, "members": 0, "registered": 0, "dismissed": 0,
-         "new": 0, "players_trailing": 0, "members_trailing": 0}
+         "new": 0, "players_trailing": 0, "members_trailing": 0,
+         "windows": {}}
+    win_cut = {}
+    for n in BENCHMARK_WINDOWS:
+        wc = (end_date + timedelta(days=n)) if end_date else None
+        win_cut[n] = wc
+        f["windows"][str(n)] = {
+            "players": 0, "members": 0,
+            "cutoff": wc.isoformat() if wc else None,
+            "open": (today <= wc) if wc else None}
+    f["windows"]["lifetime"] = {"players": 0, "members": 0, "cutoff": None, "open": None}
     for l in leads:
         st = l.get("status")
         tag = l.get("tag") or ""
@@ -703,16 +792,27 @@ def _funnel(leads: list[dict], today: date, cutoff: date | None) -> dict:
             if is_mem:
                 f["members"] += 1
             conv = (l.get("converted_at") or "")[:10]
-            inside = True
-            if cutoff and conv:
+            conv_d = None
+            if conv:
                 try:
-                    inside = date.fromisoformat(conv) <= cutoff
+                    conv_d = date.fromisoformat(conv)
                 except ValueError:
-                    inside = True
+                    conv_d = None
+            inside = True
+            if cutoff and conv_d:
+                inside = conv_d <= cutoff
             if inside:
                 f["players_trailing"] += 1
                 if is_mem:
                     f["members_trailing"] += 1
+            for n, wc in win_cut.items():
+                if wc is None or conv_d is None or conv_d <= wc:
+                    f["windows"][str(n)]["players"] += 1
+                    if is_mem:
+                        f["windows"][str(n)]["members"] += 1
+            f["windows"]["lifetime"]["players"] += 1
+            if is_mem:
+                f["windows"]["lifetime"]["members"] += 1
     f["reply_pct"] = (round(100.0 * f["replied"] / f["touched"], 1)
                       if f["touched"] else None)
     return f
@@ -776,24 +876,36 @@ def campaign_stats(db_path: str | Path | None = None,
                 cid=None, value=None):
         cutoff = None
         window_open = None
-        if end_date:
+        if end_date and TRAILING_DAYS is not None:
             try:
                 cutoff = date.fromisoformat(end_date) + timedelta(days=TRAILING_DAYS)
                 window_open = today_d <= cutoff
             except ValueError:
                 cutoff = None
-        f = _funnel(rows, today_d, cutoff)
+        end_d = None
+        if end_date:
+            try:
+                end_d = date.fromisoformat(end_date)
+            except ValueError:
+                end_d = None
+        f = _funnel(rows, today_d, cutoff, end_d)
         chapters = {}
         for ch in ("San Antonio", "Austin", None):
             sub = [r for r in rows if (r.get("chapter") or None) == ch]
             if sub:
-                chapters[ch or "unrouted"] = _funnel(sub, today_d, cutoff)
+                chapters[ch or "unrouted"] = _funnel(sub, today_d, cutoff, end_d)
         cost = {
             "cpl": _ratio(spend, f["leads"]),
             "cpp": _ratio(spend, f["players"]),
             "cpmem": _ratio(spend, f["members"]),
             "cpp_trailing": _ratio(spend, f["players_trailing"]),
             "cpmem_trailing": _ratio(spend, f["members_trailing"]),
+            # The benchmark columns: CPP / CPMem at each window.
+            "windows": {k: {"cpp": _ratio(spend, w["players"]),
+                            "cpmem": _ratio(spend, w["members"]),
+                            "players": w["players"], "members": w["members"],
+                            "cutoff": w["cutoff"], "open": w["open"]}
+                        for k, w in f["windows"].items()},
         }
         # ROI on MARGIN, never on gross collected (Kerry 2026-09-04:
         # "a calculated ROI on the stats, that includes the lifetime
@@ -885,13 +997,21 @@ def campaign_stats(db_path: str | Path | None = None,
             default="") or None
     return {"today": today_d.isoformat(), "meta_token": bool(_meta_token()),
             "trailing_days": TRAILING_DAYS,
+            "benchmark_windows": list(BENCHMARK_WINDOWS),
             "definitions": {
                 "CPL": "ad spend / leads",
                 "CPP": "ad spend / unique leads who became a player "
                        "(registered any event or became a member)",
                 "CPMem": "ad spend / leads who became members",
-                "trailing": f"conversions counted through {TRAILING_DAYS} "
-                            "days after the campaign's last spend day",
+                "trailing": ("conversions counted indefinitely — a lead is a "
+                             "lifetime relationship (Kerry 2026-09-09)"
+                             if TRAILING_DAYS is None else
+                             f"conversions counted through {TRAILING_DAYS} "
+                             "days after the campaign's last spend day"),
+                "windows": ("benchmark columns: conversions counted through the "
+                            "campaign's last spend day + 30 / 60 / 90 / 180 / 365 "
+                            "days, and lifetime (no cut-off); an open window is "
+                            "provisional"),
             },
             "campaigns": out_campaigns, "unattributed": unattributed,
             "all": all_bucket}

@@ -14,6 +14,7 @@ import random
 import re
 import shutil
 import sqlite3
+import threading
 import logging
 from collections import defaultdict
 from datetime import datetime, timedelta
@@ -4831,7 +4832,16 @@ def init_db(db_path: str | Path | None = None) -> None:
         #                 purpose it chose and can change. Never surface
         #                 it to members as "your dues fund the Cup" —
         #                 that turns a flexible earmark into a promise.
-        for _col in ("discount_given", "lsc_shirt_fund"):
+        # fee_spread      what the customer paid in transaction fee for
+        #                 this item, less what GoDaddy actually took for
+        #                 it. Kerry 2026-09-09: "the spread should be
+        #                 inside the TGF Margin and ... is the part that
+        #                 gets taxed as it's basically a markup over and
+        #                 above (or below) what the actual GoDaddy fees
+        #                 are." Booked into tgf_operating from the margin
+        #                 model cutover on; carried here so it stays
+        #                 visible and auditable.
+        for _col in ("discount_given", "lsc_shirt_fund", "fee_spread"):
             try:
                 conn.execute(f"ALTER TABLE acct_allocations "
                              f"ADD COLUMN {_col} REAL DEFAULT 0")
@@ -5078,6 +5088,12 @@ def init_db(db_path: str | Path | None = None) -> None:
                 allocation_status   TEXT DEFAULT 'pending'
                     CHECK(allocation_status IN ('pending', 'complete', 'needs_course_cost')),
                 notes               TEXT,
+                -- Money model (#420/#422). The ALTERs above that add these
+                -- to an EXISTING table run before this CREATE, so on a
+                -- FRESH database they no-op and the columns must be here.
+                discount_given      REAL DEFAULT 0,
+                lsc_shirt_fund      REAL DEFAULT 0,
+                fee_spread          REAL DEFAULT 0,
                 created_at          TEXT DEFAULT (datetime('now')),
                 UNIQUE(order_id, item_id)
             )
@@ -22632,6 +22648,14 @@ def get_audit_report(db_path: str | Path | None = None) -> dict:
                 "pct": round(filled / total * 100, 1),
             }
 
+        # --- One order, one fee: do the item rows add back? (2026-09-09) --------
+        try:
+            from .fee_splits import fee_split_integrity
+            fee_splits = fee_split_integrity(conn)
+        except Exception:
+            logger.warning("fee split integrity check failed", exc_info=True)
+            fee_splits = {"ok": None, "error": "check failed — see logs"}
+
         # --- Rows missing critical fields ----------------------------------------
         problems = []
         for it in items:
@@ -22660,6 +22684,8 @@ def get_audit_report(db_path: str | Path | None = None) -> dict:
             "problems": problems,
             "problem_count": len(problems),
             "distributions": distributions,
+            # One order, one fee: item rows must add back to the order row.
+            "fee_splits": fee_splits,
         }
 
 
@@ -34170,34 +34196,26 @@ def remove_season_contest_enrollment(enrollment_id: int,
                                      db_path: str | Path | None = None) -> dict | None:
     """Remove an enrollment AND record the removal in season_contest_removals.
 
-    One transaction does all three steps so a removal can never half-apply:
+    One transaction does both steps so a removal can never half-apply:
       1. snapshot the enrollment into season_contest_removals (the permanent
          recordation the Enrollment tab lists at the bottom),
-      2. clear the matching contest flag on the source purchase item so the
-         next sync doesn't silently re-enroll the player,
-      3. delete the enrollment row.
+      2. delete the enrollment row.
+
+    The purchase flag on the source item is LEFT ALONE (v2.356.0, Kerry
+    2026-09-09: "they WERE transactions but they were refunded"). Until
+    now this cleared it, which made the money vanish from the membership
+    decomposition (a $125 Returning + Match Play read as $75 with $50
+    unaccounted) and left the books unable to say what was sold. The
+    sync honors the removal record instead (removed stays removed), so
+    the flag can stay true to the order.
 
     Returns the removal record dict, or None if the enrollment id doesn't
     exist. removed_at is stamped in US/Central (user-facing business date).
     """
-    flag_cols = {
-        "NET Points Race": "net_points_race",
-        "GROSS Points Race": "gross_points_race",
-        "City Match Play": "city_match_play",
-    }
     with _connect(db_path) as conn:
         row = conn.execute(
             "SELECT * FROM season_contests WHERE id = ?", (enrollment_id,)
         ).fetchone()
-        # FALL enrollments share contest_type 'NET Points Race' but are
-        # sourced from items.fall_net_points_race — clearing the
-        # main-season column would leave the fall flag set and the next
-        # sync would silently re-enroll (the Scott Hammond loop, Kerry
-        # 2026-09-02: refunded 8/26, still showing enrolled 9/2).
-        if row and (row["season"] or "").endswith("Fall") \
-                and row["contest_type"] == "NET Points Race":
-            flag_cols = dict(flag_cols)
-            flag_cols["NET Points Race"] = "fall_net_points_race"
         if not row:
             return None
         row = dict(row)
@@ -34216,17 +34234,6 @@ def remove_season_contest_enrollment(enrollment_id: int,
              (refund_method or "").strip() or None,
              (note or "").strip() or None),
         )
-        flag_col = flag_cols.get(row["contest_type"])
-        if flag_col and row.get("source_item_id"):
-            conn.execute(
-                f"UPDATE items SET {flag_col} = NULL WHERE id = ?",
-                (row["source_item_id"],),
-            )
-            logger.info(
-                "Season contest unenroll: cleared %s on item %s (%s, %s)",
-                flag_col, row["source_item_id"], row["customer_name"],
-                row["contest_type"],
-            )
         conn.execute("DELETE FROM season_contests WHERE id = ?", (enrollment_id,))
         conn.commit()
         removal = conn.execute(
@@ -35054,11 +35061,37 @@ def sync_season_contests_from_items(db_path: str | Path | None = None) -> dict:
     enrolled = 0
     linked = 0
     deduped = 0
+    skipped_removed = 0
+    healed_removed = 0
     cust_by_id: dict[int, dict] = {}
+    # REMOVED STAYS REMOVED (Kerry 2026-09-09). A removal recorded through
+    # the Enrollment tab (season_contest_removals: who, when, why, refund)
+    # is the record of a decision; the sync must never re-create the
+    # enrollment from the purchase flag. Three refunded 2026 Match Play
+    # entries (Campos, Cheshire, Lourigan) came back the moment their
+    # flags were restored from the order emails, because nothing here
+    # looked at the removals. A purchase dated AFTER the removal is a new
+    # decision and enrolls normally.
+    removed: dict = {}
+
+    def _removed_after(customer_id, customer, contest_type, season, order_date):
+        rem = None
+        if customer_id is not None:
+            rem = removed.get(("id", customer_id, contest_type, season or ""))
+        if rem is None:
+            rem = removed.get(("name", (customer or "").strip().lower(),
+                               contest_type, season or ""))
+        if not rem:
+            return False
+        od = (order_date or "")[:10]
+        return (not od) or od <= rem[:10]
 
     def _upsert(conn, customer, contest_type, chapter, season, item_id,
-                customer_id=None):
-        nonlocal enrolled, linked
+                customer_id=None, order_date=None):
+        nonlocal enrolled, linked, skipped_removed
+        if _removed_after(customer_id, customer, contest_type, season, order_date):
+            skipped_removed += 1
+            return
         if not (customer or "").strip() or customer.strip() == "(Unknown)":
             # A source item with a blank/placeholder customer must not create
             # a ghost enrollment row (an empty or '(Unknown)' CUSTOMER cell
@@ -35164,6 +35197,22 @@ def sync_season_contests_from_items(db_path: str | Path | None = None) -> dict:
                 "chapter": r["chapter"] or "",
             }
 
+        try:
+            for r in conn.execute(
+                    """SELECT customer_id, customer_name, contest_type, season,
+                              MAX(removed_at) AS removed_at
+                       FROM season_contest_removals
+                       GROUP BY customer_id, LOWER(customer_name), contest_type, season"""):
+                ra = r["removed_at"] or ""
+                if r["customer_id"] is not None:
+                    k = ("id", r["customer_id"], r["contest_type"], r["season"] or "")
+                    removed[k] = max(removed.get(k, ""), ra)
+                k = ("name", (r["customer_name"] or "").strip().lower(),
+                     r["contest_type"], r["season"] or "")
+                removed[k] = max(removed.get(k, ""), ra)
+        except sqlite3.OperationalError:
+            removed = {}
+
         rows = conn.execute(
             """SELECT id, customer, customer_id, net_points_race, gross_points_race,
                       city_match_play, fall_net_points_race, item_name, order_date
@@ -35194,11 +35243,11 @@ def sync_season_contests_from_items(db_path: str | Path | None = None) -> dict:
 
             if _is_contest_product:
                 if (row.get("net_points_race") or "").upper() == "YES":
-                    _upsert(conn, customer, "NET Points Race", chapter, season, item_id, cid)
+                    _upsert(conn, customer, "NET Points Race", chapter, season, item_id, cid, order_date)
                 if (row.get("gross_points_race") or "").upper() == "YES":
-                    _upsert(conn, customer, "GROSS Points Race", chapter, season, item_id, cid)
+                    _upsert(conn, customer, "GROSS Points Race", chapter, season, item_id, cid, order_date)
                 if (row.get("city_match_play") or "").upper() == "YES":
-                    _upsert(conn, customer, "City Match Play", chapter, season, item_id, cid)
+                    _upsert(conn, customer, "City Match Play", chapter, season, item_id, cid, order_date)
             # FALL NET began as a $50 option under the umbrella SEASON
             # CONTESTS product (Kerry, 2026-07-10) and is now ALSO sold on
             # Fall event orders (Kerry, 2026-08-19 — e.g. FALL KICKOFF |
@@ -35219,7 +35268,7 @@ def sync_season_contests_from_items(db_path: str | Path | None = None) -> dict:
                     elif "AUSTIN" in _fsuffix:
                         fall_chapter = "Austin"
                 _upsert(conn, customer, "NET Points Race", fall_chapter,
-                        f"{season} Fall", item_id, cid)
+                        f"{season} Fall", item_id, cid, order_date)
 
         # Handle standalone "SEASON CONTESTS" items (fallback for items where the parser
         # didn't populate the individual flag fields).
@@ -35265,7 +35314,7 @@ def sync_season_contests_from_items(db_path: str | Path | None = None) -> dict:
                 contests_to_enroll.add("City Match Play")
 
             for ct in contests_to_enroll:
-                _upsert(conn, customer, ct, chapter, season, item_id, cid)
+                _upsert(conn, customer, ct, chapter, season, item_id, cid, order_date)
 
             # Stamp item flags so customer profile badges reflect the purchase.
             if contests_to_enroll:
@@ -35304,6 +35353,26 @@ def sync_season_contests_from_items(db_path: str | Path | None = None) -> dict:
                      AND UPPER(COALESCE(fall_net_points_race, '')) NOT LIKE 'YES%'
                )"""
         )
+
+        # HEAL: an auto-synced enrollment that a recorded removal covers
+        # (removed on or after the purchase date) was re-created by an
+        # earlier sync that did not read the removals. Delete it; the
+        # removal record stays the history.
+        if removed:
+            for sc in conn.execute(
+                    """SELECT sc.id, sc.customer_id, sc.customer_name, sc.contest_type,
+                              sc.season, sc.enrolled_at, i.order_date
+                       FROM season_contests sc
+                       LEFT JOIN items i ON i.id = sc.source_item_id
+                       WHERE COALESCE(sc.manually_enrolled, 0) = 0""").fetchall():
+                od = (sc["order_date"] or sc["enrolled_at"] or "")
+                if _removed_after(sc["customer_id"], sc["customer_name"],
+                                  sc["contest_type"], sc["season"], od):
+                    conn.execute("DELETE FROM season_contests WHERE id = ?", (sc["id"],))
+                    healed_removed += 1
+                    logger.info("Season contest sync: removed stays removed — dropped "
+                                "re-created enrollment %s (%s, %s %s)", sc["id"],
+                                sc["customer_name"], sc["contest_type"], sc["season"])
 
         # Backfill customer_id BEFORE reconciliation so rows that were never linked
         # (e.g. Eduardo Melchor sourced from a NULL source_item_id) get resolved and
@@ -35512,7 +35581,8 @@ def sync_season_contests_from_items(db_path: str | Path | None = None) -> dict:
             "these inflated the 'new enrollments' count", deduped,
         )
     logger.info("Season contest sync: %d new enrollments, %d payments linked", enrolled, linked)
-    return {"enrolled": enrolled, "linked": linked}
+    return {"enrolled": enrolled, "linked": linked,
+            "skipped_removed": skipped_removed, "healed_removed": healed_removed}
 
 
 # ---------------------------------------------------------------------------
@@ -40275,8 +40345,11 @@ def _create_allocation_for_item(
     alloc["allocation_date"] = item.get("order_date")
     alloc["godaddy_fee"] = 0  # no processing fee on non-GoDaddy payments
     alloc["total_collected"] = total_collected
-    alloc["tax_reserve"] = round(
-        max(alloc.get("tgf_operating", 0) or 0, 0) * 0.0825, 2)
+    # 8.25% of margin, SIGNED (Kerry 2026-09-09): a negative-margin row
+    # is a credit against the month, and the month nets before it floors
+    # at zero — the Comptroller asks for monthly Total Taxable Sales,
+    # not per-transaction.
+    alloc["tax_reserve"] = round((alloc.get("tgf_operating", 0) or 0) * 0.0825, 2)
     alloc["payment_method"] = payment_method
 
     # Determine status
@@ -40375,14 +40448,22 @@ def _create_allocation_for_item(
     return alloc
 
 
-def calculate_order_allocation(order_id: str, db_path: str | Path | None = None) -> list[dict]:
+def calculate_order_allocation(order_id: str, db_path: str | Path | None = None,
+                               dry_run: bool = False,
+                               only_item_ids: set | None = None) -> list[dict]:
     """Calculate how each item in a GoDaddy order is allocated across buckets.
 
     For EVENT items: course_payable, course_surcharge, prize_pool, tgf_operating,
     godaddy_fee, tax_reserve.
     For MEMBERSHIP items: tgf_operating, prize_pool, godaddy_fee, tax_reserve.
 
+    From the margin-model cutover on, `tgf_operating` also carries the
+    item's FEE SPREAD (its share of the 3.5% the customer paid, less its
+    share of what GoDaddy took) — Kerry-ratified 2026-09-09: the spread
+    is margin and is taxed as margin. `fee_spread` is stored beside it.
+
     Returns a list of allocation dicts (one per item in the order).
+    `dry_run=True` computes without writing.
     """
     with _connect(db_path) as conn:
         items = conn.execute(
@@ -40400,12 +40481,24 @@ def calculate_order_allocation(order_id: str, db_path: str | Path | None = None)
         # Parse order total (once per order, from first item)
         order_total = _parse_dollar(items[0].get("total_amount"))
 
-        # GoDaddy fee: 2.9% + $0.30 per order (split evenly across items)
+        # GoDaddy fee: 2.9% + $0.30 per order, shared out BY ITEM PRICE
+        # (Kerry-ratified 2026-09-09 — the same basis as the order's
+        # splits, so the allocator and the ledger agree per item; an
+        # equal split gave a $58 round the same fee as a $120 one).
+        from .fee_splits import prorate as _prorate_fee, order_fee_from_items
+        _prices = [_parse_dollar(i.get("item_price")) for i in items]
         gd_fee_total = round(order_total * 0.029 + 0.30, 2) if order_total else 0
-        gd_fee_per_item = round(gd_fee_total / len(items), 2) if items else 0
+        _gd_shares = _prorate_fee(gd_fee_total, _prices)
+        # The customer's 3.5%: ONE order fee (the parser stamps it on
+        # every item row), shared out by item price like the deposit.
+        _fee_in_shares = _prorate_fee(
+            order_fee_from_items(
+                _prices, [_parse_dollar(i.get("transaction_fees")) for i in items]),
+            _prices)
 
         results = []
-        for item in items:
+        for _k, item in enumerate(items):
+            gd_fee_per_item = _gd_shares[_k]
             item_name = item.get("item_name", "")
             is_membership = "MEMBERSHIP" in item_name.upper()
 
@@ -40420,9 +40513,26 @@ def calculate_order_allocation(order_id: str, db_path: str | Path | None = None)
             alloc["godaddy_fee"] = gd_fee_per_item
             alloc["total_collected"] = _parse_dollar(item.get("item_price")) or 0
 
-            # Tax reserve: 8.25% of TGF operating revenue
-            alloc["tax_reserve"] = round(
-        max(alloc.get("tgf_operating", 0) or 0, 0) * 0.0825, 2)
+            # FEE SPREAD → margin (Kerry 2026-09-09). Only under the
+            # residual model: rows before the cutover are frozen at the
+            # rate card (guiding principle 4). The spread can be negative
+            # on a small order (3.5% loses to 2.9% + $0.30 under ~$59).
+            alloc["fee_spread"] = 0.0
+            if _margin_model_applies(item.get("order_date"), conn):
+                alloc["fee_spread"] = round(_fee_in_shares[_k] - gd_fee_per_item, 2)
+                alloc["tgf_operating"] = round(
+                    (alloc.get("tgf_operating", 0) or 0) + alloc["fee_spread"], 2)
+
+            # Tax reserve: 8.25% of TGF operating revenue — the spread
+            # included, on Kerry's ruling: "that money is not allotted
+            # to anything but margin ... So that additionally gets taxed."
+            # SIGNED, not floored (Kerry 2026-09-09: "Comptroller only
+            # asks for Total Sales and Total Taxable Sales for the
+            # month, not the per transaction breakdown. So ... that
+            # seems like something that should reduce my Total Taxable
+            # Sales amount."). A loss-leader round is a credit against
+            # the month; the MONTH floors at zero, not the row.
+            alloc["tax_reserve"] = round((alloc.get("tgf_operating", 0) or 0) * 0.0825, 2)
 
             # Determine status
             if is_membership:
@@ -40440,6 +40550,17 @@ def calculate_order_allocation(order_id: str, db_path: str | Path | None = None)
             alloc.pop("_needs_course_cost", None)
             results.append(alloc)
 
+        # `only_item_ids` restricts what is REPORTED and WRITTEN to those
+        # items (the membership restatement rebooks membership rows of an
+        # order without touching the frozen event rows beside them). The
+        # order-level fee shares above are still computed over the whole
+        # order, so a restricted row carries the same share it always did.
+        if only_item_ids is not None:
+            results = [a for a in results if a["item_id"] in only_item_ids]
+
+        if dry_run:
+            return results
+
         # Upsert allocations
         for alloc in results:
             conn.execute(
@@ -40447,8 +40568,9 @@ def calculate_order_allocation(order_id: str, db_path: str | Path | None = None)
                    (order_id, item_id, event_name, chapter, allocation_date,
                     player_count, course_payable, course_surcharge, prize_pool,
                     tgf_operating, godaddy_fee, tax_reserve, total_collected,
-                    allocation_status, notes, discount_given, lsc_shirt_fund)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    allocation_status, notes, discount_given, lsc_shirt_fund,
+                    fee_spread)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                    ON CONFLICT(order_id, item_id) DO UPDATE SET
                     event_name=excluded.event_name, chapter=excluded.chapter,
                     allocation_date=excluded.allocation_date, player_count=excluded.player_count,
@@ -40458,14 +40580,16 @@ def calculate_order_allocation(order_id: str, db_path: str | Path | None = None)
                     total_collected=excluded.total_collected,
                     allocation_status=excluded.allocation_status, notes=excluded.notes,
                     discount_given=excluded.discount_given,
-                    lsc_shirt_fund=excluded.lsc_shirt_fund""",
+                    lsc_shirt_fund=excluded.lsc_shirt_fund,
+                    fee_spread=excluded.fee_spread""",
                 (alloc["order_id"], alloc["item_id"], alloc["event_name"],
                  alloc["chapter"], alloc["allocation_date"], alloc.get("player_count", 1),
                  alloc.get("course_payable", 0), alloc.get("course_surcharge", 0),
                  alloc.get("prize_pool", 0), alloc.get("tgf_operating", 0),
                  alloc["godaddy_fee"], alloc["tax_reserve"], alloc["total_collected"],
                  alloc["allocation_status"], alloc.get("notes"),
-                 alloc.get("discount_given", 0), alloc.get("lsc_shirt_fund", 0)),
+                 alloc.get("discount_given", 0), alloc.get("lsc_shirt_fund", 0),
+                 alloc.get("fee_spread", 0)),
             )
         conn.commit()
 
@@ -40555,24 +40679,35 @@ def _write_godaddy_order_entry(
         return None
 
     # ── Calculate order totals ───────────────────────────────────
-    total_item_prices = 0.0
-    total_tx_fees = 0.0
+    from .fee_splits import order_fee_from_items, prorate as _prorate
 
-    for item in items:
-        total_item_prices += _parse_dollar(item.get("item_price"))
-        total_tx_fees += _parse_dollar(item.get("transaction_fees"))
+    _prices = [_parse_dollar(item.get("item_price")) for item in items]
+    _tfs = [_parse_dollar(item.get("transaction_fees")) for item in items]
+    total_item_prices = sum(_prices)
+    # ONE ORDER, ONE FEE (Kerry-ratified 2026-09-09). The parser stamps
+    # the ORDER's 3.5% fee on every item row of a multi-item order, so
+    # summing the per-item field counts it once per item. Read the
+    # order's fee once, then share it out by item price; the shares add
+    # back to the order's fee to the cent. Single-item orders: unchanged.
+    order_fee = order_fee_from_items(_prices, _tfs)
+    total_tx_fees = order_fee
+    _fee_shares = _prorate(order_fee, _prices)
 
     # total_amount on each item row stores the FULL ORDER total (same value
     # on every item in the order).  Use it from the first item only; fall
-    # back to the sum of per-item prices + fees when it's missing/zero.
+    # back to the sum of per-item prices + the order fee when it's missing/zero.
     first_ta = _parse_dollar(items[0].get("total_amount"))
-    order_total = first_ta if first_ta > 0 else (total_item_prices + total_tx_fees)
+    order_total = first_ta if first_ta > 0 else (total_item_prices + order_fee)
 
     if order_total <= 0:
         return None
 
     merchant_fee_val = round(order_total * 0.029 + 0.30, 2)
     net_deposit_val = round(order_total - merchant_fee_val, 2)
+    # Same basis for the processor's side: by item price, summing to the
+    # order's merchant fee. (Previously weighted by price + stamped fee,
+    # which on a multi-item order weighted every item by the whole fee.)
+    _merchant_shares = _prorate(merchant_fee_val, _prices)
 
     # ── Determine shared event_name and customer ─────────────────
     event_names = list(dict.fromkeys(
@@ -40624,13 +40759,13 @@ def _write_godaddy_order_entry(
         return None
 
     # ── Create splits ────────────────────────────────────────────
-    for item in items:
+    for _k, item in enumerate(items):
         item_id = item.get("id")
         item_event = item.get("item_name") or event_name
         item_customer = item.get("customer") or customer_name
-        ip = _parse_dollar(item.get("item_price"))
-        tf = _parse_dollar(item.get("transaction_fees"))
-        item_total = ip + tf  # per-item contribution to order total
+        ip = _prices[_k]
+        tf = _fee_shares[_k]           # this item's share of the ORDER fee
+        item_merchant_fee = _merchant_shares[_k]
 
         # Registration income split
         if ip > 0:
@@ -40660,10 +40795,8 @@ def _write_godaddy_order_entry(
                 (txn_id, item_id, item_event, item_customer, -coupon_amt),
             )
 
-        # Merchant fee split (proportional by per-item contribution, negative = expense)
-        _sum_items = total_item_prices + total_tx_fees
-        if item_total > 0 and _sum_items > 0:
-            item_merchant_fee = round(merchant_fee_val * item_total / _sum_items, 2)
+        # Merchant fee split (this item's price-share of the order's fee, negative = expense)
+        if item_merchant_fee > 0:
             conn.execute(
                 """INSERT INTO godaddy_order_splits
                    (transaction_id, item_id, event_name, customer, split_type, amount)
@@ -41002,10 +41135,18 @@ def _setting_via(conn: sqlite3.Connection | None, key: str) -> str | None:
         return None
 
 
+# A MEASURE-ONLY override of the cutover, thread-local so a dry-run that
+# asks "what would history look like under the residual model" cannot
+# leak into a concurrent real allocation. Set only by
+# fee_splits.rebook_spread_since(dry_run=True, cutover_override=...).
+_MARGIN_CUTOVER_OVERRIDE = threading.local()
+
+
 def _margin_model_applies(order_date: str | None,
                           conn: sqlite3.Connection | None = None) -> bool:
     """True when this allocation should use the residual margin model."""
-    cutover = _setting_via(conn, "margin_model_cutover") or MARGIN_MODEL_CUTOVER
+    cutover = (getattr(_MARGIN_CUTOVER_OVERRIDE, "cutover", None)
+               or _setting_via(conn, "margin_model_cutover") or MARGIN_MODEL_CUTOVER)
     d = (str(order_date or "").strip())[:10]
     if not d:
         # No date means we cannot prove it is historical, and booking a
@@ -41052,8 +41193,14 @@ def _calc_membership_allocation(item: dict, conn: sqlite3.Connection) -> dict:
     # (the old flat $20/contest under-booked the pass-through pool).
     contest_count = 0
     contest_prize = 0.0
+    # FALL Net Points Race is its own field (the parser only fills it
+    # when the body says FALL) and a $50 contest: $10 markup + $40 pool.
+    # Kerry 2026-09-09 on Kannon Brown's $100 order: "Kannon Brown's was
+    # only $100 because he added the $50 Fall Points Race. So it's still
+    # $50 for his New Member membership rate." Before this the field was
+    # not in the table, so $100 read as a Returning base with no contest.
     _pool_by_field = {"net_points_race": 80.0, "gross_points_race": 40.0,
-                      "city_match_play": 40.0}
+                      "city_match_play": 40.0, "fall_net_points_race": 40.0}
     for field, pool in _pool_by_field.items():
         val = (item.get(field) or "").strip().upper()
         if val and val not in ("", "NO", "NONE", "N/A"):

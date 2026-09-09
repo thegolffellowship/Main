@@ -768,6 +768,35 @@ that must be flagged.
 later, so deducting it here would double-count against the ratified
 margin definition.
 
+**Fee columns on multi-item orders (Kerry 2026-09-09, v2.348.1).** The
+stored `transaction_fee` split carries the ORDER's fee on every item
+row (the parser stamps it per item; `merchant_fee` is pro-rated at
+write time). `money_in` was immune because it reads the deposit, but
+`fee_in` summed the stamped rows, so Will Wallace's four-item order
+showed $10.92 of fee-in four times and a fee-net of +$33.90 against a
+true +$1.26. Read-side fix, same shape as `money_in`: when an order's
+fee rows all carry the same value, each item's `fee_in` is that fee
+apportioned by registration amount. Single-item orders and orders
+already pro-rated at write time are unchanged. **Ratified and done
+(v2.349.0, same day):** the split rows are now written and repaired
+at the source — see `email_parser/fee_splits.py` and
+`unified-financial-model.md` → "ONE ORDER, ONE FEE". The read-side
+apportionment here stays as a no-op guard.
+
+**Fee spread is margin (v2.350.0, Kerry 2026-09-09).** From the cutover
+on the allocator books the item's fee spread into `tgf_operating`, so
+BOOKED equals ACTUALLY LEFT on post-cutover rows and the table's
+remaining "overstated" is the pre-cutover rate-card rows only. Rule of
+record: `unified-financial-model.md` → "The fee spread is margin".
+
+**`margin_actual` deducts set-asides (v2.348.1).** `lsc_shirt_fund`
+($10 per membership, #422) comes off ACTUALLY LEFT as it already came
+off BOOKED; before this every post-cutover membership read as
+overstated by exactly $10. Rows dated before `MARGIN_MODEL_CUTOVER`
+(2026-09-05) still book the rate-card markup (forward-only, #420 C),
+which is why the campaign's first-week 1st Timer rounds still show as
+overstated; restating them is Kerry's call, not a bug.
+
 ## Morning follow-up digest (Kerry 2026-09-03, v2.302.0)
 
 > "Yes should be part of morning digest."
@@ -953,11 +982,15 @@ assignment is never overwritten by the auto-link.
 **Metric definitions (Kerry's, verbatim):** CPL = ad spend / leads ·
 CPP = Cost Per Player = ad spend / unique leads who became a PLAYER
 (registered any event OR became a member; counts once) · CPMem = Cost
-Per Member = ad spend / leads who became members (never "CPM"). Each
-reported CURRENT and **30-DAY TRAILING**: conversions counted through
-`end_date + 30` (the honest read 30 days after the last dollar); while
-that window is open the trailing figure equals current and the panel
-says when it closes. `converted_at` stamps on every conversion path
+Per Member = ad spend / leads who became members (never "CPM"). Reported
+CURRENT and as **BENCHMARK WINDOWS** (v2.354.0, Kerry 2026-09-09: "30
+days, 60 days, 90 days, 180 days, one year, lifetime total would be
+good benchmarks to compare"): `cost.windows` carries CPP / CPMem with
+conversions counted through the campaign's last spend day + 30 / 60 /
+90 / 180 / 365 days and lifetime (no cut-off); `open` marks a window
+still filling. `BENCHMARK_WINDOWS` in campaigns.py. The single 30-day
+trailing column of #391 is gone (`TRAILING_DAYS = None`; the
+`*_trailing` fields remain and equal lifetime). `converted_at` stamps on every conversion path
 (auto-detect + `mark_lead`), backfilled from `touched_at` for rows
 converted before the column existed.
 

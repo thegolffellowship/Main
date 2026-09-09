@@ -146,7 +146,7 @@ Do not assume it — read it — but do not redo it either.
     `<portal>/pages/<results page>?round_id=<gg league round id>`.
     Store links for the "up next" events come from
     `events.registration_url` (derived + verified nightly since
-    v2.349.0; `scoring-event-links` shows the state) — do not hand-build
+    v2.357.0; `scoring-event-links` shows the state) — do not hand-build
     a slug when the row already carries a verified URL.
     Save the draft under `transaction-tracker/docs/claude/recaps/`.
     Kerry sends — OPEN 2.

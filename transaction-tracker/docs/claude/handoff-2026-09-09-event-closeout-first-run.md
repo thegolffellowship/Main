@@ -101,7 +101,7 @@ now stores `customer_id` at insert and refuses a self-alias. Test:
 Repair on production = re-send the same one field after deploy; the
 verification is in §5.
 
-### 3c. Store registration links (v2.349.0)
+### 3c. Store registration links (v2.357.0 — numbered after merging the Sales & Growth lane's 2.349–2.356 from main)
 
 Kerry, pasting the Avery Ranch product URL: *"Are you able to grab other
 current event URLs and add them to the Event pages for email or text

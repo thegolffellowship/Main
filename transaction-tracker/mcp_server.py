@@ -1717,6 +1717,9 @@ def _render_health(payload: dict) -> dict:
     }
 
 
+MARGIN_CUTOVER_DEFAULT = "2026-09-05"
+
+
 def _scoring_dispatch(url: str, extract: str):
     """Bridge for MCP sessions whose cached tool inventory predates the
     v2.23 scoring tools (client sessions freeze the tool list at session
@@ -1739,6 +1742,13 @@ def _scoring_dispatch(url: str, extract: str):
       scoring-hcp-import:<event>[|apply]  self-derive handicap rounds (WHS NDB)
                                    |apply also auto-emails the chapter recap
       scoring-hcp-recap:<event>    (re)send the chapter-manager recap email
+      scoring-fee-splits-check     one order, one fee: item rows add back to the order row?
+      scoring-fee-splits-repair[:apply]  pro-rate multi-item orders' fee rows by price (dry by default)
+      scoring-margin-rebook[:<since>[|apply]]  recompute allocations >= since so margin carries the fee spread
+      scoring-margin-gaps[:<limit>]  pre-cutover events: booked vs residual-would-book, with reasons (measure-only)
+      scoring-liabilities          payouts owed, credits held, LSC shirt fund by Cup year, HIO pot, tax reserve by month
+      scoring-membership-gap[:apply]  the membership gap group: booked vs today's decomposition by price/type/contests; apply rebooks membership rows only
+      scoring-contest-flags-audit[:apply][|all]  memberships not at $50/$75 (|all = every one) + SEASON CONTESTS items: stored contest flags vs the option lines printed on the order email (Graph fetch, no AI); apply writes the form's answers
       scoring-mp-reconcile75[:<season>|<chapter>|<allow>]  match-play reconcile
                                    with off-lowest per-chapter allowance
       scoring-mp-lock-one:<chapter>|<A>|<B>[|apply]  manually lock one
@@ -2340,6 +2350,104 @@ def _scoring_dispatch(url: str, extract: str):
                 db.log_agent_action("mcp-claude", "scoring-lead-unmerge",
                                     f"restored lead {arg.strip()}")
             return json.dumps(res, indent=2, default=str)
+        if cmd == "scoring-fee-splits-check":
+            # ONE ORDER, ONE FEE (Kerry 2026-09-09): do every order's
+            # per-item fee rows add back to its order row? Read-only.
+            from email_parser.fee_splits import fee_split_integrity
+            with db._connect() as _c:
+                return json.dumps(fee_split_integrity(_c, limit=50),
+                                  indent=2, default=str)
+        if cmd == "scoring-fee-splits-repair":
+            # Rewrite multi-item orders' per-item fee rows to price-share
+            # (transaction_fee AND merchant_fee), re-stamp the matching
+            # acct_allocations.godaddy_fee. The order row is untouched.
+            # Dry-run unless ":apply". Ratified 2026-09-09. Audited.
+            from email_parser.fee_splits import repair_multi_item_fee_splits
+            _apply = arg.strip().lower() == "apply"
+            res = repair_multi_item_fee_splits(dry_run=not _apply)
+            if _apply:
+                db.log_agent_action(
+                    "mcp-claude", "scoring-fee-splits-repair",
+                    f"orders_changed={res.get('orders_changed')} "
+                    f"fee_in {res.get('fee_in_before')} -> {res.get('fee_in_after')} "
+                    f"alloc_restamped={res.get('allocations_restamped')}"[:200])
+            # The per-order row detail is large; keep the summary readable.
+            _orders = res.pop("orders", [])
+            res["orders_sample"] = _orders[:8]
+            res["orders_listed"] = len(_orders)
+            return json.dumps(res, indent=2, default=str)
+        if cmd == "scoring-margin-rebook":
+            # "<since>[|apply]" — recompute allocations for GoDaddy orders
+            # dated >= since so they carry the fee spread in margin
+            # (Kerry 2026-09-09). Dry-run unless |apply. Audited.
+            # "<since>|apply" writes; "<since>|dry|cutover=<date>" measures
+            # what rows before the real cutover WOULD book under the
+            # residual model (Question 3). The override never writes.
+            _parts = [x.strip() for x in arg.split("|")]
+            _since = _parts[0] if _parts and _parts[0] else MARGIN_CUTOVER_DEFAULT
+            _apply = len(_parts) > 1 and _parts[1].lower() == "apply"
+            _cut = None
+            for _p in _parts[1:]:
+                if _p.lower().startswith("cutover="):
+                    _cut = _p.split("=", 1)[1].strip()
+            from email_parser.fee_splits import rebook_spread_since
+            res = rebook_spread_since(_since, dry_run=not _apply,
+                                      cutover_override=None if _apply else _cut)
+            if _apply:
+                db.log_agent_action(
+                    "mcp-claude", "scoring-margin-rebook",
+                    f"since={_since} orders={res.get('orders')} "
+                    f"rows_changed={res.get('rows_changed')} "
+                    f"tgf_operating {res.get('tgf_operating_before')} -> "
+                    f"{res.get('tgf_operating_after')}"[:200])
+            _ch = res.pop("changes", [])
+            # Biggest movers first: a rebook is expected to move each row
+            # by its spread (cents); anything larger is the thing to read.
+            _ch.sort(key=lambda c: -abs((c.get("tgf_operating") or [0, 0])[1]
+                                        - (c.get("tgf_operating") or [0, 0])[0]))
+            res["changes_sample"] = _ch[:40]
+            res["changes_listed"] = len(_ch)
+            return json.dumps(res, indent=2, default=str)
+        if cmd == "scoring-margin-gaps":
+            # Where the past event costs are missing (Kerry 2026-09-09):
+            # every pre-cutover allocation, what the books say vs what
+            # the residual model would book from today's configuration,
+            # grouped by event with a reason. Measure-only.
+            from email_parser.margin_ledger import margin_gaps
+            _lim = int(arg.strip()) if arg.strip().isdigit() else 60
+            return json.dumps(margin_gaps(limit=_lim), indent=2, default=str)
+        if cmd == "scoring-membership-gap":
+            # Gap group 1 (Kerry 2026-09-09). Measure by default; ":apply"
+            # rebooks ONLY membership rows across the whole history under
+            # today's decomposition (fits/misfits reported first). Audited.
+            from email_parser.margin_ledger import membership_gap
+            _apply = arg.strip().lower() == "apply"
+            res = membership_gap(apply=_apply)
+            if _apply:
+                db.log_agent_action(
+                    "mcp-claude", "scoring-membership-gap",
+                    f"rebooked membership rows: {res.get('applied')}")
+            return json.dumps(res, indent=2, default=str)
+        if cmd == "scoring-contest-flags-audit":
+            # Kerry 2026-09-09: sweep every membership that is not a plain
+            # $50 / $75 for contest add-ons against the ORDER EMAIL.
+            from email_parser.contest_flags import contest_flags_audit
+            _parts = [x.strip().lower() for x in arg.split("|") if x.strip()]
+            _apply = "apply" in _parts
+            _all = "all" in _parts
+            res = contest_flags_audit(apply=_apply, all_rows=_all)
+            if _apply:
+                db.log_agent_action(
+                    "mcp-claude", "scoring-contest-flags-audit",
+                    f"applied {res.get('applied')} flag corrections: "
+                    f"{[m['order_id'] for m in res.get('mismatches', [])]}")
+            return json.dumps(res, indent=2, default=str)
+        if cmd == "scoring-liabilities":
+            # What TGF is holding for someone else or has earmarked:
+            # prize payouts owed, credits held, LSC shirt fund by Cup
+            # year, sales-tax reserve by month (filed / open). Read-only.
+            from email_parser.margin_ledger import liability_buckets
+            return json.dumps(liability_buckets(), indent=2, default=str)
         if cmd == "scoring-backup-run":
             # Take a backup NOW: consistent snapshot -> gzip -> OneDrive
             # -> prune. ":dry" snapshots and verifies integrity without

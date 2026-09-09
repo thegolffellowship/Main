@@ -1,12 +1,135 @@
-window.TGF_VERSION = "2.349.0";
+window.TGF_VERSION = "2.357.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.357.0",
+    date: "2026-09-09",
+    changes: [
+      "Store registration links are derived, verified and expiring (Kerry: \u201cgrab other current event URLs and add them to the Event pages for email or text presets \u2026 after the events they become obsolete\u201d). The Registration link box in Add Event and Edit Event already existed for the Lead Center texts; it is now filled automatically: the store slug is the event name lower-cased with punctuation collapsed to hyphens (a9.23 Avery Ranch \u2192 a9-23-avery-ranch), and a derived link is saved only once the store answers for it \u2014 the store redirects unknown products to the shop index instead of 404ing, so \u201canswers\u201d means HTTP 200 on a URL that still carries the slug.",
+      "Edit Event shows the link's state \u2014 VERIFIED, UNVERIFIED, MISSING, UNREACHABLE, EXPIRED \u2014 with a Verify button and a one-click Use for the suggested URL. Add Event derives and checks the link the moment the event is saved. A daily 06:00 Central sweep covers every upcoming event and marks played events' links EXPIRED; nothing is ever deleted (past events are frozen), the link simply stops being sendable.",
+      "Message Players gains {event_url}. Send refuses, naming the reason, when the event has no link, the store rejected it, or the event has already been played \u2014 the same boundary check that guards {manager_phone}. Preview shows the gap instead of a blank. Bridge: scoring-event-links[|apply][|<event id>]. Test: test_event_links.py (32 checks).",
+    ],
+  },
+  {
+    version: "2.356.2",
+    date: "2026-09-09",
+    changes: [
+      "Subject lookup fix: Graph rejects an $orderby on a property that is not also in $filter, so the v2.356.1 fallback errored silently and the 18 re-keyed emails stayed unfetchable. The filter now carries a receivedDateTime bound alongside the subject.",
+    ],
+  },
+  {
+    version: "2.356.1",
+    date: "2026-09-09",
+    changes: [
+      "Contest-flags audit: a re-keyed order email is found by its subject. The first sweep could not fetch 18 of 53 order emails — every one from January through April — because an Outlook rule had moved them to a dated folder and Graph gives a moved message a NEW id, so the email_uid stored at parse time 404s. fetch_email_by_subject() looks the order up by 'New Order #R…' when the id fails; the audit reports how many it re-found that way. The same re-keying is why Re-extract fails on older orders (a follow-up).",
+      "Production after v2.356.0: the boot sync dropped the three re-created Match Play enrollments (19 enrolled again; the sync reports skipped_removed=3), Daniel Miller moved from the 2026 NET Points Race to the 2026 Fall race per his order, and the membership rebook re-ran: 14 of 14 price groups now decompose to the cent (+$25 margin, Fall pool +$40, NET pool −$80 on Miller).",
+    ],
+  },
+  {
+    version: "2.356.0",
+    date: "2026-09-09",
+    changes: [
+      "REMOVED STAYS REMOVED. Kerry on Campos, Cheshire and Lourigan: 'I refunded all three of them for those entries ... So they WERE transactions but they were refunded. 2026 Match Play is long since over ... You should see that in the history somewhere.' The history was there — season_contest_removals holds all three (Campos $40 Venmo 7/19, Cheshire $51.75 Venmo 6/23, Lourigan $50 Venmo 5/26) — but the enrollment sync never read it, so restoring their purchase flags from the order emails (v2.355.0) re-created the three enrollments Kerry had removed. The sync now skips any purchase covered by a later removal, heals enrollments an earlier sync re-created, and a purchase dated after the removal still enrolls as a new decision. This deploy's boot sync drops the three.",
+      "Removing an enrollment no longer erases the contest flag on the purchase. That erasure (the 2026-09-02 Hammond fix) is why Campos's $125 read as a $75 membership with $50 unaccounted: the books could not say what was sold. The purchase flag now stays true to the order and the removal record carries the refund; the sync's removal check does the job the erasure used to do.",
+      "New sweep Kerry asked for: `scoring-contest-flags-audit[:apply][|all]` — every membership that is not a plain $50 / $75 (or every one with |all) plus every SEASON CONTESTS item is checked against the option lines printed on its ORDER EMAIL (Graph fetch, no AI): stored NET / GROSS / Match Play / FALL flags vs the form's YES/NO. Dry-run reports; apply writes the form's answers. Miller's order (Fall yes, NET no) fixed by hand ahead of it; the 2026 NET Points Race was $90, so $125 could never have been NET.",
+      "Open for the Finance lane: the three refunded Match Play entries now book their $50 in full (contest markup + pool) and the Venmo refunds live only in the removals table and expense feed, not as contra rows against the contest pool — the pool reads $120 high until refunds post against the bucket they came from.",
+    ],
+  },
+  {
+    version: "2.355.0",
+    date: "2026-09-09",
+    changes: [
+      "The four membership rows at 'unknown' prices were not unknown prices — they were parser misses. The original GoDaddy emails (Kerry: 'Here's the original transactions. See the match play') print 'Add CITY Match Play?: YES' on Campos R745590832, Cheshire R841551831 and Lourigan R499684196, and 'Add FALL Points Race?: YES' on Miller R667402675; the LLM dropped the Match Play flag on the first three and read Miller's FALL line as NET. Flags corrected on the three Match Play rows and the membership rebook re-run: +$30 margin, +$120 to the Match Play pool, tax reserve +$2.46. None of the three was on the 2026 City Match Play enrollment; the boot-time contest sync now enrolls them from the corrected flags. Miller's NET→FALL correction is held for Kerry (it moves him between contests).",
+      "Parser: the contest add-on lines are now read deterministically. contest_flags_from_body() takes 'Add CITY Match Play / NET Points Race / GROSS Points Race / FALL Points Race?: YES|NO' straight from the order text and overrides the LLM wherever a line is printed; a form with a FALL line and no NET line reports NET as NO (the Miller shape). Where no line exists the LLM's value and the existing hallucination guards stand. A printed option line is a fact, not an extraction. Test: test_parser.py (test_contest_option_lines).",
+    ],
+  },
+  {
+    version: "2.354.0",
+    date: "2026-09-09",
+    changes: [
+      "Lead campaign stats: benchmark windows. Kerry: 'I think having 30 days, 60 days, 90 days, 180 days, one year, lifetime total would be good benchmarks to compare.' The cost table now carries Current, 30d, 60d, 90d, 180d, 1 yr and Lifetime columns for CPP and CPMem, each counting conversions through the campaign's last spend day plus the window; a window still filling is marked open; Lifetime has no cut-off. Replaces the single Lifetime column of v2.353.0.",
+      "Membership rebook APPLIED (Kerry: 'Seems like you should apply the membership rebook'). Backup taken first (tracker_20260909_202327). 117 membership rows, 106 changed: margin $8,934.20 → $5,943.20, pools $1,576 → $3,262, shirt set-aside $100 → $1,170, tax reserve $737.03 → $490.62. Event rows in the same orders untouched. Four rows at prices the table does not know stay at nearest fit until Kerry names them.",
+      "New paste-in prompt docs/claude/session-prompt-financial-audit.md for the Finance lane Kerry asked for: audit the financial side, design the liability ledger with inflows and outflows, and simplify the surfaces — one decision at a time.",
+    ],
+  },
+  {
+    version: "2.353.0",
+    date: "2026-09-09",
+    changes: [
+      "Membership gap group (Kerry 2026-09-09: 'Let's go with the membership gap recommendation first'). New measure-only read `scoring-membership-gap`: every membership sold since the Tracker's history began, grouped by price / New-Returning-Plus / contests bundled, with what the books hold beside what today's decomposition books (base 44/69/244 + $6 Monthly Points pool + $10 per contest + contest pools + the $10 shirt set-aside), and a FITS flag per group — a price the table cannot rebuild to the cent is the question for Kerry. `:apply` rebooks ONLY membership rows across the history (event rows in the same orders are untouched, via a new only_item_ids restriction on the allocator and an item_class filter on the rebook). Apply is Kerry-gated.",
+      "FALL Net Points Race now decodes inside a membership bundle. Kerry: 'Kannon Brown's was only $100 because he added the $50 Fall Points Race. So it's still $50 for his New Member membership rate.' The fall_net_points_race field was not in the contest table, so $100 read as a Returning base with no contest ($59 margin, $6 pool); it now reads New $44 + $10 contest markup − $10 shirt = $44 margin, $46 to pools.",
+      "Lead campaign stats: the 30-day trailing window is gone (Kerry: 'What is the significance of 10/6 as the end of the trailing window? Shouldn't it be indefinite?'). A lead is a lifetime relationship, so conversions count whenever they happen; the second column now reads Lifetime and equals current. TRAILING_DAYS = None is the switch, an integer re-arms a window.",
+      "Liabilities read now carries the HIO pot (pot, carry-in, contributed, paid out, through-date) beside payouts owed, credits, shirt fund and tax reserve — Kerry is moving it and the 2027 shirt fund to a high-yield savings account.",
+      "Gap list adds a by-month view of the pre-cutover non-membership rows: what was booked, what the residual model would book, how many rows would be negative and the sales-tax credit those negatives would have carried under the signed-tax ruling — the number behind Kerry's 'probably overshot' question about past filings.",
+    ],
+  },
+  {
+    version: "2.352.0",
+    date: "2026-09-09",
+    changes: [
+      "Sales tax is now signed per row and nets within the month (Kerry-ratified 2026-09-09). Kerry: 'Shouldn't minus margins be minus sales tax too? ... Comptroller only asks for Total Sales and Total Taxable Sales for the month, not the per transaction breakdown. So in my mind, that seems like something that should reduce my Total Taxable Sales amount.' A loss-leader round now books negative tax reserve — a credit against its month — and the monthly figure floors at zero instead of every row. Supersedes the 9/5 per-row floor. Post-cutover rows rebooked so the stored reserve matches.",
+      "Lone Star Cup shirt fund: the Aug–Jul membership window funds the Cup played that OCTOBER (Aug 2025–Jul 2026 → the 2026 Cup), which is the point of the window — shirts get ordered from what was collected before the City and TGF Championships. Wording corrected everywhere it said 'that July'. The liabilities read now states where the Tracker's order history begins (2025-12-29), because memberships sold before that are not in it and the 2026 fund figure is a floor until they are loaded.",
+      "Margin audit table: BOUGHT is now ITEMS; PLAYER, ITEMS and DATE read left and take their widest content, the money columns stay right (Kerry).",
+      "Two walk-in 1st Timers for a18.5 Forest Creek — Geoff Hightower (lead 133) and Zac Hammond (lead 134), a partner pair who came through the store with no ad — added to the Lead Center by hand as source 'organic' so they are tracked and filterable apart from the campaign. The automatic capture for this class is designed (mailbox #435 §6) and not yet built.",
+    ],
+  },
+  {
+    version: "2.351.0",
+    date: "2026-09-09",
+    changes: [
+      "The campaign margin audit table now has ONE margin column. Kerry: 'I want to be able to see that ACTUALLY LEFT and OVERSTATED column reduced to one column, MARGIN or PROFIT or whatever that's supposed to be called. Then perhaps a column that computes tax liability for sales tax.' Columns are now Paid · Fee net · Course · Prizes · Shirt fund · Margin · Sales tax · Check. Shirt fund is the $10 Lone Star Cup set-aside per membership sold, which had been coming out of margin without a column of its own. Sales tax is 8.25% of Margin. The Check column is the control: paid + fee net − course − prizes − shirt fund − margin must be zero; a row dated before the margin-model cutover is flagged 'rate card' instead of carrying a second margin figure.",
+      "Margin-model cutover moved from 2026-09-05 to 2026-08-27 (Kerry-ratified; the app_settings dial margin_model_cutover, not a code change) and the rows in between rebooked on production: 87 orders, 57 rows changed, margin −$122.71, tax reserve −$6.95, August and September only. The 1st-Timer rounds of the campaign's first week now book the loss they were; five memberships pick up the shirt set-aside. Kerry: 'All memberships fund shirts.'",
+      "Two new read-only bridges for the questions Kerry asked next. scoring-margin-gaps: every event dated before the cutover with what the books say beside what today's residual model would book, and a reason — the list Kerry fills in so history can be restated event by event ('tell me where the gaps are in the past event costs'). scoring-liabilities: prize payouts owed, credits held, the Lone Star Cup shirt fund by Cup year (Aug–Jul membership sales fund that July's Cup: Aug 2025–Jul 2026 → 2026, Aug 2026–Jul 2027 → 2027), and the sales-tax reserve by month split filed/open by the 20th-of-next-month rule. Module: email_parser/margin_ledger.py.",
+    ],
+  },
+  {
+    version: "2.350.2",
+    date: "2026-09-09",
+    changes: [
+      "scoring-margin-rebook gained a measure-only mode (|dry|cutover=<date>) that reports what rows dated before the real margin-model cutover WOULD book under the residual model, by month, without writing — the numbers behind Kerry's Question 3 (restate history, or leave it frozen). The override is thread-local so it cannot leak into a concurrent real allocation, and it is refused on apply.",
+    ],
+  },
+  {
+    version: "2.350.1",
+    date: "2026-09-09",
+    changes: [
+      "scoring-margin-rebook lists its biggest movers first (40, was 12 in write order). The first production dry-run moved margin by +$160.58 against a spread total of +$6.53, so the rows that moved for a reason other than the spread are the ones that have to be read before anything is applied.",
+    ],
+  },
+  {
+    version: "2.350.0",
+    date: "2026-09-09",
+    changes: [
+      "The card-fee spread is TGF margin and is taxed as margin (Kerry-ratified 2026-09-09). On every GoDaddy order the customer pays 3.5% and GoDaddy takes 2.9% + $0.30; what is left over — a few cents either way per item, about +$592 across all orders since December — used to sit in no bucket at all. The allocator now books each item's share of it into tgf_operating and stores it beside as fee_spread, and the 8.25% tax reserve picks it up automatically. Kerry: 'the spread should be inside the TGF Margin and in my mind is the part that gets taxed as it's basically a markup over and above (or below) what the actual GoDaddy fees are ... Somewhat similar to the rounding up concept with the course fees.' Rows dated before the 2026-09-05 margin-model cutover are frozen and book no spread.",
+      "One-time rebook for the rows written since the cutover: scoring-margin-rebook:<since>[|apply] recomputes those orders' allocations through the ordinary allocator (dry-run by default) and reports every bucket that moved. calculate_order_allocation gained dry_run so the report can be produced without writing.",
+      "Consequence on the campaign margin audit table: BOOKED now equals ACTUALLY LEFT on post-cutover rows; the remaining 'overstated' figure is the pre-cutover 1st Timer rows only, which is the next ruling. Footnotes updated to say so.",
+      "Tests: test_fee_splits.py (spread per item, sum to the order's +$1.26, tax on it, frozen pre-cutover row, dry-run, rebook), test_margin_model.py, test_lead_campaigns.py.",
+    ],
+  },
+  {
+    version: "2.349.1",
+    date: "2026-09-09",
+    changes: [
+      "The fee-split check reads the order's fee from its ITEM rows, not from the order row. The production dry-run of v2.349.0 showed why: 21 orders have an order row whose deposit was adjusted after the splits were written (a later refund or credit), so 'charged minus registrations' read as a fee of −$370 on one of them. Those orders are now reported as DIVERGED — order row and item rows disagree — for a person to look at, and the repair does not touch their totals; only the stamped fee shares are corrected. Nothing was applied to production before this correction.",
+    ],
+  },
   {
     version: "2.349.0",
     date: "2026-09-09",
     changes: [
-      "Store registration links are derived, verified and expiring (Kerry: “grab other current event URLs and add them to the Event pages for email or text presets … after the events they become obsolete”). The Registration link box in Add Event and Edit Event already existed for the Lead Center texts; it is now filled automatically: the store slug is the event name lower-cased with punctuation collapsed to hyphens (a9.23 Avery Ranch → a9-23-avery-ranch), and a derived link is saved only once the store answers for it — the store redirects unknown products to the shop index instead of 404ing, so “answers” means HTTP 200 on a URL that still carries the slug.",
-      "Edit Event shows the link's state — VERIFIED, UNVERIFIED, MISSING, UNREACHABLE, EXPIRED — with a Verify button and a one-click Use for the suggested URL. Add Event derives and checks the link the moment the event is saved. A daily 06:00 Central sweep covers every upcoming event and marks played events' links EXPIRED; nothing is ever deleted (past events are frozen), the link simply stops being sendable.",
-      "Message Players gains {event_url}. Send refuses, naming the reason, when the event has no link, the store rejected it, or the event has already been played — the same boundary check that guards {manager_phone}. Preview shows the gap instead of a blank. Bridge: scoring-event-links[|apply][|<event id>]. Test: test_event_links.py (32 checks).",
+      "One order, one fee — and the item rows underneath must add back to it (Kerry-ratified 2026-09-09: 'it seems like you can go ahead, yes'). A multi-item GoDaddy order's 3.5% transaction fee was stamped on every item row and the GoDaddy merchant fee was split equally per item, so a $58 round carried the same fee as a $120 round and any report summing item rows counted the order's fee once per item. Both legs are now the order's fee shared out by item price, to the cent, in the splits writer and in the allocator — the same basis the campaign table already used for the deposit. The order-level row (what was charged, what GoDaddy kept, what was deposited) was right all along and is untouched. Single-item orders are unchanged.",
+      "The invariant is checked, not assumed. `fee_split_integrity` runs inside the data-quality audit (`get_data_quality_report` → `fee_splits`) and lists any order whose item rows do not sum to its order row; bridge `scoring-fee-splits-check` reads it on demand.",
+      "One-time repair for the rows written before today: `scoring-fee-splits-repair` (dry-run by default, `:apply` to write) rewrites the per-item transaction_fee and merchant_fee splits of every multi-item order to price-share and re-stamps the matching acct_allocations.godaddy_fee, reporting before/after totals per order and per month. Money Flow's RETAINED stops reading the stamped copies as a consequence (the ~$1,098 overstatement in mailbox #423 §2).",
+      "Found on the way: on a FRESH database the discount_given and lsc_shirt_fund columns were never created — the ALTER that adds them to an existing table ran before the CREATE TABLE, so a new install (and every test fixture that used init_db) had an allocator that could not write. The columns are now in the CREATE as well.",
+      "Tests: test_fee_splits.py (new, 40 checks incl. Will Wallace's real four-event order), test_margin_model.py, test_lead_campaigns.py.",
+    ],
+  },
+  {
+    version: "2.348.1",
+    date: "2026-09-09",
+    changes: [
+      "The campaign margin audit table's FEE columns no longer count a multi-item order's transaction fee once per item. Kerry: 'I don't think the FEE NET lines are correct for Will Wallace's transactions. Transaction fee on the one attached with multiple line items was $10.92. My calculation for GoDaddy fees is $9.66. So the diff is +$1.26 which would be prorated across all of those line items.' Correct: his four-item order carried the order's $10.92 on every row, so the table showed $43.68 of fee-in against a correctly pro-rated fee-out and a fee-net of +$33.90 where the truth is +$1.26. Fee-in is now the order's fee once, apportioned by registration amount, the same basis the deposit is split on. Money-in already read the deposit, so ACTUALLY LEFT was right; only the fee columns were wrong.",
+      "ACTUALLY LEFT now deducts item-type set-asides (the $10 Lone Star Cup shirt fund per membership, ratified 2026-09-05). BOOKED already did, so every membership allocated since the cutover read as overstated by exactly $10 against a definition that disagreed with the ratified standard.",
+      "Not changed: the stored split rows still carry the order's fee per item (a write-time migration, held for ratification), and allocations dated before the 2026-09-05 margin-model cutover still book the rate-card markup, which is why 1st Timer rounds from the campaign's first week still show as overstated. Both are put to Kerry in the Sales & Growth session record.",
     ],
   },
   {

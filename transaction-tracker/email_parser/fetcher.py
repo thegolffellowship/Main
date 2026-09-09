@@ -350,6 +350,55 @@ def fetch_email_by_id(
         return None
 
 
+def fetch_email_by_subject(
+    tenant_id: str,
+    client_id: str,
+    client_secret: str,
+    email_address: str,
+    subject: str,
+) -> dict | None:
+    """Fetch the newest email whose subject matches exactly. The fallback
+    for a re-keyed Graph message id: Outlook rules that move a message to
+    a dated folder give it a NEW id, so the `email_uid` stored at parse
+    time 404s months later (18 of 53 order emails in the 2026-09-09
+    contest-flags sweep). The order number in the subject
+    ("New Order #R499684196") is stable."""
+    token = _get_graph_token(tenant_id, client_id, client_secret)
+    if not token:
+        return None
+    headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
+    url = f"{GRAPH_BASE}/users/{email_address}/messages"
+    # Graph requires every $orderby property to appear in $filter, so the
+    # date bound is there for the ordering, not to narrow the search.
+    params = {
+        "$filter": ("receivedDateTime ge 2020-01-01T00:00:00Z and subject eq '"
+                    + subject.replace("'", "''") + "'"),
+        "$select": "id,subject,from,receivedDateTime,body",
+        "$orderby": "receivedDateTime desc",
+        "$top": "1",
+    }
+    try:
+        resp = _request_with_retry("get", url, headers=headers, params=params, timeout=30)
+        resp.raise_for_status()
+        msgs = resp.json().get("value") or []
+        if not msgs:
+            return None
+        msg = msgs[0]
+        body = msg.get("body", {}) or {}
+        content_type = body.get("contentType", "text")
+        return {
+            "uid": msg["id"],
+            "subject": msg.get("subject", ""),
+            "from": (msg.get("from") or {}).get("emailAddress", {}).get("address", ""),
+            "date": msg.get("receivedDateTime"),
+            "text": body.get("content", "") if content_type == "text" else "",
+            "html": body.get("content", "") if content_type == "html" else "",
+        }
+    except Exception:
+        logger.exception("Failed to fetch email by subject %r", subject)
+        return None
+
+
 def send_mail_graph(
     tenant_id: str,
     client_id: str,
