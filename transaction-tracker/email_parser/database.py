@@ -3462,6 +3462,12 @@ def init_db(db_path: str | Path | None = None) -> None:
             # asked. The URL itself is registration_url (#417 D).
             ("registration_url_status", "TEXT"),
             ("registration_url_checked_at", "TEXT"),
+            # Where the group meets after THIS event (Kerry 2026-09-09:
+            # "We go to different places for each event. Some ... are right
+            # in the clubhouse on site"). Per event, not per chapter; the
+            # Fellowship preset renders it as {fellowship_spot} and the send
+            # refuses while it is blank.
+            ("fellowship_spot", "TEXT"),
         ]:
             try:
                 conn.execute(f"ALTER TABLE events ADD COLUMN {col} {col_type}")
@@ -4199,14 +4205,17 @@ def init_db(db_path: str | Path | None = None) -> None:
                 # answered YES to the fellowship request — where we
                 # are meeting afterward, and a nudge to tell us if
                 # they drop so the restaurant headcount stays right.
-                # [MEETING SPOT] is deliberately a bracketed blank;
-                # the composer refuses to send while one survives.
+                # {fellowship_spot} is the event's own venue (Kerry
+                # 2026-09-09: a different place every event, sometimes the
+                # clubhouse on site) \u2014 events.fellowship_spot, set in Edit
+                # Event. The send refuses while the event has none, the
+                # same way it refuses a missing {manager_phone}.
                 "Fellowship \u2014 Where We're Meeting", "email",
                 "Fellowship after {event_name} \u2014 where we're meeting",
                 "<p>Hi {player_name},</p>"
                 "<p>You said YES to fellowship after <strong>{event_name}</strong>, "
                 "so here is where we are headed once we are off the course:</p>"
-                "<p><strong>[MEETING SPOT]</strong></p>"
+                "<p><strong>{fellowship_spot}</strong></p>"
                 "<p>Come over when your group finishes.</p>"
                 "<p>If your plans have changed and you cannot join us, just reply "
                 "and let me know, or text {manager_name} at {manager_phone}. We "
@@ -23241,7 +23250,7 @@ def update_event(event_id: int, fields: dict, db_path: str | Path | None = None)
                 "tee_time_count", "tee_time_interval", "start_time_18", "start_type_18",
                 "tee_time_count_18", "event_type", "tee_direction", "tee_direction_18",
                 "nine_side", "allow_fivesomes", "range_balls_included",
-                "registration_url",
+                "registration_url", "fellowship_spot",
                 "pairing_mode", "pairing_race_key",
                 "course_cost", "tgf_markup", "side_game_fee", "transaction_fee_pct",
                 "course_cost_9", "course_cost_18", "tgf_markup_9", "tgf_markup_18",
@@ -38309,6 +38318,21 @@ _PRIOR_SYSTEM_TEMPLATE_BODIES = {
         "and let me know. We give the restaurant a headcount, so an "
         "accurate number genuinely helps.</p>"
         "<p>Looking forward to it,<br>The Golf Fellowship</p>",
+        # v2.345.0 → v2.358.0: the bracketed [MEETING SPOT] blank became
+        # the per-event {fellowship_spot} variable (Kerry 2026-09-09).
+        # Verified against production before this shipped: the stored
+        # body was this string, byte for byte (506 chars, id 8).
+        "<p>Hi {player_name},</p>"
+        "<p>You said YES to fellowship after <strong>{event_name}</strong>, "
+        "so here is where we are headed once we are off the course:</p>"
+        "<p><strong>[MEETING SPOT]</strong></p>"
+        "<p>Come over when your group finishes.</p>"
+        "<p>If your plans have changed and you cannot join us, just reply "
+        "and let me know, or text {manager_name} at {manager_phone}. We "
+        "give the restaurant a headcount, so an accurate number genuinely "
+        "helps.</p>"
+        "<p>Looking forward to it,<br>{manager_name}<br>"
+        "The Golf Fellowship</p>",
     },
 }
 

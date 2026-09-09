@@ -42,7 +42,11 @@ def test_fellowship_template_is_seeded():
     t = rows[0]
     assert t["is_system"] == 1
     # Kerry's two asks must both be in the copy.
-    assert "[MEETING SPOT]" in t["html_body"], "no place to put the venue"
+    # The venue is per EVENT (Kerry 2026-09-09: "We go to different places
+    # for each event ... some are right in the clubhouse on site"), so the
+    # bracketed blank became a variable the send guard refuses while empty.
+    assert "{fellowship_spot}" in t["html_body"], "no place to put the venue"
+    assert "[MEETING SPOT]" not in t["html_body"], "the hand-filled blank is back"
     assert "headcount" in t["html_body"], "no nudge to correct the count"
     assert "{player_name}" in t["html_body"]
     assert "{event_name}" in t["subject"]
@@ -143,6 +147,37 @@ def test_a_hand_edited_template_survives_a_revision():
         body = c.execute("SELECT html_body FROM message_templates "
                          "WHERE name LIKE 'Fellowship%'").fetchone()[0]
     assert body == "KERRY WROTE THIS"
+
+
+def test_the_meeting_spot_blank_body_is_registered_as_a_prior():
+    """v2.345.0's body (the [MEETING SPOT] blank + manager lines) is what
+    production held on 2026-09-09 (id 8, 506 chars). It must be a prior,
+    or the {fellowship_spot} revision strands every deployment on it."""
+    priors = db._PRIOR_SYSTEM_TEMPLATE_BODIES["Fellowship — Where We're Meeting"]
+    old = [p for p in priors if "[MEETING SPOT]" in p and "{manager_phone}" in p]
+    assert len(old) == 1, "the v2.345.0 body is not registered as a prior"
+    d = _fresh_db()
+    with sqlite3.connect(d) as c:
+        c.execute("UPDATE message_templates SET html_body = ? "
+                  "WHERE name LIKE 'Fellowship%'", (old[0],))
+    db.init_db(str(d))
+    with sqlite3.connect(d) as c:
+        body = c.execute("SELECT html_body FROM message_templates "
+                         "WHERE name LIKE 'Fellowship%'").fetchone()[0]
+    assert "{fellowship_spot}" in body and "[MEETING SPOT]" not in body
+
+
+def test_send_refuses_a_blank_fellowship_spot():
+    """A template that uses {fellowship_spot} must not go out blank —
+    same class as the {manager_phone} guard."""
+    src = Path("app.py").read_text()
+    assert re.search(
+        r'if "\{fellowship_spot\}" in \(subject_tpl \+ body_tpl\) and not '
+        r'event_vars\["fellowship_spot"\]:', src), \
+        "no send guard for {fellowship_spot}"
+    preview = src.split("def api_preview_message")[1].split("@app.route")[0]
+    assert 'variables["fellowship_spot"]' in preview, \
+        "preview does not show the fellowship_spot gap"
 
 
 def test_both_chapters_have_a_manager_on_file():

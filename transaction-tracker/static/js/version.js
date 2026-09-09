@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.357.1";
+window.TGF_VERSION = "2.358.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.358.0",
+    date: "2026-09-09",
+    changes: [
+      "The fellowship venue is per EVENT (Kerry: “Max & Louie's was just for that event. We go to different places for each event. Some, like next week, are right in the clubhouse on site”). A Fellowship spot field now sits on the GENERAL tab of Add Event and Edit Event, and the Fellowship — Where We're Meeting preset renders it as {fellowship_spot} instead of the hand-filled [MEETING SPOT] blank. The send refuses, naming the event, while the spot is blank — the same boundary check as {manager_phone} and {event_url}; the composer has a {fellowship_spot} button and the preview shows the gap.",
+      "Template revision done per the §7 rule: the previous seeded body is appended to the prior-bodies registry, so an untouched production row picks up the new wording on boot and a hand-edited one is left alone.",
+    ],
+  },
   {
     version: "2.357.1",
     date: "2026-09-09",

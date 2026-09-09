@@ -943,6 +943,7 @@
                             <option value="DFW">DFW</option>
                         </select>
                     </label>
+                    <label title="Where the group meets after this event. Fills {fellowship_spot} in the Fellowship preset; the send refuses while it is blank.">Fellowship spot<input type="text" id="edit-event-fellowship_spot" class="modal-input" placeholder="e.g. Clubhouse (on site), or the restaurant's name"></label>
                 </div>
                 <!-- Format -->
                 <div style="margin-top:0.75rem;">
@@ -1782,6 +1783,7 @@
                             <option value="DFW">DFW</option>
                         </select>
                     </label>
+                    <label title="Where the group meets after this event. Fills {fellowship_spot} in the Fellowship preset; the send refuses while it is blank.">Fellowship spot<input type="text" id="add-event-fellowship_spot" class="modal-input" placeholder="e.g. Clubhouse (on site), or the restaurant's name"></label>
                 </div>
                 <!-- Format -->
                 <div style="margin-top:0.75rem;">
@@ -2180,6 +2182,7 @@
                         <button type="button" class="btn btn-secondary compose-var-btn" data-var="manager_name" style="font-size:0.7rem; padding:0.15rem 0.4rem;" title="Chapter manager's name, from the chapter_managers setting">{manager_name}</button>
                         <button type="button" class="btn btn-secondary compose-var-btn" data-var="manager_phone" style="font-size:0.7rem; padding:0.15rem 0.4rem;" title="Chapter manager's cell, from the chapter_managers setting">{manager_phone}</button>
                         <button type="button" class="btn btn-secondary compose-var-btn" data-var="event_url" style="font-size:0.7rem; padding:0.15rem 0.4rem;" title="The event's store registration link (Edit Event → Registration link). Refused when the event has no verified link or has already been played.">{event_url}</button>
+                        <button type="button" class="btn btn-secondary compose-var-btn" data-var="fellowship_spot" style="font-size:0.7rem; padding:0.15rem 0.4rem;" title="Where the group meets after this event (Edit Event → Fellowship spot). Refused while blank.">{fellowship_spot}</button>
                     </div>
                     <textarea id="compose-body" class="modal-input" rows="8" style="margin-top:0.2rem; font-family:inherit; resize:vertical;" placeholder="Type your message here. Leave a blank line between paragraphs; wrap **words in stars** to bold them. Use the buttons above to insert personalization tags."></textarea>
                 </label>
@@ -10618,6 +10621,7 @@
                     // shows the same gap the send guard refuses on.
                     event_url: (ev && ev.registration_url && !["expired", "missing"].includes(ev.registration_url_state))
                         ? ev.registration_url : "",
+                    fellowship_spot: ev?.fellowship_spot || "",
                 }),
             });
             const data = await resp.json();
@@ -10654,7 +10658,8 @@
         // introduced a blank.
         const KNOWN_VARS = ["player_name", "event_name", "event_date",
                             "course", "chapter",
-                            "manager_name", "manager_phone", "event_url"];
+                            "manager_name", "manager_phone", "event_url",
+                            "fellowship_spot"];
         const blanks = [];
         (subject + "\n" + body).replace(/\[[A-Z][A-Z0-9 _/-]{2,}\]/g,
             m => { if (!blanks.includes(m)) blanks.push(m); return m; });
@@ -12315,6 +12320,8 @@
             payload.range_balls_included = addRbEl && addRbEl.checked ? 1 : 0;
             const addUrlEl = document.getElementById("add-event-registration_url");
             if (addUrlEl && addUrlEl.value.trim()) payload.registration_url = addUrlEl.value.trim();
+            const addSpotEl = document.getElementById("add-event-fellowship_spot");
+            if (addSpotEl && addSpotEl.value.trim()) payload.fellowship_spot = addSpotEl.value.trim();
             // Pricing fields
             if (isCombo) {
                 // Combo pricing from calculators
@@ -13162,6 +13169,8 @@
         const editRegUrl = document.getElementById("edit-event-registration_url");
         if (editRegUrl) editRegUrl.value = ev.registration_url || "";
         renderRegistrationUrlStatus(ev);
+        const editSpot = document.getElementById("edit-event-fellowship_spot");
+        if (editSpot) editSpot.value = ev.fellowship_spot || "";
 
         // Pricing fields — single format
         document.getElementById("edit-event-tgf_markup").value = ev.tgf_markup != null ? ev.tgf_markup : "";
@@ -13321,6 +13330,11 @@
         if (regUrlEl) {
             const urlVal = regUrlEl.value.trim();
             if (urlVal !== (ev.registration_url || "")) changes.registration_url = urlVal;
+        }
+        const spotEl = document.getElementById("edit-event-fellowship_spot");
+        if (spotEl) {
+            const spotVal = spotEl.value.trim();
+            if (spotVal !== (ev.fellowship_spot || "")) changes.fellowship_spot = spotVal;
         }
 
         // Pricing fields — depends on format

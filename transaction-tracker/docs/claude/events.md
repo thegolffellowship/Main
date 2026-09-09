@@ -25,6 +25,21 @@ lists every event where the id-link and the name-link disagree, with the
 item names actually recorded against it. Regression:
 `test_event_registration_count.py`.
 
+## Fellowship spot — per event, not per chapter (v2.358.0, Kerry 2026-09-09)
+
+`events.fellowship_spot` (GENERAL tab, Add + Edit) is where the group
+meets after THAT event. Kerry: *"Max & Louie's was just for that event.
+We go to different places for each event. Some ... are right in the
+clubhouse on site."* The system template `Fellowship — Where We're
+Meeting` renders it as `{fellowship_spot}` (was the bracketed
+`[MEETING SPOT]` blank). `/api/messages/send` refuses with the event
+named when the template uses the variable and the event has none;
+`/api/messages/preview` shows "(no fellowship spot set for this event)".
+Not a dial: two chapters, a different venue every week, so a per-chapter
+setting would have been wrong by design. Whitelisted in `update_event`,
+carried by `api_create_event` extras, populated / saved in the modals.
+Prior body appended to `_PRIOR_SYSTEM_TEMPLATE_BODIES` (§7 rule).
+
 ## Course cost: the saved number is the source; the editor derives from it (v2.357.1, Kerry 2026-09-09)
 
 `events.course_cost` (and `_9` / `_18`) is what the list column, the

@@ -165,13 +165,19 @@ store actually answered.
 - `version.js` polled on production after the push (see the deploy line
   at the top).
 
-## 6. Kerry still owes (asked again here, not for the first time)
+## 6. The two standing asks — both answered 2026-09-09 evening
 
-- The **San Antonio `lead_notify_recipients`** address. The dial holds
-  only Austin (`robert@thegolffellowship.com`); SA is 67% of lead volume.
-- **Austin's fellowship meeting spot.** The template blank guard will
-  refuse the send until it is filled; the Austin recap draft carries the
-  same blank.
+- **San Antonio `lead_notify_recipients`: CLOSED.** Kerry: *"SA lead
+  pings are just me."* SA leads already ping the default list, which is
+  Kerry's inbox; no SA entry is needed. Item removed from the queue.
+- **Fellowship meeting spot: re-designed, not answered.** Kerry: *"Max &
+  Louie's was just for that event. We go to different places for each
+  event. Some, like next week, are right in the clubhouse on site."* So
+  the venue is per EVENT — v2.358.0 adds `events.fellowship_spot` on the
+  GENERAL tab and the preset renders `{fellowship_spot}`. His message
+  carried a literal "[venue]" placeholder for Austin, so the a9.22 recap
+  draft still has its blank; for a9.23 Avery Ranch he will type the spot
+  into Edit Event before sending the preset.
 
 ## 7. OPEN for Kerry — from the skill, verbatim
 

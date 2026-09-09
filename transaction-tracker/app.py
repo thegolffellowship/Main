@@ -6730,6 +6730,9 @@ def api_create_event():
         _url = (data.get("registration_url") or "").strip()
         if _url:
             extras["registration_url"] = _url
+        _spot = (data.get("fellowship_spot") or "").strip()
+        if _spot:
+            extras["fellowship_spot"] = _spot
         if extras and event.get("id"):
             try:
                 update_event(event["id"], extras)
@@ -7747,6 +7750,9 @@ def api_send_messages():
         "manager_name": _mgr["name"],
         "manager_phone": _mgr["phone"],
         "event_url": _event_url,
+        # Where the group meets after THIS event — per event, not per
+        # chapter (Kerry 2026-09-09). Blank = the send below refuses.
+        "fellowship_spot": (event_info.get("fellowship_spot") or "").strip(),
     }
     event_status = (event_info.get("status") or "active")
 
@@ -7770,6 +7776,11 @@ def api_send_messages():
             f"{{event_url}} cannot be sent: {_event_url_problem}. "
             "Verify the link in Edit Event, or take the variable out "
             "of the message."}), 400
+    if "{fellowship_spot}" in (subject_tpl + body_tpl) and not event_vars["fellowship_spot"]:
+        return jsonify({"error":
+            f"No fellowship spot is set for {event_name} — "
+            "{fellowship_spot} would send blank. Set it in Edit Event "
+            "(Fellowship spot), or take the variable out of the message."}), 400
 
     # Filter audience. An UNKNOWN value used to fall through the
     # per-recipient else-branch below and mail the entire roster — a
@@ -8033,6 +8044,8 @@ def api_preview_message():
     # preview names the gap the send guard would refuse on.
     variables["event_url"] = (data.get("event_url") or "").strip() \
         or "(no registration link on file)"
+    variables["fellowship_spot"] = (data.get("fellowship_spot") or "").strip() \
+        or "(no fellowship spot set for this event)"
 
     return jsonify({
         "subject": render_msg_template(subject_tpl, variables),
