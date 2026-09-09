@@ -1,4 +1,8 @@
 *.db
 
-# Claude Code tooling (agent worktrees, session state) — never track
-.claude/
+# Claude Code tooling (agent worktrees, session state) — never track.
+# Skills are project documentation and ARE tracked: the event-closeout
+# skill written 2026-09-08 was lost to the blanket ignore and had to be
+# rewritten from the first live run on 2026-09-09.
+.claude/*
+!.claude/skills/

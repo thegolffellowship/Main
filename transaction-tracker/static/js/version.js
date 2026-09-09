@@ -1,5 +1,15 @@
-window.TGF_VERSION = "2.347.1";
+window.TGF_VERSION = "2.347.2";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.347.2",
+    date: "2026-09-09",
+    changes: [
+      "Documentation only. First live run of the event-closeout routine, on s9.22 Silverhorn and a9.22 ShadowGlen. Both chapters: final Golf Genius pairings ingested (36 + 18 pairs), handicap differentials posted (24 + 16 rounds, chapter recap emailed), contests synced, financials verified, recap drafts written. One identity gap fixed on the way: GG's “Donovan, Tom” never matched the customer row “Thomas Donovan”, so his card, pairings and handicap round would have gone in nameless.",
+      "The routine itself had to be rewritten. The 2026-09-08 skill file lived under .claude/, which the repo ignored wholesale, so it was never committed — a written sequence that existed nowhere. .gitignore now tracks .claude/skills/.",
+      "Two things the first run learned and wrote into the skill: the hourly auto-sync already does the data-in and payout-recording phases within an hour of GG finalizing (check, do not redo), and the scoring-rounds filter is a NAME substring — passing an event id returns [] and reads as “nothing has happened” when everything has.",
+      "Not done, on purpose: handicap cards were not emailed to players (no bridge exists; it is the Handicaps page, By Event), no payout was marked paid (all 31 rows PENDING), and no recap was sent. Three new items join the skill's OPEN list for Kerry.",
+    ],
+  },
   {
     version: "2.347.1",
     date: "2026-09-09",
