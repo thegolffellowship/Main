@@ -146,8 +146,8 @@ def main():
                      - a.get("lsc_shirt_fund", 0) + a["fee_spread"], 2)
         check(f"{a['event_name']}: margin is the residual PLUS the spread",
               a["tgf_operating"] == want, (a["tgf_operating"], want))
-        check(f"{a['event_name']}: tax reserve is 8.25% of that, spread included",
-              a["tax_reserve"] == round(max(a["tgf_operating"], 0) * 0.0825, 2),
+        check(f"{a['event_name']}: tax reserve is 8.25% of that, spread included, SIGNED",
+              a["tax_reserve"] == round(a["tgf_operating"] * 0.0825, 2),
               (a["tax_reserve"], a["tgf_operating"]))
     cc = allocs[0]
     check("Cedar Creek books 15.83, not 15.35", cc["tgf_operating"] == 15.83, cc)
@@ -313,6 +313,21 @@ def main():
 
     print("Margin ledger: shirt-fund years, the gap list, the liability buckets")
     from email_parser import margin_ledger as ml
+    # Negative-margin row → negative tax (a credit against the month)
+    with db._connect(p) as conn:
+        conn.execute("INSERT INTO events (item_name, event_date, course, chapter, format, "
+                     " course_cost, tgf_markup, side_game_fee, course_surcharge) "
+                     "VALUES ('s9.99 LOSS LEADER', '2026-09-20', 'x', 'San Antonio', "
+                     " '9 Hole', 54.12, 8.0, 7.0, 0.0)")
+        conn.commit()
+        add_item(conn, 500, "R999000222", "s9.99 LOSS LEADER", 55.0, 1.93, 56.93, 1,
+                 date="2026-09-10")
+        conn.commit()
+    ll = db.calculate_order_allocation("R999000222", db_path=p)[0]
+    check("a loss-leader round books negative margin", ll["tgf_operating"] < 0, ll)
+    check("and its tax is negative too — a credit, not zero (Kerry 2026-09-09)",
+          ll["tax_reserve"] == round(ll["tgf_operating"] * 0.0825, 2) and ll["tax_reserve"] < 0,
+          (ll["tgf_operating"], ll["tax_reserve"]))
     check("Aug 2025 → 2026 Cup", ml.lsc_fund_year("2025-08-01") == 2026)
     check("Jul 2026 → 2026 Cup", ml.lsc_fund_year("2026-07-31") == 2026)
     check("Aug 2026 → 2027 Cup", ml.lsc_fund_year("2026-08-01") == 2027)
@@ -335,6 +350,12 @@ def main():
           liab["sales_tax_reserve"]["by_month"].get("2026-09", {}).get("status") == "open"
           and liab["sales_tax_reserve"]["by_month"].get("2026-08", {}).get("status") == "open",
           liab["sales_tax_reserve"]["by_month"])
+    sep = liab["sales_tax_reserve"]["by_month"]["2026-09"]
+    check("the month nets signed rows and floors at zero",
+          sep["tax_reserve"] == round(max(sep["tax_reserve_signed_sum"], 0), 2)
+          and sep["tax_reserve_signed_sum"] < sum(
+              round(a["tgf_operating"] * 0.0825, 2) for a in allocs if a["tgf_operating"] > 0)
+          + 100, sep)
 
     print("The audit report carries the check")
     rep = db.get_audit_report(p)

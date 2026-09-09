@@ -1,5 +1,15 @@
-window.TGF_VERSION = "2.351.0";
+window.TGF_VERSION = "2.352.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.352.0",
+    date: "2026-09-09",
+    changes: [
+      "Sales tax is now signed per row and nets within the month (Kerry-ratified 2026-09-09). Kerry: 'Shouldn't minus margins be minus sales tax too? ... Comptroller only asks for Total Sales and Total Taxable Sales for the month, not the per transaction breakdown. So in my mind, that seems like something that should reduce my Total Taxable Sales amount.' A loss-leader round now books negative tax reserve — a credit against its month — and the monthly figure floors at zero instead of every row. Supersedes the 9/5 per-row floor. Post-cutover rows rebooked so the stored reserve matches.",
+      "Lone Star Cup shirt fund: the Aug–Jul membership window funds the Cup played that OCTOBER (Aug 2025–Jul 2026 → the 2026 Cup), which is the point of the window — shirts get ordered from what was collected before the City and TGF Championships. Wording corrected everywhere it said 'that July'. The liabilities read now states where the Tracker's order history begins (2025-12-29), because memberships sold before that are not in it and the 2026 fund figure is a floor until they are loaded.",
+      "Margin audit table: BOUGHT is now ITEMS; PLAYER, ITEMS and DATE read left and take their widest content, the money columns stay right (Kerry).",
+      "Two walk-in 1st Timers for a18.5 Forest Creek — Geoff Hightower (lead 133) and Zac Hammond (lead 134), a partner pair who came through the store with no ad — added to the Lead Center by hand as source 'organic' so they are tracked and filterable apart from the campaign. The automatic capture for this class is designed (mailbox #435 §6) and not yet built.",
+    ],
+  },
   {
     version: "2.351.0",
     date: "2026-09-09",

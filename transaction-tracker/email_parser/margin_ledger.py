@@ -38,10 +38,13 @@ TAX_FILING_DAY = 20
 
 
 def lsc_fund_year(date_str: str | None) -> int | None:
-    """The Lone Star Cup year a membership sold on `date_str` funds:
-    August through July → the Cup played in that July's year + 0, i.e.
-    Aug 2025–Jul 2026 → 2026, Aug 2026–Jul 2027 → 2027 (Kerry
-    2026-09-09)."""
+    """The Lone Star Cup year a membership sold on `date_str` funds.
+    Memberships sold August through July fund the Cup played that
+    OCTOBER: Aug 2025–Jul 2026 → the 2026 Cup, Aug 2026–Jul 2027 → the
+    2027 Cup. Kerry 2026-09-09: "The Cup is typically in October ...
+    That's the point. To allow time to order shirts with what was
+    collected prior to City & TGF Championships as the funding
+    source." """
     d = (str(date_str or "").strip())[:10]
     if len(d) < 7:
         return None
@@ -195,6 +198,12 @@ def liability_buckets(db_path: str | Path | None = None,
             out["credits_held"] = {"error": "unavailable"}
         # Shirt fund by Cup year, from membership items sold
         per = db._membership_setaside("lsc_shirt", 10.0, conn)
+        # The Tracker's order history starts where the email parsing
+        # started; memberships sold before that are not in it, so an
+        # early fund year is a FLOOR until the older sales are loaded.
+        records_from = conn.execute(
+            "SELECT MIN(substr(order_date,1,10)) AS d FROM items "
+            "WHERE merchant = 'The Golf Fellowship'").fetchone()["d"]
         fund: dict = defaultdict(lambda: {"memberships": 0, "funded": 0.0})
         for r in conn.execute(
                 """SELECT order_date FROM items
@@ -209,7 +218,9 @@ def liability_buckets(db_path: str | Path | None = None,
             fund[y]["funded"] = round(fund[y]["funded"] + per, 2)
         out["lsc_shirt_fund"] = {
             "per_membership": per,
-            "rule": "Aug–Jul membership sales fund that July's Cup year",
+            "rule": "Aug–Jul membership sales fund the Cup played that October "
+                    "(Aug 2025–Jul 2026 → 2026 Cup)",
+            "records_from": records_from,
             "by_cup_year": {str(k): v for k, v in sorted(fund.items())},
             "spend_recorded": "not tracked yet — shirt purchases are not tagged to the fund",
         }
@@ -229,11 +240,15 @@ def liability_buckets(db_path: str | Path | None = None,
             y, mo = int(m[:4]), int(m[5:7])
             ny, nm = (y + 1, 1) if mo == 12 else (y, mo + 1)
             due = f"{ny:04d}-{nm:02d}-{TAX_FILING_DAY:02d}"
-            months[m] = {"tax_reserve": round(r["tax"], 2),
+            # Rows are SIGNED (a loss-leader round is a credit); the
+            # MONTH floors at zero — Kerry 2026-09-09.
+            months[m] = {"tax_reserve": round(max(r["tax"], 0.0), 2),
+                         "tax_reserve_signed_sum": round(r["tax"], 2),
                          "margin": round(r["margin"], 2), "rows": r["rows"],
                          "due": due, "status": "filed" if due < today else "open"}
         out["sales_tax_reserve"] = {
-            "rate": "8.25% of TGF margin, floored at zero per row",
+            "rate": ("8.25% of TGF margin per row, signed; a negative row is a "
+                     "credit against its month; the month floors at zero"),
             "by_month": months,
             "open_total": round(sum(v["tax_reserve"] for v in months.values()
                                     if v["status"] == "open"), 2),

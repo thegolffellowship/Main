@@ -191,6 +191,9 @@
         .ld-costtbl th, .ld-costtbl td { text-align: right; padding: 4px 6px; border-top: 1px solid #F3F2EF; font-variant-numeric: tabular-nums; }
         .ld-costtbl th:first-child, .ld-costtbl td:first-child { text-align: left; }
         .ld-costtbl thead th { border-top: none; font-size: 10px; letter-spacing: .6px; text-transform: uppercase; color: #6B7280; }
+        /* Margin audit table (Kerry 2026-09-09): PLAYER, ITEMS and DATE read
+           left and take their widest content; the money columns stay right. */
+        .ld-margintbl th:nth-child(-n+3), .ld-margintbl td:nth-child(-n+3) { text-align: left; white-space: nowrap; width: 1%; }
         .ld-panel .ld-foot { font-size: 11px; color: #6B7280; margin-top: 8px; }
         .ld-mnotes td { padding: 2px 6px; font-size: 12px; white-space: normal; }
         @media (max-width: 768px) {
@@ -1527,8 +1530,8 @@
                 <td class="${x.reconciles ? "ld-dsub" : "ld-late"}" title="${x.reconciles ? "paid + fee net − course − prizes − shirt fund − margin = 0" : (x.model === "rate card" ? `rate-card row: books ${money(x.margin_booked)}, residual would be ${money(x.margin_actual)}` : `does not foot by ${money(x.overstated)}`)}">${x.reconciles ? "✓" : (x.model === "rate card" ? "rate card" : money(x.overstated))}</td>
             </tr>`).join("");
             return `<div style="margin-top:0.75rem; overflow-x:auto">
-              <table class="ld-costtbl"><thead><tr>
-                <th style="text-align:left">Player</th><th style="text-align:left">Bought</th><th style="text-align:left">Date</th>
+              <table class="ld-costtbl ld-margintbl"><thead><tr>
+                <th>Player</th><th>Items</th><th>Date</th>
                 <th>Paid</th><th title="3.5% the customer paid, minus what GoDaddy actually took — inside Margin">Fee net</th><th>Course</th><th>Prizes</th><th title="Lone Star Cup shirt fund, $10 per membership sold">Shirt fund</th><th>Margin</th><th title="8.25% of Margin, owed to the Comptroller">Sales tax</th><th title="paid + fee net − course − prizes − shirt fund − margin = 0">Check</th>
               </tr></thead><tbody>${body}</tbody>
               <tfoot><tr style="border-top:2px solid #1B1B1B; font-weight:700">
@@ -1543,7 +1546,7 @@
                 <td class="${rc ? "ld-late" : ""}">${rc ? `${rc} rate card` : "✓"}</td>
               </tr></tfoot></table>
               <div class="ld-foot">
-                <b>Margin</b> is what TGF kept: Paid + Fee net &minus; Course &minus; Prizes &minus; Shirt fund. <b>Sales tax</b> is 8.25% of Margin, owed to the Comptroller and not deducted here. <b>Fee net</b> is the customer's 3.5% (${money(tot("fee_in"))}) minus what GoDaddy took (${money(tot("fee_out"))}); it is inside Margin and taxed with it. On a multi-item order every leg is shared out by item price and sums back to the order.
+                <b>Margin</b> is what TGF kept: Paid + Fee net &minus; Course &minus; Prizes &minus; Shirt fund. <b>Sales tax</b> is 8.25% of Margin, owed to the Comptroller and not deducted here; a negative row is a credit against its month, and the month nets to no less than zero. <b>Fee net</b> is the customer's 3.5% (${money(tot("fee_in"))}) minus what GoDaddy took (${money(tot("fee_out"))}); it is inside Margin and taxed with it. On a multi-item order every leg is shared out by item price and sums back to the order.
                 ${rc ? `<span class="ld-late">${rc} row${rc === 1 ? "" : "s"} dated before the margin-model cutover (${esc(v.cutover || "")}) still book the rate-card markup, which overstates by ${money(v.rate_card_overstated)} against what was actually left. They restate when their event costs are confirmed.</span>` : "Every row foots to zero."}
               </div></div>`;
         }

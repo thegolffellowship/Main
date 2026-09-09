@@ -40288,8 +40288,11 @@ def _create_allocation_for_item(
     alloc["allocation_date"] = item.get("order_date")
     alloc["godaddy_fee"] = 0  # no processing fee on non-GoDaddy payments
     alloc["total_collected"] = total_collected
-    alloc["tax_reserve"] = round(
-        max(alloc.get("tgf_operating", 0) or 0, 0) * 0.0825, 2)
+    # 8.25% of margin, SIGNED (Kerry 2026-09-09): a negative-margin row
+    # is a credit against the month, and the month nets before it floors
+    # at zero — the Comptroller asks for monthly Total Taxable Sales,
+    # not per-transaction.
+    alloc["tax_reserve"] = round((alloc.get("tgf_operating", 0) or 0) * 0.0825, 2)
     alloc["payment_method"] = payment_method
 
     # Determine status
@@ -40465,8 +40468,13 @@ def calculate_order_allocation(order_id: str, db_path: str | Path | None = None,
             # Tax reserve: 8.25% of TGF operating revenue — the spread
             # included, on Kerry's ruling: "that money is not allotted
             # to anything but margin ... So that additionally gets taxed."
-            alloc["tax_reserve"] = round(
-        max(alloc.get("tgf_operating", 0) or 0, 0) * 0.0825, 2)
+            # SIGNED, not floored (Kerry 2026-09-09: "Comptroller only
+            # asks for Total Sales and Total Taxable Sales for the
+            # month, not the per transaction breakdown. So ... that
+            # seems like something that should reduce my Total Taxable
+            # Sales amount."). A loss-leader round is a credit against
+            # the month; the MONTH floors at zero, not the row.
+            alloc["tax_reserve"] = round((alloc.get("tgf_operating", 0) or 0) * 0.0825, 2)
 
             # Determine status
             if is_membership:

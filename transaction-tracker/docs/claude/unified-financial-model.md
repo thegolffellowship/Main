@@ -423,19 +423,24 @@ As Kerry confirms an event's costs, move the dial back and
 **Liability buckets** (`scoring-liabilities`, `margin_ledger.liability_buckets`):
 prize payouts owed (`tgf_payouts.paid_at IS NULL`), credits held (refunds
 console outstanding), the **Lone Star Cup shirt fund by Cup year** — $10 per
-membership SOLD, Aug–Jul sales fund that July's Cup (Aug 2025–Jul 2026 → 2026,
-Aug 2026–Jul 2027 → 2027; `lsc_fund_year`), counted from membership items so
+membership SOLD, Aug–Jul sales fund that July's Cup (the Cup is played that OCTOBER: Aug 2025–Jul 2026 → the 2026 Cup, Aug 2026–Jul 2027 → the 2027 Cup; `lsc_fund_year`), counted from membership items so
 pre-cutover memberships count too (Kerry: "All memberships fund shirts") —
 and the sales-tax reserve by month, filed/open by the 20th-of-next-month rule.
 Shirt PURCHASES are not yet tagged to the fund (open).
 
-**Tax reserve floors at zero.** `max(tgf_operating, 0) × 8.25%`. There is
-no negative taxable sale, and a loss must never net against another
-round's tax. Whether a discount that *exceeds* the markup reduces the
-taxable base at all is a question for Kerry's CPA — the Pricing &
-Services Master is silent on it. Directional note from #420: if filings
-were computed off an overstated `tgf_operating`, TGF has probably been
-**over**-remitting.
+**Tax reserve is SIGNED per row; the MONTH floors at zero (Kerry-ratified
+2026-09-09, v2.352.0 — supersedes the 9/5 per-row floor).** Kerry:
+*"Shouldn't minus margins be minus sales tax too? ... Comptroller only
+asks for Total Sales and Total Taxable Sales for the month, not the per
+transaction breakdown. So in my mind, that seems like something that
+should reduce my Total Taxable Sales amount."* So `tax_reserve =
+tgf_operating × 8.25%` on every row, negative on a loss-leader round (a
+credit against its month), and the monthly figure (`liability_buckets`
+→ `sales_tax_reserve.by_month`, and the `tgf-sales-tax` skill) is the
+signed sum floored at zero. Directional note from #420 still holds: if
+past filings were computed off an overstated `tgf_operating`, TGF has
+probably been **over**-remitting; Kerry: *"We can always amend past
+reporting if necessary."*
 
 ## Membership set-asides
 
