@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.350.1";
+window.TGF_VERSION = "2.350.2";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.350.2",
+    date: "2026-09-09",
+    changes: [
+      "scoring-margin-rebook gained a measure-only mode (|dry|cutover=<date>) that reports what rows dated before the real margin-model cutover WOULD book under the residual model, by month, without writing — the numbers behind Kerry's Question 3 (restate history, or leave it frozen). The override is thread-local so it cannot leak into a concurrent real allocation, and it is refused on apply.",
+    ],
+  },
   {
     version: "2.350.1",
     date: "2026-09-09",

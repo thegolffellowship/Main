@@ -338,7 +338,8 @@ def repair_multi_item_fee_splits(dry_run: bool = True,
 
 
 def rebook_spread_since(since: str, dry_run: bool = True,
-                        db_path: str | Path | None = None) -> dict:
+                        db_path: str | Path | None = None,
+                        cutover_override: str | None = None) -> dict:
     """Recompute the allocations of every GoDaddy order dated on or after
     `since` so they carry the fee spread (Kerry 2026-09-09: the spread is
     margin and is taxed as margin). The whole allocation is recomputed
@@ -348,13 +349,23 @@ def rebook_spread_since(since: str, dry_run: bool = True,
 
     Dry-run by default. `since` should be the margin-model cutover
     (2026-09-05) or later; rows before it are frozen at the rate card and
-    the allocator leaves their spread at zero regardless."""
+    the allocator leaves their spread at zero regardless.
+
+    `cutover_override` (DRY-RUN ONLY, ignored on apply) answers "what
+    would these rows book under the residual model?" for rows dated
+    before the real cutover — the measurement behind Kerry's Question 3
+    (restate history or leave it frozen). It never writes."""
     from . import database as db
     since = (since or "").strip()[:10]
-    out = {"dry_run": dry_run, "since": since, "orders": 0, "rows": 0,
+    if cutover_override and not dry_run:
+        raise ValueError("cutover_override is measure-only: use dry_run=True")
+    out = {"dry_run": dry_run, "since": since,
+           "cutover_override": (cutover_override or None) if dry_run else None,
+           "orders": 0, "rows": 0,
            "rows_changed": 0, "tgf_operating_before": 0.0,
            "tgf_operating_after": 0.0, "tax_reserve_before": 0.0,
-           "tax_reserve_after": 0.0, "fee_spread_total": 0.0, "changes": []}
+           "tax_reserve_after": 0.0, "fee_spread_total": 0.0,
+           "by_month": {}, "changes": []}
     with db._connect(db_path) as conn:
         order_ids = [r["order_id"] for r in conn.execute(
             """SELECT DISTINCT order_id FROM items
@@ -373,32 +384,48 @@ def rebook_spread_since(since: str, dry_run: bool = True,
                 "fee_spread, godaddy_fee FROM acct_allocations WHERE 0",
                 tuple(order_ids)).fetchall():
             before[(r["order_id"], r["item_id"])] = dict(r)
-    for oid in order_ids:
-        rows = db.calculate_order_allocation(oid, db_path=db_path, dry_run=dry_run)
-        out["orders"] += 1
-        for a in rows:
-            out["rows"] += 1
-            b = before.get((oid, a["item_id"]), {})
-            t0 = float(b.get("tgf_operating") or 0)
-            x0 = float(b.get("tax_reserve") or 0)
-            t1 = float(a.get("tgf_operating") or 0)
-            x1 = float(a.get("tax_reserve") or 0)
-            out["tgf_operating_before"] = round(out["tgf_operating_before"] + t0, 2)
-            out["tgf_operating_after"] = round(out["tgf_operating_after"] + t1, 2)
-            out["tax_reserve_before"] = round(out["tax_reserve_before"] + x0, 2)
-            out["tax_reserve_after"] = round(out["tax_reserve_after"] + x1, 2)
-            out["fee_spread_total"] = round(
-                out["fee_spread_total"] + float(a.get("fee_spread") or 0), 2)
-            if abs(t1 - t0) > 0.005 or abs(x1 - x0) > 0.005 or not b:
-                out["rows_changed"] += 1
-                out["changes"].append({
-                    "order_id": oid, "item_id": a["item_id"],
-                    "event_name": a.get("event_name"),
-                    "tgf_operating": [round(t0, 2), round(t1, 2)],
-                    "fee_spread": round(float(a.get("fee_spread") or 0), 2),
-                    "tax_reserve": [round(x0, 2), round(x1, 2)],
-                    "new_row": not b,
-                })
+    if dry_run and cutover_override:
+        db._MARGIN_CUTOVER_OVERRIDE.cutover = str(cutover_override)[:10]
+    try:
+        for oid in order_ids:
+            rows = db.calculate_order_allocation(oid, db_path=db_path, dry_run=dry_run)
+            out["orders"] += 1
+            for a in rows:
+                out["rows"] += 1
+                b = before.get((oid, a["item_id"]), {})
+                t0 = float(b.get("tgf_operating") or 0)
+                x0 = float(b.get("tax_reserve") or 0)
+                t1 = float(a.get("tgf_operating") or 0)
+                x1 = float(a.get("tax_reserve") or 0)
+                out["tgf_operating_before"] = round(out["tgf_operating_before"] + t0, 2)
+                out["tgf_operating_after"] = round(out["tgf_operating_after"] + t1, 2)
+                out["tax_reserve_before"] = round(out["tax_reserve_before"] + x0, 2)
+                out["tax_reserve_after"] = round(out["tax_reserve_after"] + x1, 2)
+                out["fee_spread_total"] = round(
+                    out["fee_spread_total"] + float(a.get("fee_spread") or 0), 2)
+                _m = str(a.get("allocation_date") or "")[:7] or "?"
+                _bm = out["by_month"].setdefault(
+                    _m, {"rows": 0, "rows_changed": 0, "new_rows": 0,
+                         "tgf_operating_delta": 0.0, "tax_reserve_delta": 0.0})
+                _bm["rows"] += 1
+                _bm["tgf_operating_delta"] = round(_bm["tgf_operating_delta"] + (t1 - t0), 2)
+                _bm["tax_reserve_delta"] = round(_bm["tax_reserve_delta"] + (x1 - x0), 2)
+                if abs(t1 - t0) > 0.005 or abs(x1 - x0) > 0.005 or not b:
+                    out["rows_changed"] += 1
+                    _bm["rows_changed"] += 1
+                    if not b:
+                        _bm["new_rows"] += 1
+                    out["changes"].append({
+                        "order_id": oid, "item_id": a["item_id"],
+                        "event_name": a.get("event_name"),
+                        "tgf_operating": [round(t0, 2), round(t1, 2)],
+                        "fee_spread": round(float(a.get("fee_spread") or 0), 2),
+                        "tax_reserve": [round(x0, 2), round(x1, 2)],
+                        "new_row": not b,
+                    })
+    finally:
+        if dry_run and cutover_override:
+            db._MARGIN_CUTOVER_OVERRIDE.cutover = None
     out["tgf_operating_delta"] = round(
         out["tgf_operating_after"] - out["tgf_operating_before"], 2)
     out["tax_reserve_delta"] = round(

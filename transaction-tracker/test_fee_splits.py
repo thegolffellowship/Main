@@ -185,6 +185,26 @@ def main():
     check("the pre-cutover order is outside the window",
           all(c["order_id"] != "R586155719" for c in rb2["changes"]))
 
+    print("Measure-only cutover override (Question 3): reports history, never writes")
+    m = fs.rebook_spread_since("2026-08-01", dry_run=True, db_path=p,
+                               cutover_override="2026-08-01")
+    pre_row = [c for c in m["changes"] if c["order_id"] == "R586155719"]
+    check("the pre-cutover order shows what it WOULD book under the residual model",
+          pre_row and pre_row[0]["tgf_operating"][1] != pre_row[0]["tgf_operating"][0], pre_row)
+    check("by-month breakdown present", "2026-08" in m["by_month"], m["by_month"])
+    with db._connect(p) as conn:
+        kept = conn.execute("SELECT fee_spread FROM acct_allocations "
+                            "WHERE order_id = 'R586155719'").fetchone()[0]
+    check("and the stored pre-cutover row is untouched", round(kept or 0, 2) == 0.0, kept)
+    check("the override is cleared afterwards",
+          getattr(db._MARGIN_CUTOVER_OVERRIDE, "cutover", None) is None)
+    try:
+        fs.rebook_spread_since("2026-08-01", dry_run=False, db_path=p,
+                               cutover_override="2026-08-01")
+        check("override with apply is refused", False)
+    except ValueError:
+        check("override with apply is refused", True)
+
     print("Integrity: a clean database passes")
     with db._connect(p) as conn:
         integ = fs.fee_split_integrity(conn)

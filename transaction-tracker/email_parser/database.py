@@ -14,6 +14,7 @@ import random
 import re
 import shutil
 import sqlite3
+import threading
 import logging
 from collections import defaultdict
 from datetime import datetime, timedelta
@@ -41060,10 +41061,18 @@ def _setting_via(conn: sqlite3.Connection | None, key: str) -> str | None:
         return None
 
 
+# A MEASURE-ONLY override of the cutover, thread-local so a dry-run that
+# asks "what would history look like under the residual model" cannot
+# leak into a concurrent real allocation. Set only by
+# fee_splits.rebook_spread_since(dry_run=True, cutover_override=...).
+_MARGIN_CUTOVER_OVERRIDE = threading.local()
+
+
 def _margin_model_applies(order_date: str | None,
                           conn: sqlite3.Connection | None = None) -> bool:
     """True when this allocation should use the residual margin model."""
-    cutover = _setting_via(conn, "margin_model_cutover") or MARGIN_MODEL_CUTOVER
+    cutover = (getattr(_MARGIN_CUTOVER_OVERRIDE, "cutover", None)
+               or _setting_via(conn, "margin_model_cutover") or MARGIN_MODEL_CUTOVER)
     d = (str(order_date or "").strip())[:10]
     if not d:
         # No date means we cannot prove it is historical, and booking a

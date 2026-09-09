@@ -2376,11 +2376,19 @@ def _scoring_dispatch(url: str, extract: str):
             # "<since>[|apply]" — recompute allocations for GoDaddy orders
             # dated >= since so they carry the fee spread in margin
             # (Kerry 2026-09-09). Dry-run unless |apply. Audited.
+            # "<since>|apply" writes; "<since>|dry|cutover=<date>" measures
+            # what rows before the real cutover WOULD book under the
+            # residual model (Question 3). The override never writes.
             _parts = [x.strip() for x in arg.split("|")]
             _since = _parts[0] if _parts and _parts[0] else MARGIN_CUTOVER_DEFAULT
             _apply = len(_parts) > 1 and _parts[1].lower() == "apply"
+            _cut = None
+            for _p in _parts[1:]:
+                if _p.lower().startswith("cutover="):
+                    _cut = _p.split("=", 1)[1].strip()
             from email_parser.fee_splits import rebook_spread_since
-            res = rebook_spread_since(_since, dry_run=not _apply)
+            res = rebook_spread_since(_since, dry_run=not _apply,
+                                      cutover_override=None if _apply else _cut)
             if _apply:
                 db.log_agent_action(
                     "mcp-claude", "scoring-margin-rebook",
