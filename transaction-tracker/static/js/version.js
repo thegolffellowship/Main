@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.360.0";
+window.TGF_VERSION = "2.360.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.360.1",
+    date: "2026-09-09",
+    changes: [
+      "Finance lane opened (docs only, nothing deployed): the financial audit's session record, docs/claude/handoff-2026-09-09-financial-audit.md. Kerry: 'Our bookkeeping needs to be above reproach and account for every penny and I need to know what needs to be in our liability buckets too.' The record carries the money map (every dollar's path from GoDaddy / Venmo / cash through items, acct_transactions, godaddy_order_splits and acct_allocations to ten buckets, with where each bucket's OUTFLOW is recorded today: prize payouts, the ace payout and credit refunds are tagged; monthly points by name only; course bills, contest refunds, shirts, the Comptroller payment and Lone Star Cup deposits not at all), the ranked findings, the liability-ledger design (a fund_buckets registry as data, a fund_bucket key on the ledger row that moves the money, inflows derived from allocations, one balance function, an untagged-outflow queue), the collapse of the finance surfaces into one monthly close, filed-vs-Tracker sales tax (March reconciles within $12.76; the other six confirmations are needed), and the decision register. The first and only question put to Kerry: ratify the bucket list and which account holds each.",
+    ],
+  },
   {
     version: "2.360.0",
     date: "2026-09-09",
