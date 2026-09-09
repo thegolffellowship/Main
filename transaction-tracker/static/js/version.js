@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.350.2";
+window.TGF_VERSION = "2.351.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.351.0",
+    date: "2026-09-09",
+    changes: [
+      "The campaign margin audit table now has ONE margin column. Kerry: 'I want to be able to see that ACTUALLY LEFT and OVERSTATED column reduced to one column, MARGIN or PROFIT or whatever that's supposed to be called. Then perhaps a column that computes tax liability for sales tax.' Columns are now Paid · Fee net · Course · Prizes · Shirt fund · Margin · Sales tax · Check. Shirt fund is the $10 Lone Star Cup set-aside per membership sold, which had been coming out of margin without a column of its own. Sales tax is 8.25% of Margin. The Check column is the control: paid + fee net − course − prizes − shirt fund − margin must be zero; a row dated before the margin-model cutover is flagged 'rate card' instead of carrying a second margin figure.",
+      "Margin-model cutover moved from 2026-09-05 to 2026-08-27 (Kerry-ratified; the app_settings dial margin_model_cutover, not a code change) and the rows in between rebooked on production: 87 orders, 57 rows changed, margin −$122.71, tax reserve −$6.95, August and September only. The 1st-Timer rounds of the campaign's first week now book the loss they were; five memberships pick up the shirt set-aside. Kerry: 'All memberships fund shirts.'",
+      "Two new read-only bridges for the questions Kerry asked next. scoring-margin-gaps: every event dated before the cutover with what the books say beside what today's residual model would book, and a reason — the list Kerry fills in so history can be restated event by event ('tell me where the gaps are in the past event costs'). scoring-liabilities: prize payouts owed, credits held, the Lone Star Cup shirt fund by Cup year (Aug–Jul membership sales fund that July's Cup: Aug 2025–Jul 2026 → 2026, Aug 2026–Jul 2027 → 2027), and the sales-tax reserve by month split filed/open by the 20th-of-next-month rule. Module: email_parser/margin_ledger.py.",
+    ],
+  },
   {
     version: "2.350.2",
     date: "2026-09-09",

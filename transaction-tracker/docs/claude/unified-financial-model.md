@@ -405,10 +405,29 @@ A 9-hole has $8 base + $10 guest surcharge = $18; less $25 leaves −$7. An
 two markup stacks. `discount_given` exists to make that visible, not to
 correct it.
 
-**Past events are frozen.** `MARGIN_MODEL_CUTOVER` (default `2026-09-05`,
-overridable via the `margin_model_cutover` app setting) gates it: an
-allocation dated earlier keeps the rate-card model it was booked under,
-because those months are already filed with the Comptroller.
+**Past events are frozen — until their costs are confirmed.**
+`MARGIN_MODEL_CUTOVER` (code default `2026-09-05`; the `margin_model_cutover`
+app setting is **2026-08-27 on production since 2026-09-09**, Kerry-ratified)
+gates it: an allocation dated earlier keeps the rate-card model it was booked
+under. Kerry 2026-09-09 on restating further back: *"I don't care if it
+doesn't match the Comptroller's stuff. We can always amend past reporting if
+necessary. Our bookkeeping needs to be above reproach and account for every
+penny."* The blocker is not the filings but the DATA: run
+`scoring-margin-gaps` (`margin_ledger.margin_gaps`) to see, per pre-cutover
+event, what the books say vs what today's residual model would book and why
+they differ (course cost blank, package events, membership tiers of the day).
+As Kerry confirms an event's costs, move the dial back and
+`scoring-margin-rebook:<since>|apply`. Never move the dial past an event whose
+"would book" is absurd — that is a gap, not a restatement.
+
+**Liability buckets** (`scoring-liabilities`, `margin_ledger.liability_buckets`):
+prize payouts owed (`tgf_payouts.paid_at IS NULL`), credits held (refunds
+console outstanding), the **Lone Star Cup shirt fund by Cup year** — $10 per
+membership SOLD, Aug–Jul sales fund that July's Cup (Aug 2025–Jul 2026 → 2026,
+Aug 2026–Jul 2027 → 2027; `lsc_fund_year`), counted from membership items so
+pre-cutover memberships count too (Kerry: "All memberships fund shirts") —
+and the sales-tax reserve by month, filed/open by the 20th-of-next-month rule.
+Shirt PURCHASES are not yet tagged to the fund (open).
 
 **Tax reserve floors at zero.** `max(tgf_operating, 0) × 8.25%`. There is
 no negative taxable sale, and a loss must never net against another

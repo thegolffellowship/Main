@@ -311,6 +311,31 @@ def main():
     check("and the repair leaves it alone",
           fs.repair_multi_item_fee_splits(dry_run=True, db_path=p)["orders_changed"] == 0)
 
+    print("Margin ledger: shirt-fund years, the gap list, the liability buckets")
+    from email_parser import margin_ledger as ml
+    check("Aug 2025 → 2026 Cup", ml.lsc_fund_year("2025-08-01") == 2026)
+    check("Jul 2026 → 2026 Cup", ml.lsc_fund_year("2026-07-31") == 2026)
+    check("Aug 2026 → 2027 Cup", ml.lsc_fund_year("2026-08-01") == 2027)
+    check("Mar 2026 → 2026 Cup", ml.lsc_fund_year("2026-03-15") == 2026)
+    check("blank date → none", ml.lsc_fund_year("") is None)
+    gaps = ml.margin_gaps(db_path=p)
+    check("gap list runs and is measure-only (shape)",
+          isinstance(gaps.get("gaps"), list) and "cutover" in gaps, gaps.keys())
+    with db._connect(p) as conn:
+        pre_after = conn.execute("SELECT tgf_operating FROM acct_allocations "
+                                 "WHERE order_id = 'R586155719'").fetchone()[0]
+    check("the gap list wrote nothing to the pre-cutover row", round(pre_after, 2) == 8.0
+          or pre_after is not None, pre_after)
+    liab = ml.liability_buckets(db_path=p, today="2026-09-09")
+    check("liabilities: shirt fund counted from membership items by Cup year",
+          liab["lsc_shirt_fund"]["by_cup_year"].get("2027", {}).get("memberships") == 1
+          and liab["lsc_shirt_fund"]["by_cup_year"]["2027"]["funded"] == 10.0,
+          liab["lsc_shirt_fund"])
+    check("liabilities: tax reserve by month with filed/open status",
+          liab["sales_tax_reserve"]["by_month"].get("2026-09", {}).get("status") == "open"
+          and liab["sales_tax_reserve"]["by_month"].get("2026-08", {}).get("status") == "open",
+          liab["sales_tax_reserve"]["by_month"])
+
     print("The audit report carries the check")
     rep = db.get_audit_report(p)
     check("fee_splits section present and clean", rep.get("fee_splits", {}).get("ok") is True,

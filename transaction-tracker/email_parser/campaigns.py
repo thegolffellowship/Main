@@ -641,6 +641,17 @@ def campaign_value(lead_rows: list[dict], conn,
         for c in conn.execute("PRAGMA table_info(acct_allocations)").fetchall())
     _setaside_sql = ("CAST(COALESCE(a.lsc_shirt_fund,0) AS REAL)"
                      if _has_setaside else "0.0")
+    # Which rows are still on the rate-card model (dated before the
+    # margin-model cutover) — Kerry 2026-09-09: one MARGIN column, with
+    # the rows that are not yet residual flagged rather than a second
+    # "actually left" column beside them.
+    try:
+        from .database import _setting_via, MARGIN_MODEL_CUTOVER
+        _cutover = (_setting_via(conn, "margin_model_cutover")
+                    or MARGIN_MODEL_CUTOVER)[:10]
+    except Exception:
+        _cutover = "2026-09-05"
+    out["cutover"] = _cutover
     out["rows"] = []
     for r in conn.execute(
             f"SELECT a.order_id, a.event_name, a.allocation_date, "
@@ -685,6 +696,12 @@ def campaign_value(lead_rows: list[dict], conn,
                                    - d["setaside"], 2)
         # Positive = the books claim more than was actually left over.
         d["overstated"] = round(d["margin_booked"] - d["margin_actual"], 2)
+        d["model"] = ("residual" if str(d.get("allocation_date") or "")[:10] >= _cutover
+                      else "rate card")
+        # The check: money in − course − surcharge − prizes − set-asides
+        # − margin must be zero. A non-zero residual means the ALLOCATION
+        # is wrong (or is still rate card), never the display.
+        d["reconciles"] = abs(d["overstated"]) < 0.02
         for k in ("collected", "course", "surcharge", "prizes", "fee",
                   "tax", "margin", "margin_booked", "margin_actual",
                   "overstated", "fee_in", "fee_out", "fee_net", "money_in",
@@ -696,6 +713,9 @@ def campaign_value(lead_rows: list[dict], conn,
     out["coverage_pct"] = (round(100.0 * out["allocated_orders"]
                                  / out["orders"], 1) if out["orders"] else None)
     out["rows_reconcile"] = abs(out["overstated"]) < 0.05
+    out["rate_card_rows"] = sum(1 for r in out["rows"] if r["model"] == "rate card")
+    out["rate_card_overstated"] = round(
+        sum(r["overstated"] for r in out["rows"] if r["model"] == "rate card"), 2)
     return out
 
 

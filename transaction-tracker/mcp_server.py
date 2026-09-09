@@ -1745,6 +1745,8 @@ def _scoring_dispatch(url: str, extract: str):
       scoring-fee-splits-check     one order, one fee: item rows add back to the order row?
       scoring-fee-splits-repair[:apply]  pro-rate multi-item orders' fee rows by price (dry by default)
       scoring-margin-rebook[:<since>[|apply]]  recompute allocations >= since so margin carries the fee spread
+      scoring-margin-gaps[:<limit>]  pre-cutover events: booked vs residual-would-book, with reasons (measure-only)
+      scoring-liabilities          payouts owed, credits held, LSC shirt fund by Cup year, tax reserve by month
       scoring-mp-reconcile75[:<season>|<chapter>|<allow>]  match-play reconcile
                                    with off-lowest per-chapter allowance
       scoring-mp-lock-one:<chapter>|<A>|<B>[|apply]  manually lock one
@@ -2404,6 +2406,20 @@ def _scoring_dispatch(url: str, extract: str):
             res["changes_sample"] = _ch[:40]
             res["changes_listed"] = len(_ch)
             return json.dumps(res, indent=2, default=str)
+        if cmd == "scoring-margin-gaps":
+            # Where the past event costs are missing (Kerry 2026-09-09):
+            # every pre-cutover allocation, what the books say vs what
+            # the residual model would book from today's configuration,
+            # grouped by event with a reason. Measure-only.
+            from email_parser.margin_ledger import margin_gaps
+            _lim = int(arg.strip()) if arg.strip().isdigit() else 60
+            return json.dumps(margin_gaps(limit=_lim), indent=2, default=str)
+        if cmd == "scoring-liabilities":
+            # What TGF is holding for someone else or has earmarked:
+            # prize payouts owed, credits held, LSC shirt fund by Cup
+            # year, sales-tax reserve by month (filed / open). Read-only.
+            from email_parser.margin_ledger import liability_buckets
+            return json.dumps(liability_buckets(), indent=2, default=str)
         if cmd == "scoring-backup-run":
             # Take a backup NOW: consistent snapshot -> gzip -> OneDrive
             # -> prune. ":dry" snapshots and verifies integrity without
