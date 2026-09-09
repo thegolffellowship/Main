@@ -83,6 +83,7 @@ def main():
             godaddy_fee REAL DEFAULT 0, tax_reserve REAL DEFAULT 0,
             total_collected REAL DEFAULT 0,
             allocation_status TEXT DEFAULT 'pending', notes TEXT,
+            discount_given REAL DEFAULT 0, lsc_shirt_fund REAL DEFAULT 0,
             created_at TEXT, UNIQUE(order_id, item_id))""")
         conn.execute("CREATE TABLE IF NOT EXISTS customers (customer_id INTEGER "
                      "PRIMARY KEY, first_name TEXT, last_name TEXT)")
@@ -553,6 +554,40 @@ def main():
         check("and the pair does not invent the $3.99 the old maths did",
               round(ev["money_in"] + mem["money_in"], 2) != 118.26,
               (ev["money_in"], mem["money_in"]))
+        # Kerry 2026-09-09: the FEE columns had the same bug. The order's
+        # $3.99 stamped on both rows read as $7.98 of fee-in; the truth is
+        # $3.99 once, apportioned by registration like the deposit.
+        check("fee-in is the order's fee ONCE, apportioned by registration",
+              (ev["fee_in"], mem["fee_in"]) == (2.24, 1.75)
+              and round(ev["fee_in"] + mem["fee_in"], 2) == 3.99,
+              (ev["fee_in"], mem["fee_in"]))
+        check("fee-out is untouched (already pro-rated at write time)",
+              (ev["fee_out"], mem["fee_out"]) == (2.07, 1.65),
+              (ev["fee_out"], mem["fee_out"]))
+        check("so fee-net across the order is the real spread, +$0.27",
+              round(ev["fee_net"] + mem["fee_net"], 2) == 0.27,
+              (ev["fee_net"], mem["fee_net"]))
+
+    # Item-type set-asides come out of TGF's side (LSC shirt fund, $10
+    # per membership, mailbox #422). BOOKED deducts it; ACTUALLY LEFT
+    # must too, or every membership reads as overstated by exactly $10.
+    print("Set-asides leave ACTUALLY LEFT as well as BOOKED")
+    with db._connect(db_path) as conn:
+        conn.execute("UPDATE acct_allocations SET tgf_operating = 34.00, "
+                     "lsc_shirt_fund = 10.00 WHERE order_id = 'O-9' "
+                     "AND item_id = 92")
+        conn.commit()
+    sa = campaigns.campaign_stats(db_path, today="2026-09-03",
+                                  gap_fill_seconds=0)["campaigns"][0]["value"]
+    mem2 = {r["item_id"]: r for r in sa["rows"]}.get(92)
+    if mem2:
+        check("the membership row carries its set-aside",
+              mem2["setaside"] == 10.0, mem2)
+        check("and what was left is net of it (deposit share - prizes - $10)",
+              mem2["margin_actual"] == round(mem2["money_in"] - 6.00 - 10.00, 2),
+              (mem2["money_in"], mem2["margin_actual"]))
+        check("so booked and actual agree on a membership",
+              abs(mem2["overstated"]) < 0.20, mem2["overstated"])
 
     print("Closed window + converted_at stamp")
     st = campaigns.campaign_stats(db_path, today="2026-10-30", gap_fill_seconds=0)

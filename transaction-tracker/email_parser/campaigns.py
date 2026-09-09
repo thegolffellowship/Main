@@ -571,6 +571,26 @@ def campaign_value(lead_rows: list[dict], conn,
     # Read-side on purpose. The root cause is at WRITE time and the stored
     # split rows are money records that other reports read; rewriting them
     # is a migration, not a bug fix, and needs its own ratification.
+    #
+    # THE SAME BUG, on the fee columns (Kerry 2026-09-09: "I don't think
+    # the FEE NET lines are correct for Will Wallace's transactions.
+    # Transaction fee on the one attached with multiple line items was
+    # $10.92. My calculation for GoDaddy fees is $9.66. So the diff is
+    # +$1.26 which would be prorated across all of those line items.")
+    # Correct. His four-item order R343961029 carried the ORDER's $10.92
+    # on EVERY item row, so the table showed $10.92 of fee-in four times
+    # ($43.68 of fee the customer never paid) against a correctly
+    # pro-rated fee-out, and a fee-net of +$33.90 where the truth is
+    # +$1.26. `money_in` was already immune (it reads the deposit), so
+    # ACTUALLY LEFT was right and only the FEE columns lied — but a wrong
+    # column beside a right one is how a table stops being trusted.
+    #
+    # Read-side, same as money_in: the ORDER's fee is the value stamped
+    # on its rows (they all carry the same number), and each item's share
+    # is by registration amount — the same basis the deposit is split on,
+    # so the three legs (money in, fee in, fee out) are apportioned alike.
+    # A single-item order is unchanged. An order whose fee rows already
+    # differ per item has been pro-rated at write time and is used as is.
     money_in: dict = {}
     fees: dict = {}
     try:
@@ -584,7 +604,15 @@ def campaign_value(lead_rows: list[dict], conn,
                 "           THEN ABS(s.amount) ELSE 0 END) AS fee_out, "
                 "  (SELECT SUM(s2.amount) FROM godaddy_order_splits s2 "
                 "   WHERE s2.transaction_id = s.transaction_id "
-                "   AND s2.split_type = 'registration') AS order_reg "
+                "   AND s2.split_type = 'registration') AS order_reg, "
+                "  (SELECT COUNT(DISTINCT s3.item_id) "
+                "   FROM godaddy_order_splits s3 "
+                "   WHERE s3.transaction_id = s.transaction_id "
+                "   AND s3.split_type = 'transaction_fee') AS fee_rows, "
+                "  (SELECT COUNT(DISTINCT ROUND(ABS(s4.amount), 2)) "
+                "   FROM godaddy_order_splits s4 "
+                "   WHERE s4.transaction_id = s.transaction_id "
+                "   AND s4.split_type = 'transaction_fee') AS fee_values "
                 "FROM godaddy_order_splits s "
                 "LEFT JOIN acct_transactions t ON t.id = s.transaction_id "
                 "WHERE s.item_id IS NOT NULL "
@@ -592,8 +620,13 @@ def campaign_value(lead_rows: list[dict], conn,
             _reg = float(fr["reg"] or 0)
             _order_reg = float(fr["order_reg"] or 0)
             _net = fr["net_deposit"]
-            fees[fr["item_id"]] = (float(fr["fee_in"] or 0),
-                                   float(fr["fee_out"] or 0))
+            _fee_in = float(fr["fee_in"] or 0)
+            # Multi-item order with the SAME fee on every row = the
+            # order's fee stamped per item. Apportion it like the deposit.
+            if (int(fr["fee_rows"] or 0) > 1 and int(fr["fee_values"] or 0) == 1
+                    and _order_reg > 0):
+                _fee_in = round(_fee_in * (_reg / _order_reg), 2)
+            fees[fr["item_id"]] = (_fee_in, float(fr["fee_out"] or 0))
             if _net is not None and _order_reg > 0:
                 money_in[fr["item_id"]] = round(
                     float(_net) * (_reg / _order_reg), 2)
@@ -601,6 +634,13 @@ def campaign_value(lead_rows: list[dict], conn,
         logger.warning("fee splits unavailable — margin_actual falls back "
                        "to the collected amount", exc_info=True)
 
+    # lsc_shirt_fund arrived with v2.323 as an ALTER; a database that
+    # predates it (a test fixture, an old backup) has no set-asides.
+    _has_setaside = any(
+        c[1] == "lsc_shirt_fund"
+        for c in conn.execute("PRAGMA table_info(acct_allocations)").fetchall())
+    _setaside_sql = ("CAST(COALESCE(a.lsc_shirt_fund,0) AS REAL)"
+                     if _has_setaside else "0.0")
     out["rows"] = []
     for r in conn.execute(
             f"SELECT a.order_id, a.event_name, a.allocation_date, "
@@ -612,6 +652,7 @@ def campaign_value(lead_rows: list[dict], conn,
             f"       CAST(COALESCE(a.godaddy_fee,0) AS REAL) AS fee, "
             f"       CAST(COALESCE(a.tax_reserve,0) AS REAL) AS tax, "
             f"       CAST(COALESCE(a.tgf_operating,0) AS REAL) AS margin, "
+            f"       {_setaside_sql} AS setaside, "
             f"       a.item_id, i.item_name, "
             f"       TRIM(COALESCE(c.first_name,'')||' '||"
             f"            COALESCE(c.last_name,'')) AS player "
@@ -633,13 +674,21 @@ def campaign_value(lead_rows: list[dict], conn,
         _mi = money_in.get(d.get("item_id"))
         d["money_in"] = _mi if _mi is not None else d["collected"]
         d["money_in_source"] = "deposit" if _mi is not None else "collected"
+        # Item-type set-asides come out of TGF's side too (the $10 Lone
+        # Star Cup shirt fund per membership, mailbox #422, standard v1.0
+        # in #428). BOOKED already deducts it; until 2026-09-09 this column
+        # did not, so every post-cutover membership read as "overstated"
+        # by exactly the set-aside. A definition that disagrees with the
+        # ratified standard is a bug, not a second opinion.
         d["margin_actual"] = round(d["money_in"] - d["course"]
-                                   - d["surcharge"] - d["prizes"], 2)
+                                   - d["surcharge"] - d["prizes"]
+                                   - d["setaside"], 2)
         # Positive = the books claim more than was actually left over.
         d["overstated"] = round(d["margin_booked"] - d["margin_actual"], 2)
         for k in ("collected", "course", "surcharge", "prizes", "fee",
                   "tax", "margin", "margin_booked", "margin_actual",
-                  "overstated", "fee_in", "fee_out", "fee_net", "money_in"):
+                  "overstated", "fee_in", "fee_out", "fee_net", "money_in",
+                  "setaside"):
             d[k] = round(d[k], 2)
         out["rows"].append(d)
     out["margin_actual"] = round(sum(r["margin_actual"] for r in out["rows"]), 2)

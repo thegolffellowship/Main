@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.348.0";
+window.TGF_VERSION = "2.348.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.348.1",
+    date: "2026-09-09",
+    changes: [
+      "The campaign margin audit table's FEE columns no longer count a multi-item order's transaction fee once per item. Kerry: 'I don't think the FEE NET lines are correct for Will Wallace's transactions. Transaction fee on the one attached with multiple line items was $10.92. My calculation for GoDaddy fees is $9.66. So the diff is +$1.26 which would be prorated across all of those line items.' Correct: his four-item order carried the order's $10.92 on every row, so the table showed $43.68 of fee-in against a correctly pro-rated fee-out and a fee-net of +$33.90 where the truth is +$1.26. Fee-in is now the order's fee once, apportioned by registration amount, the same basis the deposit is split on. Money-in already read the deposit, so ACTUALLY LEFT was right; only the fee columns were wrong.",
+      "ACTUALLY LEFT now deducts item-type set-asides (the $10 Lone Star Cup shirt fund per membership, ratified 2026-09-05). BOOKED already did, so every membership allocated since the cutover read as overstated by exactly $10 against a definition that disagreed with the ratified standard.",
+      "Not changed: the stored split rows still carry the order's fee per item (a write-time migration, held for ratification), and allocations dated before the 2026-09-05 margin-model cutover still book the rate-card markup, which is why 1st Timer rounds from the campaign's first week still show as overstated. Both are put to Kerry in the Sales & Growth session record.",
+    ],
+  },
   {
     version: "2.348.0",
     date: "2026-09-09",
