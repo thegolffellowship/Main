@@ -16,11 +16,12 @@ METRIC DEFINITIONS (Kerry's, verbatim):
           (registered any event OR became a member; both counts once)
   CPMem = Cost Per Member = ad spend / leads who became members
           (never "CPM" — that is cost-per-mille in the Meta panel)
-Each reported CURRENT (to date) and 30-DAY TRAILING: conversions keep
-arriving after spend stops, so the honest read counts conversions
-through 30 days after the last dollar (campaign end date). While that
-window is still open the trailing figure equals current and the panel
-says when the window closes.
+Reported CURRENT (to date). The 30-day trailing window that used to
+sit beside it is gone (Kerry 2026-09-09: "What is the significance of
+10/6 as the end of the trailing window? Shouldn't it be indefinite?") —
+a lead is a lifetime relationship, so conversions count whenever they
+happen. The `*_trailing` fields remain for the page and equal current;
+`TRAILING_DAYS = None` is the switch.
 
 META PANEL: spend, impressions, reach, frequency, link clicks, CTR,
 CPM, leads, CPL from the Marketing API insights edge
@@ -50,7 +51,7 @@ META_AD_ACCOUNT_ID = "2353186181735308"
 META_GRAPH_VERSION = "v21.0"
 META_INSIGHT_FIELDS = ("spend,impressions,reach,frequency,"
                        "inline_link_clicks,ctr,cpm,actions")
-TRAILING_DAYS = 30
+TRAILING_DAYS = None  # indefinite (Kerry 2026-09-09); an int re-arms the window
 INSIGHTS_STALE_MINUTES = 60
 
 # The current campaign (Kerry 2026-09-03) — seeded once, then Kerry's
@@ -845,7 +846,7 @@ def campaign_stats(db_path: str | Path | None = None,
                 cid=None, value=None):
         cutoff = None
         window_open = None
-        if end_date:
+        if end_date and TRAILING_DAYS is not None:
             try:
                 cutoff = date.fromisoformat(end_date) + timedelta(days=TRAILING_DAYS)
                 window_open = today_d <= cutoff
@@ -959,8 +960,11 @@ def campaign_stats(db_path: str | Path | None = None,
                 "CPP": "ad spend / unique leads who became a player "
                        "(registered any event or became a member)",
                 "CPMem": "ad spend / leads who became members",
-                "trailing": f"conversions counted through {TRAILING_DAYS} "
-                            "days after the campaign's last spend day",
+                "trailing": ("conversions counted indefinitely — a lead is a "
+                             "lifetime relationship (Kerry 2026-09-09)"
+                             if TRAILING_DAYS is None else
+                             f"conversions counted through {TRAILING_DAYS} "
+                             "days after the campaign's last spend day"),
             },
             "campaigns": out_campaigns, "unattributed": unattributed,
             "all": all_bucket}

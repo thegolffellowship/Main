@@ -357,6 +357,72 @@ def main():
               round(a["tgf_operating"] * 0.0825, 2) for a in allocs if a["tgf_operating"] > 0)
           + 100, sep)
 
+    print("Membership gap group: FALL contest decodes, rebook touches membership rows only")
+    with db._connect(p) as conn:
+        add_item(conn, 700, "R700000001", "s9.1 THE QUARRY", 75.0, 4.38, 129.38, 1,
+                 date="2026-03-10")
+        add_item(conn, 701, "R700000001", "TGF MEMBERSHIP", 100.0, 4.38, 129.38, 2,
+                 date="2026-03-10")
+        conn.execute("UPDATE items SET returning_or_new='New', fall_net_points_race='YES' "
+                     "WHERE id = 701")
+        conn.execute(
+            "INSERT INTO acct_transactions (date, description, total_amount, type, amount, "
+            " category, source, source_ref, status, net_deposit, merchant_fee, order_id) "
+            "VALUES ('2026-03-10', 'GoDaddy order R700000001', 129.38, 'income', 125.33, "
+            " 'godaddy_order', 'godaddy', 'godaddy-order-R700000001', 'active', 125.33, 4.05, "
+            " 'R700000001')")
+        # Stale books: the event row at rate card ($8), the membership
+        # read as a Returning base with no contest ($94 margin, $6 pool).
+        conn.executemany(
+            "INSERT INTO acct_allocations (order_id, item_id, event_name, allocation_date, "
+            " godaddy_fee, total_collected, allocation_status, tgf_operating, prize_pool, "
+            " tax_reserve) VALUES (?, ?, ?, ?, ?, ?, 'complete', ?, ?, ?)",
+            [("R700000001", 700, "s9.1 THE QUARRY", "2026-03-10", 2.32, 75.0, 8.0, 20.0, 0.66),
+             ("R700000001", 701, "TGF MEMBERSHIP", "2026-03-10", 3.09, 100.0, 94.0, 6.0, 7.76)])
+        conn.commit()
+        kb = db._calc_membership_allocation(
+            {"item_name": "TGF MEMBERSHIP", "item_price": "$100.00",
+             "returning_or_new": "New", "fall_net_points_race": "YES"}, conn)
+    check("$100 New + FALL = base 44 + $10 markup - $10 shirt = $44 margin (Kerry: "
+          "'still $50 for his New Member membership rate')",
+          kb["tgf_operating"] == 44.0 and kb["prize_pool"] == 46.0
+          and kb["lsc_shirt_fund"] == 10.0, kb)
+    mg = ml.membership_gap(db_path=p)
+    grp = [g for g in mg["by_group"] if g["price"] == 100.0]
+    check("the gap groups by price / type / contests and the $100 New+FALL group fits",
+          len(grp) == 1 and grp[0]["type"] == "New" and grp[0]["contests"] == "FALL"
+          and grp[0]["fits_table"] is True, grp)
+    check("booked $94 vs would-book $44 on that group",
+          grp[0]["booked_margin"] == 94.0 and grp[0]["would_margin"] == 44.0
+          and grp[0]["delta_margin"] == -50.0, grp[0])
+    with db._connect(p) as conn:
+        m_meas = conn.execute("SELECT tgf_operating FROM acct_allocations "
+                              "WHERE item_id = 701").fetchone()[0]
+    check("measure wrote nothing", m_meas == 94.0, m_meas)
+    mg2 = ml.membership_gap(db_path=p, apply=True)
+    with db._connect(p) as conn:
+        m_after = conn.execute("SELECT tgf_operating, prize_pool, lsc_shirt_fund, tax_reserve "
+                               "FROM acct_allocations WHERE item_id = 701").fetchone()
+        e_after = conn.execute("SELECT tgf_operating FROM acct_allocations "
+                               "WHERE item_id = 700").fetchone()[0]
+    check("apply rebooked the membership row (44 / 46 / 10, tax 3.63)",
+          tuple(m_after) == (44.0, 46.0, 10.0, 3.63), tuple(m_after))
+    check("and left the event row in the same order untouched at $8",
+          e_after == 8.0, e_after)
+    check("apply report is membership-class and lists the change",
+          mg2["applied"]["item_class"] == "membership" and mg2["applied"]["rows_changed"] >= 1,
+          mg2["applied"])
+    mg3 = ml.membership_gap(db_path=p, apply=True)
+    check("second apply is a no-op", mg3["applied"]["rows_changed"] == 0, mg3["applied"])
+    liab2 = ml.liability_buckets(db_path=p, today="2026-09-09")
+    check("liabilities carry the HIO pot", "hio_pot" in liab2 and "pot" in liab2["hio_pot"]
+          or liab2.get("hio_pot", {}).get("error"), liab2.get("hio_pot"))
+    gaps2 = ml.margin_gaps(db_path=p)
+    check("gap list carries a by-month view with the negative-row tax credit",
+          isinstance(gaps2.get("by_month"), dict)
+          and all("negative_tax_credit" in v for v in gaps2["by_month"].values()),
+          gaps2.get("by_month"))
+
     print("The audit report carries the check")
     rep = db.get_audit_report(p)
     check("fee_splits section present and clean", rep.get("fee_splits", {}).get("ok") is True,

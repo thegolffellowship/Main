@@ -1746,7 +1746,8 @@ def _scoring_dispatch(url: str, extract: str):
       scoring-fee-splits-repair[:apply]  pro-rate multi-item orders' fee rows by price (dry by default)
       scoring-margin-rebook[:<since>[|apply]]  recompute allocations >= since so margin carries the fee spread
       scoring-margin-gaps[:<limit>]  pre-cutover events: booked vs residual-would-book, with reasons (measure-only)
-      scoring-liabilities          payouts owed, credits held, LSC shirt fund by Cup year, tax reserve by month
+      scoring-liabilities          payouts owed, credits held, LSC shirt fund by Cup year, HIO pot, tax reserve by month
+      scoring-membership-gap[:apply]  the membership gap group: booked vs today's decomposition by price/type/contests; apply rebooks membership rows only
       scoring-mp-reconcile75[:<season>|<chapter>|<allow>]  match-play reconcile
                                    with off-lowest per-chapter allowance
       scoring-mp-lock-one:<chapter>|<A>|<B>[|apply]  manually lock one
@@ -2414,6 +2415,18 @@ def _scoring_dispatch(url: str, extract: str):
             from email_parser.margin_ledger import margin_gaps
             _lim = int(arg.strip()) if arg.strip().isdigit() else 60
             return json.dumps(margin_gaps(limit=_lim), indent=2, default=str)
+        if cmd == "scoring-membership-gap":
+            # Gap group 1 (Kerry 2026-09-09). Measure by default; ":apply"
+            # rebooks ONLY membership rows across the whole history under
+            # today's decomposition (fits/misfits reported first). Audited.
+            from email_parser.margin_ledger import membership_gap
+            _apply = arg.strip().lower() == "apply"
+            res = membership_gap(apply=_apply)
+            if _apply:
+                db.log_agent_action(
+                    "mcp-claude", "scoring-membership-gap",
+                    f"rebooked membership rows: {res.get('applied')}")
+            return json.dumps(res, indent=2, default=str)
         if cmd == "scoring-liabilities":
             # What TGF is holding for someone else or has earmarked:
             # prize payouts owed, credits held, LSC shirt fund by Cup

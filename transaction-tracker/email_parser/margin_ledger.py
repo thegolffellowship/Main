@@ -23,7 +23,11 @@ Three reads, all read-only:
     This is the list Kerry fills in. It never writes.
   * `liability_buckets()` — what TGF is holding for someone else or has
     earmarked: prize payouts owed, credits held, shirt fund by Cup
-    year, sales-tax reserve by month (filed / open).
+    year, the HIO pot, sales-tax reserve by month (filed / open).
+  * `membership_gap()` — the first gap group: every membership sold,
+    grouped by what was sold, booked vs today's decomposition, and the
+    prices the table does not know. `apply=True` rebooks membership
+    rows only.
 """
 from __future__ import annotations
 
@@ -90,9 +94,18 @@ def margin_gaps(db_path: str | Path | None = None, limit: int = 60) -> dict:
                             cutover_override=first_date)
     groups: dict = defaultdict(lambda: {
         "event": None, "rows": 0, "booked": 0.0, "would_book": 0.0,
-        "delta": 0.0, "negative_rows": 0, "new_rows": 0,
+        "delta": 0.0, "negative_rows": 0, "negative_sum": 0.0, "new_rows": 0,
         "sample_order": None, "event_date": None, "course_cost": None,
         "event_type": None})
+    # By ORDER month: the credit the signed-tax ruling would have given
+    # each filed month had the residual model applied then. Kerry
+    # 2026-09-09: "your (or CA's) calculations for my past month's sales
+    # tax numbers ... probably overshot them because we weren't recording
+    # any negative sales tax impact." Memberships are excluded from the
+    # negative figures (their gap is decomposition, not a loss).
+    by_month: dict = defaultdict(lambda: {
+        "rows": 0, "booked": 0.0, "would_book": 0.0,
+        "negative_rows": 0, "negative_sum": 0.0, "negative_tax_credit": 0.0})
     for c in m["changes"]:
         # Only rows before the real cutover are "gaps"; later rows are
         # already residual and moved only by their spread.
@@ -106,9 +119,20 @@ def margin_gaps(db_path: str | Path | None = None, limit: int = 60) -> dict:
         g["delta"] = round(g["delta"] + (a - b), 2)
         if a < 0:
             g["negative_rows"] += 1
+            g["negative_sum"] = round(g["negative_sum"] + a, 2)
         if c.get("new_row"):
             g["new_rows"] += 1
         g["sample_order"] = g["sample_order"] or c["order_id"]
+        _mo = (c.get("allocation_date") or "")[:7]
+        if _mo and "MEMBERSHIP" not in name.upper():
+            bm = by_month[_mo]
+            bm["rows"] += 1
+            bm["booked"] = round(bm["booked"] + b, 2)
+            bm["would_book"] = round(bm["would_book"] + a, 2)
+            if a < 0:
+                bm["negative_rows"] += 1
+                bm["negative_sum"] = round(bm["negative_sum"] + a, 2)
+                bm["negative_tax_credit"] = round(bm["negative_sum"] * 0.0825, 2)
     out_rows = []
     for key, g in groups.items():
         ev = events.get(key)
@@ -153,8 +177,134 @@ def margin_gaps(db_path: str | Path | None = None, limit: int = 60) -> dict:
         "note": ("Measure-only. 'would_book' is today's residual model applied to "
                  "history through the ordinary allocator; where it is absurd, the "
                  "event's cost/prize configuration is the gap, not the model."),
+        "by_month": {k: by_month[k] for k in sorted(by_month)},
         "gaps": out_rows[:limit],
     }
+
+
+def membership_gap(db_path: str | Path | None = None,
+                   apply: bool = False) -> dict:
+    """The MEMBERSHIP gap group (Kerry 2026-09-09: "Let's go with the
+    membership gap recommendation first").
+
+    Every active membership item in the Tracker's history, grouped by
+    what was sold (price, New/Returning/Plus, contests bundled), with
+    what the books hold beside what today's membership decomposition
+    books: base (44 / 69 / 244 taxable) + $6 Monthly Points pool +
+    $10 markup per contest + the contest pools + the $10 shirt
+    set-aside. A group FITS when those parts sum to the price paid to
+    the cent; a group that does not fit is a price the table does not
+    know (a tier or bundle of the day) and is the question for Kerry.
+
+    The membership decomposition never depended on the margin-model
+    cutover, so "would book" here is exactly what an apply writes; the
+    only cutover-gated part, the fee spread, stays off pre-cutover rows.
+    `apply=True` rebooks ONLY membership rows (event rows in the same
+    orders are untouched) and is audited by the caller."""
+    from . import database as db
+    from .fee_splits import rebook_spread_since
+    with db._connect(db_path) as conn:
+        cutover = _cutover(conn)
+        first_date = conn.execute(
+            "SELECT MIN(substr(order_date,1,10)) AS d FROM items "
+            "WHERE merchant = 'The Golf Fellowship' AND order_date IS NOT NULL"
+        ).fetchone()["d"] or "2025-12-01"
+        lsc = db._membership_setaside("lsc_shirt", 10.0, conn)
+        rows = [dict(r) for r in conn.execute(
+            """SELECT i.id, i.order_id, i.order_date, i.item_price, i.customer,
+                      i.returning_or_new, i.net_points_race, i.gross_points_race,
+                      i.city_match_play, i.fall_net_points_race, i.item_name,
+                      a.tgf_operating AS booked_tgf, a.prize_pool AS booked_pool,
+                      a.lsc_shirt_fund AS booked_shirt, a.tax_reserve AS booked_tax
+               FROM items i
+               LEFT JOIN acct_allocations a ON a.item_id = i.id
+               WHERE i.merchant = 'The Golf Fellowship'
+                 AND UPPER(COALESCE(i.item_name,'')) LIKE '%MEMBERSHIP%'
+                 AND COALESCE(i.transaction_status,'active') = 'active'
+                 AND i.parent_item_id IS NULL
+               ORDER BY i.order_date, i.id""")]
+        groups: dict = {}
+        for r in rows:
+            price = db._parse_dollar(r.get("item_price"))
+            if price <= 0:
+                continue
+            would = db._calc_membership_allocation(r, conn)
+            flags = []
+            for f, tag in (("net_points_race", "NET"), ("gross_points_race", "GROSS"),
+                           ("city_match_play", "MATCH"), ("fall_net_points_race", "FALL")):
+                v = (r.get(f) or "").strip().upper()
+                if v and v not in ("NO", "NONE", "N/A"):
+                    flags.append(tag)
+            ron = (r.get("returning_or_new") or "").strip().upper()
+            kind = ("Plus" if "PLUS" in ron or "PLUS" in (r.get("item_name") or "").upper()
+                    else "New" if ("NEW" in ron or "1ST" in ron or "FIRST" in ron)
+                    else "Returning" if ron else "(blank)")
+            w_tgf = float(would.get("tgf_operating") or 0)
+            w_pool = float(would.get("prize_pool") or 0)
+            w_shirt = float(would.get("lsc_shirt_fund") or 0)
+            fits = abs((w_tgf + w_shirt + w_pool) - price) < 0.01
+            key = (round(price, 2), kind, "+".join(flags) or "none")
+            g = groups.setdefault(key, {
+                "price": key[0], "type": kind, "contests": key[2],
+                "rows": 0, "unallocated": 0, "fits_table": fits,
+                "booked_margin": 0.0, "would_margin": 0.0,
+                "booked_pool": 0.0, "would_pool": 0.0,
+                "booked_shirt": 0.0, "would_shirt": 0.0,
+                "booked_tax": 0.0, "would_tax": 0.0,
+                "first": r.get("order_date"), "last": r.get("order_date"),
+                "fund_years": defaultdict(int), "samples": []})
+            g["rows"] += 1
+            if r.get("booked_tgf") is None:
+                g["unallocated"] += 1
+            g["booked_margin"] = round(g["booked_margin"] + float(r.get("booked_tgf") or 0), 2)
+            g["would_margin"] = round(g["would_margin"] + w_tgf, 2)
+            g["booked_pool"] = round(g["booked_pool"] + float(r.get("booked_pool") or 0), 2)
+            g["would_pool"] = round(g["would_pool"] + w_pool, 2)
+            g["booked_shirt"] = round(g["booked_shirt"] + float(r.get("booked_shirt") or 0), 2)
+            g["would_shirt"] = round(g["would_shirt"] + w_shirt, 2)
+            g["booked_tax"] = round(g["booked_tax"] + float(r.get("booked_tax") or 0), 2)
+            g["would_tax"] = round(g["would_tax"] + w_tgf * 0.0825, 2)
+            g["last"] = r.get("order_date")
+            fy = lsc_fund_year(r.get("order_date"))
+            if fy:
+                g["fund_years"][str(fy)] += 1
+            if len(g["samples"]) < 2:
+                g["samples"].append(f"{r.get('order_id')} {r.get('customer')}")
+    out_groups = []
+    for g in groups.values():
+        g["fund_years"] = dict(g["fund_years"])
+        g["delta_margin"] = round(g["would_margin"] - g["booked_margin"], 2)
+        g["delta_tax"] = round(g["would_tax"] - g["booked_tax"], 2)
+        out_groups.append(g)
+    out_groups.sort(key=lambda g: (-g["rows"], g["price"]))
+    result = {
+        "cutover": cutover, "history_from": first_date,
+        "shirt_setaside_per_membership": lsc,
+        "table": ("base New 44 / Returning 69 / Plus 244 taxable + $6 Monthly Points "
+                  "pool + $10 markup per contest (Plus waived) + contest pools "
+                  "(NET 80, Gross 40, Match Play 40, FALL Net 40) + $10 shirt "
+                  "set-aside out of TGF's side"),
+        "rows": sum(g["rows"] for g in out_groups),
+        "groups": len(out_groups),
+        "fits": sum(1 for g in out_groups if g["fits_table"]),
+        "misfits": [g for g in out_groups if not g["fits_table"]],
+        "booked_margin": round(sum(g["booked_margin"] for g in out_groups), 2),
+        "would_margin": round(sum(g["would_margin"] for g in out_groups), 2),
+        "booked_pool": round(sum(g["booked_pool"] for g in out_groups), 2),
+        "would_pool": round(sum(g["would_pool"] for g in out_groups), 2),
+        "booked_shirt": round(sum(g["booked_shirt"] for g in out_groups), 2),
+        "would_shirt": round(sum(g["would_shirt"] for g in out_groups), 2),
+        "booked_tax": round(sum(g["booked_tax"] for g in out_groups), 2),
+        "would_tax": round(sum(g["would_tax"] for g in out_groups), 2),
+        "by_group": out_groups,
+    }
+    result["delta_margin"] = round(result["would_margin"] - result["booked_margin"], 2)
+    result["delta_tax"] = round(result["would_tax"] - result["booked_tax"], 2)
+    if apply:
+        result["applied"] = rebook_spread_since(
+            first_date, dry_run=False, db_path=db_path, item_class="membership")
+        result["applied"].pop("changes", None)
+    return result
 
 
 def liability_buckets(db_path: str | Path | None = None,
@@ -224,6 +374,22 @@ def liability_buckets(db_path: str | Path | None = None,
             "by_cup_year": {str(k): v for k, v in sorted(fund.items())},
             "spend_recorded": "not tracked yet — shirt purchases are not tagged to the fund",
         }
+        # Hole-in-One pot (rolling, carried across seasons). Kerry
+        # 2026-09-09: "I also need to put the full HIO pot amount in
+        # there [the HYSA] right away so I don't have it in my TGF
+        # Checking account to spend."
+        try:
+            hio = db.get_hio_pot(db_path)
+            _ev = hio.get("events") or []
+            out["hio_pot"] = {"pot": round(float(hio.get("pot") or 0), 2),
+                              "carry_in": round(float(hio.get("carry_in") or 0), 2),
+                              "contributed": round(float(hio.get("total_contributed") or 0), 2),
+                              "paid_out": round(float(hio.get("paid_out") or 0), 2),
+                              "events_counted": hio.get("events_counted"),
+                              "through": _ev[-1].get("date") if _ev else None}
+        except Exception:
+            logger.warning("HIO pot read failed", exc_info=True)
+            out["hio_pot"] = {"error": "unavailable"}
         # Sales tax reserve by month
         months = {}
         for r in conn.execute(

@@ -442,6 +442,22 @@ past filings were computed off an overstated `tgf_operating`, TGF has
 probably been **over**-remitting; Kerry: *"We can always amend past
 reporting if necessary."*
 
+**Membership decomposition (v2.353.0).** A membership item books
+`base` (New 44 / Returning 69 / Plus 244 taxable) + $6 Monthly Points
+pool + $10 markup per contest bundled (Plus waived) + the contest pools
+(NET 80, Gross 40, Match Play 40, **FALL Net 40** — the
+`fall_net_points_race` field joined the table in v2.353.0 after Kannon
+Brown's $100 New + Fall order read as a Returning base) + the $10 shirt
+set-aside out of TGF's side. The base is chosen as the one whose parts
+sum closest to the price paid. `margin_ledger.membership_gap()` (bridge
+`scoring-membership-gap[:apply]`) is gap group 1: every membership in
+the history grouped by price / type / contests, booked vs would-book,
+and a `fits_table` flag per group — a misfit is a price of the day the
+table does not know and is Kerry's to name. Apply rebooks membership
+rows only (`calculate_order_allocation(only_item_ids=…)`,
+`rebook_spread_since(item_class="membership")`); it is Kerry-gated
+because it restates ~110 rows of booked margin and tax base.
+
 ## Membership set-asides
 
 A membership is not all margin. The allocator must carry the **full**

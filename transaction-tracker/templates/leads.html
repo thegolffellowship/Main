@@ -1460,7 +1460,7 @@
         const metric = (lbl, val, sub) => `<div class="ld-metric"><div class="lbl">${lbl}</div><div class="val">${val}</div>${sub ? `<div class="sub">${sub}</div>` : ""}</div>`;
         const win = b.trailing_cutoff
             ? (b.trailing_window_open ? `window open until ${fmtD(b.trailing_cutoff)}` : `window closed ${fmtD(b.trailing_cutoff)}`)
-            : "no end date · trailing = current";
+            : "no window — conversions count whenever they happen";
         const chapRows = Object.entries(b.chapters || {}).map(([ch, cf]) =>
             `<tr><td>${esc(ch)}</td><td>${cf.leads}</td><td>${cf.touched}</td><td>${cf.replied}</td><td>${cf.reply_pct == null ? "—" : cf.reply_pct + "%"}</td><td>${cf.interested}</td><td>${cf.players}</td><td>${cf.members}</td><td>${cf.dismissed}</td></tr>`).join("");
         const head = `<div class="ld-stats-head">
@@ -1491,12 +1491,12 @@
             ${metric("Members", num(f.members))}
             ${metric("Dismissed", num(f.dismissed))}
             </div>
-            <table class="ld-costtbl"><thead><tr><th></th><th>Current</th><th>30-day trailing</th></tr></thead><tbody>
+            <table class="ld-costtbl"><thead><tr><th></th><th>Current</th><th>${STATS.trailing_days == null ? "Lifetime" : STATS.trailing_days + "-day trailing"}</th></tr></thead><tbody>
             <tr><td>CPL <span class="ld-dsub">spend / leads</span></td><td>${money(c.cpl)}</td><td>${money(c.cpl)}</td></tr>
             <tr><td>CPP <span class="ld-dsub">spend / players</span></td><td>${money(c.cpp)}<span class="ld-dsub"> /${f.players}</span></td><td>${money(c.cpp_trailing)}<span class="ld-dsub"> /${f.players_trailing}</span></td></tr>
             <tr><td>CPMem <span class="ld-dsub">spend / members</span></td><td>${money(c.cpmem)}<span class="ld-dsub"> /${f.members}</span></td><td>${money(c.cpmem_trailing)}<span class="ld-dsub"> /${f.members_trailing}</span></td></tr>
             </tbody></table>
-            <div class="ld-foot">Replied = a human wrote back to our outreach. It does not count Golf Genius RSVPs, HubSpot re-submissions or the app's own bookkeeping notes, so it is narrower than RESPONDED in the queue — that one answers &ldquo;who still needs me&rdquo;, this one answers &ldquo;did our outreach work&rdquo;. Player = registered any event or became a member (counts once). Trailing counts conversions through ${STATS.trailing_days} days after the last spend day · ${esc(win)}.</div></div>`;
+            <div class="ld-foot">Replied = a human wrote back to our outreach. It does not count Golf Genius RSVPs, HubSpot re-submissions or the app's own bookkeeping notes, so it is narrower than RESPONDED in the queue — that one answers &ldquo;who still needs me&rdquo;, this one answers &ldquo;did our outreach work&rdquo;. Player = registered any event or became a member (counts once). ${STATS.trailing_days == null ? "Lifetime = every conversion a lead ever makes; there is no cut-off date (Kerry 2026-09-09)" : "Trailing counts conversions through " + STATS.trailing_days + " days after the last spend day"} · ${esc(win)}.</div></div>`;
         // The audit trail behind TGF MARGIN (Kerry 2026-09-04: "I want
         // to make sure your math is correct"). Every allocation row that
         // makes up the number, per person, with the four destinations

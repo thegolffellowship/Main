@@ -339,7 +339,8 @@ def repair_multi_item_fee_splits(dry_run: bool = True,
 
 def rebook_spread_since(since: str, dry_run: bool = True,
                         db_path: str | Path | None = None,
-                        cutover_override: str | None = None) -> dict:
+                        cutover_override: str | None = None,
+                        item_class: str | None = None) -> dict:
     """Recompute the allocations of every GoDaddy order dated on or after
     `since` so they carry the fee spread (Kerry 2026-09-09: the spread is
     margin and is taxed as margin). The whole allocation is recomputed
@@ -354,12 +355,23 @@ def rebook_spread_since(since: str, dry_run: bool = True,
     `cutover_override` (DRY-RUN ONLY, ignored on apply) answers "what
     would these rows book under the residual model?" for rows dated
     before the real cutover — the measurement behind Kerry's Question 3
-    (restate history or leave it frozen). It never writes."""
+    (restate history or leave it frozen). It never writes.
+
+    `item_class="membership"` restricts the rebook to MEMBERSHIP items:
+    only orders holding one are visited and only those rows are reported
+    or written, so the frozen event rows in the same order stay as they
+    are (the membership restatement, Kerry 2026-09-09: memberships are
+    the first gap group)."""
     from . import database as db
     since = (since or "").strip()[:10]
+    _class_sql = ""
+    if item_class == "membership":
+        _class_sql = " AND UPPER(COALESCE(item_name,'')) LIKE '%MEMBERSHIP%'"
+    elif item_class:
+        raise ValueError(f"unknown item_class {item_class!r}")
     if cutover_override and not dry_run:
         raise ValueError("cutover_override is measure-only: use dry_run=True")
-    out = {"dry_run": dry_run, "since": since,
+    out = {"dry_run": dry_run, "since": since, "item_class": item_class,
            "cutover_override": (cutover_override or None) if dry_run else None,
            "orders": 0, "rows": 0,
            "rows_changed": 0, "tgf_operating_before": 0.0,
@@ -372,8 +384,17 @@ def rebook_spread_since(since: str, dry_run: bool = True,
                WHERE merchant = 'The Golf Fellowship'
                  AND COALESCE(transaction_status, 'active') = 'active'
                  AND order_id IS NOT NULL AND order_id != ''
-                 AND substr(COALESCE(order_date, ''), 1, 10) >= ?
-               ORDER BY order_date, order_id""", (since,)).fetchall()]
+                 AND substr(COALESCE(order_date, ''), 1, 10) >= ?"""
+            + _class_sql +
+            """ ORDER BY order_date, order_id""", (since,)).fetchall()]
+        only_ids: dict = {}
+        if _class_sql and order_ids:
+            for r in conn.execute(
+                    """SELECT order_id, id FROM items
+                       WHERE COALESCE(transaction_status, 'active') = 'active'
+                         AND order_id IN (%s)""" % ",".join("?" * len(order_ids))
+                    + _class_sql, tuple(order_ids)):
+                only_ids.setdefault(r["order_id"], set()).add(r["id"])
         before = {}
         for r in conn.execute(
                 """SELECT order_id, item_id, tgf_operating, tax_reserve,
@@ -388,7 +409,9 @@ def rebook_spread_since(since: str, dry_run: bool = True,
         db._MARGIN_CUTOVER_OVERRIDE.cutover = str(cutover_override)[:10]
     try:
         for oid in order_ids:
-            rows = db.calculate_order_allocation(oid, db_path=db_path, dry_run=dry_run)
+            rows = db.calculate_order_allocation(
+                oid, db_path=db_path, dry_run=dry_run,
+                only_item_ids=only_ids.get(oid) if _class_sql else None)
             out["orders"] += 1
             for a in rows:
                 out["rows"] += 1
@@ -418,6 +441,9 @@ def rebook_spread_since(since: str, dry_run: bool = True,
                     out["changes"].append({
                         "order_id": oid, "item_id": a["item_id"],
                         "event_name": a.get("event_name"),
+                        "allocation_date": str(a.get("allocation_date") or "")[:10],
+                        "prize_pool": round(float(a.get("prize_pool") or 0), 2),
+                        "lsc_shirt_fund": round(float(a.get("lsc_shirt_fund") or 0), 2),
                         "tgf_operating": [round(t0, 2), round(t1, 2)],
                         "fee_spread": round(float(a.get("fee_spread") or 0), 2),
                         "tax_reserve": [round(x0, 2), round(x1, 2)],

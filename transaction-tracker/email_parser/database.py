@@ -40392,7 +40392,8 @@ def _create_allocation_for_item(
 
 
 def calculate_order_allocation(order_id: str, db_path: str | Path | None = None,
-                               dry_run: bool = False) -> list[dict]:
+                               dry_run: bool = False,
+                               only_item_ids: set | None = None) -> list[dict]:
     """Calculate how each item in a GoDaddy order is allocated across buckets.
 
     For EVENT items: course_payable, course_surcharge, prize_pool, tgf_operating,
@@ -40491,6 +40492,14 @@ def calculate_order_allocation(order_id: str, db_path: str | Path | None = None,
 
             alloc.pop("_needs_course_cost", None)
             results.append(alloc)
+
+        # `only_item_ids` restricts what is REPORTED and WRITTEN to those
+        # items (the membership restatement rebooks membership rows of an
+        # order without touching the frozen event rows beside them). The
+        # order-level fee shares above are still computed over the whole
+        # order, so a restricted row carries the same share it always did.
+        if only_item_ids is not None:
+            results = [a for a in results if a["item_id"] in only_item_ids]
 
         if dry_run:
             return results
@@ -41127,8 +41136,14 @@ def _calc_membership_allocation(item: dict, conn: sqlite3.Connection) -> dict:
     # (the old flat $20/contest under-booked the pass-through pool).
     contest_count = 0
     contest_prize = 0.0
+    # FALL Net Points Race is its own field (the parser only fills it
+    # when the body says FALL) and a $50 contest: $10 markup + $40 pool.
+    # Kerry 2026-09-09 on Kannon Brown's $100 order: "Kannon Brown's was
+    # only $100 because he added the $50 Fall Points Race. So it's still
+    # $50 for his New Member membership rate." Before this the field was
+    # not in the table, so $100 read as a Returning base with no contest.
     _pool_by_field = {"net_points_race": 80.0, "gross_points_race": 40.0,
-                      "city_match_play": 40.0}
+                      "city_match_play": 40.0, "fall_net_points_race": 40.0}
     for field, pool in _pool_by_field.items():
         val = (item.get(field) or "").strip().upper()
         if val and val not in ("", "NO", "NONE", "N/A"):

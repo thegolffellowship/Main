@@ -1,5 +1,16 @@
-window.TGF_VERSION = "2.352.0";
+window.TGF_VERSION = "2.353.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.353.0",
+    date: "2026-09-09",
+    changes: [
+      "Membership gap group (Kerry 2026-09-09: 'Let's go with the membership gap recommendation first'). New measure-only read `scoring-membership-gap`: every membership sold since the Tracker's history began, grouped by price / New-Returning-Plus / contests bundled, with what the books hold beside what today's decomposition books (base 44/69/244 + $6 Monthly Points pool + $10 per contest + contest pools + the $10 shirt set-aside), and a FITS flag per group — a price the table cannot rebuild to the cent is the question for Kerry. `:apply` rebooks ONLY membership rows across the history (event rows in the same orders are untouched, via a new only_item_ids restriction on the allocator and an item_class filter on the rebook). Apply is Kerry-gated.",
+      "FALL Net Points Race now decodes inside a membership bundle. Kerry: 'Kannon Brown's was only $100 because he added the $50 Fall Points Race. So it's still $50 for his New Member membership rate.' The fall_net_points_race field was not in the contest table, so $100 read as a Returning base with no contest ($59 margin, $6 pool); it now reads New $44 + $10 contest markup − $10 shirt = $44 margin, $46 to pools.",
+      "Lead campaign stats: the 30-day trailing window is gone (Kerry: 'What is the significance of 10/6 as the end of the trailing window? Shouldn't it be indefinite?'). A lead is a lifetime relationship, so conversions count whenever they happen; the second column now reads Lifetime and equals current. TRAILING_DAYS = None is the switch, an integer re-arms a window.",
+      "Liabilities read now carries the HIO pot (pot, carry-in, contributed, paid out, through-date) beside payouts owed, credits, shirt fund and tax reserve — Kerry is moving it and the 2027 shirt fund to a high-yield savings account.",
+      "Gap list adds a by-month view of the pre-cutover non-membership rows: what was booked, what the residual model would book, how many rows would be negative and the sales-tax credit those negatives would have carried under the signed-tax ruling — the number behind Kerry's 'probably overshot' question about past filings.",
+    ],
+  },
   {
     version: "2.352.0",
     date: "2026-09-09",

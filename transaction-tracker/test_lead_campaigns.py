@@ -190,12 +190,17 @@ def main():
         conn.execute("DELETE FROM leads WHERE id = ?", (replier,))
         conn.commit()
     check("dismissed = 1, new = 1", (f["dismissed"], f["new"]) == (1, 1), f)
-    check("trailing cutoff = end 9/6 + 30 = 10/6, window open on 9/3",
-          c["trailing_cutoff"] == "2026-10-06" and c["trailing_window_open"] is True, c)
-    check("trailing drops the 10/9 and 10/20 conversions: players 4, members 2",
-          (f["players_trailing"], f["members_trailing"]) == (4, 2), f)
-    check("CPP trailing = 127.16 / 4 = 31.79, CPMem trailing = 63.58",
-          (cost["cpp_trailing"], cost["cpmem_trailing"]) == (31.79, 63.58), cost)
+    # Kerry 2026-09-09: the trailing window is indefinite. No cutoff,
+    # the 10/9 and 10/20 conversions still count, trailing == current.
+    check("no trailing cutoff (indefinite window)",
+          c["trailing_cutoff"] is None and c["trailing_window_open"] is None, c)
+    check("trailing keeps the 10/9 and 10/20 conversions: equals current",
+          (f["players_trailing"], f["members_trailing"]) == (f["players"], f["members"]), f)
+    check("CPP / CPMem trailing equal current",
+          (cost["cpp_trailing"], cost["cpmem_trailing"]) == (cost["cpp"], cost["cpmem"]), cost)
+    check("stats declare the indefinite window",
+          campaigns.TRAILING_DAYS is None and "indefinitely" in st["definitions"]["trailing"],
+          st.get("definitions", {}).get("trailing"))
     ch = c["chapters"]
     check("per-chapter split present", set(ch) >= {"San Antonio", "Austin", "unrouted"}, list(ch))
     check("SA players 3 members 2", (ch["San Antonio"]["players"], ch["San Antonio"]["members"]) == (3, 2), ch["San Antonio"])
@@ -592,7 +597,7 @@ def main():
     print("Closed window + converted_at stamp")
     st = campaigns.campaign_stats(db_path, today="2026-10-30", gap_fill_seconds=0)
     c = st["campaigns"][0]
-    check("window closed after 10/6", c["trailing_window_open"] is False, c["trailing_window_open"])
+    check("still no window on 10/30 (indefinite)", c["trailing_window_open"] is None, c["trailing_window_open"])
     with db._connect(db_path) as conn:
         nid = plant(conn, "Fresh", "Austin", "touched", None, META)
         conn.commit()
