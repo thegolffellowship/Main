@@ -368,8 +368,11 @@ def fetch_email_by_subject(
         return None
     headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
     url = f"{GRAPH_BASE}/users/{email_address}/messages"
+    # Graph requires every $orderby property to appear in $filter, so the
+    # date bound is there for the ordering, not to narrow the search.
     params = {
-        "$filter": "subject eq '" + subject.replace("'", "''") + "'",
+        "$filter": ("receivedDateTime ge 2020-01-01T00:00:00Z and subject eq '"
+                    + subject.replace("'", "''") + "'"),
         "$select": "id,subject,from,receivedDateTime,body",
         "$orderby": "receivedDateTime desc",
         "$top": "1",

@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.356.1";
+window.TGF_VERSION = "2.356.2";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.356.2",
+    date: "2026-09-09",
+    changes: [
+      "Subject lookup fix: Graph rejects an $orderby on a property that is not also in $filter, so the v2.356.1 fallback errored silently and the 18 re-keyed emails stayed unfetchable. The filter now carries a receivedDateTime bound alongside the subject.",
+    ],
+  },
   {
     version: "2.356.1",
     date: "2026-09-09",
