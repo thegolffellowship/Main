@@ -43607,12 +43607,82 @@ def resolve_player_status(item, conn=None, db_path=None) -> str:
             if cps == "first_timer":
                 return "1ST TIMER"
         if isinstance(item, dict):
-            return (item.get("user_status") or "").strip()
+            us = (item.get("user_status") or "").strip()
+            # The MEMBER box on an event order is a claim, not a purchase
+            # (Kerry 2026-09-09, Kyle Compton). Without a membership item
+            # on record the fallback reads GUEST.
+            if us.upper().startswith("MEMBER") and not _has_membership_purchase(conn, cid, item):
+                return "GUEST"
+            return us
         return ""
     finally:
         if owns:
             try: conn.close()
             except Exception: pass
+
+
+def _has_membership_purchase(conn, cid, item) -> bool:
+    """Any active TGF MEMBERSHIP item for this customer (by id, else by
+    the order's email)."""
+    try:
+        if cid:
+            r = conn.execute(
+                """SELECT 1 FROM items WHERE customer_id = ?
+                     AND UPPER(COALESCE(item_name,'')) LIKE '%MEMBERSHIP%'
+                     AND COALESCE(transaction_status,'active') = 'active' LIMIT 1""",
+                (cid,)).fetchone()
+            if r:
+                return True
+        em = ((item.get("customer_email") if isinstance(item, dict) else None) or "").strip().lower()
+        if em:
+            r = conn.execute(
+                """SELECT 1 FROM items WHERE LOWER(COALESCE(customer_email,'')) = ?
+                     AND UPPER(COALESCE(item_name,'')) LIKE '%MEMBERSHIP%'
+                     AND COALESCE(transaction_status,'active') = 'active' LIMIT 1""",
+                (em,)).fetchone()
+            return bool(r)
+    except Exception:
+        return True   # never demote on a read error
+    return False
+
+
+def member_rate_without_membership(db_path: str | Path | None = None,
+                                   since: str = "2026-01-01") -> dict:
+    """Customers who paid the MEMBER rate on an event order since `since`
+    with no membership purchase on record and no member status — the
+    class Kerry named on Kyle Compton (2026-09-09). Read-only."""
+    with _connect(db_path) as conn:
+        rows = [dict(r) for r in conn.execute(
+            """SELECT i.customer_id, i.customer, LOWER(COALESCE(i.customer_email,'')) AS email,
+                      c.current_player_status AS status,
+                      COUNT(*) AS member_rate_orders, MIN(i.order_date) AS first_order,
+                      MAX(i.order_date) AS last_order,
+                      GROUP_CONCAT(i.item_name, ' | ') AS items
+               FROM items i
+               LEFT JOIN customers c ON c.customer_id = i.customer_id
+               WHERE i.merchant = 'The Golf Fellowship'
+                 AND COALESCE(i.transaction_status,'active') = 'active'
+                 AND UPPER(COALESCE(i.user_status,'')) LIKE 'MEMBER%'
+                 AND substr(COALESCE(i.order_date,''),1,10) >= ?
+                 AND COALESCE(c.current_player_status,'') NOT IN ('active_member','member_plus')
+                 AND NOT EXISTS (
+                     SELECT 1 FROM items m
+                     WHERE UPPER(COALESCE(m.item_name,'')) LIKE '%MEMBERSHIP%'
+                       AND COALESCE(m.transaction_status,'active') = 'active'
+                       AND ((i.customer_id IS NOT NULL AND m.customer_id = i.customer_id)
+                            OR (i.customer_email IS NOT NULL AND i.customer_email != ''
+                                AND LOWER(m.customer_email) = LOWER(i.customer_email))))
+                 AND NOT EXISTS (
+                     SELECT 1 FROM customer_roles r
+                     WHERE r.customer_id = i.customer_id
+                       AND r.role_type IN ('manager','owner','admin'))
+               GROUP BY COALESCE(i.customer_id, i.customer)
+               ORDER BY last_order DESC""", (since,))]
+    return {"since": since, "customers": len(rows),
+            "note": ("MEMBER ticked on an event order, no membership bought, no member "
+                     "status on record. They paid the member rate; the badge now reads "
+                     "GUEST with a MEMBER RATE chip."),
+            "rows": rows}
 
 
 def heal_items_from_customers(db_path: str | Path | None = None) -> dict:

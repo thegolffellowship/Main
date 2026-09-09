@@ -1216,3 +1216,19 @@ Bridge: `scoring-contact-alias:<customer_id>|<phone|email>|<value>[|note]`,
 `scoring-contact-aliases[:<customer_id>]`. Route:
 `POST /api/parse-warnings/<id>/always-ignore`. Test:
 `test_contact_aliases.py`.
+
+
+## MEMBER is a purchase, not a checkbox (v2.360.0, Kerry 2026-09-09)
+
+Kerry on Kyle Compton: *"should not show MEMBER until he's purchased
+membership. He just signed up for an event at the Member's rate."* The
+Customers badge (`deriveStatus` in customers.html) used to bootstrap
+MEMBER from `items.user_status` — the status a player ticks on the
+order form. Now the badge is MEMBER only from a membership purchase, a
+member status on record (`customer_statuses` / `current_player_status`)
+or a leadership role. A customer who ticked MEMBER with no membership
+reads GUEST plus an orange **MEMBER RATE** chip (`memberRateFlag`), so
+the leak is visible. Server side, `resolve_player_status`'s fallback
+returns GUEST for the same shape (`_has_membership_purchase`), and
+`member_rate_without_membership()` / bridge `scoring-member-rate-check`
+lists everyone in that state since a date.

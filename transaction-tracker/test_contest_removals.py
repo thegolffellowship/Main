@@ -133,6 +133,34 @@ def main():
     check("|all sweeps the $75 row too and finds it clean",
           "uid-p" in calls and rep3["mismatches"] == [], (calls, rep3["mismatches"]))
 
+    print("A MEMBER box on an event order is not a membership (Kyle Compton)")
+    with db._connect(p) as conn:
+        conn.execute("INSERT INTO customers (customer_id, first_name, last_name, chapter) "
+                     "VALUES (902, 'Kyle', 'Compton', 'Austin')")
+        conn.execute(
+            "INSERT INTO items (id, email_uid, order_id, item_name, item_price, customer, "
+            " customer_id, customer_email, merchant, transaction_status, order_date, item_index, "
+            " user_status) VALUES (4001, 'uid-k', 'R189036014', 'a18.5 FOREST CREEK', '$143.00', "
+            " 'Kyle Compton', 902, 'kwcompton1969@gmail.com', 'The Golf Fellowship', 'active', "
+            " '2026-09-09', 0, 'MEMBER')")
+        conn.commit()
+        kyle = conn.execute("SELECT * FROM items WHERE id = 4001").fetchone()
+        st = db.resolve_player_status(dict(kyle), conn)
+    check("the server resolver reads GUEST, not MEMBER", st == "GUEST", st)
+    rep = db.member_rate_without_membership(db_path=p)
+    check("and the member-rate check lists him", any(r["customer"] == "Kyle Compton" for r in rep["rows"])
+          and rep["customers"] == 1, rep)
+    with db._connect(p) as conn:      # once he buys a membership, MEMBER
+        conn.execute(
+            "INSERT INTO items (id, email_uid, order_id, item_name, item_price, customer, "
+            " customer_id, customer_email, merchant, transaction_status, order_date, item_index) "
+            "VALUES (4002, 'uid-k2', 'R189036015', 'TGF MEMBERSHIP', '$50.00', 'Kyle Compton', 902, "
+            " 'kwcompton1969@gmail.com', 'The Golf Fellowship', 'active', '2026-09-10', 0)")
+        conn.commit()
+        st2 = db.resolve_player_status(dict(kyle), conn)
+    check("a membership purchase flips the fallback to MEMBER", st2 == "MEMBER", st2)
+    check("and clears him from the check", db.member_rate_without_membership(db_path=p)["customers"] == 0)
+
     os.unlink(p)
     print()
     print("ALL PASS" if not FAILS else f"{FAILS} FAILED")

@@ -1750,6 +1750,7 @@ def _scoring_dispatch(url: str, extract: str):
       scoring-membership-gap[:apply]  the membership gap group: booked vs today's decomposition by price/type/contests; apply rebooks membership rows only
       scoring-import-orders:<from>|<to>[|apply][|membership-only]  date-range import of "New Order" emails from the mailbox (dry-run counts; apply runs in the background, no member email)
       scoring-import-status        progress of the running/last import
+      scoring-member-rate-check[:<since>]  customers who paid the MEMBER rate on an event with no membership purchase and no member status (Kerry 2026-09-09, Kyle Compton)
       scoring-contest-flags-audit[:apply][|all]  memberships not at $50/$75 (|all = every one) + SEASON CONTESTS items: stored contest flags vs the option lines printed on the order email (Graph fetch, no AI); apply writes the form's answers
       scoring-mp-reconcile75[:<season>|<chapter>|<allow>]  match-play reconcile
                                    with off-lowest per-chapter allowance
@@ -2449,6 +2450,9 @@ def _scoring_dispatch(url: str, extract: str):
         if cmd == "scoring-import-status":
             from email_parser.order_import import status
             return json.dumps(status(), indent=2, default=str)
+        if cmd == "scoring-member-rate-check":
+            _since = arg.strip()[:10] if arg.strip() else "2026-01-01"
+            return json.dumps(db.member_rate_without_membership(since=_since), indent=2, default=str)
         if cmd == "scoring-contest-flags-audit":
             # Kerry 2026-09-09: sweep every membership that is not a plain
             # $50 / $75 for contest add-ons against the ORDER EMAIL.

@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.359.0";
+window.TGF_VERSION = "2.360.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.360.0",
+    date: "2026-09-09",
+    changes: [
+      "A MEMBER box on an event order is not a membership (Kerry 2026-09-09, Kyle Compton: 'should not show MEMBER until he's purchased membership. He just signed up for an event at the Member's rate'). The Customers badge bootstrapped MEMBER from the status a player ticked on an order form; now only a membership purchase, a member status on record, or a leadership role makes MEMBER. A customer who ticked MEMBER with no membership on record reads GUEST with an orange MEMBER RATE chip — the revenue leak shown, not hidden. The server-side resolver (event rosters, previews) reads the same way, and `scoring-member-rate-check[:<since>]` lists everyone in that state.",
+      "2025 membership import applied (membership-only, Aug 1 – Dec 28 2025): 9 orders found among 458 in the window, 9 parsed and saved, no errors, member notices suppressed on the two terms the membership module created. LSC shirt fund 2026 now counts 117 memberships ($1,170), history from 2025-08-09. One 2025 price the table does not know: Joshua Bartz $150 New + Fall (R208580086) — Kerry warned 2025 breakdowns may differ.",
+    ],
+  },
   {
     version: "2.359.0",
     date: "2026-09-09",

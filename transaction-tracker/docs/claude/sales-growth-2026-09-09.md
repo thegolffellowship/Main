@@ -384,6 +384,20 @@ the three refunded Match Play entries book $50 each with the Venmo
 refunds only in the removals table / expense feed, so the Match Play
 pool reads $120 high.
 
+## Round five (v2.357–v2.360): the 2025 import, the ROI jump, Kyle Compton
+
+Date-range import built (`scoring-import-orders`, background, member
+notices suppressed, de-dup by order number). Preview Aug 1 – Dec 28
+2025: 458 orders, 9 memberships (Aug 4, Sep 5), none in the Tracker.
+Applied membership-only: 9 saved, 0 errors; 2026 shirt fund 108 → 117.
+Bartz $150 New + Fall (R208580086) does not fit today's table — the
+first 2025 breakdown question. Event orders (449) wait for the events
+phase. ROI jump 177.78 → 228.74 (campaign-only): Wade Lewis's $100
+membership (+44.20) and Hector Hinojosa's −6.76 Silverhorn row leaving
+the campaign bucket; the All view (233.40) adds the two organic Forest
+Creek walk-ins. Kyle Compton: MEMBER badge came from the order-form
+checkbox; now a purchase, a status on record or a role only.
+
 ## Kerry decisions this lane is waiting on
 
 - ~~The three prices the table does not know~~ — RESOLVED v2.355.0:
