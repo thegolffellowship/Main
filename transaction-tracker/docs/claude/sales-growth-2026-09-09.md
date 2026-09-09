@@ -398,6 +398,40 @@ the campaign bucket; the All view (233.40) adds the two organic Forest
 Creek walk-ins. Kyle Compton: MEMBER badge came from the order-form
 checkbox; now a purchase, a status on record or a role only.
 
+## Round six: all of 2025's memberships are in (v2.361.1)
+
+Kerry: *"Go ahead and import the remaining 2025 memberships."* Jan 1 –
+Jul 31 2025, membership-only: 659 orders in the window, 71 memberships,
+71 parsed, 79 items saved (8 event items rode along in the same orders;
+6 past-event rows created by the auto-sync), 0 errors, 23 season-2025
+contest enrollments, notices suppressed on 8 terms + 7 later terms.
+Shirt fund by Cup year: 2025 = 71 ($710), 2026 = 117 ($1,170), 2027 =
+10 ($100). Membership rebook applied: 198 rows, 72 changed, margin
+$6,413 → $9,567, tax reserve $529 → $790 (2025 months, all filed).
+Contest-flags audit 67/67 clean. **2025 breakdowns differ (Kerry
+warned):** 8 price groups / 11 rows do not fit today's table — $250
+Returning NET+MATCH (Dyal, Sharitz), $150 NET (Jackman New, Martinez
+Returning), $175 Returning NET (W. Fieber), $200 New GROSS+MATCH
+(Henderson), $225 Returning NET+GROSS (Lieck), $250 New all three
+(Stich), $300 Returning all three (Ellis). Booked at nearest fit until
+Kerry gives the 2025 table — one at a time.
+
+Bartz $150 (8/30/2025) = New at the $25-off promo + Fall Points Race +
+**Fall Match Play** (a 2025 field the regex now reads); fits. Kerry is
+"pretty sure" the Match Play was refunded in 2026 — no Venmo refund to
+Bartz in the 2026 feed (only winnings and event differences), so the
+refund, if made, was not by Venmo.
+
+Hector Hinojosa: lead 65 (HubSpot, no campaign id) was never in the
+campaign bucket — my "left the campaign" reading in #441 was wrong. The
+ROI jump 177.78 → 233.40 on the All view = Wade Lewis's membership
+(+44.20) + Hightower and Hammond's Forest Creek rows (+5.71 each).
+
+Member-rate check after the import: 20 → 11 (Booker, Cedillo, Walter,
+Taft, Perry, Dyal, Newman, Carter, Aronberg now carry 2025
+memberships). Kerry: Vazquez, Aken, Cordero were members before 2025
+(Aken won a free membership) — pre-Tracker, needs a status on record.
+
 ## Kerry decisions this lane is waiting on
 
 - ~~The three prices the table does not know~~ — RESOLVED v2.355.0:
