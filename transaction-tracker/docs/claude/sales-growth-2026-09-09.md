@@ -361,6 +361,21 @@ own three-field list and missed it — one hard-coded list in one
 function. Liabilities: not on any page; only the bridge read — Finance
 lane prompt written (`session-prompt-financial-audit.md`).
 
+## Round four (v2.355.0 → v2.356.0): the four misfits, and what they taught
+
+All four were the ORDER EMAIL's option lines, not prices of the day.
+Campos / Cheshire / Lourigan: "Add CITY Match Play?: YES"; Miller:
+"Add FALL Points Race?: YES" read as NET (the 2026 NET race was $90,
+Kerry). Kerry then: *"I refunded all three of them ... they WERE
+transactions but they were refunded. 2026 Match Play is long since
+over ... You should see that in the history somewhere."* It was there
+(`season_contest_removals`: $40 / $51.75 / $50 Venmo) and the sync had
+never read it, so v2.355.0's flag restore re-created the three
+enrollments. v2.356.0: removed stays removed (sync skips + heals),
+removals keep the purchase flag, `scoring-contest-flags-audit` sweeps
+every off-table membership against its email. Miller moved to the
+Fall race by hand (net NO, fall YES).
+
 ## Kerry decisions this lane is waiting on
 
 - ~~The three prices the table does not know~~ — RESOLVED v2.355.0:

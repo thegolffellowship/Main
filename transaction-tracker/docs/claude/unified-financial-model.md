@@ -466,7 +466,17 @@ reads those option lines deterministically (`contest_flags_from_body`
 in parser.py) and the three Match Play rows were corrected and rebooked
 (+$30 margin, +$120 pool). Lesson for the class: a membership that does
 not decompose to its price is a flag miss until proven otherwise —
-check the source email before asking Kerry.
+check the source email before asking Kerry. Second lesson (v2.356.0):
+one of the four (Campos) was not a parser miss but the REMOVAL routine
+erasing the flag when Kerry refunded the entry; the other two had been
+refunded too. Now: the purchase flag stays true to the order, the
+removal record (`season_contest_removals`, with refund amount/method)
+is the history, and the sync honors it (removed stays removed). OPEN
+for the Finance lane: contest refunds paid by Venmo post to the expense
+feed and the removals table, not as contra rows against the contest
+pool, so a refunded entry's $50 still reads as markup + pool in
+`acct_allocations` — the pool is $120 high for the three 2026 Match
+Play refunds until refunds post against the bucket they came from.
 
 ## Membership set-asides
 

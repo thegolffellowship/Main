@@ -1748,6 +1748,7 @@ def _scoring_dispatch(url: str, extract: str):
       scoring-margin-gaps[:<limit>]  pre-cutover events: booked vs residual-would-book, with reasons (measure-only)
       scoring-liabilities          payouts owed, credits held, LSC shirt fund by Cup year, HIO pot, tax reserve by month
       scoring-membership-gap[:apply]  the membership gap group: booked vs today's decomposition by price/type/contests; apply rebooks membership rows only
+      scoring-contest-flags-audit[:apply][|all]  memberships not at $50/$75 (|all = every one) + SEASON CONTESTS items: stored contest flags vs the option lines printed on the order email (Graph fetch, no AI); apply writes the form's answers
       scoring-mp-reconcile75[:<season>|<chapter>|<allow>]  match-play reconcile
                                    with off-lowest per-chapter allowance
       scoring-mp-lock-one:<chapter>|<A>|<B>[|apply]  manually lock one
@@ -2426,6 +2427,20 @@ def _scoring_dispatch(url: str, extract: str):
                 db.log_agent_action(
                     "mcp-claude", "scoring-membership-gap",
                     f"rebooked membership rows: {res.get('applied')}")
+            return json.dumps(res, indent=2, default=str)
+        if cmd == "scoring-contest-flags-audit":
+            # Kerry 2026-09-09: sweep every membership that is not a plain
+            # $50 / $75 for contest add-ons against the ORDER EMAIL.
+            from email_parser.contest_flags import contest_flags_audit
+            _parts = [x.strip().lower() for x in arg.split("|") if x.strip()]
+            _apply = "apply" in _parts
+            _all = "all" in _parts
+            res = contest_flags_audit(apply=_apply, all_rows=_all)
+            if _apply:
+                db.log_agent_action(
+                    "mcp-claude", "scoring-contest-flags-audit",
+                    f"applied {res.get('applied')} flag corrections: "
+                    f"{[m['order_id'] for m in res.get('mismatches', [])]}")
             return json.dumps(res, indent=2, default=str)
         if cmd == "scoring-liabilities":
             # What TGF is holding for someone else or has earmarked:

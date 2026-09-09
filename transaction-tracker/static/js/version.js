@@ -1,5 +1,15 @@
-window.TGF_VERSION = "2.355.0";
+window.TGF_VERSION = "2.356.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.356.0",
+    date: "2026-09-09",
+    changes: [
+      "REMOVED STAYS REMOVED. Kerry on Campos, Cheshire and Lourigan: 'I refunded all three of them for those entries ... So they WERE transactions but they were refunded. 2026 Match Play is long since over ... You should see that in the history somewhere.' The history was there — season_contest_removals holds all three (Campos $40 Venmo 7/19, Cheshire $51.75 Venmo 6/23, Lourigan $50 Venmo 5/26) — but the enrollment sync never read it, so restoring their purchase flags from the order emails (v2.355.0) re-created the three enrollments Kerry had removed. The sync now skips any purchase covered by a later removal, heals enrollments an earlier sync re-created, and a purchase dated after the removal still enrolls as a new decision. This deploy's boot sync drops the three.",
+      "Removing an enrollment no longer erases the contest flag on the purchase. That erasure (the 2026-09-02 Hammond fix) is why Campos's $125 read as a $75 membership with $50 unaccounted: the books could not say what was sold. The purchase flag now stays true to the order and the removal record carries the refund; the sync's removal check does the job the erasure used to do.",
+      "New sweep Kerry asked for: `scoring-contest-flags-audit[:apply][|all]` — every membership that is not a plain $50 / $75 (or every one with |all) plus every SEASON CONTESTS item is checked against the option lines printed on its ORDER EMAIL (Graph fetch, no AI): stored NET / GROSS / Match Play / FALL flags vs the form's YES/NO. Dry-run reports; apply writes the form's answers. Miller's order (Fall yes, NET no) fixed by hand ahead of it; the 2026 NET Points Race was $90, so $125 could never have been NET.",
+      "Open for the Finance lane: the three refunded Match Play entries now book their $50 in full (contest markup + pool) and the Venmo refunds live only in the removals table and expense feed, not as contra rows against the contest pool — the pool reads $120 high until refunds post against the bucket they came from.",
+    ],
+  },
   {
     version: "2.355.0",
     date: "2026-09-09",

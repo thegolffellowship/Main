@@ -34183,34 +34183,26 @@ def remove_season_contest_enrollment(enrollment_id: int,
                                      db_path: str | Path | None = None) -> dict | None:
     """Remove an enrollment AND record the removal in season_contest_removals.
 
-    One transaction does all three steps so a removal can never half-apply:
+    One transaction does both steps so a removal can never half-apply:
       1. snapshot the enrollment into season_contest_removals (the permanent
          recordation the Enrollment tab lists at the bottom),
-      2. clear the matching contest flag on the source purchase item so the
-         next sync doesn't silently re-enroll the player,
-      3. delete the enrollment row.
+      2. delete the enrollment row.
+
+    The purchase flag on the source item is LEFT ALONE (v2.356.0, Kerry
+    2026-09-09: "they WERE transactions but they were refunded"). Until
+    now this cleared it, which made the money vanish from the membership
+    decomposition (a $125 Returning + Match Play read as $75 with $50
+    unaccounted) and left the books unable to say what was sold. The
+    sync honors the removal record instead (removed stays removed), so
+    the flag can stay true to the order.
 
     Returns the removal record dict, or None if the enrollment id doesn't
     exist. removed_at is stamped in US/Central (user-facing business date).
     """
-    flag_cols = {
-        "NET Points Race": "net_points_race",
-        "GROSS Points Race": "gross_points_race",
-        "City Match Play": "city_match_play",
-    }
     with _connect(db_path) as conn:
         row = conn.execute(
             "SELECT * FROM season_contests WHERE id = ?", (enrollment_id,)
         ).fetchone()
-        # FALL enrollments share contest_type 'NET Points Race' but are
-        # sourced from items.fall_net_points_race — clearing the
-        # main-season column would leave the fall flag set and the next
-        # sync would silently re-enroll (the Scott Hammond loop, Kerry
-        # 2026-09-02: refunded 8/26, still showing enrolled 9/2).
-        if row and (row["season"] or "").endswith("Fall") \
-                and row["contest_type"] == "NET Points Race":
-            flag_cols = dict(flag_cols)
-            flag_cols["NET Points Race"] = "fall_net_points_race"
         if not row:
             return None
         row = dict(row)
@@ -34229,17 +34221,6 @@ def remove_season_contest_enrollment(enrollment_id: int,
              (refund_method or "").strip() or None,
              (note or "").strip() or None),
         )
-        flag_col = flag_cols.get(row["contest_type"])
-        if flag_col and row.get("source_item_id"):
-            conn.execute(
-                f"UPDATE items SET {flag_col} = NULL WHERE id = ?",
-                (row["source_item_id"],),
-            )
-            logger.info(
-                "Season contest unenroll: cleared %s on item %s (%s, %s)",
-                flag_col, row["source_item_id"], row["customer_name"],
-                row["contest_type"],
-            )
         conn.execute("DELETE FROM season_contests WHERE id = ?", (enrollment_id,))
         conn.commit()
         removal = conn.execute(
@@ -35067,11 +35048,37 @@ def sync_season_contests_from_items(db_path: str | Path | None = None) -> dict:
     enrolled = 0
     linked = 0
     deduped = 0
+    skipped_removed = 0
+    healed_removed = 0
     cust_by_id: dict[int, dict] = {}
+    # REMOVED STAYS REMOVED (Kerry 2026-09-09). A removal recorded through
+    # the Enrollment tab (season_contest_removals: who, when, why, refund)
+    # is the record of a decision; the sync must never re-create the
+    # enrollment from the purchase flag. Three refunded 2026 Match Play
+    # entries (Campos, Cheshire, Lourigan) came back the moment their
+    # flags were restored from the order emails, because nothing here
+    # looked at the removals. A purchase dated AFTER the removal is a new
+    # decision and enrolls normally.
+    removed: dict = {}
+
+    def _removed_after(customer_id, customer, contest_type, season, order_date):
+        rem = None
+        if customer_id is not None:
+            rem = removed.get(("id", customer_id, contest_type, season or ""))
+        if rem is None:
+            rem = removed.get(("name", (customer or "").strip().lower(),
+                               contest_type, season or ""))
+        if not rem:
+            return False
+        od = (order_date or "")[:10]
+        return (not od) or od <= rem[:10]
 
     def _upsert(conn, customer, contest_type, chapter, season, item_id,
-                customer_id=None):
-        nonlocal enrolled, linked
+                customer_id=None, order_date=None):
+        nonlocal enrolled, linked, skipped_removed
+        if _removed_after(customer_id, customer, contest_type, season, order_date):
+            skipped_removed += 1
+            return
         if not (customer or "").strip() or customer.strip() == "(Unknown)":
             # A source item with a blank/placeholder customer must not create
             # a ghost enrollment row (an empty or '(Unknown)' CUSTOMER cell
@@ -35177,6 +35184,22 @@ def sync_season_contests_from_items(db_path: str | Path | None = None) -> dict:
                 "chapter": r["chapter"] or "",
             }
 
+        try:
+            for r in conn.execute(
+                    """SELECT customer_id, customer_name, contest_type, season,
+                              MAX(removed_at) AS removed_at
+                       FROM season_contest_removals
+                       GROUP BY customer_id, LOWER(customer_name), contest_type, season"""):
+                ra = r["removed_at"] or ""
+                if r["customer_id"] is not None:
+                    k = ("id", r["customer_id"], r["contest_type"], r["season"] or "")
+                    removed[k] = max(removed.get(k, ""), ra)
+                k = ("name", (r["customer_name"] or "").strip().lower(),
+                     r["contest_type"], r["season"] or "")
+                removed[k] = max(removed.get(k, ""), ra)
+        except sqlite3.OperationalError:
+            removed = {}
+
         rows = conn.execute(
             """SELECT id, customer, customer_id, net_points_race, gross_points_race,
                       city_match_play, fall_net_points_race, item_name, order_date
@@ -35207,11 +35230,11 @@ def sync_season_contests_from_items(db_path: str | Path | None = None) -> dict:
 
             if _is_contest_product:
                 if (row.get("net_points_race") or "").upper() == "YES":
-                    _upsert(conn, customer, "NET Points Race", chapter, season, item_id, cid)
+                    _upsert(conn, customer, "NET Points Race", chapter, season, item_id, cid, order_date)
                 if (row.get("gross_points_race") or "").upper() == "YES":
-                    _upsert(conn, customer, "GROSS Points Race", chapter, season, item_id, cid)
+                    _upsert(conn, customer, "GROSS Points Race", chapter, season, item_id, cid, order_date)
                 if (row.get("city_match_play") or "").upper() == "YES":
-                    _upsert(conn, customer, "City Match Play", chapter, season, item_id, cid)
+                    _upsert(conn, customer, "City Match Play", chapter, season, item_id, cid, order_date)
             # FALL NET began as a $50 option under the umbrella SEASON
             # CONTESTS product (Kerry, 2026-07-10) and is now ALSO sold on
             # Fall event orders (Kerry, 2026-08-19 — e.g. FALL KICKOFF |
@@ -35232,7 +35255,7 @@ def sync_season_contests_from_items(db_path: str | Path | None = None) -> dict:
                     elif "AUSTIN" in _fsuffix:
                         fall_chapter = "Austin"
                 _upsert(conn, customer, "NET Points Race", fall_chapter,
-                        f"{season} Fall", item_id, cid)
+                        f"{season} Fall", item_id, cid, order_date)
 
         # Handle standalone "SEASON CONTESTS" items (fallback for items where the parser
         # didn't populate the individual flag fields).
@@ -35278,7 +35301,7 @@ def sync_season_contests_from_items(db_path: str | Path | None = None) -> dict:
                 contests_to_enroll.add("City Match Play")
 
             for ct in contests_to_enroll:
-                _upsert(conn, customer, ct, chapter, season, item_id, cid)
+                _upsert(conn, customer, ct, chapter, season, item_id, cid, order_date)
 
             # Stamp item flags so customer profile badges reflect the purchase.
             if contests_to_enroll:
@@ -35317,6 +35340,26 @@ def sync_season_contests_from_items(db_path: str | Path | None = None) -> dict:
                      AND UPPER(COALESCE(fall_net_points_race, '')) NOT LIKE 'YES%'
                )"""
         )
+
+        # HEAL: an auto-synced enrollment that a recorded removal covers
+        # (removed on or after the purchase date) was re-created by an
+        # earlier sync that did not read the removals. Delete it; the
+        # removal record stays the history.
+        if removed:
+            for sc in conn.execute(
+                    """SELECT sc.id, sc.customer_id, sc.customer_name, sc.contest_type,
+                              sc.season, sc.enrolled_at, i.order_date
+                       FROM season_contests sc
+                       LEFT JOIN items i ON i.id = sc.source_item_id
+                       WHERE COALESCE(sc.manually_enrolled, 0) = 0""").fetchall():
+                od = (sc["order_date"] or sc["enrolled_at"] or "")
+                if _removed_after(sc["customer_id"], sc["customer_name"],
+                                  sc["contest_type"], sc["season"], od):
+                    conn.execute("DELETE FROM season_contests WHERE id = ?", (sc["id"],))
+                    healed_removed += 1
+                    logger.info("Season contest sync: removed stays removed — dropped "
+                                "re-created enrollment %s (%s, %s %s)", sc["id"],
+                                sc["customer_name"], sc["contest_type"], sc["season"])
 
         # Backfill customer_id BEFORE reconciliation so rows that were never linked
         # (e.g. Eduardo Melchor sourced from a NULL source_item_id) get resolved and
@@ -35525,7 +35568,8 @@ def sync_season_contests_from_items(db_path: str | Path | None = None) -> dict:
             "these inflated the 'new enrollments' count", deduped,
         )
     logger.info("Season contest sync: %d new enrollments, %d payments linked", enrolled, linked)
-    return {"enrolled": enrolled, "linked": linked}
+    return {"enrolled": enrolled, "linked": linked,
+            "skipped_removed": skipped_removed, "healed_removed": healed_removed}
 
 
 # ---------------------------------------------------------------------------
