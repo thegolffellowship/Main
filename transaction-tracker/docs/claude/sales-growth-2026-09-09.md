@@ -279,7 +279,66 @@ Leads Ad."* Map:
 - **Now:** Hightower and Hammond added by hand as the first two rows once
   Kerry says go.
 
+## Kerry's evening round of questions, answered and shipped — v2.352.0
+
+Kerry, on the new table and the liabilities read:
+
+- *"Lone Star Cup isn't in July. The Cup is typically in October of
+  that July. That's the point. To allow time to order shirts with what
+  was collected prior to City & TGF Championships as the funding
+  source."* — The mapping (Aug–Jul window → that year's Cup) was right;
+  the WORDING "that July's Cup" was wrong. Fixed in `lsc_fund_year`,
+  the liabilities rule text, the docs and CLAUDE.md.
+- *"Left align BOUGHT and DATE columns and adjust width automatically
+  to widest. Change BOUGHT to ITEMS."* — Done (`.ld-margintbl`, first
+  three columns left, nowrap, 1% width so they take their content).
+- *"Shouldn't minus margins be minus sales tax too? ... Comptroller only
+  asks for Total Sales and Total Taxable Sales for the month, not the
+  per transaction breakdown. So in my mind, that seems like something
+  that should reduce my Total Taxable Sales amount."* — RULING:
+  tax_reserve is signed per row; the month nets and floors at zero.
+  Supersedes the 9/5 per-row floor (#420). Per-row floor removed at
+  both allocation sites; `liability_buckets` carries
+  `tax_reserve_signed_sum` beside the floored `tax_reserve`.
+  Applied on production with `scoring-margin-rebook:2026-08-27|apply`:
+  94 rows, 14 restamped (all 1st-Timer loss-leader rows on s9.21
+  Canyon Springs, a9.21 Star Ranch, s9.22 Silverhorn, a9.22 ShadowGlen,
+  s9.23 Quarry), margin unchanged, tax reserve −$5.59 (Aug −$2.05 →
+  $141.43 due 9/20; Sep −$3.54 → $57.91). Open total $199.34.
+- *"are you only able to track memberships from January this year?"* —
+  Tracker order history begins 2025-12-29 (`records_from` now on the
+  read). The 2026 fund's 108 is a FLOOR; Aug–Dec 2025 memberships need
+  a source (GoDaddy order export or the HubSpot archive).
+- *"Shirt fund 2027 is including some that are renewals at $75 right?"*
+  — Yes: 9 rows since 8/1 = 7 New (incl. Kannon Brown at $100) + 2
+  Returning at $75 (Joshua Bartz, Andy Sanford). All memberships fund
+  shirts.
+- *"What do you mean that the shirt purchases aren't tagged to the fund
+  yet? Are you talking about our liability accounts for shirts, Hole In
+  One Pot, etc.?"* — Yes. The read shows inflows only; the expense side
+  (shirt orders) is not linked, so there is no BALANCE. Each earmark
+  needs both sides against one bucket: prize pools → payouts, HIO pot,
+  shirt fund by Cup year, credits, LSC deposits, tax reserve. HIO pot
+  is not yet in `scoring-liabilities` (it lives in `scoring-hio-pot`)
+  — to add.
+- *"as opposed to what with Hightower and Hammond?"* — As opposed to
+  waiting for the automatic walk-in capture to be built. They are in
+  now: leads 133 (Geoff Hightower) and 134 (Zac Hammond), source
+  organic, Austin.
+- *"We'll need to address the GAPS one at a time"* — agreed; nothing
+  pushed until Kerry picks the first group. Recommendation: memberships
+  (largest swing; also the shirt-fund input).
+
+Mailbox **#436** carries all of it for CA.
+
 ## Kerry decisions this lane is waiting on
+
+- **Which gap group first** (recommend memberships).
+- **HIO pot into the liabilities read** + expense tagging to the
+  earmark buckets (the "balance" side) — scope with CA's chart of
+  accounts.
+- **Automatic walk-in 1st-Timer capture** (#435 §6 design) — build or
+  not.
 
 - **Round two of the lead campaign** — the biggest lever on the board.
   Creative, budget, dates. Every day dark is ~13 leads at $1.55 not
@@ -302,7 +361,7 @@ question. `lead_email_subjects` unratified.
 
 ## Sources read this session
 
-Mailbox #353–#431 (highest id 431); `docs/claude/leads.md`,
+Mailbox #353–#436 (highest id 436); `docs/claude/leads.md`,
 `TGF_Tracker_LeadCenter_Context_v1_0.md`,
 `hubspot-decommission-directive.md`,
 `Update_Fragment_2026-09-03_Data_Safety_and_HubSpot_Exit.md`,
