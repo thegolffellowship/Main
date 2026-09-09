@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.347.0";
+window.TGF_VERSION = "2.347.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.347.1",
+    date: "2026-09-09",
+    changes: [
+      "Documentation only. There is now a written routine for closing out an event \u2014 scorecards in, the final Golf Genius pairings ingested, payouts verified AND paid, handicap differentials posted, updated handicap cards emailed to the players who played, contests synced, financial summary, recap. The phases are dependency-ordered because several steps silently produce nothing useful if run early.",
+      "The routine exists because of what it catches: on 2026-09-08 the final GG pairings for the August SA Championship and both TGF Championship rounds had never been ingested. 135 pairs of history the pairing generator had been running without, for weeks, with nothing to indicate a step had been missed.",
+      "Also a start-here prompt for the next session, naming the two events from 2026-09-08 that are not closed out and the open queue in priority order.",
+    ],
+  },
   {
     version: "2.347.0",
     date: "2026-09-08",
