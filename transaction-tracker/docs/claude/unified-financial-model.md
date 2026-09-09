@@ -100,6 +100,20 @@ PROJECTED PROFIT = Net Income - Total Expenses
   Transfer targets (`transferred_from_id IS NOT NULL`) are excluded.
 - **Refunds** are contra-revenue (deducted from Income), not expenses. They appear as
   negative child payment items (e.g., -$29 partial refund via Zelle).
+- **ONE ORDER, ONE FEE (v2.349.0, Kerry-ratified 2026-09-09).** The parser stamps the
+  ORDER's 3.5% fee into `items.transaction_fees` on EVERY item row of a multi-item
+  order — that field is an order-level number stored per item, never sum it across an
+  order. `email_parser/fee_splits.py` holds the one rule: the fee is recorded once per
+  order (the `acct_transactions` row), and every per-item share — the `transaction_fee`
+  split, the `merchant_fee` split, `acct_allocations.godaddy_fee` — is the order's fee
+  pro rata BY ITEM PRICE, to the cent (`prorate`, last non-zero item absorbs rounding).
+  Never an equal split. `order_fee_from_items` tells a stamp from real shares by which
+  reading lands nearer 3.5% of the item total. `fee_split_integrity` (in the audit
+  report and `scoring-fee-splits-check`) reports any order whose item rows do not add
+  back to its order row; `repair_multi_item_fee_splits` (`scoring-fee-splits-repair
+  [:apply]`) rewrote the rows written before this rule. Note `acct_transactions.amount`
+  means the DEPOSIT on writer-created rows but the CHARGED total on rows an older boot
+  repair touched — derive "charged" as `net_deposit + merchant_fee`, never from `amount`.
 
 ## Parser: item_price extraction
 - `item_price` must come from the **Subtotal** or **SKU line** in the GoDaddy email,

@@ -5072,6 +5072,11 @@ def init_db(db_path: str | Path | None = None) -> None:
                 allocation_status   TEXT DEFAULT 'pending'
                     CHECK(allocation_status IN ('pending', 'complete', 'needs_course_cost')),
                 notes               TEXT,
+                -- Money model (#420/#422). The ALTERs above that add these
+                -- to an EXISTING table run before this CREATE, so on a
+                -- FRESH database they no-op and the columns must be here.
+                discount_given      REAL DEFAULT 0,
+                lsc_shirt_fund      REAL DEFAULT 0,
                 created_at          TEXT DEFAULT (datetime('now')),
                 UNIQUE(order_id, item_id)
             )
@@ -22626,6 +22631,14 @@ def get_audit_report(db_path: str | Path | None = None) -> dict:
                 "pct": round(filled / total * 100, 1),
             }
 
+        # --- One order, one fee: do the item rows add back? (2026-09-09) --------
+        try:
+            from .fee_splits import fee_split_integrity
+            fee_splits = fee_split_integrity(conn)
+        except Exception:
+            logger.warning("fee split integrity check failed", exc_info=True)
+            fee_splits = {"ok": None, "error": "check failed — see logs"}
+
         # --- Rows missing critical fields ----------------------------------------
         problems = []
         for it in items:
@@ -22654,6 +22667,8 @@ def get_audit_report(db_path: str | Path | None = None) -> dict:
             "problems": problems,
             "problem_count": len(problems),
             "distributions": distributions,
+            # One order, one fee: item rows must add back to the order row.
+            "fee_splits": fee_splits,
         }
 
 
@@ -40387,12 +40402,18 @@ def calculate_order_allocation(order_id: str, db_path: str | Path | None = None)
         # Parse order total (once per order, from first item)
         order_total = _parse_dollar(items[0].get("total_amount"))
 
-        # GoDaddy fee: 2.9% + $0.30 per order (split evenly across items)
+        # GoDaddy fee: 2.9% + $0.30 per order, shared out BY ITEM PRICE
+        # (Kerry-ratified 2026-09-09 — the same basis as the order's
+        # splits, so the allocator and the ledger agree per item; an
+        # equal split gave a $58 round the same fee as a $120 one).
+        from .fee_splits import prorate as _prorate_fee
         gd_fee_total = round(order_total * 0.029 + 0.30, 2) if order_total else 0
-        gd_fee_per_item = round(gd_fee_total / len(items), 2) if items else 0
+        _gd_shares = _prorate_fee(
+            gd_fee_total, [_parse_dollar(i.get("item_price")) for i in items])
 
         results = []
-        for item in items:
+        for _k, item in enumerate(items):
+            gd_fee_per_item = _gd_shares[_k]
             item_name = item.get("item_name", "")
             is_membership = "MEMBERSHIP" in item_name.upper()
 
@@ -40542,24 +40563,35 @@ def _write_godaddy_order_entry(
         return None
 
     # ── Calculate order totals ───────────────────────────────────
-    total_item_prices = 0.0
-    total_tx_fees = 0.0
+    from .fee_splits import order_fee_from_items, prorate as _prorate
 
-    for item in items:
-        total_item_prices += _parse_dollar(item.get("item_price"))
-        total_tx_fees += _parse_dollar(item.get("transaction_fees"))
+    _prices = [_parse_dollar(item.get("item_price")) for item in items]
+    _tfs = [_parse_dollar(item.get("transaction_fees")) for item in items]
+    total_item_prices = sum(_prices)
+    # ONE ORDER, ONE FEE (Kerry-ratified 2026-09-09). The parser stamps
+    # the ORDER's 3.5% fee on every item row of a multi-item order, so
+    # summing the per-item field counts it once per item. Read the
+    # order's fee once, then share it out by item price; the shares add
+    # back to the order's fee to the cent. Single-item orders: unchanged.
+    order_fee = order_fee_from_items(_prices, _tfs)
+    total_tx_fees = order_fee
+    _fee_shares = _prorate(order_fee, _prices)
 
     # total_amount on each item row stores the FULL ORDER total (same value
     # on every item in the order).  Use it from the first item only; fall
-    # back to the sum of per-item prices + fees when it's missing/zero.
+    # back to the sum of per-item prices + the order fee when it's missing/zero.
     first_ta = _parse_dollar(items[0].get("total_amount"))
-    order_total = first_ta if first_ta > 0 else (total_item_prices + total_tx_fees)
+    order_total = first_ta if first_ta > 0 else (total_item_prices + order_fee)
 
     if order_total <= 0:
         return None
 
     merchant_fee_val = round(order_total * 0.029 + 0.30, 2)
     net_deposit_val = round(order_total - merchant_fee_val, 2)
+    # Same basis for the processor's side: by item price, summing to the
+    # order's merchant fee. (Previously weighted by price + stamped fee,
+    # which on a multi-item order weighted every item by the whole fee.)
+    _merchant_shares = _prorate(merchant_fee_val, _prices)
 
     # ── Determine shared event_name and customer ─────────────────
     event_names = list(dict.fromkeys(
@@ -40611,13 +40643,13 @@ def _write_godaddy_order_entry(
         return None
 
     # ── Create splits ────────────────────────────────────────────
-    for item in items:
+    for _k, item in enumerate(items):
         item_id = item.get("id")
         item_event = item.get("item_name") or event_name
         item_customer = item.get("customer") or customer_name
-        ip = _parse_dollar(item.get("item_price"))
-        tf = _parse_dollar(item.get("transaction_fees"))
-        item_total = ip + tf  # per-item contribution to order total
+        ip = _prices[_k]
+        tf = _fee_shares[_k]           # this item's share of the ORDER fee
+        item_merchant_fee = _merchant_shares[_k]
 
         # Registration income split
         if ip > 0:
@@ -40647,10 +40679,8 @@ def _write_godaddy_order_entry(
                 (txn_id, item_id, item_event, item_customer, -coupon_amt),
             )
 
-        # Merchant fee split (proportional by per-item contribution, negative = expense)
-        _sum_items = total_item_prices + total_tx_fees
-        if item_total > 0 and _sum_items > 0:
-            item_merchant_fee = round(merchant_fee_val * item_total / _sum_items, 2)
+        # Merchant fee split (this item's price-share of the order's fee, negative = expense)
+        if item_merchant_fee > 0:
             conn.execute(
                 """INSERT INTO godaddy_order_splits
                    (transaction_id, item_id, event_name, customer, split_type, amount)

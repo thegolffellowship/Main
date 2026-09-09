@@ -777,10 +777,11 @@ showed $10.92 of fee-in four times and a fee-net of +$33.90 against a
 true +$1.26. Read-side fix, same shape as `money_in`: when an order's
 fee rows all carry the same value, each item's `fee_in` is that fee
 apportioned by registration amount. Single-item orders and orders
-already pro-rated at write time are unchanged. **Held for
-ratification:** rewriting the split rows at the source (a migration
-of money records that Money Flow also reads — the same duplication is
-the RETAINED overstatement in mailbox #423 §2).
+already pro-rated at write time are unchanged. **Ratified and done
+(v2.349.0, same day):** the split rows are now written and repaired
+at the source — see `email_parser/fee_splits.py` and
+`unified-financial-model.md` → "ONE ORDER, ONE FEE". The read-side
+apportionment here stays as a no-op guard.
 
 **`margin_actual` deducts set-asides (v2.348.1).** `lsc_shirt_fund`
 ($10 per membership, #422) comes off ACTUALLY LEFT as it already came

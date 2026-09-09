@@ -1,5 +1,16 @@
-window.TGF_VERSION = "2.348.1";
+window.TGF_VERSION = "2.349.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.349.0",
+    date: "2026-09-09",
+    changes: [
+      "One order, one fee — and the item rows underneath must add back to it (Kerry-ratified 2026-09-09: 'it seems like you can go ahead, yes'). A multi-item GoDaddy order's 3.5% transaction fee was stamped on every item row and the GoDaddy merchant fee was split equally per item, so a $58 round carried the same fee as a $120 round and any report summing item rows counted the order's fee once per item. Both legs are now the order's fee shared out by item price, to the cent, in the splits writer and in the allocator — the same basis the campaign table already used for the deposit. The order-level row (what was charged, what GoDaddy kept, what was deposited) was right all along and is untouched. Single-item orders are unchanged.",
+      "The invariant is checked, not assumed. `fee_split_integrity` runs inside the data-quality audit (`get_data_quality_report` → `fee_splits`) and lists any order whose item rows do not sum to its order row; bridge `scoring-fee-splits-check` reads it on demand.",
+      "One-time repair for the rows written before today: `scoring-fee-splits-repair` (dry-run by default, `:apply` to write) rewrites the per-item transaction_fee and merchant_fee splits of every multi-item order to price-share and re-stamps the matching acct_allocations.godaddy_fee, reporting before/after totals per order and per month. Money Flow's RETAINED stops reading the stamped copies as a consequence (the ~$1,098 overstatement in mailbox #423 §2).",
+      "Found on the way: on a FRESH database the discount_given and lsc_shirt_fund columns were never created — the ALTER that adds them to an existing table ran before the CREATE TABLE, so a new install (and every test fixture that used init_db) had an allocator that could not write. The columns are now in the CREATE as well.",
+      "Tests: test_fee_splits.py (new, 40 checks incl. Will Wallace's real four-event order), test_margin_model.py, test_lead_campaigns.py.",
+    ],
+  },
   {
     version: "2.348.1",
     date: "2026-09-09",

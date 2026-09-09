@@ -1739,6 +1739,8 @@ def _scoring_dispatch(url: str, extract: str):
       scoring-hcp-import:<event>[|apply]  self-derive handicap rounds (WHS NDB)
                                    |apply also auto-emails the chapter recap
       scoring-hcp-recap:<event>    (re)send the chapter-manager recap email
+      scoring-fee-splits-check     one order, one fee: item rows add back to the order row?
+      scoring-fee-splits-repair[:apply]  pro-rate multi-item orders' fee rows by price (dry by default)
       scoring-mp-reconcile75[:<season>|<chapter>|<allow>]  match-play reconcile
                                    with off-lowest per-chapter allowance
       scoring-mp-lock-one:<chapter>|<A>|<B>[|apply]  manually lock one
@@ -2339,6 +2341,32 @@ def _scoring_dispatch(url: str, extract: str):
             if not res.get("error"):
                 db.log_agent_action("mcp-claude", "scoring-lead-unmerge",
                                     f"restored lead {arg.strip()}")
+            return json.dumps(res, indent=2, default=str)
+        if cmd == "scoring-fee-splits-check":
+            # ONE ORDER, ONE FEE (Kerry 2026-09-09): do every order's
+            # per-item fee rows add back to its order row? Read-only.
+            from email_parser.fee_splits import fee_split_integrity
+            with db._connect() as _c:
+                return json.dumps(fee_split_integrity(_c, limit=50),
+                                  indent=2, default=str)
+        if cmd == "scoring-fee-splits-repair":
+            # Rewrite multi-item orders' per-item fee rows to price-share
+            # (transaction_fee AND merchant_fee), re-stamp the matching
+            # acct_allocations.godaddy_fee. The order row is untouched.
+            # Dry-run unless ":apply". Ratified 2026-09-09. Audited.
+            from email_parser.fee_splits import repair_multi_item_fee_splits
+            _apply = arg.strip().lower() == "apply"
+            res = repair_multi_item_fee_splits(dry_run=not _apply)
+            if _apply:
+                db.log_agent_action(
+                    "mcp-claude", "scoring-fee-splits-repair",
+                    f"orders_changed={res.get('orders_changed')} "
+                    f"fee_in {res.get('fee_in_before')} -> {res.get('fee_in_after')} "
+                    f"alloc_restamped={res.get('allocations_restamped')}"[:200])
+            # The per-order row detail is large; keep the summary readable.
+            _orders = res.pop("orders", [])
+            res["orders_sample"] = _orders[:8]
+            res["orders_listed"] = len(_orders)
             return json.dumps(res, indent=2, default=str)
         if cmd == "scoring-backup-run":
             # Take a backup NOW: consistent snapshot -> gzip -> OneDrive
