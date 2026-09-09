@@ -114,6 +114,9 @@ PROJECTED PROFIT = Net Income - Total Expenses
   [:apply]`) rewrote the rows written before this rule. Note `acct_transactions.amount`
   means the DEPOSIT on writer-created rows but the CHARGED total on rows an older boot
   repair touched — derive "charged" as `net_deposit + merchant_fee`, never from `amount`.
+  And the order row can legitimately DIVERGE from its splits later (a refund or credit
+  adjusts the deposit; the splits stay as sold) — the integrity check lists those as
+  `diverged`, a separate class the fee repair never rewrites.
 
 ## Parser: item_price extraction
 - `item_price` must come from the **Subtotal** or **SKU line** in the GoDaddy email,

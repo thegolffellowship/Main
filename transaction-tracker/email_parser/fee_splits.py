@@ -90,7 +90,7 @@ def order_fee_from_items(prices: list[float], fees: list[float],
 
 def _order_rows(conn: sqlite3.Connection) -> list[dict]:
     """Every active GoDaddy order entry with its per-item splits folded
-    into one dict: {txn, order_id, amount, merchant_fee, items: {item_id:
+    into one dict: {txn, order_id, charged, merchant_fee, items: {item_id:
     {reg, fee, merchant, coupon}}}."""
     txns = conn.execute(
         """SELECT id, source_ref, merchant_fee, net_deposit
@@ -142,32 +142,48 @@ def _order_rows(conn: sqlite3.Connection) -> list[dict]:
     return [o for o in by_id.values() if o["items"]]
 
 
-def _order_fee_in(o: dict) -> float:
-    """What the customer paid in fee on this order: the order total
-    charged, less what the items themselves came to. The order row is
-    the truth; the item rows are what must agree with it."""
-    reg = sum(i["reg"] for i in o["items"].values())
-    coupon = sum(i["coupon"] for i in o["items"].values())
-    if o["charged"] is not None and o["charged"] > 0:
-        return round(o["charged"] - reg - coupon, 2)
-    # No deposit/fee recorded on the order row: read the item rows.
+def _item_fee_total(o: dict) -> float:
+    """The ORDER's transaction fee as its item rows carry it — stamped
+    once per item (the defect) or already shared out — decided by
+    `order_fee_from_items`. Read from the item rows on purpose: the
+    order row's deposit can legitimately drift from the item rows later
+    (a refund or credit adjusts what was deposited; the splits stay as
+    sold), so "charged minus registrations" is NOT the fee on those
+    orders. That divergence is reported separately, never "repaired"."""
     prices = [i["reg"] for i in o["items"].values()]
     fees = [i["fee"] for i in o["items"].values()]
     return order_fee_from_items(prices, fees)
 
 
+def _order_row_gap(o: dict, fee_total: float) -> float | None:
+    """How far the order row's charged total sits from what its item
+    rows add up to (registrations + fee + coupons). None when the order
+    row has no deposit/fee recorded. Non-zero means the order row and
+    its splits have diverged — a different class of problem from the
+    fee stamp, listed for a human, not rewritten by the repair."""
+    if o["charged"] is None:
+        return None
+    reg = sum(i["reg"] for i in o["items"].values())
+    coupon = sum(i["coupon"] for i in o["items"].values())
+    return round(o["charged"] - (reg + fee_total + coupon), 2)
+
+
 def fee_split_integrity(conn: sqlite3.Connection, limit: int = 25) -> dict:
-    """Do the item rows of every order add back to the order row?
-    Reported, never assumed. `offenders` lists the orders that do not,
-    with both legs' expected and actual sums."""
+    """Do the item rows of every order add back to ONE order fee?
+    Reported, never assumed. `offenders` are orders whose fee rows do
+    not (the stamp, or a merchant split that does not sum to the order's
+    merchant fee). `diverged` are orders whose ORDER ROW no longer
+    matches its item rows at all — a refund or credit moved the deposit
+    after the splits were written — listed so a person can look, and
+    deliberately outside the repair's reach."""
     orders = _order_rows(conn)
-    offenders = []
+    offenders, diverged = [], []
     multi = 0
     for o in orders:
         items = o["items"]
         if len(items) > 1:
             multi += 1
-        fee_expected = _order_fee_in(o)
+        fee_expected = _item_fee_total(o)
         fee_actual = round(sum(i["fee"] for i in items.values()), 2)
         merch_expected = (round(o["merchant_fee"], 2)
                           if o["merchant_fee"] is not None else None)
@@ -182,7 +198,16 @@ def fee_split_integrity(conn: sqlite3.Connection, limit: int = 25) -> dict:
                 "merchant_expected": merch_expected,
                 "merchant_actual": merch_actual,
             })
+        gap = _order_row_gap(o, fee_expected)
+        if gap is not None and abs(gap) > 0.05:
+            diverged.append({
+                "order_id": o["order_id"], "items": len(items),
+                "charged_on_order_row": o["charged"],
+                "items_add_up_to": round(o["charged"] - gap, 2),
+                "gap": gap,
+            })
     offenders.sort(key=lambda r: -abs(r["fee_in_actual"] - r["fee_in_expected"]))
+    diverged.sort(key=lambda r: -abs(r["gap"]))
     return {
         "orders": len(orders),
         "multi_item_orders": multi,
@@ -191,6 +216,11 @@ def fee_split_integrity(conn: sqlite3.Connection, limit: int = 25) -> dict:
                                        for r in offenders), 2),
         "ok": not offenders,
         "sample": offenders[:limit],
+        "diverged": len(diverged),
+        "diverged_note": ("order row (deposit + GoDaddy fee) does not equal the "
+                          "item rows; usually a later refund/credit. Not touched "
+                          "by the fee repair."),
+        "diverged_sample": diverged[:limit],
     }
 
 
@@ -221,10 +251,17 @@ def repair_multi_item_fee_splits(dry_run: bool = True,
             out["multi_item_orders"] += 1
             item_ids = list(items.keys())
             prices = [items[i]["reg"] for i in item_ids]
-            fee_total = _order_fee_in(o)
-            merch_total = (round(o["merchant_fee"], 2)
-                           if o["merchant_fee"] is not None
-                           else round(sum(items[i]["merchant"] for i in item_ids), 2))
+            # The fee comes from the item rows (see _item_fee_total); the
+            # merchant total from the order row when the splits already
+            # agree with it to a nickel, otherwise from the splits
+            # themselves — a diverged order keeps its own total and only
+            # has its SHARES corrected.
+            fee_total = _item_fee_total(o)
+            _split_merch = round(sum(items[i]["merchant"] for i in item_ids), 2)
+            merch_total = _split_merch
+            if (o["merchant_fee"] is not None
+                    and abs(round(o["merchant_fee"], 2) - _split_merch) <= 0.05):
+                merch_total = round(o["merchant_fee"], 2)
             fee_shares = prorate(fee_total, prices)
             merch_shares = prorate(merch_total, prices)
             before_fee = round(sum(items[i]["fee"] for i in item_ids), 2)

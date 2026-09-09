@@ -198,6 +198,33 @@ def main():
     check("running the repair again changes nothing",
           fs.repair_multi_item_fee_splits(dry_run=True, db_path=p)["orders_changed"] == 0)
 
+    print("A diverged order row is reported, not repaired")
+    # Single-item order whose deposit was adjusted later (a refund): the
+    # item rows still say $55 + $1.92, the order row now says $30 landed.
+    with db._connect(p) as conn:
+        add_item(conn, 400, "R999000111", "s9.24 BRACKENRIDGE", 55.0, 1.92, 56.92, 1,
+                 date="2026-09-01")
+        conn.execute(
+            "INSERT INTO acct_transactions (date, description, total_amount, type, amount, "
+            " category, source, source_ref, status, net_deposit, merchant_fee, order_id) "
+            "VALUES ('2026-09-01', 'GoDaddy order R999000111', 56.92, 'income', 28.05, "
+            " 'godaddy_order', 'godaddy', 'godaddy-order-R999000111', 'active', 28.05, 1.95, "
+            " 'R999000111')")
+        dv = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
+        conn.executemany(
+            "INSERT INTO godaddy_order_splits (transaction_id, item_id, split_type, amount) "
+            "VALUES (?, ?, ?, ?)",
+            [(dv, 400, "registration", 55.0), (dv, 400, "transaction_fee", 1.92),
+             (dv, 400, "merchant_fee", -1.95)])
+        conn.commit()
+        integ2 = fs.fee_split_integrity(conn)
+    check("its fee rows are fine, so it is NOT an offender", integ2["offenders"] == 0, integ2)
+    check("but it IS listed as diverged, with the gap",
+          integ2["diverged"] == 1 and integ2["diverged_sample"][0]["order_id"] == "R999000111"
+          and integ2["diverged_sample"][0]["gap"] == -26.92, integ2["diverged_sample"])
+    check("and the repair leaves it alone",
+          fs.repair_multi_item_fee_splits(dry_run=True, db_path=p)["orders_changed"] == 0)
+
     print("The audit report carries the check")
     rep = db.get_audit_report(p)
     check("fee_splits section present and clean", rep.get("fee_splits", {}).get("ok") is True,

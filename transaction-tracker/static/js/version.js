@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.349.0";
+window.TGF_VERSION = "2.349.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.349.1",
+    date: "2026-09-09",
+    changes: [
+      "The fee-split check reads the order's fee from its ITEM rows, not from the order row. The production dry-run of v2.349.0 showed why: 21 orders have an order row whose deposit was adjusted after the splits were written (a later refund or credit), so 'charged minus registrations' read as a fee of −$370 on one of them. Those orders are now reported as DIVERGED — order row and item rows disagree — for a person to look at, and the repair does not touch their totals; only the stamped fee shares are corrected. Nothing was applied to production before this correction.",
+    ],
+  },
   {
     version: "2.349.0",
     date: "2026-09-09",
