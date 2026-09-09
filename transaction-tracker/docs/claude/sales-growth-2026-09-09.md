@@ -189,6 +189,21 @@ rows) and were left alone — classes and order ids in #433 §5.
 Still showing on the campaign table: $64.58 "overstated", which is
 Question 2 (pre-cutover rate-card rows + the fee spread's home).
 
+## Question 2, ratified and applied: the fee spread is margin, and taxed — v2.350.x
+
+Kerry: *"the spread should be inside the TGF Margin and in my mind is
+the part that gets taxed as it's basically a markup over and above (or
+below) what the actual GoDaddy fees are ... Somewhat similar to the
+'rounding up' concept with the course fees."* The allocator books each
+item's spread into `tgf_operating` from the 9/5 cutover on (new column
+`fee_spread`), the 8.25% reserve follows, pre-cutover rows stay frozen.
+Rebooked on production (`scoring-margin-rebook:2026-09-05|apply`): 32
+orders, 35 rows, spread +$6.53, 13 never-allocated registrations
+created on the way. Mailbox **#434** carries the standard amendment for
+CA (spread is in the tax base; the GoDaddy-covering part is not).
+
+Question 3 (open): the pre-9/5 rows that book rate-card markup.
+
 ## Kerry decisions this lane is waiting on
 
 - **Round two of the lead campaign** — the biggest lever on the board.
