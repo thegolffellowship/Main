@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.350.0";
+window.TGF_VERSION = "2.350.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.350.1",
+    date: "2026-09-09",
+    changes: [
+      "scoring-margin-rebook lists its biggest movers first (40, was 12 in write order). The first production dry-run moved margin by +$160.58 against a spread total of +$6.53, so the rows that moved for a reason other than the spread are the ones that have to be read before anything is applied.",
+    ],
+  },
   {
     version: "2.350.0",
     date: "2026-09-09",

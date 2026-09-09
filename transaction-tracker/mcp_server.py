@@ -2389,7 +2389,11 @@ def _scoring_dispatch(url: str, extract: str):
                     f"tgf_operating {res.get('tgf_operating_before')} -> "
                     f"{res.get('tgf_operating_after')}"[:200])
             _ch = res.pop("changes", [])
-            res["changes_sample"] = _ch[:12]
+            # Biggest movers first: a rebook is expected to move each row
+            # by its spread (cents); anything larger is the thing to read.
+            _ch.sort(key=lambda c: -abs((c.get("tgf_operating") or [0, 0])[1]
+                                        - (c.get("tgf_operating") or [0, 0])[0]))
+            res["changes_sample"] = _ch[:40]
             res["changes_listed"] = len(_ch)
             return json.dumps(res, indent=2, default=str)
         if cmd == "scoring-backup-run":
