@@ -166,6 +166,29 @@ has a different fix:
 Once 1 and 2 are ruled, the table should reconcile to $0 and the
 OVERSTATED column becomes a red flag rather than a standing feature.
 
+## Ratified and applied (later the same day): one order, one fee — v2.349.x
+
+Kerry asked for the industry standard rather than an invented one
+(options page: `https://claude.ai/code/artifact/c7b5be08-9984-4e43-9ac7-28a0c32641de`)
+and chose D: the fee stays once per order in the ledger; item shares
+for reporting are pro rata by item price. *"So the running example is
+what happens first and then D is how it is backfilled (prorated) for use
+in our table? If so, then it seems like you can go ahead, yes."*
+
+Applied to production 2026-09-09 ~17:20 UTC after a verified backup
+(`tracker_20260909_170331.db.gz`): 59 of 61 multi-item orders rewritten,
+113 allocation rows re-stamped, fee-in across multi-item orders $1,072.94
+→ $491.18, merchant totals unchanged, integrity 0 offenders. Will's four
+rows now net +$1.26. Mailbox **#433**.
+
+The first dry-run caught a wrong assumption (fee derived from the order
+row, which can drift after refunds) and nothing was applied until it was
+corrected in v2.349.1. **28 orders are DIVERGED** (order row ≠ item
+rows) and were left alone — classes and order ids in #433 §5.
+
+Still showing on the campaign table: $64.58 "overstated", which is
+Question 2 (pre-cutover rate-card rows + the fee spread's home).
+
 ## Kerry decisions this lane is waiting on
 
 - **Round two of the lead campaign** — the biggest lever on the board.
