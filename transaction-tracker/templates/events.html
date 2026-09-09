@@ -11147,6 +11147,54 @@
         { key: "other",        label: "Other",         defaultTax: 8.25 },
     ];
 
+    // Sum a stored breakdown the same way the calculator does (amount × (1 + tax%)).
+    function breakdownTotal(bd) {
+        let total = 0;
+        Object.values(bd || {}).forEach(v => {
+            const amt = parseFloat(v && v.amount) || 0;
+            const tax = parseFloat(v && v.tax_pct) || 0;
+            total += amt * (1 + tax / 100);
+        });
+        return Math.round(total * 100) / 100;
+    }
+
+    // What the editor's calculator should be seeded with for one saved cost.
+    // The SAVED course cost is the number the list column, the financial
+    // summary and the withdrawal credits all read, so the editor must agree
+    // with it: a missing or disagreeing breakdown is replaced by a single
+    // tax-free Green Fees line equal to the saved cost, and flagged.
+    function breakdownForEditor(breakdownJson, courseCost) {
+        let bd = null;
+        if (breakdownJson) {
+            try { bd = typeof breakdownJson === "string" ? JSON.parse(breakdownJson) : breakdownJson; }
+            catch (e) { bd = null; }
+        }
+        const cc = parseFloat(courseCost);
+        const hasCost = !isNaN(cc) && cc > 0;
+        if (bd && Object.values(bd).some(v => v && parseFloat(v.amount) > 0)) {
+            const total = breakdownTotal(bd);
+            if (!hasCost || Math.abs(total - cc) <= 0.011) {
+                return { breakdown: bd, synthesized: false, mismatch: false, savedCost: hasCost ? cc : null, breakdownTotal: total };
+            }
+            // Line items on file disagree with the saved cost: the saved cost wins.
+            return { breakdown: { green_fees: { amount: cc, tax_pct: 0 } }, synthesized: true, mismatch: true, savedCost: cc, breakdownTotal: total };
+        }
+        if (hasCost) {
+            return { breakdown: { green_fees: { amount: cc, tax_pct: 0 } }, synthesized: true, mismatch: false, savedCost: cc, breakdownTotal: null };
+        }
+        return { breakdown: null, synthesized: false, mismatch: false, savedCost: null, breakdownTotal: null };
+    }
+
+    function noteImportedCost(containerId, seed) {
+        const container = document.getElementById(containerId);
+        if (!container || !seed || !seed.synthesized) return;
+        const msg = seed.mismatch
+            ? `Line items on file totalled $${seed.breakdownTotal.toFixed(2)} but the event's course cost is $${seed.savedCost.toFixed(2)} — showing the course cost. Re-enter the line items if you want the breakdown back.`
+            : `Course cost was entered as a total ($${seed.savedCost.toFixed(2)}); no line-item breakdown on file. Saving keeps the total.`;
+        container.insertAdjacentHTML("beforeend",
+            `<div class="calc-imported-note" style="font-size:0.72rem; color:var(--text-muted); margin-top:0.3rem;">${msg}</div>`);
+    }
+
     function renderCostCalculator(containerId, prefix, breakdownData) {
         const container = document.getElementById(containerId);
         if (!container) return;
@@ -13127,13 +13175,22 @@
         document.getElementById("edit-event-side_game_fee_18").value = ev.side_game_fee_18 != null ? ev.side_game_fee_18 : "";
         document.getElementById("edit-event-transaction_fee_pct_combo").value = ev.transaction_fee_pct != null ? ev.transaction_fee_pct : 3.5;
 
-        // Render Course Cost Calculators
-        const singleBreakdown = ev.course_cost_breakdown ? JSON.parse(ev.course_cost_breakdown) : null;
-        renderCostCalculator("edit-single-calc", "edit-single", singleBreakdown);
-        const combo9Breakdown = ev.course_cost_breakdown_9 ? JSON.parse(ev.course_cost_breakdown_9) : null;
-        renderCostCalculator("edit-combo-9-calc", "edit-combo-9", combo9Breakdown);
-        const combo18Breakdown = ev.course_cost_breakdown_18 ? JSON.parse(ev.course_cost_breakdown_18) : null;
-        renderCostCalculator("edit-combo-18-calc", "edit-combo-18", combo18Breakdown);
+        // Render Course Cost Calculators — seeded from the SAVED course cost
+        // when no line-item breakdown exists or the breakdown disagrees
+        // with it (Kerry 2026-09-09: "Pricing should be based off of what
+        // is in the Pricing List in the editor"). Costs entered through the
+        // API / MCP tools carry no breakdown, so the calculator read $0 and
+        // the editor's tiers were built from nothing while the list column
+        // read the real number; saving from that screen wiped the cost.
+        const singleSeed = breakdownForEditor(ev.course_cost_breakdown, ev.course_cost);
+        renderCostCalculator("edit-single-calc", "edit-single", singleSeed.breakdown);
+        noteImportedCost("edit-single-calc", singleSeed);
+        const combo9Seed = breakdownForEditor(ev.course_cost_breakdown_9, ev.course_cost_9);
+        renderCostCalculator("edit-combo-9-calc", "edit-combo-9", combo9Seed.breakdown);
+        noteImportedCost("edit-combo-9-calc", combo9Seed);
+        const combo18Seed = breakdownForEditor(ev.course_cost_breakdown_18, ev.course_cost_18);
+        renderCostCalculator("edit-combo-18-calc", "edit-combo-18", combo18Seed.breakdown);
+        noteImportedCost("edit-combo-18-calc", combo18Seed);
 
         // Update pricing tab display
         updatePricingTabForFormat(ev.format || "");

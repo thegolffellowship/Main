@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.357.0";
+window.TGF_VERSION = "2.357.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.357.1",
+    date: "2026-09-09",
+    changes: [
+      "Edit Event's Course Cost calculator now agrees with the saved course cost (Kerry: “Pricing should be based off of what is in the Pricing List in the editor”). The list column reads events.course_cost; the editor's Pricing List read the calculator, which was seeded only from a line-item breakdown — and course costs entered through the API or MCP tools carry none. So the calculator showed $0.00, the editor's tiers were built from markup and games alone, and Save from that screen wrote the course cost away. The calculator is now seeded from the saved cost as a single tax-free Green Fees line whenever no breakdown exists or the breakdown totals a different number, with a note saying which case it is. Saving keeps the total.",
+      "Read-only bridge scoring-event-pricing-audit[:all] lists the events whose saved course cost has no breakdown or a disagreeing one — the rows the editor used to misread. Test: test_event_pricing_editor.js (13 checks).",
+    ],
+  },
   {
     version: "2.357.0",
     date: "2026-09-09",

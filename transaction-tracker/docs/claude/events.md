@@ -25,6 +25,25 @@ lists every event where the id-link and the name-link disagree, with the
 item names actually recorded against it. Regression:
 `test_event_registration_count.py`.
 
+## Course cost: the saved number is the source; the editor derives from it (v2.357.1, Kerry 2026-09-09)
+
+`events.course_cost` (and `_9` / `_18`) is what the list column, the
+financial summary and the withdrawal credits read. The Edit Event
+calculator stores an optional line-item breakdown
+(`course_cost_breakdown*` JSON: green_fees / cart_fees / range_balls /
+printing / other, each amount + tax%) and used to be seeded ONLY from it —
+so a cost set through the API or the MCP `create_new_event` /
+`update_existing_event` tools (no breakdown parameter) rendered as $0.00
+in the editor, the editor's tiers were computed from markup + games alone,
+and Save wrote `course_cost = null`.
+
+Rule (`breakdownForEditor` in `templates/events.html`): seed the
+calculator from the breakdown when it exists AND totals the saved cost
+(±1¢); otherwise from the saved cost as one tax-free Green Fees line, with
+a note ("entered as a total" / "line items disagree — showing the course
+cost"). An all-zero or unparseable breakdown counts as missing. Audit:
+`scoring-event-pricing-audit[:all]`. Test: `test_event_pricing_editor.js`.
+
 ## Store registration link — derived, verified, expiring (v2.357.0, Kerry 2026-09-09)
 
 `events.registration_url` (added for the Lead Center follow-up texts,
