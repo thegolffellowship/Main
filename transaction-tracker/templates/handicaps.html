@@ -30,7 +30,13 @@
                   vertical-align:middle; }
         .hcp-ch.sa { background:var(--chapter-sa, #D3DDE4); color:#1B1B1B; }
         .hcp-ch.a  { background:var(--chapter-austin, #BF5700); color:#fff; }
+        .hcp-ch.h  { background:#0F766E; color:#fff; }
         .hcp-ch.other { background:#E5E7EB; color:#374151; }
+        .hcp-pending-band td, div.hcp-pending-band {
+            background:#F1F5F9; color:#475569; font: 600 11px/1.4 'Bitter', serif;
+            letter-spacing:0.6px; text-transform:uppercase; padding:8px 12px !important;
+            border-top:2px solid #CBD5E1; }
+        div.hcp-pending-band { border-radius:8px; margin:14px 0 8px; }
         .hcp-index {
             font-weight: 700;
             font-size: 1.05em;
@@ -1052,9 +1058,34 @@
     }
 
     /** Format "First Last" → "Last, First" for display. Handles suffixes. */
+    // Kerry 2026-09-10: "Capitalize names correctly for names like
+    // McCormick. Shouldn't be Mccormick." Imported names arrive in whatever
+    // case the export used; the linked customer's name is the store's own
+    // spelling, so prefer it. Otherwise fix the classic prefixes.
+    function smartCase(word) {
+        if (!word) return word;
+        if (/^[A-Z]{2,}$/.test(word) || /^[a-z]/.test(word) || /^[A-Z][a-z]+$/.test(word)) {
+            let w = word.toLowerCase();
+            w = w.replace(/(^|[-'’])([a-z])/g, (m, a, b) => a + b.toUpperCase());
+            w = w.replace(/^(Mc)([a-z])/, (m, a, b) => a + b.toUpperCase());
+            w = w.replace(/^(Mac)([a-z])(?=[a-z]{2,})/, (m, a, b) => a + b.toUpperCase());
+            w = w.replace(/^(O')([a-z])/, (m, a, b) => a + b.toUpperCase());
+            if (/^(de|del|della|di|da|van|von|der|la|le)$/i.test(w) && word !== word.toUpperCase()) w = w.toLowerCase();
+            return w;
+        }
+        return word;   // mixed case already (DeLaCruz, McCormick) — trust it
+    }
+    function displayNameFor(p) {
+        if (p && p.customer_name) {
+            const c = String(p.customer_name).trim().split(/\s+/);
+            if (c.length > 1) return displayName(c.join(" "));
+        }
+        return displayName(p ? p.player_name : "");
+    }
     function displayName(name) {
-        const s = String(name || "").trim();
-        if (!s) return "\u2014";
+        const s0 = String(name || "").trim();
+        if (!s0) return "\u2014";
+        const s = s0.split(/\s+/).map(smartCase).join(" ");
         const parts = s.split(/\s+/);
         if (parts.length <= 1) return s;
         const sfx = new Set(["jr", "jr.", "sr", "sr.", "ii", "iii", "iv", "v"]);
@@ -1080,7 +1111,7 @@
             // people relate to an 18 hole index").
             document.getElementById('stat-avg-index').innerHTML =
                 `${avg.toFixed(1)}<span style="font-size:0.5em;color:#94a3b8;margin-left:3px;font-weight:500;">N</span>`
-                + `<span style="font-size:0.6em;color:#64748b;margin-left:4px;font-weight:500;">/ ${(avg * 2).toFixed(1)}</span>`;
+                + `<span style="color:#64748b;margin-left:6px;">/ ${(avg * 2).toFixed(1)}</span>`;
         } else {
             document.getElementById('stat-avg-index').textContent = '—';
         }
@@ -1095,8 +1126,8 @@
     const HCP_MEMBER_STATUSES = new Set(["active_member", "member_plus"]);
     function chapterBadge(ch) {
         if (!ch) return '';
-        const cls = ch === 'Austin' ? 'a' : (ch === 'San Antonio' ? 'sa' : 'other');
-        const txt = ch === 'Austin' ? 'A' : (ch === 'San Antonio' ? 'SA' : esc(ch.slice(0, 2).toUpperCase()));
+        const cls = ch === 'Austin' ? 'a' : (ch === 'San Antonio' ? 'sa' : (ch === 'Houston' ? 'h' : 'other'));
+        const txt = ch === 'Austin' ? 'A' : (ch === 'San Antonio' ? 'SA' : esc(ch.slice(0, 1).toUpperCase()));
         return `<span class="hcp-ch ${cls}" title="${esc(ch)}">${txt}</span>`;
     }
 
@@ -1130,6 +1161,17 @@
             return 0;
         });
 
+        // Kerry 2026-09-10: players without an established TGF Handicap
+        // (fewer than the minimum rounds) sit at the bottom under a band
+        // that says why, whatever the sort.
+        const HCP_MIN_ROUNDS = (window.HCP_SETTINGS && window.HCP_SETTINGS.min_rounds) || 3;
+        const established = players.filter(p => p.handicap_index !== null);
+        const pending = players.filter(p => p.handicap_index === null);
+        players = established.concat(pending);
+        const firstPending = pending.length ? pending[0].player_name : null;
+        const pendingBandText = `Not yet established — a TGF Handicap needs ${HCP_MIN_ROUNDS} rounds. `
+            + `${pending.length} player${pending.length === 1 ? '' : 's'} building toward one.`;
+
         // Update sort arrows on column headers
         document.querySelectorAll('.sortable-th').forEach(th => {
             const col = th.dataset.sort;
@@ -1158,10 +1200,16 @@
 
         tbody.innerHTML = '';
         for (const p of players) {
+            if (p.player_name === firstPending) {
+                const band = document.createElement('tr');
+                band.className = 'hcp-pending-band';
+                band.innerHTML = `<td colspan="9">${esc(pendingBandText)}</td>`;
+                tbody.appendChild(band);
+            }
             const isExpanded = expandedRows.has(p.player_name);
             const idx18 = p.handicap_index_18;
             const indexCell = p.handicap_index !== null
-                ? `<span class="hcp-index">${p.handicap_index.toFixed(1)}</span><span style="font-size:0.72em;color:#94a3b8;margin-left:3px;font-weight:500;">N</span><span style="font-size:0.82em;color:#64748b;margin-left:2px;"> / ${idx18.toFixed(1)}</span> ${indexTag(p.handicap_index)}<button class="hcp-info-btn" onclick="showCalcModal(event,${esc(JSON.stringify(p.player_name))})" title="Show calculation">i</button>`
+                ? `<span class="hcp-index">${p.handicap_index.toFixed(1)}</span><span style="font-size:0.72em;color:#94a3b8;margin-left:3px;font-weight:500;">N</span><span class="hcp-index" style="color:#64748b;margin-left:4px;">/ ${idx18.toFixed(1)}</span> ${indexTag(p.handicap_index)}<button class="hcp-info-btn" onclick="showCalcModal(event,${esc(JSON.stringify(p.player_name))})" title="Show calculation">i</button>`
                 : '<span class="hcp-na">N/A</span>';
             const activeRounds = p.active_rounds ?? 0;
             const totalRounds  = p.total_rounds ?? 0;
@@ -1176,12 +1224,12 @@
             let actionCell = '';
             const chBadge = chapterBadge(p.chapter);
             if (p.customer_name && !window.MEMBER_MODE) {
-                playerCell = `<a class="player-link" href="/customers?name=${encodeURIComponent(p.customer_name)}">${esc(displayName(p.player_name))}</a>${chBadge}`;
+                playerCell = `<a class="player-link" href="/customers?name=${encodeURIComponent(p.customer_name)}">${esc(displayNameFor(p))}</a>${chBadge}`;
                 if (canManage) {
                     actionCell = `<span class="action-email" data-player-name="${esc(p.player_name)}"></span><span class="action-unlink" data-player-name="${esc(p.player_name)}" data-customer-name="${esc(p.customer_name)}"></span>`;
                 }
             } else {
-                playerCell = `<span class="player-unlinked">${esc(displayName(p.player_name))}</span>${chBadge}`;
+                playerCell = `<span class="player-unlinked">${esc(displayNameFor(p))}</span>${chBadge}`;
                 if (canManage) {
                     actionCell = `<span class="action-buttons" data-player-name="${esc(p.player_name)}"></span>`;
                 }
@@ -1286,9 +1334,15 @@
             } else {
                 const canManageMobile = currentRole === 'admin' || currentRole === 'manager';
                 players.forEach(p => {
+                    if (p.player_name === firstPending) {
+                        const band = document.createElement('div');
+                        band.className = 'hcp-pending-band';
+                        band.textContent = pendingBandText;
+                        mobileList.appendChild(band);
+                    }
                     const id = safeid(p.player_name);
                     const idxHtml = p.handicap_index !== null
-                        ? `<span class="hcp-mc-idx">${p.handicap_index.toFixed(1)}</span><span class="hcp-mc-n">N</span><span style="font-size:0.85rem;color:#64748b;margin-left:2px;"> / ${p.handicap_index_18.toFixed(1)}</span>`
+                        ? `<span class="hcp-mc-idx">${p.handicap_index.toFixed(1)}</span><span class="hcp-mc-n">N</span><span class="hcp-mc-idx" style="color:#64748b;margin-left:4px;">/ ${p.handicap_index_18.toFixed(1)}</span>`
                         : `<span class="hcp-mc-idx na">N/A</span>`;
                     const mobileEmailBtn = (canManageMobile && p.customer_name)
                         ? `<button class="btn-email-action" onclick="event.stopPropagation();openEmailPreviewModal(${esc(JSON.stringify(p.player_name))})" title="Email handicap card" style="margin-right:6px;">✉</button>`
@@ -1304,8 +1358,8 @@
                              onclick="toggleMobileCard(${esc(JSON.stringify(p.player_name))}, this)">
                             <div class="hcp-mc-info">
                                 <div class="hcp-mc-name">${(p.customer_name && !window.MEMBER_MODE)
-                                    ? `<a class="player-link" href="/customers?name=${encodeURIComponent(p.customer_name)}" onclick="event.stopPropagation()">${esc(displayName(p.player_name))}</a>`
-                                    : esc(displayName(p.player_name))}${chapterBadge(p.chapter)}</div>
+                                    ? `<a class="player-link" href="/customers?name=${encodeURIComponent(p.customer_name)}" onclick="event.stopPropagation()">${esc(displayNameFor(p))}</a>`
+                                    : esc(displayNameFor(p))}${chapterBadge(p.chapter)}</div>
                                 <div class="hcp-mc-sub">${esc(sub)}</div>
                             </div>
                             <div class="hcp-mc-right">
@@ -1328,7 +1382,6 @@
 
     function indexTag(idx) {
         if (idx <= 0)  return '<span class="hcp-tag plus">+</span>';
-        if (idx >= 20) return '<span class="hcp-tag high">High</span>';
         return '';
     }
 

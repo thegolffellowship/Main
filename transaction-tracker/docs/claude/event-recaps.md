@@ -358,6 +358,10 @@ Wednesday auto-draft fills the template:**
     graphic ... Don't want to just appeal to the high or mid-handicappers
     either. It goes both ways. Low, scratch and plus handicappers need to
     see there's others like them in our group too."*
+  - Third pass: *"It does change the draft from 5 of 7 to 6 of 8, right?"*
+    → beat 2 counts the whole group: "6 of the 8 first-timers on the sheet
+    did." *"Jump in any time should be a header above the text."* → close
+    box header line, body below.
 
 **v3 fixes (Kerry, off the Brevo preview 2026-09-02) — template rules:**
 - The Season-20 logo (69986bc3…png) is BLACK INK — header band must be

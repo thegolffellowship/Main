@@ -142,8 +142,8 @@ with db._connect(p) as conn:   # Hector A. (4) cashes too → "and so did 1 of t
     conn.execute("INSERT INTO tgf_payouts (event_id, customer_id, category, amount) VALUES (1, 4, 'team', 12)")
     conn.commit()
 _s2 = insider.compose(insider.gather_week(db_path=p, as_of=date(2026, 9, 10)))
-check("beat 2 counts the other first-timers who cashed", "and so did 1 of the other 3 first-timers" in _s2["BEAT_2_BODY"],
-      _s2["BEAT_2_BODY"])
+check("beat 2 counts the whole first-timer group (Kerry: 6 of the 8, not 5 of the other 7)",
+      "2 of the 4 first-timers on the sheet did." in _s2["BEAT_2_BODY"], _s2["BEAT_2_BODY"])
 check("beat 3 tells the bogey skin in plain language, names the player first + initial",
       slots["BEAT_3_LEAD"] == "A bogey won money." and "7th hole" in slots["BEAT_3_BODY"]
       and "Robert R." in slots["BEAT_3_BODY"] and "Rideout" not in slots["BEAT_3_BODY"]
@@ -152,6 +152,7 @@ check("beat 3 tells the bogey skin in plain language, names the player first + i
 check("GG name forms → public form", insider._gg_short("DONOVAN, Tom") == "Tom D."
       and insider._gg_short("Espinosa, Christopher Guest") == "Christopher E."
       and insider._gg_short("Kerry Niester") == "Kerry N.")
+check("close box: Jump in any time is a header line", '<p style="margin:0 0 8px;font-size:20px;line-height:1.3;color:#ffffff;font-weight:bold;">Jump in any time.</p>' in insider.render(slots))
 check("template says Event, not night, and carries Kerry's Compete line",
       "How a TGF Event works" in insider.render(slots) and "A Team best ball game included" in insider.render(slots)
       and "night works" not in insider.render(slots))

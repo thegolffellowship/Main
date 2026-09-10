@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.369.8";
+window.TGF_VERSION = "2.369.9";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.369.9",
+    date: "2026-09-10",
+    changes: [
+      "Handicaps page, Kerry's review: the 18-hole index is the same size as the 9-hole number (rows, cards, and the AVG INDEX tile); the amber HIGH tag is gone ('That's rubbing it in'); players without an established TGF Handicap now sit at the bottom under a band that says why (fewer than 3 rounds); Houston gets its own H badge in teal; players whose customer row has no chapter fall back to the chapter of their most recent purchase (Jay Horton, Ryan Estes); names show the store's own capitalisation when linked (McCormick, DelCarmen) and fix Mc/Mac/O' prefixes otherwise.",
+      "Insider: beat 2 counts the whole first-timer group ('6 of the 8 first-timers on the sheet did'); the close box's 'Jump in any time.' is a header line above its text.",
+    ],
+  },
   {
     version: "2.369.8",
     date: "2026-09-10",

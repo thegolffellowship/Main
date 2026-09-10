@@ -465,8 +465,8 @@ def compose(data: dict) -> dict:
         others = len(firsts) - 1
         k = len(cashed_firsts) - 1          # the other first-timers who cashed
         if others and k >= 1:
-            tail = (f" — and so did {k} of the other {others} first-timer"
-                    f"{'s' if others != 1 else ''} on the sheet.")
+            # Kerry 2026-09-10: count the whole group, not "the others".
+            tail = (f" — {k + 1} of the {others + 1} first-timers on the sheet did.")
         elif others:
             tail = f" — one of {len(firsts)} first-timers on the sheet."
         else:

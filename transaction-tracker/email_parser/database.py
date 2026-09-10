@@ -33944,7 +33944,11 @@ def get_all_handicap_players(db_path: str | Path | None = None) -> list[dict]:
                    MIN(r.differential) AS best_differential,
                    AVG(r.differential) AS avg_differential,
                    l.customer_name,
-                   c.chapter,
+                   COALESCE(c.chapter,
+                            (SELECT i.chapter FROM items i
+                              WHERE i.customer_id = c.customer_id AND i.chapter IS NOT NULL
+                                AND i.chapter != ''
+                              ORDER BY i.order_date DESC, i.id DESC LIMIT 1)) AS chapter,
                    c.current_player_status AS player_status
             FROM handicap_rounds r
             LEFT JOIN handicap_player_links l ON l.player_name = r.player_name
