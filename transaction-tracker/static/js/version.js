@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.371.0";
+window.TGF_VERSION = "2.371.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.371.1",
+    date: "2026-09-10",
+    changes: [
+      "Docs only: session record round ten — the funnel-ordered lead queue (v2.371.0) verified live; INTERESTED definition and the due-inside-stage rule recorded with Kerry's words.",
+    ],
+  },
   {
     version: "2.371.0",
     date: "2026-09-10",
