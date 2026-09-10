@@ -509,6 +509,32 @@ of the two days' events (Daniel Lugo IV: Forest Creek Saturday, not
 Avery Ranch Tuesday). Standing rule from Kerry: read the mailbox before
 every reply.
 
+## Round nine (v2.370.0): CONVERTED becomes EVENT SIGNUPS + GUESTS
+
+Kerry: *"Split out the CONVERTED section into EVENT SIGNUPS (those who
+are signed up to play) and GUESTS (those who have played)."* Every
+lead row now carries `played` from the server (a `scoring_rounds` card
+for the customer, or an active registration on an event whose date has
+passed; `played_rounds` / `past_regs` hold the counts; a bare leads DB
+reads 0). The page splits converted non-members on it: EVENT SIGNUPS
+(blue bar, tier 6) and GUESTS (green bar, tier 7); SNOOZED and
+DISMISSED shift to 8 and 9. Production after deploy: 17 converted = 6
+members, 5 guests (Espinosa, Sekiguchi, Johnston, Hinojosa, Mesa — one
+card each), 6 signups (Hightower, Hammond, Logan and Rick Billeaud,
+Pearson, Clarkson). Render test covers both bars and their order;
+proof script against a full-schema DB: card → played, past registration
+→ played, future registration → not.
+
+Sidebar answered, no decision taken: SMS tooling. Kerry's pain is
+copy-paste and untracked conversations ("we're simply not doing it").
+Recommendation on record: a business-phone product with API + webhooks
+(OpenPhone first look) for the two-way lead texts, wired so the Tracker
+sends the preset and logs every reply; Brevo SMS for one-to-many member
+sends only (no inbox / phone app; US two-way on his plan unverified);
+Twilio unnecessary. 10DLC registration applies to all three. Cost
+crosses Sarah's line (two seats/month). Open question to Kerry: answer
+hot leads from a texting app, or from the Tracker on his phone?
+
 ## Kerry decisions this lane is waiting on
 
 - ~~The three prices the table does not know~~ — RESOLVED v2.355.0:
@@ -517,6 +543,9 @@ every reply.
   were absent from the 2026 City Match Play enrollment and the boot
   sync now adds them (bracket implications are Kerry's). Miller's
   NET→FALL correction is the next single question.
+- **SMS tooling** (sidebar 9/10): texting app vs Tracker-as-inbox; then
+  vendor + Sarah review; then the build (message table, webhook, send
+  from composer, reply stats).
 - ~~2025 import~~ — DONE v2.357–v2.361: all 80 memberships from 2025
   are in (`scoring-import-orders`). Events phase (449 + 588 event
   orders in the two windows) waits on Kerry; course costs need invoices.

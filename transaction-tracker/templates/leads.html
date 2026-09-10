@@ -86,6 +86,10 @@
         .ld-secbar.due { background: #DC2626; }
         .ld-secbar.due .n { color: #FECACA; }
         .ld-secbar.snoozed { background: #6B7280; }
+        .ld-secbar.signup { background: #1D4ED8; }
+        .ld-secbar.signup .n { color: #BFDBFE; }
+        .ld-secbar.guest { background: #047857; }
+        .ld-secbar.guest .n { color: #A7F3D0; }
         .ld-fu { display: inline-block; margin-top: 2px; padding: 1px 8px; border-radius: 99px; font-size: 10.5px; font-weight: 700; background: #EEF2FF; color: #3730A3; }
         .ld-fu.due { background: #FEE2E2; color: #B91C1C; }
         .ld-bchip.muted { background: #F7F7F5; color: #A8ADB5; }
@@ -508,6 +512,11 @@
         const responded = l => HOT_TAGS.includes(l.tag || "")
             || humanNotes(l).length > 0;
         const isMember = l => l.status === "converted" && l.tag === "Became member";
+        // Kerry 2026-09-10: "Split out the CONVERTED section into EVENT
+        // SIGNUPS (those who are signed up to play) and GUESTS (those
+        // who have played)." The server says played (a scorecard, or a
+        // registration on an event whose date has passed).
+        const played = l => !!l.played;
         // Follow-up / snooze (mailbox #365, Kerry-ratified 2026-08-31):
         // a future follow_up_at snoozes the lead below the active work;
         // once due (today, Central) it resurfaces at the very top.
@@ -726,12 +735,12 @@
         // clock has not started; a follow-up is someone already
         // contacted. The unstarted clock is the one that runs out.
         const tier = l =>
-            l.status === "dismissed" ? 8
+            l.status === "dismissed" ? 9
             : l.status === "new" ? 0
             : fuDue(l) ? 1
-            : fuSnoozed(l) ? 7
+            : fuSnoozed(l) ? 8
             : isMember(l) ? 5
-            : l.status === "converted" ? 6
+            : l.status === "converted" ? (played(l) ? 7 : 6)
             : responded(l) ? 2
             : QUIET_TAGS.includes(l.tag || "") ? 4
             : 3;
@@ -828,7 +837,8 @@
         // Mirrors tier() exactly. If the two disagree a section splits
         // into two bars with the same name, because the bar drops in
         // wherever the section CHANGES down a sorted list.
-        // MEMBERS and CONVERTED now outrank the follow-up sections
+        // MEMBERS, EVENT SIGNUPS and GUESTS (the two halves of the old
+        // CONVERTED, Kerry 2026-09-10) outrank the follow-up sections
         // (Kerry 2026-09-07): "Anyone that signs up for an event or is
         // a member no longer needs to be in follow ups due. They become
         // part of our awareness from their signup side thru the EVENTS
@@ -842,13 +852,13 @@
             l.status === "dismissed" ? "DISMISSED"
             : l.status === "new" ? "NEW LEADS"
             : isMember(l) ? "MEMBERS"
-            : l.status === "converted" ? "CONVERTED"
+            : l.status === "converted" ? (played(l) ? "GUESTS" : "EVENT SIGNUPS")
             : fuDue(l) ? "FOLLOW-UPS DUE"
             : fuSnoozed(l) ? "SNOOZED"
             : responded(l) ? "RESPONDED"
             : "NO RESPONSE";
         const SEC_CLASS = { "MEMBERS": " member", "FOLLOW-UPS DUE": " due",
-            "SNOOZED": " snoozed" };
+            "SNOOZED": " snoozed", "EVENT SIGNUPS": " signup", "GUESTS": " guest" };
         const secCounts = {};
         visible.forEach(l => {
             const s = sectionOf(l);
