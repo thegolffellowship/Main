@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.367.2";
+window.TGF_VERSION = "2.367.3";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.367.3",
+    date: "2026-09-10",
+    changes: [
+      "Docs: session record for the 2026-09-02 Lead Center / Brevo lane closed out — handoff-2026-09-02-lead-selections-brevo-sync.md + session-prompt-2026-09-02-brevo-next.md. The one ratified build still missing is the Wednesday-morning TGF Insider auto-draft; the weekly cadence lapsed on 9/9 with no #2 sent.",
+    ],
+  },
   {
     version: "2.367.2",
     date: "2026-09-10",
