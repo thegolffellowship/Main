@@ -268,6 +268,30 @@ def dedupe_terms_by_source_item(conn: sqlite3.Connection,
             "rows": rows}
 
 
+def purge_backfill_terms_created_between(conn: sqlite3.Connection, start: str,
+                                         end: str, apply: bool = False) -> dict:
+    """Delete every source='backfill' term created inside [start, end) —
+    the rows one broken boot wrote. Safe because the backfill re-runs at
+    every boot and recreates anything genuinely missing under the fixed
+    guards. Dry run by default; the status sync runs after an apply."""
+    ensure_membership_tables(conn)
+    rows = [dict(r) for r in conn.execute(
+        """SELECT id, customer_id, source_item_id, started_at, expires_at, created_at
+             FROM customer_memberships
+            WHERE source = 'backfill' AND created_at >= ? AND created_at < ?
+            ORDER BY customer_id, id""", (start, end))]
+    if apply and rows:
+        conn.executemany("DELETE FROM customer_memberships WHERE id = ?",
+                         [(r["id"],) for r in rows])
+        conn.commit()
+        try:
+            sync_player_status_with_terms(conn)
+        except Exception:
+            logger.warning("purge_backfill_terms: status sync failed", exc_info=True)
+    return {"applied": bool(apply), "window": [start, end],
+            "terms_to_delete" if not apply else "terms_deleted": len(rows), "rows": rows}
+
+
 MANAGER_COMP_SOURCE = "manual"
 MANAGER_COMP_MARK = "Manager comp"
 
@@ -387,6 +411,15 @@ def backfill_memberships_from_items(conn: sqlite3.Connection) -> dict:
         if conn.execute(
                 "SELECT 1 FROM customer_memberships WHERE source_item_id = ? LIMIT 1",
                 (r["id"],)).fetchone():
+            continue
+        # Same purchase, entered by hand (v2.368.3): a term that already
+        # STARTS on this item's order date is this item — Kerry's manual
+        # terms from 2026-07-01 predate the item link. Without this guard
+        # the continuation rule read that manual term as a prior term and
+        # stacked a second year on top (46 lapsed members went active).
+        if conn.execute(
+                "SELECT 1 FROM customer_memberships WHERE customer_id = ? "
+                "AND started_at = ? LIMIT 1", (r["customer_id"], started_at)).fetchone():
             continue
         started_at = continued_start(conn, r["customer_id"], started_at)
         expires_at = compute_expires_at(started_at)

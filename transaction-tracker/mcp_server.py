@@ -1767,6 +1767,7 @@ def _scoring_dispatch(url: str, extract: str):
       scoring-round-drop:<id>[|unpost][|apply]  delete one scoring card
       scoring-parse-warnings[:<frag>][|<status>][|<limit>]  read parse warnings
       scoring-parse-warning-dismiss:<id>[,<id>]|<note>  dismiss ruled-on warnings
+      scoring-membership-terms-purge:<from>|<to>[|apply]  delete one boot's backfill terms
       scoring-membership-terms-dedupe[:<created_since>][|apply]  one item, one term
       scoring-membership-terms-repair[:apply]  early renewals continue at the
                                    365 date (dry run default)
@@ -2972,6 +2973,21 @@ def _scoring_dispatch(url: str, extract: str):
             if _apply:
                 _audit("scoring-membership-terms-dedupe",
                        f"duplicates_deleted={_res.get('duplicates_deleted')}")
+            return json.dumps(_res, indent=2, default=str)
+        if cmd == "scoring-membership-terms-purge":
+            # "<from>|<to>[|apply]" — delete backfill terms created in a
+            # window (one broken boot's rows); the boot backfill recreates
+            # anything genuinely missing.
+            from email_parser.memberships import purge_backfill_terms_created_between
+            _p = [x.strip() for x in (arg or "").split("|")]
+            if len(_p) < 2:
+                return json.dumps({"error": "usage: scoring-membership-terms-purge:<from>|<to>[|apply]"})
+            _apply = len(_p) > 2 and _p[2].lower() == "apply"
+            with db._connect() as _c:
+                _res = purge_backfill_terms_created_between(_c, _p[0], _p[1], apply=_apply)
+            if _apply:
+                _audit("scoring-membership-terms-purge",
+                       f"window={_p[0]}..{_p[1]} deleted={_res.get('terms_deleted')}")
             return json.dumps(_res, indent=2, default=str)
         if cmd == "scoring-membership-terms-repair":
             # "[apply]" — move early-renewal terms to start at the previous

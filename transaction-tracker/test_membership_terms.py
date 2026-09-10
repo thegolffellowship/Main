@@ -186,6 +186,35 @@ check("dedupe finds the later duplicate", dry["duplicates_to_delete"] == 1
 check("apply deletes it and keeps the first term", res["duplicates_deleted"] == 1
       and left == 2 and first == "2026-09-10", f"{res} {left} {first}")
 
+print("\n== 6. a manual term on the order date IS the purchase — no stacked year ==")
+p = fresh_db()
+with db._connect(p) as conn:
+    # Don Vann's shape: Kerry entered the 2025-05-01 term by hand on 7/1; the
+    # order item was linked to him later.
+    conn.execute("INSERT INTO customer_memberships (customer_id, started_at, expires_at, "
+                 "source, notes) VALUES (82, '2025-05-01', '2026-05-01', 'manual', 'admin')")
+    conn.execute("INSERT INTO items VALUES (700, 82, '2025-05-01', 'TGF MEMBERSHIP', '$50.00')")
+    conn.commit()
+    r = ms.backfill_memberships_from_items(conn)
+    n = conn.execute("SELECT COUNT(*) FROM customer_memberships WHERE customer_id = 82").fetchone()[0]
+check("backfill adds nothing on top of the manual term", r["inserted"] == 0 and n == 1, f"{r} {n}")
+
+print("\n== 7. purge of one boot's backfill rows ==")
+with db._connect(p) as conn:
+    conn.execute("INSERT INTO customer_memberships (customer_id, started_at, expires_at, source, "
+                 "source_item_id, created_at) VALUES (82, '2026-05-01', '2027-05-01', 'backfill', 700, "
+                 "'2026-09-10 16:17:10')")
+    conn.execute("INSERT INTO customer_memberships (customer_id, started_at, expires_at, source, "
+                 "created_at) VALUES (7, '2026-01-01', '2027-01-01', 'backfill', '2026-06-23 16:35:20')")
+    conn.commit()
+    dry = ms.purge_backfill_terms_created_between(conn, "2026-09-10 16:17:00", "2026-09-10 16:18:00")
+    res = ms.purge_backfill_terms_created_between(conn, "2026-09-10 16:17:00", "2026-09-10 16:18:00",
+                                                  apply=True)
+    left = [tuple(r) for r in conn.execute("SELECT customer_id, started_at FROM customer_memberships "
+                                           "WHERE source = 'backfill'")]
+check("only the row inside the window is targeted", dry["terms_to_delete"] == 1
+      and res["terms_deleted"] == 1 and left == [(7, "2026-01-01")], f"{dry} {left}")
+
 print()
 if FAILURES:
     print(f"{len(FAILURES)} FAILED: {FAILURES}")

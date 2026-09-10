@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.368.2";
+window.TGF_VERSION = "2.368.3";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.368.3",
+    date: "2026-09-10",
+    changes: [
+      "Second half of the 2.368.0 boot cleanup. 50 lapsed members were upgraded at that boot, and the item-level dedupe only reverted 4: the other 46 had a MANUAL term Kerry entered on 2026-07-01 for the same purchase (no item link), so the backfill saw no term for the item, the continuation rule read the manual term as a prior term, and stacked a second year on top (Don Vann: manual 2025-05-01→2026-05-01, phantom 2026-05-01→2027-05-01). The backfill now treats a term that already starts on the item's order date as that purchase and skips it; scoring-membership-terms-purge:<from>|<to>[|apply] deletes one boot's backfill rows so the fixed backfill can recreate only what is genuinely missing. The early-renewal repair (29 candidates) is HELD for Kerry: several look like two purchases days apart, which may be family buys or refunded duplicates, not renewals.",
+    ],
+  },
   {
     version: "2.368.2",
     date: "2026-09-10",
