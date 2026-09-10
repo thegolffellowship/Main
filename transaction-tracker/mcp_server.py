@@ -2865,6 +2865,53 @@ def _scoring_dispatch(url: str, extract: str):
             # no-ops with an error note until HUBSPOT_TOKEN is set).
             from email_parser.leads import check_new_leads
             return json.dumps(check_new_leads(), indent=2, default=str)
+        if cmd == "scoring-expense-event":
+            # "<expense_id>|<event_id or none>" — re-point an
+            # expense_transactions row at the right event (the Venmo
+            # classifier guesses an event from context and gets one-off
+            # payments wrong: LSC cup money landing on whatever event
+            # the payer last played). event_name follows event_id so the
+            # expense review UI and event financials agree. Audited.
+            _p = arg.split("|", 1)
+            if len(_p) < 2 or not _p[0].strip():
+                return json.dumps({"error":
+                                   "need <expense_id>|<event_id|none>"})
+            _eid = _p[1].strip().lower()
+            with db._connect() as conn:
+                row = conn.execute(
+                    "SELECT id, merchant, amount, event_id, event_name "
+                    "FROM expense_transactions WHERE id = ?",
+                    (int(_p[0].strip()),)).fetchone()
+                if not row:
+                    return json.dumps({"error":
+                                       f"expense {_p[0].strip()} not found"})
+                if _eid in ("none", "null", ""):
+                    new_id, new_name = None, None
+                else:
+                    ev = conn.execute(
+                        "SELECT id, item_name FROM events WHERE id = ?",
+                        (int(_eid),)).fetchone()
+                    if not ev:
+                        return json.dumps({"error":
+                                           f"event {_eid} not found"})
+                    new_id, new_name = ev["id"], ev["item_name"]
+                conn.execute(
+                    "UPDATE expense_transactions "
+                    "SET event_id = ?, event_name = ? WHERE id = ?",
+                    (new_id, new_name, row["id"]))
+                conn.commit()
+            db.log_agent_action(
+                "mcp-claude", "scoring-expense-event",
+                f"expense {row['id']} ({row['merchant']} "
+                f"${row['amount']}): event {row['event_id']} "
+                f"-> {new_id}")
+            return json.dumps({"expense_id": row["id"],
+                               "merchant": row["merchant"],
+                               "amount": row["amount"],
+                               "old_event_id": row["event_id"],
+                               "new_event_id": new_id,
+                               "new_event_name": new_name,
+                               "saved": True})
         if cmd == "scoring-setting-set":
             # "<key>|<value>" — write an app_settings dial ("stored as a
             # setting is our standard for everything" — Kerry).

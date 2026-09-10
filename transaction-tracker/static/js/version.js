@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.371.1";
+window.TGF_VERSION = "2.371.2";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.371.2",
+    date: "2026-09-10",
+    changes: [
+      "New audited bridge scoring-expense-event:<expense_id>|<event_id|none> — re-points an expense_transactions row at the right event (id + name together). Built for the Lone Star Cup money wave: the Venmo classifier guesses an event from the payer's recent activity, so cup payments landed on Forest Creek (Cannon $325) and the SA Championship (McCrary/Youngs $150 deposits) instead of the new LONE STAR CUP | The Hideout event (3329, Oct 10-11, Brownwood; practice round 3330 Fri 10/9 at $110). Roster of 28 registered on the event; Hideout pricing set at $90/day + tax per Kerry.",
+    ],
+  },
   {
     version: "2.371.1",
     date: "2026-09-10",
