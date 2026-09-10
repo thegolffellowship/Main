@@ -344,8 +344,14 @@ tee" cut; ONE rotating highlight band (skill percentages this week, HIO
 pot next, dial `insider_highlight`); "How a TGF Event works"; Kerry's
 Compete line; Celebrate per chapter from `fellowship_spot` (3306 set to
 Max & Louie's); Handicaps page gained chapter badges beside names
-(`templates/handicaps.html`). Preview HTML sent for review; the Brevo
-revision (new draft, #17 deleted in the UI) waits on his word.
+(`templates/handicaps.html`). Third pass (v2.369.9–.10): beat 2 "6 of the 8",
+Jump-in header, centered eyebrow/headline; Handicaps page index sizing,
+HIGH tag gone, pending-players band, Dallas navy / Houston teal badges,
+chapter fallback, store capitalisation. Insider #2 SENT by Kerry from
+Brevo draft #18 at 13:36 CDT 2026-09-10 (1,244 recipients). Cadence
+ruling: WEEKLY stays; opens/click trends are the metric, not unsubs
+(event-recaps.md). Next: read #18 at +24h; first unattended draft Wed
+2026-09-16 13:00 UTC (highlight rotation → Hole-In-One pot).
 
 ## 4. NOT done, and why
 
