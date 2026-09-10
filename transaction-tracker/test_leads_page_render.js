@@ -139,6 +139,18 @@ const leads = [
       touched_at: "2026-08-20 10:00:00", arrived_at: "2026-08-19T10:00:00Z",
       days_since_arrival: 16, outreach_at: null, follow_up_at: null,
       notes_log: [], sms: sms("p4") },
+    // Kerry 2026-09-10: CONVERTED splits into EVENT SIGNUPS (signed up,
+    // not yet played) and GUESTS (played — the server's `played` flag).
+    { ...base, id: 7, first_name: "Signed", last_name: "Up", email: "su@x.com",
+      phone: null, chapter: "Austin", status: "converted", tag: "Registered event",
+      touched_at: "2026-09-03 10:00:00", arrived_at: "2026-09-03T10:00:00Z",
+      days_since_arrival: 1, outreach_at: null, follow_up_at: null,
+      played: false, notes_log: [], sms: sms("p8") },
+    { ...base, id: 8, first_name: "Has", last_name: "Played", email: "hp@x.com",
+      phone: null, chapter: "San Antonio", status: "converted", tag: "Registered event",
+      touched_at: "2026-08-25 10:00:00", arrived_at: "2026-08-25T10:00:00Z",
+      days_since_arrival: 10, outreach_at: null, follow_up_at: null,
+      played: true, notes_log: [], sms: sms("p8") },
     // The route sets sms = None when the server-side pick throws.
     { ...base, id: 6, first_name: "Nosms", last_name: "Lead", email: "n@x.com",
       phone: null, chapter: null, status: "touched", tag: "Left VM",
@@ -176,6 +188,23 @@ check("no unsubstituted placeholder leaks into a message",
 check("nor into the desktop list",
       !/\{(first_name|owner|cadence|price_block|first_timer_price)\}/.test(desk),
       (desk.match(/\{[a-z_]+\}/g) || []).slice(0, 5).join(" "));
+
+// Kerry 2026-09-10: "Split out the CONVERTED section into EVENT SIGNUPS
+// (those who are signed up to play) and GUESTS (those who have played)".
+const barIdx = name => desk.indexOf(`>${name}<span class="n">`);
+check("an EVENT SIGNUPS bar renders for a converted lead who has not played",
+      barIdx("EVENT SIGNUPS") >= 0);
+check("a GUESTS bar renders for a converted lead who has played",
+      barIdx("GUESTS") >= 0);
+check("the old CONVERTED bar is gone", barIdx("CONVERTED") < 0);
+check("MEMBERS, then EVENT SIGNUPS, then GUESTS",
+      barIdx("MEMBERS") < barIdx("EVENT SIGNUPS")
+      && barIdx("EVENT SIGNUPS") < barIdx("GUESTS"),
+      [barIdx("MEMBERS"), barIdx("EVENT SIGNUPS"), barIdx("GUESTS")].join(","));
+const between = (a, b) => desk.slice(barIdx(a), b ? barIdx(b) : undefined);
+check("Signed Up sits under EVENT SIGNUPS", between("EVENT SIGNUPS", "GUESTS").includes("Signed"));
+check("Has Played sits under GUESTS", between("GUESTS").includes("Played")
+      && !between("EVENT SIGNUPS", "GUESTS").includes("Has Played"));
 
 // v2.324.0: the Email picker renders the same preset preview the Text
 // picker does, so it hit the SAME trap on a lead whose server-side pick

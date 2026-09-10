@@ -1661,6 +1661,22 @@ def get_leads(status: str = "", limit: int = 200,
         # invisible in the event count. Same predicate the conversion
         # auto-detect uses.
         _ph = ",".join("?" * len(PLACEHOLDER_MERCHANTS))
+        # A bare leads database (tests) has neither table; the flag is
+        # simply 0 there rather than a missing-table error.
+        _tables = {r[0] for r in conn.execute(
+            "SELECT name FROM sqlite_master WHERE type = 'table'")}
+        _have_rounds = "scoring_rounds" in _tables
+        _have_events = "events" in _tables and "items" in _tables
+        _played_sql = ("(SELECT COUNT(*) FROM scoring_rounds sr "
+                       " WHERE sr.customer_id = l.customer_id) AS played_rounds, ")
+        _past_sql = ("(SELECT COUNT(*) FROM items i JOIN events e "
+                     " ON (i.event_id = e.id OR i.item_name = e.item_name COLLATE NOCASE) "
+                     " WHERE i.customer_id = l.customer_id "
+                     " AND COALESCE(i.transaction_status, 'active') = 'active' "
+                     " AND i.parent_item_id IS NULL "
+                     f" AND i.merchant NOT IN ({_ph}) "
+                     " AND e.event_date < ?"
+                     ") AS past_regs ")
         q = ("SELECT l.*, c.name AS campaign_name, "
              "(SELECT COUNT(*) FROM items i "
              " WHERE i.customer_id = l.customer_id "
@@ -1668,11 +1684,21 @@ def get_leads(status: str = "", limit: int = 200,
              " AND i.parent_item_id IS NULL "
              f" AND i.merchant NOT IN ({_ph}) "
              " AND UPPER(COALESCE(i.item_name, '')) NOT LIKE '%MEMBERSHIP%'"
-             ") AS event_regs "
-             "FROM leads l "
+             ") AS event_regs, "
+             # played (Kerry 2026-09-10: "Split out the CONVERTED section
+             # into EVENT SIGNUPS (those who are signed up to play) and
+             # GUESTS (those who have played)"). A scorecard is the proof;
+             # a registration on an event whose date has passed is the
+             # fallback for rounds the card import never reached.
+             + (_played_sql if _have_rounds else "0 AS played_rounds, ")
+             + (_past_sql if _have_events else "0 AS past_regs ")
+             + "FROM leads l "
              "LEFT JOIN lead_campaigns c ON c.id = l.campaign_id "
              "WHERE l.merged_into IS NULL")
+        from .timezone_utils import today_central_str
         params: tuple = tuple(PLACEHOLDER_MERCHANTS)
+        if _have_events:
+            params = params + tuple(PLACEHOLDER_MERCHANTS) + (today_central_str(),)
         if status:
             q += " AND l.status = ?"
             params = params + (status,)
@@ -1710,6 +1736,8 @@ def get_leads(status: str = "", limit: int = 200,
     for r in rows:
         r["notes_log"] = notes_by_lead.get(r["id"], [])
         r["has_history"] = r.get("customer_id") in with_history
+        r["played"] = bool((r.get("played_rounds") or 0)
+                           or (r.get("past_regs") or 0))
         try:
             r["payload"] = json.loads(r["payload"]) if r.get("payload") else None
         except Exception:

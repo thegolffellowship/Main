@@ -135,7 +135,7 @@ event or is a member no longer needs to be in follow ups due. They
 become part of our awareness from their signup side thru the EVENTS page
 and Golf Genius, so we don't need reminders anymore for them."* Two
 places enforce it, and they must agree: `sectionOf` in leads.html tests
-MEMBERS and CONVERTED **before** the follow-up sections, and
+MEMBERS, EVENT SIGNUPS and GUESTS **before** the follow-up sections, and
 `followups_due` excludes `converted` alongside `dismissed` so the morning
 digest cannot nag about a lead the page has already filed. This covers
 HAND-SET dates as well; nothing is deleted, the date simply stops
@@ -308,14 +308,22 @@ activity (latest note, else touch, else arrival) first. Newest/Oldest/Name/Statu
 remain in the select. **Category bars, no status badges** (Kerry
 2026-08-31, v2.263.0; TOUCHED split v2.265.0): in priority view the
 desktop rows group under dark NEW LEADS / RESPONDED / NO RESPONSE /
-MEMBERS / CONVERTED / DISMISSED bars with counts — RESPONDED = touched
+MEMBERS / EVENT SIGNUPS / GUESTS / DISMISSED bars with counts — RESPONDED = touched
 with a hot tag (Call back / Interested / Coming to event) OR any
 logged note (v2.265.1, Kerry: a note most likely means they replied);
 NO RESPONSE = the rest of touched (note-less outreach tags or
 untagged); MEMBERS (v2.266.0, "the ultimate conversion") = converted +
 'Became member' tag, rendered as a TGF-orange bar with orange row edge
-and a filled ★ MEMBER badge replacing the tag chip, above plain
-CONVERTED (event guests). The Touched and Converted stat cards carry
+and a filled ★ MEMBER badge replacing the tag chip, above the two
+halves of the old CONVERTED bar (Kerry 2026-09-10: *"Split out the
+CONVERTED section into EVENT SIGNUPS (those who are signed up to play)
+and GUESTS (those who have played)"*): **EVENT SIGNUPS** (blue) =
+converted, not a member, no round yet; **GUESTS** (green) = converted
+and `played`, a server flag on every lead row = a `scoring_rounds` card
+for the customer OR an active registration on an event whose date has
+passed (`played_rounds` / `past_regs` carry the counts; a bare leads
+database without those tables reads 0). Tier order MEMBERS 5 · EVENT
+SIGNUPS 6 · GUESTS 7 · SNOOZED 8 · DISMISSED 9. The Touched and Converted stat cards carry
 sub-lines: "N responded · N no response" / "N event guests · N
 members". The history flag reads "customer" (was "existing
 customer") —
