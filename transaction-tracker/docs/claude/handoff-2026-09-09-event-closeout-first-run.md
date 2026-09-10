@@ -126,6 +126,117 @@ was tested with an injected fetch and then run for real on production
 through `scoring-event-links` after deploy — see the digest for what the
 store actually answered.
 
+### 3d. The Silverhorn recap went out (2026-09-10), and what it taught
+
+Kerry asked for the recap "to send out" and to "consider what previous
+event results were to catch any trends, like Jeff Rideout." The trend:
+Rideout was the s9.21 headline too — two Tuesdays, two 49s, two City
+MVPs, two TGF MVPs, $124 + $159.50. Draft v2 carried it with a verified
+comparison table; Kerry edited and sent, then said "Learn from it."
+`event-recaps.md` 20–29 are the lessons (no humor at a member's expense
+is rule 20 for a reason); the sent text is the template of record in
+`docs/claude/recaps/2026-09-08-s9.22-silverhorn.md` with a draft-vs-sent
+table.
+
+His Quarry link was `s9-23-quarry`, not the derived `s9-23-the-quarry`:
+the store drops "the". v2.363.0 makes the derivation try variants
+(strict → without dropped words → before a pipe) and save the first the
+store answers for. Live sweep after deploy: s9.27 The Quarry filled via
+the variant (strict 404, variant 200); 11 of 17 upcoming events
+verified; 6 October events have no store page yet (s9.26 Olympia Hills,
+a9.26 Star Ranch, a9.27 Avery Ranch, a9.28 Forest Creek, a9.29
+Teravista, s18.12 FALL CHAMPIONSHIP).
+
+**Two lanes on `main`, twice today.** The Sales & Growth / lead-campaign
+lane pushed between my pushes both times. Merge commits, never rebase;
+version.js is the only file that conflicts and is resolved by taking
+main's copy and renumbering my entry above theirs. Lesson banked: a
+`git merge` on a DIRTY tree aborts and my commit lands beside main, not
+on it — commit first, merge second, and read `git ls-remote` after every
+push.
+
+### 3e. The card sends are on record, and reading them found 32 cards for 16 players (v2.364.0 → v2.365.0)
+
+Kerry, 2026-09-10 morning: "Just sent handicap cards for both events...is
+there a historical record logged when those are sent?" Yes. Every bulk
+card send has logged to `message_log` under event_name `handicap-card`
+since the feature shipped; nothing could read that table from a session
+until `scoring-message-log` (v2.364.0). The read-back:
+
+| day (UTC) | cards sent |
+|---|---|
+| 2026-09-10 15:06–15:07 | 31 — 19 Silverhorn players + 12 ShadowGlen players, one batch, status `sent`, sent_by `admin` |
+| 2026-09-02 | 26 |
+| 2026-08-31 | 26 |
+| 2026-08-26 | 37 |
+
+Field 24 + 16 = 40, cards 31. The nine without a card (SA: Lewis,
+Hinojosa, McCormick, Wallace, Espinosa; Austin: Johnston, Compton,
+Sekiguchi, Donovan) are the players with no established index yet —
+`/api/handicaps/send-bulk-email` skips anyone whose `handicap_index_9` is
+null, by design. Not a defect; worth knowing when a first-timer asks why
+they got nothing. (The route still matches event registrants to
+handicap links by NAME — rule 6 debt, noted, not touched today.)
+
+Reconciling the recipients against the fields is what surfaced the
+second finding: `get_scoring_rounds("a9.22 ShadowGlen")` returned 32
+rows. Two full sets — ids 3447–3462 (league round key `1702842`,
+aggregates 2433694xxx, imported 9/8 23:12 and 9/9 01:12) and 3463–3478
+(key NULL, aggregates 2434241xxx, imported 9/9 18:12:21, the hourly
+auto-sync's slot). Chain: the closeout's targeted re-import
+(`scoring-import-event:a9.22@1702842`, the Donovan refresh) stamped the
+key onto the auto-synced rows via the replace path; Kerry added the
+Skins/CTP boards on GG that afternoon, which re-keyed the tournament's
+aggregate ids; the keyless auto-sync then found no keyless twin and
+inserted a second set. `scoring-hcp-preview` showed it plainly: 16
+`already_imported: true`, 16 `false` — 16 differentials waiting to
+double-post had anyone run the import again. Silverhorn (24 rows, never
+keyed) was clean.
+
+Shipped in v2.365.0: the dedupe treats a missing key on either side as a
+wildcard (exact matches sort first, so multi-round days stay apart), a
+keyless re-import keeps the stored key, a keyed import stamps its key on
+a keyless twin it skips; and `scoring-dedupe-rounds[:<event>|all][|apply]`
+repairs rows already doubled (keeper = the bridged card; bridge moved,
+loser's holes + row deleted, its open discrepancy item closed).
+Applied on production after the deploy — see §5.
+
+### 3f. The first production scan, and three morning questions (v2.366.0)
+
+`scoring-dedupe-rounds:all` on v2.365.0 reported 120 groups across five
+events. Reading them before applying anything: a9.22 (16, the class
+above) and s18.10 FALL KICKOFF (27, a 2026-08-31 re-import under new GG
+aggregate ids; hole-for-hole identical) are real; TGF SAN ANTONIO /
+AUSTIN CHAMPIONSHIP (32 + 16, same import minute, unbridged twins) need
+the hole comparison to say; and the 2026 TGF CHAMPIONSHIP's 29 were NOT
+duplicates — Saturday's and Sunday's cards share an event id, and the
+grouping had ignored the date. v2.366.0 scopes by date and classifies
+every group from the hole scores; apply touches only `identical` and
+`partial`. Result of the apply is in §5.
+
+Three things Kerry hit the same morning, all fallout from the 2026-09-09
+membership-only historical import (`scoring-import-orders 2025-01-01..
+2025-07-31|membership-only`, then Aug–Dec):
+
+- **"Where'd Straiton and others go?"** — the import created 2025
+  membership terms that had already expired; `sync_player_status_with_terms`
+  then demoted their holders to `expired_member` (Robert Straiton: one
+  term, 2025-01-02 → 2026-01-02, no 2026 renewal on file; status flipped
+  23:33:53 UTC), and the Handicaps page's MEMBERS toggle hides
+  non-members. `scoring-status-changes:2026-09-09` lists every flip with
+  the status before. Who is genuinely lapsed vs comped/paid-off-books is
+  Kerry's call — the Brevo nightly sync already pushed the new statuses
+  at 09:10, so a reversal needs to reach Brevo too.
+- **Luke Mazanec "duplicate" renewal** — item 2721 (2025-09-10, $50,
+  imported 9/9) vs item 2807 (2026-09-10, $75). A renewal, not a
+  duplicate; rule fixed (customers.md), item closed.
+- **Six action items** — four phone drifts on 2025 orders (Duran, Carter,
+  Dyal, Tonche) and Dan Tarr's 2025-07-10 Twin Creeks order (GUEST rate
+  + membership, no guest name: he was the guest). HubSpot agrees with
+  the ORDER for Dyal ((210) 557-1765; canonical (270) is wrong) and with
+  the CANONICAL for Tonche ((979) 236-8787). Duran and Carter are not in
+  HubSpot by name.
+
 ## 4. NOT done, and why
 
 1. **Handicap cards were not emailed to the players who played (Phase

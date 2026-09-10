@@ -1238,3 +1238,19 @@ the check (v2.362.0; Colasanto, Ferrara and friends paid by Venmo).
 Pre-Tracker history Kerry states goes on record through bridge
 `scoring-customer-status:<id>|<status>[|<note>]` (v2.361.2), his words
 as the note.
+
+
+## Duplicate-registration alerts and membership renewals (v2.366.0)
+
+`save_items()` raises a `duplicate_registration` action item + an admin
+email when a customer gains a second ACTIVE row for the same item_name.
+Memberships renew, and last year's TGF MEMBERSHIP row stays `active`
+forever, so every renewal read as a duplicate of the term before it —
+Luke Mazanec's 2026-09-10 renewal against the 2025-09-10 term the
+membership-only historical import had brought in the day before. For
+items whose name matches `MEMBERSHIP` / `SKU: MEM-`, a prior row now
+counts only when its order_date is inside the last 300 days. Event items
+keep the date-free rule (one event, one date). Historical imports
+(`scoring-import-orders`) can still trip the alarm the other way round —
+an OLD term arriving after a newer one — so read the two order dates
+before crediting anything.

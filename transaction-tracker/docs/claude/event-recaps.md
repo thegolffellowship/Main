@@ -98,6 +98,77 @@ the rules live. This is the voice and rulebook of record.
     summer City Net races — best 6 + Fall Championship instead of best
     10; more of a sprint than a marathon."
 
+## Lessons from the s9.22 send (Kerry's edit of the draft, 2026-09-10: "Learn from it")
+
+Kerry kept the two-week Rideout trend, the head-to-head, the Baker and
+South comparisons and the skins paragraph. What he changed is the rulebook:
+
+20. **Humor is never at a member's expense.** Cut: "Enjoy it while it
+    lasts, Jeff" (a jab at a falling handicap) → "Enjoy your success,
+    Jeff! Well done!" Cut: "Daniel, the games are right there at
+    checkout. We are begging you" → "He would be taking all our money if
+    he bought into games, so thank you, Dan!" The nudge rides as
+    gratitude or a wink, never as pressure on a named person.
+21. **Member businesses get a plug when the hook is natural.** Kerry
+    added "could it be his new membership at Jeff Young's MAVN Golf???"
+    (linked). That is knowledge only he has; the draft should leave room
+    for it, and when a member-owned business is on record it can be
+    offered as an option.
+22. **Every proper noun that has a page gets its link**: the OTHER
+    chapter's course in the head-to-head → its GG results page;
+    "HANDICAPS" → the member portal handicaps page; CURRENT STANDINGS →
+    the Tracker member contests page (`/member/contests#race=fall_sa`,
+    `#race=monthly`), not GG. Buttons became inline links.
+23. **Explain the mechanic in one line wherever a race is named.** Fall:
+    "Your points are being tallied, just activate them by BUYING IN.
+    Green highlighted in the standings means you're already in."
+    Monthly: "Winner takes all. $1 / TGF Member count at end of each
+    month." Team Net: give the team score "at 30 (−6)".
+24. **First-timer = first TGF round ever, regardless of what they
+    bought.** Michele McCormick (member purchase + first round) is a
+    first-timer AND a new member. The sent list: four first-timers, "3 of
+    them went home with money", as bullets with surnames in CAPS for the
+    two who joined ("Michele McCORMICK - New Member!"), plain for the
+    others (events.md § Surname Uppercase for Elevated Roles). A member
+    on their second Tuesday (Will Wallace) is not "new faces".
+25. **Acquisition is a story.** "All 4 found out about us through our
+    recent Ad Campaign on Facebook & Instagram!" `customers.
+    acquisition_source` (facebook_lead) is on record for every one of
+    them — pull it for the NEW FACES block next time.
+26. **Fellowship reports who CAME, not who said yes** — "9 of us landed
+    at Max & Louie's" (13 said yes). The headcount is Kerry's to give
+    until it is recorded somewhere (skill OPEN 4); the draft carries the
+    YES count as a placeholder, flagged.
+27. **UP NEXT is a chronological list across BOTH chapters**, each line
+    `Day | tee times or shotgun time | COURSE (nine side) | REGISTER
+    link`, with sub-bullets for the pitch ("Feeling a road trip? This
+    Round Rock course is sweet!"), the points reassurance ("Yes, you'll
+    gain points by playing") and the **registration deadline** ("Deadline
+    is 8pm tonight"). Store URLs come from `events.registration_url`, not
+    from a hand-built slug — the Quarry's is `s9-23-quarry`, not
+    `s9-23-the-quarry`.
+28. **Greeting + merge tag**: "Good Morning, %first_name%!" (GG's merge
+    syntax). Section heads in CAPS with a period, no bold: "FALL POINTS
+    RACE.", "NEW FACES.", "FELLOWSHIP.", "UP NEXT." Sign-off "See you
+    soon!" when the next event is not a Tuesday.
+29. **Trim the framing when the facts already carry it.** Cut: "more of a
+    sprint than a marathon", "where the real leaderboard gets settled",
+    the second new-member paragraph. Kept: "It is early. It is very
+    early." Draft leaner; let Kerry add.
+
+Draft-time checklist derived from the above: two-week trend table for
+the headliner (previous event's card + payout), team score on Team Net,
+acquisition source per first-timer, links for every proper noun, both
+chapters' next three events with deadlines, and NO line a named member
+could read as a dig.
+
+## Sent template of record — s9.22 Silverhorn (Kerry's send, 2026-09-10)
+
+`docs/claude/recaps/2026-09-08-s9.22-silverhorn.md` carries the SENT text
+verbatim above the draft-vs-sent notes. It supersedes the s9.21 structure
+below where they differ (inline links instead of buttons, bulleted NEW
+FACES and UP NEXT, mechanic one-liners under each race).
+
 ## Sent template of record (Kerry's final s9.21 send, 2026-09-02)
 
 Kerry's shipped version added structure to keep in every draft:

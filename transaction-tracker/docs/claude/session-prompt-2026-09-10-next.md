@@ -27,9 +27,11 @@ reporting anything done.
    the By-Event handicap-card send; whether shadow-computed Skins/CTP get
    recorded before GG posts a board; the HIO pot pre-counting future
    registrations.
-4. Whether to send the two recap drafts in `docs/claude/recaps/`, and by
-   whom. Austin's still needs the September points line (the monthly
-   snapshot had not picked up a9.22 when drafted); its venue is filled.
+4. **Silverhorn recap: SENT by Kerry 2026-09-10** after his edit — his
+   text is the template of record, and `event-recaps.md` rules 20–29 are
+   what the edit taught. Read them before the next draft. The Austin
+   (ShadowGlen) draft is unsent and still needs the September points
+   line; its venue is filled.
 
 ## Still on the Tracker side, unchanged
 

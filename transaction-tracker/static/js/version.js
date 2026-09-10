@@ -1,10 +1,44 @@
-window.TGF_VERSION = "2.363.0";
+window.TGF_VERSION = "2.367.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.367.0",
+    date: "2026-09-10",
+    changes: [
+      "Lead presets name the SOONEST event that fits a Tu+Sa lead (Kerry, on Daniel Lugo IV: 'Preset is showing Tuesday event even though there is a Saturday event before that that meets his availability'). Both-days leads always got the Tuesday 9; now a Saturday 18 this weekend beats next Tuesday, and the deadline sentence and link follow the event actually named. Tuesday-only and Saturday-only leads are unchanged; the cadence sentence still leads with Tuesdays.",
+    ],
+  },
+  {
+    version: "2.366.0",
+    date: "2026-09-10",
+    changes: [
+      "scoring-dedupe-rounds now scopes by DATE and proves the duplicate from the hole scores before it touches anything. The first production scan grouped the 2026 TGF CHAMPIONSHIP's Saturday and Sunday cards as one round because they share an event id; a different round_date inside one event is a different round, never a duplicate. Each group is classified from scoring_holes — identical (same holes, same strokes), partial (a mid-round grab inside the full card), or conflict (different holes or strokes) — and apply removes only identical and partial; conflicts are held and listed. The import-time wildcard match (v2.365.0) carries the same guard: a keyless side matches only on the same date, so a keyed Round 2 import can never be swallowed by a keyless Round 1 card.",
+      "Duplicate-registration alerts learn that memberships renew. Luke Mazanec's 2026-09-10 renewal was flagged as a duplicate of his 2025-09-10 term, imported the day before by the membership-only historical import — last year's TGF MEMBERSHIP row stays 'active' forever, so every renewal read as a duplicate of the term before it. A prior membership now counts only when bought inside the last 300 days; event items keep the date-free rule.",
+      "Read-only bridge scoring-status-changes[:<since>][|<limit>] lists customer status flips with the status before, the latest term's expiry and the last membership order — the answer to “Where'd Straiton and others go?” (the 2025 terms imported on 2026-09-09 had already expired, the terms sync demoted their holders to expired_member, and the Handicaps MEMBERS toggle hid them).",
+      "The ShadowGlen recap for Robert ships as copy-paste text (.txt) and email-ready HTML beside the markdown draft under docs/claude/recaps/.",
+    ],
+  },
+  {
+    version: "2.365.0",
+    date: "2026-09-10",
+    changes: [
+      "Duplicate scorecards: a9.22 ShadowGlen carried 32 scoring_rounds for 16 players. The closeout's targeted re-import stamped the GG league round key onto the 16 auto-synced cards; Kerry then added the Skins and CTP boards on GG, which re-keyed the tournament's aggregate ids; the hourly auto-sync, which passes no round key, saw new aggregates, found no keyless twin, and inserted a second full set. Handicaps had posted off the first set, so the preview showed 16 more cards waiting to double-post. The cross-tournament dedupe now treats a missing round key on either side as a wildcard, not a different round (exact key matches still sort first, so multi-round days stay apart), a keyless re-import can no longer erase a stored key, and a keyed import stamps its key on a keyless twin it skips.",
+      "Repair bridge scoring-dedupe-rounds[:<event>|all][|apply]: groups scoring_rounds that describe one person's one round (same event or date, same customer, keys equal or missing), keeps the card a handicap record is bridged to (else the fuller, else the oldest), and on apply moves the bridge, deletes the loser's holes and row, and closes its open discrepancy item. Dry run by default; the all-events scan is the class check. Tests: test_scoring_dedupe.py.",
+      "Closeout skill 1.1 now says: cards must equal the field, and a count that is a multiple of it is this class — run the dedupe scan before Phase 3. The message-log read confirmed Kerry's 31 handicap-card sends of 2026-09-10 (19 SA + 12 Austin); the 9 players who did not get one have no established index yet, which is the send route's own rule.",
+    ],
+  },
+  {
+    version: "2.364.0",
+    date: "2026-09-10",
+    changes: [
+      "Read-only bridge scoring-message-log[:<fragment>[|<limit>]] answers Kerry's question after sending the handicap cards: “is there a historical record logged when those are sent?” Yes — every send has logged to message_log since the bulk-email feature shipped (handicap cards under event_name handicap-card, event messages under the event's name), and the closeout routine can now read it instead of asking. Grouped by day, event and status, with the rows underneath.",
+    ],
+  },
   {
     version: "2.363.0",
     date: "2026-09-10",
     changes: [
-      "Lead presets name the SOONEST event that fits a Tu+Sa lead (Kerry, on Daniel Lugo IV: 'Preset is showing Tuesday event even though there is a Saturday event before that that meets his availability'). Both-days leads always got the Tuesday 9; now a Saturday 18 this weekend beats next Tuesday, and the deadline sentence and link follow the event actually named. Tuesday-only and Saturday-only leads are unchanged; the cadence sentence still leads with Tuesdays.",
+      "Store link derivation tries the store's own naming variants. The first live sweep reported s9.23 The Quarry as MISSING while a product existed \u2014 the store's slug is s9-23-quarry, without \u201cthe\u201d. The sweep now tries the strict slug first, then the slug without dropped words, and for a \u201cNAME | Course\u201d title the part before the pipe; the first URL the store answers for is saved, and the report lists every URL asked. Kerry's Quarry link is on the event; the next sweep verifies it.",
+      "Recap house style grew ten rules from Kerry's edit of the Silverhorn send (event-recaps.md 20\u201329): no humor at a member's expense, member businesses get a plug, every proper noun linked, one-line race mechanics, first-timer means first round ever, acquisition source is a story, fellowship reports who came, UP NEXT is a chronological list across both chapters with deadlines. The sent text is the template of record.",
     ],
   },
   {

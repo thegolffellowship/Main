@@ -52,6 +52,15 @@ Do not assume it — read it — but do not redo it either.
     (`get_event_registrations`). Missing? `scoring-import-event:<code>@<gg_round_id>`
     with url = the widget (round ids from `scoring-pairings:teamrounds|<sa|austin>`).
     A card imported mid-round self-heals on re-import.
+    **Cards must EQUAL the field. A count that is a multiple of it (32 for
+    16 — a9.22 ShadowGlen, found 2026-09-10) is the duplicate-card class:**
+    a keyed re-import plus GG re-keying its aggregates (Kerry adding a
+    board) plus the keyless hourly auto-sync. Guarded since v2.365.0; for
+    rows already doubled run `scoring-dedupe-rounds:<event>` (dry run,
+    shows keep/drop), then `…|apply`. `scoring-dedupe-rounds:all` is the
+    class check across every event — run it once per closeout. Do this
+    BEFORE Phase 3: `scoring-hcp-preview` lists every card, and a doubled
+    set shows as N imported + N "new" waiting to double-post.
 
     **Identity check here, before anything writes:** any row with
     `customer_id: null` is a name GG spells differently from the
@@ -90,8 +99,12 @@ Do not assume it — read it — but do not redo it either.
     other: `all_ok: true`. Any discrepancy already filed a COO action item.
 2.2 **Payouts recorded AND paid.** `scoring-payouts-inspect:<event>` —
     every row's `state`. `PENDING` = recorded, not paid. Paying is Kerry
-    (Venmo); the receipt matcher flips the state when the receipt lands.
-    Report the pending total per chapter. Never mark paid from here.
+    (Venmo); the receipt matcher flips the state when the receipt lands,
+    usually within minutes. Report the pending total per chapter. Never
+    mark paid from here. **Re-read before every report** —
+    `scoring-payouts-unpaid` is the one-call answer. On 2026-09-10 a
+    morning report repeated "31 PENDING" from the night before; Kerry had
+    paid all 31 in between, and the Tracker already knew.
 2.3 **Roster truth.** Registrations vs cards: no-shows (registered, no
     card), WDs, `credit_amount`, balance-due rows. A WD still in the saved
     pairings: `scoring-pairings-remove:<event>|<player>`.
@@ -117,6 +130,13 @@ Do not assume it — read it — but do not redo it either.
     `/api/handicaps/send-bulk-email`, manager login). There is NO bridge
     command for it as of 2026-09-09, so it cannot be run from an MCP
     session — see OPEN 6. Reversing 3.2 and 3.3 mails yesterday's index.
+    **It IS verifiable from here:** every card send logs to `message_log`
+    under event_name `handicap-card`; `scoring-message-log:handicap-card`
+    shows the sends by day with recipient and status. Check it before
+    reporting 3.3 as done or not done.
+3.4 **Kerry uploads the updated handicaps to Golf Genius** (manual CSV
+    export → GG, so next week's strokes are right). Not computable from
+    the Tracker; ask, do not assume.
 
 ## Phase 4 — money and standings
 
@@ -150,12 +170,21 @@ Do not assume it — read it — but do not redo it either.
     a slug when the row already carries a verified URL.
     Save the draft under `transaction-tracker/docs/claude/recaps/`.
     Kerry sends — OPEN 2.
+    **Draft-time inputs the s9.22 send taught (event-recaps.md 20–29):**
+    the headliner's PREVIOUS event (card + payout) for a trend; the Team
+    Net team score; `customers.acquisition_source` for every first-timer;
+    a first-timer is anyone on their first TGF round, membership or not
+    (surname CAPS + "New Member!" when they also joined); both chapters'
+    next three events, chronological, with tee time / shotgun, nine side
+    and registration deadline; links for every proper noun that has a
+    page; and no line a named member could read as a dig.
 5.2 **First-timer follow-up** while the round is fresh — list them
     (`user_status` = `1st TIMER`) with what they did. There is no
     first-timer system template on the shelf as of 2026-09-09; the send
     is Kerry's or the chapter manager's.
-5.3 **Fellowship attendance** — the YES count was asked for a headcount;
-    OPEN 4.
+5.3 **Fellowship attendance** — the recap reports who CAME, which only
+    Kerry knows (13 said yes at Silverhorn, 9 came). Ask him for the
+    number; OPEN 4 is where it should live.
 
 ## Report shape
 

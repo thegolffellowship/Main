@@ -1762,6 +1762,14 @@ def _scoring_dispatch(url: str, extract: str):
                                    event (ALL Net → ALL Gross); refresh=
                                    force-replaces named players' stale cards;
                                    url = the portal widget
+      scoring-status-changes[:<since>][|<limit>]  customer status flips since a
+                                   date with the status before (read-only)
+      scoring-dedupe-rounds[:<event>|all][|apply]  duplicate scorecards
+                                   (two scoring_rounds for one person's one
+                                   round — the a9.22 32-cards-for-16 class);
+                                   dry run lists keep/drop per group, apply
+                                   moves handicap bridges to the keeper and
+                                   deletes the losers
       scoring-pairings-remove:<event>|<player>[|dry]  pull one player from
                                    the saved pairings + re-seat the group
                                    per the TGF adjustment standard
@@ -2878,6 +2886,89 @@ def _scoring_dispatch(url: str, extract: str):
             _subs = [s.strip() for s in arg.split(",") if s.strip()]
             return json.dumps(_ggh.hio_archive_events(_subs),
                               indent=2, default=str)
+        if cmd == "scoring-dedupe-rounds":
+            # Duplicate scorecards (2026-09-10): a9.22 ShadowGlen carried 32
+            # scoring_rounds for 16 players after a keyed re-import + GG
+            # re-keying its aggregates + the keyless hourly auto-sync.
+            # "[<event>|all][|apply]" — dry run by default; apply moves
+            # handicap bridges to the keeper and deletes the loser rows.
+            _ev, _sep, _mode = arg.rpartition("|")
+            if _mode.strip().lower() == "apply" and _sep:
+                _apply, _ev = True, _ev.strip()
+            else:
+                _apply, _ev = False, arg.strip()
+            _res = db.dedupe_scoring_rounds(_ev or None, apply=_apply)
+            if _apply:
+                _audit("scoring-dedupe-rounds",
+                       f"event={_ev or 'all'} dropped={_res.get('rows_dropped')} "
+                       f"bridges_moved={_res.get('handicap_bridges_moved')}")
+            return json.dumps(_res, indent=2, default=str)
+        if cmd == "scoring-status-changes":
+            # READ-ONLY (Kerry 2026-09-10, "Where'd Straiton and others go?"):
+            # customer status flips since a date, newest first, with the
+            # status before. The 2026-09-09 historical membership import
+            # created 2025 terms that had already expired and the terms sync
+            # demoted their holders to expired_member, which the Handicaps
+            # MEMBERS toggle then hid. "[<since YYYY-MM-DD>][|<limit>]".
+            _p = [x.strip() for x in (arg or "").split("|")]
+            _since = _p[0] if _p and _p[0] else "2026-09-09"
+            _lim = int(_p[1]) if len(_p) > 1 and _p[1].isdigit() else 200
+            with db._connect() as _c:
+                _rows = [dict(r) for r in _c.execute(
+                    """SELECT cs.id, cs.customer_id,
+                              c.first_name || ' ' || c.last_name AS name,
+                              c.chapter, c.current_player_status AS status_now,
+                              s.status_name AS set_to, cs.set_at, cs.notes,
+                              (SELECT s2.status_name FROM customer_statuses p
+                                 JOIN statuses s2 ON s2.status_id = p.status_id
+                                WHERE p.customer_id = cs.customer_id AND p.id < cs.id
+                                ORDER BY p.id DESC LIMIT 1) AS was,
+                              (SELECT MAX(m.expires_at) FROM customer_memberships m
+                                WHERE m.customer_id = cs.customer_id) AS latest_term_expires,
+                              (SELECT MAX(i.order_date) FROM items i
+                                WHERE i.customer_id = cs.customer_id
+                                  AND UPPER(i.item_name) LIKE '%MEMBERSHIP%') AS last_membership_order
+                         FROM customer_statuses cs
+                         JOIN customers c ON c.customer_id = cs.customer_id
+                         JOIN statuses s ON s.status_id = cs.status_id
+                        WHERE cs.set_at >= ?
+                        ORDER BY cs.id DESC LIMIT ?""", (_since, _lim)).fetchall()]
+            _by: dict = {}
+            for r in _rows:
+                k = (r["set_to"], r["notes"])
+                _by[k] = _by.get(k, 0) + 1
+            return json.dumps({"since": _since, "n": len(_rows),
+                               "by_change": [{"set_to": k[0], "notes": k[1], "n": v}
+                                             for k, v in _by.items()],
+                               "rows": _rows}, indent=2, default=str)
+        if cmd == "scoring-message-log":
+            # READ-ONLY (Kerry 2026-09-10, after sending the handicap cards:
+            # "is there a historical record logged when those are sent?"):
+            # the message_log as production holds it. Handicap cards log
+            # under event_name 'handicap-card'; event messages under the
+            # event's name. "<fragment>[|<limit>]" — fragment matches
+            # event_name OR subject, case-insensitive; empty = newest 50.
+            _p = [x.strip() for x in (arg or "").split("|")]
+            _frag = _p[0] if _p and _p[0] else ""
+            _lim = int(_p[1]) if len(_p) > 1 and _p[1].isdigit() else 50
+            with db._connect() as _c:
+                _rows = [dict(r) for r in _c.execute(
+                    "SELECT id, sent_at, event_name, channel, recipient_name, "
+                    "recipient_address, subject, status, sent_by FROM message_log "
+                    + ("WHERE LOWER(event_name) LIKE ? OR LOWER(subject) LIKE ? "
+                       if _frag else "")
+                    + "ORDER BY sent_at DESC LIMIT ?",
+                    ((f"%{_frag.lower()}%", f"%{_frag.lower()}%", _lim)
+                     if _frag else (_lim,))).fetchall()]
+            _by_day: dict = {}
+            for r in _rows:
+                k = ((r.get("sent_at") or "")[:10], r.get("event_name"), r.get("status"))
+                _by_day[k] = _by_day.get(k, 0) + 1
+            return json.dumps({"filter": _frag or None, "n": len(_rows),
+                               "by_day": [{"date": k[0], "event_name": k[1],
+                                           "status": k[2], "n": v}
+                                          for k, v in sorted(_by_day.items(), reverse=True)],
+                               "rows": _rows}, indent=2, default=str)
         if cmd == "scoring-event-pricing-audit":
             # READ-ONLY (Kerry 2026-09-09, "Pricing should be based off of
             # what is in the Pricing List in the editor"): events whose

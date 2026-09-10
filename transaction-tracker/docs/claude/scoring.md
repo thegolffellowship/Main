@@ -76,6 +76,39 @@ scoring_rounds.gg_league_round_id — the cross-tournament dedupe scopes
 to it, so same-day rounds don't collapse while ALL Net/ALL Gross of the
 SAME round still dedupe. NULL round_key keeps one-round behavior.
 
+**A missing key is a wildcard, not a different round (v2.365.0).** The
+hourly auto-sync imports with NO round key; the targeted bridge
+(`scoring-import-event:<code>@<round>`) stamps one. On 2026-09-09 a keyed
+re-import of a9.22 ShadowGlen put `1702842` on the 16 auto-synced cards,
+Kerry added the Skins/CTP boards on GG (which re-keys the tournament's
+aggregate ids), and the next keyless auto-sync found no keyless twin for
+the new aggregates and inserted a SECOND full set — 32 cards for 16
+players, with 16 handicap differentials already posted off the first set
+and 16 more waiting to double-post. Rules now: the cross-tournament
+dedupe matches when the keys agree OR either side has none (exact
+matches sort first, so a keyed import on a multi-round day still finds
+its own round); the replace path keeps a stored key when the incoming
+import has none; a keyed import stamps its key on a keyless twin even
+when it skips the card as same-quality. Repair for rows already
+doubled: `scoring-dedupe-rounds[:<event>|all][|apply]` — groups by
+(event or date, customer, compatible keys), keeps the card a handicap
+record is bridged to (else the fuller, else the oldest), and on apply
+moves the bridge, deletes the loser's holes + row, and closes its open
+"Scorecard discrepancy" item. The `all` scan is the class check; the
+closeout skill runs it in 1.1 whenever cards ≠ field. Tests:
+`test_scoring_dedupe.py`.
+
+Two guards learned from the first production scan (v2.366.0): (1) a
+different `round_date` inside one event is a DIFFERENT round — the 2026
+TGF CHAMPIONSHIP's 8/15 and 8/16 cards share an event id and were
+grouped as one; both the repair's grouping and the import's wildcard
+match now require the same date whenever a round key is missing on
+either side. (2) The repair proves the duplicate from `scoring_holes`
+before acting: `identical` (same holes, same strokes) and `partial`
+(loser ⊂ keeper) are removed on apply; `conflict` (different holes or
+strokes) is held and listed — two cards that disagree are two rounds
+until a person says otherwise.
+
 Ordering rule (admin-corrected): **ALL Net and ALL Gross are the gold
 standard** — both carry the FULL field. ALL Net has everyone's playing
 handicaps + strokes-received dots (Individual Net is a PURCHASED game
