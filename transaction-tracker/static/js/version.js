@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.368.3";
+window.TGF_VERSION = "2.369.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.369.0",
+    date: "2026-09-10",
+    changes: [
+      "TGF Insider auto-draft (mailbox #381 ratified, #453 routed). Every Wednesday 13:00 UTC the Tracker fills the public recap template from the week's Tuesday events in both chapters — field size, share of the field that cashed, first-timers (first name + last initial), a bogey or par that won a skin, RESULTS links, the live Hole-In-One pot, next Tuesday per chapter, upcoming Saturday 18s — lints it against the ratified guardrails (no league / purse / TGF Plus / DFW / Houston, no dollar figure beyond the $25 offer and the pot), parks it in Brevo as a DRAFT to list 3 minus Active members, and emails Kerry the link. It never sends. Bridge scoring-brevo-draft (dry, returns the HTML) and scoring-brevo-draft:apply; off switches INSIDER_AUTODRAFT=0 or dial insider_autodraft=off.",
+    ],
+  },
   {
     version: "2.368.3",
     date: "2026-09-10",
