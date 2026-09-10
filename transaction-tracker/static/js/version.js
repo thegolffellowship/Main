@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.367.0";
+window.TGF_VERSION = "2.367.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.367.1",
+    date: "2026-09-10",
+    changes: [
+      "Docs only: session record round eight — the 2025 membership price table read off the nine misfit order emails (Returning 75 / New 75 then 50 promo / NET Only 75 / NET + Fellowship Cup 100 / Players Cup 50 / Match Play 75; all 11 rows fit), pending Kerry's ratification; Finance lane told the 2025 filed months are still moving.",
+    ],
+  },
   {
     version: "2.367.0",
     date: "2026-09-10",

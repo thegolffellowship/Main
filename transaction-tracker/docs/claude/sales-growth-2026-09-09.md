@@ -470,6 +470,45 @@ Mailbox #445 (id 446) posted. Finance lane's first digest (#444, id
 Kerry. Nothing in it conflicts with this lane; the rebook above is the
 kind of filed-month drift its D4 will surface.
 
+## Round eight: the 2025 price table, read off the order emails
+
+Kerry sent the Dyal and Sharitz emails; the NET line reads **"Add City
+NET + The Fellowship Cup"**. Pulled the other six misfits from Outlook
+(read_resource on the New Order mails). The line values, not the YES/NO
+flags, carry the 2025 prices:
+
+| Order | Date | Type | NET line | GROSS | MP | Paid | Decomposes |
+|---|---|---|---|---|---|---|---|
+| Dyal R410124194 | 3/12 | Returning | NET + Fellowship Cup | no | yes | 250 | 75+100+75 |
+| Sharitz R738755460 | 3/16 | Returning | NET + Fellowship Cup | no | yes | 250 | 75+100+75 |
+| Jackman R438935951 | 3/13 | New (Same Price) | NET Only | no | no | 150 | 75+75 |
+| Martinez R813217197 | 3/16 | Returning | NET Only | no | no | 150 | 75+75 |
+| W. Fieber R455774909 | 3/30 | Returning | NET + Fellowship Cup | no | no | 175 | 75+100 |
+| Henderson R919147271 | 3/10 | New (Same Price) | none | Players Cup | yes | 200 | 75+50+75 |
+| Lieck R910913208 | 3/16 | Returning | NET + Fellowship Cup | Players Cup | no | 225 | 75+100+50 |
+| Stich R560777916 | 3/26 | New ($25 Off Promo) | NET Only | Players Cup | yes | 250 | 50+75+50+75 |
+| Ellis R740796520 | 3/14 | Returning | NET + Fellowship Cup | Players Cup | yes | 300 | 75+100+50+75 |
+
+**Derived 2025 table (not yet ratified — rule 3b):** Returning $75; New
+$75 "Same Price" until the "$25 Off Promo" ($50; the $75 New group runs
+1/25–3/21, the $50 group starts 3/25); City NET Only $75; City NET +
+The Fellowship Cup $100; The Players Cup (GROSS) $50; City Match Play
+$75. All 11 misfit rows and S. Fieber's $125 (75+50) fit to the dollar.
+Two things the Tracker does not hold: the Fellowship Cup add-on is not a
+flag (the parser reduces the NET line to YES), and the pool / markup /
+shirt split inside each 2025 add-on (Kerry: 2025 contests carried a
+shirt-fund portion). Both wait on Kerry.
+
+Finance lane told directly (#446, id 448): the seven 2025 filed months
+moved +$58.28 with the shirt-gate rebook and will move again when the
+2025 table is booked; key the D4 comparison on a versioned
+`tax_reserve_signed_sum`.
+
+Also this round: **v2.367.0** — a Tu+Sa lead's presets name the soonest
+of the two days' events (Daniel Lugo IV: Forest Creek Saturday, not
+Avery Ranch Tuesday). Standing rule from Kerry: read the mailbox before
+every reply.
+
 ## Kerry decisions this lane is waiting on
 
 - ~~The three prices the table does not know~~ — RESOLVED v2.355.0:
@@ -481,9 +520,9 @@ kind of filed-month drift its D4 will surface.
 - ~~2025 import~~ — DONE v2.357–v2.361: all 80 memberships from 2025
   are in (`scoring-import-orders`). Events phase (449 + 588 event
   orders in the two windows) waits on Kerry; course costs need invoices.
-- **The 2025 price table** for 8 groups / 11 rows booked at nearest
-  fit. One at a time, starting with $250 Returning + NET + Match Play
-  (Dyal, Sharitz).
+- **Ratify the derived 2025 price table** (round eight), then the
+  pool / markup / shirt split per 2025 add-on, then whether the
+  Fellowship Cup add-on becomes its own flag (schema).
 - **HIO pot into the liabilities read** + expense tagging to the
   earmark buckets (the "balance" side) — scope with CA's chart of
   accounts.
