@@ -83,6 +83,8 @@ One order, one fee: 0 offenders across 1,375 orders. Every `tgf_payouts` row (1,
 
 ## 4. Inherited open items (do not re-derive)
 
+**Drift since the 2026-09-09 read (mailbox #445–#447, liabilities re-read 2026-09-10 10:46 CDT):** all 2025 memberships imported (80); no 2025 shirt-fund year (dial `membership_setaside_lsc_shirt_from` = 2025-08-01); 2027 fund 11 / $110; prize payouts owed $0; credits held $195.70 (3 rows); HIO pot $3,349; September reserve $64.07, open total $204.27. New gap group 2: eight 2025 membership price groups (11 rows) booked at nearest fit until Kerry names the 2025 table (CA: a 2025 column in the Pricing Master). Nothing in those posts changes D1.
+
 - Four membership misfits → resolved (parser misses + refunds, v2.355–v2.356). Bartz 2025 $150 New + Fall is the one open price question.
 - 28 diverged orders (F9). 73 pre-cutover event gaps (`scoring-margin-gaps`: 74 events, 1,268 rows, books $22,843 vs would-book $28,742 after the membership rebook; the membership group now reads $6,096 vs $6,103, closed). Kerry wants these one at a time; recommendation stands: the eight "no events row" names first (HILL COUNTRY MATCHES, both Kickoffs, s9.9, s9.16, s9.10, Northern Hills, a18.2), because they carry $5,500 of the $5,900 swing and each is one course cost + one prize structure.
 - 2025 event orders (449) wait for the events phase.
@@ -198,7 +200,7 @@ Not on the list: `/tgf` Payouts and Refunds (they are the outflow writers the le
 | 2026-08 | $1,704.70 | $140.20 | open, due 9/20 | | first month the Tracker can file from |
 | 2026-09 | $745.95 | $61.56 | open | | |
 
-Tracker reserve, 2026 filed months: $1,789.94. The 2025 months carry $33.45 of retroactive reserve from the imported memberships; those returns were filed in 2025 and are outside this table.
+Tracker reserve, 2026 filed months: $1,789.94. **2025 (addendum 2026-09-10, after #445/#446):** all 80 memberships from 2025 are now imported and Kerry ruled that memberships before 2025-08-01 funded no shirts, so the ten 2025 months with orders (Jan–Sep, Dec) now carry $352.21 of reserve that did not exist when those returns were filed — Jan $39.83, Feb $22.76, Mar $89.93, Apr $7.26, May $79.86, Jun $41.99, Jul $38.36, Aug $12.89, Sep $16.52, Dec $2.81. Those returns were filed from 2025 workbooks that are outside this table; D4 covers 2026 only unless Kerry wants 2025 sized too.
 
 ---
 
