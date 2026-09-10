@@ -366,6 +366,18 @@ Wednesday auto-draft fills the template:**
     show top headlines centered as shown"); the greeting and lede stay
     left. Template updated.
 
+**Cadence ruling (Kerry, 2026-09-10 evening, after #2's first-day numbers —
+27.8% opens, 29 tracked clicks, 7 unsubs in 3h40m):** *"let's keep it at
+weekly right now. I think there's more stories to tell and I think opens
+and click trends might be a better sign of how it's hitting."* Unsubs are
+not the steering metric (*"I'd rather people unsubscribe if they truly
+don't want to be involved"*). Biweekly stays the recorded off-season
+rhythm and the fallback if open/click trends sag; monthly is off the
+table because the format lives on last Tuesday's results and next
+Tuesday's button. Read #2 again at +24h and keep the opens/clicks trend
+per issue (Brevo campaign ids: #15 = Insider 1 (9/2), #18 = Insider 2
+(9/10)).
+
 **v3 fixes (Kerry, off the Brevo preview 2026-09-02) — template rules:**
 - The Season-20 logo (69986bc3…png) is BLACK INK — header band must be
   WHITE (with a dark rule under it), never #1b1b1b (v2 rendered black
