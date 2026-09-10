@@ -18468,11 +18468,17 @@ def _cleanup_empty_scoring_rounds(conn: sqlite3.Connection) -> None:
 def _scoring_round_dupe_groups(conn: sqlite3.Connection,
                                event: str | None = None) -> list:
     """Group scoring_rounds that describe the SAME physical round: same
-    event (or same date when the event is unknown), same person
+    event (or, with no event, same date), same DATE — a different
+    round_date inside one event is a different round (the 2026 TGF
+    CHAMPIONSHIP's 8/15 and 8/16 cards), never a duplicate — same person
     (customer_id, else the lower-cased player name), and league round
-    keys that agree or are missing on either side. Returns groups with
-    2+ rows, keeper first (the row a handicap record is bridged to, else
-    the oldest)."""
+    keys that agree or are missing on either side. Returns groups with 2+
+    rows, keeper first (the row a handicap record is bridged to, else the
+    fuller card, else the oldest), each classified from the hole scores:
+    'identical' (same holes, same strokes), 'partial' (the loser's scored
+    holes are a subset of the keeper's with equal strokes — a mid-round
+    grab), or 'conflict' (different holes or strokes — NOT a duplicate we
+    can prove; apply leaves it alone)."""
     where, params = "", []
     if event and event.lower() != "all":
         where = "WHERE LOWER(COALESCE(e.item_name, '')) LIKE ?"
@@ -18492,29 +18498,30 @@ def _scoring_round_dupe_groups(conn: sqlite3.Connection,
     for r in rows:
         who = (("cid", r["customer_id"]) if r["customer_id"]
                else ("name", (r["player_name"] or "").strip().lower()))
-        scope = (("event", r["event_id"]) if r["event_id"]
-                 else ("date", r["round_date"]))
-        buckets.setdefault((scope, who), []).append(dict(r))
+        scope = (("event", r["event_id"]) if r["event_id"] else ("date", None))
+        buckets.setdefault((scope, r["round_date"], who), []).append(dict(r))
+
+    def strokes_of(rid: int) -> dict:
+        return {h["hole_number"]: h["strokes"] for h in conn.execute(
+            "SELECT hole_number, strokes FROM scoring_holes "
+            "WHERE scoring_round_id = ? AND strokes IS NOT NULL", (rid,))}
+
     groups = []
-    for (scope, who), rs in buckets.items():
+    for (scope, rdate, who), rs in buckets.items():
         if len(rs) < 2:
             continue
-        # Split the bucket by league key: rows with DIFFERENT non-empty keys
-        # are different rounds of a multi-round day; keyless rows attach
-        # to whichever keyed cluster shares their date (or the first).
+        # Rows with DIFFERENT non-empty keys are different rounds of a
+        # multi-round day; keyless rows attach to the first cluster.
         clusters: list = []
         for r in rs:
             k = (r["gg_league_round_id"] or "").strip()
             home = None
             for c in clusters:
-                ck = c["key"]
-                if (not k) or (not ck) or k == ck:
-                    if not k and ck and c["date"] != r["round_date"]:
-                        continue
+                if (not k) or (not c["key"]) or k == c["key"]:
                     home = c
                     break
             if home is None:
-                clusters.append({"key": k, "date": r["round_date"], "rows": [r]})
+                clusters.append({"key": k, "rows": [r]})
             else:
                 home["rows"].append(r)
                 if k and not home["key"]:
@@ -18526,12 +18533,29 @@ def _scoring_round_dupe_groups(conn: sqlite3.Connection,
                              key=lambda r: (-(r["bridged"] or 0),
                                             -(r["holes_played"] or 0),
                                             r["id"]))
+            keep = ordered[0]
+            keep_strokes = strokes_of(keep["id"])
+            verdicts = []
+            for r in ordered[1:]:
+                st = strokes_of(r["id"])
+                if st == keep_strokes:
+                    verdicts.append("identical")
+                elif st and all(keep_strokes.get(h) == v for h, v in st.items()):
+                    verdicts.append("partial")
+                else:
+                    verdicts.append("conflict")
+            for r in ordered:
+                st = strokes_of(r["id"])
+                r["holes"] = (f"{min(st)}-{max(st)} ({len(st)})" if st else "none")
             groups.append({"scope": scope[0], "scope_id": scope[1],
-                           "who": who[1], "event_name": ordered[0]["event_name"],
-                           "player_name": ordered[0]["player_name"],
-                           "round_date": ordered[0]["round_date"],
-                           "keep": ordered[0]["id"],
+                           "who": who[1], "event_name": keep["event_name"],
+                           "player_name": keep["player_name"],
+                           "round_date": rdate,
+                           "keep": keep["id"],
                            "drop": [r["id"] for r in ordered[1:]],
+                           "verdict": ("conflict" if "conflict" in verdicts
+                                       else "partial" if "partial" in verdicts
+                                       else "identical"),
                            "rows": ordered})
     return groups
 
@@ -18555,9 +18579,10 @@ def dedupe_scoring_rounds(event: str | None = None, apply: bool = False,
         _ensure_scoring_tables(conn)
         groups = _scoring_round_dupe_groups(conn, event)
         removed = moved = 0
+        held = [g for g in groups if g["verdict"] == "conflict"]
         for g in groups:
             g["rows"] = [{k: v for k, v in r.items()} for r in g["rows"]]
-            if not apply:
+            if not apply or g["verdict"] == "conflict":
                 continue
             for rid in g["drop"]:
                 moved += conn.execute(
@@ -18578,18 +18603,27 @@ def dedupe_scoring_rounds(event: str | None = None, apply: bool = False,
             conn.commit()
     by_event: dict = {}
     for g in groups:
-        by_event[g["event_name"] or f"date {g['round_date']}"] = \
-            by_event.get(g["event_name"] or f"date {g['round_date']}", 0) + 1
+        k = g["event_name"] or f"date {g['round_date']}"
+        by_event.setdefault(k, {"identical": 0, "partial": 0, "conflict": 0})
+        by_event[k][g["verdict"]] += 1
+    provable = [g for g in groups if g["verdict"] != "conflict"]
     return {"event": event or "all", "applied": bool(apply),
             "duplicate_groups": len(groups),
+            "provable_groups": len(provable),
+            "held_conflicts": len(held),
             "rows_to_drop" if not apply else "rows_dropped":
-                sum(len(g["drop"]) for g in groups) if not apply else removed,
+                sum(len(g["drop"]) for g in provable) if not apply else removed,
             "handicap_bridges_moved": moved if apply else None,
             "by_event": by_event,
+            "note": ("conflict = the two cards carry different holes or strokes; "
+                     "they are two rounds, not one duplicated, and apply never "
+                     "touches them. identical/partial are removed on apply."),
             "groups": [{"event": g["event_name"], "player": g["player_name"],
-                        "round_date": g["round_date"], "keep": g["keep"],
-                        "drop": g["drop"],
+                        "round_date": g["round_date"], "verdict": g["verdict"],
+                        "keep": g["keep"], "drop": g["drop"],
                         "keys": [r["gg_league_round_id"] for r in g["rows"]],
+                        "holes": [r["holes"] for r in g["rows"]],
+                        "gross": [r["gross"] for r in g["rows"]],
                         "aggregates": [r["gg_aggregate_id"] for r in g["rows"]],
                         "bridged": [r["bridged"] for r in g["rows"]],
                         "imported_at": [r["imported_at"] for r in g["rows"]]}
@@ -18711,16 +18745,31 @@ def import_gg_scorecards(tournament_url: str, event_code: str | None = None,
                 # keyless auto-sync insert a SECOND card for all 16
                 # players. Exact key matches sort first so a keyed import
                 # on a multi-round day still finds its own round.
+                # A wildcard match (either side keyless) additionally
+                # requires the SAME round_date: inside one event a
+                # different date is a different round (2026 TGF
+                # CHAMPIONSHIP 8/15 + 8/16), so a keyed R2 import must
+                # never be swallowed by a keyless R1 card. Two keyed rows
+                # that agree may still match by event id (archive rows
+                # whose dates were stamped later).
+                rk = round_key or ""
                 dup = conn.execute(
                     """SELECT id, playing_handicap, holes_played, gg_league_round_id
                        FROM scoring_rounds
-                       WHERE (round_date = ? OR (event_id IS NOT NULL AND event_id = ?))
-                         AND (COALESCE(gg_league_round_id, '') = ?
-                              OR ? = '' OR gg_league_round_id IS NULL)
-                         AND (customer_id = ? OR LOWER(player_name) = LOWER(?))
+                       WHERE (customer_id = ? OR LOWER(player_name) = LOWER(?))
+                         AND (
+                              (? != '' AND COALESCE(gg_league_round_id, '') = ?
+                               AND (round_date = ?
+                                    OR (event_id IS NOT NULL AND event_id = ?)))
+                           OR (round_date = ?
+                               AND (COALESCE(gg_league_round_id, '') = ?
+                                    OR ? = '' OR gg_league_round_id IS NULL))
+                         )
                        ORDER BY (COALESCE(gg_league_round_id, '') = ?) DESC, id""",
-                    (event_date, event_id, round_key or "", round_key or "",
-                     cid or -1, p["player_name"], round_key or "")).fetchone()
+                    (cid or -1, p["player_name"],
+                     rk, rk, event_date, event_id,
+                     event_date, rk, rk,
+                     rk)).fetchone()
                 if dup:
                     incoming_holes = sum(1 for h in p["holes"].values()
                                          if h.get("strokes") is not None)
@@ -22493,25 +22542,43 @@ def save_items(rows: list[dict], db_path: str | Path | None = None,
                             _dc_order = row.get("order_id") or ""
                             if (_dc_cid or _dc_name) and _dc_event and not row.get("transferred_from_id"):
                                 _prior = None
+                                # A membership RENEWS: last year's TGF MEMBERSHIP
+                                # row stays 'active' forever, so without a date
+                                # window every renewal reads as a duplicate of
+                                # the term before it (Luke Mazanec, 2026-09-10 —
+                                # the 2025-09-10 term imported the day before
+                                # tripped the alarm). Only a prior membership
+                                # bought inside the last 300 days is a duplicate;
+                                # event items keep the date-free rule (one event,
+                                # one date).
+                                _dc_date = str(row.get("order_date") or "")[:10]
+                                _dc_recurring = bool(re.search(
+                                    r"MEMBERSHIP|SKU:\s*MEM-", _dc_event, re.I))
+                                _dc_window = (
+                                    " AND order_date >= date(?, '-300 days')"
+                                    if _dc_recurring and _dc_date else "")
+                                _dc_wparams = (_dc_date,) if _dc_window else ()
                                 if _dc_cid:
                                     _prior = conn.execute(
-                                        """SELECT id, order_id FROM items
+                                        f"""SELECT id, order_id FROM items
                                            WHERE customer_id = ? AND item_name = ? COLLATE NOCASE
                                              AND COALESCE(transaction_status,'active') = 'active'
                                              AND id != ?
                                              AND COALESCE(email_uid,'') NOT LIKE 'manual-%'
+                                             {_dc_window}
                                            LIMIT 1""",
-                                        (_dc_cid, _dc_event, new_item_id),
+                                        (_dc_cid, _dc_event, new_item_id) + _dc_wparams,
                                     ).fetchone()
                                 if not _prior and _dc_name:
                                     _prior = conn.execute(
-                                        """SELECT id, order_id FROM items
+                                        f"""SELECT id, order_id FROM items
                                            WHERE customer = ? COLLATE NOCASE AND item_name = ? COLLATE NOCASE
                                              AND COALESCE(transaction_status,'active') = 'active'
                                              AND id != ?
                                              AND COALESCE(email_uid,'') NOT LIKE 'manual-%'
+                                             {_dc_window}
                                            LIMIT 1""",
-                                        (_dc_name, _dc_event, new_item_id),
+                                        (_dc_name, _dc_event, new_item_id) + _dc_wparams,
                                     ).fetchone()
                                 if _prior:
                                     _pr_val = (row.get("partner_request") or "").strip().lower()

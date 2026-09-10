@@ -1,5 +1,15 @@
-window.TGF_VERSION = "2.365.0";
+window.TGF_VERSION = "2.366.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.366.0",
+    date: "2026-09-10",
+    changes: [
+      "scoring-dedupe-rounds now scopes by DATE and proves the duplicate from the hole scores before it touches anything. The first production scan grouped the 2026 TGF CHAMPIONSHIP's Saturday and Sunday cards as one round because they share an event id; a different round_date inside one event is a different round, never a duplicate. Each group is classified from scoring_holes — identical (same holes, same strokes), partial (a mid-round grab inside the full card), or conflict (different holes or strokes) — and apply removes only identical and partial; conflicts are held and listed. The import-time wildcard match (v2.365.0) carries the same guard: a keyless side matches only on the same date, so a keyed Round 2 import can never be swallowed by a keyless Round 1 card.",
+      "Duplicate-registration alerts learn that memberships renew. Luke Mazanec's 2026-09-10 renewal was flagged as a duplicate of his 2025-09-10 term, imported the day before by the membership-only historical import — last year's TGF MEMBERSHIP row stays 'active' forever, so every renewal read as a duplicate of the term before it. A prior membership now counts only when bought inside the last 300 days; event items keep the date-free rule.",
+      "Read-only bridge scoring-status-changes[:<since>][|<limit>] lists customer status flips with the status before, the latest term's expiry and the last membership order — the answer to “Where'd Straiton and others go?” (the 2025 terms imported on 2026-09-09 had already expired, the terms sync demoted their holders to expired_member, and the Handicaps MEMBERS toggle hid them).",
+      "The ShadowGlen recap for Robert ships as copy-paste text (.txt) and email-ready HTML beside the markdown draft under docs/claude/recaps/.",
+    ],
+  },
   {
     version: "2.365.0",
     date: "2026-09-10",

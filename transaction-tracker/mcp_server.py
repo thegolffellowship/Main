@@ -1762,6 +1762,8 @@ def _scoring_dispatch(url: str, extract: str):
                                    event (ALL Net → ALL Gross); refresh=
                                    force-replaces named players' stale cards;
                                    url = the portal widget
+      scoring-status-changes[:<since>][|<limit>]  customer status flips since a
+                                   date with the status before (read-only)
       scoring-dedupe-rounds[:<event>|all][|apply]  duplicate scorecards
                                    (two scoring_rounds for one person's one
                                    round — the a9.22 32-cards-for-16 class);
@@ -2901,6 +2903,44 @@ def _scoring_dispatch(url: str, extract: str):
                        f"event={_ev or 'all'} dropped={_res.get('rows_dropped')} "
                        f"bridges_moved={_res.get('handicap_bridges_moved')}")
             return json.dumps(_res, indent=2, default=str)
+        if cmd == "scoring-status-changes":
+            # READ-ONLY (Kerry 2026-09-10, "Where'd Straiton and others go?"):
+            # customer status flips since a date, newest first, with the
+            # status before. The 2026-09-09 historical membership import
+            # created 2025 terms that had already expired and the terms sync
+            # demoted their holders to expired_member, which the Handicaps
+            # MEMBERS toggle then hid. "[<since YYYY-MM-DD>][|<limit>]".
+            _p = [x.strip() for x in (arg or "").split("|")]
+            _since = _p[0] if _p and _p[0] else "2026-09-09"
+            _lim = int(_p[1]) if len(_p) > 1 and _p[1].isdigit() else 200
+            with db._connect() as _c:
+                _rows = [dict(r) for r in _c.execute(
+                    """SELECT cs.id, cs.customer_id,
+                              c.first_name || ' ' || c.last_name AS name,
+                              c.chapter, c.current_player_status AS status_now,
+                              s.status_name AS set_to, cs.set_at, cs.notes,
+                              (SELECT s2.status_name FROM customer_statuses p
+                                 JOIN statuses s2 ON s2.status_id = p.status_id
+                                WHERE p.customer_id = cs.customer_id AND p.id < cs.id
+                                ORDER BY p.id DESC LIMIT 1) AS was,
+                              (SELECT MAX(m.expires_at) FROM customer_memberships m
+                                WHERE m.customer_id = cs.customer_id) AS latest_term_expires,
+                              (SELECT MAX(i.order_date) FROM items i
+                                WHERE i.customer_id = cs.customer_id
+                                  AND UPPER(i.item_name) LIKE '%MEMBERSHIP%') AS last_membership_order
+                         FROM customer_statuses cs
+                         JOIN customers c ON c.customer_id = cs.customer_id
+                         JOIN statuses s ON s.status_id = cs.status_id
+                        WHERE cs.set_at >= ?
+                        ORDER BY cs.id DESC LIMIT ?""", (_since, _lim)).fetchall()]
+            _by: dict = {}
+            for r in _rows:
+                k = (r["set_to"], r["notes"])
+                _by[k] = _by.get(k, 0) + 1
+            return json.dumps({"since": _since, "n": len(_rows),
+                               "by_change": [{"set_to": k[0], "notes": k[1], "n": v}
+                                             for k, v in _by.items()],
+                               "rows": _rows}, indent=2, default=str)
         if cmd == "scoring-message-log":
             # READ-ONLY (Kerry 2026-09-10, after sending the handicap cards:
             # "is there a historical record logged when those are sent?"):

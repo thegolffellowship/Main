@@ -201,6 +201,42 @@ repairs rows already doubled (keeper = the bridged card; bridge moved,
 loser's holes + row deleted, its open discrepancy item closed).
 Applied on production after the deploy — see §5.
 
+### 3f. The first production scan, and three morning questions (v2.366.0)
+
+`scoring-dedupe-rounds:all` on v2.365.0 reported 120 groups across five
+events. Reading them before applying anything: a9.22 (16, the class
+above) and s18.10 FALL KICKOFF (27, a 2026-08-31 re-import under new GG
+aggregate ids; hole-for-hole identical) are real; TGF SAN ANTONIO /
+AUSTIN CHAMPIONSHIP (32 + 16, same import minute, unbridged twins) need
+the hole comparison to say; and the 2026 TGF CHAMPIONSHIP's 29 were NOT
+duplicates — Saturday's and Sunday's cards share an event id, and the
+grouping had ignored the date. v2.366.0 scopes by date and classifies
+every group from the hole scores; apply touches only `identical` and
+`partial`. Result of the apply is in §5.
+
+Three things Kerry hit the same morning, all fallout from the 2026-09-09
+membership-only historical import (`scoring-import-orders 2025-01-01..
+2025-07-31|membership-only`, then Aug–Dec):
+
+- **"Where'd Straiton and others go?"** — the import created 2025
+  membership terms that had already expired; `sync_player_status_with_terms`
+  then demoted their holders to `expired_member` (Robert Straiton: one
+  term, 2025-01-02 → 2026-01-02, no 2026 renewal on file; status flipped
+  23:33:53 UTC), and the Handicaps page's MEMBERS toggle hides
+  non-members. `scoring-status-changes:2026-09-09` lists every flip with
+  the status before. Who is genuinely lapsed vs comped/paid-off-books is
+  Kerry's call — the Brevo nightly sync already pushed the new statuses
+  at 09:10, so a reversal needs to reach Brevo too.
+- **Luke Mazanec "duplicate" renewal** — item 2721 (2025-09-10, $50,
+  imported 9/9) vs item 2807 (2026-09-10, $75). A renewal, not a
+  duplicate; rule fixed (customers.md), item closed.
+- **Six action items** — four phone drifts on 2025 orders (Duran, Carter,
+  Dyal, Tonche) and Dan Tarr's 2025-07-10 Twin Creeks order (GUEST rate
+  + membership, no guest name: he was the guest). HubSpot agrees with
+  the ORDER for Dyal ((210) 557-1765; canonical (270) is wrong) and with
+  the CANONICAL for Tonche ((979) 236-8787). Duran and Carter are not in
+  HubSpot by name.
+
 ## 4. NOT done, and why
 
 1. **Handicap cards were not emailed to the players who played (Phase

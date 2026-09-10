@@ -98,6 +98,17 @@ moves the bridge, deletes the loser's holes + row, and closes its open
 closeout skill runs it in 1.1 whenever cards ≠ field. Tests:
 `test_scoring_dedupe.py`.
 
+Two guards learned from the first production scan (v2.366.0): (1) a
+different `round_date` inside one event is a DIFFERENT round — the 2026
+TGF CHAMPIONSHIP's 8/15 and 8/16 cards share an event id and were
+grouped as one; both the repair's grouping and the import's wildcard
+match now require the same date whenever a round key is missing on
+either side. (2) The repair proves the duplicate from `scoring_holes`
+before acting: `identical` (same holes, same strokes) and `partial`
+(loser ⊂ keeper) are removed on apply; `conflict` (different holes or
+strokes) is held and listed — two cards that disagree are two rounds
+until a person says otherwise.
+
 Ordering rule (admin-corrected): **ALL Net and ALL Gross are the gold
 standard** — both carry the FULL field. ALL Net has everyone's playing
 handicaps + strokes-received dots (Individual Net is a PURCHASED game

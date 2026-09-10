@@ -147,6 +147,29 @@ check("a re-keyed R2 aggregate adds no third row and leaves R1 alone",
       len(rs) == 2 and rs[0]["gg_aggregate_id"] == "M1"
       and [r["gg_league_round_id"] for r in rs] == ["R1", "R2"], str(rs))
 
+print("\n== 3b. multi-DAY event: a keyed R2 on a later date never merges into a keyless R1 ==")
+p = fresh_db()
+with db._connect(p) as conn:
+    conn.execute("INSERT INTO events VALUES (3291, '2026 TGF CHAMPIONSHIP', '2026-08-15', 'Lost Pines')")
+    conn.commit()
+fake_fetch([card("YOUNGS, Luke", "C1", gross=84)])
+db.import_gg_scorecards("https://x/t/1", event_code="2026 TGF CHAMPIONSHIP", db_path=p)
+fake_fetch([card("YOUNGS, Luke", "C2", gross=90)])
+db.import_gg_scorecards("https://x/t/2", event_code="2026 TGF CHAMPIONSHIP",
+                        round_key="1692725", round_date="2026-08-16", db_path=p)
+rs = rows(p, 3291)
+check("R1 (keyless, 8/15) and R2 (keyed, 8/16) are two rows",
+      len(rs) == 2 and [r["gg_aggregate_id"] for r in rs] == ["C1", "C2"], str(rs))
+fake_fetch([card("YOUNGS, Luke", "C3", gross=90)])
+db.import_gg_scorecards("https://x/t/3", event_code="2026 TGF CHAMPIONSHIP",
+                        round_date="2026-08-16", db_path=p)   # keyless R2 re-import
+rs = rows(p, 3291)
+check("a keyless R2 re-import on 8/16 adds nothing and leaves R1 alone",
+      len(rs) == 2 and rs[0]["gg_aggregate_id"] == "C1", str(rs))
+scan = db.dedupe_scoring_rounds("CHAMPIONSHIP", apply=False, db_path=p)
+check("the dedupe scan does not group the two dates", scan["duplicate_groups"] == 0,
+      str(scan))
+
 print("\n== 4. dedupe_scoring_rounds on the a9.22 shape ==")
 p = fresh_db()
 with db._connect(p) as conn:
@@ -248,6 +271,23 @@ res = db.dedupe_scoring_rounds("a9.22", apply=True, db_path=p)
 rs = rows(p)
 check("the newer-but-bridged row is the keeper",
       [r["id"] for r in rs] == [2], str(rs))
+
+print("\n== 6. two cards with DIFFERENT strokes on one date are a conflict — held, never dropped ==")
+p = fresh_db()
+with db._connect(p) as conn:
+    for rid, agg, strokes in ((1, "X1", 4), (2, "X2", 5)):
+        conn.execute("""INSERT INTO scoring_rounds (id, customer_id, player_name, event_id,
+                        gg_aggregate_id, round_date, holes_played) VALUES (?, 13, 'YOUNGS, Luke',
+                        3313, ?, '2026-09-08', 9)""", (rid, agg))
+        for h in range(1, 10):
+            conn.execute("INSERT INTO scoring_holes (scoring_round_id, hole_number, strokes) "
+                         "VALUES (?, ?, ?)", (rid, h, strokes))
+    conn.commit()
+res = db.dedupe_scoring_rounds("a9.22", apply=True, db_path=p)
+check("the group is reported as a conflict",
+      res["duplicate_groups"] == 1 and res["held_conflicts"] == 1
+      and res["groups"][0]["verdict"] == "conflict", str(res))
+check("nothing is dropped", res["rows_dropped"] == 0 and len(rows(p)) == 2, str(res))
 
 print()
 if FAILURES:
