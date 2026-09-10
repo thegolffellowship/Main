@@ -2878,6 +2878,34 @@ def _scoring_dispatch(url: str, extract: str):
             _subs = [s.strip() for s in arg.split(",") if s.strip()]
             return json.dumps(_ggh.hio_archive_events(_subs),
                               indent=2, default=str)
+        if cmd == "scoring-message-log":
+            # READ-ONLY (Kerry 2026-09-10, after sending the handicap cards:
+            # "is there a historical record logged when those are sent?"):
+            # the message_log as production holds it. Handicap cards log
+            # under event_name 'handicap-card'; event messages under the
+            # event's name. "<fragment>[|<limit>]" — fragment matches
+            # event_name OR subject, case-insensitive; empty = newest 50.
+            _p = [x.strip() for x in (arg or "").split("|")]
+            _frag = _p[0] if _p and _p[0] else ""
+            _lim = int(_p[1]) if len(_p) > 1 and _p[1].isdigit() else 50
+            with db._connect() as _c:
+                _rows = [dict(r) for r in _c.execute(
+                    "SELECT id, sent_at, event_name, channel, recipient_name, "
+                    "recipient_address, subject, status, sent_by FROM message_log "
+                    + ("WHERE LOWER(event_name) LIKE ? OR LOWER(subject) LIKE ? "
+                       if _frag else "")
+                    + "ORDER BY sent_at DESC LIMIT ?",
+                    ((f"%{_frag.lower()}%", f"%{_frag.lower()}%", _lim)
+                     if _frag else (_lim,))).fetchall()]
+            _by_day: dict = {}
+            for r in _rows:
+                k = ((r.get("sent_at") or "")[:10], r.get("event_name"), r.get("status"))
+                _by_day[k] = _by_day.get(k, 0) + 1
+            return json.dumps({"filter": _frag or None, "n": len(_rows),
+                               "by_day": [{"date": k[0], "event_name": k[1],
+                                           "status": k[2], "n": v}
+                                          for k, v in sorted(_by_day.items(), reverse=True)],
+                               "rows": _rows}, indent=2, default=str)
         if cmd == "scoring-event-pricing-audit":
             # READ-ONLY (Kerry 2026-09-09, "Pricing should be based off of
             # what is in the Pricing List in the editor"): events whose

@@ -90,8 +90,12 @@ Do not assume it — read it — but do not redo it either.
     other: `all_ok: true`. Any discrepancy already filed a COO action item.
 2.2 **Payouts recorded AND paid.** `scoring-payouts-inspect:<event>` —
     every row's `state`. `PENDING` = recorded, not paid. Paying is Kerry
-    (Venmo); the receipt matcher flips the state when the receipt lands.
-    Report the pending total per chapter. Never mark paid from here.
+    (Venmo); the receipt matcher flips the state when the receipt lands,
+    usually within minutes. Report the pending total per chapter. Never
+    mark paid from here. **Re-read before every report** —
+    `scoring-payouts-unpaid` is the one-call answer. On 2026-09-10 a
+    morning report repeated "31 PENDING" from the night before; Kerry had
+    paid all 31 in between, and the Tracker already knew.
 2.3 **Roster truth.** Registrations vs cards: no-shows (registered, no
     card), WDs, `credit_amount`, balance-due rows. A WD still in the saved
     pairings: `scoring-pairings-remove:<event>|<player>`.
@@ -117,6 +121,13 @@ Do not assume it — read it — but do not redo it either.
     `/api/handicaps/send-bulk-email`, manager login). There is NO bridge
     command for it as of 2026-09-09, so it cannot be run from an MCP
     session — see OPEN 6. Reversing 3.2 and 3.3 mails yesterday's index.
+    **It IS verifiable from here:** every card send logs to `message_log`
+    under event_name `handicap-card`; `scoring-message-log:handicap-card`
+    shows the sends by day with recipient and status. Check it before
+    reporting 3.3 as done or not done.
+3.4 **Kerry uploads the updated handicaps to Golf Genius** (manual CSV
+    export → GG, so next week's strokes are right). Not computable from
+    the Tracker; ask, do not assume.
 
 ## Phase 4 — money and standings
 

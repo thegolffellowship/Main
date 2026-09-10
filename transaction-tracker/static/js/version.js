@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.363.0";
+window.TGF_VERSION = "2.364.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.364.0",
+    date: "2026-09-10",
+    changes: [
+      "Read-only bridge scoring-message-log[:<fragment>[|<limit>]] answers Kerry's question after sending the handicap cards: “is there a historical record logged when those are sent?” Yes — every send has logged to message_log since the bulk-email feature shipped (handicap cards under event_name handicap-card, event messages under the event's name), and the closeout routine can now read it instead of asking. Grouped by day, event and status, with the rows underneath.",
+    ],
+  },
   {
     version: "2.363.0",
     date: "2026-09-10",
