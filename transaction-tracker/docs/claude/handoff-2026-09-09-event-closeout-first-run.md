@@ -311,6 +311,20 @@ a bad data row cannot ship a rule break; every proper name in the send
 is first name + last initial. First real draft: only after Kerry reads
 the dry run.
 
+Dry run on production (v2.369.2/.3, 2026-09-10 16:47 UTC): subject
+"TGF Insider | First round. First payday."; s9.22 24 cards / 12 cashed,
+a9.22 16 cards / 9 cashed; 7 first-timers by registration tag (SA
+Espinosa, Hinojosa, Lewis; AUS Compton, Donovan, Johnston, Sekiguchi),
+6 of whom cashed — checked against `scoring-gg-results` (Espinosa par on
+10 skin, Donovan BOGEY on 4 skin, the other four on T1 team-net cards;
+Compton did not cash). Lint clean. Two corrections came out of the first
+dry run: the no-earlier-card first-timer guess over-counted (a
+MEMBER-tagged registrant whose rounds predate the scorecard imports) →
+the 1st TIMER tag decides; `str.capitalize` produced "san antonio" →
+first-letter-only. Rendered copy of record:
+`docs/claude/recaps/2026-09-10-insider-draft-s9.22-a9.22.html`. The
+scheduler's first unattended run is Wednesday 2026-09-16 13:00 UTC.
+
 ## 4. NOT done, and why
 
 - **Wednesday-AM TGF Insider auto-draft (mailbox #453).** BUILT in

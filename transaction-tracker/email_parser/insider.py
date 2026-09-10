@@ -317,11 +317,17 @@ def compose(data: dict) -> dict:
     if cashed_firsts:
         f = cashed_firsts[0]
         others = len(firsts) - 1
+        k = len(cashed_firsts) - 1          # the other first-timers who cashed
+        if others and k >= 1:
+            tail = (f" — and so did {k} of the other {others} first-timer"
+                    f"{'s' if others != 1 else ''} on the sheet.")
+        elif others:
+            tail = f" — one of {len(firsts)} first-timers on the sheet."
+        else:
+            tail = "."
         slots["BEAT_2_LEAD"] = "First round, first payday."
         slots["BEAT_2_BODY"] = (f"{_esc(f['short'])} teed it up with us for the first time "
-                                f"{when_mid} and left with money"
-                                + (f" — one of {len(firsts)} first-timers on the sheet." if others
-                                   else ".")
+                                f"{when_mid} and left with money" + tail
                                 + " Nobody gets a special tee. Everybody gets a fair game.")
     elif firsts:
         slots["BEAT_2_LEAD"] = f"{len(firsts)} new face{'s' if len(firsts) != 1 else ''} in the groups."

@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.369.2";
+window.TGF_VERSION = "2.369.3";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.369.3",
+    date: "2026-09-10",
+    changes: [
+      "Insider beat 2 now counts the first-timers who cashed, not just the one it names: 'Christopher E. ... left with money — and so did 5 of the other 6 first-timers on the sheet.' Verified against the GG boards for s9.22/a9.22 before shipping (Espinosa par on 10, Donovan bogey on 4, Hinojosa/Lewis/Johnston/Sekiguchi on the T1 team net cards).",
+    ],
+  },
   {
     version: "2.369.2",
     date: "2026-09-10",

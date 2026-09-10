@@ -127,6 +127,14 @@ slots = insider.compose(data)
 check("headline follows first-timer payday", slots["HEADLINE"] == "First round. First payday.", slots["HEADLINE"])
 check("beat 2 names Kannon B. only by initial", "Kannon B." in slots["BEAT_2_BODY"]
       and "Bell" not in slots["BEAT_2_BODY"])
+check("beat 2 counts the other first-timers who did not cash", "one of 3 first-timers" in slots["BEAT_2_BODY"],
+      slots["BEAT_2_BODY"])
+with db._connect(p) as conn:   # Hector A. (4) cashes too → "and so did 1 of the other 2"
+    conn.execute("INSERT INTO tgf_payouts (event_id, customer_id, category, amount) VALUES (1, 4, 'team', 12)")
+    conn.commit()
+_s2 = insider.compose(insider.gather_week(db_path=p, as_of=date(2026, 9, 10)))
+check("beat 2 counts the other first-timers who cashed", "and so did 1 of the other 2 first-timers" in _s2["BEAT_2_BODY"],
+      _s2["BEAT_2_BODY"])
 check("beat 3 tells the bogey skin", "bogey" in slots["BEAT_3_LEAD"] and "7th" in slots["BEAT_3_BODY"],
       slots["BEAT_3_BODY"])
 check("HIO pot formatted", slots["HIO_POT"] == "$1,175")
