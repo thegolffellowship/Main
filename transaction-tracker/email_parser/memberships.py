@@ -229,11 +229,15 @@ def repair_early_renewal_terms(conn: sqlite3.Connection,
 # customer_memberships.source is CHECK-constrained to backfill/renewal/manual;
 # a comp term is a MANUAL term whose notes start with the marker below.
 def dedupe_terms_by_source_item(conn: sqlite3.Connection,
-                                apply: bool = False) -> dict:
+                                apply: bool = False,
+                                created_since: str | None = None) -> dict:
     """One item, one term. Delete every term after the FIRST (lowest id)
     that shares a source_item_id — the duplicates the v2.368.0 boot
     created when the backfill's date-keyed idempotency stopped matching
-    continued starts. Dry run by default; the status sync runs after an
+    continued starts. `created_since` limits the deletion to duplicates
+    created at/after that timestamp (the boot's rows), leaving older
+    duplicates — a re-extracted order date from an earlier backfill —
+    listed for a human. Dry run by default; the status sync runs after an
     apply so nobody keeps a status only the duplicate supported."""
     ensure_membership_tables(conn)
     dupes = conn.execute(
@@ -244,7 +248,12 @@ def dedupe_terms_by_source_item(conn: sqlite3.Connection,
               AND m.id > (SELECT MIN(id) FROM customer_memberships k
                            WHERE k.source_item_id = m.source_item_id)
             ORDER BY m.customer_id, m.id""").fetchall()
-    rows = [dict(r) for r in dupes]
+    all_rows = [dict(r) for r in dupes]
+    if created_since:
+        rows = [r for r in all_rows if (r["created_at"] or "") >= created_since]
+        older = [r for r in all_rows if (r["created_at"] or "") < created_since]
+    else:
+        rows, older = all_rows, []
     if apply and rows:
         conn.executemany("DELETE FROM customer_memberships WHERE id = ?",
                          [(r["id"],) for r in rows])
@@ -253,8 +262,9 @@ def dedupe_terms_by_source_item(conn: sqlite3.Connection,
             sync_player_status_with_terms(conn)
         except Exception:
             logger.warning("dedupe_terms_by_source_item: status sync failed", exc_info=True)
-    return {"applied": bool(apply),
+    return {"applied": bool(apply), "created_since": created_since,
             "duplicates_to_delete" if not apply else "duplicates_deleted": len(rows),
+            "older_duplicates_left_for_review": older,
             "rows": rows}
 
 

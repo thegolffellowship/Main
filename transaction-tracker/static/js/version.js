@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.368.1";
+window.TGF_VERSION = "2.368.2";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.368.2",
+    date: "2026-09-10",
+    changes: [
+      "scoring-membership-terms-dedupe takes a created_since bound so the repair deletes exactly the rows the 2.368.0 boot created (139 duplicates found in all; ~125 from that boot, 14 older ones from earlier backfills where an order date had been re-extracted — those are listed for review, not deleted).",
+    ],
+  },
   {
     version: "2.368.1",
     date: "2026-09-10",

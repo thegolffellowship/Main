@@ -174,6 +174,10 @@ with db._connect(p) as conn:
                  "source, source_item_id) VALUES (7, '2027-09-10', '2028-09-09', 'backfill', 601)")
     conn.commit()
     dry = ms.dedupe_terms_by_source_item(conn, apply=False)
+    scoped = ms.dedupe_terms_by_source_item(conn, apply=False, created_since="2099-01-01")
+    check("created_since scopes the deletion and lists the rest for review",
+          scoped["duplicates_to_delete"] == 0
+          and len(scoped["older_duplicates_left_for_review"]) == 1, str(scoped))
     res = ms.dedupe_terms_by_source_item(conn, apply=True)
     left = conn.execute("SELECT COUNT(*) FROM customer_memberships WHERE customer_id = 7").fetchone()[0]
     first = conn.execute("SELECT started_at FROM customer_memberships WHERE source_item_id = 601").fetchone()[0]

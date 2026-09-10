@@ -1767,7 +1767,7 @@ def _scoring_dispatch(url: str, extract: str):
       scoring-round-drop:<id>[|unpost][|apply]  delete one scoring card
       scoring-parse-warnings[:<frag>][|<status>][|<limit>]  read parse warnings
       scoring-parse-warning-dismiss:<id>[,<id>]|<note>  dismiss ruled-on warnings
-      scoring-membership-terms-dedupe[:apply]  one item, one term (delete dupes)
+      scoring-membership-terms-dedupe[:<created_since>][|apply]  one item, one term
       scoring-membership-terms-repair[:apply]  early renewals continue at the
                                    365 date (dry run default)
       scoring-membership-sync      terms → status reconcile now (manager comps)
@@ -2961,10 +2961,14 @@ def _scoring_dispatch(url: str, extract: str):
         if cmd == "scoring-membership-terms-dedupe":
             # "[apply]" — one item, one term: delete the duplicate terms the
             # v2.368.0 boot created (backfill re-inserted continued starts).
+            # "[<created_since>][|apply]" — created_since (e.g. 2026-09-10 16:00)
+            # limits deletion to the boot's rows; older dupes are listed only.
             from email_parser.memberships import dedupe_terms_by_source_item
-            _apply = (arg or "").strip().lower() == "apply"
+            _p = [x.strip() for x in (arg or "").split("|")]
+            _apply = bool(_p) and _p[-1].lower() == "apply"
+            _since = _p[0] if _p and _p[0] and _p[0].lower() != "apply" else None
             with db._connect() as _c:
-                _res = dedupe_terms_by_source_item(_c, apply=_apply)
+                _res = dedupe_terms_by_source_item(_c, apply=_apply, created_since=_since)
             if _apply:
                 _audit("scoring-membership-terms-dedupe",
                        f"duplicates_deleted={_res.get('duplicates_deleted')}")
