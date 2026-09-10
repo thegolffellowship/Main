@@ -608,6 +608,27 @@ def main():
         check("so booked and actual agree on a membership",
               abs(mem2["overstated"]) < 0.20, mem2["overstated"])
 
+    print("Campaigns / Overall / Organic views (Kerry 2026-09-10)")
+    with db._connect(db_path) as conn:
+        conn.execute(
+            "INSERT INTO leads (source, external_id, first_name, last_name, email, chapter, "
+            "status, tag, payload, arrived_at, converted_at) VALUES ('organic', 'ext-walkin', "
+            "'Geoff', 'Hightower', 'geoff@x.com', 'Austin', 'converted', 'Registered event', "
+            "'{}', '2026-09-08 10:00:00', '2026-09-08')")
+        conn.commit()
+    stv = campaigns.campaign_stats(db_path, today="2026-09-09", gap_fill_seconds=0)
+    check("Organic bucket holds the walk-in and no spend / no ROI",
+          stv["organic"]["funnel"]["leads"] == 1 and stv["organic"]["spend"] is None
+          and stv["organic"]["roi"] is None, stv["organic"]["funnel"])
+    check("Campaigns bucket excludes him",
+          stv["campaigns_all"]["funnel"]["leads"] == stv["all"]["funnel"]["leads"] - 1
+          - stv["unattributed"]["funnel"]["leads"], (stv["campaigns_all"]["funnel"]["leads"], stv["all"]["funnel"]["leads"]))
+    check("Overall's ROI block is the Campaigns one, scope stated",
+          stv["all"]["roi_scope"] == "campaigns" and stv["all"]["roi"] == stv["campaigns_all"]["roi"], stv["all"].get("roi_scope"))
+    with db._connect(db_path) as conn:
+        conn.execute("DELETE FROM leads WHERE external_id = 'ext-walkin'")
+        conn.commit()
+
     print("Closed window + converted_at stamp")
     st = campaigns.campaign_stats(db_path, today="2026-10-30", gap_fill_seconds=0)
     c = st["campaigns"][0]

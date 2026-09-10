@@ -451,6 +451,17 @@ Aug–Jul window), events later; 2025 events have no event rows so their
 allocations wait in the gap list, and Kerry expects 2025 side-game
 breakdowns to differ from today's table.
 
+**Shirt set-aside starts Aug 2025 (v2.362.0, Kerry 2026-09-10).**
+*"2025 Shirt Fund is not needed. That was obviously spent already, and
+I believe we actually collected shirt fund money thru a portion from
+each season contest and from Lone Star Cup markups to cover it. So we
+don't need to track shirt funds from memberships prior to August 2025.
+We do extract $6 from each membership still for monthly points race
+pots."* `LSC_SHIRT_SETASIDE_FROM = "2025-08-01"` (dial
+`membership_setaside_lsc_shirt_from`): earlier memberships book the $6
+pool and no shirt set-aside; `liability_buckets` reports fund years
+from 2026 only.
+
 **Membership decomposition (v2.353.0).** A membership item books
 `base` (New 44 / Returning 69 / Plus 244 taxable) + $6 Monthly Points
 pool + $10 markup per contest bundled (Plus waived) + the contest pools

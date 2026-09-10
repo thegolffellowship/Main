@@ -362,14 +362,18 @@ def liability_buckets(db_path: str | Path | None = None,
                      AND parent_item_id IS NULL
                      AND COALESCE(item_price,'') NOT IN ('', '$0.00', '0', '0.0')"""):
             y = lsc_fund_year(r["order_date"])
-            if y is None:
+            # Memberships before Aug 2025 funded no shirts (Kerry
+            # 2026-09-10: that year's shirts came from season-contest and
+            # LSC markups, already spent) — not a fund to track.
+            if y is None or (r["order_date"] or "")[:10] < db.LSC_SHIRT_SETASIDE_FROM:
                 continue
             fund[y]["memberships"] += 1
             fund[y]["funded"] = round(fund[y]["funded"] + per, 2)
         out["lsc_shirt_fund"] = {
             "per_membership": per,
             "rule": "Aug–Jul membership sales fund the Cup played that October "
-                    "(Aug 2025–Jul 2026 → 2026 Cup)",
+                    "(Aug 2025–Jul 2026 → 2026 Cup); memberships before Aug 2025 "
+                    "funded no shirts (Kerry 2026-09-10)",
             "records_from": records_from,
             "by_cup_year": {str(k): v for k, v in sorted(fund.items())},
             "spend_recorded": "not tracked yet — shirt purchases are not tagged to the fund",

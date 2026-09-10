@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.361.2";
+window.TGF_VERSION = "2.362.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.362.0",
+    date: "2026-09-10",
+    changes: [
+      "Lead stats: Campaigns / Overall / Organic / Unattributed views (Kerry: 'Hammond/Hightower should not show in the Return on Ad Spend ... they did not come thru the lead form ... There should be toggles to click between Campaigns, Overall, Organic'). Toggle buttons on the stats head and matching entries in the campaign dropdown. CAMPAIGNS = leads attributed to a campaign, the only view whose margin is divided by ad spend. ORGANIC = walk-ins, referrals, met-in-person, partner, manual — never in a ROAS. OVERALL = everyone, carrying the Campaigns ROI block with its scope stated. UNATTRIBUTED = lead-form leads with no campaign id (a data gap, e.g. Hector Hinojosa). The queue filter follows the same keys.",
+      "Shirt set-aside starts with the Aug 2025 – Jul 2026 window (Kerry: '2025 Shirt Fund is not needed ... we actually collected shirt fund money thru a portion from each season contest and from Lone Star Cup markups ... We do extract $6 from each membership still for monthly points race pots'). Memberships dated before 2025-08-01 book the $6 pool and no $10 shirt set-aside (dial membership_setaside_lsc_shirt_from); the liabilities read drops the 2025 fund year. The Jan–Jul 2025 rows imported yesterday are rebooked accordingly.",
+      "A Venmo / cash / comped membership on record as a customer_memberships term counts as a membership (Kerry: 'Ferrara, Colasanto, Rivas and McKinley should all have member transactions somewhere' — they have manual Venmo terms). The member-rate check and the server status fallback both honor terms now; Aken set to FORMER with Kerry's words (free membership at the Short Game USA open house, early 2025, ended by 2026-03-10).",
+    ],
+  },
   {
     version: "2.361.2",
     date: "2026-09-09",

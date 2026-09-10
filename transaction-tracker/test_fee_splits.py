@@ -423,6 +423,19 @@ def main():
           and all("negative_tax_credit" in v for v in gaps2["by_month"].values()),
           gaps2.get("by_month"))
 
+    print("Shirt set-aside starts Aug 2025; the $6 pool never stops (Kerry 2026-09-10)")
+    with db._connect(p) as conn:
+        early = db._calc_membership_allocation(
+            {"item_name": "TGF MEMBERSHIP", "item_price": "$75.00",
+             "returning_or_new": "Returning", "order_date": "2025-03-16"}, conn)
+        later = db._calc_membership_allocation(
+            {"item_name": "TGF MEMBERSHIP", "item_price": "$75.00",
+             "returning_or_new": "Returning", "order_date": "2025-08-09"}, conn)
+    check("a March 2025 membership books no shirt set-aside, $6 pool, $69 margin",
+          early["lsc_shirt_fund"] == 0.0 and early["prize_pool"] == 6.0 and early["tgf_operating"] == 69.0, early)
+    check("an August 2025 membership books the $10 shirt set-aside",
+          later["lsc_shirt_fund"] == 10.0 and later["tgf_operating"] == 59.0, later)
+
     print("The audit report carries the check")
     rep = db.get_audit_report(p)
     check("fee_splits section present and clean", rep.get("fee_splits", {}).get("ok") is True,

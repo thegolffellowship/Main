@@ -1232,3 +1232,9 @@ the leak is visible. Server side, `resolve_player_status`'s fallback
 returns GUEST for the same shape (`_has_membership_purchase`), and
 `member_rate_without_membership()` / bridge `scoring-member-rate-check`
 lists everyone in that state since a date.
+A membership TERM on record (`customer_memberships`, any source — Venmo,
+cash, comped) counts as a membership for both the badge fallback and
+the check (v2.362.0; Colasanto, Ferrara and friends paid by Venmo).
+Pre-Tracker history Kerry states goes on record through bridge
+`scoring-customer-status:<id>|<status>[|<note>]` (v2.361.2), his words
+as the note.

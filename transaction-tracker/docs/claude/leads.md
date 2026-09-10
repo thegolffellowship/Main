@@ -872,6 +872,18 @@ from `note_count` too, so the Stats view's response rate is stricter
 than the queue's. Flagged to CA rather than changed unilaterally — it
 is a reported metric.
 
+**Stats views: Campaigns / Overall / Organic / Unattributed (v2.362.0,
+Kerry 2026-09-10).** *"Hammond/Hightower should not show in the Return
+on Ad Spend ... they did not come thru the lead form ... There should
+be toggles to click between Campaigns, Overall, Organic."*
+`campaign_stats` returns `campaigns_all` (campaign-attributed leads,
+spend = total — the only bucket whose margin is divided by ad spend),
+`organic` (sources in `MANUAL_LEAD_SOURCES`, no spend, no ROI), `all`
+(Overall — everyone, with `roi` copied from `campaigns_all` and
+`roi_scope: "campaigns"`), and `unattributed` (lead-form leads with no
+campaign id — a data gap). The page's `campaignFilter` takes the same
+keys; toggle buttons sit on the stats head.
+
 **"Followed up 2x" (Kerry 2026-09-09, v2.361.0).** *"I need a 2nd
 follow up option."* Same action a second time: in `DEFAULT_REARM_TAGS`
 (restarts the clock like Followed up), in the tag list right after

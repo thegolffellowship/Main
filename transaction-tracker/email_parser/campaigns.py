@@ -839,7 +839,7 @@ def campaign_stats(db_path: str | Path | None = None,
         link_leads_to_campaigns(conn)
         conn.commit()
         leads = [dict(r) for r in conn.execute(
-            "SELECT l.id, l.status, l.tag, l.chapter, l.campaign_id, "
+            "SELECT l.id, l.status, l.tag, l.chapter, l.campaign_id, l.source, "
             "l.customer_id, l.converted_at, l.arrived_at, l.replied_at, "
             # Only notes a PERSON wrote count toward REPLIED — see
             # leads.REPLY_EXCLUDED_NOTE_AUTHORS for why GG and HS are out
@@ -979,22 +979,54 @@ def campaign_stats(db_path: str | Path | None = None,
                   "insights_error": c.get("insights_error"),
                   "notes": c.get("notes")})
         out_campaigns.append(b)
-    organic = by_campaign.get(None, [])
-    unattributed = _bucket("Unattributed / organic", organic, None, "none",
-                           None)
+    # Three views (Kerry 2026-09-10: "Hammond/Hightower should not show
+    # in the Return on Ad Spend ... they did not come thru the lead form
+    # ... There should be toggles to click between Campaigns, Overall,
+    # Organic"). CAMPAIGNS = every lead attributed to a campaign, the
+    # only bucket whose margin is divided by ad spend. ORGANIC = manual
+    # sources (referral / organic / in person / partner / manual) —
+    # people who found TGF some other way, never in a ROAS. OVERALL =
+    # everyone, whose ROI block is the Campaigns one (scope stated).
+    # UNATTRIBUTED = a lead-form lead with no campaign id (a data gap).
+    from .leads import MANUAL_LEAD_SOURCES
+    no_campaign = by_campaign.get(None, [])
+    organic_rows = [l for l in no_campaign
+                    if (l.get("source") or "") in MANUAL_LEAD_SOURCES]
+    unattributed_rows = [l for l in no_campaign
+                         if (l.get("source") or "") not in MANUAL_LEAD_SOURCES]
+    unattributed = _bucket("Unattributed", unattributed_rows, None, "none", None)
+    with db._connect(db_path) as _vc:
+        _org_val = campaign_value(organic_rows, _vc, db_path, gap_fill_seconds)
+    organic_bucket = _bucket("Organic", organic_rows, None, "none", None,
+                             None, None, _org_val)
+    attributed_rows = [l for l in leads if l.get("campaign_id") is not None]
     all_ins = _roll_up_insights(campaigns)
     with db._connect(db_path) as _vc:
+        _camp_val = campaign_value(attributed_rows, _vc, db_path, gap_fill_seconds)
+    campaigns_bucket = _bucket("Campaigns", attributed_rows,
+                               total_spend if any_spend else None,
+                               "meta" if all_ins else ("sum" if any_spend
+                                                       else "none"),
+                               latest_end, all_ins, None, _camp_val)
+    with db._connect(db_path) as _vc:
         _all_val = campaign_value(leads, _vc, db_path, gap_fill_seconds)
-    all_bucket = _bucket("All campaigns", leads,
+    all_bucket = _bucket("Overall", leads,
                          total_spend if any_spend else None,
                          "meta" if all_ins else ("sum" if any_spend
                                                 else "none"),
                          latest_end, all_ins, None, _all_val)
-    if all_ins:
-        # so the panel can date-stamp the roll-up like a single campaign
-        all_bucket["insights_fetched_at"] = max(
-            (c.get("insights_fetched_at") or "" for c in campaigns),
-            default="") or None
+    # Overall never divides organic margin by ad spend: its ROI block is
+    # the Campaigns one, and says so.
+    all_bucket["roi"] = campaigns_bucket.get("roi")
+    all_bucket["roi_scope"] = "campaigns"
+    all_bucket["cost"] = dict(campaigns_bucket.get("cost") or {})
+    campaigns_bucket["roi_scope"] = "campaigns"
+    for _b in (all_bucket, campaigns_bucket):
+        if all_ins:
+            # so the panel can date-stamp the roll-up like a single campaign
+            _b["insights_fetched_at"] = max(
+                (c.get("insights_fetched_at") or "" for c in campaigns),
+                default="") or None
     return {"today": today_d.isoformat(), "meta_token": bool(_meta_token()),
             "trailing_days": TRAILING_DAYS,
             "benchmark_windows": list(BENCHMARK_WINDOWS),
@@ -1014,4 +1046,5 @@ def campaign_stats(db_path: str | Path | None = None,
                             "provisional"),
             },
             "campaigns": out_campaigns, "unattributed": unattributed,
+            "campaigns_all": campaigns_bucket, "organic": organic_bucket,
             "all": all_bucket}

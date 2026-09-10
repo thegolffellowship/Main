@@ -180,6 +180,8 @@
         .ld-statsbtn.on { background: #1B1B1B; color: #fff; border-color: #1B1B1B; }
         #ld-stats { display: none; }
         .ld-stats-head { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 0 0 0.75rem; }
+        .ld-viewtoggle { display: inline-flex; gap: 4px; margin-right: 6px; }
+        .ld-viewtoggle .ld-btn.on { background: #1B1B1B; color: #fff; border-color: #1B1B1B; }
         .ld-panels { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 14px; }
         .ld-panel { background: #fff; border: 1px solid var(--border); border-radius: 12px; padding: 12px 16px; }
         .ld-panel h3 { margin: 0 0 8px; font: 700 10px/1 'Bitter', serif; letter-spacing: 1.5px; text-transform: uppercase; color: var(--text-muted); }
@@ -545,11 +547,17 @@
         // Campaign filter options (#391): each campaign + unattributed.
         const campSel = document.getElementById("ld-campsel");
         if (campSel) {
-            const noneN = leads.filter(l => l.campaign_id == null).length;
-            const opts = [`<option value="all">All campaigns · ${leads.length}</option>`]
+            const srcsM = ALL.manual_lead_sources || {};
+            const isOrganic = l => l.campaign_id == null && !!srcsM[l.source];
+            const orgN = leads.filter(isOrganic).length;
+            const noneN = leads.filter(l => l.campaign_id == null && !isOrganic(l)).length;
+            const campN = leads.filter(l => l.campaign_id != null).length;
+            const opts = [`<option value="all">Overall · ${leads.length}</option>`,
+                          `<option value="campaigns">Campaigns · ${campN}</option>`]
                 .concat((ALL.campaigns || []).map(c =>
-                    `<option value="${c.id}">${esc(c.name)} · ${leads.filter(l => l.campaign_id === c.id).length}</option>`))
-                .concat([`<option value="none">Unattributed / organic · ${noneN}</option>`]);
+                    `<option value="${c.id}">&nbsp;&nbsp;${esc(c.name)} · ${leads.filter(l => l.campaign_id === c.id).length}</option>`))
+                .concat([`<option value="organic">Organic · ${orgN}</option>`,
+                         `<option value="none">Unattributed · ${noneN}</option>`]);
             campSel.innerHTML = opts.join("");
             campSel.value = campaignFilter;
         }
@@ -760,8 +768,10 @@
         const visible = leads.filter(l => {
             if (chapterFilter !== "all" && (l.chapter || "") !== chapterFilter) return false;
             if (campaignFilter !== "all") {
-                const cid = l.campaign_id == null ? "none" : String(l.campaign_id);
-                if (cid !== campaignFilter) return false;
+                const srcsF = ALL.manual_lead_sources || {};
+                const organic = l.campaign_id == null && !!srcsF[l.source];
+                const cid = l.campaign_id == null ? (organic ? "organic" : "none") : String(l.campaign_id);
+                if (campaignFilter === "campaigns" ? l.campaign_id == null : cid !== campaignFilter) return false;
             }
             if (triActive()) {
                 const t = triageOf(l);
@@ -1447,8 +1457,17 @@
     function renderStats() {
         if (!STATS) return;
         const b = campaignFilter === "all" ? STATS.all
+            : campaignFilter === "campaigns" ? (STATS.campaigns_all || STATS.all)
+            : campaignFilter === "organic" ? (STATS.organic || STATS.unattributed)
             : campaignFilter === "none" ? STATS.unattributed
             : (STATS.campaigns || []).find(c => String(c.id) === campaignFilter) || STATS.all;
+        // View toggles (Kerry 2026-09-10): Campaigns is the only view
+        // whose margin is divided by ad spend; Organic (walk-ins,
+        // referrals) never is; Overall shows everyone with the Campaigns
+        // ROI block, scope stated.
+        const viewKey = ["all", "campaigns", "organic", "none"].includes(campaignFilter) ? campaignFilter : "campaigns";
+        const toggles = [["campaigns", "Campaigns"], ["all", "Overall"], ["organic", "Organic"], ["none", "Unattributed"]]
+            .map(([k, lbl]) => `<button class="ld-btn${viewKey === k ? " on" : ""}" onclick="setCampaignFilter('${k}');document.getElementById('ld-campsel').value='${k}';">${lbl}</button>`).join("");
         const m = b.meta || {};
         const f = b.funnel || {};
         const c = b.cost || {};
@@ -1464,7 +1483,8 @@
         const chapRows = Object.entries(b.chapters || {}).map(([ch, cf]) =>
             `<tr><td>${esc(ch)}</td><td>${cf.leads}</td><td>${cf.touched}</td><td>${cf.replied}</td><td>${cf.reply_pct == null ? "—" : cf.reply_pct + "%"}</td><td>${cf.interested}</td><td>${cf.players}</td><td>${cf.members}</td><td>${cf.dismissed}</td></tr>`).join("");
         const head = `<div class="ld-stats-head">
-            <b style="font-size:15px">${esc(b.name)}</b>
+            <span class="ld-viewtoggle">${toggles}</span>
+            <b style="font-size:15px">${esc(b.name)}</b>${b.roi_scope === "campaigns" && campaignFilter === "all" ? `<span class="ld-dsub">ROI counts campaign leads only — organic and unattributed excluded</span>` : ""}
             ${isCamp ? `<span class="ld-dsub">${esc(b.source || "")}${b.start_date ? ` · ${fmtD(b.start_date)}–${fmtD(b.end_date || "")}` : ""}${b.meta_campaign_id ? ` · Meta ${esc(b.meta_campaign_id)}` : ""}</span>` : ""}
             ${isCamp && (STATS.is_admin !== false) ? `<button class="ld-btn" onclick="setSpend(${b.id}, ${b.spend_manual == null ? "null" : b.spend_manual})">Set spend</button>` : ""}
             <button class="ld-btn" onclick="loadStats(true)">↻ Refresh Meta</button>
@@ -1598,10 +1618,11 @@
         const adPanel = adRows ? `<div class="ld-panel" style="grid-column:1/-1"><h3>Ad sets</h3>
             <div style="overflow-x:auto"><table class="ld-costtbl"><thead><tr><th>Ad set</th><th>Leads</th><th>Touched</th><th>Converted</th><th>Dismissed</th></tr></thead><tbody>${adRows}</tbody></table></div>
             <div class="ld-foot">Whole queue, from each lead's Meta attribution (ad-set names via the lead_ad_set_names dial).</div></div>` : "";
-        const list = campaignFilter === "all" && (STATS.campaigns || []).length
+        const list = (campaignFilter === "all" || campaignFilter === "campaigns") && (STATS.campaigns || []).length
             ? `<div class="ld-panel" style="grid-column:1/-1"><h3>Campaigns</h3><div style="overflow-x:auto"><table class="ld-costtbl"><thead><tr><th>Campaign</th><th>Dates</th><th>Spend</th><th>Leads</th><th>Players</th><th>Members</th><th>CPL</th><th>CPP</th><th>CPMem</th></tr></thead><tbody>
                 ${STATS.campaigns.map(x => `<tr><td><a href="#" onclick="setCampaignFilter('${x.id}');document.getElementById('ld-campsel').value='${x.id}';return false;">${esc(x.name)}</a></td><td>${fmtD(x.start_date)}–${fmtD(x.end_date)}</td><td>${money(x.spend)}</td><td>${x.funnel.leads}</td><td>${x.funnel.players}</td><td>${x.funnel.members}</td><td>${money(x.cost.cpl)}</td><td>${money(x.cost.cpp)}</td><td>${money(x.cost.cpmem)}</td></tr>`).join("")}
-                <tr><td>Unattributed / organic</td><td></td><td>—</td><td>${STATS.unattributed.funnel.leads}</td><td>${STATS.unattributed.funnel.players}</td><td>${STATS.unattributed.funnel.members}</td><td>—</td><td>—</td><td>—</td></tr>
+                <tr><td><a href="#" onclick="setCampaignFilter('organic');document.getElementById('ld-campsel').value='organic';return false;">Organic</a> <span class="ld-dsub">walk-ins, referrals — never in ROAS</span></td><td></td><td>—</td><td>${(STATS.organic || STATS.unattributed).funnel.leads}</td><td>${(STATS.organic || STATS.unattributed).funnel.players}</td><td>${(STATS.organic || STATS.unattributed).funnel.members}</td><td>—</td><td>—</td><td>—</td></tr>
+                <tr><td>Unattributed <span class="ld-dsub">lead-form leads with no campaign</span></td><td></td><td>—</td><td>${STATS.unattributed.funnel.leads}</td><td>${STATS.unattributed.funnel.players}</td><td>${STATS.unattributed.funnel.members}</td><td>—</td><td>—</td><td>—</td></tr>
               </tbody></table></div></div>` : "";
         document.getElementById("ld-stats").innerHTML = head + `<div class="ld-panels">${metaPanel}${funnelPanel}${roiPanel}${chapPanel}${adPanel}${list}</div>`;
     }
