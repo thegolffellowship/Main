@@ -30,7 +30,8 @@
                   vertical-align:middle; }
         .hcp-ch.sa { background:var(--chapter-sa, #D3DDE4); color:#1B1B1B; }
         .hcp-ch.a  { background:var(--chapter-austin, #BF5700); color:#fff; }
-        .hcp-ch.h  { background:#0F766E; color:#fff; }
+        .hcp-ch.h  { background:var(--chapter-houston, #0F766E); color:#fff; }
+        .hcp-ch.d  { background:var(--chapter-dfw, #041E42); color:#fff; }   /* Dallas Cowboys navy (Kerry) */
         .hcp-ch.other { background:#E5E7EB; color:#374151; }
         .hcp-pending-band td, div.hcp-pending-band {
             background:#F1F5F9; color:#475569; font: 600 11px/1.4 'Bitter', serif;
@@ -1126,7 +1127,8 @@
     const HCP_MEMBER_STATUSES = new Set(["active_member", "member_plus"]);
     function chapterBadge(ch) {
         if (!ch) return '';
-        const cls = ch === 'Austin' ? 'a' : (ch === 'San Antonio' ? 'sa' : (ch === 'Houston' ? 'h' : 'other'));
+        const isDallas = /^(dfw|dallas)/i.test(ch);
+        const cls = ch === 'Austin' ? 'a' : (ch === 'San Antonio' ? 'sa' : (ch === 'Houston' ? 'h' : (isDallas ? 'd' : 'other')));
         const txt = ch === 'Austin' ? 'A' : (ch === 'San Antonio' ? 'SA' : esc(ch.slice(0, 1).toUpperCase()));
         return `<span class="hcp-ch ${cls}" title="${esc(ch)}">${txt}</span>`;
     }

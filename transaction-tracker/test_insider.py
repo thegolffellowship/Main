@@ -152,6 +152,8 @@ check("beat 3 tells the bogey skin in plain language, names the player first + i
 check("GG name forms → public form", insider._gg_short("DONOVAN, Tom") == "Tom D."
       and insider._gg_short("Espinosa, Christopher Guest") == "Christopher E."
       and insider._gg_short("Kerry Niester") == "Kerry N.")
+check("eyebrow + headline centered (Kerry, off draft #18)",
+      'text-align:center;">TGF Insider' in insider.render(slots) and 'text-align:center;">First round. First payday.</h1>' in insider.render(slots))
 check("close box: Jump in any time is a header line", '<p style="margin:0 0 8px;font-size:20px;line-height:1.3;color:#ffffff;font-weight:bold;">Jump in any time.</p>' in insider.render(slots))
 check("template says Event, not night, and carries Kerry's Compete line",
       "How a TGF Event works" in insider.render(slots) and "A Team best ball game included" in insider.render(slots)

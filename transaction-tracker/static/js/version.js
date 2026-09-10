@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.369.9";
+window.TGF_VERSION = "2.369.10";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.369.10",
+    date: "2026-09-10",
+    changes: [
+      "Handicaps page: DFW / Dallas players wear a D badge in Cowboys navy with white text (Kerry). New CSS tokens --chapter-dfw and --chapter-houston beside the SA / Austin ones for every future board.",
+      "Insider template: eyebrow and headline are centered from here on (Kerry's Brevo edit of draft #18: 'show top headlines centered as shown'); greeting and lede stay left.",
+    ],
+  },
   {
     version: "2.369.9",
     date: "2026-09-10",

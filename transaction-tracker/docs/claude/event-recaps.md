@@ -362,6 +362,9 @@ Wednesday auto-draft fills the template:**
     → beat 2 counts the whole group: "6 of the 8 first-timers on the sheet
     did." *"Jump in any time should be a header above the text."* → close
     box header line, body below.
+  - Kerry's Brevo edit of #18: eyebrow + headline CENTERED ("For future,
+    show top headlines centered as shown"); the greeting and lede stay
+    left. Template updated.
 
 **v3 fixes (Kerry, off the Brevo preview 2026-09-02) — template rules:**
 - The Season-20 logo (69986bc3…png) is BLACK INK — header band must be
