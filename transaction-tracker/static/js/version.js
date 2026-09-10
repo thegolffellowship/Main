@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.370.1";
+window.TGF_VERSION = "2.371.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.371.0",
+    date: "2026-09-10",
+    changes: [
+      "Lead queue reads as the sales funnel, top to bottom (Kerry: 'Should order by funnel'): NEW LEADS → NO RESPONSE → RESPONDED → INTERESTED → EVENT SIGNUPS → GUESTS → MEMBERS → DISMISSED. INTERESTED is new — the Interested / Coming to event tags, the qualified stage between a reply and a signup.",
+      "Follow-ups due are tasks, not a stage (Kerry: 'Follow-Ups due is kind of its own thing though and could be part of each section' → 'Move inside the stages'). The red FOLLOW-UPS DUE bar and the SNOOZED bar are gone: a due row sorts first inside its stage with its red chip, a snoozed row sinks to the bottom of its stage, each stage bar shows how many of its rows are due, and a new Follow-ups due filter chip is the daily list. The page lands with NEW LEADS plus every stage holding a due row open.",
+    ],
+  },
   {
     version: "2.370.1",
     date: "2026-09-10",
