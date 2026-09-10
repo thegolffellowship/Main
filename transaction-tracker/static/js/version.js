@@ -1,10 +1,18 @@
-window.TGF_VERSION = "2.367.1";
+window.TGF_VERSION = "2.367.2";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.367.2",
+    date: "2026-09-10",
+    changes: [
+      "Docs only: session record round eight — the 2025 membership price table read off the nine misfit order emails (Returning 75 / New 75 then 50 promo / NET Only 75 / NET + Fellowship Cup 100 / Players Cup 50 / Match Play 75; all 11 rows fit), pending Kerry's ratification; Finance lane told the 2025 filed months are still moving.",
+    ],
+  },
   {
     version: "2.367.1",
     date: "2026-09-10",
     changes: [
-      "Docs only: session record round eight — the 2025 membership price table read off the nine misfit order emails (Returning 75 / New 75 then 50 promo / NET Only 75 / NET + Fellowship Cup 100 / Players Cup 50 / Match Play 75; all 11 rows fit), pending Kerry's ratification; Finance lane told the 2025 filed months are still moving.",
+      "Docs only: the duplicate-card repair applied on production — 88 identical cards removed across a9.22 ShadowGlen (16), s18.10 FALL KICKOFF (24), TGF SAN ANTONIO CHAMPIONSHIP (32) and TGF AUSTIN CHAMPIONSHIP (16); the 2026 TGF CHAMPIONSHIP's Saturday/Sunday cards correctly untouched; three s18.10 groups held as conflicts (Aguilera, Ayala, Atkinson) for Kerry. The all-events scan times out on the hole comparison — run the repair per event. Merged above the lead-preset lane's 2.367.0.",
+      "Workflow rule (Kerry 2026-09-10): read the tracker mailbox before EVERY response, not only at session start — CLAUDE.md rule 4 updated.",
     ],
   },
   {

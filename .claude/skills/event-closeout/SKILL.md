@@ -57,8 +57,10 @@ Do not assume it — read it — but do not redo it either.
     a keyed re-import plus GG re-keying its aggregates (Kerry adding a
     board) plus the keyless hourly auto-sync. Guarded since v2.365.0; for
     rows already doubled run `scoring-dedupe-rounds:<event>` (dry run,
-    shows keep/drop), then `…|apply`. `scoring-dedupe-rounds:all` is the
-    class check across every event — run it once per closeout. Do this
+    shows keep/drop and a verdict per group), then `…|apply` — apply
+    removes only `identical` / `partial` groups and HOLDS `conflict`
+    groups (different strokes = two rounds until Kerry says otherwise).
+    Run it PER EVENT; the `all` scan times out on the hole comparison. Do this
     BEFORE Phase 3: `scoring-hcp-preview` lists every card, and a doubled
     set shows as N imported + N "new" waiting to double-post.
 
