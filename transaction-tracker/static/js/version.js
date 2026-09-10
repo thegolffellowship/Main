@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.370.0";
+window.TGF_VERSION = "2.370.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.370.1",
+    date: "2026-09-10",
+    changes: [
+      "Docs only: session record round nine — EVENT SIGNUPS / GUESTS verified on production (6 members, 5 guests, 6 signups); SMS tooling sidebar recorded (OpenPhone-class for two-way lead texts, Brevo for member broadcasts, no Twilio).",
+    ],
+  },
   {
     version: "2.370.0",
     date: "2026-09-10",
