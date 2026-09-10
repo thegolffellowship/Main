@@ -298,6 +298,9 @@ def test_contest_option_lines():
     f3 = contest_flags_from_body(body3.upper())
     if f3 != {"net_points_race": "YES", "gross_points_race": "YES", "city_match_play": "NO"}:
         errors.append(f"three lines: {f3}")
+    f4 = contest_flags_from_body("RETURNING or NEW?: NEW ($25 Off Promo) Add FALL Points Race?: YES Add FALL Match Play?: YES".upper())
+    if f4 != {"fall_net_points_race": "YES", "city_match_play": "YES", "net_points_race": "NO"}:
+        errors.append(f"2025 FALL Match Play line (Bartz): {f4}")
     if contest_flags_from_body("EVENT ONLY - NO ADDITIONAL GAMES") != {}:
         errors.append("no lines → empty (LLM value kept)")
     # End to end: the LLM omits the flag, the form line supplies it.

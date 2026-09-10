@@ -363,6 +363,16 @@ def main():
     check("and the note records the date it replaced, so nothing is lost",
           "was " in notes(p_db, hand2)[-1]["note"], notes(p_db, hand2)[-1])
 
+    # Kerry 2026-09-09: "I need a 2nd follow up option ('Followed Up 2x')".
+    # Same action, second time: re-arms the clock and is offered in the list.
+    leads.set_lead_tag(hand2, "Followed up 2x", db_path=p_db)
+    r2x = leads.get_leads(db_path=p_db, status="")
+    r2x = next(x for x in r2x if x["id"] == hand2)
+    check("Followed up 2x re-arms the 48-hour clock too",
+          r2x["tag"] == "Followed up 2x" and bool(r2x["outreach_at"]) and bool(r2x["follow_up_at"]), r2x)
+    check("Followed up 2x is a re-arm tag and in the tag list",
+          "Followed up 2x" in leads.get_rearm_tags(p_db)
+          and "Followed up 2x" in leads.get_tag_options(p_db), leads.get_tag_options(p_db))
     check("Followed up is offered in the tag list",
           "Followed up" in leads.get_tag_options(p_db),
           leads.get_tag_options(p_db))

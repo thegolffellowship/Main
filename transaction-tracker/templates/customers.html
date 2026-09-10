@@ -571,6 +571,16 @@
     //   3. status_name from customer_statuses (canonical, set by system/manager)
     //   4. Bootstrap from transaction user_status history (new customers only)
     // Roles (golfer, sponsor, etc.) have NO bearing on member status.
+    // True when a customer with NO membership purchase (and no member
+    // status on record) bought an event at the member rate — the revenue
+    // leak Kerry wants to see, not hide behind a MEMBER badge.
+    function memberRateFlag(items, roles, currentPlayerStatus, membershipTerm, statusName) {
+        items = Array.isArray(items) ? items : [];
+        const st = deriveStatus(items, roles, currentPlayerStatus, membershipTerm, statusName);
+        if (st === "MEMBER" || st === "MEMBER+" || st === "MANAGER") return false;
+        return items.some(i => (i.user_status || "").toUpperCase().startsWith("MEMBER"));
+    }
+
     function deriveStatus(items, roles, currentPlayerStatus, membershipTerm, statusName) {
         roles = Array.isArray(roles) ? roles : [];
         items = Array.isArray(items) ? items : [];
@@ -598,9 +608,13 @@
         if (currentPlayerStatus === 'active_guest')   return "GUEST";
         if (currentPlayerStatus === 'first_timer')    return items.length > 1 ? "GUEST" : "1st TIMER";
 
-        // Bootstrap from transaction history for customers with no explicit status set
+        // Bootstrap from transaction history for customers with no explicit status set.
+        // A MEMBERSHIP PURCHASE makes a member. The MEMBER box a player ticks
+        // on an event order does not (Kerry 2026-09-09, Kyle Compton: "should
+        // not show MEMBER until he's purchased membership. He just signed up
+        // for an event at the Member's rate") — that case is a GUEST who
+        // paid the member rate, and the row says so (see memberRateFlag).
         const memberStatuses = items.map(i => (i.user_status || "").toUpperCase()).filter(Boolean);
-        if (memberStatuses.includes("MEMBER")) return "MEMBER";
         const hasMembership = items.some(i => (i.item_name || "").toLowerCase().includes("membership"));
         if (hasMembership) return "MEMBER";
         if (memberStatuses.includes("GUEST") || memberStatuses.includes("NON-MEMBER")) return "GUEST";
@@ -836,6 +850,7 @@
         if ("current_player_status" in fields) {
             cust.status_name = _PS_TO_STATUS_NAME[fields.current_player_status] || null;
             cust.status = deriveStatus(cust.items, cust.roles, cust.current_player_status, cust.membershipTerm, cust.status_name);
+            cust.member_rate_flag = memberRateFlag(cust.items, cust.roles, cust.current_player_status, cust.membershipTerm, cust.status_name);
         }
         return nameChanged;
     }
@@ -1281,7 +1296,7 @@
                 <div class="mobile-card-top cust-mobile-top" data-name="${escapeHtml(c.name)}">
                     <div class="mc-primary">
                         <span class="mc-customer">${escapeHtml(displayName(c.name))}</span>
-                        <span class="status-badge-sm ${statusBadgeClass(c.status)}" style="margin-left:0.35rem; vertical-align:middle;">${escapeHtml(c.status)}</span>
+                        <span class="status-badge-sm ${statusBadgeClass(c.status)}" style="margin-left:0.35rem; vertical-align:middle;">${escapeHtml(c.status)}</span>${c.member_rate_flag ? '<span class="status-badge-sm badge-first-timer" title="Paid the MEMBER rate on an event order but has never bought a membership" style="margin-left:0.3rem;">MEMBER RATE</span>' : ''}
                         ${c.creditTotal > 0 ? `<span class="status-tag status-tag-credited" style="margin-left:0.25rem; vertical-align:middle;">$${c.creditTotal.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})} Credit</span>` : ''}
                         ${currentRole === "admin" ? `<button class="btn btn-edit" data-merge-customer="${escapeHtml(c.name)}" style="font-size:0.65rem; padding:0.1rem 0.3rem; margin-left:0.25rem; vertical-align:middle;" onclick="event.stopPropagation(); openCustMergeModal('${escapeHtml(c.name).replace(/'/g, "\\'")}')">Merge</button>` : ''}
                         <br><span class="mc-event">${meta.join(" &bull; ")}</span>
@@ -1534,7 +1549,7 @@
             html += `
             <tr data-name="${escapeHtml(c.name)}" class="cust-row-clickable ${statusRowClass(c.status)} ${isExpanded ? 'expanded' : ''}">
                 <td><strong>${escapeHtml(displayName(c.name))}</strong>${c.creditTotal > 0 ? ` <span class="status-tag status-tag-credited">$${c.creditTotal.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})} Credit</span>` : ''}</td>
-                <td><span class="status-badge-sm ${statusBadgeClass(c.status)}">${escapeHtml(c.status)}</span></td>
+                <td><span class="status-badge-sm ${statusBadgeClass(c.status)}">${escapeHtml(c.status)}</span>${c.member_rate_flag ? '<span class="status-badge-sm badge-first-timer" title="Paid the MEMBER rate on an event order but has never bought a membership" style="margin-left:0.3rem;">MEMBER RATE</span>' : ''}</td>
                 <td>${escapeHtml(c.chapter || "\u2014")}</td>
                 <td>${c.items.length}</td>
                 <td style="font-weight:600; font-variant-numeric:tabular-nums;">$${c.totalSpent.toLocaleString(undefined, {minimumFractionDigits: 0, maximumFractionDigits: 0})}</td>
@@ -1592,7 +1607,7 @@
             <div class="customer-card ${statusRowClass(c.status)} ${isSelected ? 'selected' : ''}" data-name="${escapeHtml(c.name)}">
                 <div class="customer-card-name">
                     ${escapeHtml(displayName(c.name))}
-                    <span class="status-badge-sm ${statusBadgeClass(c.status)}">${escapeHtml(c.status)}</span>
+                    <span class="status-badge-sm ${statusBadgeClass(c.status)}">${escapeHtml(c.status)}</span>${c.member_rate_flag ? '<span class="status-badge-sm badge-first-timer" title="Paid the MEMBER rate on an event order but has never bought a membership" style="margin-left:0.3rem;">MEMBER RATE</span>' : ''}
                     ${c.creditTotal > 0 ? `<span class="status-tag status-tag-credited">$${c.creditTotal.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})} Credit</span>` : ''}
                 </div>
                 <div class="customer-card-meta">
@@ -4396,6 +4411,7 @@
                     // c.membershipTerm is overlaid earlier in init() — if it's
                     // lapsed, deriveStatus returns ALUMNI regardless of items/roles.
                     c.status = deriveStatus(c.items, c.roles, c.current_player_status, c.membershipTerm, c.status_name);
+                    c.member_rate_flag = memberRateFlag(c.items, c.roles, c.current_player_status, c.membershipTerm, c.status_name);
                 });
             } catch (e) { /* roles data optional */ }
 

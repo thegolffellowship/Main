@@ -1,5 +1,51 @@
-window.TGF_VERSION = "2.358.0";
+window.TGF_VERSION = "2.362.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.362.0",
+    date: "2026-09-10",
+    changes: [
+      "Lead stats: Campaigns / Overall / Organic / Unattributed views (Kerry: 'Hammond/Hightower should not show in the Return on Ad Spend ... they did not come thru the lead form ... There should be toggles to click between Campaigns, Overall, Organic'). Toggle buttons on the stats head and matching entries in the campaign dropdown. CAMPAIGNS = leads attributed to a campaign, the only view whose margin is divided by ad spend. ORGANIC = walk-ins, referrals, met-in-person, partner, manual — never in a ROAS. OVERALL = everyone, carrying the Campaigns ROI block with its scope stated. UNATTRIBUTED = lead-form leads with no campaign id (a data gap, e.g. Hector Hinojosa). The queue filter follows the same keys.",
+      "Shirt set-aside starts with the Aug 2025 – Jul 2026 window (Kerry: '2025 Shirt Fund is not needed ... we actually collected shirt fund money thru a portion from each season contest and from Lone Star Cup markups ... We do extract $6 from each membership still for monthly points race pots'). Memberships dated before 2025-08-01 book the $6 pool and no $10 shirt set-aside (dial membership_setaside_lsc_shirt_from); the liabilities read drops the 2025 fund year. The Jan–Jul 2025 rows imported yesterday are rebooked accordingly.",
+      "A Venmo / cash / comped membership on record as a customer_memberships term counts as a membership (Kerry: 'Ferrara, Colasanto, Rivas and McKinley should all have member transactions somewhere' — they have manual Venmo terms). The member-rate check and the server status fallback both honor terms now; Aken set to FORMER with Kerry's words (free membership at the Short Game USA open house, early 2025, ended by 2026-03-10).",
+    ],
+  },
+  {
+    version: "2.361.2",
+    date: "2026-09-09",
+    changes: [
+      "Bridge `scoring-customer-status:<id>|<status>[|<note>]` sets a customer's status on record (audited). For history the Tracker cannot derive from a purchase — Kerry: 'Vazquez, Aken, Cordero, Cedillo, Booker were all members ... Aken won a free membership' — the statement becomes the status row with Kerry's words as the note, so the badge reads ALUMNI (or MEMBER) instead of GUEST with a MEMBER RATE chip.",
+    ],
+  },
+  {
+    version: "2.361.1",
+    date: "2026-09-09",
+    changes: [
+      "Parser: the 2025 order form's 'Add FALL Match Play?: YES' line is read into the Match Play flag (Bartz R208580086: New at the $25-off promo + Fall Points Race + Fall Match Play = $150, which now decomposes to the cent). The contest-flags audit sees it too.",
+    ],
+  },
+  {
+    version: "2.361.0",
+    date: "2026-09-09",
+    changes: [
+      "Lead tag selector: 'Followed up 2x' (Kerry: 'I need a 2nd follow up option'). Same action a second time — it restarts the 48-hour clock exactly like Followed up (lead_rearm_tags default now carries both), sits right after Followed up in the list, and counts as quiet outreach, not a response. The record shows how many times a person was chased before No answer. The stored lead_tag_options dial was updated on production alongside (a saved dial beats the code defaults).",
+    ],
+  },
+  {
+    version: "2.360.0",
+    date: "2026-09-09",
+    changes: [
+      "A MEMBER box on an event order is not a membership (Kerry 2026-09-09, Kyle Compton: 'should not show MEMBER until he's purchased membership. He just signed up for an event at the Member's rate'). The Customers badge bootstrapped MEMBER from the status a player ticked on an order form; now only a membership purchase, a member status on record, or a leadership role makes MEMBER. A customer who ticked MEMBER with no membership on record reads GUEST with an orange MEMBER RATE chip — the revenue leak shown, not hidden. The server-side resolver (event rosters, previews) reads the same way, and `scoring-member-rate-check[:<since>]` lists everyone in that state.",
+      "2025 membership import applied (membership-only, Aug 1 – Dec 28 2025): 9 orders found among 458 in the window, 9 parsed and saved, no errors, member notices suppressed on the two terms the membership module created. LSC shirt fund 2026 now counts 117 memberships ($1,170), history from 2025-08-09. One 2025 price the table does not know: Joshua Bartz $150 New + Fall (R208580086) — Kerry warned 2025 breakdowns may differ.",
+    ],
+  },
+  {
+    version: "2.359.0",
+    date: "2026-09-09",
+    changes: [
+      "Date-range order import (Kerry: 'August 1 thru December 28, 2025 for the shirt fund first'). `scoring-import-orders:<from>|<to>[|apply][|membership-only]` reads 'New Order' emails for the window from the same mailbox (every folder), skips what the Tracker already holds — by message id OR by the order number in the subject, since moved messages are re-keyed — and runs the rest through the inbox check's own pipeline (parse, save, warnings, processed, then the event / contest / event-link syncs). Dry-run counts and lists; apply runs in a background thread (the bridge times out at 60 s) and `scoring-import-status` reports progress. email_parser/order_import.py; test_order_import.py.",
+      "Two guards for a historical import. No member email: an imported membership term gets its four notice columns and the 'thanks for renewing' confirmation pre-stamped 'suppressed:historical-import', and so does any later term of the same customer that had no confirmation yet — the daily membership job fires on exact expiry dates and would otherwise mail 2025 buyers about terms the Tracker only just learned of. Status flips are shown first: the preview lists every 2025 membership whose buyer has no 2026 membership in the Tracker, because after import that 2025 term becomes their latest and the status sync reads them as FORMER (Brevo follows).",
+    ],
+  },
   {
     version: "2.358.0",
     date: "2026-09-09",

@@ -41179,6 +41179,11 @@ def _margin_model_applies(order_date: str | None,
     return d >= str(cutover)[:10]
 
 
+# First order date whose membership funds Lone Star Cup shirts (the
+# Aug 2025 – Jul 2026 window → the 2026 Cup). Kerry 2026-09-10.
+LSC_SHIRT_SETASIDE_FROM = "2025-08-01"
+
+
 def _membership_setaside(name: str, default: float,
                          conn: sqlite3.Connection | None = None) -> float:
     """A membership set-aside amount, dial-overridable (#422 §9: "IT IS A
@@ -41274,6 +41279,16 @@ def _calc_membership_allocation(item: dict, conn: sqlite3.Connection) -> dict:
     # Season contest buy-ins are deliberately NOT a source: Kerry removed
     # shirts from those and they stay removed.
     lsc_shirt = _membership_setaside("lsc_shirt", 10.0, conn)
+    # The set-aside starts with the Aug 2025 – Jul 2026 window (Kerry
+    # 2026-09-10: "we don't need to track shirt funds from memberships
+    # prior to August 2025 ... We do extract $6 from each membership
+    # still for monthly points race pots"). Earlier shirts were paid
+    # from season-contest and LSC markups. Dial: membership_setaside_lsc_shirt_from.
+    _from = (_setting_via(conn, "membership_setaside_lsc_shirt_from")
+             or LSC_SHIRT_SETASIDE_FROM)[:10]
+    _od = (item.get("order_date") or "")[:10]
+    if _od and _od < _from:      # no date = a live sale, set-aside applies
+        lsc_shirt = 0.0
 
     return {
         "player_count": 1,
@@ -43607,12 +43622,95 @@ def resolve_player_status(item, conn=None, db_path=None) -> str:
             if cps == "first_timer":
                 return "1ST TIMER"
         if isinstance(item, dict):
-            return (item.get("user_status") or "").strip()
+            us = (item.get("user_status") or "").strip()
+            # The MEMBER box on an event order is a claim, not a purchase
+            # (Kerry 2026-09-09, Kyle Compton). Without a membership item
+            # on record the fallback reads GUEST.
+            if us.upper().startswith("MEMBER") and not _has_membership_purchase(conn, cid, item):
+                return "GUEST"
+            return us
         return ""
     finally:
         if owns:
             try: conn.close()
             except Exception: pass
+
+
+def _has_membership_purchase(conn, cid, item) -> bool:
+    """Any active TGF MEMBERSHIP item for this customer (by id, else by
+    the order's email), or a membership TERM on record — Venmo / cash /
+    comped memberships live only in customer_memberships (Kerry
+    2026-09-10: "Ferrara, Colasanto, Rivas and McKinley should all have
+    member transactions somewhere" — they do, as manual Venmo terms)."""
+    try:
+        if cid:
+            try:
+                t = conn.execute("SELECT 1 FROM customer_memberships WHERE customer_id = ? LIMIT 1",
+                                 (cid,)).fetchone()
+                if t:
+                    return True
+            except sqlite3.OperationalError:
+                pass
+            r = conn.execute(
+                """SELECT 1 FROM items WHERE customer_id = ?
+                     AND UPPER(COALESCE(item_name,'')) LIKE '%MEMBERSHIP%'
+                     AND COALESCE(transaction_status,'active') = 'active' LIMIT 1""",
+                (cid,)).fetchone()
+            if r:
+                return True
+        em = ((item.get("customer_email") if isinstance(item, dict) else None) or "").strip().lower()
+        if em:
+            r = conn.execute(
+                """SELECT 1 FROM items WHERE LOWER(COALESCE(customer_email,'')) = ?
+                     AND UPPER(COALESCE(item_name,'')) LIKE '%MEMBERSHIP%'
+                     AND COALESCE(transaction_status,'active') = 'active' LIMIT 1""",
+                (em,)).fetchone()
+            return bool(r)
+    except Exception:
+        return True   # never demote on a read error
+    return False
+
+
+def member_rate_without_membership(db_path: str | Path | None = None,
+                                   since: str = "2026-01-01") -> dict:
+    """Customers who paid the MEMBER rate on an event order since `since`
+    with no membership purchase on record and no member status — the
+    class Kerry named on Kyle Compton (2026-09-09). Read-only."""
+    with _connect(db_path) as conn:
+        rows = [dict(r) for r in conn.execute(
+            """SELECT i.customer_id, i.customer, LOWER(COALESCE(i.customer_email,'')) AS email,
+                      c.current_player_status AS status,
+                      COUNT(*) AS member_rate_orders, MIN(i.order_date) AS first_order,
+                      MAX(i.order_date) AS last_order,
+                      GROUP_CONCAT(i.item_name, ' | ') AS items
+               FROM items i
+               LEFT JOIN customers c ON c.customer_id = i.customer_id
+               WHERE i.merchant = 'The Golf Fellowship'
+                 AND COALESCE(i.transaction_status,'active') = 'active'
+                 AND UPPER(COALESCE(i.user_status,'')) LIKE 'MEMBER%'
+                 AND substr(COALESCE(i.order_date,''),1,10) >= ?
+                 AND COALESCE(c.current_player_status,'') NOT IN ('active_member','member_plus')
+                 AND NOT EXISTS (
+                     SELECT 1 FROM items m
+                     WHERE UPPER(COALESCE(m.item_name,'')) LIKE '%MEMBERSHIP%'
+                       AND COALESCE(m.transaction_status,'active') = 'active'
+                       AND ((i.customer_id IS NOT NULL AND m.customer_id = i.customer_id)
+                            OR (i.customer_email IS NOT NULL AND i.customer_email != ''
+                                AND LOWER(m.customer_email) = LOWER(i.customer_email))))
+                 AND NOT EXISTS (
+                     SELECT 1 FROM customer_roles r
+                     WHERE r.customer_id = i.customer_id
+                       AND r.role_type IN ('manager','owner','admin'))
+                 AND NOT EXISTS (
+                     SELECT 1 FROM customer_memberships t
+                     WHERE t.customer_id = i.customer_id)
+               GROUP BY COALESCE(i.customer_id, i.customer)
+               ORDER BY last_order DESC""", (since,))]
+    return {"since": since, "customers": len(rows),
+            "note": ("MEMBER ticked on an event order, no membership bought, no member "
+                     "status on record. They paid the member rate; the badge now reads "
+                     "GUEST with a MEMBER RATE chip."),
+            "rows": rows}
 
 
 def heal_items_from_customers(db_path: str | Path | None = None) -> dict:
