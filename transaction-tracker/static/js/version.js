@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.369.5";
+window.TGF_VERSION = "2.369.6";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.369.6",
+    date: "2026-09-10",
+    changes: [
+      "scoring-hcp-distribution: the spread of established handicap indexes across current members as 18-hole equivalents (range, median, quartiles, share at 10+/15+/20+, five-stroke bands, per chapter). Feeds the 'Am I good enough to play?' section Kerry asked for in the Insider (preview first, no draft yet).",
+    ],
+  },
   {
     version: "2.369.5",
     date: "2026-09-10",

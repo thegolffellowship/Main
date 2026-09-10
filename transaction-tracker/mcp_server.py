@@ -1772,6 +1772,7 @@ def _scoring_dispatch(url: str, extract: str):
       scoring-membership-terms-repair[:apply]  early renewals continue at the
                                    365 date (dry run default)
       scoring-membership-sync      terms → status reconcile now (manager comps)
+      scoring-hcp-distribution     member handicap-index spread (18-hole equiv.)
       scoring-brevo-draft[:dry|review|apply]  Wednesday TGF Insider: fill the
                                    public recap template from the week's events;
                                    dry (default) returns HTML; review emails Kerry
@@ -2964,6 +2965,11 @@ def _scoring_dispatch(url: str, extract: str):
             _done = [i for i in _ids if db.dismiss_parse_warning(i)]
             _audit("scoring-parse-warning-dismiss", f"ids={_done} note={_note.strip()}")
             return json.dumps({"dismissed": _done, "note": _note.strip()}, indent=2)
+        if cmd == "scoring-hcp-distribution":
+            # Spread of established handicap indexes across current members
+            # (18-hole equivalents) — the "Am I good enough?" numbers.
+            from email_parser.insider import handicap_distribution
+            return json.dumps(handicap_distribution(), indent=2, default=str)
         if cmd == "scoring-brevo-draft":
             # "[dry|apply]" — the Wednesday-AM TGF Insider (#453). dry returns
             # the rendered HTML + lint; apply creates the Brevo DRAFT and emails

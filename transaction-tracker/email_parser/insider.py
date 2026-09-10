@@ -275,6 +275,42 @@ def gather_week(db_path=None, as_of: date | None = None, days: int = 7) -> dict:
     return out
 
 
+def handicap_distribution(db_path=None) -> dict:
+    """The "Am I good enough to play?" facts (Kerry 2026-09-10): the spread
+    of established TGF handicap indexes across current members, as 18-hole
+    equivalents (index_18 = 2 × the 9-hole index the board carries).
+    Members = active_member / member_plus with an established index."""
+    from . import database as db
+    players = db.get_all_handicap_players(db_path=db_path)
+    rows = [p for p in players
+            if p.get("handicap_index") is not None
+            and (p.get("player_status") or "") in ("active_member", "member_plus")]
+    idx = sorted(p["handicap_index_18"] for p in rows)
+    n = len(idx)
+
+    def pct(k):  # share of members at or above k (18-hole index)
+        return round(100 * sum(1 for v in idx if v >= k) / n) if n else 0
+
+    def q(f):
+        return idx[min(n - 1, int(f * (n - 1)))] if n else None
+
+    bands = [("0–5", 0, 5), ("5–10", 5, 10), ("10–15", 10, 15),
+             ("15–20", 15, 20), ("20–25", 20, 25), ("25+", 25, 999)]
+    by_band = {lab: sum(1 for v in idx if lo <= v < hi) for lab, lo, hi in bands}
+    return {
+        "members_with_index": n,
+        "members_total": sum(1 for p in players
+                             if (p.get("player_status") or "") in ("active_member", "member_plus")),
+        "min": idx[0] if n else None, "max": idx[-1] if n else None,
+        "median": q(0.5), "q1": q(0.25), "q3": q(0.75),
+        "pct_10_plus": pct(10), "pct_15_plus": pct(15), "pct_20_plus": pct(20),
+        "single_digit": sum(1 for v in idx if v < 10),
+        "by_band": by_band,
+        "by_chapter": {ch: sorted(p["handicap_index_18"] for p in rows if p.get("chapter") == ch)
+                       for ch in CHAPTERS},
+    }
+
+
 # ── copy ────────────────────────────────────────────────────────────────
 
 def compose(data: dict) -> dict:

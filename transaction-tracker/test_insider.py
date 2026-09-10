@@ -216,6 +216,21 @@ os.environ["INSIDER_AUTODRAFT"] = "0"
 check("INSIDER_AUTODRAFT=0 is off", insider.insider_mode(db_path=p) == "off")
 del os.environ["INSIDER_AUTODRAFT"]
 
+print("\n== 4d. handicap distribution ==")
+db.get_all_handicap_players = lambda db_path=None: [
+    {"player_status": "active_member", "handicap_index": 2.0, "handicap_index_18": 4.0, "chapter": "San Antonio"},
+    {"player_status": "active_member", "handicap_index": 6.0, "handicap_index_18": 12.0, "chapter": "San Antonio"},
+    {"player_status": "member_plus", "handicap_index": 9.0, "handicap_index_18": 18.0, "chapter": "Austin"},
+    {"player_status": "active_member", "handicap_index": 13.0, "handicap_index_18": 26.0, "chapter": "Austin"},
+    {"player_status": "expired_member", "handicap_index": 1.0, "handicap_index_18": 2.0, "chapter": "Austin"},
+    {"player_status": "active_member", "handicap_index": None, "handicap_index_18": None, "chapter": "Austin"},
+]
+dist = insider.handicap_distribution(db_path=p)
+check("members only, established only", dist["members_with_index"] == 4 and dist["members_total"] == 5)
+check("range + median + shares", dist["min"] == 4.0 and dist["max"] == 26.0 and dist["median"] == 12.0
+      and dist["pct_10_plus"] == 75 and dist["pct_20_plus"] == 25 and dist["single_digit"] == 1, str(dist))
+check("bands", dist["by_band"]["0–5"] == 1 and dist["by_band"]["25+"] == 1, str(dist["by_band"]))
+
 print("\n== 5. single-chapter week ==")
 with db._connect(p) as conn:
     conn.execute("DELETE FROM scoring_rounds WHERE event_id = 3313")
