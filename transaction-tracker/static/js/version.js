@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.369.0";
+window.TGF_VERSION = "2.369.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.369.1",
+    date: "2026-09-10",
+    changes: [
+      "Spin-off directive (Kerry): new repo skill .claude/skills/spin-off/SKILL.md + CLAUDE.md workflow rule 5. A tangent that outgrows its lane gets its own session via a self-contained hand-off block; the new session must read the Tracker mailbox, CLAUDE.md and the named handoff docs, confirm its tools, and post an ack BEFORE any reply or build. Lanes announce spin-offs in the mailbox so they don't collide.",
+    ],
+  },
   {
     version: "2.369.0",
     date: "2026-09-10",
