@@ -269,6 +269,33 @@ Mailbox #453 (2026-09-10 16:13 UTC) routed the Wednesday-AM TGF Insider
 auto-draft build to this lane per Kerry — queued behind the above; see
 §4.
 
+### 3h. The v2.368.0 boot incident, and its cleanup (v2.368.1–2.368.3)
+
+The first boot carrying the continuation rule re-ran the historical
+membership backfill and, because its idempotency was keyed on
+`(customer_id, started_at)` instead of the source item, re-inserted ~188
+past items as new terms at their continued start. Two shapes: (a) the
+item already had a term → a duplicate a year later (127 rows); (b) the
+item's purchase had been entered BY HAND by Kerry on 2026-07-01 (a manual
+term with no item link) → the continuation rule read that manual term as
+a prior term and stacked a second year on top (61 rows). The status sync
+at 16:17:10 UTC then upgraded 50 lapsed members to active_member. Fixed
+in three steps, all applied on production between 16:20 and 16:30 UTC,
+before the nightly Brevo sync: per-item idempotency + the dedupe
+(2.368.1/2), the manual-term guard + the purge of that boot's rows
+(2.368.3). Verify with `scoring-status-changes:2026-09-10 16:00`.
+
+Lessons for the class: an idempotency key must be the SOURCE identity,
+never a derived value; and a rule that changes a derived value needs its
+own backfill dry-run BEFORE it runs at boot — this one ran at boot first.
+
+HELD for Kerry: the early-renewal repair (`scoring-membership-terms-repair`,
+29 candidates). Several are two purchases days apart on one customer
+(cid 7: 06-26 and 06-28; cid 87: 07-20 and 07-27; cid 38: three in 2026),
+which may be family buys attributed to the buyer or refunded duplicates,
+not renewals. Also 12 older duplicate terms from earlier backfills
+(order dates re-extracted) listed by `scoring-membership-terms-dedupe`.
+
 ## 4. NOT done, and why
 
 - **Wednesday-AM TGF Insider auto-draft (mailbox #453, Kerry-routed to
