@@ -4,8 +4,15 @@ window.TGF_CHANGELOG = [
     version: "2.363.0",
     date: "2026-09-10",
     changes: [
-      "Store link derivation tries the store's own naming variants. The first live sweep reported s9.23 The Quarry as MISSING while a product existed — the store's slug is s9-23-quarry, without “the”. The sweep now tries the strict slug first, then the slug without dropped words, and for a “NAME | Course” title the part before the pipe; the first URL the store answers for is saved, and the report lists every URL asked. Kerry's Quarry link is on the event; the next sweep verifies it.",
-      "Recap house style grew ten rules from Kerry's edit of the Silverhorn send (event-recaps.md 20–29): no humor at a member's expense, member businesses get a plug, every proper noun linked, one-line race mechanics, first-timer means first round ever, acquisition source is a story, fellowship reports who came, UP NEXT is a chronological list across both chapters with deadlines. The sent text is the template of record.",
+      "Store link derivation tries the store's own naming variants. The first live sweep reported s9.23 The Quarry as MISSING while a product existed \u2014 the store's slug is s9-23-quarry, without \u201cthe\u201d. The sweep now tries the strict slug first, then the slug without dropped words, and for a \u201cNAME | Course\u201d title the part before the pipe; the first URL the store answers for is saved, and the report lists every URL asked. Kerry's Quarry link is on the event; the next sweep verifies it.",
+      "Recap house style grew ten rules from Kerry's edit of the Silverhorn send (event-recaps.md 20\u201329): no humor at a member's expense, member businesses get a plug, every proper noun linked, one-line race mechanics, first-timer means first round ever, acquisition source is a story, fellowship reports who came, UP NEXT is a chronological list across both chapters with deadlines. The sent text is the template of record.",
+    ],
+  },
+  {
+    version: "2.362.1",
+    date: "2026-09-10",
+    changes: [
+      "Docs only: session record round seven — v2.362.0 applied on production (membership rebook 71 rows, 2026/2027 shirt fund years only, member-rate check 11 → 5), mailbox #445 posted, 2025 price table listed as the next single question for Kerry.",
     ],
   },
   {
