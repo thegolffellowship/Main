@@ -266,6 +266,28 @@ membership-only historical import (`scoring-import-orders 2025-01-01..
 
 ## 5. Verified against production
 
+**2026-09-10, v2.366.0 — the duplicate-card repair, applied.** Per-event
+runs (the `all` scan timed out on the hole comparison; per-event is the
+working shape):
+
+| Event | groups | identical | partial | conflict (held) | rows dropped |
+|---|---|---|---|---|---|
+| a9.22 ShadowGlen | 16 | 16 | 0 | 0 | 16 |
+| s18.10 FALL KICKOFF | 27 | 23 | 1 | 3 | 24 |
+| TGF SAN ANTONIO CHAMPIONSHIP | 32 | 32 | 0 | 0 | 32 |
+| TGF AUSTIN CHAMPIONSHIP | 16 | 16 | 0 | 0 | 16 |
+| 2026 TGF CHAMPIONSHIP | 0 (8/15 and 8/16 are two rounds) | | | | 0 |
+
+88 duplicate cards removed; every keeper was the card the handicap
+records were bridged to, so no bridge moved. The three HELD groups on
+s18.10 are real disagreements between the 8/29 import (bridged, kept)
+and the 8/31 23:44 re-import: Hector Aguilera 103 vs 97, Elio Ayala 116
+vs 105, Bob Atkinson 18 holes vs a 10-hole card. GG's current board is
+the truth for those; if the 8/31 numbers are the corrected ones, the
+fix is `scoring-import-event:s18.10|refresh=Aguilera,Ayala` (which also
+re-posts their differentials) — Kerry's call, not taken.
+
+
 - `get_scoring_rounds` counts before and after; Donovan's row re-read
   with cid 796 after the refresh.
 - Pairing applies report `applied: true` and pairs written; the Austin

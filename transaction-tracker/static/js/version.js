@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.366.0";
+window.TGF_VERSION = "2.366.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.366.1",
+    date: "2026-09-10",
+    changes: [
+      "Docs only: the duplicate-card repair applied on production — 88 identical cards removed across a9.22 ShadowGlen (16), s18.10 FALL KICKOFF (24), TGF SAN ANTONIO CHAMPIONSHIP (32) and TGF AUSTIN CHAMPIONSHIP (16); the 2026 TGF CHAMPIONSHIP's Saturday/Sunday cards correctly untouched; three s18.10 groups held as conflicts (Aguilera, Ayala, Atkinson) for Kerry. The all-events scan times out on the hole comparison — run the repair per event.",
+    ],
+  },
   {
     version: "2.366.0",
     date: "2026-09-10",
