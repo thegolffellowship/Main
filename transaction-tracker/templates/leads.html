@@ -90,6 +90,9 @@
         .ld-secbar.signup .n { color: #BFDBFE; }
         .ld-secbar.guest { background: #047857; }
         .ld-secbar.guest .n { color: #A7F3D0; }
+        .ld-secbar.interested { background: #B45309; }
+        .ld-secbar.interested .n { color: #FDE68A; }
+        .ld-secbar .n.d { color: #FCA5A5; font-weight: 800; }
         .ld-fu { display: inline-block; margin-top: 2px; padding: 1px 8px; border-radius: 99px; font-size: 10.5px; font-weight: 700; background: #EEF2FF; color: #3730A3; }
         .ld-fu.due { background: #FEE2E2; color: #B91C1C; }
         .ld-bchip.muted { background: #F7F7F5; color: #A8ADB5; }
@@ -244,6 +247,7 @@
             <span class="ld-chip" data-f="converted" onclick="setStatusFilter('converted')">Converted</span>
             <span class="ld-chip" data-f="dismissed" onclick="setStatusFilter('dismissed')">Dismissed</span>
             <span class="ld-chip" data-f="late" onclick="setStatusFilter('late')">Overdue</span>
+            <span class="ld-chip" data-f="due" onclick="setStatusFilter('due')">Follow-ups due <span id="ld-count-due"></span></span>
             <input id="ld-search" class="ld-tagsel ld-sortsel" style="max-width:150px" placeholder="🔎 Search" oninput="searchQ=this.value.trim();renderLeads()">
             <select id="ld-sort" class="ld-tagsel" onchange="setSort(this.value)">
                 <option value="priority:1">Priority (hot first)</option>
@@ -444,7 +448,8 @@
     // with the two he actually works — "keep leads and follow ups
     // expanded for landing. Then I'll collapse them if necessary" —
     // and everything else closed.
-    const LANDING_SECTIONS = ["NEW LEADS", "FOLLOW-UPS DUE"];
+    const LANDING_SECTIONS = ["NEW LEADS"];
+    let landed = false;   // stages with due follow-ups open on first render
     let openSections = new Set(LANDING_SECTIONS);
 
     // Opening a CLOSED section makes it the only one open (his original
@@ -517,6 +522,11 @@
         // who have played)." The server says played (a scorecard, or a
         // registration on an event whose date has passed).
         const played = l => !!l.played;
+        // Funnel stages (Kerry 2026-09-10): INTERESTED = qualified — the
+        // Interested / Coming to event tags. RESPONDED = engaged, any
+        // human reply short of that (Call back, a logged note).
+        const INTERESTED_TAGS = ["Interested", "Coming to event"];
+        const interested = l => INTERESTED_TAGS.includes(l.tag || "");
         // Follow-up / snooze (mailbox #365, Kerry-ratified 2026-08-31):
         // a future follow_up_at snoozes the lead below the active work;
         // once due (today, Central) it resurfaces at the very top.
@@ -734,16 +744,22 @@
         // Follow-Ups Due leads." A new lead is a stranger whose 48-hour
         // clock has not started; a follow-up is someone already
         // contacted. The unstarted clock is the one that runs out.
+        // The queue is the sales funnel, top to bottom (Kerry
+        // 2026-09-10): NEW LEADS → NO RESPONSE → RESPONDED → INTERESTED
+        // → EVENT SIGNUPS → GUESTS → MEMBERS → DISMISSED. A due
+        // follow-up is a TASK, not a stage ("Follow-Ups due is kind of
+        // its own thing though and could be part of each section" —
+        // "Move inside the stages"): it sorts first inside its stage
+        // with the red chip, and the Follow-ups due filter chip is the
+        // daily list. Snoozed rows sink to the bottom of their stage.
         const tier = l =>
-            l.status === "dismissed" ? 9
+            l.status === "dismissed" ? 7
             : l.status === "new" ? 0
-            : fuDue(l) ? 1
-            : fuSnoozed(l) ? 8
-            : isMember(l) ? 5
-            : l.status === "converted" ? (played(l) ? 7 : 6)
+            : isMember(l) ? 6
+            : l.status === "converted" ? (played(l) ? 5 : 4)
+            : interested(l) ? 3
             : responded(l) ? 2
-            : QUIET_TAGS.includes(l.tag || "") ? 4
-            : 3;
+            : 1;
         const lastActivity = l => (((l.notes_log || [])[0] || {}).created_at
             || l.touched_at || l.arrived_at || l.first_seen_at || "")
             .replace("T", " ").replace("Z", "");
@@ -794,11 +810,16 @@
             }
             if (statusFilter === "all") return true;
             if (statusFilter === "late") return isLate(l);
+            if (statusFilter === "due") return fuDue(l);
             return l.status === statusFilter;
         });
         if (sortKey === "priority") {
             const fu = l => l.follow_up_at || "";
+            // inside a stage: due first (oldest due date first), then
+            // the rest, snoozed last (soonest wake first)
+            const taskRank = l => fuDue(l) ? 0 : fuSnoozed(l) ? 2 : 1;
             visible.sort((a, b) => tier(a) - tier(b)
+                || taskRank(a) - taskRank(b)
                 || (fu(a) < fu(b) ? -1 : fu(a) > fu(b) ? 1 : 0)
                 || formRank(a) - formRank(b)
                 || (lastActivity(a) < lastActivity(b) ? 1
@@ -837,38 +858,42 @@
         // Mirrors tier() exactly. If the two disagree a section splits
         // into two bars with the same name, because the bar drops in
         // wherever the section CHANGES down a sorted list.
-        // MEMBERS, EVENT SIGNUPS and GUESTS (the two halves of the old
-        // CONVERTED, Kerry 2026-09-10) outrank the follow-up sections
-        // (Kerry 2026-09-07): "Anyone that signs up for an event or is
-        // a member no longer needs to be in follow ups due. They become
-        // part of our awareness from their signup side thru the EVENTS
-        // page and Golf Genius, so we don't need reminders anymore for
-        // them." A signup is not a lead you are still chasing, and the
-        // Events page is where you watch it from — so the outcome wins
-        // over the reminder for these two, and only these two. A lead
-        // still being worked keeps the old precedence: a due action
-        // outranks its status, which is the whole point of the section.
+        // Sections ARE the funnel stages (Kerry 2026-09-10); follow-ups
+        // due and snoozes are tasks inside them, never sections. The
+        // 2026-09-07 rule still holds by construction: a signup, guest
+        // or member is filed by outcome and the reminder only orders
+        // rows inside that stage ("Anyone that signs up for an event or
+        // is a member no longer needs to be in follow ups due").
         const sectionOf = l =>
             l.status === "dismissed" ? "DISMISSED"
             : l.status === "new" ? "NEW LEADS"
             : isMember(l) ? "MEMBERS"
             : l.status === "converted" ? (played(l) ? "GUESTS" : "EVENT SIGNUPS")
-            : fuDue(l) ? "FOLLOW-UPS DUE"
-            : fuSnoozed(l) ? "SNOOZED"
+            : interested(l) ? "INTERESTED"
             : responded(l) ? "RESPONDED"
             : "NO RESPONSE";
-        const SEC_CLASS = { "MEMBERS": " member", "FOLLOW-UPS DUE": " due",
-            "SNOOZED": " snoozed", "EVENT SIGNUPS": " signup", "GUESTS": " guest" };
-        const secCounts = {};
+        const SEC_CLASS = { "MEMBERS": " member", "EVENT SIGNUPS": " signup",
+            "GUESTS": " guest", "INTERESTED": " interested" };
+        const secCounts = {}, secDue = {};
         visible.forEach(l => {
             const s = sectionOf(l);
             secCounts[s] = (secCounts[s] || 0) + 1;
+            if (fuDue(l)) secDue[s] = (secDue[s] || 0) + 1;
         });
+        // Landing: NEW LEADS plus every stage holding a due follow-up,
+        // so the day's work is open without hunting (once per load —
+        // after that the accordion is Kerry's).
+        if (!landed) {
+            landed = true;
+            Object.keys(secDue).forEach(s => openSections.add(s));
+        }
+        const dueEl = document.getElementById("ld-count-due");
+        if (dueEl) dueEl.textContent = leads.filter(fuDue).length || "";
         const showPill = sortKey !== "priority";
         // Collapsible sections (Kerry 2026-09-04). openSections lives
         // outside renderLeads so tagging a lead does not slam the
         // section shut under him, and is NOT persisted — every load
-        // lands on NEW LEADS + FOLLOW-UPS DUE open, the two he works.
+        // lands on NEW LEADS + the stages holding due follow-ups open.
         const useSections = !showPill;
         // A search that finds two people and then hides both behind
         // collapsed bars is worse than no search (Kerry 2026-09-04: "If
@@ -996,7 +1021,7 @@
             if (useSections && sec !== curSection) {
                 curSection = sec;
                 const isOpen = secOpen(sec);
-                const bar = `<div class="ld-secbar${SEC_CLASS[sec] || ""}${isOpen ? " open" : ""}" data-sec="${esc(sec)}" onclick="toggleSection(this.dataset.sec)" title="${isOpen ? "Collapse" : "Expand"}"><span class="ld-secch">${isOpen ? "&#9662;" : "&#9656;"}</span>${sec}<span class="n">· ${secCounts[sec]}</span></div>`;
+                const bar = `<div class="ld-secbar${SEC_CLASS[sec] || ""}${isOpen ? " open" : ""}" data-sec="${esc(sec)}" onclick="toggleSection(this.dataset.sec)" title="${isOpen ? "Collapse" : "Expand"}"><span class="ld-secch">${isOpen ? "&#9662;" : "&#9656;"}</span>${sec}<span class="n">· ${secCounts[sec]}</span>${secDue[sec] ? `<span class="n d">· ${secDue[sec]} due</span>` : ""}</div>`;
                 drows.push(bar);
                 cards.push(bar);
             }

@@ -134,8 +134,10 @@ self-heals re-route chapter and re-derive stats.
 event or is a member no longer needs to be in follow ups due. They
 become part of our awareness from their signup side thru the EVENTS page
 and Golf Genius, so we don't need reminders anymore for them."* Two
-places enforce it, and they must agree: `sectionOf` in leads.html tests
-MEMBERS, EVENT SIGNUPS and GUESTS **before** the follow-up sections, and
+places enforce it, and they must agree: `sectionOf` in leads.html files a
+signup, guest or member by outcome (a due date only orders rows inside
+that stage, it never lifts them out — v2.371.0 made this true by
+construction, there are no follow-up sections at all), and
 `followups_due` excludes `converted` alongside `dismissed` so the morning
 digest cannot nag about a lead the page has already filed. This covers
 HAND-SET dates as well; nothing is deleted, the date simply stops
@@ -307,8 +309,19 @@ unlisted combos (no answer / "No days") fall below 12 — then newest
 activity (latest note, else touch, else arrival) first. Newest/Oldest/Name/Status sorts
 remain in the select. **Category bars, no status badges** (Kerry
 2026-08-31, v2.263.0; TOUCHED split v2.265.0): in priority view the
-desktop rows group under dark NEW LEADS / RESPONDED / NO RESPONSE /
-MEMBERS / EVENT SIGNUPS / GUESTS / DISMISSED bars with counts — RESPONDED = touched
+desktop rows group under stage bars **in funnel order, top to
+bottom** (Kerry 2026-09-10, v2.371.0: *"Should order by funnel"*): NEW
+LEADS → NO RESPONSE → RESPONDED → INTERESTED (amber; the Interested /
+Coming to event tags = qualified) → EVENT SIGNUPS (blue) → GUESTS
+(green) → MEMBERS (orange) → DISMISSED, each with its count and, in red,
+how many of its rows have a follow-up due. **Follow-ups due and snoozes
+are tasks, not stages** (Kerry: *"Follow-Ups due is kind of its own
+thing though and could be part of each section"* → *"Move inside the
+stages"*): a due row sorts first inside its stage with the red chip,
+a snoozed row sinks to the bottom of it, and the **Follow-ups due**
+filter chip (statusFilter `due`) is the daily list. The page lands with
+NEW LEADS plus every stage holding a due row open (`landed` flag, once
+per load). The older FOLLOW-UPS DUE and SNOOZED bars are gone. — RESPONDED = touched
 with a hot tag (Call back / Interested / Coming to event) OR any
 logged note (v2.265.1, Kerry: a note most likely means they replied);
 NO RESPONSE = the rest of touched (note-less outreach tags or
@@ -322,8 +335,8 @@ converted, not a member, no round yet; **GUESTS** (green) = converted
 and `played`, a server flag on every lead row = a `scoring_rounds` card
 for the customer OR an active registration on an event whose date has
 passed (`played_rounds` / `past_regs` carry the counts; a bare leads
-database without those tables reads 0). Tier order MEMBERS 5 · EVENT
-SIGNUPS 6 · GUESTS 7 · SNOOZED 8 · DISMISSED 9. The Touched and Converted stat cards carry
+database without those tables reads 0). Tier order since v2.371.0: NEW 0 · NO RESPONSE 1 · RESPONDED 2 ·
+INTERESTED 3 · EVENT SIGNUPS 4 · GUESTS 5 · MEMBERS 6 · DISMISSED 7. The Touched and Converted stat cards carry
 sub-lines: "N responded · N no response" / "N event guests · N
 members". The history flag reads "customer" (was "existing
 customer") —

@@ -151,6 +151,24 @@ const leads = [
       touched_at: "2026-08-25 10:00:00", arrived_at: "2026-08-25T10:00:00Z",
       days_since_arrival: 10, outreach_at: null, follow_up_at: null,
       played: true, notes_log: [], sms: sms("p8") },
+    // Funnel stages (Kerry 2026-09-10): INTERESTED = Interested / Coming
+    // to event tag; a due follow-up sorts FIRST inside its stage, a
+    // snooze sinks to the bottom of it.
+    { ...base, id: 9, first_name: "Keen", last_name: "Prospect", email: "k@x.com",
+      phone: null, chapter: "Austin", status: "touched", tag: "Interested",
+      touched_at: "2026-09-02 10:00:00", arrived_at: "2026-09-02T10:00:00Z",
+      days_since_arrival: 2, outreach_at: "2026-09-02 10:00:00",
+      follow_up_at: null, notes_log: [], sms: sms("p2") },
+    { ...base, id: 10, first_name: "Quiet", last_name: "Recent", email: "q@x.com",
+      phone: null, chapter: "San Antonio", status: "touched", tag: "Texted",
+      touched_at: "2026-09-04 09:00:00", arrived_at: "2026-09-04T08:00:00Z",
+      days_since_arrival: 0, outreach_at: "2026-09-04 09:00:00",
+      follow_up_at: null, notes_log: [], sms: sms("p2") },
+    { ...base, id: 11, first_name: "Snoozy", last_name: "Later", email: "z@x.com",
+      phone: null, chapter: "San Antonio", status: "touched", tag: "Texted",
+      touched_at: "2026-09-04 09:30:00", arrived_at: "2026-09-04T08:30:00Z",
+      days_since_arrival: 0, outreach_at: "2026-09-04 09:30:00",
+      follow_up_at: "2099-01-01", notes_log: [], sms: sms("p2") },
     // The route sets sms = None when the server-side pick throws.
     { ...base, id: 6, first_name: "Nosms", last_name: "Lead", email: "n@x.com",
       phone: null, chapter: null, status: "touched", tag: "Left VM",
@@ -197,14 +215,37 @@ check("an EVENT SIGNUPS bar renders for a converted lead who has not played",
 check("a GUESTS bar renders for a converted lead who has played",
       barIdx("GUESTS") >= 0);
 check("the old CONVERTED bar is gone", barIdx("CONVERTED") < 0);
-check("MEMBERS, then EVENT SIGNUPS, then GUESTS",
-      barIdx("MEMBERS") < barIdx("EVENT SIGNUPS")
-      && barIdx("EVENT SIGNUPS") < barIdx("GUESTS"),
-      [barIdx("MEMBERS"), barIdx("EVENT SIGNUPS"), barIdx("GUESTS")].join(","));
+check("EVENT SIGNUPS, then GUESTS, then MEMBERS — the funnel, top to bottom",
+      barIdx("EVENT SIGNUPS") < barIdx("GUESTS")
+      && barIdx("GUESTS") < barIdx("MEMBERS"),
+      [barIdx("EVENT SIGNUPS"), barIdx("GUESTS"), barIdx("MEMBERS")].join(","));
 const between = (a, b) => desk.slice(barIdx(a), b ? barIdx(b) : undefined);
 check("Signed Up sits under EVENT SIGNUPS", between("EVENT SIGNUPS", "GUESTS").includes("Signed"));
-check("Has Played sits under GUESTS", between("GUESTS").includes("Played")
+check("Has Played sits under GUESTS", between("GUESTS", "MEMBERS").includes("Played")
       && !between("EVENT SIGNUPS", "GUESTS").includes("Has Played"));
+
+// Kerry 2026-09-10: "Should order by funnel. Top to bottom." and, on the
+// due follow-ups, "Move inside the stages".
+const FUNNEL = ["NEW LEADS", "NO RESPONSE", "RESPONDED", "INTERESTED",
+                "EVENT SIGNUPS", "GUESTS", "MEMBERS", "DISMISSED"];
+const present = FUNNEL.filter(n => barIdx(n) >= 0);
+check("every bar on the page is a funnel stage, in funnel order",
+      present.length >= 5
+      && present.map(barIdx).every((v, i, a) => i === 0 || v > a[i - 1]),
+      present.map(n => n + ":" + barIdx(n)).join(" "));
+check("no FOLLOW-UPS DUE or SNOOZED section exists any more",
+      barIdx("FOLLOW-UPS DUE") < 0 && barIdx("SNOOZED") < 0);
+check("Keen Prospect (Interested) sits under INTERESTED",
+      between("INTERESTED", "EVENT SIGNUPS").includes("Keen"));
+const noResp = between("NO RESPONSE", "INTERESTED");
+const at = name => noResp.indexOf(name);
+check("inside NO RESPONSE the due rows come first, then the rest, snoozed last",
+      at("Bruno") >= 0 && at("Nosms") >= 0 && at("Quiet") >= 0 && at("Snoozy") >= 0
+      && Math.max(at("Bruno"), at("Nosms")) < at("Quiet") && at("Quiet") < at("Snoozy"),
+      [at("Bruno"), at("Nosms"), at("Quiet"), at("Snoozy")].join(","));
+check("the NO RESPONSE bar carries its due count",
+      /NO RESPONSE<span class="n">· \d+<\/span><span class="n d">· 2 due<\/span>/.test(desk),
+      (desk.match(/NO RESPONSE<span[^<]*<\/span>(<span[^<]*<\/span>)?/) || [""])[0]);
 
 // v2.324.0: the Email picker renders the same preset preview the Text
 // picker does, so it hit the SAME trap on a lead whose server-side pick
@@ -292,20 +333,21 @@ check("the button reports back so a silent failure is impossible",
       btn.textContent !== "", btn.textContent);
 
 const touchSub = () => store["ld-touch-sub"].textContent || "";
+// (Keen Prospect, tag Interested, is the one responded row in the fixtures.)
 check("a lead whose only note is 'auto' is NOT counted as responded",
-      /0 responded/.test(touchSub()), touchSub());
+      /1 responded/.test(touchSub()), touchSub());
 const withHuman = leads.map(l => l.id !== 3 ? l : { ...l,
     notes_log: [...l.notes_log, { author: "K", note: "he called back", created_at: "2026-09-04 01:00:00" }] });
 setALL({ ...ALL, leads: withHuman });
 render();
 check("a human note DOES count as responded",
-      /1 responded/.test(touchSub()), touchSub());
+      /2 responded/.test(touchSub()), touchSub());
 const withGG = leads.map(l => l.id !== 3 ? l : { ...l,
     notes_log: [...l.notes_log, { author: "GG", note: "RSVPd", created_at: "2026-09-04 01:00:00" }] });
 setALL({ ...ALL, leads: withGG });
 render();
 check("a GG RSVP counts too — that is the person acting",
-      /1 responded/.test(touchSub()), touchSub());
+      /2 responded/.test(touchSub()), touchSub());
 setALL(ALL); render();
 
 // ---- sections: order + accordion (Kerry 2026-09-04) ----------------
@@ -313,9 +355,9 @@ console.log("Sections");
 const barsOf = html => [...html.matchAll(/class="ld-secbar[^"]*"[^>]*data-sec="([^"]+)"/g)]
     .map(m => m[1]);
 const order = barsOf(mob);
-check("NEW LEADS outranks FOLLOW-UPS DUE",
+check("NEW LEADS outranks NO RESPONSE",
       order.indexOf("NEW LEADS") >= 0
-      && order.indexOf("NEW LEADS") < order.indexOf("FOLLOW-UPS DUE"), order);
+      && order.indexOf("NEW LEADS") < order.indexOf("NO RESPONSE"), order);
 check("each section appears exactly once — tier() and sectionOf() agree",
       order.length === new Set(order).size, order);
 check("mobile gets section bars too, not just desktop",
@@ -325,8 +367,8 @@ const hiddenRows = h => (h.match(/class="ld-(?:drow|mcard)[^"]*"[^>]*hidden/g) |
 const allRows = h => (h.match(/class="ld-(?:drow|mcard)[^"]*"/g) || []).length;
 const secOf = h => [...h.matchAll(/class="ld-mcard[^"]*"\s+data-sec="([^"]+)"([^>]*)>/g)]
     .map(m => ({ sec: m[1], hidden: /hidden/.test(m[2]) }));
-const LANDING = ["NEW LEADS", "FOLLOW-UPS DUE"];
-check("the queue LANDS with New Leads and Follow-Ups Due open",
+const LANDING = ["NEW LEADS", "NO RESPONSE"];   // NO RESPONSE holds the due rows
+check("the queue LANDS with New Leads and every stage holding a due follow-up open",
       secOf(mob).every(r => r.hidden === !LANDING.includes(r.sec)),
       JSON.stringify(secOf(mob)));
 check("everything else lands collapsed",
@@ -339,9 +381,9 @@ check("the collapsed bars still carry their counts",
 F.toggleSection("NEW LEADS");
 check("closing one landing section leaves the other open",
       secOf(store["ld-mlist"].innerHTML)
-          .every(r => r.hidden === (r.sec !== "FOLLOW-UPS DUE")),
+          .every(r => r.hidden === (r.sec !== "NO RESPONSE")),
       JSON.stringify(secOf(store["ld-mlist"].innerHTML)));
-F.toggleSection("FOLLOW-UPS DUE");
+F.toggleSection("NO RESPONSE");
 check("closing both leaves everything collapsed",
       secOf(store["ld-mlist"].innerHTML).every(r => r.hidden));
 
@@ -357,15 +399,15 @@ check("the open bar shows a down chevron",
       /ld-secbar[^"]*open[^"]*"[^>]*data-sec="NEW LEADS"/.test(openMob),
       openMob.slice(0, 300));
 
-F.toggleSection("FOLLOW-UPS DUE");
+F.toggleSection("NO RESPONSE");
 const swapped = [...store["ld-mlist"].innerHTML
     .matchAll(/class="ld-mcard[^"]*"\s+data-sec="([^"]+)"([^>]*)>/g)]
     .map(m => ({ sec: m[1], hidden: /hidden/.test(m[2]) }));
 check("opening another auto-collapses the first — one at a time",
-      swapped.every(r => r.hidden === (r.sec !== "FOLLOW-UPS DUE")),
+      swapped.every(r => r.hidden === (r.sec !== "NO RESPONSE")),
       JSON.stringify(swapped));
 
-F.toggleSection("FOLLOW-UPS DUE");
+F.toggleSection("NO RESPONSE");
 const reclosed = [...store["ld-mlist"].innerHTML
     .matchAll(/class="ld-mcard[^"]*"\s+data-sec="([^"]+)"([^>]*)>/g)]
     .map(m => /hidden/.test(m[2]));
@@ -387,6 +429,15 @@ F.setSearch("");
 check("clearing the search restores the collapse state, not everything",
       secOf(store["ld-mlist"].innerHTML).some(r => r.hidden),
       JSON.stringify(secOf(store["ld-mlist"].innerHTML)));
+// The Follow-ups due chip is the daily list now that due rows live
+// inside their stages.
+F.setStatus("due");
+const dueOnly = secOf(store["ld-mlist"].innerHTML);
+const dueNames = store["ld-mlist"].innerHTML;
+check("the Follow-ups due chip shows only the due rows",
+      dueOnly.length === 2 && dueNames.includes("Bruno") && dueNames.includes("Nosms")
+      && !dueNames.includes("Quiet"), JSON.stringify(dueOnly));
+F.setStatus("due");   // off again
 F.setStatus("touched");
 check("a status filter opens them too — the same trap",
       secOf(store["ld-mlist"].innerHTML).every(r => !r.hidden),
