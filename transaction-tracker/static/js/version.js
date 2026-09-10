@@ -1,15 +1,18 @@
-window.TGF_VERSION = "2.367.3";
+window.TGF_VERSION = "2.367.4";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.367.4",
+    date: "2026-09-10",
+    changes: [
+      "A scorecard lookup can no longer answer a question with a misleading silence. Asking for an event's rounds by its ID matched nothing and returned an empty list \u2014 which reads exactly like 'this event has no scorecards'. That is how Tuesday's closeout was reported as never started when 24 Silverhorn cards had been imported the night before, to Kerry and to CA. A number is now treated as the event ID it plainly is, and an ID with no event raises instead of returning nothing. The closeout skill already warned about the trap; this closes it in the code so no caller can fall in.",
+      "Corrections written into the two documents that carried the false claim, so nobody works from them, and the superseded start-here prompt now says so at the top.",
+    ],
+  },
   {
     version: "2.367.3",
     date: "2026-09-10",
     changes: [
-<<<<<<< HEAD
-      "A scorecard lookup can no longer answer a question with a misleading silence. Asking for an event's rounds by its ID matched nothing and returned an empty list \u2014 which reads exactly like 'this event has no scorecards'. That is how Tuesday's closeout was reported as never started when 24 Silverhorn cards had been imported the night before, to Kerry and to CA. A number is now treated as the event ID it plainly is, and an ID with no event raises instead of returning nothing. The closeout skill already warned about the trap; this closes it in the code so no caller can fall in.",
-      "Corrections written into the two documents that carried the false claim, so nobody works from them, and the superseded start-here prompt now says so at the top.",
-=======
       "Docs: session record for the 2026-09-02 Lead Center / Brevo lane closed out — handoff-2026-09-02-lead-selections-brevo-sync.md + session-prompt-2026-09-02-brevo-next.md. The one ratified build still missing is the Wednesday-morning TGF Insider auto-draft; the weekly cadence lapsed on 9/9 with no #2 sent.",
->>>>>>> origin/main
     ],
   },
   {
