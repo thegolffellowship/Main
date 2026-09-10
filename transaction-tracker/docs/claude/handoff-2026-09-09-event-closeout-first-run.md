@@ -237,7 +237,47 @@ membership-only historical import (`scoring-import-orders 2025-01-01..
   the CANONICAL for Tonche ((979) 236-8787). Duran and Carter are not in
   HubSpot by name.
 
+### 3g. Kerry's rulings on the morning's questions (v2.368.0)
+
+Verbatim, 2026-09-10 late morning, and what each became:
+
+- *"Robert Straiton is a Manager. Until that changes he is automatically
+  a member, without any dues. He is comped, yes, but as we've discussed
+  financially with CA, we need to note what that comp amount is for tax
+  purposes."* → the `chapter_managers` dial carries `customer_id`; the
+  terms→status sync opens a `Manager comp` term (source manual, price 0,
+  value $75 in notes) whenever a manager has no term covering today.
+  The finance lane owns how the comp value is booked (customers.md).
+- *"When someone renews prior to the 365 date, their new membership
+  should continue at the 365 date, not reset to the date of the
+  renewal."* → `continued_start` on the live and backfill paths;
+  `scoring-membership-terms-repair` for terms recorded the old way.
+- Phones: Duran (254) 278-1722 and Carter (210) 378-8073 — canonical is
+  right, drift warnings dismissed; Dyal → (210) 557-1765 set on the
+  customer (HubSpot agreed). Tonche canonical right. Dan Tarr was the
+  guest himself: dismissed.
+- *"Rochford and Gwin are both correctly Alumni now."* → no change.
+- Landa Park (s18.10): *"Reimports are correct for Aguilera and Ayala as I
+  entered the remaining missing scores manually. Atkinson and their 4th
+  were partial cards that should not be recorded into handicaps."* →
+  Aguilera/Ayala: the 8/29 cards dropped with their differentials
+  (`scoring-round-drop … |unpost`), the 8/31 cards re-posted through the
+  two-nines path; Atkinson + Decareaux: `hcp_exclude` set, their four
+  handicap rounds unposted, Atkinson's 10-hole duplicate dropped.
+
+Mailbox #453 (2026-09-10 16:13 UTC) routed the Wednesday-AM TGF Insider
+auto-draft build to this lane per Kerry — queued behind the above; see
+§4.
+
 ## 4. NOT done, and why
+
+- **Wednesday-AM TGF Insider auto-draft (mailbox #453, Kerry-routed to
+  this lane 2026-09-10).** Not started this session — the rulings above
+  came first. Spec of record: `session-prompt-2026-09-02-brevo-next.md`
+  (Brevo DRAFT to list 3 excluding segment 2, sender 1, tag
+  `public-recap`, Wednesday 13:00 UTC, bridge `scoring-brevo-draft[:dry]`,
+  public-variant rules in event-recaps.md). Kerry's answer needed first:
+  does an Insider #2 go out by hand this week?
 
 1. **Handicap cards were not emailed to the players who played (Phase
    3.3).** The only path is `/api/handicaps/send-bulk-email` behind the
