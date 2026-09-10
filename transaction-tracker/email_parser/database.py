@@ -19009,7 +19009,24 @@ def get_scoring_rounds_list(player: str | None = None, event: str | None = None,
         if customer_id:
             clauses.append("sr.customer_id = ?"); params.append(customer_id)
         if event:
-            clauses.append("e.item_name LIKE ?"); params.append(f"%{event}%")
+            # `event` is normally an item_name SUBSTRING. A caller passing an
+            # events.id used to match nothing and get back [] — a silent
+            # false negative that reads as "no scorecards for this event"
+            # (it is how the 2026-09-08 closeout was mis-reported as never
+            # started when 24 cards were already in). A numeric value is
+            # therefore treated as the id it plainly is, and an id with no
+            # event raises instead of returning an empty list.
+            _ev = str(event).strip()
+            if _ev.isdigit():
+                _hit = conn.execute(
+                    "SELECT id FROM events WHERE id = ?", (int(_ev),)).fetchone()
+                if not _hit:
+                    raise ValueError(
+                        f"no event with id {_ev} — pass an events.id that "
+                        f"exists, or an item_name substring")
+                clauses.append("sr.event_id = ?"); params.append(int(_ev))
+            else:
+                clauses.append("e.item_name LIKE ?"); params.append(f"%{_ev}%")
         params.append(limit)
         # Badge source of truth is our self-computed determination
         # (event_mvp_computed; Kerry-ratified 2026-07-16) with split -> Co-.
