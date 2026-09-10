@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.362.0";
+window.TGF_VERSION = "2.362.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.362.1",
+    date: "2026-09-10",
+    changes: [
+      "Docs only: session record round seven — v2.362.0 applied on production (membership rebook 71 rows, 2026/2027 shirt fund years only, member-rate check 11 → 5), mailbox #445 posted, 2025 price table listed as the next single question for Kerry.",
+    ],
+  },
   {
     version: "2.362.0",
     date: "2026-09-10",
