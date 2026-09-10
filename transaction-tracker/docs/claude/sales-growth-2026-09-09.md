@@ -535,6 +535,29 @@ Twilio unnecessary. 10DLC registration applies to all three. Cost
 crosses Sarah's line (two seats/month). Open question to Kerry: answer
 hot leads from a texting app, or from the Tracker on his phone?
 
+## Round ten (v2.371.0): the queue is the funnel
+
+Kerry: *"Should order by funnel. Top to bottom. 1. NEW LEADS 2.
+FOLLOW-UPS DUE 3. NO RESPONSE 4. RESPONDED 5. INTERESTED 6. EVENT
+SIGNUPS 7. GUESTS 8. MEMBERS 9. DISMISSED … Follow-Ups due is kind of
+it's own thing though and could be part of each section."* Assessment
+given (it is the standard lead → contacted → engaged → qualified →
+opportunity → customer → retained → closed-lost ladder; every pipeline
+tool keeps stage and task apart). Kerry: *"Move inside the stages."*
+
+Shipped: sections = the eight stages in that order; INTERESTED = the
+Interested / Coming to event tags (assumption stated, not objected to);
+RESPONDED = any other human reply (Call back, a logged note). Due
+follow-ups sort first inside their stage (oldest due first), snoozed
+rows last; each stage bar shows "· N due" in red; a **Follow-ups due**
+filter chip (statusFilter `due`) is the daily list — the existing
+Overdue chip is a different thing (new leads untouched past 48 h) and
+stays. Landing opens NEW LEADS plus every stage holding a due row, once
+per load. Tier order 0–7. Render test rewritten: funnel order, no
+FOLLOW-UPS DUE / SNOOZED bars, due-first-then-snoozed inside NO
+RESPONSE, INTERESTED bar, bar due count, due chip. The 2026-09-07
+outcome-over-reminder rule holds by construction now.
+
 ## Kerry decisions this lane is waiting on
 
 - ~~The three prices the table does not know~~ — RESOLVED v2.355.0:
