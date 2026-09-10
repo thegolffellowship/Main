@@ -62,6 +62,38 @@ def derive_store_url(item_name: str | None) -> str:
     return STORE_BASE + slug if slug else ""
 
 
+# Words Kerry's store names drop that the event names keep. Learned from
+# the first live sweep (2026-09-10): "s9.23 The Quarry" is
+# .../products/s9-23-quarry on the store, so the strict slug came back
+# MISSING while a product existed. Order matters — the strict slug is
+# tried first so an exact match always wins.
+_SLUG_DROP_WORDS = ("the",)
+
+
+def derive_store_url_candidates(item_name: str | None) -> list[str]:
+    """Store URLs to try for an event, most literal first, no duplicates:
+    the strict slug; the slug without dropped words ("the"); and for a
+    "NAME | Course" title, the part before the pipe (with and without the
+    dropped words). A caller verifies each against the store in order and
+    keeps the first one the store answers for."""
+    name = (item_name or "").strip()
+    if not name:
+        return []
+    variants = [name]
+    if "|" in name:
+        variants.append(name.split("|", 1)[0])
+    out: list[str] = []
+    for v in variants:
+        for drop in (False, True):
+            words = v.split()
+            if drop:
+                words = [w for w in words if w.lower() not in _SLUG_DROP_WORDS]
+            slug = derive_store_slug(" ".join(words))
+            if slug and (STORE_BASE + slug) not in out:
+                out.append(STORE_BASE + slug)
+    return out
+
+
 def is_store_url(url: str | None) -> bool:
     try:
         p = urlparse((url or "").strip())
@@ -189,12 +221,24 @@ def sweep_event_links(db_path: str | Path | None = None, apply: bool = False,
                     out["rows"].append(rep)
                 continue
             if not url:
-                url = derive_store_url(ev["item_name"])
-                rep["url"] = url
+                # Try the candidate slugs in order; the first the store
+                # answers for is the link. Report every URL asked.
+                cands = derive_store_url_candidates(ev["item_name"])
+                if not cands:
+                    continue
                 rep["derived"] = True
-            if not url:
-                continue
-            res = checker(url)
+                rep["tried"] = []
+                res = None
+                for cand in cands:
+                    res = checker(cand)
+                    rep["tried"].append({"url": cand, "status": res["status"],
+                                         "http": res.get("http")})
+                    url = cand
+                    if res["status"] == STATE_OK:
+                        break
+                rep["url"] = url
+            else:
+                res = checker(url)
             rep["status"] = res["status"]
             rep["http"] = res.get("http")
             if res["status"] == STATE_OK:

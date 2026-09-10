@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.362.0";
+window.TGF_VERSION = "2.363.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.363.0",
+    date: "2026-09-10",
+    changes: [
+      "Store link derivation tries the store's own naming variants. The first live sweep reported s9.23 The Quarry as MISSING while a product existed — the store's slug is s9-23-quarry, without “the”. The sweep now tries the strict slug first, then the slug without dropped words, and for a “NAME | Course” title the part before the pipe; the first URL the store answers for is saved, and the report lists every URL asked. Kerry's Quarry link is on the event; the next sweep verifies it.",
+      "Recap house style grew ten rules from Kerry's edit of the Silverhorn send (event-recaps.md 20–29): no humor at a member's expense, member businesses get a plug, every proper noun linked, one-line race mechanics, first-timer means first round ever, acquisition source is a story, fellowship reports who came, UP NEXT is a chronological list across both chapters with deadlines. The sent text is the template of record.",
+    ],
+  },
   {
     version: "2.362.0",
     date: "2026-09-10",

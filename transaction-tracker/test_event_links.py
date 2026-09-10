@@ -46,6 +46,7 @@ def fresh_db():
             INSERT INTO events VALUES (3306, 's9.22 Silverhorn', '2026-09-08',
                 'https://thegolffellowship.com/shop/ols/products/s9-22-silverhorn', 'ok', '2026-09-01 12:00:00');
             INSERT INTO events VALUES (3237, 'SEASON CONTESTS', NULL, NULL, NULL, NULL);
+            INSERT INTO events VALUES (3307, 's9.27 The Quarry', '2026-10-13', NULL, NULL, NULL);
         """)
     return tmp.name
 
@@ -71,6 +72,19 @@ def main():
     check("the full URL sits under the store base",
           el.derive_store_url("a9.23 Avery Ranch")
           == "https://thegolffellowship.com/shop/ols/products/a9-23-avery-ranch")
+
+    # ── candidate slugs (learned 2026-09-10: the store drops "the") ─────
+    c = el.derive_store_url_candidates("s9.23 The Quarry")
+    check("The Quarry tries the strict slug first, then without 'the'",
+          [u.rsplit("/", 1)[-1] for u in c] == ["s9-23-the-quarry", "s9-23-quarry"], c)
+    c = el.derive_store_url_candidates("s18.12 FALL CHAMPIONSHIP | Kissing Tree")
+    check("a piped title also tries the part before the pipe",
+          [u.rsplit("/", 1)[-1] for u in c]
+          == ["s18-12-fall-championship-kissing-tree", "s18-12-fall-championship"], c)
+    c = el.derive_store_url_candidates("a9.23 Avery Ranch")
+    check("a plain name yields exactly one candidate (no duplicates)",
+          [u.rsplit("/", 1)[-1] for u in c] == ["a9-23-avery-ranch"], c)
+    check("empty name yields no candidates", el.derive_store_url_candidates("") == [])
 
     # ── the checker, with the network replaced ─────────────────────────
     good = "https://thegolffellowship.com/shop/ols/products/a9-23-avery-ranch"
@@ -120,6 +134,8 @@ def main():
     store = {  # what the store "knows"
         "https://thegolffellowship.com/shop/ols/products/a9-23-avery-ranch": (200, None),
         "https://thegolffellowship.com/shop/ols/products/quarry-tuesday": (200, None),
+        # The store's real Quarry slug drops "the" (Kerry's link, 2026-09-10).
+        "https://thegolffellowship.com/shop/ols/products/s9-27-quarry": (200, None),
         # Cedar Creek not listed yet -> soft-404 redirect to the shop index
     }
 
@@ -150,8 +166,14 @@ def main():
           r[3302]["registration_url"].endswith("/quarry-tuesday") and r[3302]["registration_url_status"] == "ok", r[3302])
     check("a played event's link is marked expired, URL kept",
           r[3306]["registration_url"].endswith("/s9-22-silverhorn") and r[3306]["registration_url_status"] == "expired", r[3306])
-    check("counts: 2 verified, 1 filled, 1 missing, 1 expired",
-          (res["verified"], res["filled"], res["missing"], res["expired"]) == (2, 1, 1, 1),
+    check("a second candidate that the store answers for is saved (The Quarry -> s9-27-quarry)",
+          r[3307]["registration_url"] == "https://thegolffellowship.com/shop/ols/products/s9-27-quarry"
+          and r[3307]["registration_url_status"] == "ok", r[3307])
+    q = next(x for x in res["rows"] if x["id"] == 3307)
+    check("the report lists every URL tried, strict slug first",
+          [t["status"] for t in q["tried"]] == ["missing", "ok"], q.get("tried"))
+    check("counts: 3 verified, 2 filled, 1 missing, 1 expired",
+          (res["verified"], res["filled"], res["missing"], res["expired"]) == (3, 2, 1, 1),
           {k: res[k] for k in ("verified", "filled", "missing", "expired", "errors")})
 
     res2 = el.sweep_event_links(p, apply=True, today=TODAY, checker=fake_checker)

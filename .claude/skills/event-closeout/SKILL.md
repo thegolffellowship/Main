@@ -150,12 +150,21 @@ Do not assume it — read it — but do not redo it either.
     a slug when the row already carries a verified URL.
     Save the draft under `transaction-tracker/docs/claude/recaps/`.
     Kerry sends — OPEN 2.
+    **Draft-time inputs the s9.22 send taught (event-recaps.md 20–29):**
+    the headliner's PREVIOUS event (card + payout) for a trend; the Team
+    Net team score; `customers.acquisition_source` for every first-timer;
+    a first-timer is anyone on their first TGF round, membership or not
+    (surname CAPS + "New Member!" when they also joined); both chapters'
+    next three events, chronological, with tee time / shotgun, nine side
+    and registration deadline; links for every proper noun that has a
+    page; and no line a named member could read as a dig.
 5.2 **First-timer follow-up** while the round is fresh — list them
     (`user_status` = `1st TIMER`) with what they did. There is no
     first-timer system template on the shelf as of 2026-09-09; the send
     is Kerry's or the chapter manager's.
-5.3 **Fellowship attendance** — the YES count was asked for a headcount;
-    OPEN 4.
+5.3 **Fellowship attendance** — the recap reports who CAME, which only
+    Kerry knows (13 said yes at Silverhorn, 9 came). Ask him for the
+    number; OPEN 4 is where it should live.
 
 ## Report shape
 
