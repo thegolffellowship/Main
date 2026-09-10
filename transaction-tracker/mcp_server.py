@@ -1772,6 +1772,10 @@ def _scoring_dispatch(url: str, extract: str):
       scoring-membership-terms-repair[:apply]  early renewals continue at the
                                    365 date (dry run default)
       scoring-membership-sync      terms → status reconcile now (manager comps)
+      scoring-brevo-draft[:dry|apply]  Wednesday TGF Insider: fill the public
+                                   recap template from the week's events; dry
+                                   (default) returns HTML, apply creates the
+                                   Brevo DRAFT + emails Kerry (never sends)
       scoring-status-changes[:<since>][|<limit>]  customer status flips since a
                                    date with the status before (read-only)
       scoring-dedupe-rounds[:<event>|all][|apply]  duplicate scorecards
@@ -2959,6 +2963,17 @@ def _scoring_dispatch(url: str, extract: str):
             _done = [i for i in _ids if db.dismiss_parse_warning(i)]
             _audit("scoring-parse-warning-dismiss", f"ids={_done} note={_note.strip()}")
             return json.dumps({"dismissed": _done, "note": _note.strip()}, indent=2)
+        if cmd == "scoring-brevo-draft":
+            # "[dry|apply]" — the Wednesday-AM TGF Insider (#453). dry returns
+            # the rendered HTML + lint; apply creates the Brevo DRAFT and emails
+            # Kerry the link. Nothing here ever sends a campaign.
+            from email_parser.insider import build_public_recap_draft
+            _apply = (arg or "").strip().lower() == "apply"
+            _res = build_public_recap_draft(dry_run=not _apply)
+            if _apply:
+                _audit("scoring-brevo-draft", f"campaign_id={_res.get('campaign_id')} "
+                       f"error={_res.get('error')} lint={_res.get('lint')}")
+            return json.dumps(_res, indent=2, default=str)
         if cmd == "scoring-membership-terms-dedupe":
             # "[apply]" — one item, one term: delete the duplicate terms the
             # v2.368.0 boot created (backfill re-inserted continued starts).

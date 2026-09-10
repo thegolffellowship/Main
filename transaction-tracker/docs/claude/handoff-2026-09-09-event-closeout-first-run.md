@@ -296,15 +296,28 @@ which may be family buys attributed to the buyer or refunded duplicates,
 not renewals. Also 12 older duplicate terms from earlier backfills
 (order dates re-extracted) listed by `scoring-membership-terms-dedupe`.
 
+### 3i. The TGF Insider auto-draft, built (v2.369.0)
+
+`email_parser/insider.py` (routed here by #453). Gather → compose →
+render → lint → Brevo DRAFT → email Kerry the link; scheduled Wednesdays
+13:00 UTC as `insider_draft` beside `brevo_sync`; bridge
+`scoring-brevo-draft[:dry|apply]`. The data map and copy rules are in
+event-recaps.md (BUILT block); `test_insider.py` covers a two-chapter
+week, the lint gate, dry-run-never-calls-Brevo, empty window, single
+chapter. Deliberate choices: the module is its own file rather than
+brevo.py (the sync must not share a blast radius with a copywriter);
+the lint refuses `apply` on any banned word or stray dollar figure, so
+a bad data row cannot ship a rule break; every proper name in the send
+is first name + last initial. First real draft: only after Kerry reads
+the dry run.
+
 ## 4. NOT done, and why
 
-- **Wednesday-AM TGF Insider auto-draft (mailbox #453, Kerry-routed to
-  this lane 2026-09-10).** Not started this session — the rulings above
-  came first. Spec of record: `session-prompt-2026-09-02-brevo-next.md`
-  (Brevo DRAFT to list 3 excluding segment 2, sender 1, tag
-  `public-recap`, Wednesday 13:00 UTC, bridge `scoring-brevo-draft[:dry]`,
-  public-variant rules in event-recaps.md). Kerry's answer needed first:
-  does an Insider #2 go out by hand this week?
+- **Wednesday-AM TGF Insider auto-draft (mailbox #453).** BUILT in
+  v2.369.0 — see §3i. What is NOT done: the first REAL Brevo draft. Per
+  the spec the dry run for s9.22/a9.22 goes to Kerry first; `apply` runs
+  only when he says. Still open: does an Insider #2 go out by hand this
+  week?
 
 1. **Handicap cards were not emailed to the players who played (Phase
    3.3).** The only path is `/api/handicaps/send-bulk-email` behind the

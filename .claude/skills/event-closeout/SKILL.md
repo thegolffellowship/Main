@@ -193,6 +193,13 @@ Do not assume it — read it — but do not redo it either.
 5.3 **Fellowship attendance** — the recap reports who CAME, which only
     Kerry knows (13 said yes at Silverhorn, 9 came). Ask him for the
     number; OPEN 4 is where it should live.
+5.4 **TGF Insider (public sibling of the recap)** — auto-drafted
+    Wednesdays 13:00 UTC into Brevo as a DRAFT (v2.369.0, mailbox #453).
+    In a closeout run: `scoring-brevo-draft` (dry; returns the rendered
+    HTML + `lint`) → read it against the public-variant rules in
+    event-recaps.md → `scoring-brevo-draft:apply` creates the draft and
+    emails Kerry the link. It never sends. `lint` must be `[]` before
+    apply; it refuses otherwise. Names in it are first name + last initial.
 
 ## Report shape
 

@@ -263,6 +263,37 @@ Working rules (v1):
 - Brevo API has no campaign update/delete — revisions are new drafts;
   superseded drafts are deleted in the UI.
 
+**BUILT (v2.369.0, 2026-09-10, `email_parser/insider.py`) — how the
+Wednesday auto-draft fills the template:**
+- `gather_week()` — per chapter, the most recent event WITH SCORECARDS in
+  the last 7 days (`scoring_rounds` joined to `events`); field = cards,
+  cashed = distinct `tgf_payouts` recipients via `tgf_events.events_id`;
+  first-timers = players whose first-ever scoring round is that date
+  (cashed flag from the same payouts); skins story = a `gg_game_results`
+  skins row whose detail reads "Bogey on 7" / "Par on 3" (bogey wins);
+  fairness fallback = playing-handicap spread of the players who cashed;
+  results link = chapter page + `?round_id=<gg_league_round_id>`; HIO
+  pot from `get_hio_pot()["pot"]`; next Tuesday per chapter (first
+  future `[sa]9.`, `registration_url` else `derive_store_url`, label
+  "Course · Tue Sep 15"); Saturday 18s = future `[sa]18.` within 45 days,
+  not cancelled, max 4.
+- `compose()` — deterministic sentences into the 5-block slots. Headline
+  follows the strongest beat: "First round. First payday." (a first-timer
+  cashed) → "A bogey won money Tuesday" → the ratified default. Beat 1 is
+  the fraction ("half the field", "a third of the field"), never dollars.
+- `render()` strips the template's `<!-- example -->` author notes;
+  Brevo merge tags (`{{ contact.FIRSTNAME }}`, `{{ unsubscribe }}`,
+  `{{ update_profile }}`) stay.
+- `lint()` is the gate: unfilled `{{SLOT}}`, banned words (league, purse,
+  TGF Plus, DFW, Houston), any dollar figure other than the verbatim $25
+  offer and the "Hole-In-One Pot = $X" line. `apply` refuses on any hit.
+- Subject `TGF Insider | <headline>`; campaign name `TGF Insider <date>`;
+  sender 1, list 3 minus segment 2, tag `public-recap`. Kerry gets the
+  campaign link by email (Graph, COO_EMAIL_TO), logged to message_log as
+  `insider-draft`. Skipped when no event has cards in the window.
+- Off switches: env `INSIDER_AUTODRAFT=0`, dial `insider_autodraft=off`,
+  or `BREVO_SYNC_DISABLED=1` (also stops the nightly sync).
+
 **v3 fixes (Kerry, off the Brevo preview 2026-09-02) — template rules:**
 - The Season-20 logo (69986bc3…png) is BLACK INK — header band must be
   WHITE (with a dark rule under it), never #1b1b1b (v2 rendered black
