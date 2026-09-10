@@ -1853,7 +1853,11 @@ def _clear_outreach_alarm(conn, lead_id: int) -> bool:
 # being explicit is what makes overriding the pending date safe:
 # a mis-tap on Texted must never push a lead out of sight, but choosing
 # Followed up says exactly that.
-DEFAULT_REARM_TAGS = ["Followed up"]
+# "Followed up 2x" (Kerry 2026-09-09: "I need a 2nd follow up option") is
+# the same action a second time — the record shows how many times the
+# person was chased before No answer (Kerry selects that after the 3rd
+# text), and it restarts the clock just like the first.
+DEFAULT_REARM_TAGS = ["Followed up", "Followed up 2x"]
 
 
 def get_rearm_tags(db_path: str | Path | None = None) -> list[str]:
@@ -1865,7 +1869,7 @@ def get_rearm_tags(db_path: str | Path | None = None) -> list[str]:
 # these are the defaults. Tags are dispositions, orthogonal to the
 # new/touched/converted/dismissed pipeline.
 DEFAULT_TAG_OPTIONS = ["Left VM", "Texted", "Sent email", "Followed up",
-                       "No answer",
+                       "Followed up 2x", "No answer",
                        "Call back", "Interested", "Coming to event",
                        "Too expensive", "Days don't work", "Not now",
                        "Bad contact", "Registered event", "Became member"]
@@ -3359,6 +3363,22 @@ def select_sms_preset(lead: dict, now=None) -> dict:
     return _pick(key, f"{why} · {slot_used}", slot_used)
 
 
+def _event_for_slot(rows: dict, chapter: str, slot: str) -> dict:
+    """The event a preset names for one lead: their day's next event,
+    or for Tu+Sa (and no answer) the soonest of the two, then any."""
+    tue = (rows.get("tue") or {}).get(chapter)
+    sat = (rows.get("sat") or {}).get(chapter)
+    if slot == "sat":
+        pick = sat
+    elif slot == "tue":
+        pick = tue
+    else:
+        cands = [r for r in (tue, sat) if r and r.get("event_date")]
+        pick = min(cands, key=lambda r: str(r["event_date"])[:10]) \
+            if cands else (tue or sat)
+    return pick or (rows.get("any") or {}).get(chapter) or {}
+
+
 def sms_vars_for(lead: dict, owners: dict | None = None,
                  nexts: dict | None = None, rows: dict | None = None,
                  slot: str = "") -> dict:
@@ -3375,8 +3395,12 @@ def sms_vars_for(lead: dict, owners: dict | None = None,
         return m.get(ch) or m.get("default") or fallback
 
     # The event this text is actually about: the one matching their day.
-    kind = "sat" if slot == "sat" else ("tue" if slot in ("tue", "both") else "any")
-    ev = (rows.get(kind) or {}).get(ch) or (rows.get("any") or {}).get(ch) or {}
+    # Tu+Sa (Kerry 2026-09-10, Daniel Lugo IV): "Preset is showing
+    # Tuesday event even though there is a Saturday event before that
+    # that meets his availability." Both days fit, so the SOONEST of the
+    # two is the one named — a Saturday 18 this weekend beats next
+    # Tuesday's 9. The cadence sentence still leads with Tuesdays.
+    ev = _event_for_slot(rows, ch, slot)
     holes = event_holes(ev) if ev else 9
     price = first_timer_price(ev) if ev else None
 

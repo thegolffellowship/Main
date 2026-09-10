@@ -368,6 +368,34 @@ def main():
     check("a Saturday 18 closes Wednesday evening",
           "Sign ups close Wednesday evening" in t7c, t7c)
 
+    # Kerry 2026-09-10 (Daniel Lugo IV, Tu+Sa, Austin): "Preset is
+    # showing Tuesday event even though there is a Saturday event before
+    # that that meets his availability." Both days fit → the soonest.
+    fc_sat = {"item_name": "a18.5 FOREST CREEK", "event_date": "2026-09-12",
+              "course": "Forest Creek Golf Club", "chapter": "Austin",
+              "registration_url": "https://x/fc"}
+    av_tue = {"item_name": "a9.23 Avery Ranch", "event_date": "2026-09-15",
+              "course": "Avery Ranch Golf Club", "chapter": "Austin",
+              "registration_url": "https://x/ar"}
+    l7d = lead(first="Daniel", chapter="Austin", imp="Golf",
+               avail="Both (Tue + Sat)", inv="Austin only")
+    rows_d = {"any": {"Austin": fc_sat}, "tue": {"Austin": av_tue},
+              "sat": {"Austin": fc_sat}}
+    v7d = leads.sms_vars_for(l7d, ow, {}, rows_d, "both")
+    t7d = leads.render_sms(presets, "p7", l7d, v7d, slot="both")
+    check("Tu+Sa names the soonest of the two days (Saturday 18 first)",
+          "at Forest Creek is up next" in t7d and "Avery" not in t7d, t7d)
+    check("Tu+Sa carries that event's link", "https://x/fc" in t7d, t7d)
+    rows_e = {"any": {"Austin": av_tue},
+              "tue": {"Austin": dict(av_tue, event_date="2026-09-11")},
+              "sat": {"Austin": fc_sat}}
+    v7e = leads.sms_vars_for(l7d, ow, {}, rows_e, "both")
+    check("Tu+Sa names the Tuesday when it comes first",
+          v7e["course"] == "Avery Ranch", v7e["course"])
+    check("Tu+Sa with a blank answer still picks the soonest",
+          leads.sms_vars_for(l7d, ow, {}, rows_d, "")["course"]
+          == "Forest Creek")
+
     # The valve: an event with no URL must not send a dangling offer.
     v7n = leads.sms_vars_for(l7, ow, {}, {"any": {"San Antonio": SILVERHORN},
                                           "tue": {"San Antonio": SILVERHORN},

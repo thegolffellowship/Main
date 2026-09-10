@@ -576,7 +576,9 @@ def _normalize_item_name(name: str | None) -> str | None:
 # when their memberships would not decompose to the price paid). A
 # printed option line is a fact, not an extraction; read it directly.
 _CONTEST_LINE_RE = {
-    "city_match_play": re.compile(r"ADD\s+CITY\s+MATCH\s+PLAY\s*\?\s*:\s*(YES|NO)\b"),
+    # 2025 forms sold a FALL Match Play (Bartz R208580086, 2025-08-30);
+    # money-wise it is the same $50 contest, so it lands in the same flag.
+    "city_match_play": re.compile(r"ADD\s+(?:CITY|FALL)\s+MATCH\s+PLAY\s*\?\s*:\s*(YES|NO)\b"),
     "net_points_race": re.compile(r"ADD\s+NET\s+POINTS\s+RACE\s*\?\s*:\s*(YES|NO)\b"),
     "gross_points_race": re.compile(r"ADD\s+GROSS\s+POINTS\s+RACE\s*\?\s*:\s*(YES|NO)\b"),
     "fall_net_points_race": re.compile(r"ADD\s+FALL\s+(?:NET\s+)?POINTS\s+RACE\s*\?\s*:\s*(YES|NO)\b"),

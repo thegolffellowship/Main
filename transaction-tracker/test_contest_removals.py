@@ -160,6 +160,30 @@ def main():
         st2 = db.resolve_player_status(dict(kyle), conn)
     check("a membership purchase flips the fallback to MEMBER", st2 == "MEMBER", st2)
     check("and clears him from the check", db.member_rate_without_membership(db_path=p)["customers"] == 0)
+    # A Venmo / cash membership lives only as a customer_memberships term
+    # (Kerry 2026-09-10: "Ferrara, Colasanto, Rivas and McKinley should all
+    # have member transactions somewhere") — a term counts.
+    with db._connect(p) as conn:
+        conn.execute("INSERT INTO customers (customer_id, first_name, last_name, chapter) "
+                     "VALUES (903, 'Adam', 'Colasanto', 'Austin')")
+        conn.execute(
+            "INSERT INTO items (id, email_uid, order_id, item_name, item_price, customer, "
+            " customer_id, customer_email, merchant, transaction_status, order_date, item_index, "
+            " user_status) VALUES (4003, 'uid-ac', 'R1', 'a9.1 STAR RANCH', '$91.00', "
+            " 'Adam Colasanto', 903, 'awcolasanto@gmail.com', 'The Golf Fellowship', 'active', "
+            " '2026-03-08', 0, 'MEMBER')")
+        conn.commit()
+    check("without a term he is on the list", db.member_rate_without_membership(db_path=p)["customers"] == 1)
+    with db._connect(p) as conn:
+        from email_parser.memberships import ensure_membership_tables
+        ensure_membership_tables(conn)
+        conn.execute("INSERT INTO customer_memberships (customer_id, started_at, expires_at, source, notes) "
+                     "VALUES (903, '2025-06-26', '2026-06-26', 'manual', 'Venmo')")
+        conn.commit()
+        ac = conn.execute("SELECT * FROM items WHERE id = 4003").fetchone()
+        st3 = db.resolve_player_status(dict(ac), conn)
+    check("a manual Venmo term is a membership: off the list, and the resolver keeps his own status",
+          db.member_rate_without_membership(db_path=p)["customers"] == 0 and st3 == "MEMBER", st3)
 
     os.unlink(p)
     print()

@@ -443,7 +443,10 @@ human enough."* The core sentences survived; the scaffolding did not.
 **Rendered rules** (all automatic, all from #406): course **main name
 only** · day name inside 7 days, "next Saturday, Sep 12" at 8-10, "Sep
 19" beyond, **never** "9/19" · **both owner names** whenever the lead
-touches Austin · cadence ordered by their Availability and **never
+touches Austin · the event named is the lead's day's next one, and for
+**Tu+Sa the soonest of the two** (Kerry 2026-09-10, Daniel Lugo IV: a
+Saturday 18 this weekend beats next Tuesday's 9; `_event_for_slot`) ·
+cadence ordered by their Availability and **never
 dropping the other day** (the "whenever you can" softener rides the
 non-selected day) · the `here in SA` callout **only** when Invitations =
 Both · "Team Net game and Closest to Pins" · "weekly", not "every week".
@@ -871,6 +874,26 @@ acting. NOTE the divergence: `campaigns._funnel` excludes GG and HS
 from `note_count` too, so the Stats view's response rate is stricter
 than the queue's. Flagged to CA rather than changed unilaterally — it
 is a reported metric.
+
+**Stats views: Campaigns / Overall / Organic / Unattributed (v2.362.0,
+Kerry 2026-09-10).** *"Hammond/Hightower should not show in the Return
+on Ad Spend ... they did not come thru the lead form ... There should
+be toggles to click between Campaigns, Overall, Organic."*
+`campaign_stats` returns `campaigns_all` (campaign-attributed leads,
+spend = total — the only bucket whose margin is divided by ad spend),
+`organic` (sources in `MANUAL_LEAD_SOURCES`, no spend, no ROI), `all`
+(Overall — everyone, with `roi` copied from `campaigns_all` and
+`roi_scope: "campaigns"`), and `unattributed` (lead-form leads with no
+campaign id — a data gap). The page's `campaignFilter` takes the same
+keys; toggle buttons sit on the stats head.
+
+**"Followed up 2x" (Kerry 2026-09-09, v2.361.0).** *"I need a 2nd
+follow up option."* Same action a second time: in `DEFAULT_REARM_TAGS`
+(restarts the clock like Followed up), in the tag list right after
+Followed up, in the page's QUIET_TAGS (outreach, not a response). The
+sequence Kerry works is Texted → Followed up → Followed up 2x → No
+answer (which dismisses). The stored `lead_tag_options` dial was
+updated on production at the same time — see the trap below.
 
 **TRAP — a saved dial beats the code defaults.** `lead_tag_options` was
 already set in `app_settings`, so adding "Followed up" to

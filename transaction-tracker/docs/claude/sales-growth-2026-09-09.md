@@ -398,6 +398,78 @@ the campaign bucket; the All view (233.40) adds the two organic Forest
 Creek walk-ins. Kyle Compton: MEMBER badge came from the order-form
 checkbox; now a purchase, a status on record or a role only.
 
+## Round six: all of 2025's memberships are in (v2.361.1)
+
+Kerry: *"Go ahead and import the remaining 2025 memberships."* Jan 1 –
+Jul 31 2025, membership-only: 659 orders in the window, 71 memberships,
+71 parsed, 79 items saved (8 event items rode along in the same orders;
+6 past-event rows created by the auto-sync), 0 errors, 23 season-2025
+contest enrollments, notices suppressed on 8 terms + 7 later terms.
+Shirt fund by Cup year: 2025 = 71 ($710), 2026 = 117 ($1,170), 2027 =
+10 ($100). Membership rebook applied: 198 rows, 72 changed, margin
+$6,413 → $9,567, tax reserve $529 → $790 (2025 months, all filed).
+Contest-flags audit 67/67 clean. **2025 breakdowns differ (Kerry
+warned):** 8 price groups / 11 rows do not fit today's table — $250
+Returning NET+MATCH (Dyal, Sharitz), $150 NET (Jackman New, Martinez
+Returning), $175 Returning NET (W. Fieber), $200 New GROSS+MATCH
+(Henderson), $225 Returning NET+GROSS (Lieck), $250 New all three
+(Stich), $300 Returning all three (Ellis). Booked at nearest fit until
+Kerry gives the 2025 table — one at a time.
+
+Bartz $150 (8/30/2025) = New at the $25-off promo + Fall Points Race +
+**Fall Match Play** (a 2025 field the regex now reads); fits. Kerry is
+"pretty sure" the Match Play was refunded in 2026 — no Venmo refund to
+Bartz in the 2026 feed (only winnings and event differences), so the
+refund, if made, was not by Venmo.
+
+Hector Hinojosa: lead 65 (HubSpot, no campaign id) was never in the
+campaign bucket — my "left the campaign" reading in #441 was wrong. The
+ROI jump 177.78 → 233.40 on the All view = Wade Lewis's membership
+(+44.20) + Hightower and Hammond's Forest Creek rows (+5.71 each).
+
+Member-rate check after the import: 20 → 11 (Booker, Cedillo, Walter,
+Taft, Perry, Dyal, Newman, Carter, Aronberg now carry 2025
+memberships). Kerry: Vazquez, Aken, Cordero were members before 2025
+(Aken won a free membership) — pre-Tracker, needs a status on record.
+
+## Round seven (v2.362.0): Organic out of the ROAS, shirt fund from Aug 2025, terms are memberships
+
+Kerry's morning rulings, all shipped and applied on production:
+
+- *"Hammond/Hightower should not show in the Return on Ad Spend ...
+  There should be toggles to click between Campaigns, Overall,
+  Organic."* Lead stats now have four views: CAMPAIGNS (attributed to a
+  campaign; the only view divided by spend — $228.74 vs $199.62),
+  ORGANIC (walk-ins, referrals, met-in-person, partner, manual —
+  Hightower and Hammond, never in a ROAS), OVERALL (everyone, ROI
+  block labelled as the Campaigns figure), UNATTRIBUTED (lead-form
+  leads with no campaign id, e.g. Hector). Queue filter uses the same
+  keys.
+- *"2025 Shirt Fund is not needed ... We do extract $6 from each
+  membership still."* Shirt set-aside gated to order_date ≥ 2025-08-01
+  (dial `membership_setaside_lsc_shirt_from`). Membership rebook
+  applied: 71 rows changed (every Jan–Jul 2025 membership), TGF
+  operating +$710.00, tax reserve +$58.28 across 2025-01..07 (months
+  marked filed — a filed-vs-Tracker item for the Finance lane's D4).
+  Liabilities read: 2026 Cup 117 memberships / $1,170, 2027 Cup 10 /
+  $100, no 2025 fund year.
+- *"Ferrara, Colasanto, Rivas and McKinley should all have member
+  transactions somewhere."* They have manual Venmo terms in
+  `customer_memberships`; the status resolver and the member-rate
+  check honor terms now. Member-rate check 11 → 5: Compton (expected),
+  Best, Purvis, Moore, Aken. Aken's is real — Flying L 2026-05-27 at
+  the member rate, after his free membership ended (Kerry: by
+  2026-03-10). Aken set FORMER via `scoring-customer-status` with
+  Kerry's words as the note (Short Game USA open house, early 2025).
+- Bartz Match Play: Kerry checked Venmo and found no refund; flag stays
+  YES, the $150 decomposes to the cent.
+
+Mailbox #445 (id 446) posted. Finance lane's first digest (#444, id
+444) is in the mailbox: read-only audit, design for `fund_buckets` +
+`acct_transactions.fund_bucket`, D1 bucket-list question in front of
+Kerry. Nothing in it conflicts with this lane; the rebook above is the
+kind of filed-month drift its D4 will surface.
+
 ## Kerry decisions this lane is waiting on
 
 - ~~The three prices the table does not know~~ — RESOLVED v2.355.0:
@@ -406,9 +478,12 @@ checkbox; now a purchase, a status on record or a role only.
   were absent from the 2026 City Match Play enrollment and the boot
   sync now adds them (bracket implications are Kerry's). Miller's
   NET→FALL correction is the next single question.
-- **2025 import**: date range (Aug 1–Dec 28 2025 for the shirt fund, or
-  all of 2025), confirm same mailbox, go on the parse spend. Needs a
-  windowed import bridge (not built).
+- ~~2025 import~~ — DONE v2.357–v2.361: all 80 memberships from 2025
+  are in (`scoring-import-orders`). Events phase (449 + 588 event
+  orders in the two windows) waits on Kerry; course costs need invoices.
+- **The 2025 price table** for 8 groups / 11 rows booked at nearest
+  fit. One at a time, starting with $250 Returning + NET + Match Play
+  (Dyal, Sharitz).
 - **HIO pot into the liabilities read** + expense tagging to the
   earmark buckets (the "balance" side) — scope with CA's chart of
   accounts.
@@ -436,7 +511,7 @@ question. `lead_email_subjects` unratified.
 
 ## Sources read this session
 
-Mailbox #353–#436 (highest id 436); `docs/claude/leads.md`,
+Mailbox #353–#445 (highest id 446, incl. the Finance lane's #444); `docs/claude/leads.md`,
 `TGF_Tracker_LeadCenter_Context_v1_0.md`,
 `hubspot-decommission-directive.md`,
 `Update_Fragment_2026-09-03_Data_Safety_and_HubSpot_Exit.md`,
