@@ -323,14 +323,20 @@ MEMBER-tagged registrant whose rounds predate the scorecard imports) →
 the 1st TIMER tag decides; `str.capitalize` produced "san antonio" →
 first-letter-only. Rendered copy of record:
 `docs/claude/recaps/2026-09-10-insider-draft-s9.22-a9.22.html`. The
-scheduler's first unattended run is Wednesday 2026-09-16 13:00 UTC —
-in REVIEW mode (v2.369.4; Kerry: "We always need to review and discuss
-the Insider mailings until I'm confident enough to automate it a little
-more"): it emails Kerry the rendered Insider under a review banner and
-posts the beats to the mailbox (topic `insider-review`); nothing reaches
-Brevo until this lane runs `scoring-brevo-draft:apply` after the
-discussion. Dial `insider_autodraft=draft` is the step up when he is
-ready.
+scheduler's first unattended run is Wednesday 2026-09-16 13:00 UTC in
+DRAFT mode (v2.369.5). Kerry's two rulings, 2026-09-10, verbatim: "We
+always need to review and discuss the Insider mailings until I'm
+confident enough to automate it a little more." and, on seeing the dry
+run: "Update the dial to create the Brevo draft directly each wednesday
+at 8am. I'll review it there because I can see all the visual with it
+too. And then I'll work with you for edits before sending so you can
+learn from it." So: the job creates the Brevo DRAFT and emails him the
+link; he reviews in Brevo; edits come back through this lane (a
+revision is a new draft — Brevo has no campaign update API); nothing
+sends itself. His first edit — the skins sentence ("alone
+sounds...lonely", skins unexplained) — is folded into `compose()` and
+recorded in event-recaps.md. Dial `insider_autodraft` = draft (default)
+| review | off.
 
 ## 4. NOT done, and why
 

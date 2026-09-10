@@ -16,9 +16,10 @@ Rules folded in (event-recaps.md, public variant):
   * DRAFTS ONLY.
 
 Bridge: `scoring-brevo-draft[:dry|apply|review]`. Scheduler: Wednesday
-13:00 UTC (`weekly_insider_draft`). Dial `insider_autodraft`: review
-(default — preview to Kerry + mailbox, nothing in Brevo), draft (Brevo
-DRAFT + link), off. Skipped when no event was played in the window.
+13:00 UTC (`weekly_insider_draft`). Dial `insider_autodraft`: draft
+(default — Brevo DRAFT + link to Kerry, who reviews it in Brevo and edits
+with the session lane), review (preview to Kerry + mailbox, nothing in
+Brevo), off. Skipped when no event was played in the window.
 """
 
 from __future__ import annotations
@@ -72,6 +73,19 @@ def _short_name(first: str | None, last: str | None) -> str:
     if not first and not last:
         return "a first-timer"
     return f"{first} {last[:1]}.".strip() if last else first
+
+
+def _gg_short(name: str | None) -> str:
+    """GG board name ("DONOVAN, Tom", "Espinosa, Christopher Guest") →
+    public form "Tom D."."""
+    raw = re.sub(r"\s+Guest\b", "", name or "", flags=re.I).strip()
+    if "," in raw:
+        last, first = [x.strip() for x in raw.split(",", 1)]
+    else:
+        parts = raw.split()
+        first, last = (" ".join(parts[:-1]), parts[-1]) if len(parts) > 1 else (raw, "")
+    first = first.split()[0].title() if first else ""
+    return _short_name(first, last.title())
 
 
 def _fmt_day(d: str | None) -> str:
@@ -346,10 +360,15 @@ def compose(data: dict) -> dict:
                  None) or next((e for e in evs if e["skins_story"]), None)
     if story:
         s = story["skins_story"]
-        slots["BEAT_3_LEAD"] = f"A {s['score']} won a skin."
-        slots["BEAT_3_BODY"] = (f"On the {_ordinal(s['hole'])} in {_esc(story['chapter'])}, a "
-                                f"{s['score']} was the only one in the field — and that is how "
-                                "skins work. You do not have to be good, you have to be alone.")
+        who = _gg_short(s.get("player"))
+        is_first = any(f["short"] == who for f in story["first_timers"])
+        slots["BEAT_3_LEAD"] = f"A {s['score']} won money."
+        slots["BEAT_3_BODY"] = (
+            f"On the {_ordinal(s['hole'])} hole in {_esc(story['chapter'])}, {_esc(who)}"
+            f"{' — in his first TGF round —' if is_first else ''} made {s['score']}, and it was "
+            f"the best score anyone posted on that hole. In our skins game every hole is its "
+            f"own small contest, so one good hole pays even when the rest of the round doesn't. "
+            f"That is how a {s['score']} beats a birdie made two holes later.")
     else:
         spreads = [(e["hcp_min"], e["hcp_max"]) for e in evs
                    if e["hcp_min"] is not None and e["hcp_max"] is not None]
@@ -592,7 +611,7 @@ def send_review_preview(res: dict, db_path=None) -> dict:
 
 
 def insider_mode(db_path=None) -> str:
-    """review (default) | draft | off. Env INSIDER_AUTODRAFT=0 is 'off'."""
+    """draft (default, Kerry 2026-09-10) | review | off. INSIDER_AUTODRAFT=0 is 'off'."""
     from . import database as db
     if os.getenv("INSIDER_AUTODRAFT", "1") == "0":
         return "off"
@@ -600,18 +619,21 @@ def insider_mode(db_path=None) -> str:
         v = (db.get_app_setting("insider_autodraft", db_path=db_path) or "").strip().lower()
     except Exception:
         v = ""
-    return v if v in ("review", "draft", "off") else "review"
+    return v if v in ("review", "draft", "off") else "draft"
 
 
 def weekly_insider_draft() -> None:
     """Scheduler entry point — Wednesday 13:00 UTC (8 AM Central).
 
     Mode from the dial `insider_autodraft`:
-      review (default) — render the dry run, email Kerry the preview, post it
-                         to the Tracker mailbox; NOTHING goes to Brevo.
-      draft            — create the Brevo DRAFT and email Kerry the link
-                         (the fully ratified process, for when Kerry says
-                         he is confident enough).
+      draft (default)  — create the Brevo DRAFT and email Kerry the link. Kerry
+                         2026-09-10: "Update the dial to create the Brevo draft
+                         directly each wednesday at 8am. I'll review it there
+                         because I can see all the visual with it too. And then
+                         I'll work with you for edits before sending." Edits go
+                         through the session lane; nothing sends itself.
+      review           — render the dry run, email Kerry the preview, post it
+                         to the Tracker mailbox; nothing goes to Brevo.
       off              — do nothing.
     """
     from . import database as db

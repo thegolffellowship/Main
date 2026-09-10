@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.369.4";
+window.TGF_VERSION = "2.369.5";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.369.5",
+    date: "2026-09-10",
+    changes: [
+      "Insider: DRAFT mode is the default (Kerry, on the dry run: 'Update the dial to create the Brevo draft directly each wednesday at 8am. I'll review it there because I can see all the visual with it too. And then I'll work with you for edits before sending so you can learn from it.'). The Wednesday job creates the Brevo DRAFT and emails Kerry the link; review mode stays available on the dial.",
+      "Insider beat 3 rewritten from Kerry's first edit ('the skin sentence... alone sounds...lonely'; skins unexplained): it now names the player (first name + initial), says the score was the best anyone posted on that hole, explains that every hole is its own small contest so one good hole pays even when the rest of the round doesn't — no 'alone'. Lesson recorded in event-recaps.md.",
+    ],
+  },
   {
     version: "2.369.4",
     date: "2026-09-10",

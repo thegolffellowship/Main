@@ -37,6 +37,8 @@ def fresh_db():
             CREATE TABLE events (id INTEGER PRIMARY KEY, item_name TEXT, event_date TEXT, course TEXT,
                 chapter TEXT, start_time TEXT, registration_url TEXT, fellowship_spot TEXT, status TEXT);
             CREATE TABLE tgf_events (id INTEGER PRIMARY KEY, events_id INTEGER);
+            CREATE TABLE app_settings (key TEXT PRIMARY KEY, value TEXT NOT NULL,
+                updated_at TEXT DEFAULT (datetime('now')));
             CREATE TABLE tgf_payouts (id INTEGER PRIMARY KEY AUTOINCREMENT, event_id INTEGER,
                 customer_id INTEGER, category TEXT, amount REAL, paid_at TEXT);
             INSERT INTO events VALUES (3306, 's9.22 Silverhorn', '2026-09-08', 'Silverhorn', 'San Antonio',
@@ -135,8 +137,14 @@ with db._connect(p) as conn:   # Hector A. (4) cashes too → "and so did 1 of t
 _s2 = insider.compose(insider.gather_week(db_path=p, as_of=date(2026, 9, 10)))
 check("beat 2 counts the other first-timers who cashed", "and so did 1 of the other 2 first-timers" in _s2["BEAT_2_BODY"],
       _s2["BEAT_2_BODY"])
-check("beat 3 tells the bogey skin", "bogey" in slots["BEAT_3_LEAD"] and "7th" in slots["BEAT_3_BODY"],
+check("beat 3 tells the bogey skin in plain language, names the player first + initial",
+      slots["BEAT_3_LEAD"] == "A bogey won money." and "7th hole" in slots["BEAT_3_BODY"]
+      and "Robert R." in slots["BEAT_3_BODY"] and "Rideout" not in slots["BEAT_3_BODY"]
+      and "alone" not in slots["BEAT_3_BODY"] and "every hole is its own small contest" in slots["BEAT_3_BODY"],
       slots["BEAT_3_BODY"])
+check("GG name forms → public form", insider._gg_short("DONOVAN, Tom") == "Tom D."
+      and insider._gg_short("Espinosa, Christopher Guest") == "Christopher E."
+      and insider._gg_short("Kerry Niester") == "Kerry N.")
 check("HIO pot formatted", slots["HIO_POT"] == "$1,175")
 check("celebrate uses fellowship spot", "Silverhorn grill" in slots["CELEBRATE_PROOF"])
 check("proper nouns keep their case", "San Antonio" in slots["BEAT_1_BODY"] and "Tuesday night" in slots["BEAT_2_BODY"]
@@ -200,7 +208,10 @@ with db._connect(p) as conn:
 check("mailbox post under insider-review names the beats", mb and mb[0] == "insider-review" and "Beat 2:" in mb[1],
       str(mb))
 check("still no Brevo call", called == [])
-check("mode defaults to review", insider.insider_mode(db_path=p) == "review")
+check("mode defaults to draft (Kerry 2026-09-10)", insider.insider_mode(db_path=p) == "draft")
+db.set_app_setting("insider_autodraft", "review", db_path=p)
+check("dial can hold review", insider.insider_mode(db_path=p) == "review")
+db.set_app_setting("insider_autodraft", "", db_path=p)
 os.environ["INSIDER_AUTODRAFT"] = "0"
 check("INSIDER_AUTODRAFT=0 is off", insider.insider_mode(db_path=p) == "off")
 del os.environ["INSIDER_AUTODRAFT"]

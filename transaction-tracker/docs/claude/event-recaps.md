@@ -291,17 +291,34 @@ Wednesday auto-draft fills the template:**
   sender 1, list 3 minus segment 2, tag `public-recap`. Kerry gets the
   campaign link by email (Graph, COO_EMAIL_TO), logged to message_log as
   `insider-draft`. Skipped when no event has cards in the window.
-- MODES (dial `insider_autodraft`; Kerry 2026-09-10: *"We always need to
-  review and discuss the Insider mailings until I'm confident enough to
-  automate it a little more"*): **review** (DEFAULT) — the Wednesday job
-  renders the dry run, emails Kerry the Insider itself under a REVIEW
-  banner, posts the beats to the Tracker mailbox (topic `insider-review`),
-  and puts NOTHING in Brevo; the session lane discusses it with Kerry and
-  runs `scoring-brevo-draft:apply` when he says go. **draft** — the fully
-  ratified process (Brevo DRAFT + link), for when Kerry flips the dial.
-  **off** — nothing. Env `INSIDER_AUTODRAFT=0` is off; `BREVO_SYNC_DISABLED=1`
-  also unschedules it. Bridge `scoring-brevo-draft:review` runs the review
-  step by hand.
+- MODES (dial `insider_autodraft`). **draft** (DEFAULT — Kerry 2026-09-10:
+  *"Update the dial to create the Brevo draft directly each wednesday at
+  8am. I'll review it there because I can see all the visual with it too.
+  And then I'll work with you for edits before sending so you can learn
+  from it."*): Brevo DRAFT + link emailed to Kerry; edits go through the
+  session lane (a Brevo campaign cannot be updated by API — a revision is
+  a new draft, the old one deleted in the UI); nothing sends itself.
+  **review** — renders the dry run, emails Kerry the Insider under a REVIEW
+  banner, posts the beats to the mailbox (topic `insider-review`), nothing
+  in Brevo. **off** — nothing. Env `INSIDER_AUTODRAFT=0` is off;
+  `BREVO_SYNC_DISABLED=1` also unschedules it. Bridges
+  `scoring-brevo-draft[:dry|review|apply]`.
+- Kerry's standing review rule (2026-09-10): *"We always need to review and
+  discuss the Insider mailings until I'm confident enough to automate it a
+  little more."* Every auto-draft is discussed before he sends; what he
+  changes goes into the lessons list below and, where it is a pattern,
+  into `compose()`.
+
+**Lessons from the auto-draft (Kerry's edits, 2026-09-10 — "so you can learn from it"):**
+- Skins need plain language for a public list. Kerry on the first draft:
+  *"the skin sentence doesn't really work where it says you don't have to
+  be good, you just have to be alone. Doesn't resonate with a lot of people
+  who don't know what a skin is, and alone sounds...lonely."* → beat 3 now
+  names the player (first + initial), says the score was *the best anyone
+  posted on that hole*, explains that *every hole is its own small
+  contest, so one good hole pays even when the rest of the round doesn't*,
+  and never uses "alone". Rule: any game term (skin, CTP, net, flight)
+  gets a one-clause explanation the first time it appears in a public send.
 
 **v3 fixes (Kerry, off the Brevo preview 2026-09-02) — template rules:**
 - The Season-20 logo (69986bc3…png) is BLACK INK — header band must be

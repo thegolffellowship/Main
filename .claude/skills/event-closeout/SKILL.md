@@ -197,13 +197,15 @@ Do not assume it — read it — but do not redo it either.
     Wednesdays 13:00 UTC into Brevo as a DRAFT (v2.369.0, mailbox #453).
     In a closeout run: `scoring-brevo-draft` (dry; returns the rendered
     HTML + `lint`) → read it against the public-variant rules in
-    event-recaps.md → DISCUSS it with Kerry (his rule 2026-09-10: every
-    Insider is reviewed and discussed until he says otherwise; the
-    Wednesday job's default mode is `review`, which emails him the preview
-    and posts the beats to the mailbox) → only on his go,
-    `scoring-brevo-draft:apply` creates the Brevo draft and emails him the
-    link. It never sends. `lint` must be `[]` before apply; it refuses
-    otherwise. Names in it are first name + last initial.
+    event-recaps.md → `scoring-brevo-draft:apply` creates the Brevo draft
+    and emails Kerry the link (the Wednesday 8 AM job does the same
+    unattended, dial `insider_autodraft=draft`). Kerry reviews it IN
+    BREVO and works the edits with the lane before he sends (his rule
+    2026-09-10: every Insider is reviewed and discussed until he says
+    otherwise — fold each edit into event-recaps.md lessons and, when it
+    is a pattern, into `compose()`). A revision is a NEW draft; the old
+    one is deleted in the Brevo UI. It never sends. `lint` must be `[]`
+    before apply; it refuses otherwise. Names are first name + last initial.
 
 ## Report shape
 
