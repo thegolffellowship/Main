@@ -1762,6 +1762,14 @@ def _scoring_dispatch(url: str, extract: str):
                                    event (ALL Net → ALL Gross); refresh=
                                    force-replaces named players' stale cards;
                                    url = the portal widget
+      scoring-hcp-exclude:<event>|<A>[,<B>]|<note>[|apply]  never-post cards for
+                                   handicaps + unpost bridged rounds
+      scoring-round-drop:<id>[|unpost][|apply]  delete one scoring card
+      scoring-parse-warnings[:<frag>][|<status>][|<limit>]  read parse warnings
+      scoring-parse-warning-dismiss:<id>[,<id>]|<note>  dismiss ruled-on warnings
+      scoring-membership-terms-repair[:apply]  early renewals continue at the
+                                   365 date (dry run default)
+      scoring-membership-sync      terms → status reconcile now (manager comps)
       scoring-status-changes[:<since>][|<limit>]  customer status flips since a
                                    date with the status before (read-only)
       scoring-dedupe-rounds[:<event>|all][|apply]  duplicate scorecards
@@ -2902,6 +2910,72 @@ def _scoring_dispatch(url: str, extract: str):
                 _audit("scoring-dedupe-rounds",
                        f"event={_ev or 'all'} dropped={_res.get('rows_dropped')} "
                        f"bridges_moved={_res.get('handicap_bridges_moved')}")
+            return json.dumps(_res, indent=2, default=str)
+        if cmd == "scoring-hcp-exclude":
+            # "<event>|<player>[,<player>]|<note>[|apply]" — mark cards as
+            # never-post for handicaps and unpost anything already bridged
+            # (Kerry 2026-09-10, s18.10 partial cards). Dry run by default.
+            _p = [x.strip() for x in (arg or "").split("|")]
+            _apply = bool(_p) and _p[-1].lower() == "apply"
+            if _apply:
+                _p = _p[:-1]
+            if len(_p) < 2:
+                return json.dumps({"error": "usage: scoring-hcp-exclude:<event>|<A>[,<B>]|<note>[|apply]"})
+            _ev, _players = _p[0], [x.strip() for x in _p[1].split(",") if x.strip()]
+            _note = _p[2] if len(_p) > 2 else None
+            _res = db.exclude_scoring_rounds_from_handicaps(_ev, _players, note=_note,
+                                                            apply=_apply)
+            if _apply:
+                _audit("scoring-hcp-exclude",
+                       f"event={_ev} players={_players} unposted="
+                       f"{_res.get('handicap_rounds_unposted')} note={_note}")
+            return json.dumps(_res, indent=2, default=str)
+        if cmd == "scoring-round-drop":
+            # "<scoring_round_id>[|unpost][|apply]" — delete one card (+holes);
+            # bridged handicap rounds are unlinked, or deleted with |unpost.
+            _p = [x.strip().lower() for x in (arg or "").split("|") if x.strip()]
+            if not _p or not _p[0].isdigit():
+                return json.dumps({"error": "usage: scoring-round-drop:<id>[|unpost][|apply]"})
+            _res = db.drop_scoring_round(int(_p[0]), unpost=("unpost" in _p[1:]),
+                                         apply=("apply" in _p[1:]))
+            if "apply" in _p[1:]:
+                _audit("scoring-round-drop", f"round={_p[0]} unpost={'unpost' in _p[1:]} "
+                       f"card={_res.get('card')}")
+            return json.dumps(_res, indent=2, default=str)
+        if cmd == "scoring-parse-warnings":
+            # READ-ONLY: open parse warnings — "[<fragment>][|<status>][|<limit>]".
+            _p = [x.strip() for x in (arg or "").split("|")]
+            _frag = _p[0] if _p and _p[0] else None
+            _status = _p[1] if len(_p) > 1 and _p[1] else "open"
+            _lim = int(_p[2]) if len(_p) > 2 and _p[2].isdigit() else 100
+            return json.dumps(db.list_parse_warnings(_frag, status=_status, limit=_lim),
+                              indent=2, default=str)
+        if cmd == "scoring-parse-warning-dismiss":
+            # "<id>[,<id>...]|<note>" — dismiss parse warnings Kerry has ruled on.
+            _ids_s, _, _note = arg.partition("|")
+            _ids = [int(x) for x in _ids_s.split(",") if x.strip().isdigit()]
+            _done = [i for i in _ids if db.dismiss_parse_warning(i)]
+            _audit("scoring-parse-warning-dismiss", f"ids={_done} note={_note.strip()}")
+            return json.dumps({"dismissed": _done, "note": _note.strip()}, indent=2)
+        if cmd == "scoring-membership-terms-repair":
+            # "[apply]" — move early-renewal terms to start at the previous
+            # term's expiry (Kerry 2026-09-10 continuation rule). Dry run
+            # by default.
+            from email_parser.memberships import repair_early_renewal_terms
+            _apply = (arg or "").strip().lower() == "apply"
+            with db._connect() as _c:
+                _res = repair_early_renewal_terms(_c, apply=_apply)
+            if _apply:
+                _audit("scoring-membership-terms-repair",
+                       f"terms_moved={_res.get('terms_moved')} skipped={len(_res.get('skipped', []))}")
+            return json.dumps(_res, indent=2, default=str)
+        if cmd == "scoring-membership-sync":
+            # Run the terms → status reconcile now (opens manager comp terms,
+            # demotes lapsed, upgrades renewed). Audited.
+            from email_parser.memberships import sync_player_status_with_terms
+            with db._connect() as _c:
+                _res = sync_player_status_with_terms(_c)
+            _audit("scoring-membership-sync", str(_res))
             return json.dumps(_res, indent=2, default=str)
         if cmd == "scoring-status-changes":
             # READ-ONLY (Kerry 2026-09-10, "Where'd Straiton and others go?"):

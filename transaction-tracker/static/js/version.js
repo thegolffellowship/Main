@@ -1,5 +1,15 @@
-window.TGF_VERSION = "2.367.4";
+window.TGF_VERSION = "2.368.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.368.0",
+    date: "2026-09-10",
+    changes: [
+      "Membership terms continue, they do not reset (Kerry: 'When someone renews prior to the 365 date, their new membership should continue at the 365 date, not reset to the date of the renewal'). A renewal bought while a term is still running now starts on that term's expiry and runs 365 days from there — on the live renewal path and on the historical backfill; a renewal after a lapse still starts on the purchase date, and legacy calendar-year terms never continue. scoring-membership-terms-repair[:apply] moves terms already recorded the old way (renewal/backfill sources only, manual terms untouched).",
+      "Chapter managers are members for as long as they manage, without dues (Kerry: 'Robert Straiton is a Manager. Until that changes he is automatically a member... we need to note what that comp amount is for tax purposes'). The chapter_managers dial now carries each manager's customer_id (SA 18, Austin 31); the terms→status sync opens a manual term marked 'Manager comp' (price 0, membership value $75 in the notes — dial membership_comp_value) whenever a manager has no term covering today, continuing from the last expiry. Robert is active_member again on the first sync after this deploy; scoring-membership-sync runs it on demand.",
+      "Partial cards stay out of the handicap record (Kerry on s18.10: 'Atkinson and their 4th were partial cards that should not be recorded into handicaps'). scoring_rounds gains hcp_exclude + hcp_exclude_note; both posting paths (9-hole and the 18-hole two-nines) skip flagged cards and the preview shows them; scoring-hcp-exclude:<event>|<players>|<note>[|apply] flags the cards and unposts any handicap round already bridged to them. scoring-round-drop:<id>[|unpost][|apply] removes one card (its handicap rounds unlinked, or deleted with |unpost) — for the s18.10 Aguilera/Ayala cards imported before Kerry entered the missing scores on GG.",
+      "Parse warnings from a session: scoring-parse-warnings[:<frag>][|<status>][|<limit>] reads them, scoring-parse-warning-dismiss:<ids>|<note> dismisses the ones Kerry has ruled on (Duran, Carter, Tonche phones: canonical is right; Dan Tarr 2025-07-10 was the guest himself).",
+    ],
+  },
   {
     version: "2.367.4",
     date: "2026-09-10",

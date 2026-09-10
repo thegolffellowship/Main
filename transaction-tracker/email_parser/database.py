@@ -12426,6 +12426,17 @@ def _ensure_scoring_tables(conn: sqlite3.Connection) -> None:
                      "INTEGER REFERENCES scoring_rounds(id)")
     except sqlite3.OperationalError:
         pass
+    # hcp_exclude (v2.368.0, Kerry 2026-09-10 on s18.10 Atkinson/Decareaux:
+    # "partial cards that should not be recorded into handicaps"): a card
+    # kept for the event record but never posted as a handicap round. The
+    # preview marks it, the import skips it, scoring-hcp-exclude sets it
+    # and unposts any round already bridged to it.
+    for col, ddl in (("hcp_exclude", "INTEGER DEFAULT 0"),
+                     ("hcp_exclude_note", "TEXT")):
+        try:
+            conn.execute(f"ALTER TABLE scoring_rounds ADD COLUMN {col} {ddl}")
+        except sqlite3.OperationalError:
+            pass
     # Persisted played side (Kerry 2026-07-19): 'front' | 'back' | NULL. The
     # nine a 9-hole handicap posting represents is RECORDED here at import
     # time (from the scorecard: holes 1-9 = front, 10-18 = back) instead of
@@ -15401,6 +15412,8 @@ def get_scoring_handicap_preview(event_query: str,
         rounds = conn.execute(
             """SELECT sr.id AS srid, sr.player_name, sr.customer_id,
                       sr.round_date, sr.holes_played, sr.gross, sr.tee_id,
+                      COALESCE(sr.hcp_exclude, 0) AS hcp_exclude,
+                      sr.hcp_exclude_note,
                       e.item_name AS event_name, c.name AS course_name,
                       ct.tee_name, ct.slope, ct.rating,
                       (SELECT hr.id FROM handicap_rounds hr
@@ -15452,6 +15465,8 @@ def get_scoring_handicap_preview(event_query: str,
             flags = []
             if bad_par:
                 flags.append("missing_par_holes")
+            if r["hcp_exclude"]:
+                flags.append("hcp_excluded")
             diff_ndb = diff_raw = None
             if r["slope"] and r["rating"] is not None:
                 diff_ndb = round((adj_ndb - r["rating"]) * 113.0 / r["slope"], 1)
@@ -15512,6 +15527,8 @@ def get_scoring_handicap_preview(event_query: str,
                 "index_after_raw": _with(diff_raw),
                 "prior_rounds_in_window": len(hist),
                 "already_imported": is_imported,
+                "hcp_excluded": bool(r["hcp_exclude"]),
+                "hcp_exclude_note": r["hcp_exclude_note"],
                 "flags": flags,
             }
             if is_imported:
@@ -15745,6 +15762,8 @@ def derive_handicap_rounds_from_scoring(event_query: str, dry_run: bool = True,
             why = None
             if row["already_imported"]:
                 why = "already bridged to a handicap round"
+            elif row.get("hcp_excluded"):
+                why = f"excluded from handicaps: {row.get('hcp_exclude_note') or 'partial card'}"
             elif "no_tee_slope_rating" in row["flags"]:
                 why = "no tee slope/rating on the round"
             elif "missing_par_holes" in row["flags"]:
@@ -17806,6 +17825,8 @@ def derive_18hole_rounds_as_two_nines(event_query: str, per_nine: dict,
         rounds = conn.execute(
             """SELECT sr.id AS srid, sr.player_name, sr.customer_id,
                       sr.round_date, sr.holes_played, sr.gross, sr.tee_id,
+                      COALESCE(sr.hcp_exclude, 0) AS hcp_exclude,
+                      sr.hcp_exclude_note,
                       e.item_name AS event_name, c.name AS course_name,
                       ct.tee_name
                FROM scoring_rounds sr
@@ -17825,6 +17846,12 @@ def derive_18hole_rounds_as_two_nines(event_query: str, per_nine: dict,
                 skipped.append({"player_name": r["player_name"],
                                 "scoring_round_id": r["srid"],
                                 "reason": "not an 18-hole round (use the 9-hole path)"})
+                continue
+            if r["hcp_exclude"]:
+                skipped.append({"player_name": r["player_name"],
+                                "scoring_round_id": r["srid"],
+                                "reason": f"excluded from handicaps: "
+                                          f"{r['hcp_exclude_note'] or 'partial card'}"})
                 continue
             pn = per_nine.get(r["tee_id"])
             if not pn:
@@ -18628,6 +18655,108 @@ def dedupe_scoring_rounds(event: str | None = None, apply: bool = False,
                         "bridged": [r["bridged"] for r in g["rows"]],
                         "imported_at": [r["imported_at"] for r in g["rows"]]}
                        for g in groups]}
+
+
+def exclude_scoring_rounds_from_handicaps(event: str, players: list,
+                                          note: str | None = None,
+                                          apply: bool = False,
+                                          db_path: str | Path = DB_PATH) -> dict:
+    """Mark a player's card(s) for one event as never-post (hcp_exclude=1)
+    and UNPOST any handicap round already bridged to them. Kerry
+    2026-09-10, s18.10: "Atkinson and their 4th were partial cards that
+    should not be recorded into handicaps." Player match: customer alias
+    resolution first, then a case-insensitive name substring."""
+    with _connect(db_path) as conn:
+        _ensure_scoring_tables(conn)
+        out = []
+        for name in players:
+            cid = _resolve_scoring_player(conn, name)
+            rows = conn.execute(
+                """SELECT sr.id, sr.player_name, sr.customer_id, sr.round_date,
+                          sr.holes_played, e.item_name AS event_name,
+                          COALESCE(sr.hcp_exclude, 0) AS hcp_exclude
+                     FROM scoring_rounds sr JOIN events e ON e.id = sr.event_id
+                    WHERE LOWER(e.item_name) LIKE ?
+                      AND (sr.customer_id = ? OR LOWER(sr.player_name) LIKE ?)""",
+                (f"%{event.lower()}%", cid or -1, f"%{name.lower()}%")).fetchall()
+            for r in rows:
+                hrs = [h["id"] for h in conn.execute(
+                    "SELECT id FROM handicap_rounds WHERE scoring_round_id = ?",
+                    (r["id"],))]
+                rec = {"player": name, "scoring_round_id": r["id"],
+                       "player_name": r["player_name"], "event": r["event_name"],
+                       "round_date": r["round_date"], "holes_played": r["holes_played"],
+                       "was_excluded": bool(r["hcp_exclude"]),
+                       "handicap_rounds_unposted": hrs}
+                if apply:
+                    conn.execute(
+                        "UPDATE scoring_rounds SET hcp_exclude = 1, hcp_exclude_note = ? "
+                        "WHERE id = ?", (note or "partial card (Kerry)", r["id"]))
+                    for hid in hrs:
+                        conn.execute("DELETE FROM handicap_rounds WHERE id = ?", (hid,))
+                out.append(rec)
+        if apply:
+            conn.commit()
+    return {"event": event, "players": players, "applied": bool(apply),
+            "cards": out,
+            "handicap_rounds_unposted": (sum(len(c["handicap_rounds_unposted"]) for c in out)
+                                         if apply else None)}
+
+
+def drop_scoring_round(scoring_round_id: int, unpost: bool = False,
+                       apply: bool = False, db_path: str | Path = DB_PATH) -> dict:
+    """Delete ONE scoring card (and its holes). Handicap rounds bridged to
+    it are unlinked by default; with unpost=True they are deleted too (a
+    card whose scores were wrong, so its differentials are wrong). Dry run
+    by default. Built for the s18.10 Aguilera/Ayala cards whose 8/29
+    import predated Kerry's manual score entry on GG."""
+    with _connect(db_path) as conn:
+        _ensure_scoring_tables(conn)
+        r = conn.execute(
+            """SELECT sr.id, sr.player_name, sr.customer_id, sr.round_date,
+                      sr.holes_played, sr.gross, e.item_name AS event_name
+                 FROM scoring_rounds sr LEFT JOIN events e ON e.id = sr.event_id
+                WHERE sr.id = ?""", (scoring_round_id,)).fetchone()
+        if not r:
+            return {"error": f"scoring round {scoring_round_id} not found"}
+        hrs = [dict(h) for h in conn.execute(
+            "SELECT id, round_date, adjusted_score, differential FROM handicap_rounds "
+            "WHERE scoring_round_id = ?", (scoring_round_id,))]
+        if apply:
+            if unpost:
+                conn.execute("DELETE FROM handicap_rounds WHERE scoring_round_id = ?",
+                             (scoring_round_id,))
+            else:
+                conn.execute("UPDATE handicap_rounds SET scoring_round_id = NULL "
+                             "WHERE scoring_round_id = ?", (scoring_round_id,))
+            conn.execute("DELETE FROM scoring_holes WHERE scoring_round_id = ?",
+                         (scoring_round_id,))
+            conn.execute("DELETE FROM scoring_rounds WHERE id = ?", (scoring_round_id,))
+            conn.execute(
+                """UPDATE action_items SET status = 'completed'
+                   WHERE status = 'open' AND subject = ?""",
+                (f"Scorecard discrepancy: {r['player_name']} (round {scoring_round_id})",))
+            conn.commit()
+    return {"applied": bool(apply), "card": dict(r),
+            "bridged_handicap_rounds": hrs,
+            "handicap_rounds": (("deleted" if unpost else "unlinked") if apply
+                                else ("would delete" if unpost else "would unlink"))}
+
+
+def list_parse_warnings(fragment: str | None = None, status: str = "open",
+                        limit: int = 100, db_path: str | Path = DB_PATH) -> list:
+    """Read parse warnings (the COO banner's drift / guest-name items)."""
+    with _connect(db_path) as conn:
+        q = ("SELECT id, order_id, customer, item_name, warning_code, message, status, "
+             "created_at FROM parse_warnings WHERE status = ?")
+        params: list = [status]
+        if fragment:
+            q += (" AND (LOWER(customer) LIKE ? OR LOWER(message) LIKE ? "
+                  "OR LOWER(warning_code) LIKE ?)")
+            params += [f"%{fragment.lower()}%"] * 3
+        q += " ORDER BY id DESC LIMIT ?"
+        params.append(limit)
+        return [dict(r) for r in conn.execute(q, params)]
 
 
 def import_gg_scorecards(tournament_url: str, event_code: str | None = None,
@@ -38587,9 +38716,12 @@ CHAPTER_MANAGERS_KEY = "chapter_managers"
 # is Robert Straiton) — NOT read off a customer record, which is why
 # Robert's cell appears here and nowhere else in the database.
 DEFAULT_CHAPTER_MANAGERS = {
-    "San Antonio": {"name": "Kerry", "phone": "(210) 838-3948"},
-    "Austin": {"name": "Robert", "phone": "(361) 389-9395"},
+    "San Antonio": {"name": "Kerry", "phone": "(210) 838-3948", "customer_id": 18},
+    "Austin": {"name": "Robert", "phone": "(361) 389-9395", "customer_id": 31},
 }
+# customer_id (v2.368.0): the manager's customers row. Managers are members
+# for as long as they manage, without dues — memberships.ensure_manager_comp_terms
+# keeps a `manager_comp` term open for each id here (Kerry 2026-09-10).
 
 
 def get_chapter_managers(db_path: str | Path | None = None) -> dict:
@@ -38606,6 +38738,9 @@ def get_chapter_managers(db_path: str | Path | None = None) -> dict:
                         out[chapter] = {
                             "name": str(val.get("name") or "").strip(),
                             "phone": str(val.get("phone") or "").strip(),
+                            "customer_id": (int(val["customer_id"])
+                                            if str(val.get("customer_id") or "").isdigit()
+                                            else out.get(chapter, {}).get("customer_id")),
                         }
         except Exception:
             logger.warning("chapter_managers dial is not valid JSON — using defaults")

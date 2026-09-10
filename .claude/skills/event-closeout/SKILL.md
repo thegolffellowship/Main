@@ -121,6 +121,12 @@ Do not assume it — read it — but do not redo it either.
     `already_imported: false`, `flags: []`, and no absurd index move (a
     wrong tee or course import shows here as a multi-point jump). New
     players show `index_now: null`.
+3.1b **Partial cards** (Kerry 2026-09-10): a player who did not finish
+    must not post. Before 3.2, `scoring-hcp-exclude:<event>|<A>,<B>|<note>`
+    (dry run, then `|apply`) flags the cards and unposts anything already
+    bridged; the preview then shows them `hcp_excluded`. A card whose
+    scores were WRONG (GG edited after our import) is
+    `scoring-round-drop:<id>|unpost|apply` + re-import, not an exclusion.
 3.2 `scoring-hcp-import:<event>|apply` — writes one handicap round per
     9-hole card (WHS NDB adjusted gross, Kerry-ratified 2026-07-14) and
     auto-emails the chapter recap to `hcp_recap_email_<chapter>` →

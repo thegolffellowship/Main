@@ -139,6 +139,166 @@ def compute_expires_at(started_at: str) -> str:
     return f"{d.year}-12-31"
 
 
+def continued_start(conn: sqlite3.Connection, customer_id: int,
+                    purchase_date: str) -> str:
+    """The date a term bought on `purchase_date` actually STARTS.
+
+    Kerry, 2026-09-10: "When someone renews prior to the 365 date, their
+    new membership should continue at the 365 date, not reset to the date
+    of the renewal." So an early renewal starts when the current term
+    ends; a renewal after a lapse starts on the purchase date. Only 365-day
+    terms (POLICY_365_FROM_YEAR onward) continue — a calendar-year legacy
+    term ending 12-31 would otherwise seed a zero-length term.
+    """
+    purchase_date = (purchase_date or "")[:10]
+    if not purchase_date:
+        return purchase_date
+    cur = conn.execute(
+        """SELECT expires_at FROM customer_memberships
+            WHERE customer_id = ? AND started_at <= ? AND expires_at > ?
+            ORDER BY expires_at DESC LIMIT 1""",
+        (customer_id, purchase_date, purchase_date)).fetchone()
+    if not cur or not cur["expires_at"]:
+        return purchase_date
+    exp = str(cur["expires_at"])[:10]
+    try:
+        if datetime.strptime(exp, "%Y-%m-%d").date().year < POLICY_365_FROM_YEAR:
+            return purchase_date
+    except ValueError:
+        return purchase_date
+    return exp
+
+
+def repair_early_renewal_terms(conn: sqlite3.Connection,
+                               apply: bool = False) -> dict:
+    """Backfill for the continuation rule: any renewal/backfill term that
+    started before the previous term ended is moved to start on that
+    expiry (same duration). Manual terms are left alone — an admin chose
+    those dates. Idempotent; dry run by default."""
+    ensure_membership_tables(conn)
+    rows = conn.execute(
+        """SELECT id, customer_id, started_at, expires_at, source
+             FROM customer_memberships
+            ORDER BY customer_id, started_at, id""").fetchall()
+    by_cust: dict = {}
+    for r in rows:
+        by_cust.setdefault(r["customer_id"], []).append(dict(r))
+    changes, skipped = [], []
+    for cid, terms in by_cust.items():
+        prev_exp = None
+        for t in terms:
+            start = (t["started_at"] or "")[:10]
+            if (prev_exp and start < prev_exp
+                    and t["source"] in ("renewal", "backfill")):
+                try:
+                    exp_year = datetime.strptime(prev_exp, "%Y-%m-%d").date().year
+                except ValueError:
+                    exp_year = 0
+                if exp_year >= POLICY_365_FROM_YEAR:
+                    new_start = prev_exp
+                    new_exp = compute_expires_at(new_start)
+                    clash = conn.execute(
+                        "SELECT id FROM customer_memberships WHERE customer_id = ? "
+                        "AND started_at = ? AND id != ?",
+                        (cid, new_start, t["id"])).fetchone()
+                    rec = {"term_id": t["id"], "customer_id": cid,
+                           "from": [start, t["expires_at"]],
+                           "to": [new_start, new_exp], "source": t["source"]}
+                    if clash:
+                        rec["reason"] = f"another term already starts {new_start}"
+                        skipped.append(rec)
+                    else:
+                        changes.append(rec)
+                        if apply:
+                            conn.execute(
+                                "UPDATE customer_memberships SET started_at = ?, "
+                                "expires_at = ?, updated_at = CURRENT_TIMESTAMP "
+                                "WHERE id = ?", (new_start, new_exp, t["id"]))
+                        t["started_at"], t["expires_at"] = new_start, new_exp
+            prev_exp = max(prev_exp or "", (t["expires_at"] or "")[:10])
+    if apply and changes:
+        conn.commit()
+        try:
+            sync_player_status_with_terms(conn)
+        except Exception:
+            logger.warning("repair_early_renewal_terms: status sync failed", exc_info=True)
+    return {"applied": bool(apply), "terms_to_move" if not apply else "terms_moved":
+            len(changes), "skipped": skipped, "changes": changes}
+
+
+# customer_memberships.source is CHECK-constrained to backfill/renewal/manual;
+# a comp term is a MANUAL term whose notes start with the marker below.
+MANAGER_COMP_SOURCE = "manual"
+MANAGER_COMP_MARK = "Manager comp"
+
+
+def ensure_manager_comp_terms(conn: sqlite3.Connection) -> dict:
+    """Chapter managers are members for as long as they manage, without
+    dues (Kerry 2026-09-10: "Robert Straiton is a Manager. Until that
+    changes he is automatically a member... He is comped, yes, but ... we
+    need to note what that comp amount is for tax purposes.").
+
+    For every manager in the chapter_managers dial that carries a
+    customer_id, make sure a term covers today: when the latest term has
+    lapsed (or none exists), open a `manager_comp` term that continues
+    from the last expiry (or starts today), price_paid 0, with the comp
+    value recorded in notes for the finance lane. Idempotent — runs inside
+    sync_player_status_with_terms so boot, the daily job and every renewal
+    keep it true.
+    """
+    from .database import get_chapter_managers, get_app_setting
+    try:
+        value = float(get_app_setting("membership_comp_value") or 75.0)
+    except (TypeError, ValueError):
+        value = 75.0
+    today = today_central().strftime("%Y-%m-%d")
+    opened = []
+    for chapter, cfg in get_chapter_managers().items():
+        cid = cfg.get("customer_id")
+        if not cid:
+            continue
+        cur = conn.execute(
+            """SELECT id FROM customer_memberships
+                WHERE customer_id = ? AND started_at <= ? AND expires_at > ?
+                LIMIT 1""", (cid, today, today)).fetchone()
+        if cur:
+            continue
+        last = conn.execute(
+            "SELECT MAX(expires_at) AS e FROM customer_memberships WHERE customer_id = ?",
+            (cid,)).fetchone()
+        start = today
+        if last and last["e"]:
+            last_e = str(last["e"])[:10]
+            try:
+                if (datetime.strptime(last_e, "%Y-%m-%d").date().year
+                        >= POLICY_365_FROM_YEAR and last_e <= today):
+                    start = last_e
+            except ValueError:
+                pass
+        # Roll a stale comp start forward in whole terms so the open term
+        # covers today (a manager whose comp lapsed long ago).
+        exp = compute_expires_at(start)
+        while exp <= today:
+            start, exp = exp, compute_expires_at(exp)
+        try:
+            conn.execute(
+                """INSERT INTO customer_memberships
+                       (customer_id, started_at, expires_at, source, price_paid, notes)
+                   VALUES (?, ?, ?, ?, 0, ?)""",
+                (cid, start, exp, MANAGER_COMP_SOURCE,
+                 f"{MANAGER_COMP_MARK} ({chapter}) — membership value ${value:.2f} "
+                 f"for tax reporting; no dues collected (Kerry 2026-09-10)"))
+            opened.append({"customer_id": cid, "chapter": chapter,
+                           "started_at": start, "expires_at": exp, "comp_value": value})
+        except sqlite3.IntegrityError as exc:
+            logger.warning("ensure_manager_comp_terms: could not open a comp term for "
+                           "customer %s (%s)", cid, exc)
+    if opened:
+        conn.commit()
+        logger.info("ensure_manager_comp_terms: opened %s", opened)
+    return {"opened": opened}
+
+
 def _is_membership_item(item_name: str) -> bool:
     """Mirror of the frontend membership detector — match `deriveStatus`."""
     return "membership" in (item_name or "").lower()
@@ -179,6 +339,7 @@ def backfill_memberships_from_items(conn: sqlite3.Connection) -> dict:
         started_at = (r["order_date"] or "")[:10]
         if not started_at:
             continue
+        started_at = continued_start(conn, r["customer_id"], started_at)
         expires_at = compute_expires_at(started_at)
         # Strip any "$" / "(credit)" noise from price.
         price_paid = None
@@ -287,6 +448,10 @@ def sync_player_status_with_terms(conn: sqlite3.Connection) -> dict:
     Returns counts: {downgraded, upgraded}.
     """
     ensure_membership_tables(conn)
+    try:
+        ensure_manager_comp_terms(conn)
+    except Exception:
+        logger.warning("ensure_manager_comp_terms failed (non-fatal)", exc_info=True)
 
     # Latest term per customer joined back so we can branch on its expires_at.
     latest_sql = """
@@ -511,6 +676,8 @@ def record_renewal_for_item(
     started_at = (item["order_date"] or "")[:10]
     if not started_at:
         return None
+    # Early renewal continues from the current term's end (Kerry 2026-09-10).
+    started_at = continued_start(conn, item["customer_id"], started_at)
     expires_at = compute_expires_at(started_at)
 
     # Did the customer have a previous term that had any reminders sent?
