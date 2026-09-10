@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.369.1";
+window.TGF_VERSION = "2.369.2";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.369.2",
+    date: "2026-09-10",
+    changes: [
+      "TGF Insider dry run against s9.22/a9.22, three corrections. First-timers now come from the registration tag (played + '1st TIMER' on an active item for the event; the no-earlier-card guess only when the event has no store items — it had counted a MEMBER-tagged registrant whose earlier rounds predate the scorecard imports). Proper nouns keep their case in the proof line (str.capitalize had produced 'san antonio'). Kerry's venue notes in parentheses ('(on site)') are stripped from the Celebrate line.",
+    ],
+  },
   {
     version: "2.369.1",
     date: "2026-09-10",

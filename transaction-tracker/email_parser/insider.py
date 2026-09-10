@@ -93,6 +93,12 @@ def _link(url: str, text: str) -> str:
             f'{_esc(text)}</a>')
 
 
+def _cap(s: str) -> str:
+    """Upper-case the first letter only (str.capitalize lower-cases the rest,
+    which turned 'San Antonio' into 'san antonio')."""
+    return s[:1].upper() + s[1:] if s else s
+
+
 def _fraction_phrase(n: int, m: int) -> str:
     if not m:
         return ""
@@ -150,16 +156,36 @@ def gather_week(db_path=None, as_of: date | None = None, days: int = 7) -> dict:
                 """SELECT DISTINCT p.customer_id
                      FROM tgf_payouts p JOIN tgf_events te ON te.id = p.event_id
                     WHERE te.events_id = ?""", (eid,))}
-            # First-timers: first scoring round EVER on this date.
-            firsts = [dict(r) for r in conn.execute(
-                """SELECT sr.customer_id, c.first_name, c.last_name,
-                          sr.gross, sr.net, sr.playing_handicap
-                     FROM scoring_rounds sr
-                     JOIN customers c ON c.customer_id = sr.customer_id
-                    WHERE sr.event_id = ? AND sr.customer_id IS NOT NULL
-                      AND sr.round_date = (SELECT MIN(round_date) FROM scoring_rounds x
-                                            WHERE x.customer_id = sr.customer_id)
-                    ORDER BY c.last_name, c.first_name""", (eid,))]
+            # First-timers: players who PLAYED (have a card) and registered
+            # as "1st TIMER" for this event. The tag is what the player said
+            # at checkout; the no-earlier-card heuristic is only the fallback
+            # for an event with no store items (scorecards only go back so
+            # far, so it over-counts on real data).
+            n_items = conn.execute(
+                "SELECT COUNT(*) FROM items WHERE event_id = ? "
+                "AND COALESCE(transaction_status,'active') = 'active'", (eid,)).fetchone()[0]
+            if n_items:
+                firsts = [dict(r) for r in conn.execute(
+                    """SELECT DISTINCT sr.customer_id, c.first_name, c.last_name,
+                              sr.gross, sr.net, sr.playing_handicap
+                         FROM scoring_rounds sr
+                         JOIN customers c ON c.customer_id = sr.customer_id
+                         JOIN items i ON i.customer_id = sr.customer_id
+                                     AND i.event_id = sr.event_id
+                        WHERE sr.event_id = ? AND sr.customer_id IS NOT NULL
+                          AND COALESCE(i.transaction_status,'active') = 'active'
+                          AND UPPER(COALESCE(i.user_status,'')) LIKE '1ST%'
+                        ORDER BY c.last_name, c.first_name""", (eid,))]
+            else:
+                firsts = [dict(r) for r in conn.execute(
+                    """SELECT sr.customer_id, c.first_name, c.last_name,
+                              sr.gross, sr.net, sr.playing_handicap
+                         FROM scoring_rounds sr
+                         JOIN customers c ON c.customer_id = sr.customer_id
+                        WHERE sr.event_id = ? AND sr.customer_id IS NOT NULL
+                          AND sr.round_date = (SELECT MIN(round_date) FROM scoring_rounds x
+                                                WHERE x.customer_id = sr.customer_id)
+                        ORDER BY c.last_name, c.first_name""", (eid,))]
             for f in firsts:
                 f["cashed"] = f["customer_id"] in cashed_ids
                 f["short"] = _short_name(f["first_name"], f["last_name"])
@@ -243,6 +269,7 @@ def compose(data: dict) -> dict:
     evs = data["events"]
     by_ch = {e["chapter"]: e for e in evs}
     when = "Tuesday night" if all(e["holes"] == 9 for e in evs) else "This week"
+    when_mid = when if when.startswith("Tuesday") else "this week"   # mid-sentence form
     monday = (datetime.strptime(data["as_of"], "%Y-%m-%d").date()
               - timedelta(days=datetime.strptime(data["as_of"], "%Y-%m-%d").weekday()))
     slots = {"EYEBROW": f"TGF Insider · Week of {monday.strftime('%B')} {monday.day}"}
@@ -273,9 +300,9 @@ def compose(data: dict) -> dict:
             total_c += e["cashed"]
             total_f += e["field"]
     if cashed_lines:
-        slots["BEAT_1_LEAD"] = (f"{_fraction_phrase(total_c, total_f).capitalize()} went home "
+        slots["BEAT_1_LEAD"] = (f"{_cap(_fraction_phrase(total_c, total_f))} went home "
                                 f"with money.")
-        slots["BEAT_1_BODY"] = (" and ".join(cashed_lines).capitalize()
+        slots["BEAT_1_BODY"] = (_cap(" and ".join(cashed_lines))
                                 + " cashed something Tuesday — a skin, a closest-to-pin, "
                                   "a share of a team pot. Your own ball, your own handicap, "
                                   "your own shot at it.")
@@ -292,7 +319,7 @@ def compose(data: dict) -> dict:
         others = len(firsts) - 1
         slots["BEAT_2_LEAD"] = "First round, first payday."
         slots["BEAT_2_BODY"] = (f"{_esc(f['short'])} teed it up with us for the first time "
-                                f"{when.lower()} and left with money"
+                                f"{when_mid} and left with money"
                                 + (f" — one of {len(firsts)} first-timers on the sheet." if others
                                    else ".")
                                 + " Nobody gets a special tee. Everybody gets a fair game.")
@@ -301,7 +328,7 @@ def compose(data: dict) -> dict:
         slots["BEAT_2_BODY"] = (", ".join(_esc(f["short"]) for f in firsts[:4])
                                 + (" and more" if len(firsts) > 4 else "")
                                 + f" played {'their' if len(firsts) != 1 else 'a'} first TGF round "
-                                  f"{when.lower()}. Show up once and you will know everyone by the turn.")
+                                  f"{when_mid}. Show up once and you will know everyone by the turn.")
     else:
         slots["BEAT_2_LEAD"] = "Everybody was new once."
         slots["BEAT_2_BODY"] = ("Every group we send out has room for one more. Show up once and "
@@ -323,7 +350,7 @@ def compose(data: dict) -> dict:
             lo = min(s[0] for s in spreads)
             hi = max(s[1] for s in spreads)
             slots["BEAT_3_LEAD"] = "The winners were not the low handicaps."
-            slots["BEAT_3_BODY"] = (f"The players who cashed {when.lower()} carried playing "
+            slots["BEAT_3_BODY"] = (f"The players who cashed {when_mid} carried playing "
                                     f"handicaps from {int(lo)} to {int(hi)}. A TGF handicap keeps "
                                     "it fair, so a 20-handicap has the same shot as a scratch player.")
         else:
@@ -341,7 +368,8 @@ def compose(data: dict) -> dict:
 
     slots["HIO_POT"] = _fmt_money(data.get("hio_pot")) if data.get("hio_pot") is not None else "growing"
 
-    spots = [(e["chapter"], e["fellowship_spot"]) for e in evs if e.get("fellowship_spot")]
+    spots = [(e["chapter"], re.sub(r"\s*\([^)]*\)", "", e["fellowship_spot"]).strip())
+             for e in evs if e.get("fellowship_spot")]
     if spots:
         slots["CELEBRATE_PROOF"] = (f"{when} the crowd landed at "
                                     + " and ".join(f"{_esc(s)} in {_esc(ch)}" for ch, s in spots)

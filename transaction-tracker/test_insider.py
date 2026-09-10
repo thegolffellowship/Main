@@ -53,13 +53,20 @@ def fresh_db():
                 NULL, NULL, NULL, 'cancelled');
             INSERT INTO events VALUES (3299, 's9.21 Old Round', '2026-09-01', 'Olmos', 'San Antonio',
                 NULL, NULL, NULL, 'active');
+            CREATE TABLE items (id INTEGER PRIMARY KEY AUTOINCREMENT, customer_id INTEGER, event_id INTEGER,
+                user_status TEXT, guest_name TEXT, transaction_status TEXT, customer TEXT);
+            INSERT INTO items (customer_id, event_id, user_status, transaction_status) VALUES
+                (1, 3306, 'MEMBER', 'active'), (2, 3306, '1st TIMER', 'active'), (3, 3306, 'MEMBER', 'active'),
+                (4, 3306, '1st TIMER', 'active'), (7, 3306, 'MEMBER', 'active'),
+                (5, 3313, 'MEMBER', 'active'), (6, 3313, '1st TIMER', 'active');
             INSERT INTO tgf_events VALUES (1, 3306);
             INSERT INTO tgf_events VALUES (2, 3313);
         """)
         db._ensure_scoring_tables(conn)
         db._ensure_gg_game_results_tables(conn)
         names = [(1, 'Robert', 'Rideout'), (2, 'Kannon', 'Bell'), (3, 'Ken', 'Carter'),
-                 (4, 'Hector', 'Aguilera'), (5, 'Dan', 'Tarr'), (6, 'Luke', 'Mazanec')]
+                 (4, 'Hector', 'Aguilera'), (5, 'Dan', 'Tarr'), (6, 'Luke', 'Mazanec'),
+                 (7, 'Michele', 'Member')]
         conn.executemany("INSERT INTO customers (customer_id, first_name, last_name) VALUES (?,?,?)", names)
         # Older round for 1, 3, 5 so only 2, 4, 6 are first-timers.
         for cid in (1, 3, 5):
@@ -67,7 +74,8 @@ def fresh_db():
                          "holes_played, playing_handicap) VALUES (?,?,3299,'2026-09-01',9,10)",
                          (cid, f"P{cid}"))
         # Silverhorn: 1,2,3,4 ; ShadowGlen: 5,6
-        for cid, eid, ph in ((1, 3306, 4), (2, 3306, 18), (3, 3306, 12), (4, 3306, 9),
+        # 7 = a MEMBER-tagged registrant with no earlier card: NOT a first-timer.
+        for cid, eid, ph in ((1, 3306, 4), (2, 3306, 18), (3, 3306, 12), (4, 3306, 9), (7, 3306, 11),
                              (5, 3313, 7), (6, 3313, 15)):
             conn.execute("INSERT INTO scoring_rounds (customer_id, player_name, event_id, round_date, "
                          "holes_played, playing_handicap, gg_league_round_id) VALUES (?,?,?,'2026-09-08',9,?,?)",
@@ -90,11 +98,12 @@ data = insider.gather_week(db_path=p, as_of=date(2026, 9, 10))
 evs = {e["chapter"]: e for e in data["events"]}
 check("both chapters found, most recent only", set(evs) == {"San Antonio", "Austin"}
       and evs["San Antonio"]["name"] == "s9.22 Silverhorn", str([e["name"] for e in data["events"]]))
-check("field = cards", evs["San Antonio"]["field"] == 4 and evs["Austin"]["field"] == 2)
+check("field = cards", evs["San Antonio"]["field"] == 5 and evs["Austin"]["field"] == 2)
 check("cashed = distinct payout recipients", evs["San Antonio"]["cashed"] == 2
       and evs["Austin"]["cashed"] == 1)
 firsts = sorted(f["short"] for e in data["events"] for f in e["first_timers"])
-check("first-timers are first name + last initial", firsts == ["Hector A.", "Kannon B.", "Luke M."], str(firsts))
+check("first-timers = played + tagged 1st TIMER, first name + last initial (Michele M. is MEMBER-tagged)",
+      firsts == ["Hector A.", "Kannon B.", "Luke M."], str(firsts))
 check("first-timer who cashed is marked", any(f["cashed"] and f["short"] == "Kannon B."
                                               for f in evs["San Antonio"]["first_timers"]))
 check("results link uses the chapter page + gg round id",
@@ -122,6 +131,8 @@ check("beat 3 tells the bogey skin", "bogey" in slots["BEAT_3_LEAD"] and "7th" i
       slots["BEAT_3_BODY"])
 check("HIO pot formatted", slots["HIO_POT"] == "$1,175")
 check("celebrate uses fellowship spot", "Silverhorn grill" in slots["CELEBRATE_PROOF"])
+check("proper nouns keep their case", "San Antonio" in slots["BEAT_1_BODY"] and "Tuesday night" in slots["BEAT_2_BODY"]
+      and "san antonio" not in slots["BEAT_1_BODY"], slots["BEAT_1_BODY"] + slots["BEAT_2_BODY"])
 html_out = insider.render(slots)
 problems = insider.lint(html_out)
 check("lint clean", problems == [], str(problems))
@@ -148,6 +159,15 @@ check("dry run returns html + subject", res["dry_run"] and res["html"].startswit
 check("dry run made no Brevo call", called == [])
 res = insider.build_public_recap_draft(dry_run=True, db_path=p, as_of=date(2026, 10, 10))
 check("no events in window → skipped", res.get("skipped"), str(res.get("skipped")))
+
+print("\n== 4b. no store items → no-earlier-card fallback ==")
+with db._connect(p) as conn:
+    conn.execute("DELETE FROM items WHERE event_id = 3313")
+    conn.commit()
+d = insider.gather_week(db_path=p, as_of=date(2026, 9, 10))
+aus = [e for e in d["events"] if e["chapter"] == "Austin"][0]
+check("fallback finds Luke M. by first-ever card", [f["short"] for f in aus["first_timers"]] == ["Luke M."],
+      str(aus["first_timers"]))
 
 print("\n== 5. single-chapter week ==")
 with db._connect(p) as conn:
