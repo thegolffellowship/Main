@@ -1772,10 +1772,11 @@ def _scoring_dispatch(url: str, extract: str):
       scoring-membership-terms-repair[:apply]  early renewals continue at the
                                    365 date (dry run default)
       scoring-membership-sync      terms → status reconcile now (manager comps)
-      scoring-brevo-draft[:dry|apply]  Wednesday TGF Insider: fill the public
-                                   recap template from the week's events; dry
-                                   (default) returns HTML, apply creates the
-                                   Brevo DRAFT + emails Kerry (never sends)
+      scoring-brevo-draft[:dry|review|apply]  Wednesday TGF Insider: fill the
+                                   public recap template from the week's events;
+                                   dry (default) returns HTML; review emails Kerry
+                                   the preview + posts the mailbox; apply creates
+                                   the Brevo DRAFT + emails the link (never sends)
       scoring-status-changes[:<since>][|<limit>]  customer status flips since a
                                    date with the status before (read-only)
       scoring-dedupe-rounds[:<event>|all][|apply]  duplicate scorecards
@@ -2967,9 +2968,17 @@ def _scoring_dispatch(url: str, extract: str):
             # "[dry|apply]" — the Wednesday-AM TGF Insider (#453). dry returns
             # the rendered HTML + lint; apply creates the Brevo DRAFT and emails
             # Kerry the link. Nothing here ever sends a campaign.
-            from email_parser.insider import build_public_recap_draft
-            _apply = (arg or "").strip().lower() == "apply"
+            # "review" runs exactly what the Wednesday job does in review
+            # mode: preview email to Kerry + mailbox post, nothing in Brevo.
+            from email_parser.insider import build_public_recap_draft, send_review_preview
+            _mode = (arg or "").strip().lower()
+            _apply = _mode == "apply"
             _res = build_public_recap_draft(dry_run=not _apply)
+            if _mode == "review" and not _res.get("skipped"):
+                _res["review"] = send_review_preview(_res)
+                _res.pop("html", None)
+                _audit("scoring-brevo-draft", f"review emailed={_res['review'].get('emailed')} "
+                       f"mailbox={_res['review'].get('mailbox_post')}")
             if _apply:
                 _audit("scoring-brevo-draft", f"campaign_id={_res.get('campaign_id')} "
                        f"error={_res.get('error')} lint={_res.get('lint')}")

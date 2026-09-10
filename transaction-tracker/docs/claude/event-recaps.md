@@ -291,8 +291,17 @@ Wednesday auto-draft fills the template:**
   sender 1, list 3 minus segment 2, tag `public-recap`. Kerry gets the
   campaign link by email (Graph, COO_EMAIL_TO), logged to message_log as
   `insider-draft`. Skipped when no event has cards in the window.
-- Off switches: env `INSIDER_AUTODRAFT=0`, dial `insider_autodraft=off`,
-  or `BREVO_SYNC_DISABLED=1` (also stops the nightly sync).
+- MODES (dial `insider_autodraft`; Kerry 2026-09-10: *"We always need to
+  review and discuss the Insider mailings until I'm confident enough to
+  automate it a little more"*): **review** (DEFAULT) — the Wednesday job
+  renders the dry run, emails Kerry the Insider itself under a REVIEW
+  banner, posts the beats to the Tracker mailbox (topic `insider-review`),
+  and puts NOTHING in Brevo; the session lane discusses it with Kerry and
+  runs `scoring-brevo-draft:apply` when he says go. **draft** — the fully
+  ratified process (Brevo DRAFT + link), for when Kerry flips the dial.
+  **off** — nothing. Env `INSIDER_AUTODRAFT=0` is off; `BREVO_SYNC_DISABLED=1`
+  also unschedules it. Bridge `scoring-brevo-draft:review` runs the review
+  step by hand.
 
 **v3 fixes (Kerry, off the Brevo preview 2026-09-02) — template rules:**
 - The Season-20 logo (69986bc3…png) is BLACK INK — header band must be

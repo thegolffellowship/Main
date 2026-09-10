@@ -177,6 +177,34 @@ aus = [e for e in d["events"] if e["chapter"] == "Austin"][0]
 check("fallback finds Luke M. by first-ever card", [f["short"] for f in aus["first_timers"]] == ["Luke M."],
       str(aus["first_timers"]))
 
+print("\n== 4c. review mode: preview to Kerry + mailbox, nothing in Brevo ==")
+import email_parser.fetcher as _fetcher
+sent = []
+_fetcher.send_mail_graph = lambda **k: sent.append(k) or True
+os.environ["AZURE_TENANT_ID"] = "t"; os.environ["AZURE_CLIENT_ID"] = "c"
+os.environ["AZURE_CLIENT_SECRET"] = "s"; os.environ["EMAIL_ADDRESS"] = "tracker@tgf.test"
+os.environ["COO_EMAIL_TO"] = "kerry@tgf.test"
+with db._connect(p) as conn:
+    conn.executescript("""CREATE TABLE IF NOT EXISTS message_log (id INTEGER PRIMARY KEY AUTOINCREMENT,
+        event_name TEXT, channel TEXT, recipient_name TEXT, recipient_address TEXT, subject TEXT,
+        body_preview TEXT, status TEXT, sent_by TEXT, created_at TEXT DEFAULT CURRENT_TIMESTAMP);""")
+    conn.commit()
+res = insider.build_public_recap_draft(dry_run=True, db_path=p, as_of=date(2026, 9, 10))
+rv = insider.send_review_preview(res, db_path=p)
+check("preview emailed to Kerry with REVIEW subject", rv["emailed"] and sent and sent[0]["to_address"] == "kerry@tgf.test"
+      and sent[0]["subject"].startswith("REVIEW: TGF Insider |"), str(rv))
+check("preview body is the banner + the rendered Insider", "INSIDER DRAFT FOR REVIEW" in sent[0]["html_body"]
+      and "$25 off your first event" in sent[0]["html_body"])
+with db._connect(p) as conn:
+    mb = conn.execute("SELECT topic, body FROM platform_dialogue ORDER BY id DESC LIMIT 1").fetchone()
+check("mailbox post under insider-review names the beats", mb and mb[0] == "insider-review" and "Beat 2:" in mb[1],
+      str(mb))
+check("still no Brevo call", called == [])
+check("mode defaults to review", insider.insider_mode(db_path=p) == "review")
+os.environ["INSIDER_AUTODRAFT"] = "0"
+check("INSIDER_AUTODRAFT=0 is off", insider.insider_mode(db_path=p) == "off")
+del os.environ["INSIDER_AUTODRAFT"]
+
 print("\n== 5. single-chapter week ==")
 with db._connect(p) as conn:
     conn.execute("DELETE FROM scoring_rounds WHERE event_id = 3313")

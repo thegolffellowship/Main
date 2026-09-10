@@ -1104,8 +1104,10 @@ Tracker→Brevo API brick:
   list 3 minus that segment. Segments are UI-only in Brevo's API.
 - Wednesday-AM auto-draft of the public recap: BUILT v2.369.0 —
   `email_parser/insider.py`, scheduler id `insider_draft` (Wed 13:00
-  UTC), bridge `scoring-brevo-draft[:dry|apply]`; rules and data map in
-  docs/claude/event-recaps.md (BUILT block). Drafts only, never sends.
+  UTC), bridge `scoring-brevo-draft[:dry|review|apply]`; rules, data map
+  and modes in docs/claude/event-recaps.md (BUILT block). Default mode is
+  REVIEW (preview to Kerry, nothing in Brevo) until Kerry flips the dial
+  `insider_autodraft` to `draft`. Never sends.
 Next brick (not built): campaign recipient export (who clicked what)
 onto the customer timeline (`POST /v3/emailCampaigns/{id}/exportRecipients`,
 async).

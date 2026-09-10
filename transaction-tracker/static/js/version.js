@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.369.3";
+window.TGF_VERSION = "2.369.4";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.369.4",
+    date: "2026-09-10",
+    changes: [
+      "Insider REVIEW mode is the default (Kerry: 'We always need to review and discuss the Insider mailings until I'm confident enough to automate it a little more'). The Wednesday job now renders the dry run, emails Kerry the Insider itself under a review banner, and posts the three beats to the Tracker mailbox (topic insider-review) — nothing reaches Brevo until the session lane runs scoring-brevo-draft:apply after the discussion. Dial insider_autodraft: review (default) / draft (Brevo DRAFT + link) / off. Bridge scoring-brevo-draft:review runs the review step by hand.",
+      "scoring-membership-terms-repair rows now carry the customer's name and the expiry of the term they would continue from, so the list can be reviewed without id lookups.",
+    ],
+  },
   {
     version: "2.369.3",
     date: "2026-09-10",

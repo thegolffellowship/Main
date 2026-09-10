@@ -323,7 +323,14 @@ MEMBER-tagged registrant whose rounds predate the scorecard imports) →
 the 1st TIMER tag decides; `str.capitalize` produced "san antonio" →
 first-letter-only. Rendered copy of record:
 `docs/claude/recaps/2026-09-10-insider-draft-s9.22-a9.22.html`. The
-scheduler's first unattended run is Wednesday 2026-09-16 13:00 UTC.
+scheduler's first unattended run is Wednesday 2026-09-16 13:00 UTC —
+in REVIEW mode (v2.369.4; Kerry: "We always need to review and discuss
+the Insider mailings until I'm confident enough to automate it a little
+more"): it emails Kerry the rendered Insider under a review banner and
+posts the beats to the mailbox (topic `insider-review`); nothing reaches
+Brevo until this lane runs `scoring-brevo-draft:apply` after the
+discussion. Dial `insider_autodraft=draft` is the step up when he is
+ready.
 
 ## 4. NOT done, and why
 

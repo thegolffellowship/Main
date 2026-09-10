@@ -197,9 +197,13 @@ Do not assume it — read it — but do not redo it either.
     Wednesdays 13:00 UTC into Brevo as a DRAFT (v2.369.0, mailbox #453).
     In a closeout run: `scoring-brevo-draft` (dry; returns the rendered
     HTML + `lint`) → read it against the public-variant rules in
-    event-recaps.md → `scoring-brevo-draft:apply` creates the draft and
-    emails Kerry the link. It never sends. `lint` must be `[]` before
-    apply; it refuses otherwise. Names in it are first name + last initial.
+    event-recaps.md → DISCUSS it with Kerry (his rule 2026-09-10: every
+    Insider is reviewed and discussed until he says otherwise; the
+    Wednesday job's default mode is `review`, which emails him the preview
+    and posts the beats to the mailbox) → only on his go,
+    `scoring-brevo-draft:apply` creates the Brevo draft and emails him the
+    link. It never sends. `lint` must be `[]` before apply; it refuses
+    otherwise. Names in it are first name + last initial.
 
 ## Report shape
 

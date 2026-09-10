@@ -201,9 +201,14 @@ def repair_early_renewal_terms(conn: sqlite3.Connection,
                         "SELECT id FROM customer_memberships WHERE customer_id = ? "
                         "AND started_at = ? AND id != ?",
                         (cid, new_start, t["id"])).fetchone()
+                    nm = conn.execute(
+                        "SELECT TRIM(COALESCE(first_name,'') || ' ' || COALESCE(last_name,'')) "
+                        "FROM customers WHERE customer_id = ?", (cid,)).fetchone()
                     rec = {"term_id": t["id"], "customer_id": cid,
+                           "customer": (nm[0] if nm else None) or f"#{cid}",
                            "from": [start, t["expires_at"]],
-                           "to": [new_start, new_exp], "source": t["source"]}
+                           "to": [new_start, new_exp], "source": t["source"],
+                           "continues_term_ending": prev_exp}
                     if clash:
                         rec["reason"] = f"another term already starts {new_start}"
                         skipped.append(rec)

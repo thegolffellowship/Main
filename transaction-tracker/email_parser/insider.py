@@ -15,9 +15,10 @@ Rules folded in (event-recaps.md, public variant):
   * recipients = list 3 minus segment 2 (Active members) — proven shape;
   * DRAFTS ONLY.
 
-Bridge: `scoring-brevo-draft[:dry|apply]`. Scheduler: Wednesday 13:00 UTC
-(`weekly_insider_draft`), skipped when INSIDER_AUTODRAFT=0, when the dial
-`insider_autodraft` is "off", or when no event was played in the window.
+Bridge: `scoring-brevo-draft[:dry|apply|review]`. Scheduler: Wednesday
+13:00 UTC (`weekly_insider_draft`). Dial `insider_autodraft`: review
+(default — preview to Kerry + mailbox, nothing in Brevo), draft (Brevo
+DRAFT + link), off. Skipped when no event was played in the window.
 """
 
 from __future__ import annotations
@@ -527,22 +528,115 @@ def _ping_kerry(subject: str, res: dict, data: dict, db_path=None) -> dict:
     return {"sent": bool(ok), "to": to}
 
 
-def weekly_insider_draft() -> None:
-    """Scheduler entry point — Wednesday 13:00 UTC (8 AM Central)."""
+def send_review_preview(res: dict, db_path=None) -> dict:
+    """Review mode (Kerry 2026-09-10: "We always need to review and discuss
+    the Insider mailings until I'm confident enough to automate it a
+    little more"): email Kerry the rendered Insider itself, wrapped in a
+    review banner, and post the dry run to the Tracker mailbox so the
+    session lane discusses it with him before anything reaches Brevo."""
+    from . import database as db
+    from .fetcher import send_mail_graph
+    subject = res.get("subject") or "TGF Insider"
+    week = (res.get("events") or [{}])[0].get("date") or today_central().isoformat()
+    evs = ", ".join(e["name"] for e in res.get("events", []))
+    firsts = ", ".join(res.get("first_timers") or []) or "none"
+    lint = res.get("lint") or []
+    banner = (
+        '<div style="font-family:Arial,sans-serif;font-size:14px;line-height:1.5;'
+        'background:#fff7ed;border:2px solid #e2773d;padding:12px 16px;margin:0 0 16px;">'
+        f'<strong>INSIDER DRAFT FOR REVIEW — not in Brevo yet.</strong><br>'
+        f'Events: {_esc(evs)}<br>First-timers named: {_esc(firsts)}<br>'
+        f'Lint: {_esc(", ".join(lint) if lint else "clean")}<br>'
+        'Reply with edits or say "go" in the Tracker session; the Brevo draft is created '
+        'with <code>scoring-brevo-draft:apply</code> only after that.</div>')
+    html_out = banner + (res.get("html") or "")
+    out = {"emailed": False, "mailbox_post": None}
+    tenant = os.getenv("AZURE_TENANT_ID"); client = os.getenv("AZURE_CLIENT_ID")
+    secret = os.getenv("AZURE_CLIENT_SECRET"); frm = os.getenv("EMAIL_ADDRESS")
+    to = (os.getenv("COO_EMAIL_TO") or frm or "").strip()
+    if all([tenant, client, secret, frm, to]):
+        try:
+            ok = send_mail_graph(tenant_id=tenant, client_id=client, client_secret=secret,
+                                 from_address=frm, to_address=to,
+                                 subject=f"REVIEW: {subject}", html_body=html_out)
+        except Exception as exc:
+            ok = False
+            logger.warning("insider review mail failed: %s", exc)
+        out["emailed"] = bool(ok); out["to"] = to
+        try:
+            db.log_message({"event_name": "insider-review", "channel": "email",
+                            "recipient_name": "Kerry", "recipient_address": to,
+                            "subject": subject, "body_preview": (res.get("slots") or {}).get("BEAT_1_BODY", "")[:200],
+                            "status": "sent" if ok else "failed", "sent_by": "scheduler"},
+                           db_path=db_path)
+        except Exception:
+            pass
+    else:
+        out["reason"] = "mail not configured"
+    try:
+        slots = res.get("slots") or {}
+        body = (f"TO: kerry, Event closeout lane — INSIDER DRAFT FOR REVIEW (week of {week}). "
+                f"Subject: {subject}. Events: {evs}. First-timers: {firsts}. Lint: "
+                f"{', '.join(lint) if lint else 'clean'}.\n"
+                f"Beat 1: {re.sub('<[^>]+>', '', slots.get('BEAT_1_LEAD', ''))} {re.sub('<[^>]+>', '', slots.get('BEAT_1_BODY', ''))}\n"
+                f"Beat 2: {slots.get('BEAT_2_LEAD', '')} {slots.get('BEAT_2_BODY', '')}\n"
+                f"Beat 3: {slots.get('BEAT_3_LEAD', '')} {slots.get('BEAT_3_BODY', '')}\n"
+                f"Not in Brevo. Discuss with Kerry, then scoring-brevo-draft:apply. "
+                f"Re-render any time with scoring-brevo-draft (dry).")
+        post = db.post_platform_dialogue_entry("tracker-claude", body, topic="insider-review",
+                                               db_path=db_path or db.DB_PATH)
+        out["mailbox_post"] = post.get("id") if isinstance(post, dict) else True
+    except Exception as exc:
+        logger.warning("insider review mailbox post failed: %s", exc)
+    return out
+
+
+def insider_mode(db_path=None) -> str:
+    """review (default) | draft | off. Env INSIDER_AUTODRAFT=0 is 'off'."""
     from . import database as db
     if os.getenv("INSIDER_AUTODRAFT", "1") == "0":
-        logger.info("Insider auto-draft disabled by env")
-        return
+        return "off"
     try:
-        if (db.get_app_setting("insider_autodraft") or "").strip().lower() == "off":
-            logger.info("Insider auto-draft disabled by dial")
-            return
+        v = (db.get_app_setting("insider_autodraft", db_path=db_path) or "").strip().lower()
     except Exception:
-        pass
-    if not _api_key():
+        v = ""
+    return v if v in ("review", "draft", "off") else "review"
+
+
+def weekly_insider_draft() -> None:
+    """Scheduler entry point — Wednesday 13:00 UTC (8 AM Central).
+
+    Mode from the dial `insider_autodraft`:
+      review (default) — render the dry run, email Kerry the preview, post it
+                         to the Tracker mailbox; NOTHING goes to Brevo.
+      draft            — create the Brevo DRAFT and email Kerry the link
+                         (the fully ratified process, for when Kerry says
+                         he is confident enough).
+      off              — do nothing.
+    """
+    from . import database as db
+    mode = insider_mode()
+    if mode == "off":
+        logger.info("Insider auto-draft disabled")
+        return
+    if mode == "draft" and not _api_key():
         logger.info("Insider auto-draft idle — BREVO_API_KEY not set")
         return
     try:
+        if mode == "review":
+            res = build_public_recap_draft(dry_run=True)
+            if res.get("skipped"):
+                logger.info("Insider review: %s", res["skipped"])
+                return
+            rv = send_review_preview(res)
+            try:
+                db.log_agent_action("insider-draft", "brevo-insider-review",
+                                    f"subject={res.get('subject')} emailed={rv.get('emailed')} "
+                                    f"mailbox={rv.get('mailbox_post')} lint={res.get('lint')}")
+            except Exception:
+                pass
+            logger.info("Insider review preview: %s", json.dumps(rv, default=str))
+            return
         res = build_public_recap_draft(dry_run=False)
         logger.info("Insider auto-draft: %s", json.dumps(
             {k: res.get(k) for k in ("skipped", "campaign_id", "error", "lint", "subject")},
