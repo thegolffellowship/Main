@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.362.1";
+window.TGF_VERSION = "2.363.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.363.0",
+    date: "2026-09-10",
+    changes: [
+      "Lead presets name the SOONEST event that fits a Tu+Sa lead (Kerry, on Daniel Lugo IV: 'Preset is showing Tuesday event even though there is a Saturday event before that that meets his availability'). Both-days leads always got the Tuesday 9; now a Saturday 18 this weekend beats next Tuesday, and the deadline sentence and link follow the event actually named. Tuesday-only and Saturday-only leads are unchanged; the cadence sentence still leads with Tuesdays.",
+    ],
+  },
   {
     version: "2.362.1",
     date: "2026-09-10",

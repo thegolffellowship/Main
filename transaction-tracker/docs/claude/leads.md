@@ -443,7 +443,10 @@ human enough."* The core sentences survived; the scaffolding did not.
 **Rendered rules** (all automatic, all from #406): course **main name
 only** · day name inside 7 days, "next Saturday, Sep 12" at 8-10, "Sep
 19" beyond, **never** "9/19" · **both owner names** whenever the lead
-touches Austin · cadence ordered by their Availability and **never
+touches Austin · the event named is the lead's day's next one, and for
+**Tu+Sa the soonest of the two** (Kerry 2026-09-10, Daniel Lugo IV: a
+Saturday 18 this weekend beats next Tuesday's 9; `_event_for_slot`) ·
+cadence ordered by their Availability and **never
 dropping the other day** (the "whenever you can" softener rides the
 non-selected day) · the `here in SA` callout **only** when Invitations =
 Both · "Team Net game and Closest to Pins" · "weekly", not "every week".
