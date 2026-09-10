@@ -1,10 +1,18 @@
-window.TGF_VERSION = "2.366.1";
+window.TGF_VERSION = "2.367.1";
 window.TGF_CHANGELOG = [
   {
-    version: "2.366.1",
+    version: "2.367.1",
     date: "2026-09-10",
     changes: [
-      "Docs only: the duplicate-card repair applied on production — 88 identical cards removed across a9.22 ShadowGlen (16), s18.10 FALL KICKOFF (24), TGF SAN ANTONIO CHAMPIONSHIP (32) and TGF AUSTIN CHAMPIONSHIP (16); the 2026 TGF CHAMPIONSHIP's Saturday/Sunday cards correctly untouched; three s18.10 groups held as conflicts (Aguilera, Ayala, Atkinson) for Kerry. The all-events scan times out on the hole comparison — run the repair per event.",
+      "Docs only: the duplicate-card repair applied on production — 88 identical cards removed across a9.22 ShadowGlen (16), s18.10 FALL KICKOFF (24), TGF SAN ANTONIO CHAMPIONSHIP (32) and TGF AUSTIN CHAMPIONSHIP (16); the 2026 TGF CHAMPIONSHIP's Saturday/Sunday cards correctly untouched; three s18.10 groups held as conflicts (Aguilera, Ayala, Atkinson) for Kerry. The all-events scan times out on the hole comparison — run the repair per event. Merged above the lead-preset lane's 2.367.0.",
+      "Workflow rule (Kerry 2026-09-10): read the tracker mailbox before EVERY response, not only at session start — CLAUDE.md rule 4 updated.",
+    ],
+  },
+  {
+    version: "2.367.0",
+    date: "2026-09-10",
+    changes: [
+      "Lead presets name the SOONEST event that fits a Tu+Sa lead (Kerry, on Daniel Lugo IV: 'Preset is showing Tuesday event even though there is a Saturday event before that that meets his availability'). Both-days leads always got the Tuesday 9; now a Saturday 18 this weekend beats next Tuesday, and the deadline sentence and link follow the event actually named. Tuesday-only and Saturday-only leads are unchanged; the cadence sentence still leads with Tuesdays.",
     ],
   },
   {
