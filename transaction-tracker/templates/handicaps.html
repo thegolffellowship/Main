@@ -420,7 +420,7 @@
             </div>
             <div class="stat-card">
                 <div class="stat-value" id="stat-avg-index">—</div>
-                <div class="stat-label">Avg Index</div>
+                <div class="stat-label">Avg Index (9 / 18)</div>
             </div>
             <div class="stat-card">
                 <div class="stat-value" id="stat-lookback">—</div>
@@ -1075,7 +1075,12 @@
         const indexed = allPlayers.filter(p => p.handicap_index !== null);
         if (indexed.length) {
             const avg = indexed.reduce((s, p) => s + p.handicap_index, 0) / indexed.length;
-            document.getElementById('stat-avg-index').textContent = avg.toFixed(1);
+            // 9-hole index with the N tag, then the 18-hole equivalent — the
+            // same shape as every INDEX cell below (Kerry 2026-09-10: "Most
+            // people relate to an 18 hole index").
+            document.getElementById('stat-avg-index').innerHTML =
+                `${avg.toFixed(1)}<span style="font-size:0.5em;color:#94a3b8;margin-left:3px;font-weight:500;">N</span>`
+                + `<span style="font-size:0.6em;color:#64748b;margin-left:4px;font-weight:500;">/ ${(avg * 2).toFixed(1)}</span>`;
         } else {
             document.getElementById('stat-avg-index').textContent = '—';
         }

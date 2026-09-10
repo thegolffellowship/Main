@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.369.7";
+window.TGF_VERSION = "2.369.8";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.369.8",
+    date: "2026-09-10",
+    changes: [
+      "Handicaps page AVG INDEX tile now reads like the INDEX cells: the 9-hole average with the N tag, then the 18-hole equivalent (Kerry: 'Most people relate to an 18 hole index'). Label: Avg Index (9 / 18).",
+    ],
+  },
   {
     version: "2.369.7",
     date: "2026-09-10",
