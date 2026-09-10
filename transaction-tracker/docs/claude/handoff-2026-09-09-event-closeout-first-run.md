@@ -126,6 +126,35 @@ was tested with an injected fetch and then run for real on production
 through `scoring-event-links` after deploy — see the digest for what the
 store actually answered.
 
+### 3d. The Silverhorn recap went out (2026-09-10), and what it taught
+
+Kerry asked for the recap "to send out" and to "consider what previous
+event results were to catch any trends, like Jeff Rideout." The trend:
+Rideout was the s9.21 headline too — two Tuesdays, two 49s, two City
+MVPs, two TGF MVPs, $124 + $159.50. Draft v2 carried it with a verified
+comparison table; Kerry edited and sent, then said "Learn from it."
+`event-recaps.md` 20–29 are the lessons (no humor at a member's expense
+is rule 20 for a reason); the sent text is the template of record in
+`docs/claude/recaps/2026-09-08-s9.22-silverhorn.md` with a draft-vs-sent
+table.
+
+His Quarry link was `s9-23-quarry`, not the derived `s9-23-the-quarry`:
+the store drops "the". v2.363.0 makes the derivation try variants
+(strict → without dropped words → before a pipe) and save the first the
+store answers for. Live sweep after deploy: s9.27 The Quarry filled via
+the variant (strict 404, variant 200); 11 of 17 upcoming events
+verified; 6 October events have no store page yet (s9.26 Olympia Hills,
+a9.26 Star Ranch, a9.27 Avery Ranch, a9.28 Forest Creek, a9.29
+Teravista, s18.12 FALL CHAMPIONSHIP).
+
+**Two lanes on `main`, twice today.** The Sales & Growth / lead-campaign
+lane pushed between my pushes both times. Merge commits, never rebase;
+version.js is the only file that conflicts and is resolved by taking
+main's copy and renumbering my entry above theirs. Lesson banked: a
+`git merge` on a DIRTY tree aborts and my commit lands beside main, not
+on it — commit first, merge second, and read `git ls-remote` after every
+push.
+
 ## 4. NOT done, and why
 
 1. **Handicap cards were not emailed to the players who played (Phase
