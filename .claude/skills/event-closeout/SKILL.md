@@ -52,6 +52,15 @@ Do not assume it — read it — but do not redo it either.
     (`get_event_registrations`). Missing? `scoring-import-event:<code>@<gg_round_id>`
     with url = the widget (round ids from `scoring-pairings:teamrounds|<sa|austin>`).
     A card imported mid-round self-heals on re-import.
+    **Cards must EQUAL the field. A count that is a multiple of it (32 for
+    16 — a9.22 ShadowGlen, found 2026-09-10) is the duplicate-card class:**
+    a keyed re-import plus GG re-keying its aggregates (Kerry adding a
+    board) plus the keyless hourly auto-sync. Guarded since v2.365.0; for
+    rows already doubled run `scoring-dedupe-rounds:<event>` (dry run,
+    shows keep/drop), then `…|apply`. `scoring-dedupe-rounds:all` is the
+    class check across every event — run it once per closeout. Do this
+    BEFORE Phase 3: `scoring-hcp-preview` lists every card, and a doubled
+    set shows as N imported + N "new" waiting to double-post.
 
     **Identity check here, before anything writes:** any row with
     `customer_id: null` is a name GG spells differently from the

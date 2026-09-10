@@ -18465,6 +18465,137 @@ def _cleanup_empty_scoring_rounds(conn: sqlite3.Connection) -> None:
     conn.commit()
 
 
+def _scoring_round_dupe_groups(conn: sqlite3.Connection,
+                               event: str | None = None) -> list:
+    """Group scoring_rounds that describe the SAME physical round: same
+    event (or same date when the event is unknown), same person
+    (customer_id, else the lower-cased player name), and league round
+    keys that agree or are missing on either side. Returns groups with
+    2+ rows, keeper first (the row a handicap record is bridged to, else
+    the oldest)."""
+    where, params = "", []
+    if event and event.lower() != "all":
+        where = "WHERE LOWER(COALESCE(e.item_name, '')) LIKE ?"
+        params.append(f"%{event.lower()}%")
+    rows = conn.execute(
+        f"""SELECT sr.id, sr.customer_id, sr.player_name, sr.event_id,
+                   e.item_name AS event_name, sr.round_date,
+                   sr.gg_league_round_id, sr.gg_aggregate_id, sr.holes_played,
+                   sr.playing_handicap, sr.gross, sr.net, sr.imported_at,
+                   (SELECT COUNT(*) FROM handicap_rounds hr
+                     WHERE hr.scoring_round_id = sr.id) AS bridged
+              FROM scoring_rounds sr
+              LEFT JOIN events e ON e.id = sr.event_id
+              {where}
+             ORDER BY sr.id""", params).fetchall()
+    buckets: dict = {}
+    for r in rows:
+        who = (("cid", r["customer_id"]) if r["customer_id"]
+               else ("name", (r["player_name"] or "").strip().lower()))
+        scope = (("event", r["event_id"]) if r["event_id"]
+                 else ("date", r["round_date"]))
+        buckets.setdefault((scope, who), []).append(dict(r))
+    groups = []
+    for (scope, who), rs in buckets.items():
+        if len(rs) < 2:
+            continue
+        # Split the bucket by league key: rows with DIFFERENT non-empty keys
+        # are different rounds of a multi-round day; keyless rows attach
+        # to whichever keyed cluster shares their date (or the first).
+        clusters: list = []
+        for r in rs:
+            k = (r["gg_league_round_id"] or "").strip()
+            home = None
+            for c in clusters:
+                ck = c["key"]
+                if (not k) or (not ck) or k == ck:
+                    if not k and ck and c["date"] != r["round_date"]:
+                        continue
+                    home = c
+                    break
+            if home is None:
+                clusters.append({"key": k, "date": r["round_date"], "rows": [r]})
+            else:
+                home["rows"].append(r)
+                if k and not home["key"]:
+                    home["key"] = k
+        for c in clusters:
+            if len(c["rows"]) < 2:
+                continue
+            ordered = sorted(c["rows"],
+                             key=lambda r: (-(r["bridged"] or 0),
+                                            -(r["holes_played"] or 0),
+                                            r["id"]))
+            groups.append({"scope": scope[0], "scope_id": scope[1],
+                           "who": who[1], "event_name": ordered[0]["event_name"],
+                           "player_name": ordered[0]["player_name"],
+                           "round_date": ordered[0]["round_date"],
+                           "keep": ordered[0]["id"],
+                           "drop": [r["id"] for r in ordered[1:]],
+                           "rows": ordered})
+    return groups
+
+
+def dedupe_scoring_rounds(event: str | None = None, apply: bool = False,
+                          db_path: str | Path = DB_PATH) -> dict:
+    """Find (and with apply=True remove) duplicate scorecards — two
+    scoring_rounds rows for one person's one round. Cause of record:
+    a9.22 ShadowGlen, 2026-09-09 — a keyed targeted re-import followed
+    by GG re-keying the tournament's aggregate ids let the keyless hourly
+    auto-sync insert a second full set (32 cards for 16 players).
+
+    Keeper: the row a handicap record is bridged to; else the card with
+    more holes; else the oldest. Losers: their handicap bridges move to
+    the keeper, their holes and the row are deleted, and any open
+    "Scorecard discrepancy" action item on the loser is closed. Never
+    touches handicap_rounds themselves (the posted differentials), and
+    never deletes a row that is the only card for its round.
+    """
+    with _connect(db_path) as conn:
+        _ensure_scoring_tables(conn)
+        groups = _scoring_round_dupe_groups(conn, event)
+        removed = moved = 0
+        for g in groups:
+            g["rows"] = [{k: v for k, v in r.items()} for r in g["rows"]]
+            if not apply:
+                continue
+            for rid in g["drop"]:
+                moved += conn.execute(
+                    "UPDATE handicap_rounds SET scoring_round_id = ? "
+                    "WHERE scoring_round_id = ?", (g["keep"], rid)).rowcount
+                conn.execute("DELETE FROM scoring_holes WHERE scoring_round_id = ?",
+                             (rid,))
+                conn.execute("DELETE FROM scoring_rounds WHERE id = ?", (rid,))
+                conn.execute(
+                    """UPDATE action_items SET status = 'completed'
+                       WHERE status = 'open' AND subject = ?""",
+                    (f"Scorecard discrepancy: {g['player_name']} (round {rid})",))
+                removed += 1
+                logger.info("dedupe_scoring_rounds: dropped round %s (kept %s) "
+                            "for %r on %s", rid, g["keep"], g["player_name"],
+                            g["round_date"])
+        if apply:
+            conn.commit()
+    by_event: dict = {}
+    for g in groups:
+        by_event[g["event_name"] or f"date {g['round_date']}"] = \
+            by_event.get(g["event_name"] or f"date {g['round_date']}", 0) + 1
+    return {"event": event or "all", "applied": bool(apply),
+            "duplicate_groups": len(groups),
+            "rows_to_drop" if not apply else "rows_dropped":
+                sum(len(g["drop"]) for g in groups) if not apply else removed,
+            "handicap_bridges_moved": moved if apply else None,
+            "by_event": by_event,
+            "groups": [{"event": g["event_name"], "player": g["player_name"],
+                        "round_date": g["round_date"], "keep": g["keep"],
+                        "drop": g["drop"],
+                        "keys": [r["gg_league_round_id"] for r in g["rows"]],
+                        "aggregates": [r["gg_aggregate_id"] for r in g["rows"]],
+                        "bridged": [r["bridged"] for r in g["rows"]],
+                        "imported_at": [r["imported_at"] for r in g["rows"]]}
+                       for g in groups]}
+
+
 def import_gg_scorecards(tournament_url: str, event_code: str | None = None,
                          round_key: str | None = None,
                          round_date: str | None = None,
@@ -18570,13 +18701,26 @@ def import_gg_scorecards(tournament_url: str, event_code: str | None = None,
             # left (raw-score baseline).
             is_upgrade = False
             if not existing:
+                # Round-key scoping (v2.365.0): a stored key and an incoming
+                # key must agree when BOTH are present (multi-round days);
+                # a MISSING key on either side is a wildcard, not a
+                # different round. The hourly auto-sync imports with no
+                # key while the targeted bridge stamps one — on 2026-09-09
+                # a keyed re-import of a9.22 ShadowGlen followed by GG
+                # re-keying its aggregates (Skins/CTP boards added) let the
+                # keyless auto-sync insert a SECOND card for all 16
+                # players. Exact key matches sort first so a keyed import
+                # on a multi-round day still finds its own round.
                 dup = conn.execute(
-                    """SELECT id, playing_handicap, holes_played FROM scoring_rounds
+                    """SELECT id, playing_handicap, holes_played, gg_league_round_id
+                       FROM scoring_rounds
                        WHERE (round_date = ? OR (event_id IS NOT NULL AND event_id = ?))
-                         AND COALESCE(gg_league_round_id, '') = ?
-                         AND (customer_id = ? OR LOWER(player_name) = LOWER(?))""",
-                    (event_date, event_id, round_key or "",
-                     cid or -1, p["player_name"])).fetchone()
+                         AND (COALESCE(gg_league_round_id, '') = ?
+                              OR ? = '' OR gg_league_round_id IS NULL)
+                         AND (customer_id = ? OR LOWER(player_name) = LOWER(?))
+                       ORDER BY (COALESCE(gg_league_round_id, '') = ?) DESC, id""",
+                    (event_date, event_id, round_key or "", round_key or "",
+                     cid or -1, p["player_name"], round_key or "")).fetchone()
                 if dup:
                     incoming_holes = sum(1 for h in p["holes"].values()
                                          if h.get("strokes") is not None)
@@ -18598,6 +18742,14 @@ def import_gg_scorecards(tournament_url: str, event_code: str | None = None,
                         existing = dup
                         is_upgrade = True
                     else:
+                        # Same card, other tournament: skip — but let a
+                        # keyed import stamp its round key on a keyless
+                        # stored twin so the next keyless pass matches
+                        # exactly instead of by wildcard.
+                        if round_key and not dup["gg_league_round_id"]:
+                            conn.execute(
+                                "UPDATE scoring_rounds SET gg_league_round_id = ? "
+                                "WHERE id = ?", (round_key, dup["id"]))
                         skipped += 1
                         continue
             if not cid:
@@ -18625,7 +18777,7 @@ def import_gg_scorecards(tournament_url: str, event_code: str | None = None,
                     """UPDATE scoring_rounds SET customer_id=?, event_id=?, gg_event_id=?,
                            gg_aggregate_id=?, gg_profile_id=?, round_date=?, course_id=?,
                            tee_id=?, holes_played=?, playing_handicap=?, gross=?, net=?,
-                           flight=?, gg_league_round_id=?
+                           flight=?, gg_league_round_id=COALESCE(?, gg_league_round_id)
                        WHERE id=?""",
                     (cid, event_id, p.get("gg_event_id"), p.get("gg_aggregate_id"),
                      p.get("gg_profile_id"), event_date, course_id, tee_id, holes_played,

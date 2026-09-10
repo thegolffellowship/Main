@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.364.0";
+window.TGF_VERSION = "2.365.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.365.0",
+    date: "2026-09-10",
+    changes: [
+      "Duplicate scorecards: a9.22 ShadowGlen carried 32 scoring_rounds for 16 players. The closeout's targeted re-import stamped the GG league round key onto the 16 auto-synced cards; Kerry then added the Skins and CTP boards on GG, which re-keyed the tournament's aggregate ids; the hourly auto-sync, which passes no round key, saw new aggregates, found no keyless twin, and inserted a second full set. Handicaps had posted off the first set, so the preview showed 16 more cards waiting to double-post. The cross-tournament dedupe now treats a missing round key on either side as a wildcard, not a different round (exact key matches still sort first, so multi-round days stay apart), a keyless re-import can no longer erase a stored key, and a keyed import stamps its key on a keyless twin it skips.",
+      "Repair bridge scoring-dedupe-rounds[:<event>|all][|apply]: groups scoring_rounds that describe one person's one round (same event or date, same customer, keys equal or missing), keeps the card a handicap record is bridged to (else the fuller, else the oldest), and on apply moves the bridge, deletes the loser's holes and row, and closes its open discrepancy item. Dry run by default; the all-events scan is the class check. Tests: test_scoring_dedupe.py.",
+      "Closeout skill 1.1 now says: cards must equal the field, and a count that is a multiple of it is this class — run the dedupe scan before Phase 3. The message-log read confirmed Kerry's 31 handicap-card sends of 2026-09-10 (19 SA + 12 Austin); the 9 players who did not get one have no established index yet, which is the send route's own rule.",
+    ],
+  },
   {
     version: "2.364.0",
     date: "2026-09-10",

@@ -1762,6 +1762,12 @@ def _scoring_dispatch(url: str, extract: str):
                                    event (ALL Net → ALL Gross); refresh=
                                    force-replaces named players' stale cards;
                                    url = the portal widget
+      scoring-dedupe-rounds[:<event>|all][|apply]  duplicate scorecards
+                                   (two scoring_rounds for one person's one
+                                   round — the a9.22 32-cards-for-16 class);
+                                   dry run lists keep/drop per group, apply
+                                   moves handicap bridges to the keeper and
+                                   deletes the losers
       scoring-pairings-remove:<event>|<player>[|dry]  pull one player from
                                    the saved pairings + re-seat the group
                                    per the TGF adjustment standard
@@ -2878,6 +2884,23 @@ def _scoring_dispatch(url: str, extract: str):
             _subs = [s.strip() for s in arg.split(",") if s.strip()]
             return json.dumps(_ggh.hio_archive_events(_subs),
                               indent=2, default=str)
+        if cmd == "scoring-dedupe-rounds":
+            # Duplicate scorecards (2026-09-10): a9.22 ShadowGlen carried 32
+            # scoring_rounds for 16 players after a keyed re-import + GG
+            # re-keying its aggregates + the keyless hourly auto-sync.
+            # "[<event>|all][|apply]" — dry run by default; apply moves
+            # handicap bridges to the keeper and deletes the loser rows.
+            _ev, _sep, _mode = arg.rpartition("|")
+            if _mode.strip().lower() == "apply" and _sep:
+                _apply, _ev = True, _ev.strip()
+            else:
+                _apply, _ev = False, arg.strip()
+            _res = db.dedupe_scoring_rounds(_ev or None, apply=_apply)
+            if _apply:
+                _audit("scoring-dedupe-rounds",
+                       f"event={_ev or 'all'} dropped={_res.get('rows_dropped')} "
+                       f"bridges_moved={_res.get('handicap_bridges_moved')}")
+            return json.dumps(_res, indent=2, default=str)
         if cmd == "scoring-message-log":
             # READ-ONLY (Kerry 2026-09-10, after sending the handicap cards:
             # "is there a historical record logged when those are sent?"):
