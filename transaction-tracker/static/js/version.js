@@ -1,5 +1,133 @@
-window.TGF_VERSION = "2.367.2";
+window.TGF_VERSION = "2.369.10";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.369.10",
+    date: "2026-09-10",
+    changes: [
+      "Handicaps page: DFW / Dallas players wear a D badge in Cowboys navy with white text (Kerry). New CSS tokens --chapter-dfw and --chapter-houston beside the SA / Austin ones for every future board.",
+      "Insider template: eyebrow and headline are centered from here on (Kerry's Brevo edit of draft #18: 'show top headlines centered as shown'); greeting and lede stay left.",
+    ],
+  },
+  {
+    version: "2.369.9",
+    date: "2026-09-10",
+    changes: [
+      "Handicaps page, Kerry's review: the 18-hole index is the same size as the 9-hole number (rows, cards, and the AVG INDEX tile); the amber HIGH tag is gone ('That's rubbing it in'); players without an established TGF Handicap now sit at the bottom under a band that says why (fewer than 3 rounds); Houston gets its own H badge in teal; players whose customer row has no chapter fall back to the chapter of their most recent purchase (Jay Horton, Ryan Estes); names show the store's own capitalisation when linked (McCormick, DelCarmen) and fix Mc/Mac/O' prefixes otherwise.",
+      "Insider: beat 2 counts the whole first-timer group ('6 of the 8 first-timers on the sheet did'); the close box's 'Jump in any time.' is a header line above its text.",
+    ],
+  },
+  {
+    version: "2.369.8",
+    date: "2026-09-10",
+    changes: [
+      "Handicaps page AVG INDEX tile now reads like the INDEX cells: the 9-hole average with the N tag, then the 18-hole equivalent (Kerry: 'Most people relate to an 18 hole index'). Label: Avg Index (9 / 18).",
+    ],
+  },
+  {
+    version: "2.369.7",
+    date: "2026-09-10",
+    changes: [
+      "Insider, Kerry's second review pass. First-timers now come through two doors — the 1st TIMER tag OR a brand-new member (first TGF purchase inside 90 days, no earlier card), so s9.22/a9.22 counts 8 as Kerry did, not 7. 'Nobody gets a special tee' is cut. ONE dark highlight band per issue, rotated weekly from the week of Sep 7 — skill (Am I good enough to play? three big percentages: % single digits · lowest-to-highest handicap · % at 20+, with a TGF Handicaps link) this week, Hole-In-One Pot next, dial insider_highlight = skill | hio | none. Template says 'How a TGF Event works' with Kerry's Compete line; Celebrate is one sentence per chapter from the event's fellowship spot ('Austin grabbed drinks in the clubhouse. San Antonio went to Max & Louie's for food and fellowship.').",
+      "Handicaps page: chapter badge (SA / A, chapter colors) beside every player name on desktop rows and mobile cards, like the cross-chapter boards.",
+    ],
+  },
+  {
+    version: "2.369.6",
+    date: "2026-09-10",
+    changes: [
+      "scoring-hcp-distribution: the spread of established handicap indexes across current members as 18-hole equivalents (range, median, quartiles, share at 10+/15+/20+, five-stroke bands, per chapter). Feeds the 'Am I good enough to play?' section Kerry asked for in the Insider (preview first, no draft yet).",
+    ],
+  },
+  {
+    version: "2.369.5",
+    date: "2026-09-10",
+    changes: [
+      "Insider: DRAFT mode is the default (Kerry, on the dry run: 'Update the dial to create the Brevo draft directly each wednesday at 8am. I'll review it there because I can see all the visual with it too. And then I'll work with you for edits before sending so you can learn from it.'). The Wednesday job creates the Brevo DRAFT and emails Kerry the link; review mode stays available on the dial.",
+      "Insider beat 3 rewritten from Kerry's first edit ('the skin sentence... alone sounds...lonely'; skins unexplained): it now names the player (first name + initial), says the score was the best anyone posted on that hole, explains that every hole is its own small contest so one good hole pays even when the rest of the round doesn't — no 'alone'. Lesson recorded in event-recaps.md.",
+    ],
+  },
+  {
+    version: "2.369.4",
+    date: "2026-09-10",
+    changes: [
+      "Insider REVIEW mode is the default (Kerry: 'We always need to review and discuss the Insider mailings until I'm confident enough to automate it a little more'). The Wednesday job now renders the dry run, emails Kerry the Insider itself under a review banner, and posts the three beats to the Tracker mailbox (topic insider-review) — nothing reaches Brevo until the session lane runs scoring-brevo-draft:apply after the discussion. Dial insider_autodraft: review (default) / draft (Brevo DRAFT + link) / off. Bridge scoring-brevo-draft:review runs the review step by hand.",
+      "scoring-membership-terms-repair rows now carry the customer's name and the expiry of the term they would continue from, so the list can be reviewed without id lookups.",
+    ],
+  },
+  {
+    version: "2.369.3",
+    date: "2026-09-10",
+    changes: [
+      "Insider beat 2 now counts the first-timers who cashed, not just the one it names: 'Christopher E. ... left with money — and so did 5 of the other 6 first-timers on the sheet.' Verified against the GG boards for s9.22/a9.22 before shipping (Espinosa par on 10, Donovan bogey on 4, Hinojosa/Lewis/Johnston/Sekiguchi on the T1 team net cards).",
+    ],
+  },
+  {
+    version: "2.369.2",
+    date: "2026-09-10",
+    changes: [
+      "TGF Insider dry run against s9.22/a9.22, three corrections. First-timers now come from the registration tag (played + '1st TIMER' on an active item for the event; the no-earlier-card guess only when the event has no store items — it had counted a MEMBER-tagged registrant whose earlier rounds predate the scorecard imports). Proper nouns keep their case in the proof line (str.capitalize had produced 'san antonio'). Kerry's venue notes in parentheses ('(on site)') are stripped from the Celebrate line.",
+    ],
+  },
+  {
+    version: "2.369.1",
+    date: "2026-09-10",
+    changes: [
+      "Spin-off directive (Kerry): new repo skill .claude/skills/spin-off/SKILL.md + CLAUDE.md workflow rule 5. A tangent that outgrows its lane gets its own session via a self-contained hand-off block; the new session must read the Tracker mailbox, CLAUDE.md and the named handoff docs, confirm its tools, and post an ack BEFORE any reply or build. Lanes announce spin-offs in the mailbox so they don't collide.",
+    ],
+  },
+  {
+    version: "2.369.0",
+    date: "2026-09-10",
+    changes: [
+      "TGF Insider auto-draft (mailbox #381 ratified, #453 routed). Every Wednesday 13:00 UTC the Tracker fills the public recap template from the week's Tuesday events in both chapters — field size, share of the field that cashed, first-timers (first name + last initial), a bogey or par that won a skin, RESULTS links, the live Hole-In-One pot, next Tuesday per chapter, upcoming Saturday 18s — lints it against the ratified guardrails (no league / purse / TGF Plus / DFW / Houston, no dollar figure beyond the $25 offer and the pot), parks it in Brevo as a DRAFT to list 3 minus Active members, and emails Kerry the link. It never sends. Bridge scoring-brevo-draft (dry, returns the HTML) and scoring-brevo-draft:apply; off switches INSIDER_AUTODRAFT=0 or dial insider_autodraft=off.",
+    ],
+  },
+  {
+    version: "2.368.3",
+    date: "2026-09-10",
+    changes: [
+      "Second half of the 2.368.0 boot cleanup. 50 lapsed members were upgraded at that boot, and the item-level dedupe only reverted 4: the other 46 had a MANUAL term Kerry entered on 2026-07-01 for the same purchase (no item link), so the backfill saw no term for the item, the continuation rule read the manual term as a prior term, and stacked a second year on top (Don Vann: manual 2025-05-01→2026-05-01, phantom 2026-05-01→2027-05-01). The backfill now treats a term that already starts on the item's order date as that purchase and skips it; scoring-membership-terms-purge:<from>|<to>[|apply] deletes one boot's backfill rows so the fixed backfill can recreate only what is genuinely missing. The early-renewal repair (29 candidates) is HELD for Kerry: several look like two purchases days apart, which may be family buys or refunded duplicates, not renewals.",
+    ],
+  },
+  {
+    version: "2.368.2",
+    date: "2026-09-10",
+    changes: [
+      "scoring-membership-terms-dedupe takes a created_since bound so the repair deletes exactly the rows the 2.368.0 boot created (139 duplicates found in all; ~125 from that boot, 14 older ones from earlier backfills where an order date had been re-extracted — those are listed for review, not deleted).",
+    ],
+  },
+  {
+    version: "2.368.1",
+    date: "2026-09-10",
+    changes: [
+      "Fix: the v2.368.0 boot re-inserted every past membership item as a second term at its CONTINUED start. The historical backfill's idempotency was UNIQUE(customer_id, started_at); once the continuation rule moved an early renewal's start date, the item no longer matched its own term and came back as new — including terms that had lapsed, which the sync then read as active and upgraded ~20 former members to active_member for an hour. Backfill idempotency is now per source item; scoring-membership-terms-dedupe[:apply] deletes the duplicates (one item, one term) and re-runs the status sync so those members return to expired_member before the nightly Brevo push.",
+    ],
+  },
+  {
+    version: "2.368.0",
+    date: "2026-09-10",
+    changes: [
+      "Membership terms continue, they do not reset (Kerry: 'When someone renews prior to the 365 date, their new membership should continue at the 365 date, not reset to the date of the renewal'). A renewal bought while a term is still running now starts on that term's expiry and runs 365 days from there — on the live renewal path and on the historical backfill; a renewal after a lapse still starts on the purchase date, and legacy calendar-year terms never continue. scoring-membership-terms-repair[:apply] moves terms already recorded the old way (renewal/backfill sources only, manual terms untouched).",
+      "Chapter managers are members for as long as they manage, without dues (Kerry: 'Robert Straiton is a Manager. Until that changes he is automatically a member... we need to note what that comp amount is for tax purposes'). The chapter_managers dial now carries each manager's customer_id (SA 18, Austin 31); the terms→status sync opens a manual term marked 'Manager comp' (price 0, membership value $75 in the notes — dial membership_comp_value) whenever a manager has no term covering today, continuing from the last expiry. Robert is active_member again on the first sync after this deploy; scoring-membership-sync runs it on demand.",
+      "Partial cards stay out of the handicap record (Kerry on s18.10: 'Atkinson and their 4th were partial cards that should not be recorded into handicaps'). scoring_rounds gains hcp_exclude + hcp_exclude_note; both posting paths (9-hole and the 18-hole two-nines) skip flagged cards and the preview shows them; scoring-hcp-exclude:<event>|<players>|<note>[|apply] flags the cards and unposts any handicap round already bridged to them. scoring-round-drop:<id>[|unpost][|apply] removes one card (its handicap rounds unlinked, or deleted with |unpost) — for the s18.10 Aguilera/Ayala cards imported before Kerry entered the missing scores on GG.",
+      "Parse warnings from a session: scoring-parse-warnings[:<frag>][|<status>][|<limit>] reads them, scoring-parse-warning-dismiss:<ids>|<note> dismisses the ones Kerry has ruled on (Duran, Carter, Tonche phones: canonical is right; Dan Tarr 2025-07-10 was the guest himself).",
+    ],
+  },
+  {
+    version: "2.367.4",
+    date: "2026-09-10",
+    changes: [
+      "A scorecard lookup can no longer answer a question with a misleading silence. Asking for an event's rounds by its ID matched nothing and returned an empty list \u2014 which reads exactly like 'this event has no scorecards'. That is how Tuesday's closeout was reported as never started when 24 Silverhorn cards had been imported the night before, to Kerry and to CA. A number is now treated as the event ID it plainly is, and an ID with no event raises instead of returning nothing. The closeout skill already warned about the trap; this closes it in the code so no caller can fall in.",
+      "Corrections written into the two documents that carried the false claim, so nobody works from them, and the superseded start-here prompt now says so at the top.",
+    ],
+  },
+  {
+    version: "2.367.3",
+    date: "2026-09-10",
+    changes: [
+      "Docs: session record for the 2026-09-02 Lead Center / Brevo lane closed out — handoff-2026-09-02-lead-selections-brevo-sync.md + session-prompt-2026-09-02-brevo-next.md. The one ratified build still missing is the Wednesday-morning TGF Insider auto-draft; the weekly cadence lapsed on 9/9 with no #2 sent.",
+    ],
+  },
   {
     version: "2.367.2",
     date: "2026-09-10",

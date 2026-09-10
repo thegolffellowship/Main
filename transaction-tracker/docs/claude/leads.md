@@ -1110,9 +1110,16 @@ Tracker→Brevo API brick:
 - Brevo side (Kerry, UI): segment "Active members" =
   TGF_MEMBER_STATUS equals active_member; the public campaign sends to
   list 3 minus that segment. Segments are UI-only in Brevo's API.
-Next bricks (not built): campaign recipient export (who clicked what)
-onto the customer timeline; Wednesday-AM auto-draft of the public
-recap (docs/claude/event-recaps.md).
+- Wednesday-AM auto-draft of the public recap: BUILT v2.369.0 —
+  `email_parser/insider.py`, scheduler id `insider_draft` (Wed 13:00
+  UTC), bridge `scoring-brevo-draft[:dry|review|apply]`; rules, data map
+  and modes in docs/claude/event-recaps.md (BUILT block). Default mode is
+  DRAFT (Kerry 2026-09-10: Brevo draft each Wednesday 8 AM, he reviews it
+  in Brevo, edits with the session lane before sending); dial
+  `insider_autodraft` = draft | review | off. Never sends.
+Next brick (not built): campaign recipient export (who clicked what)
+onto the customer timeline (`POST /v3/emailCampaigns/{id}/exportRecipients`,
+async).
 
 ## MCP access for CA (platform-claude)
 

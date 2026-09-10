@@ -121,6 +121,12 @@ Do not assume it — read it — but do not redo it either.
     `already_imported: false`, `flags: []`, and no absurd index move (a
     wrong tee or course import shows here as a multi-point jump). New
     players show `index_now: null`.
+3.1b **Partial cards** (Kerry 2026-09-10): a player who did not finish
+    must not post. Before 3.2, `scoring-hcp-exclude:<event>|<A>,<B>|<note>`
+    (dry run, then `|apply`) flags the cards and unposts anything already
+    bridged; the preview then shows them `hcp_excluded`. A card whose
+    scores were WRONG (GG edited after our import) is
+    `scoring-round-drop:<id>|unpost|apply` + re-import, not an exclusion.
 3.2 `scoring-hcp-import:<event>|apply` — writes one handicap round per
     9-hole card (WHS NDB adjusted gross, Kerry-ratified 2026-07-14) and
     auto-emails the chapter recap to `hcp_recap_email_<chapter>` →
@@ -187,6 +193,19 @@ Do not assume it — read it — but do not redo it either.
 5.3 **Fellowship attendance** — the recap reports who CAME, which only
     Kerry knows (13 said yes at Silverhorn, 9 came). Ask him for the
     number; OPEN 4 is where it should live.
+5.4 **TGF Insider (public sibling of the recap)** — auto-drafted
+    Wednesdays 13:00 UTC into Brevo as a DRAFT (v2.369.0, mailbox #453).
+    In a closeout run: `scoring-brevo-draft` (dry; returns the rendered
+    HTML + `lint`) → read it against the public-variant rules in
+    event-recaps.md → `scoring-brevo-draft:apply` creates the Brevo draft
+    and emails Kerry the link (the Wednesday 8 AM job does the same
+    unattended, dial `insider_autodraft=draft`). Kerry reviews it IN
+    BREVO and works the edits with the lane before he sends (his rule
+    2026-09-10: every Insider is reviewed and discussed until he says
+    otherwise — fold each edit into event-recaps.md lessons and, when it
+    is a pattern, into `compose()`). A revision is a NEW draft; the old
+    one is deleted in the Brevo UI. It never sends. `lint` must be `[]`
+    before apply; it refuses otherwise. Names are first name + last initial.
 
 ## Report shape
 

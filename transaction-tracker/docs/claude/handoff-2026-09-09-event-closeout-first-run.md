@@ -237,7 +237,123 @@ membership-only historical import (`scoring-import-orders 2025-01-01..
   the CANONICAL for Tonche ((979) 236-8787). Duran and Carter are not in
   HubSpot by name.
 
+### 3g. Kerry's rulings on the morning's questions (v2.368.0)
+
+Verbatim, 2026-09-10 late morning, and what each became:
+
+- *"Robert Straiton is a Manager. Until that changes he is automatically
+  a member, without any dues. He is comped, yes, but as we've discussed
+  financially with CA, we need to note what that comp amount is for tax
+  purposes."* → the `chapter_managers` dial carries `customer_id`; the
+  terms→status sync opens a `Manager comp` term (source manual, price 0,
+  value $75 in notes) whenever a manager has no term covering today.
+  The finance lane owns how the comp value is booked (customers.md).
+- *"When someone renews prior to the 365 date, their new membership
+  should continue at the 365 date, not reset to the date of the
+  renewal."* → `continued_start` on the live and backfill paths;
+  `scoring-membership-terms-repair` for terms recorded the old way.
+- Phones: Duran (254) 278-1722 and Carter (210) 378-8073 — canonical is
+  right, drift warnings dismissed; Dyal → (210) 557-1765 set on the
+  customer (HubSpot agreed). Tonche canonical right. Dan Tarr was the
+  guest himself: dismissed.
+- *"Rochford and Gwin are both correctly Alumni now."* → no change.
+- Landa Park (s18.10): *"Reimports are correct for Aguilera and Ayala as I
+  entered the remaining missing scores manually. Atkinson and their 4th
+  were partial cards that should not be recorded into handicaps."* →
+  Aguilera/Ayala: the 8/29 cards dropped with their differentials
+  (`scoring-round-drop … |unpost`), the 8/31 cards re-posted through the
+  two-nines path; Atkinson + Decareaux: `hcp_exclude` set, their four
+  handicap rounds unposted, Atkinson's 10-hole duplicate dropped.
+
+Mailbox #453 (2026-09-10 16:13 UTC) routed the Wednesday-AM TGF Insider
+auto-draft build to this lane per Kerry — queued behind the above; see
+§4.
+
+### 3h. The v2.368.0 boot incident, and its cleanup (v2.368.1–2.368.3)
+
+The first boot carrying the continuation rule re-ran the historical
+membership backfill and, because its idempotency was keyed on
+`(customer_id, started_at)` instead of the source item, re-inserted ~188
+past items as new terms at their continued start. Two shapes: (a) the
+item already had a term → a duplicate a year later (127 rows); (b) the
+item's purchase had been entered BY HAND by Kerry on 2026-07-01 (a manual
+term with no item link) → the continuation rule read that manual term as
+a prior term and stacked a second year on top (61 rows). The status sync
+at 16:17:10 UTC then upgraded 50 lapsed members to active_member. Fixed
+in three steps, all applied on production between 16:20 and 16:30 UTC,
+before the nightly Brevo sync: per-item idempotency + the dedupe
+(2.368.1/2), the manual-term guard + the purge of that boot's rows
+(2.368.3). Verify with `scoring-status-changes:2026-09-10 16:00`.
+
+Lessons for the class: an idempotency key must be the SOURCE identity,
+never a derived value; and a rule that changes a derived value needs its
+own backfill dry-run BEFORE it runs at boot — this one ran at boot first.
+
+HELD for Kerry: the early-renewal repair (`scoring-membership-terms-repair`,
+29 candidates). Several are two purchases days apart on one customer
+(cid 7: 06-26 and 06-28; cid 87: 07-20 and 07-27; cid 38: three in 2026),
+which may be family buys attributed to the buyer or refunded duplicates,
+not renewals. Also 12 older duplicate terms from earlier backfills
+(order dates re-extracted) listed by `scoring-membership-terms-dedupe`.
+
+### 3i. The TGF Insider auto-draft, built (v2.369.0)
+
+`email_parser/insider.py` (routed here by #453). Gather → compose →
+render → lint → Brevo DRAFT → email Kerry the link; scheduled Wednesdays
+13:00 UTC as `insider_draft` beside `brevo_sync`; bridge
+`scoring-brevo-draft[:dry|apply]`. The data map and copy rules are in
+event-recaps.md (BUILT block); `test_insider.py` covers a two-chapter
+week, the lint gate, dry-run-never-calls-Brevo, empty window, single
+chapter. Deliberate choices: the module is its own file rather than
+brevo.py (the sync must not share a blast radius with a copywriter);
+the lint refuses `apply` on any banned word or stray dollar figure, so
+a bad data row cannot ship a rule break; every proper name in the send
+is first name + last initial. First real draft: only after Kerry reads
+the dry run.
+
+Dry run on production (v2.369.2/.3, 2026-09-10 16:47 UTC): subject
+"TGF Insider | First round. First payday."; s9.22 24 cards / 12 cashed,
+a9.22 16 cards / 9 cashed; 7 first-timers by registration tag (SA
+Espinosa, Hinojosa, Lewis; AUS Compton, Donovan, Johnston, Sekiguchi),
+6 of whom cashed — checked against `scoring-gg-results` (Espinosa par on
+10 skin, Donovan BOGEY on 4 skin, the other four on T1 team-net cards;
+Compton did not cash). Lint clean. Two corrections came out of the first
+dry run: the no-earlier-card first-timer guess over-counted (a
+MEMBER-tagged registrant whose rounds predate the scorecard imports) →
+the 1st TIMER tag decides; `str.capitalize` produced "san antonio" →
+first-letter-only. Rendered copy of record:
+`docs/claude/recaps/2026-09-10-insider-draft-s9.22-a9.22.html`. The
+scheduler's first unattended run is Wednesday 2026-09-16 13:00 UTC in
+DRAFT mode (v2.369.5). Kerry's two rulings, 2026-09-10, verbatim: "We
+always need to review and discuss the Insider mailings until I'm
+confident enough to automate it a little more." and, on seeing the dry
+run: "Update the dial to create the Brevo draft directly each wednesday
+at 8am. I'll review it there because I can see all the visual with it
+too. And then I'll work with you for edits before sending so you can
+learn from it." So: the job creates the Brevo DRAFT and emails him the
+link; he reviews in Brevo; edits come back through this lane (a
+revision is a new draft — Brevo has no campaign update API); nothing
+sends itself. His first edit — the skins sentence ("alone
+sounds...lonely", skins unexplained) — is folded into `compose()` and
+recorded in event-recaps.md. Dial `insider_autodraft` = draft (default)
+| review | off.
+
+Second review pass (v2.369.7), all Kerry's edits verbatim in
+event-recaps.md: first-timers = tag OR new member (8, not 7); "special
+tee" cut; ONE rotating highlight band (skill percentages this week, HIO
+pot next, dial `insider_highlight`); "How a TGF Event works"; Kerry's
+Compete line; Celebrate per chapter from `fellowship_spot` (3306 set to
+Max & Louie's); Handicaps page gained chapter badges beside names
+(`templates/handicaps.html`). Preview HTML sent for review; the Brevo
+revision (new draft, #17 deleted in the UI) waits on his word.
+
 ## 4. NOT done, and why
+
+- **Wednesday-AM TGF Insider auto-draft (mailbox #453).** BUILT in
+  v2.369.0 — see §3i. What is NOT done: the first REAL Brevo draft. Per
+  the spec the dry run for s9.22/a9.22 goes to Kerry first; `apply` runs
+  only when he says. Still open: does an Insider #2 go out by hand this
+  week?
 
 1. **Handicap cards were not emailed to the players who played (Phase
    3.3).** The only path is `/api/handicaps/send-bulk-email` behind the

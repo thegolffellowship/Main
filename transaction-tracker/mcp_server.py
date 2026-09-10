@@ -1762,6 +1762,22 @@ def _scoring_dispatch(url: str, extract: str):
                                    event (ALL Net → ALL Gross); refresh=
                                    force-replaces named players' stale cards;
                                    url = the portal widget
+      scoring-hcp-exclude:<event>|<A>[,<B>]|<note>[|apply]  never-post cards for
+                                   handicaps + unpost bridged rounds
+      scoring-round-drop:<id>[|unpost][|apply]  delete one scoring card
+      scoring-parse-warnings[:<frag>][|<status>][|<limit>]  read parse warnings
+      scoring-parse-warning-dismiss:<id>[,<id>]|<note>  dismiss ruled-on warnings
+      scoring-membership-terms-purge:<from>|<to>[|apply]  delete one boot's backfill terms
+      scoring-membership-terms-dedupe[:<created_since>][|apply]  one item, one term
+      scoring-membership-terms-repair[:apply]  early renewals continue at the
+                                   365 date (dry run default)
+      scoring-membership-sync      terms → status reconcile now (manager comps)
+      scoring-hcp-distribution     member handicap-index spread (18-hole equiv.)
+      scoring-brevo-draft[:dry|review|apply]  Wednesday TGF Insider: fill the
+                                   public recap template from the week's events;
+                                   dry (default) returns HTML; review emails Kerry
+                                   the preview + posts the mailbox; apply creates
+                                   the Brevo DRAFT + emails the link (never sends)
       scoring-status-changes[:<since>][|<limit>]  customer status flips since a
                                    date with the status before (read-only)
       scoring-dedupe-rounds[:<event>|all][|apply]  duplicate scorecards
@@ -2902,6 +2918,126 @@ def _scoring_dispatch(url: str, extract: str):
                 _audit("scoring-dedupe-rounds",
                        f"event={_ev or 'all'} dropped={_res.get('rows_dropped')} "
                        f"bridges_moved={_res.get('handicap_bridges_moved')}")
+            return json.dumps(_res, indent=2, default=str)
+        if cmd == "scoring-hcp-exclude":
+            # "<event>|<player>[,<player>]|<note>[|apply]" — mark cards as
+            # never-post for handicaps and unpost anything already bridged
+            # (Kerry 2026-09-10, s18.10 partial cards). Dry run by default.
+            _p = [x.strip() for x in (arg or "").split("|")]
+            _apply = bool(_p) and _p[-1].lower() == "apply"
+            if _apply:
+                _p = _p[:-1]
+            if len(_p) < 2:
+                return json.dumps({"error": "usage: scoring-hcp-exclude:<event>|<A>[,<B>]|<note>[|apply]"})
+            _ev, _players = _p[0], [x.strip() for x in _p[1].split(",") if x.strip()]
+            _note = _p[2] if len(_p) > 2 else None
+            _res = db.exclude_scoring_rounds_from_handicaps(_ev, _players, note=_note,
+                                                            apply=_apply)
+            if _apply:
+                _audit("scoring-hcp-exclude",
+                       f"event={_ev} players={_players} unposted="
+                       f"{_res.get('handicap_rounds_unposted')} note={_note}")
+            return json.dumps(_res, indent=2, default=str)
+        if cmd == "scoring-round-drop":
+            # "<scoring_round_id>[|unpost][|apply]" — delete one card (+holes);
+            # bridged handicap rounds are unlinked, or deleted with |unpost.
+            _p = [x.strip().lower() for x in (arg or "").split("|") if x.strip()]
+            if not _p or not _p[0].isdigit():
+                return json.dumps({"error": "usage: scoring-round-drop:<id>[|unpost][|apply]"})
+            _res = db.drop_scoring_round(int(_p[0]), unpost=("unpost" in _p[1:]),
+                                         apply=("apply" in _p[1:]))
+            if "apply" in _p[1:]:
+                _audit("scoring-round-drop", f"round={_p[0]} unpost={'unpost' in _p[1:]} "
+                       f"card={_res.get('card')}")
+            return json.dumps(_res, indent=2, default=str)
+        if cmd == "scoring-parse-warnings":
+            # READ-ONLY: open parse warnings — "[<fragment>][|<status>][|<limit>]".
+            _p = [x.strip() for x in (arg or "").split("|")]
+            _frag = _p[0] if _p and _p[0] else None
+            _status = _p[1] if len(_p) > 1 and _p[1] else "open"
+            _lim = int(_p[2]) if len(_p) > 2 and _p[2].isdigit() else 100
+            return json.dumps(db.list_parse_warnings(_frag, status=_status, limit=_lim),
+                              indent=2, default=str)
+        if cmd == "scoring-parse-warning-dismiss":
+            # "<id>[,<id>...]|<note>" — dismiss parse warnings Kerry has ruled on.
+            _ids_s, _, _note = arg.partition("|")
+            _ids = [int(x) for x in _ids_s.split(",") if x.strip().isdigit()]
+            _done = [i for i in _ids if db.dismiss_parse_warning(i)]
+            _audit("scoring-parse-warning-dismiss", f"ids={_done} note={_note.strip()}")
+            return json.dumps({"dismissed": _done, "note": _note.strip()}, indent=2)
+        if cmd == "scoring-hcp-distribution":
+            # Spread of established handicap indexes across current members
+            # (18-hole equivalents) — the "Am I good enough?" numbers.
+            from email_parser.insider import handicap_distribution
+            return json.dumps(handicap_distribution(), indent=2, default=str)
+        if cmd == "scoring-brevo-draft":
+            # "[dry|apply]" — the Wednesday-AM TGF Insider (#453). dry returns
+            # the rendered HTML + lint; apply creates the Brevo DRAFT and emails
+            # Kerry the link. Nothing here ever sends a campaign.
+            # "review" runs exactly what the Wednesday job does in review
+            # mode: preview email to Kerry + mailbox post, nothing in Brevo.
+            from email_parser.insider import build_public_recap_draft, send_review_preview
+            _mode = (arg or "").strip().lower()
+            _apply = _mode == "apply"
+            _res = build_public_recap_draft(dry_run=not _apply)
+            if _mode == "review" and not _res.get("skipped"):
+                _res["review"] = send_review_preview(_res)
+                _res.pop("html", None)
+                _audit("scoring-brevo-draft", f"review emailed={_res['review'].get('emailed')} "
+                       f"mailbox={_res['review'].get('mailbox_post')}")
+            if _apply:
+                _audit("scoring-brevo-draft", f"campaign_id={_res.get('campaign_id')} "
+                       f"error={_res.get('error')} lint={_res.get('lint')}")
+            return json.dumps(_res, indent=2, default=str)
+        if cmd == "scoring-membership-terms-dedupe":
+            # "[apply]" — one item, one term: delete the duplicate terms the
+            # v2.368.0 boot created (backfill re-inserted continued starts).
+            # "[<created_since>][|apply]" — created_since (e.g. 2026-09-10 16:00)
+            # limits deletion to the boot's rows; older dupes are listed only.
+            from email_parser.memberships import dedupe_terms_by_source_item
+            _p = [x.strip() for x in (arg or "").split("|")]
+            _apply = bool(_p) and _p[-1].lower() == "apply"
+            _since = _p[0] if _p and _p[0] and _p[0].lower() != "apply" else None
+            with db._connect() as _c:
+                _res = dedupe_terms_by_source_item(_c, apply=_apply, created_since=_since)
+            if _apply:
+                _audit("scoring-membership-terms-dedupe",
+                       f"duplicates_deleted={_res.get('duplicates_deleted')}")
+            return json.dumps(_res, indent=2, default=str)
+        if cmd == "scoring-membership-terms-purge":
+            # "<from>|<to>[|apply]" — delete backfill terms created in a
+            # window (one broken boot's rows); the boot backfill recreates
+            # anything genuinely missing.
+            from email_parser.memberships import purge_backfill_terms_created_between
+            _p = [x.strip() for x in (arg or "").split("|")]
+            if len(_p) < 2:
+                return json.dumps({"error": "usage: scoring-membership-terms-purge:<from>|<to>[|apply]"})
+            _apply = len(_p) > 2 and _p[2].lower() == "apply"
+            with db._connect() as _c:
+                _res = purge_backfill_terms_created_between(_c, _p[0], _p[1], apply=_apply)
+            if _apply:
+                _audit("scoring-membership-terms-purge",
+                       f"window={_p[0]}..{_p[1]} deleted={_res.get('terms_deleted')}")
+            return json.dumps(_res, indent=2, default=str)
+        if cmd == "scoring-membership-terms-repair":
+            # "[apply]" — move early-renewal terms to start at the previous
+            # term's expiry (Kerry 2026-09-10 continuation rule). Dry run
+            # by default.
+            from email_parser.memberships import repair_early_renewal_terms
+            _apply = (arg or "").strip().lower() == "apply"
+            with db._connect() as _c:
+                _res = repair_early_renewal_terms(_c, apply=_apply)
+            if _apply:
+                _audit("scoring-membership-terms-repair",
+                       f"terms_moved={_res.get('terms_moved')} skipped={len(_res.get('skipped', []))}")
+            return json.dumps(_res, indent=2, default=str)
+        if cmd == "scoring-membership-sync":
+            # Run the terms → status reconcile now (opens manager comp terms,
+            # demotes lapsed, upgrades renewed). Audited.
+            from email_parser.memberships import sync_player_status_with_terms
+            with db._connect() as _c:
+                _res = sync_player_status_with_terms(_c)
+            _audit("scoring-membership-sync", str(_res))
             return json.dumps(_res, indent=2, default=str)
         if cmd == "scoring-status-changes":
             # READ-ONLY (Kerry 2026-09-10, "Where'd Straiton and others go?"):

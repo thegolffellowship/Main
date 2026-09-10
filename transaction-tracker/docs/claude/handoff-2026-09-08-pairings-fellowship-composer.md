@@ -277,6 +277,18 @@ Listed because the habit is the point, not the individual checks:
   the real body, not asserted from the regexes.
 - Every deploy polled on `version.js` before anything was reported done.
 
+**CORRECTION, 2026-09-10.** One item in this section was itself wrong.
+This session reported `scoring-rounds` returning `[]` for events 3306 and
+3313 as evidence that closeout had not started. It filters on an
+item_name SUBSTRING, and the session passed event **ids** — which match
+no name and return `[]`. Silverhorn's 24 cards were imported 2026-09-08
+23:10, before the check ran. The claim went to Kerry in chat and to CA in
+mailbox #430 §4 and was false in both places. Fixed at the source:
+`get_scoring_rounds_list` now treats a numeric value as an events.id and
+raises on an unknown one (`test_scoring_rounds_lookup.py`), so the trap
+cannot produce another silent false negative. A verification step that
+can only fail toward "nothing here" is worse than no verification step.
+
 One thing I could **not** reproduce, and said so rather than explaining it
 away: Kerry reported the pairings view showing "Group 1..6" instead of
 hole labels. Both of that day's events carry correct labels (ShadowGlen

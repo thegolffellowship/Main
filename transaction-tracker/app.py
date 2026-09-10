@@ -1707,6 +1707,23 @@ def start_scheduler():
                     "" if os.getenv("BREVO_API_KEY")
                     else " (idle — BREVO_API_KEY not set)")
 
+    # TGF Insider auto-draft (mailbox #381 ratified, #453 routed): every
+    # Wednesday 13:00 UTC = 8 AM Central, fill the public recap template
+    # from Tuesday's events and park it in Brevo as a DRAFT for Kerry to
+    # edit and send. Never sends. INSIDER_AUTODRAFT=0 or the dial
+    # insider_autodraft=off switches it off.
+    if os.getenv("BREVO_SYNC_DISABLED", "") != "1":
+        from email_parser.insider import weekly_insider_draft
+        scheduler.add_job(
+            weekly_insider_draft,
+            "cron", day_of_week="wed", hour=13, minute=0,
+            id="insider_draft",
+            replace_existing=True,
+        )
+        logger.info("TGF Insider auto-draft scheduled Wednesdays 13:00 UTC%s",
+                    "" if os.getenv("BREVO_API_KEY")
+                    else " (idle — BREVO_API_KEY not set)")
+
     # Meta campaign insights (mailbox #391): hourly refresh of the
     # campaign stats view's META panel. Safe no-op (manual spend rules)
     # until META_ACCESS_TOKEN lands on Railway.

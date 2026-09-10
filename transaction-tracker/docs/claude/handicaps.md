@@ -657,3 +657,19 @@ Rules of record:
   TGF AUSTIN CHAMPIONSHIP (Falconhead — Blue F 36.4/130 B 36.1/136,
   White F 35.1/121 B 34.8/126, Red F 33.2/116 B 33.2/119; 16 players /
   32 rounds). All numbers Kerry-read from GG course setup.
+
+
+## Cards excluded from handicaps (v2.368.0, Kerry 2026-09-10)
+
+`scoring_rounds.hcp_exclude` (+ `hcp_exclude_note`) marks a card that
+stays in the event record but is never posted as a handicap round —
+Kerry on s18.10 FALL KICKOFF: "Atkinson and their 4th were partial cards
+that should not be recorded into handicaps." Both posting paths honour
+it (`derive_handicap_rounds_from_scoring` for nines,
+`derive_18hole_handicap_rounds_two_nines` for 18s) and the preview flags
+the row `hcp_excluded`. Set it with `scoring-hcp-exclude:<event>|<A>[,<B>]
+|<note>[|apply]`, which also deletes any handicap round already bridged to
+the card (dry run first). A card whose SCORES were wrong is a different
+case: `scoring-round-drop:<id>|unpost|apply` deletes the card and its
+differentials so the corrected card can post (Aguilera / Ayala, whose
+8/29 import predated Kerry's manual score entry on GG).

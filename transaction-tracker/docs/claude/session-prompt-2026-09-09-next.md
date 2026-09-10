@@ -1,3 +1,31 @@
+> **SUPERSEDED — 2026-09-10. Do not work from this document.**
+>
+> Two of its claims are wrong and one is now stale:
+>
+> 1. **"`scoring-rounds` returns `[]` for BOTH, no scorecards imported"
+>    was FALSE.** `scoring-rounds` filters on an item_name SUBSTRING; the
+>    session passed event **ids** (3306 / 3313), which match no name and
+>    return `[]`. Silverhorn's 24 cards had been imported 2026-09-08
+>    23:10, before the check was ever run. The lookup now treats a numeric
+>    value as an events.id and raises on an unknown one
+>    (`test_scoring_rounds_lookup.py`), and the closeout skill documents
+>    the trap.
+> 2. **The "FIRST JOB" is done.** Both events were closed out on
+>    2026-09-09/10 — see
+>    `docs/claude/handoff-2026-09-09-event-closeout-first-run.md` and
+>    mailbox #434 / #447 / #449. Handicap cards went to 31 players, the
+>    Silverhorn recap was sent, and the recap house style grew rules
+>    20-29 from Kerry's edit.
+> 3. The open queue below has moved on. **Read the mailbox
+>    (`read_platform_dialogue`) for current state** — CLAUDE.md rule 4
+>    now requires that before every response, not just at session start.
+>
+> Kept for the record of what the 2026-09-08 wave shipped. The durable
+> version of that is
+> `docs/claude/handoff-2026-09-08-pairings-fellowship-composer.md`.
+
+---
+
 # Start-here prompt — next session (written 2026-09-09)
 
 Paste this to start. It orients you and names the first job.

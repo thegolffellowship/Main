@@ -263,6 +263,109 @@ Working rules (v1):
 - Brevo API has no campaign update/delete — revisions are new drafts;
   superseded drafts are deleted in the UI.
 
+**BUILT (v2.369.0, 2026-09-10, `email_parser/insider.py`) — how the
+Wednesday auto-draft fills the template:**
+- `gather_week()` — per chapter, the most recent event WITH SCORECARDS in
+  the last 7 days (`scoring_rounds` joined to `events`); field = cards,
+  cashed = distinct `tgf_payouts` recipients via `tgf_events.events_id`;
+  first-timers = players whose first-ever scoring round is that date
+  (cashed flag from the same payouts); skins story = a `gg_game_results`
+  skins row whose detail reads "Bogey on 7" / "Par on 3" (bogey wins);
+  fairness fallback = playing-handicap spread of the players who cashed;
+  results link = chapter page + `?round_id=<gg_league_round_id>`; HIO
+  pot from `get_hio_pot()["pot"]`; next Tuesday per chapter (first
+  future `[sa]9.`, `registration_url` else `derive_store_url`, label
+  "Course · Tue Sep 15"); Saturday 18s = future `[sa]18.` within 45 days,
+  not cancelled, max 4.
+- `compose()` — deterministic sentences into the 5-block slots. Headline
+  follows the strongest beat: "First round. First payday." (a first-timer
+  cashed) → "A bogey won money Tuesday" → the ratified default. Beat 1 is
+  the fraction ("half the field", "a third of the field"), never dollars.
+- `render()` strips the template's `<!-- example -->` author notes;
+  Brevo merge tags (`{{ contact.FIRSTNAME }}`, `{{ unsubscribe }}`,
+  `{{ update_profile }}`) stay.
+- `lint()` is the gate: unfilled `{{SLOT}}`, banned words (league, purse,
+  TGF Plus, DFW, Houston), any dollar figure other than the verbatim $25
+  offer and the "Hole-In-One Pot = $X" line. `apply` refuses on any hit.
+- Subject `TGF Insider | <headline>`; campaign name `TGF Insider <date>`;
+  sender 1, list 3 minus segment 2, tag `public-recap`. Kerry gets the
+  campaign link by email (Graph, COO_EMAIL_TO), logged to message_log as
+  `insider-draft`. Skipped when no event has cards in the window.
+- MODES (dial `insider_autodraft`). **draft** (DEFAULT — Kerry 2026-09-10:
+  *"Update the dial to create the Brevo draft directly each wednesday at
+  8am. I'll review it there because I can see all the visual with it too.
+  And then I'll work with you for edits before sending so you can learn
+  from it."*): Brevo DRAFT + link emailed to Kerry; edits go through the
+  session lane (a Brevo campaign cannot be updated by API — a revision is
+  a new draft, the old one deleted in the UI); nothing sends itself.
+  **review** — renders the dry run, emails Kerry the Insider under a REVIEW
+  banner, posts the beats to the mailbox (topic `insider-review`), nothing
+  in Brevo. **off** — nothing. Env `INSIDER_AUTODRAFT=0` is off;
+  `BREVO_SYNC_DISABLED=1` also unschedules it. Bridges
+  `scoring-brevo-draft[:dry|review|apply]`.
+- Kerry's standing review rule (2026-09-10): *"We always need to review and
+  discuss the Insider mailings until I'm confident enough to automate it a
+  little more."* Every auto-draft is discussed before he sends; what he
+  changes goes into the lessons list below and, where it is a pattern,
+  into `compose()`.
+
+**Lessons from the auto-draft (Kerry's edits, 2026-09-10 — "so you can learn from it"):**
+- Skins need plain language for a public list. Kerry on the first draft:
+  *"the skin sentence doesn't really work where it says you don't have to
+  be good, you just have to be alone. Doesn't resonate with a lot of people
+  who don't know what a skin is, and alone sounds...lonely."* → beat 3 now
+  names the player (first + initial), says the score was *the best anyone
+  posted on that hole*, explains that *every hole is its own small
+  contest, so one good hole pays even when the rest of the round doesn't*,
+  and never uses "alone". Rule: any game term (skin, CTP, net, flight)
+  gets a one-clause explanation the first time it appears in a public send.
+- Second pass (Kerry, 2026-09-10, on the Brevo draft #17 + skill-block preview):
+  - *"so did 5 of the other 8 first timers. 2 more members were first
+    timers, right? There were 4 first timers in each city's events."* →
+    the 1st TIMER tag alone under-counts: a brand-new MEMBER whose first
+    TGF purchase is inside 90 days and who has no earlier card is a
+    first-timer too (Michele McCormick, s9.22). Two doors in, both
+    computed. (8 first-timers; Christopher E. + 5 of the other 7 cashed.)
+  - *"What does 'nobody gets a special tee' mean? Seem like we could
+    scratch that."* → gone. Beat 2 ends "Everybody gets a fair game."
+  - *"I think we rotate our highlight sections each week to not
+    overwhelm. Drop Hole-In-One Pot this week or possibly move to bottom.
+    We can hit different highlight sections each week and rotate them
+    back."* → ONE dark highlight band per issue, rotated weekly from the
+    week of 2026-09-07: skill (Am I good enough to play?) → hio → skill…
+    Dial `insider_highlight` = skill | hio | none forces one.
+  - *"How a TGF Event works, not night"* → heading fixed in the template.
+  - Compete line, verbatim: *"Your own ball. A Team best ball game
+    included, so your foursome roots for you. Optional Individual Net &
+    Gross games. A TGF Handicap and flighting keeps it fair."* Kerry:
+    "We could have a rotation of items here too, and all three of the
+    How a TGF Event works" — not built yet; noted.
+  - Celebrate shape, verbatim: *"Austin grabbed drinks in the clubhouse.
+    San Antonio went to Max & Louie's for food and fellowship. It's the
+    best part, and it's yours if you want it."* → per-chapter sentence
+    from `events.fellowship_spot`: clubhouse / on-site / grill / patio →
+    "grabbed drinks in the clubhouse"; anything else → "went to <spot>
+    for food and fellowship". "Stick around after." dropped. The SA spot
+    must be ON the event row (set 3306 → Max & Louie's).
+  - Skill block: percentages, not "1 in N" (*"Wouldn't percentages be
+    simpler graphically and be able to show larger?"*); three tiles —
+    % single digits · lowest-to-highest handicap · % at 20 or higher — a
+    header "Am I good enough to play?" and the footer *"The other half of
+    us are in between."* + *"Check out our TGF Handicaps"* linked to
+    https://tgf-tracker.up.railway.app/member/handicaps. Computed live
+    from `handicap_distribution()` (members with an established index,
+    18-hole equivalents). Kerry's brief: *"big number, very limited text
+    graphic ... Don't want to just appeal to the high or mid-handicappers
+    either. It goes both ways. Low, scratch and plus handicappers need to
+    see there's others like them in our group too."*
+  - Third pass: *"It does change the draft from 5 of 7 to 6 of 8, right?"*
+    → beat 2 counts the whole group: "6 of the 8 first-timers on the sheet
+    did." *"Jump in any time should be a header above the text."* → close
+    box header line, body below.
+  - Kerry's Brevo edit of #18: eyebrow + headline CENTERED ("For future,
+    show top headlines centered as shown"); the greeting and lede stay
+    left. Template updated.
+
 **v3 fixes (Kerry, off the Brevo preview 2026-09-02) — template rules:**
 - The Season-20 logo (69986bc3…png) is BLACK INK — header band must be
   WHITE (with a dark rule under it), never #1b1b1b (v2 rendered black

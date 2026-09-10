@@ -1254,3 +1254,42 @@ keep the date-free rule (one event, one date). Historical imports
 (`scoring-import-orders`) can still trip the alarm the other way round —
 an OLD term arriving after a newer one — so read the two order dates
 before crediting anything.
+
+
+## Membership terms: continuation and manager comps (v2.368.0, Kerry 2026-09-10)
+
+**A renewal continues the term, it never resets it.** "When someone renews
+prior to the 365 date, their new membership should continue at the 365
+date, not reset to the date of the renewal." `memberships.continued_start`
+gives a term bought on `purchase_date` its real start: the current term's
+`expires_at` when one is still running, else the purchase date. Applied
+on `record_renewal_for_item` (live) and `backfill_memberships_from_items`
+(historical); `add_manual_term` is an admin's explicit dates. Legacy
+calendar-year terms (before `POLICY_365_FROM_YEAR`) never continue — a
+12-31 expiry would seed a zero-length term. `repair_early_renewal_terms`
+(bridge `scoring-membership-terms-repair[:apply]`) moves renewal/backfill
+terms recorded the old way; manual terms are left alone; clashes on
+`UNIQUE(customer_id, started_at)` are listed, not forced.
+
+**Chapter managers are members while they manage, without dues.** "Robert
+Straiton is a Manager. Until that changes he is automatically a member,
+without any dues. He is comped, yes, but ... we need to note what that comp
+amount is for tax purposes." The `chapter_managers` dial carries each
+manager's `customer_id` (defaults SA → 18, Austin → 31). Inside
+`sync_player_status_with_terms`, `ensure_manager_comp_terms` opens a
+`source='manual'` term whose notes start with `Manager comp` (price_paid
+0, membership value from `membership_comp_value`, default $75) whenever a
+manager has no term covering today — continuing from the last expiry, or
+starting today. The finance lane reads those notes for the comp value.
+The 2026-09-09 historical import had demoted Robert (`expired_member`) by
+creating his lapsed 2025 term; the first sync after v2.368.0 restores him.
+
+**Backfill idempotency is per ITEM (v2.368.1).** The first v2.368.0 boot
+re-inserted ~60 past membership items as second terms at their continued
+start (the old `UNIQUE(customer_id, started_at)` guard stopped matching
+once the rule moved the date), and the terms sync briefly upgraded ~20
+lapsed members whose phantom term ran into 2027. `backfill_memberships_from_items`
+now skips any item that already has a term (`source_item_id`);
+`scoring-membership-terms-dedupe[:apply]` removes duplicates (first term
+per item wins) and re-runs the sync. Lesson for the class: an
+idempotency key must be the SOURCE identity, never a derived value.
