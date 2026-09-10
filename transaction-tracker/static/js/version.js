@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.369.10";
+window.TGF_VERSION = "2.370.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.370.0",
+    date: "2026-09-10",
+    changes: [
+      "Lead queue: the CONVERTED section is now two (Kerry: 'Split out the CONVERTED section into EVENT SIGNUPS (those who are signed up to play) and GUESTS (those who have played)'). EVENT SIGNUPS (blue) = converted, not a member, no round yet; GUESTS (green) = converted and played. Played is a server flag on every lead row: a scorecard for the customer, or an active registration on an event whose date has passed. Order MEMBERS · EVENT SIGNUPS · GUESTS, all above the follow-up sections as before.",
+    ],
+  },
   {
     version: "2.369.10",
     date: "2026-09-10",
