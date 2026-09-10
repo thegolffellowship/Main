@@ -42,9 +42,9 @@ def fresh_db():
             CREATE TABLE tgf_payouts (id INTEGER PRIMARY KEY AUTOINCREMENT, event_id INTEGER,
                 customer_id INTEGER, category TEXT, amount REAL, paid_at TEXT);
             INSERT INTO events VALUES (3306, 's9.22 Silverhorn', '2026-09-08', 'Silverhorn', 'San Antonio',
-                NULL, NULL, 'the Silverhorn grill', 'active');
+                NULL, NULL, 'Max & Louie''s', 'active');
             INSERT INTO events VALUES (3313, 'a9.22 ShadowGlen', '2026-09-08', 'ShadowGlen', 'Austin',
-                NULL, NULL, NULL, 'active');
+                NULL, NULL, 'ShadowGlen clubhouse (on site)', 'active');
             INSERT INTO events VALUES (3320, 's9.23 Canyon Springs', '2026-09-15', 'Canyon Springs', 'San Antonio',
                 '17:30', 'https://thegolffellowship.com/product/s9-23/', NULL, 'active');
             INSERT INTO events VALUES (3321, 'a9.23 Teravista', '2026-09-15', 'Teravista', 'Austin',
@@ -56,11 +56,16 @@ def fresh_db():
             INSERT INTO events VALUES (3299, 's9.21 Old Round', '2026-09-01', 'Olmos', 'San Antonio',
                 NULL, NULL, NULL, 'active');
             CREATE TABLE items (id INTEGER PRIMARY KEY AUTOINCREMENT, customer_id INTEGER, event_id INTEGER,
-                user_status TEXT, guest_name TEXT, transaction_status TEXT, customer TEXT);
+                user_status TEXT, guest_name TEXT, transaction_status TEXT, customer TEXT, order_date TEXT);
             INSERT INTO items (customer_id, event_id, user_status, transaction_status) VALUES
                 (1, 3306, 'MEMBER', 'active'), (2, 3306, '1st TIMER', 'active'), (3, 3306, 'MEMBER', 'active'),
                 (4, 3306, '1st TIMER', 'active'), (7, 3306, 'MEMBER', 'active'),
                 (5, 3313, 'MEMBER', 'active'), (6, 3313, '1st TIMER', 'active');
+            UPDATE items SET order_date = '2026-09-05';
+            -- Members 1, 3, 5 have an older purchase too (not new to TGF).
+            INSERT INTO items (customer_id, event_id, user_status, transaction_status, order_date) VALUES
+                (1, 3299, 'MEMBER', 'active', '2026-03-01'), (3, 3299, 'MEMBER', 'active', '2026-03-01'),
+                (5, 3299, 'MEMBER', 'active', '2026-03-01');
             INSERT INTO tgf_events VALUES (1, 3306);
             INSERT INTO tgf_events VALUES (2, 3313);
         """)
@@ -104,8 +109,8 @@ check("field = cards", evs["San Antonio"]["field"] == 5 and evs["Austin"]["field
 check("cashed = distinct payout recipients", evs["San Antonio"]["cashed"] == 2
       and evs["Austin"]["cashed"] == 1)
 firsts = sorted(f["short"] for e in data["events"] for f in e["first_timers"])
-check("first-timers = played + tagged 1st TIMER, first name + last initial (Michele M. is MEMBER-tagged)",
-      firsts == ["Hector A.", "Kannon B.", "Luke M."], str(firsts))
+check("first-timers = tagged 1st TIMER OR new member (first purchase < 90 days, no earlier card)",
+      firsts == ["Hector A.", "Kannon B.", "Luke M.", "Michele M."], str(firsts))
 check("first-timer who cashed is marked", any(f["cashed"] and f["short"] == "Kannon B."
                                               for f in evs["San Antonio"]["first_timers"]))
 check("results link uses the chapter page + gg round id",
@@ -129,13 +134,15 @@ slots = insider.compose(data)
 check("headline follows first-timer payday", slots["HEADLINE"] == "First round. First payday.", slots["HEADLINE"])
 check("beat 2 names Kannon B. only by initial", "Kannon B." in slots["BEAT_2_BODY"]
       and "Bell" not in slots["BEAT_2_BODY"])
-check("beat 2 counts the other first-timers who did not cash", "one of 3 first-timers" in slots["BEAT_2_BODY"],
+check("beat 2 counts the other first-timers who did not cash", "one of 4 first-timers" in slots["BEAT_2_BODY"],
       slots["BEAT_2_BODY"])
+check("'special tee' is gone (Kerry)", "special tee" not in slots["BEAT_2_BODY"]
+      and "Everybody gets a fair game." in slots["BEAT_2_BODY"])
 with db._connect(p) as conn:   # Hector A. (4) cashes too → "and so did 1 of the other 2"
     conn.execute("INSERT INTO tgf_payouts (event_id, customer_id, category, amount) VALUES (1, 4, 'team', 12)")
     conn.commit()
 _s2 = insider.compose(insider.gather_week(db_path=p, as_of=date(2026, 9, 10)))
-check("beat 2 counts the other first-timers who cashed", "and so did 1 of the other 2 first-timers" in _s2["BEAT_2_BODY"],
+check("beat 2 counts the other first-timers who cashed", "and so did 1 of the other 3 first-timers" in _s2["BEAT_2_BODY"],
       _s2["BEAT_2_BODY"])
 check("beat 3 tells the bogey skin in plain language, names the player first + initial",
       slots["BEAT_3_LEAD"] == "A bogey won money." and "7th hole" in slots["BEAT_3_BODY"]
@@ -145,8 +152,20 @@ check("beat 3 tells the bogey skin in plain language, names the player first + i
 check("GG name forms → public form", insider._gg_short("DONOVAN, Tom") == "Tom D."
       and insider._gg_short("Espinosa, Christopher Guest") == "Christopher E."
       and insider._gg_short("Kerry Niester") == "Kerry N.")
-check("HIO pot formatted", slots["HIO_POT"] == "$1,175")
-check("celebrate uses fellowship spot", "Silverhorn grill" in slots["CELEBRATE_PROOF"])
+check("template says Event, not night, and carries Kerry's Compete line",
+      "How a TGF Event works" in insider.render(slots) and "A Team best ball game included" in insider.render(slots)
+      and "night works" not in insider.render(slots))
+check("celebrate in Kerry's shape: off-site = went to X, clubhouse = grabbed drinks",
+      "San Antonio went to Max &amp; Louie's for food and fellowship." in slots["CELEBRATE_PROOF"]
+      and "Austin grabbed drinks in the clubhouse." in slots["CELEBRATE_PROOF"]
+      and "(on site)" not in slots["CELEBRATE_PROOF"], slots["CELEBRATE_PROOF"])
+check("highlight rotation: week 0 skill, week 1 hio, forced none",
+      insider.pick_highlight(date(2026, 9, 10)) == "skill" and insider.pick_highlight(date(2026, 9, 17)) == "hio"
+      and insider.pick_highlight(date(2026, 9, 24)) == "skill" and insider.pick_highlight(date(2026, 9, 10), "none") == "none"
+      and insider.highlight_block({"as_of": "2026-09-10", "highlight_forced": "none"}) == ""
+      and insider.pick_highlight(date(2026, 9, 10), "hio") == "hio")
+check("no handicap board in the fixture → skill week falls back to the pot band",
+      "Hole-In-One Pot = $1,175" in slots["HIGHLIGHT_BLOCK"], slots["HIGHLIGHT_BLOCK"][:120])
 check("proper nouns keep their case", "San Antonio" in slots["BEAT_1_BODY"] and "Tuesday night" in slots["BEAT_2_BODY"]
       and "san antonio" not in slots["BEAT_1_BODY"], slots["BEAT_1_BODY"] + slots["BEAT_2_BODY"])
 html_out = insider.render(slots)
@@ -230,6 +249,18 @@ check("members only, established only", dist["members_with_index"] == 4 and dist
 check("range + median + shares", dist["min"] == 4.0 and dist["max"] == 26.0 and dist["median"] == 12.0
       and dist["pct_10_plus"] == 75 and dist["pct_20_plus"] == 25 and dist["single_digit"] == 1, str(dist))
 check("bands", dist["by_band"]["0–5"] == 1 and dist["by_band"]["25+"] == 1, str(dist["by_band"]))
+blk = insider.skill_block(dist)
+check("skill block: three big numbers + handicaps link, no dollars", "25%" in blk and "4<span" in blk and ">26</p>" in blk
+      and "TGF Handicaps" in blk and insider.HANDICAPS_URL in blk and "$" not in blk
+      and "The other half of us are in between." in blk, blk[:300])
+check("plus handicaps render as +N", "+3<span" in insider.skill_block({**dist, "min": -2.6}))
+check("empty board → no block", insider.skill_block({"members_with_index": 0}) == "")
+data_sk = insider.gather_week(db_path=p, as_of=date(2026, 9, 10))
+check("gather carries the distribution + forced dial", data_sk["hcp_dist"]["members_with_index"] == 4
+      and data_sk["highlight_forced"] in (None, ""))
+h_sk = insider.render(insider.compose(data_sk))
+check("week-0 render carries the skill band and no pot", "Am I good enough to play?" in h_sk and "Hole-In-One" not in h_sk
+      and insider.lint(h_sk) == [], str(insider.lint(h_sk)))
 
 print("\n== 5. single-chapter week ==")
 with db._connect(p) as conn:

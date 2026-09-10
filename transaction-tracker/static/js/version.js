@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.369.6";
+window.TGF_VERSION = "2.369.7";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.369.7",
+    date: "2026-09-10",
+    changes: [
+      "Insider, Kerry's second review pass. First-timers now come through two doors — the 1st TIMER tag OR a brand-new member (first TGF purchase inside 90 days, no earlier card), so s9.22/a9.22 counts 8 as Kerry did, not 7. 'Nobody gets a special tee' is cut. ONE dark highlight band per issue, rotated weekly from the week of Sep 7 — skill (Am I good enough to play? three big percentages: % single digits · lowest-to-highest handicap · % at 20+, with a TGF Handicaps link) this week, Hole-In-One Pot next, dial insider_highlight = skill | hio | none. Template says 'How a TGF Event works' with Kerry's Compete line; Celebrate is one sentence per chapter from the event's fellowship spot ('Austin grabbed drinks in the clubhouse. San Antonio went to Max & Louie's for food and fellowship.').",
+      "Handicaps page: chapter badge (SA / A, chapter colors) beside every player name on desktop rows and mobile cards, like the cross-chapter boards.",
+    ],
+  },
   {
     version: "2.369.6",
     date: "2026-09-10",

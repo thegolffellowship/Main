@@ -180,16 +180,31 @@ def gather_week(db_path=None, as_of: date | None = None, days: int = 7) -> dict:
                 "SELECT COUNT(*) FROM items WHERE event_id = ? "
                 "AND COALESCE(transaction_status,'active') = 'active'", (eid,)).fetchone()[0]
             if n_items:
+                # Two doors in (Kerry 2026-09-10: "2 more members were first
+                # timers, right? There were 4 first timers in each city's
+                # events."): the 1st TIMER tag, OR a brand-new member — first
+                # TGF purchase inside 90 days and no earlier card.
                 firsts = [dict(r) for r in conn.execute(
                     """SELECT DISTINCT sr.customer_id, c.first_name, c.last_name,
                               sr.gross, sr.net, sr.playing_handicap
                          FROM scoring_rounds sr
                          JOIN customers c ON c.customer_id = sr.customer_id
-                         JOIN items i ON i.customer_id = sr.customer_id
-                                     AND i.event_id = sr.event_id
                         WHERE sr.event_id = ? AND sr.customer_id IS NOT NULL
-                          AND COALESCE(i.transaction_status,'active') = 'active'
-                          AND UPPER(COALESCE(i.user_status,'')) LIKE '1ST%'
+                          AND (
+                            EXISTS (SELECT 1 FROM items i
+                                     WHERE i.customer_id = sr.customer_id AND i.event_id = sr.event_id
+                                       AND COALESCE(i.transaction_status,'active') = 'active'
+                                       AND UPPER(COALESCE(i.user_status,'')) LIKE '1ST%')
+                            OR (
+                              NOT EXISTS (SELECT 1 FROM scoring_rounds x
+                                           WHERE x.customer_id = sr.customer_id
+                                             AND x.round_date < sr.round_date)
+                              AND (SELECT MIN(order_date) FROM items i2
+                                    WHERE i2.customer_id = sr.customer_id
+                                      AND COALESCE(i2.transaction_status,'active') = 'active')
+                                  >= date(sr.round_date, '-90 days')
+                            )
+                          )
                         ORDER BY c.last_name, c.first_name""", (eid,))]
             else:
                 firsts = [dict(r) for r in conn.execute(
@@ -272,6 +287,15 @@ def gather_week(db_path=None, as_of: date | None = None, days: int = 7) -> dict:
         out["hio_pot"] = pot.get("pot") if isinstance(pot, dict) else None
     except Exception:
         logger.warning("insider: HIO pot unavailable", exc_info=True)
+    try:
+        out["hcp_dist"] = handicap_distribution(db_path=db_path)
+    except Exception:
+        logger.warning("insider: handicap distribution unavailable", exc_info=True)
+        out["hcp_dist"] = None
+    try:
+        out["highlight_forced"] = db.get_app_setting("insider_highlight", db_path=db_path)
+    except Exception:
+        out["highlight_forced"] = None
     return out
 
 
@@ -312,6 +336,77 @@ def handicap_distribution(db_path=None) -> dict:
 
 
 # ── copy ────────────────────────────────────────────────────────────────
+
+HIGHLIGHT_ROTATION = ("skill", "hio")
+ROTATION_EPOCH = date(2026, 9, 7)      # week 0 = skill (Kerry 2026-09-10)
+HANDICAPS_URL = "https://tgf-tracker.up.railway.app/member/handicaps"
+_DARK_OPEN = ('<tr><td style="padding:14px 32px 4px;">\n<table role="presentation" width="100%" '
+              'cellpadding="0" cellspacing="0" style="background:#1b1b1b;border-radius:8px;"><tbody>')
+_DARK_CLOSE = "</tbody></table>\n</td></tr>"
+
+
+def pick_highlight(as_of: date, forced: str | None = None) -> str:
+    """skill | hio | none. The dial insider_highlight forces one; otherwise
+    alternate weekly from ROTATION_EPOCH."""
+    f = (forced or "").strip().lower()
+    if f in HIGHLIGHT_ROTATION or f == "none":
+        return f
+    weeks = (as_of - ROTATION_EPOCH).days // 7
+    return HIGHLIGHT_ROTATION[weeks % len(HIGHLIGHT_ROTATION)]
+
+
+def hio_block(pot) -> str:
+    val = _fmt_money(pot) if pot is not None else "growing"
+    return (_DARK_OPEN + '<tr><td style="padding:14px 18px;">\n'
+            '<p style="margin:0;font-size:16px;line-height:1.55;color:#ffffff;text-align:center;">'
+            '<strong style="color:#e2773d;"><span style="font-size:36px;">Hole-In-One Pot = '
+            f'{val}</span></strong></p>\n'
+            '<p style="margin:0;font-size:16px;line-height:1.55;color:#ffffff;">Every player at every '
+            'TGF event kicks a dollar into it per 9, and it keeps growing until a member jars one '
+            'during a TGF round and takes the whole thing. 11 have won over our 20 years. Join and '
+            'you could be next!</p>\n</td></tr>' + _DARK_CLOSE)
+
+
+def skill_block(dist: dict | None) -> str:
+    """Am I good enough to play? — three big percentages (Kerry 2026-09-10:
+    "big number, very limited text graphic ... It goes both ways. Low,
+    scratch and plus handicappers need to see there's others like them")."""
+    if not dist or not dist.get("members_with_index"):
+        return ""
+    n = dist["members_with_index"]
+    pct_single = round(100 * dist["single_digit"] / n)
+    pct_20 = dist["pct_20_plus"]
+    lo, hi = dist["min"], dist["max"]
+    lo_s = f"+{int(round(abs(lo)))}" if lo is not None and lo < 0 else f"{int(round(lo or 0))}"
+    hi_s = f"{int(round(hi or 0))}"
+    num = 'style="margin:0;font-size:44px;line-height:1;color:#e2773d;font-weight:bold;"'
+    cap = 'style="margin:6px 0 0;font-size:13px;line-height:1.4;color:#ffffff;"'
+    cell = 'align="center" valign="top" style="padding:8px 6px 4px;'
+    return (_DARK_OPEN +
+            '<tr><td colspan="3" style="padding:16px 18px 4px;text-align:center;">'
+            '<p style="margin:0;font-size:20px;line-height:1.3;color:#ffffff;font-weight:bold;">'
+            'Am I good enough to play?</p></td></tr>\n<tr>\n'
+            f'<td width="33%" {cell}"><p {num}>{pct_single}%</p><p {cap}>play to<br>single digits</p></td>\n'
+            f'<td width="34%" {cell}border-left:1px solid #3b3f44;border-right:1px solid #3b3f44;">'
+            f'<p {num}>{lo_s}<span style="font-size:26px;color:#d3dde4;">&nbsp;to&nbsp;</span>{hi_s}</p>'
+            f'<p {cap}>every handicap<br>in the group</p></td>\n'
+            f'<td width="33%" {cell}"><p {num}>{pct_20}%</p><p {cap}>play to 20<br>or higher</p></td>\n'
+            '</tr>\n<tr><td colspan="3" style="padding:8px 18px 16px;text-align:center;">'
+            '<p style="margin:0;font-size:16px;line-height:1.55;color:#d3dde4;">The other half of us '
+            f'are in between.<br>Check out our <a href="{HANDICAPS_URL}" style="color:#e2773d;'
+            'font-weight:bold;">TGF Handicaps</a>.</p></td></tr>' + _DARK_CLOSE)
+
+
+def highlight_block(data: dict) -> str:
+    choice = pick_highlight(datetime.strptime(data["as_of"], "%Y-%m-%d").date(),
+                            data.get("highlight_forced"))
+    if choice == "skill":
+        blk = skill_block(data.get("hcp_dist"))
+        return blk or hio_block(data.get("hio_pot"))
+    if choice == "hio":
+        return hio_block(data.get("hio_pot"))
+    return ""
+
 
 def compose(data: dict) -> dict:
     """Turn the gathered facts into the template's slots. Deterministic
@@ -379,7 +474,7 @@ def compose(data: dict) -> dict:
         slots["BEAT_2_LEAD"] = "First round, first payday."
         slots["BEAT_2_BODY"] = (f"{_esc(f['short'])} teed it up with us for the first time "
                                 f"{when_mid} and left with money" + tail
-                                + " Nobody gets a special tee. Everybody gets a fair game.")
+                                + " Everybody gets a fair game.")
     elif firsts:
         slots["BEAT_2_LEAD"] = f"{len(firsts)} new face{'s' if len(firsts) != 1 else ''} in the groups."
         slots["BEAT_2_BODY"] = (", ".join(_esc(f["short"]) for f in firsts[:4])
@@ -430,14 +525,22 @@ def compose(data: dict) -> dict:
 
     slots["HIO_POT"] = _fmt_money(data.get("hio_pot")) if data.get("hio_pot") is not None else "growing"
 
+    # Kerry's shape (2026-09-10): "Austin grabbed drinks in the clubhouse.
+    # San Antonio went to Max & Louie's for food and fellowship."
     spots = [(e["chapter"], re.sub(r"\s*\([^)]*\)", "", e["fellowship_spot"]).strip())
              for e in evs if e.get("fellowship_spot")]
-    if spots:
-        slots["CELEBRATE_PROOF"] = (f"{when} the crowd landed at "
-                                    + " and ".join(f"{_esc(s)} in {_esc(ch)}" for ch, s in spots)
-                                    + ".")
-    else:
-        slots["CELEBRATE_PROOF"] = f"{when} most of the field stayed for a drink."
+    lines = []
+    for ch, spot in spots:
+        if re.search(r"clubhouse|on[- ]site|19th|grill|patio|bar$", spot, re.I):
+            lines.append(f"{_esc(ch)} grabbed drinks in the clubhouse.")
+        else:
+            lines.append(f"{_esc(ch)} went to {_esc(spot)} for food and fellowship.")
+    slots["CELEBRATE_PROOF"] = (" ".join(lines) if lines
+                                else "Most of the field stayed for a drink after.")
+
+    # Highlight band — one per week, rotated (Kerry: "rotate our highlight
+    # sections each week to not overwhelm").
+    slots["HIGHLIGHT_BLOCK"] = highlight_block(data)
 
     for ch, key in (("San Antonio", "SA"), ("Austin", "AUS")):
         nt = data["next_tuesday"].get(ch)

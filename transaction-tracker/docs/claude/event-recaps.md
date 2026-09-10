@@ -319,6 +319,45 @@ Wednesday auto-draft fills the template:**
   contest, so one good hole pays even when the rest of the round doesn't*,
   and never uses "alone". Rule: any game term (skin, CTP, net, flight)
   gets a one-clause explanation the first time it appears in a public send.
+- Second pass (Kerry, 2026-09-10, on the Brevo draft #17 + skill-block preview):
+  - *"so did 5 of the other 8 first timers. 2 more members were first
+    timers, right? There were 4 first timers in each city's events."* →
+    the 1st TIMER tag alone under-counts: a brand-new MEMBER whose first
+    TGF purchase is inside 90 days and who has no earlier card is a
+    first-timer too (Michele McCormick, s9.22). Two doors in, both
+    computed. (8 first-timers; Christopher E. + 5 of the other 7 cashed.)
+  - *"What does 'nobody gets a special tee' mean? Seem like we could
+    scratch that."* → gone. Beat 2 ends "Everybody gets a fair game."
+  - *"I think we rotate our highlight sections each week to not
+    overwhelm. Drop Hole-In-One Pot this week or possibly move to bottom.
+    We can hit different highlight sections each week and rotate them
+    back."* → ONE dark highlight band per issue, rotated weekly from the
+    week of 2026-09-07: skill (Am I good enough to play?) → hio → skill…
+    Dial `insider_highlight` = skill | hio | none forces one.
+  - *"How a TGF Event works, not night"* → heading fixed in the template.
+  - Compete line, verbatim: *"Your own ball. A Team best ball game
+    included, so your foursome roots for you. Optional Individual Net &
+    Gross games. A TGF Handicap and flighting keeps it fair."* Kerry:
+    "We could have a rotation of items here too, and all three of the
+    How a TGF Event works" — not built yet; noted.
+  - Celebrate shape, verbatim: *"Austin grabbed drinks in the clubhouse.
+    San Antonio went to Max & Louie's for food and fellowship. It's the
+    best part, and it's yours if you want it."* → per-chapter sentence
+    from `events.fellowship_spot`: clubhouse / on-site / grill / patio →
+    "grabbed drinks in the clubhouse"; anything else → "went to <spot>
+    for food and fellowship". "Stick around after." dropped. The SA spot
+    must be ON the event row (set 3306 → Max & Louie's).
+  - Skill block: percentages, not "1 in N" (*"Wouldn't percentages be
+    simpler graphically and be able to show larger?"*); three tiles —
+    % single digits · lowest-to-highest handicap · % at 20 or higher — a
+    header "Am I good enough to play?" and the footer *"The other half of
+    us are in between."* + *"Check out our TGF Handicaps"* linked to
+    https://tgf-tracker.up.railway.app/member/handicaps. Computed live
+    from `handicap_distribution()` (members with an established index,
+    18-hole equivalents). Kerry's brief: *"big number, very limited text
+    graphic ... Don't want to just appeal to the high or mid-handicappers
+    either. It goes both ways. Low, scratch and plus handicappers need to
+    see there's others like them in our group too."*
 
 **v3 fixes (Kerry, off the Brevo preview 2026-09-02) — template rules:**
 - The Season-20 logo (69986bc3…png) is BLACK INK — header band must be

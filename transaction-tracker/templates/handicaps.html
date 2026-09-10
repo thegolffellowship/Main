@@ -22,6 +22,15 @@
     <meta name="apple-mobile-web-app-title" content="TGF Tracker">
     <style>
         /* ── Handicap-specific overrides ─────────────────────────── */
+        /* Chapter badge beside the name (Kerry 2026-09-10: "include chapter
+           badges next to player names like in other places") — same pills as
+           the cross-chapter boards: SA on chapter blue, A on Austin orange. */
+        .hcp-ch { display:inline-block; margin-left:6px; padding:2px 6px; border-radius:9999px;
+                  font-size:0.68em; font-weight:700; letter-spacing:0.5px; line-height:1.3;
+                  vertical-align:middle; }
+        .hcp-ch.sa { background:var(--chapter-sa, #D3DDE4); color:#1B1B1B; }
+        .hcp-ch.a  { background:var(--chapter-austin, #BF5700); color:#fff; }
+        .hcp-ch.other { background:#E5E7EB; color:#374151; }
         .hcp-index {
             font-weight: 700;
             font-size: 1.05em;
@@ -1079,6 +1088,13 @@
     // EVERYONE. Membership comes from customers.current_player_status.
     let hcpStatusFilter = "members";
     const HCP_MEMBER_STATUSES = new Set(["active_member", "member_plus"]);
+    function chapterBadge(ch) {
+        if (!ch) return '';
+        const cls = ch === 'Austin' ? 'a' : (ch === 'San Antonio' ? 'sa' : 'other');
+        const txt = ch === 'Austin' ? 'A' : (ch === 'San Antonio' ? 'SA' : esc(ch.slice(0, 2).toUpperCase()));
+        return `<span class="hcp-ch ${cls}" title="${esc(ch)}">${txt}</span>`;
+    }
+
     function renderTable() {
         const q = document.getElementById('hcp-search').value.trim().toLowerCase();
         let players = allPlayers.filter(p =>
@@ -1153,13 +1169,14 @@
             const canManage = role === 'admin' || role === 'manager';
             let playerCell;
             let actionCell = '';
+            const chBadge = chapterBadge(p.chapter);
             if (p.customer_name && !window.MEMBER_MODE) {
-                playerCell = `<a class="player-link" href="/customers?name=${encodeURIComponent(p.customer_name)}">${esc(displayName(p.player_name))}</a>`;
+                playerCell = `<a class="player-link" href="/customers?name=${encodeURIComponent(p.customer_name)}">${esc(displayName(p.player_name))}</a>${chBadge}`;
                 if (canManage) {
                     actionCell = `<span class="action-email" data-player-name="${esc(p.player_name)}"></span><span class="action-unlink" data-player-name="${esc(p.player_name)}" data-customer-name="${esc(p.customer_name)}"></span>`;
                 }
             } else {
-                playerCell = `<span class="player-unlinked">${esc(displayName(p.player_name))}</span>`;
+                playerCell = `<span class="player-unlinked">${esc(displayName(p.player_name))}</span>${chBadge}`;
                 if (canManage) {
                     actionCell = `<span class="action-buttons" data-player-name="${esc(p.player_name)}"></span>`;
                 }
@@ -1283,7 +1300,7 @@
                             <div class="hcp-mc-info">
                                 <div class="hcp-mc-name">${(p.customer_name && !window.MEMBER_MODE)
                                     ? `<a class="player-link" href="/customers?name=${encodeURIComponent(p.customer_name)}" onclick="event.stopPropagation()">${esc(displayName(p.player_name))}</a>`
-                                    : esc(displayName(p.player_name))}</div>
+                                    : esc(displayName(p.player_name))}${chapterBadge(p.chapter)}</div>
                                 <div class="hcp-mc-sub">${esc(sub)}</div>
                             </div>
                             <div class="hcp-mc-right">

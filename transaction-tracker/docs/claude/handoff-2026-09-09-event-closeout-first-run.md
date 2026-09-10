@@ -338,6 +338,15 @@ sounds...lonely", skins unexplained) — is folded into `compose()` and
 recorded in event-recaps.md. Dial `insider_autodraft` = draft (default)
 | review | off.
 
+Second review pass (v2.369.7), all Kerry's edits verbatim in
+event-recaps.md: first-timers = tag OR new member (8, not 7); "special
+tee" cut; ONE rotating highlight band (skill percentages this week, HIO
+pot next, dial `insider_highlight`); "How a TGF Event works"; Kerry's
+Compete line; Celebrate per chapter from `fellowship_spot` (3306 set to
+Max & Louie's); Handicaps page gained chapter badges beside names
+(`templates/handicaps.html`). Preview HTML sent for review; the Brevo
+revision (new draft, #17 deleted in the UI) waits on his word.
+
 ## 4. NOT done, and why
 
 - **Wednesday-AM TGF Insider auto-draft (mailbox #453).** BUILT in
