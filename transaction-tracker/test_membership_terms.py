@@ -153,6 +153,35 @@ check("the status sync upgrades him back to active_member", status == "active_me
       f"{status} {sync}")
 check("idempotent: no second comp term", again["opened"] == [], str(again))
 
+print("\n== 5. backfill is idempotent per ITEM, and the dedupe cleans the v2.368.0 boot ==")
+p = fresh_db()
+with db._connect(p) as conn:
+    conn.execute("INSERT INTO items VALUES (600, 7, '2025-09-10', 'TGF MEMBERSHIP', '$75.00')")
+    conn.execute("INSERT INTO items VALUES (601, 7, '2026-06-01', 'TGF MEMBERSHIP', '$75.00')")
+    conn.commit()
+    r1 = ms.backfill_memberships_from_items(conn)
+    r2 = ms.backfill_memberships_from_items(conn)
+    terms = [tuple(r) for r in conn.execute(
+        "SELECT started_at, expires_at, source_item_id FROM customer_memberships "
+        "WHERE customer_id = 7 ORDER BY started_at")]
+check("first backfill inserts 2 terms, the early renewal continued",
+      r1["inserted"] == 2 and terms == [("2025-09-10", "2026-09-10", 600),
+                                        ("2026-09-10", "2027-09-10", 601)], f"{r1} {terms}")
+check("second backfill inserts nothing", r2["inserted"] == 0 and len(terms) == 2, str(r2))
+with db._connect(p) as conn:
+    # Simulate the v2.368.0 boot: a duplicate term for item 601 at a later start.
+    conn.execute("INSERT INTO customer_memberships (customer_id, started_at, expires_at, "
+                 "source, source_item_id) VALUES (7, '2027-09-10', '2028-09-09', 'backfill', 601)")
+    conn.commit()
+    dry = ms.dedupe_terms_by_source_item(conn, apply=False)
+    res = ms.dedupe_terms_by_source_item(conn, apply=True)
+    left = conn.execute("SELECT COUNT(*) FROM customer_memberships WHERE customer_id = 7").fetchone()[0]
+    first = conn.execute("SELECT started_at FROM customer_memberships WHERE source_item_id = 601").fetchone()[0]
+check("dedupe finds the later duplicate", dry["duplicates_to_delete"] == 1
+      and dry["rows"][0]["started_at"] == "2027-09-10", str(dry))
+check("apply deletes it and keeps the first term", res["duplicates_deleted"] == 1
+      and left == 2 and first == "2026-09-10", f"{res} {left} {first}")
+
 print()
 if FAILURES:
     print(f"{len(FAILURES)} FAILED: {FAILURES}")

@@ -1283,3 +1283,13 @@ manager has no term covering today — continuing from the last expiry, or
 starting today. The finance lane reads those notes for the comp value.
 The 2026-09-09 historical import had demoted Robert (`expired_member`) by
 creating his lapsed 2025 term; the first sync after v2.368.0 restores him.
+
+**Backfill idempotency is per ITEM (v2.368.1).** The first v2.368.0 boot
+re-inserted ~60 past membership items as second terms at their continued
+start (the old `UNIQUE(customer_id, started_at)` guard stopped matching
+once the rule moved the date), and the terms sync briefly upgraded ~20
+lapsed members whose phantom term ran into 2027. `backfill_memberships_from_items`
+now skips any item that already has a term (`source_item_id`);
+`scoring-membership-terms-dedupe[:apply]` removes duplicates (first term
+per item wins) and re-runs the sync. Lesson for the class: an
+idempotency key must be the SOURCE identity, never a derived value.

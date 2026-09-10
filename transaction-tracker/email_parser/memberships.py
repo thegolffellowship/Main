@@ -228,6 +228,36 @@ def repair_early_renewal_terms(conn: sqlite3.Connection,
 
 # customer_memberships.source is CHECK-constrained to backfill/renewal/manual;
 # a comp term is a MANUAL term whose notes start with the marker below.
+def dedupe_terms_by_source_item(conn: sqlite3.Connection,
+                                apply: bool = False) -> dict:
+    """One item, one term. Delete every term after the FIRST (lowest id)
+    that shares a source_item_id — the duplicates the v2.368.0 boot
+    created when the backfill's date-keyed idempotency stopped matching
+    continued starts. Dry run by default; the status sync runs after an
+    apply so nobody keeps a status only the duplicate supported."""
+    ensure_membership_tables(conn)
+    dupes = conn.execute(
+        """SELECT m.id, m.customer_id, m.source_item_id, m.started_at, m.expires_at,
+                  m.source, m.created_at
+             FROM customer_memberships m
+            WHERE m.source_item_id IS NOT NULL
+              AND m.id > (SELECT MIN(id) FROM customer_memberships k
+                           WHERE k.source_item_id = m.source_item_id)
+            ORDER BY m.customer_id, m.id""").fetchall()
+    rows = [dict(r) for r in dupes]
+    if apply and rows:
+        conn.executemany("DELETE FROM customer_memberships WHERE id = ?",
+                         [(r["id"],) for r in rows])
+        conn.commit()
+        try:
+            sync_player_status_with_terms(conn)
+        except Exception:
+            logger.warning("dedupe_terms_by_source_item: status sync failed", exc_info=True)
+    return {"applied": bool(apply),
+            "duplicates_to_delete" if not apply else "duplicates_deleted": len(rows),
+            "rows": rows}
+
+
 MANAGER_COMP_SOURCE = "manual"
 MANAGER_COMP_MARK = "Manager comp"
 
@@ -338,6 +368,15 @@ def backfill_memberships_from_items(conn: sqlite3.Connection) -> dict:
             continue
         started_at = (r["order_date"] or "")[:10]
         if not started_at:
+            continue
+        # Idempotency is per ITEM, not per start date (v2.368.1): once the
+        # continuation rule moved an early renewal's start, the old
+        # UNIQUE(customer_id, started_at) guard no longer recognised the
+        # item and every boot re-inserted it as a fresh term (the first
+        # v2.368.0 boot opened ~60 duplicates at continued dates).
+        if conn.execute(
+                "SELECT 1 FROM customer_memberships WHERE source_item_id = ? LIMIT 1",
+                (r["id"],)).fetchone():
             continue
         started_at = continued_start(conn, r["customer_id"], started_at)
         expires_at = compute_expires_at(started_at)

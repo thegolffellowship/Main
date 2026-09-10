@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.368.0";
+window.TGF_VERSION = "2.368.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.368.1",
+    date: "2026-09-10",
+    changes: [
+      "Fix: the v2.368.0 boot re-inserted every past membership item as a second term at its CONTINUED start. The historical backfill's idempotency was UNIQUE(customer_id, started_at); once the continuation rule moved an early renewal's start date, the item no longer matched its own term and came back as new — including terms that had lapsed, which the sync then read as active and upgraded ~20 former members to active_member for an hour. Backfill idempotency is now per source item; scoring-membership-terms-dedupe[:apply] deletes the duplicates (one item, one term) and re-runs the status sync so those members return to expired_member before the nightly Brevo push.",
+    ],
+  },
   {
     version: "2.368.0",
     date: "2026-09-10",

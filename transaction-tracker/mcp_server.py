@@ -1767,6 +1767,7 @@ def _scoring_dispatch(url: str, extract: str):
       scoring-round-drop:<id>[|unpost][|apply]  delete one scoring card
       scoring-parse-warnings[:<frag>][|<status>][|<limit>]  read parse warnings
       scoring-parse-warning-dismiss:<id>[,<id>]|<note>  dismiss ruled-on warnings
+      scoring-membership-terms-dedupe[:apply]  one item, one term (delete dupes)
       scoring-membership-terms-repair[:apply]  early renewals continue at the
                                    365 date (dry run default)
       scoring-membership-sync      terms → status reconcile now (manager comps)
@@ -2957,6 +2958,17 @@ def _scoring_dispatch(url: str, extract: str):
             _done = [i for i in _ids if db.dismiss_parse_warning(i)]
             _audit("scoring-parse-warning-dismiss", f"ids={_done} note={_note.strip()}")
             return json.dumps({"dismissed": _done, "note": _note.strip()}, indent=2)
+        if cmd == "scoring-membership-terms-dedupe":
+            # "[apply]" — one item, one term: delete the duplicate terms the
+            # v2.368.0 boot created (backfill re-inserted continued starts).
+            from email_parser.memberships import dedupe_terms_by_source_item
+            _apply = (arg or "").strip().lower() == "apply"
+            with db._connect() as _c:
+                _res = dedupe_terms_by_source_item(_c, apply=_apply)
+            if _apply:
+                _audit("scoring-membership-terms-dedupe",
+                       f"duplicates_deleted={_res.get('duplicates_deleted')}")
+            return json.dumps(_res, indent=2, default=str)
         if cmd == "scoring-membership-terms-repair":
             # "[apply]" — move early-renewal terms to start at the previous
             # term's expiry (Kerry 2026-09-10 continuation rule). Dry run
