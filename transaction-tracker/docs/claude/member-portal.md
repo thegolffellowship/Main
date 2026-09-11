@@ -633,12 +633,14 @@ team(s) (position, members, recorded total, purse; team-net blue) and
 every proxy winner (CTP / Longest Putt / HIO; teal) — so the default
 view carries the games that don't live in a player row ("the OVERALL
 board shows everything").
-v2.383.0: every column SORTS (tap to sort, tap again to flip; Pts/Won
-open high-first; blanks sink); the # column is the net-standings rank
-and travels with the player. Row expansion became ONE delegated click
-handler on the event body (`evlbWireEvent`) so sorted re-renders keep
-tap-for-scorecard; the overall row template is module-level
-(`evlbOvrRowHtml`) shared by initial paint and re-sorts.
+v2.383.0/.1: every column SORTS (tap to sort, tap again to flip;
+Pts/Won open high-first; blanks sink), and the # column RE-RANKS
+against the sorted column (Kerry: "re-rank based on which column is
+tapped") — T# on tied values, blank rank for players with no value
+there. Row expansion became ONE delegated click handler on the event
+body (`evlbWireEvent`) so sorted re-renders keep tap-for-scorecard;
+the overall row template is module-level (`evlbOvrRowHtml`) shared by
+initial paint and re-sorts.
 
 **Team Net scoring — LEARNED FROM GG (parity bridge, 2026-09-11):**
 `scoring-teamnet-parity:<event>|<gg v2tournaments url>` computes every
