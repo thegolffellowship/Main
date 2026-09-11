@@ -289,8 +289,9 @@ with db._connect(p) as conn:
     conn.commit()
 rep = db.find_customer_duplicates(db_path=p)
 keys = {g["key"] for g in rep["same_email"]} | {g["key"] for g in rep["same_phone"]} | {g["key"] for g in rep["same_name"]}
-check("email + phone doors find Chris/Christopher Espinosa; the two Luke Youngs (13 and 803) and the Sam Joneses by name",
-      "chris@x.com" in keys and "2105550101" in keys and "Sam Jones" in keys and "Luke Youngs" in keys, str(keys))
+check("email door finds Chris/Christopher Espinosa (the phone door sees the same pair, reported once); "
+      "the two Luke Youngs (13 and 803) and the Sam Joneses by name",
+      "chris@x.com" in keys and "2105550101" not in keys and "Sam Jones" in keys and "Luke Youngs" in keys, str(keys))
 esp = next(g for g in rep["same_email"] if g["key"] == "chris@x.com")
 check("suggest_keep = the active member with the items", esp["suggest_keep"] == 802
       and {pr["customer_id"] for pr in esp["profiles"]} == {801, 802}, str(esp))
