@@ -12849,11 +12849,14 @@ def team_net_parity(event_name: str, gg_url: str = "",
                             "total": sum(per_hole_best.values())})
                     out_schemes[key] = totals
 
-    gg_totals = []
+    gg_totals, gg_players = [], []
     if gg_url:
         try:
             from golf_genius_sync import (fetch_public_page,
-                                          parse_page_structure)
+                                          parse_page_structure,
+                                          parse_tournament_aggregates,
+                                          parse_scorecard_details,
+                                          _unwrap_js_strings)
             page = fetch_public_page(gg_url)
             parsed = parse_page_structure(page["html"], gg_url)
             for tbl in parsed.get("tables") or []:
@@ -12864,8 +12867,26 @@ def team_net_parity(event_name: str, gg_url: str = "",
                             gg_totals.append({"pos": row[0],
                                               "team": row[1],
                                               "total": int(m_.group(1))})
+            # the details fragments are the GROUND TRUTH: each player's
+            # TEAM-game playing handicap + per-hole dots as GG allocated
+            # them — read the rule straight off instead of inferring it
+            from urllib.parse import urlparse as _up
+            base = f"https://{_up(gg_url).netloc}"
+            for agg in parse_tournament_aggregates(page["html"])[:12]:
+                fp = fetch_public_page(
+                    f"{base}/tournaments2/details/{agg}", xhr=True)
+                frag = _unwrap_js_strings(fp["html"]) or fp["html"]
+                det = parse_scorecard_details(frag)
+                for pl in det.get("players") or []:
+                    gg_players.append({
+                        "player": pl.get("player_name"),
+                        "gg_team_ph": pl.get("playing_handicap"),
+                        "dots": {h: (v or {}).get("dots")
+                                 for h, v in (pl.get("holes") or {}).items()
+                                 if (v or {}).get("dots")}})
         except Exception as e:
-            gg_totals = [{"error": str(e)}]
+            gg_totals = gg_totals or [{"error": str(e)}]
+            gg_players = [{"error": str(e)}]
 
     # score each scheme: how many teams' totals equal GG's (matched by
     # surname overlap)
@@ -12891,6 +12912,10 @@ def team_net_parity(event_name: str, gg_url: str = "",
                        if verdict.get(k, "").startswith(f"{best_n}/")}
     return {"event": event_name, "min_field_ph": min_field,
             "schemes": out_schemes, "gg_board": gg_totals,
+            "gg_players": gg_players,
+            "our_ph": {m["player_name"]: ph_by_rid.get(m["scoring_round_id"])
+                       for t in teams for m in t["players"]
+                       if m["scoring_round_id"] in ph_by_rid},
             "verdict": verdict}
 
 
