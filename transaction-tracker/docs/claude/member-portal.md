@@ -529,3 +529,14 @@ cards), and everyone NOT in skins listed below with their hole
 scores. (7) POINTS tab is labeled MVP/Points. (8) Tables compress
 LEFT (width:auto) instead of filling the screen. Pilot dial expanded
 per Kerry: s9.22, a9.22, s9.21, a9.21, s18.10.
+
+**Events leaderboard iteration 3 (v2.378.2, Kerry 2026-09-11):**
+hole columns come only from holes actually PLAYED (GG cards carry
+empty rows for the unplayed nine — a front-9 event was rendering
+1-18); the team card and skins chart adopt THE card standard's metrics
+(2px/6px cells, 2em min-width, #e2e8f0 grid, 110px name column) so
+they column-align with the expanded player cards; the ball(s) that
+COUNTED for the team best-ball score are highlighted (green fill —
+circles stay reserved for the standard's under-par mark and the skins
+chart's winning skins); the winning team's row is highlighted in the
+team list; the nine's total column reads OUT/IN per the side played.

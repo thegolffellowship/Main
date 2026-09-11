@@ -13135,7 +13135,11 @@ def get_event_leaderboard(event_name: str,
     # see the team net scorecard like on Golf Genius") — grouped by
     # scoring_rounds.team_num; total = best NET ball per hole summed;
     # GG's recorded purse attaches by member-surname overlap ──
-    hole_cols = sorted({h[0] for hs in cards.values() for h in hs})
+    # only holes actually PLAYED (GG cards can carry empty rows for the
+    # unplayed nine — a front-9 event must not render 10-18, Kerry
+    # 2026-09-11)
+    hole_cols = sorted({h[0] for hs in cards.values() for h in hs
+                        if h[1] is not None})
 
     def _player_holes(rid):
         return {h[0]: (h[1], h[2]) for h in cards.get(rid, [])}

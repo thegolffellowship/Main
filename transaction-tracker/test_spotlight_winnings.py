@@ -324,7 +324,8 @@ VALUES (101, 1, 'BUYER, Low', 50, 5, 40, 35),
 -- hole 11 (Low 5, High 5-1dot, Mid 4, Guest 6)
 INSERT INTO scoring_holes (scoring_round_id, hole_number, strokes, strokes_received) VALUES
  (101,10,4,0),(101,11,5,0),(102,10,6,1),(102,11,5,1),
- (103,10,5,0),(103,11,4,0),(104,10,5,0),(104,11,6,0);
+ (103,10,5,0),(103,11,4,0),(104,10,5,0),(104,11,6,0),
+ (101,12,NULL,0);  -- GG's empty row for an unplayed hole: must NOT become a column
 INSERT INTO gg_game_flights (event_id, gg_tournament_id, game, flight_label, customer_id, player_name)
 VALUES (50, 't1', 'individual_net', 'Flight 1 (HCP <12.0)', 1, 'BUYER, Low'),
        (50, 't2', 'individual_net', 'Flight 2 (HCP 12.0+)', 2, 'BUYER, High'),

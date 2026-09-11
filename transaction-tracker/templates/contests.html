@@ -294,12 +294,21 @@
             padding: 2px 8px; font-size: 10px; font-weight: 700; margin-left: 6px; }
         .evlb-plr { cursor: pointer; }
         .evlb-card-row > td { background: #FAF9F7; }
-        .evlb-holes { border-collapse: collapse; font-size: 11.5px; margin: 6px 0; }
-        .evlb-holes td, .evlb-holes th { border: 1px solid #E5E1DA; padding: 2px 6px;
-            text-align: center; min-width: 26px; }
-        .evlb-holes td.nm { text-align: left; white-space: nowrap; font-weight: 600; }
+        /* hole grids share THE card standard's metrics (tgf-standards
+           TGF_CARD_STYLE: 2px 6px cells, 2em min-width, #e2e8f0 grid,
+           0.8rem) so they column-align with the expanded player cards */
+        .evlb-holes { border-collapse: collapse; font-size: 0.8rem; margin: 6px 0; }
+        .evlb-holes td, .evlb-holes th { border: 1px solid #e2e8f0; padding: 2px 6px;
+            text-align: center; min-width: 2em; white-space: nowrap; }
+        .evlb-holes th { background: #1B1B1B; color: #fff; font-weight: 700; }
+        .evlb-holes td.nm, .evlb-holes th.nm { text-align: left; min-width: 110px;
+            font-weight: 600; color: #475569; }
+        .evlb-holes th.nm { color: #fff; }
         .evlb-holes tr.mute td { color: #9CA3AF; }
-        .evlb-holes tr.teamrow td { background: #F3F1EC; font-weight: 700; }
+        .evlb-holes tr.teamrow td { background: #F3F1EC; font-weight: 700;
+            border-top: 2px solid #1B1B1B; }
+        /* the counting ball(s) behind the team best-ball score */
+        .evlb-holes td.count { background: #DCFCE7; font-weight: 700; }
         /* GG-style circled winning score (skins / counting team ball) */
         .evlb-circ { display: inline-block; min-width: 17px; line-height: 17px;
             border: 1.5px solid #1B1B1B; border-radius: 50%; font-weight: 700; }
@@ -309,6 +318,8 @@
         details.evlb-team > summary { list-style: none; cursor: pointer; display: flex;
             align-items: center; gap: 10px; padding: 8px 10px; font-size: 13px; }
         details.evlb-team > summary::-webkit-details-marker { display: none; }
+        details.evlb-team.win > summary { background: #E9F7EE; }
+        details.evlb-team.win > summary .tm { font-weight: 700; }
         .evlb-team .tchev { flex: none; color: #9CA3AF; font-size: 10px; transition: transform .15s; }
         details.evlb-team[open] > summary .tchev { transform: rotate(90deg); }
         .evlb-team .tm { flex: 1; min-width: 0; }
@@ -2675,7 +2686,8 @@
         const teamHtml = (d.teams || []).length
             ? d.teams.map((t, ti) => {
                 const names = t.players.map(p => escapeHtml(p.player_name)).join(" &middot; ");
-                return `<details class="evlb-team" data-ti="${ti}">` +
+                const win = /^T?1$/.test(t.position || "");
+                return `<details class="evlb-team${win ? " win" : ""}" data-ti="${ti}">` +
                     `<summary><span class="tchev">&#9654;</span>` +
                     `<span style="min-width:26px;font-weight:700;">${escapeHtml(t.position || "")}</span>` +
                     `<span class="tm">${names}</span>` +
@@ -2714,11 +2726,16 @@
                 `<div class="evlb-panel" data-panel="${k}"${k === "net" ? "" : " hidden"}>${panels[k]}</div>`).join("") +
             `<p style="font-size:11px;color:#9CA3AF;margin:8px 0 0;">Tap a player for their scorecard, or a team for its best-ball card. &#10003; IN = bought into that game &middot; non-buyers are placed in the flight their handicap would have flighted them.</p>`;
     }
-    // GG-style team net card: each member's NET per hole, the counting
-    // (lowest) ball circled, TEAM best-ball row + total beneath
+    // Team net card in THE card standard's family: each member's NET
+    // per hole, the ball(s) that COUNTED for the team score highlighted
+    // (Kerry 2026-09-11: "Highlight the player scores that were used
+    // for the Team net score"), TEAM best-ball row beneath. Columns
+    // share the standard's metrics so the expanded player card beneath
+    // lines up.
     function evlbTeamCard(d, t) {
         const cols = d.hole_cols || [];
         if (!cols.length) return '<p style="color:var(--text-muted);">No hole data.</p>';
+        const nineLbl = cols.length > 9 ? "TOT" : (cols[0] >= 10 ? "IN" : "OUT");
         const netOf = (rid, n) => {
             const h = (d.cards[String(rid)] || []).find(x => x[0] === n);
             return (h && h[1] != null) ? h[1] - (h[2] || 0) : null;
@@ -2733,15 +2750,16 @@
             cols.map(n => {
                 const v = netOf(p.scoring_round_id, n);
                 if (v == null) return "<td></td>";
-                return `<td>${v === mins[n] ? `<span class="evlb-circ">${v}</span>` : v}</td>`;
+                return `<td${v === mins[n] ? ' class="count"' : ""}>${v}</td>`;
             }).join("") + `<td></td></tr>`).join("");
         const teamTotal = cols.reduce((s, n) => s + (mins[n] ?? 0), 0);
         const teamRow = `<tr class="teamrow"><td class="nm">TEAM (best ball)</td>` +
             cols.map(n => `<td>${mins[n] ?? ""}</td>`).join("") +
             `<td>${t.total_net ?? teamTotal}</td></tr>`;
         return `<div class="evlb-scroll"><table class="evlb-holes"><thead>` +
-            `<tr><th class="nm">Net scores</th>${cols.map(n => `<th>${n}</th>`).join("")}<th>Tot</th></tr>` +
-            `</thead><tbody>${rows}${teamRow}</tbody></table></div>`;
+            `<tr><th class="nm">NET SCORES</th>${cols.map(n => `<th>${n}</th>`).join("")}<th>${nineLbl}</th></tr>` +
+            `</thead><tbody>${rows}${teamRow}</tbody></table>` +
+            `<span style="font-size:10.5px;color:#9CA3AF;">Highlighted = the ball that counted for the team score</span></div>`;
     }
     function evlbWireEvent(body) {
         body.querySelectorAll(".evlb-subtab").forEach(btn =>
