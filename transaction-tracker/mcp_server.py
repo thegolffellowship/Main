@@ -2948,6 +2948,21 @@ def _scoring_dispatch(url: str, extract: str):
                                "acct_category": (_cat if _cat and
                                                  _cat != "-" else None),
                                "saved": True})
+        if cmd == "scoring-expense-promote":
+            # "<expense_id>" — promote an expense_transactions row into
+            # the acct_transactions ledger via the standard
+            # promote_expense_to_ledger path (idempotent: an already-
+            # promoted row returns skipped). Exists because the
+            # classifier occasionally records an incoming payment
+            # without promoting it (Zelle arrivals under raw bank
+            # names, and one-off Venmo rows), leaving the money linked
+            # to an event but invisible to the ledger-driven event
+            # financials. Entity defaults to TGF. Audited.
+            _xid = int(arg.strip())
+            res = db.promote_expense_to_ledger(_xid, None, "TGF")
+            db.log_agent_action("mcp-claude", "scoring-expense-promote",
+                                f"expense {_xid} -> {res}")
+            return json.dumps(res, indent=2)
         if cmd == "scoring-setting-set":
             # "<key>|<value>" — write an app_settings dial ("stored as a
             # setting is our standard for everything" — Kerry).
