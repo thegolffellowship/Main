@@ -2866,20 +2866,31 @@ def _scoring_dispatch(url: str, extract: str):
             from email_parser.leads import check_new_leads
             return json.dumps(check_new_leads(), indent=2, default=str)
         if cmd == "scoring-expense-event":
-            # "<expense_id>|<event_id or none>" — re-point an
-            # expense_transactions row at the right event (the Venmo
-            # classifier guesses an event from context and gets one-off
-            # payments wrong: LSC cup money landing on whatever event
-            # the payer last played). event_name follows event_id so the
-            # expense review UI and event financials agree. Audited.
-            _p = arg.split("|", 1)
+            # "<expense_id>|<event_id or none>[|<acct_category or ->]" —
+            # re-point an expense_transactions row at the right event (the
+            # Venmo classifier guesses an event from context and gets
+            # one-off payments wrong: LSC cup money landing on whatever
+            # event the payer last played). event_name follows event_id so
+            # the expense review UI and event financials agree. When the
+            # expense row was promoted into the ledger
+            # (acct_transaction_id), the SAME event_name cascades onto
+            # that acct_transactions row — get_event_financial_summary
+            # aggregates the ledger by event_name + category, so without
+            # the cascade the money is linked but invisible to the event's
+            # Financial tab. A third segment sets the acct row's category
+            # too ('addon' puts venmo income in external revenue; '-' or
+            # absent leaves category untouched). Audited.
+            _p = arg.split("|", 2)
             if len(_p) < 2 or not _p[0].strip():
                 return json.dumps({"error":
-                                   "need <expense_id>|<event_id|none>"})
+                                   "need <expense_id>|<event_id|none>"
+                                   "[|<category|->]"})
+            _cat = (_p[2].strip() if len(_p) > 2 else "")
             _eid = _p[1].strip().lower()
             with db._connect() as conn:
                 row = conn.execute(
-                    "SELECT id, merchant, amount, event_id, event_name "
+                    "SELECT id, merchant, amount, event_id, event_name, "
+                    "acct_transaction_id "
                     "FROM expense_transactions WHERE id = ?",
                     (int(_p[0].strip()),)).fetchone()
                 if not row:
@@ -2899,6 +2910,21 @@ def _scoring_dispatch(url: str, extract: str):
                     "UPDATE expense_transactions "
                     "SET event_id = ?, event_name = ? WHERE id = ?",
                     (new_id, new_name, row["id"]))
+                acct_id = row["acct_transaction_id"]
+                acct_updated = False
+                if acct_id:
+                    if _cat and _cat != "-":
+                        conn.execute(
+                            "UPDATE acct_transactions "
+                            "SET event_name = ?, category = ? "
+                            "WHERE id = ?",
+                            (new_name, _cat, acct_id))
+                    else:
+                        conn.execute(
+                            "UPDATE acct_transactions "
+                            "SET event_name = ? WHERE id = ?",
+                            (new_name, acct_id))
+                    acct_updated = True
                 conn.commit()
             db.log_agent_action(
                 "mcp-claude", "scoring-expense-event",
@@ -2911,6 +2937,10 @@ def _scoring_dispatch(url: str, extract: str):
                                "old_event_id": row["event_id"],
                                "new_event_id": new_id,
                                "new_event_name": new_name,
+                               "acct_transaction_id": acct_id,
+                               "acct_updated": acct_updated,
+                               "acct_category": (_cat if _cat and
+                                                 _cat != "-" else None),
                                "saved": True})
         if cmd == "scoring-setting-set":
             # "<key>|<value>" — write an app_settings dial ("stored as a

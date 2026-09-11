@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.371.3";
+window.TGF_VERSION = "2.371.4";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.371.4",
+    date: "2026-09-11",
+    changes: [
+      "scoring-expense-event now cascades to the ledger (Kerry: 'the events page for these need to account for the deposits'): when the re-pointed expense row was promoted into acct_transactions, the same event_name is written onto that ledger row, and an optional third segment sets its category ('addon' = external revenue; '-' leaves it). get_event_financial_summary aggregates the LEDGER by event_name + category, so the v2.371.2 re-point linked the Lone Star Cup deposits to the event without making them visible to its Financial tab — this closes that gap for the 24 cup payments and any future outside-the-store money.",
+    ],
+  },
   {
     version: "2.371.3",
     date: "2026-09-11",
