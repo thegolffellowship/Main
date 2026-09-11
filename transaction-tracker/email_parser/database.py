@@ -12727,6 +12727,341 @@ def _entry_to_pot_cents() -> int:
         return 4000
 
 
+# ═══════════════════════════════════════════════════════════════════
+#  EVENTS LEADERBOARD (Kerry directed 2026-09-11, improvements lane)
+#
+#  A per-event results surface for the LEADERBOARD page: list of played
+#  events (newest first, chapter-filterable), each expanding to its
+#  games in the ratified leaderboard IA (Team · Net · Gross · Proxies,
+#  side-games.md "Leaderboard IA"), with the FULL-FIELD board and the
+#  buy-in money game COMBINED into one table — every player's score,
+#  buyers highlighted, money winners badged (the season-boards pattern)
+#  — condensing GG's stacked game lists into one view. Player rows
+#  drill down to the hole-by-hole card (/api/scoring/scorecard, already
+#  member-tier).
+#
+#  ADMIN-ONLY pilot until Kerry approves member exposure (rule 3b).
+#  Which events appear is a dial: events_leaderboard_events (JSON list
+#  of event-code prefixes; empty list = every event with scorecards).
+#  PII-free by design (names, scores, dollars only) so the eventual
+#  member flip is a role-string change, not a data audit.
+# ═══════════════════════════════════════════════════════════════════
+
+_EVENTS_LEADERBOARD_SEED = ["s9.22", "a9.22"]   # this past Tuesday's pilot
+
+
+def _events_leaderboard_codes(db_path=None) -> list[str]:
+    try:
+        raw = get_app_setting("events_leaderboard_events", db_path=db_path)
+        if raw is not None and raw.strip() != "":
+            parsed = json.loads(raw)
+            if isinstance(parsed, list):
+                return [str(c) for c in parsed]
+    except Exception as e:
+        logger.warning("events_leaderboard_events unreadable: %s", e)
+    return list(_EVENTS_LEADERBOARD_SEED)
+
+
+def get_events_leaderboard(chapter: str | None = None,
+                           year: str | None = None,
+                           db_path: str | Path = DB_PATH) -> dict:
+    """The EVENTS tab's list: played events (have scorecards), newest
+    first. chapter filters exactly; year is the future year-selector
+    hook (matches event_date's year)."""
+    codes = _events_leaderboard_codes(db_path)
+    with _connect(db_path) as conn:
+        _ensure_scoring_tables(conn)
+        rows = [dict(r) for r in conn.execute(
+            """SELECT e.id, e.item_name, e.event_date, e.course, e.chapter,
+                      COUNT(DISTINCT COALESCE(sr.customer_id,
+                                              'n:' || sr.player_name)) AS field
+               FROM events e
+               JOIN scoring_rounds sr ON sr.event_id = e.id
+               WHERE COALESCE(sr.source, 'gg') NOT LIKE 'gg_history%'
+               GROUP BY e.id
+               ORDER BY e.event_date DESC, e.id DESC""")]
+        if codes:
+            low = [c.strip().lower() for c in codes if c and c.strip()]
+            rows = [r for r in rows
+                    if any((r["item_name"] or "").lower().startswith(c)
+                           for c in low)]
+        if chapter:
+            rows = [r for r in rows
+                    if (r["chapter"] or "").lower() == chapter.lower()]
+        years = sorted({str(r["event_date"] or "")[:4]
+                        for r in rows if r["event_date"]}, reverse=True)
+        if year:
+            rows = [r for r in rows
+                    if str(r["event_date"] or "").startswith(str(year))]
+        for r in rows:
+            pot = conn.execute(
+                """SELECT ROUND(COALESCE(SUM(p.amount), 0), 2) AS t
+                   FROM tgf_payouts p JOIN tgf_events te ON te.id = p.event_id
+                   WHERE LOWER(TRIM(te.code)) = ?""",
+                ((r["item_name"] or "").strip().lower(),)).fetchone()
+            r["pot"] = pot["t"] if pot else 0
+    return {"events": rows, "years": years,
+            "pilot": bool(codes), "pilot_codes": codes}
+
+
+def get_event_leaderboard(event_name: str,
+                          db_path: str | Path = DB_PATH) -> dict | None:
+    """One event's combined boards for the EVENTS leaderboard tab."""
+    with _connect(db_path) as conn:
+        _ensure_scoring_tables(conn)
+        ev = conn.execute(
+            """SELECT id, item_name, event_date, course, chapter, format
+               FROM events WHERE LOWER(item_name) = ?""",
+            ((event_name or "").strip().lower(),)).fetchone()
+        if not ev:
+            return None
+        ev = dict(ev)
+        ev["holes"] = _event_holes_type(ev["item_name"], ev["format"])
+
+        # one merged row per player: scoring_rounds carries one row per
+        # imported GG board (the ALL Gross row has net/hcp NULL) — same
+        # merge rule as the shadow-game engine (v2.188.9)
+        players: dict = {}
+        order: list = []
+        for sr in conn.execute(
+                """SELECT id, customer_id, player_name, playing_handicap,
+                          gross, net
+                   FROM scoring_rounds
+                   WHERE event_id = ?
+                     AND COALESCE(source, 'gg') NOT LIKE 'gg_history%'
+                   ORDER BY id""", (ev["id"],)):
+            k = (int(sr["customer_id"]) if sr["customer_id"] is not None
+                 else "n:" + (sr["player_name"] or "").strip().lower())
+            if k not in players:
+                players[k] = {"customer_id": sr["customer_id"],
+                              "player_name": sr["player_name"],
+                              "scoring_round_id": sr["id"],
+                              "gross": None, "net": None, "hcp": None}
+                order.append(k)
+            p = players[k]
+            for src, dst in (("gross", "gross"), ("net", "net"),
+                             ("playing_handicap", "hcp")):
+                if p[dst] is None and sr[src] is not None:
+                    p[dst] = sr[src]
+            if sr["net"] is not None:
+                p["scoring_round_id"] = sr["id"]   # net row carries dots
+
+        # bundle buyers (Games-tab eligibility rules)
+        net_buyers = set(_event_game_buyers(
+            conn, ev["item_name"], "NET")["buyers"].keys())
+        gross_buyers = set(_event_game_buyers(
+            conn, ev["item_name"], "GROSS")["buyers"].keys())
+
+        # per-game flight membership (GG labels only — never derived)
+        flights: dict = {}
+        for fr in conn.execute(
+                """SELECT game, flight_label, customer_id
+                   FROM gg_game_flights WHERE event_id = ?""", (ev["id"],)):
+            if fr["customer_id"] is not None:
+                flights.setdefault(fr["game"], {})[
+                    int(fr["customer_id"])] = fr["flight_label"]
+
+        # recorded money, per customer, with the shared friendly bits
+        won: dict = {}
+        for pr in conn.execute(
+                """SELECT p.customer_id, p.category, p.amount,
+                          LTRIM(REPLACE(COALESCE(p.description, ''),
+                                        'auto: ', '')) AS d
+                   FROM tgf_payouts p
+                   JOIN tgf_events te ON te.id = p.event_id
+                   WHERE LOWER(TRIM(te.code)) = ?
+                   ORDER BY p.amount DESC""",
+                ((ev["item_name"] or "").strip().lower(),)):
+            if pr["customer_id"] is None:
+                continue
+            cat = pr["category"] or "other"
+            label = _PAYOUT_CAT_LABELS.get(cat) or cat.replace(
+                "_", " ").title()
+            won.setdefault(int(pr["customer_id"]), []).append({
+                "category": cat, "label": label,
+                "cents": round((pr["amount"] or 0) * 100),
+                "detail": " · ".join(_payout_detail_bits(cat, pr["d"]))})
+
+        # GG-recorded team + proxy boards
+        team_rows, proxies, hio_rows = [], [], []
+        for gr in conn.execute(
+                """SELECT game, game_label, player_name, is_team, position,
+                          detail, purse, customer_id
+                   FROM gg_game_results WHERE event_id = ?
+                   ORDER BY game, id""", (ev["id"],)):
+            g = dict(gr)
+            if g["game"] == "team_net" and g["is_team"]:
+                team_rows.append({"position": g["position"],
+                                  "team": g["player_name"],
+                                  "purse": g["purse"]})
+            elif g["game"] in ("ctp", "longest_putt"):
+                proxies.append({"game": g["game"],
+                                "label": g["game_label"] or (
+                                    "Longest Putt" if g["game"] ==
+                                    "longest_putt" else "Closest to Pin"),
+                                "player": g["player_name"],
+                                "detail": g["detail"],
+                                "purse": g["purse"]})
+            elif g["game"] == "hio":
+                hio_rows.append({"player": g["player_name"],
+                                 "detail": g["detail"],
+                                 "purse": g["purse"]})
+
+        # stableford points, both tables, from the imported holes through
+        # the formula layer — one bulk read, keyed by scoring_round_id
+        # (the POINTS board = MVP merged with the points games, Kerry
+        # 2026-09-11: "MVP with Points")
+        pts: dict = {}
+        try:
+            formulas = get_scoring_formulas(db_path)
+            for hr in conn.execute(
+                    """SELECT sr.id AS rid, sh.strokes, sh.strokes_received,
+                              cth.par
+                       FROM scoring_rounds sr
+                       JOIN scoring_holes sh ON sh.scoring_round_id = sr.id
+                       LEFT JOIN course_tee_holes cth
+                         ON cth.tee_id = sr.tee_id
+                        AND cth.hole_number = sh.hole_number
+                       WHERE sr.event_id = ?
+                         AND COALESCE(sr.source, 'gg') NOT LIKE 'gg_history%'""",
+                    (ev["id"],)):
+                d = compute_hole_derivations(hr["par"], hr["strokes"],
+                                             hr["strokes_received"] or 0,
+                                             formulas)
+                a = pts.setdefault(hr["rid"], {"net": 0, "gross": 0})
+                if d.get("stableford_net") is not None:
+                    a["net"] += d["stableford_net"]
+                if d.get("stableford_gross") is not None:
+                    a["gross"] += d["stableford_gross"]
+        except Exception:
+            logger.warning("event leaderboard points failed", exc_info=True)
+
+    def _won_cats(cid, cats):
+        return [w for w in won.get(cid, []) if w["category"] in cats]
+
+    def _row(p, buyer_set, won_cats):
+        cid = p["customer_id"]
+        cid = int(cid) if cid is not None else None
+        return {
+            "player_name": p["player_name"],
+            "customer_id": cid,
+            "scoring_round_id": p["scoring_round_id"],
+            "gross": p["gross"], "net": p["net"], "hcp": p["hcp"],
+            "buyer": cid in buyer_set if cid is not None else False,
+            "won": _won_cats(cid, won_cats) if cid is not None else [],
+        }
+
+    def _flight_sections(rows, fmap):
+        """Flight-SECTIONED board (Kerry 2026-09-11): buyers keep their
+        GG flight label (gg_game_flights, never derived); every other
+        player is PLACED into the flight their handicap would have put
+        them in ("Place non-flighted members... in the flights they
+        would have been in") — the boundaries come from the labeled
+        members' playing handicaps, midpoint between adjacent flights,
+        never hardcoded. Placed rows carry assigned=True so the UI can
+        show a dashed pill."""
+        by_label: dict = {}
+        for r in rows:
+            lab = (fmap.get(r["customer_id"])
+                   if r["customer_id"] is not None else None)
+            if lab:
+                by_label.setdefault(lab, []).append(r["hcp"])
+        if not by_label:
+            return [{"label": None, "rows": rows}]
+        stats = []
+        for lab, hcps in by_label.items():
+            known = [h for h in hcps if h is not None]
+            stats.append((lab,
+                          (sum(known) / len(known)) if known else 0.0,
+                          min(known) if known else 0.0,
+                          max(known) if known else 0.0))
+        stats.sort(key=lambda s: s[1])            # low flight first
+        bounds = [(a[3] + b[2]) / 2.0 for a, b in zip(stats, stats[1:])]
+        out = [{"label": s[0], "rows": []} for s in stats]
+        overflow = {"label": "UNFLIGHTED", "rows": []}
+        for r in rows:
+            cid = r["customer_id"]
+            lab = fmap.get(cid) if cid is not None else None
+            if lab:
+                idx = next(i for i, s in enumerate(stats) if s[0] == lab)
+                out[idx]["rows"].append(r)
+                continue
+            if r["hcp"] is None:
+                overflow["rows"].append(dict(r, assigned=True))
+                continue
+            idx = 0
+            for i, b in enumerate(bounds):
+                if r["hcp"] > b:
+                    idx = i + 1
+            out[idx]["rows"].append(dict(r, assigned=True))
+        if overflow["rows"]:
+            out.append(overflow)
+        return out
+
+    plist = [players[k] for k in order]
+
+    # NET = All Net merged with Individual Net (whole field, buyers
+    # highlighted), flight-sectioned per the event
+    net_rows = [_row(p, net_buyers, ("individual_net",)) for p in plist]
+    net_rows.sort(key=lambda r: (r["net"] is None, r["net"] or 0,
+                                 r["gross"] or 0))
+    net_board = _flight_sections(net_rows, flights.get("individual_net", {}))
+
+    # GROSS = All Gross merged with Individual Gross, flight-sectioned
+    gross_rows = [_row(p, gross_buyers, ("individual_gross",))
+                  for p in plist]
+    gross_rows.sort(key=lambda r: (r["gross"] is None, r["gross"] or 0))
+    gross_board = _flight_sections(gross_rows,
+                                   flights.get("individual_gross", {}))
+
+    # SKINS = bought-in players only, in their skins flights, with the
+    # skins they won (Kerry: "only needs to show the players bought in
+    # and the flights")
+    skins_rows = [dict(_row(p, gross_buyers, ("skins",)))
+                  for p in plist
+                  if p["customer_id"] is not None
+                  and int(p["customer_id"]) in gross_buyers]
+    skins_rows.sort(key=lambda r: (-(sum(w["cents"] for w in r["won"])),
+                                   (r["player_name"] or "").lower()))
+    skins_board = _flight_sections(skins_rows, flights.get("skins", {}))
+
+    # POINTS = the points games merged with MVP: net + gross stableford
+    # for the whole field, MVP-eligible (NET-bundle) buyers highlighted,
+    # City/TGF MVP money badged
+    points_rows = []
+    for p in plist:
+        cid = int(p["customer_id"]) if p["customer_id"] is not None else None
+        a = pts.get(p["scoring_round_id"]) or {}
+        points_rows.append({
+            "player_name": p["player_name"], "customer_id": cid,
+            "scoring_round_id": p["scoring_round_id"],
+            "net_pts": a.get("net"), "gross_pts": a.get("gross"),
+            "buyer": cid in net_buyers if cid is not None else False,
+            "won": _won_cats(cid, ("mvp", "tgf_mvp")) if cid is not None
+                   else [],
+        })
+    points_rows.sort(key=lambda r: (r["net_pts"] is None,
+                                    -(r["net_pts"] or 0)))
+
+    return {
+        "event": {"name": ev["item_name"], "date": ev["event_date"],
+                  "course": ev["course"], "chapter": ev["chapter"],
+                  "holes": ev["holes"]},
+        "field": len(plist),
+        "pot": round(sum(w["cents"] for ws in won.values()
+                         for w in ws) / 100.0, 2),
+        "net_board": net_board,
+        "gross_board": gross_board,
+        "skins_board": skins_board,
+        "points_board": points_rows,
+        "team_board": team_rows,
+        "proxies": proxies,
+        "hio": hio_rows,
+        "n_net_buyers": len(net_buyers),
+        "n_gross_buyers": len(gross_buyers),
+    }
+
+
 # Spotlight shares the expensive, customer-INDEPENDENT reads (each
 # race's live board, the cup and LSC projections) across profile views
 # for a short TTL — clicking through players re-ran get_points_race_live

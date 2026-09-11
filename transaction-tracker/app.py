@@ -10169,6 +10169,27 @@ def api_season_contest_removals():
     return jsonify(removals)
 
 
+# ── EVENTS LEADERBOARD (Kerry 2026-09-11, improvements lane) ──
+# ADMIN-ONLY pilot until Kerry approves member exposure (rule 3b) —
+# the payloads are PII-free by design, so the member flip is changing
+# these two role strings to "member".
+@app.route("/api/events-leaderboard")
+@require_role("admin")
+def api_events_leaderboard():
+    from email_parser.database import get_events_leaderboard
+    return jsonify(get_events_leaderboard(
+        chapter=request.args.get("chapter") or None,
+        year=request.args.get("year") or None))
+
+
+@app.route("/api/events-leaderboard/event")
+@require_role("admin")
+def api_events_leaderboard_event():
+    from email_parser.database import get_event_leaderboard
+    d = get_event_leaderboard(request.args.get("name", ""))
+    return (jsonify(d), 200) if d else (jsonify({"error": "event not found"}), 404)
+
+
 @app.route("/api/season-contests/points-race")
 @require_role("member")
 def api_season_contest_points_race():

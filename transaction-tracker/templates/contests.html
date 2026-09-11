@@ -246,6 +246,53 @@
         }
         .top-tab:hover { color: var(--text); }
         .top-tab.active { color: var(--primary); border-bottom-color: var(--primary); }
+
+        /* ── EVENTS leaderboard (ADMIN pilot, Kerry 2026-09-11) ── */
+        .evlb-chips { display: flex; align-items: center; gap: 8px; margin: 1rem 0 0.5rem; flex-wrap: wrap; }
+        .evlb-chip { border: 1px solid var(--border, #E5E7EB); background: #fff; border-radius: 99px;
+            padding: 6px 14px; cursor: pointer; font: 700 12px/1 'Bitter', serif;
+            letter-spacing: 0.5px; color: #6B7280; text-transform: uppercase; }
+        .evlb-chip.active { background: #1B1B1B; border-color: #1B1B1B; color: #fff; }
+        .evlb-year { margin-left: auto; font: 700 11px/1 'Bitter', serif; color: #9CA3AF;
+            letter-spacing: 1px; border: 1px dashed var(--border, #E5E7EB); border-radius: 99px; padding: 6px 12px; }
+        .evlb-pilot { font-size: 11px; color: #9CA3AF; flex-basis: 100%; }
+        details.evlb-ev { border: 1px solid var(--border, #E5E7EB); border-radius: 10px;
+            background: #fff; margin-top: 0.7rem; overflow: hidden; }
+        details.evlb-ev > summary { list-style: none; cursor: pointer; display: flex;
+            align-items: center; gap: 12px; padding: 12px 14px; }
+        details.evlb-ev > summary::-webkit-details-marker { display: none; }
+        .evlb-ev .chev { flex: none; transition: transform .15s; color: #9CA3AF; font-size: 11px; }
+        details.evlb-ev[open] > summary .chev { transform: rotate(90deg); }
+        .evlb-ev .nm { font: 700 15px/1.2 'Bitter', serif; color: #1B1B1B; }
+        .evlb-ev .meta { font-size: 12px; color: #6B7280; margin-top: 2px; }
+        .evlb-ev .pot { margin-left: auto; text-align: right; font: 700 15px/1 'Bitter', serif;
+            color: #1B7F4B; font-variant-numeric: tabular-nums; }
+        .evlb-ev .pot .s { display: block; font: 600 10px/1.6 'Helvetica Neue', Arial, sans-serif;
+            color: #9CA3AF; letter-spacing: 0.5px; }
+        .evlb-body { border-top: 1px solid #F0EEE9; padding: 10px 14px 14px; }
+        .evlb-subtabs { display: flex; gap: 6px; margin-bottom: 10px; flex-wrap: wrap; }
+        .evlb-subtab { border: 1px solid var(--border, #E5E7EB); background: #fff; border-radius: 99px;
+            padding: 5px 12px; cursor: pointer; font: 700 11px/1 'Bitter', serif;
+            letter-spacing: 0.5px; color: #6B7280; text-transform: uppercase; }
+        .evlb-subtab.active { background: var(--primary, #E87C3E); border-color: var(--primary, #E87C3E); color: #fff; }
+        .evlb-scroll { overflow-x: auto; }
+        table.evlb-tbl { width: 100%; border-collapse: collapse; }
+        .evlb-tbl th { text-align: left; font: 700 10px/1.6 'Bitter', serif; letter-spacing: 1px;
+            color: #9CA3AF; text-transform: uppercase; padding: 4px 8px; border-bottom: 1px solid #F0EEE9; }
+        .evlb-tbl td { padding: 6px 8px; font-size: 13px; border-bottom: 1px solid #F6F4F0; }
+        .evlb-tbl tr.buyer > td { background: #E9F7EE; }
+        .evlb-tbl td.r { text-align: right; font-variant-numeric: tabular-nums; }
+        .evlb-in { font-size: 10px; font-weight: 700; color: #166534; }
+        .evlb-notin { font-size: 10px; font-weight: 700; color: #B91C1C; }
+        .evlb-won { display: inline-block; background: #DCFCE7; color: #166534; border-radius: 99px;
+            padding: 2px 8px; font-size: 11px; font-weight: 700; margin-left: 6px; white-space: nowrap; }
+        .evlb-flight { display: inline-block; background: #EEF2FF; color: #4338CA; border-radius: 99px;
+            padding: 2px 8px; font-size: 10px; font-weight: 700; margin-left: 6px; }
+        .evlb-plr { cursor: pointer; }
+        .evlb-card-row > td { background: #FAF9F7; }
+        .evlb-holes { border-collapse: collapse; font-size: 11px; margin: 6px 0; }
+        .evlb-holes td, .evlb-holes th { border: 1px solid #E5E1DA; padding: 2px 6px;
+            text-align: center; min-width: 26px; }
         .section-hidden { display: none !important; }
 
         /* ── Sub-tabs (Points Race) ── */
@@ -1596,6 +1643,10 @@
              which clips absolutely-positioned children (v2.57.6 iOS fix) -->
         <div class="top-tabs-wrap">
             <div class="top-tabs">
+                {# EVENTS leaderboard (Kerry 2026-09-11) — ADMIN-ONLY pilot
+                   until he approves member exposure; applyRole reveals it,
+                   the member-page CSS backstop keeps it off /member #}
+                <button class="top-tab admin-only" data-top="events" style="display:none;">Events</button>
                 <button class="top-tab active" data-top="points-race">Points Races</button>
                 <button class="top-tab" data-top="match-play">Match Play</button>
                 <button class="top-tab" data-top="lone-star-cup">Lone Star Cup</button>
@@ -1790,6 +1841,21 @@
         </div>
 
         <!-- ═══════════ POINTS RACE ═══════════ -->
+        <!-- ═══════════ EVENTS LEADERBOARD (Kerry 2026-09-11 — ADMIN pilot;
+             list of played events, each expanding to its games in the
+             ratified Team · Net · Gross · Proxies IA, full-field board +
+             money game combined, buyers highlighted, winners badged) ═══ -->
+        <div id="section-events" class="section-hidden">
+            <div class="evlb-chips" id="evlb-chips">
+                <button class="evlb-chip active" data-ch="">All</button>
+                <button class="evlb-chip" data-ch="Austin">Austin</button>
+                <button class="evlb-chip" data-ch="San Antonio">San Antonio</button>
+                <span class="evlb-year" id="evlb-year" title="Year selector arrives with historical records">2026</span>
+                <span class="evlb-pilot" id="evlb-pilot"></span>
+            </div>
+            <div id="evlb-list"><p style="color:var(--text-muted);margin-top:1rem;">Loading events&hellip;</p></div>
+        </div>
+
         <div id="section-points-race">
             <div class="pr-section">
                 <!-- L3 race selector (contests-handicaps-071026 view 1a/1e):
@@ -2386,6 +2452,201 @@
         }
     }
 
+    // ═══════════ EVENTS LEADERBOARD (ADMIN pilot, Kerry 2026-09-11) ═══
+    // List of played events → expand to the ratified game IA
+    // (Team · Net · Gross · Skins · Points · Proxies): full-field
+    // boards merged with their money game, flight-sectioned, buyers
+    // highlighted, winners badged; player rows drill to the
+    // hole-by-hole card.
+    let evlbLoaded = false, evlbChapter = "";
+    const EVLB_LOADED_EVENTS = {};
+    function evlbFmt(c) { return "$" + (c / 100).toFixed(2).replace(/\.00$/, ""); }
+    function evlbDate(s) {
+        if (!s) return "";
+        const d = new Date(s + "T12:00:00");
+        return isNaN(d) ? s : d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+    }
+    async function evlbLoad(force) {
+        const box = $("evlb-list");
+        if (evlbLoaded && !force) return;
+        evlbLoaded = true;
+        box.innerHTML = '<p style="color:var(--text-muted);margin-top:1rem;">Loading events&hellip;</p>';
+        try {
+            const res = await fetch("/api/events-leaderboard" +
+                (evlbChapter ? "?chapter=" + encodeURIComponent(evlbChapter) : ""));
+            const d = await res.json();
+            if (!res.ok || d.error) throw new Error(d.error || res.statusText);
+            $("evlb-pilot").textContent = d.pilot
+                ? "Pilot: showing " + (d.pilot_codes || []).join(", ") + " (events_leaderboard_events dial)" : "";
+            if (!(d.events || []).length) {
+                box.innerHTML = '<p style="color:var(--text-muted);margin-top:1rem;">No played events here yet.</p>';
+                return;
+            }
+            box.innerHTML = d.events.map(ev => {
+                const ch = ev.chapter === "Austin"
+                    ? '<span class="chip-austin" style="background:var(--chapter-austin,#BF5700);color:#fff;border-radius:99px;padding:2px 8px;font-size:10px;font-weight:700;">AUSTIN</span>'
+                    : ev.chapter === "San Antonio"
+                    ? '<span style="background:var(--chapter-sa,#D3DDE4);color:#1B1B1B;border-radius:99px;padding:2px 8px;font-size:10px;font-weight:700;">SAN ANTONIO</span>' : "";
+                return `<details class="evlb-ev" data-ev="${escapeHtml(ev.item_name)}">` +
+                    `<summary><span class="chev">&#9654;</span>` +
+                    `<div><div class="nm">${escapeHtml(ev.item_name)}</div>` +
+                    `<div class="meta">${evlbDate(ev.event_date)}${ev.course ? " &middot; " + escapeHtml(ev.course) : ""} &middot; ${ev.field} players ${ch}</div></div>` +
+                    `<div class="pot">$${(ev.pot || 0).toFixed(2)}<span class="s">POT</span></div>` +
+                    `</summary><div class="evlb-body"><p style="color:var(--text-muted);">Loading&hellip;</p></div></details>`;
+            }).join("");
+            box.querySelectorAll("details.evlb-ev").forEach(el => {
+                el.addEventListener("toggle", () => {
+                    if (el.open) evlbLoadEvent(el);
+                });
+            });
+        } catch (err) {
+            evlbLoaded = false;
+            box.innerHTML = `<p style="color:var(--text-muted);margin-top:1rem;">Couldn't load events (${escapeHtml(err.message || String(err))}).</p>`;
+        }
+    }
+    async function evlbLoadEvent(el) {
+        const name = el.dataset.ev;
+        const body = el.querySelector(".evlb-body");
+        if (EVLB_LOADED_EVENTS[name]) return;
+        EVLB_LOADED_EVENTS[name] = true;
+        try {
+            const res = await fetch("/api/events-leaderboard/event?name=" + encodeURIComponent(name));
+            const d = await res.json();
+            if (!res.ok || d.error) throw new Error(d.error || res.statusText);
+            body.innerHTML = evlbEventHtml(d);
+            evlbWireEvent(body, d);
+        } catch (err) {
+            EVLB_LOADED_EVENTS[name] = false;
+            body.innerHTML = `<p style="color:var(--text-muted);">Couldn't load this event (${escapeHtml(err.message || String(err))}).</p>`;
+        }
+    }
+    function evlbWonChips(won) {
+        return (won || []).map(w =>
+            `<span class="evlb-won" title="${escapeHtml(w.detail || "")}">${escapeHtml(w.label)}${w.detail ? " · " + escapeHtml(w.detail) : ""} · ${evlbFmt(w.cents)}</span>`).join("");
+    }
+    function evlbScoreRows(rows, kind) {
+        // kind: net | gross — rank within the section by that score
+        let rank = 0, shown = 0, last = null;
+        return rows.map(r => {
+            const score = kind === "net" ? r.net : r.gross;
+            shown++;
+            if (score !== last) { rank = shown; last = score; }
+            const tied = rows.filter(x => (kind === "net" ? x.net : x.gross) === score).length > 1 && score != null;
+            return `<tr class="evlb-plr${r.buyer ? " buyer" : ""}" data-rid="${r.scoring_round_id || ""}">` +
+                `<td class="r">${score == null ? "" : (tied ? "T" : "") + rank}</td>` +
+                `<td>${escapeHtml(r.player_name)}${r.hcp != null ? ` <span style="color:#9CA3AF;font-size:11px;">(${r.hcp})</span>` : ""}` +
+                evlbWonChips(r.won) + `</td>` +
+                `<td class="r">${r.gross ?? ""}</td>` +
+                (kind === "net" ? `<td class="r"><b>${r.net ?? ""}</b></td>` : "") +
+                `<td class="r">${r.buyer ? '<span class="evlb-in">&#10003; IN</span>' : '<span class="evlb-notin">&#10007;</span>'}</td>` +
+                `</tr>`;
+        }).join("");
+    }
+    function evlbSectioned(board, kind) {
+        const head = `<thead><tr><th>#</th><th>Player</th><th style="text-align:right;">Gross</th>` +
+            (kind === "net" ? `<th style="text-align:right;">Net</th>` : "") +
+            `<th style="text-align:right;">Buy-in</th></tr></thead>`;
+        const bodyRows = (board || []).map(sec =>
+            (sec.label ? `<tr><td colspan="5" style="background:#1B1B1B;color:#fff;font:700 10px/1.7 'Bitter',serif;letter-spacing:1px;padding:4px 10px;">${escapeHtml(sec.label)}</td></tr>` : "") +
+            evlbScoreRows(sec.rows, kind)).join("");
+        return bodyRows
+            ? `<div class="evlb-scroll"><table class="evlb-tbl">${head}<tbody>${bodyRows}</tbody></table></div>`
+            : '<p style="color:var(--text-muted);">No scores.</p>';
+    }
+    function evlbEventHtml(d) {
+        const tabs = [["team", "Team"], ["net", "Net"], ["gross", "Gross"],
+                      ["skins", "Skins"], ["points", "Points"], ["prox", "Proxies"]];
+        const skinsHtml = (d.skins_board || []).some(s => s.rows.length)
+            ? `<div class="evlb-scroll"><table class="evlb-tbl"><thead><tr><th>Player</th><th>Skins won</th></tr></thead><tbody>` +
+              d.skins_board.map(sec =>
+                  (sec.label ? `<tr><td colspan="2" style="background:#1B1B1B;color:#fff;font:700 10px/1.7 'Bitter',serif;letter-spacing:1px;padding:4px 10px;">${escapeHtml(sec.label)}</td></tr>` : "") +
+                  sec.rows.map(r =>
+                      `<tr class="evlb-plr buyer" data-rid="${r.scoring_round_id || ""}"><td>${escapeHtml(r.player_name)}</td>` +
+                      `<td>${evlbWonChips(r.won) || '<span style="color:#9CA3AF;">—</span>'}</td></tr>`).join("")).join("") +
+              `</tbody></table></div>`
+            : '<p style="color:var(--text-muted);">No skins buyers recorded.</p>';
+        const pointsHtml = (d.points_board || []).length
+            ? `<div class="evlb-scroll"><table class="evlb-tbl"><thead><tr><th>#</th><th>Player</th><th style="text-align:right;">Net pts</th><th style="text-align:right;">Gross pts</th><th style="text-align:right;">MVP</th></tr></thead><tbody>` +
+              d.points_board.map((r, i) =>
+                  `<tr class="evlb-plr${r.buyer ? " buyer" : ""}" data-rid="${r.scoring_round_id || ""}">` +
+                  `<td class="r">${r.net_pts == null ? "" : i + 1}</td>` +
+                  `<td>${escapeHtml(r.player_name)}${evlbWonChips(r.won)}</td>` +
+                  `<td class="r"><b>${r.net_pts ?? ""}</b></td><td class="r">${r.gross_pts ?? ""}</td>` +
+                  `<td class="r">${r.buyer ? '<span class="evlb-in">&#10003;</span>' : ""}</td></tr>`).join("") +
+              `</tbody></table></div>`
+            : '<p style="color:var(--text-muted);">No scorecards yet.</p>';
+        const teamHtml = (d.team_board || []).length
+            ? `<div class="evlb-scroll"><table class="evlb-tbl"><thead><tr><th>Pos</th><th>Team</th><th style="text-align:right;">Purse</th></tr></thead><tbody>` +
+              d.team_board.map(t =>
+                  `<tr><td>${escapeHtml(t.position || "")}</td><td style="white-space:normal;">${escapeHtml(t.team)}</td>` +
+                  `<td class="r">${t.purse != null ? "$" + Number(t.purse).toFixed(2) : ""}</td></tr>`).join("") +
+              `</tbody></table></div>`
+            : '<p style="color:var(--text-muted);">Team results not recorded yet.</p>';
+        const proxHtml = ((d.proxies || []).length || (d.hio || []).length)
+            ? `<div class="evlb-scroll"><table class="evlb-tbl"><thead><tr><th>Contest</th><th>Winner</th><th>Detail</th><th style="text-align:right;">$</th></tr></thead><tbody>` +
+              (d.proxies || []).map(p =>
+                  `<tr><td>${escapeHtml(p.label || "")}</td><td>${escapeHtml(p.player || "")}</td>` +
+                  `<td>${escapeHtml(p.detail || "")}</td><td class="r">${p.purse != null ? "$" + Number(p.purse).toFixed(2) : ""}</td></tr>`).join("") +
+              (d.hio || []).map(p =>
+                  `<tr><td>Hole-in-One</td><td>${escapeHtml(p.player || "")}</td>` +
+                  `<td>${escapeHtml(p.detail || "")}</td><td class="r">${p.purse != null ? "$" + Number(p.purse).toFixed(2) : ""}</td></tr>`).join("") +
+              `</tbody></table></div>`
+            : '<p style="color:var(--text-muted);">No proxies recorded yet.</p>';
+        const panels = {
+            team: teamHtml,
+            net: evlbSectioned(d.net_board, "net"),
+            gross: evlbSectioned(d.gross_board, "gross"),
+            skins: skinsHtml, points: pointsHtml, prox: proxHtml,
+        };
+        return `<div class="evlb-subtabs">` +
+            tabs.map(([k, l], i) =>
+                `<button class="evlb-subtab${k === "net" ? " active" : ""}" data-sub="${k}">${l}</button>`).join("") +
+            `</div>` +
+            tabs.map(([k]) =>
+                `<div class="evlb-panel" data-panel="${k}"${k === "net" ? "" : " hidden"}>${panels[k]}</div>`).join("") +
+            `<p style="font-size:11px;color:#9CA3AF;margin:8px 0 0;">Tap a player for their scorecard. &#10003; IN = bought into that game &middot; dashed sections place non-buyers where their handicap would have flighted them.</p>`;
+    }
+    function evlbWireEvent(body) {
+        body.querySelectorAll(".evlb-subtab").forEach(btn =>
+            btn.addEventListener("click", () => {
+                body.querySelectorAll(".evlb-subtab").forEach(b => b.classList.toggle("active", b === btn));
+                body.querySelectorAll(".evlb-panel").forEach(p =>
+                    p.hidden = p.dataset.panel !== btn.dataset.sub);
+            }));
+        body.querySelectorAll("tr.evlb-plr[data-rid]").forEach(tr =>
+            tr.addEventListener("click", async () => {
+                const rid = tr.dataset.rid;
+                if (!rid) return;
+                const nxt = tr.nextElementSibling;
+                if (nxt && nxt.classList.contains("evlb-card-row")) { nxt.remove(); return; }
+                const cardRow = document.createElement("tr");
+                cardRow.className = "evlb-card-row";
+                const cols = tr.children.length;
+                cardRow.innerHTML = `<td colspan="${cols}" style="white-space:normal;">Loading card&hellip;</td>`;
+                tr.after(cardRow);
+                try {
+                    const res = await fetch("/api/scoring/scorecard/" + rid);
+                    const c = await res.json();
+                    if (!res.ok || c.error) throw new Error(c.error || res.statusText);
+                    const hs = c.holes || [];
+                    cardRow.firstElementChild.innerHTML = hs.length
+                        ? `<div class="evlb-scroll"><table class="evlb-holes"><tr><th>Hole</th>${hs.map(h => `<th>${h.hole_number}</th>`).join("")}<th>Tot</th></tr>` +
+                          `<tr><td>Par</td>${hs.map(h => `<td>${h.par ?? ""}</td>`).join("")}<td>${hs.reduce((s, h) => s + (h.par || 0), 0) || ""}</td></tr>` +
+                          `<tr><td><b>Score</b></td>${hs.map(h => `<td><b>${h.strokes ?? ""}</b>${"&bull;".repeat(h.strokes_received || 0)}</td>`).join("")}<td><b>${hs.reduce((s, h) => s + (h.strokes || 0), 0) || ""}</b></td></tr>` +
+                          `</table><span style="font-size:10.5px;color:#9CA3AF;">&bull; = handicap strokes received</span></div>`
+                        : "No hole detail on file for this round.";
+                } catch (err) {
+                    cardRow.firstElementChild.textContent = "Couldn't load the card (" + (err.message || err) + ").";
+                }
+            }));
+    }
+    $$("#evlb-chips .evlb-chip").forEach(btn =>
+        btn.addEventListener("click", () => {
+            $$("#evlb-chips .evlb-chip").forEach(b => b.classList.toggle("active", b === btn));
+            evlbChapter = btn.dataset.ch;
+            evlbLoad(true);
+        }));
+
     $$(".top-tab").forEach(btn => {
         btn.addEventListener("click", (e) => {
             const top = btn.dataset.top;
@@ -2395,11 +2656,12 @@
             const wasActive = btn.classList.contains("active");
             $$(".top-tab").forEach(b => b.classList.remove("active"));
             btn.classList.add("active");
-            ["match-play", "points-race", "enrollment", "lone-star-cup"].forEach(k => {
+            ["events", "match-play", "points-race", "enrollment", "lone-star-cup"].forEach(k => {
                 $("section-" + k).classList.toggle("section-hidden", k !== top);
             });
             if (top === "enrollment") enrAutoLoad();
             if (top === "lone-star-cup") lscLoad();
+            if (top === "events") evlbLoad();
             try {
                 if (top === "match-play") {
                     // Keep the active Match Play sub-panel in the link
@@ -2409,6 +2671,7 @@
                 }
                 else if (top === "enrollment") history.replaceState(null, "", "#tab=enr");
                 else if (top === "lone-star-cup") history.replaceState(null, "", "#tab=lsc");
+                else if (top === "events") history.replaceState(null, "", "#tab=events");
                 else {
                     const activeRace = (document.querySelector(".sub-tab[data-pr].active") || {}).dataset?.pr || "tfc";
                     history.replaceState(null, "", "#race=" + activeRace);

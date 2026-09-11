@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.376.0";
+window.TGF_VERSION = "2.377.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.377.0",
+    date: "2026-09-11",
+    changes: [
+      "EVENTS leaderboard, ADMIN PILOT (Kerry 2026-09-11 — stays admin-only until he approves member exposure): a new EVENTS tab left of Points Races on the LEADERBOARD page. ALL | AUSTIN | SAN ANTONIO chips (lands on ALL; the year chip is the future year-selector hook), played events newest first, each expanding to its games in the ratified Team · Net · Gross · Skins · Points · Proxies IA. Kerry's merge rules applied verbatim: Individual Net merges with All Net and Individual Gross with All Gross (whole field on one board, flight-SECTIONED per the event, buyers highlighted green with a ✓ IN pill and their game money badged); MVP merges with POINTS (net + gross Stableford for the whole field from the formula layer, MVP money on the winners' rows); Team Net and Skins have their own boards (Skins shows only bought-in players in their flights); CTP/Longest Putt/HIO list separately under Proxies. Non-buyers are PLACED into the flight their handicap would have flighted them, boundaries derived from the labeled members' handicaps, never hardcoded; no-handicap rows land in an UNFLIGHTED band. Tapping any player row opens their hole-by-hole card with handicap dots. Pilot scope is the events_leaderboard_events dial, seeded to this past Tuesday (s9.22 Silverhorn + a9.22 ShadowGlen); empty it to show every event with scorecards.",
+      "Admin dark nav gains a Member View link straight to the pinless /member experience (Kerry: 'give me a top level link to go directly to MEMBER VIEW') — desktop links and the mobile drawer, admin role only.",
+    ],
+  },
   {
     version: "2.376.0",
     date: "2026-09-11",

@@ -460,3 +460,47 @@ Flight 2 (caught on Jeff Young's spotlight line). An ordinal-flight
 branch now handles that shape (incl. "Champion & 1st Flight winner"
 and the championship-close "4th Flight 2nd" form) before the generic
 place/flight regexes.
+
+## EVENTS leaderboard on the LEADERBOARD page (v2.377.0 — ADMIN PILOT, Kerry directed 2026-09-11)
+
+Kerry's ask (improvements lane): an EVENTS tab LEFT of Points Races —
+ALL | AUSTIN | SAN ANTONIO chips (lands ALL; year selector arrives
+with historical records) — listing played events newest first, each
+expanding to its games "like Golf Genius's leaderboard but condensed",
+with drill-down to individual players. His merge rules (2026-09-11,
+verbatim intent): "Only merge Individual Net with All Net, Individual
+Gross with All Gross, and MVP with Points. Maintain flights for the
+Net and Gross per the event. Place non-flighted members... in the
+flights they would have been in if they'd have played. Highlight those
+that did buy in. Team Net has it's own. Skins has it's own, and only
+needs to show the players bought in and the flights. Closest to Pins
+obviously listed separately."
+
+- **ADMIN-ONLY until Kerry approves** (rule 3b): the tab carries
+  `admin-only` (applyRole reveals; member pages CSS-backstop it), both
+  routes are `@require_role("admin")` — the member flip is two role
+  strings + removing the class. Payloads are PII-free by design.
+- **Pilot scope is a dial**: `events_leaderboard_events` (JSON list of
+  event-code prefixes; seed s9.22 + a9.22 — this past Tuesday; empty
+  list = every event with scorecards).
+- **Boards per event** (the ratified leaderboard IA, side-games.md):
+  TEAM (gg_game_results rows) · NET (whole field, flight-SECTIONED;
+  buyers green + ✓ IN; Ind Net money badged) · GROSS (same shape) ·
+  SKINS (bought-in players only, in skins flights, skins won badged) ·
+  POINTS (net + gross Stableford from the formula layer, MVP-eligible
+  buyers highlighted, City/TGF MVP money badged) · PROXIES (CTP /
+  Longest Putt / HIO). Non-buyers are PLACED into the flight their
+  handicap would have flighted them (boundaries derived from the
+  labeled members' playing handicaps — `_flight_sections`, marked
+  `assigned` for a dashed treatment); no-handicap rows land in an
+  UNFLIGHTED band.
+- **Player drill-down**: tapping a row fetches
+  `/api/scoring/scorecard/<id>` (already member-tier) and renders the
+  hole-by-hole grid with handicap dots.
+- Backend: `get_events_leaderboard` / `get_event_leaderboard`
+  (database.py); routes `/api/events-leaderboard[/event]` (app.py).
+- **Future (Kerry)**: Player Spotlight winnings drill-down event lines
+  deep-link to these event records; year selector.
+- Also shipped: the admin dark nav gains a **Member View** link
+  (`/member`, admin-nav class) — Kerry 2026-09-11: "give me a top
+  level link to go directly to MEMBER VIEW."

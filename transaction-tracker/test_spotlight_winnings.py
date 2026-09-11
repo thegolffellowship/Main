@@ -274,6 +274,101 @@ check("race with no recorded payouts returns None (strip recomputes)",
                                 {"label": "AUSTIN Net 2026"}, _dbp) is None)
 os.unlink(_dbp)
 
+# ── EVENTS LEADERBOARD (Kerry 2026-09-11, admin pilot): flight-
+#    sectioned boards; non-buyers PLACED into the flight their handicap
+#    would have flighted them; buyers highlighted; skins buyers-only ──
+with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as _tf2:
+    _db2 = _tf2.name
+_c = sqlite3.connect(_db2)
+_c.executescript("""
+CREATE TABLE app_settings (key TEXT PRIMARY KEY, value TEXT);
+CREATE TABLE events (id INTEGER PRIMARY KEY, item_name TEXT, event_date TEXT,
+  course TEXT, chapter TEXT, format TEXT);
+CREATE TABLE event_aliases (alias_name TEXT, canonical_event_name TEXT);
+CREATE TABLE items (id INTEGER PRIMARY KEY, item_name TEXT, customer_id INT,
+  customer TEXT, parent_item_id INT, side_games TEXT, transaction_status TEXT,
+  wd_credits TEXT, event_id INT);
+CREATE TABLE tgf_events (id INTEGER PRIMARY KEY, code TEXT, name TEXT);
+CREATE TABLE tgf_payouts (id INTEGER PRIMARY KEY, event_id INT, customer_id INT,
+  category TEXT, amount REAL, description TEXT);
+INSERT INTO events VALUES (50, 's9.99 Testhorn', '2026-09-08', 'Testhorn', 'San Antonio', '9-hole');
+-- NET buyers: cid 1 (hcp 5, Flight 1), cid 2 (hcp 20, Flight 2);
+-- cid 3 non-buyer hcp 14 -> placed Flight 2; guest (no cid) hcp NULL -> UNFLIGHTED
+INSERT INTO items VALUES
+ (1,'s9.99 Testhorn',1,'Low Buyer',NULL,'NET','active',NULL,50),
+ (2,'s9.99 Testhorn',2,'High Buyer',NULL,'BOTH','active',NULL,50),
+ (3,'s9.99 Testhorn',3,'Mid Nonbuyer',NULL,'NONE','active',NULL,50);
+INSERT INTO tgf_events VALUES (9, 's9.99 Testhorn', 's9.99 Testhorn');
+INSERT INTO tgf_payouts VALUES
+ (1,9,1,'individual_net',63.0,'auto: Ind Net Flight 1 (HCP <12.0) 1st (GG $)'),
+ (2,9,2,'skins',19.5,'auto: Skins Par on 4 (GG $)'),
+ (3,9,1,'mvp',30.0,'auto: City MVP');
+""")
+_c.close()
+with db._connect(_db2) as _cn:
+    db._ensure_scoring_tables(_cn)
+    db._ensure_gg_game_results_tables(_cn)
+    db._ensure_gg_game_flights_tables(_cn)
+    _cn.executescript("""
+INSERT INTO scoring_rounds (id, customer_id, player_name, event_id, playing_handicap, gross, net)
+VALUES (101, 1, 'BUYER, Low', 50, 5, 40, 35),
+       (102, 2, 'BUYER, High', 50, 20, 55, 35),
+       (103, 3, 'NONBUYER, Mid', 50, 14, 50, 36),
+       (104, NULL, 'GUEST, Someone', 50, NULL, 48, NULL);
+INSERT INTO gg_game_flights (event_id, gg_tournament_id, game, flight_label, customer_id, player_name)
+VALUES (50, 't1', 'individual_net', 'Flight 1 (HCP <12.0)', 1, 'BUYER, Low'),
+       (50, 't2', 'individual_net', 'Flight 2 (HCP 12.0+)', 2, 'BUYER, High'),
+       (50, 't3', 'skins', 'ALL', 2, 'BUYER, High');
+INSERT INTO gg_game_results (event_id, gg_tournament_id, game, game_label, player_name, is_team, position, detail, purse)
+VALUES (50, 't4', 'team_net', 'TEAM Net $', 'A + B + C + D', 1, '1', NULL, 128),
+       (50, 't5', 'ctp', 'CTP', 'BUYER, Low', 0, '1', '#7', 26);
+""")
+    _cn.commit()
+
+evd = db.get_event_leaderboard("s9.99 Testhorn", db_path=_db2)
+check("event leaderboard assembles", evd is not None and evd["field"] == 4)
+_nb = evd["net_board"]
+check("net board flight-sectioned, low flight first",
+      [s["label"] for s in _nb][:2] == ["Flight 1 (HCP <12.0)",
+                                        "Flight 2 (HCP 12.0+)"],
+      repr([s["label"] for s in _nb]))
+f2 = next(s for s in _nb if s["label"] == "Flight 2 (HCP 12.0+)")
+placed = [r for r in f2["rows"] if r.get("assigned")]
+check("non-buyer hcp 14 PLACED into Flight 2",
+      any(r["customer_id"] == 3 for r in placed), repr(f2["rows"]))
+check("guest with no handicap lands in UNFLIGHTED",
+      _nb[-1]["label"] == "UNFLIGHTED"
+      and _nb[-1]["rows"][0]["player_name"] == "GUEST, Someone")
+f1 = next(s for s in _nb if s["label"] == "Flight 1 (HCP <12.0)")
+w = next(r for r in f1["rows"] if r["customer_id"] == 1)
+check("net board: buyer flagged + Ind Net money badged (MVP kept for Points)",
+      w["buyer"] and [x["category"] for x in w["won"]] == ["individual_net"],
+      repr(w["won"]))
+sk = evd["skins_board"]
+check("skins board holds BUYERS ONLY",
+      all(r["customer_id"] == 2 for s in sk for r in s["rows"])
+      and any(x["category"] == "skins" for s in sk for r in s["rows"]
+              for x in r["won"]))
+pb = evd["points_board"]
+check("points board carries MVP money on the winner's row",
+      any(r["customer_id"] == 1 and
+          any(x["category"] == "mvp" for x in r["won"]) for r in pb))
+check("team + proxies ride on their own boards",
+      evd["team_board"][0]["team"] == "A + B + C + D"
+      and evd["proxies"][0]["detail"] == "#7")
+lst = db.get_events_leaderboard(db_path=_db2)
+check("pilot dial gates the event list (s9.99 not in seed)",
+      lst["pilot"] and all(not e["item_name"].startswith("s9.99")
+                           for e in lst["events"]))
+with db._connect(_db2) as _cn:
+    _cn.execute("INSERT INTO app_settings VALUES ('events_leaderboard_events', '[\"s9.99\"]')")
+    _cn.commit()
+lst2 = db.get_events_leaderboard(db_path=_db2)
+check("dial change admits the event, pot from payouts",
+      len(lst2["events"]) == 1 and lst2["events"][0]["pot"] == 112.5,
+      repr(lst2["events"]))
+os.unlink(_db2)
+
 # dial fallback: malformed JSON must fall back to the seed, not blank
 check("seed bundles well-formed",
       db.get_winnings_bundles.__doc__ is not None
