@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.371.6";
+window.TGF_VERSION = "2.371.7";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.371.7",
+    date: "2026-09-11",
+    changes: [
+      "Standings fold guard: the first best-N fold on production came out BELOW the larger GG record's own total (Jay Hogue, Austin Net: derived 108 vs GG's 116), which is impossible if the detail was read the way GG counts it. A folded total can never be under the dominant record's total, so the fold now keeps that total whenever the derivation falls short (method max(guard)) and logs the disagreement. Diagnostic bridge scoring-race-detail:<race>|<card> returns one member record's raw GG per-event tables plus our parse, to reconcile the count.",
+    ],
+  },
   {
     version: "2.371.6",
     date: "2026-09-11",

@@ -1772,6 +1772,7 @@ def _scoring_dispatch(url: str, extract: str):
       scoring-membership-terms-repair[:apply]  early renewals continue at the
                                    365 date (dry run default)
       scoring-membership-sync      terms → status reconcile now (manager comps)
+      scoring-race-detail:<race_key>|<card>  one GG member record's per-event lines
       scoring-race-dupes[:refresh]  one person = one row on every Season Contests
                                    board (GG duplicate member records folded;
                                    refresh re-fetches all races first)
@@ -3045,6 +3046,22 @@ def _scoring_dispatch(url: str, extract: str):
             _done = [i for i in _ids if db.dismiss_parse_warning(i)]
             _audit("scoring-parse-warning-dismiss", f"ids={_done} note={_note.strip()}")
             return json.dumps({"dismissed": _done, "note": _note.strip()}, indent=2)
+        if cmd == "scoring-race-detail":
+            # "<race_key>|<member_card_id>" — GG's per-event points lines for one
+            # member record (the row-expansion XHR), raw tables + our parse.
+            _rk, _, _card = (arg or "").partition("|")
+            _race = db._GG_POINTS_RACES.get(_rk.strip())
+            if not _race or not _card.strip().isdigit():
+                return json.dumps({"error": "usage: scoring-race-detail:<race_key>|<member_card_id>",
+                                   "races": sorted(db._GG_POINTS_RACES)})
+            from golf_genius_sync import fetch_points_race_member_detail
+            _d = fetch_points_race_member_detail(page_id=_race["page_id"], member_card_id=_card.strip(),
+                                                 league_id=_race["league_id"], host=_race["host"])
+            _d["parsed_events"] = db._member_detail_events(_race, _card.strip())
+            _d["best_n"] = _race.get("best_n")
+            _d["best_n_total_of_parsed"] = (db._best_n_total(_d["parsed_events"], _race["best_n"])
+                                            if _race.get("best_n") else None)
+            return json.dumps(_d, indent=2, default=str)
         if cmd == "scoring-race-dupes":
             # "[refresh]" — one person = one row across every Season Contests
             # board. refresh re-fetches every GG race first (write-time merge

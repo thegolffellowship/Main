@@ -138,6 +138,10 @@ check("detail unavailable → dominant record's total, never the sum",
       [r for r in m_fail if r["customer_id"] == 37][0]["total_points"] == 92.0 and mf[0]["method"] == "max", str(mf))
 m_small, ms = db._merge_duplicate_standings([dict(r, tournaments=2) for r in two], race={"best_n": 10},
                                             detail_fetcher=fetch)
+m_guard, mg = db._merge_duplicate_standings([dict(r) for r in two], race={"best_n": 10},
+                                            detail_fetcher=lambda c: [{"date": "2026-01-01", "event": "x", "points": 1.0}])
+check("derived total below the larger record's own total → guard keeps the record total",
+      [r for r in m_guard if r["customer_id"] == 37][0]["total_points"] == 92.0 and mg[0]["method"] == "max(guard)", str(mg))
 check("under N rounds combined → plain sum, no detail fetch", ms[0]["method"] == "sum"
       and [r for r in m_small if r["customer_id"] == 37][0]["total_points"] == 103.0)
 check("same event under both records counts once (max)",

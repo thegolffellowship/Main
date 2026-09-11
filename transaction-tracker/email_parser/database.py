@@ -7795,10 +7795,21 @@ def _merge_duplicate_standings(rows: list, race: dict | None = None,
                                    base.get("player_name"), x.get("member_card_id"), exc)
                     ok = False
                     break
+            floor = max(_n(x.get("total_points")) for x in g)
             if ok and events:
                 total, method = _best_n_total(events, best_n), f"best_{best_n}"
+                # Invariant: the union of both records' events contains each
+                # record's own events, so best-N over the union can never be
+                # BELOW the larger record's own GG total. If it is, our read
+                # of the detail table disagrees with GG's own count — keep
+                # the dominant record's total and say so.
+                if total < floor:
+                    logger.warning("fold for %s: derived %s < GG record total %s — "
+                                   "detail parse disagrees with GG; using max",
+                                   base.get("player_name"), total, floor)
+                    total, method = floor, "max(guard)"
             else:
-                total, method = max(_n(x.get("total_points")) for x in g), "max"
+                total, method = floor, "max"
         base["total_points"] = total
         base["prev_rank"] = ""          # GG's arrows are per-record; unknown after a fold
         base["merged_from"] = json.dumps({"method": method, "records": [
