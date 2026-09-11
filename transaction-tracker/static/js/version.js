@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.377.1";
+window.TGF_VERSION = "2.377.2";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.377.2",
+    date: "2026-09-11",
+    changes: [
+      "LSC captains as a CHIP (Kerry, correcting v2.377.1: 'AUSTIN NET - 2 is correct and should be shown, but also highlight Matt JENKINS as CAPTAIN. Same for Rob Callaway as SA NET - 1 — Captains need to be set apart visually'). The freeze now labels every captain seat by qualification (AUSTIN NET · 2, SA NET · 1) and stamps captain:true; the renderer keeps the tinted captain row and adds a chapter-colored CAPTAIN chip next to the name (burnt orange Austin, slate SA). Visible to members too — captaincy is roster identity, not ops.",
+    ],
+  },
   {
     version: "2.377.1",
     date: "2026-09-11",

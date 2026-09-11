@@ -10977,20 +10977,25 @@ def freeze_lsc_final_roster(db_path: str | Path = DB_PATH) -> dict:
     """
     d = get_lone_star_cup_projection(db_path=db_path)
     chapters = d.get("chapters", [])
-    # Captaincy is NOT inherited (Kerry 2026-09-11: "Rob Callaway is the
-    # SA Captain, fix that" — Austin's declined NET champion had cascaded
-    # the CAPTAIN label onto the 2nd-place finisher). A cascaded fill
-    # keeps the SEAT but is relabeled by how they actually qualified;
-    # only a row whose qualification reads "Champion" wears CAPTAIN.
+    # Captain seats (Kerry 2026-09-11, second ruling): the seat LABEL
+    # shows how the player qualified ("AUSTIN NET · 2", "SA NET · 1")
+    # and captaincy becomes a FLAG the renderer sets apart visually
+    # (tinted row + CAPTAIN chip). The engine's captain pick stands —
+    # Jenkins via cascade in Austin, Callaway as SA NET Champion.
+    _CH_ABBR = {"san antonio": "SA", "austin": "AUSTIN"}
     for ch in chapters:
+        abbr = _CH_ABBR.get((ch.get("chapter") or "").lower(),
+                            (ch.get("chapter") or "").upper())
         for s in ch.get("seats", []):
-            if (s.get("seat") == "CAPTAIN"
-                    and "Champion" not in (s.get("earned_as") or "")):
-                m = re.match(r"(\d+)", s.get("earned_as") or "")
-                s["seat"] = (f"{(ch.get('chapter') or '').upper()} NET"
-                             + (f" · {m.group(1)}" if m else ""))
-                s["note"] = ("City NET final standings — the "
-                             "captaincy is not inherited")
+            if s.get("seat") == "CAPTAIN":
+                s["captain"] = True
+                ea = s.get("earned_as") or ""
+                m = re.match(r"(\d+)", ea)
+                place = m.group(1) if m else (
+                    "1" if "Champion" in ea else None)
+                s["seat"] = (f"{abbr} NET"
+                             + (f" · {place}" if place else ""))
+                s["note"] = "City NET final standings — team captain"
     frozen = {
         "frozen_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         "season": d.get("season"),
