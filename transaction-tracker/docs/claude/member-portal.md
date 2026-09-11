@@ -547,3 +547,36 @@ skins flight their handicap would have put them in, at the BOTTOM of
 that flight in grey (same boundary derivation as the other boards);
 buyers stay on top with the circles and skins counts, and placed rows
 never contest a skin. `skins_out` removed from the payload.
+
+**Events leaderboard iteration 4 (v2.379.0, Kerry 2026-09-11):**
+- **MVP/Points ties**: points ties STAY ties (T# on the board — the
+  races never tiebreak); only Event MVP tiebreaks, per Kerry's
+  ratified chain (verbatim): "1. Net Score 2. Gross Score 3. Split
+  Pot." The top tied group orders by that chain so the MVP winner
+  shows first, and every tied MVP-eligible buyer carries a note
+  saying how the chain decided ("MVP tiebreak 2 — low Gross (36)").
+- **TEAM board is GG-official**: our best-ball total is a
+  reconstruction from each player's OWN card dots (100% individual
+  allowance) while the real Team Net game plays 75% OFF-LOWEST — so
+  the reconstruction can disagree with the recorded result (s9.21's
+  $80 winner showed 2nd; s9.22's GG T1 tie split 30/31 here).
+  Recorded GG positions + purses now rank the board; unrecorded teams
+  follow by reconstruction total, unranked; the panel says which is
+  which. Native engine-scored Team Net (live_scoring.py's
+  game_team_net with the ratified allowance) is the proper fix and
+  belongs to the untether program.
+- **CART Net events**: below 16 players the matrix runs 2-man cart
+  teams — team grouping now splits each pairing group into cart pairs
+  (cart_pos 1-2 / 3-4) when the matrix row's teamType says CART (or
+  N<16 fallback).
+- **Joint events** (chapter TGF/national — Landa Park) list under
+  BOTH chapter filters.
+- **Game activation keys off the Tracker's EVENT/GAMES counts** (Kerry:
+  "should be checking against Tracker EVENT / GAMES which should also
+  be helping determine which games are being played") —
+  `_event_player_counts` (the Games-tab mirror) supplies the player
+  count that picks the matrix row (team type) and the GROSS buyer
+  count that judges Individual Gross activation, not the scorecard
+  field size. The Star Ranch team-game override was a one-off with no
+  standing dial; if per-event game overrides become a pattern they
+  should land as a dial the leaderboard reads too.

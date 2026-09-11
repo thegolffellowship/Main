@@ -12814,8 +12814,11 @@ def get_events_leaderboard(chapter: str | None = None,
                     if any((r["item_name"] or "").lower().startswith(c)
                            for c in low)]
         if chapter:
+            # joint events (chapter "TGF"/national/blank — Landa Park)
+            # show under BOTH chapters (Kerry 2026-09-11)
             rows = [r for r in rows
-                    if (r["chapter"] or "").lower() == chapter.lower()]
+                    if (r["chapter"] or "").lower() == chapter.lower()
+                    or (r["chapter"] or "").lower() in ("tgf", "national", "")]
         years = sorted({str(r["event_date"] or "")[:4]
                         for r in rows if r["event_date"]}, reverse=True)
         if year:
@@ -12882,18 +12885,19 @@ def get_event_leaderboard(event_name: str,
         pairing_groups: dict = {}
         try:
             prows = conn.execute(
-                """SELECT group_num, player_name FROM event_pairings
+                """SELECT group_num, cart_pos, player_name FROM event_pairings
                    WHERE event_id = ? AND holes = ?
                    ORDER BY group_num, cart_pos""",
                 (ev["id"], str(ev["holes"] or 18))).fetchall()
             if not prows:
                 prows = conn.execute(
-                    """SELECT group_num, player_name FROM event_pairings
+                    """SELECT group_num, cart_pos, player_name
+                       FROM event_pairings
                        WHERE event_id = ? ORDER BY group_num, cart_pos""",
                     (ev["id"],)).fetchall()
             for prw in prows:
                 pairing_groups.setdefault(prw["group_num"], []).append(
-                    prw["player_name"])
+                    (prw["cart_pos"], prw["player_name"]))
         except sqlite3.OperationalError:
             pairing_groups = {}
 
@@ -12943,6 +12947,15 @@ def get_event_leaderboard(event_name: str,
             conn, ev["item_name"], "NET")["buyers"].keys())
         gross_buyers = set(_event_game_buyers(
             conn, ev["item_name"], "GROSS")["buyers"].keys())
+        # the Games-tab player counts are what keyed the matrix when the
+        # GG games were set up (Kerry 2026-09-11: "should be checking
+        # against Tracker EVENT / GAMES which should also be helping
+        # determine which games are being played") — use THEM for game
+        # activation and team type, not the scorecard field size
+        try:
+            game_counts = _event_player_counts(conn, ev["item_name"])
+        except Exception:
+            game_counts = {}
 
         # per-game flight membership (GG labels only — never derived)
         flights: dict = {}
@@ -13130,12 +13143,68 @@ def get_event_leaderboard(event_name: str,
             "player_name": p["player_name"], "customer_id": cid,
             "scoring_round_id": p["scoring_round_id"],
             "net_pts": a.get("net"), "gross_pts": a.get("gross"),
+            "net": p["net"], "gross": p["gross"],
             "buyer": cid in net_buyers if cid is not None else False,
             "won": _won_cats(cid, ("mvp", "tgf_mvp")) if cid is not None
                    else [],
         })
     points_rows.sort(key=lambda r: (r["net_pts"] is None,
                                     -(r["net_pts"] or 0)))
+
+    # Points ties STAY ties (T# on the board — the races don't
+    # tiebreak); only Event MVP is tiebroken, per Kerry's ratified
+    # chain: 1. Net Score, 2. Gross Score, 3. Split Pot. The TOP tied
+    # group orders by that chain so the MVP winner shows first, and
+    # every tied MVP-eligible buyer carries a note saying how the
+    # chain decided (Kerry 2026-09-11: "Robert won the 2nd tiebreaker
+    # and should be shown 1st with notes for each").
+    def _chain_key(r):
+        return (r["net"] if r["net"] is not None else 999,
+                r["gross"] if r["gross"] is not None else 999)
+
+    def _sc(v):
+        if v is None:
+            return "—"
+        try:
+            return str(int(v)) if float(v).is_integer() else str(v)
+        except (TypeError, ValueError):
+            return str(v)
+
+    regrouped, seen_top = [], False
+    i = 0
+    while i < len(points_rows):
+        j = i + 1
+        while (j < len(points_rows)
+               and points_rows[j]["net_pts"] == points_rows[i]["net_pts"]):
+            j += 1
+        grp = points_rows[i:j]
+        buyers_g = sorted([r for r in grp if r["buyer"]], key=_chain_key)
+        others_g = sorted([r for r in grp if not r["buyer"]],
+                          key=_chain_key)
+        if (not seen_top and grp[0]["net_pts"] is not None
+                and len(grp) > 1 and len(buyers_g) >= 2):
+            w = buyers_g[0]
+            same_net = [r for r in buyers_g if r["net"] == w["net"]]
+            if len(same_net) == 1:
+                w["mvp_note"] = f"MVP tiebreak 1 — low Net ({_sc(w['net'])})"
+            else:
+                same_gross = [r for r in same_net
+                              if r["gross"] == w["gross"]]
+                if len(same_gross) == 1:
+                    w["mvp_note"] = (f"MVP tiebreak 2 — low Gross "
+                                     f"({_sc(w['gross'])})")
+                else:
+                    for r in same_gross:
+                        r["mvp_note"] = "MVP tiebreak 3 — split pot"
+            for r in buyers_g:
+                if not r.get("mvp_note"):
+                    r["mvp_note"] = (f"MVP tiebreak: Net {_sc(r['net'])} · "
+                                     f"Gross {_sc(r['gross'])}")
+        if grp[0]["net_pts"] is not None:
+            seen_top = True
+        regrouped.extend(buyers_g + others_g)
+        i = j
+    points_rows = regrouped
 
     # ── ALL teams with best-ball totals + GG-style team cards (Kerry
     # 2026-09-11: "Show all teams and allow expansion of each team to
@@ -13153,9 +13222,29 @@ def get_event_leaderboard(event_name: str,
 
     by_norm = {_normalize_player_name(p["player_name"]).lower(): p
                for p in plist if p["player_name"]}
+    # Below 16 players the matrix runs CART Net — 2-man cart teams, not
+    # foursomes (side-games spec; the s9.21/a9.21 boards are cart events)
+    _n_players = (game_counts or {}).get("players") or len(plist)
+    _team_type = ""
+    try:
+        _m9, _m18 = _load_games_matrix(db_path=db_path)
+        _mat = _m9 if (ev["holes"] or 18) == 9 else _m18
+        _mrow = _mat.get(str(_n_players)) or _mat.get(_n_players) or {}
+        _team_type = str(_mrow.get("teamType") or "")
+    except Exception:
+        pass
+    _cart_mode = "cart" in _team_type.lower() or (
+        not _team_type and _n_players < 16)
+    _groups: dict = {}
+    for tn, slots in pairing_groups.items():
+        if _cart_mode:
+            for cp, nm in slots:
+                _groups.setdefault((tn, "a" if (cp or 1) <= 2 else "b"),
+                                   []).append(nm)
+        else:
+            _groups[tn] = [nm for _, nm in slots]
     teams = []
-    for tn, names in sorted(pairing_groups.items(),
-                            key=lambda kv: str(kv[0])):
+    for tn, names in sorted(_groups.items(), key=lambda kv: str(kv[0])):
         members, matched = [], 0
         for nm in names:
             p = by_norm.get(_normalize_player_name(nm).lower())
@@ -13185,19 +13274,11 @@ def get_event_leaderboard(event_name: str,
                 total += min(nets)
                 any_hole = True
         teams.append({
-            "team_num": tn,
+            "team_num": (f"{tn[0]}{tn[1]}" if isinstance(tn, tuple)
+                         else tn),
             "players": members,
             "total_net": total if any_hole else None,
             "purse": None, "gg_position": None})
-    teams.sort(key=lambda t: (t["total_net"] is None, t["total_net"] or 0))
-    _last, _rank = object(), 0
-    for i, t in enumerate(teams, 1):
-        if t["total_net"] != _last:
-            _rank, _last = i, t["total_net"]
-        tied = (t["total_net"] is not None and sum(
-            1 for x in teams if x["total_net"] == t["total_net"]) > 1)
-        t["position"] = (("T" if tied else "") + str(_rank)
-                         if t["total_net"] is not None else "")
 
     def _surnames(members):
         out = set()
@@ -13209,6 +13290,7 @@ def get_event_leaderboard(event_name: str,
                 out.add(last_.strip().lower())
         return out
 
+    _min_match = 1 if _cart_mode else 2
     for gr in team_rows:
         gs = (gr["team"] or "").lower()
         best_t, best_n = None, 0
@@ -13216,9 +13298,43 @@ def get_event_leaderboard(event_name: str,
             n = sum(1 for s in _surnames(t["players"]) if s and s in gs)
             if n > best_n:
                 best_n, best_t = n, t
-        if best_t is not None and best_n >= 2:
+        if best_t is not None and best_n >= _min_match:
             best_t["purse"] = gr["purse"]
             best_t["gg_position"] = gr["position"]
+
+    # GG's recorded Team Net result is OFFICIAL — our best-ball total
+    # is a reconstruction from the ALL Net card's own dots (100%
+    # individual allowance), NOT the ratified Team Net allocation (75%,
+    # off lowest), so it can disagree with GG and must never out-rank
+    # the recorded result (Kerry 2026-09-11: the s9.21 $80 winner
+    # showed 2nd; s9.22's GG tie at T1 split 30/31 here). Recorded
+    # teams rank first by GG position; the rest follow by our total,
+    # unranked.
+    def _gg_pos_num(t):
+        m_ = re.search(r"\d+", str(t.get("gg_position") or ""))
+        return int(m_.group(0)) if m_ else None
+
+    any_gg = any(_gg_pos_num(t) is not None for t in teams)
+    if any_gg:
+        teams.sort(key=lambda t: (
+            0 if _gg_pos_num(t) is not None else 1,
+            _gg_pos_num(t) or 0,
+            t["total_net"] is None, t["total_net"] or 0))
+        for t in teams:
+            t["official"] = _gg_pos_num(t) is not None
+            t["position"] = t["gg_position"] if t["official"] else ""
+    else:
+        teams.sort(key=lambda t: (t["total_net"] is None,
+                                  t["total_net"] or 0))
+        _last, _rank = object(), 0
+        for i, t in enumerate(teams, 1):
+            if t["total_net"] != _last:
+                _rank, _last = i, t["total_net"]
+            tied = (t["total_net"] is not None and sum(
+                1 for x in teams if x["total_net"] == t["total_net"]) > 1)
+            t["position"] = (("T" if tied else "") + str(_rank)
+                             if t["total_net"] is not None else "")
+            t["official"] = False
 
     # ── skins winning cells (outright low GROSS on a hole WITHIN the
     # flight — the engine's rule) for the GG-style hole-by-hole grid ──
@@ -13252,13 +13368,16 @@ def get_event_leaderboard(event_name: str,
             if _matrix_num(row_.get("individualGross")) > 0:
                 thr = n
                 break
-        if thr is not None and len(gross_buyers) < thr:
+        _n_gross = (game_counts or {}).get("gross")
+        if _n_gross is None:
+            _n_gross = len(gross_buyers)
+        if thr is not None and _n_gross < thr:
             games_off.append({
                 "game": "individual_gross", "label": "Individual Gross",
-                "needed": thr, "had": len(gross_buyers),
+                "needed": thr, "had": _n_gross,
                 "note": (f"Individual Gross activates at {thr} GROSS "
                          f"buy-ins on a {ev['holes']}-hole event — this "
-                         f"event had {len(gross_buyers)}, so its pot "
+                         f"event had {_n_gross}, so its pot "
                          f"rolled into Skins (the full GROSS pool paid "
                          f"as skins).")})
     except Exception:

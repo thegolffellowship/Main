@@ -2668,21 +2668,35 @@
                   }).join("")).join("") +
               `</tbody></table></div>`
             : '<p style="color:var(--text-muted);">No skins buyers recorded.</p>';
+        // Points ties stay ties (T#) — only Event MVP tiebreaks, per
+        // the ratified chain (Net → Gross → split); the winner sits
+        // first in the tied group with a note per tied buyer
         const pointsHtml = (d.points_board || []).length
             ? `<div class="evlb-scroll"><table class="evlb-tbl"><thead><tr><th>#</th><th>Player</th><th style="text-align:right;">Net pts</th><th style="text-align:right;">Gross pts</th><th style="text-align:right;">MVP</th></tr></thead><tbody>` +
-              d.points_board.map((r, i) =>
-                  `<tr class="evlb-plr${r.buyer ? " buyer" : ""}" data-rid="${r.scoring_round_id || ""}">` +
-                  `<td class="r">${r.net_pts == null ? "" : i + 1}</td>` +
-                  `<td>${escapeHtml(r.player_name)}${evlbWonChips(r.won)}</td>` +
-                  `<td class="r"><b>${r.net_pts ?? ""}</b></td><td class="r">${r.gross_pts ?? ""}</td>` +
-                  `<td class="r">${r.buyer ? '<span class="evlb-in">&#10003;</span>' : ""}</td></tr>`).join("") +
+              (() => {
+                  let shown = 0, rank = 0, last = null;
+                  return d.points_board.map(r => {
+                      shown++;
+                      if (r.net_pts !== last) { rank = shown; last = r.net_pts; }
+                      const tied = r.net_pts != null &&
+                          d.points_board.filter(x => x.net_pts === r.net_pts).length > 1;
+                      return `<tr class="evlb-plr${r.buyer ? " buyer" : ""}" data-rid="${r.scoring_round_id || ""}">` +
+                          `<td class="r">${r.net_pts == null ? "" : (tied ? "T" : "") + rank}</td>` +
+                          `<td>${escapeHtml(r.player_name)}${evlbWonChips(r.won)}` +
+                          (r.mvp_note ? `<div style="font-size:10.5px;color:#9CA3AF;">${escapeHtml(r.mvp_note)}</div>` : "") +
+                          `</td>` +
+                          `<td class="r"><b>${r.net_pts ?? ""}</b></td><td class="r">${r.gross_pts ?? ""}</td>` +
+                          `<td class="r">${r.buyer ? '<span class="evlb-in">&#10003;</span>' : ""}</td></tr>`;
+                  }).join("");
+              })() +
               `</tbody></table></div>`
             : '<p style="color:var(--text-muted);">No scorecards yet.</p>';
         // TEAM: every team, best-ball total, expandable to the GG-style
         // team net scorecard (Kerry 2026-09-11: "Show all teams and
         // allow expansion of each team")
         const teamHtml = (d.teams || []).length
-            ? d.teams.map((t, ti) => {
+            ? `<div class="evlb-note" style="background:#F8FAFC;border-color:#E2E8F0;color:#475569;">Positions and purses are the recorded Golf Genius result (the money of record). The total shown is our best-ball reconstruction from each player's own card — the official Team Net game plays a 75% off-lowest allowance, so the two can differ.</div>` +
+              d.teams.map((t, ti) => {
                 const names = t.players.map(p => escapeHtml(p.player_name)).join(" &middot; ");
                 const win = /^T?1$/.test(t.position || "");
                 return `<details class="evlb-team${win ? " win" : ""}" data-ti="${ti}">` +

@@ -315,11 +315,12 @@ CREATE TABLE IF NOT EXISTS event_pairings (id INTEGER PRIMARY KEY, event_id INT,
 INSERT INTO event_pairings (event_id, holes, group_num, slot_label, player_name, cart_pos) VALUES
  (50,'9',1,'A','Low Buyer',1),(50,'9',1,'B','High Buyer',2),
  (50,'9',2,'A','Mid Nonbuyer',1),(50,'9',2,'B','Someone Guest',2);
-INSERT INTO scoring_rounds (id, customer_id, player_name, event_id, playing_handicap, gross, net)
-VALUES (101, 1, 'BUYER, Low', 50, 5, 40, 35),
-       (102, 2, 'BUYER, High', 50, 20, 55, 35),
-       (103, 3, 'NONBUYER, Mid', 50, 14, 50, 36),
-       (104, NULL, 'GUEST, Someone', 50, NULL, 48, NULL);
+INSERT INTO course_tee_holes (tee_id, hole_number, par) VALUES (7,10,4),(7,11,4);
+INSERT INTO scoring_rounds (id, customer_id, player_name, event_id, playing_handicap, gross, net, tee_id)
+VALUES (101, 1, 'BUYER, Low', 50, 5, 40, 35, 7),
+       (102, 2, 'BUYER, High', 50, 20, 55, 35, 7),
+       (103, 3, 'NONBUYER, Mid', 50, 14, 50, 36, 7),
+       (104, NULL, 'GUEST, Someone', 50, NULL, 48, NULL, 7);
 -- two holes of data: hole 10 (Low 4, High 6-1dot, Mid 5, Guest 5),
 -- hole 11 (Low 5, High 5-1dot, Mid 4, Guest 6)
 INSERT INTO scoring_holes (scoring_round_id, hole_number, strokes, strokes_received) VALUES
@@ -369,6 +370,18 @@ pb = evd["points_board"]
 check("points board carries MVP money on the winner's row",
       any(r["customer_id"] == 1 and
           any(x["category"] == "mvp" for x in r["won"]) for r in pb))
+# MVP tiebreak (Kerry: chain is Net → Gross → split; points stay tied):
+# cids 1+2 tie on net pts AND net stroke (35) — gross 40 vs 55 decides
+check("tied top group orders by the MVP chain (gross decides)",
+      pb[0]["customer_id"] == 1 and pb[1]["customer_id"] == 2,
+      repr([(r["customer_id"], r["net_pts"]) for r in pb[:3]]))
+check("MVP winner notes the deciding tiebreaker",
+      pb[0].get("mvp_note") == "MVP tiebreak 2 — low Gross (40)",
+      repr(pb[0].get("mvp_note")))
+check("tied loser carries their chain values",
+      "Net 35" in (pb[1].get("mvp_note") or "")
+      and "Gross 55" in (pb[1].get("mvp_note") or ""),
+      repr(pb[1].get("mvp_note")))
 check("team + proxies ride on their own boards",
       evd["team_board"][0]["team"] == "A + B + C + D"
       and evd["proxies"][0]["detail"] == "#7")

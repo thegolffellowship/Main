@@ -1,5 +1,15 @@
-window.TGF_VERSION = "2.378.3";
+window.TGF_VERSION = "2.379.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.379.0",
+    date: "2026-09-11",
+    changes: [
+      "Events leaderboard TEAM board is now GG-OFFICIAL (Kerry: 'Something is wrong here' — the s9.21 $80 winner showed 2nd, and s9.22's recorded T1 tie split into 30/31). Root cause: our best-ball total reconstructs from each player's OWN card dots (100% individual allowance) while the real Team Net game plays 75% OFF-LOWEST, and events under 16 players run CART Net (2-man cart teams), not foursomes. Fix: GG's recorded positions and purses rank the board (the money of record; recorded teams first, the rest follow by reconstruction total, unranked), team grouping splits into cart pairs when the matrix row's teamType says CART, and the panel says plainly that the total is a reconstruction. Native engine-scored Team Net (live_scoring.game_team_net with the ratified allowance) is the untether program's job.",
+      "Game activation reads the Tracker's EVENT/GAMES counts (Kerry: 'should be checking against Tracker EVENT / GAMES which should also be helping determine which games are being played') — _event_player_counts (the Games-tab mirror) supplies the player count that picks the matrix row and the GROSS buyer count that judges Individual Gross activation, replacing the scorecard field size.",
+      "MVP/Points board: points ties STAY ties, shown as T# (the races never tiebreak); only Event MVP tiebreaks, per Kerry's ratified chain verbatim — '1. Net Score 2. Gross Score 3. Split Pot.' The top tied group orders by that chain so the MVP winner shows first (Robert won tiebreaker 2 on gross at Landa), and every tied MVP-eligible buyer carries a note saying how the chain decided.",
+      "Joint events (chapter TGF/national — Landa Park) now list under BOTH the Austin and San Antonio chapter filters.",
+    ],
+  },
   {
     version: "2.378.3",
     date: "2026-09-11",
