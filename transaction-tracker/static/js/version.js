@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.377.2";
+window.TGF_VERSION = "2.378.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.378.0",
+    date: "2026-09-11",
+    changes: [
+      "Events leaderboard iteration 2 (Kerry's review of the pilot, all eight notes): TEAM now shows EVERY team — the event's pairing groups (Team Net is Foursome v. Field; the closeout's final GG pairing ingest makes those the played groups) with best-ball net totals computed from the hole cards, ranked with ties and GG's recorded purses attached — and each team expands to a GG-style team net card with the counting ball circled. Found along the way: scoring_rounds has no team column at all, so the spotlight's team-partners lookup ('w/ Smith & Jones') has been silently failing into its except since it shipped — pairings are the team truth (the #452 lesson again: a check whose only failure mode is toward 'nothing here').",
+      "SKINS is now the GG-style overall chart: bought-in players per flight, hole-by-hole gross with winning skins circled (outright low gross within the flight, computed from the cards), and everyone NOT in skins listed below with their hole scores. Handicapped boards carry INDEX (9-hole index on 9-hole events) and PLAYING HANDICAP columns and the '(4)' name parenthetical is gone. A game that didn't run is denoted up front — Individual Gross's activation read from the LIVE matrix per the 9/18 standard, with the note that its remaining pot rolled into Skins.",
+      "Player scorecard expands now use THE universal card standard (tgfRenderScorecard — pixel-identical to the Handicaps and Points Race drill-downs; 9-hole events render only the nine played). The chapter chips and the game sub-tabs are CONNECTED segmented controls; tables compress LEFT instead of filling the screen; POINTS is relabeled MVP/Points. Pilot dial widened per Kerry to s9.22, a9.22, s9.21, a9.21 and s18.10 FALL KICKOFF (set on production).",
+    ],
+  },
   {
     version: "2.377.2",
     date: "2026-09-11",
