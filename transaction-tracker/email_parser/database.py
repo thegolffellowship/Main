@@ -13475,6 +13475,17 @@ def get_event_leaderboard(event_name: str,
         if best_t is not None and best_n >= _min_match:
             best_t["purse"] = gr["purse"]
             best_t["gg_position"] = gr["position"]
+            # blind-draw slots ride on the GG team string ("Bl[LAST,
+            # First]" — Kerry 2026-09-11: "Make sure to show blinds as
+            # well"): show them on the team, card duplicated from the
+            # drawn player's own round (that is GG's mechanism)
+            for bm in re.findall(r"Bl\[([^\]]+)\]", gr["team"] or ""):
+                src = by_norm.get(_normalize_player_name(bm).lower())
+                best_t["players"].append({
+                    "player_name": f"Bl[{bm}]",
+                    "customer_id": None,
+                    "scoring_round_id": (src or {}).get("scoring_round_id"),
+                    "blind": True})
 
     # GG's recorded Team Net result is OFFICIAL — our best-ball total
     # is a reconstruction from the ALL Net card's own dots (100%

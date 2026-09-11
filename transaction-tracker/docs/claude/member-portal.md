@@ -580,3 +580,22 @@ never contest a skin. `skins_out` removed from the payload.
   field size. The Star Ranch team-game override was a one-off with no
   standing dial; if per-event game overrides become a pattern they
   should land as a dial the leaderboard reads too.
+
+**Team Net scoring — LEARNED FROM GG (parity bridge, 2026-09-11):**
+`scoring-teamnet-parity:<event>|<gg v2tournaments url>` computes every
+plausible reading of 75%-off-lowest from our cards AND reads GG's
+ground truth (the team tournament's per-player detail fragments: each
+player's TEAM-game handicap + dots). s9.22 findings, proven from GG's
+own dots: team PH = 75% × (UNROUNDED course handicap − lowest
+unrounded CH in field), rounded half-up, CAPPED at the TGF max
+(18 on nines — DelCarmen's 18 is unreachable any other way);
+allocation over ALL holes by stroke index (max 2 pops), then dots on
+par 3s are REMOVED, not reallocated (Anthis: TH 8 → 7 dots).
+EXACT reproduction from our stored data is impossible: we keep the
+ROUNDED net-game PH, and its ±0.5 flips several players by a stroke.
+The clean fix is importing the TEAM tournament per-player nets the
+way ALL Net imports (GG fragments carry the exact THs/dots) — a
+schema addition awaiting Kerry's rule-3b ratification. Until then the
+board stays GG-official-ranked. Blind-draw slots now render on teams
+(parsed from the GG team string's "Bl[...]", card duplicated from the
+drawn player's round — GG's own mechanism).

@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.379.0";
+window.TGF_VERSION = "2.379.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.379.1",
+    date: "2026-09-11",
+    changes: [
+      "Team Net math LEARNED FROM GG (Kerry: 'Review where discrepancy is on GG and learn from it for our own uses'). New read-only bridge scoring-teamnet-parity:<event>|<gg url> computes every plausible reading of 75%-off-lowest from our cards AND reads GG's ground truth — the team tournament's per-player fragments with each player's TEAM-game handicap and dots. Proven on s9.22: team PH = 75% of the player's UNROUNDED course handicap minus the field's lowest unrounded CH, rounded half-up, CAPPED at the TGF max (18 on nines — DelCarmen's 18 is unreachable any other way); strokes allocate over ALL holes by stroke index (max 2 pops) and dots landing on par 3s are REMOVED, not reallocated (Anthis: TH 8 → 7 dots). Exact reproduction from stored data alone is impossible — we keep the ROUNDED net-game handicap and its ±0.5 flips players by a stroke — so the board stays ranked by GG's recorded result; importing the team tournament's per-player nets (the clean fix) is a schema addition awaiting Kerry's ratification.",
+      "Blind draws now show on teams (Kerry: 'Make sure to show blinds as well'): Bl[...] slots parsed from GG's recorded team string, rendered as team members with the drawn player's own card — GG's mechanism, ours to display. Team Net has NO tiebreakers (Kerry): tied teams split the pot — the recorded T#s and split purses are exactly what the board shows.",
+    ],
+  },
   {
     version: "2.379.0",
     date: "2026-09-11",
