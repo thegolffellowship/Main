@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.382.0";
+window.TGF_VERSION = "2.382.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.382.1",
+    date: "2026-09-11",
+    changes: [
+      "OVERALL view now shows EVERYTHING (Kerry: 'list team winners and closest to pin winners above that leaderboard separately so that the OVERALL board shows everything'): winner strips render above the board — the winning Team Net team(s) with position, members, recorded total and purse (team-net blue), and every proxy winner (Closest to Pin, Longest Putt, plus any Hole-in-One) with hole detail and purse (CTP teal) — so the one default view carries the individual board AND the games that don't live in a player row.",
+    ],
+  },
   {
     version: "2.382.0",
     date: "2026-09-11",

@@ -323,6 +323,15 @@
         .evlb-ovr td.w-mvp { background: rgba(109,40,217,.14); color: var(--cat-mvp, #6D28D9); font-weight: 700; border-radius: 4px; }
         .evlb-ovr td.won, .evlb-ovr th.won { text-align: right; font-weight: 700;
             color: var(--money-green, #15803D); font-variant-numeric: tabular-nums; min-width: 58px; }
+        /* OVERALL winner strips (Team Net + proxies above the board) */
+        .evlb-winbox { margin: 0 0 10px; display: grid; gap: 4px; }
+        .evlb-winline { display: flex; align-items: baseline; gap: 10px; font-size: 12.5px;
+            padding: 5px 10px; border-radius: 8px; background: #FAFAF8; border: 1px solid #F0EEE9; }
+        .evlb-winline .cat { font: 700 9.5px/1.4 'Bitter', serif; letter-spacing: 1px; white-space: nowrap; }
+        .evlb-winline.team .cat { color: var(--cat-team-net, #1D4ED8); }
+        .evlb-winline.ctp .cat { color: var(--cat-ctp, #0F766E); }
+        .evlb-winline .who { flex: 1; min-width: 0; white-space: normal; }
+        .evlb-winline .amt { font-weight: 700; color: var(--money-green, #15803D); font-variant-numeric: tabular-nums; white-space: nowrap; }
         .evlb-legend { font-size: 11px; color: #6B7280; margin: 8px 0 0; white-space: normal; }
         .evlb-legend .lg { display: inline-block; padding: 1px 7px; border-radius: 4px; font-weight: 700; }
         .evlb-legend .lg.w-net { background: rgba(21,128,61,.16); color: var(--cat-ind-net, #15803D); }
@@ -2684,8 +2693,29 @@
             }).join("");
         };
         const ovRows = d.overall_board || [];
+        // Winner strips above the board (Kerry 2026-09-11: "list team
+        // winners and closest to pin winners above that leaderboard
+        // separately so that the OVERALL board shows everything") —
+        // Team Net winning team(s) + every proxy (CTP / Longest Putt)
+        // + hole-in-ones, each in its ratified category color.
+        const ovTeamWins = (d.teams || []).filter(t => t.purse != null && t.purse > 0)
+            .map(t => `<div class="evlb-winline team"><span class="cat">TEAM NET</span>` +
+                `<span class="who">${t.position ? escapeHtml(t.position) + " · " : ""}` +
+                `${t.players.map(p => escapeHtml(p.player_name)).join(" · ")}` +
+                `${t.gg_total != null ? ` · <b>${t.gg_total}</b>` : ""}</span>` +
+                `<span class="amt">$${Number(t.purse).toFixed(2)}</span></div>`);
+        const ovProxWins = (d.proxies || [])
+            .map(p => `<div class="evlb-winline ctp"><span class="cat">${escapeHtml((p.label || "Closest to Pin").toUpperCase())}</span>` +
+                `<span class="who">${escapeHtml(p.player || "")}${p.detail ? " · " + escapeHtml(p.detail) : ""}</span>` +
+                `<span class="amt">${p.purse != null ? "$" + Number(p.purse).toFixed(2) : ""}</span></div>`)
+            .concat((d.hio || []).map(p =>
+                `<div class="evlb-winline ctp"><span class="cat">HOLE-IN-ONE</span>` +
+                `<span class="who">${escapeHtml(p.player || "")}${p.detail ? " · " + escapeHtml(p.detail) : ""}</span>` +
+                `<span class="amt">${p.purse != null ? "$" + Number(p.purse).toFixed(2) : ""}</span></div>`));
+        const ovWinStrips = ovTeamWins.concat(ovProxWins).join("");
         const overallHtml = ovRows.length
-            ? `<div class="evlb-scroll"><table class="evlb-holes evlb-ovr"><thead>` +
+            ? (ovWinStrips ? `<div class="evlb-winbox">${ovWinStrips}</div>` : "") +
+              `<div class="evlb-scroll"><table class="evlb-holes evlb-ovr"><thead>` +
               `<tr><th>#</th><th class="nm">Player</th><th title="Handicap Index">Idx</th><th title="Playing Handicap">PH</th>` +
               (d.hole_cols || []).map(n => `<th>${n}</th>`).join("") +
               `<th>Gross</th><th>Net</th><th>Pts</th><th class="won">Won</th></tr></thead><tbody>` +
