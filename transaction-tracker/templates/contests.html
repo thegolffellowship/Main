@@ -2694,23 +2694,33 @@
         // TEAM: every team, best-ball total, expandable to the GG-style
         // team net scorecard (Kerry 2026-09-11: "Show all teams and
         // allow expansion of each team")
+        const anyGGTotal = (d.teams || []).some(t => t.gg_total != null);
         const teamHtml = (d.teams || []).length
-            ? `<div class="evlb-note" style="background:#F8FAFC;border-color:#E2E8F0;color:#475569;">Positions and purses are the recorded Golf Genius result (the money of record). The total shown is our best-ball reconstruction from each player's own card — the official Team Net game plays a 75% off-lowest allowance, so the two can differ.</div>` +
+            ? (anyGGTotal
+                ? `<div class="evlb-note" style="background:#F8FAFC;border-color:#E2E8F0;color:#475569;">Positions, totals and purses are the recorded Golf Genius result — the official Team Net game (75% off-lowest allowance), the score and money of record.</div>`
+                : `<div class="evlb-note" style="background:#F8FAFC;border-color:#E2E8F0;color:#475569;">Positions and purses are the recorded Golf Genius result (the money of record). The total shown is our best-ball reconstruction from each player's own card — the official Team Net game plays a 75% off-lowest allowance, so the two can differ.</div>`) +
               d.teams.map((t, ti) => {
                 const names = t.players.map(p => escapeHtml(p.player_name)).join(" &middot; ");
                 const win = /^T?1$/.test(t.position || "");
+                // GG's posted board total is the score of record; a team
+                // GG didn't post (shouldn't happen on a walked board)
+                // falls back to our reconstruction, shown muted.
+                const tot = t.gg_total != null
+                    ? `<span class="tnet">${t.gg_total}</span>`
+                    : `<span class="tnet"${anyGGTotal ? ' style="color:#9CA3AF;font-style:italic;" title="our reconstruction — GG posted no total for this team"' : ""}>${t.total_net ?? ""}</span>`;
                 return `<details class="evlb-team${win ? " win" : ""}" data-ti="${ti}">` +
                     `<summary><span class="tchev">&#9654;</span>` +
                     `<span style="min-width:26px;font-weight:700;">${escapeHtml(t.position || "")}</span>` +
                     `<span class="tm">${names}</span>` +
-                    `<span class="tnet">${t.total_net ?? ""}</span>` +
+                    tot +
                     `<span class="tpurse">${t.purse != null ? "$" + Number(t.purse).toFixed(2) : ""}</span>` +
                     `</summary><div class="evlb-team-card">${evlbTeamCard(d, t)}</div></details>`;
             }).join("")
             : (d.team_board || []).length
-            ? `<div class="evlb-scroll"><table class="evlb-tbl"><thead><tr><th>Pos</th><th>Team</th><th style="text-align:right;">Purse</th></tr></thead><tbody>` +
+            ? `<div class="evlb-scroll"><table class="evlb-tbl"><thead><tr><th>Pos</th><th>Team</th><th style="text-align:right;">Total</th><th style="text-align:right;">Purse</th></tr></thead><tbody>` +
               d.team_board.map(t =>
                   `<tr><td>${escapeHtml(t.position || "")}</td><td style="white-space:normal;">${escapeHtml(t.team)}</td>` +
+                  `<td class="r">${t.gg_total ?? ""}</td>` +
                   `<td class="r">${t.purse != null ? "$" + Number(t.purse).toFixed(2) : ""}</td></tr>`).join("") +
               `</tbody></table></div>`
             : '<p style="color:var(--text-muted);">Team results not recorded yet.</p>';
@@ -2767,11 +2777,18 @@
         const teamTotal = cols.reduce((s, n) => s + (mins[n] ?? 0), 0);
         const teamRow = `<tr class="teamrow"><td class="nm">TEAM (best ball)</td>` +
             cols.map(n => `<td>${mins[n] ?? ""}</td>`).join("") +
-            `<td>${t.total_net ?? teamTotal}</td></tr>`;
+            `<td>${teamTotal}</td></tr>`;
+        // The card's per-hole nets come from each player's OWN card
+        // (individual allowance), so its sum can differ from GG's
+        // recorded team total (75% off-lowest) — say so rather than
+        // letting the two numbers silently disagree.
+        const ggNote = (t.gg_total != null && t.gg_total !== teamTotal)
+            ? ` &middot; GG recorded team total: <b>${t.gg_total}</b> (official 75% off-lowest allowance; this card shows each player's own-card net)`
+            : "";
         return `<div class="evlb-scroll"><table class="evlb-holes"><thead>` +
             `<tr><th class="nm">NET SCORES</th>${cols.map(n => `<th>${n}</th>`).join("")}<th>${nineLbl}</th></tr>` +
             `</thead><tbody>${rows}${teamRow}</tbody></table>` +
-            `<span style="font-size:10.5px;color:#9CA3AF;">Highlighted = the ball that counted for the team score</span></div>`;
+            `<span style="font-size:10.5px;color:#9CA3AF;">Highlighted = the ball that counted for the team score${ggNote}</span></div>`;
     }
     function evlbWireEvent(body) {
         body.querySelectorAll(".evlb-subtab").forEach(btn =>

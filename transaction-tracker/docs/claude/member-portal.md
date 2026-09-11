@@ -581,6 +581,36 @@ never contest a skin. `skins_out` removed from the payload.
   standing dial; if per-event game overrides become a pattern they
   should land as a dial the leaderboard reads too.
 
+**Events leaderboard iteration 5 (v2.381.0, Kerry 2026-09-11 —
+"Both, but do 1 first"): TEAM board shows GG's POSTED TOTALS.**
+- The games-results walk (`import_gg_game_results`) now captures the
+  ENTIRE Team Net board, not just winners: `_game_winners_from_table`
+  grew a `total` field (parsed from GG's "TotalNet" column, "30
+  (-/30)") and a `winners_only=False` mode returning every positioned
+  row. Winner teams keep their `game='team_net'` row (the posted total
+  rides in `detail` as `total:N`); non-winner teams store under
+  **`game='team_net_board'`** — a key the payout assembly NEVER reads,
+  because storing $0 teams as `team_net` would let the matrix-fallback
+  pool invent place money GG didn't record (the v2.126.3 phantom-ties
+  class).
+- `get_event_leaderboard` reads both keys: every team gets
+  `gg_position` + `gg_total`; the board ranks and scores by the
+  recorded result end to end (GG even ordered s9.22's non-winners
+  differently than our reconstruction — WADE's team 5th at 34 vs our
+  3rd at 31). Reconstruction totals appear only for a team GG posted
+  no total for (muted, titled), and inside the expanded best-ball card,
+  which notes when its own-card sum differs from the recorded total
+  and why (75% off-lowest).
+- Matching hardened: per-MEMBER hits (full "LAST, First" preferred,
+  surname on a WORD BOUNDARY as fallback) — the surname-set approach
+  collapsed same-surname teammates (married couple in one cart) below
+  the foursome threshold, and bare substring let "buyer" hit inside
+  "nonBUYER". Blind-draw append is idempotent (a team can match its
+  winner row AND its board row).
+- Bridges: `scoring-games-import` takes `rewalk=N` (≤12) for the
+  backfill; `scoring-event-board:<event>` is a read-only compact TEAM
+  board vet (GG pos/total, reconstruction, purse, official).
+
 **Team Net scoring — LEARNED FROM GG (parity bridge, 2026-09-11):**
 `scoring-teamnet-parity:<event>|<gg v2tournaments url>` computes every
 plausible reading of 75%-off-lowest from our cards AND reads GG's

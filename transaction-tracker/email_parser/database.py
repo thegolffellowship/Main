@@ -13372,10 +13372,19 @@ def get_event_leaderboard(event_name: str,
                    FROM gg_game_results WHERE event_id = ?
                    ORDER BY game, id""", (ev["id"],)):
             g = dict(gr)
-            if g["game"] == "team_net" and g["is_team"]:
+            if g["game"] in ("team_net", "team_net_board") and g["is_team"]:
+                # gg_total = GG's posted board total (rides in detail as
+                # "total:N", v2.381.0) — the score of record. team_net =
+                # winner rows (real purses); team_net_board = the rest of
+                # the recorded standings ($0 rows the payout assembly
+                # must never see).
+                _tm = re.search(r"total:(-?\d+)", g["detail"] or "")
                 team_rows.append({"position": g["position"],
                                   "team": g["player_name"],
-                                  "purse": g["purse"]})
+                                  "purse": (g["purse"] if g["game"] ==
+                                            "team_net" else None),
+                                  "gg_total": (int(_tm.group(1))
+                                               if _tm else None)})
             elif g["game"] in ("ctp", "longest_putt"):
                 proxies.append({"game": g["game"],
                                 "label": g["game_label"] or (
@@ -13655,34 +13664,52 @@ def get_event_leaderboard(event_name: str,
                          else tn),
             "players": members,
             "total_net": total if any_hole else None,
-            "purse": None, "gg_position": None})
+            "purse": None, "gg_position": None, "gg_total": None})
 
-    def _surnames(members):
-        out = set()
+    def _member_hits(members, gs):
+        # Count MEMBERS found in GG's team string — full "LAST, First"
+        # match preferred, surname fallback. Counting per member (not a
+        # surname SET) matters: a team carrying two same-surname players
+        # (a married couple in one cart) collapsed to one surname hit
+        # and could miss the foursome threshold entirely.
+        hits = 0
         for m in members:
-            nm = m["player_name"] or ""
-            last_ = (nm.split(",")[0] if "," in nm
+            nm = (m["player_name"] or "").strip().lower()
+            if not nm or nm.startswith("bl["):
+                continue
+            last_ = (nm.split(",")[0].strip() if "," in nm
                      else (nm.split()[-1] if nm.split() else ""))
-            if last_.strip():
-                out.add(last_.strip().lower())
-        return out
+            # surname on a word boundary only — bare substring let
+            # "buyer" hit inside "nonBUYER" and cross-matched teams
+            if nm in gs or (last_ and re.search(
+                    r"(?<![a-z'])" + re.escape(last_) + r"(?![a-z'])", gs)):
+                hits += 1
+        return hits
 
     _min_match = 1 if _cart_mode else 2
     for gr in team_rows:
         gs = (gr["team"] or "").lower()
         best_t, best_n = None, 0
         for t in teams:
-            n = sum(1 for s in _surnames(t["players"]) if s and s in gs)
+            n = _member_hits(t["players"], gs)
             if n > best_n:
                 best_n, best_t = n, t
         if best_t is not None and best_n >= _min_match:
-            best_t["purse"] = gr["purse"]
+            if gr["purse"] is not None:
+                best_t["purse"] = gr["purse"]
             best_t["gg_position"] = gr["position"]
+            if gr.get("gg_total") is not None:
+                best_t["gg_total"] = gr["gg_total"]
             # blind-draw slots ride on the GG team string ("Bl[LAST,
             # First]" — Kerry 2026-09-11: "Make sure to show blinds as
             # well"): show them on the team, card duplicated from the
-            # drawn player's own round (that is GG's mechanism)
+            # drawn player's own round (that is GG's mechanism). A team
+            # can match BOTH its winner row and its board row (v2.381.0)
+            # — never append the same blind slot twice.
+            _have = {p["player_name"] for p in best_t["players"]}
             for bm in re.findall(r"Bl\[([^\]]+)\]", gr["team"] or ""):
+                if f"Bl[{bm}]" in _have:
+                    continue
                 src = by_norm.get(_normalize_player_name(bm).lower())
                 best_t["players"].append({
                     "player_name": f"Bl[{bm}]",
@@ -15926,16 +15953,22 @@ def _split_board_sections(table: list) -> list[tuple]:
     return sections
 
 
-def _game_winners_from_table(table: list) -> list[dict]:
+def _game_winners_from_table(table: list, winners_only: bool = True) -> list[dict]:
     """Winner rows from a GG game-result board table.
 
-    Returns [{player, chapter, position, detail, purse, is_team, section}].
-    Winners = rows with purse > 0; if no purse column/values, rows at
-    position 1 (incl. "T1" ties) — evaluated PER SECTION, since flighted
-    boards (Ind Net / Ind Gross) pack every flight into one table and
-    each flight has its own winner. Blank/notice rows (len mismatch)
-    skip. Unsectioned tables (CTP / Team Net / proxies) parse exactly as
-    before, with section = None.
+    Returns [{player, chapter, position, detail, purse, is_team, section,
+    total}]. Winners = rows with purse > 0; if no purse column/values,
+    rows at position 1 (incl. "T1" ties) — evaluated PER SECTION, since
+    flighted boards (Ind Net / Ind Gross) pack every flight into one
+    table and each flight has its own winner. Blank/notice rows (len
+    mismatch) skip. Unsectioned tables (CTP / Team Net / proxies) parse
+    exactly as before, with section = None.
+
+    total (v2.381.0, Kerry: show GG's posted totals, not our
+    reconstruction): the board's Total column ("TotalNet", "30 (-/30)")
+    as an int when present. winners_only=False returns EVERY positioned
+    row — the whole standings, $0 teams included — so the events
+    leaderboard can display the full recorded Team Net board.
     """
     if not table or not table[0]:
         return []
@@ -15956,6 +15989,7 @@ def _game_winners_from_table(table: list) -> list[dict]:
         player_i = col("player", "foursome", "team", "twosome", "cart")
         purse_i = col("purse")
         detail_i = col("detail")
+        total_i = col("total")
         if player_i < 0:
             continue
         is_team = 1 if "player" not in head[player_i] else 0
@@ -15969,6 +16003,10 @@ def _game_winners_from_table(table: list) -> list[dict]:
             m = re.search(r"\s+TGF\s+([A-Za-z .'-]+)$", raw)
             chapter = m.group(1).strip() if m else None
             name = raw[:m.start()].strip() if m else raw
+            tot = None
+            if total_i > -1:
+                tm = re.match(r"^\s*(-?\d+)", str(r[total_i] or ""))
+                tot = int(tm.group(1)) if tm else None
             rows.append({
                 "player": name, "chapter": chapter,
                 "position": (r[pos_i] or "").strip() if pos_i > -1 else "",
@@ -15976,7 +16014,11 @@ def _game_winners_from_table(table: list) -> list[dict]:
                 "purse": _parse_money(r[purse_i]) if purse_i > -1 else 0.0,
                 "is_team": is_team,
                 "section": section,
+                "total": tot,
             })
+        if not winners_only:
+            winners.extend([r for r in rows if r["position"]])
+            continue
         sec_winners = [r for r in rows if r["purse"] > 0]
         if not sec_winners:
             sec_winners = [r for r in rows
@@ -16181,9 +16223,53 @@ def import_gg_game_results(widget_url: str, db_path: str | Path = DB_PATH,
                          w["position"],
                          # Flighted boards: the section label (LOW Flight /
                          # FLIGHT 2 | HDCP 6 - 12) rides in detail so the
-                         # payout description can name the flight.
-                         w["detail"] or w.get("section"), w["purse"]))
+                         # payout description can name the flight. Team
+                         # rows: GG's posted board total rides here
+                         # instead (v2.381.0 — the recorded score of
+                         # record, so boards never show our best-ball
+                         # reconstruction against GG's positions).
+                         w["detail"] or w.get("section")
+                         or (f"total:{w['total']}" if w["is_team"]
+                             and w.get("total") is not None else None),
+                         w["purse"]))
                     result["winners_recorded"] += 1
+                # FULL TEAM BOARD (v2.381.0, Kerry: "do 1 first" — show
+                # GG's posted totals): the Team Net board publishes EVERY
+                # team's position + total, not just winners, and GG's
+                # ordering is the record (our reconstruction mis-ordered
+                # s9.22's non-winners). Store non-winner teams under game
+                # 'team_net_board' so the payout assembly (which reads
+                # game='team_net' only) NEVER sees a $0 row — storing $0
+                # teams as team_net would let the matrix-fallback pool
+                # invent place money GG didn't record. Winner teams keep
+                # their game='team_net' row (the board insert lands on
+                # the same (tid, player_name) key and only refreshes
+                # position/detail/purse — game is not in the upsert).
+                board_names: list = []
+                if game == "team_net" and any(w["is_team"] for w in fresh):
+                    board: list = []
+                    for table in tstruct.get("tables") or []:
+                        board.extend(r for r in _game_winners_from_table(
+                            table, winners_only=False) if r["is_team"])
+                    for b in board:
+                        board_names.append(b["player"])
+                        conn.execute(
+                            """INSERT INTO gg_game_results
+                                   (event_id, event_code, gg_round_id,
+                                    gg_tournament_id, game, game_label,
+                                    customer_id, player_name, is_team,
+                                    chapter, position, detail, purse)
+                               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                               ON CONFLICT (gg_tournament_id, player_name)
+                               DO UPDATE SET purse = excluded.purse,
+                                             position = excluded.position,
+                                             detail = excluded.detail""",
+                            (ev_id, ev_code, rid, tid, "team_net_board",
+                             text, None, b["player"], 1, b["chapter"],
+                             b["position"],
+                             (f"total:{b['total']}"
+                              if b.get("total") is not None else None),
+                             b["purse"]))
                 # REPLACE semantics per tournament (v2.126.3): drop rows a
                 # previous walk stored that are NOT in the current winner
                 # set. A walk during a live round captures transient
@@ -16191,7 +16277,7 @@ def import_gg_game_results(widget_url: str, db_path: str | Path = DB_PATH,
                 # upserted the real winners but left the stale rows — the
                 # a9.18/s18.8 phantom Team Net "ties".
                 if fresh:
-                    names = [w["player"] for w in fresh]
+                    names = [w["player"] for w in fresh] + board_names
                     ph = ",".join("?" * len(names))
                     stale = conn.execute(
                         f"DELETE FROM gg_game_results WHERE gg_tournament_id"

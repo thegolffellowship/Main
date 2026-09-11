@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.380.1";
+window.TGF_VERSION = "2.381.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.381.0",
+    date: "2026-09-11",
+    changes: [
+      "Events leaderboard TEAM board now shows GG'S POSTED TOTALS — the score of record — instead of our best-ball reconstruction (Kerry, on seeing s9.22's T1/T1 rendered 30 vs 31: the recorded tie IS a tie, both teams posted 30; our reconstruction from own-card dots cannot reproduce the 75% off-lowest team math and even mis-ordered the non-winners — GG had WADE's team 5th at 34, we showed them 3rd at 31). The games-results walk now captures the ENTIRE Team Net board: winner rows keep their game='team_net' entry and gain the posted total; non-winner teams (positions, totals, $0 purses) store under game='team_net_board', which the payout assembly NEVER reads — storing $0 teams as team_net would have let the matrix-fallback pool invent place money GG didn't record. The board note now reads 'Positions, totals and purses are the recorded Golf Genius result'; a team's expanded best-ball card keeps our per-hole reconstruction and says plainly when its sum differs from GG's recorded total and why.",
+      "Team-to-GG matching hardened by what the test fixture caught: surname matching used a SET, so a team with two same-surname players (a married couple in one cart) collapsed to one hit and could miss the foursome threshold; and bare substring matching let 'buyer' hit inside 'nonBUYER' and cross-match teams. Now counts per MEMBER — full 'LAST, First' match preferred, surname on a word boundary as fallback. Blind-draw slots guard against double-append now that a team can match both its winner row and its board row.",
+      "Bridge scoring-games-import accepts rewalk=N (newest N rounds, cap 12) so the team-board totals backfill can reach the pilot events; new read-only bridge scoring-event-board:<event> returns the TEAM board compactly (GG position/total, our reconstruction, purse, official flag) for vetting without an admin login.",
+    ],
+  },
   {
     version: "2.380.1",
     date: "2026-09-11",

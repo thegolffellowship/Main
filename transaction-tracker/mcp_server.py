@@ -3818,11 +3818,17 @@ def _scoring_dispatch(url: str, extract: str):
         if cmd == "scoring-games-import":
             # GG-recorded CTP / Longest Putt / HIO / TEAM Net winners;
             # same widget-url contract + time budget as scoring-mvp-import.
-            # "[rewalk][|event=<name>]" — event= attaches an unmapped
+            # "[rewalk[=N]][|event=<name>]" — event= attaches an unmapped
             # round's winners to the named calendar event (championship
-            # rounds carry no [sa]N.N code; v2.188.5)
+            # rounds carry no [sa]N.N code; v2.188.5). rewalk=N re-walks
+            # the newest N rounds (bare "rewalk" = 2; v2.381.0 backfill
+            # of GG team-board totals needs a deeper window)
             _p = [x.strip() for x in (arg or "").split("|") if x.strip()]
-            _rw = 2 if any(x.lower().startswith("rewalk") for x in _p) else 0
+            _rw = 0
+            for x in _p:
+                if x.lower().startswith("rewalk"):
+                    _m = re.search(r"=\s*(\d+)", x)
+                    _rw = min(int(_m.group(1)), 12) if _m else 2
             _fe = next((x[6:].strip() for x in _p
                         if x.lower().startswith("event=")), None)
             return json.dumps(db.import_gg_game_results(
@@ -4887,6 +4893,26 @@ def _scoring_dispatch(url: str, extract: str):
             _ev, _, _gurl = arg.partition("|")
             return json.dumps(db.team_net_parity(_ev.strip(), _gurl.strip()),
                               indent=2, default=str)
+        if cmd == "scoring-event-board":
+            # "<event>" — compact read of the events-leaderboard TEAM
+            # board for vetting: per team the GG position, GG posted
+            # total (score of record), our reconstruction total, purse,
+            # official flag. Read-only (v2.381.0).
+            _d = db.get_event_leaderboard(arg.strip())
+            if not _d:
+                return json.dumps({"error": "event not found"})
+            return json.dumps({
+                "event": arg.strip(),
+                "teams": [{
+                    "team": " + ".join(p["player_name"]
+                                       for p in t["players"]),
+                    "position": t.get("position"),
+                    "gg_total": t.get("gg_total"),
+                    "reconstruction": t.get("total_net"),
+                    "purse": t.get("purse"),
+                    "official": t.get("official"),
+                } for t in (_d.get("teams") or [])],
+                "games_off": _d.get("games_off")}, indent=2, default=str)
         if cmd == "scoring-ca-queue":
             # CA QUEUE read (mailbox #473/#474): "[<section>[|<status>]]"
             _sec, _, _st = arg.partition("|")

@@ -332,7 +332,8 @@ VALUES (50, 't1', 'individual_net', 'Flight 1 (HCP <12.0)', 1, 'BUYER, Low'),
        (50, 't2', 'individual_net', 'Flight 2 (HCP 12.0+)', 2, 'BUYER, High'),
        (50, 't3', 'skins', 'ALL', 2, 'BUYER, High');
 INSERT INTO gg_game_results (event_id, gg_tournament_id, game, game_label, player_name, is_team, position, detail, purse)
-VALUES (50, 't4', 'team_net', 'TEAM Net $', 'A + B + C + D', 1, '1', NULL, 128),
+VALUES (50, 't4', 'team_net', 'TEAM Net $', 'BUYER, Low + BUYER, High TGF San Antonio', 1, 'T1', 'total:7', 128),
+       (50, 't4', 'team_net_board', 'TEAM Net $', 'NONBUYER, Mid + GUEST, Someone TGF San Antonio', 1, '2', 'total:9', 0),
        (50, 't5', 'ctp', 'CTP', 'BUYER, Low', 0, '1', '#7', 26);
 """)
     _cn.commit()
@@ -383,8 +384,11 @@ check("tied loser carries their chain values",
       and "Gross 55" in (pb[1].get("mvp_note") or ""),
       repr(pb[1].get("mvp_note")))
 check("team + proxies ride on their own boards",
-      evd["team_board"][0]["team"] == "A + B + C + D"
+      evd["team_board"][0]["team"].startswith("BUYER, Low + BUYER, High")
       and evd["proxies"][0]["detail"] == "#7")
+check("team_board carries GG posted totals (winner + board rows)",
+      sorted(t["gg_total"] for t in evd["team_board"]) == [7, 9],
+      repr(evd["team_board"]))
 # ── iteration 2 (Kerry 2026-09-11 feedback): all teams w/ best-ball
 #    totals, skins grid winners, index columns, inactive-game notice ──
 tm = evd["teams"]
@@ -395,10 +399,33 @@ t1 = next(t for t in tm if t["team_num"] == 1)
 check("team best-ball net total (dots applied)",
       t1["total_net"] == 8, t1["total_net"])
 t2 = next(t for t in tm if t["team_num"] == 2)
-# team 2: hole 10 min(5,5)=5; hole 11 min(4,6)=4 → 9 → team 1 ranks 1st
-check("teams ranked by best-ball total",
-      t1["position"] == "1" and t2["position"] == "2",
+# GG's board rows (winner T1 + team_net_board 2) rank the board and
+# carry the posted totals — the score of record (v2.381.0)
+check("teams ranked by GG's recorded positions",
+      t1["position"] == "T1" and t2["position"] == "2",
       (t1["position"], t2["position"]))
+check("both teams official (full board recorded)",
+      t1["official"] and t2["official"])
+check("GG posted totals thread through (winner via detail, board row too)",
+      t1["gg_total"] == 7 and t2["gg_total"] == 9,
+      (t1["gg_total"], t2["gg_total"]))
+check("winner purse survives the board-row match (never clobbered to None)",
+      t1["purse"] == 128 and t2["purse"] is None,
+      (t1["purse"], t2["purse"]))
+# the raw parser: winners_only=False returns the whole standings with
+# totals parsed from GG's "TotalNet" column ("30 (-/30)")
+_gg_tbl = [["Pos.", "Foursome", "To ParNet", "TotalNet", "Purse"],
+           ["T1", "X, A + Y, B TGF San Antonio", "-6", "30 (-/30)", "$48.00"],
+           [""],
+           ["3", "Z, C + W, D TGF San Antonio", "-4", "32 (-/32)", "$0.00"]]
+_win = db._game_winners_from_table(_gg_tbl)
+check("board parser: winners-only keeps the paid row w/ total",
+      len(_win) == 1 and _win[0]["total"] == 30 and _win[0]["is_team"] == 1,
+      repr(_win))
+_all = db._game_winners_from_table(_gg_tbl, winners_only=False)
+check("board parser: winners_only=False returns the full standings",
+      [(r["position"], r["total"], r["purse"]) for r in _all]
+      == [("T1", 30, 48.0), ("3", 32, 0.0)], repr(_all))
 # skins (GROSS buyers only = cid 2): winner of both holes unopposed
 check("skin cells mark the buyer's winning holes",
       evd["skin_cells"].get("102") == [10, 11], repr(evd["skin_cells"]))
