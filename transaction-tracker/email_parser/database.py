@@ -12919,6 +12919,206 @@ def team_net_parity(event_name: str, gg_url: str = "",
             "verdict": verdict}
 
 
+# ═══════════════════════════════════════════════════════════════════
+#  CA QUEUE (Kerry directed 2026-09-11 — mailbox #473 spec, #474 shape)
+#
+#  The admin-only interactive open-items checklist: Kerry works it,
+#  platform-claude maintains it over MCP, every lane can reach it via
+#  bridges. Kerry verbatim: "Let's create a checklist in the Tracker
+#  that I can interact with and be able to always keep track of as a
+#  standard. You update it whenever is necessary. Admin view only."
+#  DONE rows never delete (collapse under a Done band); REOPEN keeps
+#  history in the append-only notes log.
+# ═══════════════════════════════════════════════════════════════════
+
+CA_QUEUE_SECTIONS = ("kerry_decision", "ca_owed", "cc_build",
+                     "finance_cleanup", "followups", "parked", "settled")
+_CA_QUEUE_STATUSES = ("open", "blocked", "done")
+
+
+def _ensure_ca_queue(conn: sqlite3.Connection) -> None:
+    conn.execute("""CREATE TABLE IF NOT EXISTS ca_queue (
+        id          INTEGER PRIMARY KEY AUTOINCREMENT,
+        title       TEXT NOT NULL,
+        section     TEXT NOT NULL DEFAULT 'followups',
+        owner       TEXT,
+        status      TEXT NOT NULL DEFAULT 'open',
+        blocked_on  TEXT,
+        mailbox_ref TEXT,
+        notes_log   TEXT,
+        sort_order  INTEGER NOT NULL DEFAULT 0,
+        created_at  TEXT DEFAULT (datetime('now')),
+        updated_at  TEXT DEFAULT (datetime('now')),
+        done_at     TEXT,
+        done_by     TEXT)""")
+
+
+def _ca_queue_row(r) -> dict:
+    out = dict(r)
+    try:
+        out["notes_log"] = json.loads(out.get("notes_log") or "[]")
+    except (TypeError, ValueError):
+        out["notes_log"] = []
+    return out
+
+
+def _ca_queue_note(conn, item_id: int, note: str, author: str) -> None:
+    row = conn.execute("SELECT notes_log FROM ca_queue WHERE id = ?",
+                       (item_id,)).fetchone()
+    try:
+        log = json.loads((row["notes_log"] if row else None) or "[]")
+    except (TypeError, ValueError):
+        log = []
+    log.append({"at": datetime.utcnow().strftime("%Y-%m-%d %H:%M"),
+                "author": (author or "unknown")[:60],
+                "note": (note or "")[:2000]})
+    conn.execute("UPDATE ca_queue SET notes_log = ?, "
+                 "updated_at = datetime('now') WHERE id = ?",
+                 (json.dumps(log), item_id))
+
+
+def list_ca_queue(section: str = "", status: str = "",
+                  db_path: str | Path = DB_PATH) -> dict:
+    with _connect(db_path) as conn:
+        _ensure_ca_queue(conn)
+        clauses, params = [], []
+        if section:
+            clauses.append("section = ?")
+            params.append(section)
+        if status:
+            clauses.append("status = ?")
+            params.append(status)
+        where = ("WHERE " + " AND ".join(clauses)) if clauses else ""
+        rows = [_ca_queue_row(r) for r in conn.execute(
+            f"""SELECT * FROM ca_queue {where}
+                ORDER BY CASE section
+                    {' '.join(f"WHEN '{s}' THEN {i}" for i, s in enumerate(CA_QUEUE_SECTIONS))}
+                    ELSE 99 END, sort_order, id""", params)]
+    return {"sections": list(CA_QUEUE_SECTIONS), "items": rows,
+            "n_open": sum(1 for r in rows if r["status"] != "done"),
+            "n_done": sum(1 for r in rows if r["status"] == "done")}
+
+
+def upsert_ca_queue_item(item: dict, author: str = "",
+                         db_path: str | Path = DB_PATH) -> dict:
+    """Create or update a queue row. Matches by id, else EXACT title
+    (case-insensitive), else inserts. Only known fields apply; section
+    and status are validated. status→done stamps done_at/done_by;
+    done→open/blocked is a REOPEN: done_at clears and the transition is
+    logged so history survives (mailbox #473 rule)."""
+    fields = {k: item.get(k) for k in
+              ("title", "section", "owner", "status", "blocked_on",
+               "mailbox_ref", "sort_order") if k in item}
+    if "section" in fields and fields["section"] not in CA_QUEUE_SECTIONS:
+        return {"error": f"section must be one of {CA_QUEUE_SECTIONS}"}
+    if "status" in fields and fields["status"] not in _CA_QUEUE_STATUSES:
+        return {"error": f"status must be one of {_CA_QUEUE_STATUSES}"}
+    with _connect(db_path) as conn:
+        _ensure_ca_queue(conn)
+        row = None
+        if item.get("id"):
+            row = conn.execute("SELECT * FROM ca_queue WHERE id = ?",
+                               (int(item["id"]),)).fetchone()
+            if not row:
+                return {"error": f"no ca_queue row id {item['id']}"}
+        elif fields.get("title"):
+            row = conn.execute(
+                "SELECT * FROM ca_queue WHERE LOWER(TRIM(title)) = ?",
+                (fields["title"].strip().lower(),)).fetchone()
+        if row is None:
+            if not fields.get("title"):
+                return {"error": "a new item needs a title"}
+            sec = fields.get("section") or "followups"
+            nxt = conn.execute(
+                "SELECT COALESCE(MAX(sort_order), 0) + 1 AS n "
+                "FROM ca_queue WHERE section = ?", (sec,)).fetchone()["n"]
+            cur = conn.execute(
+                """INSERT INTO ca_queue
+                       (title, section, owner, status, blocked_on,
+                        mailbox_ref, sort_order, notes_log)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, '[]')""",
+                (fields["title"].strip(), sec,
+                 fields.get("owner"), fields.get("status") or "open",
+                 fields.get("blocked_on"), fields.get("mailbox_ref"),
+                 fields.get("sort_order") or nxt))
+            new_id = cur.lastrowid
+            if author:
+                _ca_queue_note(conn, new_id, "created", author)
+            conn.commit()
+            return {"ok": True, "id": new_id, "created": True}
+        # update path
+        rid = row["id"]
+        sets, params = [], []
+        for k, v in fields.items():
+            sets.append(f"{k} = ?")
+            params.append(v.strip() if isinstance(v, str) else v)
+        new_status = fields.get("status")
+        if new_status == "done" and row["status"] != "done":
+            sets += ["done_at = datetime('now')", "done_by = ?"]
+            params.append(author or "unknown")
+        elif new_status in ("open", "blocked") and row["status"] == "done":
+            sets += ["done_at = NULL", "done_by = NULL"]
+            _ca_queue_note(conn, rid,
+                           f"reopened (was done {row['done_at']} by "
+                           f"{row['done_by']})", author or "unknown")
+        if sets:
+            sets.append("updated_at = datetime('now')")
+            conn.execute(f"UPDATE ca_queue SET {', '.join(sets)} "
+                         f"WHERE id = ?", params + [rid])
+        if item.get("note"):
+            _ca_queue_note(conn, rid, str(item["note"]), author or "unknown")
+        conn.commit()
+        return {"ok": True, "id": rid, "created": False}
+
+
+def note_ca_queue_item(item_id: int, note: str, author: str,
+                       db_path: str | Path = DB_PATH) -> dict:
+    with _connect(db_path) as conn:
+        _ensure_ca_queue(conn)
+        if not conn.execute("SELECT 1 FROM ca_queue WHERE id = ?",
+                            (int(item_id),)).fetchone():
+            return {"error": f"no ca_queue row id {item_id}"}
+        _ca_queue_note(conn, int(item_id), note, author)
+        conn.commit()
+    return {"ok": True, "id": int(item_id)}
+
+
+def close_ca_queue_item(item_id: int, author: str,
+                        db_path: str | Path = DB_PATH) -> dict:
+    return upsert_ca_queue_item({"id": int(item_id), "status": "done"},
+                                author=author, db_path=db_path)
+
+
+def move_ca_queue_item(item_id: int, section: str | None = None,
+                       position: int | None = None, author: str = "",
+                       db_path: str | Path = DB_PATH) -> dict:
+    """Move a row to another section and/or position (1-based) within
+    its section; the section's rows renumber densely."""
+    with _connect(db_path) as conn:
+        _ensure_ca_queue(conn)
+        row = conn.execute("SELECT * FROM ca_queue WHERE id = ?",
+                           (int(item_id),)).fetchone()
+        if not row:
+            return {"error": f"no ca_queue row id {item_id}"}
+        sec = section or row["section"]
+        if sec not in CA_QUEUE_SECTIONS:
+            return {"error": f"section must be one of {CA_QUEUE_SECTIONS}"}
+        ids = [r["id"] for r in conn.execute(
+            "SELECT id FROM ca_queue WHERE section = ? AND id != ? "
+            "ORDER BY sort_order, id", (sec, row["id"]))]
+        pos = (len(ids) + 1 if position is None
+               else max(1, min(int(position), len(ids) + 1)))
+        ids.insert(pos - 1, row["id"])
+        for i, rid in enumerate(ids, 1):
+            conn.execute("UPDATE ca_queue SET sort_order = ?, "
+                         "section = CASE WHEN id = ? THEN ? ELSE section END "
+                         "WHERE id = ?", (i, row["id"], sec, rid))
+        conn.execute("UPDATE ca_queue SET updated_at = datetime('now') "
+                     "WHERE id = ?", (row["id"],))
+        conn.commit()
+    return {"ok": True, "id": int(item_id), "section": sec, "position": pos}
+
+
 def _entry_to_pot_cents() -> int:
     try:
         from .season_payouts import ENTRY_TO_POT_CENTS

@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.379.1";
+window.TGF_VERSION = "2.380.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.380.0",
+    date: "2026-09-11",
+    changes: [
+      "CA QUEUE (Kerry: 'Let's create a checklist in the Tracker that I can interact with and be able to always keep track of as a standard. You update it whenever is necessary. Admin view only.') — a new admin-only interactive open-items checklist at /admin/ca-queue (shell nav link 'CA Queue', desktop + drawer). Sections render as bands in a fixed order (Kerry decisions owed · CA owed · CC build · finance cleanup · follow-ups · parked · settled); a checkbox marks an item DONE — it moves to the collapsed Done band with the date and who, and is NEVER deleted; a row tap expands its append-only notes log plus add-note, mark-blocked, move-between-sections, and reorder controls. Reopening a done item clears the done stamp and logs 'reopened (was done <date> by <who>)' so history survives.",
+      "The queue is jointly maintained: Kerry works the page; platform-claude maintains it from claude.ai through four new MCP tools (list_ca_queue, upsert_ca_queue_item — matches by id, else exact title, else inserts — note_ca_queue_item, close_ca_queue_item), every write stamped with its author in the notes log AND the agent action log; tracker-claude lanes reach the same functions through bridges (scoring-ca-queue, scoring-ca-queue-upsert, scoring-ca-queue-note, scoring-ca-queue-close). This replaces the open-items lists scattered across mailbox digests, handoff docs, and the Project Files markdown queue — the Tracker becomes the record (mailbox #473/#474). Tests: test_ca_queue.py, 32 checks. Docs: docs/claude/ca-queue.md.",
+    ],
+  },
   {
     version: "2.379.1",
     date: "2026-09-11",

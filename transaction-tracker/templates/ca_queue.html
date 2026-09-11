@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
+    <title>TGF — CA Queue</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Bitter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/css/dashboard.css">
+    <link rel="stylesheet" href="/static/css/shell.css">
+    <link rel="icon" href="/static/icon.svg" type="image/svg+xml">
+    <link rel="apple-touch-icon" href="/static/icon-180.png">
+    <style>
+        .caq-wrap { padding: 1rem 1.5rem 2.5rem; max-width: 900px; margin: 0 auto; }
+        .caq-head { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; margin: 0.25rem 0 1rem; }
+        .caq-head h2 { font: 700 20px/1.2 'Bitter', serif; margin: 0; }
+        .caq-count { font-size: 12.5px; color: var(--text-muted); font-variant-numeric: tabular-nums; }
+        .caq-band { background: #fff; border: 1px solid var(--border); border-radius: 12px; margin-bottom: 14px; overflow: hidden; }
+        .caq-band-hd { display: flex; align-items: center; gap: 10px; padding: 9px 14px; background: #1B1B1B; color: #fff; }
+        .caq-band-hd h3 { font: 700 11px/1.2 'Bitter', serif; letter-spacing: 1.5px; text-transform: uppercase; margin: 0; flex: 1; }
+        .caq-band-hd .n { font-size: 11px; color: #cbd5e1; font-variant-numeric: tabular-nums; }
+        .caq-band-hd .add { background: none; border: 1px solid #4b5563; color: #e5e7eb; border-radius: 999px; font-size: 11px; padding: 2px 10px; cursor: pointer; }
+        .caq-band-hd .add:hover { border-color: var(--primary); color: var(--primary); }
+        .caq-band.done-band .caq-band-hd { background: #374151; cursor: pointer; }
+        .caq-row { border-top: 1px solid #F3F2EF; }
+        .caq-row:first-child { border-top: none; }
+        .caq-line { display: flex; align-items: flex-start; gap: 10px; padding: 8px 14px; cursor: pointer; }
+        .caq-line:hover { background: #FAFAF8; }
+        .caq-line input[type=checkbox] { width: 17px; height: 17px; margin-top: 2px; accent-color: var(--primary); cursor: pointer; flex: none; }
+        .caq-title { flex: 1; font-size: 13.5px; line-height: 1.35; white-space: normal; }
+        .caq-row.is-done .caq-title { color: #9CA3AF; text-decoration: line-through; }
+        .caq-chips { display: flex; gap: 5px; flex-wrap: wrap; align-items: center; flex: none; }
+        .caq-chip { font-size: 10px; font-weight: 600; letter-spacing: 0.4px; border-radius: 999px; padding: 2px 8px; white-space: nowrap; }
+        .caq-chip.owner { background: #EEF2F7; color: #4B5563; }
+        .caq-chip.blocked { background: #FEF2F2; color: #B91C1C; }
+        .caq-chip.ref { background: #F0FDF4; color: #15803D; }
+        .caq-chip.sec { background: #FFF7ED; color: #C2410C; }
+        .caq-chip.date { background: #F3F4F6; color: #6B7280; font-variant-numeric: tabular-nums; }
+        .caq-detail { display: none; padding: 4px 14px 12px 41px; background: #FAFAF8; border-top: 1px dashed #E5E7EB; }
+        .caq-row.open .caq-detail { display: block; }
+        .caq-notes { margin: 6px 0; }
+        .caq-note { font-size: 12px; padding: 4px 0; border-bottom: 1px dotted #E5E7EB; white-space: normal; }
+        .caq-note .who { font-weight: 700; color: #374151; }
+        .caq-note .at { color: #9CA3AF; font-size: 11px; margin-left: 6px; font-variant-numeric: tabular-nums; }
+        .caq-ctl { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-top: 8px; }
+        .caq-ctl input[type=text], .caq-ctl select { font-size: 12px; padding: 5px 8px; border: 1px solid var(--border); border-radius: 8px; }
+        .caq-ctl input.note-in { flex: 1; min-width: 160px; }
+        .caq-btn { font-size: 11.5px; font-weight: 600; border-radius: 999px; padding: 4px 12px; border: 1px solid var(--border); background: #fff; cursor: pointer; }
+        .caq-btn:hover { border-color: var(--primary); color: var(--primary); }
+        .caq-btn.warn { color: #B91C1C; }
+        .caq-meta { font-size: 11px; color: #9CA3AF; margin-top: 8px; font-variant-numeric: tabular-nums; }
+        .caq-empty { padding: 10px 14px; font-size: 12.5px; color: #9CA3AF; font-style: italic; }
+        .caq-addform { display: none; padding: 10px 14px; background: #FFF7ED; border-top: 1px solid #FED7AA; }
+        .caq-addform.show { display: flex; gap: 8px; flex-wrap: wrap; }
+        .caq-addform input[type=text] { flex: 1; min-width: 200px; font-size: 13px; padding: 6px 9px; border: 1px solid var(--border); border-radius: 8px; }
+        .caq-note-hint { font-size: 11.5px; color: var(--text-muted); margin-top: 1.25rem; }
+        @media (max-width: 640px) { .caq-wrap { padding: 0.5rem 0.5rem 2rem; } .caq-detail { padding-left: 14px; } }
+    </style>
+</head>
+<body>
+    {% if shell_v2 %}
+    {% set SHELL_TITLE = 'CA Queue' %}{% set SHELL_ACTIVE = 'admin' %}
+    {% include '_shell_nav.html' %}
+    {% else %}
+    <header>
+        <div class="header-content">
+            <h1>TGF Transaction Tracker</h1>
+            <p class="subtitle">CA Queue</p>
+            <a href="/changelog" class="version-link" id="version-badge" title="View changelog">v2.0.0</a>
+        </div>
+        <div class="header-actions">
+            <span id="role-badge" class="role-badge" style="display:none;"></span>
+            <button id="btn-logout" class="btn btn-secondary" title="Log out" style="display:none;">Log Out</button>
+        </div>
+    </header>
+    {% endif %}
+
+    <main>
+        <nav class="admin-subnav">
+            <a href="/accounting">Accounting</a>
+            <a href="/coo">COO</a>
+            <a href="/audit">Audit Log</a>
+            <a href="/matrix">Matrix</a>
+            <a href="/courses">Courses</a>
+            <a href="/traffic">Traffic</a>
+            <a href="/spotlight">Spotlight</a>
+            <a href="/admin/ca-queue" class="active">CA Queue</a>
+            <a href="/admin/gg-history">GG History</a>
+            <a href="/admin/test-center">Test Center</a>
+            <a href="/admin/snapshot-center">Snapshot Center</a>
+            <a href="/database">Database</a>
+            <a href="/changelog">Changelog</a>
+        </nav>
+
+        <div class="caq-wrap">
+            <div class="caq-head">
+                <h2>CA Queue</h2>
+                <span class="caq-count" id="caq-count"></span>
+            </div>
+            <div id="caq-bands"><div class="caq-empty">Loading…</div></div>
+            <p class="caq-note-hint">
+                Checking a box marks the item DONE — it moves to the Done band with the date, never deleted.
+                Tap a row to expand notes, add a note, mark blocked, or move it to another section.
+                CA (platform-claude) maintains this list too — its changes appear here and every write is
+                stamped with who made it.
+            </p>
+        </div>
+    </main>
+
+    <script src="/static/js/version.js"></script>
+    <script src="/static/js/auth.js"></script>
+    <script>
+    (function () {
+        "use strict";
+        const $ = id => document.getElementById(id);
+        const esc = s => String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+        const SECTION_LABELS = {
+            kerry_decision: "Kerry — Decisions Owed",
+            ca_owed: "CA Owed",
+            cc_build: "CC Build",
+            finance_cleanup: "Finance Cleanup",
+            followups: "Follow-ups",
+            parked: "Parked",
+            settled: "Settled",
+        };
+        let DATA = null;
+        let openRows = {};       // id -> true (survive re-render)
+        let doneOpen = false;    // Done band expanded?
+
+        async function post(url, body) {
+            const res = await fetch(url, { method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(body) });
+            const d = await res.json().catch(() => ({}));
+            if (!res.ok || d.error) alert(d.error || ("Request failed (" + res.status + ")"));
+            return d;
+        }
+
+        function chip(cls, text) { return `<span class="caq-chip ${cls}">${esc(text)}</span>`; }
+
+        function rowHtml(it, inDoneBand) {
+            const chips = [];
+            if (inDoneBand) chips.push(chip("sec", SECTION_LABELS[it.section] || it.section));
+            if (it.status === "blocked") chips.push(chip("blocked", "BLOCKED" + (it.blocked_on ? ": " + it.blocked_on : "")));
+            if (it.owner) chips.push(chip("owner", it.owner));
+            if (it.mailbox_ref) chips.push(chip("ref", "#" + String(it.mailbox_ref).replace(/\s/g, "")));
+            if (it.status === "done" && it.done_at) chips.push(chip("date", "done " + String(it.done_at).slice(0, 10) + (it.done_by ? " · " + it.done_by : "")));
+            const notes = (it.notes_log || []).map(n =>
+                `<div class="caq-note"><span class="who">${esc(n.author)}</span><span class="at">${esc(n.at)}</span><br>${esc(n.note)}</div>`).join("")
+                || '<div class="caq-note" style="color:#9CA3AF;border:none;">No notes yet.</div>';
+            const secOpts = (DATA.sections || []).map(s =>
+                `<option value="${s}" ${s === it.section ? "selected" : ""}>${esc(SECTION_LABELS[s] || s)}</option>`).join("");
+            const blockedBtn = it.status === "blocked"
+                ? `<button class="caq-btn" data-act="unblock">Unblock</button>`
+                : `<button class="caq-btn warn" data-act="block">Mark blocked…</button>`;
+            return `<div class="caq-row ${it.status === "done" ? "is-done" : ""} ${openRows[it.id] ? "open" : ""}" data-id="${it.id}">
+                <div class="caq-line">
+                    <input type="checkbox" ${it.status === "done" ? "checked" : ""} data-act="toggle" title="${it.status === "done" ? "Reopen" : "Mark done"}">
+                    <div class="caq-title">${esc(it.title)}</div>
+                    <div class="caq-chips">${chips.join("")}</div>
+                </div>
+                <div class="caq-detail">
+                    <div class="caq-notes">${notes}</div>
+                    <div class="caq-ctl">
+                        <input type="text" class="note-in" placeholder="Add a note…" data-in="note">
+                        <button class="caq-btn" data-act="note">Add note</button>
+                    </div>
+                    <div class="caq-ctl">
+                        ${blockedBtn}
+                        <select data-in="movesec">${secOpts}</select>
+                        <button class="caq-btn" data-act="move">Move</button>
+                        <button class="caq-btn" data-act="up">↑</button>
+                        <button class="caq-btn" data-act="down">↓</button>
+                    </div>
+                    <div class="caq-meta">#${it.id} · created ${esc(String(it.created_at || "").slice(0, 10))} · updated ${esc(String(it.updated_at || "").slice(0, 16))}</div>
+                </div>
+            </div>`;
+        }
+
+        function render() {
+            const items = DATA.items || [];
+            const active = items.filter(i => i.status !== "done");
+            const done = items.filter(i => i.status === "done");
+            $("caq-count").textContent = `${active.length} open · ${done.length} done`;
+            let html = "";
+            for (const sec of (DATA.sections || [])) {
+                const rows = active.filter(i => i.section === sec);
+                html += `<div class="caq-band" data-sec="${sec}">
+                    <div class="caq-band-hd"><h3>${esc(SECTION_LABELS[sec] || sec)}</h3>
+                        <span class="n">${rows.length}</span>
+                        <button class="add" data-act="showadd">+ Add</button></div>
+                    <div class="caq-addform" data-addform="${sec}">
+                        <input type="text" placeholder="New item title…" data-in="newtitle">
+                        <button class="caq-btn" data-act="addnew">Add to ${esc(SECTION_LABELS[sec] || sec)}</button>
+                    </div>
+                    ${rows.map(r => rowHtml(r, false)).join("") || '<div class="caq-empty">Nothing here.</div>'}
+                </div>`;
+            }
+            html += `<div class="caq-band done-band">
+                <div class="caq-band-hd" data-act="toggledone"><h3>Done ${doneOpen ? "▾" : "▸"}</h3><span class="n">${done.length}</span></div>
+                ${doneOpen ? (done.map(r => rowHtml(r, true)).join("") || '<div class="caq-empty">Nothing done yet.</div>') : ""}
+            </div>`;
+            $("caq-bands").innerHTML = html;
+        }
+
+        async function load() {
+            const res = await fetch("/api/ca-queue");
+            if (!res.ok) {
+                $("caq-bands").innerHTML = '<div class="caq-empty">Admin login required.</div>';
+                return;
+            }
+            DATA = await res.json();
+            render();
+        }
+
+        $("caq-bands").addEventListener("click", async (e) => {
+            const actEl = e.target.closest("[data-act]");
+            const rowEl = e.target.closest(".caq-row");
+            if (!actEl) {
+                // plain row-line click toggles the detail
+                if (rowEl && e.target.closest(".caq-line")) {
+                    const id = rowEl.dataset.id;
+                    openRows[id] = !openRows[id];
+                    rowEl.classList.toggle("open", !!openRows[id]);
+                }
+                return;
+            }
+            const act = actEl.dataset.act;
+            if (act === "toggledone") { doneOpen = !doneOpen; render(); return; }
+            if (act === "showadd") {
+                const band = actEl.closest(".caq-band");
+                band.querySelector(".caq-addform").classList.toggle("show");
+                return;
+            }
+            if (act === "addnew") {
+                const band = actEl.closest(".caq-band");
+                const inp = band.querySelector('[data-in="newtitle"]');
+                const title = (inp.value || "").trim();
+                if (!title) return;
+                await post("/api/ca-queue/upsert", { title, section: band.dataset.sec });
+                await load();
+                return;
+            }
+            if (!rowEl) return;
+            const id = parseInt(rowEl.dataset.id, 10);
+            const item = (DATA.items || []).find(i => i.id === id);
+            if (act === "toggle") {
+                e.stopPropagation();
+                const toDone = actEl.checked;
+                await post("/api/ca-queue/upsert", { id, status: toDone ? "done" : "open" });
+                await load();
+            } else if (act === "note") {
+                const inp = rowEl.querySelector('[data-in="note"]');
+                const note = (inp.value || "").trim();
+                if (!note) return;
+                await post("/api/ca-queue/note", { id, note });
+                await load();
+            } else if (act === "block") {
+                const why = prompt("Blocked on what?");
+                if (why === null) return;
+                await post("/api/ca-queue/upsert", { id, status: "blocked", blocked_on: why.trim() });
+                await load();
+            } else if (act === "unblock") {
+                await post("/api/ca-queue/upsert", { id, status: "open", blocked_on: "" });
+                await load();
+            } else if (act === "move") {
+                const sel = rowEl.querySelector('[data-in="movesec"]');
+                await post("/api/ca-queue/move", { id, section: sel.value });
+                await load();
+            } else if (act === "up" || act === "down") {
+                const sec = item ? item.section : null;
+                const sibs = (DATA.items || []).filter(i => i.section === sec && i.status !== "done");
+                const idx = sibs.findIndex(i => i.id === id);
+                const target = act === "up" ? idx : idx + 2;  // 1-based position
+                if (target < 1 || target > sibs.length) return;
+                await post("/api/ca-queue/move", { id, position: target });
+                await load();
+            }
+        });
+
+        // Enter submits the visible add/note input
+        $("caq-bands").addEventListener("keydown", (e) => {
+            if (e.key !== "Enter") return;
+            const inp = e.target.closest("[data-in]");
+            if (!inp) return;
+            const btnAct = inp.dataset.in === "newtitle" ? "addnew" : inp.dataset.in === "note" ? "note" : null;
+            if (!btnAct) return;
+            const scope = inp.closest(".caq-addform, .caq-detail");
+            const btn = scope && scope.querySelector(`[data-act="${btnAct}"]`);
+            if (btn) btn.click();
+        });
+
+        load();
+    })();
+    </script>
+</body>
+</html>

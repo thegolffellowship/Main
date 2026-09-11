@@ -11611,6 +11611,56 @@ def traffic_page():
     return render_template("traffic.html")
 
 
+# ── CA QUEUE (admin-only checklist — Kerry directed 2026-09-11,
+#    mailbox #473/#474). Kerry works it here; platform-claude maintains
+#    it through the MCP tools; lanes reach it through the bridges.
+#    Admin-only by Kerry's direction ("Admin view only") — no member or
+#    manager tier may ever see it.
+
+@app.route("/admin/ca-queue")
+def ca_queue_page():
+    if session.get("role") != "admin":
+        return redirect("/events")
+    return render_template("ca_queue.html")
+
+
+@app.route("/api/ca-queue")
+@require_role("admin")
+def api_ca_queue():
+    from email_parser.database import list_ca_queue
+    return jsonify(list_ca_queue(
+        (request.args.get("section") or "").strip(),
+        (request.args.get("status") or "").strip()))
+
+
+@app.route("/api/ca-queue/upsert", methods=["POST"])
+@require_role("admin")
+def api_ca_queue_upsert():
+    from email_parser.database import upsert_ca_queue_item
+    data = request.get_json(silent=True) or {}
+    return jsonify(upsert_ca_queue_item(data, author="kerry"))
+
+
+@app.route("/api/ca-queue/note", methods=["POST"])
+@require_role("admin")
+def api_ca_queue_note():
+    from email_parser.database import note_ca_queue_item
+    data = request.get_json(silent=True) or {}
+    return jsonify(note_ca_queue_item(
+        int(data.get("id") or 0), str(data.get("note") or ""), "kerry"))
+
+
+@app.route("/api/ca-queue/move", methods=["POST"])
+@require_role("admin")
+def api_ca_queue_move():
+    from email_parser.database import move_ca_queue_item
+    data = request.get_json(silent=True) or {}
+    pos = data.get("position")
+    return jsonify(move_ca_queue_item(
+        int(data.get("id") or 0), section=data.get("section") or None,
+        position=int(pos) if pos is not None else None, author="kerry"))
+
+
 # ── NEW LEADS QUEUE (v2.257.0, mailbox #352/#353 — Kerry-ratified) ──────
 # Facebook/Meta leads polled from HubSpot on a timer; the 48-hour
 # personal touch is audited here. Manager tier so chapter managers can

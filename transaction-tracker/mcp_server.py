@@ -4887,6 +4887,45 @@ def _scoring_dispatch(url: str, extract: str):
             _ev, _, _gurl = arg.partition("|")
             return json.dumps(db.team_net_parity(_ev.strip(), _gurl.strip()),
                               indent=2, default=str)
+        if cmd == "scoring-ca-queue":
+            # CA QUEUE read (mailbox #473/#474): "[<section>[|<status>]]"
+            _sec, _, _st = arg.partition("|")
+            return json.dumps(db.list_ca_queue(_sec.strip(), _st.strip()),
+                              indent=2, default=str)
+        if cmd == "scoring-ca-queue-upsert":
+            # "<json item>" — {id?|title, section?, owner?, status?,
+            # blocked_on?, mailbox_ref?, note?, author?}; author stamps
+            # the notes log. Writes audited like every MCP write.
+            try:
+                _item = json.loads(arg)
+            except ValueError as exc:
+                return json.dumps({"error": f"bad JSON: {exc}"})
+            _who = str(_item.pop("author", "") or "bridge")
+            _res = db.upsert_ca_queue_item(_item, author=_who)
+            if _res.get("ok"):
+                _audit("ca_queue_upsert",
+                       f"[{_who}] {'created' if _res.get('created') else 'updated'} "
+                       f"queue item #{_res['id']}: {_item.get('title') or _item.get('id')}")
+            return json.dumps(_res, indent=2, default=str)
+        if cmd == "scoring-ca-queue-note":
+            # "<id>|<author>|<note>"
+            _id, _, _rest = arg.partition("|")
+            _who, _, _note = _rest.partition("|")
+            _res = db.note_ca_queue_item(int(_id.strip()), _note.strip(),
+                                         _who.strip() or "bridge")
+            if _res.get("ok"):
+                _audit("ca_queue_note",
+                       f"[{_who.strip()}] noted queue item #{_id.strip()}")
+            return json.dumps(_res, indent=2, default=str)
+        if cmd == "scoring-ca-queue-close":
+            # "<id>|<author>" — marks done (never deletes; #473 rule)
+            _id, _, _who = arg.partition("|")
+            _res = db.close_ca_queue_item(int(_id.strip()),
+                                          _who.strip() or "bridge")
+            if _res.get("ok"):
+                _audit("ca_queue_close",
+                       f"[{_who.strip()}] closed queue item #{_id.strip()}")
+            return json.dumps(_res, indent=2, default=str)
         if cmd == "scoring-payouts-unpaid":
             # Every non-paid payout group + the customer's recent Venmo
             # payout receipts (linked flag + amounts) for match diagnosis
@@ -5628,6 +5667,106 @@ def determine_tgf_mvp(event_name: str) -> str:
     """
     from email_parser.database import determine_tgf_mvp as _det
     return json.dumps(_det(event_name), indent=2, default=str)
+
+
+@mcp.tool()
+def list_ca_queue(section: str = "", status: str = "") -> str:
+    """CA QUEUE — the admin-only open-items checklist Kerry works in the
+    Tracker (mailbox #473/#474). Lists rows grouped by section in enum
+    order (kerry_decision, ca_owed, cc_build, finance_cleanup, followups,
+    parked, settled), each with status/owner/blocked_on/mailbox_ref and
+    the append-only notes log. DONE rows are kept, never deleted.
+
+    Args:
+        section: optional filter to one section (enum value)
+        status: optional filter — open | blocked | done
+    """
+    from email_parser import database as db
+    return json.dumps(db.list_ca_queue(section.strip(), status.strip()),
+                      indent=2, default=str)
+
+
+@mcp.tool()
+def upsert_ca_queue_item(title: str = "", item_id: int = 0,
+                         section: str = "", owner: str = "",
+                         status: str = "", blocked_on: str = "",
+                         mailbox_ref: str = "", note: str = "",
+                         author: str = "platform-claude") -> str:
+    """Create or update a CA QUEUE item (mailbox #473/#474).
+
+    Matches by item_id when given, else by EXACT title
+    (case-insensitive), else inserts a new row at the bottom of its
+    section. Only the fields you pass change. Setting status=done
+    stamps done_at/done_by; setting a done row back to open/blocked is
+    a REOPEN — done_at clears and the transition is logged so history
+    survives. Every call stamps the author on the notes log and the
+    agent action log.
+
+    Args:
+        title: one-line item title (required for a new row)
+        item_id: existing row id to update (0 = match by title/insert)
+        section: kerry_decision | ca_owed | cc_build | finance_cleanup |
+            followups | parked | settled
+        owner: kerry | ca | lane name (free text)
+        status: open | blocked | done
+        blocked_on: what it waits on (free text)
+        mailbox_ref: comma-separated mailbox post ids
+        note: optional note appended to the item's log
+        author: who is writing (stamps notes + audit)
+    """
+    from email_parser import database as db
+    item: dict = {}
+    if item_id:
+        item["id"] = item_id
+    for k, v in (("title", title), ("section", section), ("owner", owner),
+                 ("status", status), ("blocked_on", blocked_on),
+                 ("mailbox_ref", mailbox_ref), ("note", note)):
+        if v:
+            item[k] = v
+    res = db.upsert_ca_queue_item(item, author=author)
+    if res.get("ok"):
+        _audit("ca_queue_upsert",
+               f"[{author}] {'created' if res.get('created') else 'updated'} "
+               f"queue item #{res['id']}: {title or item_id}")
+    return json.dumps(res, indent=2, default=str)
+
+
+@mcp.tool()
+def note_ca_queue_item(item_id: int, note: str,
+                       author: str = "platform-claude") -> str:
+    """Append a note to a CA QUEUE item's append-only log
+    (author + timestamp, leads.notes_log shape). Never edits or
+    removes existing notes.
+
+    Args:
+        item_id: the queue row id
+        note: the note text
+        author: who is writing
+    """
+    from email_parser import database as db
+    res = db.note_ca_queue_item(item_id, note, author)
+    if res.get("ok"):
+        _audit("ca_queue_note", f"[{author}] noted queue item #{item_id}")
+    return json.dumps(res, indent=2, default=str)
+
+
+@mcp.tool()
+def close_ca_queue_item(item_id: int,
+                        author: str = "platform-claude") -> str:
+    """Mark a CA QUEUE item done. NEVER deletes — the row keeps its
+    history and collapses under the Done band with date + who
+    (mailbox #473 rule). Reopen later via upsert_ca_queue_item
+    with status=open.
+
+    Args:
+        item_id: the queue row id
+        author: who is closing (stamped as done_by)
+    """
+    from email_parser import database as db
+    res = db.close_ca_queue_item(item_id, author)
+    if res.get("ok"):
+        _audit("ca_queue_close", f"[{author}] closed queue item #{item_id}")
+    return json.dumps(res, indent=2, default=str)
 
 
 @mcp.tool()
