@@ -1772,6 +1772,8 @@ def _scoring_dispatch(url: str, extract: str):
       scoring-membership-terms-repair[:apply]  early renewals continue at the
                                    365 date (dry run default)
       scoring-membership-sync      terms → status reconcile now (manager comps)
+      scoring-customer-dupes       potential duplicate customer profiles (name /
+                                   email / phone), report only
       scoring-race-detail:<race_key>|<card>  one GG member record's per-event lines
       scoring-race-dupes[:refresh]  one person = one row on every Season Contests
                                    board (GG duplicate member records folded;
@@ -3046,6 +3048,10 @@ def _scoring_dispatch(url: str, extract: str):
             _done = [i for i in _ids if db.dismiss_parse_warning(i)]
             _audit("scoring-parse-warning-dismiss", f"ids={_done} note={_note.strip()}")
             return json.dumps({"dismissed": _done, "note": _note.strip()}, indent=2)
+        if cmd == "scoring-customer-dupes":
+            # Potential duplicate customer profiles — same name / email /
+            # phone — REPORT ONLY; merging is Kerry's call (merge_customers).
+            return json.dumps(db.find_customer_duplicates(), indent=2, default=str)
         if cmd == "scoring-race-detail":
             # "<race_key>|<member_card_id>" — GG's per-event points lines for one
             # member record (the row-expansion XHR), raw tables + our parse.

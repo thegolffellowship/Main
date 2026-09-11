@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.371.10";
+window.TGF_VERSION = "2.371.11";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.371.11",
+    date: "2026-09-11",
+    changes: [
+      "Season Contests boards: a member's last name shows in caps the way Golf Genius prints its own members (Kerry: 'When someone becomes a member (like Chris Espinosa) his last name should show all caps when appropriate'). The Tracker's membership truth decides, so a member who joined through a GG guest profile reads ESPINOSA, Christopher here even while GG still shows Espinosa; prefixes keep GG's shape (McCRARY, DelCARMEN). Guests unchanged.",
+      "scoring-customer-dupes: potential duplicate customer profiles by same name, same email, or same phone — each group with status, emails, phones, purchases, rounds and a suggested keep. Report only; merging stays a human call.",
+    ],
+  },
   {
     version: "2.371.10",
     date: "2026-09-11",

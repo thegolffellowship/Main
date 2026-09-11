@@ -7955,6 +7955,125 @@ def combine_member_detail_tables(table_sets: list, best_n: int | None) -> list:
     return out
 
 
+_NAME_PREFIXES = re.compile(r"^(Mc|Mac|Del|De|Da|Di|La|Le|Van|Von|O')(?=[A-Za-z])")
+
+
+def member_caps_name(name: str | None) -> str:
+    """GG's member convention on the boards (Kerry 2026-09-11: "When someone
+    becomes a member (like Chris Espinosa) his last name should show all
+    caps when appropriate"): "Espinosa, Christopher" → "ESPINOSA,
+    Christopher"; prefixes keep GG's own shape — "McCrary" → "McCRARY",
+    "DelCarmen" → "DelCARMEN". Only the "Last, First" form is touched."""
+    s = (name or "").strip()
+    if "," not in s:
+        return s
+    last, first = [x.strip() for x in s.split(",", 1)]
+    def _tok(t):
+        m = _NAME_PREFIXES.match(t)
+        if m and t[len(m.group(1)):].lower() != t[len(m.group(1)):]:
+            return m.group(1) + t[len(m.group(1)):].upper()
+        return t.upper()
+    last_caps = " ".join("-".join(_tok(h) for h in w.split("-")) for w in last.split())
+    return f"{last_caps}, {first}"
+
+
+def find_customer_duplicates(db_path: str | Path | None = None) -> dict:
+    """Potential duplicate customer profiles, REPORT ONLY (a merge is
+    Kerry's call — merge_customers is the tool). Three doors: the same
+    first+last name (minus the confirmed-distinct pairs), the same email
+    on two profiles (customer_emails or the items rows), the same phone
+    digits. Each group lists what every profile holds so the keep/merge
+    direction is obvious: status, emails, phones, item count, last order."""
+    out = {"same_name": [], "same_email": [], "same_phone": [], "profiles_checked": 0}
+    with _connect(db_path) as conn:
+        out["profiles_checked"] = conn.execute("SELECT COUNT(*) FROM customers").fetchone()[0]
+
+        def profile(cid: int) -> dict:
+            c = conn.execute(
+                """SELECT customer_id, first_name, last_name, phone, chapter,
+                          current_player_status, created_at
+                     FROM customers WHERE customer_id = ?""", (cid,)).fetchone()
+            emails = sorted({(r[0] or "").strip().lower() for r in conn.execute(
+                "SELECT email FROM customer_emails WHERE customer_id = ?", (cid,)) if r[0]}
+                | {(r[0] or "").strip().lower() for r in conn.execute(
+                    "SELECT DISTINCT customer_email FROM items WHERE customer_id = ? "
+                    "AND COALESCE(customer_email,'') != ''", (cid,)) if r[0]})
+            phones = sorted({re.sub(r"\D", "", r[0] or "")[-10:] for r in conn.execute(
+                "SELECT DISTINCT customer_phone FROM items WHERE customer_id = ? "
+                "AND COALESCE(customer_phone,'') != ''", (cid,)) if r[0]}
+                | ({re.sub(r"\D", "", c["phone"] or "")[-10:]} if c and c["phone"] else set()))
+            it = conn.execute(
+                """SELECT COUNT(*), MAX(order_date), MIN(order_date) FROM items
+                    WHERE customer_id = ? AND COALESCE(transaction_status,'active') = 'active'""",
+                (cid,)).fetchone()
+            try:
+                rounds = conn.execute("SELECT COUNT(*) FROM scoring_rounds WHERE customer_id = ?",
+                                      (cid,)).fetchone()[0]
+            except sqlite3.OperationalError:
+                rounds = 0
+            return {"customer_id": cid,
+                    "name": f"{(c['first_name'] or '').strip()} {(c['last_name'] or '').strip()}".strip() if c else "?",
+                    "status": c["current_player_status"] if c else None,
+                    "chapter": c["chapter"] if c else None,
+                    "emails": emails, "phones": [p for p in phones if len(p) == 10],
+                    "items": it[0], "first_order": it[2], "last_order": it[1],
+                    "scoring_rounds": rounds,
+                    "created_at": c["created_at"] if c else None}
+
+        def suggest(profiles: list) -> int:
+            act = {"active_member", "member_plus"}
+            return max(profiles, key=lambda p: ((p["status"] in act), p["items"],
+                                                 p["scoring_rounds"], -(p["customer_id"])))["customer_id"]
+
+        seen_groups: set = set()
+
+        def add(bucket: str, key: str, cids: list):
+            fs = frozenset(cids)
+            if len(fs) < 2 or fs in seen_groups:
+                return
+            seen_groups.add(fs)
+            profs = [profile(c) for c in sorted(fs)]
+            out[bucket].append({"key": key, "profiles": profs, "suggest_keep": suggest(profs)})
+
+        for d in conn.execute(
+                """SELECT LOWER(TRIM(first_name)) AS f, LOWER(TRIM(last_name)) AS l,
+                          GROUP_CONCAT(customer_id) AS cids, COUNT(*) AS n
+                     FROM customers
+                    WHERE COALESCE(TRIM(first_name), '') != '' AND COALESCE(TRIM(last_name), '') != ''
+                    GROUP BY 1, 2 HAVING n > 1"""):
+            cids = [int(x) for x in d["cids"].split(",")]
+            if frozenset(cids) in _KNOWN_DISTINCT_SAME_NAME:
+                continue
+            add("same_name", f"{d['f'].title()} {d['l'].title()}", cids)
+
+        email_owner: dict = {}
+        for r in conn.execute("SELECT customer_id, LOWER(TRIM(email)) AS e FROM customer_emails "
+                              "WHERE COALESCE(email,'') != ''"):
+            email_owner.setdefault(r["e"], set()).add(r["customer_id"])
+        for r in conn.execute("SELECT DISTINCT customer_id, LOWER(TRIM(customer_email)) AS e FROM items "
+                              "WHERE customer_id IS NOT NULL AND COALESCE(customer_email,'') != ''"):
+            email_owner.setdefault(r["e"], set()).add(r["customer_id"])
+        for e, cids in email_owner.items():
+            if len(cids) > 1:
+                add("same_email", e, sorted(cids))
+
+        phone_owner: dict = {}
+        for r in conn.execute("SELECT customer_id, phone FROM customers WHERE COALESCE(phone,'') != ''"):
+            d10 = re.sub(r"\D", "", r["phone"])[-10:]
+            if len(d10) == 10:
+                phone_owner.setdefault(d10, set()).add(r["customer_id"])
+        for r in conn.execute("SELECT DISTINCT customer_id, customer_phone FROM items "
+                              "WHERE customer_id IS NOT NULL AND COALESCE(customer_phone,'') != ''"):
+            d10 = re.sub(r"\D", "", r["customer_phone"])[-10:]
+            if len(d10) == 10:
+                phone_owner.setdefault(d10, set()).add(r["customer_id"])
+        for ph, cids in phone_owner.items():
+            if len(cids) > 1:
+                add("same_phone", ph, sorted(cids))
+    out["groups"] = len(out["same_name"]) + len(out["same_email"]) + len(out["same_phone"])
+    return out
+
+
 def find_points_race_duplicates(db_path: str | Path | None = None) -> dict:
     """Every Season Contests board, one person = one row check.
 
@@ -10113,6 +10232,13 @@ def get_points_race_standings(race_key: str,
                                       (r.get("affiliation") or "").lower()
                                       else "guest")
             r["is_member"] = r["member_status"] == "member"
+            # Boards show members LAST-in-caps (GG's own convention; Kerry
+            # 2026-09-11). GG only re-cases a name when the profile is a
+            # league member on ITS side, so a new TGF member who joined
+            # via a guest profile stays "Espinosa, Christopher" there — the
+            # Tracker's financial truth decides here instead.
+            r["display_name"] = (member_caps_name(r["player_name"]) if r["is_member"]
+                                 else r["player_name"])
 
         # CUP boards hide guests/alumni (Kerry 2026-08-15, R1 live: "Hide
         # guests and alumni from both cups"). Race-flagged so the CITY

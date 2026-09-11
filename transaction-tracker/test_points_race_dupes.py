@@ -260,6 +260,44 @@ check("combined detail fetched both cards and rebuilt one table", det.get("combi
 det1 = db.points_race_member_detail_combined("austin_fall_net", "901", db_path=p)
 check("a plain row passes GG's detail through", not det1.get("combined") and det1["cards"] == ["901"])
 
+print("\n== 3c. member caps + customer duplicate report ==")
+check("member caps follows GG's shape",
+      db.member_caps_name("Espinosa, Christopher") == "ESPINOSA, Christopher"
+      and db.member_caps_name("McCrary, Justin") == "McCRARY, Justin"
+      and db.member_caps_name("DelCarmen, Michelle") == "DelCARMEN, Michelle"
+      and db.member_caps_name("YOUNGS, Luke") == "YOUNGS, Luke"
+      and db.member_caps_name("Williams, Jacob GUEST") == "WILLIAMS, Jacob GUEST"
+      and db.member_caps_name("Kerry Niester") == "Kerry Niester",
+      str([db.member_caps_name(x) for x in ("Espinosa, Christopher", "McCrary, Justin", "DelCarmen, Michelle")]))
+with db._connect(p) as conn:
+    conn.executescript("""
+        CREATE TABLE IF NOT EXISTS customer_emails (email_id INTEGER PRIMARY KEY AUTOINCREMENT, customer_id INTEGER,
+            email TEXT, is_primary INTEGER DEFAULT 0, is_golf_genius INTEGER DEFAULT 0, label TEXT);
+        CREATE TABLE IF NOT EXISTS items (id INTEGER PRIMARY KEY AUTOINCREMENT, customer_id INTEGER, customer TEXT,
+            customer_email TEXT, customer_phone TEXT, order_date TEXT, transaction_status TEXT);
+        ALTER TABLE customers ADD COLUMN phone TEXT;
+        ALTER TABLE customers ADD COLUMN created_at TEXT;
+        INSERT INTO customers (customer_id, first_name, last_name, chapter, current_player_status, phone)
+            VALUES (801, 'Chris', 'Espinosa', 'San Antonio', 'guest', '(210) 555-0101'),
+                   (802, 'Christopher', 'Espinosa', 'San Antonio', 'active_member', '210-555-0101'),
+                   (803, 'Luke', 'Youngs', 'San Antonio', 'expired_member', NULL),
+                   (804, 'Sam', 'Jones', NULL, 'guest', NULL), (805, 'Sam', 'Jones', NULL, 'guest', NULL);
+        INSERT INTO customer_emails (customer_id, email) VALUES (801, 'chris@x.com'), (802, 'Chris@X.com');
+        INSERT INTO items (customer_id, customer, customer_email, order_date) VALUES
+            (802, 'Christopher Espinosa', 'chris@x.com', '2026-09-06'), (801, 'Chris Espinosa', 'chris@x.com', '2026-05-01');
+    """)
+    conn.commit()
+rep = db.find_customer_duplicates(db_path=p)
+keys = {g["key"] for g in rep["same_email"]} | {g["key"] for g in rep["same_phone"]} | {g["key"] for g in rep["same_name"]}
+check("email + phone doors find Chris/Christopher Espinosa; the two Luke Youngs (13 and 803) and the Sam Joneses by name",
+      "chris@x.com" in keys and "2105550101" in keys and "Sam Jones" in keys and "Luke Youngs" in keys, str(keys))
+esp = next(g for g in rep["same_email"] if g["key"] == "chris@x.com")
+check("suggest_keep = the active member with the items", esp["suggest_keep"] == 802
+      and {pr["customer_id"] for pr in esp["profiles"]} == {801, 802}, str(esp))
+check("a group is reported once even when two doors find it",
+      sum(1 for b in ("same_name", "same_email", "same_phone") for g in rep[b]
+          if {pr["customer_id"] for pr in g["profiles"]} == {801, 802}) == 1)
+
 print("\n== 4. scraper keeps both member card ids for a repeated name ==")
 html = ('<a data-member-card-id="904" class="x"> YOUNGS, Luke </a>'
         '<a data-member-card-id="903" class="x">MCCORMICK, Sam</a>'

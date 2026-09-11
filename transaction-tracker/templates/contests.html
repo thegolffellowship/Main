@@ -6619,8 +6619,8 @@
                     ? `<span style="color:#b91c1c;font-weight:600;" title="Not bought in">&#10007;${compact ? "" : " Not in"}</span>`
                     : `<span style="color:#b45309;font-weight:600;" title="No matching tracker profile — check name/aliases">?${compact ? "" : " Unmatched"}</span>`);
             const nameCell = (r.customer_id && !window.MEMBER_MODE)
-                ? `<a href="/customers?cid=${r.customer_id}" class="cell-link">${escapeHtml(r.player_name)}</a>`
-                : escapeHtml(r.player_name);
+                ? `<a href="/customers?cid=${r.customer_id}" class="cell-link">${escapeHtml(r.display_name || r.player_name)}</a>`
+                : escapeHtml(r.display_name || r.player_name);
             const expandable = !!(r.member_card_id || r.customer_id);
             const chevron = expandable
                 ? ' <span class="pr-chevron tgf-exp" title="Round-by-round points & imported scorecards">&#9654;</span>'
@@ -7010,8 +7010,8 @@
             const hcp = r.handicap_index != null
                 ? ` <span style="color:var(--text-muted);font-size:0.82em;">(${r.handicap_index.toFixed(1)})</span>` : "";
             const nameCell = (r.customer_id && !window.MEMBER_MODE)
-                ? `<a href="/customers?cid=${r.customer_id}" class="cell-link">${escapeHtml(r.player_name)}</a>`
-                : escapeHtml(r.player_name);
+                ? `<a href="/customers?cid=${r.customer_id}" class="cell-link">${escapeHtml(r.display_name || r.player_name)}</a>`
+                : escapeHtml(r.display_name || r.player_name);
             // The CITY RANK links to that player's row on their chapter's
             // city race board — centered + pulsed, same as the Spotlight
             // deep links (Kerry 2026-08-03).
@@ -7215,8 +7215,8 @@
             // the monthly table itself is TGF-wide, so pick the race by chapter
             const race = r.chapter === "Austin" ? "austin_net" : "san_antonio_net";
             const name = (r.customer_id && !window.MEMBER_MODE)
-                ? `<a href="/customers?cid=${r.customer_id}" class="cell-link">${escapeHtml(r.player_name)}</a>`
-                : escapeHtml(r.player_name);
+                ? `<a href="/customers?cid=${r.customer_id}" class="cell-link">${escapeHtml(r.display_name || r.player_name)}</a>`
+                : escapeHtml(r.display_name || r.player_name);
             const chevron = r.customer_id
                 ? ' <span class="pr-chevron tgf-exp" title="This month&#39;s rounds & scorecards">&#9654;</span>'
                 : '';
