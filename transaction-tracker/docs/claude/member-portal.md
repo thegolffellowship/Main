@@ -388,3 +388,56 @@ folds into PAST CONTESTS under its season year; THE FELLOWSHIP CUP's
 `final` now reads the `gg_points_race_final` dial (it was hardcoded
 False — the dial already said 2026-08-16). Rows inside PAST CONTESTS
 render no status badges (Kerry: the section says COMPLETED already).
+
+## Winnings by Game + SEASON | ALL-TIME scope (v2.372.0, Kerry ratified 2026-09-11)
+
+Kerry (improvements lane, verbatim ask): *"show members how much
+they've won in each specific game type. Like Team Net total, or
+Individual Net, or Skins, and also per each bundle like NET Games or
+GROSS Games."* Ratified as Option A — bundle-first rows that expand to
+per-game rows — plus three rulings during build: the scope toggle sits
+at the TOP under the name header and flips the whole page (stat strip
+AND the new panel), SEASON offers a pill per calendar year the member
+has data (only 2026 today; default landing = current season), and
+zero-dollar bundles still render, with buy-in counts next to every
+bundle ("a zero GROSS row advertises the games you're not in").
+
+- **Bundles are rules-as-data**: app_settings
+  `spotlight_winnings_bundles` (JSON, same shape as
+  `SEED_WINNINGS_BUNDLES` in database.py) maps bundle → categories +
+  label + color + which buy-in counter shows (`net`/`gross` = bundle
+  purchases, `events` = entries, `contests` = enrollments). Seed:
+  NET Games = individual_net + mvp + tgf_mvp · GROSS Games = skins +
+  individual_gross · Included Games = team_net + ctp/closest_to_pin +
+  longest_putt + hole_in_one · Season Contests (catch_all) =
+  monthly_points + the season display-string categories ("City Net",
+  "Match Play", "Fellowship Cup", "Players Cup"...). A category no
+  bundle names lands in the catch_all bundle — a future game type can
+  never silently vanish. Production spelling note (2026-09-11 audit):
+  payout rows use `ctp`, older maps say `closest_to_pin` — both are
+  seeded and they merge into ONE "Closest to Pin" game row.
+- **Payload** (`get_player_spotlight`): `winnings_by_game =
+  {current_year, years[], by_year{year: [bundle...]}, all_time:
+  [bundle...]}` where bundle = {key,label,color,buyin_noun,buyins,
+  total,games:[{category,label,count,total}]}; plus `stats_scoped =
+  {years{year: {events_played,races_entered,total_winnings}},
+  all_time{...}}`. Both scopes ship at once — the toggle is a client
+  re-render, no second fetch. PII-free (labels, counts, dollars), so
+  the member tier serves it unchanged. Helpers: `_winnings_by_game`
+  (pure — tested in `test_spotlight_winnings.py`),
+  `_spotlight_buyin_counts` (mirrors `_event_game_buyers` eligibility:
+  credited/refunded/transferred/rsvp_only out, child add-ons upgrade
+  the parent, wd keeps only un-credited bundles),
+  `get_winnings_bundles` (dial with seed fallback).
+- **UI** (spotlight.html): toggle pills under the hero card
+  (SEASON <year> | ALL-TIME; per-year pills appear once 2+ years
+  exist); ALL-TIME shows the note "historical records will be added in
+  the future"; stat strip reads the scoped values. WINNINGS BY GAME
+  panel sits between SCORING and Recent Winnings: a proportional
+  color-split bar, then one row per bundle (color dot, buy-in count +
+  win count, green total; $0 in gray, no chevron when no wins) using
+  the SAME details/summary expand pattern as Recent Winnings; game
+  rows carry a chip in the admin payout category colors
+  (`--cat-*` tokens, hex fallbacks matching tgf.html's CAT_COLORS).
+  Bundle totals sum exactly to the payout total, so the panel
+  self-audits against the Won tile in the all-time scope.

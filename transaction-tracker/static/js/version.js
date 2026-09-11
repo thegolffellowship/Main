@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.371.13";
+window.TGF_VERSION = "2.372.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.372.0",
+    date: "2026-09-11",
+    changes: [
+      "Player Spotlight shows WINNINGS BY GAME (Kerry ratified 2026-09-11, improvements lane): one row per bundle — NET Games (Ind Net + City/TGF MVP), GROSS Games (Skins + Ind Gross), Included Games (Team Net, CTP/Longest Putt, Hole-in-One), Season Contests — each expanding to per-game rows with win counts and totals in the admin payout category colors, over a proportional split bar. Zero-dollar bundles still render with the member's buy-in count next to each bundle (a $0 GROSS row advertises the games you're not entered in). Bundle membership is rules-as-data: the spotlight_winnings_bundles app setting (seed SEED_WINNINGS_BUNDLES), with a catch-all bundle so an unmapped category can never silently vanish; production rows spelling CTP as 'ctp' and legacy 'closest_to_pin' merge into one game row.",
+      "Page-level SEASON | ALL-TIME toggle under the spotlight name header flips the whole page — the Events/Contests/Won stat strip and Winnings by Game together (stats_scoped + winnings_by_game ship both scopes in one payload, so a flip is a re-render, not a re-fetch). SEASON grows a pill per calendar year the member has data (2026 only today); default landing is the current season; ALL-TIME carries the note that historical records will be added in the future. PII-free throughout, member tier unchanged. Tests: test_spotlight_winnings.py.",
+    ],
+  },
   {
     version: "2.371.13",
     date: "2026-09-11",

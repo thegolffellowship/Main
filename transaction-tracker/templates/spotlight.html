@@ -193,6 +193,44 @@
         .spt-win-game .a { flex: none; font-weight: 700; color: #1B7F4B;
             font-variant-numeric: tabular-nums; }
 
+        /* SEASON | ALL-TIME page scope toggle (Kerry 2026-09-11: sits
+           under the name header; flips the stat strip AND Winnings by
+           Game — one scope for the whole page) */
+        .spt-scope { display: flex; justify-content: center; margin: 12px 2px 0; }
+        .spt-scope .seg { display: flex; border: 1px solid #E5E1DA; border-radius: 99px;
+            overflow: hidden; background: #fff; }
+        .spt-scope button { appearance: none; border: 0; background: transparent; cursor: pointer;
+            font: 700 10px/1 'Bitter', serif; letter-spacing: 1px; padding: 8px 16px;
+            color: #6B675F; text-transform: uppercase; }
+        .spt-scope button.on { background: #1B1B1B; color: #fff; }
+        .spt-scope-note { font: 500 10.5px/1.4 'Helvetica Neue', Arial, sans-serif;
+            color: #9CA3AF; margin: 5px 4px 0; text-align: center; }
+        /* per-year pills, shown under SEASON once more than one year of
+           data exists (Kerry 2026-09-11) */
+        .spt-scope-years { display: flex; justify-content: center; flex-wrap: wrap;
+            gap: 6px; margin-top: 6px; }
+        .spt-scope-years button { appearance: none; cursor: pointer;
+            border: 1px solid #E5E1DA; border-radius: 99px; background: #fff;
+            font: 700 10px/1 'Bitter', serif; letter-spacing: 1px;
+            padding: 6px 12px; color: #6B675F; }
+        .spt-scope-years button.on { background: #1B1B1B; border-color: #1B1B1B; color: #fff; }
+
+        /* Winnings by Game (Kerry ratified Option A, 2026-09-11):
+           bundle rows expand to per-game rows; proportional split bar */
+        .spt-wbg-bar { display: flex; height: 8px; border-radius: 4px; overflow: hidden;
+            margin: 10px 14px 4px; background: #F0EEE9; }
+        .spt-wbg-bar span { display: block; height: 100%; }
+        details.spt-bundle, div.spt-bundle { border-top: 1px solid #F0EEE9; }
+        .spt-wbg-bar + details.spt-bundle, .spt-wbg-bar + div.spt-bundle { border-top: none; }
+        details.spt-bundle > summary { list-style: none; cursor: pointer; user-select: none; }
+        details.spt-bundle > summary::-webkit-details-marker { display: none; }
+        .spt-bundle .spt-win { border-top: none; }
+        .spt-bundle .dot { flex: none; width: 9px; height: 9px; border-radius: 3px; }
+        details.spt-bundle[open] .spt-win-chev { transform: rotate(90deg); }
+        .spt-wbg-games { padding: 0 14px 10px 33px; }
+        .spt-win-game .chip { flex: none; width: 8px; height: 8px; border-radius: 2px;
+            align-self: center; }
+
         .spt-note { font: 500 11px/1.5 'Helvetica Neue', Arial, sans-serif; color: #9CA3AF; padding: 2px 4px 4px; margin: 0; }
         /* CTA banner (Kerry 2026-07-13): same bar as the Leaderboard page */
         .contest-cta-row { margin: 0; text-align: center; }
@@ -364,10 +402,105 @@
                 return;
             }
             $("spt-hero-copy").style.display = "none";   // loaded view drops the intro (#110)
+            SPT_SCOPE = null;   // every player lands on the current season
             render(d);
         }
 
+        // ── SEASON (per year) | ALL-TIME page scope + Winnings by Game
+        //    (Kerry ratified Option A + page-level toggle, 2026-09-11).
+        //    The toggle lives under the name header and flips the stat
+        //    strip AND the Winnings by Game panel; both scopes ship in
+        //    the payload so a flip is a re-render, not a re-fetch. ──
+        let SPT_DATA = null, SPT_SCOPE = null;
+        // Category colors mirror the admin payout map (dashboard.css
+        // --cat-* tokens; hex fallbacks match tgf.html CAT_COLORS)
+        const SPT_CAT_COLORS = {
+            team_net: "var(--cat-team-net, #1D4ED8)",
+            individual_net: "var(--cat-ind-net, #15803D)",
+            individual_gross: "var(--cat-ind-gross, #B45309)",
+            skins: "var(--cat-skins, #BE185D)",
+            mvp: "var(--cat-mvp, #6D28D9)",
+            tgf_mvp: "var(--cat-tgf-mvp, #C2410C)",
+            ctp: "var(--cat-ctp, #0F766E)",
+            closest_to_pin: "var(--cat-ctp, #0F766E)",
+            longest_putt: "var(--cat-ctp, #0F766E)",
+            hole_in_one: "#A16207",
+            monthly_points: "#C2410C",
+        };
+        const sptCatColor = c => SPT_CAT_COLORS[c] || "#475569";
+
+        function scopeStats(d) {
+            const ss = d.stats_scoped;
+            if (!ss) return d.stats || {};
+            return (SPT_SCOPE === "all_time"
+                ? ss.all_time : (ss.years || {})[SPT_SCOPE]) || d.stats || {};
+        }
+
+        function scopeBarHtml(d) {
+            const w = d.winnings_by_game;
+            if (!w || !d.stats_scoped) return "";
+            const years = w.years || [];
+            const season = SPT_SCOPE !== "all_time";
+            const seasonLbl = years.length === 1 ? `Season ${years[0]}` : "Season";
+            let html =
+                `<div class="spt-scope"><div class="seg">` +
+                `<button type="button" data-scope="${season ? esc(SPT_SCOPE) : esc(String(w.current_year))}" class="${season ? "on" : ""}">${esc(seasonLbl)}</button>` +
+                `<button type="button" data-scope="all_time" class="${season ? "" : "on"}">All-Time</button>` +
+                `</div></div>`;
+            if (season && years.length > 1)
+                html += `<div class="spt-scope-years">` + years.map(y =>
+                    `<button type="button" data-scope="${esc(y)}" class="${SPT_SCOPE === y ? "on" : ""}">${esc(y)}</button>`).join("") + `</div>`;
+            if (!season)
+                html += `<div class="spt-scope-note">All-time currently includes the ${esc(String(w.current_year))} season only &mdash; historical records will be added in the future.</div>`;
+            return html;
+        }
+
+        function wbgHtml(d) {
+            const w = d.winnings_by_game;
+            if (!w) return "";
+            const bundles = (SPT_SCOPE === "all_time"
+                ? w.all_time : (w.by_year || {})[SPT_SCOPE]) || [];
+            if (!bundles.length) return "";
+            const total = bundles.reduce((s, b) => s + (b.total || 0), 0);
+            const bar = total > 0
+                ? `<div class="spt-wbg-bar">` +
+                  bundles.filter(b => b.total > 0).map(b =>
+                      `<span style="flex:${b.total} 0 0;background:${esc(b.color)};"></span>`).join("") +
+                  `</div>`
+                : "";
+            const rows = bundles.map(b => {
+                const games = b.games || [];
+                const meta = [];
+                if (b.buyins != null)
+                    meta.push(`${b.buyins} ${b.buyin_noun}${b.buyins === 1 ? "" : "s"}`);
+                const wonN = games.reduce((s, g) => s + (g.count || 0), 0);
+                if (wonN) meta.push(`${wonN} win${wonN === 1 ? "" : "s"}`);
+                const row =
+                    `<div class="spt-win"><span class="dot" style="background:${esc(b.color)};"></span>` +
+                    (games.length ? `<span class="spt-win-chev tgf-exp">&#9654;</span>` : "") +
+                    `<div class="mid"><div class="ev">${esc(b.label)}</div>` +
+                    `<div class="meta">${esc(meta.join(" · "))}</div></div>` +
+                    `<span class="amt"${b.total ? "" : ' style="color:#9CA3AF;"'}>${fmtMoney(b.total)}</span></div>`;
+                if (!games.length) return `<div class="spt-bundle">${row}</div>`;
+                return `<details class="spt-bundle"><summary>${row}</summary>` +
+                    `<div class="spt-wbg-games">` +
+                    games.map(g =>
+                        `<div class="spt-win-game"><span class="chip" style="background:${sptCatColor(g.category)};"></span>` +
+                        `<span class="g">${esc(g.label)} &middot; ${g.count} win${g.count === 1 ? "" : "s"}</span>` +
+                        `<span class="a">${fmtMoney(g.total)}</span></div>`).join("") +
+                    `</div></details>`;
+            }).join("");
+            return `<div><div class="spt-sec-head"><span class="t">Winnings by Game</span>` +
+                `<span class="s" style="color:var(--primary, #E87C3E);font-style:italic;">(Tap a bundle for the games)</span></div>` +
+                `<div class="spt-panel">${bar}${rows}</div></div>`;
+        }
+
         function render(d) {
+            SPT_DATA = d;
+            const _wbgYears = (d.winnings_by_game && d.winnings_by_game.years) || [];
+            if (SPT_SCOPE !== "all_time" && !_wbgYears.includes(SPT_SCOPE))
+                SPT_SCOPE = String((d.winnings_by_game && d.winnings_by_game.current_year)
+                    || new Date().getFullYear());
             // LONE STAR CUP moved into WHERE THEY STAND as its own navy
             // row (Kerry 2026-08-03) — the hero line is retired.
             const lscLine = "";
@@ -386,7 +519,7 @@
                 (d.handicap_player_name ? `</a>` : `</div>`) +
                 `</div>${lscLine}</div>`;
 
-            const st = d.stats || {};
+            const st = scopeStats(d);
             const strip =
                 `<div class="spt-strip">` +
                 `<div class="spt-tile"><div class="lbl">Events</div><div class="val">${st.events_played ?? 0}</div></div>` +
@@ -663,9 +796,19 @@
 
             // #156 (Kerry): standings-vs-money is the conversion surface —
             // Where {Name} Stands reads ABOVE Scoring
-            $("spt-player").innerHTML = hero + strip + stands + scoring + wins +
+            $("spt-player").innerHTML = hero + scopeBarHtml(d) + strip + stands +
+                scoring + wbgHtml(d) + wins +
                 (d.gg_error ? `<p class="spt-note">Standings feed note: ${esc(d.gg_error)}</p>` : "");
         }
+
+        // Scope toggle (delegated — the section re-renders on every flip)
+        $("spt-player").addEventListener("click", e => {
+            const b = e.target.closest("button[data-scope]");
+            if (!b || !SPT_DATA) return;
+            if (b.dataset.scope === SPT_SCOPE) return;
+            SPT_SCOPE = b.dataset.scope;
+            render(SPT_DATA);
+        });
 
         document.addEventListener("DOMContentLoaded", () => {
             if (typeof initAuth === "function") initAuth();

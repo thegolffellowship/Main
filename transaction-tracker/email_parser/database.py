@@ -12141,6 +12141,195 @@ _PAYOUT_CAT_LABELS = {
 }
 
 
+# ── Winnings by Game (Kerry ratified 2026-09-11, improvements lane) ──
+# Bundle membership is RULES-AS-DATA (guiding principle 2): the live
+# grouping is the `spotlight_winnings_bundles` app setting; this seed is
+# the fallback and the shape of record. Categories listed here are the
+# PRODUCTION spellings audited 2026-09-11 (rows use `ctp`, older maps
+# also say `closest_to_pin` — both are listed so aggregation never
+# depends on one spelling). A bundle flagged catch_all collects any
+# category no bundle names, so a future game type still displays
+# instead of silently vanishing (protect the class, not the instance).
+# buyin: which counter is shown next to the bundle — 'net'/'gross'
+# (bundle purchases), 'events' (entries — included games ride on entry),
+# 'contests' (season-contest enrollments).
+SEED_WINNINGS_BUNDLES = [
+    {"key": "net", "label": "NET Games", "color": "#15803D",
+     "buyin": "net", "buyin_noun": "buy-in",
+     "categories": ["individual_net", "mvp", "tgf_mvp"]},
+    {"key": "gross", "label": "GROSS Games", "color": "#B45309",
+     "buyin": "gross", "buyin_noun": "buy-in",
+     "categories": ["skins", "individual_gross"]},
+    {"key": "included", "label": "Included Games", "color": "#1D4ED8",
+     "buyin": "events", "buyin_noun": "event",
+     "categories": ["team_net", "ctp", "closest_to_pin",
+                    "longest_putt", "hole_in_one"]},
+    {"key": "season", "label": "Season Contests", "color": "#C2410C",
+     "buyin": "contests", "buyin_noun": "contest", "catch_all": True,
+     "categories": ["monthly_points", "City Net", "City Gross",
+                    "Match Play", "Match Play Pool",
+                    "Fellowship Cup", "Players Cup"]},
+]
+
+
+def get_winnings_bundles(db_path: str | Path | None = None) -> list[dict]:
+    """The live winnings-bundle definition: app_settings
+    `spotlight_winnings_bundles` (JSON list, same shape as the seed),
+    falling back to SEED_WINNINGS_BUNDLES. Malformed JSON falls back
+    rather than blanking the member page."""
+    try:
+        raw = get_app_setting("spotlight_winnings_bundles", db_path=db_path)
+        if raw:
+            parsed = json.loads(raw)
+            if isinstance(parsed, list) and all(
+                    isinstance(b, dict) and b.get("key") and
+                    isinstance(b.get("categories"), list) for b in parsed):
+                return parsed
+    except Exception as e:
+        logger.warning("spotlight_winnings_bundles unreadable, using seed: %s", e)
+    return [dict(b) for b in SEED_WINNINGS_BUNDLES]
+
+
+def _winnings_by_game(payouts: list[dict], bundles: list[dict],
+                      current_year: int,
+                      buyin_counts: dict | None = None) -> dict:
+    """Pure aggregation for the spotlight Winnings-by-Game panel.
+
+    payouts: get_customer_winnings()['payouts'] rows (category, amount,
+    event_date). Scopes are PER CALENDAR YEAR plus all_time (Kerry
+    2026-09-11: SEASON offers a toggle per year the member has data;
+    all data is 2026 today so that is the only year that appears;
+    default landing is the current season). Every bundle shows even at
+    $0 — a zero GROSS row advertises the games you're not in. PII-free:
+    categories, labels, counts and dollars only."""
+    cat_to_bundle: dict = {}
+    catch_all = None
+    for b in bundles:
+        if b.get("catch_all") and catch_all is None:
+            catch_all = b["key"]
+        for c in b.get("categories", []):
+            cat_to_bundle.setdefault(c, b["key"])
+    if catch_all is None:
+        catch_all = bundles[-1]["key"] if bundles else "other"
+
+    def build(scope_payouts, scope_key):
+        out = []
+        for b in bundles:
+            games: dict = {}
+            order: list = []
+            total = 0.0
+            for p in scope_payouts:
+                cat = (p.get("category") or "other")
+                if cat_to_bundle.get(cat, catch_all) != b["key"]:
+                    continue
+                # ctp/closest_to_pin are one game with two production
+                # spellings — merge on the display label
+                label = _PAYOUT_CAT_LABELS.get(cat) or (
+                    cat.replace("_", " ").title() if "_" in cat
+                    or cat.islower() else cat)
+                if label not in games:
+                    games[label] = {"category": cat, "label": label,
+                                    "count": 0, "total": 0.0}
+                    order.append(label)
+                amt = p.get("amount") or 0
+                games[label]["count"] += 1
+                games[label]["total"] = round(games[label]["total"] + amt, 2)
+                total = round(total + amt, 2)
+            rows = [games[k] for k in order]
+            rows.sort(key=lambda g: -g["total"])
+            entry = {"key": b["key"], "label": b.get("label") or b["key"],
+                     "color": b.get("color") or "#475569",
+                     "buyin_noun": b.get("buyin_noun") or "buy-in",
+                     "total": total, "games": rows, "buyins": None}
+            if buyin_counts:
+                src = (buyin_counts.get("all_time", {})
+                       if scope_key == "all_time"
+                       else buyin_counts.get("years", {}).get(scope_key, {}))
+                entry["buyins"] = src.get(b.get("buyin"), 0)
+            out.append(entry)
+        return out
+
+    years = {str(p.get("event_date"))[:4] for p in payouts
+             if p.get("event_date")}
+    years |= set((buyin_counts or {}).get("years", {}).keys())
+    years.add(str(current_year))
+    years = sorted((y for y in years if re.fullmatch(r"20\d\d", y)),
+                   reverse=True)
+    by_year = {y: build([p for p in payouts
+                         if str(p.get("event_date") or "").startswith(y)], y)
+               for y in years}
+    return {"current_year": current_year, "years": years,
+            "by_year": by_year, "all_time": build(payouts, "all_time")}
+
+
+def _spotlight_buyin_counts(conn, customer_id: int) -> dict:
+    """Per-customer buy-in counters for the Winnings-by-Game bundles:
+    {'all_time': {net, gross, events, contests},
+     'years': {'2026': {...}, ...}}. Mirrors the Games-tab eligibility
+    statuses (_event_game_buyers): credited/refunded/transferred/
+    rsvp_only parents are out; child add-on payments upgrade the
+    parent's bundle; a wd row keeps a bundle only if that bundle wasn't
+    credited back."""
+    keys = ("net", "gross", "events", "contests")
+    counts = {"all_time": {k: 0 for k in keys}, "years": {}}
+
+    def bump(key, year):
+        counts["all_time"][key] += 1
+        if year:
+            counts["years"].setdefault(
+                year, {k: 0 for k in keys})[key] += 1
+
+    rows = [dict(r) for r in conn.execute(
+        """SELECT i.id, i.parent_item_id, i.side_games,
+                  COALESCE(i.transaction_status,'active') AS ts,
+                  i.wd_credits, e.event_date
+             FROM items i JOIN events e ON e.id = i.event_id
+            WHERE i.customer_id = ?""", (customer_id,)).fetchall()]
+    parents = [r for r in rows if not r["parent_item_id"]
+               and r["ts"] not in ("credited", "refunded",
+                                   "transferred", "rsvp_only")]
+    kids: dict = {}
+    if parents:
+        ph = ",".join("?" for _ in parents)
+        for k in conn.execute(
+                f"SELECT parent_item_id, side_games FROM items "
+                f"WHERE parent_item_id IN ({ph})",
+                [r["id"] for r in parents]).fetchall():
+            kids.setdefault(int(k["parent_item_id"]), []).append(
+                k["side_games"])
+
+    def _yr(text):
+        m = re.search(r"20\d\d", str(text or ""))
+        return m.group(0) if m else None
+
+    for r in parents:
+        year = _yr(r["event_date"])
+        bump("events", year)
+        types = {_classify_side_games_type(r["side_games"])}
+        for sg in kids.get(int(r["id"]), []):
+            types.add(_classify_side_games_type(sg))
+        has = {"net": ("NET" in types or "BOTH" in types),
+               "gross": ("GROSS" in types or "BOTH" in types)}
+        if r["ts"] == "wd":
+            try:
+                wd = json.loads(r["wd_credits"] or "{}")
+            except (TypeError, ValueError):
+                wd = {}
+            if "net_games" in wd:
+                has["net"] = False
+            if "gross_games" in wd:
+                has["gross"] = False
+        for k in ("net", "gross"):
+            if has[k]:
+                bump(k, year)
+
+    for c in conn.execute(
+            "SELECT season FROM season_contests WHERE customer_id = ?",
+            (customer_id,)).fetchall():
+        bump("contests", _yr(c["season"]))
+    return counts
+
+
 # Spotlight shares the expensive, customer-INDEPENDENT reads (each
 # race's live board, the cup and LSC projections) across profile views
 # for a short TTL — clicking through players re-ran get_points_race_live
@@ -12200,7 +12389,8 @@ def get_player_spotlight(customer_id: int,
         # standings' "tournaments" column, so guests/non-enrolled players
         # showed 0-1 (Beam 0 vs 2 rounds; Decareaux 1 vs 5).
         from .timezone_utils import today_central
-        _season_start = f"{today_central().year}-01-01"
+        season_year = today_central().year
+        _season_start = f"{season_year}-01-01"
         _ev = conn.execute(
             """SELECT COUNT(DISTINCT COALESCE(event_id, 'd:' || COALESCE(round_date, '?'))) AS n
                FROM scoring_rounds
@@ -12208,6 +12398,27 @@ def get_player_spotlight(customer_id: int,
                  AND COALESCE(source, 'gg') NOT LIKE 'gg_history%'""",
             (customer_id, _season_start)).fetchone()
         events_played_rounds = (_ev["n"] or 0) if _ev else 0
+        # per-year twins for the SEASON (per year) | ALL-TIME toggle —
+        # identical to the season row while scorecards only reach back
+        # to 2026; diverges when historical records land
+        events_played_by_year = {
+            r["y"]: r["n"] or 0 for r in conn.execute(
+                """SELECT substr(round_date, 1, 4) AS y,
+                          COUNT(DISTINCT COALESCE(event_id, 'd:' || COALESCE(round_date, '?'))) AS n
+                   FROM scoring_rounds
+                   WHERE customer_id = ? AND round_date IS NOT NULL
+                     AND COALESCE(source, 'gg') NOT LIKE 'gg_history%'
+                   GROUP BY substr(round_date, 1, 4)""",
+                (customer_id,)).fetchall() if r["y"]}
+        events_played_rounds_all = sum(events_played_by_year.values())
+
+        # Winnings-by-Game buy-in counters (needs this conn; the winnings
+        # aggregation itself runs after the payouts read below)
+        try:
+            wbg_buyins = _spotlight_buyin_counts(conn, customer_id)
+        except Exception:
+            logger.warning("spotlight buy-in counts failed", exc_info=True)
+            wbg_buyins = None
 
         # current handicap index via handicap_player_links (canonical path)
         idx18 = None
@@ -12688,7 +12899,7 @@ def get_player_spotlight(customer_id: int,
     # game carries a FRIENDLY label ("Individual Net — 1st Place | Low
     # Flight") — the raw category/description read like gobbledygook
     # (Kerry, same day).
-    total_winnings, recent_payouts, recent_events = 0, [], []
+    total_winnings, recent_payouts, recent_events, w = 0, [], [], None
     try:
         w = get_customer_winnings(name, db_path=db_path,
                                   customer_id=customer_id)
@@ -12810,6 +13021,46 @@ def get_player_spotlight(customer_id: int,
     except Exception as e:
         errors.append(f"winnings: {e}")
 
+    # ── winnings by game / bundle (Kerry ratified 2026-09-11) ──
+    # Both scopes ship in one payload so the page-level SEASON | ALL-TIME
+    # toggle is a client-side flip with no second fetch.
+    winnings_by_game = None
+    try:
+        winnings_by_game = _winnings_by_game(
+            (w.get("payouts") or []) if w else [],
+            get_winnings_bundles(db_path), season_year, wbg_buyins)
+    except Exception as e:
+        errors.append(f"winnings by game: {e}")
+
+    # Scoped stat-strip values (the page-level toggle drives the whole
+    # strip, Kerry 2026-09-11): one entry per year with data + all_time.
+    # The live-board "tournaments" floor applies to the CURRENT year
+    # (and all-time, which can only be >= it) — live boards are this
+    # season's by definition.
+    def _races_n(rows):
+        return len({(e["contest_type"], e["season"]) for e in rows})
+
+    _yr = str(season_year)
+    _wbg_years = (winnings_by_game or {}).get("years") or [_yr]
+    stats_scoped = {"years": {}, "all_time": {
+        "events_played": max(events_played_rounds_all, events_played),
+        "races_entered": _races_n(enrollments),
+        "total_winnings": total_winnings,
+    }}
+    for y in _wbg_years:
+        ep = events_played_by_year.get(y, 0)
+        if y == _yr:
+            ep = max(ep, events_played_rounds, events_played)
+        stats_scoped["years"][y] = {
+            "events_played": ep,
+            "races_entered": _races_n(
+                [e for e in enrollments if y in str(e["season"] or "")]),
+            "total_winnings": (
+                round(sum(b["total"]
+                          for b in winnings_by_game["by_year"][y]), 2)
+                if winnings_by_game else (total_winnings if y == _yr else 0)),
+        }
+
     return {
         "customer_id": customer_id,
         "name": name,
@@ -12828,6 +13079,10 @@ def get_player_spotlight(customer_id: int,
                                   for e in enrollments}),
             "total_winnings": total_winnings,
         },
+        # SEASON | ALL-TIME page toggle (Kerry 2026-09-11): the strip
+        # reads from here; legacy "stats" stays for older clients.
+        "stats_scoped": stats_scoped,
+        "winnings_by_game": winnings_by_game,
         "scoring": scoring,
         "races": races,
         "race_pots": race_pots,
