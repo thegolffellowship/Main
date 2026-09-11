@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.371.7";
+window.TGF_VERSION = "2.371.8";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.371.8",
+    date: "2026-09-11",
+    changes: [
+      "Standings fold reconciled with GG's own count. The per-event detail names the event in its Tournament column (the Event column is the league), and two rounds can share a date — Hill Country Matches R1/R2, Kickoff Front/Back — so the earlier parse collapsed them and came out under GG. Keyed on the Tournament column and honouring GG's 'not counted in standings' separator, best 10 + Championship over Jay Hogue's single record now reproduces GG's 116 exactly; the fold across his two records is computed the same way. Verified against the live table via scoring-race-detail.",
+    ],
+  },
   {
     version: "2.371.7",
     date: "2026-09-11",

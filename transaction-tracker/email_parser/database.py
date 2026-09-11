@@ -7702,6 +7702,20 @@ def _member_detail_events(race: dict, member_card_id: str) -> list:
     detail = fetch_points_race_member_detail(
         page_id=race["page_id"], member_card_id=str(member_card_id),
         league_id=race["league_id"], host=race["host"])
+    return parse_member_detail_events(detail)
+
+
+def parse_member_detail_events(detail: dict) -> list:
+    """GG's individual_info table (verified live 2026-09-11, Jay Hogue
+    card 7124833): columns Event (the league, "TGF Austin 2026"),
+    Tournament ("a9.12 POINTS Net - AUSTIN Net", "2026 Austin Championship
+    - POINTS Net"), Awarded Date, Position, Points; a one-cell separator
+    row "The following points are not counted in standings" splits the
+    counted rows from the rest. The TOURNAMENT column is the event
+    identity — two rounds can share a date and the league name (Hill
+    Country Matches R1/R2, Kickoff Front/Back) — so it is the key, and
+    it is where "Championship" appears. Each line carries counted=True
+    above the separator so a single record can be checked against GG."""
     out = []
     for t in detail.get("tables") or []:
         if not t or len(t) < 2:
@@ -7709,20 +7723,25 @@ def _member_detail_events(race: dict, member_card_id: str) -> list:
         head = [str(h or "").strip().lower() for h in t[0]]
         d_i = next((i for i, h in enumerate(head) if "date" in h), -1)
         p_i = next((i for i, h in enumerate(head) if h == "pts" or "point" in h), -1)
-        e_i = next((i for i, h in enumerate(head)
-                    if any(k in h for k in ("event", "tournament", "round", "name"))), -1)
+        t_i = next((i for i, h in enumerate(head) if "tournament" in h or "round" in h), -1)
+        e_i = next((i for i, h in enumerate(head) if "event" in h or "name" in h), -1)
         if d_i == -1 or p_i == -1:
             continue
+        counted = True
         for row in t[1:]:
+            if len(row) == 1 and "not counted" in str(row[0]).lower():
+                counted = False
+                continue
             if len(row) <= max(d_i, p_i):
                 continue
             try:
                 pts = float(str(row[p_i]).replace(",", ""))
             except ValueError:
                 continue
-            out.append({"date": str(row[d_i] or "").strip(),
-                        "event": (str(row[e_i]).strip() if 0 <= e_i < len(row) else ""),
-                        "points": pts})
+            name = (str(row[t_i]).strip() if 0 <= t_i < len(row) else "") or \
+                   (str(row[e_i]).strip() if 0 <= e_i < len(row) else "")
+            out.append({"date": str(row[d_i] or "").strip(), "event": name,
+                        "points": pts, "counted": counted})
     return out
 
 

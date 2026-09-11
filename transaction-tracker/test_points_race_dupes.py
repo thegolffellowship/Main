@@ -148,6 +148,41 @@ check("same event under both records counts once (max)",
       db._best_n_total([{"date": "2026-05-12", "event": "s9.10", "points": 9},
                         {"date": "2026-05-12", "event": "s9.10", "points": 7}], 10) == 9.0)
 
+print("\n== 1c. GG's real detail table (Hogue card 7124833, austin_net, 2026-09-11) ==")
+REAL = {"tables": [[["Event", "Tournament", "Awarded Date", "Position", "Points"],
+    ["TGF Austin 2026", "2026 Austin Championship - POINTS Net", "2026-08-01", "14", "24"],
+    ["TGF Austin 2026", "a9.12 POINTS Net - AUSTIN Net", "2026-06-02", "T2", "12"],
+    ["TGF Austin 2026", "a9.14 POINTS Net - AUSTIN Net", "2026-06-16", "T1", "11"],
+    ["TGF Austin 2026", "a9.19 POINTS Net - AUSTIN Net", "2026-07-21", "3", "10"],
+    ["2026 Hill Country Matches", "hcmR2 POINTS Net - AUSTIN Net", "2026-05-16", "T1", "10"],
+    ["2026 Hill Country Matches", "hcmR1 POINTS Net - AUSTIN Net", "2026-05-16", "2", "9"],
+    ["TGF Austin 2026", "a9.1 POINTS Net - AUSTIN Net", "2026-03-17", "T2", "9"],
+    ["TGF Austin 2026", "a9.17 POINTS Net - AUSTIN Net", "2026-07-07", "1", "9"],
+    ["TGF Austin 2026", "a9.7 POINTS Net - AUSTIN Net", "2026-04-28", "T4", "8"],
+    ["TGF Austin 2026", "a9.13 POINTS Net - AUSTIN Net", "2026-06-09", "T12", "7"],
+    ["TGF Austin 2026", "a9.15 POINTS Net - AUSTIN Net", "2026-06-23", "T6", "7"],
+    ["The following points are not counted in standings"],
+    ["TGF Austin 2026", "a9.2 POINTS Net - AUSTIN Net", "2026-03-24", "T7", "7"],
+    ["TGF Austin 2026", "a9.9 POINTS Net - AUSTIN Net", "2026-05-12", "T5", "6"],
+    ["TGF Austin 2026", "a9.3 POINTS Net - AUSTIN Net", "2026-03-31", "T8", "6"],
+    ["TGF Austin 2026", "a9.8 POINTS Net - AUSTIN Net", "2026-05-05", "T6", "6"],
+    ["TGF Austin 2026", "a9.16 POINTS Net - AUSTIN Net", "2026-06-30", "T9", "5"],
+    ["TGF Austin 2026", "Kickoff POINTS Net - Front - AUSTIN Net", "2026-03-14", "T9", "4"],
+    ["TGF Austin 2026", "a9.10 POINTS Net - AUSTIN Net", "2026-05-19", "T14", "4"],
+    ["2026 Hill Country Matches", "hcmR3 POINTS Net - AUSTIN Net", "2026-05-16", "T5", "4"],
+    ["TGF Austin 2026", "a9.4 POINTS Net - AUSTIN Net", "2026-04-07", "T8", "3"],
+    ["TGF Austin 2026", "Kickoff POINTS Net - Back - AUSTIN Net", "2026-03-14", "T15", "3"]]]}
+ev = db.parse_member_detail_events(REAL)
+check("21 event lines, tournament column is the identity, separator honoured",
+      len(ev) == 21 and ev[0]["event"].startswith("2026 Austin Championship") and ev[0]["counted"]
+      and sum(1 for e in ev if e["counted"]) == 11 and not ev[-1]["counted"], str(ev[:2]))
+check("best 10 + championship over ONE record reproduces GG's own 116",
+      db._best_n_total(ev, 10) == 116.0, str(db._best_n_total(ev, 10)))
+check("a second record with an 8 replaces a counted 7 → 117; with a 6 and a 2 → still 116",
+      db._best_n_total(ev + [{"date": "2026-09-01", "event": "a9.21 POINTS Net", "points": 8.0}], 10) == 117.0
+      and db._best_n_total(ev + [{"date": "2026-09-01", "event": "a9.21 POINTS Net", "points": 6.0},
+                                 {"date": "2026-09-08", "event": "a9.22 POINTS Net", "points": 2.0}], 10) == 116.0)
+
 print("\n== 2. refresh writes the folded snapshot ==")
 p = fresh_db()
 n = db.refresh_points_race_standings("austin_fall_net", db_path=p)
