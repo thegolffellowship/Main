@@ -13107,15 +13107,16 @@ def get_event_leaderboard(event_name: str,
     gross_board = _flight_sections(gross_rows,
                                    flights.get("individual_gross", {}))
 
-    # SKINS = bought-in players only, in their skins flights, with the
-    # skins they won (Kerry: "only needs to show the players bought in
-    # and the flights")
-    skins_rows = [dict(_row(p, gross_buyers, ("skins",)))
-                  for p in plist
-                  if p["customer_id"] is not None
-                  and int(p["customer_id"]) in gross_buyers]
-    skins_rows.sort(key=lambda r: (-(sum(w["cents"] for w in r["won"])),
-                                   (r["player_name"] or "").lower()))
+    # SKINS = the skins chart's roster: buyers in their flights on top;
+    # everyone NOT in skins is PLACED into the flight their handicap
+    # would have put them in, at the BOTTOM of the flight in grey
+    # (Kerry 2026-09-11, second pass — replaces the flat NOT IN SKINS
+    # block). The competition itself stays buyers-only.
+    skins_rows = [dict(_row(p, gross_buyers, ("skins",))) for p in plist]
+    skins_rows.sort(key=lambda r: (
+        not r["buyer"],
+        -(sum(w["cents"] for w in r["won"])) if r["buyer"] else 0,
+        (r["player_name"] or "").lower()))
     skins_board = _flight_sections(skins_rows, flights.get("skins", {}))
 
     # POINTS = the points games merged with MVP: net + gross stableford
@@ -13226,6 +13227,8 @@ def get_event_leaderboard(event_name: str,
         for hn in hole_cols:
             best, who, tie = None, None, False
             for r in sec["rows"]:
+                if not r["buyer"]:
+                    continue   # placed non-buyers never contest a skin
                 s = _player_holes(r["scoring_round_id"]).get(hn)
                 s = s[0] if s else None
                 if s is None:
@@ -13236,14 +13239,6 @@ def get_event_leaderboard(event_name: str,
                     tie = True
             if who is not None and not tie:
                 skin_cells.setdefault(who, []).append(hn)
-    skins_out = [{"player_name": p["player_name"],
-                  "customer_id": (int(p["customer_id"])
-                                  if p["customer_id"] is not None else None),
-                  "scoring_round_id": p["scoring_round_id"]}
-                 for p in plist
-                 if not (p["customer_id"] is not None
-                         and int(p["customer_id"]) in gross_buyers)]
-
     # ── games that did NOT run, with the requirement from the LIVE
     # matrix (Kerry 2026-09-11: denote immediately, per the 9/18
     # standard, and say the pot rolled into skins) ──
@@ -13280,7 +13275,6 @@ def get_event_leaderboard(event_name: str,
         "net_board": net_board,
         "gross_board": gross_board,
         "skins_board": skins_board,
-        "skins_out": skins_out,
         "skin_cells": {str(k): v for k, v in skin_cells.items()},
         "points_board": points_rows,
         "teams": teams,

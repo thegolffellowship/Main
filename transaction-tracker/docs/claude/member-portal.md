@@ -540,3 +540,10 @@ COUNTED for the team best-ball score are highlighted (green fill —
 circles stay reserved for the standard's under-par mark and the skins
 chart's winning skins); the winning team's row is highlighted in the
 team list; the nine's total column reads OUT/IN per the side played.
+
+**Skins placement pass (v2.378.3, Kerry 2026-09-11):** the flat NOT
+IN SKINS block is gone — everyone not in skins is PLACED into the
+skins flight their handicap would have put them in, at the BOTTOM of
+that flight in grey (same boundary derivation as the other boards);
+buyers stay on top with the circles and skins counts, and placed rows
+never contest a skin. `skins_out` removed from the payload.

@@ -2652,22 +2652,20 @@
         // below with their hole scores (Kerry 2026-09-11)
         const holeHead = `<tr><th class="nm">Player</th>${(d.hole_cols || []).map(n => `<th>${n}</th>`).join("")}<th>Skins</th></tr>`;
         const skinCircle = (n, v, rid) => ((d.skin_cells || {})[String(rid)] || []).includes(n);
-        const skinsHtml = (d.skins_board || []).some(s => s.rows.length)
+        // buyers on top of each flight; everyone NOT in skins sits at
+        // the BOTTOM of the flight their handicap places them, in grey
+        // (Kerry 2026-09-11 second pass)
+        const skinsHtml = (d.skins_board || []).some(s => (s.rows || []).some(r => r.buyer))
             ? offNotes + `<div class="evlb-scroll"><table class="evlb-holes"><thead>${holeHead}</thead><tbody>` +
               d.skins_board.map(sec =>
                   (sec.label ? `<tr><td colspan="${(d.hole_cols || []).length + 2}" style="background:#1B1B1B;color:#fff;font:700 10px/1.7 'Bitter',serif;letter-spacing:1px;text-align:left;padding:4px 10px;">${escapeHtml(sec.label)}</td></tr>` : "") +
-                  sec.rows.map(r =>
-                      `<tr class="evlb-plr" data-rid="${r.scoring_round_id || ""}">` +
-                      `<td class="nm">${escapeHtml(r.player_name)}${evlbWonChips(r.won)}</td>` +
-                      evlbHoleCells(d, r.scoring_round_id, { circle: skinCircle }) +
-                      `<td><b>${(((d.skin_cells || {})[String(r.scoring_round_id)]) || []).length || ""}</b></td></tr>`).join("")).join("") +
-              ((d.skins_out || []).length
-                  ? `<tr><td colspan="${(d.hole_cols || []).length + 2}" style="background:#6B7280;color:#fff;font:700 10px/1.7 'Bitter',serif;text-align:left;letter-spacing:1px;padding:4px 10px;">NOT IN SKINS</td></tr>` +
-                    d.skins_out.map(r =>
-                        `<tr class="evlb-plr mute" data-rid="${r.scoring_round_id || ""}">` +
-                        `<td class="nm">${escapeHtml(r.player_name)}</td>` +
-                        evlbHoleCells(d, r.scoring_round_id, {}) + `<td></td></tr>`).join("")
-                  : "") +
+                  sec.rows.map(r => {
+                      const won = ((d.skin_cells || {})[String(r.scoring_round_id)]) || [];
+                      return `<tr class="evlb-plr${r.buyer ? "" : " mute"}" data-rid="${r.scoring_round_id || ""}">` +
+                          `<td class="nm">${escapeHtml(r.player_name)}${r.buyer ? evlbWonChips(r.won) : ""}</td>` +
+                          evlbHoleCells(d, r.scoring_round_id, r.buyer ? { circle: skinCircle } : {}) +
+                          `<td>${r.buyer && won.length ? `<b>${won.length}</b>` : ""}</td></tr>`;
+                  }).join("")).join("") +
               `</tbody></table></div>`
             : '<p style="color:var(--text-muted);">No skins buyers recorded.</p>';
         const pointsHtml = (d.points_board || []).length

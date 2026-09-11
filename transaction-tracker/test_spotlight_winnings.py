@@ -356,10 +356,15 @@ check("net board: buyer flagged + Ind Net money badged (MVP kept for Points)",
       w["buyer"] and [x["category"] for x in w["won"]] == ["individual_net"],
       repr(w["won"]))
 sk = evd["skins_board"]
-check("skins board holds BUYERS ONLY",
-      all(r["customer_id"] == 2 for s in sk for r in s["rows"])
-      and any(x["category"] == "skins" for s in sk for r in s["rows"]
-              for x in r["won"]))
+check("skins board: whole field, winners among buyers, non-buyers present",
+      any(r["buyer"] and any(x["category"] == "skins" for x in r["won"])
+          for s in sk for r in s["rows"])
+      and any(not r["buyer"] for s in sk for r in s["rows"]),
+      repr(sk))
+for _s in sk:
+    _order = [r["buyer"] for r in _s["rows"]]
+    check(f"skins section keeps buyers ABOVE placed non-buyers ({_s['label']})",
+          _order == sorted(_order, reverse=True), repr(_order))
 pb = evd["points_board"]
 check("points board carries MVP money on the winner's row",
       any(r["customer_id"] == 1 and
@@ -384,8 +389,8 @@ check("teams ranked by best-ball total",
 # skins (GROSS buyers only = cid 2): winner of both holes unopposed
 check("skin cells mark the buyer's winning holes",
       evd["skin_cells"].get("102") == [10, 11], repr(evd["skin_cells"]))
-check("skins_out lists everyone NOT in skins",
-      {r["player_name"] for r in evd["skins_out"]}
+check("everyone NOT in skins is placed on the board (grey rows)",
+      {r["player_name"] for s in sk for r in s["rows"] if not r["buyer"]}
       == {"BUYER, Low", "NONBUYER, Mid", "GUEST, Someone"})
 check("cards + hole_cols feed the grids",
       evd["hole_cols"] == [10, 11] and "101" in evd["cards"])

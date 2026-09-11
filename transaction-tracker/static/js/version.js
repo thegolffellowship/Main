@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.378.2";
+window.TGF_VERSION = "2.378.3";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.378.3",
+    date: "2026-09-11",
+    changes: [
+      "Skins chart: the flat NOT IN SKINS block is gone — everyone who didn't buy skins is now PLACED into the skins flight their handicap index would have put them in, at the BOTTOM of that flight in grey (Kerry: 'put them in the flights they would have been at the bottom in grey based on their handicap indexes for that event'). Buyers stay on top of each flight with their winning skins circled and counts shown; placed rows never contest a skin.",
+    ],
+  },
   {
     version: "2.378.2",
     date: "2026-09-11",
