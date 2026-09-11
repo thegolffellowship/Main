@@ -628,6 +628,11 @@ scorecard (same `tr.evlb-plr[data-rid]` delegation). Backend:
 `overall_board` in `get_event_leaderboard`; the
 `scoring-event-board:<event>` bridge now also returns the overall
 summary (wins coded N/G/S/M + won) for no-login vetting.
+v2.382.1: winner STRIPS render above the board — the winning Team Net
+team(s) (position, members, recorded total, purse; team-net blue) and
+every proxy winner (CTP / Longest Putt / HIO; teal) — so the default
+view carries the games that don't live in a player row ("the OVERALL
+board shows everything").
 
 **Team Net scoring — LEARNED FROM GG (parity bridge, 2026-09-11):**
 `scoring-teamnet-parity:<event>|<gg v2tournaments url>` computes every
