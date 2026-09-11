@@ -2946,6 +2946,19 @@
                         if (vb == null) return -1;
                         return (va < vb ? -1 : va > vb ? 1 : 0) * curDir;
                     });
+                    // RE-RANK against the tapped column (Kerry
+                    // 2026-09-11): # is the standing in the CURRENT
+                    // sort — ties on the sorted value show T#, blanks
+                    // get no rank
+                    let shown = 0, rank = 0, last = null, first = true;
+                    rows.forEach(r => {
+                        const v = val(r, k);
+                        if (v == null) { r._rank = ""; return; }
+                        shown++;
+                        if (first || v !== last) { rank = shown; last = v; first = false; }
+                        const tied = rows.filter(x => val(x, k) === v).length > 1;
+                        r._rank = (tied ? "T" : "") + rank;
+                    });
                     ovT.querySelector("tbody").innerHTML =
                         rows.map(r => evlbOvrRowHtml(d, r)).join("");
                     ovT.querySelectorAll("th[data-k]").forEach(h2 =>

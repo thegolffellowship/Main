@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.383.0";
+window.TGF_VERSION = "2.383.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.383.1",
+    date: "2026-09-11",
+    changes: [
+      "OVERALL board # column now RE-RANKS by whichever column is sorted (Kerry: 'How about you re-rank based on which column is tapped?') — tap Won and #1 is the night's biggest winner, tap Gross and #1 is low gross, tap a hole and #1 is the low score on that hole. Ties on the sorted value show T#; players with no value in that column rank blank and sit at the bottom. Replaces v2.383.0's travel-with-the-player net rank.",
+    ],
+  },
   {
     version: "2.383.0",
     date: "2026-09-11",
