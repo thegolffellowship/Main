@@ -1,5 +1,19 @@
-window.TGF_VERSION = "2.377.0";
+window.TGF_VERSION = "2.377.2";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.377.2",
+    date: "2026-09-11",
+    changes: [
+      "LSC captains as a CHIP (Kerry, correcting v2.377.1: 'AUSTIN NET - 2 is correct and should be shown, but also highlight Matt JENKINS as CAPTAIN. Same for Rob Callaway as SA NET - 1 — Captains need to be set apart visually'). The freeze now labels every captain seat by qualification (AUSTIN NET · 2, SA NET · 1) and stamps captain:true; the renderer keeps the tinted captain row and adds a chapter-colored CAPTAIN chip next to the name (burnt orange Austin, slate SA). Visible to members too — captaincy is roster identity, not ops.",
+    ],
+  },
+  {
+    version: "2.377.1",
+    date: "2026-09-11",
+    changes: [
+      "LSC page final-roster polish (Kerry 2026-09-11): captaincy is NOT inherited \u2014 a CAPTAIN seat filled by cascade (the champion declined) is relabeled in the freeze by how the player actually qualified ('AUSTIN NET \u00b7 2' for Matt Jenkins; Rob Callaway keeps CAPTAIN as the 2026 San Antonio NET Champion). The Lock/Pool legend is removed ('we're not using it'), and when the roster is frozen the header badge flips from 'Projected Rosters \u00b7 Live from today's standings' to a green 'Final Rosters', the intro paragraph stops talking about projections, and the alternates-pool footnote hides.",
+    ],
+  },
   {
     version: "2.377.0",
     date: "2026-09-11",
@@ -28,8 +42,7 @@ window.TGF_CHANGELOG = [
     version: "2.374.0",
     date: "2026-09-11",
     changes: [
-      "Winnings by Game drill-down (Kerry, same-day follow-up to v2.372.0): every game subtotal inside a bundle now expands to the EVENTS that game was won in — event name, date, flight and place, and the amount won there. Two payout rows in one event fold to one line with the details accumulated (CTP 'Hole 13 · Hole 16'); skins show their holes and flight ('Holes 2 & 18 · High Flight'); season rows show the standings place. The description parsing (place with ties, holes, LOW/MID/HIGH or numeric flights) moved to a shared _payout_detail_bits helper used by BOTH the Recent Winnings labels and this drill-down, so the two surfaces can never read the same payout row differently. Tests grew to 30 checks in test_spotlight_winnings.py.",
-    ],
+      "Winnings by Game drill-down (Kerry, same-day follow-up to v2.372.0): every game subtotal inside a bundle now expands to the EVENTS that game was won in — event name, date, flight and place, and the amount won there. Two payout rows in one event fold to one line with the details accumulated (CTP 'Hole 13 · Hole 16'); skins show their holes and flight ('Holes 2 & 18 · High Flight'); season rows show the standings place. The description parsing (place with ties, holes, LOW/MID/HIGH or numeric flights) moved to a shared _payout_detail_bits helper used by BOTH the Recent Winnings labels and this drill-down, so the two surfaces can never read the same payout row differently. Tests grew to 30 checks in test_spotlight_winnings.py.",    ],
   },
   {
     version: "2.373.0",
