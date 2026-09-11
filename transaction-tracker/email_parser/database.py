@@ -13592,6 +13592,34 @@ def get_event_leaderboard(event_name: str,
         i = j
     points_rows = regrouped
 
+    # ── OVERALL (Kerry 2026-09-11): ONE whole-field table combining
+    # every player's scores. Wins highlight by category color — Ind Net
+    # on the Net total, Ind Gross on the Gross total, MVP on the Points
+    # total, Skins on the winning hole cells (skin_cells) — and buy-ins
+    # are deliberately NOT identified on this view. Won = the player's
+    # total recorded money for the event across ALL categories (team
+    # shares, proxies and HIO included), from tgf_payouts.
+    overall_rows = []
+    for p in plist:
+        cid = int(p["customer_id"]) if p["customer_id"] is not None else None
+        a = pts.get(p["scoring_round_id"]) or {}
+        wlist = won.get(cid, []) if cid is not None else []
+        cats = {w["category"] for w in wlist}
+        overall_rows.append({
+            "player_name": p["player_name"], "customer_id": cid,
+            "scoring_round_id": p["scoring_round_id"],
+            "index": indexes.get(cid) if cid is not None else None,
+            "hcp": p["hcp"], "gross": p["gross"], "net": p["net"],
+            "net_pts": a.get("net"),
+            "win_net": "individual_net" in cats,
+            "win_gross": "individual_gross" in cats,
+            "win_skins": "skins" in cats,
+            "win_mvp": bool(cats & {"mvp", "tgf_mvp"}),
+            "won_total": round(sum(w["cents"] for w in wlist) / 100.0, 2),
+        })
+    overall_rows.sort(key=lambda r: (r["net"] is None, r["net"] or 0,
+                                     r["gross"] or 0))
+
     # ── ALL teams with best-ball totals + GG-style team cards (Kerry
     # 2026-09-11: "Show all teams and allow expansion of each team to
     # see the team net scorecard like on Golf Genius") — grouped by
@@ -13806,6 +13834,7 @@ def get_event_leaderboard(event_name: str,
         "field": len(plist),
         "pot": round(sum(w["cents"] for ws in won.values()
                          for w in ws) / 100.0, 2),
+        "overall_board": overall_rows,
         "net_board": net_board,
         "gross_board": gross_board,
         "skins_board": skins_board,

@@ -312,6 +312,22 @@
         /* GG-style circled winning score (skins / counting team ball) */
         .evlb-circ { display: inline-block; min-width: 17px; line-height: 17px;
             border: 1.5px solid #1B1B1B; border-radius: 50%; font-weight: 700; }
+        /* OVERALL view (Kerry 2026-09-11): win highlights use the
+           ratified payout category colors (dashboard.css --cat-*) —
+           Ind Net green, Ind Gross amber, MVP purple, skins pink circles.
+           No buy-in identification on this view by design. */
+        .evlb-circ.sk { border-color: var(--cat-skins, #BE185D); color: var(--cat-skins, #BE185D); }
+        .evlb-ovr td.w-net { background: rgba(21,128,61,.16); color: var(--cat-ind-net, #15803D); border-radius: 4px; }
+        .evlb-ovr td.w-net b { color: inherit; }
+        .evlb-ovr td.w-gross { background: rgba(180,83,9,.16); color: var(--cat-ind-gross, #B45309); font-weight: 700; border-radius: 4px; }
+        .evlb-ovr td.w-mvp { background: rgba(109,40,217,.14); color: var(--cat-mvp, #6D28D9); font-weight: 700; border-radius: 4px; }
+        .evlb-ovr td.won, .evlb-ovr th.won { text-align: right; font-weight: 700;
+            color: var(--money-green, #15803D); font-variant-numeric: tabular-nums; min-width: 58px; }
+        .evlb-legend { font-size: 11px; color: #6B7280; margin: 8px 0 0; white-space: normal; }
+        .evlb-legend .lg { display: inline-block; padding: 1px 7px; border-radius: 4px; font-weight: 700; }
+        .evlb-legend .lg.w-net { background: rgba(21,128,61,.16); color: var(--cat-ind-net, #15803D); }
+        .evlb-legend .lg.w-gross { background: rgba(180,83,9,.16); color: var(--cat-ind-gross, #B45309); }
+        .evlb-legend .lg.w-mvp { background: rgba(109,40,217,.14); color: var(--cat-mvp, #6D28D9); }
         .evlb-note { background: #FFF7ED; border: 1px solid #FED7AA; color: #9A3412;
             border-radius: 8px; padding: 8px 12px; font-size: 12px; margin: 0 0 10px; }
         details.evlb-team { border: 1px solid #F0EEE9; border-radius: 8px; margin-top: 6px; }
@@ -2643,10 +2659,61 @@
         }).join("");
     }
     function evlbEventHtml(d) {
-        const tabs = [["team", "Team"], ["net", "Net"], ["gross", "Gross"],
-                      ["skins", "Skins"], ["points", "MVP/Points"], ["prox", "Proxies"]];
+        const tabs = [["overall", "Overall"], ["team", "Team"], ["net", "Net"],
+                      ["gross", "Gross"], ["skins", "Skins"],
+                      ["points", "MVP/Points"], ["prox", "Proxies"]];
         const offNotes = (d.games_off || []).map(g =>
             `<div class="evlb-note">${escapeHtml(g.note)}</div>`).join("");
+        // OVERALL (Kerry 2026-09-11): the whole field in ONE table —
+        // hole-by-hole gross plus totals. Wins highlight by the ratified
+        // category colors (Net total green, Gross total amber, MVP on
+        // the Pts total purple, winning skins circled pink on the hole
+        // cells). Buy-ins are deliberately NOT identified here. Won =
+        // total collected for the event across ALL games. Rows expand
+        // to the universal scorecard.
+        const ovSkinCircle = (rid) => (n) =>
+            ((d.skin_cells || {})[String(rid)] || []).includes(n);
+        const ovHoles = (r) => {
+            const hs = {};
+            (d.cards[String(r.scoring_round_id)] || []).forEach(h => { hs[h[0]] = h; });
+            const isWin = r.win_skins ? ovSkinCircle(r.scoring_round_id) : () => false;
+            return (d.hole_cols || []).map(n => {
+                const h = hs[n];
+                if (!h || h[1] == null) return "<td></td>";
+                return `<td>${isWin(n) ? `<span class="evlb-circ sk">${h[1]}</span>` : h[1]}</td>`;
+            }).join("");
+        };
+        const ovRows = d.overall_board || [];
+        const overallHtml = ovRows.length
+            ? `<div class="evlb-scroll"><table class="evlb-holes evlb-ovr"><thead>` +
+              `<tr><th>#</th><th class="nm">Player</th><th title="Handicap Index">Idx</th><th title="Playing Handicap">PH</th>` +
+              (d.hole_cols || []).map(n => `<th>${n}</th>`).join("") +
+              `<th>Gross</th><th>Net</th><th>Pts</th><th class="won">Won</th></tr></thead><tbody>` +
+              (() => {
+                  let shown = 0, rank = 0, last = null;
+                  return ovRows.map(r => {
+                      shown++;
+                      if (r.net !== last) { rank = shown; last = r.net; }
+                      const tied = r.net != null && ovRows.filter(x => x.net === r.net).length > 1;
+                      return `<tr class="evlb-plr" data-rid="${r.scoring_round_id || ""}">` +
+                          `<td>${r.net == null ? "" : (tied ? "T" : "") + rank}</td>` +
+                          `<td class="nm">${escapeHtml(r.player_name)}</td>` +
+                          `<td>${r.index != null ? Number(r.index).toFixed(1) : ""}</td>` +
+                          `<td>${r.hcp ?? ""}</td>` +
+                          ovHoles(r) +
+                          `<td${r.win_gross ? ' class="w-gross" title="won Individual Gross"' : ""}>${r.gross ?? ""}</td>` +
+                          `<td${r.win_net ? ' class="w-net" title="won Individual Net"' : ""}><b>${r.net ?? ""}</b></td>` +
+                          `<td${r.win_mvp ? ' class="w-mvp" title="Event MVP"' : ""}>${r.net_pts ?? ""}</td>` +
+                          `<td class="won">${r.won_total > 0 ? "$" + Number(r.won_total).toFixed(2) : ""}</td></tr>`;
+                  }).join("");
+              })() +
+              `</tbody></table></div>` +
+              `<p class="evlb-legend"><span class="lg w-net">Net</span> won Individual Net &middot; ` +
+              `<span class="lg w-gross">Gross</span> won Individual Gross &middot; ` +
+              `<span class="lg"><span class="evlb-circ sk">4</span></span> skin won on that hole &middot; ` +
+              `<span class="lg w-mvp">Pts</span> Event MVP &middot; ` +
+              `<b>Won</b> = total collected for this event, all games (team &amp; proxies included). Tap a player for their scorecard.</p>`
+            : '<p style="color:var(--text-muted);">No scorecards yet.</p>';
         // SKINS: GG-style overall chart — buyers per flight, hole-by-hole
         // gross with winning skins circled; everyone NOT in skins listed
         // below with their hole scores (Kerry 2026-09-11)
@@ -2735,6 +2802,7 @@
               `</tbody></table></div>`
             : '<p style="color:var(--text-muted);">No proxies recorded yet.</p>';
         const panels = {
+            overall: overallHtml,
             team: teamHtml,
             net: evlbSectioned(d.net_board, "net"),
             gross: offNotes + evlbSectioned(d.gross_board, "gross"),
@@ -2742,10 +2810,10 @@
         };
         return `<div class="evlb-subtabs"><div class="evlb-seg evlb-seg-sub">` +
             tabs.map(([k, l]) =>
-                `<button class="evlb-subtab${k === "net" ? " active" : ""}" data-sub="${k}">${l}</button>`).join("") +
+                `<button class="evlb-subtab${k === "overall" ? " active" : ""}" data-sub="${k}">${l}</button>`).join("") +
             `</div></div>` +
             tabs.map(([k]) =>
-                `<div class="evlb-panel" data-panel="${k}"${k === "net" ? "" : " hidden"}>${panels[k]}</div>`).join("") +
+                `<div class="evlb-panel" data-panel="${k}"${k === "overall" ? "" : " hidden"}>${panels[k]}</div>`).join("") +
             `<p style="font-size:11px;color:#9CA3AF;margin:8px 0 0;">Tap a player for their scorecard, or a team for its best-ball card. &#10003; IN = bought into that game &middot; non-buyers are placed in the flight their handicap would have flighted them.</p>`;
     }
     // Team net card in THE card standard's family: each member's NET

@@ -4912,6 +4912,14 @@ def _scoring_dispatch(url: str, extract: str):
                     "purse": t.get("purse"),
                     "official": t.get("official"),
                 } for t in (_d.get("teams") or [])],
+                "overall": [{
+                    "player": r["player_name"], "net": r["net"],
+                    "gross": r["gross"], "pts": r["net_pts"],
+                    "wins": "".join(c for c, f in (
+                        ("N", r["win_net"]), ("G", r["win_gross"]),
+                        ("S", r["win_skins"]), ("M", r["win_mvp"])) if f),
+                    "won": r["won_total"],
+                } for r in (_d.get("overall_board") or [])],
                 "games_off": _d.get("games_off")}, indent=2, default=str)
         if cmd == "scoring-ca-queue":
             # CA QUEUE read (mailbox #473/#474): "[<section>[|<status>]]"

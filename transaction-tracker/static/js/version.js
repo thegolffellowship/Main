@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.381.0";
+window.TGF_VERSION = "2.382.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.382.0",
+    date: "2026-09-11",
+    changes: [
+      "Events leaderboard OVERALL view (Kerry directed) — the new default subtab: the whole field in ONE table (rank by net · Player · Idx · PH · hole-by-hole gross · Gross · Net · Pts · Won). Wins highlight by the ratified payout category colors: an Individual Net win tints the player's Net total green, an Individual Gross win tints the Gross total amber, Event MVP tints the Pts total purple, and each winning skin circles that hole's score in pink — a legend under the table explains every mark. Buy-ins are deliberately NOT identified on this view (Kerry: 'Don't identify those who bought in'): no checkmarks, no buyer highlighting, no per-category chips — just the win colors and the Won column, which shows the player's TOTAL recorded money for the event across ALL games (team shares, proxies and hole-in-one included). Tapping any player expands their full scorecard in the universal card standard.",
+      "Backend: overall_board in get_event_leaderboard (win flags from the event's recorded payouts by category; won_total from all tgf_payouts rows); the scoring-event-board bridge now returns the overall summary too (wins coded N/G/S/M) so the view can be vetted without a login. Tests: 8 new checks incl. 'overall rows do NOT identify buy-ins' asserted on the payload shape itself.",
+    ],
+  },
   {
     version: "2.381.0",
     date: "2026-09-11",

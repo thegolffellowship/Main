@@ -611,6 +611,24 @@ never contest a skin. `skins_out` removed from the payload.
   backfill; `scoring-event-board:<event>` is a read-only compact TEAM
   board vet (GG pos/total, reconstruction, purse, official).
 
+**Events leaderboard iteration 6 (v2.382.0, Kerry 2026-09-11):
+OVERALL view — the new default subtab.** One whole-field table
+(rank-by-net · Player · Idx · PH · hole-by-hole gross · Gross · Net ·
+Pts · Won) combining every player's scores. Wins highlight by the
+RATIFIED payout category colors (`--cat-*` in dashboard.css): Ind Net
+win tints the Net total green, Ind Gross the Gross total amber, Event
+MVP the Pts total purple, and winning skins circle their hole cells
+pink (`.evlb-circ.sk`); a legend explains each. **Buy-ins are
+deliberately NOT identified on this view** (Kerry: "Don't identify
+those who bought in") — rows carry no buyer flag or won-chips at all,
+only the win highlights and the **Won** column = the player's total
+recorded money for the event across ALL games (team shares, proxies,
+HIO included), from tgf_payouts. Rows expand to the universal
+scorecard (same `tr.evlb-plr[data-rid]` delegation). Backend:
+`overall_board` in `get_event_leaderboard`; the
+`scoring-event-board:<event>` bridge now also returns the overall
+summary (wins coded N/G/S/M + won) for no-login vetting.
+
 **Team Net scoring — LEARNED FROM GG (parity bridge, 2026-09-11):**
 `scoring-teamnet-parity:<event>|<gg v2tournaments url>` computes every
 plausible reading of 75%-off-lowest from our cards AND reads GG's

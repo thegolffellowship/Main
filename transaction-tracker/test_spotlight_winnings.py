@@ -438,6 +438,30 @@ check("Individual Gross inactive notice from the live matrix (16 on 9h)",
       evd["games_off"] and evd["games_off"][0]["needed"] == 16
       and "rolled into Skins" in evd["games_off"][0]["note"],
       repr(evd["games_off"]))
+# ── OVERALL view (Kerry 2026-09-11): whole field, one table, win flags
+#    by category, Won = ALL event money, NO buy-in identification ──
+ovr = evd["overall_board"]
+check("overall board carries the whole field", len(ovr) == 4, len(ovr))
+check("overall sorted by net (no-net guests last)",
+      [r["player_name"] for r in ovr][:2] == ["BUYER, Low", "BUYER, High"]
+      and ovr[-1]["player_name"] == "GUEST, Someone",
+      repr([r["player_name"] for r in ovr]))
+o1 = next(r for r in ovr if r["customer_id"] == 1)
+o2 = next(r for r in ovr if r["customer_id"] == 2)
+check("win flags: cid1 won Ind Net + MVP, not skins/gross",
+      o1["win_net"] and o1["win_mvp"] and not o1["win_skins"]
+      and not o1["win_gross"], repr(o1))
+check("win flags: cid2 won skins only", o2["win_skins"]
+      and not o2["win_net"] and not o2["win_mvp"], repr(o2))
+check("Won column = total event money across ALL categories",
+      o1["won_total"] == 93.0 and o2["won_total"] == 19.5,
+      (o1["won_total"], o2["won_total"]))
+check("overall rows do NOT identify buy-ins",
+      all("buyer" not in r and "won" not in r for r in ovr),
+      repr(sorted(ovr[0].keys())))
+check("overall rows carry hcp/pts for the table (index None w/o links)",
+      "index" in o1 and o1["hcp"] == 5
+      and o1["net_pts"] is not None, repr(o1))
 
 lst = db.get_events_leaderboard(db_path=_db2)
 check("pilot dial gates the event list (s9.99 not in seed)",
