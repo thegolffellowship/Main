@@ -633,6 +633,14 @@ team(s) (position, members, recorded total, purse; team-net blue) and
 every proxy winner (CTP / Longest Putt / HIO; teal) — so the default
 view carries the games that don't live in a player row ("the OVERALL
 board shows everything").
+v2.384.0: money wins color-code BY FLIGHT (Kerry: "anybody who won
+money gets color-coded") — flight 1 red, 2 green, 3 blue (+amber,
+violet; `EVLB_FLIGHT_COLORS`/`evlbFlightTint`): tinted Net/Gross
+totals and flight-colored skins circles, tooltips name game + flight,
+legend shows only the flights that paid; MVP keeps the ratified
+purple. Backend: overall rows carry `net_flight` / `gross_flight` /
+`skins_flight` ordinals (`_flight_ordinals` over the sectioned
+boards — 1 = low flight, placed non-buyers included).
 v2.383.0/.1: every column SORTS (tap to sort, tap again to flip;
 Pts/Won open high-first; blanks sink), and the # column RE-RANKS
 against the sorted column (Kerry: "re-rank based on which column is
