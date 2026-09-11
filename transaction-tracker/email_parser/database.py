@@ -10976,10 +10976,25 @@ def freeze_lsc_final_roster(db_path: str | Path = DB_PATH) -> dict:
     scoring-lsc-freeze:clear) to fall back to the live projection.
     """
     d = get_lone_star_cup_projection(db_path=db_path)
+    chapters = d.get("chapters", [])
+    # Captaincy is NOT inherited (Kerry 2026-09-11: "Rob Callaway is the
+    # SA Captain, fix that" — Austin's declined NET champion had cascaded
+    # the CAPTAIN label onto the 2nd-place finisher). A cascaded fill
+    # keeps the SEAT but is relabeled by how they actually qualified;
+    # only a row whose qualification reads "Champion" wears CAPTAIN.
+    for ch in chapters:
+        for s in ch.get("seats", []):
+            if (s.get("seat") == "CAPTAIN"
+                    and "Champion" not in (s.get("earned_as") or "")):
+                m = re.match(r"(\d+)", s.get("earned_as") or "")
+                s["seat"] = (f"{(ch.get('chapter') or '').upper()} NET"
+                             + (f" · {m.group(1)}" if m else ""))
+                s["note"] = ("City NET final standings — the "
+                             "captaincy is not inherited")
     frozen = {
         "frozen_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         "season": d.get("season"),
-        "chapters": d.get("chapters", []),
+        "chapters": chapters,
         "rules_note": "Final rosters.",
     }
     set_app_setting("lsc_roster_final", json.dumps(frozen), db_path=db_path)

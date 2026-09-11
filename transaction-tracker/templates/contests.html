@@ -1950,21 +1950,21 @@
                 <!-- HIW left, badges right (Kerry 2026-08-06) -->
                 <div style="margin-top:0.7rem; display:flex; align-items:center; gap:0.6rem; flex-wrap:wrap;">
                     <button id="lsc-hiw-btn" class="pr-hiw-link" type="button">How It Works</button>
-                    <span class="lsc-chip" style="margin-left:auto;">&#9679;&nbsp;Projected Rosters &middot; Live from today's standings</span>
+                    <!-- Status chip: static default reads PROJECTED; lscLoad
+                         flips it to FINAL ROSTERS when the payload carries
+                         roster_final (Kerry 2026-09-11: "Should have FINAL
+                         ROSTERS badge now") -->
+                    <span class="lsc-chip" id="lsc-status-chip" style="margin-left:auto;">&#9679;&nbsp;Projected Rosters &middot; Live from today's standings</span>
                 </div>
-                <p class="lsc-intro">Austin vs San Antonio — each chapter fields a
+                <p class="lsc-intro" id="lsc-intro-p">Austin vs San Antonio — each chapter fields a
                 12-player team earned through the season's contests. Rosters are
                 decided after the City and TGF Championships; until then, every
                 seat below is projected live from the current standings, just
                 like the projected payouts.</p>
-                <div id="lsc-rosters"><p style="color:var(--text-muted);margin-top:1rem;">Loading projected rosters&hellip;</p></div>
-                <div class="lsc-legend">
-                    <span class="li"><span class="ic"><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M8 10V7a4 4 0 0 1 8 0v3" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"/><path fill="currentColor" fill-rule="evenodd" d="M6.2 10h11.6c1.2 0 2.2 1 2.2 2.2v7.6c0 1.2-1 2.2-2.2 2.2H6.2C5 22 4 21 4 19.8v-7.6C4 11 5 10 6.2 10zm5.8 3.2a1.9 1.9 0 0 0-1 3.5V19a1 1 0 0 0 2 0v-2.3a1.9 1.9 0 0 0-1-3.5z"/></svg></span>
-                        <span><b>Lock</b> &mdash; the seat is SECURED: the champion is declared or the result is final, and standings moves can no longer change it.</span></span>
-                    <span class="li"><span class="lsc-pool-chip" style="margin-left:0;">Pool</span>
-                        <span><b>Pool</b> &mdash; the seat is projected to fill from the Alternates Pool (next player up) because a qualifier holds a better seat or a spot is open.</span></span>
-                </div>
-                <p class="lsc-foot">Only bought-in players hold seats. If you
+                <div id="lsc-rosters"><p style="color:var(--text-muted);margin-top:1rem;">Loading rosters&hellip;</p></div>
+                <!-- Lock/Pool legend removed (Kerry 2026-09-11: "No need for
+                     that legend below since we're not using it") -->
+                <p class="lsc-foot" id="lsc-foot-p">Only bought-in players hold seats. If you
                 qualify in more than one contest you take the seat where you
                 placed higher, and the seat you free up goes to the next player up
                 from the alternates pool. Alternates are ranked by how high you
@@ -2218,6 +2218,24 @@
             const res = await fetch("/api/season-contests/lone-star-cup");
             const d = await res.json();
             if (!res.ok || d.error) throw new Error(d.error || res.statusText);
+            // FINAL ROSTERS state (Kerry 2026-09-11): once the roster is
+            // frozen the badge and intro stop talking about projections.
+            if (d.roster_final) {
+                const chip = $("lsc-status-chip");
+                if (chip) {
+                    chip.innerHTML = "&#9679;&nbsp;Final Rosters";
+                    chip.style.background = "#DCFCE7";
+                    chip.style.color = "#166534";
+                    chip.style.borderColor = "#86EFAC";
+                }
+                const ip = $("lsc-intro-p");
+                if (ip) ip.textContent = "Austin vs San Antonio — each " +
+                    "chapter fields a team earned through the season's " +
+                    "contests. These are the final rosters for the weekend " +
+                    "at The Hideout.";
+                const fp = $("lsc-foot-p");
+                if (fp) fp.style.display = "none";
+            }
             const lscEv = d.event_info;
             // banner IS the section header (Kerry 2026-08-06) — the title
             // and icon are static; JS fills the date/venue from the dial
