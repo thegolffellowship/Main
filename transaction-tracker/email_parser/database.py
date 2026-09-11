@@ -10990,9 +10990,15 @@ def freeze_lsc_final_roster(db_path: str | Path = DB_PATH) -> dict:
             if s.get("seat") == "CAPTAIN":
                 s["captain"] = True
                 ea = s.get("earned_as") or ""
-                m = re.match(r"(\d+)", ea)
-                place = m.group(1) if m else (
-                    "1" if "Champion" in ea else None)
+                # Champion first — "2026 San Antonio NET Champion"
+                # starts with the YEAR, and a bare digit match turned
+                # Callaway's label into "SA NET · 2026". A place is an
+                # ORDINAL ("2nd in Austin NET"), nothing else.
+                if "Champion" in ea:
+                    place = "1"
+                else:
+                    m = re.match(r"(\d+)(?:st|nd|rd|th)\b", ea)
+                    place = m.group(1) if m else None
                 s["seat"] = (f"{abbr} NET"
                              + (f" · {place}" if place else ""))
                 s["note"] = "City NET final standings — team captain"
