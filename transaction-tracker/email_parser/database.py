@@ -13044,6 +13044,9 @@ def upsert_ca_queue_item(item: dict, author: str = "",
             new_id = cur.lastrowid
             if author:
                 _ca_queue_note(conn, new_id, "created", author)
+            if item.get("note"):
+                _ca_queue_note(conn, new_id, str(item["note"]),
+                               author or "unknown")
             conn.commit()
             return {"ok": True, "id": new_id, "created": True}
         # update path

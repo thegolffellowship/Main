@@ -61,7 +61,7 @@ status=done) · `move_ca_queue_item(id, section, position, author)`.
 |---|---|
 | Kerry | `/admin/ca-queue` page → `/api/ca-queue` (GET list) + POST `/upsert` `/note` `/move`, author stamped `kerry` |
 | platform-claude (claude.ai) | MCP tools `list_ca_queue`, `upsert_ca_queue_item`, `note_ca_queue_item`, `close_ca_queue_item` — writes audited via `_audit` → `log_agent_action` |
-| tracker-claude lanes | bridges via `probe_golf_genius` extract=: `scoring-ca-queue[|<section>[|<status>]]`, `scoring-ca-queue-upsert:<json>` (json may carry `author`), `scoring-ca-queue-note:<id>|<author>|<note>`, `scoring-ca-queue-close:<id>|<author>` |
+| tracker-claude lanes | bridges via `probe_golf_genius` extract=: `scoring-ca-queue[:<section>[|<status>]]` (the FIRST separator is the dispatch colon, not a pipe), `scoring-ca-queue-upsert:<json>` (json may carry `author` and an inline `note`), `scoring-ca-queue-note:<id>|<author>|<note>`, `scoring-ca-queue-close:<id>|<author>` |
 
 Every write path stamps an author into the notes log and (MCP/bridge)
 the agent action log, so "who changed this" is always answerable.

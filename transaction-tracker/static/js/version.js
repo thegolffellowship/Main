@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.380.0";
+window.TGF_VERSION = "2.380.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.380.1",
+    date: "2026-09-11",
+    changes: [
+      "CA Queue fix caught in the live bridge verification: an inline note passed with a brand-NEW item was silently dropped — upsert only appended notes on the update path, so a row could be born without the context it arrived with. Inserts now append the note right after the 'created' stamp (test added). Also corrected the bridge syntax in docs: the list command's first separator is the dispatch colon — scoring-ca-queue:<section>[|<status>] — not a pipe.",
+    ],
+  },
   {
     version: "2.380.0",
     date: "2026-09-11",

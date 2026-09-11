@@ -155,6 +155,18 @@ def main():
     rbad2 = db.move_ca_queue_item(999, db_path=dbp)
     check("move unknown id rejected", "error" in rbad2, rbad2)
 
+    print("== inline note on INSERT (v2.380.1 fix) ==")
+    r8 = db.upsert_ca_queue_item(
+        {"title": "Item born with a note", "section": "followups",
+         "note": "context arrives with the row"},
+        author="platform-claude", db_path=dbp)
+    row = [i for i in db.list_ca_queue(db_path=dbp)["items"]
+           if i["id"] == r8["id"]][0]
+    check("insert-time note appended after 'created'",
+          len(row["notes_log"]) == 2 and
+          row["notes_log"][1]["note"] == "context arrives with the row",
+          row["notes_log"])
+
     print("== field updates leave others untouched ==")
     db.upsert_ca_queue_item({"id": r1["id"], "owner": "ca"},
                             author="platform-claude", db_path=dbp)
