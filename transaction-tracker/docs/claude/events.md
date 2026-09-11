@@ -2036,3 +2036,30 @@ Unconfigured events keep the standard columns untouched.
   deposits/lodging/alternates/declined — seat `status` (no locks),
   `n_projected`/`n_secured` (plain player count in the header), and the
   "— invitation accepted" suffix. Admin/manager views unchanged.
+
+## TGF Payouts page — season-contest placement + flighted cups (v2.375.0, Kerry 2026-09-11)
+
+- Year-prefixed cup accounts ("2026 PLAYERS CUP", "2026 FELLOWSHIP
+  CUP") list under the SEASON view, not EVENTS — `isContestAccount`
+  in tgf.html now allows a leading year before the cup name.
+- A flighted cup's Player Pot Summary renders grouped by flight in
+  order (1st Flight band → winner, then 2nd place …), detected from
+  the data: it activates only when EVERY golfer's payout rows carry
+  "<N>st Flight" in the description (the Players Cup is the only
+  flighted season contest today; a future one inherits the layout,
+  normal events never trigger it).
+
+## Points-race boards: season-YEAR enrollment scoping (v2.375.0)
+
+Kerry ruling 2026-09-11, verbatim: "Nothing from 2025 should influence
+2026 EXCEPT for included shirt fund from memberships starting Aug 1,
+2025." (The shirt fund lives in margin_ledger.lsc_fund_year —
+unaffected.) The boards' enrollment filter scoped fall-vs-main and
+chapter but never the YEAR; the 2025 historical order import added
+prior-season season_contests rows and the concluded Players Cup's
+projected-payout strip promptly advertised 27 entries ($1,080 pool,
+2nd place $80.19) against the 23-entry $920 actually collected and
+paid 2026-08-17 — which is how a paid-correct $68.31 looked like an
+underpayment. `get_points_race_standings` now also matches the race's
+season year (parsed from the race label, current year fallback), so
+prior-year enrollments never light pills or count in pots.

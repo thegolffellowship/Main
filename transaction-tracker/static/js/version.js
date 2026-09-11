@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.374.0";
+window.TGF_VERSION = "2.375.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.375.0",
+    date: "2026-09-11",
+    changes: [
+      "Jeff Young's Players Cup vet (Kerry: '1st Place Flight 2 is incorrect... he was in flight 1... and won $80.19'). VERDICT: the payout row and the money were RIGHT ($68.31 = 2nd place, Flight 1 on the $920 / 23-entry pool actually collected and paid 2026-08-17); TWO display defects made it look wrong. (1) The detail parser read 'Players Cup — 1st Flight 2nd place' as 1st place in Flight 2 — cup rows put the flight ordinal FIRST; a dedicated ordinal-flight branch in _payout_detail_bits now handles that shape (incl. 'Champion & 1st Flight winner') for both the spotlight drill-down and Recent Winnings labels. (2) The $80.19 Kerry compared against is the live board's projected-payout strip, inflated to a phantom 27-entry / $1,080 pool by four season-2025 enrollments (Fieber, Stich, Lieck, Henderson) the historical order import added — the boards' enrollment filter scoped fall-vs-main and chapter but never the YEAR.",
+      "Season-YEAR enrollment scoping on every points-race board, per Kerry's ruling (verbatim): 'Nothing from 2025 should influence 2026 EXCEPT for included shirt fund from memberships starting Aug 1, 2025.' get_points_race_standings now also matches the race's season year (parsed from the race label, current-year fallback), so prior-year season_contests rows never light buy-in pills, count in pots, or move projected payouts. The LSC shirt-fund Aug-2025 accrual (margin_ledger.lsc_fund_year) is untouched.",
+      "TGF Payouts page: year-prefixed cup accounts ('2026 PLAYERS CUP', '2026 FELLOWSHIP CUP') now list under SEASON, not EVENTS (isContestAccount allows a leading year). A flighted cup's Player Pot Summary renders grouped by flight in order — 1st Flight band, winner then 2nd place — activated by the data (every row carrying '<N>st Flight'), so the Players Cup is grouped today and any future flighted cup inherits it while normal events never trigger it.",
+    ],
+  },
   {
     version: "2.374.0",
     date: "2026-09-11",

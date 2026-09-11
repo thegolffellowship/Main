@@ -452,3 +452,11 @@ lives in `_payout_detail_bits`, extracted from `_friendly_game` so the
 Recent Winnings labels and this drill-down can never parse the same
 row differently. Payload: each game gains
 `events: [{event_name, event_date, total, detail}]`, newest first.
+
+**Detail-parse fix (v2.375.0, Kerry 2026-09-11):** cup rows put the
+FLIGHT ordinal first ("Players Cup — 1st Flight 2nd place" = Flight 1,
+2nd place); the shared `_payout_detail_bits` read that as 1st place in
+Flight 2 (caught on Jeff Young's spotlight line). An ordinal-flight
+branch now handles that shape (incl. "Champion & 1st Flight winner"
+and the championship-close "4th Flight 2nd" form) before the generic
+place/flight regexes.

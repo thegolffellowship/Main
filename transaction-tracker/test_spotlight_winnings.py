@@ -194,6 +194,31 @@ check("a row with no description still yields an event line",
       next(g for g in sea["games"] if g["category"] == "mystery_game")
       ["events"][0]["detail"] == "")
 
+# ── ordinal-flight descriptions (Kerry 2026-09-11: Jeff Young's
+#    "Players Cup — 1st Flight 2nd place" rendered as 1st Place ·
+#    Flight 2 — the flight ordinal comes FIRST in cup rows) ──
+BITS = db._payout_detail_bits
+check("cup: '1st Flight 2nd place' = 2nd place IN flight 1",
+      BITS("Players Cup", "Players Cup — 1st Flight 2nd place")
+      == ["2nd Place", "Flight 1"],
+      repr(BITS("Players Cup", "Players Cup — 1st Flight 2nd place")))
+check("cup: '2nd Flight winner' = 1st place in flight 2",
+      BITS("Players Cup", "Players Cup — 2nd Flight winner")
+      == ["1st Place", "Flight 2"],
+      repr(BITS("Players Cup", "Players Cup — 2nd Flight winner")))
+check("cup: champion row keeps the Champion bit",
+      BITS("Players Cup", "Players Cup — Champion & 1st Flight winner")
+      == ["Champion", "1st Place", "Flight 1"],
+      repr(BITS("Players Cup", "Players Cup — Champion & 1st Flight winner")))
+check("championship-close: '4th Flight 2nd' (no 'place') parses too",
+      BITS("individual_gross", "Combined Ind Gross 4th Flight 2nd")
+      == ["2nd Place", "Flight 4"],
+      repr(BITS("individual_gross", "Combined Ind Gross 4th Flight 2nd")))
+check("generic 'FLIGHT 3' descriptions untouched by the ordinal branch",
+      BITS("individual_gross", "Ind Gross FLIGHT 3 | HDCP 12+ 1st (GG $)")
+      == ["1st Place", "Flight 3"],
+      repr(BITS("individual_gross", "Ind Gross FLIGHT 3 | HDCP 12+ 1st (GG $)")))
+
 # dial fallback: malformed JSON must fall back to the seed, not blank
 check("seed bundles well-formed",
       db.get_winnings_bundles.__doc__ is not None

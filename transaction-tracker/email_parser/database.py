@@ -10087,6 +10087,22 @@ def get_points_race_standings(race_key: str,
             clauses.append("COALESCE(season, '') LIKE '%Fall'")
         else:
             clauses.append("COALESCE(season, '') NOT LIKE '%Fall'")
+        # Season-YEAR scoping (Kerry ruling 2026-09-11, verbatim:
+        # "Nothing from 2025 should influence 2026 EXCEPT for included
+        # shirt fund from memberships starting Aug 1, 2025." — the LSC
+        # shirt-fund accrual lives in margin_ledger.lsc_fund_year and is
+        # unaffected here). The fall/main split above was the whole
+        # filter while season_contests held one year of data; the 2025
+        # historical order import added prior-year rows and the Players
+        # Cup pot projection promptly advertised 27 entries ($1,080,
+        # 2nd-place $80.19) against the 23-entry $920 actually collected
+        # and paid on 2026-08-17. A board counts ONLY its own season's
+        # year — parsed from the race label, current year as fallback.
+        _ym = re.search(r"20\d\d", race.get("label") or "")
+        _race_year = _ym.group(0) if _ym else str(today_central().year)
+        clauses.append(
+            "(COALESCE(season,'') LIKE ? OR COALESCE(season,'') = '')")
+        params.append(f"%{_race_year}%")
         if race.get("enroll_chapter"):
             clauses.append("(chapter = ? OR chapter IS NULL OR chapter = '')")
             params.append(race["enroll_chapter"])
@@ -12335,6 +12351,26 @@ def _payout_detail_bits(cat: str, desc: str) -> list[str]:
     Winnings-by-Game per-event drill-down so the two surfaces can never
     parse the same row differently."""
     bits: list[str] = []
+    tied = "(T)" in desc
+    # "<N>st Flight <M>nd [place]" / "<N>st Flight winner" — the cup and
+    # championship-close rows put the FLIGHT ordinal first ("Players Cup
+    # — 1st Flight 2nd place" = Flight 1, 2nd place). The generic
+    # place/flight regexes below would read that as 1st place in Flight
+    # 2 — Kerry caught the inversion on Jeff Young's Players Cup line
+    # (2026-09-11), so this shape is handled first and returns.
+    of_ = re.search(r"\b(\d+)(?:st|nd|rd|th)\s+Flight\b"
+                    r"(?:\s+(?:(\d+)(st|nd|rd|th)(?:\s+place)?|(winner)))?",
+                    desc, re.I)
+    if of_:
+        if "champion" in desc.lower():
+            bits.append("Champion")
+        if of_.group(2):
+            bits.append(f"{'T' if tied else ''}"
+                        f"{of_.group(2)}{of_.group(3).lower()} Place")
+        elif of_.group(4):
+            bits.append(f"{'T' if tied else ''}1st Place")
+        bits.append(f"Flight {of_.group(1)}")
+        return bits
     # "SAN ANTONIO Net 2026 final standings — 2 place" → "2nd Place |
     # Season Standings" (season payout rows)
     fs_ = re.search(r"final standings\s*[—\-]\s*(\d+)\s*place", desc, re.I)
