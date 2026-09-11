@@ -495,6 +495,18 @@ standard, but the standard is TGF's, not GG's.
 
 ## One person = one row on the points boards (Kerry 2026-09-11, v2.371.5)
 
+**SCOPE (Kerry, same day, verbatim): "I'm only talking about reviewing
+currently active points races...Austin Fall and San Antonio Fall. All
+previous spring/summer races are concluded and should not be touched
+unless see a discrepancy. And then you need to communicate to me before
+changing."** So the fold runs ONLY on races flagged `fold_duplicates`
+in `_GG_POINTS_RACES` (the two Fall races). SAN ANTONIO Net, AUSTIN Net
+and THE PLAYERS CUP are re-fetched as GG's rows verbatim; their doubles
+show in `scoring-race-dupes` under `unmerged` as "concluded race — report
+only, Kerry decides". A concluded board changes only on Kerry's word.
+(The 15:44 UTC refresh on 2026-09-11 briefly folded the concluded boards;
+reverted at 16:00 UTC, v2.371.9.)
+
 Golf Genius can carry two member records for one player (Austin Fall
 Net showed YOUNGS, Luke twice: T3 with 20 pts / 2 rounds AND 5th with
 17 pts / 2 rounds). The snapshot used to mirror the page row for row.
