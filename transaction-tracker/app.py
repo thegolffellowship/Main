@@ -10261,9 +10261,15 @@ def api_fellowship_cup_projection():
 @require_role("member")
 def api_lone_star_cup():
     """LONE STAR CUP projected rosters + alternates pool (member LSC tab)."""
-    from email_parser.database import get_lone_star_cup_projection, get_app_setting
+    from email_parser.database import (get_lone_star_cup_projection,
+                                       get_lsc_final_roster, get_app_setting)
     try:
-        d = get_lone_star_cup_projection()
+        # FROZEN final roster first (Kerry 2026-09-11: "harden the LONE
+        # STAR CUP page teams into final rosters so it doesn't take so
+        # long to load") — the lsc_roster_final dial snapshot serves
+        # instantly with live deposit badges; clear the dial to fall
+        # back to the live projection.
+        d = get_lsc_final_roster() or get_lone_star_cup_projection()
         # Event banner (Kerry 2026-08-06): the lsc_event_info dial holds
         # {dates, venue, city} — one source for this tab AND the emails
         try:
@@ -10284,11 +10290,27 @@ def api_lone_star_cup():
                 # members") — invitation order is roster ops, not a
                 # member-facing standing.
                 ch.pop("alternates", None)
+                # MEMBER VIEW = Teams + Players + how they qualified,
+                # nothing else (Kerry 2026-09-11: "Only thing that
+                # should show on the members view is the Teams and
+                # Players and the left column denoting how they
+                # qualified"). Locks/secured chips and the
+                # projected/secured counts are roster-ops state — strip
+                # them so the renderer never draws them; the invitation-
+                # accepted suffix on the qualification line goes too.
+                ch.pop("n_projected", None)
+                ch.pop("n_secured", None)
+                for s in ch.get("seats", []):
+                    s["status"] = ""
+                    if s.get("earned_as"):
+                        s["earned_as"] = s["earned_as"].replace(
+                            " — invitation accepted", "")
             # Deposit amounts are financial data — staff eyes only
             d.pop("deposits", None)
             # Collapsed duplicate standings rows are a roster-ops
             # diagnostic, same tier as the alternates list
             d.pop("duplicate_rows", None)
+            d.pop("frozen_at", None)
         else:
             # Lodging tracker (Kerry 2026-08-19) — attached only for
             # staff sessions, so the public payload never carries it
@@ -10302,6 +10324,27 @@ def api_lone_star_cup():
     except Exception as e:
         logger.exception("Lone Star Cup projection failed")
         return jsonify({"error": f"Projection failed: {e}"}), 500
+
+
+@app.route("/api/events/<int:event_id>/oneoff-finance")
+@require_role("manager")
+def api_oneoff_finance(event_id):
+    """Per-player money picture for a ONE-OFF event (Kerry 2026-09-11):
+    chapter, paid to date, expected, balance due, lodging — for events
+    whose money arrives outside the store (Lone Star Cup, TGF
+    Championship, Hill Country Matches). Configured per event in the
+    oneoff_charges dial; an unconfigured event returns oneoff:false and
+    the Events page keeps its standard roster columns."""
+    from email_parser.database import get_oneoff_roster_finance
+    try:
+        d = get_oneoff_roster_finance(event_id)
+        if d is None:
+            return jsonify({"oneoff": False, "event_id": event_id})
+        d.update(oneoff=True, event_id=event_id)
+        return jsonify(d)
+    except Exception as e:
+        logger.exception("oneoff finance failed for event %s", event_id)
+        return jsonify({"error": str(e)}), 500
 
 
 @app.route("/api/scoring/import", methods=["POST"])

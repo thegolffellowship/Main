@@ -2948,6 +2948,23 @@ def _scoring_dispatch(url: str, extract: str):
                                "acct_category": (_cat if _cat and
                                                  _cat != "-" else None),
                                "saved": True})
+        if cmd == "scoring-lsc-freeze":
+            # Freeze the Lone Star Cup page onto the FINAL roster
+            # snapshot (Kerry 2026-09-11: "harden the LONE STAR CUP
+            # page teams into final rosters so it doesn't take so long
+            # to load"): runs the live projection once, stores it in
+            # the lsc_roster_final dial; the API then serves it
+            # instantly with live deposit badges. "clear" reverts to
+            # the live projection. Audited.
+            if arg.strip().lower() == "clear":
+                db.set_app_setting("lsc_roster_final", "")
+                db.log_agent_action("mcp-claude", "scoring-lsc-freeze",
+                                    "cleared — back to live projection")
+                return json.dumps({"frozen": False, "cleared": True})
+            res = db.freeze_lsc_final_roster()
+            db.log_agent_action("mcp-claude", "scoring-lsc-freeze",
+                                f"frozen at {res.get('frozen_at')}")
+            return json.dumps(res, indent=2)
         if cmd == "scoring-expense-promote":
             # "<expense_id>" — promote an expense_transactions row into
             # the acct_transactions ledger via the standard

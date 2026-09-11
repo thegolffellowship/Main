@@ -2260,7 +2260,18 @@
                 const cls = /austin/i.test(ch.chapter || "") ? "austin" : "sa";
                 return `<div class="lsc-col">` +
                        `<div class="lsc-card ${cls}">` +
-                       `<div class="lsc-card-head">Team ${escapeHtml((ch.chapter || "").toUpperCase())}<span>${ch.n_projected} of ${ch.n_seats || 12} projected${ch.n_secured ? ` &middot; ${ch.n_secured} secured` : ""}</span></div>` +
+                       `<div class="lsc-card-head">Team ${escapeHtml((ch.chapter || "").toUpperCase())}<span>${
+                           // Member payload carries no projected/secured
+                           // counts (Kerry 2026-09-11: member view is
+                           // Teams + Players + qualification only) —
+                           // plain player count there; ops counts for
+                           // staff, or FINAL once the roster is frozen.
+                           ch.n_projected == null
+                               ? `${(ch.seats || []).length} players`
+                               : (d.roster_final
+                                   ? `FINAL &middot; ${(ch.seats || []).length} players`
+                                   : `${ch.n_projected} of ${ch.n_seats || 12} projected${ch.n_secured ? ` &middot; ${ch.n_secured} secured` : ""}`)
+                       }</span></div>` +
                        seats +
                        `</div>` +
                        // Alternates are STAFF-ONLY (Kerry 2026-08-24:
@@ -2360,6 +2371,11 @@
                        ).join("") + `</div>`;
             })() + (d.gg_error
                 ? `<p style="color:var(--text-muted);font-size:12px;margin-top:0.5rem;">Standings feed note: ${escapeHtml(d.gg_error)}</p>`
+                : "") + (d.frozen_at
+                // Staff-only breadcrumb (frozen_at is stripped from
+                // member payloads): the page is serving the hardened
+                // final-roster snapshot, not the live projection.
+                ? `<p style="color:var(--text-muted);font-size:12px;margin-top:0.5rem;">Final roster snapshot (frozen ${escapeHtml(d.frozen_at)}) &mdash; deposits stay live; ask Claude to re-freeze after a roster change (scoring-lsc-freeze).</p>`
                 : "");
             // chevron fold: tap a seat row to reveal how they qualified
             box.querySelectorAll(".lsc-seat.has-earn").forEach(el =>
