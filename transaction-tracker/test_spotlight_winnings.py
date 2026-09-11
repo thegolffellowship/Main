@@ -219,6 +219,61 @@ check("generic 'FLIGHT 3' descriptions untouched by the ordinal branch",
       == ["1st Place", "Flight 3"],
       repr(BITS("individual_gross", "Ind Gross FLIGHT 3 | HDCP 12+ 1st (GG $)")))
 
+# ── concluded races LOCK to recorded payouts (Kerry ruling 2026-09-11:
+#    "freeze concluded races to recorded payouts... it should lock") ──
+import sqlite3
+import tempfile
+
+with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as _tf:
+    _dbp = _tf.name
+_c = sqlite3.connect(_dbp)
+_c.executescript("""
+CREATE TABLE app_settings (key TEXT PRIMARY KEY, value TEXT);
+CREATE TABLE tgf_events (id INTEGER PRIMARY KEY, code TEXT, name TEXT);
+CREATE TABLE tgf_payouts (id INTEGER PRIMARY KEY, event_id INT,
+  customer_id INT, category TEXT, amount REAL, description TEXT);
+INSERT INTO tgf_events VALUES (1, '2026 PLAYERS CUP', '2026 PLAYERS CUP'),
+                              (2, 'SAN ANTONIO Net 2026', 'SAN ANTONIO Net 2026');
+INSERT INTO tgf_payouts VALUES
+ (1,1,31,'Players Cup',230.69,'auto: Players Cup — Champion & 1st Flight winner'),
+ (2,1,88,'Players Cup', 68.31,'auto: Players Cup — 1st Flight 2nd place'),
+ (3,1,39,'Players Cup',138.69,'auto: Players Cup — 2nd Flight winner'),
+ (4,1,37,'Players Cup', 68.31,'auto: Players Cup — 2nd Flight 2nd place'),
+ (5,1,35,'Players Cup',138.69,'auto: Players Cup — 3rd Flight winner'),
+ (6,1,23,'Players Cup', 68.31,'auto: Players Cup — 3rd Flight 2nd place'),
+ (7,1, 1,'Players Cup',138.69,'auto: Players Cup — 4th Flight winner'),
+ (8,1, 6,'Players Cup', 68.31,'auto: Players Cup — 4th Flight 2nd place'),
+ (9,2,18,'City Net',400.0,'SAN ANTONIO Net 2026 final standings — 1 place'),
+ (10,2,24,'City Net',300.0,'SAN ANTONIO Net 2026 final standings — 2 place'),
+ (11,2,82,'City Net',220.0,'SAN ANTONIO Net 2026 final standings — 3 place');
+""")
+_c.commit(); _c.close()
+
+pc = db._recorded_payout_strip(
+    "players_cup_gross", {"label": "THE PLAYERS CUP 2026",
+                          "flights": (("1st Flight", None, 6.0),)}, _dbp)
+check("locked cup strip built from recorded rows",
+      pc is not None and pc["locked"] and pc["kind"] == "flights", repr(pc))
+check("locked cup: pot/champion/first/second from what was PAID",
+      (pc["pot_cents"], pc["champion_cents"], pc["flight_first_cents"],
+       pc["flight_second_cents"]) == (92000, 9200, 13869, 6831),
+      repr(pc))
+check("locked cup: n_basis is the pool's real entry count",
+      pc["n_basis"] == 23, pc["n_basis"])
+check("locked cup: recorded recipients ride along (8 customers)",
+      len(pc["recorded_rows"]) == 8
+      and {"customer_id": 88, "amount_cents": 6831} in pc["recorded_rows"])
+
+cn = db._recorded_payout_strip(
+    "san_antonio_net", {"label": "SAN ANTONIO Net 2026"}, _dbp)
+check("locked city strip is a ladder of recorded amounts",
+      cn["kind"] == "ladder" and cn["amounts_cents"] == [40000, 30000, 22000]
+      and cn["pot_cents"] == 92000, repr(cn))
+check("race with no recorded payouts returns None (strip recomputes)",
+      db._recorded_payout_strip("austin_net",
+                                {"label": "AUSTIN Net 2026"}, _dbp) is None)
+os.unlink(_dbp)
+
 # dial fallback: malformed JSON must fall back to the seed, not blank
 check("seed bundles well-formed",
       db.get_winnings_bundles.__doc__ is not None

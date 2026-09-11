@@ -10356,17 +10356,25 @@ def get_points_race_standings(race_key: str,
     from . import season_payouts as _sp
     _n_pot = (sum(1 for r in out_rows if r["enrolled"])
               + len(enrolled_not_ranked))
+    _final_flag = _points_race_final(race_key, db_path=db_path)
     if race.get("enroll_season") == "fall":
         # Fall payout ladder isn't ratified yet (rule 3b — money): the
         # boards show standings + buy-in pills, but no projected payout
         # strip until Kerry confirms the fall structure.
         projected_payouts = None
     else:
+        # A FINAL race LOCKS its strip to the recorded payouts (Kerry
+        # 2026-09-11: "freeze concluded races to recorded payouts") —
+        # recomputing from live enrollments is how the concluded cup
+        # advertised a phantom pool. Falls back to the projection only
+        # while no payout rows exist yet.
         projected_payouts = (
-            _sp.players_cup_payouts(_n_pot) if race.get("flights")
-            else _sp.city_net_payouts(_n_pot))
-
-    _final_flag = _points_race_final(race_key, db_path=db_path)
+            _recorded_payout_strip(race_key, race, db_path)
+            if _final_flag else None)
+        if projected_payouts is None:
+            projected_payouts = (
+                _sp.players_cup_payouts(_n_pot) if race.get("flights")
+                else _sp.city_net_payouts(_n_pot))
     return {
         "race_key": race_key,
         "label": race["label"],
@@ -10796,6 +10804,10 @@ def get_fellowship_cup_projection(force_refresh: bool = False,
     # (gg_points_race_final['fellowship_cup']); champions are the
     # top-ranked ENROLLED row(s), same eligibility as the money.
     _cup_final = _points_race_final("fellowship_cup", db_path=db_path)
+    # FINAL cup locks to the recorded payouts (Kerry 2026-09-11 — same
+    # freeze as the races; see _recorded_payout_strip)
+    _cup_locked = (_recorded_payout_strip("fellowship_cup", None, db_path)
+                   if _cup_final else None)
     return {
         "label": "THE FELLOWSHIP CUP",
         "reset_official": _points_reset_official(db_path=db_path),
@@ -10805,7 +10817,7 @@ def get_fellowship_cup_projection(force_refresh: bool = False,
         "n_players": len(combined),
         "n_enrolled": cup_n,
         "per_race": per_race,
-        "projected_payouts": _sp.fellowship_cup_payouts(cup_n),
+        "projected_payouts": _cup_locked or _sp.fellowship_cup_payouts(cup_n),
         "fetched_at": max(fetched) if fetched else None,
         "gg_error": "; ".join(errors) or None,
         # Live-championship signal for the Cup tab's badge + 60s poll —
@@ -12615,6 +12627,104 @@ def _spotlight_buyin_counts(conn, customer_id: int) -> dict:
             (customer_id,)).fetchall():
         bump("contests", _yr(c["season"]))
     return counts
+
+
+# ── Concluded races LOCK to recorded payouts (Kerry ruling 2026-09-11,
+# verbatim: "Yes freeze concluded races to recorded payouts. Once it is
+# completed and especially if it's paid out, it should lock and only
+# have changes made to it by express direction and approval by me.") ──
+# The race_payout_events app setting (JSON {race_key: tgf_events code})
+# overrides this seed; the race label is the last fallback.
+_RACE_PAYOUT_EVENTS_SEED = {
+    "players_cup_gross": "2026 PLAYERS CUP",
+    "san_antonio_net": "SAN ANTONIO Net 2026",
+    "austin_net": "AUSTIN Net 2026",
+    "fellowship_cup": "2026 FELLOWSHIP CUP",
+}
+
+
+def _recorded_payout_strip(race_key: str, race: dict | None,
+                           db_path=None) -> dict | None:
+    """The payout strip for a FINAL race, rebuilt from the tgf_payouts
+    rows actually recorded (and paid) — never recomputed from live
+    enrollments, which is how the concluded Players Cup advertised a
+    phantom $1,080 pool after the 2025 historical import. Keeps the
+    projected_payouts shape (kind ladder/flights + pot/champion/flight
+    or amounts_cents) so every consumer renders unchanged, adds
+    locked=True and per-customer recorded_rows so the boards can badge
+    the ACTUAL recipients instead of re-splitting money down standings
+    that may have moved since payday (the Hogue fold). Returns None
+    when no recorded rows exist — the strip then recomputes as before."""
+    code = None
+    try:
+        raw = get_app_setting("race_payout_events", db_path=db_path)
+        if raw:
+            code = (json.loads(raw) or {}).get(race_key)
+    except Exception:
+        code = None
+    candidates = [c for c in (code, _RACE_PAYOUT_EVENTS_SEED.get(race_key),
+                              (race or {}).get("label")) if c]
+    with _connect(db_path) as conn:
+        ev = None
+        for c in candidates:
+            ev = conn.execute(
+                """SELECT id, code FROM tgf_events
+                   WHERE LOWER(TRIM(code)) = ? OR LOWER(TRIM(name)) = ?""",
+                (c.strip().lower(), c.strip().lower())).fetchone()
+            if ev:
+                break
+        if not ev:
+            return None
+        rows = [dict(r) for r in conn.execute(
+            """SELECT customer_id, amount, COALESCE(description,'') AS d
+               FROM tgf_payouts WHERE event_id = ?""", (ev["id"],))]
+    if not rows:
+        return None
+    cents = [round((r["amount"] or 0) * 100) for r in rows]
+    pot = sum(cents)
+    by_cust: dict = {}
+    for r, c in zip(rows, cents):
+        if r["customer_id"] is not None:
+            by_cust[int(r["customer_id"])] = (
+                by_cust.get(int(r["customer_id"]), 0) + c)
+    strip: dict = {
+        "locked": True, "pot_cents": pot,
+        "recorded_event": ev["code"],
+        "n_basis": round(pot / _entry_to_pot_cents()) or None,
+        "recorded_rows": [{"customer_id": k, "amount_cents": v}
+                          for k, v in by_cust.items()],
+    }
+    if race and race.get("flights"):
+        # "winner" rows are flight firsts ("2nd Flight winner" is a
+        # FIRST — the ordinal is the flight); everything else is a
+        # lower place row
+        firsts = [c for r, c in zip(rows, cents)
+                  if "winner" in r["d"].lower()
+                  and "champion" not in r["d"].lower()]
+        seconds = [c for r, c in zip(rows, cents)
+                   if "winner" not in r["d"].lower()
+                   and "champion" not in r["d"].lower()]
+        champ = [c for r, c in zip(rows, cents)
+                 if "champion" in r["d"].lower()]
+        first = max(firsts) if firsts else 0
+        second = max(seconds) if seconds else 0
+        strip.update({"kind": "flights",
+                      "champion_cents": (champ[0] - first) if champ else 0,
+                      "flight_first_cents": first,
+                      "flight_second_cents": second,
+                      "flight_pot_cents": first + second})
+    else:
+        strip["kind"] = "ladder"
+        strip["amounts_cents"] = sorted(cents, reverse=True)
+    return strip
+
+
+def _entry_to_pot_cents() -> int:
+    try:
+        from .season_payouts import ENTRY_TO_POT_CENTS
+        return ENTRY_TO_POT_CENTS or 4000
+    except Exception:
+        return 4000
 
 
 # Spotlight shares the expensive, customer-INDEPENDENT reads (each

@@ -2063,3 +2063,27 @@ paid 2026-08-17 — which is how a paid-correct $68.31 looked like an
 underpayment. `get_points_race_standings` now also matches the race's
 season year (parsed from the race label, current year fallback), so
 prior-year enrollments never light pills or count in pots.
+
+## Concluded races LOCK to recorded payouts (v2.376.0)
+
+Kerry ruling 2026-09-11, verbatim: "Yes freeze concluded races to
+recorded payouts. Once it is completed and especially if it's paid
+out, it should lock and only have changes made to it by express
+direction and approval by me."
+
+- `_recorded_payout_strip(race_key, race, db_path)` (database.py):
+  when a race's `race_final` dial is set, its payout strip is rebuilt
+  from the tgf_payouts rows actually recorded — never recomputed from
+  live enrollments. Same shape as the projection (ladder/flights keys)
+  so every consumer renders unchanged, plus `locked: true`,
+  `recorded_event`, and per-customer `recorded_rows`.
+- Race → payout-event mapping: `race_payout_events` app setting
+  (JSON {race_key: tgf_events code}), seeded
+  (`_RACE_PAYOUT_EVENTS_SEED`), race label as last fallback. A final
+  race with NO recorded rows still shows the projection (payday
+  pending).
+- Wired into `get_points_race_standings` AND
+  `get_fellowship_cup_projection`; the CONTESTS boards badge the
+  ACTUAL recipients from `recorded_rows` (never re-split down
+  standings that moved since payday — the Hogue fold), and the strip
+  reads "FINAL · Pot $X · as paid".

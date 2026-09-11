@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.375.0";
+window.TGF_VERSION = "2.376.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.376.0",
+    date: "2026-09-11",
+    changes: [
+      "Concluded races LOCK to recorded payouts (Kerry ratified, verbatim: 'Yes freeze concluded races to recorded payouts. Once it is completed and especially if it's paid out, it should lock and only have changes made to it by express direction and approval by me.'). A race whose race_final dial is set rebuilds its payout strip from the tgf_payouts rows actually recorded — never recomputed from live enrollments (the mechanism behind the phantom $1,080 Players Cup pool). Same payload shape plus locked/recorded_rows; the CONTESTS boards now badge the ACTUAL recipients by customer_id instead of re-splitting money down standings that may have moved since payday, and the strip reads 'FINAL · Pot $X · as paid'. Applies to the city races, the Players Cup AND the Fellowship Cup; race→payout-event mapping is the race_payout_events dial (seeded), race label fallback; a final race with no recorded rows yet keeps the projection. Tests: 41 checks in test_spotlight_winnings.py.",
+    ],
+  },
   {
     version: "2.375.0",
     date: "2026-09-11",

@@ -6300,7 +6300,7 @@
         if (!el) return;
         if (!pp || !pp.pot_cents) { el.innerHTML = ""; return; }
         const chips = [(prRaceFinal
-                ? `<span class="pr-pot" style="background:#166534;color:#fff;">&#127937; FINAL &middot; Pot ${prFmtMoney(pp.pot_cents)}</span>`
+                ? `<span class="pr-pot" style="background:#166534;color:#fff;">&#127937; FINAL &middot; Pot ${prFmtMoney(pp.pot_cents)}${pp.locked ? " &middot; as paid" : ""}</span>`
                 : `<span class="pr-pot">Pot ${prFmtMoney(pp.pot_cents)}</span>`)];
         if (pp.kind === "ladder") {
             pp.amounts_cents.forEach((c, i) =>
@@ -6346,6 +6346,24 @@
         (d.standings || []).forEach(r => { delete r._pay; delete r._payTitle; });
         const pp = d.projected_payouts;
         if (!pp || !d.standings) return;
+        // A LOCKED strip (final race, payouts recorded — Kerry
+        // 2026-09-11: "freeze concluded races to recorded payouts")
+        // badges the ACTUAL recipients by customer_id; never re-split
+        // money down standings that may have moved since payday.
+        if (pp.recorded_rows && pp.recorded_rows.length) {
+            const byCid = {};
+            pp.recorded_rows.forEach(x => {
+                if (x.customer_id != null)
+                    byCid[x.customer_id] = (byCid[x.customer_id] || 0) + x.amount_cents;
+            });
+            d.standings.forEach(r => {
+                if (r.customer_id != null && byCid[r.customer_id]) {
+                    r._pay = byCid[r.customer_id];
+                    r._payTitle = "Recorded payout (as paid)";
+                }
+            });
+            return;
+        }
         const enrolled = d.standings.filter(r => r.enrolled);
         if (pp.kind === "ladder") {
             prSplitDown(enrolled, pp.amounts_cents, "place money");
