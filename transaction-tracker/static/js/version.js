@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.371.2";
+window.TGF_VERSION = "2.371.3";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.371.3",
+    date: "2026-09-11",
+    changes: [
+      "Auto payment reminders learn an exclusion dial (payment_reminder_exclude_events, JSON list of event ids) after the 9/11 6 AM run mass-mailed the Lone Star Cup roster: the cup's 27 RSVP placeholder rows exist to track the roster while the money is collected OUTSIDE the store (Venmo deposits already in the ledger), so 'RSVP placeholder' does not mean 'hasn't paid' there. Dial set to [3329, 3330] (LONE STAR CUP + LSC PRACTICE ROUND); every other event's reminder behavior is unchanged.",
+    ],
+  },
   {
     version: "2.371.2",
     date: "2026-09-10",

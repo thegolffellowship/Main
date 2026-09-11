@@ -1814,6 +1814,19 @@ def send_auto_payment_reminders():
     events = get_all_events()
     items = get_all_items()
 
+    # payment_reminder_exclude_events dial: JSON list of event ids whose
+    # RSVP rows must NEVER get auto payment reminders. Needed for events
+    # whose money is collected OUTSIDE the store (Lone Star Cup: Venmo
+    # deposits in the ledger, roster tracked as RSVP placeholders) — the
+    # placeholder does not mean "hasn't paid" there, and the 2026-09-11
+    # 6 AM run mass-mailed the whole cup roster before this guard existed.
+    try:
+        from email_parser.database import get_app_setting
+        _excluded = {int(x) for x in json.loads(
+            get_app_setting("payment_reminder_exclude_events") or "[]")}
+    except Exception:
+        _excluded = set()
+
     total_sent = 0
     total_failed = 0
 
@@ -1821,6 +1834,8 @@ def send_auto_payment_reminders():
         event_date = ev.get("event_date") or ""
         # Skip past events
         if event_date and event_date < today:
+            continue
+        if ev.get("id") in _excluded:
             continue
         event_name = ev.get("item_name") or ""
         if not event_name:
