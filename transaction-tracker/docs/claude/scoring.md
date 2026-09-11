@@ -507,9 +507,16 @@ records kept in `gg_points_standings.merged_from` (JSON: name, card id,
 rank, rounds, points). Untouched races keep GG's own rank / arrows /
 behind exactly. Every reader of the snapshot (city races, Fellowship
 Cup, Players Cup, Monthly, spotlight, eligibility counts) inherits the
-fold. Caveat: Fall Net counts the best 6 — a folded player with more
-than 6 rounds is logged as a warning because a sum can overstate; the
-real fix is merging the member records in Golf Genius. The scraper
+fold. Best-N rule (v2.371.6): a GG record's total is already "best N +
+Championship" of ITS events, so once the folded rounds exceed N (10 for
+the season races and The Players Cup, 6 for the Fall races — `best_n`
+on the registry) the fold re-derives the total over the UNION of both
+records' per-event lines (the row-expansion XHR), championship events
+always counted, the same event under both records counted once. If GG
+detail is unavailable the fold takes the dominant record's total, never
+the sum (a sum can only overstate). `merged_from.method` records which:
+sum | best_10 | best_6 | max. The real fix is merging the member records
+in Golf Genius. The scraper
 also now keeps BOTH `member_card_id`s when a display name repeats (a
 name→id dict had collapsed them). Bridge `scoring-race-dupes[:refresh]`
 re-fetches every race and reports folded rows (with the GG card ids to

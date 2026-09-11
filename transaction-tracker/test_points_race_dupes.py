@@ -105,11 +105,44 @@ check("behind recomputed from the new leader", luke[0]["points_behind"] == 0.0
       and [r for r in merged if r["player_name"] == "STRAITON, Robert"][0]["points_behind"] == 4.0)
 check("unresolved twins fold on the normalised name", sum(1 for r in merged if "mystery" in r["player_name"].lower()) == 1
       and [r for r in merged if "mystery" in r["player_name"].lower()][0]["total_points"] == 8.0)
-check("merged_from records both GG cards", json.loads(luke[0]["merged_from"])[0]["member_card_id"] == "904"
-      and json.loads(luke[0]["merged_from"])[1]["member_card_id"] == "905")
+check("merged_from records both GG cards + method", json.loads(luke[0]["merged_from"])["records"][0]["member_card_id"] == "904"
+      and json.loads(luke[0]["merged_from"])["records"][1]["member_card_id"] == "905"
+      and json.loads(luke[0]["merged_from"])["method"] == "sum")
 check("merge list names the fold", len(merges) == 2 and merges[0]["member_card_ids"] == ["904", "905"], str(merges))
 clean, m2 = db._merge_duplicate_standings([dict(r, customer_id=i) for i, r in enumerate(GG_ROWS[:3], 1)])
 check("a clean race is untouched (GG ranks kept verbatim)", m2 == [] and [r["rank"] for r in clean] == ["1", "2", "T3"])
+
+print("\n== 1b. best-N races re-derive over the union of events ==")
+DETAIL = {
+    "A": [{"date": f"2026-0{m}-01", "event": f"s9.{m}", "points": p} for m, p in
+          zip(range(1, 10), [12, 11, 10, 9, 8, 7, 6, 5, 4])]
+         + [{"date": "2026-08-15", "event": "TGF CHAMPIONSHIP", "points": 20}],   # 9 regular + champ
+    "B": [{"date": "2026-05-12", "event": "s9.10", "points": 9},                  # beats A's 4
+          {"date": "2026-05-19", "event": "s9.11", "points": 2}],
+}
+fetch = lambda card: DETAIL[card]
+two = [{"rank": "1", "prev_rank": "", "player_name": "HOGUE, Jay", "customer_id": 37, "tournaments": 10,
+        "wins": 0, "total_points": 92.0, "points_behind": 0, "member_card_id": "A"},
+       {"rank": "9", "prev_rank": "", "player_name": "HOGUE, Jay", "customer_id": 37, "tournaments": 2,
+        "wins": 0, "total_points": 11.0, "points_behind": 81, "member_card_id": "B"},
+       {"rank": "2", "prev_rank": "", "player_name": "X, Y", "customer_id": 99, "tournaments": 3,
+        "wins": 0, "total_points": 95.0, "points_behind": 0, "member_card_id": "C"}]
+m10, mm = db._merge_duplicate_standings([dict(r) for r in two], race={"best_n": 10}, detail_fetcher=fetch)
+h = [r for r in m10 if r["customer_id"] == 37][0]
+check("best 10 + championship over the union: 11 regular events, the 2 drops → 81 + 20 = 101, not the 103 sum",
+      h["total_points"] == 101.0 and mm[0]["method"] == "best_10", str((h["total_points"], mm)))
+check("re-rank uses the derived total (101 beats 95)", h["rank"] == "1" and m10[1]["rank"] == "2")
+m_fail, mf = db._merge_duplicate_standings([dict(r) for r in two], race={"best_n": 10},
+                                           detail_fetcher=lambda c: (_ for _ in ()).throw(RuntimeError("gg down")))
+check("detail unavailable → dominant record's total, never the sum",
+      [r for r in m_fail if r["customer_id"] == 37][0]["total_points"] == 92.0 and mf[0]["method"] == "max", str(mf))
+m_small, ms = db._merge_duplicate_standings([dict(r, tournaments=2) for r in two], race={"best_n": 10},
+                                            detail_fetcher=fetch)
+check("under N rounds combined → plain sum, no detail fetch", ms[0]["method"] == "sum"
+      and [r for r in m_small if r["customer_id"] == 37][0]["total_points"] == 103.0)
+check("same event under both records counts once (max)",
+      db._best_n_total([{"date": "2026-05-12", "event": "s9.10", "points": 9},
+                        {"date": "2026-05-12", "event": "s9.10", "points": 7}], 10) == 9.0)
 
 print("\n== 2. refresh writes the folded snapshot ==")
 p = fresh_db()
@@ -127,9 +160,9 @@ check("audit row written", audit and "YOUNGS, Luke x2" in audit[0], str(audit))
 
 print("\n== 3. duplicates report ==")
 rep = db.find_points_race_duplicates(db_path=p)
-check("merged fold reported with both GG cards", len(rep["merged"]) == 2
+check("merged fold reported with both GG cards + method", len(rep["merged"]) == 2
       and any(m["player_name"] == "YOUNGS, Luke" and [g["member_card_id"] for g in m["gg_records"]] == ["904", "905"]
-              for m in rep["merged"]), str(rep["merged"]))
+              and m["method"] == "sum" for m in rep["merged"]), str(rep["merged"]))
 check("nothing left doubled in the snapshot", rep["unmerged"] == [], str(rep["unmerged"]))
 check("duplicate enrollment (Wade x2, 2026 Fall) reported; Luke's single 2026 entry is not",
       len(rep["enrollment_dupes"]) == 1 and rep["enrollment_dupes"][0]["customer_id"] == 4

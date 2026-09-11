@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.371.5";
+window.TGF_VERSION = "2.371.6";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.371.6",
+    date: "2026-09-11",
+    changes: [
+      "Season Contests fold, corrected within the hour: the season races and The Players Cup count a player's best 10 events (+ Championship) and the Fall races the best 6, so adding two GG records' totals overstated once the combined rounds passed N (Jay Hogue on Austin Net read 124 instead of his real best-10). The fold now re-derives the total over the union of both records' per-event lines from GG's row-expansion detail, championship always counted, a shared event counted once; if GG detail is down it takes the dominant record's total, never the sum. The method rides on the row (sum / best_10 / best_6 / max) and in scoring-race-dupes.",
+    ],
+  },
   {
     version: "2.371.5",
     date: "2026-09-11",

@@ -7425,6 +7425,7 @@ _GG_POINTS_RACES: dict = {
         "host": "tgf-sa.golfgenius.com",
         "league_id": "514047",
         "page_id": "6028090",
+        "best_n": 10,   # season standing = best N + Championship (scoring.md)
         "contest_type": "NET Points Race",
         "chapter": "San Antonio",
         # NET races are chapter-scoped: only same-chapter buy-ins count
@@ -7437,6 +7438,7 @@ _GG_POINTS_RACES: dict = {
         "host": "tgf-austin.golfgenius.com",
         "league_id": "514705",
         "page_id": "6077320",
+        "best_n": 10,   # season standing = best N + Championship (scoring.md)
         "contest_type": "NET Points Race",
         "chapter": "Austin",
         "enroll_chapter": "Austin",
@@ -7455,6 +7457,7 @@ _GG_POINTS_RACES: dict = {
         "host": "tgf-sa.golfgenius.com",
         "league_id": "514047",
         "page_id": "6201199",
+        "best_n": 6,   # season standing = best N + Championship (scoring.md)
         "contest_type": "NET Points Race",
         "chapter": "San Antonio",
         "enroll_chapter": "San Antonio",
@@ -7465,6 +7468,7 @@ _GG_POINTS_RACES: dict = {
         "host": "tgf-austin.golfgenius.com",
         "league_id": "514705",
         "page_id": "6201227",
+        "best_n": 6,   # season standing = best N + Championship (scoring.md)
         "contest_type": "NET Points Race",
         "chapter": "Austin",
         "enroll_chapter": "Austin",
@@ -7475,6 +7479,7 @@ _GG_POINTS_RACES: dict = {
         "host": "tgf-sa.golfgenius.com",
         "league_id": "514047",
         "page_id": "6050326",
+        "best_n": 10,   # season standing = best N + Championship (scoring.md)
         "contest_type": "GROSS Points Race",
         "chapter": "San Antonio",
         # The Players Cup is cross-chapter: an Austin GROSS buy-in counts
@@ -7689,7 +7694,52 @@ def _standings_dupe_key(row: dict) -> tuple:
     return ("name", re.sub(r"\s+", " ", (row.get("player_name") or "")).strip().lower())
 
 
-def _merge_duplicate_standings(rows: list) -> tuple:
+def _member_detail_events(race: dict, member_card_id: str) -> list:
+    """One GG member record's per-event points lines, from the same
+    individual_info XHR the board's row expansion uses:
+    [{"date", "event", "points"}]."""
+    from golf_genius_sync import fetch_points_race_member_detail
+    detail = fetch_points_race_member_detail(
+        page_id=race["page_id"], member_card_id=str(member_card_id),
+        league_id=race["league_id"], host=race["host"])
+    out = []
+    for t in detail.get("tables") or []:
+        if not t or len(t) < 2:
+            continue
+        head = [str(h or "").strip().lower() for h in t[0]]
+        d_i = next((i for i, h in enumerate(head) if "date" in h), -1)
+        p_i = next((i for i, h in enumerate(head) if h == "pts" or "point" in h), -1)
+        e_i = next((i for i, h in enumerate(head)
+                    if any(k in h for k in ("event", "tournament", "round", "name"))), -1)
+        if d_i == -1 or p_i == -1:
+            continue
+        for row in t[1:]:
+            if len(row) <= max(d_i, p_i):
+                continue
+            try:
+                pts = float(str(row[p_i]).replace(",", ""))
+            except ValueError:
+                continue
+            out.append({"date": str(row[d_i] or "").strip(),
+                        "event": (str(row[e_i]).strip() if 0 <= e_i < len(row) else ""),
+                        "points": pts})
+    return out
+
+
+def _best_n_total(events: list, best_n: int) -> float:
+    """Season standing = best N + Championship (scoring.md). The same event
+    under two member records counts once (max)."""
+    seen: dict = {}
+    for e in events:
+        k = (e.get("date") or "", (e.get("event") or "").strip().lower())
+        seen[k] = max(seen.get(k, float("-inf")), e["points"])
+    champ = [v for k, v in seen.items() if "championship" in k[1]]
+    rest = sorted((v for k, v in seen.items() if "championship" not in k[1]), reverse=True)
+    return round(sum(champ) + sum(rest[:best_n]), 2)
+
+
+def _merge_duplicate_standings(rows: list, race: dict | None = None,
+                               detail_fetcher=None) -> tuple:
     """Collapse GG duplicate member records inside one race snapshot.
 
     Kerry 2026-09-11 (Austin Fall Net showed YOUNGS, Luke twice — T3 with
@@ -7716,6 +7766,7 @@ def _merge_duplicate_standings(rows: list) -> tuple:
     def _n(v):
         return v if isinstance(v, (int, float)) else 0
 
+    best_n = (race or {}).get("best_n")
     out = []
     for k in order:
         g = groups[k]
@@ -7725,15 +7776,38 @@ def _merge_duplicate_standings(rows: list) -> tuple:
         base = dict(g[0])
         base["tournaments"] = sum(_n(x.get("tournaments")) for x in g)
         base["wins"] = sum(_n(x.get("wins")) for x in g)
-        base["total_points"] = round(sum(_n(x.get("total_points")) for x in g), 2)
+        # A GG record's total is already "best N + championship" of ITS
+        # events, so two records cannot simply be added once the union is
+        # longer than N — re-derive best N over the union of per-event
+        # lines (the row-expansion XHR). No detail → the dominant record's
+        # total (never the sum, which can only overstate).
+        method = "sum"
+        total = round(sum(_n(x.get("total_points")) for x in g), 2)
+        if best_n and base["tournaments"] > best_n:
+            events, ok = [], True
+            for x in g:
+                try:
+                    if not detail_fetcher or not x.get("member_card_id"):
+                        raise RuntimeError("no detail path")
+                    events.extend(detail_fetcher(x["member_card_id"]))
+                except Exception as exc:
+                    logger.warning("fold detail for %s card %s failed: %s",
+                                   base.get("player_name"), x.get("member_card_id"), exc)
+                    ok = False
+                    break
+            if ok and events:
+                total, method = _best_n_total(events, best_n), f"best_{best_n}"
+            else:
+                total, method = max(_n(x.get("total_points")) for x in g), "max"
+        base["total_points"] = total
         base["prev_rank"] = ""          # GG's arrows are per-record; unknown after a fold
-        base["merged_from"] = json.dumps([
+        base["merged_from"] = json.dumps({"method": method, "records": [
             {"player_name": x.get("player_name"), "member_card_id": x.get("member_card_id"),
              "rank": x.get("rank"), "tournaments": x.get("tournaments"),
-             "total_points": x.get("total_points")} for x in g])
+             "total_points": x.get("total_points")} for x in g]})
         merges.append({"player_name": base.get("player_name"),
                        "customer_id": base.get("customer_id"),
-                       "records": len(g),
+                       "records": len(g), "method": method,
                        "member_card_ids": [x.get("member_card_id") for x in g],
                        "tournaments": base["tournaments"],
                        "total_points": base["total_points"]})
@@ -7785,10 +7859,13 @@ def find_points_race_duplicates(db_path: str | Path | None = None) -> dict:
                         src = json.loads(r["merged_from"])
                     except Exception:
                         src = r["merged_from"]
+                    recs = src.get("records") if isinstance(src, dict) else src
                     out["merged"].append({"race_key": rk, "player_name": r["player_name"],
                                           "customer_id": r["customer_id"], "rank": r["rank"],
                                           "tournaments": r["tournaments"],
-                                          "total_points": r["total_points"], "gg_records": src})
+                                          "total_points": r["total_points"],
+                                          "method": (src.get("method") if isinstance(src, dict) else "sum"),
+                                          "gg_records": recs})
             for k, g in by_key.items():
                 if len(g) > 1:
                     out["unmerged"].append({"race_key": rk, "key": list(k),
@@ -7967,18 +8044,14 @@ def refresh_points_race_standings(race_key: str,
         # One person = one row (Kerry 2026-09-11): GG can carry two member
         # records for one player; fold them here so every board that reads
         # this snapshot (city races, cups, monthly, spotlight) agrees.
-        standings, merges = _merge_duplicate_standings(standings)
+        standings, merges = _merge_duplicate_standings(
+            standings, race=race,
+            detail_fetcher=lambda card: _member_detail_events(race, card))
         for m in merges:
             logger.warning("GG points race %r: folded %d GG records for %s "
-                           "(cards %s) -> %s pts / %s rounds", race_key,
+                           "(cards %s) -> %s pts / %s rounds [%s]", race_key,
                            m["records"], m["player_name"], m["member_card_ids"],
-                           m["total_points"], m["tournaments"])
-            if (race_key.endswith("fall_net") and m["tournaments"]
-                    and m["tournaments"] > 6):
-                logger.warning("GG points race %r: %s now carries %d rounds — "
-                               "Fall Net counts the best 6, a summed fold may "
-                               "overstate until GG merges the records",
-                               race_key, m["player_name"], m["tournaments"])
+                           m["total_points"], m["tournaments"], m["method"])
         conn.execute("DELETE FROM gg_points_standings WHERE race_key = ?",
                      (race_key,))
         conn.executemany(
@@ -7997,7 +8070,8 @@ def refresh_points_race_standings(race_key: str,
             try:
                 log_agent_action("gg-points-sync", "standings-duplicate-merge",
                                  f"{race_key}: " + "; ".join(
-                                     f"{m['player_name']} x{m['records']} cards={m['member_card_ids']}"
+                                     f"{m['player_name']} x{m['records']} cards={m['member_card_ids']} "
+                                     f"{m['method']}={m['total_points']}"
                                      for m in merges), db_path=db_path)
             except Exception:
                 pass
