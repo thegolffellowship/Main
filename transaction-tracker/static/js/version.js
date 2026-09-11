@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.382.1";
+window.TGF_VERSION = "2.383.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.383.0",
+    date: "2026-09-11",
+    changes: [
+      "OVERALL board columns SORT (Kerry: 'Allow columns to sort'): tap any header — #, Player, Idx, PH, every hole, Gross, Net, Pts, Won — to sort by it; tap again to flip direction (Pts and Won open high-first since higher is better; blanks always sink to the bottom). The # column is the net-standings rank and TRAVELS with the player, so a re-sorted table still shows everyone's finishing position. Arrows on the headers show the active sort.",
+      "Under the hood the player-row scorecard expansion moved from per-row listeners to ONE delegated click handler on the event body — the class fix, not the instance: rows re-rendered by a sort (or any future re-paint of any board) keep their tap-for-scorecard behavior without rebinding.",
+    ],
+  },
   {
     version: "2.382.1",
     date: "2026-09-11",

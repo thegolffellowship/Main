@@ -323,6 +323,11 @@
         .evlb-ovr td.w-mvp { background: rgba(109,40,217,.14); color: var(--cat-mvp, #6D28D9); font-weight: 700; border-radius: 4px; }
         .evlb-ovr td.won, .evlb-ovr th.won { text-align: right; font-weight: 700;
             color: var(--money-green, #15803D); font-variant-numeric: tabular-nums; min-width: 58px; }
+        /* OVERALL sortable headers */
+        .evlb-ovr th.sortable { cursor: pointer; user-select: none; }
+        .evlb-ovr th.sortable::after { content: " \2195"; opacity: 0.3; font-size: 9px; }
+        .evlb-ovr th.sortable.asc::after { content: " \2191"; opacity: 1; }
+        .evlb-ovr th.sortable.desc::after { content: " \2193"; opacity: 1; }
         /* OVERALL winner strips (Team Net + proxies above the board) */
         .evlb-winbox { margin: 0 0 10px; display: grid; gap: 4px; }
         .evlb-winline { display: flex; align-items: baseline; gap: 10px; font-size: 12.5px;
@@ -2667,6 +2672,29 @@
             return `<td>${circ ? `<span class="evlb-circ">${v}</span>` : v}</td>`;
         }).join("");
     }
+    // ONE overall row — module-level so the sortable headers can
+    // re-render the tbody with the same markup the initial paint used
+    function evlbOvrRowHtml(d, r) {
+        const skinHoles = r.win_skins
+            ? (((d.skin_cells || {})[String(r.scoring_round_id)]) || []) : [];
+        const hs = {};
+        (d.cards[String(r.scoring_round_id)] || []).forEach(h => { hs[h[0]] = h; });
+        const holeCells = (d.hole_cols || []).map(n => {
+            const h = hs[n];
+            if (!h || h[1] == null) return "<td></td>";
+            return `<td>${skinHoles.includes(n) ? `<span class="evlb-circ sk">${h[1]}</span>` : h[1]}</td>`;
+        }).join("");
+        return `<tr class="evlb-plr" data-rid="${r.scoring_round_id || ""}">` +
+            `<td>${r._rank ?? ""}</td>` +
+            `<td class="nm">${escapeHtml(r.player_name)}</td>` +
+            `<td>${r.index != null ? Number(r.index).toFixed(1) : ""}</td>` +
+            `<td>${r.hcp ?? ""}</td>` +
+            holeCells +
+            `<td${r.win_gross ? ' class="w-gross" title="won Individual Gross"' : ""}>${r.gross ?? ""}</td>` +
+            `<td${r.win_net ? ' class="w-net" title="won Individual Net"' : ""}><b>${r.net ?? ""}</b></td>` +
+            `<td${r.win_mvp ? ' class="w-mvp" title="Event MVP"' : ""}>${r.net_pts ?? ""}</td>` +
+            `<td class="won">${r.won_total > 0 ? "$" + Number(r.won_total).toFixed(2) : ""}</td></tr>`;
+    }
     function evlbEventHtml(d) {
         const tabs = [["overall", "Overall"], ["team", "Team"], ["net", "Net"],
                       ["gross", "Gross"], ["skins", "Skins"],
@@ -2680,19 +2708,18 @@
         // cells). Buy-ins are deliberately NOT identified here. Won =
         // total collected for the event across ALL games. Rows expand
         // to the universal scorecard.
-        const ovSkinCircle = (rid) => (n) =>
-            ((d.skin_cells || {})[String(rid)] || []).includes(n);
-        const ovHoles = (r) => {
-            const hs = {};
-            (d.cards[String(r.scoring_round_id)] || []).forEach(h => { hs[h[0]] = h; });
-            const isWin = r.win_skins ? ovSkinCircle(r.scoring_round_id) : () => false;
-            return (d.hole_cols || []).map(n => {
-                const h = hs[n];
-                if (!h || h[1] == null) return "<td></td>";
-                return `<td>${isWin(n) ? `<span class="evlb-circ sk">${h[1]}</span>` : h[1]}</td>`;
-            }).join("");
-        };
         const ovRows = d.overall_board || [];
+        // rank by net is computed ONCE and travels with the player, so
+        // sorting any column keeps everyone's finishing position visible
+        {
+            let shown = 0, rank = 0, last = null;
+            ovRows.forEach(r => {
+                shown++;
+                if (r.net !== last) { rank = shown; last = r.net; }
+                const tied = r.net != null && ovRows.filter(x => x.net === r.net).length > 1;
+                r._rank = r.net == null ? "" : (tied ? "T" : "") + rank;
+            });
+        }
         // Winner strips above the board (Kerry 2026-09-11: "list team
         // winners and closest to pin winners above that leaderboard
         // separately so that the OVERALL board shows everything") —
@@ -2716,27 +2743,13 @@
         const overallHtml = ovRows.length
             ? (ovWinStrips ? `<div class="evlb-winbox">${ovWinStrips}</div>` : "") +
               `<div class="evlb-scroll"><table class="evlb-holes evlb-ovr"><thead>` +
-              `<tr><th>#</th><th class="nm">Player</th><th title="Handicap Index">Idx</th><th title="Playing Handicap">PH</th>` +
-              (d.hole_cols || []).map(n => `<th>${n}</th>`).join("") +
-              `<th>Gross</th><th>Net</th><th>Pts</th><th class="won">Won</th></tr></thead><tbody>` +
-              (() => {
-                  let shown = 0, rank = 0, last = null;
-                  return ovRows.map(r => {
-                      shown++;
-                      if (r.net !== last) { rank = shown; last = r.net; }
-                      const tied = r.net != null && ovRows.filter(x => x.net === r.net).length > 1;
-                      return `<tr class="evlb-plr" data-rid="${r.scoring_round_id || ""}">` +
-                          `<td>${r.net == null ? "" : (tied ? "T" : "") + rank}</td>` +
-                          `<td class="nm">${escapeHtml(r.player_name)}</td>` +
-                          `<td>${r.index != null ? Number(r.index).toFixed(1) : ""}</td>` +
-                          `<td>${r.hcp ?? ""}</td>` +
-                          ovHoles(r) +
-                          `<td${r.win_gross ? ' class="w-gross" title="won Individual Gross"' : ""}>${r.gross ?? ""}</td>` +
-                          `<td${r.win_net ? ' class="w-net" title="won Individual Net"' : ""}><b>${r.net ?? ""}</b></td>` +
-                          `<td${r.win_mvp ? ' class="w-mvp" title="Event MVP"' : ""}>${r.net_pts ?? ""}</td>` +
-                          `<td class="won">${r.won_total > 0 ? "$" + Number(r.won_total).toFixed(2) : ""}</td></tr>`;
-                  }).join("");
-              })() +
+              `<tr><th data-k="net" class="sortable asc">#</th><th data-k="player" class="nm sortable">Player</th>` +
+              `<th data-k="index" class="sortable" title="Handicap Index">Idx</th>` +
+              `<th data-k="hcp" class="sortable" title="Playing Handicap">PH</th>` +
+              (d.hole_cols || []).map(n => `<th data-k="h:${n}" class="sortable">${n}</th>`).join("") +
+              `<th data-k="gross" class="sortable">Gross</th><th data-k="net" class="sortable">Net</th>` +
+              `<th data-k="pts" class="sortable">Pts</th><th data-k="won" class="won sortable">Won</th></tr></thead><tbody>` +
+              ovRows.map(r => evlbOvrRowHtml(d, r)).join("") +
               `</tbody></table></div>` +
               `<p class="evlb-legend"><span class="lg w-net">Net</span> won Individual Net &middot; ` +
               `<span class="lg w-gross">Gross</span> won Individual Gross &middot; ` +
@@ -2888,15 +2901,64 @@
             `</thead><tbody>${rows}${teamRow}</tbody></table>` +
             `<span style="font-size:10.5px;color:#9CA3AF;">Highlighted = the ball that counted for the team score${ggNote}</span></div>`;
     }
-    function evlbWireEvent(body) {
+    function evlbWireEvent(body, d) {
         body.querySelectorAll(".evlb-subtab").forEach(btn =>
             btn.addEventListener("click", () => {
                 body.querySelectorAll(".evlb-subtab").forEach(b => b.classList.toggle("active", b === btn));
                 body.querySelectorAll(".evlb-panel").forEach(p =>
                     p.hidden = p.dataset.panel !== btn.dataset.sub);
             }));
-        body.querySelectorAll("tr.evlb-plr[data-rid]").forEach(tr =>
-            tr.addEventListener("click", async () => {
+        // OVERALL column sorting (Kerry 2026-09-11: "Allow columns to
+        // sort") — every header sorts; second tap flips direction; the
+        // net-rank travels with the player. Rows re-render from the
+        // shared row template; expansion keeps working because the
+        // scorecard click is DELEGATED on the body (below), not bound
+        // per row.
+        const ovT = body.querySelector("table.evlb-ovr");
+        if (ovT && d) {
+            let curK = "net", curDir = 1;
+            const val = (r, k) => {
+                if (k === "player") return (r.player_name || "").toLowerCase();
+                if (k === "index") return r.index;
+                if (k === "hcp") return r.hcp;
+                if (k === "gross") return r.gross;
+                if (k === "net") return r.net;
+                if (k === "pts") return r.net_pts;
+                if (k === "won") return r.won_total > 0 ? r.won_total : null;
+                if (k.startsWith("h:")) {
+                    const n = +k.slice(2);
+                    const h = (d.cards[String(r.scoring_round_id)] || []).find(x => x[0] === n);
+                    return h && h[1] != null ? h[1] : null;
+                }
+                return null;
+            };
+            ovT.querySelectorAll("th[data-k]").forEach(th =>
+                th.addEventListener("click", () => {
+                    const k = th.dataset.k;
+                    // higher-is-better columns open descending
+                    const deft = (k === "pts" || k === "won") ? -1 : 1;
+                    curDir = k === curK ? -curDir : deft;
+                    curK = k;
+                    const rows = (d.overall_board || []).slice().sort((a, b) => {
+                        const va = val(a, k), vb = val(b, k);
+                        if (va == null && vb == null) return 0;
+                        if (va == null) return 1;   // blanks stay last either way
+                        if (vb == null) return -1;
+                        return (va < vb ? -1 : va > vb ? 1 : 0) * curDir;
+                    });
+                    ovT.querySelector("tbody").innerHTML =
+                        rows.map(r => evlbOvrRowHtml(d, r)).join("");
+                    ovT.querySelectorAll("th[data-k]").forEach(h2 =>
+                        h2.classList.remove("asc", "desc"));
+                    th.classList.add(curDir === 1 ? "asc" : "desc");
+                }));
+        }
+        // Player-row scorecard expansion — DELEGATED so rows re-rendered
+        // by a sort (or any future re-paint) keep the behavior
+        body.addEventListener("click", async (e) => {
+            const tr = e.target.closest("tr.evlb-plr[data-rid]");
+            if (!tr || !body.contains(tr)) return;
+            {
                 const rid = tr.dataset.rid;
                 if (!rid) return;
                 const nxt = tr.nextElementSibling;
@@ -2922,7 +2984,8 @@
                 } catch (err) {
                     cardRow.firstElementChild.textContent = "Couldn't load the card (" + (err.message || err) + ").";
                 }
-            }));
+            }
+        });
     }
     $$("#evlb-chips .evlb-chip").forEach(btn =>
         btn.addEventListener("click", () => {
