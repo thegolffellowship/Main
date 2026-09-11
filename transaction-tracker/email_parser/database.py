@@ -10875,6 +10875,238 @@ def _dedupe_stream_by_cid(cands: list, chapter: str | None = None,
     return out
 
 
+def lsc_deposit_scan(db_path: str | Path = DB_PATH) -> dict:
+    """LSC deposit tracker (extracted from the projection, v2.371.14).
+
+    Incoming venmo/zelle rows >= lsc_deposit_min since lsc_deposit_since,
+    attached to customer_ids (overrides dial for rows the classifier
+    couldn't resolve; exclude dial for look-alikes that aren't deposits).
+    Returns {cid: {"amount": float, "txns": [{id, amount, date, source}]}}.
+    Empty dict on any failure — deposit badges are never worth a 500.
+    """
+    deposits: dict = {}
+    try:
+        dep_since = get_app_setting("lsc_deposit_since",
+                                    db_path=db_path) or "2026-08-16"
+        dep_min = float(get_app_setting("lsc_deposit_min",
+                                        db_path=db_path) or 100)
+        try:
+            _ov = json.loads(get_app_setting("lsc_deposit_overrides",
+                                             db_path=db_path) or "{}")
+            oid_to_cid = {int(e): int(cid) for cid, eids in _ov.items()
+                          for e in (eids if isinstance(eids, list)
+                                    else [eids])}
+        except Exception:
+            oid_to_cid = {}
+        try:
+            dep_exclude = {int(x) for x in json.loads(
+                get_app_setting("lsc_deposit_exclude",
+                                db_path=db_path) or "[]")}
+        except Exception:
+            dep_exclude = set()
+        with _connect(db_path) as conn:
+            for r in conn.execute(
+                    """SELECT id, merchant, amount, transaction_date,
+                              source_type, customer_id
+                       FROM expense_transactions
+                       WHERE transaction_type = 'received'
+                         AND source_type IN ('venmo', 'zelle')
+                         AND COALESCE(review_status, '') != 'ignored'
+                         AND transaction_date >= ?
+                         AND amount >= ?""", (dep_since, dep_min)):
+                if r["id"] in dep_exclude:
+                    continue
+                cid = oid_to_cid.get(r["id"]) or r["customer_id"]
+                if not cid:
+                    try:
+                        cid = _resolve_scoring_player(
+                            conn, r["merchant"] or "")
+                    except Exception:
+                        cid = None
+                if not cid:
+                    continue
+                d = deposits.setdefault(
+                    int(cid), {"amount": 0.0, "txns": []})
+                d["amount"] = round(d["amount"] + (r["amount"] or 0), 2)
+                d["txns"].append({"id": r["id"], "amount": r["amount"],
+                                  "date": r["transaction_date"],
+                                  "source": r["source_type"]})
+    except Exception:
+        deposits = {}
+    return deposits
+
+
+def freeze_lsc_final_roster(db_path: str | Path = DB_PATH) -> dict:
+    """HARDEN the Lone Star Cup page (Kerry 2026-09-11: "harden the
+    LONE STAR CUP page teams into final rosters so it doesn't take so
+    long to load").
+
+    Runs the live projection ONCE and stores its chapters (seats +
+    alternates + declined) in the lsc_roster_final dial. From then on
+    the API serves the frozen roster instantly — no GG fetches — while
+    deposits stay LIVE via lsc_deposit_scan. Clear the dial (bridge
+    scoring-lsc-freeze:clear) to fall back to the live projection.
+    """
+    d = get_lone_star_cup_projection(db_path=db_path)
+    frozen = {
+        "frozen_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "season": d.get("season"),
+        "chapters": d.get("chapters", []),
+        "rules_note": "Final rosters.",
+    }
+    set_app_setting("lsc_roster_final", json.dumps(frozen), db_path=db_path)
+    return {"frozen": True, "frozen_at": frozen["frozen_at"],
+            "chapters": [{"chapter": c.get("chapter"),
+                          "seats": len(c.get("seats") or [])}
+                         for c in frozen["chapters"]],
+            "gg_error": d.get("gg_error")}
+
+
+def get_lsc_final_roster(db_path: str | Path = DB_PATH) -> dict | None:
+    """The frozen final roster from the lsc_roster_final dial, shaped
+    like get_lone_star_cup_projection()'s payload (deposits recomputed
+    live so new payments keep appearing). None when not frozen."""
+    try:
+        raw = get_app_setting("lsc_roster_final", db_path=db_path)
+        if not raw:
+            return None
+        frozen = json.loads(raw)
+        if not isinstance(frozen, dict) or not frozen.get("chapters"):
+            return None
+    except Exception:
+        return None
+    return {
+        "season": frozen.get("season"),
+        "chapters": frozen.get("chapters", []),
+        "deposits": {str(k): v for k, v in
+                     lsc_deposit_scan(db_path=db_path).items()},
+        "duplicate_rows": [],
+        "rules_note": frozen.get("rules_note") or "Final rosters.",
+        "roster_final": True,
+        "frozen_at": frozen.get("frozen_at"),
+        "gg_error": None,
+    }
+
+
+def get_oneoff_roster_finance(event_id: int,
+                              db_path: str | Path = DB_PATH) -> dict | None:
+    """Per-player money picture for a ONE-OFF event (Kerry 2026-09-11:
+    the Lone Star Cup / TGF Championship / Hill Country Matches class,
+    where money arrives by Venmo/Zelle instead of store orders and the
+    standard roster columns say nothing useful).
+
+    Config lives in the `oneoff_charges` dial (rules-as-data):
+      {"<event_id>": {"default": 250,              # expected per player
+                      "overrides": {"<cid>": 325}, # per-player expected
+                      "lodging_dial": "lsc_lodging"}}  # optional
+    An event with no entry is NOT a one-off event -> returns None, and
+    the Events page keeps its standard columns.
+
+    Payments = incoming expense_transactions rows pointed at this event
+    (the scoring-expense-event bridge is how they get pointed). Chapter
+    is the canonical customers.chapter (rule 6).
+
+    Returns {"config": {...}, "players": {"<cid>": {chapter, paid,
+    payments:[{id, date, amount, memo}], expected, balance,
+    lodging: {unit, cost, paid, own, out} | None}}}.
+    """
+    try:
+        cfgs = json.loads(get_app_setting("oneoff_charges",
+                                          db_path=db_path) or "{}")
+        cfg = cfgs.get(str(event_id))
+    except Exception:
+        cfg = None
+    if not isinstance(cfg, dict):
+        return None
+    default_expected = float(cfg.get("default") or 0)
+    overrides = {}
+    try:
+        overrides = {int(k): float(v)
+                     for k, v in (cfg.get("overrides") or {}).items()}
+    except Exception:
+        overrides = {}
+
+    # Lodging map from the named dial (the lsc_lodging shape)
+    lodging_by_cid: dict = {}
+    if cfg.get("lodging_dial"):
+        try:
+            lcfg = json.loads(get_app_setting(cfg["lodging_dial"],
+                                              db_path=db_path) or "{}")
+            unit_names = {u.get("id"): u.get("name")
+                          for u in (lcfg.get("units") or [])}
+            for cid_s, p in (lcfg.get("players") or {}).items():
+                try:
+                    lodging_by_cid[int(cid_s)] = {
+                        "unit": unit_names.get(p.get("unit"))
+                                or p.get("unit"),
+                        "cost": p.get("cost"),
+                        "paid": p.get("paid"),
+                        "own": bool(p.get("own")),
+                        "out": bool(p.get("out")),
+                        "note": p.get("note"),
+                    }
+                except Exception:
+                    continue
+        except Exception:
+            lodging_by_cid = {}
+
+    players: dict = {}
+    with _connect(db_path) as conn:
+        # Everyone registered on the event (active + placeholders)
+        regs = conn.execute(
+            """SELECT DISTINCT i.customer_id, c.chapter
+               FROM items i LEFT JOIN customers c
+                    ON c.customer_id = i.customer_id
+               WHERE i.event_id = ? AND i.customer_id IS NOT NULL
+                 AND COALESCE(i.transaction_status, 'active')
+                     NOT IN ('credited', 'refunded', 'transferred')""",
+            (event_id,)).fetchall()
+        for r in regs:
+            players[int(r["customer_id"])] = {
+                "chapter": r["chapter"],
+                "paid": 0.0, "payments": [],
+                "expected": overrides.get(int(r["customer_id"]),
+                                          default_expected),
+                "lodging": lodging_by_cid.get(int(r["customer_id"])),
+            }
+        # Incoming money pointed at this event
+        for r in conn.execute(
+                """SELECT id, customer_id, amount, transaction_date,
+                          notes, merchant
+                   FROM expense_transactions
+                   WHERE event_id = ? AND transaction_type = 'received'
+                     AND COALESCE(review_status, '') != 'ignored'""",
+                (event_id,)):
+            cid = r["customer_id"]
+            if not cid:
+                continue
+            p = players.setdefault(int(cid), {
+                "chapter": None, "paid": 0.0, "payments": [],
+                "expected": overrides.get(int(cid), default_expected),
+                "lodging": lodging_by_cid.get(int(cid)),
+            })
+            amt = float(r["amount"] or 0)
+            # Lodging money stays in the LODGING column, not PAID:
+            # when the lodging dial shows this player paid, subtract
+            # their lodging-paid amount once from the golf tally if a
+            # single combined payment covered both. Simpler and safer:
+            # a payment equal to the player's lodging 'paid' amount is
+            # lodging, not golf.
+            lodge = lodging_by_cid.get(int(cid))
+            if lodge and lodge.get("paid") and amt == float(lodge["paid"]):
+                continue
+            p["paid"] = round(p["paid"] + amt, 2)
+            p["payments"].append({
+                "id": r["id"], "date": r["transaction_date"],
+                "amount": amt, "memo": r["notes"] or "",
+            })
+    for p in players.values():
+        p["balance"] = round((p["expected"] or 0) - p["paid"], 2)
+    return {"config": {"default": default_expected,
+                       "lodging_dial": cfg.get("lodging_dial")},
+            "players": {str(k): v for k, v in players.items()}}
+
+
 def get_lone_star_cup_projection(db_path: str | Path = DB_PATH,
                                  # 12 next-up alternates per chapter
                                  # (Kerry 2026-08-24; the list itself is
@@ -10999,55 +11231,10 @@ def get_lone_star_cup_projection(db_path: str | Path = DB_PATH,
     #                           $121.77 and Hamilton's $122 are Match
     #                           Play finals money, not LSC deposits)
     # STAFF-ONLY payload: the route strips `deposits` for non-staff.
-    lsc_deposits: dict = {}
-    try:
-        dep_since = get_app_setting("lsc_deposit_since",
-                                    db_path=db_path) or "2026-08-16"
-        dep_min = float(get_app_setting("lsc_deposit_min",
-                                        db_path=db_path) or 100)
-        try:
-            _ov = json.loads(get_app_setting("lsc_deposit_overrides",
-                                             db_path=db_path) or "{}")
-            oid_to_cid = {int(e): int(cid) for cid, eids in _ov.items()
-                          for e in (eids if isinstance(eids, list)
-                                    else [eids])}
-        except Exception:
-            oid_to_cid = {}
-        try:
-            dep_exclude = {int(x) for x in json.loads(
-                get_app_setting("lsc_deposit_exclude",
-                                db_path=db_path) or "[]")}
-        except Exception:
-            dep_exclude = set()
-        with _connect(db_path) as conn:
-            for r in conn.execute(
-                    """SELECT id, merchant, amount, transaction_date,
-                              source_type, customer_id
-                       FROM expense_transactions
-                       WHERE transaction_type = 'received'
-                         AND source_type IN ('venmo', 'zelle')
-                         AND COALESCE(review_status, '') != 'ignored'
-                         AND transaction_date >= ?
-                         AND amount >= ?""", (dep_since, dep_min)):
-                if r["id"] in dep_exclude:
-                    continue
-                cid = oid_to_cid.get(r["id"]) or r["customer_id"]
-                if not cid:
-                    try:
-                        cid = _resolve_scoring_player(
-                            conn, r["merchant"] or "")
-                    except Exception:
-                        cid = None
-                if not cid:
-                    continue
-                d = lsc_deposits.setdefault(
-                    int(cid), {"amount": 0.0, "txns": []})
-                d["amount"] = round(d["amount"] + (r["amount"] or 0), 2)
-                d["txns"].append({"id": r["id"], "amount": r["amount"],
-                                  "date": r["transaction_date"],
-                                  "source": r["source_type"]})
-    except Exception:
-        lsc_deposits = {}
+    # Extracted to lsc_deposit_scan (v2.371.14) so the frozen final
+    # roster keeps serving LIVE deposit badges without re-running the
+    # whole projection.
+    lsc_deposits = lsc_deposit_scan(db_path=db_path)
 
     # BONUS seats (Kerry 2026-08-19): each team carries 2 bonus spots
     # reserved for members of the FORMER TGF chapters (DFW & Houston).

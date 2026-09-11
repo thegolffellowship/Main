@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.372.0";
+window.TGF_VERSION = "2.373.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.373.0",
+    date: "2026-09-11",
+    changes: [
+      "ONE-OFF EVENT roster view (Kerry: 'Columns for this need to adjust to useful columns for this event' — Lone Star Cup / TGF Championship / Hill Country Matches class). An event listed in the new oneoff_charges dial swaps the roster's Holes/Games/Fall/Tee/Status/Order/Price columns for CHAPTER, PAID (to date, hover lists every Venmo/Zelle with date + memo), BALANCE DUE (expected − paid; expected is the dial's per-event default with per-player overrides Kerry teaches as amounts come in; PAID ✓ when settled), and LODGING (bed · cost · paid/owes, Own plans, Not staying — read from the event's lodging dial). Data from the new /api/events/<id>/oneoff-finance (manager+), payments = incoming expense rows pointed at the event; a payment equal to the player's lodging-paid amount counts as lodging, not golf. Mobile cards follow the same field set. Unconfigured events are untouched.",
+      "LONE STAR CUP page HARDENED into final rosters (Kerry: 'so it doesn't take so long to load'): bridge scoring-lsc-freeze runs the live projection once and snapshots it into the lsc_roster_final dial; the API then serves instantly (no GG fetches) with deposit badges still LIVE via the extracted lsc_deposit_scan(). scoring-lsc-freeze:clear reverts to the live projection; staff see a frozen-at breadcrumb, and team headers read FINAL.",
+      "LSC MEMBER VIEW stripped to Teams + Players + how they qualified (Kerry: 'Locks, Housing, Deposits, Next Players Up, Lodging, Staying, Own Arrangements, Declined should not be showing in member view'): the member payload now also drops seat status (no locks), the projected/secured counts (header shows a plain player count), and the '— invitation accepted' suffix; deposits/lodging/alternates/declined were already staff-only. Admin and manager views unchanged.",
+    ],
+  },
   {
     version: "2.372.0",
     date: "2026-09-11",

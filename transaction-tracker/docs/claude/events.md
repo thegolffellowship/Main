@@ -2001,3 +2001,38 @@ stops a slow fetch overwriting text typed in the meantime.
 A missing template (deleted, renamed past the `templateMatch`) still sets
 the audience — a correctly-addressed empty message, not a silently wrong
 one.
+
+## One-off event roster view (v2.373.0, Kerry 2026-09-11)
+
+For events whose money arrives OUTSIDE the store (Lone Star Cup, TGF
+Championship, Hill Country Matches), the standard roster columns say
+nothing useful. An event listed in the **`oneoff_charges` dial** gets a
+different ROSTER column set: CHAPTER (canonical customers.chapter),
+PAID to date (incoming expense_transactions rows pointed at the event —
+the scoring-expense-event bridge is how they get pointed; hover lists
+each payment with date + memo), BALANCE DUE (expected − paid), LODGING
+(from the event's lodging dial: bed · cost · paid/owes, Own plans, Not
+staying). Dial shape:
+
+    {"<event_id>": {"default": 250,               # expected per player
+                    "overrides": {"<cid>": 325},  # per-player expected
+                    "lodging_dial": "lsc_lodging"}}  # optional
+
+Kerry teaches what amounts mean as they come in → record them as
+overrides. A payment equal to the player's lodging `paid` amount counts
+as lodging, not golf. Backend `get_oneoff_roster_finance()` in
+database.py; route `GET /api/events/<id>/oneoff-finance` (manager+);
+frontend `ONEOFF_DETAIL_COLUMNS` in events.html (desktop + mobile).
+Unconfigured events keep the standard columns untouched.
+
+## Lone Star Cup page: final-roster freeze + member view (v2.373.0)
+
+- **Freeze**: bridge `scoring-lsc-freeze` snapshots the live projection
+  into the `lsc_roster_final` dial; `/api/season-contests/lone-star-cup`
+  then serves it instantly (no GG fetches) with deposit badges still
+  live via `lsc_deposit_scan()`. `scoring-lsc-freeze:clear` reverts.
+- **Member view = Teams + Players + qualification only** (Kerry
+  2026-09-11): the route strips — beyond the existing staff-only
+  deposits/lodging/alternates/declined — seat `status` (no locks),
+  `n_projected`/`n_secured` (plain player count in the header), and the
+  "— invitation accepted" suffix. Admin/manager views unchanged.
